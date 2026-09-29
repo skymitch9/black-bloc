@@ -17,10 +17,19 @@ from black_bloc.cogs.content.marathon import (
     get_marathon,
     pair_runner,
     runs_of,
+    update_marathon,
 )
 from black_bloc.marathon_sources import parse_gdq
-from black_bloc.settings_store import SettingError
-from tests.cogs.content.test_marathon import NOW, SKY, URL, FakeClient, bot, proposals, threading
+from tests.cogs.content.test_marathon import (
+    NOW,
+    SKY,
+    URL,
+    FakeClient,
+    a_run,
+    bot,
+    proposals,
+    threading,
+)
 from tests.cogs.content.test_marathon_hosts import (
     ANARCHY,
     HOSTED_ONLY,
@@ -42,9 +51,15 @@ from tests.cogs.content.test_spotlight import (
 FIXTURE = Path(__file__).parents[2] / "fixtures" / "marathon" / "gdq_sgdq2026_runs.json"
 REHEARSAL = 661
 KINGS = 8102
+HOST = ("anarchy", "anarchyasf", "host")
+HIDDEN_HEROES = [
+    a_run(1, 60, game="Titanfall 2", people=(("clipboard", "cb", "runner"), HOST), length=85),
+    a_run(2, 145, game="VHOLUME", people=(("sorbet", "ts", "runner"), HOST), length=35),
+    a_run(3, 180, game="SPRAWL zero", people=(("sylllphie", "sy", "runner"), HOST), length=50),
+]
 
 
-async def show(bot, cog, runs, *, scan=True, clock=15):
+async def show(bot, cog, runs, *, scan=True, clock=0, auto=False):
     threading(bot, SHOW_ROOM)
     await bot.store.set(GUILD, "events_announce_channel_id", SHOW_ROOM)
     await bot.store.set(GUILD, "marathon_track_makes_thread", True)
@@ -61,6 +76,7 @@ async def show(bot, cog, runs, *, scan=True, clock=15):
     if scan:
         switched = await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.SCAN, True)
         assert switched.ok, switched.message
+    await update_marathon(bot.db, marathon["id"], public_highlight=1 if auto else 0)
     return await tick_at(bot, cog, marathon, clock)
 
 
@@ -71,24 +87,27 @@ async def tick_at(bot, cog, marathon, minutes):
     return await get_marathon(bot.db, GUILD, marathon["id"])
 
 
+async def walk(bot, cog, marathon, minutes):
+    for one in minutes:
+        await tick_at(bot, cog, marathon, one)
+
+
+def posts(bot, channel_id=CHANNEL):
+    return bot.guild.channels[channel_id].messages
+
+
+def heads_ups(bot, channel_id=CHANNEL, member=ANARCHY):
+    said = f"<@{member}> hosts **"
+    return [one for one in posts(bot, channel_id) if one.content.startswith(said)]
+
+
 def highlights(bot, channel_id=CHANNEL, name="anarchy"):
-    return [
-        one
-        for one in bot.guild.channels[channel_id].messages
-        if f"**{name}**" in one.content and one not in heads_ups(bot, channel_id, name)
-    ]
+    return [one for one in posts(bot, channel_id) if one.content.startswith(f"**{name}** hosts **")]
 
 
-def heads_ups(bot, channel_id=CHANNEL, name="anarchy"):
-    return [
-        one
-        for one in bot.guild.channels[channel_id].messages
-        if one.content.startswith(f"**{name}** is hosting") and ":R>" in one.content
-    ]
-
-
-def now_text(message):
-    return message.content
+def game_of(message):
+    parts = message.content.split("**")
+    return parts[3] if message.content.startswith("**") else parts[1]
 
 
 def no_pings(message):
@@ -96,145 +115,204 @@ def no_pings(message):
     return mentions.users is False and mentions.roles is False and mentions.everyone is False
 
 
-async def test_hidden_heroes_gets_one_host_highlight_that_follows_the_block(bot, cog):
-    marathon = await show(bot, cog, HOSTED_ONLY)
+async def run_named(bot, marathon, game):
+    return next(one for one in await runs_of(bot.db, marathon["id"]) if one["game"] == game)
 
-    posted = [one for one in highlights(bot) if "hosts **Hidden Heroes**" in one.content]
-    assert len(posted) == 1
-    (post,) = posted
-    assert post.content.startswith("**anarchy** hosts **Hidden Heroes** · <t:")
-    assert "https://twitch.tv/anarchyasf" in post.content and "<@" not in post.content
-    assert no_pings(post)
-    (heads,) = heads_ups(bot)
-    assert no_pings(heads) and "<t:" in heads.content
-    logged = await details_of(bot.db, "marathon.host_highlight_posted")
-    assert (logged["member_id"], logged["channel_id"], logged["state"]) == (
-        ANARCHY,
-        CHANNEL,
-        "upcoming",
+
+async def test_hidden_heroes_gets_three_heads_ups_each_at_its_runs_moment(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES)
+    await walk(bot, cog, marathon, [30, 44])
+    assert heads_ups(bot) == []
+    await tick_at(bot, cog, marathon, 45)
+    (first,) = heads_ups(bot)
+    assert first.content.startswith(
+        "<@8101> hosts **Titanfall 2** (Any%) on **Hidden Heroes** <t:"
     )
-    assert len(logged["runs"]) == 3
-    assert (await details_of(bot.db, "marathon.host_reminded"))["mark"] == 15
-
-    rows = await runs_of(bot.db, marathon["id"])
-    assert cogmod.counts_of(rows) == (3, 0)
-    for game in ("Titanfall 2", "VHOLUME", "SPRAWL zero"):
-        assert said_about(bot, game) == []
+    assert no_pings(first)
+    await walk(bot, cog, marathon, [61, 129])
+    assert len(heads_ups(bot)) == 1
+    await walk(bot, cog, marathon, [130, 146, 164])
+    assert [game_of(one) for one in heads_ups(bot)] == ["Titanfall 2", "VHOLUME"]
+    await walk(bot, cog, marathon, [165, 181, 231, 300])
+    said = heads_ups(bot)
+    assert [game_of(one) for one in said] == ["Titanfall 2", "VHOLUME", "SPRAWL zero"]
+    assert all(no_pings(one) and "<@&" not in one.content for one in said)
+    assert highlights(bot) == []
+    assert (await kinds(bot.db)).count("marathon.host_reminded") == 3
+    logged = await details_of(bot.db, "marathon.host_reminded")
+    assert logged["members"] == [ANARCHY] and logged["mark"] == 15
+    assert cogmod.counts_of(await runs_of(bot.db, marathon["id"])) == (3, 0)
     for kind in ("marathon.shouted", "marathon.reminded", "marathon.public_highlight_posted"):
         assert kind not in await kinds(bot.db)
 
-    await tick_at(bot, cog, marathon, 31)
-    assert now_text(post).startswith("**anarchy** is hosting **Hidden Heroes** now")
-    await tick_at(bot, cog, marathon, 151)
-    assert now_text(post).startswith("**anarchy** is hosting **Hidden Heroes** now")
-    await tick_at(bot, cog, marathon, 302)
-    assert now_text(post).startswith("**anarchy** hosted **Hidden Heroes**")
-    assert all(edit["allowed_mentions"].roles is False for edit in post.edits)
-    assert len(heads_ups(bot)) == 1
-    assert (await kinds(bot.db)).count("marathon.host_highlight_posted") == 1
-    assert "marathon.shouted" not in await kinds(bot.db)
+
+async def test_the_heads_up_is_the_runners_public_reminder_with_the_host_word(bot, cog):
+    await bot.store.set(GUILD, "marathon_public_reminder_template", "{member} {part} {game} {in}")
+    await bot.store.set(GUILD, "marathon_part_host", "will be hosting")
+    marathon = await show(bot, cog, HIDDEN_HEROES)
+    await tick_at(bot, cog, marathon, 45)
+    (said,) = [one for one in posts(bot) if one.content.startswith("<@8101>")]
+    assert said.content.startswith("<@8101> will be hosting Titanfall 2 <t:")
+
+
+async def test_no_highlight_until_staff_press_it_while_auto_highlight_is_off(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES)
+    await walk(bot, cog, marathon, [45, 61, 146])
+    assert highlights(bot) == []
+    run = await run_named(bot, marathon, "VHOLUME")
+    done = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "post", run_id=run["id"])
+    assert done.ok and "is up in" in done.message
+    (post,) = highlights(bot)
+    assert post.content.startswith("**anarchy** hosts **VHOLUME** — Any%")
+    assert " · on now · " in post.content and no_pings(post)
+    await tick_at(bot, cog, marathon, 181)
+    assert " · done · " in post.content
+    assert len(highlights(bot)) == 1
+
+
+async def test_auto_highlight_on_posts_one_at_each_runs_live_and_edits_it_to_done(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
+    await walk(bot, cog, marathon, [45, 59])
+    assert highlights(bot) == []
+    await tick_at(bot, cog, marathon, 61)
+    (titanfall,) = highlights(bot)
+    assert titanfall.content.startswith("**anarchy** hosts **Titanfall 2**")
+    assert " · on now · " in titanfall.content and no_pings(titanfall)
+    await walk(bot, cog, marathon, [130, 146])
+    assert [game_of(one) for one in highlights(bot)] == ["Titanfall 2", "VHOLUME"]
+    assert " · done · " in titanfall.content
+    await walk(bot, cog, marathon, [165, 181, 231, 400])
+    found = highlights(bot)
+    assert [game_of(one) for one in found] == ["Titanfall 2", "VHOLUME", "SPRAWL zero"]
+    assert [one.content.split(" · ")[2] for one in found] == ["done"] * 3
+    assert all(edit["allowed_mentions"].roles is False for one in found for edit in one.edits)
+    assert (await kinds(bot.db)).count("marathon.host_highlight_posted") == 3
+    assert len(heads_ups(bot)) == 3
+    assert cogmod.counts_of(await runs_of(bot.db, marathon["id"])) == (3, 0)
+
+
+async def test_staff_marking_a_hosted_run_live_highlights_it_under_auto(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
+    run = await run_named(bot, marathon, "VHOLUME")
+    said = await cogmod.mark_live(bot, bot.guild, FakeActor(), marathon, run)
+    assert said.ok, said.message
+    (post,) = highlights(bot)
+    assert game_of(post) == "VHOLUME"
 
 
 async def test_a_restart_posts_neither_the_highlight_nor_the_heads_up_again(bot, cog):
-    marathon = await show(bot, cog, HOSTED_ONLY)
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
+    await walk(bot, cog, marathon, [45, 61])
     restarted = type(cog)(bot)
     restarted.client = cog.client
     restarted.clock = cog.clock
     bot.cogs[cogmod.COG_NAME] = restarted
 
     await restarted.tick_once()
-    await tick_at(bot, restarted, marathon, 16)
-
-    assert len([one for one in highlights(bot) if "hosts **" in one.content]) == 1
-    assert len(heads_ups(bot)) == 1
-    post = next(one for one in highlights(bot) if "hosts **" in one.content)
-    assert post.edits == []
+    await walk(bot, restarted, marathon, [62, 70])
+    assert len(heads_ups(bot)) == 1 and len(highlights(bot)) == 1
+    assert highlights(bot)[0].edits == []
 
 
-async def test_the_key_off_posts_nothing_for_hosts(bot, cog):
-    await bot.store.set(GUILD, "marathon_host_highlights", False)
-    await show(bot, cog, HOSTED_ONLY)
-    assert highlights(bot) == [] and heads_ups(bot) == []
+@pytest.mark.parametrize("off", ["key", "scan"])
+async def test_the_key_off_or_scan_hosts_off_posts_nothing(bot, cog, off):
+    if off == "key":
+        await bot.store.set(GUILD, "marathon_host_highlights", False)
+    marathon = await show(bot, cog, HIDDEN_HEROES, scan=off != "scan", auto=True)
+    await walk(bot, cog, marathon, [45, 61, 130, 146, 165, 181, 231])
+    assert heads_ups(bot) == [] and highlights(bot) == []
     assert "marathon.host_highlight_posted" not in await kinds(bot.db)
-
-
-async def test_without_scan_hosts_there_is_no_host_to_highlight(bot, cog):
-    marathon = await show(bot, cog, HOSTED_ONLY, scan=False)
-    assert highlights(bot) == [] and heads_ups(bot) == []
-    said = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "post")
-    assert not said.ok and said.code == mhh.NOT_SCANNED_CODE and "Scan hosts" in said.message
+    if off == "scan":
+        said = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "post")
+        assert not said.ok and said.code == mhh.NOT_SCANNED_CODE and "Scan hosts" in said.message
 
 
 async def test_the_heads_up_waits_for_public_reminders(bot, cog):
     await bot.store.set(GUILD, "marathon_public_reminders", False)
-    await show(bot, cog, HOSTED_ONLY)
-    assert heads_ups(bot) == [] and len(highlights(bot)) == 1
+    marathon = await show(bot, cog, HIDDEN_HEROES)
+    await walk(bot, cog, marathon, [45, 130, 165])
+    assert heads_ups(bot) == []
 
 
-async def test_a_baf_runners_run_is_unchanged_beside_a_host_block(bot, cog):
+async def test_a_heads_up_too_late_is_skipped_not_posted(bot, cog):
+    await bot.store.set(GUILD, "marathon_reminder_stale_minutes", 5)
+    marathon = await show(bot, cog, HIDDEN_HEROES, clock=20)
+    await walk(bot, cog, marathon, [52, 55])
+    assert heads_ups(bot) == []
+    skipped = await details_of(bot.db, "marathon.host_reminder_skipped")
+    assert skipped["because"] == "late" and skipped["game"] == "Titanfall 2"
+    assert (await kinds(bot.db)).count("marathon.host_reminder_skipped") == 1
+
+
+async def test_a_baf_runners_run_is_unchanged_beside_hosted_runs(bot, cog):
     marathon = await show(bot, cog, [*HOSTED_ONLY, SKY_SLOT])
     rows = {row["game"]: row for row in await runs_of(bot.db, marathon["id"])}
     assert mt.member_ids(rows["Super Metroid"]) == [SKY]
     assert said_about(bot, "Super Metroid")
     assert cogmod.counts_of(list(rows.values())) == (4, 1)
-    posted = await details_of(bot.db, "marathon.host_highlight_posted")
-    assert posted["member_id"] == ANARCHY and rows["Super Metroid"]["id"] not in posted["runs"]
-    assert highlights(bot, name="Sky") == []
+    await tick_at(bot, cog, marathon, 15)
+    (heads,) = heads_ups(bot)
+    assert game_of(heads) == "Titanfall 2"
+    await tick_at(bot, cog, marathon, 195)
+    assert not any(one.content.startswith(f"<@{SKY}> hosts") for one in posts(bot))
+    assert any(one.content.startswith(f"<@{SKY}> runs **Super Metroid**") for one in posts(bot))
 
 
 async def test_staff_take_it_down_and_put_it_back_in_the_same_message(bot, cog):
-    marathon = await show(bot, cog, HOSTED_ONLY)
-    (post,) = [one for one in highlights(bot) if "hosts **" in one.content]
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
+    await tick_at(bot, cog, marathon, 61)
+    (post,) = highlights(bot)
+    run_id = (await details_of(bot.db, "marathon.host_highlight_posted"))["run_id"]
 
     down = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "remove")
     assert down.ok and "taken down" in down.message
-    assert now_text(post) == "Staff took down the highlight for **anarchy** on **Hidden Heroes**."
-    await tick_at(bot, cog, marathon, 31)
-    assert now_text(post).startswith("Staff took down")
-    again = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "remove")
+    assert post.content == "Staff took down the highlight for **anarchy** on **Hidden Heroes**."
+    await tick_at(bot, cog, marathon, 70)
+    assert post.content.startswith("Staff took down")
+    again = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "remove", run_id=run_id)
     assert again.ok and "nothing to take down" in again.message
 
-    back = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "post")
+    back = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "post", run_id=run_id)
     assert back.ok and "is up in" in back.message
-    assert now_text(post).startswith("**anarchy** is hosting **Hidden Heroes** now")
-    assert len(bot.guild.channels[CHANNEL].messages) == 2
+    assert post.content.startswith("**anarchy** hosts **Titanfall 2**")
+    assert len(highlights(bot)) == 1
     assert "marathon.host_highlight_restored" in await kinds(bot.db)
     assert (await details_of(bot.db, "marathon.host_highlight_removed"))["edited"] is True
 
 
+async def test_a_run_staff_took_down_is_never_auto_posted_again(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
+    run_id = (await run_named(bot, marathon, "VHOLUME"))["id"]
+    for to in ("post", "remove"):
+        said = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, to, run_id=run_id)
+        assert said.ok
+    await walk(bot, cog, marathon, [146, 150])
+    assert [one for one in highlights(bot) if game_of(one) == "VHOLUME"] == []
+
+
 async def test_a_move_on_someone_who_hosts_nothing_is_refused_in_words(bot, cog):
-    marathon = await show(bot, cog, HOSTED_ONLY)
+    marathon = await show(bot, cog, HIDDEN_HEROES)
     said = await hh.press(bot, bot.guild, FakeActor(), marathon, SKY, "post")
     assert not said.ok and said.status == 404 and "hosts nothing" in said.message
     said = await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "shout")
     assert not said.ok and said.status == 422
 
 
-async def test_shadow_mode_rehearses_it_in_the_public_rehearsal_home(bot, cog):
+async def test_shadow_mode_rehearses_both_in_the_public_rehearsal_home(bot, cog):
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     bot.guild.channels[REHEARSAL] = FakeChannel(REHEARSAL)
     await bot.store.set(GUILD, "marathon_public_shadow_channel_id", REHEARSAL)
-    await show(bot, cog, HOSTED_ONLY)
-    assert highlights(bot) == []
-    rehearsed = bot.guild.channels[REHEARSAL].messages
-    assert any("hosts **Hidden Heroes**" in one.content for one in rehearsed)
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
+    await walk(bot, cog, marathon, [45, 61])
+    assert heads_ups(bot) == [] and highlights(bot) == []
+    rehearsed = [one.content for one in posts(bot, REHEARSAL)]
+    assert any("<@8101> hosts **Titanfall 2**" in one for one in rehearsed)
+    assert any("**anarchy** hosts **Titanfall 2**" in one for one in rehearsed)
     assert "marathon.would_post_host_highlight" in await kinds(bot.db)
     assert "marathon.would_remind_host" in await kinds(bot.db)
 
 
-async def test_an_unknown_placeholder_is_refused_in_words(bot):
-    for key in (
-        "marathon_host_highlight_template",
-        "marathon_host_highlight_live_template",
-        "marathon_host_highlight_done_template",
-        "marathon_host_reminder_template",
-    ):
-        with pytest.raises(SettingError, match="`{game}` is not something Black Bloc can fill"):
-            await bot.store.set(GUILD, key, "{name} on {game}")
-        assert await bot.store.set(GUILD, key, "{mention} hosts {show} {link}")
-
-
-async def test_a_gdq_tracker_host_block_runs_across_a_hostless_segment(bot, cog):
+async def test_the_sgdq_tracker_heads_ups_only_the_runs_the_host_hosts(bot, cog):
     runs = parse_gdq(json.loads(FIXTURE.read_text("utf-8")))
     cog.client.runs_given = runs
     made = await create_marathon(bot, bot.guild, FakeActor(), name="SGDQ 2026", url=URL)
@@ -246,48 +324,36 @@ async def test_a_gdq_tracker_host_block_runs_across_a_hostless_segment(bot, cog)
     assert (await inbox.track(bot, bot.guild, FakeActor(), made.value)).ok
     marathon = await get_marathon(bot.db, GUILD, made.value["id"])
     await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.SCAN, True)
-    start = datetime(2026, 7, 5, 21, 58, tzinfo=UTC)
 
     async def at(when):
         cog.clock = lambda: when
         async with cog.lock(marathon["id"]):
             await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
 
-    await at(start - timedelta(minutes=15))
-    posts = highlights(bot, name="TheKingsPride")
-    (post,) = [one for one in posts if "hosts **SGDQ 2026**" in one.content]
-    assert "https://twitch.tv/thekingspride" in post.content
-    assert len(heads_ups(bot, name="TheKingsPride")) == 1
-    logged = await details_of(bot.db, "marathon.host_highlight_posted")
-    by_id = {row["id"]: row["game"] for row in await runs_of(bot.db, marathon["id"])}
-    assert [by_id[one] for one in logged["runs"]] == [
+    for hour, minute in ((21, 40), (21, 43), (22, 30), (22, 49), (23, 6), (23, 30)):
+        await at(datetime(2026, 7, 5, hour, minute, tzinfo=UTC))
+    await at(datetime(2026, 7, 6, 1, 5, tzinfo=UTC))
+    said = heads_ups(bot, member=KINGS)
+    assert [game_of(one) for one in said] == [
         "I Am Your Beast",
         "Devil May Cry 5: Special Edition",
     ]
-
-    await at(datetime(2026, 7, 5, 23, 10, tzinfo=UTC))
-    assert now_text(post).startswith("**TheKingsPride** is hosting **SGDQ 2026** now")
-    await at(datetime(2026, 7, 6, 0, 30, tzinfo=UTC))
-    assert now_text(post).startswith("**TheKingsPride** is hosting")
-    await at(datetime(2026, 7, 6, 1, 5, tzinfo=UTC))
-    assert now_text(post).startswith("**TheKingsPride** hosted **SGDQ 2026**")
-    assert (await kinds(bot.db)).count("marathon.host_highlight_posted") == 1
+    assert all("The Checkpoint" not in one.content for one in posts(bot))
+    assert highlights(bot, name="TheKingsPride") == []
     assert cogmod.counts_of(await runs_of(bot.db, marathon["id"]))[1] == 0
 
 
 @pytest.mark.parametrize("stop", ["key", "scan"])
-async def test_a_post_already_up_follows_its_block_to_the_end_after_a_switch_goes_off(
+async def test_a_post_already_up_follows_its_run_to_the_end_after_a_switch_goes_off(
     bot, cog, stop
 ):
-    marathon = await show(bot, cog, HOSTED_ONLY)
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
+    await tick_at(bot, cog, marathon, 61)
     (post,) = highlights(bot)
     if stop == "key":
         await bot.store.set(GUILD, "marathon_host_highlights", False)
     else:
         await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.SCAN, False)
-
-    await tick_at(bot, cog, marathon, 31)
-    assert now_text(post).startswith("**anarchy** is hosting **Hidden Heroes** now")
-    await tick_at(bot, cog, marathon, 302)
-    assert now_text(post).startswith("**anarchy** hosted **Hidden Heroes**")
-    assert len(highlights(bot)) == 1
+    await walk(bot, cog, marathon, [130, 146, 181])
+    assert " · done · " in post.content
+    assert len(highlights(bot)) == 1 and heads_ups(bot) == []

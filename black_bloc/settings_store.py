@@ -4848,22 +4848,6 @@ MARATHON_HOST_EVENT_TITLE_KEY = "marathon_host_event_title_template"
 MARATHON_HOST_EVENT_DESCRIPTION_KEY = "marathon_host_event_description_template"
 MARATHON_HOST_EVENT_FIELDS = ("member", "marathon", "games", "runs")
 MARATHON_HOST_HIGHLIGHTS_KEY = "marathon_host_highlights"
-MARATHON_HOST_HIGHLIGHT_TEMPLATE_KEY = "marathon_host_highlight_template"
-MARATHON_HOST_HIGHLIGHT_LIVE_TEMPLATE_KEY = "marathon_host_highlight_live_template"
-MARATHON_HOST_HIGHLIGHT_DONE_TEMPLATE_KEY = "marathon_host_highlight_done_template"
-MARATHON_HOST_REMINDER_TEMPLATE_KEY = "marathon_host_reminder_template"
-MARATHON_HOST_HIGHLIGHT_FIELDS = (
-    "name",
-    "mention",
-    "show",
-    "when",
-    "relative",
-    "until",
-    "link",
-    "url",
-    "games",
-    "runs",
-)
 MARATHON_SPOTLIGHT_HOST_NOTE_KEY = "marathon_spotlight_host_note_template"
 MARATHON_REMINDER_CHANNEL_KEY = "marathon_reminder_channel_id"
 MARATHON_PUBLIC_REMINDERS_KEY = "marathon_public_reminders"
@@ -5027,11 +5011,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_HOST_HIGHLIGHTS_KEY: (
         "bool",
         True,
-        "whether each BaF host of a marathon that scans its hosts gets one public highlight per "
-        "block they host, in marathon_public_channel_id, edited as the block goes on now and "
-        "ends, and one heads-up marathon_ping_minutes before it in "
-        "marathon_reminder_channel_id (while marathon_public_reminders is on). A host still "
-        "never makes a run a BaF run. on by default",
+        "whether each BaF host of a marathon that scans its hosts is posted like a BaF runner, "
+        "once per run they host: the public reminder (marathon_public_reminder_template, with "
+        "marathon_part_host) marathon_ping_minutes before it in marathon_reminder_channel_id "
+        "while marathon_public_reminders is on, and the public highlight "
+        "(marathon_public_template) when the run goes live and the marathon's Auto-highlight "
+        "is on, or when staff press it. A host still never makes a run a BaF run. on by "
+        "default",
     ),
     MARATHON_MODE_KEY: (
         "enum",
@@ -5424,33 +5410,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         MARATHON_HOST_EVENT_FIELDS,
         "the description of the event made for one BaF host of a marathon. It takes {member} "
         "{marathon} {games} {runs}",
-    ),
-    MARATHON_HOST_HIGHLIGHT_TEMPLATE_KEY: (
-        "**{name}** hosts **{show}** · {when} ({relative}) until {until} · {link}",
-        MARATHON_HOST_HIGHLIGHT_FIELDS,
-        "a BaF host's public highlight while their block is still to come — one post per block "
-        "they host, edited in place. It takes {name} {mention} {show} {when} {relative} {until} "
-        "{link} {url} {games} {runs}; {mention} names the member without pinging, {link} is "
-        "their Twitch channel (else the marathon's) and {url} the marathon's",
-    ),
-    MARATHON_HOST_HIGHLIGHT_LIVE_TEMPLATE_KEY: (
-        "**{name}** is hosting **{show}** now, until {until} · {url}",
-        MARATHON_HOST_HIGHLIGHT_FIELDS,
-        "the same highlight once the first run of their block is live. It takes the same words "
-        "as marathon_host_highlight_template",
-    ),
-    MARATHON_HOST_HIGHLIGHT_DONE_TEMPLATE_KEY: (
-        "**{name}** hosted **{show}** · {when} · {link}",
-        MARATHON_HOST_HIGHLIGHT_FIELDS,
-        "the same highlight once the last run of their block is over. It takes the same words "
-        "as marathon_host_highlight_template",
-    ),
-    MARATHON_HOST_REMINDER_TEMPLATE_KEY: (
-        "**{name}** is hosting **{show}** {relative} — {when}. {url}",
-        MARATHON_HOST_HIGHLIGHT_FIELDS,
-        "the public heads-up before a BaF host's block, once per block, posted in "
-        "marathon_reminder_channel_id marathon_ping_minutes before its first run. It takes the "
-        "same words as marathon_host_highlight_template",
     ),
     MARATHON_CONTROLS_HOSTS_ON_KEY: (
         "Scan hosts: on · turn off",

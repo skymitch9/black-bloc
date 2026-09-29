@@ -250,6 +250,14 @@ not read; the one-rematch lag on stored runs was reasoned from the code, not mea
 
 ## Host highlights (owner 2026-09-28)
 
+> ⚠️ **SUPERSEDED BEFORE IT SHIPPED (2026-09-28, branch `host-highlights-per-run`, commit `30199332`)** by
+> *Host highlights, per run* at the foot of this doc (checklist 35). This section was merged (`ea4c2b43`) but never
+> deployed. ~~One post per contiguous hosted **block**, posted as soon as the block is known, one heads-up per block,
+> four `marathon_host_*` templates~~ → one heads-up and one highlight per hosted **run**, in the runner's own
+> templates and at the runner's own moments. The block rule, Deviation 1, the five-key list and the Friday table
+> below are struck by that section; the bookkeeping column, shadow routing, never-ping, staff moves, routes and log
+> kinds carry over as it says.
+
 > **BUILT 2026-09-28 on branch `host-highlights` (worktree `C:/lcw/bb-host-highlights`, off `main` `c0e38353`),
 > NOT MERGED, NOT DEPLOYED.** Commits `9fd9088e` (Python + tests), `b055e945` (mock, contract, site), then the
 > carry-to-the-end fix and docs. **Last verified: 2026-09-28** by the suite (`tests/test_marathon_host_highlights.py`,
@@ -323,7 +331,7 @@ hosts, so hosted runs still get no runner post, reminder, shoutout, run highligh
 
 ### Deviations
 
-1. **The post goes up as soon as the block is known, not on the day.** "Upcoming" is a real state; with the marathon
+1. ~~**The post goes up as soon as the block is known, not on the day.**~~ *(Reversed 2026-09-28 20:4x by the owner — per run, at the runner's moments; see the per-run section.)* "Upcoming" is a real state; with the marathon
    near and tracked, the first tick after deploy posts it. For Hidden Heroes that means **the day it deploys**, days
    before Friday. If the owner wants it later, the lever is a lead-time key (not built).
 2. **A post in flight is carried to its end (checklist 38).** The key off stops NEW posts and heads-ups; Scan hosts
@@ -355,7 +363,9 @@ hosts, so hosted runs still get no runner post, reminder, shoutout, run highligh
 - **Timing against a real stream**: the *on now* edit follows the run's state, which with a watched channel waits for
   the title/category signal (or the 90-minute grace) — reasoned from `mt.advance`, not observed.
 
-### Live check for Friday — Hidden Heroes (marathon 10), Fri 2026-10-02, Phoenix (UTC−7)
+### ~~Live check for Friday — Hidden Heroes (marathon 10), Fri 2026-10-02, Phoenix (UTC−7)~~
+
+> ⚠️ Struck: these block-based expectations never shipped. The per-run table is in *Host highlights, per run*.
 
 Sweep rows **`HS-h` … `HS-l`** in `docs/access/sweeps.md`. Expected, if the first hosted run is at 16:00 Phoenix:
 
@@ -366,3 +376,101 @@ Sweep rows **`HS-h` … `HS-l`** in `docs/access/sweeps.md`. Expected, if the fi
 | Fri ~16:00, the first hosted run live | The SAME post edited: **anarchy** is hosting **Hidden Heroes** now, until <end> · <watch link>. |
 | after the last hosted run is done | The same post: **anarchy** hosted **Hidden Heroes** · <start> · <link>. |
 | throughout | No runner post / reminder / shoutout / run highlight for the three runs (the drawer's BaF count stays 0). |
+
+## Host highlights, per run (owner 2026-09-28 20:4x)
+
+> **BUILT 2026-09-28 on branch `host-highlights-per-run` (worktree `C:/lcw/bb-host-highlights-per-run`, off `main`
+> `2b6f378b`), NOT MERGED, NOT DEPLOYED.** Code commit `30199332`. **Last verified: 2026-09-28** by the suite
+> (`tests/test_marathon_host_highlights.py`, `tests/cogs/content/test_marathon_host_highlights.py`, the slot-view test in
+> `tests/cogs/content/test_marathon_people.py`, the route test in `tests/api/tools/test_marathons.py`, the contract
+> test's seeded host) and `node site/mock/check.mjs` on `MOCK_PORT=8917`. ⚠️ Nothing met Discord, a browser or the live
+> database. Replaces the block-based section above (checklist 35).
+
+**The asks, verbatim.** Owner 20:4x: *"how soon before a run do we post that runner? lets do the same for host, then
+every next line item they appear in post them again. meaning anarchy will get posted 3 times during hidden heroes"*.
+Owner 20:5x: *"we can say Anarchy will be hosting Titanfall 2 at 7pm on GDQ twitch page in upcoming, the same way we'd
+say, Anarchy will be running Titanfall 2 at 7pm on GDQ twitch page. make them match you know"* — one template, one
+renderer, so the two can never drift.
+
+**What a runner gets (measured by the conductor 20:4x), and so what a host now gets, per run:**
+
+| | Runner (BaF run) | Host (a run a BaF host hosts) |
+|---|---|---|
+| Heads-up | the public copy of the reminder in `marathon_reminder_channel_id`, `marathon_public_reminder_template` | **the same template, the same renderer** (`marathon_public_reminders.reminder_text` → `mt.run_fields`); `{member}` = the BaF host(s), `{part}` = `marathon_part_host` (*hosts*) |
+| When | every mark in `marathon_reminder_minutes` (`120, 15` by default) | **once, at `marathon_ping_minutes` (15)** — the owner's measured *"is up in 15 minutes"* copy |
+| Switches | `marathon_public_reminders`; `marathon_reminder_stale_minutes` skips a late one | the same two, plus `marathon_host_highlights` (master) and the marathon's Scan hosts |
+| Highlight | `marathon_public_template` in `marathon_public_channel_id`, when the run goes live with the marathon's **Auto-highlight** (`public_highlight`) on, or staff press **Highlight** | **the same template and renderer** (`marathon_public.public_text` with `people=`), at the same moment: the run's LIVE transition (`Marathons.advance`, and staff **Mark live**) with Auto-highlight on, or staff press it for that run |
+| Edited | in place as the run moves / goes live / ends (`{state}`) | the same: *coming up* → *on now* → *done* |
+
+- **The unit is the run.** `marathon_host_highlights.hosted` lists every non-dropped run with at least one BaF host
+  (a host with a `user_id`, i.e. only while the marathon scans its hosts). No block, no span; nothing posts days early.
+- **Co-hosts follow the runner convention: ONE post per run naming every BaF host on it** (`{member}` is
+  `mt.mention_line` of them, `{runner}` their names joined by `, `), exactly as a run with two BaF runners gets one
+  reminder and one highlight. A non-BaF co-host is not named.
+- **Hosts still never make a run ours**: `mt.ours` is untouched; the host path passes its people explicitly
+  (`people=` on `mt.run_fields`, `mt.run_url`, `mrp.fields_of` / `post_text`, `mp.text_of`, `public_text`,
+  `reminder_text`), so no runner post / reminder / shoutout / run event appears for a hosted run (tested: `counts_of`
+  stays `(3, 0)`).
+- **Never pings.** Every send and edit is `AllowedMentions.none()`, no role prefix. `{member}` renders `<@id>` as it
+  does for a runner, without pinging.
+- **Bookkeeping:** `marathons.host_highlight_posts` (schema **83**, unchanged) is re-keyed per run:
+  `{run_id, hosts: [{user_id, name, login, part}], message_id, channel_id, removed, tried, reminded}`. `reminded` and
+  `tried` are saved BEFORE the send → a restart never double-posts (tested with a second cog instance). **No data
+  migration:** the block build was merged but never deployed, so the live column does not exist yet / is empty
+  (reasoned from the TODO and the release history — the live database was not read); an old-shape record (no
+  `run_id`) is simply ignored.
+- **A run that moves later is due again** (`rearm`), as a runner's reminder is re-armed by `mt.rearmed` on a
+  refresh / retime.
+- **Auto-highlight is tried once per run**: `auto_wanted` needs the switch on, the run LIVE and no record that was
+  tried or taken down — staff's **Remove** is never undone by the switch (the runner rule).
+- **A post already up follows its run to the end** after the key or Scan hosts goes off (`left_behind` uses the
+  hosts stored on the record; checklist 38).
+- **Staff final say, per run, both doors, same words.** Discord slot view: **Highlight in #channel** /
+  **Remove the highlight** for that slot's run. Site: the host's slot line (that run) and the BaF row (no `run_id`:
+  every hosted run the move fits — Post posts the ones not up, Take it down takes down the ones up). API paths
+  unchanged: `POST` / `DELETE /api/marathons/{id}/people/{user_id}/host-highlight` with optional `run_id`. The People
+  board's **`host_highlight`** is now `{up, channel_id, can_post, runs: [{run_id, up, channel_id, can_post}]}` (was
+  `blocks: [{runs, …}]`); `can_post` also needs the run upcoming, live or done.
+- **Keys:** `marathon_host_highlights` stays (bool, on, re-described). ~~`marathon_host_highlight_template`,
+  `_live_template`, `_done_template`, `marathon_host_reminder_template`~~ **removed** (never deployed → no settings
+  migration) — the owner's *"make them match"*. Registry **719 → 715** (measured: `len(settings_store.KEY_TYPES)`).
+- **Log kinds unchanged**; `details` now carry `run_id`, `members` (list), `hosts` (names), `game` instead of
+  `member_id` / `host` / `runs`.
+
+**Hidden Heroes walk-through (marathon 10, Fri 2026-10-02, Phoenix UTC−7).** From the Hotfix sheet fixture
+(`tests/fixtures/marathon/gdq_hotfix_sheet.csv` rows 26–28: the 7:00 PM ET show, 1:25 / 0:35 / 0:50): Titanfall 2
+16:00–17:25, VHOLUME 17:25–18:00, SPRAWL zero 18:00–18:50 Phoenix. Auto-highlight is OFF on Hidden Heroes.
+
+| When (Phoenix) | What |
+|---|---|
+| before Fri 15:45 | nothing for anarchy (no post the day it deploys) |
+| Fri 15:45 | #upcoming-events: `@anarchy hosts **Titanfall 2** (Any%) on **Hidden Heroes** in 15 minutes — <16:00>. <watch link>` — `marathon.host_reminded` |
+| Fri 17:10 | the same for **VHOLUME** (All Main Levels), 17:25 |
+| Fri 17:45 | the same for **SPRAWL zero** (Any%), 18:00 |
+| whenever staff press **Highlight in #…** / **Post host highlight** on a hosted slot | ONE highlight for that run in `marathon_public_channel_id`: `**anarchy** hosts **<game>** — <category> on **Hidden Heroes** · <when> · <state> · <link>`, then edited to *on now* / *done* |
+| if Auto-highlight is turned ON beforehand | a highlight at each run's live (≈16:00, 17:25, 18:00), each edited to *done* |
+| throughout | no runner post / reminder / shoutout / run highlight for the three runs; BaF count 0; no role mention |
+
+(Times follow the runs' stored `scheduled_at`: a stream-driven retime moves them, and the heads-up with them.)
+
+### Deviations
+
+1. **One heads-up per run, at `marathon_ping_minutes` only** — a runner also gets a public copy at every other
+   `marathon_reminder_minutes` mark (120 by default). The brief and the owner's measured example name the 15-minute
+   copy; a 2-hour host copy is not built.
+2. **Auto-highlight fires at the LIVE transition** (`Marathons.advance` and `mark_live`), like the runner's, not on a
+   later tick — turning Auto-highlight on mid-run does not post the run already live (staff press it).
+3. **The BaF-row move without `run_id`** acts on every hosted run it fits (the block build's "every block"
+   semantics carried over); the slot line is the per-run door.
+4. **`{member}` in the heads-up is a mention** (`<@id>`, never pinging) — the runner copy's own convention, kept so
+   the two match.
+
+### What was NOT verified
+
+- ⚠️ **Nothing met Discord or a browser**; the People card's per-run buttons were not rendered (JS parses;
+  `check.mjs` green on the mock).
+- **The live DB was not read**: that `host_highlight_posts` is empty live, Hidden Heroes' stored run times, anarchy's
+  pairing / Twitch login, the live `marathon_ping_minutes` / `marathon_public_reminders` / reminder channel.
+- **The watch link** for Hidden Heroes (`channel_login` of the marathon, else the host's Twitch) was not resolved live.
+- Timing against a real stream (the LIVE transition waits for the title/category signal or the grace) — reasoned,
+  not observed.

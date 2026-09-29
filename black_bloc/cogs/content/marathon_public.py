@@ -142,8 +142,9 @@ def view_of(button: mp.Button | None, marathon_id: Any, run_id: Any) -> discord.
 
 
 async def public_text(
-    bot: Any, guild: Any, marathon: Any, row: Any, *, removed: bool = False
+    bot: Any, guild: Any, marathon: Any, row: Any, *, removed: bool = False, people: Any = None
 ) -> str:
+    """A runner's highlight, or a host's when `people` names the BaF hosts: one template."""
     said = words_for(bot, guild.id)
     key = MARATHON_PUBLIC_REMOVED_KEY if removed else MARATHON_PUBLIC_TEMPLATE_KEY
     login = await channel_login(bot, marathon)
@@ -153,8 +154,9 @@ async def public_text(
         said,
         template=said[key],
         default=said_default(key),
-        url=mt.run_url(row, login, marathon["schedule_url"]),
+        url=mt.run_url(row, login, marathon["schedule_url"], people=people),
         unlisted=said[MARATHON_RUNNER_POST_UNLISTED_KEY],
+        people=people,
     )
 
 

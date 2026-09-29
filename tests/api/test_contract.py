@@ -801,8 +801,8 @@ async def seed_world(client, web, guild, wf) -> dict:
             json.dumps(
                 [
                     {
-                        "user_id": HOST_MEMBER_ID,
-                        "runs": [hosted_run_id],
+                        "run_id": hosted_run_id,
+                        "hosts": [{"user_id": HOST_MEMBER_ID, "name": "Interview Crew"}],
                         "message_id": 1,
                         "channel_id": wf.TEST_CHANNEL_ID,
                         "tried": True,

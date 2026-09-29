@@ -59,8 +59,8 @@ from ...cogs.content.marathon_events import (
     unlink_run_event,
 )
 from ...cogs.content.marathon_feeds import get_feed
-from ...cogs.content.marathon_host_highlights import block_state, state_for
 from ...cogs.content.marathon_host_highlights import press as host_highlight_press
+from ...cogs.content.marathon_host_highlights import run_state, state_for
 from ...cogs.content.marathon_hosts import set_switch, switch_state
 from ...cogs.content.marathon_inbox import ignore as ignore_marathon
 from ...cogs.content.marathon_inbox import inbox_message_url, post_now
@@ -237,7 +237,7 @@ def entry_row(
         "looks_like": (
             {"username": near["username"], "user_id": _id(near["user_id"])} if near else None
         ),
-        "host_highlight": block_state(hosting or {}, user_id) if user_id else None,
+        "host_highlight": run_state(hosting or {}, user_id) if user_id else None,
     }
 
 

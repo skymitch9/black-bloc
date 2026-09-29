@@ -1005,7 +1005,7 @@ async def test_a_baf_hosts_highlight_is_shown_on_the_people_card_and_moved_both_
     client.patch(f"/api/marathons/{marathon_id}", json={"scan_hosts": True})
     board = client.get(f"/api/marathons/{marathon_id}/people").json()
     crew = next(one for one in board["baf"] if one["name"] == "Interview Crew")
-    assert crew["host_highlight"]["up"] is False and len(crew["host_highlight"]["blocks"]) == 1
+    assert crew["host_highlight"]["up"] is False and len(crew["host_highlight"]["runs"]) == 1
 
     none_up = client.delete(f"/api/marathons/{marathon_id}/people/77/host-highlight")
     assert none_up.status_code == 200 and "nothing to take down" in none_up.json()["message"]
@@ -1015,4 +1015,4 @@ async def test_a_baf_hosts_highlight_is_shown_on_the_people_card_and_moved_both_
     assert posted.status_code == 409 and posted.json()["error"] == "post_failed"
     assert "could not post **Interview Crew**" in posted.json()["message"]
     said = await web_row(wf, web, "web.marathon.host_highlight_failed")
-    assert (said["member_id"], said["step"], said["via"]) == (77, "post", "website")
+    assert (said["members"], said["step"], said["via"]) == ([77], "post", "website")
