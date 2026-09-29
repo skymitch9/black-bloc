@@ -110,7 +110,6 @@ from ...settings_store import (
     MARATHON_REMINDER_TEMPLATE_KEY,
     MARATHON_REMOVE_QUESTION_KEY,
     MARATHON_RUNNER_POSTS_KEY,
-    MARATHON_SCAN_HOSTS_DEFAULT_KEY,
     MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY,
     MARATHON_SUGGEST_NEXT_KEY,
     MARATHON_UNKNOWN_SITE_KEY,
@@ -2251,10 +2250,6 @@ class Marathons(commands.Cog):
         links = await links_of(db)
         pairings = await pairings_of(db, guild.id)
         hosts = bool(self.bot.store.get(guild.id, MARATHON_MATCH_HOSTS_KEY))
-        scan = mh.scans_hosts(
-            await get_marathon(db, guild.id, marathon["id"]) or marathon,
-            self.bot.store.get(guild.id, MARATHON_SCAN_HOSTS_DEFAULT_KEY),
-        )
         count = bool(self.bot.store.get(guild.id, MARATHON_HOSTS_COUNT_AS_OURS_KEY))
         usernames = usernames_of(guild)
         newly = 0
@@ -2267,7 +2262,6 @@ class Marathons(commands.Cog):
                 marathon_id=marathon["id"],
                 match_hosts=hosts,
                 usernames=usernames,
-                scan_hosts=scan,
                 hosts_count=count,
             )
             if after == before:

@@ -222,7 +222,6 @@ async def test_patch_pauses_resumes_renames_and_sets_the_channel(client, sign_in
 async def test_pairing_a_name_makes_the_run_ours_and_unpairing_undoes_it(
     client, sign_in, web, cog, wf
 ):
-    await web.store.set(wf.GUILD_ID, "marathon_scan_hosts_default", True)
     await web.store.set(wf.GUILD_ID, "marathon_hosts_count_as_ours", True)
     sign_in(client)
     marathon_id = add(client).json()["id"]
@@ -583,7 +582,7 @@ async def test_patch_event_mode_applies_at_once_and_leaves_one_web_row(
 
     body = client.patch(f"/api/marathons/{marathon_id}", json={"event_mode": "runs"}).json()
 
-    assert body["event_mode"] == "runs" and "1 run event(s) made" in body["message"]
+    assert body["event_mode"] == "runs" and "1 run or host block event(s) made" in body["message"]
     kinds = [kind for kind, _ in await wf.web_rows_in(web.db)]
     assert kinds == ["web.marathon.added", "web.marathon.event_mode_set"]
     assert (await web_row(wf, web, "web.marathon.event_mode_set"))["to"] == "runs"
@@ -629,6 +628,7 @@ async def test_the_people_answer_is_baf_then_everyone_with_how_each_matched(
     assert sky["spotlight_id"] is None and sky["channel_id"] is None
     assert [one["name"] for one in body["others"]] == ["Interview Crew", "Somebody"]
     assert body["others"][0]["parts"] == ["host"]
+    assert sky["part_tag"] == "runs" and body["others"][0]["part_tag"] == "hosts"
 
 
 async def test_spotlight_a_runner_makes_a_go_live_row_and_stop_removes_it(
@@ -715,28 +715,23 @@ async def test_patch_ping_role_turns_it_on_and_off_and_refuses_a_word_it_does_no
     assert bad.status_code == 422 and bad.json()["error"] == "bad_ping_role"
 
 
-async def test_patch_the_host_switches_follow_on_and_off_and_refuse_a_bad_word(
+async def test_patch_the_announcements_switch_and_the_retired_host_switches_answer_in_words(
     client, sign_in, web, cog, wf
 ):
     sign_in(client)
     marathon_id = add(client).json()["id"]
     first = client.get(f"/api/marathons/{marathon_id}").json()
-    assert first["scan_hosts"] == {"own": None, "on": True, "default": True}
-    assert first["host_events"] == {"own": None, "on": False, "default": False}
+    assert "scan_hosts" not in first and "host_events" not in first
     assert first["announcements"] == {"own": None, "on": True, "default": True}
 
     body = client.patch(
         f"/api/marathons/{marathon_id}", json={"scan_hosts": True, "host_events": "on"}
     ).json()
 
-    assert body["scan_hosts"] == {"own": True, "on": True, "default": True}
-    assert body["host_events"]["own"] is True
-    assert "scans its hosts now" in body["message"]
-    said = await web_row(wf, web, "web.marathon.scan_hosts_set")
-    assert (said["to"], said["via"]) == (True, "website")
-    body = client.patch(f"/api/marathons/{marathon_id}", json={"scan_hosts": None}).json()
-    assert body["scan_hosts"]["own"] is None
-    bad = client.patch(f"/api/marathons/{marathon_id}", json={"host_events": "loud"})
+    assert "hosts are always found now" in body["message"]
+    assert "follow the one **BaF run/host events** switch" in body["message"]
+    assert body["event_mode"] == first["event_mode"]
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "loud"})
     assert bad.status_code == 422 and bad.json()["error"] == "bad_switch"
     body = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "off"}).json()
     assert body["announcements"] == {"own": False, "on": False, "default": True}

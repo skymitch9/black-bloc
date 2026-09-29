@@ -19,6 +19,7 @@ from tests.cogs.content.test_marathon import (  # noqa: F401
     at,
     bot,
 )
+from tests.cogs.content.test_marathon import a_run as show_run
 from tests.cogs.content.test_spotlight import (
     GUILD,
     FakeActor,
@@ -428,3 +429,58 @@ async def test_a_baf_persons_slot_offers_opt_out_and_opt_back_in(bot, cog):  # n
         getattr(one, "action", None) in (people.OPT_OUT, people.OPT_IN)
         for one in await slot("Vee")
     )
+
+
+MO = 8202
+MIXED = [
+    show_run(
+        1,
+        30,
+        game="Alpha",
+        people=(("Sky", "skyruns", "runner"), ("anarchy", "anarchyasf", "host")),
+    ),
+    show_run(
+        2,
+        90,
+        game="Beta",
+        people=(("anarchy", "anarchyasf", "runner"), ("Mo", "mohosts", "host")),
+    ),
+]
+
+
+async def test_a_runner_a_host_and_both_get_one_set_of_moves_and_their_part_tag(
+    bot,  # noqa: F811
+    cog,  # noqa: F811
+):
+    from black_bloc.cogs.content.marathon import pair_runner
+    from tests.cogs.content.test_marathon_host_highlights import show
+
+    await bot.store.set(GUILD, "events_create_scheduled", False)
+    marathon = await show(bot, cog, MIXED)
+    for name, user_id in (("Sky", SKY), ("Mo", MO)):
+        paired = await pair_runner(bot, bot.guild, FakeActor(), marathon, name, user_id)
+        assert paired.ok, paired.message
+    alpha, beta = await runs_of(bot.db, marathon["id"])
+
+    async def slot(run, person):
+        embed, view = await people.build_people(
+            bot, bot.guild, FakeActor(), marathon["id"], run_id=run["id"], person=person
+        )
+        moves = sorted(
+            one.action for one in view.children if isinstance(one, people.PeopleMove)
+        )
+        return (embed.description, moves)
+
+    words, sky_moves = await slot(alpha, "Sky")
+    assert f"<@{SKY}> (runs) ✦BaF" in words
+    assert "(runs + hosts) ✦BaF" in words
+    _, anarchy_moves = await slot(alpha, "anarchy")
+    words, mo_moves = await slot(beta, "Mo")
+    assert f"<@{MO}> (hosts) ✦BaF" in words
+    assert sky_moves == anarchy_moves == mo_moves
+    assert people.OPT_OUT in sky_moves and people.SPOTLIGHT in sky_moves
+    state = await people.people_state(
+        bot, bot.guild, await get_marathon(bot.db, GUILD, marathon["id"])
+    )
+    tags = {one["name"]: people.part_words(bot, bot.guild, one["parts"]) for one in state["baf"]}
+    assert tags == {"Sky": "runs", "anarchy": "runs + hosts", "Mo": "hosts"}

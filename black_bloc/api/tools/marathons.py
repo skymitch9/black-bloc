@@ -41,6 +41,7 @@ from ...cogs.content.marathon import (
     shout_now,
     unlink_the_event,
     unpair_runner,
+    words_for,
 )
 from ...cogs.content.marathon_announce import set_opt_out
 from ...cogs.content.marathon_archive import (
@@ -202,7 +203,10 @@ def run_row(guild: Any, row: Any, statuses: dict[int, str] | None = None) -> dic
 
 
 def entry_row(
-    guild: Any, entry: dict[str, Any], opted: set[int] | None = None
+    guild: Any,
+    entry: dict[str, Any],
+    opted: set[int] | None = None,
+    words: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """One person on the People card: who they are here, how they matched, their Go-live row,
     and — for a BaF person — whether they are opted out of the marathon's public posts."""
@@ -221,6 +225,7 @@ def entry_row(
         "username": found["name"] if found else None,
         "avatar_url": found["avatar_url"] if found else None,
         "parts": entry["parts"],
+        "part_tag": mh.part_tag(entry["parts"], words or {}),
         "runs": entry["runs"],
         "done": entry["done"],
         "live": entry["live"],
@@ -390,8 +395,6 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "spotlight_mode": spotlight_mode_of(row),
         "ping_role": pings_role(row),
         "public_highlight": highlights(row),
-        "scan_hosts": host_switch(bot, guild, row, mh.SCAN),
-        "host_events": host_switch(bot, guild, row, mh.EVENTS),
         "announcements": host_switch(bot, guild, row, mh.ANNOUNCE),
         "archived": False,
     } | await tracking_of(bot, guild, row)
@@ -520,12 +523,13 @@ def build_router(bot: Any) -> APIRouter:
     async def board(guild: Any, marathon: Any) -> dict[str, Any]:
         state = await people_state(bot, guild, marathon)
         opted = ma.opted_out(marathon)
+        words = words_for(bot, guild.id)
         return {
             "marathon_id": marathon["id"],
             "timezone": zone_of(bot, guild),
             "pairings": await people(guild, marathon),
-            "baf": [entry_row(guild, one, opted) for one in state["baf"]],
-            "others": [entry_row(guild, one) for one in state["others"]],
+            "baf": [entry_row(guild, one, opted, words) for one in state["baf"]],
+            "others": [entry_row(guild, one, None, words) for one in state["others"]],
         }
 
     @router.get("")
@@ -684,20 +688,23 @@ def build_router(bot: Any) -> APIRouter:
                 )
             )
             said.append(done.message)
-        for which in (mh.SCAN, mh.EVENTS, mh.ANNOUNCE):
-            if which in payload:
-                done = answered(
-                    await set_switch(
-                        bot,
-                        guild,
-                        actor,
-                        await wanted(guild, marathon_id),
-                        which,
-                        payload[which],
-                        via=VIA_WEBSITE,
-                    )
+        if "scan_hosts" in payload:
+            said.append(mh.SCAN_GONE)
+        if "host_events" in payload:
+            said.append(mh.HOST_EVENTS_GONE)
+        if mh.ANNOUNCE in payload:
+            done = answered(
+                await set_switch(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    mh.ANNOUNCE,
+                    payload[mh.ANNOUNCE],
+                    via=VIA_WEBSITE,
                 )
-                said.append(done.message)
+            )
+            said.append(done.message)
         if "public_highlight" in payload:
             done = answered(
                 await set_public_highlight(
@@ -883,13 +890,14 @@ def build_router(bot: Any) -> APIRouter:
 
     async def archived_board(guild: Any, marathon: Any) -> dict[str, Any]:
         state = await archived_people_state(bot, guild, marathon)
+        words = words_for(bot, guild.id)
         return {
             "marathon_id": marathon["id"],
             "timezone": zone_of(bot, guild),
             "archived": True,
             "pairings": [pairing_row(guild, one) for one in state["pairings"]],
-            "baf": [entry_row(guild, one, ma.opted_out(marathon)) for one in state["baf"]],
-            "others": [entry_row(guild, one) for one in state["others"]],
+            "baf": [entry_row(guild, one, ma.opted_out(marathon), words) for one in state["baf"]],
+            "others": [entry_row(guild, one, None, words) for one in state["others"]],
         }
 
     @router.get("/{marathon_id}/people")

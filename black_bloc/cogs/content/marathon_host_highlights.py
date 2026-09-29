@@ -31,7 +31,6 @@ from .marathon import (
     update_marathon,
 )
 from .marathon_announce import announces
-from .marathon_hosts import scans
 from .marathon_public import (
     edit_public,
     fetch_public,
@@ -53,13 +52,12 @@ def switched_on(bot: Any, guild_id: int) -> bool:
 
 
 def wanted(bot: Any, guild: Any, marathon: Any) -> bool:
-    """The host posts at all: the key, a tracked active marathon that scans its hosts."""
+    """The host posts at all: the key, a tracked active marathon."""
     return (
         switched_on(bot, guild.id)
         and bool(mt._cell(marathon, "active"))
         and mi.is_tracked(marathon)
         and mode_of(bot, guild.id) != MODE_OFF
-        and scans(bot, guild.id, marathon)
     )
 
 
@@ -101,8 +99,6 @@ async def save(bot: Any, marathon: Any, found: list[dict[str, Any]]) -> None:
 
 
 async def blocks_of(bot: Any, guild: Any, marathon: Any) -> list[mhh.Block]:
-    if not scans(bot, guild.id, marathon):
-        return []
     return mhh.blocks(await runs_of(bot.db, marathon["id"]))
 
 
@@ -280,7 +276,7 @@ async def sync_host_highlights(cog: Any, guild: Any, marathon: Any) -> None:
 
 async def went_live(cog: Any, guild: Any, marathon: Any, run_id: Any) -> None:
     """A run of a host block goes live: the block's highlight is posted when the marathon's
-    Auto-highlight and Runner/Host announcements are on, once per block."""
+    Auto-highlight and BaF announcements are on, once per block."""
     bot = cog.bot
     try:
         fresh = await get_marathon(bot.db, guild.id, marathon["id"]) if marathon else None

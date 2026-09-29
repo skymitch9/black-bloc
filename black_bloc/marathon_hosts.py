@@ -1,22 +1,30 @@
 from __future__ import annotations
 
 import json
-from typing import Any, NamedTuple
+from typing import Any
 
 from . import marathon as mt
+from . import marathon_host_highlights as mhh
 from . import spotlight as spot
 from .golive import parse_ts
 
 FOLLOW = "follow"
-SCAN = "scan_hosts"
-EVENTS = "host_events"
 ANNOUNCE = "announcements"
 YES = ("on", "true", "yes", "1")
 NO = ("off", "false", "no", "0")
 FOLLOWS = ("", "follow", "default", "setting", "null", "none")
 BAD_SWITCH = "Say on, off or follow for **{what}**, so nothing was changed."
 BAD_SWITCH_CODE = "bad_switch"
-WHAT = {SCAN: "Scan hosts", EVENTS: "BaF host events", ANNOUNCE: "Runner/Host announcements"}
+WHAT = {ANNOUNCE: "BaF announcements"}
+SCAN_GONE = (
+    "The Scan hosts switch is gone — hosts are always found now, like runners, so nothing was "
+    "changed."
+)
+HOST_EVENTS_GONE = (
+    "The BaF host events switch is gone — events now follow the one **BaF run/host events** "
+    "switch, so nothing was changed."
+)
+RETIRED = ("scan_hosts", "host_events")
 BAD_TWITCH = (
     "**{given}** is not a Twitch channel name (letters, digits and _, up to 25, or the "
     "channel's twitch.tv link), so nothing was changed."
@@ -26,14 +34,6 @@ LOGIN_SET = "**{runner}** is **twitch.tv/{login}** everywhere Black Bloc uses th
 LOGIN_CLEARED = "**{runner}** is back to the schedule's Twitch channel."
 LOGIN_SAME = "**{runner}** already has that Twitch channel, so nothing was changed."
 KEEP = object()
-
-
-class HostSpan(NamedTuple):
-    user_id: int
-    name: str
-    runs: list[Any]
-    starts: Any
-    ends: Any
 
 
 def clean_switch(given: Any) -> tuple[bool, bool | None]:
@@ -62,14 +62,6 @@ def switch_on(marathon: Any, column: str, default: Any) -> bool:
     return bool(default) if own is None else own
 
 
-def scans_hosts(marathon: Any, default: Any) -> bool:
-    return switch_on(marathon, SCAN, default)
-
-
-def makes_host_events(marathon: Any, default: Any) -> bool:
-    return switch_on(marathon, EVENTS, default)
-
-
 def clean_login(given: Any) -> tuple[bool, str | None]:
     """`(understood, login)`: a blank clears the fix."""
     text = str(given or "").strip()
@@ -79,25 +71,96 @@ def clean_login(given: Any) -> tuple[bool, str | None]:
     return (login is not None, login)
 
 
-def event_ids(marathon: Any) -> dict[int, int]:
-    raw = mt._cell(marathon, "host_event_ids")
-    try:
-        found = json.loads(raw or "{}")
-    except (TypeError, ValueError):
-        return {}
-    if not isinstance(found, dict):
-        return {}
-    kept: dict[int, int] = {}
-    for key, value in found.items():
+def _ints(values: Any) -> list[int]:
+    kept = []
+    for one in values or ():
         try:
-            kept[int(key)] = int(value)
+            kept.append(int(one))
         except (TypeError, ValueError):
             continue
     return kept
 
 
-def dump_ids(ids: dict[int, int]) -> str:
-    return json.dumps({str(key): int(value) for key, value in sorted(ids.items())})
+def event_records(marathon: Any) -> list[dict[str, Any]]:
+    """One record per host BLOCK event; the v190 per-host `{user_id: event_id}` shape reads as
+    records with no runs, claimed by that host's first block."""
+    raw = mt._cell(marathon, "host_event_ids")
+    try:
+        found = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return []
+    if isinstance(found, dict):
+        found = [{"event_id": value, "hosts": [key], "runs": []} for key, value in found.items()]
+    if not isinstance(found, list):
+        return []
+    kept = []
+    for one in found:
+        if not isinstance(one, dict):
+            continue
+        try:
+            event_id = int(one.get("event_id"))
+        except (TypeError, ValueError):
+            continue
+        runs = _ints(one.get("runs"))
+        kept.append(
+            {
+                "event_id": event_id,
+                "start_run_id": runs[0] if runs else None,
+                "runs": runs,
+                "hosts": _ints(one.get("hosts")),
+            }
+        )
+    return kept
+
+
+def dump_records(found: list[dict[str, Any]]) -> str:
+    return json.dumps(
+        [
+            {
+                "event_id": int(one["event_id"]),
+                "runs": list(one["runs"]),
+                "hosts": list(one["hosts"]),
+            }
+            for one in found
+        ]
+    )
+
+
+def claim(found: list[dict[str, Any]], block: mhh.Block, used: set[int]) -> dict[str, Any] | None:
+    """The block's record: one that starts where it starts, else one sharing a host and a run,
+    else a per-host record from before blocks that names one of its hosts."""
+    free = [one for one in found if id(one) not in used]
+    hosts = set(block.user_ids)
+    runs = set(block.run_ids)
+    for test in (
+        lambda one: one["start_run_id"] == block.start_run_id,
+        lambda one: hosts & set(one["hosts"]) and runs & set(one["runs"]),
+        lambda one: not one["runs"] and hosts & set(one["hosts"]),
+    ):
+        hit = next((one for one in free if test(one)), None)
+        if hit is not None:
+            used.add(id(hit))
+            return hit
+    return None
+
+
+def fit(record: dict[str, Any], block: mhh.Block) -> None:
+    record["runs"] = block.run_ids
+    record["start_run_id"] = block.start_run_id
+    record["hosts"] = block.user_ids
+
+
+def span_of(block: mhh.Block) -> tuple[Any, Any]:
+    starts = [at for at in (parse_ts(mt._cell(one, "scheduled_at")) for one in block.runs) if at]
+    ends = [
+        at
+        for at in (
+            parse_ts(mt._cell(one, "ends_at")) or parse_ts(mt._cell(one, "scheduled_at"))
+            for one in block.runs
+        )
+        if at
+    ]
+    return (min(starts) if starts else None, max(ends) if ends else None)
 
 
 def is_runner_run(row: Any) -> bool:
@@ -105,50 +168,13 @@ def is_runner_run(row: Any) -> bool:
     return any(one.get("user_id") and one.get("part") != mt.HOST for one in mt.people_of(row))
 
 
-def hosted(runs: Any) -> list[HostSpan]:
-    """Each BaF host once, with the runs they host (dropped runs left out) and their span."""
-    found: dict[int, list[Any]] = {}
-    names: dict[int, str] = {}
-    for row in sorted(
-        (one for one in runs or () if mt._cell(one, "state") != mt.DROPPED), key=mt._when
-    ):
-        for person in mt.people_of(row):
-            if person.get("part") != mt.HOST or not person.get("user_id"):
-                continue
-            user_id = int(person["user_id"])
-            if row not in found.setdefault(user_id, []):
-                found[user_id].append(row)
-            names.setdefault(user_id, str(person.get("name") or user_id))
-    spans = []
-    for user_id, rows in found.items():
-        starts = [at for at in (parse_ts(mt._cell(one, "scheduled_at")) for one in rows) if at]
-        ends = [
-            at
-            for at in (
-                parse_ts(mt._cell(one, "ends_at")) or parse_ts(mt._cell(one, "scheduled_at"))
-                for one in rows
-            )
-            if at
-        ]
-        spans.append(
-            HostSpan(
-                user_id,
-                names[user_id],
-                rows,
-                min(starts) if starts else None,
-                max(ends) if ends else None,
-            )
-        )
-    return spans
-
-
-def event_fields(span: HostSpan, marathon: Any, name: str | None = None) -> dict[str, str]:
-    games = list(dict.fromkeys(str(mt._cell(one, "game") or "") for one in span.runs))
+def event_fields(block: mhh.Block, marathon: Any, name: str | None = None) -> dict[str, str]:
+    games = list(dict.fromkeys(str(mt._cell(one, "game") or "") for one in block.runs))
     return {
-        "member": name or span.name,
+        "member": name or block.names,
         "marathon": str(mt._cell(marathon, "name") or ""),
         "games": ", ".join(one for one in games if one),
-        "runs": str(len(span.runs)),
+        "runs": str(len(block.runs)),
     }
 
 
@@ -157,23 +183,29 @@ def host_only(parts: Any) -> bool:
     return mt.HOST in kinds and mt.RUNNER not in kinds
 
 
+def part_tag(parts: Any, words: dict[str, str]) -> str:
+    """The small tag beside a BaF person's name: their parts in the part keys' words."""
+    return " + ".join(words.get(mt.PART_KEYS.get(one, ""), str(one)) for one in parts or ())
+
+
 __all__ = [
     "ANNOUNCE",
     "BAD_SWITCH",
     "BAD_TWITCH",
-    "EVENTS",
     "FOLLOW",
-    "HostSpan",
-    "SCAN",
+    "HOST_EVENTS_GONE",
+    "RETIRED",
+    "SCAN_GONE",
+    "claim",
     "clean_login",
     "clean_switch",
-    "dump_ids",
+    "dump_records",
     "event_fields",
-    "event_ids",
+    "event_records",
+    "fit",
     "host_only",
-    "hosted",
     "is_runner_run",
-    "makes_host_events",
-    "scans_hosts",
+    "part_tag",
+    "span_of",
     "stored",
 ]

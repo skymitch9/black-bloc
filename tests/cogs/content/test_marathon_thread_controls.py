@@ -132,13 +132,11 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
     assert message.content.startswith("Staff: these buttons set **AGDQ 2027**'s events")
     assert labels(message) == [
         "Marathon event: off · turn on",
-        "BaF run events: off · turn on",
+        "BaF run/host events: off · turn on",
         "Spotlight: on now · stop",
         "Auto-highlight BaF runners when live: off · turn on",
         "Ping the marathon role: off · turn on",
-        "Scan hosts: on · turn off",
-        "BaF host events: off · turn on",
-        "Runner/Host announcements: on · turn off",
+        "BaF announcements: on · turn off",
     ]
     ids = [one.custom_id for one in buttons(message)]
     assert ids == [
@@ -147,8 +145,6 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         f"marathon:controls:{marathon['id']}:spotlight:off",
         f"marathon:controls:{marathon['id']}:highlight:on",
         f"marathon:controls:{marathon['id']}:ping:on",
-        f"marathon:controls:{marathon['id']}:hosts:off",
-        f"marathon:controls:{marathon['id']}:hostevents:on",
         f"marathon:controls:{marathon['id']}:announce:off",
     ]
     assert message.kwargs["allowed_mentions"].users is False
@@ -229,12 +225,18 @@ async def test_each_events_button_moves_one_half_through_set_event_mode(
 
     await pressed(bot, marathon, "event", "on")
     assert (await fresh(bot, marathon))["event_mode"] == "marathon"
-    assert labels(message)[:2] == ["Marathon event: on · turn off", "BaF run events: off · turn on"]
+    assert labels(message)[:2] == [
+        "Marathon event: on · turn off",
+        "BaF run/host events: off · turn on",
+    ]
     await pressed(bot, marathon, "runs", "on")
     assert (await fresh(bot, marathon))["event_mode"] == "both"
     await pressed(bot, marathon, "event", "off")
     assert (await fresh(bot, marathon))["event_mode"] == "runs"
-    assert labels(message)[:2] == ["Marathon event: off · turn on", "BaF run events: on · turn off"]
+    assert labels(message)[:2] == [
+        "Marathon event: off · turn on",
+        "BaF run/host events: on · turn off",
+    ]
     await pressed(bot, marathon, "runs", "off")
     assert (await fresh(bot, marathon))["event_mode"] == "none"
 
@@ -265,7 +267,7 @@ async def test_a_mode_change_from_the_drawer_or_the_card_re_renders_the_message(
     message = controls_in(the_thread(bot))[0]
 
     await runev.set_event_mode(bot, bot.guild, FakeActor(), marathon, "runs", via="website")
-    assert labels(message)[1] == "BaF run events: on · turn off"
+    assert labels(message)[1] == "BaF run/host events: on · turn off"
 
     await make_event_now(bot, bot.guild, FakeActor(), await fresh(bot, marathon))
     assert labels(message)[0] == "Marathon event: on · turn off"
@@ -670,23 +672,40 @@ async def logged(bot, kind):
 # --- the host buttons ---------------------------------------------------------------------------
 
 
-async def test_the_host_buttons_flip_their_switches_through_the_writer_and_relabel(bot, cog):
+@pytest.mark.parametrize(
+    ("action", "to", "said"),
+    [
+        ("hosts", "on", "hosts are always found now"),
+        ("hosts", "off", "hosts are always found now"),
+        ("hostevents", "on", "events now follow the one **BaF run/host events** switch"),
+        ("hostevents", "off", "events now follow the one **BaF run/host events** switch"),
+    ],
+)
+async def test_a_removed_host_button_answers_in_words_and_changes_nothing(
+    bot, cog, action, to, said
+):
     marathon = await tracked_marathon(bot, cog)
     message = controls_in(the_thread(bot))[0]
-    assert (await fresh(bot, marathon))["scan_hosts"] is None
+    before = dict(await fresh(bot, marathon))
 
-    said = await pressed(bot, marathon, "hosts", "on")
+    answered = await pressed(bot, marathon, action, to)
 
-    assert said.ok and "scans its hosts now" in said.message
-    assert (await fresh(bot, marathon))["scan_hosts"] == 1
-    assert labels(message)[5] == "Scan hosts: on · turn off"
-    assert buttons(message)[5].custom_id == f"marathon:controls:{marathon['id']}:hosts:off"
-    events = await pressed(bot, marathon, "hostevents", "on")
-    assert events.ok and (await fresh(bot, marathon))["host_events"] == 1
-    assert labels(message)[6] == "BaF host events: on · turn off"
-    again = await pressed(bot, marathon, "hosts", "off")
-    assert again.ok and (await fresh(bot, marathon))["scan_hosts"] == 0
-    assert labels(message)[5] == "Scan hosts: off · turn on"
+    assert not answered.ok and said in answered.message
+    after = dict(await fresh(bot, marathon))
+    assert (after["scan_hosts"], after["host_events"], after["event_mode"]) == (
+        before["scan_hosts"],
+        before["host_events"],
+        before["event_mode"],
+    )
+    assert len(labels(message)) == 6
+
+
+async def test_a_removed_host_button_clicked_in_discord_answers_in_words(bot, cog):
+    marathon = await tracked_marathon(bot, cog)
+    button = controls.ControlButton(marathon["id"], "hostevents", "on")
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await button.on_click(interaction)
+    assert "BaF run/host events" in interaction.sent
 
 
 async def test_a_host_button_rebuilds_from_its_custom_id():

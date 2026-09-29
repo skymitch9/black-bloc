@@ -395,6 +395,8 @@ async def set_event_mode(
     bot: Any, guild: Any, actor: Any, marathon: Any, mode: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """Applies at once: makes what the new mode asks for, lets go of what it no longer does."""
+    from .marathon_hosts import sync_host_events
+
     wanted = me.clean_mode(mode)
     if wanted is None:
         return refusal(me.BAD_MODE.format(given=str(mode or "")[:40]), BAD_MODE_CODE, 422)
@@ -422,18 +424,22 @@ async def set_event_mode(
             details["marathon_event"] = int(fresh["event_id"])
             await update_marathon(bot.db, fresh["id"], event_id=None)
         fresh = await get_marathon(bot.db, guild.id, fresh["id"])
+        runs: dict[str, int] = {}
         if me.makes_run_events(wanted):
-            counts = await sync_run_events(bot, guild, fresh, actor=actor)
-            details |= counts
-            if counts.get("made"):
-                said.append(me.RUN_EVENTS_MADE.format(count=counts["made"]))
+            runs = await sync_run_events(bot, guild, fresh, actor=actor)
         elif me.makes_run_events(was):
-            counts = await leave_run_events(bot, guild, fresh, actor=actor)
-            details |= counts
-            if counts["cancelled"]:
-                said.append(me.RUN_EVENTS_CANCELLED.format(count=counts["cancelled"]))
-            if counts["kept"]:
-                said.append(me.RUN_EVENTS_KEPT.format(count=counts["kept"]))
+            runs = await leave_run_events(bot, guild, fresh, actor=actor)
+        hosted = await sync_host_events(bot, guild, fresh, actor=actor)
+        details |= runs
+        details["host_blocks"] = hosted
+        made = runs.get("made", 0) + hosted.get("made", 0)
+        cancelled = runs.get("cancelled", 0) + hosted.get("cancelled", 0)
+        if made:
+            said.append(me.RUN_EVENTS_MADE.format(count=made))
+        if cancelled:
+            said.append(me.RUN_EVENTS_CANCELLED.format(count=cancelled))
+        if runs.get("kept"):
+            said.append(me.RUN_EVENTS_KEPT.format(count=runs["kept"]))
     await log_action(
         bot,
         guild,

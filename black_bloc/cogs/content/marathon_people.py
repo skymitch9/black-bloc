@@ -315,8 +315,7 @@ class PeoplePanel(Panel):
 
 
 def part_words(bot: Any, guild: Any, parts: list[Any]) -> str:
-    words = words_for(bot, guild.id)
-    return ", ".join(words.get(mt.PART_KEYS.get(part, ""), str(part)) for part in parts)
+    return mh.part_tag(parts, words_for(bot, guild.id))
 
 
 def run_chip(one: dict[str, Any]) -> str:
@@ -365,9 +364,10 @@ def person_line(bot: Any, guild: Any, entry: Any, person: dict[str, Any]) -> str
     if not person.get("user_id") and near:
         how = mp.SLOT_LOOKS_LIKE.format(username=near["username"])
     extra = spotlight_words(entry or {})
+    parts = (entry or {}).get("parts") if person.get("user_id") else None
     line = mp.SLOT_PERSON.format(
         who=who,
-        part=part_words(bot, guild, [person.get("part")]),
+        part=part_words(bot, guild, parts or [person.get("part")]),
         baf=mp.BAF_MARK if person.get("user_id") else "",
         twitch=twitch_of(person),
         how=how or "—",

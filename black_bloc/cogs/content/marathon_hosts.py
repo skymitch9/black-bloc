@@ -4,6 +4,8 @@ from datetime import timedelta
 from typing import Any
 
 from ... import marathon as mt
+from ... import marathon_events as me
+from ... import marathon_host_highlights as mhh
 from ... import marathon_hosts as mh
 from ...actionlog import log_action
 from ...events import DESCRIPTION_LIMIT as EVENT_DESCRIPTION_LIMIT
@@ -19,13 +21,7 @@ from ...settings_store import (
     MARATHON_ANNOUNCEMENTS_ON_SAID_KEY,
     MARATHON_HOST_EVENT_DESCRIPTION_KEY,
     MARATHON_HOST_EVENT_TITLE_KEY,
-    MARATHON_HOST_EVENTS_DEFAULT_KEY,
-    MARATHON_HOST_EVENTS_OFF_SAID_KEY,
-    MARATHON_HOST_EVENTS_ON_SAID_KEY,
     MARATHON_RUN_EVENT_CANCEL_ON_LEAVE_KEY,
-    MARATHON_SCAN_HOSTS_DEFAULT_KEY,
-    MARATHON_SCAN_HOSTS_OFF_SAID_KEY,
-    MARATHON_SCAN_HOSTS_ON_SAID_KEY,
 )
 from .marathon import (
     NO_SUCH,
@@ -41,31 +37,19 @@ NOT_HOST = "not_host"
 SWITCHED_OFF = "switched_off"
 HOST_GONE = "marathon_removed"
 SAID = {
-    (mh.SCAN, True): MARATHON_SCAN_HOSTS_ON_SAID_KEY,
-    (mh.SCAN, False): MARATHON_SCAN_HOSTS_OFF_SAID_KEY,
-    (mh.EVENTS, True): MARATHON_HOST_EVENTS_ON_SAID_KEY,
-    (mh.EVENTS, False): MARATHON_HOST_EVENTS_OFF_SAID_KEY,
     (mh.ANNOUNCE, True): MARATHON_ANNOUNCEMENTS_ON_SAID_KEY,
     (mh.ANNOUNCE, False): MARATHON_ANNOUNCEMENTS_OFF_SAID_KEY,
 }
-DEFAULTS = {
-    mh.SCAN: MARATHON_SCAN_HOSTS_DEFAULT_KEY,
-    mh.EVENTS: MARATHON_HOST_EVENTS_DEFAULT_KEY,
-    mh.ANNOUNCE: MARATHON_ANNOUNCEMENTS_DEFAULT_KEY,
-}
-
+DEFAULTS = {mh.ANNOUNCE: MARATHON_ANNOUNCEMENTS_DEFAULT_KEY}
 
 
 def words(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
     return mt.render(bot.store.get(guild_id, key), said_default(key), **fields).text
 
 
-def scans(bot: Any, guild_id: int, marathon: Any) -> bool:
-    return mh.scans_hosts(marathon, bot.store.get(guild_id, MARATHON_SCAN_HOSTS_DEFAULT_KEY))
-
-
-def host_events_on(bot: Any, guild_id: int, marathon: Any) -> bool:
-    return mh.makes_host_events(marathon, bot.store.get(guild_id, MARATHON_HOST_EVENTS_DEFAULT_KEY))
+def host_events_on(marathon: Any) -> bool:
+    """Host blocks get events exactly when the marathon's BaF run/host events are on."""
+    return bool(mt._cell(marathon, "active")) and me.makes_run_events(me.mode_of(marathon))
 
 
 def switch_state(bot: Any, guild_id: int, marathon: Any, which: str) -> dict[str, Any]:
@@ -84,9 +68,7 @@ async def set_switch(
     *,
     via: str = VIA_DISCORD,
 ) -> Outcome:
-    """Scan hosts, BaF host events or Runner/Host announcements for one marathon: on, off, or
-    None to follow the setting."""
-    from .marathon import rematched
+    """BaF announcements for one marathon: on, off, or None to follow the setting."""
     from .marathon_thread_controls import controls_changed
 
     understood, wanted = mh.clean_switch(given)
@@ -102,10 +84,6 @@ async def set_switch(
         )
         fresh = await get_marathon(bot.db, guild.id, fresh["id"])
         now = switch_state(bot, guild.id, fresh, which)
-        if which == mh.SCAN:
-            await rematched(bot, guild, fresh, actor)
-        elif which == mh.EVENTS:
-            await sync_host_events(bot, guild, fresh, actor=actor, via=via)
     details = {
         "marathon_id": fresh["id"],
         "name": fresh["name"],
@@ -115,18 +93,7 @@ async def set_switch(
         "via": via,
     }
     await log_action(
-        bot,
-        guild,
-        kind_via(
-            "marathon.scan_hosts_set"
-            if which == mh.SCAN
-            else "marathon.host_events_set"
-            if which == mh.EVENTS
-            else "marathon.announcements_set",
-            via,
-        ),
-        actor=actor,
-        details=details,
+        bot, guild, kind_via("marathon.announcements_set", via), actor=actor, details=details
     )
     await controls_changed(bot, guild, fresh["id"])
     return Outcome(
@@ -136,144 +103,172 @@ async def set_switch(
     )
 
 
-def host_names(guild: Any, span: mh.HostSpan) -> str:
-    member = guild.get_member(span.user_id) if hasattr(guild, "get_member") else None
-    return str(getattr(member, "display_name", "") or "") or span.name
+def host_names(guild: Any, block: mhh.Block) -> str:
+    names = []
+    for one in block.hosts:
+        member = guild.get_member(int(one["user_id"])) if hasattr(guild, "get_member") else None
+        names.append(str(getattr(member, "display_name", "") or "") or str(one["name"]))
+    return ", ".join(names)
 
 
-async def host_fields(bot: Any, guild: Any, marathon: Any, span: mh.HostSpan) -> Any:
-    if span.starts is None:
+async def host_fields(bot: Any, guild: Any, marathon: Any, block: mhh.Block) -> Any:
+    starts, ends = mh.span_of(block)
+    if starts is None:
         return None
-    finishes = span.ends if span.ends is not None and span.ends > span.starts else span.starts
+    finishes = ends if ends is not None and ends > starts else starts
     login = await channel_login(bot, marathon)
-    own = next(
-        (
-            one.get("login")
-            for row in span.runs
-            for one in mt.people_of(row)
-            if one.get("user_id") == span.user_id and one.get("login")
-        ),
-        None,
-    )
+    own = next((one.get("login") for one in block.hosts if one.get("login")), None)
     if login or own:
         place = mt.TWITCH_URL.format(login=login or own)
     else:
         place = (
             schedule_page(marathon["source"], marathon["source_ref"]) or marathon["schedule_url"]
         )
-    fields = mh.event_fields(span, marathon, host_names(guild, span))
+    fields = mh.event_fields(block, marathon, host_names(guild, block))
     title = words(bot, guild.id, MARATHON_HOST_EVENT_TITLE_KEY, **fields)
     description = words(bot, guild.id, MARATHON_HOST_EVENT_DESCRIPTION_KEY, **fields)
     return EventFields(
         clamp(title, EVENT_TITLE_LIMIT),
         clamp(description, EVENT_DESCRIPTION_LIMIT),
         Where(WHERE_OTHER, None, clamp(place, EVENT_LOCATION_LIMIT)),
-        span.starts,
-        max(1, int((finishes - span.starts).total_seconds() // 60)),
+        starts,
+        max(1, int((finishes - starts).total_seconds() // 60)),
     )
 
 
-def details_of(marathon: Any, user_id: int, **extra: Any) -> dict[str, Any]:
-    return {"marathon_id": marathon["id"], "member_id": int(user_id)} | extra
+def details_of(marathon: Any, record: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    return {
+        "marathon_id": marathon["id"],
+        "members": list(record["hosts"]),
+        "runs": list(record["runs"]),
+    } | extra
+
+
+async def _redate(
+    bot: Any, guild: Any, marathon: Any, record: dict[str, Any], block: mhh.Block, event: Any
+) -> int:
+    from .marathon_events import redated
+
+    fields = await host_fields(bot, guild, marathon, block)
+    if fields is None:
+        return 0
+    finishes = fields.starts + timedelta(minutes=int(fields.minutes))
+    moved = await redated(bot, guild, event, fields.starts, finishes)
+    if moved is None:
+        return 0
+    extra = {"event_id": record["event_id"], "scheduled": moved}
+    await log_action(
+        bot, guild, "marathon.host_event_redated", details=details_of(marathon, record, **extra)
+    )
+    if moved not in SCHEDULED_OK:
+        await log_action(
+            bot,
+            guild,
+            "marathon.scheduled_move_failed",
+            details=details_of(marathon, record, **extra),
+        )
+    return 1
+
+
+async def _make(
+    bot: Any, guild: Any, marathon: Any, block: mhh.Block, actor: Any, via: str
+) -> dict[str, Any] | None:
+    from .marathon_events import event_from
+
+    fields = await host_fields(bot, guild, marathon, block)
+    if fields is None:
+        return None
+    record = {
+        "event_id": 0,
+        "start_run_id": block.start_run_id,
+        "runs": block.run_ids,
+        "hosts": block.user_ids,
+    }
+    made, why, reviewed = await event_from(bot, guild, marathon, fields, actor=actor, via=via)
+    if made is None:
+        await log_action(
+            bot,
+            guild,
+            kind_via("marathon.host_event_failed", via),
+            actor=actor,
+            details=details_of(marathon, record, reason=why[:300], via=via),
+        )
+        return record
+    record["event_id"] = int(made["id"])
+    await log_action(
+        bot,
+        guild,
+        kind_via("marathon.host_event_made", via),
+        actor=actor,
+        target=block.user_ids[0],
+        details=details_of(
+            marathon,
+            record,
+            event_id=int(made["id"]),
+            status=made["status"],
+            reviewed=reviewed,
+            via=via,
+        ),
+    )
+    return record
 
 
 async def sync_host_events(
     bot: Any, guild: Any, marathon: Any, *, actor: Any = None, via: str = VIA_DISCORD
 ) -> dict[str, int]:
-    """Under the marathon's lock: one event per BaF host while the switch is on and the marathon
-    scans its hosts, kept to their hosted runs' span; called off when they stop being a host."""
-    from .marathon_events import event_from, redated
-
+    """Under the marathon's lock: one event per BaF host BLOCK while its BaF run/host events are
+    on, kept to the block's span; called off when the block is gone or the switch goes off."""
     fresh = await get_marathon(bot.db, guild.id, marathon["id"])
     if fresh is None:
         return {}
     counts = {"made": 0, "redated": 0, "cancelled": 0, "failed": 0}
-    wanted = (
-        bool(fresh["active"])
-        and host_events_on(bot, guild.id, fresh)
-        and scans(bot, guild.id, fresh)
-    )
-    ids = mh.event_ids(fresh)
-    spans = {one.user_id: one for one in mh.hosted(await runs_of(bot.db, fresh["id"]))}
+    wanted = host_events_on(fresh)
+    found = mh.event_records(fresh)
+    before = mh.dump_records(found)
+    blocks = mhh.blocks(await runs_of(bot.db, fresh["id"]))
     now = cog_of(bot).clock()
-    changed = False
     cancelling = bool(bot.store.get(guild.id, MARATHON_RUN_EVENT_CANCEL_ON_LEAVE_KEY))
-    for user_id, event_id in list(ids.items()):
-        event = await get_event(bot.db, event_id)
-        span = spans.get(user_id)
-        if event is None:
-            ids.pop(user_id)
-            changed = True
+    events = {}
+    for record in found:
+        event = await get_event(bot.db, record["event_id"])
+        if event is not None:
+            events[id(record)] = event
+    found = [one for one in found if id(one) in events]
+    used: set[int] = set()
+    owner: dict[int, mhh.Block] = {}
+    for block in blocks:
+        record = mh.claim(found, block, used)
+        if record is not None:
+            owner[id(record)] = block
+    kept: list[dict[str, Any]] = []
+    for record in found:
+        block = owner.get(id(record))
+        event = events[id(record)]
+        if block is not None and wanted:
+            mh.fit(record, block)
+            kept.append(record)
+            counts["redated"] += await _redate(bot, guild, fresh, record, block, event)
             continue
-        if span is not None and wanted:
-            fields = await host_fields(bot, guild, fresh, span)
-            if fields is None:
-                continue
-            finishes = fields.starts + timedelta(minutes=int(fields.minutes))
-            moved = await redated(bot, guild, event, fields.starts, finishes)
-            if moved is not None:
-                counts["redated"] += 1
-                await log_action(
-                    bot,
-                    guild,
-                    "marathon.host_event_redated",
-                    details=details_of(fresh, user_id, event_id=event_id, scheduled=moved),
-                )
-                if moved not in SCHEDULED_OK:
-                    await log_action(
-                        bot,
-                        guild,
-                        "marathon.scheduled_move_failed",
-                        details=details_of(fresh, user_id, event_id=event_id, scheduled=moved),
-                    )
-            continue
-        ids.pop(user_id)
-        changed = True
-        reason = NOT_HOST if span is None else SWITCHED_OFF
+        reason = NOT_HOST if block is None else SWITCHED_OFF
         if reason == SWITCHED_OFF and not cancelling:
             continue
-        counts["cancelled"] += await _cancelled(
-            bot, guild, fresh, user_id, event_id, reason, actor, via
-        )
+        counts["cancelled"] += await _cancelled(bot, guild, fresh, record, reason, actor, via)
     if wanted:
-        for user_id, span in spans.items():
-            if user_id in ids or span.ends is None or span.ends <= now:
+        claimed = {id(block) for block in owner.values()}
+        for block in blocks:
+            _starts, ends = mh.span_of(block)
+            if id(block) in claimed or ends is None or ends <= now:
                 continue
-            fields = await host_fields(bot, guild, fresh, span)
-            if fields is None:
+            record = await _make(bot, guild, fresh, block, actor, via)
+            if record is None:
                 continue
-            made, why, reviewed = await event_from(bot, guild, fresh, fields, actor=actor, via=via)
-            if made is None:
+            if not record["event_id"]:
                 counts["failed"] += 1
-                await log_action(
-                    bot,
-                    guild,
-                    kind_via("marathon.host_event_failed", via),
-                    actor=actor,
-                    details=details_of(fresh, user_id, reason=why[:300], via=via),
-                )
                 continue
-            ids[user_id] = int(made["id"])
-            changed = True
+            kept.append(record)
             counts["made"] += 1
-            await log_action(
-                bot,
-                guild,
-                kind_via("marathon.host_event_made", via),
-                actor=actor,
-                target=user_id,
-                details=details_of(
-                    fresh,
-                    user_id,
-                    event_id=int(made["id"]),
-                    status=made["status"],
-                    reviewed=reviewed,
-                    runs=[int(row["id"]) for row in span.runs],
-                    via=via,
-                ),
-            )
-    if changed:
-        await update_marathon(bot.db, fresh["id"], host_event_ids=mh.dump_ids(ids))
+    if mh.dump_records(kept) != before:
+        await update_marathon(bot.db, fresh["id"], host_event_ids=mh.dump_records(kept))
     return counts
 
 
@@ -281,15 +276,16 @@ async def _cancelled(
     bot: Any,
     guild: Any,
     marathon: Any,
-    user_id: int,
-    event_id: int,
+    record: dict[str, Any],
     reason: str,
     actor: Any,
     via: str,
 ) -> int:
     from .marathon_events import call_off
 
+    event_id = record["event_id"]
     cancelled, trouble = await call_off(bot, guild, event_id, reason, actor=actor, via=via)
+    target = record["hosts"][0] if record["hosts"] else None
     if not cancelled:
         if trouble:
             await log_action(
@@ -297,7 +293,7 @@ async def _cancelled(
                 guild,
                 "marathon.host_event_failed",
                 details=details_of(
-                    marathon, user_id, event_id=event_id, reason=trouble, calling_off=reason
+                    marathon, record, event_id=event_id, reason=trouble, calling_off=reason
                 ),
             )
         return 0
@@ -306,8 +302,8 @@ async def _cancelled(
         guild,
         kind_via("marathon.host_event_cancelled", via),
         actor=actor,
-        target=user_id,
-        details=details_of(marathon, user_id, event_id=event_id, reason=reason, via=via),
+        target=target,
+        details=details_of(marathon, record, event_id=event_id, reason=reason, via=via),
     )
     return 1
 
@@ -316,19 +312,18 @@ async def cancel_every_host_event(
     bot: Any, guild: Any, marathon: Any, *, actor: Any = None, via: str = VIA_DISCORD
 ) -> int:
     fresh = await get_marathon(bot.db, guild.id, marathon["id"]) or marathon
-    ids = mh.event_ids(fresh)
+    found = mh.event_records(fresh)
     cancelled = 0
-    for user_id, event_id in ids.items():
-        cancelled += await _cancelled(bot, guild, fresh, user_id, event_id, HOST_GONE, actor, via)
-    if ids:
-        await update_marathon(bot.db, fresh["id"], host_event_ids=mh.dump_ids({}))
+    for record in found:
+        cancelled += await _cancelled(bot, guild, fresh, record, HOST_GONE, actor, via)
+    if found:
+        await update_marathon(bot.db, fresh["id"], host_event_ids=mh.dump_records([]))
     return cancelled
 
 
 __all__ = [
     "cancel_every_host_event",
     "host_events_on",
-    "scans",
     "set_switch",
     "switch_state",
     "sync_host_events",

@@ -13,7 +13,7 @@ MODES = MARATHON_EVENT_MODES
 MODE_WORDS = {
     NONE: "No event",
     MARATHON: "One event for the marathon",
-    RUNS: f"An event per {BAF} run",
+    RUNS: f"An event per {BAF} run and host block",
     BOTH: "Both",
 }
 LEGACY_YES = ("yes", "y", "true", "on", "1")
@@ -34,11 +34,11 @@ MODE_SAME = "**{name}** already makes {words}, so nothing was changed."
 MODE_SENTENCES = {
     NONE: "no event",
     MARATHON: "one event for the whole marathon",
-    RUNS: f"one event per {BAF} run, kept in step with the schedule",
-    BOTH: f"one event for the marathon and one per {BAF} run",
+    RUNS: f"one event per {BAF} run and per {BAF} host block, kept in step with the schedule",
+    BOTH: f"one event for the marathon and one per {BAF} run and host block",
 }
-RUN_EVENTS_MADE = "{count} run event(s) made."
-RUN_EVENTS_CANCELLED = "{count} run event(s) called off."
+RUN_EVENTS_MADE = "{count} run or host block event(s) made."
+RUN_EVENTS_CANCELLED = "{count} run or host block event(s) called off."
 RUN_EVENTS_KEPT = "{count} run event(s) left on the calendar."
 RUN_EVENT_LINE = "event **#{event_id}** — {status}"
 RUN_EVENT_MADE = "**{game}** has its own event now, **#{event_id}**."

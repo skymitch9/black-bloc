@@ -15,7 +15,8 @@ PING = "ping"
 HOSTS = "hosts"
 HOST_EVENTS = "hostevents"
 ANNOUNCE = "announce"
-ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, HOSTS, HOST_EVENTS, ANNOUNCE)
+ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, ANNOUNCE)
+RETIRED = (HOSTS, HOST_EVENTS)
 ON = "on"
 OFF = "off"
 CANCEL = "cancel"
@@ -102,8 +103,6 @@ def controls(
     spot_state: Any,
     highlight: bool = False,
     ping: bool = False,
-    hosts: bool = False,
-    host_events: bool = False,
     announce: bool = True,
 ) -> tuple[Control, ...]:
     """Each button carries the move it makes, so a stale label can never do the opposite."""
@@ -115,8 +114,6 @@ def controls(
         spot_control(spot),
         switch(HIGHLIGHT, highlight),
         switch(PING, ping),
-        switch(HOSTS, hosts),
-        switch(HOST_EVENTS, host_events),
         switch(ANNOUNCE, announce),
     )
 
@@ -128,6 +125,7 @@ def label(text: Any) -> str:
 __all__ = [
     "ACTIONS",
     "Control",
+    "RETIRED",
     "controls",
     "custom_id",
     "halves",

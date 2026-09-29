@@ -1,4 +1,4 @@
-"""Runner/Host announcements: the marathon's switch and each person's opt-out."""
+"""BaF announcements: the marathon's switch and each person's opt-out."""
 
 from __future__ import annotations
 
