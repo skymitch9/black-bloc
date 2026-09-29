@@ -10,6 +10,7 @@ from typing import Any
 import discord
 
 from ... import marathon as mt
+from ... import marathon_announce as ma
 from ... import marathon_inbox as mi
 from ... import marathon_public as mp
 from ... import marathon_runner_posts as mrp
@@ -21,21 +22,15 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import Outcome, answer, refusal, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
-    MARATHON_PUBLIC_ALREADY_KEY,
     MARATHON_PUBLIC_AUTO_OFF_SAID_KEY,
     MARATHON_PUBLIC_AUTO_ON_SAID_KEY,
     MARATHON_PUBLIC_AUTO_SAME_KEY,
-    MARATHON_PUBLIC_BUTTON_POST_KEY,
-    MARATHON_PUBLIC_BUTTON_REMOVE_KEY,
+    MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
+    MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
     MARATHON_PUBLIC_CHANNEL_KEY,
     MARATHON_PUBLIC_DEFAULT_KEY,
-    MARATHON_PUBLIC_FAILED_KEY,
-    MARATHON_PUBLIC_NO_CHANNEL_KEY,
     MARATHON_PUBLIC_NOT_POSTABLE_KEY,
-    MARATHON_PUBLIC_NOT_UP_KEY,
-    MARATHON_PUBLIC_POSTED_SAID_KEY,
     MARATHON_PUBLIC_REMOVED_KEY,
-    MARATHON_PUBLIC_REMOVED_SAID_KEY,
     MARATHON_PUBLIC_TEMPLATE_KEY,
     MARATHON_RUNNER_POST_UNLISTED_KEY,
 )
@@ -64,9 +59,7 @@ from .marathon import (
 
 log = logging.getLogger(__name__)
 
-NO_PUBLIC_CODE = "no_public_channel"
 NOT_POSTABLE_CODE = "not_postable"
-FAILED_CODE = "post_failed"
 
 
 def words(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
@@ -117,20 +110,19 @@ def shadowed(bot: Any, guild: Any, text: str, home: int | None = None) -> str:
     return f"{said}\n{text}" if said else text
 
 
-def button_of(bot: Any, guild: Any, marathon_id: Any, row: Any) -> mp.Button | None:
-    channel = public_channel(bot, guild.id)
+def button_of(bot: Any, guild: Any, marathon: Any, row: Any) -> mp.Button | None:
     return mp.button_for(
-        marathon_id,
+        marathon["id"],
         row,
-        has_channel=channel is not None,
-        post_label=words(
-            bot,
-            guild.id,
-            MARATHON_PUBLIC_BUTTON_POST_KEY,
-            channel=channel_name(bot, guild, channel) if channel else "?",
-        ),
-        remove_label=words(bot, guild.id, MARATHON_PUBLIC_BUTTON_REMOVE_KEY),
+        opted=ma.opted_out(marathon),
+        out_label=words(bot, guild.id, MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY),
+        in_label=words(bot, guild.id, MARATHON_PUBLIC_BUTTON_OPT_IN_KEY),
     )
+
+
+def people_for(marathon: Any, row: Any) -> list[dict[str, Any]]:
+    """Everyone of ours on the run who is not opted out: the names a public post carries."""
+    return ma.run_people(row, ma.opted_out(marathon))
 
 
 def view_of(button: mp.Button | None, marathon_id: Any, run_id: Any) -> discord.ui.View | None:
@@ -238,7 +230,7 @@ async def post_highlight(
     """`(why, channel_id)`: a highlight staff took down comes back in place when it is still in
     the channel it would go to now; otherwise a new one is posted."""
     bot = cog.bot
-    text = await public_text(bot, guild, marathon, row)
+    text = await public_text(bot, guild, marathon, row, people=people_for(marathon, row) or None)
     shadow = mode_of(bot, guild.id) != MODE_ON
     base = details_of(marathon, row) | {"auto": auto, "via": via}
     if mp.message_id(row) and mp.is_removed(row):
@@ -340,7 +332,9 @@ async def sync_highlights(cog: Any, guild: Any, marathon: Any) -> None:
     cache = public_cache(cog, marathon["id"])
     for row in rows:
         key = int(row["id"])
-        text = await public_text(bot, guild, marathon, row)
+        text = await public_text(
+            bot, guild, marathon, row, people=people_for(marathon, row) or None
+        )
         if cache.get(key) == (mp.channel_of(row), text):
             continue
         message, lost = await fetch_public(bot, guild, row)
@@ -384,23 +378,18 @@ async def sync_highlights(cog: Any, guild: Any, marathon: Any) -> None:
 async def auto_highlight(cog: Any, guild: Any, marathon: Any, row: Any) -> None:
     """The moment a run's shoutout fires: posted when the marathon's switch is on, never
     again once staff took it down. A failure here never breaks the shoutout."""
+    from .marathon_announce import announces
+
     try:
         if not mi.is_tracked(marathon) or not mp.auto_wanted(marathon, row):
             return
         if mode_of(cog.bot, guild.id) == MODE_OFF or public_channel(cog.bot, guild.id) is None:
             return
+        if not announces(cog.bot, guild.id, marathon) or not people_for(marathon, row):
+            return
         await post_highlight(cog, guild, marathon, row, auto=True)
     except Exception as exc:
         log.warning("marathon: the auto-highlight failed — %s", reason_of(exc))
-
-
-async def rerender_post(cog: Any, guild: Any, marathon_id: Any) -> None:
-    from .marathon_runner_posts import sync_posts
-
-    try:
-        await sync_posts(cog, guild, await get_marathon(cog.bot.db, guild.id, marathon_id))
-    except Exception as exc:
-        log.warning("marathon: a runner post re-render failed — %s", reason_of(exc))
 
 
 async def press(
@@ -413,75 +402,74 @@ async def press(
     *,
     via: str = VIA_DISCORD,
 ) -> Outcome:
-    cog = cog_of(bot)
+    """The button on a runner post: opts every BaF person on the run out of (or back in to)
+    this marathon's public posts. It never posts anything itself."""
+    from .marathon_announce import set_opt_out
+
     marathon = await get_marathon(bot.db, guild.id, marathon_id)
-    if marathon is None or cog is None:
+    if marathon is None or cog_of(bot) is None:
         return refusal(mt.NO_SUCH_MARATHON.format(given=marathon_id), NO_SUCH, 404)
-    async with cog.lock(marathon["id"]):
-        row = await run_by_id(bot.db, marathon["id"], run_id)
-        if row is None:
-            return refusal(mt.NO_SUCH_RUN.format(name=marathon["name"]), NO_SUCH_RUN_CODE, 404)
-        runner = mrp.names_of(row)
-        if to == mp.POST:
-            outcome = await highlight_now(cog, guild, actor, marathon, row, runner, via=via)
-        elif not mp.is_up(row):
-            outcome = Outcome(True, words(bot, guild.id, MARATHON_PUBLIC_NOT_UP_KEY, runner=runner))
-        else:
-            await remove_highlight(cog, guild, marathon, row, actor=actor, via=via)
-            outcome = Outcome(
-                True,
-                words(
-                    bot,
-                    guild.id,
-                    MARATHON_PUBLIC_REMOVED_SAID_KEY,
-                    runner=runner,
-                    channel=f"<#{mp.channel_of(row)}>",
-                ),
-            )
-        await rerender_post(cog, guild, marathon["id"])
-    return outcome
-
-
-async def highlight_now(
-    cog: Any, guild: Any, actor: Any, marathon: Any, row: Any, runner: str, *, via: str
-) -> Outcome:
-    bot = cog.bot
-    if mp.is_up(row):
-        return Outcome(
-            True,
+    row = await run_by_id(bot.db, marathon["id"], run_id)
+    if row is None:
+        return refusal(mt.NO_SUCH_RUN.format(name=marathon["name"]), NO_SUCH_RUN_CODE, 404)
+    members = mt.member_ids(row)
+    if not members:
+        return refusal(
             words(
                 bot,
                 guild.id,
-                MARATHON_PUBLIC_ALREADY_KEY,
-                runner=runner,
-                channel=f"<#{mp.channel_of(row)}>",
+                MARATHON_PUBLIC_NOT_POSTABLE_KEY,
+                runner=mrp.names_of(row),
+                game=row["game"],
             ),
-        )
-    if not mp.postable(row):
-        return refusal(
-            words(bot, guild.id, MARATHON_PUBLIC_NOT_POSTABLE_KEY, runner=runner, game=row["game"]),
             NOT_POSTABLE_CODE,
             409,
         )
-    if public_channel(bot, guild.id) is None:
-        return refusal(words(bot, guild.id, MARATHON_PUBLIC_NO_CHANNEL_KEY), NO_PUBLIC_CODE, 409)
-    why, channel_id = await post_highlight(cog, guild, marathon, row, actor=actor, via=via)
-    if why is not None:
-        return refusal(
-            words(bot, guild.id, MARATHON_PUBLIC_FAILED_KEY, runner=runner, reason=why),
-            FAILED_CODE,
-            409,
-        )
-    return Outcome(
-        True,
-        words(
-            bot,
-            guild.id,
-            MARATHON_PUBLIC_POSTED_SAID_KEY,
-            runner=runner,
-            channel=f"<#{channel_id}>",
-        ),
+    return await set_opt_out(
+        bot, guild, actor, marathon, members, mp.move_of(to) == mp.OPT_OUT, via=via
     )
+
+
+async def put_back(
+    cog: Any, guild: Any, marathon: Any, row: Any, *, actor: Any = None, via: str = VIA_DISCORD
+) -> bool:
+    """A highlight taken down comes back IN PLACE — an edit, never a new post."""
+    bot = cog.bot
+    message, _lost = await fetch_public(bot, guild, row)
+    if message is None:
+        return False
+    text = await public_text(bot, guild, marathon, row, people=people_for(marathon, row) or None)
+    if await edit_public(bot, guild, message, text) is not None:
+        return False
+    await update_run(bot.db, row["id"], public_removed=0)
+    public_cache(cog, marathon["id"])[int(row["id"])] = (mp.channel_of(row), text)
+    await log_action(
+        bot,
+        guild,
+        kind_via("marathon.public_highlight_restored", via),
+        actor=actor,
+        details=details_of(marathon, row)
+        | {"message_id": str(message.id), "via": via, "because": "opted_in"}
+        | rehearsal_of(bot, guild),
+    )
+    return True
+
+
+async def follow_opt(
+    cog: Any, guild: Any, marathon: Any, user_ids: Any, *, actor: Any, via: str
+) -> None:
+    """After an opt-out: a highlight that names nobody any more is taken down; after an opt-in,
+    one that was taken down comes back in place while its run is not over."""
+    bot = cog.bot
+    wanted = {int(one) for one in user_ids}
+    for row in await runs_of(bot.db, marathon["id"]):
+        if not mp.message_id(row) or not wanted & set(mt.member_ids(row)):
+            continue
+        people = people_for(marathon, row)
+        if mp.is_up(row) and not people:
+            await remove_highlight(cog, guild, marathon, row, actor=actor, via=via)
+        elif mp.is_removed(row) and people and row["state"] in (mt.UPCOMING, mt.LIVE):
+            await put_back(cog, guild, marathon, row, actor=actor, via=via)
 
 
 async def set_public_highlight(
@@ -545,7 +533,9 @@ class HighlightButton(
             discord.ui.Button(
                 label=mp.label(label or to),
                 style=(
-                    discord.ButtonStyle.primary if to == mp.POST else discord.ButtonStyle.secondary
+                    discord.ButtonStyle.primary
+                    if mp.move_of(to) == mp.OPT_IN
+                    else discord.ButtonStyle.secondary
                 ),
                 custom_id=mp.custom_id(marathon_id, run_id, to),
             )
@@ -578,9 +568,12 @@ __all__ = [
     "auto_highlight",
     "button_of",
     "default_for_new",
+    "follow_opt",
+    "people_for",
     "post_highlight",
     "press",
     "public_channel",
+    "put_back",
     "send_public",
     "remove_highlight",
     "set_public_highlight",

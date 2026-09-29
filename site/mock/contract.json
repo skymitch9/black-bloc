@@ -5223,6 +5223,7 @@
         "public_highlight",
         "scan_hosts",
         "host_events",
+        "announcements",
         "tracked_state",
         "tracked",
         "tracked_at",
@@ -5374,16 +5375,18 @@
       "path": "/api/marathons/{marathon_bare_id}",
       "body": {
         "scan_hosts": true,
-        "host_events": "follow"
+        "host_events": "follow",
+        "announcements": "follow"
       },
       "read_by": [
-        "marathons-section.js (events.html) the drawer's Settings foldout — Scan hosts and BaF host events"
+        "marathons-section.js (events.html) the drawer's Settings foldout — Scan hosts, BaF host events and Runner/Host announcements"
       ],
       "shape": "object",
       "keys": [
         "id",
         "scan_hosts",
         "host_events",
+        "announcements",
         "message"
       ]
     },
@@ -5743,7 +5746,7 @@
           "spotlight_until",
           "looks_like",
           "sheet_login",
-          "host_highlight"
+          "opted_out"
         ],
         "others": [
           "key",
@@ -5811,7 +5814,7 @@
           "spotlight_id",
           "spotlight_until",
           "looks_like",
-          "host_highlight"
+          "opted_out"
         ],
         "others": [
           "key",
@@ -5878,7 +5881,7 @@
           "spotlight_id",
           "spotlight_until",
           "looks_like",
-          "host_highlight"
+          "opted_out"
         ],
         "others": [
           "key",
@@ -5908,10 +5911,9 @@
     },
     {
       "method": "POST",
-      "path": "/api/marathons/{marathon_id}/people/{marathon_host}/host-highlight",
-      "body": {},
+      "path": "/api/marathons/{marathon_id}/people/{marathon_host}/opt-out",
       "read_by": [
-        "marathons-section.js (events.html) People card — Highlight a BaF host"
+        "marathons-section.js (events.html) People card — Opt out of highlight"
       ],
       "shape": "object",
       "keys": [
@@ -5946,7 +5948,7 @@
           "spotlight_id",
           "spotlight_until",
           "looks_like",
-          "host_highlight"
+          "opted_out"
         ],
         "others": [
           "key",
@@ -5976,9 +5978,9 @@
     },
     {
       "method": "DELETE",
-      "path": "/api/marathons/{marathon_id}/people/{marathon_host}/host-highlight",
+      "path": "/api/marathons/{marathon_id}/people/{marathon_host}/opt-out",
       "read_by": [
-        "marathons-section.js (events.html) People card — Remove a BaF host's highlight"
+        "marathons-section.js (events.html) People card — Opt back in"
       ],
       "shape": "object",
       "keys": [
@@ -6013,7 +6015,7 @@
           "spotlight_id",
           "spotlight_until",
           "looks_like",
-          "host_highlight"
+          "opted_out"
         ],
         "others": [
           "key",
@@ -9061,10 +9063,9 @@
     "web.marathon.unpaired",
     "web.marathon.runner_spotlit",
     "web.marathon.runner_unspotlit",
-    "web.marathon.host_highlight_posted",
-    "web.marathon.host_highlight_restored",
-    "web.marathon.host_highlight_removed",
-    "web.marathon.host_highlight_failed",
+    "web.marathon.announce_opted_out",
+    "web.marathon.announce_opted_in",
+    "web.marathon.announcements_set",
     "web.marathon.board_posted",
     "web.marathon.board_refreshed",
     "web.marathon.board_failed",

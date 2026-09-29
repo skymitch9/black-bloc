@@ -1633,6 +1633,7 @@ async def test_the_card_opens_the_schedule_view_and_its_modal_changes_the_link(b
 
 
 async def test_hosts_are_not_scanned_until_host_scanning_is_on(bot, cog):
+    await bot.store.set(GUILD, "marathon_scan_hosts_default", False)
     await bot.store.set(GUILD, "marathon_hosts_count_as_ours", True)
     await bot.db.conn.execute(
         "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",

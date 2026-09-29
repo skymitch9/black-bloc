@@ -27,6 +27,8 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     DEFAULT_TIMEZONE_KEY,
     MARATHON_CONTROLS_ALREADY_ON_KEY,
+    MARATHON_CONTROLS_ANNOUNCE_OFF_KEY,
+    MARATHON_CONTROLS_ANNOUNCE_ON_KEY,
     MARATHON_CONTROLS_CANCELLED_KEY,
     MARATHON_CONTROLS_CANNOT_WAIT_KEY,
     MARATHON_CONTROLS_EVENT_OFF_KEY,
@@ -65,6 +67,7 @@ from .marathon import (
     update_marathon,
 )
 from .marathon import mode_of as posts_mode_of
+from .marathon_announce import announces
 from .marathon_channels import locked, marathons_on_channel
 from .marathon_events import set_event_mode
 from .marathon_hosts import host_events_on, scans, set_switch
@@ -104,6 +107,8 @@ LABEL_KEYS = {
     (mtc.HOSTS, mtc.OFF): MARATHON_CONTROLS_HOSTS_OFF_KEY,
     (mtc.HOST_EVENTS, mtc.ON): MARATHON_CONTROLS_HOST_EVENTS_ON_KEY,
     (mtc.HOST_EVENTS, mtc.OFF): MARATHON_CONTROLS_HOST_EVENTS_OFF_KEY,
+    (mtc.ANNOUNCE, mtc.ON): MARATHON_CONTROLS_ANNOUNCE_ON_KEY,
+    (mtc.ANNOUNCE, mtc.OFF): MARATHON_CONTROLS_ANNOUNCE_OFF_KEY,
 }
 STYLES = {
     mtc.ON: discord.ButtonStyle.success,
@@ -134,6 +139,7 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         mping.pings_role(marathon),
         scans(bot, guild.id, marathon),
         host_events_on(bot, guild.id, marathon),
+        announces(bot, guild.id, marathon),
     )
     starts = label_moment(state.get("starts"), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY))
     labels = tuple(
@@ -507,8 +513,8 @@ async def press(
         from .marathon_ping import set_ping_role
 
         outcome = await set_ping_role(bot, guild, actor, marathon, to == mtc.ON, via=via)
-    elif action in (mtc.HOSTS, mtc.HOST_EVENTS):
-        which = mh.SCAN if action == mtc.HOSTS else mh.EVENTS
+    elif action in (mtc.HOSTS, mtc.HOST_EVENTS, mtc.ANNOUNCE):
+        which = {mtc.HOSTS: mh.SCAN, mtc.HOST_EVENTS: mh.EVENTS, mtc.ANNOUNCE: mh.ANNOUNCE}[action]
         outcome = await set_switch(bot, guild, actor, marathon, which, to == mtc.ON, via=via)
     elif to == mtc.ON:
         outcome = await start_spotlight(bot, guild, actor, marathon, via=via)

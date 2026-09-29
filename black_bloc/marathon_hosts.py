@@ -10,12 +10,13 @@ from .golive import parse_ts
 FOLLOW = "follow"
 SCAN = "scan_hosts"
 EVENTS = "host_events"
+ANNOUNCE = "announcements"
 YES = ("on", "true", "yes", "1")
 NO = ("off", "false", "no", "0")
 FOLLOWS = ("", "follow", "default", "setting", "null", "none")
 BAD_SWITCH = "Say on, off or follow for **{what}**, so nothing was changed."
 BAD_SWITCH_CODE = "bad_switch"
-WHAT = {SCAN: "Scan hosts", EVENTS: "BaF host events"}
+WHAT = {SCAN: "Scan hosts", EVENTS: "BaF host events", ANNOUNCE: "Runner/Host announcements"}
 BAD_TWITCH = (
     "**{given}** is not a Twitch channel name (letters, digits and _, up to 25, or the "
     "channel's twitch.tv link), so nothing was changed."
@@ -157,6 +158,7 @@ def host_only(parts: Any) -> bool:
 
 
 __all__ = [
+    "ANNOUNCE",
     "BAD_SWITCH",
     "BAD_TWITCH",
     "EVENTS",

@@ -1720,6 +1720,7 @@ async def test_mathcat_by_twitch_link_tracks_gdqueer_when_it_is_not_listed(bot, 
 
 
 async def test_a_host_is_not_tracked_until_host_scanning_is_on(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_scan_hosts_default", False)
     await pair_everywhere(bot, "anarchy", ANARCHY)
     _row, feed = await hotfix_feed(bot, cog)
     made = [ref for ref, row in (await by_ref(bot)).items() if row["source"] == "gdq_hotfix"]

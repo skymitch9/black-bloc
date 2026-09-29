@@ -5,11 +5,18 @@ from __future__ import annotations
 from typing import Any, NamedTuple
 
 from . import marathon as mt
+from . import marathon_announce as ma
 from . import marathon_runner_posts as mrp
 
 POST = "post"
 REMOVE = "remove"
-TEMPLATE = r"marathon:highlight:(?P<marathon_id>[0-9]+):(?P<run_id>[0-9]+):(?P<to>post|remove)"
+OPT_OUT = ma.OPT_OUT
+OPT_IN = ma.OPT_IN
+LEGACY = {POST: OPT_IN, REMOVE: OPT_OUT}
+TEMPLATE = (
+    r"marathon:highlight:(?P<marathon_id>[0-9]+):(?P<run_id>[0-9]+)"
+    r":(?P<to>post|remove|optout|optin)"
+)
 CUSTOM_ID = "marathon:highlight:{marathon_id}:{run_id}:{to}"
 SHADOW_FEATURE = "marathon_public"
 LABEL_LIMIT = 80
@@ -80,15 +87,23 @@ def label(text: Any) -> str:
     return str(text or "").strip()[:LABEL_LIMIT] or "…"
 
 
+def move_of(to: Any) -> str:
+    """A button posted before the opt-out answers as the toggle it stands for: Highlight opts
+    the run's people back in, Remove the highlight opts them out."""
+    return LEGACY.get(str(to), str(to))
+
+
 def button_for(
-    marathon_id: Any, row: Any, *, has_channel: bool, post_label: str, remove_label: str
+    marathon_id: Any, row: Any, *, opted: set[int], out_label: str, in_label: str
 ) -> Button | None:
-    """Remove while it is up; Highlight while it could be; nothing otherwise."""
-    if is_up(row):
-        return Button(custom_id(marathon_id, row["id"], REMOVE), label(remove_label), REMOVE)
-    if has_channel and postable(row):
-        return Button(custom_id(marathon_id, row["id"], POST), label(post_label), POST)
-    return None
+    """Opt back in while everyone of ours on the run is opted out; Opt out otherwise; nothing
+    for a run nobody from BaF is on. It posts nothing."""
+    members = mt.member_ids(row)
+    if not members:
+        return None
+    if ma.all_out(members, opted):
+        return Button(custom_id(marathon_id, row["id"], OPT_IN), label(in_label), OPT_IN)
+    return Button(custom_id(marathon_id, row["id"], OPT_OUT), label(out_label), OPT_OUT)
 
 
 def shown_button(message: Any) -> Button | None | bool:
@@ -101,7 +116,7 @@ def shown_button(message: Any) -> Button | None | bool:
         for child in getattr(one, "children", ()) or ():
             wanted = str(getattr(child, "custom_id", "") or "")
             if wanted.startswith("marathon:highlight:"):
-                to = REMOVE if wanted.endswith(":" + REMOVE) else POST
+                to = wanted.rsplit(":", 1)[-1]
                 return Button(wanted, str(getattr(child, "label", "") or ""), to)
     return None
 
@@ -133,6 +148,9 @@ __all__ = [
     "BAD_SWITCH",
     "BAD_SWITCH_CODE",
     "Button",
+    "LEGACY",
+    "OPT_IN",
+    "OPT_OUT",
     "POST",
     "REMOVE",
     "SHADOW_FEATURE",
@@ -147,6 +165,7 @@ __all__ = [
     "is_up",
     "label",
     "message_id",
+    "move_of",
     "postable",
     "shown_button",
     "text_of",

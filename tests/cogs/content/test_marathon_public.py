@@ -1,11 +1,15 @@
 # ruff: noqa: F401, F811
+import json
 import re
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 
+from black_bloc import marathon_hosts as mh
 from black_bloc import marathon_public as mp
 from black_bloc import marathon_thread_controls as mtc
+from black_bloc.cogs.content import marathon_hosts as hosts
 from black_bloc.cogs.content import marathon_public as public
 from black_bloc.cogs.content import marathon_thread_controls as controls
 from black_bloc.cogs.content.marathon import (
@@ -18,6 +22,7 @@ from black_bloc.cogs.content.marathon import (
 from tests.cogs.content.test_marathon import (
     FAN_ROLE,
     NOW,
+    SKY,
     URL,
     FakeClient,
     Member,
@@ -85,51 +90,81 @@ async def pressed(bot, marathon, row, to, actor=None):
     return await public.press(bot, bot.guild, actor or FakeActor(), marathon["id"], row["id"], to)
 
 
-# --- the button on the runner post --------------------------------------------------------------
+async def highlighted(bot, cog, marathon, game="Super Metroid"):
+    why, _channel = await public.post_highlight(
+        cog, bot.guild, await fresh(bot, marathon), await run_of(bot, marathon, game)
+    )
+    assert why is None, why
+    return public_posts(bot) or None
 
 
-async def test_each_runner_post_carries_highlight_naming_the_public_channel(bot, cog):
+async def opted(bot, marathon):
+    return json.loads((await fresh(bot, marathon))["announce_opt_out"] or "[]")
+
+
+# --- the button on the runner post: opt out / opt back in ---------------------------------------
+
+
+async def test_each_runner_post_carries_opt_out_and_it_posts_nothing(bot, cog):
     marathon = await ready(bot, cog)
     post = runner_posts(the_thread(bot))[0]
     row = await run_of(bot, marathon, "Super Metroid")
 
     button = button_on(post)
-    assert button.label == "Highlight in #go-live"
-    assert button.custom_id == f"marathon:highlight:{marathon['id']}:{row['id']}:post"
+    assert button.label == "Opt out of highlight"
+    assert button.custom_id == f"marathon:highlight:{marathon['id']}:{row['id']}:optout"
     assert public_posts(bot) == []
 
 
-async def test_highlight_posts_publicly_now_and_the_button_becomes_remove(bot, cog):
+async def test_opt_out_answers_in_words_flips_the_button_and_opt_back_in_undoes_it(bot, cog):
     marathon = await ready(bot, cog)
     row = await run_of(bot, marathon, "Super Metroid")
 
-    said = await pressed(bot, marathon, row, mp.POST)
+    said = await pressed(bot, marathon, row, mp.OPT_OUT)
 
-    assert said.ok and "highlight is up in <#111>" in said.message
-    posts = public_posts(bot)
-    assert len(posts) == 1
-    assert "**Super Metroid**" in posts[0].content and "coming up" in posts[0].content
-    assert "on **SS4C**" in posts[0].content
-    mentions = posts[0].kwargs["allowed_mentions"]
-    assert mentions.users is False and mentions.roles is False and mentions.everyone is False
-    row = await run_of(bot, marathon, "Super Metroid")
-    assert (row["public_message_id"], row["public_channel_id"], row["public_removed"]) == (
-        posts[0].id,
-        CHANNEL,
-        0,
-    )
+    assert said.ok and "is opted out of **SS4C**" in said.message
+    assert await opted(bot, marathon) == [SKY] and public_posts(bot) == []
     button = button_on(runner_posts(the_thread(bot))[0])
-    assert button.label == "Remove the highlight" and button.custom_id.endswith(":remove")
-    assert (await details_of(bot.db, "marathon.public_highlight_posted"))["run_id"] == row["id"]
+    assert button.label == "Opt back in" and button.custom_id.endswith(":optin")
+    logged = await details_of(bot.db, "marathon.announce_opted_out")
+    assert logged["members"] == [SKY] and logged["via"] == "discord"
 
-    again = await pressed(bot, marathon, row, mp.POST)
-    assert "already up" in again.message and len(public_posts(bot)) == 1
+    again = await pressed(bot, marathon, row, mp.OPT_OUT)
+    assert again.ok and (await kinds(bot.db)).count("marathon.announce_opted_out") == 1
+
+    back = await pressed(bot, marathon, row, mp.OPT_IN)
+    assert back.ok and "is back in" in back.message and await opted(bot, marathon) == []
+    assert button_on(runner_posts(the_thread(bot))[0]).label == "Opt out of highlight"
+    assert public_posts(bot) == []
+
+
+async def test_opting_out_takes_the_highlight_down_and_opting_in_puts_the_same_one_back(bot, cog):
+    marathon = await ready(bot, cog)
+    (post,) = await highlighted(bot, cog, marathon)
+    row = await run_of(bot, marathon, "Super Metroid")
+
+    await pressed(bot, marathon, row, mp.OPT_OUT)
+
+    assert post.content == "Staff took down the highlight for **Sky** on **SS4C**."
+    assert not post.deleted
+    row = await run_of(bot, marathon, "Super Metroid")
+    assert row["public_removed"] == 1 and row["public_message_id"] == post.id
+    edits = len(post.edits)
+    cog.clock = lambda: NOW + timedelta(minutes=31)
+    await follow(bot, cog, marathon)
+    assert len(post.edits) == edits and "took down" in post.content
+    assert (await details_of(bot.db, "marathon.public_highlight_removed"))["edited"] is True
+
+    await pressed(bot, marathon, row, mp.OPT_IN)
+
+    assert len(public_posts(bot)) == 1 and "**Super Metroid**" in post.content
+    assert (await run_of(bot, marathon, "Super Metroid"))["public_removed"] == 0
+    assert (await details_of(bot.db, "marathon.public_highlight_restored"))["because"] == "opted_in"
 
 
 async def test_the_highlight_follows_the_run_as_its_slot_moves_and_it_goes_live(bot, cog):
     marathon = await ready(bot, cog)
-    await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.POST)
-    post = public_posts(bot)[0]
+    (post,) = await highlighted(bot, cog, marathon)
     cog.client.runs_given = [
         a_run(3, 75, game="Super Metroid", people=SKY_RUN),
         a_run(4, 90, game="Kirby Air Riders"),
@@ -145,44 +180,25 @@ async def test_the_highlight_follows_the_run_as_its_slot_moves_and_it_goes_live(
     assert "marathon.public_highlight_edited" in await kinds(bot.db)
 
 
-async def test_remove_edits_it_to_the_key_sentence_and_stops_updating_it(bot, cog):
+async def test_a_button_posted_before_the_opt_out_still_answers_as_the_toggle(bot, cog):
     marathon = await ready(bot, cog)
     row = await run_of(bot, marathon, "Super Metroid")
-    await pressed(bot, marathon, row, mp.POST)
-    post = public_posts(bot)[0]
-
-    said = await pressed(bot, marathon, row, mp.REMOVE)
-
-    assert "taken down" in said.message
-    assert post.content == "Staff took down the highlight for **Sky** on **SS4C**."
-    assert not post.deleted
-    row = await run_of(bot, marathon, "Super Metroid")
-    assert row["public_removed"] == 1 and row["public_message_id"] == post.id
-    edits = len(post.edits)
-    cog.clock = lambda: NOW + timedelta(minutes=31)
-    await follow(bot, cog, marathon)
-    assert len(post.edits) == edits and "took down" in post.content
-    assert button_on(runner_posts(the_thread(bot))[0]).label == "Highlight in #go-live"
-    removed = await details_of(bot.db, "marathon.public_highlight_removed")
-    assert removed["edited"] is True
-
-    nothing = await pressed(bot, marathon, row, mp.REMOVE)
-    assert "nothing to take down" in nothing.message
+    for old, word in ((mp.REMOVE, "opted out"), (mp.POST, "is back in")):
+        custom = mp.custom_id(marathon["id"], row["id"], old)
+        button = await public.HighlightButton.from_custom_id(
+            None, None, re.fullmatch(mp.TEMPLATE, custom)
+        )
+        lead = FakeInteraction(bot, FakeActor(), bot.guild)
+        await button.on_click(lead)
+        assert word in lead.sent
+    assert await opted(bot, marathon) == [] and public_posts(bot) == []
 
 
-async def test_highlight_after_remove_puts_the_same_message_back(bot, cog):
+async def test_a_run_nobody_from_baf_is_on_is_refused_in_words(bot, cog):
     marathon = await ready(bot, cog)
-    row = await run_of(bot, marathon, "Super Metroid")
-    await pressed(bot, marathon, row, mp.POST)
-    await pressed(bot, marathon, row, mp.REMOVE)
-    post = public_posts(bot)[0]
-
-    said = await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.POST)
-
-    assert said.ok and len(public_posts(bot)) == 1
-    assert "**Super Metroid**" in post.content
-    assert (await run_of(bot, marathon, "Super Metroid"))["public_removed"] == 0
-    assert "marathon.public_highlight_restored" in await kinds(bot.db)
+    row = await run_of(bot, marathon, "Kirby Air Riders")
+    said = await pressed(bot, marathon, row, mp.OPT_OUT)
+    assert not said.ok and said.code == public.NOT_POSTABLE_CODE
 
 
 # --- the auto switch ----------------------------------------------------------------------------
@@ -212,11 +228,26 @@ async def test_with_the_switch_on_going_live_posts_the_highlight_at_the_shoutout
     assert (await details_of(bot.db, "marathon.public_highlight_posted"))["auto"] is True
 
 
-async def test_the_switch_never_puts_back_a_highlight_staff_took_down(bot, cog):
+@pytest.mark.parametrize("why", ["opted_out", "announcements_off"])
+async def test_an_opted_out_runner_or_announcements_off_is_never_auto_highlighted(bot, cog, why):
     marathon = await ready(bot, cog)
-    row = await run_of(bot, marathon, "Super Metroid")
-    await pressed(bot, marathon, row, mp.POST)
-    await pressed(bot, marathon, row, mp.REMOVE)
+    await public.set_public_highlight(bot, bot.guild, FakeActor(), marathon, True)
+    if why == "opted_out":
+        await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.OPT_OUT)
+    else:
+        await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
+
+    cog.clock = lambda: NOW + timedelta(minutes=31)
+    await follow(bot, cog, marathon)
+
+    assert (await run_of(bot, marathon, "Super Metroid"))["state"] == "live"
+    assert public_posts(bot) == []
+
+
+async def test_the_switch_never_puts_back_a_highlight_taken_down(bot, cog):
+    marathon = await ready(bot, cog)
+    await highlighted(bot, cog, marathon)
+    await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.OPT_OUT)
     await public.set_public_highlight(bot, bot.guild, FakeActor(), marathon, True)
 
     await public.auto_highlight(
@@ -259,18 +290,16 @@ async def test_the_fourth_control_button_flips_the_switch_and_relabels(bot, cog)
 async def test_a_highlight_pings_the_role_only_while_the_marathon_pings_roles(bot, cog):
     marathon = await ready(bot, cog)
     await update_marathon(bot.db, marathon["id"], ping_role=1)
-    row = await run_of(bot, marathon, "Super Metroid")
 
-    await pressed(bot, marathon, row, mp.POST)
+    (post,) = await highlighted(bot, cog, marathon)
 
-    post = public_posts(bot)[0]
     assert post.content.startswith(f"<@&{FAN_ROLE}>")
     mentions = post.kwargs["allowed_mentions"]
     assert [one.id for one in mentions.roles] == [FAN_ROLE] and mentions.users is False
     assert (await details_of(bot.db, "marathon.public_highlight_posted"))["pinged"] is True
 
 
-async def test_changing_the_channel_key_relabels_the_button_and_the_next_post_goes_there(bot, cog):
+async def test_changing_the_channel_key_sends_the_next_highlight_there(bot, cog):
     marathon = await ready(bot, cog)
     room = FakeChannel(HIGHLIGHTS)
     room.name = "baf-highlights"
@@ -278,22 +307,24 @@ async def test_changing_the_channel_key_relabels_the_button_and_the_next_post_go
     await bot.store.set(GUILD, "marathon_public_channel_id", HIGHLIGHTS)
 
     await follow(bot, cog, marathon)
+    await highlighted(bot, cog, marathon)
 
-    post = runner_posts(the_thread(bot))[0]
-    assert button_on(post).label == "Highlight in #baf-highlights"
-    await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.POST)
+    assert button_on(runner_posts(the_thread(bot))[0]).label == "Opt out of highlight"
     assert public_posts(bot) == [] and len(public_posts(bot, HIGHLIGHTS)) == 1
     assert (await run_of(bot, marathon, "Super Metroid"))["public_channel_id"] == HIGHLIGHTS
 
 
-async def test_no_public_channel_hides_the_button_and_refuses_in_words(bot, cog, monkeypatch):
+async def test_no_public_channel_posts_nothing_and_the_opt_out_still_works(bot, cog, monkeypatch):
     monkeypatch.setattr(public, "public_channel", lambda bot, guild_id: None)
     marathon = await ready(bot, cog)
-    row = await run_of(bot, marathon, "Super Metroid")
+    await public.set_public_highlight(bot, bot.guild, FakeActor(), marathon, True)
+    cog.clock = lambda: NOW + timedelta(minutes=31)
+    await follow(bot, cog, marathon)
 
-    assert button_on(runner_posts(the_thread(bot))[0]) is None
-    said = await pressed(bot, marathon, row, mp.POST)
-    assert not said.ok and "no public channel" in said.message
+    assert public_posts(bot) == []
+    assert button_on(runner_posts(the_thread(bot))[0]).label == "Opt out of highlight"
+    said = await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.OPT_OUT)
+    assert said.ok
 
 
 async def test_shadow_sends_the_highlight_to_its_own_rehearsal_home_with_the_note(bot, cog):
@@ -301,7 +332,7 @@ async def test_shadow_sends_the_highlight_to_its_own_rehearsal_home_with_the_not
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     await bot.store.set(GUILD, "marathon_public_shadow_channel_id", LOG_CHANNEL)
 
-    await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.POST)
+    await highlighted(bot, cog, marathon)
 
     assert public_posts(bot) == []
     copy = public_posts(bot, LOG_CHANNEL)[0]
@@ -318,27 +349,27 @@ async def test_shadow_sends_the_highlight_to_its_own_rehearsal_home_with_the_not
 async def test_the_button_is_staff_only_and_rebuilds_from_its_custom_id(bot, cog):
     marathon = await ready(bot, cog)
     row = await run_of(bot, marathon, "Super Metroid")
-    custom = mp.custom_id(marathon["id"], row["id"], mp.POST)
+    custom = mp.custom_id(marathon["id"], row["id"], mp.OPT_OUT)
     button = await public.HighlightButton.from_custom_id(
         None, None, re.fullmatch(mp.TEMPLATE, custom)
     )
-    assert (button.marathon_id, button.run_id, button.to) == (marathon["id"], row["id"], "post")
+    assert (button.marathon_id, button.run_id, button.to) == (marathon["id"], row["id"], "optout")
 
     bot.store.is_staff = lambda member: False
     stranger = FakeInteraction(bot, Member(42), bot.guild)
     await button.on_click(stranger)
-    assert "staff only" in stranger.sent and public_posts(bot) == []
+    assert "staff only" in stranger.sent and await opted(bot, marathon) == []
 
     bot.store.is_staff = lambda member: True
     lead = FakeInteraction(bot, FakeActor(), bot.guild)
     await button.on_click(lead)
-    assert "highlight is up" in lead.sent and len(public_posts(bot)) == 1
+    assert "is opted out" in lead.sent and await opted(bot, marathon) == [SKY]
+    assert public_posts(bot) == []
 
 
 async def test_after_a_restart_a_highlight_is_read_once_and_kept_up_to_date(bot, cog):
     marathon = await ready(bot, cog)
-    await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.POST)
-    post = public_posts(bot)[0]
+    (post,) = await highlighted(bot, cog, marathon)
     restarted = Marathons(bot)
     restarted.client = cog.client
     restarted.clock = lambda: NOW + timedelta(minutes=31)
@@ -347,12 +378,48 @@ async def test_after_a_restart_a_highlight_is_read_once_and_kept_up_to_date(bot,
     await restarted.tick_once()
 
     assert "on now" in post.content and len(public_posts(bot)) == 1
-    assert button_on(runner_posts(the_thread(bot))[0]).label == "Remove the highlight"
+    assert button_on(runner_posts(the_thread(bot))[0]).label == "Opt out of highlight"
+
+
+async def test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_not_resent(
+    bot, cog
+):
+    marathon = await ready(bot, cog)
+    thread = the_thread(bot)
+    (post,) = runner_posts(thread)
+    controls_message = thread.messages[1]
+    row = await run_of(bot, marathon, "Super Metroid")
+    old = f"marathon:highlight:{marathon['id']}:{row['id']}:post"
+    post.components = [
+        SimpleNamespace(children=[SimpleNamespace(custom_id=old, label="Highlight in #go-live")])
+    ]
+    count, post_edits, control_edits = len(thread.messages), len(post.edits), len(
+        controls_message.edits
+    )
+    restarted = Marathons(bot)
+    restarted.client = cog.client
+    restarted.clock = cog.clock
+    bot.cogs["Marathons"] = restarted
+
+    await restarted.tick_once()
+
+    assert len(thread.messages) == count and runner_posts(thread) == [post]
+    assert len(post.edits) > post_edits
+    button = button_on(post)
+    assert button.custom_id.endswith(":optout") and button.label == "Opt out of highlight"
+    assert len(controls_message.edits) > control_edits
+    shown = [getattr(one, "item", one) for one in current_view(controls_message).children]
+    assert [one.label for one in shown][-3:] == [
+        "Scan hosts: on · turn off",
+        "BaF host events: off · turn on",
+        "Runner/Host announcements: on · turn off",
+    ]
+    assert shown[-1].custom_id == f"marathon:controls:{marathon['id']}:announce:off"
 
 
 async def test_a_highlight_a_person_deleted_is_forgotten_not_posted_again(bot, cog):
     marathon = await ready(bot, cog)
-    await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.POST)
+    await highlighted(bot, cog, marathon)
     await public_posts(bot)[0].delete()
     cog.__dict__.get("public_sent", {}).clear()
 

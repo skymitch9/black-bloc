@@ -1,5 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, the per-run section annotated SUPERSEDED, nothing re-keyed**: *Marathon Runner/Host announcements* (branch `marathon-announcements`, off `main` `1d5d017d`, keyed against `5a60c782`); `api/tools/marathons.py` rows after `entry_row` sit about the same (the host routes were replaced in place), `marathon_people.py` rows after `slot_card` sit ~5 lower.
+
 > **2026-09-28 — one section APPENDED, the block section annotated SUPERSEDED, nothing re-keyed**: *Host highlights, per run* (branch `host-highlights-per-run`, off `main` `2b6f378b`, keyed against `30199332`); rows keyed in `black_bloc/cogs/content/marathon.py` below `mark_live` sit two to four lines lower (a lazy import and a call each in `mark_live` and `advance`).
 
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Host highlights* (branch `host-highlights`, off `main` `c0e38353`, keyed against `9fd9088e`); rows keyed in `black_bloc/cogs/content/marathon.py` after `follow` sit two to five lines lower (two lazy imports and two calls added), `marathon_people.py` rows after `slot_card` sit up to ~30 lower, `api/tools/marathons.py` rows after `entry_row` ~40 lower. The anchor text holds. Before that:
@@ -9549,6 +9551,8 @@ Design: [`marathon-category-track-design.md`](marathon-category-track-design.md)
 
 ## Host highlights, per run — a BaF host posted like a runner, once per run they host (branch `host-highlights-per-run`, 2026-09-28)
 
+⚠️ **SUPERSEDED by *Marathon Runner/Host announcements* below** (`marathon-announcements`, 2026-09-28): the rows for `black_bloc/marathon_host_highlights.py`, `cogs/content/marathon_host_highlights.py` (`press`, `state_for`, `run_state`), `marathon_people.host_highlight_move`, `api/tools/marathons.host_highlight_move`, the mock's `marathonHostRuns` and the site's `hostHighlightBits` describe code that is gone or rewritten; the `run_url` / `run_fields` / `fields_of` / `public_text` / `reminder_text` rows still hold.
+
 Supersedes every row of the block section above. Keyed against `30199332`.
 
 | Where | Why |
@@ -9574,3 +9578,35 @@ Supersedes every row of the block section above. Keyed against `30199332`.
 | `black_bloc/cogs/content/marathon.py:2448` / `:1340` `host_went_live` | The two LIVE doors; the import is lazy (circular). |
 | `site/mock/server.mjs:8504` `marathonHostRuns` | The mock's twin of `hosted`; records keyed by `run_id`. |
 | `site/public/assets/marathons-section.js:720` `hostHighlightBits` | The slot line finds its run in `host_highlight.runs` by `run_id`; the BaF row uses the host's whole answer. |
+
+## Marathon Runner/Host announcements — a switch per marathon, an opt-out per person, hosts per host block (branch `marathon-announcements`, 2026-09-28)
+
+Supersedes the per-run section above for everything host. Keyed against `5a60c782`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_announce.py:23` `announces` | NULL follows `marathon_announcements_default` (on) through `marathon_hosts.switch_on` — the same nullable-switch reader as Scan hosts. |
+| `black_bloc/marathon_announce.py:27` `opted_out` | A JSON list on the marathon row, not a table: a pairing may be *everywhere* and a host need not be paired on this marathon; it archives with the row. A bad value reads as nobody opted out. |
+| `black_bloc/marathon_announce.py:55` `run_people` | The names a runner's public post carries: `mt.ours` minus the opted-out — passed as `people=` so a run with two BaF runners, one out, still posts naming the other. |
+| `black_bloc/marathon_announce.py:65` `clean_opt` | `remove` / `post` are accepted as out / in so the words of a button posted before this build mean the same thing everywhere. |
+| `black_bloc/cogs/content/marathon_announce.py:48` `set_opt_out` | The ONE writer (runner post button, People slot view, site route). Posts nothing. Under the marathon lock: write, log, take down highlights that now name nobody / put back in place ones that name someone again, then `sync_board` so the runner posts' buttons flip. An unchanged answer writes and logs nothing (idempotent). |
+| `black_bloc/marathon_public.py:90` `move_of` | Custom ids already on posted messages (`:post` / `:remove`) keep answering: Highlight → opt back in, Remove → opt out. |
+| `black_bloc/marathon_public.py:96` `button_for` | One button per run toggling every BaF person on it; *Opt back in* only while ALL of them are out. |
+| `black_bloc/cogs/content/marathon_public.py:123` `people_for` | Used by every runner highlight render (post, sync, put back) so an opted-out co-runner's name drops out of an edit too. |
+| `black_bloc/cogs/content/marathon_public.py:433` `put_back` | An EDIT only — the opt-in never posts; a highlight that is gone stays gone. |
+| `black_bloc/cogs/content/marathon_public.py:458` `follow_opt` | Take down only when NOBODY on the run is left (a partial opt-out re-renders instead, via `sync_highlights`); put back only while the run is upcoming or live. |
+| `black_bloc/cogs/content/marathon_public_reminders.py:103` `because` | The public copy's gates after the same-channel skip: the marathon's switch, then the opt-out. The staff copy and the reminder's sent-marker are untouched — the mark is consumed either way, so opting back in resumes at the NEXT mark. The watch link is recomputed without an opted-out person's Twitch. |
+| `black_bloc/marathon_host_highlights.py:71` `blocks` | The block rule (owner 19:1x, back at 21:1x): runs a BaF host hosts in a row, continuing through runs with no host listed, ended by a run someone else hosts. Blocks with identical runs merge into one post naming every host (the runner convention). |
+| `black_bloc/marathon_host_highlights.py:98` `state_of` / `:107` `view_row` | The block as a run for the runner's renderer: its first run's fields, the block's state (on now between runs, done after the last). |
+| `black_bloc/marathon_host_highlights.py:149` `_record` | A per-run record from v192 reads as a one-run block; `legacy_reminded` marks the marks already behind the block as sent on first use (no second 15-minute copy). |
+| `black_bloc/marathon_host_highlights.py:192` `claim` | A record is the block's when it starts there, else when it shares a host and a run — a block that grows or moves keeps its post and marks. `used` stops two blocks claiming one record. |
+| `black_bloc/marathon_host_highlights.py:250` `due` | The runner's own `mt.due_marks` on the block's start (upcoming only while every run of it is). |
+| `black_bloc/cogs/content/marathon_host_highlights.py:55` `wanted` | Whether host posts are considered at all (key, active, tracked, mode, Scan hosts). The switch / opt-out / public-reminders gates are checked at SEND time in `heads_up`, so a mark is consumed like a runner's. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:281` `went_live` | ANY run of the block going live fires the block's one highlight (tried once) — a skipped first run or Mark live on a later run still gets it. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:316` `remind_hosts` | Marks from `marathon_reminder_minutes` + `marathon_ping_minutes` (`reminder_marks`, never hard-coded); saved before the send. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:449` `follow_opt` | The host twin of the runner's: take down a block post that now names nobody, put one back in place while the block is not done. |
+| `black_bloc/cogs/content/marathon_hosts.py:107` `set_switch` | A third `which`, `mh.ANNOUNCE`: no rematch and no host-event sync — the gates read it at send time. The log kind stays a literal per branch (`tests/test_logkinds.py` enumerates them). |
+| `black_bloc/cogs/content/marathon_people.py:471` `opt_move_for` | Any BaF person in the slot (runner or host), never a non-BaF one; the runner post button's own label keys. |
+| `black_bloc/api/tools/marathons.py:944` `opt_move` | The two opt-out routes' one body; `user_id` in the path because a name can be anything; the shared writer logs with `via=website` (checklist 34 — no `note()`). |
+| `site/mock/server.mjs:8510` `marathonOptMove` | The mock's twin of `set_opt_out` (the People board + message); it does not simulate the takedown. |
+| `site/public/assets/marathons-section.js:726` `optBits` | Shown for every BaF entry (`opted_out` not null) on the BaF row and a BaF person's slot line; hidden on an archived marathon. |

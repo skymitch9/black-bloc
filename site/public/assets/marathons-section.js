@@ -192,14 +192,21 @@ const PING_HELP = 'On: its run reminders (the thread’s and the public copy), s
 const HIGHLIGHT_FIELD = 'Auto-highlight BaF runners when live';
 const HIGHLIGHT_HELP = 'On: the moment a BaF run goes live its highlight posts in the public channel '
   + '(marathon_public_channel_id, blank = go-live) — the thread is staff-only, so this is what members see. '
-  + 'Off (the default): only the Highlight button on a run’s post in the thread does. A highlight staff took '
-  + 'down never comes back by itself. marathon_public_highlight_default decides where a new marathon starts.';
+  + 'For a BaF host it is their host block: posted when the block goes live, edited to done after its last run. '
+  + 'Off (the default): nothing is highlighted. Nobody opted out is highlighted, and nothing is while Runner/Host '
+  + 'announcements is off. marathon_public_highlight_default decides where a new marathon starts.';
 const HOSTS_FIELD = 'Scan hosts';
 const HOSTS_HELP = 'On: a host from BaF — paired, or matched by their Twitch link — shows ✦BaF on the People card and '
   + 'can be spotlit as a host (their note reads marathon_spotlight_host_note_template). Off: only runners and '
   + 'commentators count. A host never makes a run a BaF run (no runner post, reminder or shoutout) unless '
   + 'marathon_hosts_count_as_ours is on; instead, while marathon_host_highlights is on, each BaF host gets a runner’s '
-  + 'public reminder before every run they host, and its highlight when the run goes live under Auto-highlight. Follow uses marathon_scan_hosts_default.';
+  + 'public reminders at every mark before each host block (the runs they host in a row), and its highlight when the '
+  + 'block goes live under Auto-highlight. Follow uses marathon_scan_hosts_default.';
+const ANNOUNCE_FIELD = 'Runner/Host announcements';
+const ANNOUNCE_HELP = 'On: every BaF runner and host of this marathon is announced publicly — the reminders at every '
+  + 'marathon_reminder_minutes mark (marathon_public_reminders is the master switch) and, with Auto-highlight on, the '
+  + 'highlight. Off: nobody on this marathon gets a public post. Anyone can be opted out on their own from the People '
+  + 'card or the Opt out of highlight button on their run’s post. Follow uses marathon_announcements_default.';
 const HOST_EVENTS_FIELD = 'BaF host events';
 const HOST_EVENTS_HELP = 'On: one Discord event for each BaF host, from their first hosted run to the end of their '
   + 'last, kept in step with the schedule and called off when they stop hosting. Needs Scan hosts on. Runner events '
@@ -212,11 +219,11 @@ const TWITCH_FIX_TITLE = 'Twitch name for {name}';
 const TWITCH_FIX_NOTE = 'The schedule says **{sheet}**. Type the channel {name} really streams on, or leave it blank to '
   + 'go back to the schedule’s.';
 const TWITCH_FIX_BUTTON = 'Twitch name…';
-const HOST_UP = 'Host highlight up';
-const HOST_POST = 'Post host highlight';
-const HOST_REMOVE = 'Take it down';
-const HOST_REMOVE_TITLE = 'Take down {name}’s host highlight?';
-const HOST_REMOVE_BODY = 'The post in the public channel is edited to say staff took it down, and it is not updated after. Post host highlight puts it back.';
+const OPTED_OUT = 'Opted out of public posts';
+const OPT_OUT = 'Opt out of highlight';
+const OPT_IN = 'Opt back in';
+const OPT_OUT_TITLE = 'Opt {name} out of this marathon’s public posts?';
+const OPT_OUT_BODY = 'No reminders and no highlight for them on this marathon. A highlight of theirs that is up is edited to say it was taken down. Opt back in undoes it from the next reminder mark.';
 const FIXED_FROM = ' (fixed from twitch.tv/{sheet})';
 const EVENT_SELECT_SHORT = 'Which Discord events this marathon makes; the setting explains the '
   + 'four choices.';
@@ -705,31 +712,26 @@ async function unspotlightPerson(marathon, say, entry, runId) {
   await after(marathon, done);
 }
 
-async function hostHighlight(marathon, say, entry, runId, to) {
-  if (to === 'remove') {
-    const sure = await ask({ title: said(HOST_REMOVE_TITLE, { name: entry.member_name || entry.name }), body: [HOST_REMOVE_BODY], confirmLabel: HOST_REMOVE });
+async function optMove(marathon, say, entry, runId, out) {
+  if (out) {
+    const sure = await ask({ title: said(OPT_OUT_TITLE, { name: entry.member_name || entry.name }), body: [OPT_OUT_BODY], confirmLabel: OPT_OUT });
     if (!sure) return;
   }
   shown.focus = runId;
-  const path = `/api/marathons/${marathon.id}/people/${encodeURIComponent(entry.user_id)}/host-highlight`;
-  const done = to === 'post'
-    ? await run(say, () => send(path, 'POST', runId ? { run_id: runId } : {}), (found) => found?.message)
-    : await run(say, () => send(runId ? `${path}?run_id=${encodeURIComponent(runId)}` : path, 'DELETE'), (found) => found?.message);
+  const path = `/api/marathons/${marathon.id}/people/${encodeURIComponent(entry.user_id)}/opt-out`;
+  const done = await run(say, () => send(path, out ? 'POST' : 'DELETE'), (found) => found?.message);
   await after(marathon, done);
 }
 
-function hostHighlightBits(marathon, say, entry, runId) {
-  const state = entry && entry.host_highlight;
-  if (shown.archived || !state) return [];
-  const block = runId ? (state.runs || []).find((one) => one.run_id === String(runId)) : state;
-  if (!block) return [];
-  if (block.up) {
+function optBits(marathon, say, entry, runId) {
+  if (shown.archived || !entry || !entry.user_id || entry.opted_out === null || entry.opted_out === undefined) return [];
+  if (entry.opted_out) {
     return [
-      el('span', { class: 'cell-quiet', text: HOST_UP }),
-      button(HOST_REMOVE, () => hostHighlight(marathon, say, entry, runId, 'remove'), { tone: 'quiet' }),
+      el('span', { class: 'cell-quiet', text: OPTED_OUT }),
+      button(OPT_IN, () => optMove(marathon, say, entry, runId, false), { tone: 'quiet' }),
     ];
   }
-  return block.can_post ? [button(HOST_POST, () => hostHighlight(marathon, say, entry, runId, 'post'), { tone: 'quiet' })] : [];
+  return [button(OPT_OUT, () => optMove(marathon, say, entry, runId, true), { tone: 'quiet' })];
 }
 
 function spotlightBits(marathon, say, entry, runId) {
@@ -798,7 +800,7 @@ function bafLine(marathon, say, entry, timeZone) {
         : el('span', { class: 'cell-quiet', text: NO_TWITCH }),
       ...matchBits(marathon, say, entry, entry, null),
       ...spotlightBits(marathon, say, entry, null),
-      ...hostHighlightBits(marathon, say, entry, null),
+      ...optBits(marathon, say, entry, null),
     ]),
   ]);
   node.addEventListener('toggle', () => {
@@ -830,7 +832,7 @@ function slotPersonLine(marathon, say, board, run, person) {
     el('span', { class: 'bar mx-person-moves' }, [
       ...matchBits(marathon, say, entry, person, run.id, { inSlot: true }),
       ...spotlightBits(marathon, say, entry, run.id),
-      ...(person.part === 'host' ? hostHighlightBits(marathon, say, entry, run.id) : []),
+      ...(person.user_id ? optBits(marathon, say, entry, run.id) : []),
     ]),
   ]);
 }
@@ -981,6 +983,7 @@ async function settingsFold(marathon, say) {
   const highlight = segment(PING_CHOICES, highlightNow);
   const hosts = switchPicker(marathon.scan_hosts);
   const hostEvents = switchPicker(marathon.host_events);
+  const announce = switchPicker(marathon.announcements);
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
     class: 'input',
@@ -998,6 +1001,7 @@ async function settingsFold(marathon, say) {
     if (highlight.readValue() !== highlightNow) body.public_highlight = highlight.readValue() === 'on';
     if (hosts.readValue() !== hosts.now) body.scan_hosts = switchWanted(hosts.readValue());
     if (hostEvents.readValue() !== hostEvents.now) body.host_events = switchWanted(hostEvents.readValue());
+    if (announce.readValue() !== announce.now) body.announcements = switchWanted(announce.readValue());
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
     if (wanted !== (marathon.poll_minutes || null)) body.poll_minutes = wanted;
@@ -1020,6 +1024,7 @@ async function settingsFold(marathon, say) {
     field(HIGHLIGHT_FIELD, highlight, HIGHLIGHT_HELP),
     field(HOSTS_FIELD, hosts, HOSTS_HELP),
     field(HOST_EVENTS_FIELD, hostEvents, HOST_EVENTS_HELP),
+    field(ANNOUNCE_FIELD, announce, ANNOUNCE_HELP),
     field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
     bar([save]),
   ], { open: shown.settings });

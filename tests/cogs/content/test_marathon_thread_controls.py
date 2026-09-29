@@ -136,8 +136,9 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         "Spotlight: on now · stop",
         "Auto-highlight BaF runners when live: off · turn on",
         "Ping the marathon role: off · turn on",
-        "Scan hosts: off · turn on",
+        "Scan hosts: on · turn off",
         "BaF host events: off · turn on",
+        "Runner/Host announcements: on · turn off",
     ]
     ids = [one.custom_id for one in buttons(message)]
     assert ids == [
@@ -146,8 +147,9 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         f"marathon:controls:{marathon['id']}:spotlight:off",
         f"marathon:controls:{marathon['id']}:highlight:on",
         f"marathon:controls:{marathon['id']}:ping:on",
-        f"marathon:controls:{marathon['id']}:hosts:on",
+        f"marathon:controls:{marathon['id']}:hosts:off",
         f"marathon:controls:{marathon['id']}:hostevents:on",
+        f"marathon:controls:{marathon['id']}:announce:off",
     ]
     assert message.kwargs["allowed_mentions"].users is False
     posted = await details_of(bot.db, "marathon.controls_posted")

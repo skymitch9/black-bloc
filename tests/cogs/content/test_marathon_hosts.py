@@ -100,7 +100,14 @@ async def scan_on(bot, marathon):  # noqa: F811
     return outcome
 
 
+async def test_hosts_are_scanned_by_default_since_the_announcements_build(bot, cog):  # noqa: F811
+    assert bot.store.get(GUILD, "marathon_scan_hosts_default") is True
+    assert hosts.scans(bot, GUILD, {"scan_hosts": None})
+    assert not hosts.scans(bot, GUILD, {"scan_hosts": 0})
+
+
 async def test_with_hosts_not_scanned_anarchy_is_not_baf(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_scan_hosts_default", False)
     marathon = await hidden_heroes(bot)
     state = await board(bot, marathon)
     assert named(state["baf"], "anarchy") is None
@@ -221,6 +228,7 @@ async def test_host_events_make_one_event_over_the_hosts_span(bot, cog, proposal
 
 
 async def test_host_events_need_the_host_scanned(bot, cog, proposals):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_scan_hosts_default", False)
     marathon = await hidden_heroes(bot)
     await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.EVENTS, True)
     assert mh.event_ids(await get_marathon(bot.db, GUILD, marathon["id"])) == {}
