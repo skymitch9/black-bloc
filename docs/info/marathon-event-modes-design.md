@@ -47,7 +47,7 @@ same thing a second time. §C settles it with a key.
   **`marathon_event_mode_default`** (enum, **`none`**).
 - ➕ **2026-09-28, branch `marathon-host-spotlight` (🔨 BUILT, NOT MERGED):** "a run IS ours" for MAKING a run event
   now means a BaF runner or commentator is on it — a run whose only BaF person is a scanned HOST gets no run event on
-  its own (hosts have their own switch, one event per host over their hosted runs); the cancel rule and *Make it now*
+  its own (~~hosts have their own switch, one event per host over their hosted runs~~ — **2026-09-28, `people-unify`: the runs half of the mode is now *BaF run/host events* and also makes one event per BaF HOST BLOCK; the separate host switch is gone**, [`people-unify-design.md`](people-unify-design.md)); the cancel rule and *Make it now*
   are unchanged. [`marathon-host-spotlight-design.md`](marathon-host-spotlight-design.md) ▸ Deviation 5.
 - **`marathon_runs.event_id INTEGER`** (nullable): the run's own event in `runs` / `both` mode. Made when a run IS ours
   (on the first fetch that matches a person, on a pairing that makes it ours, and on a mode change to `runs`/`both`

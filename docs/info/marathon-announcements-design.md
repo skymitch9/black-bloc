@@ -1,5 +1,7 @@
 # Marathon Runner/Host announcements — one switch per marathon, an opt-out per person, hosts posted per host block
 
+> ⚠️ **2026-09-28 — people-unify (branch `people-unify`, 🔨 BUILT, NOT MERGED):** the switch is now called **BaF announcements** (label defaults reworded; behaviour unchanged); **Scan hosts is gone** (§4 and the table row below are superseded — hosts are always found); the thread controls carry SIX buttons, not eight (Scan hosts and BaF host events removed; their old ids answer in words). See [`people-unify-design.md`](people-unify-design.md).
+
 > 🔨 **BUILT 2026-09-28 on branch `marathon-announcements` (worktree `C:/lcw/bb-marathon-announcements`, off `main`
 > `1d5d017d`; v192 live), NOT MERGED, NOT DEPLOYED.** Code commit `5a60c782`, then docs.
 >
@@ -47,7 +49,7 @@ re-sent (§ 5).
   | **Runner/Host announcements** (per marathon) | one marathon | its public reminders AND highlights, runners and hosts |
   | Auto-highlight (`public_highlight`, per marathon) | one marathon | whether a highlight is posted at all when a run / host block goes live |
   | `marathon_host_highlights` (guild, on) | every marathon | hosts only — the host master, kept |
-  | Scan hosts (per marathon, default now **on**) | one marathon | whether hosts are BaF at all |
+  | ~~Scan hosts (per marathon, default now **on**)~~ *(retired 2026-09-28, `people-unify` — hosts always found)* | ~~one marathon~~ | ~~whether hosts are BaF at all~~ |
   | a person's opt-out (per marathon) | one person on one marathon | every public post naming them |
 
   A reminder goes public only when `marathon_public_reminders` AND the marathon's switch are on and someone on it is not
@@ -128,7 +130,7 @@ re-sent (§ 5).
   `announcements_off`, `opted_out`. The runner's public copy logs `marathon.public_reminder_skipped` with
   `announcements_off` / `opted_out` beside the existing `same_channel`.
 
-### 4. Scan hosts automatic
+### 4. ~~Scan hosts automatic~~ — superseded 2026-09-28 by `people-unify`: there is no Scan hosts switch at all
 
 `marathon_scan_hosts_default` now defaults **on** in the registry (and the mock). Every marathon whose own Scan hosts is
 NULL scans its hosts. Hosts still never make a run ours (`marathon_hosts_count_as_ours` stays off). The conductor also

@@ -1,5 +1,7 @@
 # Marathon hosts — scan them per marathon, spotlight them, give them events; and a pairing can fix someone's Twitch channel
 
+> ⚠️ **2026-09-28 — people-unify (branch `people-unify`, 🔨 BUILT, NOT MERGED):** **§1 Scan hosts and §3 BaF host events are REVERSED** — hosts are always found (no switch, key or button; `marathons.scan_hosts` left in place, unread), and host events are one per host BLOCK under the one **BaF run/host events** switch (the runs half of `event_mode`); `marathons.host_events` is ignored. §2 (the host spotlight note) and §4 (the Twitch fix) stand. See [`people-unify-design.md`](people-unify-design.md).
+
 > 🔨 **BUILT 2026-09-28 on branch `marathon-host-spotlight` (worktree `C:/lcw/bb-marathon-host-spotlight`, off `main`
 > `aba4ca00`), NOT MERGED, NOT DEPLOYED.** Commits `e831e982` (Python), `7511e9b6` (site, mock, contract), then docs.
 >
@@ -25,7 +27,7 @@ Phoenix.
 
 ## As built
 
-### 1. Scan hosts, per marathon
+### 1. ~~Scan hosts, per marathon~~ — REVERSED 2026-09-28 by `people-unify`: hosts are always found
 
 - **`marathons.scan_hosts INTEGER`** — NULL follows `marathon_scan_hosts_default` (the `hotfix-picker` key, still
   **off**), 1 / 0 is this marathon's own answer. `Marathons.rematch` reads it through `marathon_hosts.scans_hosts`, so
@@ -53,7 +55,7 @@ Same `marathon_spotlights` bookkeeping, same **Stop spotlighting**, same `marath
 `hosting: true` in its details. It works for a host whether or not the marathon scans hosts (an unscanned host is in
 *the schedule*, not the BaF block — the same as spotlighting any runner who is not BaF).
 
-### 3. BaF host events
+### 3. ~~BaF host events~~ — REVERSED 2026-09-28 by `people-unify`: one event per host block under **BaF run/host events**
 
 - **`marathons.host_events INTEGER`** (NULL follows **`marathon_host_events_default`**, bool, **off**) and
   **`marathons.host_event_ids TEXT`** (JSON `{user_id: event_id}`).
@@ -118,7 +120,7 @@ Schema **81 → 82** · registry keys **701 → 713** · routes **+1** (`PATCH /
 1. **Host events live in a JSON column on the marathon, not a table.** `marathons.host_event_ids` archives and
    restores with the marathon row for free; a table would have needed its own archive twin and delete paths. One row
    per marathon, a handful of hosts — no query needs it indexed.
-2. **Host events are independent of the event mode.** The brief said "wherever the marathon has a switch for making
+2. ~~**Host events are independent of the event mode.**~~ *(REVERSED 2026-09-28, `people-unify`: they follow the runs half of the event mode, per host block.)* The brief said "wherever the marathon has a switch for making
    events for OUR RUNNERS, add the matching switch for OUR HOSTS": the runners' switch is the *runs* half of
    `event_mode` (the thread's **BaF run events** button); hosts got their own switch rather than a fifth mode word, so
    *None / Marathon / Runs / Both* keep their meaning and neither switch moves the other. It needs the marathon to scan
