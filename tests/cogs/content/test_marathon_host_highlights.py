@@ -273,3 +273,21 @@ async def test_a_gdq_tracker_host_block_runs_across_a_hostless_segment(bot, cog)
     assert now_text(post).startswith("**TheKingsPride** hosted **SGDQ 2026**")
     assert (await kinds(bot.db)).count("marathon.host_highlight_posted") == 1
     assert cogmod.counts_of(await runs_of(bot.db, marathon["id"]))[1] == 0
+
+
+@pytest.mark.parametrize("stop", ["key", "scan"])
+async def test_a_post_already_up_follows_its_block_to_the_end_after_a_switch_goes_off(
+    bot, cog, stop
+):
+    marathon = await show(bot, cog, HOSTED_ONLY)
+    (post,) = highlights(bot)
+    if stop == "key":
+        await bot.store.set(GUILD, "marathon_host_highlights", False)
+    else:
+        await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.SCAN, False)
+
+    await tick_at(bot, cog, marathon, 31)
+    assert now_text(post).startswith("**anarchy** is hosting **Hidden Heroes** now")
+    await tick_at(bot, cog, marathon, 302)
+    assert now_text(post).startswith("**anarchy** hosted **Hidden Heroes**")
+    assert len(highlights(bot)) == 1

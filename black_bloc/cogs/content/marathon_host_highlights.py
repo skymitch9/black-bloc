@@ -147,8 +147,9 @@ def attached(found: list[dict[str, Any]], span: mhh.Span) -> tuple[dict[str, Any
         record = mhh.new_record(span)
         found.append(record)
         return (record, True)
-    if record["runs"] != span.run_ids:
-        record["runs"] = span.run_ids
+    fresh = {"runs": span.run_ids, "name": span.name, "login": span.login}
+    if any(record.get(key) != value for key, value in fresh.items()):
+        record.update(fresh)
         return (record, True)
     return (record, False)
 
@@ -317,16 +318,25 @@ async def sync_host_highlights(cog: Any, guild: Any, marathon: Any) -> None:
         found = mhh.records(fresh)
         posting = wanted(bot, guild, fresh) and public_channel(bot, guild.id) is not None
         changed = False
+        seen: list[int] = []
         for span in await spans_of(bot, guild, fresh):
             fresh_block = posting and mhh.state_of(span) != mhh.DONE
             if mhh.record_for(found, span) is None and not fresh_block:
                 continue
             record, moved = attached(found, span)
+            seen.append(id(record))
             changed = changed or moved
             if not record["tried"] and fresh_block:
                 await post_one(cog, guild, fresh, span, record, found)
                 continue
             if mhh.is_up(record) and await follow_one(cog, guild, fresh, span, record):
+                changed = True
+        runs = await runs_of(bot.db, fresh["id"])
+        for record in found:
+            if id(record) in seen or not mhh.is_up(record):
+                continue
+            span = mhh.left_behind(record, runs)
+            if span is not None and await follow_one(cog, guild, fresh, span, record):
                 changed = True
         if changed:
             await save(bot, fresh, found)

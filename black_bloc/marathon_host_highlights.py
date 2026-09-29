@@ -46,15 +46,15 @@ def hosts_of(row: Any) -> list[dict[str, Any]]:
     return [one for one in mt.people_of(row) if one.get("part") == mt.HOST]
 
 
-def _span(user_id: int, rows: list[Any]) -> Span:
+def _span(user_id: int, rows: list[Any], name: Any = None, login: Any = None) -> Span:
     mine = [
         one
         for row in rows
         for one in hosts_of(row)
         if one.get("user_id") and int(one["user_id"]) == user_id
     ]
-    name = next((str(one.get("name")) for one in mine if one.get("name")), str(user_id))
-    login = next((str(one.get("login")) for one in mine if one.get("login")), None)
+    name = next((str(one.get("name")) for one in mine if one.get("name")), name or str(user_id))
+    login = next((str(one.get("login")) for one in mine if one.get("login")), login)
     starts = [at for at in (parse_ts(mt._cell(one, "scheduled_at")) for one in rows) if at]
     ends = [
         at
@@ -98,11 +98,21 @@ def spans(runs: Any) -> list[Span]:
 
 def state_of(span: Span) -> str:
     states = [mt._cell(one, "state") for one in span.runs]
-    if all(one == mt.DONE for one in states):
+    if all(one in (mt.DONE, mt.DROPPED) for one in states):
         return DONE
     if all(one == mt.UPCOMING for one in states):
         return UPCOMING
     return LIVE
+
+
+def left_behind(record: dict[str, Any], runs: Any) -> Span | None:
+    """A post that is up whose block is gone from the schedule's hosts (Scan hosts off, the host
+    unlinked, the runs dropped) still follows its own runs to the end."""
+    wanted = set(record["runs"])
+    rows = sorted((one for one in runs or () if int(mt._cell(one, "id")) in wanted), key=mt._when)
+    if not rows:
+        return None
+    return _span(record["user_id"], rows, record.get("name"), record.get("login"))
 
 
 def records(marathon: Any) -> list[dict[str, Any]]:
@@ -125,6 +135,8 @@ def records(marathon: Any) -> list[dict[str, Any]]:
                     "removed": bool(one.get("removed")),
                     "tried": bool(one.get("tried")),
                     "reminded": bool(one.get("reminded")),
+                    "name": str(one["name"]) if one.get("name") else None,
+                    "login": str(one["login"]) if one.get("login") else None,
                 }
             )
         except (KeyError, TypeError, ValueError):
@@ -154,6 +166,8 @@ def new_record(span: Span) -> dict[str, Any]:
         "removed": False,
         "tried": False,
         "reminded": False,
+        "name": span.name,
+        "login": span.login,
     }
 
 
@@ -218,6 +232,7 @@ __all__ = [
     "fields_of",
     "heads_up_due",
     "hosts_of",
+    "left_behind",
     "is_up",
     "new_record",
     "record_for",
