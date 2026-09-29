@@ -59,6 +59,8 @@ from ...cogs.content.marathon_events import (
     unlink_run_event,
 )
 from ...cogs.content.marathon_feeds import get_feed
+from ...cogs.content.marathon_host_highlights import block_state, state_for
+from ...cogs.content.marathon_host_highlights import press as host_highlight_press
 from ...cogs.content.marathon_hosts import set_switch, switch_state
 from ...cogs.content.marathon_inbox import ignore as ignore_marathon
 from ...cogs.content.marathon_inbox import inbox_message_url, post_now
@@ -199,8 +201,11 @@ def run_row(guild: Any, row: Any, statuses: dict[int, str] | None = None) -> dic
     }
 
 
-def entry_row(guild: Any, entry: dict[str, Any]) -> dict[str, Any]:
-    """One person on the People card: who they are here, how they matched, their Go-live row."""
+def entry_row(
+    guild: Any, entry: dict[str, Any], hosting: dict[int, Any] | None = None
+) -> dict[str, Any]:
+    """One person on the People card: who they are here, how they matched, their Go-live row,
+    and — for a BaF host — their public host highlight."""
     user_id = entry.get("user_id")
     member = guild.get_member(int(user_id)) if user_id else None
     found = member_row(member) if member is not None else None
@@ -232,6 +237,7 @@ def entry_row(guild: Any, entry: dict[str, Any]) -> dict[str, Any]:
         "looks_like": (
             {"username": near["username"], "user_id": _id(near["user_id"])} if near else None
         ),
+        "host_highlight": block_state(hosting or {}, user_id) if user_id else None,
     }
 
 
@@ -512,11 +518,12 @@ def build_router(bot: Any) -> APIRouter:
 
     async def board(guild: Any, marathon: Any) -> dict[str, Any]:
         state = await people_state(bot, guild, marathon)
+        hosting = await state_for(bot, guild, marathon)
         return {
             "marathon_id": marathon["id"],
             "timezone": zone_of(bot, guild),
             "pairings": await people(guild, marathon),
-            "baf": [entry_row(guild, one) for one in state["baf"]],
+            "baf": [entry_row(guild, one, hosting) for one in state["baf"]],
             "others": [entry_row(guild, one) for one in state["others"]],
         }
 
@@ -932,6 +939,43 @@ def build_router(bot: Any) -> APIRouter:
             )
         )
         return await board(guild, row) | {"message": done.message}
+
+    async def host_highlight_move(
+        request: Request, marathon_id: int, user_id: str, to: str, payload: Any
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        run_id = (payload or {}).get("run_id")
+        done = answered(
+            await host_highlight_press(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                row,
+                user_id,
+                to,
+                run_id=wanted_id(run_id) if run_id not in (None, "") else None,
+                via=VIA_WEBSITE,
+            )
+        )
+        return await board(guild, row) | {"message": done.message}
+
+    @router.post("/{marathon_id}/people/{user_id}/host-highlight")
+    async def marathon_host_highlight(
+        request: Request, marathon_id: int, user_id: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        return await host_highlight_move(request, marathon_id, user_id, "post", payload)
+
+    @router.delete("/{marathon_id}/people/{user_id}/host-highlight")
+    async def marathon_host_unhighlight(
+        request: Request, marathon_id: int, user_id: str, run_id: str | None = None
+    ) -> dict[str, Any]:
+        return await host_highlight_move(
+            request, marathon_id, user_id, "remove", {"run_id": run_id}
+        )
 
     @router.post("/{marathon_id}/people")
     async def marathon_pair(

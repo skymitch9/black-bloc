@@ -18,6 +18,8 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     DEFAULT_TIMEZONE_KEY,
     MARATHON_DEFAULTS,
+    MARATHON_PUBLIC_BUTTON_POST_KEY,
+    MARATHON_PUBLIC_BUTTON_REMOVE_KEY,
     MARATHON_SPOTLIGHT_HOST_NOTE_KEY,
     MARATHON_SPOTLIGHT_LEAD_KEY,
     MARATHON_SPOTLIGHT_NOTE_KEY,
@@ -56,6 +58,8 @@ UNSPOTLIGHT = "unspotlight"
 UNLINK = "unlink"
 LINK_NEAR = "link_near"
 TWITCH = "twitch"
+HOST_POST = "host_post"
+HOST_REMOVE = "host_remove"
 BACK = "back"
 LABELS = {
     SPOTLIGHT: ("Spotlight", discord.ButtonStyle.primary),
@@ -63,6 +67,8 @@ LABELS = {
     UNLINK: ("Unlink", discord.ButtonStyle.secondary),
     LINK_NEAR: ("Link @{username}", discord.ButtonStyle.primary),
     TWITCH: ("Twitch name…", discord.ButtonStyle.secondary),
+    HOST_POST: ("{label}", discord.ButtonStyle.primary),
+    HOST_REMOVE: ("{label}", discord.ButtonStyle.secondary),
     BACK: ("Back", discord.ButtonStyle.secondary),
 }
 PEOPLE_BUTTON = "People…"
@@ -393,7 +399,10 @@ async def build_people(
     days = mp.days_of(state["runs"], zone, now_for(bot))
     run = next((one for one in state["runs"] if str(one["id"]) == str(run_id)), None)
     if run is not None:
-        return slot_card(bot, guild, marathon, state, run, view, person, zone)
+        from .marathon_host_highlights import state_for
+
+        hosting = await state_for(bot, guild, marathon)
+        return slot_card(bot, guild, marathon, state, run, view, person, zone, hosting=hosting)
     wanted = next((one for one in days if one.key == day), None)
     view.day = wanted.key if wanted is not None else None
     lines += ["", mp.PEOPLE_SCHEDULE]
@@ -418,6 +427,8 @@ def slot_card(
     view: PeoplePanel,
     person: Any,
     zone: str,
+    *,
+    hosting: dict[int, Any] | None = None,
 ) -> tuple[Any, Any]:
     view.run_id = run["id"]
     view.day = mp.days_of([run], zone, now_for(bot))[0].key if run["scheduled_at"] else None
@@ -451,11 +462,38 @@ def slot_card(
         if entry.get("matched_by") == mp.BY_PAIRING and entry.get("pairing_id"):
             view.add_item(PeopleMove(UNLINK))
             view.add_item(PeopleMove(TWITCH))
+        host_move = host_highlight_move(bot, guild, hosting or {}, chosen, run["id"])
+        if host_move is not None:
+            view.add_item(host_move)
         near = entry.get("looks_like")
         if near and not chosen.get("user_id"):
             view.add_item(PeopleMove(LINK_NEAR, username=near["username"]))
     view.add_item(PeopleMove(BACK))
     return (discord.Embed(title=marathon["name"], description=clamped(lines)), view)
+
+
+def host_highlight_move(
+    bot: Any, guild: Any, hosting: dict[int, Any], chosen: dict[str, Any], run_id: Any
+) -> Any:
+    """Take down or post a BaF host's highlight for the block this slot is in — only when valid;
+    the labels are the runner highlight button's keys."""
+    from .marathon_host_highlights import block_state
+    from .marathon_public import channel_name, public_channel
+    from .marathon_public import words as public_words
+
+    if chosen.get("part") != mt.HOST or not chosen.get("user_id"):
+        return None
+    block = block_state(hosting, chosen["user_id"], run_id)
+    if block is None or not (block["up"] or block["can_post"]):
+        return None
+    if block["up"]:
+        label = public_words(bot, guild.id, MARATHON_PUBLIC_BUTTON_REMOVE_KEY)
+        return PeopleMove(HOST_REMOVE, label=label, user_id=chosen["user_id"])
+    channel = public_channel(bot, guild.id)
+    label = public_words(
+        bot, guild.id, MARATHON_PUBLIC_BUTTON_POST_KEY, channel=channel_name(bot, guild, channel)
+    )
+    return PeopleMove(HOST_POST, label=label, user_id=chosen["user_id"])
 
 
 async def render(interaction: discord.Interaction, embed: Any, view: Any, previous: Any) -> None:
@@ -571,6 +609,13 @@ class TwitchModal(AnswersErrors, discord.ui.Modal, title=TWITCH_TITLE):
 
 
 def doing_for(action: str, name: Any, run_id: Any, member_id: Any) -> Any:
+    if action in (HOST_POST, HOST_REMOVE):
+        from .marathon_host_highlights import press
+
+        to = "post" if action == HOST_POST else "remove"
+        return lambda bot, guild, actor, row: press(
+            bot, guild, actor, row, member_id, to, run_id=run_id
+        )
     if action == SPOTLIGHT:
         return lambda bot, guild, actor, row: spotlight_runner(
             bot, guild, actor, row, name, run_id=run_id
@@ -583,13 +628,18 @@ def doing_for(action: str, name: Any, run_id: Any, member_id: Any) -> Any:
 
 
 class PeopleMove(discord.ui.Button):
-    def __init__(self, action: str, *, username: str = "") -> None:
-        label, style = LABELS[action]
+    def __init__(
+        self, action: str, *, username: str = "", label: str = "", user_id: Any = None
+    ) -> None:
+        words, style = LABELS[action]
         super().__init__(
-            label=label.format(username=username)[:80], style=style, row=4 if action == BACK else 2
+            label=words.format(username=username, label=label)[:80] or "…",
+            style=style,
+            row=4 if action == BACK else 2,
         )
         self.action = action
         self.username = username
+        self.user_id = user_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
@@ -612,7 +662,7 @@ class PeopleMove(discord.ui.Button):
                 current = mt.pairing_login(pairing) if pairing is not None else None
                 await interaction.response.send_modal(TwitchModal(view, current))
             return
-        member_id = usernames_of(interaction.guild).get(self.username)
+        member_id = self.user_id or usernames_of(interaction.guild).get(self.username)
         await people_move(interaction, view, doing_for(self.action, name, view.run_id, member_id))
 
 

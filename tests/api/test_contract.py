@@ -64,6 +64,7 @@ CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.jso
 MEMBER_ID = 21
 YT_CHANNEL = "UCsXVk37bltHxD1rDPwtNM8Q"
 PING_MEMBER_ID = 22
+HOST_MEMBER_ID = 4242
 INBOX_FORUM_ID = 424_242
 
 
@@ -785,7 +786,33 @@ async def seed_world(client, web, guild, wf) -> dict:
     marathon_pairing_id = await upsert_pairing(
         db, guild_id, marathon_id, "Contract Runner", MEMBER_ID, 7
     )
+    # Host highlights: Interview Crew hosts Blaster Master and is paired, the marathon scans its
+    # hosts, and their highlight is up — so both host-highlight moves answer 200 in words.
+    await upsert_pairing(db, guild_id, marathon_id, "Interview Crew", HOST_MEMBER_ID, 7)
+    await db.conn.execute("UPDATE marathons SET scan_hosts = 1 WHERE id = ?", (marathon_id,))
+    await db.conn.commit()
     await marathons.rematch(guild, made.value)
+    hosted_run_id = next(
+        row["id"] for row in await runs_of(db, marathon_id) if row["game"] == "Blaster Master"
+    )
+    await db.conn.execute(
+        "UPDATE marathons SET host_highlight_posts = ? WHERE id = ?",
+        (
+            json.dumps(
+                [
+                    {
+                        "user_id": HOST_MEMBER_ID,
+                        "runs": [hosted_run_id],
+                        "message_id": 1,
+                        "channel_id": wf.TEST_CHANNEL_ID,
+                        "tried": True,
+                    }
+                ]
+            ),
+            marathon_id,
+        ),
+    )
+    await db.conn.commit()
     # The People card (marathon-people §B): Contract Runner is spotlit from the marathon, so
     # Stop spotlighting reaches a remembered row; Somebody is not, so Spotlight… reaches them.
     spotlit = await spotlight_runner(web, guild, None, made.value, "contractrunner")
@@ -1030,6 +1057,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_linked_run_id": str(marathon_linked_run_id),
         "marathon_person": "somebody_runs",
         "marathon_spotlit_person": "contractrunner",
+        "marathon_host": str(HOST_MEMBER_ID),
         "feed_id": str(feed_id),
         "feed_suggest_id": str(feed_suggest_id),
         "feed_horaro_events_id": str(feed_horaro_events_id),
