@@ -893,18 +893,20 @@ def member_ids(row: Any) -> list[int]:
     return [int(one["user_id"]) for one in ours(people_of(row))]
 
 
-def run_url(row: Any, channel_login: Any, fallback: str = "") -> str:
+def run_url(row: Any, channel_login: Any, fallback: str = "", *, people: Any = None) -> str:
     """The marathon's channel when it has one, else the first of ours with a Twitch login."""
     if channel_login:
         return TWITCH_URL.format(login=channel_login)
-    for person in ours(people_of(row)):
+    for person in ours(people_of(row)) if people is None else people:
         if person.get("login"):
             return TWITCH_URL.format(login=person["login"])
     return fallback
 
 
-def run_fields(row: Any, marathon: Any, words: dict[str, str], *, url: str) -> dict[str, Any]:
-    people = ours(people_of(row))
+def run_fields(
+    row: Any, marathon: Any, words: dict[str, str], *, url: str, people: Any = None
+) -> dict[str, Any]:
+    people = ours(people_of(row)) if people is None else list(people)
     part = people[0]["part"] if people else RUNNER
     return {
         "member": mention_line(people),

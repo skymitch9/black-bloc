@@ -51,93 +51,106 @@ def a_row(ident, start, hosts, *, state=mt.UPCOMING, length=60):
 
 
 ANARCHY = ("anarchy", "anarchyasf", 8101)
+KNOX = ("knox", None, 8102)
 OTHER = ("Someone", None, None)
 
 
-def test_the_sgdq_tracker_gives_one_block_per_host_shift():
-    found = {one.name: one for one in mhh.spans(sgdq_rows())}
-    assert set(found) == set(BAF)
-    assert found["JRisJunior"].run_ids == [2, 3, 4]
-    assert found["TheKingsPride"].run_ids == [5, 7]
-    assert found["Quacksilver"].run_ids == [8, 9, 10]
-    kings = found["TheKingsPride"]
-    assert kings.starts.isoformat() == "2026-07-05T21:58:00+00:00"
-    assert kings.ends.isoformat() == "2026-07-06T01:00:00+00:00"
-    assert kings.login == "thekingspride" and found["JRisJunior"].login is None
-
-
-def test_only_baf_hosts_get_a_block():
-    found = mhh.spans(sgdq_rows({"TheKingsPride": 12}))
-    assert [(one.user_id, one.run_ids) for one in found] == [(12, [5, 7])]
-
-
-def test_a_run_someone_else_hosts_ends_the_block():
-    rows = [a_row(1, 0, [ANARCHY]), a_row(2, 60, [OTHER]), a_row(3, 120, [ANARCHY])]
-    assert [one.run_ids for one in mhh.spans(rows)] == [[1], [3]]
-
-
-def test_a_run_with_no_host_keeps_the_block_going_and_a_co_host_does_too():
-    rows = [
-        a_row(1, 0, [ANARCHY]),
-        a_row(2, 60, []),
-        a_row(3, 120, [ANARCHY, OTHER]),
-        a_row(4, 180, []),
+def test_the_sgdq_tracker_gives_one_item_per_hosted_run():
+    found = [(one.run_id, one.user_ids) for one in mhh.hosted(sgdq_rows())]
+    assert found == [
+        (2, [11]),
+        (3, [11]),
+        (4, [11]),
+        (5, [12]),
+        (7, [12]),
+        (8, [13]),
+        (9, [13]),
+        (10, [13]),
     ]
-    (block,) = mhh.spans(rows)
-    assert block.run_ids == [1, 3]
-    assert block.ends == NOW + timedelta(minutes=180)
+
+
+def test_only_baf_hosts_count_and_a_run_without_one_is_skipped():
+    found = mhh.hosted(sgdq_rows({"TheKingsPride": 12}))
+    assert [one.run_id for one in found] == [5, 7]
+    assert found[0].hosts == [
+        {"user_id": 12, "name": "TheKingsPride", "login": "thekingspride", "part": mt.HOST}
+    ]
+
+
+def test_two_baf_hosts_on_one_run_are_one_item_naming_both():
+    (item,) = mhh.hosted([a_row(1, 0, [ANARCHY, KNOX, OTHER])])
+    assert item.user_ids == [8101, 8102] and item.names == "anarchy, knox"
 
 
 def test_a_dropped_run_is_off_the_schedule():
     rows = [
         a_row(1, 0, [ANARCHY]),
-        a_row(2, 60, [OTHER], state=mt.DROPPED),
+        a_row(2, 60, [ANARCHY], state=mt.DROPPED),
         a_row(3, 120, [ANARCHY]),
     ]
-    assert [one.run_ids for one in mhh.spans(rows)] == [[1, 3]]
+    assert [one.run_id for one in mhh.hosted(rows)] == [1, 3]
 
 
-def test_the_block_is_upcoming_then_on_now_then_done():
-    rows = [a_row(1, 0, [ANARCHY]), a_row(2, 60, [ANARCHY])]
-    assert mhh.state_of(mhh.spans(rows)[0]) == mhh.UPCOMING
-    rows[0]["state"] = mt.LIVE
-    assert mhh.state_of(mhh.spans(rows)[0]) == mhh.LIVE
-    rows[0]["state"] = mt.DONE
-    assert mhh.state_of(mhh.spans(rows)[0]) == mhh.LIVE
-    rows[1]["state"] = mt.DONE
-    assert mhh.state_of(mhh.spans(rows)[0]) == mhh.DONE
+def test_each_run_is_upcoming_then_live_then_done():
+    row = a_row(1, 0, [ANARCHY])
+    assert mhh.state_of(mhh.hosted([row])[0]) == mhh.UPCOMING
+    row["state"] = mt.LIVE
+    assert mhh.state_of(mhh.hosted([row])[0]) == mhh.LIVE
+    row["state"] = mt.DONE
+    assert mhh.state_of(mhh.hosted([row])[0]) == mhh.DONE
 
 
-def test_the_heads_up_is_once_before_the_first_run_and_never_late():
-    (block,) = mhh.spans([a_row(1, 30, [ANARCHY]), a_row(2, 90, [ANARCHY])])
-    due = lambda now, record=None: mhh.heads_up_due(  # noqa: E731
-        block, record, now, minutes=15, stale_minutes=30
-    )
-    assert due(NOW) is None
-    assert due(NOW + timedelta(minutes=15)) == mhh.SEND
-    assert due(NOW + timedelta(minutes=15), {"reminded": True}) is None
-    assert due(NOW + timedelta(minutes=46)) == mhh.SKIP
+def test_the_heads_up_is_once_per_run_at_its_moment_and_never_late():
+    first, second = mhh.hosted([a_row(1, 30, [ANARCHY]), a_row(2, 90, [ANARCHY])])
+
+    def due(item, now, record=None):
+        return mhh.heads_up_due(item, record, now, minutes=15, stale_minutes=30)
+
+    assert due(first, NOW) is None
+    assert due(first, NOW + timedelta(minutes=15)) == mhh.SEND
+    assert due(first, NOW + timedelta(minutes=15), {"reminded": True}) is None
+    assert due(second, NOW + timedelta(minutes=15)) is None
+    assert due(second, NOW + timedelta(minutes=75)) == mhh.SEND
+    assert due(second, NOW + timedelta(minutes=89)) == mhh.SEND
+    assert due(second, NOW + timedelta(minutes=106)) == mhh.SKIP
 
 
-def test_records_survive_a_round_trip_and_follow_a_block_that_moved():
-    (block,) = mhh.spans([a_row(1, 0, [ANARCHY]), a_row(2, 60, [ANARCHY])])
-    record = mhh.new_record(block) | {"message_id": 77, "channel_id": 5, "tried": True}
+def test_a_run_that_moved_later_is_due_again_like_a_runners_reminder():
+    (item,) = mhh.hosted([a_row(1, 30, [ANARCHY])])
+    record = {"reminded": True}
+    assert not mhh.rearm(record, item, NOW + timedelta(minutes=16), minutes=15)
+    assert mhh.rearm(record, item, NOW, minutes=15)
+    assert not mhh.rearm({"reminded": False}, item, NOW, minutes=15)
+
+
+def test_auto_follows_the_marathons_switch_at_live_once():
+    row = a_row(1, 0, [ANARCHY], state=mt.LIVE)
+    (item,) = mhh.hosted([row])
+    assert mhh.auto_wanted({"public_highlight": 1}, item, None)
+    assert not mhh.auto_wanted({"public_highlight": 0}, item, None)
+    assert not mhh.auto_wanted({"public_highlight": 1}, item, {"tried": True})
+    assert not mhh.auto_wanted({"public_highlight": 1}, item, {"message_id": 5, "removed": True})
+    row["state"] = mt.UPCOMING
+    assert not mhh.auto_wanted({"public_highlight": 1}, mhh.hosted([row])[0], None)
+
+
+def test_records_survive_a_round_trip_keyed_by_run():
+    (item,) = mhh.hosted([a_row(4, 0, [ANARCHY])])
+    record = mhh.new_record(item) | {"message_id": 77, "channel_id": 5, "tried": True}
     found = mhh.records({mhh.COLUMN: mhh.dump([record])})
-    assert found == [record]
-    (grown,) = mhh.spans([a_row(2, 60, [ANARCHY]), a_row(3, 120, [ANARCHY])])
-    assert mhh.record_for(found, grown) == record
+    assert found == [record] and found[0]["run_id"] == 4
+    assert mhh.record_for(found, item) == record
     assert mhh.is_up(record) and not mhh.is_up(record | {"removed": True})
     assert mhh.records({mhh.COLUMN: "not json"}) == []
+    assert mhh.records({mhh.COLUMN: json.dumps([{"user_id": 1, "runs": [4]}])}) == []
 
 
-def test_the_fields_name_the_host_and_link_their_own_channel_first():
-    (block,) = mhh.spans([a_row(1, 0, [ANARCHY])])
-    fields = mhh.fields_of(block, {"name": "Hidden Heroes"}, url="https://twitch.tv/hotfix")
-    assert fields["name"] == "anarchy" and fields["mention"] == "<@8101>"
-    assert fields["show"] == "Hidden Heroes" and fields["link"] == "https://twitch.tv/anarchyasf"
-    assert fields["when"].startswith("<t:") and fields["until"].endswith(":t>")
-    (plain,) = mhh.spans([a_row(1, 0, [("anarchy", None, 8101)])])
-    assert mhh.fields_of(plain, {"name": "x"}, url="https://u")["link"] == "https://u"
+def test_a_post_left_behind_follows_its_run_with_the_hosts_it_named():
+    row = a_row(4, 0, [])
+    record = {"run_id": 4, "hosts": [{"user_id": 8101, "name": "anarchy", "login": None}]}
+    item = mhh.left_behind(record, [row])
+    assert item.run_id == 4 and item.names == "anarchy"
+    assert mhh.left_behind(record | {"run_id": 9}, [row]) is None
 
 
 def test_a_move_word_is_post_or_remove():

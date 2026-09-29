@@ -45,20 +45,20 @@ def wanted(rows: Any) -> list[Any]:
     )
 
 
-def names_of(row: Any) -> str:
-    people = mt.ours(mt.people_of(row))
+def names_of(row: Any, people: Any = None) -> str:
+    people = mt.ours(mt.people_of(row)) if people is None else list(people)
     if people:
         return ", ".join(str(one.get("name") or "") for one in people)
     return str(mt._cell(row, "runners_text") or "")
 
 
 def fields_of(
-    row: Any, marathon: Any, words: dict[str, str], *, url: str, unlisted: str
+    row: Any, marathon: Any, words: dict[str, str], *, url: str, unlisted: str, people: Any = None
 ) -> dict[str, Any]:
-    base = mt.run_fields(row, marathon, words, url=url)
-    ours = mt.is_ours(row)
+    base = mt.run_fields(row, marathon, words, url=url, people=people)
+    ours = people is not None or mt.is_ours(row)
     return {
-        "runner": names_of(row),
+        "runner": names_of(row, people),
         "mention": base["member"],
         "game": base["game"],
         "category": base["category"],
@@ -80,9 +80,12 @@ def post_text(
     default: str,
     url: str,
     unlisted: str,
+    people: Any = None,
 ) -> mt.Rendered:
     found = mt.render(
-        template, default, **fields_of(row, marathon, words, url=url, unlisted=unlisted)
+        template,
+        default,
+        **fields_of(row, marathon, words, url=url, unlisted=unlisted, people=people),
     )
     return mt.Rendered(found.text[: mt.MESSAGE_LIMIT], found.fell_back)
 

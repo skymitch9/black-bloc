@@ -34,6 +34,18 @@ def wanted(bot: Any, guild_id: int) -> bool:
     return bool(bot.store.get(guild_id, MARATHON_PUBLIC_REMINDERS_KEY))
 
 
+def reminder_text(
+    bot: Any, guild: Any, marathon: Any, row: Any, *, url: str, people: Any = None
+) -> str:
+    """A runner's public reminder, or a host's when `people` names the BaF hosts: one template."""
+    said = words_for(bot, guild.id)
+    return mt.render(
+        said[MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY],
+        said_default(MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY),
+        **mt.run_fields(row, marathon, said, url=url, people=people),
+    ).text
+
+
 def staff_went_to(cog: Any, guild: Any, staff_channel_id: Any) -> int | None:
     """The real channel the staff copy stands for: its thread, or the marathon channel when it
     has none (whose copy may sit in a rehearsal home)."""
@@ -79,12 +91,7 @@ async def post_public_reminder(
                 details=base | {"because": "same_channel", "channel_id": home},
             )
             return
-        said = words_for(bot, guild.id)
-        text = mt.render(
-            said[MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY],
-            said_default(MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY),
-            **mt.run_fields(row, marathon, said, url=url),
-        ).text
+        text = reminder_text(bot, guild, marathon, row, url=url)
         message, channel_id, why = await send_public(
             bot, guild, ping_prefix(*roles) + text, roles, home=home
         )
@@ -110,4 +117,4 @@ async def post_public_reminder(
         log.warning("marathon: the public reminder failed — %s", reason_of(exc))
 
 
-__all__ = ["post_public_reminder", "reminder_channel", "staff_went_to", "wanted"]
+__all__ = ["post_public_reminder", "reminder_channel", "reminder_text", "staff_went_to", "wanted"]

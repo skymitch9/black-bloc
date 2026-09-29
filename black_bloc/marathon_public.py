@@ -115,9 +115,17 @@ def text_of(
     default: str,
     url: str,
     unlisted: str,
+    people: Any = None,
 ) -> str:
     return mrp.post_text(
-        row, marathon, words, template=template, default=default, url=url, unlisted=unlisted
+        row,
+        marathon,
+        words,
+        template=template,
+        default=default,
+        url=url,
+        unlisted=unlisted,
+        people=people,
     ).text
 
 

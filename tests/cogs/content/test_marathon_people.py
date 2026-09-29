@@ -410,15 +410,20 @@ async def test_a_baf_hosts_slot_offers_their_highlight_move_both_ways(bot, cog):
         )
         return [one for one in view.children if isinstance(one, people.PeopleMove)]
 
+    (move,) = [one for one in await slot() if one.action == people.HOST_POST]
+    assert move.label.startswith("Highlight in #") and move.user_id == ANARCHY
+    said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id)(
+        bot, bot.guild, FakeActor(), marathon
+    )
+    assert said.ok and "is up in" in said.message
     (move,) = [one for one in await slot() if one.action == people.HOST_REMOVE]
-    assert move.label == "Remove the highlight" and move.user_id == ANARCHY
+    assert move.label == "Remove the highlight"
     said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id)(
         bot, bot.guild, FakeActor(), marathon
     )
     assert said.ok and "taken down" in said.message
-    (move,) = [one for one in await slot() if one.action == people.HOST_POST]
-    assert move.label.startswith("Highlight in #")
-    assert (await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "post")).ok
+    shown = (await hh.state_for(bot, bot.guild, marathon))[ANARCHY]
+    assert [one["up"] for one in shown["runs"]] == [False, False, False]
     _, view = await people.build_people(
         bot, bot.guild, FakeActor(), marathon["id"], run_id=run["id"], person="Vee"
     )

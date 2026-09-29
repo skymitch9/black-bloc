@@ -198,8 +198,8 @@ const HOSTS_FIELD = 'Scan hosts';
 const HOSTS_HELP = 'On: a host from BaF — paired, or matched by their Twitch link — shows ✦BaF on the People card and '
   + 'can be spotlit as a host (their note reads marathon_spotlight_host_note_template). Off: only runners and '
   + 'commentators count. A host never makes a run a BaF run (no runner post, reminder or shoutout) unless '
-  + 'marathon_hosts_count_as_ours is on; instead each BaF host gets one public highlight per block they host and a '
-  + 'heads-up before it, while marathon_host_highlights is on. Follow uses marathon_scan_hosts_default.';
+  + 'marathon_hosts_count_as_ours is on; instead, while marathon_host_highlights is on, each BaF host gets a runner’s '
+  + 'public reminder before every run they host, and its highlight when the run goes live under Auto-highlight. Follow uses marathon_scan_hosts_default.';
 const HOST_EVENTS_FIELD = 'BaF host events';
 const HOST_EVENTS_HELP = 'On: one Discord event for each BaF host, from their first hosted run to the end of their '
   + 'last, kept in step with the schedule and called off when they stop hosting. Needs Scan hosts on. Runner events '
@@ -721,7 +721,7 @@ async function hostHighlight(marathon, say, entry, runId, to) {
 function hostHighlightBits(marathon, say, entry, runId) {
   const state = entry && entry.host_highlight;
   if (shown.archived || !state) return [];
-  const block = runId ? (state.blocks || []).find((one) => one.runs.includes(String(runId))) : state;
+  const block = runId ? (state.runs || []).find((one) => one.run_id === String(runId)) : state;
   if (!block) return [];
   if (block.up) {
     return [

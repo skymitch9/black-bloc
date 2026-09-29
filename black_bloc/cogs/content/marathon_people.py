@@ -475,18 +475,18 @@ def slot_card(
 def host_highlight_move(
     bot: Any, guild: Any, hosting: dict[int, Any], chosen: dict[str, Any], run_id: Any
 ) -> Any:
-    """Take down or post a BaF host's highlight for the block this slot is in — only when valid;
-    the labels are the runner highlight button's keys."""
-    from .marathon_host_highlights import block_state
+    """Take down or post a BaF host's highlight for this slot's run — only when valid; the
+    labels are the runner highlight button's keys."""
+    from .marathon_host_highlights import run_state
     from .marathon_public import channel_name, public_channel
     from .marathon_public import words as public_words
 
     if chosen.get("part") != mt.HOST or not chosen.get("user_id"):
         return None
-    block = block_state(hosting, chosen["user_id"], run_id)
-    if block is None or not (block["up"] or block["can_post"]):
+    one = run_state(hosting, chosen["user_id"], run_id)
+    if one is None or not (one["up"] or one["can_post"]):
         return None
-    if block["up"]:
+    if one["up"]:
         label = public_words(bot, guild.id, MARATHON_PUBLIC_BUTTON_REMOVE_KEY)
         return PeopleMove(HOST_REMOVE, label=label, user_id=chosen["user_id"])
     channel = public_channel(bot, guild.id)

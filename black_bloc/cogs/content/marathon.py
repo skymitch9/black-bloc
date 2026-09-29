@@ -1303,6 +1303,8 @@ async def mark_live(
 ) -> Outcome:
     """Staff say it is on: held live until its slot and the grace are over; shouted if it is
     ours and never was."""
+    from .marathon_host_highlights import went_live as host_went_live
+
     cog = cog_of(bot)
     why = None
     async with cog.lock(marathon["id"]):
@@ -1335,6 +1337,7 @@ async def mark_live(
             | {"from": row["state"], "because": mt.BY_STAFF, "via": via},
         )
         fresh = await run_by_id(bot.db, marathon["id"], run["id"])
+        await host_went_live(cog, guild, marathon, fresh["id"])
         if mt.is_ours(fresh) and not fresh["shout_message_id"]:
             why = await cog.shout(guild, marathon, fresh, actor=actor, via=via)
         await cog.sync_board(guild, await get_marathon(bot.db, guild.id, marathon["id"]))
@@ -2398,6 +2401,8 @@ class Marathons(commands.Cog):
         return moved
 
     async def advance(self, guild: Any, marathon: Any, now: datetime) -> bool:
+        from .marathon_host_highlights import went_live as host_went_live
+
         store = self.bot.store
         rows = await runs_of(self.bot.db, marathon["id"])
         session = None
@@ -2440,6 +2445,7 @@ class Marathons(commands.Cog):
                 if change.because in mt.BY_STREAM:
                     await signals.anchor(self.bot.db, change.row, now)
                     anchored = True
+                await host_went_live(self, guild, marathon, change.row["id"])
                 if not ours:
                     continue
                 await log_action(

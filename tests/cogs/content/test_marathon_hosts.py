@@ -308,6 +308,7 @@ HOSTED_ONLY = [
         people=(("Spry", "spryruns", "runner"), ("anarchy", "anarchyasf", "host")),
     ),
 ]
+HOST_POSTS = (f"<@{ANARCHY}> hosts **", "**anarchy** hosts **")
 HOSTED_GAMES = ("Titanfall 2", "VHOLUME", "SPRAWL zero")
 SKY_SLOT = a_run(4, 210, game="Super Metroid", people=(("Sky", "skyruns", "runner"),))
 
@@ -335,7 +336,12 @@ async def hosted_show(bot, cog, runs, *, count):  # noqa: F811
 
 def said_about(bot, game):  # noqa: F811
     places = [bot.guild.channels[SHOW_ROOM].threads[-1], bot.guild.channels[CHANNEL]]
-    return [one for place in places for one in place.messages if f"**{game}**" in one.content]
+    return [
+        one
+        for place in places
+        for one in place.messages
+        if f"**{game}**" in one.content and not one.content.startswith(HOST_POSTS)
+    ]
 
 
 async def test_a_scanned_host_is_shown_and_spotlit_but_makes_no_run_ours(bot, cog):  # noqa: F811
