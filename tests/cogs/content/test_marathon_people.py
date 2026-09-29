@@ -396,38 +396,35 @@ async def test_the_slot_view_offers_twitch_name_for_a_linked_person(bot, cog):  
     assert "twitch.tv/junior_sm" in embed.description
 
 
-async def test_a_baf_hosts_slot_offers_their_highlight_move_both_ways(bot, cog):  # noqa: F811
-    from black_bloc.cogs.content import marathon_host_highlights as hh
+async def test_a_baf_persons_slot_offers_opt_out_and_opt_back_in(bot, cog):  # noqa: F811
+    from black_bloc import marathon_announce as ma
     from tests.cogs.content.test_marathon_host_highlights import ANARCHY, HOSTED_ONLY, show
 
     await bot.store.set(GUILD, "events_create_scheduled", False)
     marathon = await show(bot, cog, HOSTED_ONLY)
     run = (await runs_of(bot.db, marathon["id"]))[1]
 
-    async def slot():
+    async def slot(person="anarchy"):
         _, view = await people.build_people(
-            bot, bot.guild, FakeActor(), marathon["id"], run_id=run["id"], person="anarchy"
+            bot, bot.guild, FakeActor(), marathon["id"], run_id=run["id"], person=person
         )
         return [one for one in view.children if isinstance(one, people.PeopleMove)]
 
-    (move,) = [one for one in await slot() if one.action == people.HOST_POST]
-    assert move.label.startswith("Highlight in #") and move.user_id == ANARCHY
+    (move,) = [one for one in await slot() if one.action == people.OPT_OUT]
+    assert move.label == "Opt out of highlight" and move.user_id == ANARCHY
     said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id)(
         bot, bot.guild, FakeActor(), marathon
     )
-    assert said.ok and "is up in" in said.message
-    (move,) = [one for one in await slot() if one.action == people.HOST_REMOVE]
-    assert move.label == "Remove the highlight"
+    assert said.ok and "is opted out of" in said.message
+    assert ma.opted_out(await get_marathon(bot.db, GUILD, marathon["id"])) == {ANARCHY}
+    (move,) = [one for one in await slot() if one.action == people.OPT_IN]
+    assert move.label == "Opt back in"
     said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id)(
         bot, bot.guild, FakeActor(), marathon
     )
-    assert said.ok and "taken down" in said.message
-    shown = (await hh.state_for(bot, bot.guild, marathon))[ANARCHY]
-    assert [one["up"] for one in shown["runs"]] == [False, False, False]
-    _, view = await people.build_people(
-        bot, bot.guild, FakeActor(), marathon["id"], run_id=run["id"], person="Vee"
-    )
+    assert said.ok and "is back in" in said.message
+    assert ma.opted_out(await get_marathon(bot.db, GUILD, marathon["id"])) == set()
     assert not any(
-        getattr(one, "action", None) in (people.HOST_POST, people.HOST_REMOVE)
-        for one in view.children
+        getattr(one, "action", None) in (people.OPT_OUT, people.OPT_IN)
+        for one in await slot("Vee")
     )

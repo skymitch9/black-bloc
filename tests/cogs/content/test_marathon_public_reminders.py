@@ -1,12 +1,25 @@
 # ruff: noqa: F401, F811
+import json
 from datetime import timedelta
 
+from black_bloc import marathon_hosts as mh
 from black_bloc import settings_store
+from black_bloc.cogs.content import marathon_announce as announce
+from black_bloc.cogs.content import marathon_hosts as hosts
 from black_bloc.cogs.content import marathon_public as public
 from black_bloc.cogs.content import marathon_public_reminders as reminders
-from black_bloc.cogs.content.marathon import create_marathon, update_marathon
-from tests.cogs.content.test_marathon import FAN_ROLE, NOW, URL, bot, cog, threading
-from tests.cogs.content.test_marathon_public import named, public_posts, ready
+from black_bloc.cogs.content.marathon import create_marathon, pair_runner, update_marathon
+from tests.cogs.content.test_marathon import (
+    FAN_ROLE,
+    NOW,
+    SKY,
+    URL,
+    a_run,
+    bot,
+    cog,
+    threading,
+)
+from tests.cogs.content.test_marathon_public import highlighted, named, public_posts, ready
 from tests.cogs.content.test_marathon_runner_posts import (
     EVENTS,
     events_room,
@@ -142,14 +155,7 @@ async def test_the_three_keys_are_three_rows_and_each_moves_only_its_own_posts(b
     assert reminders.reminder_channel(bot, GUILD) == REMINDERS
     assert bot.store.get(GUILD, "golive_channel_id") == CHANNEL
 
-    await public.press(
-        bot,
-        bot.guild,
-        FakeActor(),
-        marathon["id"],
-        (await run_of(bot, marathon, "Super Metroid"))["id"],
-        "post",
-    )
+    await highlighted(bot, cog, marathon)
     await at_fifteen(bot, cog, marathon)
 
     assert len(reminders_in(reminder_room)) == 1
@@ -160,6 +166,79 @@ async def test_the_three_keys_are_three_rows_and_each_moves_only_its_own_posts(b
     await bot.store.clear(GUILD, "marathon_reminder_channel_id")
     assert reminders.reminder_channel(bot, GUILD) == CHANNEL
     assert public.public_channel(bot, GUILD) == HIGHLIGHTS
+
+
+
+async def public_marks(bot):
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'marathon.public_reminded' ORDER BY id"
+    )
+    return [json.loads(row["details"])["mark"] for row in await cur.fetchall()]
+
+
+async def test_a_baf_runner_gets_the_public_copy_at_every_mark_of_every_run(bot, cog):
+    await bot.store.set(GUILD, "marathon_reminder_minutes", "1440, 120, 15")
+    cog.client.runs_given = [
+        a_run(3, 1500, game="Super Metroid", people=(("Sky", "skyruns", "runner"),)),
+        a_run(4, 1560, game="Kirby Air Riders"),
+    ]
+    marathon = await ready(bot, cog)
+    for minutes in (59, 60, 61, 700, 1380, 1485, 1501):
+        cog.clock = lambda minutes=minutes: NOW + timedelta(minutes=minutes)
+        await follow(bot, cog, marathon)
+
+    shown = reminders_in(bot.guild.channels[CHANNEL])
+    assert len(shown) == 3 and len(reminders_in(the_thread(bot))) == 3
+    assert await public_marks(bot) == [1440, 120, 15]
+    assert all("<@&" not in one.content for one in shown)
+
+
+async def test_an_opted_out_runner_gets_no_public_copy_and_the_thread_still_does(bot, cog):
+    marathon = await ready(bot, cog)
+    said = await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [SKY], True)
+    assert said.ok, said.message
+
+    await at_fifteen(bot, cog, marathon)
+
+    assert len(reminders_in(the_thread(bot))) == 1
+    assert reminders_in(bot.guild.channels[CHANNEL]) == []
+    skipped = await details_of(bot.db, "marathon.public_reminder_skipped")
+    assert skipped["because"] == "opted_out"
+
+
+async def test_the_announcements_switch_off_stops_the_public_copy(bot, cog):
+    marathon = await ready(bot, cog)
+    said = await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
+    assert said.ok, said.message
+
+    await at_fifteen(bot, cog, marathon)
+
+    assert len(reminders_in(the_thread(bot))) == 1
+    assert reminders_in(bot.guild.channels[CHANNEL]) == []
+    skipped = await details_of(bot.db, "marathon.public_reminder_skipped")
+    assert skipped["because"] == "announcements_off"
+
+
+async def test_a_co_runner_opted_out_is_left_out_of_the_public_copy(bot, cog):
+    cog.client.runs_given = [
+        a_run(
+            3,
+            30,
+            game="Super Metroid",
+            people=(("Sky", "skyruns", "runner"), ("Rivet", None, "runner")),
+        ),
+    ]
+    marathon = await ready(bot, cog)
+    paired = await pair_runner(bot, bot.guild, FakeActor(), marathon, "Rivet", 9002)
+    assert paired.ok, paired.message
+    await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [SKY], True)
+
+    await at_fifteen(bot, cog, marathon)
+
+    (shown,) = reminders_in(bot.guild.channels[CHANNEL])
+    assert "<@9002>" in shown.content and f"<@{SKY}>" not in shown.content
+    staff = reminders_in(the_thread(bot))
+    assert staff and f"<@{SKY}>" in staff[0].content
 
 
 async def test_shadow_sends_the_public_copy_to_the_public_rehearsal_home(bot, cog):

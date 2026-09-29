@@ -14,6 +14,9 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...marathon_sources import schedule_page
 from ...panels import Outcome, refusal
 from ...settings_store import (
+    MARATHON_ANNOUNCEMENTS_DEFAULT_KEY,
+    MARATHON_ANNOUNCEMENTS_OFF_SAID_KEY,
+    MARATHON_ANNOUNCEMENTS_ON_SAID_KEY,
     MARATHON_HOST_EVENT_DESCRIPTION_KEY,
     MARATHON_HOST_EVENT_TITLE_KEY,
     MARATHON_HOST_EVENTS_DEFAULT_KEY,
@@ -42,8 +45,15 @@ SAID = {
     (mh.SCAN, False): MARATHON_SCAN_HOSTS_OFF_SAID_KEY,
     (mh.EVENTS, True): MARATHON_HOST_EVENTS_ON_SAID_KEY,
     (mh.EVENTS, False): MARATHON_HOST_EVENTS_OFF_SAID_KEY,
+    (mh.ANNOUNCE, True): MARATHON_ANNOUNCEMENTS_ON_SAID_KEY,
+    (mh.ANNOUNCE, False): MARATHON_ANNOUNCEMENTS_OFF_SAID_KEY,
 }
-DEFAULTS = {mh.SCAN: MARATHON_SCAN_HOSTS_DEFAULT_KEY, mh.EVENTS: MARATHON_HOST_EVENTS_DEFAULT_KEY}
+DEFAULTS = {
+    mh.SCAN: MARATHON_SCAN_HOSTS_DEFAULT_KEY,
+    mh.EVENTS: MARATHON_HOST_EVENTS_DEFAULT_KEY,
+    mh.ANNOUNCE: MARATHON_ANNOUNCEMENTS_DEFAULT_KEY,
+}
+
 
 
 def words(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
@@ -74,7 +84,8 @@ async def set_switch(
     *,
     via: str = VIA_DISCORD,
 ) -> Outcome:
-    """Scan hosts or BaF host events for one marathon: on, off, or None to follow the setting."""
+    """Scan hosts, BaF host events or Runner/Host announcements for one marathon: on, off, or
+    None to follow the setting."""
     from .marathon import rematched
     from .marathon_thread_controls import controls_changed
 
@@ -93,7 +104,7 @@ async def set_switch(
         now = switch_state(bot, guild.id, fresh, which)
         if which == mh.SCAN:
             await rematched(bot, guild, fresh, actor)
-        else:
+        elif which == mh.EVENTS:
             await sync_host_events(bot, guild, fresh, actor=actor, via=via)
     details = {
         "marathon_id": fresh["id"],
@@ -107,7 +118,12 @@ async def set_switch(
         bot,
         guild,
         kind_via(
-            "marathon.scan_hosts_set" if which == mh.SCAN else "marathon.host_events_set", via
+            "marathon.scan_hosts_set"
+            if which == mh.SCAN
+            else "marathon.host_events_set"
+            if which == mh.EVENTS
+            else "marathon.announcements_set",
+            via,
         ),
         actor=actor,
         details=details,

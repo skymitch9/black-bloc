@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 83
+        assert SCHEMA_VERSION == 84
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3276,7 +3276,7 @@ async def test_a_schema_77_post_carrying_the_door_gains_a_front_door_block(tmp_p
         cur = await again.conn.execute("SELECT slug, carries_door FROM posts ORDER BY id")
         assert [tuple(row) for row in await cur.fetchall()] == [("welcome", 1), ("hours", 0)]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "83"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "84"
         await again.conn.execute("DELETE FROM post_blocks")
         await again.conn.commit()
     finally:
@@ -3422,7 +3422,7 @@ async def test_a_schema_81_file_gains_the_host_switches_and_the_pairing_login(tm
             cur = await again.conn.execute(f"PRAGMA table_info({table})")
             assert column in {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "83"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "84"
     finally:
         await again.close()
 
@@ -3454,6 +3454,43 @@ async def test_a_schema_82_file_gains_the_host_highlight_bookkeeping(tmp_path):
         cur = await again.conn.execute("PRAGMA table_info(marathons_archive)")
         assert "host_highlight_posts" in {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "83"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "84"
+    finally:
+        await again.close()
+
+
+async def test_a_schema_83_file_gains_the_announcements_switch_and_the_opt_outs(tmp_path):
+    """Schema 84: each marathon's Runner/Host announcements switch and opt-outs, NULL for what
+    was there (NULL follows marathon_announcements_default, on)."""
+    path = tmp_path / "old83.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for table in ("marathons", "marathons_archive"):
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN announcements")
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN announce_opt_out")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at, "
+        "scan_hosts, host_highlight_posts) VALUES (1, 'Hidden Heroes', 'https://x', 'hotfix', "
+        "'hh', 'x', 1, '[]')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '83')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT name, scan_hosts, host_highlight_posts, announcements, announce_opt_out "
+            "FROM marathons"
+        )
+        assert tuple(await cur.fetchone()) == ("Hidden Heroes", 1, "[]", None, None)
+        cur = await again.conn.execute("PRAGMA table_info(marathons_archive)")
+        found = {row["name"] for row in await cur.fetchall()}
+        assert {"announcements", "announce_opt_out"} <= found
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "84"
     finally:
         await again.close()

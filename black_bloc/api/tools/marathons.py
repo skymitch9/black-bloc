@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import marathon as mt
+from ... import marathon_announce as ma
 from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
 from ... import marathon_people as mt_people
@@ -41,6 +42,7 @@ from ...cogs.content.marathon import (
     unlink_the_event,
     unpair_runner,
 )
+from ...cogs.content.marathon_announce import set_opt_out
 from ...cogs.content.marathon_archive import (
     archive_marathon,
     archived_marathon,
@@ -59,8 +61,6 @@ from ...cogs.content.marathon_events import (
     unlink_run_event,
 )
 from ...cogs.content.marathon_feeds import get_feed
-from ...cogs.content.marathon_host_highlights import press as host_highlight_press
-from ...cogs.content.marathon_host_highlights import run_state, state_for
 from ...cogs.content.marathon_hosts import set_switch, switch_state
 from ...cogs.content.marathon_inbox import ignore as ignore_marathon
 from ...cogs.content.marathon_inbox import inbox_message_url, post_now
@@ -202,10 +202,10 @@ def run_row(guild: Any, row: Any, statuses: dict[int, str] | None = None) -> dic
 
 
 def entry_row(
-    guild: Any, entry: dict[str, Any], hosting: dict[int, Any] | None = None
+    guild: Any, entry: dict[str, Any], opted: set[int] | None = None
 ) -> dict[str, Any]:
     """One person on the People card: who they are here, how they matched, their Go-live row,
-    and — for a BaF host — their public host highlight."""
+    and — for a BaF person — whether they are opted out of the marathon's public posts."""
     user_id = entry.get("user_id")
     member = guild.get_member(int(user_id)) if user_id else None
     found = member_row(member) if member is not None else None
@@ -237,7 +237,7 @@ def entry_row(
         "looks_like": (
             {"username": near["username"], "user_id": _id(near["user_id"])} if near else None
         ),
-        "host_highlight": run_state(hosting or {}, user_id) if user_id else None,
+        "opted_out": (int(user_id) in opted) if user_id and opted is not None else None,
     }
 
 
@@ -392,6 +392,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "public_highlight": highlights(row),
         "scan_hosts": host_switch(bot, guild, row, mh.SCAN),
         "host_events": host_switch(bot, guild, row, mh.EVENTS),
+        "announcements": host_switch(bot, guild, row, mh.ANNOUNCE),
         "archived": False,
     } | await tracking_of(bot, guild, row)
 
@@ -518,12 +519,12 @@ def build_router(bot: Any) -> APIRouter:
 
     async def board(guild: Any, marathon: Any) -> dict[str, Any]:
         state = await people_state(bot, guild, marathon)
-        hosting = await state_for(bot, guild, marathon)
+        opted = ma.opted_out(marathon)
         return {
             "marathon_id": marathon["id"],
             "timezone": zone_of(bot, guild),
             "pairings": await people(guild, marathon),
-            "baf": [entry_row(guild, one, hosting) for one in state["baf"]],
+            "baf": [entry_row(guild, one, opted) for one in state["baf"]],
             "others": [entry_row(guild, one) for one in state["others"]],
         }
 
@@ -683,7 +684,7 @@ def build_router(bot: Any) -> APIRouter:
                 )
             )
             said.append(done.message)
-        for which in (mh.SCAN, mh.EVENTS):
+        for which in (mh.SCAN, mh.EVENTS, mh.ANNOUNCE):
             if which in payload:
                 done = answered(
                     await set_switch(
@@ -887,7 +888,7 @@ def build_router(bot: Any) -> APIRouter:
             "timezone": zone_of(bot, guild),
             "archived": True,
             "pairings": [pairing_row(guild, one) for one in state["pairings"]],
-            "baf": [entry_row(guild, one) for one in state["baf"]],
+            "baf": [entry_row(guild, one, ma.opted_out(marathon)) for one in state["baf"]],
             "others": [entry_row(guild, one) for one in state["others"]],
         }
 
@@ -940,42 +941,32 @@ def build_router(bot: Any) -> APIRouter:
         )
         return await board(guild, row) | {"message": done.message}
 
-    async def host_highlight_move(
-        request: Request, marathon_id: int, user_id: str, to: str, payload: Any
-    ) -> dict[str, Any]:
+    async def opt_move(request: Request, marathon_id: int, user_id: str, out: bool) -> Any:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
         require_cog(bot, COG, FEATURE)
         row = await wanted(guild, marathon_id)
-        run_id = (payload or {}).get("run_id")
         done = answered(
-            await host_highlight_press(
+            await set_opt_out(
                 bot,
                 guild,
                 actor_for(bot, who, guild),
                 row,
-                user_id,
-                to,
-                run_id=wanted_id(run_id) if run_id not in (None, "") else None,
+                [wanted_id(user_id)],
+                out,
                 via=VIA_WEBSITE,
             )
         )
-        return await board(guild, row) | {"message": done.message}
+        return await board(guild, await wanted(guild, marathon_id)) | {"message": done.message}
 
-    @router.post("/{marathon_id}/people/{user_id}/host-highlight")
-    async def marathon_host_highlight(
-        request: Request, marathon_id: int, user_id: str, payload: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        return await host_highlight_move(request, marathon_id, user_id, "post", payload)
+    @router.post("/{marathon_id}/people/{user_id}/opt-out")
+    async def marathon_opt_out(request: Request, marathon_id: int, user_id: str) -> dict[str, Any]:
+        return await opt_move(request, marathon_id, user_id, True)
 
-    @router.delete("/{marathon_id}/people/{user_id}/host-highlight")
-    async def marathon_host_unhighlight(
-        request: Request, marathon_id: int, user_id: str, run_id: str | None = None
-    ) -> dict[str, Any]:
-        return await host_highlight_move(
-            request, marathon_id, user_id, "remove", {"run_id": run_id}
-        )
+    @router.delete("/{marathon_id}/people/{user_id}/opt-out")
+    async def marathon_opt_in(request: Request, marathon_id: int, user_id: str) -> dict[str, Any]:
+        return await opt_move(request, marathon_id, user_id, False)
 
     @router.post("/{marathon_id}/people")
     async def marathon_pair(

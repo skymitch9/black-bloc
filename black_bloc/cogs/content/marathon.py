@@ -364,6 +364,8 @@ MARATHON_COLUMNS = {
     "host_events",
     "host_event_ids",
     "host_highlight_posts",
+    "announcements",
+    "announce_opt_out",
 }
 RUN_COLUMNS = {
     "order_no",

@@ -30,8 +30,8 @@ ROUTES = [
     ("PATCH", "/api/marathons/1/people/1"),
     ("POST", "/api/marathons/1/people/somebody/spotlight"),
     ("DELETE", "/api/marathons/1/people/somebody/spotlight"),
-    ("POST", "/api/marathons/1/people/77/host-highlight"),
-    ("DELETE", "/api/marathons/1/people/77/host-highlight"),
+    ("POST", "/api/marathons/1/people/77/opt-out"),
+    ("DELETE", "/api/marathons/1/people/77/opt-out"),
     ("POST", "/api/marathons/1/runs/1/shout"),
     ("POST", "/api/marathons/1/runs/1/done"),
     ("POST", "/api/marathons/1/runs/1/upcoming"),
@@ -721,14 +721,15 @@ async def test_patch_the_host_switches_follow_on_and_off_and_refuse_a_bad_word(
     sign_in(client)
     marathon_id = add(client).json()["id"]
     first = client.get(f"/api/marathons/{marathon_id}").json()
-    assert first["scan_hosts"] == {"own": None, "on": False, "default": False}
+    assert first["scan_hosts"] == {"own": None, "on": True, "default": True}
     assert first["host_events"] == {"own": None, "on": False, "default": False}
+    assert first["announcements"] == {"own": None, "on": True, "default": True}
 
     body = client.patch(
         f"/api/marathons/{marathon_id}", json={"scan_hosts": True, "host_events": "on"}
     ).json()
 
-    assert body["scan_hosts"] == {"own": True, "on": True, "default": False}
+    assert body["scan_hosts"] == {"own": True, "on": True, "default": True}
     assert body["host_events"]["own"] is True
     assert "scans its hosts now" in body["message"]
     said = await web_row(wf, web, "web.marathon.scan_hosts_set")
@@ -737,6 +738,13 @@ async def test_patch_the_host_switches_follow_on_and_off_and_refuse_a_bad_word(
     assert body["scan_hosts"]["own"] is None
     bad = client.patch(f"/api/marathons/{marathon_id}", json={"host_events": "loud"})
     assert bad.status_code == 422 and bad.json()["error"] == "bad_switch"
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "off"}).json()
+    assert body["announcements"] == {"own": False, "on": False, "default": True}
+    assert "announces nobody publicly" in body["message"]
+    said = await web_row(wf, web, "web.marathon.announcements_set")
+    assert (said["to"], said["on"], said["via"]) == (False, False, "website")
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "follow"}).json()
+    assert body["announcements"]["own"] is None and body["announcements"]["on"] is True
 
 
 async def test_a_pairings_twitch_fix_is_set_shown_cleared_and_refused_in_words(
@@ -991,7 +999,7 @@ async def test_post_it_to_the_inbox_now_is_a_route_that_posts_once_and_refuses_i
     assert off.status_code == 409 and "Marathon posts are off" in off.json()["message"]
 
 
-async def test_a_baf_hosts_highlight_is_shown_on_the_people_card_and_moved_both_ways(
+async def test_a_baf_persons_opt_out_is_shown_on_the_people_card_and_moved_both_ways(
     client, sign_in, web, cog, wf
 ):
     sign_in(client)
@@ -1001,18 +1009,20 @@ async def test_a_baf_hosts_highlight_is_shown_on_the_people_card_and_moved_both_
         json={"runner_name": "Interview Crew", "user_id": "77"},
     )
     board = client.get(f"/api/marathons/{marathon_id}/people").json()
-    assert all(one["host_highlight"] is None for one in board["baf"])
-    client.patch(f"/api/marathons/{marathon_id}", json={"scan_hosts": True})
-    board = client.get(f"/api/marathons/{marathon_id}/people").json()
     crew = next(one for one in board["baf"] if one["name"] == "Interview Crew")
-    assert crew["host_highlight"]["up"] is False and len(crew["host_highlight"]["runs"]) == 1
+    assert crew["opted_out"] is False
+    assert all(one["opted_out"] is None for one in board["others"])
 
-    none_up = client.delete(f"/api/marathons/{marathon_id}/people/77/host-highlight")
-    assert none_up.status_code == 200 and "nothing to take down" in none_up.json()["message"]
-    stranger = client.post(f"/api/marathons/{marathon_id}/people/21/host-highlight", json={})
-    assert stranger.status_code == 404 and stranger.json()["error"] == "not_hosting"
-    posted = client.post(f"/api/marathons/{marathon_id}/people/77/host-highlight", json={})
-    assert posted.status_code == 409 and posted.json()["error"] == "post_failed"
-    assert "could not post **Interview Crew**" in posted.json()["message"]
-    said = await web_row(wf, web, "web.marathon.host_highlight_failed")
-    assert (said["members"], said["step"], said["via"]) == ([77], "post", "website")
+    out = client.post(f"/api/marathons/{marathon_id}/people/77/opt-out")
+    assert out.status_code == 200 and "is opted out of" in out.json()["message"]
+    crew = next(one for one in out.json()["baf"] if one["name"] == "Interview Crew")
+    assert crew["opted_out"] is True
+    said = await web_row(wf, web, "web.marathon.announce_opted_out")
+    assert (said["members"], said["via"]) == ([77], "website")
+
+    back = client.delete(f"/api/marathons/{marathon_id}/people/77/opt-out")
+    assert back.status_code == 200 and "is back in" in back.json()["message"]
+    crew = next(one for one in back.json()["baf"] if one["name"] == "Interview Crew")
+    assert crew["opted_out"] is False
+    stranger = client.post(f"/api/marathons/{marathon_id}/people/424242/opt-out")
+    assert stranger.status_code == 404 and stranger.json()["error"] == "not_baf"

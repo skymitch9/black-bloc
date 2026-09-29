@@ -15,8 +15,16 @@ from ...settings_store import (
     MARATHON_REMINDER_CHANNEL_KEY,
 )
 from ...spotlight import reason_of
-from .marathon import GOLIVE_CHANNEL_KEY, MODE_ON, mode_of, said_default, words_for
-from .marathon_public import rehearsal_of, send_public
+from .marathon import (
+    GOLIVE_CHANNEL_KEY,
+    MODE_ON,
+    channel_login,
+    mode_of,
+    said_default,
+    words_for,
+)
+from .marathon_announce import announces
+from .marathon_public import people_for, rehearsal_of, send_public
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +99,22 @@ async def post_public_reminder(
                 details=base | {"because": "same_channel", "channel_id": home},
             )
             return
-        text = reminder_text(bot, guild, marathon, row, url=url)
+        people = people_for(marathon, row)
+        because = (
+            "announcements_off"
+            if not announces(bot, guild.id, marathon)
+            else ("opted_out" if not people else None)
+        )
+        if because is not None:
+            await log_action(
+                bot, guild, "marathon.public_reminder_skipped", details=base | {"because": because}
+            )
+            return
+        if url and people != mt.ours(mt.people_of(row)):
+            url = mt.run_url(
+                row, await channel_login(bot, marathon), marathon["schedule_url"], people=people
+            )
+        text = reminder_text(bot, guild, marathon, row, url=url, people=people)
         message, channel_id, why = await send_public(
             bot, guild, ping_prefix(*roles) + text, roles, home=home
         )

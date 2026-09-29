@@ -6,6 +6,7 @@ from typing import Any
 import discord
 
 from ... import marathon as mt
+from ... import marathon_announce as ma
 from ... import marathon_hosts as mh
 from ... import marathon_people as mp
 from ... import spotlight as spot
@@ -18,8 +19,8 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     DEFAULT_TIMEZONE_KEY,
     MARATHON_DEFAULTS,
-    MARATHON_PUBLIC_BUTTON_POST_KEY,
-    MARATHON_PUBLIC_BUTTON_REMOVE_KEY,
+    MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
+    MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
     MARATHON_SPOTLIGHT_HOST_NOTE_KEY,
     MARATHON_SPOTLIGHT_LEAD_KEY,
     MARATHON_SPOTLIGHT_NOTE_KEY,
@@ -58,8 +59,8 @@ UNSPOTLIGHT = "unspotlight"
 UNLINK = "unlink"
 LINK_NEAR = "link_near"
 TWITCH = "twitch"
-HOST_POST = "host_post"
-HOST_REMOVE = "host_remove"
+OPT_OUT = "opt_out"
+OPT_IN = "opt_in"
 BACK = "back"
 LABELS = {
     SPOTLIGHT: ("Spotlight", discord.ButtonStyle.primary),
@@ -67,8 +68,8 @@ LABELS = {
     UNLINK: ("Unlink", discord.ButtonStyle.secondary),
     LINK_NEAR: ("Link @{username}", discord.ButtonStyle.primary),
     TWITCH: ("Twitch name…", discord.ButtonStyle.secondary),
-    HOST_POST: ("{label}", discord.ButtonStyle.primary),
-    HOST_REMOVE: ("{label}", discord.ButtonStyle.secondary),
+    OPT_OUT: ("{label}", discord.ButtonStyle.secondary),
+    OPT_IN: ("{label}", discord.ButtonStyle.primary),
     BACK: ("Back", discord.ButtonStyle.secondary),
 }
 PEOPLE_BUTTON = "People…"
@@ -399,10 +400,7 @@ async def build_people(
     days = mp.days_of(state["runs"], zone, now_for(bot))
     run = next((one for one in state["runs"] if str(one["id"]) == str(run_id)), None)
     if run is not None:
-        from .marathon_host_highlights import state_for
-
-        hosting = await state_for(bot, guild, marathon)
-        return slot_card(bot, guild, marathon, state, run, view, person, zone, hosting=hosting)
+        return slot_card(bot, guild, marathon, state, run, view, person, zone)
     wanted = next((one for one in days if one.key == day), None)
     view.day = wanted.key if wanted is not None else None
     lines += ["", mp.PEOPLE_SCHEDULE]
@@ -427,8 +425,6 @@ def slot_card(
     view: PeoplePanel,
     person: Any,
     zone: str,
-    *,
-    hosting: dict[int, Any] | None = None,
 ) -> tuple[Any, Any]:
     view.run_id = run["id"]
     view.day = mp.days_of([run], zone, now_for(bot))[0].key if run["scheduled_at"] else None
@@ -462,9 +458,9 @@ def slot_card(
         if entry.get("matched_by") == mp.BY_PAIRING and entry.get("pairing_id"):
             view.add_item(PeopleMove(UNLINK))
             view.add_item(PeopleMove(TWITCH))
-        host_move = host_highlight_move(bot, guild, hosting or {}, chosen, run["id"])
-        if host_move is not None:
-            view.add_item(host_move)
+        opt_move = opt_move_for(bot, guild, marathon, chosen)
+        if opt_move is not None:
+            view.add_item(opt_move)
         near = entry.get("looks_like")
         if near and not chosen.get("user_id"):
             view.add_item(PeopleMove(LINK_NEAR, username=near["username"]))
@@ -472,28 +468,18 @@ def slot_card(
     return (discord.Embed(title=marathon["name"], description=clamped(lines)), view)
 
 
-def host_highlight_move(
-    bot: Any, guild: Any, hosting: dict[int, Any], chosen: dict[str, Any], run_id: Any
-) -> Any:
-    """Take down or post a BaF host's highlight for this slot's run — only when valid; the
-    labels are the runner highlight button's keys."""
-    from .marathon_host_highlights import run_state
-    from .marathon_public import channel_name, public_channel
+def opt_move_for(bot: Any, guild: Any, marathon: Any, chosen: dict[str, Any]) -> Any:
+    """Opt a BaF person out of this marathon's public posts, or back in — the runner post
+    button's own words; never for someone who is not BaF."""
     from .marathon_public import words as public_words
 
-    if chosen.get("part") != mt.HOST or not chosen.get("user_id"):
+    if not chosen.get("user_id"):
         return None
-    one = run_state(hosting, chosen["user_id"], run_id)
-    if one is None or not (one["up"] or one["can_post"]):
-        return None
-    if one["up"]:
-        label = public_words(bot, guild.id, MARATHON_PUBLIC_BUTTON_REMOVE_KEY)
-        return PeopleMove(HOST_REMOVE, label=label, user_id=chosen["user_id"])
-    channel = public_channel(bot, guild.id)
-    label = public_words(
-        bot, guild.id, MARATHON_PUBLIC_BUTTON_POST_KEY, channel=channel_name(bot, guild, channel)
-    )
-    return PeopleMove(HOST_POST, label=label, user_id=chosen["user_id"])
+    if int(chosen["user_id"]) in ma.opted_out(marathon):
+        label = public_words(bot, guild.id, MARATHON_PUBLIC_BUTTON_OPT_IN_KEY)
+        return PeopleMove(OPT_IN, label=label, user_id=chosen["user_id"])
+    label = public_words(bot, guild.id, MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY)
+    return PeopleMove(OPT_OUT, label=label, user_id=chosen["user_id"])
 
 
 async def render(interaction: discord.Interaction, embed: Any, view: Any, previous: Any) -> None:
@@ -609,12 +595,11 @@ class TwitchModal(AnswersErrors, discord.ui.Modal, title=TWITCH_TITLE):
 
 
 def doing_for(action: str, name: Any, run_id: Any, member_id: Any) -> Any:
-    if action in (HOST_POST, HOST_REMOVE):
-        from .marathon_host_highlights import press
+    if action in (OPT_OUT, OPT_IN):
+        from .marathon_announce import set_opt_out
 
-        to = "post" if action == HOST_POST else "remove"
-        return lambda bot, guild, actor, row: press(
-            bot, guild, actor, row, member_id, to, run_id=run_id
+        return lambda bot, guild, actor, row: set_opt_out(
+            bot, guild, actor, row, [member_id], action == OPT_OUT
         )
     if action == SPOTLIGHT:
         return lambda bot, guild, actor, row: spotlight_runner(

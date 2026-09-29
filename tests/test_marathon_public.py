@@ -14,25 +14,29 @@ def a_row(state="upcoming", people=SKY, **fields):
     return {"id": 3, "state": state, "people": people, "game": "Celeste"} | fields
 
 
-def test_the_custom_id_matches_the_template_and_fits():
-    found = re.fullmatch(mp.TEMPLATE, mp.custom_id(7, 3, mp.REMOVE))
-    assert found and (found["marathon_id"], found["run_id"], found["to"]) == ("7", "3", "remove")
-    assert len(mp.custom_id(10**18, 10**18, mp.REMOVE)) <= 100
+@pytest.mark.parametrize("to", [mp.OPT_OUT, mp.OPT_IN, mp.POST, mp.REMOVE])
+def test_the_custom_id_matches_the_template_and_fits(to):
+    found = re.fullmatch(mp.TEMPLATE, mp.custom_id(7, 3, to))
+    assert found and (found["marathon_id"], found["run_id"], found["to"]) == ("7", "3", to)
+    assert len(mp.custom_id(10**18, 10**18, mp.OPT_OUT)) <= 100
 
 
-def test_the_button_is_remove_while_up_highlight_while_it_could_be_and_else_none():
-    kwargs = {"has_channel": True, "post_label": "Highlight in #go-live", "remove_label": "Remove"}
-    assert mp.button_for(7, a_row(), **kwargs).to == mp.POST
-    up = a_row(public_message_id=55, public_channel_id=111)
-    assert mp.button_for(7, up, **kwargs) == mp.Button(
-        "marathon:highlight:7:3:remove", "Remove", "remove"
+def test_a_button_posted_before_the_opt_out_maps_to_the_toggle():
+    assert mp.move_of(mp.POST) == mp.OPT_IN and mp.move_of(mp.REMOVE) == mp.OPT_OUT
+    assert mp.move_of(mp.OPT_OUT) == mp.OPT_OUT and mp.move_of(mp.OPT_IN) == mp.OPT_IN
+
+
+def test_the_button_is_opt_out_until_everyone_on_the_run_is_out_and_none_for_nobody():
+    kwargs = {"out_label": "Opt out of highlight", "in_label": "Opt back in"}
+    assert mp.button_for(7, a_row(), opted=set(), **kwargs) == mp.Button(
+        "marathon:highlight:7:3:optout", "Opt out of highlight", "optout"
     )
-    taken_down = a_row(public_message_id=55, public_channel_id=111, public_removed=1)
-    assert mp.button_for(7, taken_down, **kwargs).to == mp.POST
-    assert mp.button_for(7, a_row(state="dropped"), **kwargs) is None
-    assert mp.button_for(7, a_row(people=NOBODY), **kwargs) is None
-    assert mp.button_for(7, a_row(), **(kwargs | {"has_channel": False})) is None
-    assert mp.button_for(7, up, **(kwargs | {"has_channel": False})).to == mp.REMOVE
+    assert mp.button_for(7, a_row(), opted={9001}, **kwargs) == mp.Button(
+        "marathon:highlight:7:3:optin", "Opt back in", "optin"
+    )
+    up = a_row(public_message_id=55, public_channel_id=111)
+    assert mp.button_for(7, up, opted=set(), **kwargs).to == mp.OPT_OUT
+    assert mp.button_for(7, a_row(people=NOBODY), opted=set(), **kwargs) is None
 
 
 def test_auto_wants_a_switched_on_marathon_and_a_run_never_highlighted():

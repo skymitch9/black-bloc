@@ -786,33 +786,12 @@ async def seed_world(client, web, guild, wf) -> dict:
     marathon_pairing_id = await upsert_pairing(
         db, guild_id, marathon_id, "Contract Runner", MEMBER_ID, 7
     )
-    # Host highlights: Interview Crew hosts Blaster Master and is paired, the marathon scans its
-    # hosts, and their highlight is up — so both host-highlight moves answer 200 in words.
+    # Opt-out: Interview Crew hosts Blaster Master and is paired, and the marathon scans its
+    # hosts — so both opt-out moves reach a BaF person and answer 200 in words.
     await upsert_pairing(db, guild_id, marathon_id, "Interview Crew", HOST_MEMBER_ID, 7)
     await db.conn.execute("UPDATE marathons SET scan_hosts = 1 WHERE id = ?", (marathon_id,))
     await db.conn.commit()
     await marathons.rematch(guild, made.value)
-    hosted_run_id = next(
-        row["id"] for row in await runs_of(db, marathon_id) if row["game"] == "Blaster Master"
-    )
-    await db.conn.execute(
-        "UPDATE marathons SET host_highlight_posts = ? WHERE id = ?",
-        (
-            json.dumps(
-                [
-                    {
-                        "run_id": hosted_run_id,
-                        "hosts": [{"user_id": HOST_MEMBER_ID, "name": "Interview Crew"}],
-                        "message_id": 1,
-                        "channel_id": wf.TEST_CHANNEL_ID,
-                        "tried": True,
-                    }
-                ]
-            ),
-            marathon_id,
-        ),
-    )
-    await db.conn.commit()
     # The People card (marathon-people §B): Contract Runner is spotlit from the marathon, so
     # Stop spotlighting reaches a remembered row; Somebody is not, so Spotlight… reaches them.
     spotlit = await spotlight_runner(web, guild, None, made.value, "contractrunner")

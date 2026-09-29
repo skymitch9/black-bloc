@@ -1,4 +1,5 @@
-"""A BaF host's public highlight and heads-up: one per run they host, like a runner's."""
+"""A BaF host's public posts, one set per host BLOCK: a runner's reminders at every mark and a
+runner's highlight, measured from the block's first run."""
 
 from __future__ import annotations
 
@@ -10,33 +11,28 @@ from . import marathon as mt
 from .golive import parse_ts
 
 COLUMN = "host_highlight_posts"
-POST = "post"
-REMOVE = "remove"
 UPCOMING = "upcoming"
 LIVE = "live"
 DONE = "done"
 STATES = (UPCOMING, LIVE, DONE)
-POSTABLE = (mt.UPCOMING, mt.LIVE, mt.DONE)
-SEND = "send"
-SKIP = "skip"
-BAD_MOVE = "Say post or remove for a host highlight, so nothing was changed."
-BAD_MOVE_CODE = "bad_host_highlight"
-NOT_HOSTING = "**{name}** hosts nothing on **{marathon}** that Black Bloc can highlight."
-NOT_HOSTING_CODE = "not_hosting"
-NOT_SCANNED = (
-    "**{marathon}** does not scan its hosts, so there is no BaF host to highlight — turn Scan "
-    "hosts on first."
-)
-NOT_SCANNED_CODE = "hosts_not_scanned"
+AS_RUN_STATE = {UPCOMING: mt.UPCOMING, LIVE: mt.LIVE, DONE: mt.DONE}
 
 
-class Hosted(NamedTuple):
-    run: Any
+class Block(NamedTuple):
+    runs: list[Any]
     hosts: list[dict[str, Any]]
 
     @property
-    def run_id(self) -> int:
-        return int(mt._cell(self.run, "id"))
+    def first(self) -> Any:
+        return self.runs[0]
+
+    @property
+    def run_ids(self) -> list[int]:
+        return [int(mt._cell(one, "id")) for one in self.runs]
+
+    @property
+    def start_run_id(self) -> int:
+        return self.run_ids[0]
 
     @property
     def user_ids(self) -> list[int]:
@@ -48,53 +44,7 @@ class Hosted(NamedTuple):
 
     @property
     def starts(self) -> datetime | None:
-        return parse_ts(mt._cell(self.run, "scheduled_at"))
-
-
-def baf_hosts(row: Any) -> list[dict[str, Any]]:
-    found: dict[int, dict[str, Any]] = {}
-    for one in mt.people_of(row):
-        if one.get("part") != mt.HOST or not one.get("user_id"):
-            continue
-        user_id = int(one["user_id"])
-        found.setdefault(
-            user_id,
-            {
-                "user_id": user_id,
-                "name": str(one.get("name") or user_id),
-                "login": str(one["login"]) if one.get("login") else None,
-                "part": mt.HOST,
-            },
-        )
-    return list(found.values())
-
-
-def hosted(runs: Any) -> list[Hosted]:
-    """Every run on the schedule with a BaF host, in schedule order; dropped runs are off it."""
-    rows = sorted(
-        (one for one in runs or () if mt._cell(one, "state") != mt.DROPPED), key=mt._when
-    )
-    return [Hosted(row, found) for row in rows if (found := baf_hosts(row))]
-
-
-def state_of(item: Hosted) -> str:
-    state = mt._cell(item.run, "state")
-    if state == mt.LIVE:
-        return LIVE
-    return DONE if state in (mt.DONE, mt.DROPPED) else UPCOMING
-
-
-def postable(item: Hosted) -> bool:
-    return mt._cell(item.run, "state") in POSTABLE
-
-
-def left_behind(record: dict[str, Any], runs: Any) -> Hosted | None:
-    """A post that is up whose run lost its BaF host (Scan hosts off, the host unlinked, the run
-    dropped) still follows its run to the end, naming the hosts it was posted for."""
-    row = next((one for one in runs or () if int(mt._cell(one, "id")) == record["run_id"]), None)
-    if row is None or not record.get("hosts"):
-        return None
-    return Hosted(row, [dict(one) for one in record["hosts"]])
+        return parse_ts(mt._cell(self.first, "scheduled_at"))
 
 
 def _host(one: Any) -> dict[str, Any]:
@@ -106,7 +56,115 @@ def _host(one: Any) -> dict[str, Any]:
     }
 
 
+def listed_hosts(row: Any) -> list[dict[str, Any]]:
+    return [one for one in mt.people_of(row) if one.get("part") == mt.HOST]
+
+
+def baf_hosts(row: Any) -> list[dict[str, Any]]:
+    found: dict[int, dict[str, Any]] = {}
+    for one in listed_hosts(row):
+        if one.get("user_id"):
+            found.setdefault(int(one["user_id"]), _host(one))
+    return list(found.values())
+
+
+def blocks(runs: Any) -> list[Block]:
+    """In schedule order: a BaF host's block runs on across the runs they host and runs with no
+    host listed, and ends at a run someone else hosts. Hosts whose blocks cover the same runs
+    share one block, as two runners on one run share one post. Dropped runs are off it."""
+    rows = sorted((one for one in runs or () if mt._cell(one, "state") != mt.DROPPED), key=mt._when)
+    open_: dict[int, list[Any]] = {}
+    who: dict[int, dict[str, Any]] = {}
+    closed: list[tuple[int, list[Any]]] = []
+    for row in rows:
+        if not listed_hosts(row):
+            continue
+        here = baf_hosts(row)
+        ids = {one["user_id"] for one in here}
+        for user_id in [one for one in open_ if one not in ids]:
+            closed.append((user_id, open_.pop(user_id)))
+        for one in here:
+            open_.setdefault(one["user_id"], []).append(row)
+            who.setdefault(one["user_id"], one)
+    closed.extend(open_.items())
+    merged: dict[tuple[int, ...], Block] = {}
+    for user_id, mine in closed:
+        key = tuple(int(mt._cell(one, "id")) for one in mine)
+        found = merged.setdefault(key, Block(mine, []))
+        found.hosts.append(who[user_id])
+    return sorted(merged.values(), key=lambda one: (mt._when(one.first), one.user_ids))
+
+
+def state_of(block: Block) -> str:
+    states = [mt._cell(one, "state") for one in block.runs]
+    if all(one in (mt.DONE, mt.DROPPED) for one in states):
+        return DONE
+    if all(one == mt.UPCOMING for one in states):
+        return UPCOMING
+    return LIVE
+
+
+def view_row(block: Block) -> dict[str, Any]:
+    """The block as a run for the runner's renderer: its first run, in the block's state."""
+    first = block.first
+    row = dict(first) if isinstance(first, dict) else {key: first[key] for key in first.keys()}
+    row["state"] = AS_RUN_STATE[state_of(block)]
+    return row
+
+
+def containing(found: list[Block], run_id: Any) -> Block | None:
+    return next((one for one in found if int(run_id) in one.run_ids), None)
+
+
+def left_behind(record: dict[str, Any], runs: Any) -> Block | None:
+    """A post that is up whose block is gone (Scan hosts off, the host unlinked, the runs
+    dropped) still follows its own runs to the end, naming the hosts it was posted for."""
+    wanted = set(record["runs"])
+    rows = sorted((one for one in runs or () if int(mt._cell(one, "id")) in wanted), key=mt._when)
+    if not rows or not record.get("hosts"):
+        return None
+    return Block(rows, [dict(one) for one in record["hosts"]])
+
+
+def _marks(raw: Any) -> list[int]:
+    kept = set()
+    for one in raw or ():
+        try:
+            kept.add(int(one))
+        except (TypeError, ValueError):
+            continue
+    return sorted(kept)
+
+
+def _pointer(one: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "hosts": [_host(host) for host in one.get("hosts") or ()],
+        "message_id": int(one["message_id"]) if one.get("message_id") else None,
+        "channel_id": int(one["channel_id"]) if one.get("channel_id") else None,
+        "removed": bool(one.get("removed")),
+        "tried": bool(one.get("tried")),
+    }
+
+
+def _record(one: dict[str, Any]) -> dict[str, Any]:
+    if "start_run_id" not in one:
+        run_id = int(one["run_id"])
+        return {
+            "start_run_id": run_id,
+            "runs": [run_id],
+            "marks": [],
+            "legacy_reminded": bool(one.get("reminded")),
+        } | _pointer(one)
+    start = int(one["start_run_id"])
+    return {
+        "start_run_id": start,
+        "runs": [int(run) for run in one.get("runs") or ()] or [start],
+        "marks": _marks(one.get("marks")),
+    } | _pointer(one)
+
+
 def records(marathon: Any) -> list[dict[str, Any]]:
+    """A per-run record from `host-highlights-per-run` reads as a one-run block keyed by it."""
     raw = mt._cell(marathon, COLUMN)
     try:
         found = json.loads(raw or "[]")
@@ -117,17 +175,7 @@ def records(marathon: Any) -> list[dict[str, Any]]:
         if not isinstance(one, dict):
             continue
         try:
-            kept.append(
-                {
-                    "run_id": int(one["run_id"]),
-                    "hosts": [_host(host) for host in one.get("hosts") or ()],
-                    "message_id": int(one["message_id"]) if one.get("message_id") else None,
-                    "channel_id": int(one["channel_id"]) if one.get("channel_id") else None,
-                    "removed": bool(one.get("removed")),
-                    "tried": bool(one.get("tried")),
-                    "reminded": bool(one.get("reminded")),
-                }
-            )
+            kept.append(_record(one))
         except (KeyError, TypeError, ValueError):
             continue
     return kept
@@ -137,86 +185,116 @@ def dump(found: list[dict[str, Any]]) -> str:
     return json.dumps(found, sort_keys=True)
 
 
-def record_for(found: list[dict[str, Any]], item: Hosted) -> dict[str, Any] | None:
-    return next((one for one in found if one["run_id"] == item.run_id), None)
+def _shares_host(record: dict[str, Any], block: Block) -> bool:
+    return bool({one["user_id"] for one in record["hosts"]} & set(block.user_ids))
 
 
-def new_record(item: Hosted) -> dict[str, Any]:
-    return {
-        "run_id": item.run_id,
-        "hosts": [dict(one) for one in item.hosts],
+def claim(found: list[dict[str, Any]], block: Block, used: set[int]) -> dict[str, Any] | None:
+    """The block's record: the one that starts where it starts, else one sharing a host and a
+    run — so a block that grows, shrinks or moves keeps its post and its marks."""
+    free = [one for one in found if id(one) not in used and _shares_host(one, block)]
+    record = next((one for one in free if one["start_run_id"] == block.start_run_id), None)
+    if record is None:
+        record = next((one for one in free if set(one["runs"]) & set(block.run_ids)), None)
+    if record is not None:
+        used.add(id(record))
+    return record
+
+
+def attach(record: dict[str, Any], block: Block) -> bool:
+    wanted = {
+        "start_run_id": block.start_run_id,
+        "runs": block.run_ids,
+        "hosts": [dict(one) for one in block.hosts],
+    }
+    changed = any(record.get(key) != value for key, value in wanted.items())
+    record.update(wanted)
+    return changed
+
+
+def new_record(block: Block) -> dict[str, Any]:
+    record: dict[str, Any] = {
         "message_id": None,
         "channel_id": None,
         "removed": False,
         "tried": False,
-        "reminded": False,
+        "marks": [],
     }
+    attach(record, block)
+    return record
 
 
 def is_up(record: Any) -> bool:
     return bool(record and record.get("message_id")) and not record.get("removed")
 
 
-def auto_wanted(marathon: Any, item: Hosted, record: Any) -> bool:
-    """The marathon's Auto-highlight switch, as for a runner: once per run, never again once it
-    was tried or staff took it down."""
+def auto_wanted(marathon: Any, block: Block, record: Any) -> bool:
+    """The marathon's Auto-highlight switch, as for a runner: once per block, never again once
+    it was tried or taken down."""
     return (
         bool(mt._cell(marathon, "public_highlight", 0))
-        and mt._cell(item.run, "state") == mt.LIVE
+        and state_of(block) == LIVE
         and not (record and (record.get("tried") or record.get("message_id")))
     )
 
 
-def heads_up_due(
-    item: Hosted, record: Any, now: datetime, *, minutes: int, stale_minutes: int
-) -> str | None:
-    """SEND, SKIP (the moment passed too long ago) or None: once per run, at a runner reminder's
-    moment. A run that moved later is due again, as a runner's reminder is."""
-    if item.starts is None or mt._cell(item.run, "state") != mt.UPCOMING:
-        return None
-    moment = item.starts - timedelta(minutes=int(minutes))
-    if now < moment:
-        return None
-    if record and record.get("reminded"):
-        return None
-    return SKIP if now - moment > timedelta(minutes=int(stale_minutes)) else SEND
+def as_reminded_run(block: Block, marks: Any) -> dict[str, Any]:
+    """What `mt.due_marks` reads: the block's start, upcoming only while all of it is."""
+    return {
+        "state": mt.UPCOMING if state_of(block) == UPCOMING else mt.LIVE,
+        "scheduled_at": mt._cell(block.first, "scheduled_at"),
+        "reminders_sent": list(marks or ()),
+    }
 
 
-def rearm(record: Any, item: Hosted, now: datetime, *, minutes: int) -> bool:
-    """True when a heads-up already sent is due again because its run moved later."""
-    if not (record and record.get("reminded")) or item.starts is None:
+def due(
+    block: Block, record: Any, marks: Any, now: datetime, *, stale_minutes: int
+) -> tuple[int | None, list[int]]:
+    return mt.due_marks(
+        as_reminded_run(block, (record or {}).get("marks")),
+        marks,
+        now,
+        stale_minutes=stale_minutes,
+    )
+
+
+def passed_marks(block: Block, marks: Any, now: datetime) -> list[int]:
+    """Every mark whose moment is behind us: what a per-run record's one heads-up stands for."""
+    at = block.starts
+    if at is None:
+        return []
+    return sorted(int(one) for one in marks if at - timedelta(minutes=int(one)) <= now)
+
+
+def rearmed(record: dict[str, Any], block: Block, now: datetime) -> bool:
+    """A block that moved later forgets every mark whose moment is ahead again."""
+    kept = mt.rearmed(record.get("marks"), mt._cell(block.first, "scheduled_at"), now)
+    if kept == sorted({int(one) for one in record.get("marks") or ()}):
         return False
-    return item.starts - timedelta(minutes=int(minutes)) > now
-
-
-def clean_move(given: Any) -> str | None:
-    word = str(given or "").strip().lower()
-    return word if word in (POST, REMOVE) else None
+    record["marks"] = kept
+    return True
 
 
 __all__ = [
-    "BAD_MOVE",
+    "Block",
     "COLUMN",
     "DONE",
-    "Hosted",
     "LIVE",
-    "POST",
-    "REMOVE",
-    "SEND",
-    "SKIP",
     "UPCOMING",
+    "attach",
     "auto_wanted",
     "baf_hosts",
-    "clean_move",
+    "blocks",
+    "claim",
+    "containing",
+    "due",
     "dump",
-    "heads_up_due",
-    "hosted",
     "is_up",
     "left_behind",
     "new_record",
-    "postable",
-    "rearm",
-    "record_for",
+    "passed_marks",
+    "rearmed",
     "records",
     "state_of",
+    "view_row",
 ]

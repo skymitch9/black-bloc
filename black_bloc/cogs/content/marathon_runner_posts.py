@@ -77,7 +77,7 @@ async def sync_posts(cog: Any, guild: Any, marathon: Any) -> None:
             url=mt.run_url(row, login, marathon["schedule_url"]),
             unlisted=words[MARATHON_RUNNER_POST_UNLISTED_KEY],
         ).text
-        button = button_of(bot, guild, marathon["id"], row)
+        button = button_of(bot, guild, marathon, row)
         await sync_one(
             cog, guild, marathon, row, int(target), text, shadow=mode != MODE_ON, button=button
         )
