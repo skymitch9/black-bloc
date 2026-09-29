@@ -117,7 +117,7 @@ def containing(found: list[Block], run_id: Any) -> Block | None:
 
 
 def left_behind(record: dict[str, Any], runs: Any) -> Block | None:
-    """A post that is up whose block is gone (Scan hosts off, the host unlinked, the runs
+    """A post that is up whose block is gone (the host unlinked, the runs
     dropped) still follows its own runs to the end, naming the hosts it was posted for."""
     wanted = set(record["runs"])
     rows = sorted((one for one in runs or () if int(mt._cell(one, "id")) in wanted), key=mt._when)

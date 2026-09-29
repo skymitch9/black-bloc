@@ -172,8 +172,9 @@ const SHEET_SAID = ' · sheet said {time}';
 const SHEET_TIMES_ACTION = 'Back to the sheet’s times';
 const EVENT_SELECT = 'Event';
 const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes into the events '
-  + 'review above, dated from the schedule. An event per ' + BAF + ' run is approved at once and '
-  + 'follows the schedule as runs move — the events feature announces each one as it starts. '
+  + 'review above, dated from the schedule. An event per ' + BAF + ' run and per ' + BAF + ' host block (the runs '
+  + 'a host hosts in a row) is approved at once and follows the schedule as runs move — the events feature '
+  + 'announces each one as it starts. Hosts are always found; they never make a run a ' + BAF + ' run. '
   + 'Both does the two. marathon_event_mode_default decides where this starts.';
 const SPOTLIGHT_FIELD = 'Follow the schedule';
 const SPOTLIGHT_CHOICES = [{ value: 'follow', label: 'On' }, { value: 'off', label: 'Off' }];
@@ -193,24 +194,13 @@ const HIGHLIGHT_FIELD = 'Auto-highlight BaF runners when live';
 const HIGHLIGHT_HELP = 'On: the moment a BaF run goes live its highlight posts in the public channel '
   + '(marathon_public_channel_id, blank = go-live) — the thread is staff-only, so this is what members see. '
   + 'For a BaF host it is their host block: posted when the block goes live, edited to done after its last run. '
-  + 'Off (the default): nothing is highlighted. Nobody opted out is highlighted, and nothing is while Runner/Host '
+  + 'Off (the default): nothing is highlighted. Nobody opted out is highlighted, and nothing is while BaF '
   + 'announcements is off. marathon_public_highlight_default decides where a new marathon starts.';
-const HOSTS_FIELD = 'Scan hosts';
-const HOSTS_HELP = 'On: a host from BaF — paired, or matched by their Twitch link — shows ✦BaF on the People card and '
-  + 'can be spotlit as a host (their note reads marathon_spotlight_host_note_template). Off: only runners and '
-  + 'commentators count. A host never makes a run a BaF run (no runner post, reminder or shoutout) unless '
-  + 'marathon_hosts_count_as_ours is on; instead, while marathon_host_highlights is on, each BaF host gets a runner’s '
-  + 'public reminders at every mark before each host block (the runs they host in a row), and its highlight when the '
-  + 'block goes live under Auto-highlight. Follow uses marathon_scan_hosts_default.';
-const ANNOUNCE_FIELD = 'Runner/Host announcements';
+const ANNOUNCE_FIELD = 'BaF announcements';
 const ANNOUNCE_HELP = 'On: every BaF runner and host of this marathon is announced publicly — the reminders at every '
   + 'marathon_reminder_minutes mark (marathon_public_reminders is the master switch) and, with Auto-highlight on, the '
   + 'highlight. Off: nobody on this marathon gets a public post. Anyone can be opted out on their own from the People '
   + 'card or the Opt out of highlight button on their run’s post. Follow uses marathon_announcements_default.';
-const HOST_EVENTS_FIELD = 'BaF host events';
-const HOST_EVENTS_HELP = 'On: one Discord event for each BaF host, from their first hosted run to the end of their '
-  + 'last, kept in step with the schedule and called off when they stop hosting. Needs Scan hosts on. Runner events '
-  + 'are the event select above and are not changed. Follow uses marathon_host_events_default.';
 const SWITCH_FOLLOW = 'Follow the setting ({state})';
 const TWITCH_FIX_FIELD = 'Twitch name (optional)';
 const TWITCH_FIX_HELP = 'Only when the schedule gives the wrong channel. It replaces the schedule’s everywhere Black Bloc '
@@ -234,7 +224,7 @@ const EVENT_OPEN = 'Open ↗';
 const MODES_FALLBACK = [
   { value: 'none', label: 'No event' },
   { value: 'marathon', label: 'One event for the marathon' },
-  { value: 'runs', label: `An event per ${BAF} run` },
+  { value: 'runs', label: `An event per ${BAF} run and host block` },
   { value: 'both', label: 'Both' },
 ];
 const FEED_MODE_FOLLOW = 'Whatever the setting says';
@@ -276,7 +266,7 @@ const HOTFIX_HOSTED_BY = 'hosted by {hosts}';
 const HOTFIX_NO_HOST = 'no host of its own';
 const HOTFIX_CHIP_TITLE = '{runs} run(s) · host: {hosts}';
 const HOTFIX_PEOPLE_ON = 'Shows a BaF person runs are tracked too, ticked or not '
-  + '(marathon_hotfix_track_people). Hosts count only while marathon_scan_hosts_default is on.';
+  + '(marathon_hotfix_track_people). Hosts always count, like runners.';
 const HOTFIX_PEOPLE_OFF = 'Only the ticked shows are tracked — marathon_hotfix_track_people is '
   + 'off, so a BaF runner on another show does not add it.';
 const HOTFIX_STALE = 'The Hotfix schedule could not be read just now ({why}), so this is the copy '
@@ -792,7 +782,7 @@ function bafLine(marathon, say, entry, timeZone) {
         entry.username ? el('span', { class: 'cell-quiet', text: ` @${entry.username}` }) : null,
       ]),
       el('span', { class: 'mx-chips' }, chips),
-      el('span', { class: 'cell-quiet mx-person-part', text: partWords(entry.parts) }),
+      el('span', { class: 'cell-quiet mx-person-part', text: entry.part_tag || partWords(entry.parts) }),
     ]),
     el('div', { class: 'bar mx-person-moves mx-person-body' }, [
       entry.login
@@ -826,7 +816,7 @@ function slotPersonLine(marathon, say, board, run, person) {
     el('span', { class: 'mx-slot-name' }, [
       el('strong', { text: person.user_id ? (person.member_name || person.name) : person.name }),
       person.user_id ? el('span', { class: 'badge', 'data-tone': 'ok', text: BAF }) : null,
-      el('span', { class: 'cell-quiet', text: ` ${PART_WORDS[person.part] || person.part}` }),
+      el('span', { class: 'cell-quiet', text: ` ${(person.user_id && entry && entry.part_tag) || PART_WORDS[person.part] || person.part}` }),
       person.login ? el('span', { class: 'cell-quiet mono', text: ` · ${twitchText(person)}` }) : el('span', { class: 'cell-quiet', text: ` · ${NO_TWITCH}` }),
     ]),
     el('span', { class: 'bar mx-person-moves' }, [
@@ -981,8 +971,6 @@ async function settingsFold(marathon, say) {
   const ping = segment(PING_CHOICES, pingNow);
   const highlightNow = marathon.public_highlight ? 'on' : 'off';
   const highlight = segment(PING_CHOICES, highlightNow);
-  const hosts = switchPicker(marathon.scan_hosts);
-  const hostEvents = switchPicker(marathon.host_events);
   const announce = switchPicker(marathon.announcements);
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
@@ -999,8 +987,6 @@ async function settingsFold(marathon, say) {
     if (mode.value !== (marathon.event_mode || 'none')) body.event_mode = mode.value;
     if (ping.readValue() !== pingNow) body.ping_role = ping.readValue() === 'on';
     if (highlight.readValue() !== highlightNow) body.public_highlight = highlight.readValue() === 'on';
-    if (hosts.readValue() !== hosts.now) body.scan_hosts = switchWanted(hosts.readValue());
-    if (hostEvents.readValue() !== hostEvents.now) body.host_events = switchWanted(hostEvents.readValue());
     if (announce.readValue() !== announce.now) body.announcements = switchWanted(announce.readValue());
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
@@ -1022,8 +1008,6 @@ async function settingsFold(marathon, say) {
     field('Airs on', picker, windowWords(marathon)),
     field(PING_FIELD, ping, PING_HELP),
     field(HIGHLIGHT_FIELD, highlight, HIGHLIGHT_HELP),
-    field(HOSTS_FIELD, hosts, HOSTS_HELP),
-    field(HOST_EVENTS_FIELD, hostEvents, HOST_EVENTS_HELP),
     field(ANNOUNCE_FIELD, announce, ANNOUNCE_HELP),
     field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
     bar([save]),

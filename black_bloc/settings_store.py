@@ -4995,7 +4995,7 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_HOST_HIGHLIGHTS_KEY: (
         "bool",
         True,
-        "whether each BaF host of a marathon that scans its hosts is posted like a BaF runner, "
+        "whether each BaF host of a marathon is posted like a BaF runner, "
         "once per host block (the runs they host in a row, through runs with no host listed): "
         "the public reminder (marathon_public_reminder_template, with marathon_part_host) at "
         "every marathon_reminder_minutes mark before the block's first run in "
