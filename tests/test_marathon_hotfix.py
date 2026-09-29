@@ -298,9 +298,9 @@ def everywhere(name, user_id):
     return {"runner_name": name.lower(), "user_id": user_id, "marathon_id": None}
 
 
-def matched(links=None, pairings=(), hosts=True, scan=True):
+def matched(links=None, pairings=(), hosts=True):
     return {
-        one.ref: hf.matched_of(one, links or {}, pairings, match_hosts=hosts, scan_hosts=scan)
+        one.ref: hf.matched_of(one, links or {}, pairings, match_hosts=hosts)
         for one in hf.blocks_of(SHEET)
     }
 
@@ -341,10 +341,11 @@ def test_anarchy_paired_everywhere_tracks_hidden_heroes_because_a_baf_person_hos
     assert hf.because_of(chosen[1][1]) == {}
 
 
-def test_a_host_counts_only_while_hosts_are_scanned_and_count_as_people():
-    for hosts, scan in ((False, True), (True, False)):
-        people = matched(pairings=[everywhere("anarchy", ANARCHY)], hosts=hosts, scan=scan)
-        assert hf.tracked(hf.blocks_of(SHEET), [], people) == []
+def test_a_host_counts_only_while_hosts_count_as_people_and_is_always_scanned():
+    people = matched(pairings=[everywhere("anarchy", ANARCHY)], hosts=False)
+    assert hf.tracked(hf.blocks_of(SHEET), [], people) == []
+    people = matched(pairings=[everywhere("anarchy", ANARCHY)], hosts=True)
+    assert hf.tracked(hf.blocks_of(SHEET), [], people) != []
 
 
 def test_a_pairing_made_for_one_marathon_does_not_track_a_show():

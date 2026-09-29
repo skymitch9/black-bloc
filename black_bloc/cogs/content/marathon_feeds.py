@@ -62,7 +62,6 @@ from ...settings_store import (
     MARATHON_HOTFIX_TRACK_PEOPLE_KEY,
     MARATHON_LADYARCADERS_FLOOR_KEY,
     MARATHON_MATCH_HOSTS_KEY,
-    MARATHON_SCAN_HOSTS_DEFAULT_KEY,
 )
 from ...timezones import unix
 from .marathon import (
@@ -459,11 +458,10 @@ async def people_on_blocks(bot: Any, guild: Any, blocks: list[Any]) -> dict[str,
     links = await links_of(bot.db)
     pairings = await pairings_of(bot.db, guild.id)
     hosts = bool(bot.store.get(guild.id, MARATHON_MATCH_HOSTS_KEY))
-    scan = bool(bot.store.get(guild.id, MARATHON_SCAN_HOSTS_DEFAULT_KEY))
     usernames = usernames_of(guild)
     return {
         one.ref: hf.matched_of(
-            one, links, pairings, match_hosts=hosts, usernames=usernames, scan_hosts=scan
+            one, links, pairings, match_hosts=hosts, usernames=usernames
         )
         for one in blocks
     }

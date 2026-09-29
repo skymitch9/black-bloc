@@ -1682,7 +1682,6 @@ async def link_twitch(bot, user_id, login):  # noqa: F811
 
 
 async def test_anarchy_hosting_hidden_heroes_adds_it_and_the_notice_says_who(bot, cog):  # noqa: F811
-    await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
     await pair_everywhere(bot, "anarchy", ANARCHY)
     await hotfix_feed(bot, cog)
     made = await by_ref(bot)
@@ -1719,8 +1718,8 @@ async def test_mathcat_by_twitch_link_tracks_gdqueer_when_it_is_not_listed(bot, 
     assert words["GDQueer"].endswith("\nTracked because **The_Mathcat** runs in it.")
 
 
-async def test_a_host_is_not_tracked_until_host_scanning_is_on(bot, cog):  # noqa: F811
-    await bot.store.set(GUILD, "marathon_scan_hosts_default", False)
+async def test_a_host_is_not_tracked_while_hosts_are_not_matched(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_match_hosts", False)
     await pair_everywhere(bot, "anarchy", ANARCHY)
     _row, feed = await hotfix_feed(bot, cog)
     made = [ref for ref, row in (await by_ref(bot)).items() if row["source"] == "gdq_hotfix"]
@@ -1731,7 +1730,6 @@ async def test_a_host_is_not_tracked_until_host_scanning_is_on(bot, cog):  # noq
 
 
 async def test_the_tracker_off_takes_only_the_listed_shows(bot, cog):  # noqa: F811
-    await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
     await bot.store.set(GUILD, "marathon_hotfix_track_people", False)
     await pair_everywhere(bot, "anarchy", ANARCHY)
     await hotfix_feed(bot, cog)
@@ -1752,7 +1750,6 @@ async def test_listed_and_a_person_on_the_same_block_is_one_marathon_never_two(b
 
 
 async def test_a_suggested_block_names_the_person_it_was_taken_for(bot, cog):  # noqa: F811
-    await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
     await bot.store.set(GUILD, "marathon_feed_action_default", "suggest")
     await bot.store.set(
         GUILD, "marathon_hotfix_hosts_template", "Anarchy watch: {people} on {show}"
@@ -1766,7 +1763,6 @@ async def test_a_suggested_block_names_the_person_it_was_taken_for(bot, cog):  #
 
 
 async def test_the_picker_answers_every_block_and_why_each_is_tracked(bot, cog):  # noqa: F811
-    await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
     await pair_everywhere(bot, "anarchy", ANARCHY)
     await link_twitch(bot, MATHCAT, "the_mathcat")
     await bot.store.set(GUILD, "marathon_hotfix_shows", "GDQueer, Speedrun Sandwich")

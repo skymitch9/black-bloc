@@ -702,26 +702,16 @@ const SETTING_SPECS = [
   ["marathon_retro_category", "text", "Retro", "Retro", "the Twitch category a run with no category of its own is played under — the channel in this category stands for such a run. `Retro` by default; capitals do not matter"],
   ["marathon_late_grace_minutes", "int", 90, 90, "minutes a run may sit past its scheduled start with no sign on the stream before the schedule alone calls it live — the run before it is probably running long. 90 by default", null, 360, 0],
   ["marathon_match_hosts", "bool", true, true, "whether a host or a commentator from BaF counts as BaF, not only a runner. on by default"],
-  ["marathon_scan_hosts_default", "bool", true, true, "whether a marathon's hosts are scanned for BaF people at all — shown ✦BaF when paired or linked, announced like runners, and counted when the Hotfix feed tracks shows a BaF person is on. Runners are always scanned; commentators follow marathon_match_hosts. on by default"],
-  ["marathon_hosts_count_as_ours", "bool", false, false, "whether a run a BaF host hosts counts as a BaF run — its runner post, reminders, shoutout and highlight — when nobody from BaF runs it. Off, a scanned host is shown and can be spotlit and given a host event, but only a BaF runner makes a run ours. off by default"],
-  ["marathon_host_events_default", "bool", false, false, "whether a marathon makes one Discord event for each BaF host, from their first hosted run to the end of their last, when its own BaF host events switch follows this setting. A host counts only while that marathon scans its hosts. off by default"],
+  ["marathon_hosts_count_as_ours", "bool", false, false, "whether a run a BaF host hosts counts as a BaF run — its runner post, reminders, shoutout and highlight — when nobody from BaF runs it. Off, a BaF host is shown, announced per host block and can be spotlit, but only a BaF runner makes a run ours. off by default"],
   ["marathon_spotlight_host_note_template", "text", "{name} hosting {marathon}", "{name} hosting {marathon}", "the note a host's channel row carries on the Go-live page when Spotlight… on a marathon's People card adds it for someone who only hosts there. It takes {name} {marathon}"],
-  ["marathon_host_event_title_template", "text", "{member} hosts {marathon}", "{member} hosts {marathon}", "what the event made for one BaF host of a marathon is called. It takes {member} {marathon} {games} {runs}"],
-  ["marathon_host_event_description_template", "text", "{member} hosts {runs} run(s) on {marathon}: {games}. Read from the schedule; times follow it.", "{member} hosts {runs} run(s) on {marathon}: {games}. Read from the schedule; times follow it.", "the description of the event made for one BaF host of a marathon. It takes {member} {marathon} {games} {runs}"],
-  ["marathon_controls_hosts_on", "text", "Scan hosts: on · turn off", "Scan hosts: on · turn off", "the thread controls' host-scanning button while the marathon's hosts are scanned for BaF people"],
-  ["marathon_controls_hosts_off", "text", "Scan hosts: off · turn on", "Scan hosts: off · turn on", "the thread controls' host-scanning button while only the marathon's runners count"],
-  ["marathon_controls_host_events_on", "text", "BaF host events: on · turn off", "BaF host events: on · turn off", "the thread controls' host-events button while each BaF host gets an event"],
-  ["marathon_controls_host_events_off", "text", "BaF host events: off · turn on", "BaF host events: off · turn on", "the thread controls' host-events button while hosts get no event of their own"],
-  ["marathon_controls_announcements_on", "text", "Runner/Host announcements: on · turn off", "Runner/Host announcements: on · turn off", "the thread controls' announcements button while the marathon's BaF runners and hosts are announced publicly"],
-  ["marathon_controls_announcements_off", "text", "Runner/Host announcements: off · turn on", "Runner/Host announcements: off · turn on", "the thread controls' announcements button while nobody on the marathon is announced publicly"],
-  ["marathon_scan_hosts_on_said", "text", "**{marathon}** scans its hosts now: a host from BaF shows ✦BaF on its People card and can be spotlit as a host.", "**{marathon}** scans its hosts now: a host from BaF shows ✦BaF on its People card and can be spotlit as a host.", "what staff are told once a marathon's Scan hosts switch is turned on. It takes {marathon}"],
-  ["marathon_scan_hosts_off_said", "text", "**{marathon}** no longer scans its hosts: only its runners and commentators count as BaF.", "**{marathon}** no longer scans its hosts: only its runners and commentators count as BaF.", "what staff are told once a marathon's Scan hosts switch is turned off. It takes {marathon}"],
-  ["marathon_announcements_on_said", "text", "**{marathon}** announces its BaF runners and hosts publicly now — reminders at every mark, and highlights while Auto-highlight is on. Anyone can be opted out on their own.", "**{marathon}** announces its BaF runners and hosts publicly now — reminders at every mark, and highlights while Auto-highlight is on. Anyone can be opted out on their own.", "what staff are told once a marathon's Runner/Host announcements switch is on. It takes {marathon}"],
-  ["marathon_announcements_off_said", "text", "**{marathon}** announces nobody publicly now — no reminders and no highlights. Posts already up follow their runs to the end.", "**{marathon}** announces nobody publicly now — no reminders and no highlights. Posts already up follow their runs to the end.", "what staff are told once a marathon's Runner/Host announcements switch is off. It takes {marathon}"],
-  ["marathon_host_events_on_said", "text", "**{marathon}** makes an event for each BaF host now, from their first hosted run to the end of their last.", "**{marathon}** makes an event for each BaF host now, from their first hosted run to the end of their last.", "what staff are told once a marathon's BaF host events switch is turned on. It takes {marathon}"],
-  ["marathon_host_events_off_said", "text", "**{marathon}** makes no event for its hosts now.", "**{marathon}** makes no event for its hosts now.", "what staff are told once a marathon's BaF host events switch is turned off. It takes {marathon}"],
-  ["marathon_host_highlights", "bool", true, true, "whether each BaF host of a marathon that scans its hosts is posted like a BaF runner, once per host block (the runs they host in a row, through runs with no host listed): the public reminder (marathon_public_reminder_template, with marathon_part_host) at every marathon_reminder_minutes mark before the block's first run in marathon_reminder_channel_id while marathon_public_reminders is on, and the public highlight (marathon_public_template) when the block goes live and the marathon's Auto-highlight is on. Both follow the marathon's Runner/Host announcements switch and each host's opt-out. A host still never makes a run a BaF run. on by default"],
-  ["marathon_announcements_default", "bool", true, true, "whether a marathon announces its BaF runners and hosts publicly — the public reminders and highlights — when its own Runner/Host announcements switch follows this setting. Off, nobody on that marathon gets a public post; anyone can still be opted out one by one. on by default"],
+  ["marathon_host_event_title_template", "text", "{member} hosts {marathon}", "{member} hosts {marathon}", "what the event made for one BaF host block of a marathon is called (its hosts in {member}). It takes {member} {marathon} {games} {runs}"],
+  ["marathon_host_event_description_template", "text", "{member} hosts {runs} run(s) on {marathon}: {games}. Read from the schedule; times follow it.", "{member} hosts {runs} run(s) on {marathon}: {games}. Read from the schedule; times follow it.", "the description of the event made for one BaF host block of a marathon. It takes {member} {marathon} {games} {runs}"],
+  ["marathon_controls_announcements_on", "text", "BaF announcements: on · turn off", "BaF announcements: on · turn off", "the thread controls' announcements button while the marathon's BaF runners and hosts are announced publicly"],
+  ["marathon_controls_announcements_off", "text", "BaF announcements: off · turn on", "BaF announcements: off · turn on", "the thread controls' announcements button while nobody on the marathon is announced publicly"],
+  ["marathon_announcements_on_said", "text", "**{marathon}** announces its BaF runners and hosts publicly now — reminders at every mark, and highlights while Auto-highlight is on. Anyone can be opted out on their own.", "**{marathon}** announces its BaF runners and hosts publicly now — reminders at every mark, and highlights while Auto-highlight is on. Anyone can be opted out on their own.", "what staff are told once a marathon's BaF announcements switch is on. It takes {marathon}"],
+  ["marathon_announcements_off_said", "text", "**{marathon}** announces nobody publicly now — no reminders and no highlights. Posts already up follow their runs to the end.", "**{marathon}** announces nobody publicly now — no reminders and no highlights. Posts already up follow their runs to the end.", "what staff are told once a marathon's BaF announcements switch is off. It takes {marathon}"],
+  ["marathon_host_highlights", "bool", true, true, "whether each BaF host of a marathon is posted like a BaF runner, once per host block (the runs they host in a row, through runs with no host listed): the public reminder (marathon_public_reminder_template, with marathon_part_host) at every marathon_reminder_minutes mark before the block's first run in marathon_reminder_channel_id while marathon_public_reminders is on, and the public highlight (marathon_public_template) when the block goes live and the marathon's Auto-highlight is on. Both follow the marathon's BaF announcements switch and each host's opt-out. A host still never makes a run a BaF run. on by default"],
+  ["marathon_announcements_default", "bool", true, true, "whether a marathon announces its BaF runners and hosts publicly — the public reminders and highlights — when its own BaF announcements switch follows this setting. Off, nobody on that marathon gets a public post; anyone can still be opted out one by one. on by default"],
   ["marathon_reminder_minutes", "text", "120, 15", "120, 15", "minutes before a BaF run that a reminder is posted, separated by commas; `120, 15` by default. marathon_ping_minutes is always one of them"],
   ["marathon_ping_minutes", "int", 15, 15, "the one reminder that pings: this many minutes before a BaF run, the member's own ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings at the scheduled start", null, 240, 0],
   ["marathon_reminder_pings", "bool", true, true, "whether the marathon_ping_minutes reminder mentions any role at all. on by default"],
@@ -767,7 +757,7 @@ const SETTING_SPECS = [
   ["marathon_public_highlight_default", "bool", false, false, "whether a NEW marathon highlights each BaF run publicly the moment it goes live. off by default; each marathon's own Auto-highlight switch changes it after, and marathons already on the list keep their own"],
   ["marathon_reminder_channel_id", "channel", null, null, "where the public copy of a tracked marathon's reminders goes (the *is up in 15 minutes* posts members see; the staff thread keeps its own copy). Blank uses the go-live channel. Its own row: it never moves the go-live spotlight post or the public highlights"],
   ["marathon_near_miss_posts", "bool", true, true, "whether a tracked marathon's thread gets one post per runner whose Twitch login or schedule name is exactly a member's Discord username, with Link (this marathon), Link everywhere and Not them buttons for staff. Nobody is linked until staff press. on by default"],
-  ["marathon_public_reminders", "bool", true, true, "whether every reminder of a tracked marathon also posts publicly, in marathon_reminder_channel_id — the master switch over every marathon's Runner/Host announcements, for reminders. on by default; off keeps reminders in the staff thread only"],
+  ["marathon_public_reminders", "bool", true, true, "whether every reminder of a tracked marathon also posts publicly, in marathon_reminder_channel_id — the master switch over every marathon's BaF announcements, for reminders. on by default; off keeps reminders in the staff thread only"],
   ["marathon_ping_role_on_said", "text", "**{marathon}** pings again: its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel has a ping window while it runs.", "**{marathon}** pings again: its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel has a ping window while it runs.", "what staff are told once a marathon's Ping the role switch is turned on. It takes {marathon}"],
   ["marathon_ping_role_off_said", "text", "**{marathon}** pings no role now: its reminders and shoutouts still post, with no mention, and its channel has no ping window for it.", "**{marathon}** pings no role now: its reminders and shoutouts still post, with no mention, and its channel has no ping window for it.", "what staff are told once a marathon's Ping the role switch is turned off. It takes {marathon}"],
   ["marathon_ping_role_same_said", "text", "**{marathon}** already has that, so nothing was changed.", "**{marathon}** already has that, so nothing was changed.", "what staff are told when the Ping the role switch is already where they asked. It takes {marathon}"],
@@ -844,8 +834,8 @@ const SETTING_SPECS = [
   ["marathon_controls_help", "text", "Staff: these buttons set **{marathon}**'s events and its channel's spotlight at once. Each one says what is on now and what a press does.", "Staff: these buttons set **{marathon}**'s events and its channel's spotlight at once. Each one says what is on now and what a press does.", "the line on the control message pinned in a tracked marathon's thread. It takes {marathon}"],
   ["marathon_controls_event_on", "text", "Marathon event: on · turn off", "Marathon event: on · turn off", "the thread controls' marathon-event button while the marathon makes its one event"],
   ["marathon_controls_event_off", "text", "Marathon event: off · turn on", "Marathon event: off · turn on", "the thread controls' marathon-event button while the marathon makes no event of its own"],
-  ["marathon_controls_runs_on", "text", "BaF run events: on · turn off", "BaF run events: on · turn off", "the thread controls' run-events button while each BaF run gets its own event"],
-  ["marathon_controls_runs_off", "text", "BaF run events: off · turn on", "BaF run events: off · turn on", "the thread controls' run-events button while BaF runs get no event of their own"],
+  ["marathon_controls_runs_on", "text", "BaF run/host events: on · turn off", "BaF run/host events: on · turn off", "the thread controls' BaF run/host events button while each BaF run and each BaF host block gets its own event"],
+  ["marathon_controls_runs_off", "text", "BaF run/host events: off · turn on", "BaF run/host events: off · turn on", "the thread controls' BaF run/host events button while BaF runs and host blocks get no event of their own"],
   ["marathon_controls_spotlight_on", "text", "Spotlight: on now · stop", "Spotlight: on now · stop", "the thread controls' spotlight button while the marathon's channel is spotlit"],
   ["marathon_controls_spotlight_off", "text", "Spotlight: off · start", "Spotlight: off · start", "the thread controls' spotlight button while the marathon's channel is not spotlit"],
   ["marathon_controls_spotlight_kept", "text", "Spotlight: kept (permanent)", "Spotlight: kept (permanent)", "the thread controls' spotlight button while the channel's spotlight is kept for ever"],
@@ -6601,7 +6591,7 @@ function seedMarathonRuns() {
 
 function seedMarathons() {
   return [
-    { id: 1, name: 'AGDQ 2027', schedule_url: 'https://gamesdonequick.com/schedule/74', source: 'gdq', source_ref: '74', scan_hosts: true, spotlight_id: 1, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 3120 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000300', board_pinned: true, last_fetched_at: minutesAgo(12), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(9000) },
+    { id: 1, name: 'AGDQ 2027', schedule_url: 'https://gamesdonequick.com/schedule/74', source: 'gdq', source_ref: '74', spotlight_id: 1, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 3120 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000300', board_pinned: true, last_fetched_at: minutesAgo(12), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(9000) },
     { id: 2, name: 'Halo Fest', schedule_url: 'https://gamesdonequick.com/schedule/73', source: 'gdq', source_ref: '73', spotlight_id: null, starts_at: minutesAgo(30000), ends_at: minutesAgo(29840), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000299', board_pinned: false, last_fetched_at: minutesAgo(700), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(40000) },
     { id: 3, name: 'GDQx 2026', schedule_url: 'https://gamesdonequick.com/schedule/72', source: 'gdq', source_ref: '72', spotlight_id: null, starts_at: null, ends_at: null, active: false, poll_minutes: 60, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(1500), last_fetch_ok: 0, last_error: 'the GDQ tracker has the event but has not published its schedule yet (it answers 404 for the runs)', fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(2000) },
     // Found on oengus.io by the Speed Stuff 4 Charity feed; its schedule is not published yet,
@@ -6895,8 +6885,6 @@ function marathonRow(row) {
     spotlight_mode: row.spotlight_mode === 'off' ? 'off' : 'follow',
     ping_role: Boolean(row.ping_role),
     public_highlight: Boolean(row.public_highlight),
-    scan_hosts: marathonSwitch(row, 'scan_hosts'),
-    host_events: marathonSwitch(row, 'host_events'),
     announcements: marathonSwitch(row, 'announcements'),
     ...marathonTracking(row),
   };
@@ -7034,14 +7022,16 @@ function marathonSetPingRole(row, given) {
   return marathonSaid(wanted ? 'marathon_ping_role_on_said' : 'marathon_ping_role_off_said', { marathon: row.name });
 }
 
-// The bot's cogs/content/marathon_hosts: Scan hosts, BaF host events and Runner/Host announcements, each on, off or following its setting.
-const MARATHON_SWITCH_DEFAULTS = { scan_hosts: 'marathon_scan_hosts_default', host_events: 'marathon_host_events_default', announcements: 'marathon_announcements_default' };
-const MARATHON_SWITCH_WHAT = { scan_hosts: 'Scan hosts', host_events: 'BaF host events', announcements: 'Runner/Host announcements' };
+// The bot's cogs/content/marathon_hosts: BaF announcements, on, off or following its setting.
+// Scan hosts and BaF host events are retired (people-unify): hosts are always found, and host
+// blocks get events under the one BaF run/host events switch (the runs half of event_mode).
+const MARATHON_SWITCH_DEFAULTS = { announcements: 'marathon_announcements_default' };
+const MARATHON_SWITCH_WHAT = { announcements: 'BaF announcements' };
 const MARATHON_SWITCH_SAID = {
-  scan_hosts: ['marathon_scan_hosts_on_said', 'marathon_scan_hosts_off_said'],
-  host_events: ['marathon_host_events_on_said', 'marathon_host_events_off_said'],
   announcements: ['marathon_announcements_on_said', 'marathon_announcements_off_said'],
 };
+const MARATHON_SCAN_GONE = 'The Scan hosts switch is gone — hosts are always found now, like runners, so nothing was changed.';
+const MARATHON_HOST_EVENTS_GONE = 'The BaF host events switch is gone — events now follow the one **BaF run/host events** switch, so nothing was changed.';
 
 function marathonSwitch(row, which) {
   const fallback = Boolean(state.settings.get(MARATHON_SWITCH_DEFAULTS[which]));
@@ -7058,75 +7048,129 @@ function marathonSetSwitch(row, which, given) {
   else throw new Refused(422, 'bad_switch', `Say on, off or follow for **${MARATHON_SWITCH_WHAT[which]}**, so nothing was changed.`);
   const was = marathonSwitch(row, which);
   row[which] = wanted;
-  if (which === 'scan_hosts') {
-    marathonRematch(row);
-    marathonSyncRuns(row);
-  } else if (which === 'host_events') {
-    marathonSyncHostEvents(row);
-  }
   const after = marathonSwitch(row, which);
   logAction(`web.marathon.${which}_set`, { details: { marathon_id: row.id, name: row.name, from: was.own, to: after.own, on: after.on, via: 'website' } });
   return marathonSaid(MARATHON_SWITCH_SAID[which][after.on ? 0 : 1], { marathon: row.name });
 }
 
-// The bot's cogs/content/marathon_hosts.sync_host_events: one event per BaF host over their hosted runs.
-function marathonHostSpans(row) {
-  const spans = new Map();
-  for (const run of marathonRunsOf(row.id).filter((one) => one.state !== 'dropped')) {
-    for (const one of run.people.filter((person) => person.part === 'host' && person.user_id)) {
+// The bot's marathon_host_highlights.blocks: a BaF host's block runs on across the runs they host
+// and runs with no host listed, and ends at a run someone else hosts; same runs = one block.
+function marathonHostBlocks(row) {
+  const runs = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped')
+    .sort((a, b) => String(a.scheduled_at || '').localeCompare(String(b.scheduled_at || '')) || a.order_no - b.order_no);
+  const open = new Map();
+  const who = new Map();
+  const closed = [];
+  for (const run of runs) {
+    const listed = run.people.filter((one) => one.part === 'host');
+    if (!listed.length) continue;
+    const here = listed.filter((one) => one.user_id);
+    const ids = new Set(here.map((one) => String(one.user_id)));
+    for (const userId of [...open.keys()].filter((one) => !ids.has(one))) {
+      closed.push([userId, open.get(userId)]);
+      open.delete(userId);
+    }
+    for (const one of here) {
       const key = String(one.user_id);
-      if (!spans.has(key)) spans.set(key, { user_id: key, name: one.name, login: one.login || null, runs: [] });
-      if (!spans.get(key).runs.includes(run)) spans.get(key).runs.push(run);
+      if (!open.has(key)) open.set(key, []);
+      if (!open.get(key).includes(run)) open.get(key).push(run);
+      if (!who.has(key)) who.set(key, { user_id: key, name: one.name, login: one.login || null });
     }
   }
-  return [...spans.values()].map((span) => {
-    const starts = span.runs.map((one) => one.scheduled_at).filter(Boolean).sort();
-    const ends = span.runs.map((one) => one.ends_at || one.scheduled_at).filter(Boolean).sort();
-    return { ...span, starts: starts[0] || null, ends: ends[ends.length - 1] || null };
+  closed.push(...open.entries());
+  const merged = new Map();
+  for (const [userId, mine] of closed) {
+    const key = mine.map((one) => one.id).join(',');
+    if (!merged.has(key)) merged.set(key, { runs: mine, hosts: [] });
+    merged.get(key).hosts.push(who.get(userId));
+  }
+  return [...merged.values()].map((block) => {
+    const starts = block.runs.map((one) => one.scheduled_at).filter(Boolean).sort();
+    const ends = block.runs.map((one) => one.ends_at || one.scheduled_at).filter(Boolean).sort();
+    return { ...block, run_ids: block.runs.map((one) => one.id), user_ids: block.hosts.map((one) => one.user_id), starts: starts[0] || null, ends: ends[ends.length - 1] || null };
   });
 }
 
-function marathonHostWords(key, span, row) {
-  const games = [...new Set(span.runs.map((one) => one.game))].join(', ');
-  return marathonSaid(key, { member: memberName(span.user_id) || span.name, marathon: row.name, games, runs: String(span.runs.length) });
+function marathonHostWords(key, block, row) {
+  const games = [...new Set(block.runs.map((one) => one.game))].join(', ');
+  const member = block.hosts.map((one) => memberName(one.user_id) || one.name).join(', ');
+  return marathonSaid(key, { member, marathon: row.name, games, runs: String(block.runs.length) });
+}
+
+// host_event_ids: one record per host block; a v190 {user_id: event_id} object reads as records
+// with no runs, claimed by that host's first block.
+function marathonHostRecords(row) {
+  const raw = row.host_event_ids;
+  if (Array.isArray(raw)) return raw.map((one) => ({ event_id: one.event_id, runs: [...(one.runs || [])], hosts: (one.hosts || []).map(String) }));
+  return Object.entries(raw || {}).map(([userId, eventId]) => ({ event_id: eventId, runs: [], hosts: [String(userId)] }));
+}
+
+function marathonClaimRecord(found, block, used) {
+  const free = found.filter((one) => !used.has(one));
+  const hosts = new Set(block.user_ids);
+  const tests = [
+    (one) => one.runs.length && one.runs[0] === block.run_ids[0],
+    (one) => one.hosts.some((id) => hosts.has(id)) && one.runs.some((id) => block.run_ids.includes(id)),
+    (one) => !one.runs.length && one.hosts.some((id) => hosts.has(id)),
+  ];
+  for (const test of tests) {
+    const hit = free.find(test);
+    if (hit) {
+      used.add(hit);
+      return hit;
+    }
+  }
+  return null;
 }
 
 function marathonSyncHostEvents(row) {
-  const ids = { ...(row.host_event_ids || {}) };
-  const wanted = row.active && marathonSwitch(row, 'host_events').on && marathonSwitch(row, 'scan_hosts').on;
-  const spans = new Map(marathonHostSpans(row).map((one) => [one.user_id, one]));
+  const wanted = Boolean(row.active) && marathonWantsRunEvents(row);
+  const found = marathonHostRecords(row).filter((one) => state.events.some((event) => event.id === one.event_id));
+  const blocks = marathonHostBlocks(row);
   const cancelling = Boolean(state.settings.get('marathon_run_event_cancel_on_leave'));
-  for (const [userId, eventId] of Object.entries(ids)) {
-    const event = state.events.find((one) => one.id === eventId);
-    const span = spans.get(userId);
-    if (!event) {
-      delete ids[userId];
+  const used = new Set();
+  const owner = new Map();
+  for (const block of blocks) {
+    const record = marathonClaimRecord(found, block, used);
+    if (record) owner.set(record, block);
+  }
+  const kept = [];
+  let made = 0;
+  let cancelled = 0;
+  for (const record of found) {
+    const event = state.events.find((one) => one.id === record.event_id);
+    const block = owner.get(record);
+    if (block && wanted) {
+      record.runs = block.run_ids;
+      record.hosts = block.user_ids;
+      event.starts_at = block.starts;
+      event.ends_at = block.ends;
+      kept.push(record);
       continue;
     }
-    if (span && wanted) {
-      event.starts_at = span.starts;
-      event.ends_at = span.ends;
-      continue;
-    }
-    delete ids[userId];
-    if ((!span || cancelling) && MARATHON_KEPT_IN_STEP.includes(event.status)) {
+    if ((!block || cancelling) && MARATHON_KEPT_IN_STEP.includes(event.status)) {
       event.status = 'cancelled';
-      logAction('marathon.host_event_cancelled', { target_id: userId, details: { marathon_id: row.id, member_id: userId, event_id: eventId, reason: span ? 'switched_off' : 'not_host' } });
+      cancelled += 1;
+      logAction('marathon.host_event_cancelled', { target_id: record.hosts[0] || null, details: { marathon_id: row.id, members: record.hosts, runs: record.runs, event_id: record.event_id, reason: block ? 'switched_off' : 'not_host' } });
     }
   }
   if (wanted) {
-    for (const span of spans.values()) {
-      if (ids[span.user_id] || !span.starts || new Date(span.ends).getTime() <= Date.now()) continue;
+    const claimed = new Set(owner.values());
+    for (const block of blocks) {
+      if (claimed.has(block) || !block.starts || new Date(block.ends).getTime() <= Date.now()) continue;
       const id = state.events.reduce((top, one) => Math.max(top, one.id), 0) + 1;
       const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
       const review = state.settings.get('marathon_run_events_reviewed') || state.settings.get('marathon_mode') !== 'on';
-      const login = channel ? channel.twitch_login : span.login;
-      state.events.unshift({ id, requester_id: STAFF.id, title: marathonHostWords('marathon_host_event_title_template', span, row), description: marathonHostWords('marathon_host_event_description_template', span, row), location: login ? `https://twitch.tv/${login}` : row.schedule_url, where_kind: 'other', where_channel_id: null, starts_at: span.starts, ends_at: span.ends, status: review ? 'pending' : 'approved', created_at: now(), decided_by: null, decided_at: review ? null : now(), deny_reason: null, review_channel_id: review ? '800000000000000005' : null });
-      ids[span.user_id] = id;
-      logAction('marathon.host_event_made', { target_id: span.user_id, details: { marathon_id: row.id, member_id: span.user_id, event_id: id, reviewed: Boolean(review), runs: span.runs.map((one) => one.id) } });
+      const own = (block.hosts.find((one) => one.login) || {}).login;
+      const login = channel ? channel.twitch_login : own;
+      state.events.unshift({ id, requester_id: STAFF.id, title: marathonHostWords('marathon_host_event_title_template', block, row), description: marathonHostWords('marathon_host_event_description_template', block, row), location: login ? `https://twitch.tv/${login}` : row.schedule_url, where_kind: 'other', where_channel_id: null, starts_at: block.starts, ends_at: block.ends, status: review ? 'pending' : 'approved', created_at: now(), decided_by: null, decided_at: review ? null : now(), deny_reason: null, review_channel_id: review ? '800000000000000005' : null });
+      kept.push({ event_id: id, runs: block.run_ids, hosts: block.user_ids });
+      made += 1;
+      logAction('marathon.host_event_made', { target_id: block.user_ids[0], details: { marathon_id: row.id, members: block.user_ids, runs: block.run_ids, event_id: id, reviewed: Boolean(review) } });
     }
   }
-  row.host_event_ids = ids;
+  row.host_event_ids = kept;
+  return { made, cancelled };
 }
 
 // The bot's cogs/content/marathon_public.set_public_highlight: the marathon's auto-highlight switch.
@@ -7143,8 +7187,8 @@ function marathonSetPublicHighlight(row, given) {
 }
 
 const MARATHON_MODES = ['none', 'marathon', 'runs', 'both'];
-const MARATHON_MODE_WORDS = { none: 'No event', marathon: 'One event for the marathon', runs: 'An event per BaF run', both: 'Both' };
-const MARATHON_MODE_SENTENCES = { none: 'no event', marathon: 'one event for the whole marathon', runs: 'one event per BaF run, kept in step with the schedule', both: 'one event for the marathon and one per BaF run' };
+const MARATHON_MODE_WORDS = { none: 'No event', marathon: 'One event for the marathon', runs: 'An event per BaF run and host block', both: 'Both' };
+const MARATHON_MODE_SENTENCES = { none: 'no event', marathon: 'one event for the whole marathon', runs: 'one event per BaF run and per BaF host block, kept in step with the schedule', both: 'one event for the marathon and one per BaF run and host block' };
 const MARATHON_BAD_MODE = '**{given}** is not an event mode, so nothing was changed. Say none, marathon, runs or both.';
 
 function marathonModeOf(row) {
@@ -7186,7 +7230,7 @@ function marathonRunEventCancel(row, run, reason) {
   return 1;
 }
 
-function marathonSyncRuns(row) {
+function marathonSyncRuns(row, { hosts = true } = {}) {
   let made = 0;
   for (const run of marathonRunsOf(row.id)) {
     if (run.event_id) {
@@ -7202,7 +7246,7 @@ function marathonSyncRuns(row) {
       }
     }
   }
-  marathonSyncHostEvents(row);
+  if (hosts) marathonSyncHostEvents(row);
   return made;
 }
 
@@ -7223,21 +7267,24 @@ function marathonSetMode(row, given) {
     row.event_id = null;
   }
   let counts = {};
+  let made = 0;
+  let cancelled = 0;
+  let kept = 0;
   if (marathonWantsRunEvents(row)) {
-    const made = marathonSyncRuns(row);
-    counts = { made };
-    if (made) said.push(`${made} run event(s) made.`);
+    made = marathonSyncRuns(row, { hosts: false });
   } else if (['runs', 'both'].includes(was)) {
-    let cancelled = 0;
-    let kept = 0;
     for (const run of marathonRunsOf(row.id).filter((one) => one.event_id)) {
       if (leaving) cancelled += marathonRunEventCancel(row, run, 'mode_changed');
       else { run.event_id = null; kept += 1; }
     }
-    counts = { cancelled, kept };
-    if (cancelled) said.push(`${cancelled} run event(s) called off.`);
-    if (kept) said.push(`${kept} run event(s) left on the calendar.`);
   }
+  const hosted = marathonSyncHostEvents(row);
+  made += hosted.made;
+  cancelled += hosted.cancelled;
+  counts = { made, cancelled, kept, host_blocks: hosted };
+  if (made) said.push(`${made} run or host block event(s) made.`);
+  if (cancelled) said.push(`${cancelled} run or host block event(s) called off.`);
+  if (kept) said.push(`${kept} run event(s) left on the calendar.`);
   logAction('web.marathon.event_mode_set', { details: { marathon_id: row.id, from: was, to: wanted, via: 'website', ...counts } });
   return said.join(' ');
 }
@@ -7356,7 +7403,6 @@ function marathonSpotlightOf(row) {
 function marathonRematch(row) {
   const links = new Map((state.golive.links || []).map((one) => [String(one.twitch_login).toLowerCase(), one.user_id]));
   const hosts = Boolean(state.settings.get('marathon_match_hosts'));
-  const scan = marathonSwitch(row, 'scan_hosts').on;
   const count = Boolean(state.settings.get('marathon_hosts_count_as_ours'));
   for (const run of marathonRunsOf(row.id)) {
     run.people = run.people.map((one) => {
@@ -7367,7 +7413,7 @@ function marathonRematch(row) {
       const sheet = one.sheet_login || one.login || null;
       const fixed = pairing && pairing.twitch_login ? pairing.twitch_login : null;
       const login = fixed || sheet;
-      if (one.part === 'runner' || (hosts && (one.part !== 'host' || scan))) {
+      if (one.part === 'runner' || hosts) {
         userId = pairing ? pairing.user_id : (login ? links.get(String(login).toLowerCase()) || null : null);
       }
       const rest = { ...one };
@@ -7561,14 +7607,14 @@ function hotfixLocal(stamp, zoneName) {
 }
 
 // The bot's marathon_hotfix.reasons_of over marathon.match_people: everywhere pairings, then a
-// linked Twitch login; runners always, hosts only while marathon_scan_hosts_default is on.
+// linked Twitch login; runners always, hosts while marathon_match_hosts is on (always scanned).
 function hotfixReasons(block, wanted) {
   const [ref, , , , , , hosts, , runners] = block;
   const found = wanted.has(ref.split('/')[0]) ? [{ kind: 'listed' }] : [];
   if (!state.settings.get('marathon_hotfix_track_people')) return found;
   const links = new Map((state.golive.links || []).map((one) => [String(one.twitch_login).toLowerCase(), one.user_id]));
   const paired = (name) => state.marathonPeople.find((one) => one.marathon_id === null && one.runner_name === name.trim().toLowerCase());
-  const scanHosts = Boolean(state.settings.get('marathon_match_hosts')) && Boolean(state.settings.get('marathon_scan_hosts_default'));
+  const scanHosts = Boolean(state.settings.get('marathon_match_hosts'));
   const seen = new Set();
   const add = (kind, name, userId) => {
     const mark = `${kind}/${name.toLowerCase()}`;
@@ -8236,9 +8282,9 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   if ('event_mode' in body) said.push(marathonSetMode(row, body.event_mode));
   if ('spotlight_mode' in body) said.push(marathonSetSpotlightMode(row, body.spotlight_mode));
   if ('ping_role' in body) said.push(marathonSetPingRole(row, body.ping_role));
-  for (const which of ['scan_hosts', 'host_events', 'announcements']) {
-    if (which in body) said.push(marathonSetSwitch(row, which, body[which]));
-  }
+  if ('scan_hosts' in body) said.push(MARATHON_SCAN_GONE);
+  if ('host_events' in body) said.push(MARATHON_HOST_EVENTS_GONE);
+  if ('announcements' in body) said.push(marathonSetSwitch(row, 'announcements', body.announcements));
   if ('public_highlight' in body) said.push(marathonSetPublicHighlight(row, body.public_highlight));
   if ('dismiss_next' in body) {
     if (body.dismiss_next !== true) throw new Refused(422, 'bad_dismiss', 'Say true to dismiss the suggested next event, so nothing was changed.');
@@ -8280,14 +8326,14 @@ route('DELETE', '/api/marathons/:marathon_id', (context) => {
     logAction('web.marathon.event_cancelled', { details: { marathon_id: row.id, event_id: event.id, via: 'website' } });
   }
   for (const run of marathonRunsOf(row.id).filter((one) => one.event_id)) marathonRunEventCancel(row, run, 'marathon_removed');
-  for (const [userId, eventId] of Object.entries(row.host_event_ids || {})) {
-    const event = state.events.find((one) => one.id === eventId);
+  for (const record of marathonHostRecords(row)) {
+    const event = state.events.find((one) => one.id === record.event_id);
     if (event && MARATHON_KEPT_IN_STEP.includes(event.status)) {
       event.status = 'cancelled';
-      logAction('marathon.host_event_cancelled', { target_id: userId, details: { marathon_id: row.id, member_id: userId, event_id: eventId, reason: 'marathon_removed' } });
+      logAction('marathon.host_event_cancelled', { target_id: record.hosts[0] || null, details: { marathon_id: row.id, members: record.hosts, runs: record.runs, event_id: record.event_id, reason: 'marathon_removed' } });
     }
   }
-  row.host_event_ids = {};
+  row.host_event_ids = [];
   marathonArchive(row, 'removed', STAFF.id);
   marathonFeedIgnore(row);
   return { removed: true, archived: true, id: row.id, message: marathonSaid('marathon_removed_said', { name: row.name }) };
@@ -8472,7 +8518,13 @@ function marathonBoardRow(row, entry) {
     spotlight_until: spotlit ? channel.expires_at : null,
     looks_like: marathonLooksLike(entry),
     opted_out: entry.user_id ? marathonOptedOut(row).has(String(entry.user_id)) : null,
+    part_tag: marathonPartTag(entry.parts),
   };
+}
+
+// The bot's marathon_hosts.part_tag: a person's parts in the marathon_part_* keys' words.
+function marathonPartTag(parts) {
+  return (parts || []).map((one) => state.settings.get(`marathon_part_${one}`) || one).join(' + ');
 }
 
 function marathonBafOrder(entry) {
@@ -8501,7 +8553,7 @@ function marathonEntryFor(row, given) {
   return found;
 }
 
-// Runner/Host announcements (black_bloc/cogs/content/marathon_announce.py): a BaF person opted
+// BaF announcements (black_bloc/cogs/content/marathon_announce.py): a BaF person opted
 // out of a marathon gets no public post there; the one writer answers in the keys' words.
 function marathonOptedOut(row) {
   return new Set((row.announce_opt_out || []).map(String));

@@ -786,11 +786,9 @@ async def seed_world(client, web, guild, wf) -> dict:
     marathon_pairing_id = await upsert_pairing(
         db, guild_id, marathon_id, "Contract Runner", MEMBER_ID, 7
     )
-    # Opt-out: Interview Crew hosts Blaster Master and is paired, and the marathon scans its
-    # hosts — so both opt-out moves reach a BaF person and answer 200 in words.
+    # Opt-out: Interview Crew hosts Blaster Master and is paired (hosts are always found) — so
+    # both opt-out moves reach a BaF person and answer 200 in words.
     await upsert_pairing(db, guild_id, marathon_id, "Interview Crew", HOST_MEMBER_ID, 7)
-    await db.conn.execute("UPDATE marathons SET scan_hosts = 1 WHERE id = ?", (marathon_id,))
-    await db.conn.commit()
     await marathons.rematch(guild, made.value)
     # The People card (marathon-people §B): Contract Runner is spotlit from the marathon, so
     # Stop spotlighting reaches a remembered row; Somebody is not, so Spotlight… reaches them.

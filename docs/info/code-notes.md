@@ -1,5 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, the host-spotlight section annotated SUPERSEDED in part, nothing re-keyed**: *People unify* (branch `people-unify`, off `main` `d3916a42`, keyed against `87694fb2`); rows in the *Marathon hosts* and *Marathon Runner/Host announcements* sections that name Scan hosts, `scan_hosts`, `host_events`, `hosted` or the per-host `event_ids` describe code that is gone — the new section wins.
+
 > **2026-09-28 — one section APPENDED, the per-run section annotated SUPERSEDED, nothing re-keyed**: *Marathon Runner/Host announcements* (branch `marathon-announcements`, off `main` `1d5d017d`, keyed against `5a60c782`); `api/tools/marathons.py` rows after `entry_row` sit about the same (the host routes were replaced in place), `marathon_people.py` rows after `slot_card` sit ~5 lower.
 
 > **2026-09-28 — one section APPENDED, the block section annotated SUPERSEDED, nothing re-keyed**: *Host highlights, per run* (branch `host-highlights-per-run`, off `main` `2b6f378b`, keyed against `30199332`); rows keyed in `black_bloc/cogs/content/marathon.py` below `mark_live` sit two to four lines lower (a lazy import and a call each in `mark_live` and `advance`).
@@ -9491,6 +9493,8 @@ Design: [`marathon-category-track-design.md`](marathon-category-track-design.md)
 
 ## Marathon hosts and the pairing's Twitch fix (branch `marathon-host-spotlight`, 2026-09-28)
 
+⚠️ **SUPERSEDED IN PART by *People unify* below** (`people-unify`, 2026-09-28): the `clean_switch`-for-Scan-hosts, `hosted`, `set_switch` (two switches) and per-host `sync_host_events` rows describe code that was replaced; the `is_runner_run` and Twitch-fix rows stand.
+
 | Where | Why |
 |---|---|
 | `black_bloc/marathon.py:402` `match_people` | The pairing is looked up by name before the part test, so a Twitch fix applies to a host even while hosts are not matched. The sheet's login is read from `sheet_login` first, so a stored (already fixed) run re-matches to the same answer and a cleared fix gives the sheet's back. `sheet_login` is written only when the fix differs. |
@@ -9610,3 +9614,21 @@ Supersedes the per-run section above for everything host. Keyed against `5a60c78
 | `black_bloc/api/tools/marathons.py:944` `opt_move` | The two opt-out routes' one body; `user_id` in the path because a name can be anything; the shared writer logs with `via=website` (checklist 34 — no `note()`). |
 | `site/mock/server.mjs:8510` `marathonOptMove` | The mock's twin of `set_opt_out` (the People board + message); it does not simulate the takedown. |
 | `site/public/assets/marathons-section.js:726` `optBits` | Shown for every BaF entry (`opted_out` not null) on the BaF row and a BaF person's slot line; hidden on an archived marathon. |
+
+## People unify — hosts always found, one BaF run/host events switch, one part tag (branch `people-unify`, 2026-09-28)
+
+Keyed against `87694fb2`. Design: [`people-unify-design.md`](people-unify-design.md).
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_hosts.py:84` `event_records` | `host_event_ids` is a JSON list of `{event_id, runs, hosts}` per host block. A v190 `{user_id: event_id}` object is read as records with no runs — never rewritten here; the cog writes the new shape at the next sync that claims it. |
+| `black_bloc/marathon_hosts.py:129` `claim` | Three passes, in order: same first run; a shared host AND run (a block that grew, shrank or moved); a no-runs legacy record naming one of the block's hosts. A record is used once, so a host with two blocks gets the legacy event on the FIRST (blocks are in schedule order). |
+| `black_bloc/marathon_hosts.py:186` `part_tag` | The words are the `marathon_part_*` keys (`mt.PART_KEYS`), so staff editing *runs* / *hosts* edits the tag too; joined with ` + `. |
+| `black_bloc/marathon_hosts.py:19` `SCAN_GONE` / `HOST_EVENTS_GONE` | Constants, not keys: they only answer a stale button or an old PATCH field (the refusals' convention). |
+| `black_bloc/cogs/content/marathon_hosts.py:50` `host_events_on` | The ONE rule: active AND the runs half of `event_mode`. `marathons.host_events` is never read — the owner's misclick on GDQueer is not carried over. |
+| `black_bloc/cogs/content/marathon_hosts.py:216` `sync_host_events` | Records whose event is gone from the database are dropped BEFORE claiming, so their block is made again in the same pass. A staff-cancelled event is still in the database, so it stays claimed and is never re-made (v190's rule). A failed make is not stored, so the next sync retries it. |
+| `black_bloc/cogs/content/marathon_events.py:432` `set_event_mode` | Host events sync after the run events on EVERY mode change (not only a runs-half change): a marathon-half change is harmless (same answer), and it keeps one path. The answer sums run and host-block counts. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:507` `press` | The retired `hosts` / `hostevents` actions still match the template (`mtc.RETIRED`) so an old message's button answers in words (410 `gone`); `press` then re-renders, which edits the stale buttons away. |
+| `black_bloc/api/tools/marathons.py:691` `marathon_patch` | `scan_hosts` / `host_events` in a PATCH add a sentence to `message` and change nothing — not a refusal, so the rest of an old page's body still saves. |
+| `black_bloc/cogs/content/marathon_people.py:367` `person_line` | A BaF person's slot line shows their parts on the whole marathon (the tag); someone not BaF keeps this slot's part. |
+| `black_bloc/cogs/content/marathon.py:2247` `rematch` | No `scan_hosts` argument: `mt.match_people`'s default (True). `marathon_match_hosts` still gates hosts and commentators together. |

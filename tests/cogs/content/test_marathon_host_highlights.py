@@ -68,7 +68,7 @@ HIDDEN_HEROES_TOMORROW = [
 LIVE_MARKS = "1440, 120, 15"
 
 
-async def show(bot, cog, runs, *, scan=True, clock=0, auto=False):
+async def show(bot, cog, runs, *, clock=0, auto=False):
     threading(bot, SHOW_ROOM)
     await bot.store.set(GUILD, "events_announce_channel_id", SHOW_ROOM)
     await bot.store.set(GUILD, "marathon_track_makes_thread", True)
@@ -82,8 +82,6 @@ async def show(bot, cog, runs, *, scan=True, clock=0, auto=False):
     done = await inbox.track(bot, bot.guild, FakeActor(), made.value)
     assert done.ok, done.message
     marathon = await get_marathon(bot.db, GUILD, made.value["id"])
-    switched = await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.SCAN, scan)
-    assert switched.ok, switched.message
     await update_marathon(bot.db, marathon["id"], public_highlight=1 if auto else 0)
     return await tick_at(bot, cog, marathon, clock)
 
@@ -223,11 +221,9 @@ async def test_a_restart_posts_neither_the_highlight_nor_the_heads_up_again(bot,
     assert highlights(bot)[0].edits == []
 
 
-@pytest.mark.parametrize("off", ["key", "scan"])
-async def test_the_key_off_or_scan_hosts_off_posts_nothing(bot, cog, off):
-    if off == "key":
-        await bot.store.set(GUILD, "marathon_host_highlights", False)
-    marathon = await show(bot, cog, HIDDEN_HEROES, scan=off != "scan", auto=True)
+async def test_the_key_off_posts_nothing(bot, cog):
+    await bot.store.set(GUILD, "marathon_host_highlights", False)
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
     await walk(bot, cog, marathon, [45, 61, 130, 146, 165, 181, 231])
     assert heads_ups(bot) == [] and highlights(bot) == []
     assert "marathon.host_highlight_posted" not in await kinds(bot.db)
@@ -368,7 +364,6 @@ async def test_the_sgdq_tracker_posts_one_set_for_thekingsprides_block(bot, cog)
     assert paired.ok, paired.message
     assert (await inbox.track(bot, bot.guild, FakeActor(), made.value)).ok
     marathon = await get_marathon(bot.db, GUILD, made.value["id"])
-    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.SCAN, True)
 
     async def at(when):
         cog.clock = lambda: when
@@ -386,7 +381,7 @@ async def test_the_sgdq_tracker_posts_one_set_for_thekingsprides_block(bot, cog)
     assert cogmod.counts_of(await runs_of(bot.db, marathon["id"]))[1] == 0
 
 
-@pytest.mark.parametrize("stop", ["key", "scan", "announcements"])
+@pytest.mark.parametrize("stop", ["key", "announcements"])
 async def test_a_post_already_up_follows_its_block_to_the_end_after_a_switch_goes_off(
     bot, cog, stop
 ):
@@ -395,8 +390,6 @@ async def test_a_post_already_up_follows_its_block_to_the_end_after_a_switch_goe
     (post,) = highlights(bot)
     if stop == "key":
         await bot.store.set(GUILD, "marathon_host_highlights", False)
-    elif stop == "scan":
-        await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.SCAN, False)
     else:
         await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
     await walk(bot, cog, marathon, [130, 146, 181, 231, 400])

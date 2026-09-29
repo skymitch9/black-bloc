@@ -189,13 +189,13 @@ async def test_a_mode_change_makes_at_once_and_leaving_calls_off_or_keeps(
 ):
     marathon = await made(bot)
     done = await runev.set_event_mode(bot, bot.guild, FakeActor(), marathon, "runs")
-    assert done.ok and "1 run event(s) made" in done.message
+    assert done.ok and "1 run or host block event(s) made" in done.message
     set_row = await details_of(bot.db, "marathon.event_mode_set")
     assert set_row["from"] == "none" and set_row["to"] == "runs" and set_row["made"] == 1
     event_id = (await runs(bot, marathon))["Super Metroid"]["event_id"]
 
     left = await runev.set_event_mode(bot, bot.guild, FakeActor(), marathon, "none")
-    assert "1 run event(s) called off" in left.message
+    assert "1 run or host block event(s) called off" in left.message
     assert (await get_event(bot.db, event_id))["status"] == "cancelled"
     assert (await details_of(bot.db, "marathon.run_event_cancelled"))["reason"] == "mode_changed"
 

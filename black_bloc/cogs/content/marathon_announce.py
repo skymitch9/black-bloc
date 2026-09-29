@@ -1,4 +1,4 @@
-"""Runner/Host announcements: whether a marathon posts its BaF people publicly, and who is
+"""BaF announcements: whether a marathon posts its BaF people publicly, and who is
 opted out of it."""
 
 from __future__ import annotations

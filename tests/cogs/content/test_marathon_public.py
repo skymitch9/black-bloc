@@ -409,11 +409,12 @@ async def test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_
     assert button.custom_id.endswith(":optout") and button.label == "Opt out of highlight"
     assert len(controls_message.edits) > control_edits
     shown = [getattr(one, "item", one) for one in current_view(controls_message).children]
-    assert [one.label for one in shown][-3:] == [
-        "Scan hosts: on · turn off",
-        "BaF host events: off · turn on",
-        "Runner/Host announcements: on · turn off",
+    assert len(shown) == 6
+    assert [one.label for one in shown][-2:] == [
+        "Ping the marathon role: off · turn on",
+        "BaF announcements: on · turn off",
     ]
+    assert not any(":hosts:" in one.custom_id or ":hostevents:" in one.custom_id for one in shown)
     assert shown[-1].custom_id == f"marathon:controls:{marathon['id']}:announce:off"
 
 
