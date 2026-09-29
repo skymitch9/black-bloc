@@ -211,6 +211,11 @@ const TWITCH_FIX_TITLE = 'Twitch name for {name}';
 const TWITCH_FIX_NOTE = 'The schedule says **{sheet}**. Type the channel {name} really streams on, or leave it blank to '
   + 'go back to the schedule’s.';
 const TWITCH_FIX_BUTTON = 'Twitch name…';
+const HOST_UP = 'Host highlight up';
+const HOST_POST = 'Post host highlight';
+const HOST_REMOVE = 'Take it down';
+const HOST_REMOVE_TITLE = 'Take down {name}’s host highlight?';
+const HOST_REMOVE_BODY = 'The post in the public channel is edited to say staff took it down, and it is not updated after. Post host highlight puts it back.';
 const FIXED_FROM = ' (fixed from twitch.tv/{sheet})';
 const EVENT_SELECT_SHORT = 'Which Discord events this marathon makes; the setting explains the '
   + 'four choices.';
@@ -699,6 +704,33 @@ async function unspotlightPerson(marathon, say, entry, runId) {
   await after(marathon, done);
 }
 
+async function hostHighlight(marathon, say, entry, runId, to) {
+  if (to === 'remove') {
+    const sure = await ask({ title: said(HOST_REMOVE_TITLE, { name: entry.member_name || entry.name }), body: [HOST_REMOVE_BODY], confirmLabel: HOST_REMOVE });
+    if (!sure) return;
+  }
+  shown.focus = runId;
+  const path = `/api/marathons/${marathon.id}/people/${encodeURIComponent(entry.user_id)}/host-highlight`;
+  const done = to === 'post'
+    ? await run(say, () => send(path, 'POST', runId ? { run_id: runId } : {}), (found) => found?.message)
+    : await run(say, () => send(runId ? `${path}?run_id=${encodeURIComponent(runId)}` : path, 'DELETE'), (found) => found?.message);
+  await after(marathon, done);
+}
+
+function hostHighlightBits(marathon, say, entry, runId) {
+  const state = entry && entry.host_highlight;
+  if (shown.archived || !state) return [];
+  const block = runId ? (state.blocks || []).find((one) => one.runs.includes(String(runId))) : state;
+  if (!block) return [];
+  if (block.up) {
+    return [
+      el('span', { class: 'cell-quiet', text: HOST_UP }),
+      button(HOST_REMOVE, () => hostHighlight(marathon, say, entry, runId, 'remove'), { tone: 'quiet' }),
+    ];
+  }
+  return block.can_post ? [button(HOST_POST, () => hostHighlight(marathon, say, entry, runId, 'post'), { tone: 'quiet' })] : [];
+}
+
 function spotlightBits(marathon, say, entry, runId) {
   if (shown.archived || !entry || !entry.login) return [];
   if (entry.spotlight_id) {
@@ -765,6 +797,7 @@ function bafLine(marathon, say, entry, timeZone) {
         : el('span', { class: 'cell-quiet', text: NO_TWITCH }),
       ...matchBits(marathon, say, entry, entry, null),
       ...spotlightBits(marathon, say, entry, null),
+      ...hostHighlightBits(marathon, say, entry, null),
     ]),
   ]);
   node.addEventListener('toggle', () => {
@@ -796,6 +829,7 @@ function slotPersonLine(marathon, say, board, run, person) {
     el('span', { class: 'bar mx-person-moves' }, [
       ...matchBits(marathon, say, entry, person, run.id, { inSlot: true }),
       ...spotlightBits(marathon, say, entry, run.id),
+      ...(person.part === 'host' ? hostHighlightBits(marathon, say, entry, run.id) : []),
     ]),
   ]);
 }

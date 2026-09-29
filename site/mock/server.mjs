@@ -716,6 +716,11 @@ const SETTING_SPECS = [
   ["marathon_scan_hosts_off_said", "text", "**{marathon}** no longer scans its hosts: only its runners and commentators count as BaF.", "**{marathon}** no longer scans its hosts: only its runners and commentators count as BaF.", "what staff are told once a marathon's Scan hosts switch is turned off. It takes {marathon}"],
   ["marathon_host_events_on_said", "text", "**{marathon}** makes an event for each BaF host now, from their first hosted run to the end of their last.", "**{marathon}** makes an event for each BaF host now, from their first hosted run to the end of their last.", "what staff are told once a marathon's BaF host events switch is turned on. It takes {marathon}"],
   ["marathon_host_events_off_said", "text", "**{marathon}** makes no event for its hosts now.", "**{marathon}** makes no event for its hosts now.", "what staff are told once a marathon's BaF host events switch is turned off. It takes {marathon}"],
+  ["marathon_host_highlights", "bool", true, true, "whether each BaF host of a marathon that scans its hosts gets one public highlight per block they host, in marathon_public_channel_id, edited as the block goes on now and ends, and one heads-up marathon_ping_minutes before it in marathon_reminder_channel_id (while marathon_public_reminders is on). A host still never makes a run a BaF run. on by default"],
+  ["marathon_host_highlight_template", "text", "**{name}** hosts **{show}** · {when} ({relative}) until {until} · {link}", "**{name}** hosts **{show}** · {when} ({relative}) until {until} · {link}", "a BaF host's public highlight while their block is still to come — one post per block they host, edited in place. It takes {name} {mention} {show} {when} {relative} {until} {link} {url} {games} {runs}; {mention} names the member without pinging, {link} is their Twitch channel (else the marathon's) and {url} the marathon's"],
+  ["marathon_host_highlight_live_template", "text", "**{name}** is hosting **{show}** now, until {until} · {url}", "**{name}** is hosting **{show}** now, until {until} · {url}", "the same highlight once the first run of their block is live. It takes the same words as marathon_host_highlight_template"],
+  ["marathon_host_highlight_done_template", "text", "**{name}** hosted **{show}** · {when} · {link}", "**{name}** hosted **{show}** · {when} · {link}", "the same highlight once the last run of their block is over. It takes the same words as marathon_host_highlight_template"],
+  ["marathon_host_reminder_template", "text", "**{name}** is hosting **{show}** {relative} — {when}. {url}", "**{name}** is hosting **{show}** {relative} — {when}. {url}", "the public heads-up before a BaF host's block, once per block, posted in marathon_reminder_channel_id marathon_ping_minutes before its first run. It takes the same words as marathon_host_highlight_template"],
   ["marathon_reminder_minutes", "text", "120, 15", "120, 15", "minutes before a BaF run that a reminder is posted, separated by commas; `120, 15` by default. marathon_ping_minutes is always one of them"],
   ["marathon_ping_minutes", "int", 15, 15, "the one reminder that pings: this many minutes before a BaF run, the member's own ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings at the scheduled start", null, 240, 0],
   ["marathon_reminder_pings", "bool", true, true, "whether the marathon_ping_minutes reminder mentions any role at all. on by default"],
@@ -1251,6 +1256,7 @@ function seedState() {
   marathonPeople: seedMarathonPeople(),
   marathonFeeds: seedMarathonFeeds(),
   marathonSpotlights: seedMarathonSpotlights(),
+  marathonHostHighlights: [],
   nextRaidTrain: 4,
   settings: new Map(SETTING_SPECS.map((spec) => [spec[0], spec[2]])),
   audit: [
@@ -6599,7 +6605,7 @@ function seedMarathonRuns() {
 
 function seedMarathons() {
   return [
-    { id: 1, name: 'AGDQ 2027', schedule_url: 'https://gamesdonequick.com/schedule/74', source: 'gdq', source_ref: '74', spotlight_id: 1, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 3120 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000300', board_pinned: true, last_fetched_at: minutesAgo(12), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(9000) },
+    { id: 1, name: 'AGDQ 2027', schedule_url: 'https://gamesdonequick.com/schedule/74', source: 'gdq', source_ref: '74', scan_hosts: true, spotlight_id: 1, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 3120 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000300', board_pinned: true, last_fetched_at: minutesAgo(12), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(9000) },
     { id: 2, name: 'Halo Fest', schedule_url: 'https://gamesdonequick.com/schedule/73', source: 'gdq', source_ref: '73', spotlight_id: null, starts_at: minutesAgo(30000), ends_at: minutesAgo(29840), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000299', board_pinned: false, last_fetched_at: minutesAgo(700), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(40000) },
     { id: 3, name: 'GDQx 2026', schedule_url: 'https://gamesdonequick.com/schedule/72', source: 'gdq', source_ref: '72', spotlight_id: null, starts_at: null, ends_at: null, active: false, poll_minutes: 60, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(1500), last_fetch_ok: 0, last_error: 'the GDQ tracker has the event but has not published its schedule yet (it answers 404 for the runs)', fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(2000) },
     // Found on oengus.io by the Speed Stuff 4 Charity feed; its schedule is not published yet,
@@ -8467,6 +8473,7 @@ function marathonBoardRow(row, entry) {
     spotlight_starts: spotlit ? channel.starts_at : null,
     spotlight_until: spotlit ? channel.expires_at : null,
     looks_like: marathonLooksLike(entry),
+    host_highlight: entry.user_id ? marathonHostState(row).get(String(entry.user_id)) || null : null,
   };
 }
 
@@ -8495,6 +8502,112 @@ function marathonEntryFor(row, given) {
   if (!found) throw new Refused(404, 'no_such_person', `Nobody called **${String(given).slice(0, 40)}** is on **${row.name}**'s schedule, so nothing was changed.`);
   return found;
 }
+
+// Host highlights (black_bloc/marathon_host_highlights.py): a BaF host's block runs on across
+// runs they host and runs with no host, and ends at a run someone else hosts.
+function marathonHostBlocks(row) {
+  if (!marathonSwitch(row, 'scan_hosts').on) return [];
+  const open = new Map();
+  const found = [];
+  for (const run of marathonRunsOf(row.id).filter((one) => one.state !== 'dropped')) {
+    const hosts = run.people.filter((one) => one.part === 'host');
+    if (!hosts.length) continue;
+    const here = new Set(hosts.filter((one) => one.user_id).map((one) => String(one.user_id)));
+    for (const id of [...open.keys()]) {
+      if (!here.has(id)) {
+        found.push([id, open.get(id)]);
+        open.delete(id);
+      }
+    }
+    for (const id of here) {
+      if (!open.has(id)) open.set(id, []);
+      open.get(id).push(run);
+    }
+  }
+  found.push(...open.entries());
+  return found.map(([userId, runs]) => {
+    const person = runs[0].people.find((one) => one.part === 'host' && String(one.user_id) === userId);
+    return { user_id: userId, name: person ? person.name : userId, runs };
+  });
+}
+
+function marathonHostRecord(row, block, make = false) {
+  const ids = block.runs.map((one) => one.id);
+  let found = state.marathonHostHighlights.find((one) => one.marathon_id === row.id && one.user_id === block.user_id && one.runs.some((id) => ids.includes(id)));
+  if (!found && make) {
+    found = { marathon_id: row.id, user_id: block.user_id, runs: ids, channel_id: null, up: false };
+    state.marathonHostHighlights.push(found);
+  }
+  if (found) found.runs = ids;
+  return found || null;
+}
+
+function marathonPublicChannel() {
+  return state.settings.get('marathon_public_channel_id') || state.settings.get('golive_channel_id') || null;
+}
+
+function marathonHostState(row) {
+  const posting = Boolean(marathonPublicChannel()) && state.settings.get('marathon_mode') !== 'off';
+  const shown = new Map();
+  for (const block of marathonHostBlocks(row)) {
+    const record = marathonHostRecord(row, block);
+    const up = Boolean(record && record.up);
+    const one = { runs: block.runs.map((run) => String(run.id)), up, channel_id: up ? record.channel_id : null, can_post: posting && !up };
+    if (!shown.has(block.user_id)) shown.set(block.user_id, { up: false, channel_id: null, can_post: false, blocks: [] });
+    const mine = shown.get(block.user_id);
+    mine.blocks.push(one);
+    mine.up = mine.up || up;
+    mine.can_post = mine.can_post || one.can_post;
+    mine.channel_id = mine.channel_id || one.channel_id;
+  }
+  return shown;
+}
+
+function marathonHostMove(context, row, to, runId) {
+  if (!marathonSwitch(row, 'scan_hosts').on) throw new Refused(409, 'hosts_not_scanned', `**${row.name}** does not scan its hosts, so there is no BaF host to highlight — turn Scan hosts on first.`);
+  const userId = String(decodeURIComponent(context.params.user_id));
+  const blocks = marathonHostBlocks(row).filter((one) => one.user_id === userId && (!runId || one.runs.some((run) => String(run.id) === String(runId))));
+  if (!blocks.length) throw new Refused(404, 'not_hosting', `**${userId}** hosts nothing on **${row.name}** that Black Bloc can highlight.`);
+  const said = [];
+  for (const block of blocks) {
+    const record = marathonHostRecord(row, block, true);
+    const details = { marathon_id: row.id, member_id: userId, host: block.name, runs: record.runs, via: 'website' };
+    if (to === 'post') {
+      if (record.up) {
+        said.push(marathonSaid('marathon_public_already_up', { runner: block.name, channel: `<#${record.channel_id}>` }));
+        continue;
+      }
+      const channel = marathonPublicChannel();
+      if (!channel) throw new Refused(409, 'no_public_channel', marathonSaid('marathon_public_no_channel', {}));
+      const restored = record.channel_id === channel;
+      Object.assign(record, { up: true, channel_id: channel });
+      logAction(restored ? 'web.marathon.host_highlight_restored' : 'web.marathon.host_highlight_posted', { target_id: userId, details: { ...details, channel_id: channel, auto: false } });
+      said.push(marathonSaid('marathon_public_posted_said', { runner: block.name, channel: `<#${channel}>` }));
+    } else {
+      if (!record.up) {
+        said.push(marathonSaid('marathon_public_not_up', { runner: block.name }));
+        continue;
+      }
+      record.up = false;
+      logAction('web.marathon.host_highlight_removed', { target_id: userId, details: { ...details, edited: true } });
+      said.push(marathonSaid('marathon_public_removed_said', { runner: block.name, channel: `<#${record.channel_id}>` }));
+    }
+  }
+  return { ...marathonBoard(row), message: [...new Set(said)].join('\n') };
+}
+
+route('POST', '/api/marathons/:marathon_id/people/:user_id/host-highlight', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const body = (await context.body()) || {};
+  return marathonHostMove(context, row, 'post', body.run_id);
+});
+
+route('DELETE', '/api/marathons/:marathon_id/people/:user_id/host-highlight', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  return marathonHostMove(context, row, 'remove', context.url.searchParams.get('run_id'));
+});
 
 route('POST', '/api/marathons/:marathon_id/people/:person/spotlight', async (context) => {
   requireStaff(context.session);

@@ -5742,7 +5742,8 @@
           "spotlight_id",
           "spotlight_until",
           "looks_like",
-          "sheet_login"
+          "sheet_login",
+          "host_highlight"
         ],
         "others": [
           "key",
@@ -5809,7 +5810,8 @@
           "channel_id",
           "spotlight_id",
           "spotlight_until",
-          "looks_like"
+          "looks_like",
+          "host_highlight"
         ],
         "others": [
           "key",
@@ -5875,7 +5877,143 @@
           "channel_id",
           "spotlight_id",
           "spotlight_until",
+          "looks_like",
+          "host_highlight"
+        ],
+        "others": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "username",
+          "avatar_url",
+          "parts",
+          "runs",
+          "done",
+          "live",
+          "next_at",
+          "first_at",
+          "last_end",
+          "matched_by",
+          "matched_word",
+          "pairing_id",
+          "channel_id",
+          "spotlight_id",
+          "spotlight_until",
           "looks_like"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/people/{marathon_host}/host-highlight",
+      "body": {},
+      "read_by": [
+        "marathons-section.js (events.html) People card — Highlight a BaF host"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon_id",
+        "timezone",
+        "pairings",
+        "baf",
+        "others",
+        "message"
+      ],
+      "rows": {
+        "baf": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "username",
+          "avatar_url",
+          "parts",
+          "runs",
+          "done",
+          "live",
+          "next_at",
+          "first_at",
+          "last_end",
+          "matched_by",
+          "matched_word",
+          "pairing_id",
+          "channel_id",
+          "spotlight_id",
+          "spotlight_until",
+          "looks_like",
+          "host_highlight"
+        ],
+        "others": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "username",
+          "avatar_url",
+          "parts",
+          "runs",
+          "done",
+          "live",
+          "next_at",
+          "first_at",
+          "last_end",
+          "matched_by",
+          "matched_word",
+          "pairing_id",
+          "channel_id",
+          "spotlight_id",
+          "spotlight_until",
+          "looks_like"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/marathons/{marathon_id}/people/{marathon_host}/host-highlight",
+      "read_by": [
+        "marathons-section.js (events.html) People card — Remove a BaF host's highlight"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon_id",
+        "timezone",
+        "pairings",
+        "baf",
+        "others",
+        "message"
+      ],
+      "rows": {
+        "baf": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "username",
+          "avatar_url",
+          "parts",
+          "runs",
+          "done",
+          "live",
+          "next_at",
+          "first_at",
+          "last_end",
+          "matched_by",
+          "matched_word",
+          "pairing_id",
+          "channel_id",
+          "spotlight_id",
+          "spotlight_until",
+          "looks_like",
+          "host_highlight"
         ],
         "others": [
           "key",
@@ -8923,6 +9061,10 @@
     "web.marathon.unpaired",
     "web.marathon.runner_spotlit",
     "web.marathon.runner_unspotlit",
+    "web.marathon.host_highlight_posted",
+    "web.marathon.host_highlight_restored",
+    "web.marathon.host_highlight_removed",
+    "web.marathon.host_highlight_failed",
     "web.marathon.board_posted",
     "web.marathon.board_refreshed",
     "web.marathon.board_failed",
