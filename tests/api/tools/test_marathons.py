@@ -30,6 +30,8 @@ ROUTES = [
     ("PATCH", "/api/marathons/1/people/1"),
     ("POST", "/api/marathons/1/people/somebody/spotlight"),
     ("DELETE", "/api/marathons/1/people/somebody/spotlight"),
+    ("POST", "/api/marathons/1/people/77/host-highlight"),
+    ("DELETE", "/api/marathons/1/people/77/host-highlight"),
     ("POST", "/api/marathons/1/runs/1/shout"),
     ("POST", "/api/marathons/1/runs/1/done"),
     ("POST", "/api/marathons/1/runs/1/upcoming"),
@@ -987,3 +989,30 @@ async def test_post_it_to_the_inbox_now_is_a_route_that_posts_once_and_refuses_i
     await web.store.set(wf.GUILD_ID, "marathon_mode", "off")
     off = client.post(f"/api/marathons/{marathon_id}/inbox", json={})
     assert off.status_code == 409 and "Marathon posts are off" in off.json()["message"]
+
+
+async def test_a_baf_hosts_highlight_is_shown_on_the_people_card_and_moved_both_ways(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    client.post(
+        f"/api/marathons/{marathon_id}/people",
+        json={"runner_name": "Interview Crew", "user_id": "77"},
+    )
+    board = client.get(f"/api/marathons/{marathon_id}/people").json()
+    assert all(one["host_highlight"] is None for one in board["baf"])
+    client.patch(f"/api/marathons/{marathon_id}", json={"scan_hosts": True})
+    board = client.get(f"/api/marathons/{marathon_id}/people").json()
+    crew = next(one for one in board["baf"] if one["name"] == "Interview Crew")
+    assert crew["host_highlight"]["up"] is False and len(crew["host_highlight"]["blocks"]) == 1
+
+    none_up = client.delete(f"/api/marathons/{marathon_id}/people/77/host-highlight")
+    assert none_up.status_code == 200 and "nothing to take down" in none_up.json()["message"]
+    stranger = client.post(f"/api/marathons/{marathon_id}/people/21/host-highlight", json={})
+    assert stranger.status_code == 404 and stranger.json()["error"] == "not_hosting"
+    posted = client.post(f"/api/marathons/{marathon_id}/people/77/host-highlight", json={})
+    assert posted.status_code == 409 and posted.json()["error"] == "post_failed"
+    assert "could not post **Interview Crew**" in posted.json()["message"]
+    said = await web_row(wf, web, "web.marathon.host_highlight_failed")
+    assert (said["member_id"], said["step"], said["via"]) == (77, "post", "website")

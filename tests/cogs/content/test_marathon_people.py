@@ -394,3 +394,35 @@ async def test_the_slot_view_offers_twitch_name_for_a_linked_person(bot, cog):  
     labels = [getattr(one, "label", None) for one in view.children]
     assert "Twitch name…" in labels
     assert "twitch.tv/junior_sm" in embed.description
+
+
+async def test_a_baf_hosts_slot_offers_their_highlight_move_both_ways(bot, cog):  # noqa: F811
+    from black_bloc.cogs.content import marathon_host_highlights as hh
+    from tests.cogs.content.test_marathon_host_highlights import ANARCHY, HOSTED_ONLY, show
+
+    await bot.store.set(GUILD, "events_create_scheduled", False)
+    marathon = await show(bot, cog, HOSTED_ONLY)
+    run = (await runs_of(bot.db, marathon["id"]))[1]
+
+    async def slot():
+        _, view = await people.build_people(
+            bot, bot.guild, FakeActor(), marathon["id"], run_id=run["id"], person="anarchy"
+        )
+        return [one for one in view.children if isinstance(one, people.PeopleMove)]
+
+    (move,) = [one for one in await slot() if one.action == people.HOST_REMOVE]
+    assert move.label == "Remove the highlight" and move.user_id == ANARCHY
+    said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id)(
+        bot, bot.guild, FakeActor(), marathon
+    )
+    assert said.ok and "taken down" in said.message
+    (move,) = [one for one in await slot() if one.action == people.HOST_POST]
+    assert move.label.startswith("Highlight in #")
+    assert (await hh.press(bot, bot.guild, FakeActor(), marathon, ANARCHY, "post")).ok
+    _, view = await people.build_people(
+        bot, bot.guild, FakeActor(), marathon["id"], run_id=run["id"], person="Vee"
+    )
+    assert not any(
+        getattr(one, "action", None) in (people.HOST_POST, people.HOST_REMOVE)
+        for one in view.children
+    )

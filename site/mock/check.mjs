@@ -109,6 +109,9 @@ const IDS = {
   // Flyingludicolo is spotlit FROM AGDQ 2027 (row 6), so Stop spotlighting reaches that one.
   marathon_person: 'decosmic',
   marathon_spotlit_person: 'flyingludicolo',
+  // Host highlights: AGDQ 2027 scans its hosts and Rivet hosts Kirby Air Riders, so both
+  // host-highlight moves reach a BaF host's block.
+  marathon_host: '700000000000000003',
   // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
   // reach it without ending a stream the other entries expect to still be live.
   spotlight_id: '3',

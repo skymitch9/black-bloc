@@ -363,6 +363,7 @@ MARATHON_COLUMNS = {
     "scan_hosts",
     "host_events",
     "host_event_ids",
+    "host_highlight_posts",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -2388,8 +2389,11 @@ class Marathons(commands.Cog):
         if marathon is None or not marathon["active"] or mode_of(self.bot, guild.id) == MODE_OFF:
             return False
         now = self.clock()
+        from .marathon_host_highlights import remind_hosts
+
         moved = await self.advance(guild, marathon, now)
         await self.remind(guild, marathon, now)
+        await remind_hosts(self, guild, marathon, now)
         await self.sync_board(guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
         return moved
 
@@ -2722,7 +2726,9 @@ class Marathons(commands.Cog):
         actor: Any = None,
         via: str = VIA_DISCORD,
     ) -> str | None:
-        """The board, each BaF run's own post under it, the near misses, the public highlights."""
+        """The board, each BaF run's own post under it, the near misses, the public highlights
+        (runners' and hosts')."""
+        from .marathon_host_highlights import sync_host_highlights
         from .marathon_near_miss import sync_near_misses
         from .marathon_public import sync_highlights
         from .marathon_runner_posts import sync_posts
@@ -2736,6 +2742,9 @@ class Marathons(commands.Cog):
                 self, guild, await get_marathon(self.bot.db, guild.id, marathon["id"])
             )
             await sync_highlights(
+                self, guild, await get_marathon(self.bot.db, guild.id, marathon["id"])
+            )
+            await sync_host_highlights(
                 self, guild, await get_marathon(self.bot.db, guild.id, marathon["id"])
             )
         return why
