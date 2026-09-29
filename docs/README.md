@@ -114,6 +114,7 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-28 22:0x:** v193 live (Runner/Host Announcements per marathon, per-person opt-out, hosts announced per block at 24 h / 2 h / 15 min, hosts scanned automatically; schema 84, 716 keys); see [`deploys.log`](deploys.log).
 **2026-09-28 21:1x:** v192 live (a BaF host is posted like a runner — the same heads-up wording, 15 min before each hosted run; schema 83, 715 keys); see [`deploys.log`](deploys.log).
 **2026-09-28 16:1x:** v191 live (a BaF host is shown and spotlightable but never makes a run a BaF run; Hidden Heroes scans hosts — anarchy shows as BaF host; 714 keys); see [`deploys.log`](deploys.log).
 **2026-09-28 15:5x:** v190 live (per-marathon Scan hosts, host Spotlight and host events; a linked person's Twitch name can be fixed — JR is junior_sm; schema 82, 713 keys); see [`deploys.log`](deploys.log).
