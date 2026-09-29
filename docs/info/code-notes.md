@@ -1,5 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, the block section annotated SUPERSEDED, nothing re-keyed**: *Host highlights, per run* (branch `host-highlights-per-run`, off `main` `2b6f378b`, keyed against `30199332`); rows keyed in `black_bloc/cogs/content/marathon.py` below `mark_live` sit two to four lines lower (a lazy import and a call each in `mark_live` and `advance`).
+
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Host highlights* (branch `host-highlights`, off `main` `c0e38353`, keyed against `9fd9088e`); rows keyed in `black_bloc/cogs/content/marathon.py` after `follow` sit two to five lines lower (two lazy imports and two calls added), `marathon_people.py` rows after `slot_card` sit up to ~30 lower, `api/tools/marathons.py` rows after `entry_row` ~40 lower. The anchor text holds. Before that:
 
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Spotlight only — hosts never make a run ours* (branch `host-spotlight-only`, off `main` `c8e075bb`, keyed against `ce1b090d`). Earlier rows keyed in `black_bloc/cogs/content/marathon.py` below its imports now sit ONE line lower (one import added); `black_bloc/marathon.py` rows after line 411 sit one to three lower. The anchor text holds. Before that:
@@ -9523,6 +9525,8 @@ Design: [`marathon-category-track-design.md`](marathon-category-track-design.md)
 
 ## Host highlights — one public post and heads-up per BaF host's block (branch `host-highlights`, 2026-09-28)
 
+> ⚠️ **SUPERSEDED 2026-09-28** (never deployed) by *Host highlights, per run* below — `spans`, `record_for`'s shared-run rule, `fields_of` and the four host templates are gone.
+
 | Where | Why |
 |---|---|
 | `black_bloc/marathon_host_highlights.py:77` `spans` | The block rule (owner 2026-09-28 19:1x): a host's block runs on across runs they host AND runs with no host at all (GDQ's *The Checkpoint*); a run someone else hosts ends it. A co-hosted run keeps both blocks open. Dropped runs are off the schedule and do not break a block. |
@@ -9542,3 +9546,31 @@ Design: [`marathon-category-track-design.md`](marathon-category-track-design.md)
 | `black_bloc/api/tools/marathons.py:943` `host_highlight_move` | The two routes' one body; `user_id` is the path segment because a host's name can be anything. |
 | `site/mock/server.mjs:8508` `marathonHostBlocks` | The mock's twin of `spans`; the AGDQ 2027 seed scans its hosts so Rivet (run 7) has a block. |
 | `site/public/assets/marathons-section.js:720` `hostHighlightBits` | On the BaF row it acts on every block; on a host's slot line only the block holding that run. |
+
+## Host highlights, per run — a BaF host posted like a runner, once per run they host (branch `host-highlights-per-run`, 2026-09-28)
+
+Supersedes every row of the block section above. Keyed against `30199332`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_host_highlights.py:54` `baf_hosts` | Only a host with a `user_id` (so only while the marathon scans its hosts); one entry per member even if the source lists them twice; `part` is set to host so `mt.run_fields` picks `marathon_part_host`. |
+| `black_bloc/marathon_host_highlights.py:72` `hosted` | The unit is the run (owner 2026-09-28 20:4x: *"every next line item they appear in post them again"*). Dropped runs are off the schedule. Two BaF hosts on one run are ONE item — the runner convention (one reminder/highlight per run naming every BaF runner). |
+| `black_bloc/marathon_host_highlights.py:80` `state_of` | Only for the log's `state`; the words come from the runner template's `{state}`. A dropped run reads done. |
+| `black_bloc/marathon_host_highlights.py:91` `left_behind` | Checklist 38: a switch going off stops NEW posts, never one in flight — the record keeps the hosts it named, so the post is still edited to *on now* / *done*. |
+| `black_bloc/marathon_host_highlights.py:160` `auto_wanted` | The runner's `mp.auto_wanted` for a host: the marathon's `public_highlight`, the run LIVE, and never again once tried or taken down (staff's Remove is final for the switch). |
+| `black_bloc/marathon_host_highlights.py:170` `heads_up_due` | The runner reminder's rule at one mark (`marathon_ping_minutes`): only while the run is upcoming; past `marathon_reminder_stale_minutes` it is SKIP (logged), never posted late. |
+| `black_bloc/marathon_host_highlights.py:185` `rearm` | The runner's `mt.rearmed`: a run that moved later forgets its heads-up when the moment is in the future again. |
+| `black_bloc/marathon.py:896` `run_url` / `:906` `run_fields` | `people=` lets the host path hand in its BaF hosts; `None` keeps the runner path (`ours(people_of(row))`) byte-for-byte. One renderer for both (owner 20:5x: *"make them match"*). |
+| `black_bloc/marathon_runner_posts.py:55` `fields_of` | With `people=` the run is treated as listed (`{state}` is the run's state, not `marathon_runner_post_unlisted`) — a hosted run is not ours but its host post still reads *on now* / *done*. |
+| `black_bloc/cogs/content/marathon_public.py:144` `public_text` | The runner highlight's text; `people=` renders the same template for a host. |
+| `black_bloc/cogs/content/marathon_public_reminders.py:37` `reminder_text` | Extracted from `post_public_reminder` so the host heads-up is the same template and renderer, with `{part}` from `marathon_part_host`. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:64` `wanted` | New posts and heads-ups: the key, an active TRACKED marathon, mode not off, Scan hosts on. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:170` `post_one` | `tried` saved BEFORE the send (restart-safe); a taken-down post comes back in place when it is still where one would go now. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:272` `sync_host_highlights` | Rides `sync_board` under the marathon lock; only FOLLOWS posts that are up (no post is created here any more). Returns at once when nothing is up. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:306` `went_live` | Called from `Marathons.advance` at a run's LIVE transition (before the `ours` check, so a run with a BaF runner AND a BaF host gets both) and from `mark_live` — the runner's `auto_highlight` moments. Wrapped: a failure is a log line. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:331` `remind_hosts` | Called from `follow` right after `remind`; `reminded` saved before the send; gated on `marathon_public_reminders` as the runner copy is. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:526` `press` | Staff final say per run (`run_id`); without it, every hosted run the move fits (`fits_move`), else the first — so the BaF row's button never answers *nothing to do* while a run is postable. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:581` `state_for` / `:606` `run_state` | The People card's `host_highlight`: per host, each hosted run's up / can-post (a co-hosted run appears under each host). |
+| `black_bloc/cogs/content/marathon.py:2448` / `:1340` `host_went_live` | The two LIVE doors; the import is lazy (circular). |
+| `site/mock/server.mjs:8504` `marathonHostRuns` | The mock's twin of `hosted`; records keyed by `run_id`. |
+| `site/public/assets/marathons-section.js:720` `hostHighlightBits` | The slot line finds its run in `host_highlight.runs` by `run_id`; the BaF row uses the host's whole answer. |

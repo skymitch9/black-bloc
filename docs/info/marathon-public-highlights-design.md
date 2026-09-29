@@ -30,7 +30,7 @@ way to put one runner in front of members, and a per-marathon switch to do it by
 
 ## As built
 
-> **Annotated 2026-09-28 (branch `host-highlights`, checklist 35):** this channel and the `marathon_public` rehearsal home now also carry each BaF HOST's highlight (one per hosted block) and the reminder channel a host heads-up — a SEPARATE path (`cogs/content/marathon_host_highlights.py`) that reuses `public_channel`, `send_public`, `edit_public` and this build's staff words. Nothing here is reversed: a run is still highlighted only when it is ours (`mp.postable` → `mt.is_ours`), and a host still never makes a run ours. See `marathon-host-spotlight-design.md` § Host highlights.
+> **Annotated 2026-09-28 (branch `host-highlights`, checklist 35):** this channel and the `marathon_public` rehearsal home now also carry each BaF HOST's highlight and the reminder channel a host heads-up — ~~one per hosted block~~ one per hosted RUN since `host-highlights-per-run` (2026-09-28), rendered by THIS build's `public_text` / the public reminder's template with the host part word, posted at the runner's moments — a SEPARATE path (`cogs/content/marathon_host_highlights.py`) that reuses `public_channel`, `send_public`, `edit_public` and this build's staff words. Nothing here is reversed: a run is still highlighted only when it is ours (`mp.postable` → `mt.is_ours`), and a host still never makes a run ours. See `marathon-host-spotlight-design.md` § Host highlights.
 
 **(1) Where it goes — `marathon_public_channel_id`** (channel, blank = `golive_channel_id`; Marathons group; registry +
 mock row + label; the Settings page's channel select uses the shared `channelLabel`, so it reads `# name · Category`).
