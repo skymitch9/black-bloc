@@ -247,3 +247,122 @@ the key on (they still prove it).
 
 **What was NOT verified:** nothing met Discord or a browser; the live marathons 9 and 10 and their stored runs were
 not read; the one-rematch lag on stored runs was reasoned from the code, not measured live.
+
+## Host highlights (owner 2026-09-28)
+
+> **BUILT 2026-09-28 on branch `host-highlights` (worktree `C:/lcw/bb-host-highlights`, off `main` `c0e38353`),
+> NOT MERGED, NOT DEPLOYED.** Commits `9fd9088e` (Python + tests), `b055e945` (mock, contract, site), then the
+> carry-to-the-end fix and docs. **Last verified: 2026-09-28** by the suite (`tests/test_marathon_host_highlights.py`,
+> `tests/cogs/content/test_marathon_host_highlights.py`, the slot-view test at the foot of
+> `tests/cogs/content/test_marathon_people.py`, the route test in `tests/api/tools/test_marathons.py`, the schema-83
+> test in `tests/storage/test_db.py`, the contract test's seeded host) and `node site/mock/check.mjs` on
+> `MOCK_PORT=8915` (*22 pages, 288 routes, 26 core settings, all keys present*). ⚠️ Nothing met Discord, a browser or
+> the live database.
+
+**The asks, verbatim.** Owner 19:0x: *"Let's add a clause for if a host is both BaF and a host it can be shown in
+upcoming events. We want to highlight all our members"*. Owner 19:1x (relayed): *"That's fine for hotfix but when it's
+a GDQ event using the tracker we can pull host from there for each host specific time blocks"* — one post per
+contiguous hosted block, the block rule below.
+
+**"A host never makes a run ours" is untouched.** This is a separate path: `mt.ours` still skips `counts:false`
+hosts, so hosted runs still get no runner post, reminder, shoutout, run highlight or run event (tested).
+
+### As built
+
+- **The block** (`marathon_host_highlights.spans`): in schedule order, a BaF host's block runs on across runs they
+  host AND runs with no host listed (GDQ's *The Checkpoint*); a run someone else hosts ends it; a co-hosted run keeps
+  both open; dropped runs are off the schedule. Only a host with a `user_id` counts, i.e. only while the marathon
+  **scans its hosts**. Hosts come per run from the source — the GDQ tracker's `hosts` (Twitch login from
+  `talent.stream`), the Hotfix sheet, Oengus/Horaro — so tracker shifts become blocks with no source-specific code.
+  Pinned with the real `tests/fixtures/marathon/gdq_sgdq2026_runs.json`: JRisJunior runs 2–4 → one block;
+  TheKingsPride *I Am Your Beast* → *The Checkpoint* (no host) → *Devil May Cry 5* → ONE block; Quacksilver 8–10 → one
+  block; and an end-to-end cog test with a real pairing on TheKingsPride.
+- **One highlight per block** in `marathon_public_channel_id` (blank → go-live, the runner highlights' resolver),
+  posted by the first sync after the block is known (the marathon active, TRACKED, mode not off, Scan hosts on, the key
+  on, a public channel resolving, the block not already over), then edited in place: `marathon_host_highlight_template`
+  (to come) → `_live_template` (from the moment any of the block's own runs is not upcoming, until all are done) →
+  `_done_template`. It rides `Marathons.sync_board`, so every door that refreshes the board moves it; an unchanged
+  tick costs no Discord call (in-memory cache; after a restart one fetch + `endswith`, the runner highlights' rule).
+- **One heads-up per block** in `marathon_reminder_channel_id` (blank → go-live) `marathon_ping_minutes` (15) before
+  the block's first run, skipped and logged past `marathon_reminder_stale_minutes`; only while
+  `marathon_public_reminders` is on. Called from `Marathons.follow` right after the runner reminders.
+- **Never pings.** Every send and edit is `AllowedMentions.none()`; `{mention}` exists (the runner highlight's
+  convention: it names the member without pinging) but the defaults use the bold name, as the runner highlight does.
+  No role is ever prefixed — not even with the marathon's `ping_role` on.
+- **Bookkeeping** — `marathons.host_highlight_posts TEXT` (JSON list; schema **82 → 83** through `ADDED_COLUMNS`,
+  mirrored to `marathons_archive` at boot): per block `{user_id, runs, message_id, channel_id, removed, tried,
+  reminded, name, login}`. A record belongs to a block when the host matches and they share a run, so a block that
+  moves or grows keeps its post. `tried` and `reminded` are saved BEFORE the send → a restart never double-posts
+  (tested with a second cog instance).
+- **Shadow** routes like runner highlights: `send_public` / `edit_public` send to the `marathon_public` rehearsal home
+  with the note naming the real channel; logs `marathon.would_post_host_highlight`, `would_edit_host_highlight`,
+  `would_remind_host`.
+- **Staff final say, both doors.** Discord: `/event` ▸ a marathon ▸ **People…** ▸ a slot ▸ the host → **Remove the
+  highlight** while it is up, **Highlight in #channel** while it could be (the runner highlight button's own keys; a
+  button renders only when valid). Site: the People card's BaF row (every block) and the host's slot line (that block)
+  → **Post host highlight** / **Take it down** (confirm). API: **`POST` / `DELETE
+  /api/marathons/{id}/people/{user_id}/host-highlight`** (optional `run_id`; the answer is the People board +
+  `message`). Take down stores the decision first, then edits the post to `marathon_public_removed` and never edits it
+  again; Post puts it back IN PLACE when the message is still in the channel a highlight would go to now, else posts
+  anew. The People board's BaF rows carry **`host_highlight`** `{up, channel_id, can_post, blocks: [{runs, up,
+  channel_id, can_post}]}` (null for anyone who hosts nothing).
+- **Keys (5, Marathons group, registry + mock row + label, listed right after the host keys):**
+  `marathon_host_highlights` (bool, **on**) · `marathon_host_highlight_template` · `marathon_host_highlight_live_template`
+  · `marathon_host_highlight_done_template` · `marathon_host_reminder_template`. Placeholders `{name} {mention} {show}
+  {when} {relative} {until} {link} {url} {games} {runs}` — `{link}` is the host's own Twitch (the pairing's fix wins,
+  else the sheet/tracker login), else the marathon's watch link; `{url}` the marathon's. An unknown placeholder is
+  refused in words by the Marathons words check (*"`{game}` is not something Black Bloc can fill in…"*).
+- **Log kinds:** routine `marathon.host_highlight_posted`, `_edited`, `_restored`, `_removed`, `_lost`,
+  `marathon.host_reminded`, `marathon.host_reminder_skipped`; shadow twins above; `marathon.host_highlight_failed`
+  (`step: post | edit | remove`) and `marathon.host_reminder_failed` IMPORTANT by suffix. Web:
+  `web.marathon.host_highlight_posted / _restored / _removed / _failed`.
+
+**Counts:** schema **82 → 83** · registry keys **714 → 719** (measured: `len(settings_store.KEY_TYPES)`) · routes
+**+2** (`check.mjs`: *22 pages, 288 routes*) · new modules `black_bloc/marathon_host_highlights.py` (pure) and
+`black_bloc/cogs/content/marathon_host_highlights.py` (not a cog; `bot.py:COGS` unchanged).
+
+### Deviations
+
+1. **The post goes up as soon as the block is known, not on the day.** "Upcoming" is a real state; with the marathon
+   near and tracked, the first tick after deploy posts it. For Hidden Heroes that means **the day it deploys**, days
+   before Friday. If the owner wants it later, the lever is a lead-time key (not built).
+2. **A post in flight is carried to its end (checklist 38).** The key off stops NEW posts and heads-ups; Scan hosts
+   off drops the hosts' `user_id`, so the block can no longer be found — the record keeps its runs, name and login
+   and `left_behind` keeps editing the post to *on now* / *done* from those runs (tested both ways).
+3. **A failed first post is not retried by the tick** (`tried` is set before the send). Staff's Post move retries it.
+   A post deleted by hand is forgotten (`host_highlight_lost`), never re-posted by the tick — the runner rule.
+4. **The staff answers reuse the runner highlight's words** (`marathon_public_posted_said`, `_removed_said`,
+   `_already_up`, `_not_up`, `_no_channel`, `_failed`) and the taken-down line is `marathon_public_removed`; the
+   Discord button labels are `marathon_public_button_post` / `_remove`. Fewer keys; the one oddity is the removed
+   answer's *"Highlight puts it back"*, which on the site reads as the **Post host highlight** button.
+5. **Bookkeeping is a JSON column on the marathon, not a table** — the host events' precedent (Deviation 1 above):
+   archives and restores with the row, a handful of hosts per marathon.
+6. **The site's button words are site chrome constants** (`HOST_POST`, `HOST_REMOVE`, `HOST_UP` in
+   `marathons-section.js`), as *Spotlight…* is; everything the BOT posts is a key.
+7. **No per-marathon switch.** The owner's default is "all members"; `marathon_host_highlights` is the guild switch
+   and Scan hosts is the per-marathon one. A per-marathon "not this one" is the staff move (take it down).
+8. **The not-hosting and not-scanned refusals are module constants** (staff chrome, the repo's convention for
+   refusals), as the host switches' bad word is.
+
+### What was NOT verified
+
+- ⚠️ **Nothing met Discord** — a real post in #upcoming-events, its edits, the heads-up, the slot-view buttons.
+- ⚠️ **No browser** — the People card's new buttons were never rendered; `node --input-type=module --check` parses
+  every asset and `check.mjs` proves the route shapes against the mock (plus a scripted POST/DELETE walk on the
+  mock: Rivet on AGDQ 2027 up → taken down; an id who hosts nothing → 404 `not_hosting`).
+- **The live migration (schema 83)** has not run; Hidden Heroes' stored runs, anarchy's pairing and whether anarchy's
+  sheet row carries a Twitch login were not read.
+- **Timing against a real stream**: the *on now* edit follows the run's state, which with a watched channel waits for
+  the title/category signal (or the 90-minute grace) — reasoned from `mt.advance`, not observed.
+
+### Live check for Friday — Hidden Heroes (marathon 10), Fri 2026-10-02, Phoenix (UTC−7)
+
+Sweep rows **`HS-h` … `HS-l`** in `docs/access/sweeps.md`. Expected, if the first hosted run is at 16:00 Phoenix:
+
+| When (Phoenix) | What |
+|---|---|
+| the first tick after deploy (Scan hosts already ON) | ONE post in #upcoming-events: **anarchy** hosts **Hidden Heroes** · <start> (in N days) until <end> · anarchy's Twitch link (or the marathon's). Logs ▸ `marathon.host_highlight_posted`. No role mention. |
+| Fri 15:45 | ONE heads-up in #upcoming-events: **anarchy** is hosting **Hidden Heroes** in 15 minutes — <start>. <watch link>. Logs ▸ `marathon.host_reminded`. |
+| Fri ~16:00, the first hosted run live | The SAME post edited: **anarchy** is hosting **Hidden Heroes** now, until <end> · <watch link>. |
+| after the last hosted run is done | The same post: **anarchy** hosted **Hidden Heroes** · <start> · <link>. |
+| throughout | No runner post / reminder / shoutout / run highlight for the three runs (the drawer's BaF count stays 0). |

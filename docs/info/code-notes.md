@@ -1,5 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Host highlights* (branch `host-highlights`, off `main` `c0e38353`, keyed against `9fd9088e`); rows keyed in `black_bloc/cogs/content/marathon.py` after `follow` sit two to five lines lower (two lazy imports and two calls added), `marathon_people.py` rows after `slot_card` sit up to ~30 lower, `api/tools/marathons.py` rows after `entry_row` ~40 lower. The anchor text holds. Before that:
+
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Spotlight only — hosts never make a run ours* (branch `host-spotlight-only`, off `main` `c8e075bb`, keyed against `ce1b090d`). Earlier rows keyed in `black_bloc/cogs/content/marathon.py` below its imports now sit ONE line lower (one import added); `black_bloc/marathon.py` rows after line 411 sit one to three lower. The anchor text holds. Before that:
 
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Marathon hosts and the pairing's Twitch fix* (branch `marathon-host-spotlight`, off `main` `aba4ca00`, keyed against `7511e9b6`); the *GDQ Hotfix — show picker* row for `match_people` still holds, and the function now also swaps in a pairing's Twitch login. Before that:
@@ -9518,3 +9520,25 @@ Design: [`marathon-category-track-design.md`](marathon-category-track-design.md)
 | `black_bloc/cogs/content/marathon.py:4014` `_merged_people` | Carries `counts` across a schedule re-write, so between `_write_plan` and the `rematch` right after it a hosted run never flickers back to ours. |
 | `site/mock/server.mjs:6662` `marathonCounts` | The mock's `mt.ours` twin; `marathonPersonRow` (6760) strips `counts` because the bot's `person_row` never sends it. |
 | `site/mock/server.mjs:7372` `marathonRematch` | Mirrors `match_people`: a matched host is `counts: false` unless `marathon_hosts_count_as_ours`. The seed's Rivet (run 7) carries the flag so the mock starts in the default shape. |
+
+## Host highlights — one public post and heads-up per BaF host's block (branch `host-highlights`, 2026-09-28)
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_host_highlights.py:77` `spans` | The block rule (owner 2026-09-28 19:1x): a host's block runs on across runs they host AND runs with no host at all (GDQ's *The Checkpoint*); a run someone else hosts ends it. A co-hosted run keeps both blocks open. Dropped runs are off the schedule and do not break a block. |
+| `black_bloc/marathon_host_highlights.py:99` `state_of` | Only the host's own runs decide: all upcoming = upcoming, all done = done, anything between = on now (a hostless run live mid-block still reads *on now*). |
+| `black_bloc/marathon_host_highlights.py:108` `left_behind` | Checklist 38: a switch going off stops NEW posts, never one in flight — the post's record keeps its runs, name and login so it can still be edited to *on now* and *done*. Dropped runs count as over. |
+| `black_bloc/marathon_host_highlights.py:151` `record_for` | A record belongs to a block when the host is the same and they share a run, so a block that moves, grows or shrinks keeps its post. Two blocks that merge keep the first's post; a split gives the new half a new post. |
+| `black_bloc/marathon_host_highlights.py:178` `fields_of` | `{link}` is the host's own Twitch (the pairing's fix already replaced the sheet/tracker login on the stored person), else the marathon's watch link; `{mention}` never pings — every send and edit is `AllowedMentions.none()`. |
+| `black_bloc/marathon_host_highlights.py:199` `heads_up_due` | Once per block, `marathon_ping_minutes` before its first run, skipped (logged) past `marathon_reminder_stale_minutes` — the runner reminders' own stale rule. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:70` `wanted` | New posts and heads-ups need the key, an active TRACKED marathon, a mode that is not off, and Scan hosts on. A post already up keeps following its block when the key goes off (checklist 38). |
+| `black_bloc/cogs/content/marathon_host_highlights.py:206` `post_one` | `tried` is saved BEFORE the send: a restart between send and save loses the pointer rather than posting twice. A failed first post is not retried by the tick (staff's Post move retries). |
+| `black_bloc/cogs/content/marathon_host_highlights.py:261` `follow_one` | The runner highlight's compare: an in-memory cache, then after a restart one fetch and an `endswith` compare. A message deleted by hand is forgotten (`host_highlight_lost`), never re-posted by the tick. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:310` `sync_host_highlights` | Rides `Marathons.sync_board`, so every door that refreshes the board (the tick, Mark live/done, a pairing change) moves the host post too — every caller already holds the marathon lock, and the records are re-read fresh under it (checklist 37). A post that is up but whose block is gone (Scan hosts off, host unlinked) follows its own stored runs through `left_behind`. Wrapped: a failure is a log line. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:347` `remind_hosts` | Called from `follow` right after `remind`; the `reminded` marker is saved before the send. Gated on `marathon_public_reminders` too. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:531` `press` | Staff final say, under the marathon lock: post (or put back in place when the message is still in the channel one would go to now) or take down, for the block holding `run_id` or every block the host has. Answers reuse the runner highlight's words. |
+| `black_bloc/cogs/content/marathon_host_highlights.py:582` `state_for` | What the People card and the slot view draw: per host, each block's up/can-post and the whole. |
+| `black_bloc/cogs/content/marathon_people.py:475` `host_highlight_move` | A slot view button only when valid (a BaF host on this slot's block, a highlight up or postable); labels are the runner highlight button keys. |
+| `black_bloc/api/tools/marathons.py:943` `host_highlight_move` | The two routes' one body; `user_id` is the path segment because a host's name can be anything. |
+| `site/mock/server.mjs:8508` `marathonHostBlocks` | The mock's twin of `spans`; the AGDQ 2027 seed scans its hosts so Rivet (run 7) has a block. |
+| `site/public/assets/marathons-section.js:720` `hostHighlightBits` | On the BaF row it acts on every block; on a host's slot line only the block holding that run. |
