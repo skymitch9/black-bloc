@@ -250,6 +250,9 @@ not read; the one-rematch lag on stored runs was reasoned from the code, not mea
 
 ## Host highlights (owner 2026-09-28)
 
+> ↩️ **Its BLOCK RULE came back on 2026-09-28 (branch `marathon-announcements`, `5a60c782`)** — per block, at every
+> reminder mark, in the runner's templates; its four templates and its *post as soon as the block is known* did not.
+>
 > ⚠️ **SUPERSEDED BEFORE IT SHIPPED (2026-09-28, branch `host-highlights-per-run`, commit `30199332`)** by
 > *Host highlights, per run* at the foot of this doc (checklist 35). This section was merged (`ea4c2b43`) but never
 > deployed. ~~One post per contiguous hosted **block**, posted as soon as the block is known, one heads-up per block,
@@ -379,6 +382,19 @@ Sweep rows **`HS-h` … `HS-l`** in `docs/access/sweeps.md`. Expected, if the fi
 
 ## Host highlights, per run (owner 2026-09-28 20:4x)
 
+> ⚠️ **SUPERSEDED 2026-09-28 by branch `marathon-announcements` (commit `5a60c782`, checklist 35)** — see
+> [`marathon-announcements-design.md`](marathon-announcements-design.md). Owner 21:1x: *"host will be in multiple slots
+> so dont reannouce until their is a break in a host block … make it a direct mirror of runner except we consider the
+> time blocks"*. What changed below: ~~the unit is the run~~ → the unit is the **host BLOCK** again (the block rule of
+> the section above, with *The Checkpoint* continuing a block); ~~once, at `marathon_ping_minutes` (15)~~ → **every
+> `marathon_reminder_minutes` mark** from the block's first run; ~~one highlight per run~~ → one per block, at the
+> block's live, edited to done after its last run; ~~staff **Highlight in #…** / **Post host highlight** / **Take it
+> down**, and the `host-highlight` routes~~ → **Opt out of highlight** / **Opt back in** per person per marathon
+> (`POST`/`DELETE …/people/{user_id}/opt-out`); the People board's ~~`host_highlight`~~ → `opted_out`. Kept: one
+> template and one renderer with the runner (owner 20:5x), never pings, shadow routing, `tried`/marks saved before the
+> send, checklist 38. The `host_highlight_posts` column is re-keyed by the block's first run; a per-run record from this
+> section reads as a one-run block.
+
 > **BUILT 2026-09-28 on branch `host-highlights-per-run` (worktree `C:/lcw/bb-host-highlights-per-run`, off `main`
 > `2b6f378b`), NOT MERGED, NOT DEPLOYED.** Code commit `30199332`. **Last verified: 2026-09-28** by the suite
 > (`tests/test_marathon_host_highlights.py`, `tests/cogs/content/test_marathon_host_highlights.py`, the slot-view test in
@@ -402,7 +418,7 @@ renderer, so the two can never drift.
 | Highlight | `marathon_public_template` in `marathon_public_channel_id`, when the run goes live with the marathon's **Auto-highlight** (`public_highlight`) on, or staff press **Highlight** | **the same template and renderer** (`marathon_public.public_text` with `people=`), at the same moment: the run's LIVE transition (`Marathons.advance`, and staff **Mark live**) with Auto-highlight on, or staff press it for that run |
 | Edited | in place as the run moves / goes live / ends (`{state}`) | the same: *coming up* → *on now* → *done* |
 
-- **The unit is the run.** `marathon_host_highlights.hosted` lists every non-dropped run with at least one BaF host
+- ~~**The unit is the run.**~~ *(reversed by `marathon-announcements` — the unit is the host block)* `marathon_host_highlights.hosted` lists every non-dropped run with at least one BaF host
   (a host with a `user_id`, i.e. only while the marathon scans its hosts). No block, no span; nothing posts days early.
 - **Co-hosts follow the runner convention: ONE post per run naming every BaF host on it** (`{member}` is
   `mt.mention_line` of them, `{runner}` their names joined by `, `), exactly as a run with two BaF runners gets one
@@ -437,7 +453,8 @@ renderer, so the two can never drift.
 - **Log kinds unchanged**; `details` now carry `run_id`, `members` (list), `hosts` (names), `game` instead of
   `member_id` / `host` / `runs`.
 
-**Hidden Heroes walk-through (marathon 10, Fri 2026-10-02, Phoenix UTC−7).** From the Hotfix sheet fixture
+~~**Hidden Heroes walk-through (marathon 10, Fri 2026-10-02, Phoenix UTC−7).**~~ *(Struck: the per-run table never
+ran on a Friday; the current one is in `marathon-announcements-design.md` — Thu 16:00, Fri 14:00, Fri 15:45.)* From the Hotfix sheet fixture
 (`tests/fixtures/marathon/gdq_hotfix_sheet.csv` rows 26–28: the 7:00 PM ET show, 1:25 / 0:35 / 0:50): Titanfall 2
 16:00–17:25, VHOLUME 17:25–18:00, SPRAWL zero 18:00–18:50 Phoenix. Auto-highlight is OFF on Hidden Heroes.
 
@@ -455,7 +472,7 @@ renderer, so the two can never drift.
 
 ### Deviations
 
-1. **One heads-up per run, at `marathon_ping_minutes` only** — a runner also gets a public copy at every other
+1. ~~**One heads-up per run, at `marathon_ping_minutes` only**~~ *(reversed by `marathon-announcements`: one per host block at every mark, as the owner asked 21:1x)* — a runner also gets a public copy at every other
    `marathon_reminder_minutes` mark (120 by default). The brief and the owner's measured example name the 15-minute
    copy; a 2-hour host copy is not built.
 2. **Auto-highlight fires at the LIVE transition** (`Marathons.advance` and `mark_live`), like the runner's, not on a

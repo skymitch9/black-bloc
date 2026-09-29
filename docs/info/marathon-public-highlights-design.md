@@ -30,6 +30,15 @@ way to put one runner in front of members, and a per-marathon switch to do it by
 
 ## As built
 
+> ⚠️ **Annotated 2026-09-28 (branch `marathon-announcements`, commit `5a60c782`, checklist 35) — the button below is
+> superseded.** Owner 21:1x: *"the button that gets posted by each found highlighted run saus opt out of highlight"*.
+> ~~**Highlight in #channel** / **Remove the highlight** (`…:post` / `…:remove`)~~ → **Opt out of highlight** / **Opt back
+> in** (`…:optout` / `…:optin`), a per-person-per-marathon opt-out that posts nothing; the old ids answer as the toggle
+> (Highlight → opt back in, Remove → opt out). A highlight now comes only from **Auto-highlight**; an opt-out takes it
+> down (the same taken-down line), an opt-in puts it back in place. Every public post also needs the marathon's new
+> **Runner/Host announcements** switch; `marathon_public_reminders` stays the global master for reminders. The eight
+> answer / label keys of the manual press are removed. See [`marathon-announcements-design.md`](marathon-announcements-design.md).
+>
 > **Annotated 2026-09-28 (branch `host-highlights`, checklist 35):** this channel and the `marathon_public` rehearsal home now also carry each BaF HOST's highlight and the reminder channel a host heads-up — ~~one per hosted block~~ one per hosted RUN since `host-highlights-per-run` (2026-09-28), rendered by THIS build's `public_text` / the public reminder's template with the host part word, posted at the runner's moments — a SEPARATE path (`cogs/content/marathon_host_highlights.py`) that reuses `public_channel`, `send_public`, `edit_public` and this build's staff words. Nothing here is reversed: a run is still highlighted only when it is ours (`mp.postable` → `mt.is_ours`), and a host still never makes a run ours. See `marathon-host-spotlight-design.md` § Host highlights.
 
 **(1) Where it goes — `marathon_public_channel_id`** (channel, blank = `golive_channel_id`; Marathons group; registry +
@@ -38,7 +47,7 @@ mock row + label; the Settings page's channel select uses the shared `channelLab
 the next tick and sends the NEXT highlight there; a highlight already up stays where it was posted and keeps being edited
 there (Deviation 2).
 
-**(2) The button on each runner post** (`HighlightButton`, a `DynamicItem` registered in `Marathons.cog_load`; custom id
+~~**(2) The button on each runner post**~~ *(superseded by the opt-out button, `marathon-announcements`)* (`HighlightButton`, a `DynamicItem` registered in `Marathons.cog_load`; custom id
 `marathon:highlight:{marathon_id}:{run_id}:{post|remove}`, so it answers after a restart). The runner post (the
 `marathon-runner-posts` build) now carries one button, decided by `marathon_public.button_for`:
 
@@ -58,7 +67,7 @@ there (Deviation 2).
 - **Remove the highlight** (`remove_highlight`): **deletes nothing.** `public_removed = 1` is stored first, then the public
   message is edited to `marathon_public_removed` (*Staff took down the highlight for **{runner}** on **{marathon}**.*) with
   no mentions, and it is never edited again. The runner post's button goes back to **Highlight**.
-- **Staff final say both ways:** Highlight after a Remove edits the SAME message back to the live words (logged
+- ~~**Staff final say both ways:** Highlight after a Remove~~ *(now: Opt back in after an opt-out)* edits the SAME message back to the live words (logged
   `marathon.public_highlight_restored`) when it is still in the channel a highlight would go to now; otherwise it posts a
   new one.
 - **Edited in place** (`sync_highlights`, called from `Marathons.sync_board` after the runner posts, so every door that
