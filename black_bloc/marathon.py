@@ -427,6 +427,7 @@ def match_people(
         name = str(_person(person, "name"))
         sheet = _person(person, "sheet_login") or _person(person, "login")
         part = str(_person(person, "part"))
+        lent = str(_person(person, "login_from") or "")
         key = runner_key(name)
         pairing = here.get(key) or everywhere.get(key)
         fixed = pairing_login(pairing)
@@ -436,11 +437,13 @@ def match_people(
             user_id = int(_cell(pairing, "user_id")) if pairing is not None else None
             if user_id is None and login:
                 user_id = lowered.get(str(login).lower())
-            if user_id is None and not login:
+            if user_id is None and (not login or (lent and not fixed)):
                 user_id = named.get(key)
         one = {"name": name, "login": login, "part": part, "user_id": user_id}
         if fixed and fixed != sheet:
             one["sheet_login"] = sheet
+        if lent:
+            one["login_from"] = lent
         if user_id is not None and part == HOST and not hosts_count:
             one["counts"] = False
         found.append(one)

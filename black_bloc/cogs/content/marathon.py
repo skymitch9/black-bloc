@@ -2023,6 +2023,7 @@ class Marathons(commands.Cog):
             return await self._failed(guild, marathon, exc, now)
         except Exception as exc:
             return await self._failed(guild, marathon, ScheduleError(str(exc)[:200]), now)
+        runs = await viewer_decorated(self.bot, guild, marathon, runs)
         found = await self.apply(guild, marathon, runs, now)
         await self.sync_window(guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
         await self.follow_spotlight(guild, marathon["id"])
@@ -4018,8 +4019,18 @@ class PollModal(AnswersErrors, discord.ui.Modal, title=mt.POLL_TITLE):
             await answer(interaction, mt.POLL_SAVED.format(name=row["name"], minutes=wanted))
 
 
+async def viewer_decorated(bot: Any, guild: Any, marathon: Any, runs: list[Any]) -> list[Any]:
+    from .marathon_viewer import decorated
+
+    return await decorated(bot, guild, marathon, runs)
+
+
 def _raw_people(run: Any) -> list[dict[str, Any]]:
-    return [{"name": one.name, "login": one.login, "part": one.part} for one in run.people]
+    return [
+        {"name": one.name, "login": one.login, "part": one.part}
+        | ({"login_from": one.login_from} if one.login_from else {})
+        for one in run.people
+    ]
 
 
 def _merged_people(row: Any, run: Any) -> list[dict[str, Any]]:

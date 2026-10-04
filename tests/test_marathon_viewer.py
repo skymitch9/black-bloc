@@ -6,7 +6,7 @@ import pytest
 
 from black_bloc import marathon_viewer as mv
 from black_bloc.doc_import import DocImportError, Hop
-from black_bloc.marathon_sources import ScheduleClient, ScheduleError
+from black_bloc.marathon_sources import Person, Run, ScheduleClient, ScheduleError
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures" / "marathon"
 PAGE_HTML = (FIXTURES / "hotfix_viewer_page.html").read_text(encoding="utf-8")
@@ -352,3 +352,32 @@ def test_the_cache_is_fresh_for_five_minutes_for_the_same_page_and_waits_after_a
     assert not cache.waiting("https://other.example/", now)
     cache.keep(mv.Viewer(page=PAGE), now)
     assert not cache.waiting(PAGE, now) and cache.trouble is None
+
+
+# --- hosts take their Twitch names ------------------------------------------------------------
+
+
+def a_run(*people):
+    return Run("spyro/any", 1, "Spyro", "Spyro", "Any%", None, None, 60, tuple(people))
+
+
+def test_a_host_with_no_twitch_name_takes_the_viewers_and_nobody_else_does():
+    runs = [
+        a_run(
+            Person("Anarchy", None, "host"),
+            Person("helix", "own_channel", "host"),
+            Person("anarchy", None, "runner"),
+            Person("Nobody", None, "host"),
+            Person("jyggy", None, "commentator"),
+        )
+    ]
+    found, filled = mv.with_host_logins(runs, mv.hosts_of(SCRIPT))
+    assert filled == {"Anarchy": "anarchyasf"}
+    assert found[0].people == (
+        Person("Anarchy", "anarchyasf", "host", "viewer"),
+        Person("helix", "own_channel", "host"),
+        Person("anarchy", None, "runner"),
+        Person("Nobody", None, "host"),
+        Person("jyggy", None, "commentator"),
+    )
+    assert mv.with_host_logins(runs, {}) == (runs, {})

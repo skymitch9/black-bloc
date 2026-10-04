@@ -292,6 +292,7 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.retimed",
         "marathon.viewer_read",
         "marathon.viewer_failed",
+        "marathon.viewer_logins",
         "marathon.sheet_times",
         "marathon.signals_disagree",
         "marathon.categories_found",

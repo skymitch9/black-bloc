@@ -160,6 +160,7 @@ class Person:
     name: str
     login: str | None
     part: str
+    login_from: str = ""
 
 
 @dataclass(frozen=True)

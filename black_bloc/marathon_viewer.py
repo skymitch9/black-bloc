@@ -5,7 +5,7 @@ import html as html_text
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlsplit
@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 from .doc_import import CONTENT_HOST_TAIL, DOCS_HOST, REDIRECTS, DocImportError, hop_allowed
 from .marathon import runner_key
 from .marathon_hotfix import CSV_URL, EASTERN, MAX_BYTES, SECONDS, Get, fetch
-from .marathon_sources import ScheduleError
+from .marathon_sources import HOST, Run, ScheduleError
 from .settings_store import MARATHON_HOTFIX_VIEWER_URL
 from .spotlight import clean_login
 from .timezones import zone
@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 
 PAGE = MARATHON_HOTFIX_VIEWER_URL
 SITE = "the Hotfix schedule viewer"
+FROM_VIEWER = "viewer"
 SCRIPT_HOST = "script.google.com"
 SHORT_HOST = "gdq.gg"
 FIXED_HOSTS = (SCRIPT_HOST, SHORT_HOST, DOCS_HOST)
@@ -399,6 +400,23 @@ async def read_viewer(get: Get, agent: str, page: str, *, with_rows: bool = Fals
         raise ScheduleError(f"{SITE} could not be reached (timeout)") from exc
 
 
+def with_host_logins(runs: Any, hosts: dict[str, str]) -> tuple[list[Run], dict[str, str]]:
+    """Each host the schedule gave no Twitch channel takes the viewer table's; (the runs,
+    who was filled)."""
+    filled: dict[str, str] = {}
+    found: list[Run] = []
+    for run in runs or ():
+        people = []
+        for person in run.people:
+            login = hosts.get(runner_key(person.name)) if person.part == HOST else None
+            if login and not person.login:
+                filled[person.name] = login
+                person = replace(person, login=login, login_from=FROM_VIEWER)
+            people.append(person)
+        found.append(replace(run, people=tuple(people)))
+    return (found, filled)
+
+
 def summary(viewer: Viewer) -> dict[str, Any]:
     return {
         "page": viewer.page,
@@ -416,6 +434,7 @@ def summary(viewer: Viewer) -> dict[str, Any]:
 __all__ = [
     "PAGE",
     "SITE",
+    "FROM_VIEWER",
     "EventLink",
     "EventSheet",
     "FeedRow",
@@ -437,4 +456,5 @@ __all__ = [
     "sheet_of",
     "starts_at",
     "summary",
+    "with_host_logins",
 ]

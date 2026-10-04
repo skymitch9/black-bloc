@@ -1,17 +1,23 @@
 import pathlib
 from datetime import timedelta
 
+from black_bloc import marathon as mt
 from black_bloc import marathon_feeds as mf
 from black_bloc import marathon_viewer as mv
+from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content import marathon_feeds as feeds
 from black_bloc.cogs.content import marathon_viewer as viewers
+from black_bloc.cogs.content.marathon import get_marathon, refresh_marathon, runs_of
 from black_bloc.marathon_sources import ScheduleError
 from tests.cogs.content.test_marathon import bot  # noqa: F401
 from tests.cogs.content.test_marathon_feeds import (  # noqa: F401
+    ANARCHY,
     SEPT,
     all_feeds,
+    by_ref,
     cog,
     hotfix_feed,
+    link_twitch,
     logged,
 )
 from tests.cogs.content.test_spotlight import GUILD, FakeActor
@@ -153,3 +159,98 @@ async def test_the_feed_card_names_the_viewer_link_or_says_it_is_off(bot, cog): 
     assert lines[1].startswith(f"**Viewer:** <{PAGE}>")
     await bot.store.set(GUILD, KEY, "")
     assert "off (the link is blank)" in feeds.shows_lines(bot, bot.guild, feed)[1]
+
+
+# --- hosts take their Twitch names ------------------------------------------------------------
+
+HEROES = "hidden-heroes/2026-10-02"
+
+
+async def heroes_of(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_hotfix_shows", "Hidden Heroes")
+    await hotfix_feed(bot, cog)
+    return (await by_ref(bot))[HEROES]
+
+
+async def hosts_of(bot, marathon):  # noqa: F811
+    return [
+        person
+        for row in await runs_of(bot.db, marathon["id"])
+        for person in mt.people_of(row)
+        if person["part"] == "host"
+    ]
+
+
+async def reread(bot, marathon):  # noqa: F811
+    read = await refresh_marathon(bot, bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert read.ok, read.message
+
+
+async def test_a_hotfix_host_takes_the_viewers_twitch_name_and_it_is_logged_once(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    await link_twitch(bot, ANARCHY, "anarchyasf")
+    marathon = await heroes_of(bot, cog)
+    hosts = await hosts_of(bot, marathon)
+    assert len(hosts) == 3
+    assert {(one["name"], one["login"], one["login_from"], one["user_id"]) for one in hosts} == {
+        ("anarchy", "anarchyasf", "viewer", ANARCHY)
+    }
+    await reread(bot, marathon)
+    rows = [one for one in await logged(bot, "marathon.viewer_logins")]
+    assert [(one["marathon_id"], one["hosts"]) for one in rows] == [
+        (marathon["id"], [{"name": "anarchy", "login": "anarchyasf"}])
+    ]
+
+
+async def test_a_staff_set_twitch_name_beats_the_viewers(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    await cogmod.upsert_pairing(bot.db, GUILD, None, "anarchy", ANARCHY, 7, "anarchy_own")
+    marathon = await heroes_of(bot, cog)
+    hosts = await hosts_of(bot, marathon)
+    assert {(one["login"], one["sheet_login"], one["user_id"]) for one in hosts} == {
+        ("anarchy_own", "anarchyasf", ANARCHY)
+    }
+    pairing = (await cogmod.pairings_of(bot.db, GUILD))[0]
+    cleared = await cogmod.set_pairing_login(
+        bot, bot.guild, FakeActor(), await get_marathon(bot.db, GUILD, marathon["id"]), pairing, ""
+    )
+    assert cleared.ok
+    assert {(one["login"], one.get("sheet_login")) for one in await hosts_of(bot, marathon)} == {
+        ("anarchyasf", None)
+    }
+
+
+async def test_with_the_link_blank_a_host_has_no_twitch_name_as_before(bot, cog):  # noqa: F811
+    reads = ViewerReads(cog.client)
+    await bot.store.set(GUILD, KEY, "")
+    marathon = await heroes_of(bot, cog)
+    assert {(one["login"], one.get("login_from")) for one in await hosts_of(bot, marathon)} == {
+        (None, None)
+    }
+    assert reads.calls == [] and await logged(bot, "marathon.viewer_logins") == []
+
+
+async def test_a_viewer_that_is_down_never_breaks_the_sheet_read_and_keeps_stored_names(bot, cog):  # noqa: F811
+    reads = ViewerReads(cog.client)
+    marathon = await heroes_of(bot, cog)
+    assert {one["login"] for one in await hosts_of(bot, marathon)} == {"anarchyasf"}
+    mv.cache_of(cog).viewer = None
+    reads.raises = ScheduleError("the Hotfix schedule viewer answered 503")
+    cog.clock = lambda: SEPT + timedelta(minutes=30)
+    cog.client.sheet = cog.client.sheet.replace(
+        "Titanfall 2,Any%,1:25:00", "Titanfall 2,Any%,1:35:00"
+    )
+    await reread(bot, marathon)
+    runs = await runs_of(bot.db, marathon["id"])
+    assert runs[0]["run_seconds"] == 95 * 60
+    assert {one["login"] for one in await hosts_of(bot, marathon)} == {"anarchyasf"}
+    fresh = await get_marathon(bot.db, GUILD, marathon["id"])
+    assert fresh["last_fetch_ok"] == 1 and fresh["fetch_failures"] == 0
+
+
+async def test_a_viewer_down_from_the_start_reads_the_sheet_alone(bot, cog):  # noqa: F811
+    reads = ViewerReads(cog.client)
+    reads.raises = ScheduleError("the Hotfix schedule viewer answered 503")
+    marathon = await heroes_of(bot, cog)
+    assert len(await runs_of(bot.db, marathon["id"])) == 3
+    assert {one["login"] for one in await hosts_of(bot, marathon)} == {None}
