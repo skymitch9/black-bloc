@@ -98,3 +98,11 @@ def test_the_event_schedule_button_is_there_only_when_a_sheet_matches():
     off = mtc.controls("marathon", ms.DARK, overlay=False)[-1]
     assert (off.action, off.to, off.word) == ("overlay", "on", "off")
     assert mtc.custom_id(7, mtc.OVERLAY, mtc.OFF) == "marathon:controls:7:overlay:off"
+
+
+def test_the_tracker_link_is_the_schedule_page_at_the_marathons_hash():
+    assert mtc.tracker_url("https://blackbloc.heygabi.ai/", 9) == (
+        "https://blackbloc.heygabi.ai/schedule.html#marathon-9"
+    )
+    assert mtc.tracker_url("", 9) is None
+    assert mtc.tracker_url("blackbloc.heygabi.ai", 9) is None
