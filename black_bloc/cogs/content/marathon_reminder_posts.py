@@ -36,7 +36,7 @@ from .marathon import (
 from .marathon_host_highlights import block_text, speaking
 from .marathon_host_highlights import details_of as block_details
 from .marathon_host_highlights import save as save_blocks
-from .marathon_inbox import find_channel
+from .marathon_inbox import find_channel, reopened
 from .marathon_public import people_for
 from .marathon_public_reminders import public_url, reminder_text
 
@@ -109,7 +109,7 @@ async def rewrite(cog: Any, guild: Any, copy: dict[str, Any], text: str) -> tupl
     if channel is None:
         return (LOST, mrem.GONE_CHANNEL) if lost else (FAILED, NOT_READABLE)
     try:
-        message = await channel.fetch_message(int(copy["message_id"]))
+        message = await (await reopened(channel)).fetch_message(int(copy["message_id"]))
         await message.edit(
             content=mrem.body(copy, text), allowed_mentions=discord.AllowedMentions.none()
         )

@@ -408,6 +408,18 @@ async def test_an_edit_discord_refuses_for_now_is_logged_once_and_tried_again_la
     assert len(await rows(bot, "marathon.reminder_edit_failed")) == 1
 
 
+async def test_an_archived_staff_thread_is_reopened_for_the_edit(bot, cog):
+    marathon = await reminded(bot, cog)
+    thread = the_thread(bot)
+    thread.archived = True
+
+    await moved(bot, cog, marathon, 50)
+
+    _public, staff = await copies(bot, marathon)
+    assert staff.content == words(50) and thread.archived is False
+    assert {"archived": False} in thread.thread_edits
+
+
 # --- a run taken off the schedule ----------------------------------------------------------------
 
 
