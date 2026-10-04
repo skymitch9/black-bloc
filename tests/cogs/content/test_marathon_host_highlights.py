@@ -67,6 +67,7 @@ HIDDEN_HEROES_TOMORROW = [
     ),
 ]
 LIVE_MARKS = "1440, 120, 15"
+HOSTED = "**anarchy** hosted **Titanfall 2** — Any% today on **Hidden Heroes** · "
 
 
 async def show(bot, cog, runs, *, clock=0, auto=False):
@@ -190,7 +191,8 @@ async def test_auto_highlight_posts_once_at_the_blocks_live_and_edits_it_to_done
     await walk(bot, cog, marathon, [130, 146, 165, 181])
     assert highlights(bot) == [post] and " · on now · " in post.content
     await walk(bot, cog, marathon, [231, 400])
-    assert highlights(bot) == [post] and " · done · " in post.content
+    assert highlights(bot) == [] and post.content.startswith(HOSTED)
+    assert " · done · " not in post.content and "<@&" not in post.content
     assert all(edit["allowed_mentions"].roles is False for edit in post.edits)
     assert (await kinds(bot.db)).count("marathon.host_highlight_posted") == 1
     assert len(heads_ups(bot)) == 1
@@ -292,7 +294,7 @@ async def test_opting_out_takes_the_highlight_down_and_opting_in_puts_it_back_in
     assert highlights(bot) == [post]
     assert "marathon.host_highlight_restored" in await kinds(bot.db)
     await walk(bot, cog, marathon, [146, 231, 400])
-    assert " · done · " in post.content and highlights(bot) == [post]
+    assert post.content.startswith(HOSTED) and highlights(bot) == []
 
 
 async def test_a_heads_up_too_late_is_skipped_not_posted(bot, cog):
@@ -394,8 +396,8 @@ async def test_a_post_already_up_follows_its_block_to_the_end_after_a_switch_goe
     else:
         await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
     await walk(bot, cog, marathon, [130, 146, 181, 231, 400])
-    assert " · done · " in post.content
-    assert len(highlights(bot)) == 1 and heads_ups(bot) == []
+    assert post.content.startswith(HOSTED)
+    assert highlights(bot) == [] and heads_ups(bot) == []
 
 
 async def test_a_host_post_already_up_from_the_last_build_is_edited_in_place(bot, cog):

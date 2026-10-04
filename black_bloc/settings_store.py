@@ -4891,6 +4891,10 @@ MARATHON_PUBLIC_FIELDS = (
     "marathon",
     "state",
 )
+MARATHON_PUBLIC_DONE_TEMPLATE_KEY = "marathon_public_done_template"
+MARATHON_PUBLIC_DAY_TODAY_KEY = "marathon_public_day_today"
+MARATHON_PUBLIC_DAY_EARLIER_KEY = "marathon_public_day_earlier"
+MARATHON_PUBLIC_DONE_FIELDS = (*MARATHON_PUBLIC_FIELDS, "day")
 MARATHON_THREAD_FIELDS = ("marathon", "channel", "when")
 MARATHON_OPENING_FIELDS = ("marathon", "who", "url", "channel", "when")
 MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY = "marathon_channel_ping_mode_default"
@@ -4906,6 +4910,9 @@ MARATHON_DONE_TEMPLATE_KEY = "marathon_done_template"
 MARATHON_PART_RUNNER_KEY = "marathon_part_runner"
 MARATHON_PART_HOST_KEY = "marathon_part_host"
 MARATHON_PART_COMMENTATOR_KEY = "marathon_part_commentator"
+MARATHON_PART_RUNNER_DONE_KEY = "marathon_part_runner_done"
+MARATHON_PART_HOST_DONE_KEY = "marathon_part_host_done"
+MARATHON_PART_COMMENTATOR_DONE_KEY = "marathon_part_commentator_done"
 MARATHON_STATE_UPCOMING_KEY = "marathon_state_upcoming"
 MARATHON_STATE_LIVE_KEY = "marathon_state_live"
 MARATHON_STATE_DONE_KEY = "marathon_state_done"
@@ -6014,9 +6021,31 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "**{runner}** {part} **{game}** — {category} on **{marathon}** · {when} ({relative}) · "
         "{state} · {url}",
         MARATHON_PUBLIC_FIELDS,
-        "a BaF run's public highlight, edited in place as its slot moves, it goes live and it "
-        "ends. It takes {runner} {mention} {game} {category} {part} {when} {relative} {url} "
-        "{marathon} {state}; {mention} names the member without pinging",
+        "a BaF run's public highlight, edited in place as its slot moves and it goes live; "
+        "once it ends it becomes marathon_public_done_template. It takes {runner} {mention} "
+        "{game} {category} {part} {when} {relative} {url} {marathon} {state}; {mention} names "
+        "the member without pinging",
+    ),
+    MARATHON_PUBLIC_DONE_TEMPLATE_KEY: (
+        "**{runner}** {part} **{game}** — {category} {day} on **{marathon}** · {url}",
+        MARATHON_PUBLIC_DONE_FIELDS,
+        "what a BaF run's public highlight is edited to once the run is over (a host's: once "
+        "their block is): the past tense, with no role mention, and the edit notifies nobody. "
+        "It takes the same words as marathon_public_template and {day}; {part} is the "
+        "past-tense word (marathon_part_runner_done, marathon_part_host_done)",
+    ),
+    MARATHON_PUBLIC_DAY_TODAY_KEY: (
+        "today",
+        (),
+        "{day} on a finished run's public highlight while it is still the day the run ended, "
+        "by the server's time zone (default_timezone)",
+    ),
+    MARATHON_PUBLIC_DAY_EARLIER_KEY: (
+        "on {date}",
+        ("date",),
+        "{day} on a finished run's public highlight once the day the run ended has passed, by "
+        "the server's time zone. It takes {date}, the day the run ended, drawn by Discord in "
+        "each reader's own language",
     ),
     MARATHON_PUBLIC_REMOVED_KEY: (
         "Staff took down the highlight for **{runner}** on **{marathon}**.",
@@ -6194,6 +6223,24 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_PART_RUNNER_KEY: ("runs", (), "{part} for a runner"),
     MARATHON_PART_HOST_KEY: ("hosts", (), "{part} for a host"),
     MARATHON_PART_COMMENTATOR_KEY: ("is on commentary", (), "{part} for a commentator"),
+    MARATHON_PART_RUNNER_DONE_KEY: (
+        "ran",
+        (),
+        "{part} for a runner once the run is over, on its public highlight "
+        "(marathon_public_done_template)",
+    ),
+    MARATHON_PART_HOST_DONE_KEY: (
+        "hosted",
+        (),
+        "{part} for a host once their host block is over, on its public highlight "
+        "(marathon_public_done_template)",
+    ),
+    MARATHON_PART_COMMENTATOR_DONE_KEY: (
+        "was on commentary",
+        (),
+        "{part} for a commentator once the run is over, on its public highlight "
+        "(marathon_public_done_template)",
+    ),
     MARATHON_STATE_UPCOMING_KEY: (
         "coming up",
         (),

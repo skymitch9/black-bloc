@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import datetime, tzinfo
 from typing import Any, NamedTuple
 
 from . import marathon as mt
 from . import marathon_announce as ma
 from . import marathon_runner_posts as mrp
+from .settings_store import (
+    MARATHON_PART_COMMENTATOR_DONE_KEY,
+    MARATHON_PART_COMMENTATOR_KEY,
+    MARATHON_PART_HOST_DONE_KEY,
+    MARATHON_PART_HOST_KEY,
+    MARATHON_PART_RUNNER_DONE_KEY,
+    MARATHON_PART_RUNNER_KEY,
+)
 
 POST = "post"
 REMOVE = "remove"
@@ -26,6 +35,13 @@ BAD_SWITCH = (
     "Say on or off for whether the marathon highlights BaF runs by itself, so nothing was changed."
 )
 BAD_SWITCH_CODE = "bad_public_highlight"
+DONE_PARTS = {
+    MARATHON_PART_RUNNER_KEY: MARATHON_PART_RUNNER_DONE_KEY,
+    MARATHON_PART_HOST_KEY: MARATHON_PART_HOST_DONE_KEY,
+    MARATHON_PART_COMMENTATOR_KEY: MARATHON_PART_COMMENTATOR_DONE_KEY,
+}
+ROLE_MENTION = "<@&"
+DATE_STAMP = "<t:{unix}:D>"
 
 
 class Button(NamedTuple):
@@ -144,7 +160,63 @@ def text_of(
     ).text
 
 
+def is_done(row: Any) -> bool:
+    return mt._cell(row, "state") == mt.DONE
+
+
+def done_words(words: dict[str, str]) -> dict[str, str]:
+    """The same words with each part in the past tense: {part} is all a done post swaps."""
+    return dict(words) | {
+        present: words[past] for present, past in DONE_PARTS.items() if past in words
+    }
+
+
+def day_word(
+    row: Any, now: datetime, zone: tzinfo, *, today: str, earlier: Any, earlier_default: str
+) -> str:
+    """Today while it is still the day the run ended in the server's zone, else its date."""
+    ended = mrp.over_at(row)
+    if ended is None or ended.astimezone(zone).date() >= now.astimezone(zone).date():
+        return today
+    return mt.render(
+        earlier, earlier_default, date=DATE_STAMP.format(unix=mt.unix(ended))
+    ).text
+
+
+def done_text(
+    row: Any,
+    marathon: Any,
+    words: dict[str, str],
+    *,
+    template: Any,
+    default: str,
+    url: str,
+    unlisted: str,
+    day: str,
+    people: Any = None,
+) -> str:
+    fields = mrp.fields_of(
+        row, marathon, done_words(words), url=url, unlisted=unlisted, people=people
+    )
+    return mt.render(template, default, **(fields | {"day": day})).text[: mt.MESSAGE_LIMIT]
+
+
+def says(content: Any, text: str, *, done: bool) -> bool:
+    """Whether a post already ends in these words; a done post must also carry no role mention
+    in front of them."""
+    content = str(content or "")
+    if not text or not content.endswith(text):
+        return False
+    return not done or ROLE_MENTION not in content[: len(content) - len(text)]
+
+
 __all__ = [
+    "DONE_PARTS",
+    "day_word",
+    "done_text",
+    "done_words",
+    "is_done",
+    "says",
     "BAD_SWITCH",
     "BAD_SWITCH_CODE",
     "Button",

@@ -41,6 +41,8 @@ from .marathon_public import (
     public_text,
     rehearsal_of,
     send_public,
+    since,
+    stands,
 )
 from .marathon_public_reminders import reminder_channel, reminder_text
 from .marathon_public_reminders import wanted as public_reminders_wanted
@@ -83,7 +85,13 @@ async def highlight_text(
     bot: Any, guild: Any, marathon: Any, block: mhh.Block, people: Any, *, removed: bool = False
 ) -> str:
     return await public_text(
-        bot, guild, marathon, mhh.view_row(block), removed=removed, people=people or block.hosts
+        bot,
+        guild,
+        marathon,
+        mhh.view_row(block),
+        removed=removed,
+        people=people or block.hosts,
+        over=block.runs[-1],
     )
 
 
@@ -219,7 +227,16 @@ async def follow_one(
         )
         record.update(message_id=None, channel_id=None)
         return True
-    if (getattr(message, "content", None) or "").endswith(text):
+    if await stands(
+        cog,
+        guild,
+        marathon,
+        mhh.view_row(block),
+        message,
+        text,
+        people=people or block.hosts,
+        over=block.runs[-1],
+    ):
         cache[key] = (record["channel_id"], text)
         return False
     why = await edit_public(bot, guild, message, text)
@@ -252,6 +269,7 @@ async def sync_host_highlights(cog: Any, guild: Any, marathon: Any) -> None:
         return
     try:
         found = mhh.records(fresh)
+        since(cog)
         if not any(mhh.is_up(one) for one in found):
             return
         changed = False
