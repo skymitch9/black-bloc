@@ -89,3 +89,12 @@ def test_the_custom_id_fits_discords_hundred_characters():
 def test_a_label_is_clamped_and_never_empty():
     assert mtc.label("x" * 200) == "x" * 80
     assert mtc.label("  ") == "…"
+
+
+def test_the_event_schedule_button_is_there_only_when_a_sheet_matches():
+    assert len(mtc.controls("marathon", ms.DARK)) == 6
+    on = mtc.controls("marathon", ms.DARK, overlay=True)[-1]
+    assert (on.action, on.to, on.word) == ("overlay", "off", "on")
+    off = mtc.controls("marathon", ms.DARK, overlay=False)[-1]
+    assert (off.action, off.to, off.word) == ("overlay", "on", "off")
+    assert mtc.custom_id(7, mtc.OVERLAY, mtc.OFF) == "marathon:controls:7:overlay:off"

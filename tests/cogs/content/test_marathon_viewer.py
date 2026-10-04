@@ -3,11 +3,17 @@ from datetime import timedelta
 
 from black_bloc import marathon as mt
 from black_bloc import marathon_feeds as mf
+from black_bloc import marathon_host_highlights as mhh
+from black_bloc import marathon_hosts as mh
+from black_bloc import marathon_overlay as mo
 from black_bloc import marathon_viewer as mv
 from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content import marathon_feeds as feeds
+from black_bloc.cogs.content import marathon_signals as signals
 from black_bloc.cogs.content import marathon_viewer as viewers
 from black_bloc.cogs.content.marathon import get_marathon, refresh_marathon, runs_of
+from black_bloc.cogs.content.marathon_hosts import set_switch
+from black_bloc.cogs.content.marathon_thread_controls import overlay_switch
 from black_bloc.marathon_sources import ScheduleError
 from tests.cogs.content.test_marathon import bot  # noqa: F401
 from tests.cogs.content.test_marathon_feeds import (  # noqa: F401
@@ -254,3 +260,202 @@ async def test_a_viewer_down_from_the_start_reads_the_sheet_alone(bot, cog):  # 
     marathon = await heroes_of(bot, cog)
     assert len(await runs_of(bot.db, marathon["id"])) == 3
     assert {one["login"] for one in await hosts_of(bot, marathon)} == {None}
+
+
+# --- the event's own schedule sheet, laid over a Hotfix marathon --------------------------------
+
+GDQUEER = "gdqueer/2026-10-03"
+CHAMPRUL = 6101
+
+
+async def gdqueer_of(bot, cog):  # noqa: F811
+    await hotfix_feed(bot, cog)
+    return (await by_ref(bot))[GDQUEER]
+
+
+async def fresh_of(bot, marathon):  # noqa: F811
+    return await get_marathon(bot.db, GUILD, marathon["id"])
+
+
+async def starts_of(bot, marathon):  # noqa: F811
+    return [one["scheduled_at"] for one in await runs_of(bot.db, marathon["id"])]
+
+
+async def test_gdqueer_takes_the_organisers_times_hosts_and_commentators(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    marathon = await gdqueer_of(bot, cog)
+    runs = await runs_of(bot.db, marathon["id"])
+    assert [one["scheduled_at"] for one in runs[:3]] == [
+        "2026-10-03T17:00:00+00:00",
+        "2026-10-03T18:18:00+00:00",
+        "2026-10-03T19:20:00+00:00",
+    ]
+    assert runs[1]["sheet_at"] == "2026-10-03T18:18:00+00:00"
+    dread = [(one["name"], one["part"]) for one in mt.people_of(runs[-1])]
+    assert dread == [
+        ("araneacharlotte", "runner"),
+        ("champrul", "host"),
+        ("jayena", "commentator"),
+        ("lucyna", "commentator"),
+    ]
+    quack = next(one for one in mt.people_of(runs[-2]) if one["part"] == "host")
+    assert (quack["name"], quack["login"], quack["login_from"]) == (
+        "Quacksilver",
+        "quacksilverplays",
+        "viewer",
+    )
+    state = mo.state_of(await fresh_of(bot, marathon))
+    assert (state["label"], state["url"], state["runs"], state["matched"], state["applied"]) == (
+        "Games Done Queer 📅 Oct 3-4",
+        SHEET_PAGE,
+        24,
+        24,
+        True,
+    )
+    await reread(bot, marathon)
+    applied = await logged(bot, "marathon.overlay_applied")
+    assert [(one["marathon_id"], one["matched"]) for one in applied] == [(marathon["id"], 24)]
+    fresh = await fresh_of(bot, marathon)
+    assert (fresh["starts_at"], fresh["ends_at"]) == (
+        "2026-10-03T17:00:00+00:00",
+        "2026-10-05T04:49:00+00:00",
+    )
+
+
+async def test_a_baf_host_on_the_organisers_sheet_is_found_like_any_host(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    await cogmod.upsert_pairing(bot.db, GUILD, None, "champrul", CHAMPRUL, 7)
+    marathon = await gdqueer_of(bot, cog)
+    hosted = [
+        row["game"]
+        for row in await runs_of(bot.db, marathon["id"])
+        for one in mt.people_of(row)
+        if one["part"] == "host" and one.get("user_id") == CHAMPRUL
+    ]
+    assert hosted == ["Isopod: A Webbed Spin-off", "Yakuza Kiwami 3 & Dark Ties", "Metroid Dread"]
+    blocks = mhh.blocks(await runs_of(bot.db, marathon["id"]))
+    assert [[one["game"] for one in block.runs] for block in blocks] == [
+        ["Isopod: A Webbed Spin-off", "Yakuza Kiwami 3 & Dark Ties"],
+        ["Metroid Dread"],
+    ]
+
+
+async def test_staff_switch_the_event_schedule_off_and_on_again(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    marathon = await gdqueer_of(bot, cog)
+    off = await set_switch(bot, bot.guild, FakeActor(), marathon, mh.OVERLAY, False)
+    assert off.ok and "keeps GDQ's sheet times" in off.message
+    assert (await starts_of(bot, marathon))[1] == "2026-10-03T18:08:00+00:00"
+    runs = await runs_of(bot.db, marathon["id"])
+    assert [one["part"] for one in mt.people_of(runs[0])] == ["runner"]
+    fresh = await fresh_of(bot, marathon)
+    assert fresh["overlay"] == 0 and mo.state_of(fresh)["applied"] is False
+    assert overlay_switch(bot, GUILD, fresh) is False
+    dropped = await logged(bot, "marathon.overlay_dropped")
+    assert [one["because"] for one in dropped] == ["switched_off"]
+    assert [(one["from"], one["to"]) for one in await logged(bot, "marathon.overlay_set")] == [
+        (None, False)
+    ]
+    back = await set_switch(bot, bot.guild, FakeActor(), fresh, mh.OVERLAY, "follow")
+    assert back.ok and "from the event's own schedule sheet" in back.message
+    assert (await starts_of(bot, marathon))[1] == "2026-10-03T18:18:00+00:00"
+    assert overlay_switch(bot, GUILD, await fresh_of(bot, marathon)) is True
+    assert not (await set_switch(bot, bot.guild, FakeActor(), fresh, mh.OVERLAY, "maybe")).ok
+
+
+async def test_the_default_key_off_leaves_a_matching_sheet_named_but_not_laid_over(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    await bot.store.set(GUILD, "marathon_hotfix_overlay_default", False)
+    marathon = await gdqueer_of(bot, cog)
+    assert (await starts_of(bot, marathon))[1] == "2026-10-03T18:08:00+00:00"
+    state = mo.state_of(await fresh_of(bot, marathon))
+    assert state["applied"] is False and state["matched"] == 24
+    assert await logged(bot, "marathon.overlay_applied") == []
+
+
+async def test_with_no_viewer_the_gdq_sheet_path_is_exactly_as_it_was(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, KEY, "")
+    marathon = await gdqueer_of(bot, cog)
+    starts = await starts_of(bot, marathon)
+    assert starts[:2] == ["2026-10-03T17:00:00+00:00", "2026-10-03T18:08:00+00:00"]
+    fresh = await fresh_of(bot, marathon)
+    assert mo.state_of(fresh) is None and overlay_switch(bot, GUILD, fresh) is None
+    assert fresh["ends_at"] == "2026-10-05T03:09:00+00:00"
+
+
+async def test_blanking_the_link_takes_the_overlay_off_and_says_so(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    marathon = await gdqueer_of(bot, cog)
+    await bot.store.set(GUILD, KEY, "")
+    await reread(bot, marathon)
+    assert (await starts_of(bot, marathon))[1] == "2026-10-03T18:08:00+00:00"
+    assert mo.state_of(await fresh_of(bot, marathon)) is None
+    assert [one["because"] for one in await logged(bot, "marathon.overlay_dropped")] == [
+        "viewer_off"
+    ]
+
+
+async def test_a_sheet_that_cannot_be_had_keeps_the_overlay_until_staff_switch_it_off(bot, cog):  # noqa: F811
+    reads = ViewerReads(cog.client)
+    marathon = await gdqueer_of(bot, cog)
+    before = await starts_of(bot, marathon)
+    mv.cache_of(cog).viewer = None
+    reads.raises = ScheduleError("the Hotfix schedule viewer answered 503")
+    cog.clock = lambda: SEPT + timedelta(minutes=30)
+    await reread(bot, marathon)
+    assert await starts_of(bot, marathon) == before
+    assert mo.state_of(await fresh_of(bot, marathon))["stale"].endswith("answered 503")
+    reads.raises = None
+    reads.answer = lambda page, rows: mv.Viewer(page=page)
+    cog.clock = lambda: SEPT + timedelta(minutes=60)
+    await reread(bot, marathon)
+    assert await starts_of(bot, marathon) == before
+    fresh = await fresh_of(bot, marathon)
+    assert mo.state_of(fresh)["stale"] == mo.NO_LONGER_LINKED and mo.applied(fresh)
+    assert len(await logged(bot, "marathon.overlay_kept")) == 1
+    assert await logged(bot, "marathon.overlay_dropped") == []
+    hosts = {
+        one["name"]
+        for row in await runs_of(bot.db, marathon["id"])
+        for one in mt.people_of(row)
+        if one["part"] == "host"
+    }
+    assert "champrul" in hosts and "Quacksilver" in hosts
+
+
+async def test_a_run_seen_live_keeps_its_real_start_and_later_runs_follow_by_the_gaps(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    marathon = await gdqueer_of(bot, cog)
+    runs = await runs_of(bot.db, marathon["id"])
+    late = "2026-10-03T19:32:00+00:00"
+    await cogmod.update_run(bot.db, runs[2]["id"], actual_started_at=late, state="live")
+    moved = await signals.retime(cog, bot.guild, marathon, because="stream")
+    assert moved == 11
+    starts = await starts_of(bot, marathon)
+    assert starts[:5] == [
+        "2026-10-03T17:00:00+00:00",
+        "2026-10-03T18:18:00+00:00",
+        late,
+        "2026-10-03T19:57:00+00:00",
+        "2026-10-03T20:42:00+00:00",
+    ]
+    assert starts[13] == "2026-10-04T17:00:00+00:00"
+    cog.client.sheet = cog.client.sheet.replace("Any% NG+,0:46:00", "Any% NG+,0:47:00")
+    cog.clock = lambda: SEPT + timedelta(minutes=30)
+    await reread(bot, marathon)
+    again = await starts_of(bot, marathon)
+    assert again[:5] == starts[:5] and again[13] == starts[13]
+    rows = await runs_of(bot.db, marathon["id"])
+    assert rows[3]["sheet_at"] == "2026-10-03T19:45:00+00:00"
+
+
+async def test_a_gdq_sheet_marathon_without_a_sheet_keeps_the_old_clock(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    marathon = await heroes_of(bot, cog)
+    fresh = await fresh_of(bot, marathon)
+    assert mo.state_of(fresh) is None and overlay_switch(bot, GUILD, fresh) is None
+    runs = await runs_of(bot.db, marathon["id"])
+    late = "2026-10-02T23:10:00+00:00"
+    await cogmod.update_run(bot.db, runs[0]["id"], actual_started_at=late, state="live")
+    assert await signals.retime(cog, bot.guild, marathon, because="stream") == 3
+    assert (await starts_of(bot, marathon))[1] == "2026-10-03T00:35:00+00:00"

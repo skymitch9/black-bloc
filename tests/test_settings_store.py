@@ -2295,7 +2295,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 707
+    assert len(settings_store.KEY_TYPES) == 712
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2528,3 +2528,20 @@ def test_the_hotfix_viewer_link_is_one_public_https_page_or_blank_for_off():
     ):
         with pytest.raises(settings_store.SettingError, match="not a page Black Bloc can read"):
             settings_store.coerce_value(key, bad)
+
+
+def test_the_event_schedule_default_is_on_and_its_button_and_answers_are_words():
+    key = settings_store.MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY
+    assert (settings_store.KEY_TYPES[key], settings_store.MARATHON_DEFAULTS[key]) == ("bool", True)
+    for key, said in (
+        (settings_store.MARATHON_CONTROLS_OVERLAY_ON_KEY, "Event schedule: on · turn off"),
+        (settings_store.MARATHON_CONTROLS_OVERLAY_OFF_KEY, "Event schedule: off · turn on"),
+    ):
+        assert settings_store.MARATHON_DEFAULTS[key] == said and len(said) <= 80
+    for key in (
+        settings_store.MARATHON_OVERLAY_ON_SAID_KEY,
+        settings_store.MARATHON_OVERLAY_OFF_SAID_KEY,
+    ):
+        assert "{marathon}" in settings_store.MARATHON_DEFAULTS[key]
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(key, "{member}")

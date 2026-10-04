@@ -5238,6 +5238,7 @@
         "ping_role",
         "public_highlight",
         "announcements",
+        "overlay",
         "tracked_state",
         "tracked",
         "tracked_at",
@@ -5397,6 +5398,22 @@
       "keys": [
         "id",
         "announcements",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_bare_id}",
+      "body": {
+        "overlay": "follow"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Settings foldout — Event schedule (a Hotfix marathon)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "overlay",
         "message"
       ]
     },

@@ -365,6 +365,8 @@ MARATHON_COLUMNS = {
     "host_highlight_posts",
     "announcements",
     "announce_opt_out",
+    "overlay",
+    "overlay_sheet",
 }
 RUN_COLUMNS = {
     "order_no",

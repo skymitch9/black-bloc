@@ -21,6 +21,9 @@ from ...settings_store import (
     MARATHON_ANNOUNCEMENTS_ON_SAID_KEY,
     MARATHON_HOST_EVENT_DESCRIPTION_KEY,
     MARATHON_HOST_EVENT_TITLE_KEY,
+    MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY,
+    MARATHON_OVERLAY_OFF_SAID_KEY,
+    MARATHON_OVERLAY_ON_SAID_KEY,
     MARATHON_RUN_EVENT_CANCEL_ON_LEAVE_KEY,
 )
 from .marathon import (
@@ -39,8 +42,13 @@ HOST_GONE = "marathon_removed"
 SAID = {
     (mh.ANNOUNCE, True): MARATHON_ANNOUNCEMENTS_ON_SAID_KEY,
     (mh.ANNOUNCE, False): MARATHON_ANNOUNCEMENTS_OFF_SAID_KEY,
+    (mh.OVERLAY, True): MARATHON_OVERLAY_ON_SAID_KEY,
+    (mh.OVERLAY, False): MARATHON_OVERLAY_OFF_SAID_KEY,
 }
-DEFAULTS = {mh.ANNOUNCE: MARATHON_ANNOUNCEMENTS_DEFAULT_KEY}
+DEFAULTS = {
+    mh.ANNOUNCE: MARATHON_ANNOUNCEMENTS_DEFAULT_KEY,
+    mh.OVERLAY: MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY,
+}
 
 
 def words(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
@@ -68,7 +76,7 @@ async def set_switch(
     *,
     via: str = VIA_DISCORD,
 ) -> Outcome:
-    """BaF announcements for one marathon: on, off, or None to follow the setting."""
+    """One of a marathon's own switches: on, off, or None to follow the setting."""
     from .marathon_thread_controls import controls_changed
 
     understood, wanted = mh.clean_switch(given)
@@ -93,8 +101,18 @@ async def set_switch(
         "via": via,
     }
     await log_action(
-        bot, guild, kind_via("marathon.announcements_set", via), actor=actor, details=details
+        bot,
+        guild,
+        kind_via(
+            "marathon.overlay_set" if which == mh.OVERLAY else "marathon.announcements_set", via
+        ),
+        actor=actor,
+        details=details,
     )
+    if which == mh.OVERLAY and was["on"] != now["on"]:
+        from .marathon import refresh_marathon
+
+        await refresh_marathon(bot, guild, fresh)
     await controls_changed(bot, guild, fresh["id"])
     return Outcome(
         True,

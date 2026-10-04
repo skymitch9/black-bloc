@@ -4938,6 +4938,11 @@ MARATHON_HOTFIX_VIEWER_URL_KEY = "marathon_hotfix_viewer_url"
 MARATHON_HOTFIX_VIEWER_URL = "https://ogndrahcir.github.io/ScheduleViewer/"
 MARATHON_HOTFIX_VIEWER_URL_LENGTH = 300
 MARATHON_HOTFIX_VIEWER_INNER = (".internal", ".local", ".localhost", ".lan", ".home", ".corp")
+MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY = "marathon_hotfix_overlay_default"
+MARATHON_CONTROLS_OVERLAY_ON_KEY = "marathon_controls_overlay_on"
+MARATHON_CONTROLS_OVERLAY_OFF_KEY = "marathon_controls_overlay_off"
+MARATHON_OVERLAY_ON_SAID_KEY = "marathon_overlay_on_said"
+MARATHON_OVERLAY_OFF_SAID_KEY = "marathon_overlay_off_said"
 MARATHON_HOTFIX_HOSTS_TEMPLATE_KEY = "marathon_hotfix_hosts_template"
 MARATHON_HOTFIX_RUNS_TEMPLATE_KEY = "marathon_hotfix_runs_template"
 MARATHON_HOTFIX_BECAUSE_FIELDS = ("people", "show")
@@ -5247,6 +5252,15 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "https link; blank turns this source off and the GDQ sheet is read alone. "
         "`https://ogndrahcir.github.io/ScheduleViewer/` by default",
     ),
+    MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY: (
+        "bool",
+        True,
+        "whether a Hotfix marathon takes its start times, hosts and commentators from the "
+        "event's own schedule sheet when the viewer page links one that matches it — while "
+        "the marathon's own Event schedule switch follows this setting. Off, such a marathon "
+        "keeps GDQ's sheet times (the show's start plus the estimates) and its host column. "
+        "on by default",
+    ),
     MARATHON_EVENT_MODE_DEFAULT_KEY: (
         "enum",
         "none",
@@ -5418,6 +5432,34 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the description of the event made for one BaF host block of a marathon. It takes "
         "{member} "
         "{marathon} {games} {runs}",
+    ),
+    MARATHON_CONTROLS_OVERLAY_ON_KEY: (
+        "Event schedule: on · turn off",
+        (),
+        "the thread controls' event-schedule button while a Hotfix marathon takes its times, "
+        "hosts and commentators from the event's own schedule sheet. The button is there only "
+        "when the viewer page links a sheet that matches the marathon",
+    ),
+    MARATHON_CONTROLS_OVERLAY_OFF_KEY: (
+        "Event schedule: off · turn on",
+        (),
+        "the thread controls' event-schedule button while a Hotfix marathon keeps GDQ's sheet "
+        "times although the event has a schedule sheet of its own",
+    ),
+    MARATHON_OVERLAY_ON_SAID_KEY: (
+        "**{marathon}** takes its start times, hosts and commentators from the event's own "
+        "schedule sheet now, when the viewer links one that matches. The schedule is being "
+        "read again.",
+        ("marathon",),
+        "what staff are told once a marathon's Event schedule switch is on. It takes "
+        "{marathon}",
+    ),
+    MARATHON_OVERLAY_OFF_SAID_KEY: (
+        "**{marathon}** keeps GDQ's sheet times and host column now — the event's own "
+        "schedule sheet is not laid over it. The schedule is being read again.",
+        ("marathon",),
+        "what staff are told once a marathon's Event schedule switch is off. It takes "
+        "{marathon}",
     ),
     MARATHON_CONTROLS_ANNOUNCE_ON_KEY: (
         "BaF announcements: on · turn off",

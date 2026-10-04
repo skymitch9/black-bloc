@@ -15,14 +15,15 @@ PING = "ping"
 HOSTS = "hosts"
 HOST_EVENTS = "hostevents"
 ANNOUNCE = "announce"
-ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, ANNOUNCE)
+OVERLAY = "overlay"
+ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, ANNOUNCE, OVERLAY)
 RETIRED = (HOSTS, HOST_EVENTS)
 ON = "on"
 OFF = "off"
 CANCEL = "cancel"
 TEMPLATE = (
     r"marathon:controls:(?P<marathon_id>[0-9]+)"
-    r":(?P<action>event|runs|spotlight|highlight|ping|hosts|hostevents|announce)"
+    r":(?P<action>event|runs|spotlight|highlight|ping|hosts|hostevents|announce|overlay)"
     r":(?P<to>on|off|cancel)"
 )
 CUSTOM_ID = "marathon:controls:{marathon_id}:{action}:{to}"
@@ -104,6 +105,7 @@ def controls(
     highlight: bool = False,
     ping: bool = False,
     announce: bool = True,
+    overlay: bool | None = None,
 ) -> tuple[Control, ...]:
     """Each button carries the move it makes, so a stale label can never do the opposite."""
     marathon_on, runs_on = halves(mode)
@@ -115,6 +117,7 @@ def controls(
         switch(HIGHLIGHT, highlight),
         switch(PING, ping),
         switch(ANNOUNCE, announce),
+        *(() if overlay is None else (switch(OVERLAY, overlay),)),
     )
 
 

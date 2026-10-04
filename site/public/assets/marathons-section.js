@@ -196,6 +196,17 @@ const HIGHLIGHT_HELP = 'On: the moment a BaF run goes live its highlight posts i
   + 'For a BaF host it is their host block: posted when the block goes live, edited to done after its last run. '
   + 'Off (the default): nothing is highlighted. Nobody opted out is highlighted, and nothing is while BaF '
   + 'announcements is off. marathon_public_highlight_default decides where a new marathon starts.';
+const OVERLAY_FIELD = 'Event schedule';
+const OVERLAY_HELP = 'On: when the Hotfix schedule viewer links the event’s own schedule sheet and it matches this '
+  + 'marathon, each run takes that sheet’s start time, hosts and commentators — GDQ’s sheet only gives the show’s '
+  + 'start and the estimates. Off: GDQ’s sheet times and host column. A run the stream shows starting still keeps '
+  + 'its real start, and the runs after it follow by the sheet’s own gaps. Follow uses marathon_hotfix_overlay_default.';
+const OVERLAY_ON_LINE = 'Times, hosts and commentators come from ';
+const OVERLAY_ON_TAIL = ' — {matched} of {runs} run(s) matched.';
+const OVERLAY_OFF_LINE = 'This event has its own schedule sheet, ';
+const OVERLAY_OFF_TAIL = ', but Event schedule is off, so GDQ’s sheet times and host column are used.';
+const OVERLAY_STALE = ' It could not be read just now ({why}), so the last copy is kept.';
+const OVERLAY_NONE = 'The schedule viewer links no event sheet that matches this marathon, so GDQ’s sheet times are used.';
 const ANNOUNCE_FIELD = 'BaF announcements';
 const ANNOUNCE_HELP = 'On: every BaF runner and host of this marathon is announced publicly — the reminders at every '
   + 'marathon_reminder_minutes mark (marathon_public_reminders is the master switch) and, with Auto-highlight on, the '
@@ -975,6 +986,22 @@ function pollWanted(given) {
   return /^\d+$/.test(text) ? Number(text) : text;
 }
 
+function overlayLine(marathon) {
+  if (marathon.source !== 'gdq_hotfix' || !marathon.overlay) return null;
+  const sheet = marathon.overlay.sheet;
+  if (!sheet) return el('p', { class: 'field-help mx-line mx-overlay', text: OVERLAY_NONE });
+  const link = el('a', { href: sheet.url, text: `${sheet.label} ↗`, rel: 'noreferrer', target: '_blank' });
+  if (!sheet.applied) {
+    return el('p', { class: 'field-help mx-line mx-overlay' }, [el('span', { text: OVERLAY_OFF_LINE }), link, el('span', { text: OVERLAY_OFF_TAIL })]);
+  }
+  return el('p', { class: 'field-help mx-line mx-overlay' }, [
+    el('span', { text: OVERLAY_ON_LINE }),
+    link,
+    el('span', { text: said(OVERLAY_ON_TAIL, { matched: sheet.matched, runs: sheet.runs }) }),
+    sheet.stale ? el('span', { class: 'cell-quiet', text: said(OVERLAY_STALE, { why: sheet.stale }) }) : null,
+  ]);
+}
+
 async function settingsFold(marathon, say) {
   const mode = modePicker(marathon.event_mode || 'none');
   const pingNow = marathon.ping_role ? 'on' : 'off';
@@ -982,6 +1009,7 @@ async function settingsFold(marathon, say) {
   const highlightNow = marathon.public_highlight ? 'on' : 'off';
   const highlight = segment(PING_CHOICES, highlightNow);
   const announce = switchPicker(marathon.announcements);
+  const overlay = marathon.source === 'gdq_hotfix' && marathon.overlay ? switchPicker(marathon.overlay) : null;
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
     class: 'input',
@@ -998,6 +1026,7 @@ async function settingsFold(marathon, say) {
     if (ping.readValue() !== pingNow) body.ping_role = ping.readValue() === 'on';
     if (highlight.readValue() !== highlightNow) body.public_highlight = highlight.readValue() === 'on';
     if (announce.readValue() !== announce.now) body.announcements = switchWanted(announce.readValue());
+    if (overlay && overlay.readValue() !== overlay.now) body.overlay = switchWanted(overlay.readValue());
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
     if (wanted !== (marathon.poll_minutes || null)) body.poll_minutes = wanted;
@@ -1019,6 +1048,7 @@ async function settingsFold(marathon, say) {
     field(PING_FIELD, ping, PING_HELP),
     field(HIGHLIGHT_FIELD, highlight, HIGHLIGHT_HELP),
     field(ANNOUNCE_FIELD, announce, ANNOUNCE_HELP),
+    overlay ? field(OVERLAY_FIELD, overlay, OVERLAY_HELP) : null,
     field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
     bar([save]),
   ], { open: shown.settings });
@@ -1156,6 +1186,7 @@ async function marathonDrawer(marathon, board, message) {
   return [
     say,
     ...headerBlock(marathon, board, say),
+    overlayLine(marathon),
     ...spotlightBlock(marathon, say),
     peopleCard(marathon, board, say),
     await settingsFold(marathon, say),
