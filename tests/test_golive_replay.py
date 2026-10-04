@@ -269,7 +269,10 @@ def two_days():
     ]
 
 
-GDQUEER = {"starts_at": DAY_ONE.isoformat(), "ends_at": (DAY_TWO + timedelta(minutes=90)).isoformat()}
+GDQUEER = {
+    "starts_at": DAY_ONE.isoformat(),
+    "ends_at": (DAY_TWO + timedelta(minutes=90)).isoformat(),
+}
 
 
 def test_the_runs_fall_into_one_block_per_show_day():
@@ -326,7 +329,10 @@ def test_a_marathon_with_no_timed_runs_keeps_its_whole_span():
 
 
 def test_any_marathon_on_the_channel_with_a_run_around_counts():
-    other = {"starts_at": DAY_TWO.isoformat(), "ends_at": (DAY_TWO + timedelta(hours=1)).isoformat()}
+    other = {
+        "starts_at": DAY_TWO.isoformat(),
+        "ends_at": (DAY_TWO + timedelta(hours=1)).isoformat(),
+    }
     now = DAY_TWO + timedelta(minutes=10)
     assert replays.run_around([(GDQUEER, two_days()[:3]), (other, [run(DAY_TWO, 60)])], now, 0, 0)
     assert not replays.run_around([(GDQUEER, two_days()[:3])], now, 0, 0)

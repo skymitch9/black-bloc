@@ -54,10 +54,14 @@ from ...settings_store import (
     GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY,
     GOLIVE_REPLAY_ACTION_KEY,
     GOLIVE_REPLAY_LIVE_WORDS_KEY,
+    GOLIVE_REPLAY_MARATHON_RUNS_KEY,
+    GOLIVE_REPLAY_MIDSTREAM_POLLS_KEY,
     GOLIVE_REPLAY_NOT_REPLAY_KEY,
+    GOLIVE_REPLAY_REASON_TAG_KEY,
     GOLIVE_REPLAY_REASON_TITLE_KEY,
     GOLIVE_REPLAY_REASON_TYPE_KEY,
     GOLIVE_REPLAY_STATE_KEY,
+    GOLIVE_REPLAY_TAG_CERTAIN_KEY,
     GOLIVE_REPLAY_TEMPLATE_KEY,
     GOLIVE_REPLAY_TREAT_LIVE_KEY,
     GOLIVE_REPLAY_TREATED_KEY,
@@ -431,12 +435,29 @@ async def set_replay_cleared(db: Any, session_id: int, because: str) -> None:
     await db.conn.commit()
 
 
+async def set_replay(db: Any, session_id: int, reason: Any, action: Any) -> None:
+    await db.conn.execute(
+        "UPDATE spotlight_sessions SET replay_reason = ?, replay_action = ?, "
+        "replay_cleared = NULL WHERE id = ?",
+        (reason, action, int(session_id)),
+    )
+    await db.conn.commit()
+
+
+async def restart_bump_clock(db: Any, session_id: int, at: str) -> None:
+    await db.conn.execute(
+        "UPDATE spotlight_sessions SET last_bump_at = ? WHERE id = ?", (at, int(session_id))
+    )
+    await db.conn.commit()
+
+
 def replay_wording_for(bot: Any, guild_id: int) -> dict[str, str]:
     store = bot.store
     return {
         "state": str(store.get(guild_id, GOLIVE_REPLAY_STATE_KEY) or ""),
         "type_words": str(store.get(guild_id, GOLIVE_REPLAY_REASON_TYPE_KEY) or ""),
         "title_words": str(store.get(guild_id, GOLIVE_REPLAY_REASON_TITLE_KEY) or ""),
+        "tag_words": str(store.get(guild_id, GOLIVE_REPLAY_REASON_TAG_KEY) or ""),
         "treat_label": str(store.get(guild_id, GOLIVE_REPLAY_TREAT_LIVE_KEY) or ""),
     }
 
@@ -448,7 +469,13 @@ def replay_state(session: Any, said: dict[str, str]) -> dict[str, Any] | None:
     return {
         "reason": _cell(session, "replay_reason"),
         "action": _cell(session, "replay_action"),
-        "line": replays.state_line(session, said["state"], said["type_words"], said["title_words"]),
+        "line": replays.state_line(
+            session,
+            said["state"],
+            said["type_words"],
+            said["title_words"],
+            said.get("tag_words", ""),
+        ),
         "treat_label": said["treat_label"],
     }
 
@@ -563,6 +590,9 @@ class Spotlight(commands.Cog):
         self._reconciler = Reconciler()
         self.misses: dict[int, int] = {}
         self.scheduled: set[int] = set()
+        self.replay_reads: dict[int, int] = {}
+        self.live_reads: dict[int, int] = {}
+        self.downgraded: set[int] = set()
         self.last_poll_ok_at: str | None = None
         self.last_poll_error: str | None = None
 
@@ -785,15 +815,22 @@ class Spotlight(commands.Cog):
         )
 
     async def _seen(self, guild: Any, row: Any, stream: Any) -> None:
+        if await self._seen_locked(guild, row, stream):
+            from .marathon_signals import replay_began
+
+            await replay_began(self.bot, guild, row["id"])
+
+    async def _seen_locked(self, guild: Any, row: Any, stream: Any) -> bool:
+        """True when a live session became a replay on this look."""
         async with self._lock(row["id"]):
             fresh = await channel_by_id(self.bot.db, row["id"])
             if fresh is None:
-                return
+                return False
             session = await open_session(self.bot.db, fresh["id"])
             # A start still ahead gates the ANNOUNCEMENT only: a session already open runs
             # to its own end, so a date set mid-stream never strands a live post.
             if session is None and words.is_scheduled(fresh):
-                return
+                return False
             if stream is not None:
                 self.misses[int(fresh["id"])] = 0
                 if session is None:
@@ -801,20 +838,24 @@ class Spotlight(commands.Cog):
                 elif replays.is_replay(session):
                     await self._replay_seen(guild, fresh, session, stream)
                 else:
+                    began = await self._replay_began(guild, fresh, session, stream)
+                    if began is not None:
+                        return began
                     info, refreshed = await self._follow(
                         guild, fresh, session, from_twitch(stream)
                     )
                     if await self._window_opened(guild, fresh, session, info, refreshed):
-                        return
+                        return False
                     await self._maybe_bump(guild, fresh, session, info, refreshed=refreshed)
-                return
+                return False
             if session is None or words.platform_of(_cell(session, "url")) != words.PLATFORM:
-                return
+                return False
             seen = self.misses.get(int(fresh["id"]), 0) + 1
             self.misses[int(fresh["id"])] = seen
             if seen < self._end_misses(guild.id):
-                return
+                return False
             await self._end(guild, fresh, session, words.ENDED)
+            return False
 
     async def _window_opened(
         self, guild: Any, row: Any, session: Any, info: Any, refreshed: bool | None
@@ -899,19 +940,125 @@ class Spotlight(commands.Cog):
         said = {
             "words": replays.words_of(store.get(guild.id, GOLIVE_REPLAY_WORDS_KEY)),
             "live_words": replays.words_of(store.get(guild.id, GOLIVE_REPLAY_LIVE_WORDS_KEY)),
+            "tag_certain": bool(store.get(guild.id, GOLIVE_REPLAY_TAG_CERTAIN_KEY)),
         }
         title = getattr(info, "title", None)
         seen = replays.verdict(title, stream_type, **said)
-        if not seen.replay or seen.reason == replays.REASON_TYPE:
+        if not seen.replay or replays.is_certain(seen.reason):
             return seen
         from .marathon_channels import marathons_on_channel
         from .marathon_spotlight import lead_of, tail_of
 
         marathons = await marathons_on_channel(self.bot.db, guild.id, row["id"])
-        inside = replays.in_marathon(
-            marathons, datetime.now(UTC), lead_of(self.bot, guild.id), tail_of(self.bot, guild.id)
-        )
+        reach = (self._now(), lead_of(self.bot, guild.id), tail_of(self.bot, guild.id))
+        if store.get(guild.id, GOLIVE_REPLAY_MARATHON_RUNS_KEY):
+            from .marathon import runs_of
+
+            paired = [(one, await runs_of(self.bot.db, one["id"])) for one in marathons]
+            inside = replays.run_around(paired, *reach)
+        else:
+            inside = replays.in_marathon(marathons, *reach)
         return replays.verdict(title, stream_type, marathon=inside, **said) if inside else seen
+
+    def _now(self) -> datetime:
+        return datetime.now(UTC)
+
+    def _midstream_polls(self, guild_id: int) -> int:
+        return max(0, int(self.bot.store.get(guild_id, GOLIVE_REPLAY_MIDSTREAM_POLLS_KEY) or 0))
+
+    async def _replay_began(self, guild: Any, row: Any, session: Any, stream: Any) -> bool | None:
+        """None: the look goes on as live. False: a replay read is waiting for its next look.
+        True: the session is a replay from now. Staff's Treat as live is never undone here."""
+        polls = self._midstream_polls(guild.id)
+        action = self._replay_action(guild.id)
+        key = int(session["id"])
+        if (
+            polls <= 0
+            or action == replays.LIVE
+            or _cell(session, "replay_cleared") == replays.CLEARED_STAFF
+            or words.platform_of(_cell(session, "url")) != words.PLATFORM
+        ):
+            self.replay_reads.pop(key, None)
+            return None
+        info = from_twitch(stream)
+        seen = await self._verdict(guild, row, info, getattr(stream, "stream_type", None))
+        if not seen.replay:
+            self.replay_reads.pop(key, None)
+            return None
+        reads = self.replay_reads.get(key, 0) + 1
+        if reads < polls:
+            self.replay_reads[key] = reads
+            return False
+        self.replay_reads.pop(key, None)
+        await self._downgrade(guild, row, session, info, seen, action, polls)
+        return True
+
+    async def _downgrade(
+        self, guild: Any, row: Any, session: Any, info: Any, seen: Any, action: str, polls: int
+    ) -> None:
+        """The state moves first; the announcement is edited in place, never posted again."""
+        await set_replay(self.bot.db, session["id"], seen.reason, action)
+        await self._refresh(session, info)
+        self.downgraded.add(int(session["id"]))
+        self.live_reads.pop(int(session["id"]), None)
+        message = await self._message(guild, session)
+        details = {
+            "spotlight_id": row["id"],
+            "session_id": session["id"],
+            "login": row["twitch_login"],
+            "title": info.title,
+            "reason": seen.reason,
+            "action": action,
+            "polls": polls,
+            "message_id": str(getattr(message, "id", "") or "") or None,
+            "bumps": int(_cell(session, "bump_count") or 0),
+        }
+        await log_action(self.bot, guild, "golive.replay_began", details=details)
+        if action == replays.SKIP:
+            await self._delete_post(guild, row, session, message)
+        else:
+            await self._unpin(guild, row, message, because=replays.BECAUSE_REPLAY)
+            await self._reword_replay(guild, row, session, message, info)
+        if self.bot.store.get(guild.id, SPOTLIGHT_BUMP_CLEANUP_KEY):
+            await self._clear_bumps(guild, session)
+
+    async def _reword_replay(
+        self, guild: Any, row: Any, session: Any, message: Any, info: Any
+    ) -> None:
+        if message is None:
+            return
+        head, _ = self._shadow_head(guild, session, message.content)
+        text = head + render(
+            self.bot.store.get(guild.id, GOLIVE_REPLAY_TEMPLATE_KEY),
+            info,
+            name=words.display_for(row),
+        )
+        details = {
+            "spotlight_id": row["id"],
+            "session_id": session["id"],
+            "login": row["twitch_login"],
+            "message_id": str(getattr(message, "id", "")),
+            "game": info.game,
+            "title": info.title,
+            "replay": True,
+        }
+        try:
+            await message.edit(
+                content=text, embed=None, allowed_mentions=self._mentions(guild.id, pinging=False)
+            )
+        except Exception as exc:
+            reason = words.reason_of(exc)
+            log.warning("spotlight: could not re-word %s — %s", row["twitch_login"], reason)
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_announcement_refresh_failed",
+                details=details | {"reason": reason},
+            )
+            return
+        await log_action(
+            self.bot, guild, "golive.spotlight_announcement_refreshed", details=details
+        )
 
     async def _note_verdict(
         self, guild: Any, row: Any, session_id: int, info: Any, seen: Any, action: str
@@ -1087,9 +1234,16 @@ class Spotlight(commands.Cog):
         info = from_twitch(stream)
         seen = await self._verdict(guild, row, info, getattr(stream, "stream_type", None))
         action = self._replay_action(guild.id)
+        key = int(session["id"])
         if seen.replay and action != replays.LIVE:
+            self.live_reads.pop(key, None)
             await self._follow(guild, row, session, info)
             return
+        if key in self.downgraded and action != replays.LIVE:
+            reads = self.live_reads.get(key, 0) + 1
+            if reads < self._midstream_polls(guild.id):
+                self.live_reads[key] = reads
+                return
         because = replays.cleared_because(_cell(session, "replay_reason"), seen, action)
         await self.upgrade(guild, row, session, info, because=because)
 
@@ -1126,6 +1280,10 @@ class Spotlight(commands.Cog):
             return None
         await set_replay_cleared(self.bot.db, session["id"], because)
         await set_pinging_last(self.bot.db, session["id"], pinging)
+        self.live_reads.pop(int(session["id"]), None)
+        if int(session["id"]) in self.downgraded:
+            self.downgraded.discard(int(session["id"]))
+            await restart_bump_clock(self.bot.db, session["id"], now_iso())
         if old is not None:
             try:
                 await old.delete()

@@ -249,6 +249,7 @@ ROUTINE: frozenset[str] = frozenset(
         "golive.replay_overruled",
         "golive.replay_announced",
         "golive.replay_upgraded",
+        "golive.replay_began",
         "quiet_pins.deleted",
         "marathon.added",
         "marathon.board_pinned",
