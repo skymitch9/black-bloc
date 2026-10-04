@@ -99,8 +99,6 @@
 .rs-line-text { min-width: 0; overflow-wrap: anywhere; }
 .rs-line-text .badge { margin-left: 6px; }
 
-.mx-runsheet { margin-left: 8px; }
-
 @media (max-width: 760px) {
   .rs-cols { display: none; }
   .rs-row { grid-template-columns: 5.2rem minmax(0, 1fr) auto; padding-inline: 12px; }

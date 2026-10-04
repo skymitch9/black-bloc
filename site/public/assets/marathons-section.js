@@ -30,6 +30,7 @@ import {
   trackedLine,
   whenWords,
 } from './marathon-words.js';
+import { runsheetLink } from './runsheet-link.js';
 import { announceMoves, announcedSaid, pingsCard, spotlightCard } from './spotlight-controls.js';
 import {
   ask,
@@ -1145,6 +1146,7 @@ async function marathonDrawer(marathon, board, message) {
   if (message) say.say(message, 'ok');
   return [
     say,
+    bar([runsheetLink(marathon.id)]),
     ...headerBlock(marathon, board, say),
     ...spotlightBlock(marathon, say),
     peopleCard(marathon, board, say),
@@ -1678,6 +1680,7 @@ function listSection(payload, feeds, say, archive) {
       text: scheduleCell(row),
     }) },
     { label: 'Event', cell: (row) => eventCell(row) },
+    { label: '', cell: (row) => runsheetLink(row.id) },
   ], rows, { empty: NOTHING_YET });
   const switched = cadence.modeSpec
     ? modeSwitch(cadence.modeSpec, { onSaved: () => refresh() })
