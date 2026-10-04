@@ -54,6 +54,7 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
   button label, a note, a template — each is a settings key (registry + mock row + label) that the Settings page and
   the feature's own page can change, never a string only the code knows. The front door (`frontdoor_title`,
   `frontdoor_text`, the three labels, `rehearsal_note`) is the pattern; a posted copy re-renders when its words change.
+- ⚠️ **No explaining blurbs (owner, 2026-10-04: "From now on no more explaining blurbs. We build features that are self explanatory to use").** No intro subtitle under a heading, no how-this-works paragraph, no help sentence describing a feature — on a page, a drawer or a Discord panel. Labels, placement and state carry the meaning. State and results stay (a status pill, *updated 12 seconds ago*, *archived*), and a refusal still says what happened and how to fix it. Put this in every build brief: agents add blurbs by default.
 - ⚠️ **Every decision is configurable BOTH ways (owner, 2026-08-27).** A default decided in chat lives in the
   settings registry (`settings_store.py`) so the Settings page and `/settings set-value` both reach it; per-item
   choices have a slash path AND a dashboard editor. Never hard-code a decided default. Checklist item 33.
