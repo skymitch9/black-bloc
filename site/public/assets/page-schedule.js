@@ -49,13 +49,10 @@ const ZONE_LINES = {
 const ZONE_PICKER = 'Show times in';
 const ZONE_DEVICE = 'My device’s time ({zone})';
 const ZONE_DEVICE_UNKNOWN = 'My device’s time';
-const KIND_EDITABLE = '{source} never moves its own times, so staff keep the clock here: every time below can be moved, and the bot’s posts follow.';
-const KIND_KEPT = '{source} never moves its own times, so Black Bloc keeps the clock: a run seen starting on the stream re-times the runs after it. Times cannot be typed here yet — **Started now** and **Finished now** work, and the rest follow.';
 const KIND_ARCHIVED = 'This marathon is archived, so this is its schedule as it ended. Nothing here can be changed.';
 const UPDATED = 'Updated {ago} · re-reads every {seconds} seconds while this tab is showing';
 const UPDATE_FAILED = 'Could not update just now — {why} The times below are as they stood at {time}. Trying again in {seconds} seconds.';
 const UPDATE_OUTAGE = 'Black Bloc did not answer.';
-const KIND_READ_ONLY = 'These times come from {source}, which moves them itself and is re-read every few minutes, so they cannot be changed here. **Started now** and **Finished now** still work.';
 const DAY_CHIP = '{day} · {runs}';
 const SHIFT_LABEL = 'Runs not yet started';
 const SHIFT_STEPS = [[5, 'Behind 5'], [10, 'Behind 10'], [-5, 'Ahead 5'], [-10, 'Ahead 10']];
@@ -287,7 +284,6 @@ function headCard(day) {
     : el('span', { text: marathon.source_word });
   const read = marathon.last_fetched_at ? ago(marathon.last_fetched_at) : null;
   const next = marathon.next_read_at && new Date(marathon.next_read_at).getTime() > Date.now() ? marathon.next_read_at : null;
-  const kind = marathon.archived ? KIND_ARCHIVED : sheet.editable ? KIND_EDITABLE : sheet.kind === 'tracker' ? KIND_READ_ONLY : KIND_KEPT;
   return card(null, [
     el('div', { class: 'rs-head' }, [
       el('h2', { class: 'rs-title', text: said(HEAD, { marathon: marathon.name, day: day ? dayLabel(day.starts_at, viewer.zone) : '' }) }),
@@ -300,7 +296,7 @@ function headCard(day) {
       next ? el('span', { title: stamp(next), text: said(NEXT_READ_LINE, { time: clock(next) }) }) : null,
       channel(marathon.watch_url) ? el('a', { class: 'say-nothing-do', href: marathon.watch_url, target: '_blank', rel: 'noopener', title: `twitch.tv/${marathon.channel_login}`, text: WATCH }) : null,
     ])),
-    el('p', { class: 'field-help' }, boldParts(said(kind, { source: marathon.source_word }))),
+    marathon.archived ? el('p', { class: 'field-help', text: KIND_ARCHIVED }) : null,
     zoneLine(),
   ]);
 }
