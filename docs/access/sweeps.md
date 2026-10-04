@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-10-03 (branch `reminder-edit-in-place`)** — ONE section APPENDED (`RE-a`…`RE-h`, BUILT, NOT MERGED, NOT verified against a browser or Discord); nothing else touched. Before that,
 > **2026-10-03 (branch `hotfix-viewer-source`)** — ONE section APPENDED (`HV-a`…`HV-g`, BUILT, NOT MERGED; both drawers rendered in a browser on the branch's mock, nothing verified against Discord or Fly); nothing else touched. Before that,
 > **2026-10-03 (branch `hotfix-setup-buffer`)** — ONE section APPENDED (`SB-a`…`SB-e`, BUILT, NOT MERGED, NOT verified against a browser, Discord or a live show); `CT-c`'s *Spyro's real start + 1:08* annotated (+ the buffer); nothing else touched. Before that,
 > **2026-09-28 (branch `people-unify`)** — ONE section APPENDED (`PU-a`…`PU-f`, BUILT, NOT MERGED, NOT verified against a browser or Discord), superseding `HS-a`, `HS-g`'s *BaF host events* clause and `MA-h`'s Scan hosts clause (marked); nothing else touched. Before that,
@@ -4008,3 +4009,23 @@ proven in Discord** — the tests prove the text and the allowed mentions, never
 |---|---|---|
 | **`RN-a`** | Events ▸ a marathon ▸ **Rename…** ▸ set *Black in a Flash: Soul Train* ▸ Rename it | The drawer re-opens under the new name with the sentence naming what follows and what keeps the old name; an empty name stays in the dialog in words. |
 | **`RN-b`** | ⚠️ **Discord only.** The same marathon's pinned controls, inbox post, board; then `/event` ▸ the marathon ▸ **Schedule…** ▸ **Rename…** | Controls at once, inbox/board/runner posts within a tick carry the new name; the thread title and any linked event keep the old one. |
+## Rows `RE-a` … `RE-h` — a moved run EDITS its heads-up instead of posting again (branch `reminder-edit-in-place`, 2026-10-03)
+
+🔨 **BUILT on branch `reminder-edit-in-place`, NOT merged, NOT deployed, NOT verified in a browser or Discord.** Owner,
+2026-10-03, asked *"if a run is delayed after the 15 minute warning do we make a new post at the next 15min warning or
+edit the existing post?"* — *"yes edit in place"*. Design:
+[`../info/reminder-edit-in-place-design.md`](../info/reminder-edit-in-place-design.md). ⚠️ **Only Discord can show an
+edit** — the tests prove the text, the allowed mentions and the count of edits, never what a member's client draws.
+Local check first: `MOCK_PORT=8823 node site/mock/server.mjs` from the branch, then
+<http://localhost:8823/settings.html> ▸ Marathons. Phoenix times (UTC−7).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`RE-a`** | Settings ▸ Marathons: find *What happens to a posted reminder when its run moves*, *How many posted reminders one marathon rewrites per minute*, *What a posted reminder says once its run is off the schedule* | **edit** (choices edit / repost), **10**, and `{member} {part} **{game}** ({category}) on **{marathon}** — {state}.` Each saves; a `{word}` the dropped template cannot fill is refused in words. The same three in `/settings`. |
+| **`RE-b`** | ⚠️ **Discord only.** A BaF run whose 15-minute heads-up has posted slips (a Hotfix show running long is the easy one) | Within a minute BOTH copies — the public reminder channel and the marathon's staff thread — show the new time, marked *(edited)*; **no second post, no second @Marathon ping**; the `@Marathon` in front of the public copy is still there. `marathon.reminder_edited` twice in the log, `copy` public and staff, `from` → `to`. |
+| **`RE-c`** | ⚠️ **Discord only.** Wait for the run's NEW 15-minute mark | Nothing posts. |
+| **`RE-d`** | ⚠️ **Discord only.** A run with its 24-hour or 2-hour heads-up out moves EARLIER, or by only 2–3 minutes | The same posts are corrected the same way. |
+| **`RE-e`** | ⚠️ **Discord only, right after the deploy.** A run whose heads-up posted BEFORE the deploy moves | The old post keeps its old time (it cannot be edited — its id was never stored) and **nothing posts again**. No `marathon.reminder_edited` row for it. This happens once per such run. |
+| **`RE-f`** | ⚠️ **Discord only.** Delete one posted heads-up by hand, then let its run move | It is not posted again. One `marathon.reminder_lost` row (`reason: message_gone`), and no more after it. |
+| **`RE-g`** | ⚠️ **Discord only.** A run with a heads-up out is taken off the schedule | The post reads *"@member runs **Game** (Category) on **Marathon** — off the schedule."* (`marathon_state_dropped`); if the run comes back, its time comes back. |
+| **`RE-h`** | ⚠️ **Discord only.** A BaF HOST block with a heads-up out moves | The block's public heads-up is edited the same way (`marathon.host_reminder_edited`), not posted again. |

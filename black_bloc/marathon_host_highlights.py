@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
 from . import marathon as mt
+from . import marathon_reminder_posts as mrem
 from .golive import parse_ts
 
 COLUMN = "host_highlight_posts"
@@ -153,6 +154,7 @@ def _record(one: dict[str, Any]) -> dict[str, Any]:
             "start_run_id": run_id,
             "runs": [run_id],
             "marks": [],
+            mrem.HOST_FIELD: {},
             "legacy_reminded": bool(one.get("reminded")),
         } | _pointer(one)
     start = int(one["start_run_id"])
@@ -160,6 +162,7 @@ def _record(one: dict[str, Any]) -> dict[str, Any]:
         "start_run_id": start,
         "runs": [int(run) for run in one.get("runs") or ()] or [start],
         "marks": _marks(one.get("marks")),
+        mrem.HOST_FIELD: mrem.posts_of(one.get(mrem.HOST_FIELD)),
     } | _pointer(one)
 
 
@@ -219,6 +222,7 @@ def new_record(block: Block) -> dict[str, Any]:
         "removed": False,
         "tried": False,
         "marks": [],
+        mrem.HOST_FIELD: {},
     }
     attach(record, block)
     return record
@@ -266,13 +270,31 @@ def passed_marks(block: Block, marks: Any, now: datetime) -> list[int]:
     return sorted(int(one) for one in marks if at - timedelta(minutes=int(one)) <= now)
 
 
-def rearmed(record: dict[str, Any], block: Block, now: datetime) -> bool:
-    """A block that moved later forgets every mark whose moment is ahead again."""
-    kept = mt.rearmed(record.get("marks"), mt._cell(block.first, "scheduled_at"), now)
+def rearmed(
+    record: dict[str, Any], block: Block, now: datetime, mode: str = mrem.REPOST
+) -> bool:
+    """A block that moved later forgets every mark whose moment is ahead again — in `edit`,
+    only the marks that never posted."""
+    kept, posts = mrem.rearmed(
+        record.get("marks"),
+        record.get(mrem.HOST_FIELD) or {},
+        mt._cell(block.first, "scheduled_at"),
+        now,
+        mode,
+    )
     if kept == sorted({int(one) for one in record.get("marks") or ()}):
         return False
     record["marks"] = kept
+    record[mrem.HOST_FIELD] = posts
     return True
+
+
+def is_dropped(block: Block) -> bool:
+    return all(mt._cell(one, "state") == mt.DROPPED for one in block.runs)
+
+
+def dropped_row(block: Block) -> dict[str, Any]:
+    return view_row(block) | {"state": mt.DROPPED}
 
 
 __all__ = [
@@ -287,8 +309,10 @@ __all__ = [
     "blocks",
     "claim",
     "containing",
+    "dropped_row",
     "due",
     "dump",
+    "is_dropped",
     "is_up",
     "left_behind",
     "new_record",

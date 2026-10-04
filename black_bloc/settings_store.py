@@ -4731,6 +4731,10 @@ MARATHON_PING_MINUTES_KEY = "marathon_ping_minutes"
 MARATHON_REMINDER_PINGS_KEY = "marathon_reminder_pings"
 MARATHON_LIVE_PINGS_KEY = "marathon_live_pings"
 MARATHON_REMINDER_STALE_KEY = "marathon_reminder_stale_minutes"
+MARATHON_REMINDER_ON_MOVE_KEY = "marathon_reminder_on_move"
+MARATHON_REMINDER_ON_MOVES = ("edit", "repost")
+MARATHON_REMINDER_EDIT_LIMIT_KEY = "marathon_reminder_edit_limit"
+MARATHON_REMINDER_EDIT_LIMIT = 10
 MARATHON_PIN_BOARD_KEY = "marathon_pin_board"
 MARATHON_RUNNER_POSTS_KEY = "marathon_runner_posts"
 MARATHON_RUNNER_POSTS_PINNED_KEY = "marathon_runner_posts_pinned"
@@ -4910,6 +4914,7 @@ MARATHON_BOARD_EMPTY_KEY = "marathon_board_empty_line"
 MARATHON_RUNNER_POST_TEMPLATE_KEY = "marathon_runner_post_template"
 MARATHON_RUNNER_POST_UNLISTED_KEY = "marathon_runner_post_unlisted"
 MARATHON_REMINDER_TEMPLATE_KEY = "marathon_reminder_template"
+MARATHON_REMINDER_DROPPED_TEMPLATE_KEY = "marathon_reminder_dropped_template"
 MARATHON_LIVE_TEMPLATE_KEY = "marathon_live_template"
 MARATHON_DONE_TEMPLATE_KEY = "marathon_done_template"
 MARATHON_PART_RUNNER_KEY = "marathon_part_runner"
@@ -4999,6 +5004,7 @@ MARATHON_REMINDER_FIELDS = (
     "marathon",
     "part",
 )
+MARATHON_REMINDER_DROPPED_FIELDS = (*MARATHON_REMINDER_FIELDS, "state")
 MARATHON_LIVE_FIELDS = ("member", "game", "category", "url", "marathon", "part")
 MARATHON_UNKNOWN_FIELD = (
     "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. This "
@@ -5160,6 +5166,24 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         30,
         "minutes past its moment after which a reminder is skipped and logged instead of posted "
         "late. 30 by default",
+    ),
+    MARATHON_REMINDER_ON_MOVE_KEY: (
+        "enum",
+        "edit",
+        "what happens to a reminder already posted when its run (or its host block) moves: "
+        "edit rewrites that post in place with the new time — any size of move, earlier or "
+        "later, in the staff thread and the public channel alike — pings nobody, and never "
+        "posts that mark a second time; a run taken off the schedule gets "
+        "marathon_reminder_dropped_template. repost leaves the old post as it was and, when the "
+        "run moves later by marathon_move_minutes or more, posts the reminder again at the new "
+        "time (pinging again at marathon_ping_minutes). edit by default",
+    ),
+    MARATHON_REMINDER_EDIT_LIMIT_KEY: (
+        "int",
+        MARATHON_REMINDER_EDIT_LIMIT,
+        "how many posted reminders one marathon may rewrite per minute while "
+        "marathon_reminder_on_move is edit — when a whole day shifts, the soonest runs are "
+        "corrected first and the rest follow a minute later. 10 by default",
     ),
     MARATHON_PIN_BOARD_KEY: (
         "bool",
@@ -6285,6 +6309,14 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "a reminder before a BaF run. It takes {member} {game} {category} {in} {when} {url} "
         "{marathon} {part}",
     ),
+    MARATHON_REMINDER_DROPPED_TEMPLATE_KEY: (
+        "{member} {part} **{game}** ({category}) on **{marathon}** — {state}.",
+        MARATHON_REMINDER_DROPPED_FIELDS,
+        "what a posted reminder is rewritten to — the staff thread's copy and the public copy "
+        "alike — when its run is taken off the schedule while marathon_reminder_on_move is edit. "
+        "{state} is marathon_state_dropped. It takes {member} {game} {category} {in} {when} {url} "
+        "{marathon} {part} {state}",
+    ),
     MARATHON_LIVE_TEMPLATE_KEY: (
         "{member} {part} **{game}** ({category}) on **{marathon}** right now! {url}",
         MARATHON_LIVE_FIELDS,
@@ -6445,6 +6477,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_LATE_GRACE_KEY: (0, 360),
     MARATHON_PING_MINUTES_KEY: (0, 240),
     MARATHON_REMINDER_STALE_KEY: (1, 240),
+    MARATHON_REMINDER_EDIT_LIMIT_KEY: (1, 50),
     MARATHON_WINDOW_SLACK_KEY: (0, 24),
     MARATHON_SPOTLIGHT_LEAD_KEY: (0, 48),
     MARATHON_SPOTLIGHT_SLACK_KEY: (0, 48),
@@ -6563,6 +6596,7 @@ KEY_HELP.update({key: said for key, (_, _, said) in MARATHON_WORDS.items()})
 KEY_CHOICES[MARATHON_MODE_KEY] = MARATHON_MODES
 KEY_CHOICES[MARATHON_FEED_ACTION_KEY] = MARATHON_FEED_ACTIONS
 KEY_CHOICES[MARATHON_FEED_NOTICE_WHEN_KEY] = MARATHON_FEED_NOTICE_WHENS
+KEY_CHOICES[MARATHON_REMINDER_ON_MOVE_KEY] = MARATHON_REMINDER_ON_MOVES
 KEY_CHOICES[MARATHON_EVENT_MODE_DEFAULT_KEY] = MARATHON_EVENT_MODES
 KEY_CHOICES[MARATHON_NOTICE_HOME_KEY] = MARATHON_NOTICE_HOMES
 KEY_CHOICES[MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY] = PING_MODES

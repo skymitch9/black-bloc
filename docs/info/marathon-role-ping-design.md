@@ -119,7 +119,7 @@ past-tense word and a new `{day}`:
   still reads *on now* is re-worded at the next boot (it never got a done edit at all).
 - The same treatment for a host block's highlight (`follow_one` → the same `stands` and `public_text`).
 - **The public 15-minute heads-up copy is NOT edited on done** — it is not edited today either (no message id is
-  stored for it), and it stays as posted.
+  stored for it), and it stays as posted. ⚠️ **2026-10-03 — superseded in part by [`reminder-edit-in-place-design.md`](reminder-edit-in-place-design.md):** while `marathon_reminder_on_move` is `edit` (the default) a mark that POSTED is never re-armed — its post is edited in place — and a reminder's message id IS stored now.
 
 ## The keys (14, all Marathons group: registry + mock row + label; Settings page and `/settings`)
 

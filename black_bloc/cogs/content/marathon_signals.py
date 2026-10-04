@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from typing import Any
 
 from ... import marathon as mt
 from ... import marathon_overlay as overlay
+from ... import marathon_reminder_posts as mrem
 from ... import marathon_signals as sig
 from ...actionlog import log_action
 from ...logkinds import VIA_DISCORD, kind_via
@@ -15,6 +15,7 @@ from ...panels import Outcome, refusal
 from ...settings_store import (
     MARATHON_CATEGORY_CONFIRMS_KEY,
     MARATHON_MOVE_MINUTES_KEY,
+    MARATHON_REMINDER_ON_MOVE_KEY,
     MARATHON_RETRO_CATEGORY_KEY,
     MARATHON_SETUP_MINUTES_KEY,
     MARATHON_TITLE_CONFIRMS_KEY,
@@ -199,12 +200,11 @@ async def retime(cog: Any, guild: Any, marathon: Any, *, because: str) -> int:
         return 0
     now = cog.clock()
     move_minutes = int(bot.store.get(guild.id, MARATHON_MOVE_MINUTES_KEY))
+    on_move = str(bot.store.get(guild.id, MARATHON_REMINDER_ON_MOVE_KEY))
     for change in changes:
         fields: dict[str, Any] = {"scheduled_at": change.starts_at, "ends_at": change.ends_at}
         if _moved_enough(change.row["scheduled_at"], change.starts_at, move_minutes):
-            fields["reminders_sent"] = json.dumps(
-                mt.rearmed(mt.marks_of(change.row), change.starts_at, now)
-            )
+            fields |= mrem.run_fields(change.row, change.starts_at, now, on_move)
         await update_run(bot.db, change.row["id"], **fields)
     first = changes[0]
     await log_action(

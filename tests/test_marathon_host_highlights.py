@@ -4,6 +4,7 @@ from pathlib import Path
 
 from black_bloc import marathon as mt
 from black_bloc import marathon_host_highlights as mhh
+from black_bloc import marathon_reminder_posts as mrem
 from black_bloc.marathon_sources import parse_gdq
 
 FIXTURE = Path(__file__).parent / "fixtures" / "marathon" / "gdq_sgdq2026_runs.json"
@@ -210,3 +211,45 @@ def test_a_post_left_behind_follows_its_runs_with_the_hosts_it_named():
     block = mhh.left_behind(record, rows)
     assert block.run_ids == [4, 5] and block.names == "anarchy"
     assert mhh.left_behind(record | {"runs": [9]}, rows) is None
+
+
+def test_edit_keeps_a_blocks_posted_marks_and_fires_only_the_ones_that_never_posted():
+    (block,) = mhh.blocks([a_row(1, 1500, [ANARCHY])])
+    copy = {"channel_id": 9, "message_id": 5, "text": "x", "head": "", "at": None}
+    record = {
+        "marks": [1440, 120],
+        "reminders": {1440: {"posted": True, "public": copy}, 120: {"posted": False}},
+    }
+
+    assert mhh.rearmed(record, block, NOW + timedelta(minutes=100), mrem.EDIT)
+    assert record["marks"] == [1440]
+    assert record["reminders"] == {1440: {"posted": True, "public": copy}}
+    legacy = {"marks": [1440, 120]}
+    assert not mhh.rearmed(legacy, block, NOW, mrem.EDIT) and legacy["marks"] == [1440, 120]
+    again = {"marks": [1440, 120], "reminders": dict(record["reminders"])}
+    assert mhh.rearmed(again, block, NOW, mrem.REPOST)
+    assert again["marks"] == [] and again["reminders"] == {}
+
+
+def test_a_record_carries_its_remembered_heads_ups_through_the_column_and_back():
+    (block,) = mhh.blocks([a_row(1, 1500, [ANARCHY])])
+    record = mhh.new_record(block)
+    assert record["reminders"] == {}
+    copy = {"channel_id": 9, "message_id": 5, "text": "x", "head": "<@&1> ", "at": "t"}
+    record["reminders"][15] = mrem.entry_of(public=copy)
+
+    (back,) = mhh.records({mhh.COLUMN: mhh.dump([record])})
+
+    assert back["reminders"] == {15: {"posted": True, "public": copy}}
+    (old,) = mhh.records({mhh.COLUMN: json.dumps([{"run_id": 1, "hosts": [], "reminded": True}])})
+    assert old["reminders"] == {}
+
+
+def test_a_block_is_dropped_only_when_every_run_of_it_is_off_the_schedule():
+    rows = [a_row(1, 1500, [ANARCHY]), a_row(2, 1585, [ANARCHY])]
+    block = mhh.Block(rows, [])
+    assert not mhh.is_dropped(block)
+    rows[0]["state"] = mt.DROPPED
+    assert not mhh.is_dropped(block)
+    rows[1]["state"] = mt.DROPPED
+    assert mhh.is_dropped(block) and mhh.dropped_row(block)["state"] == mt.DROPPED
