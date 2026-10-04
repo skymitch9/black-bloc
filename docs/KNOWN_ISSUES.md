@@ -169,6 +169,16 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
+## KI-41 — An event that lives in a forum post never gets its *has ended* line — `ACCEPTED`
+
+**Symptom:** when such an event finishes, the log reads `event.done` and then `event.ended_room_failed reason=no_room`, and the closing sentence is not posted in the event's post. Seen for event 5 (*What Day It Was*, 2026-10-04 07:30:26Z) and event 6 (*Bot Stuff*, 2026-09-19) — 2 of 2 forum-post events; an event whose home is a room is not affected.
+
+**Status:** `ACCEPTED` 2026-10-04 — owner, verbatim: *"Don't worry about that the failed event"*, after asking why event 5 failed.
+
+**Why tolerated:** nothing else fails — the event finishes, its post is tagged done and archived; only the one closing line is missing. Cause, read in the code and NOT reproduced: `cogs/community/events.py` `_finish` archives the post (`rename_channel(… DONE)`; `FORUM_ARCHIVE_STATUSES` includes done) before `post_to_room(… "ended")`, whose lookup (`events.py` `post_of`) reads discord.py's cache, and an archived thread is not in it.
+
+**What would change it:** the owner asking for the closing line, or **1** case where a forum-post event fails at something other than this line. The fix is small: say the line before archiving, or fetch the thread when the cache misses, with a test for a forum-post event.
+
 ## KI-40 — The OLD machine's marathon loop can tick once after shutdown closed the database, logging a Traceback during a deploy — `WATCHING`
 
 **Symptom:** during the v184 deploy (2026-09-28 08:54:28Z), after Fly sent SIGINT to the old machine and uvicorn logged *Application shutdown complete*, `black_bloc.cogs.content.marathon` logged `marathon: the tick failed` with `sqlite3.ProgrammingError: Cannot operate on a closed database` (`marathon.py` `ticker` → `loops.py` `run`). Six seconds later the new machine booted cleanly. A log grep for `Traceback` right after a deploy therefore finds one that is not the new boot's.
