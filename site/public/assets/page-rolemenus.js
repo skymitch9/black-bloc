@@ -8,7 +8,9 @@ import {
   avatar,
   badge,
   bar,
+  blankMeans,
   button,
+  capMark,
   card,
   channelSelect,
   el,
@@ -30,19 +32,19 @@ import {
   section,
   segment,
   settingsPanel,
-  textAction,
+  slugInput,
   table,
+  textAction,
   untilWhen,
 } from './ui.js';
 
 const MODE_KEY = 'rolemenu_mode';
 const DEFAULT_CHANNEL_KEY = 'role_menu_channel_id';
-const SWITCH_HELP = 'Off takes the panels down; on posts every ' +
-  'menu again, and nobody loses a role either way.';
 const TURNED_ON = 'On. Every menu that has a channel is posted there again, and the /rolemenu ' +
   'commands come back, within about five seconds.';
 const TURNED_OFF = 'Off. The posted panels are removed, and /rolemenu stays where it is in ' +
   'Discord within about five seconds. Nobody loses a role and no menu is changed.';
+const NEVER = 'never';
 const NO_KEY = 'The bot did not report a rolemenu_mode key, so this switch is not shown rather ' +
   'than guessed at.';
 
@@ -50,53 +52,23 @@ const SEED_BODY = 'Six menus this server expects — pronouns, playstyle, mentor
   'event-alerts and runner-status. A name you already have is left exactly as it is, options ' +
   'and all, and nothing is posted until you post it.';
 
-const APPROVAL_HELP = 'On, picking this role asks staff first instead of handing it over.';
-const EXPIRES_HELP = 'Blank means the role never runs out.';
-const RETRY_HELP = 'How long after a no before they may ask again.';
-const CHANNEL_POSTED = 'Saving a different channel moves the panel: the old message comes down ' +
-  'and a new one goes up.';
-const CHANNEL_UNPOSTED = 'This menu has no panel yet, so there is nothing to move — post it from ' +
-  'Post a menu below.';
+const CHANNEL_UNPOSTED = 'No panel is posted yet.';
 
-const REQUESTS_NOTE = 'What members have asked for on the menus that ask staff first. Approving ' +
-  'hands the role over, tells them, and starts the clock if the menu has one.';
-const TIMED_NOTE = 'Every role Black Bloc is holding a clock on. Ending one takes the role off ' +
-  'now; letting it run out does the same thing on its own.';
-const NO_REQUESTS = 'Nobody is waiting on staff. A menu only asks first when its Approval is on.';
+const NO_REQUESTS = 'Nobody is waiting on staff.';
 const NO_DECIDED = 'Nothing has been decided yet.';
 const NO_GRANTS = 'No role has a clock on it. Grant one below, or give a menu an "Expires after".';
-const ASSIGN_HELP = 'The same path /rolemenu ▸ Hand roles out… takes: only the roles on the menu you pick ' +
-  'are touched, and a clock starts if that menu has one.';
 const NO_MENU_TO_ASSIGN = 'No menu has a role on it yet, so there is nothing to hand out.';
 const PICK_A_MEMBER = 'Pick the member this is about first.';
 const PICK_A_ROLE = 'Pick the role to give them first.';
-const A_REASON = 'Say why — they are sent exactly this.';
 
 const APPLICATIONS_MODE_KEY = 'applications_mode';
-const APPLICATIONS_NOTE = 'Forms staff write, that members fill in. Approving one hands the ' +
-  'form\u2019s role over, tells the applicant, and names whoever has to do the human step after it.';
-const APPLICATIONS_SWITCH = 'Off leaves /apply in Discord saying so and offering nobody a ' +
-  'form, and stops the Apply buttons; shadow writes everything down but posts nothing, DMs ' +
-  'nobody and hands no role over; on is the real thing.';
-const NO_APPLICATION_FORMS = 'No application form exists yet. Make one below \u2014 the Twitch ' +
-  'Team form is what this was built for.';
+const NO_APPLICATION_FORMS = 'No application form exists yet. Make one below.';
 const NO_APPLICATIONS = 'Nobody is waiting on staff.';
 const NO_DECIDED_APPLICATIONS = 'No application has been decided yet.';
-const QUESTIONS_NOTE = 'Discord shows at most five boxes on one form, in this order.';
-const FORM_NAME_HELP = 'Short, lower-case, no spaces \u2014 this is what the logs and the ' +
-  '/apply panel name it by.';
-const NEXT_STEP_HELP = 'The human step after an approval. The card says \u201c@owner \u2014 next ' +
-  'step: \u2026\u201d and the applicant is told the same thing.';
-const APPROVED_TEXT_HELP = 'What an approved applicant is DMed.';
-const APPLICATION_EXPIRES_HELP = 'Blank or 0 means the role never runs out.';
-const APPLICATION_RETRY_HELP = 'Blank uses applications_retry_days.';
-const A_DENY_REASON = 'Say why \u2014 they are sent exactly this.';
 const NO_ROLE_OPTION = 'No role \u2014 keep a list';
-const ROLE_FIELD_HELP = 'Leave blank to keep a list instead of handing over a role.';
 const NO_ROSTER_YET = 'Nobody is on this list yet.';
 const NOT_LINKED = 'not linked';
 const LEFT_THE_SERVER = 'left the server';
-const A_REMOVE_REASON = 'Say why \u2014 they are sent exactly this.';
 const COPIED = 'Copied. Paste it into the team page.';
 const COULD_NOT_COPY = 'This browser would not let the page reach the clipboard, so nothing '
   + 'was copied. Select the lines in the table and copy them by hand.';
@@ -203,7 +175,7 @@ async function optionRow(option) {
 async function editor(menu) {
   const say = notice();
   const posted = Boolean(menu && menu.message_id);
-  const name = el('input', { class: 'input', type: 'text', value: menu ? menu.name : '', disabled: menu ? true : undefined });
+  const name = slugInput(el('input', { class: 'input', type: 'text', value: menu ? menu.name : '', disabled: menu ? true : undefined }));
   const title = el('input', { class: 'input', type: 'text', value: menu ? menu.title || '' : '' });
   const description = el('input', { class: 'input', type: 'text', value: menu ? menu.description || '' : '' });
   const mode = el('select', { class: 'input' });
@@ -215,6 +187,7 @@ async function editor(menu) {
     menu && menu.approval ? 'true' : 'false',
   );
   const expires = daysBox(menu ? menu.expires_days : null);
+  expires.placeholder = NEVER;
   const retry = daysBox(menu && menu.retry_days !== null && menu.retry_days !== undefined ? menu.retry_days : 7, { min: '1' });
   const where = await channelSelect(menu ? menu.channel_id : null);
   where.disabled = posted ? undefined : true;
@@ -273,16 +246,16 @@ async function editor(menu) {
 
   return card(menu ? `Editing ${menu.name}` : 'New menu', [
     el('div', { class: 'formrow' }, [
-      field('Name', name, menu ? 'A menu keeps its name for life; make a new one to rename it.' : 'Short, no spaces — this is how the slash commands find it.'),
+      field('Name', name),
       field('Title', title),
       field('Description', description),
       field('Mode', mode),
     ]),
     el('div', { class: 'formrow' }, [
-      field('Approval', approval, APPROVAL_HELP),
-      field('Expires after, days', expires, EXPIRES_HELP),
-      field('Retry after, days', retry, RETRY_HELP),
-      field('Channel', where, posted ? CHANNEL_POSTED : CHANNEL_UNPOSTED),
+      field('Staff approve first', approval),
+      field('Expires after, days', expires),
+      field('Ask again after a no, days', retry),
+      field('Channel', where, posted ? null : CHANNEL_UNPOSTED),
     ]),
     el('h3', { text: 'Options' }),
     list,
@@ -342,6 +315,7 @@ async function postCard(menu, say) {
 
 function pendingCard(row, menu, say) {
   const clock = menu && menu.expires_days ? daysBox(menu.expires_days) : null;
+  if (clock) clock.placeholder = 'no end date';
 
   const approve = button('Approve', async () => {
     const body = {};
@@ -363,7 +337,7 @@ function pendingCard(row, menu, say) {
       title: `Say no to ${row.user_name || row.user_id}?`,
       body: [
         `They are DM'd the reason you type here, and told when they may ask for ${row.role_name} again.`,
-        field('Reason', reason, A_REASON),
+        field('Reason', reason),
       ],
       confirmLabel: 'Deny it',
     });
@@ -395,7 +369,7 @@ function pendingCard(row, menu, say) {
 
   const controls = clock
     ? el('div', { class: 'formrow' }, [
-      field('Give it for, days', clock, 'Blank or 0 hands it over with no end date.'),
+      field('Give it for, days', clock),
       bar([approve, deny]),
     ])
     : bar([approve, deny]);
@@ -425,7 +399,7 @@ function requestsSection(rows, menus, say) {
   const pending = rows.filter((row) => row.status === 'pending');
   const decided = rows.filter((row) => row.status !== 'pending');
   const byName = new Map(menus.map((menu) => [menu.name, menu]));
-  const one = section('Requests', REQUESTS_NOTE, { count: pending.length });
+  const one = section('Requests', null, { count: pending.length });
 
   one.body.append(
     pending.length === 0
@@ -509,6 +483,7 @@ async function grantForm(say) {
   const picker = memberPicker({ label: 'Member' });
   const role = await roleSelect(null);
   const days = daysBox(7, { min: '0' });
+  days.placeholder = NEVER;
   const reason = el('input', { class: 'input', type: 'text', placeholder: 'why — this only goes in the log' });
 
   const go = button('Grant it', async () => {
@@ -540,7 +515,7 @@ async function grantForm(say) {
     picker.node,
     el('div', { class: 'formrow' }, [
       field('Role', role),
-      field('For, days', days, 'Blank means it never runs out.'),
+      field('For, days', days),
       field('Reason', reason),
       bar([go]),
     ]),
@@ -600,7 +575,6 @@ function assignForm(menus, say) {
   };
 
   return card('Hand roles out', [
-    el('p', { class: 'field-help', text: ASSIGN_HELP }),
     picker.node,
     field('Menu', which),
     boxes,
@@ -613,7 +587,7 @@ function assignForm(menus, say) {
 
 async function timedSection(rows, menus, say) {
   const open = rows.filter((row) => row.open).length;
-  const one = section('Timed roles', TIMED_NOTE, { count: open });
+  const one = section('Timed roles', null, { count: open });
   one.body.append(
     table([
       { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
@@ -689,19 +663,20 @@ function questionRow(question, onMove) {
 
 async function formEditor(form, questionsMax) {
   const say = notice();
-  const name = el('input', { class: 'input', type: 'text', value: form ? form.name : '', disabled: form ? true : undefined });
+  const name = slugInput(el('input', { class: 'input', type: 'text', value: form ? form.name : '', disabled: form ? true : undefined }), { lower: true });
   const title = el('input', { class: 'input', type: 'text', value: form ? form.title || '' : '' });
   const description = el('input', { class: 'input', type: 'text', value: form ? form.description || '' : '' });
   const role = await roleSelect(form ? form.role_id : null);
-  const blankRole = role.querySelector('option[value=""]');
-  if (blankRole) blankRole.textContent = NO_ROLE_OPTION;
-  const channel = await channelSelect(form ? form.review_channel_id : null);
-  const approver = await roleSelect(form ? form.approver_role_id : null);
+  blankMeans(role, NO_ROLE_OPTION);
+  const channel = blankMeans(await channelSelect(form ? form.review_channel_id : null), 'the default channel');
+  const approver = blankMeans(await roleSelect(form ? form.approver_role_id : null), 'the default approvers');
   const owner = memberPicker({ label: 'Who does the next step' });
   const nextStep = el('input', { class: 'input', type: 'text', value: form && form.next_step ? form.next_step : '' });
   const approvedText = el('input', { class: 'input', type: 'text', value: form && form.approved_text ? form.approved_text : '' });
   const expires = daysBox(form ? form.expires_days : null);
+  expires.placeholder = NEVER;
   const retry = daysBox(form ? form.retry_days : null);
+  retry.placeholder = 'the default';
   const open = segment(
     [{ value: 'true', label: 'Open' }, { value: 'false', label: 'Closed' }],
     form && form.open === false ? 'false' : 'true',
@@ -716,6 +691,10 @@ async function formEditor(form, questionsMax) {
     if (at < 0 || to < 0 || to >= held.length) return;
     list.insertBefore(by < 0 ? node : held[to], by < 0 ? held[to] : node);
   };
+  const addButton = button('Add question', () => addQuestion(null), { tone: 'quiet' });
+  const questionsMark = capMark(addButton, questionsMax);
+  new MutationObserver(() => questionsMark.paint(list.children.length)).observe(list, { childList: true });
+  questionsMark.paint(list.children.length);
   const addQuestion = (question) => {
     if (list.children.length >= questionsMax) {
       say.say(`Discord shows at most ${questionsMax} boxes on one form, so no more were added.`, 'warn');
@@ -778,34 +757,33 @@ async function formEditor(form, questionsMax) {
     refresh();
   }, { tone: 'quiet' });
 
-  const expiresField = field('Role lasts, days', expires, APPLICATION_EXPIRES_HELP);
+  const expiresField = field('Role lasts, days', expires);
   const syncRole = () => { expiresField.hidden = !readSelect(role, false); };
   role.addEventListener('change', syncRole);
   syncRole();
 
   return card(form ? `Editing ${form.name}` : 'New application form', [
     el('div', { class: 'formrow' }, [
-      field('Name', name, form ? 'A form keeps its name for life; make a new one to rename it.' : FORM_NAME_HELP),
+      field('Name', name),
       field('Heading', title),
       field('Description', description),
       field('Taking applications', open),
     ]),
     el('div', { class: 'formrow' }, [
-      field('Role it hands over', role, ROLE_FIELD_HELP),
-      field('Cards go to', channel, 'Blank uses applications_channel_id.'),
-      field('Who may decide', approver, 'Blank uses applications_approver_role_id, then staff.'),
+      field('Role it hands over', role),
+      field('Cards go to', channel),
+      field('Who may decide', approver),
     ]),
     owner.node,
     el('div', { class: 'formrow' }, [
-      field('Next step', nextStep, NEXT_STEP_HELP),
-      field('Approved message', approvedText, APPROVED_TEXT_HELP),
+      field('Next step', nextStep),
+      field('DM on approval', approvedText),
       expiresField,
-      field('Apply again after, days', retry, APPLICATION_RETRY_HELP),
+      field('Apply again after, days', retry),
     ]),
     el('h3', { text: 'Questions' }),
-    el('p', { class: 'field-help', text: QUESTIONS_NOTE }),
     list,
-    bar([button('Add question', () => addQuestion(null), { tone: 'quiet' })]),
+    bar([addButton, questionsMark]),
     say,
   ], { actions: [save, close] });
 }
@@ -838,7 +816,7 @@ function applicationCard(row, say) {
       title: `Say no to ${row.user_name || row.user_id}?`,
       body: [
         'They are DM’d the reason you type here, and told when they may apply again.',
-        field('Reason', reason, A_DENY_REASON),
+        field('Reason', reason),
       ],
       confirmLabel: 'Deny it',
     });
@@ -981,7 +959,7 @@ function rosterTable(rows, form, say) {
           title: `Take ${row.user_name || row.user_id} off ${form.name}?`,
           body: [
             'They are DM’d the reason you type here, and told when they may apply again.',
-            field('Reason', reason, A_REMOVE_REASON),
+            field('Reason', reason),
           ],
           confirmLabel: 'Take them off',
           tone: 'warn',
@@ -1072,7 +1050,7 @@ function applicationsMode(spec) {
       },
     },
   );
-  return el('div', {}, [field('Now', picker, APPLICATIONS_SWITCH), say]);
+  return el('div', {}, [field('Now', picker), say]);
 }
 
 async function applicationsSection(allSettings, say) {
@@ -1089,7 +1067,7 @@ async function applicationsSection(allSettings, say) {
 
   const namespace = settingsNamespace(allSettings, 'applications');
   const mode = namespace.find((spec) => spec.key === APPLICATIONS_MODE_KEY);
-  const one = section('Applications', APPLICATIONS_NOTE, { id: 'applications', count: waiting.length });
+  const one = section('Applications', null, { id: 'applications', count: waiting.length });
 
   if (mode) {
     one.body.append(card('Applications', [applicationsMode(mode)]));
@@ -1246,7 +1224,7 @@ async function load() {
     sayAgain('menus', say),
   );
 
-  const two = section('Post a menu', 'Posting again makes a new message; the old one stops handing out roles.', {
+  const two = section('Post a menu', null, {
     count: menus.length || null,
   });
   if (menus.length === 0) {
@@ -1265,10 +1243,10 @@ async function load() {
     );
   }
 
-  const switchboard = section('Role selection', SWITCH_HELP);
+  const switchboard = section('Role selection');
   switchboard.body.append(mode ? modeSwitch(mode) : sayNothing(NO_KEY));
 
-  const box = section('Settings', 'Where a menu goes, who answers role requests, and who gets pinged about them.', {
+  const box = section('Settings', null, {
     count: settingSpecs.length || null,
   });
   box.body.append(await settingsPanel(settingSpecs, {

@@ -7,6 +7,7 @@ import {
   ask,
   badge,
   bar,
+  blankMeans,
   button,
   card,
   channelSelect,
@@ -505,8 +506,8 @@ async function createForm(say) {
   const kind = el('select', { class: 'input' });
   for (const [value, label] of KINDS) kind.append(el('option', { value, text: label }));
   const hours = el('input', { class: 'input', type: 'number', min: '1', max: '768', value: '24' });
-  const where = await channelSelect(null);
-  const ping = await roleSelect(null);
+  const where = blankMeans(await channelSelect(null), 'the default channel');
+  const ping = blankMeans(await roleSelect(null), 'nobody');
   const anonymous = segment([{ value: 'false', label: 'Named' }, { value: 'true', label: 'Anonymous' }], 'false');
   const results = segment([{ value: 'live', label: 'Live bars' }, { value: 'close', label: 'Hidden until close' }], 'live');
   const thread = segment([{ value: 'false', label: 'No thread' }, { value: 'true', label: 'Open a thread' }], 'false');

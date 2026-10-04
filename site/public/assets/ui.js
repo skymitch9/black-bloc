@@ -2029,6 +2029,24 @@ export function quietHint(control, text) {
   return el('span', { class: 'sr-only', id, text });
 }
 
+export function blankMeans(select, text) {
+  const blank = select.querySelector('option[value=""]');
+  if (blank) blank.textContent = text;
+  return select;
+}
+
+export function slugInput(input, { lower = false } = {}) {
+  input.addEventListener('input', () => {
+    const at = input.selectionStart;
+    const spaced = input.value.replace(/\s+/g, '-');
+    const fixed = lower ? spaced.toLowerCase() : spaced;
+    if (fixed === input.value) return;
+    input.value = fixed;
+    input.setSelectionRange(at, at);
+  });
+  return input;
+}
+
 export function placeholdersOf(spec) {
   return tokensIn(spec && spec.default, spec && spec.help);
 }
