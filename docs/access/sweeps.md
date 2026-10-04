@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-10-03 (branch `hotfix-setup-buffer`)** — ONE section APPENDED (`SB-a`…`SB-e`, BUILT, NOT MERGED, NOT verified against a browser, Discord or a live show); `CT-c`'s *Spyro's real start + 1:08* annotated (+ the buffer); nothing else touched. Before that,
 > **2026-09-28 (branch `people-unify`)** — ONE section APPENDED (`PU-a`…`PU-f`, BUILT, NOT MERGED, NOT verified against a browser or Discord), superseding `HS-a`, `HS-g`'s *BaF host events* clause and `MA-h`'s Scan hosts clause (marked); nothing else touched. Before that,
 > **2026-09-28 (branch `marathon-announcements`)** — ONE section APPENDED (`MA-a`…`MA-i`, BUILT, NOT MERGED, NOT verified against a browser or Discord), superseding `HS-m`…`HS-q` (marked); nothing else touched. Before that,
 > **2026-09-28 (branch `host-highlights-per-run`)** — SIX rows APPENDED to the `HS` table (`HS-m`…`HS-r`, BUILT, NOT MERGED, NOT verified against a browser or Discord), superseding `HS-h`…`HS-l` (marked, never shipped); nothing else touched. Before that,
@@ -3868,7 +3869,7 @@ site/mock/server.mjs` from the branch, then <http://localhost:8907/events.html> 
 |---|---|---|
 | **`CT-a`** | Settings ▸ Marathons | `marathon_category_confirms` (on) beside `marathon_title_confirms`, and `marathon_retro_category` (`Retro`). Typing only spaces into the Retro box is refused in words. The `/settings` panel's key cards reach the same two keys. |
 | **`CT-b`** | After the deploy, before 10:00: Logs ▸ Marathon | One `marathon.categories_found` for GDQueer (found N, none M — write both numbers down: they are the first real answer to what Twitch has); no `marathon.category_lookup_failed`. |
-| **`CT-c`** | Sat, when Spyro actually starts: Events ▸ Marathons ▸ **GDQueer** | Spyro **on now** (because *the stream's Twitch category*, or the **certain** badge when the title names it too); Hamtaro's time is Spyro's real start + 1:08 with *· sheet said 11:08*; later runs follow. `marathon.retimed` in the log. Nothing pinged anyone. |
+| **`CT-c`** | Sat, when Spyro actually starts: Events ▸ Marathons ▸ **GDQueer** | Spyro **on now** (because *the stream's Twitch category*, or the **certain** badge when the title names it too); Hamtaro's time is Spyro's real start + 1:08 (⚠️ since `hotfix-setup-buffer`: + `marathon_setup_minutes` too — `SB-c`) with *· sheet said 11:08*; later runs follow. `marathon.retimed` in the log. Nothing pinged anyone. |
 | **`CT-d`** | Through the day | Each hand-over moves the clock; a game with no Twitch category is the run on now while the channel is in *Retro*; any `marathon.signals_disagree` row names both runs and which was trusted. Sunday's first run still starts 10:00. |
 | **`CT-e`** | The drawer ▸ **Back to the sheet's times** (or `/event` ▸ Marathons ▸ GDQueer ▸ **Schedule…** ▸ the same button) | Every run back on the sheet's times; the button disappears; `web.marathon.sheet_times` (or `marathon.sheet_times`). The next run the stream shows starting re-times from there. **Mark it live** on a run also moves every later run. |
 
@@ -3942,3 +3943,21 @@ check first: `MOCK_PORT=8921 node site/mock/server.mjs` from the branch, then
 | **`PU-d`** | Discord: `/event` ▸ Marathons ▸ GDQueer ▸ **People…** ▸ a slot ▸ a BaF runner; then a BaF host on Hidden Heroes | The slot line reads *(runs)* / *(hosts)* (*(runs + hosts)* for someone who does both); the buttons are the same set for each (Spotlight…, Opt out of highlight, Twitch name… / Unlink when paired). |
 | **`PU-e`** | (Only if the owner wants events) Hidden Heroes ▸ Event select ▸ *An event per BaF run and host block* (or the thread's **BaF run/host events: off · turn on**) | *"…makes one event per BaF run and per BaF host block… 1 run or host block event(s) made."*; ONE event *anarchy hosts Hidden Heroes* Fri 2026-10-02 16:00–18:50 in the Events queue (reviewed while marathon posts are shadow). Turning it off calls it off. |
 | **`PU-f`** | A control message nobody has re-rendered yet (or a screenshot's old id): press an old **Scan hosts** / **BaF host events** button | Ephemeral: *"The Scan hosts switch is gone — hosts are always found now…"* / *"The BaF host events switch is gone — events now follow the one **BaF run/host events** switch…"*; nothing changes; the message re-renders to six buttons. |
+
+## Rows `SB-a` … `SB-e` — Hotfix setup buffer: minutes between runs where Black Bloc keeps the clock (branch `hotfix-setup-buffer`, 2026-10-03)
+
+🔨 **BUILT on branch `hotfix-setup-buffer`, NOT merged, NOT deployed.** Owner, 2026-10-03: *"for our hotfix schedule we
+should try and add a 5 - 10 min buffer beteen each run"*. Design:
+[`../info/marathon-hotfix-design.md`](../info/marathon-hotfix-design.md) ▸ *Follow-up 2026-10-03 — setup buffer*. Rows
+lettered; the conductor numbers them. Local check first: <http://localhost:8797/settings.html#marathon_setup_minutes>
+(the conductor's mock, once it serves the branch).
+
+⏰ GDQueer day two starts **Sun 2026-10-04 10:00 Phoenix** — `SB-c` and `SB-d` need a Hotfix show that is on.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`SB-a`** | Settings ▸ Marathons ▸ *Setup minutes between runs when a schedule gives no start time per run* (`marathon_setup_minutes`) | **7**. 0 and 30 save; 31 is refused in words (*cannot be higher than 30*). The `/settings` panel's key card reaches the same key. |
+| **`SB-b`** | After the deploy: Events ▸ Marathons ▸ **GDQueer**, refresh its schedule, then look at the Sunday runs still ahead | Wii Fit U still 10:00 Phoenix; each later UPCOMING run is 7 minutes × its place in the day later than before (Inazuma Eleven 10:30, was 10:23; Ring Racers 11:57, was 11:43). Runs already live or done have NOT moved. The marathon's end is 21:19 Phoenix Sunday (was 20:09). Logs ▸ Marathon: a `marathon.member_run_moved` for each upcoming BaF run that shifted 5 minutes or more — and none for a finished run. |
+| **`SB-c`** | When a run is seen starting on the stream: the same drawer | The run on now keeps its real start; the next run reads that start + its estimate + 7 minutes, and so on down the day. `marathon.retimed` in the log. |
+| **`SB-d`** | Mid-show, set the key to 10, then refresh the schedule | The run on now and every finished run stay where they were; the runs still ahead move to + 10 between each. Set it back to 7 and refresh: they come back. |
+| **`SB-e`** | Set the key to 0 and refresh a Hotfix marathon whose runs are all ahead | The bare stack of estimates, as before this build. Any GDQ-tracker, Oengus, horaro, Fastest Furs or Lady Arcaders marathon: its times are the same at 0, 7 and 30. Put the key back to 7. |

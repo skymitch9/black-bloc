@@ -55,8 +55,9 @@ the page with `#<ref>`.
   `<show-key>/<first date ISO>` (`gdqueer/2026-10-03`).
 - **The clock**: each show-day starts at that day's show start (the first parseable *Show Start* of that show on that
   date) in **America/New_York** (`timezones.zone`, DST-aware — a December block is 18:00Z, October 17:00Z), and every
-  run starts where the previous one ended (its estimate). The next date restarts at its own show start. A day with
-  no parseable start has runs with no times.
+  run starts where the previous one ended (its estimate) — ⚠️ **since 2026-10-03 plus `marathon_setup_minutes`**
+  (default 7; see *Follow-up 2026-10-03 — setup buffer* below). The next date restarts at its own show start. A day
+  with no parseable start has runs with no times.
 - **A run**: `game`, `category`, `run_seconds` = the estimate (`seconds_of`), `starts_at`/`ends_at` in UTC,
   `order` = place in the block, `external_id` = `<game-key>/<category-key>` (+ `#2`… for a repeat), **runners**
   split on commas with their Twitch logins from the link column (`twitch_login_from_url`, positional when the counts
@@ -311,3 +312,101 @@ host"*.
 2. Pair `anarchy` → @anarchyasf for every schedule, turn `marathon_scan_hosts_default` on, reopen the drawer: Hidden
    Heroes reads *tracked because anarchy hosts*; **Check now** adds it; the inbox line ends *Tracked because
    **anarchy** hosts it.*
+
+## Follow-up 2026-10-03 — setup buffer (branch `hotfix-setup-buffer`)
+
+> 🔨 **BUILT on branch `hotfix-setup-buffer`** (off `main` `aeca20b6`) — **NOT merged, NOT deployed, nothing has met
+> Discord, Fly or a browser.** Schema unchanged; registry keys **706 → 707**; routes unchanged (`check.mjs`: *22
+> pages, 288 routes*). **Last verified: 2026-10-03** against the fixture `gdq_hotfix_sheet.csv` and the suite only.
+
+**The ask, verbatim** (owner, Sat 2026-10-03 20:0x Phoenix): *"for our hotfix schedule we should try and add a 5 - 10
+min buffer beteen each run if there isnt already one built in the start times on this new sched or when predicting
+using the old sched."*
+
+**Why.** The Hotfix sheet gives one show start per day and an estimate per run; the bot stacked the estimates with
+nothing between them, in two places — when the sheet is read (`marathon_hotfix._runs`) and when a run seen starting on
+the stream re-times the later ones (`marathon_signals.retimed`). Real shows set up between runs. Measured from the
+bot's own log on GDQueer day one, Sat 2026-10-03 (the conductor, `docs/TODO.md` chunk 2): the gap between a run's
+estimated end and the next run's real start, 11 runs — **−4, +13, +6, +10, +8, +6, +9, +6, +7, +6, +7 minutes; median
+7, mean 6.7**. Every prediction was early by about that much, and a sheet-only prediction drifts by the sum (JR's
+Denshattack!: predicted 12:50 Phoenix, really live 13:21:57).
+
+**The key.** `marathon_setup_minutes` — int, **default 7, bounds 0–30**, namespace `marathon`
+(`settings_store.MARATHON_SETUP_MINUTES_KEY`; the max is `MARATHON_SETUP_MAX`). Settings ▸ Marathons on the site
+(label *Setup minutes between runs when a schedule gives no start time per run*) and the `/settings` panel's key
+card, both from the registry. **0 is the old stack of estimates exactly.**
+
+**As built.**
+
+- **The sheet read.** `marathon_hotfix._runs(rows, setup_minutes)`: the first run of a show-day starts at the show
+  start; run N starts at run N−1's start + its estimate + the buffer. A run's `ends_at` is still start + estimate
+  (the buffer is between runs, never inside one). `blocks_of(text, setup_minutes=0)` and
+  `parse_hotfix(text, shows, setup_minutes=0)` carry it; `ScheduleClient.runs` / `.resolve` / `.hotfix_block` take
+  `setup_minutes` and use it only on the Hotfix branch. On the fixture at 7: Hamtaro 18:15Z (was 18:08Z), day one
+  ends 04:10Z (was 02:46Z), day two still starts 17:00Z, the block ends **2026-10-05 04:19Z** (was 03:09Z).
+- **The re-time.** `marathon_signals.retimed(rows, setup_minutes=0)`: the run seen starting keeps its real start;
+  each later run of its chain starts at the previous run's start + estimate (or its real end, when staff ended it) +
+  the buffer.
+- **Only where Black Bloc keeps the clock.** The cog asks through `cogs/content/marathon_signals.setup_for(bot,
+  guild_id, source)`, which answers `{}` for every source whose `RETIMES_ITSELF` is `True` (GDQ tracker, RPGLB,
+  horaro, Oengus, Fastest Furs, Lady Arcaders) — those readers are called with exactly the arguments they were
+  called with before, and `retime` still returns at once for them.
+- **The window follows.** `Block.ends_at` is the latest run end, so a Hotfix candidate's end, the picker's
+  `ends_at`, and the marathon's own `ends_at` (`mt.span(runs)` in `Marathons.apply`) all move with the buffer —
+  nothing computes a Hotfix end any other way.
+- **Chains.** A chain was *next sheet start = previous sheet end ± 1 min*. It is now *0 to `MARATHON_SETUP_MAX`
+  minutes after* (± 1 min) — see Deviation 1.
+
+**When a changed value takes effect.**
+
+| What | When |
+|---|---|
+| Upcoming runs' sheet times (and so their predicted starts, reminders, the board) | The next schedule read of that marathon: every `marathon_poll_minutes` (30 by default) while it is near, or at once with the drawer's refresh. The changed starts change the schedule hash, so the read is applied as a move; a run that shifts by `marathon_move_minutes` or more is logged `marathon.member_run_moved` (BaF runs) and has its reminder marks re-armed. |
+| Runs after one seen starting on the stream | The next re-time, whichever comes first: the next run confirmed live by title or category, a staff move that marks a run live, done or not live, or the schedule read above. It does not wait for the read. |
+| A run that is **live or done** | Never — see Deviation 2. Its `sheet_at` follows the sheet; its shown time does not move. |
+| Suggestions in the inbox, the Hotfix show picker | The next feed check / the next time the drawer opens (the picker's 5-minute cache holds the sheet's TEXT, not its times). |
+| A marathon's `ends_at` | The same schedule read. |
+
+**Deviations**
+
+1. **A chain is detected by a gap of 0–30 minutes, not by the exact buffer.** The brief asked for the buffer to be a
+   parameter of the pure helpers; `retimed` takes it, `chains` deliberately does not. Between the moment the key
+   changes and the next schedule read, the stored sheet times still carry the OLD buffer; matching on the new value
+   would break every chain for up to half an hour and send the re-timed runs back to the sheet. Matching on the
+   allowed range is right whatever the key says, and a show-day gap is many hours. At buffer 0 on a Hotfix sheet
+   (gaps are exactly 0) this is the old result; a hand-built sheet with a 1–31 minute gap would now chain where it
+   did not — no source produces one.
+2. **A live or done run of a clock-kept schedule is not moved by a read** — two small rules, both new and both in
+   force at buffer 0 too: (a) `Marathons._write_plan` leaves such a row's `scheduled_at`/`ends_at` alone and never
+   flags it moved (`cogs/content/marathon_signals.holds` / `held_plan`; `sheet_at`/`sheet_ends_at` still follow the
+   sheet so the chain stays measurable); (b) `retimed` leaves a live/done run that was never seen starting where it
+   is stored (`settled`), using its stored end as the next run's base. Without them, the first read after the
+   deploy (0 → 7) would have shifted finished GDQueer runs by up to 84 minutes and logged a
+   `marathon.member_run_moved` for each BaF one. What changes at 0: a sheet edit no longer moves a run already live
+   or done. Sources that re-time themselves are untouched by both.
+3. **`resolve` takes the buffer as well as `runs`** — a bare show name picks the first block *not over yet*, and
+   *over* is the block's end, which the buffer moves.
+4. **Existing cog tests keep their old times by setting the key to 0** (`tests/cogs/content/test_marathon_signals.py`'s
+   `gdqueer(bot, cog, setup=0)`), which is the *0 = the old behaviour* proof at cog level; two feed tests that run
+   on the default moved 18:08Z → 18:15Z and 18:38Z → 18:45Z.
+5. **After a real end the buffer is still added.** The brief's formula is start + estimate + buffer; when staff
+   ended a run (`actual_ended_at`), the next run is that real end + buffer — the setup still has to happen.
+
+**Tests** — `tests/test_marathon_hotfix.py` (0 = the bare stack exactly; 7 on the GDQueer fixture = start + estimates
++ 7×(n−1) for every run of both days; the block and candidate end follow; the client passes it),
+`tests/test_marathon_signals.py` (0 exact; +7 after the anchor; earlier/live/done runs left alone; held runs; chains
+across 0/7/30 under a different key), `tests/cogs/content/test_marathon_signals.py` (asked only for Hotfix, and a GDQ
+marathon is read and timed exactly as before with the key at 30; a live confirm at 7; a changed key at the next
+re-time; a changed key at the next read with live/done runs unmoved and the marathon's end following),
+`tests/test_settings_store.py` (type, namespace, default, bounds, count 707).
+
+**What was NOT verified**
+
+1. **No browser** — the Settings row was read from the mock's `/api/settings` and written through its `PUT`
+   (0 accepted, 31 refused in words); nobody has seen it rendered.
+2. **Nothing met Discord, Fly, gamesdonequick.com or Twitch.** The `/settings` panel's card for the key was not
+   opened; it comes from the registry like every other int key.
+3. **7 is one day's median (11 runs, one show).** Whether it fits GDQueer day two, or the weekly Hotfix shows, is
+   unmeasured — that is what the key is for.
+4. **The live marathons' first read after deploy** — which upcoming BaF runs log a move — was not rehearsed against
+   production data.

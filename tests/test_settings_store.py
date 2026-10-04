@@ -2295,7 +2295,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 706
+    assert len(settings_store.KEY_TYPES) == 707
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2492,6 +2492,22 @@ def test_the_hotfix_tracker_is_a_bool_on_by_default_and_its_notice_lines_are_wor
         assert settings_store.coerce_value(key, "{people} on {show}") == "{people} on {show}"
         with pytest.raises(settings_store.SettingError):
             settings_store.coerce_value(key, "{member}")
+
+
+def test_the_setup_buffer_is_a_marathon_int_from_0_to_30_and_7_by_default(store):
+    key = settings_store.MARATHON_SETUP_MINUTES_KEY
+    assert key == "marathon_setup_minutes"
+    assert settings_store.KEY_TYPES[key] == "int"
+    assert settings_store.namespace_of(key) == "marathon"
+    assert settings_store.MARATHON_DEFAULTS[key] == store.default(key) == 7
+    assert (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) == (0, 30)
+    assert settings_store.MARATHON_SETUP_MAX == 30
+    assert [settings_store.coerce_value(key, one) for one in (0, 7, 30)] == [0, 7, 30]
+    assert settings_store.parse_value(key, " 12 ") == 12
+    for bad in (-1, 31, True, "7"):
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(key, bad)
+    assert "0 stacks the estimates" in settings_store.KEY_HELP[key]
 
 
 def test_the_category_signal_is_a_bool_and_the_retro_category_a_name_never_blank():

@@ -257,8 +257,9 @@ def _people(row: _Row) -> tuple[Person, ...]:
     return tuple(found)
 
 
-def _runs(rows: list[_Row]) -> tuple[Run, ...]:
+def _runs(rows: list[_Row], setup_minutes: int = 0) -> tuple[Run, ...]:
     eastern = zone(EASTERN)
+    setup = timedelta(minutes=max(0, int(setup_minutes or 0)))
     found: list[Run] = []
     taken: dict[str, int] = {}
     cursor: datetime | None = None
@@ -269,7 +270,7 @@ def _runs(rows: list[_Row]) -> tuple[Run, ...]:
             cursor = datetime.combine(row.day, row.start, eastern) if row.start else None
         starts = cursor
         ends = starts + timedelta(seconds=row.seconds or 0) if starts is not None else None
-        cursor = ends
+        cursor = ends + setup if ends is not None else None
         base = f"{show_key(row.game)}/{show_key(row.category)}"[:120]
         taken[base] = taken.get(base, 0) + 1
         found.append(
@@ -288,16 +289,17 @@ def _runs(rows: list[_Row]) -> tuple[Run, ...]:
     return tuple(found)
 
 
-def _block(key: str, chunk: list[_Row]) -> Block:
-    runs = _runs(chunk)
+def _block(key: str, chunk: list[_Row], setup_minutes: int = 0) -> Block:
+    runs = _runs(chunk, setup_minutes)
     days: dict[date, str | None] = {}
     for row, run in zip(chunk, runs, strict=True):
         days.setdefault(row.day, run.starts_at)
     return Block(chunk[0].show, key, chunk[0].day, chunk[-1].day, runs, tuple(days.items()))
 
 
-def blocks_of(text: str) -> list[Block]:
-    """Every show's rows, split where two show dates are more than a day apart."""
+def blocks_of(text: str, setup_minutes: int = 0) -> list[Block]:
+    """Every show's rows, split where two show dates are more than a day apart; each run a
+    day starts `setup_minutes` after the one before it should end."""
     by_show: dict[str, list[_Row]] = {}
     for row in _rows(text):
         by_show.setdefault(show_key(row.show), []).append(row)
@@ -307,19 +309,19 @@ def blocks_of(text: str) -> list[Block]:
         chunk: list[_Row] = []
         for row in rows:
             if chunk and (row.day - chunk[-1].day).days > BLOCK_GAP_DAYS:
-                found.append(_block(key, chunk))
+                found.append(_block(key, chunk, setup_minutes))
                 chunk = []
             chunk.append(row)
         if chunk:
-            found.append(_block(key, chunk))
+            found.append(_block(key, chunk, setup_minutes))
     found.sort(key=lambda one: (one.first, one.key))
     return found
 
 
-def parse_hotfix(text: str, shows: Any) -> list[Block]:
+def parse_hotfix(text: str, shows: Any, setup_minutes: int = 0) -> list[Block]:
     """The blocks of the listed shows (case-insensitive exact names), each with its runs."""
     wanted = {show_key(one) for one in shows or ()}
-    return [one for one in blocks_of(text) if one.key in wanted]
+    return [one for one in blocks_of(text, setup_minutes) if one.key in wanted]
 
 
 def block_for(blocks: list[Block], ref: Any, now: datetime) -> Block:

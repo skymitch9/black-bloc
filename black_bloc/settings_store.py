@@ -4719,6 +4719,9 @@ MARATHON_CATEGORY_CONFIRMS_KEY = "marathon_category_confirms"
 MARATHON_RETRO_CATEGORY_KEY = "marathon_retro_category"
 MARATHON_RETRO_CATEGORY = "Retro"
 MARATHON_RETRO_LENGTH = 60
+MARATHON_SETUP_MINUTES_KEY = "marathon_setup_minutes"
+MARATHON_SETUP_MINUTES = 7
+MARATHON_SETUP_MAX = 30
 MARATHON_LATE_GRACE_KEY = "marathon_late_grace_minutes"
 MARATHON_MATCH_HOSTS_KEY = "marathon_match_hosts"
 MARATHON_HOSTS_COUNT_AS_OURS_KEY = "marathon_hosts_count_as_ours"
@@ -5068,6 +5071,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         MARATHON_RETRO_CATEGORY,
         "the Twitch category a run with no category of its own is played under — the channel "
         "in this category stands for such a run. `Retro` by default; capitals do not matter",
+    ),
+    MARATHON_SETUP_MINUTES_KEY: (
+        "int",
+        MARATHON_SETUP_MINUTES,
+        "minutes of setup between one run and the next, for a schedule that gives no start time "
+        "per run (GDQ Hotfix) — each run is predicted at the start of the one before it, plus "
+        "its estimate, plus this. 7 by default; 0 stacks the estimates with nothing between",
     ),
     MARATHON_LATE_GRACE_KEY: (
         "int",
@@ -6263,6 +6273,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_FAR_POLL_HOURS_KEY: (1, 168),
     MARATHON_LEAD_DAYS_KEY: (1, 60),
     MARATHON_MOVE_MINUTES_KEY: (1, 120),
+    MARATHON_SETUP_MINUTES_KEY: (0, MARATHON_SETUP_MAX),
     MARATHON_LATE_GRACE_KEY: (0, 360),
     MARATHON_PING_MINUTES_KEY: (0, 240),
     MARATHON_REMINDER_STALE_KEY: (1, 240),
