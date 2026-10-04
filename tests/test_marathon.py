@@ -663,3 +663,4 @@ def test_the_next_moves_offer_add_and_dismiss_only_while_the_suggestion_is_open(
     card = mt.card_moves({"active": 1}, has_unmatched=False, has_next=True)
     assert mt.NEXT_MOVE in card and mt.SCHEDULE_MOVE in card and mt.POLL_MOVE not in card
     assert mt.NEXT_MOVE not in mt.card_moves({"active": 1}, has_unmatched=False)
+

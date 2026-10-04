@@ -203,3 +203,17 @@ default says BaF). NOT `TODO.md` /
   `mountSections` paint); not investigated.
 - **`next_read_at` under a real clock**: proved by `tests/test_marathon.py::test_the_next_read_is_the_last_read_plus_the_gap_fetch_due_uses`
   and the existing `fetch_due` tests, not by watching a live tick.
+
+## 2026-10-03 (branch `marathon-rename`, BUILT, NOT MERGED): a marathon can be renamed from the drawer and from Discord
+
+Owner: Tuesday's show reads *Black in a Flash: Soul Train*, not the source schedule's *Black in a Flash*.
+`PATCH /api/marathons/{id}` with `name` and `rename_marathon` already existed; nothing sent them. Now the drawer's
+moves bar has **Rename…** (not on archived marathons; same dialog as the feed's), and the Discord card's
+**Schedule…** view has **Rename…** beside the link and the read gap (the card's own rows are full, Discord allows
+five per row). Every PATCH that changes the name answers with a sentence; an empty name is refused in words
+(422 `no_name`). A schedule read never writes `name` (tests: tracker and `gdq_hotfix`).
+
+Which posts take the new name: the pinned thread controls at once (`controls_changed`) and on every tick; the
+inbox embed title, the board and the runner posts on the next tick. NOT renamed: the marathon thread's own
+title (set at creation), a linked marathon event and per-run events (titles are written once; re-dating keeps them),
+and posts that are not re-rendered. The answer sentence says so. Not verified in Discord.

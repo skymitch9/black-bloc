@@ -8301,8 +8301,11 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   if ('name' in body || 'poll_minutes' in body) {
     if ('name' in body) {
       const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 100);
-      if (!name) throw new Refused(422, 'no_name', 'A marathon needs a name, so nothing was added.');
-      row.name = name;
+      if (!name) throw new Refused(422, 'no_name', 'A marathon needs a name, so nothing was changed.');
+      if (name !== row.name) {
+        said.push(`**${row.name}** is now called **${name}**. The pinned controls, the board and the inbox post take the new name on the next check; a linked event and the thread's title keep the old one.`);
+        row.name = name;
+      }
     }
     if ('poll_minutes' in body) {
       const given = body.poll_minutes;

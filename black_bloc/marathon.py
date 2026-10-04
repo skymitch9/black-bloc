@@ -129,6 +129,7 @@ NOT_OURS = (
 )
 ALREADY_DONE = "**{game}** is already {state}, so nothing was changed."
 NO_NAME = "A marathon needs a name, so nothing was added."
+NO_RENAME = "A marathon needs a name, so nothing was changed."
 NO_RUNNER = "Pick or type the name as the schedule writes it, so nothing was paired."
 NO_MEMBER = "Pick the member that name is, so nothing was paired."
 NO_SUCH_CHANNEL = (
@@ -172,6 +173,13 @@ NOT_LIVEABLE = (
     "**{game}** is {state}, so nothing was changed. Only a run coming up or done can be marked "
     "live."
 )
+RENAME_TITLE = "Rename the marathon"
+RENAME_LABEL = "Name"
+RENAME_SAID = (
+    "**{old}** is now called **{name}**. The pinned controls, the board and the inbox post take "
+    "the new name on the next check; a linked event and the thread's title keep the old one."
+)
+RENAME_SAME = "**{name}** already has that name, so nothing was changed."
 POLL_TITLE = "Re-read every…"
 POLL_LABEL = "Minutes between reads — blank for the default"
 POLL_HINT = "30"
@@ -225,6 +233,7 @@ EVENTS = "events"
 MINE = "mine"
 NEXT = "next"
 POLL = "poll"
+RENAME = "rename"
 SCHEDULE = "schedule"
 ADD_NEXT = "add_next"
 DISMISS_NEXT = "dismiss_next"
@@ -261,6 +270,7 @@ BACK_MOVE = MarathonMove(BACK, "Back", row=4)
 EVENTS_MOVE = MarathonMove(EVENTS, "Back", row=4)
 NEXT_MOVE = MarathonMove(NEXT, "Next up…", row=3)
 POLL_MOVE = MarathonMove(POLL, POLL_TITLE, row=3)
+RENAME_MOVE = MarathonMove(RENAME, "Rename…", row=2)
 SCHEDULE_MOVE = MarathonMove(SCHEDULE, "Schedule…", row=3)
 ADD_NEXT_MOVE = MarathonMove(ADD_NEXT, NEXT_BUTTON_ADD, "primary", 2)
 DISMISS_NEXT_MOVE = MarathonMove(DISMISS_NEXT, NEXT_BUTTON_DISMISS, row=2)

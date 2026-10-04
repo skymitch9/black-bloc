@@ -3981,3 +3981,10 @@ proven in Discord** — the tests prove the text and the allowed mentions, never
 | **`MR-f`** | ⚠️ **Discord only.** Right after the deploy: the public channel's highlights for runs that were ALREADY done | **Unchanged** — still present tense with *· done ·*, no edit mark newer than the deploy. No `marathon.public_highlight_edited` rows with `state=done` at the boot. |
 | **`MR-g`** | ⚠️ **Discord only.** A highlight that is up when its run finishes after the deploy (and a BaF host block's when its last run finishes) | Edited in place to *"**JR** ran **Game** — Any% today on **GDQueer** · link"* (host: *hosted*); no `@role` line left on it; nobody is notified by the edit. After the server's midnight, at the next sync: *today* becomes *on <date>*. |
 | **`MR-h`** | Settings ▸ Marathons: change *The word for a runner once the run is over* to something else, then back; change *What a BaF run’s public highlight says once the run is over* | Saves; a `{word}` it cannot fill is refused in words; `{day}` is accepted on the done template and refused on the live one. |
+
+## `MR-` rename (branch `marathon-rename`, BUILT, NOT MERGED, NOT verified in Discord)
+
+| Row | Do | Expect |
+|---|---|---|
+| **`RN-a`** | Events ▸ a marathon ▸ **Rename…** ▸ set *Black in a Flash: Soul Train* ▸ Rename it | The drawer re-opens under the new name with the sentence naming what follows and what keeps the old name; an empty name stays in the dialog in words. |
+| **`RN-b`** | ⚠️ **Discord only.** The same marathon's pinned controls, inbox post, board; then `/event` ▸ the marathon ▸ **Schedule…** ▸ **Rename…** | Controls at once, inbox/board/runner posts within a tick carry the new name; the thread title and any linked event keep the old one. |
