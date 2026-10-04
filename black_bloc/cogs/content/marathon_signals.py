@@ -14,6 +14,7 @@ from ...marathon_sources import retimes_itself
 from ...panels import Outcome, refusal
 from ...settings_store import (
     MARATHON_CATEGORY_CONFIRMS_KEY,
+    MARATHON_EARLY_START_KEY,
     MARATHON_MOVE_MINUTES_KEY,
     MARATHON_REMINDER_ON_MOVE_KEY,
     MARATHON_RETRO_CATEGORY_KEY,
@@ -178,12 +179,83 @@ async def verdict_of(cog: Any, guild: Any, marathon: Any, session: Any, rows: An
     return verdict
 
 
+def early_minutes(bot: Any, guild_id: int) -> int:
+    return int(bot.store.get(guild_id, MARATHON_EARLY_START_KEY) or 0)
+
+
+def _early_details(marathon: Any, row: Any, now: datetime, minutes: int) -> dict[str, Any]:
+    planned = sig.sheet_start(row)
+    return {
+        "marathon_id": marathon["id"],
+        "run_id": row["id"],
+        "game": row["game"],
+        "planned_at": planned.isoformat(),
+        "early_minutes": int((planned - now).total_seconds() // 60),
+        "allowed_minutes": minutes,
+    }
+
+
+async def guarded(
+    cog: Any, guild: Any, marathon: Any, verdict: Any, rows: Any, now: datetime
+) -> Any:
+    """The verdict, or None while the stream shows a show-day's first run too long before it."""
+    if verdict is None or _cell(verdict.row, "state") != mt.UPCOMING:
+        return verdict
+    minutes = early_minutes(cog.bot, guild.id)
+    row = verdict.row
+    if not sig.too_early(row, now, minutes) or not sig.opens_day(row, overlay.chains(rows)):
+        return verdict
+    seen = cog.__dict__.setdefault("early_held", set())
+    if int(row["id"]) not in seen:
+        seen.add(int(row["id"]))
+        await log_action(
+            cog.bot,
+            guild,
+            "marathon.early_match_held",
+            details=_early_details(marathon, row, now, minutes) | {"because": verdict.because},
+        )
+    return None
+
+
+async def undo_early(cog: Any, guild: Any, marathon: Any, rows: Any, now: datetime) -> bool:
+    """A show-day's first run the stream made live too long before it goes back to coming up,
+    and the day back to its planned times; nothing is posted."""
+    from .marathon import put_back
+
+    minutes = early_minutes(cog.bot, guild.id)
+    days = overlay.chains(rows)
+    found = [
+        row
+        for row in rows
+        if _cell(row, "state") == mt.LIVE
+        and _cell(row, "live_because") in mt.BY_STREAM
+        and sig.started_early(row, minutes)
+        and sig.too_early(row, now, minutes)
+        and sig.opens_day(row, days)
+    ]
+    for row in found:
+        await put_back(cog.bot.db, row["id"], because=None)
+        cog.__dict__.setdefault("early_held", set()).add(int(row["id"]))
+        await log_action(
+            cog.bot,
+            guild,
+            "marathon.early_start_undone",
+            details=_early_details(marathon, row, now, minutes)
+            | {"because": row["live_because"], "started_at": row["actual_started_at"]},
+        )
+    if found:
+        await retime(cog, guild, marathon, because="early_start", on_move=mrem.EDIT)
+    return bool(found)
+
+
 def _moved_enough(before: Any, after: Any, minutes: int) -> bool:
     shift = mt.moved_by(before, after)
     return shift is not None and shift >= int(minutes)
 
 
-async def retime(cog: Any, guild: Any, marathon: Any, *, because: str) -> int:
+async def retime(
+    cog: Any, guild: Any, marathon: Any, *, because: str, on_move: str | None = None
+) -> int:
     """The clock kept by Black Bloc for a schedule that does not move itself."""
     from .marathon import get_marathon, runs_of, update_run
 
@@ -200,7 +272,7 @@ async def retime(cog: Any, guild: Any, marathon: Any, *, because: str) -> int:
         return 0
     now = cog.clock()
     move_minutes = int(bot.store.get(guild.id, MARATHON_MOVE_MINUTES_KEY))
-    on_move = str(bot.store.get(guild.id, MARATHON_REMINDER_ON_MOVE_KEY))
+    on_move = on_move or str(bot.store.get(guild.id, MARATHON_REMINDER_ON_MOVE_KEY))
     for change in changes:
         fields: dict[str, Any] = {"scheduled_at": change.starts_at, "ends_at": change.ends_at}
         if _moved_enough(change.row["scheduled_at"], change.starts_at, move_minutes):
@@ -281,9 +353,7 @@ async def replay_began(bot: Any, guild: Any, spotlight_id: Any) -> int:
     ended = 0
     for marathon in await marathons_on_channel(bot.db, guild.id, spotlight_id):
         async with cog.lock(marathon["id"]):
-            live = [
-                row for row in await runs_of(bot.db, marathon["id"]) if row["state"] == mt.LIVE
-            ]
+            live = [row for row in await runs_of(bot.db, marathon["id"]) if row["state"] == mt.LIVE]
             for row in live:
                 await cog.finish(guild, marathon, row, because=BECAUSE_REPLAY)
             if live:

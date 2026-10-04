@@ -567,6 +567,38 @@ async def test_with_the_overlay_off_a_hotfix_marathon_is_on_the_buffer_clock(bot
     assert starts[13] == "2026-10-04T17:00:00+00:00"
 
 
+async def test_a_first_run_anchored_early_goes_back_to_the_organisers_times(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    marathon = await gdqueer_of(bot, cog)
+    assert mo.applied(await fresh_of(bot, marathon))
+    sheet = await starts_of(bot, marathon)
+    runs = await runs_of(bot.db, marathon["id"])
+    assert (runs[13]["game"], sheet[13]) == ("Wii Fit U", "2026-10-04T17:00:00+00:00")
+    for one in runs[:13]:
+        await cogmod.update_run(bot.db, one["id"], state="done")
+    early = "2026-10-04T15:41:00+00:00"
+    await cogmod.update_run(
+        bot.db,
+        runs[13]["id"],
+        state="live",
+        live_at=early,
+        live_because=mt.BY_BOTH,
+        actual_started_at=early,
+    )
+    assert await signals.retime(cog, bot.guild, marathon, because="stream") == 11
+    assert (await starts_of(bot, marathon))[15] == "2026-10-04T17:44:00+00:00"
+
+    now = datetime(2026, 10, 4, 16, 35, tzinfo=UTC)
+    rows = await runs_of(bot.db, marathon["id"])
+    assert await signals.undo_early(cog, bot.guild, marathon, rows, now) is True
+    after = await runs_of(bot.db, marathon["id"])
+    assert await starts_of(bot, marathon) == sheet and sheet[15] == "2026-10-04T19:03:00+00:00"
+    assert (after[13]["state"], after[13]["live_because"]) == ("upcoming", None)
+    assert (after[13]["actual_started_at"], after[13]["live_at"]) == (None, None)
+    assert await signals.undo_early(cog, bot.guild, marathon, after, now) is False
+    assert len(await logged(bot, "marathon.early_start_undone")) == 1
+
+
 async def test_switching_the_overlay_mid_day_snaps_the_times_once_each_way(bot, cog):  # noqa: F811
     ViewerReads(cog.client)
     await bot.store.set(GUILD, "marathon_hotfix_overlay_default", False)
