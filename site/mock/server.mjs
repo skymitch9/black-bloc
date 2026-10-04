@@ -383,6 +383,10 @@ const SETTING_SPECS = [
   ["golive_replay_treat_live_label", "text", "Treat as live", "Treat as live", "the button beside a replay on the Go-live page and the /golive Channels card that announces this stream again with the full spotlight — pin, role mentions, reminders"],
   ["golive_replay_treated_said", "text", "**{login}** is treated as live for this stream — announced again with the full spotlight.", "**{login}** is treated as live for this stream — announced again with the full spotlight.", "what staff are told after Treat as live; {login} is the channel"],
   ["golive_replay_not_replay_said", "text", "**{login}** is not showing a replay right now, so there was nothing to change.", "**{login}** is not showing a replay right now, so there was nothing to change.", "what staff are told when Treat as live finds no replay to treat — the stream ended, or it is already treated as live; {login} is the channel"],
+  ["golive_replay_tag_certain", "bool", true, true, "whether a golive_replay_words word that OPENS the title — inside a leading bracket, [Replay] or (Rerun), or bare before a colon, a bar or a spaced dash — is certain, the way Twitch's own rerun mark is: no golive_replay_live_words word and no marathon overrules it. on by default; off reads it as any other title word"],
+  ["golive_replay_reason_tag", "text", "the title opens with “{word}”", "the title opens with “{word}”", "the reason in golive_replay_state when the title opened with a golive_replay_words tag and golive_replay_tag_certain is on; {word} is the word it matched"],
+  ["golive_replay_midstream_polls", "int", 2, 2, "how many checks in a row a stream already announced as live must read as a replay before it is treated as one from then on — and, after that, how many in a row it must read as live before it is announced again. 2 by default, 0 to 10; 0 never looks again after the stream starts, the way it was before", null, 10, 0],
+  ["golive_replay_marathon_runs", "bool", true, true, "whether a marathon on the channel overrules a replay word in the title only while one of its runs is scheduled around now — each day's first run less the spotlight lead to its last run plus the tail — rather than for the marathon's whole span, overnight gaps included. on by default; a marathon with no timed runs keeps its whole span"],
   ['golive_costream_author', 'text', '{name} is live on {platform} and {also_platform}', '{name} is live on {platform} and {also_platform}', "the small top line of the announcement card while two platforms are live. It takes {name} {game} {title} {url} {platform} {also_url} {also_platform}"],
   ['golive_live_role_id', 'role', '900000000000000003', null, 'a role Black Bloc puts on somebody while they are streaming and takes off again when the stream ends. Blank — the default — means no role is handed out at all'],
   ['golive_require_role_id', 'role', null, null, 'when this is set, only people wearing that role are ever announced. Blank — the default — announces anybody the bot sees streaming'],
@@ -5163,6 +5167,8 @@ function replayState(live) {
   const read = (key) => String(state.settings.get(key) ?? '');
   const reason = String(live.replay_reason).startsWith('title:')
     ? read('golive_replay_reason_title').replace('{word}', String(live.replay_reason).slice(6))
+    : String(live.replay_reason).startsWith('tag:')
+    ? read('golive_replay_reason_tag').replace('{word}', String(live.replay_reason).slice(4))
     : read('golive_replay_reason_type');
   return {
     reason: live.replay_reason,
