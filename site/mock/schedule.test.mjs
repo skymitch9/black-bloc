@@ -5,6 +5,7 @@
 //   MOCK_PORT=8798 node site/mock/schedule.test.mjs  (also walks the mock; it resets the mock's state)
 
 import { channelsOf, clockMoment, clockNear, clockOf, minutesOf, safeChannel, sheetOf, zoneOr } from './schedule.mjs';
+import { changesOf, placed, refreshMs, secondsWords } from '../public/assets/schedule-merge.js';
 import { clockParts, clockTime, cookieLine, dayLabel, fillMoments, validZone, zoneChoice } from '../public/assets/timezone.js';
 
 const MIN = 60000;
@@ -113,6 +114,29 @@ for (const bad of ['http://www.twitch.tv/a_b', 'https://www.twitch.tv/a/b', 'htt
 }
 is('safeChannel takes twitch.tv without www', safeChannel('https://twitch.tv/junior_sm'), { site: 'twitch', url: 'https://twitch.tv/junior_sm' });
 is('safeChannel takes a YouTube handle', safeChannel('https://www.youtube.com/@caseyfast'), { site: 'youtube', url: 'https://www.youtube.com/@caseyfast' });
+
+const before = { marathon: { id: 9 }, rows: [{ id: 1, state: 'live', start_at: at(0) }, { id: 2, state: 'upcoming', start_at: at(33) }, { id: 3, state: 'upcoming', start_at: at(123) }, { id: 4, state: 'upcoming', start_at: at(149) }] };
+const after = { marathon: { id: 9 }, rows: [{ id: 1, state: 'done', start_at: at(0) }, { id: 2, state: 'live', start_at: at(35) }, { id: 3, state: 'upcoming', start_at: at(125) }, { id: 4, state: 'upcoming', start_at: at(149) }, { id: 5, state: 'upcoming', start_at: at(300) }] };
+is('update: a newly done row, a newly live row, a moved time and a new row are each named', changesOf(before, after), { 1: 'done', 2: 'live', 3: 'moved', 5: 'new' });
+is('update: the same read flashes nothing', changesOf(after, after), {});
+is('update: the first read flashes nothing', changesOf(null, after), {});
+is('update: another marathon flashes nothing', changesOf(before, { marathon: { id: 10 }, rows: after.rows }), {});
+is('update: a run put back to upcoming is a moved row', changesOf({ marathon: { id: 9 }, rows: [{ id: 1, state: 'done', start_at: at(0) }] }, { marathon: { id: 9 }, rows: [{ id: 1, state: 'upcoming', start_at: at(0) }] }), { 1: 'moved' });
+is('update: the interval is the key, held to 10–300 seconds', [30, 5, 999, 'x', undefined, 45.4].map(refreshMs), [30000, 10000, 300000, 30000, 30000, 45000]);
+is('update: how long ago, in words', [0, 4000, 12000, 89000, 150000].map(secondsWords), ['just now', 'just now', '12 seconds ago', '89 seconds ago', '3 minutes ago']);
+const applied = (current, wanted) => {
+  const { steps, gone } = placed(current, wanted);
+  const now = current.filter((one) => !gone.includes(one));
+  for (const one of steps) {
+    if (now.includes(one.node)) now.splice(now.indexOf(one.node), 1);
+    now.splice(one.before === null ? now.length : now.indexOf(one.before), 0, one.node);
+  }
+  return { now, touched: steps.map((one) => one.node) };
+};
+is('update: an unchanged list is not touched', applied(['a', 'b', 'c'], ['a', 'b', 'c']), { now: ['a', 'b', 'c'], touched: [] });
+is('update: one replaced row touches only that row', applied(['a', 'b', 'c'], ['a', 'B', 'c']), { now: ['a', 'B', 'c'], touched: ['B'] });
+is('update: a removed and an added row', applied(['a', 'b', 'c'], ['a', 'c', 'd']), { now: ['a', 'c', 'd'], touched: ['d'] });
+is('update: an empty list fills', applied([], ['a', 'b']), { now: ['a', 'b'], touched: ['a', 'b'] });
 
 async function walk(port) {
   const base = `http://127.0.0.1:${port}`;
