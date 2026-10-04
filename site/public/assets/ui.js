@@ -14,7 +14,7 @@ import {
 import { messageTree, mountTree } from './discordmock.js';
 import { ICONS } from './icons.js';
 import { channelLabel, humanLabel } from './labels.js';
-import { capState, counterState, insertAt, tokensIn } from './fieldaids.js';
+import { capState, counterState, insertAt, placeholdersFor } from './fieldaids.js';
 import { applyFilters, matches, passes } from './listfilter.js';
 import * as md from './mdformat.js';
 
@@ -1387,8 +1387,8 @@ export async function settingRow(spec, { onDirty = null, mock = true } = {}) {
     ]),
     wipe,
     say,
-    shown ? el('div', { class: 'setrow-mock' }, [shown.node, shown.say]) : null,
   );
+  if (shown) node.append(el('div', { class: 'setrow-mock' }, [shown.node, shown.say]));
   say.classList.add('setrow-say');
   paint();
   return row;
@@ -2049,7 +2049,7 @@ export function slugInput(input, { lower = false, join = '-', only = null } = {}
 }
 
 export function placeholdersOf(spec) {
-  return tokensIn(spec && spec.default, spec && spec.help);
+  return placeholdersFor(spec);
 }
 
 export function placeholderChips(box, tokens, { label = 'Insert', said = null } = {}) {

@@ -704,6 +704,7 @@ async function formEditor(form, questionsMax) {
     const made = questionRow(question, move);
     rows.push(made);
     list.append(made.node);
+    questionsMark.paint(list.children.length);
   };
   for (const question of (form && form.questions) || []) addQuestion(question);
 

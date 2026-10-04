@@ -2,7 +2,7 @@
 //   node site/mock/fieldaids.test.mjs
 // Exits 0 when every fixture matched, 1 with a list of what did not.
 
-import { capState, counterState, insertAt, tokensIn } from '../public/assets/fieldaids.js';
+import { capState, counterState, insertAt, placeholdersFor, tokensIn } from '../public/assets/fieldaids.js';
 
 const failures = [];
 const is = (where, found, wanted) => {
@@ -18,6 +18,14 @@ is('no tokens in plain words', tokensIn('nothing here', null, undefined), []);
 is('an escaped brace pair is not a token', tokensIn('{{name}} and {}'), ['{name}']);
 is('a JSON-looking brace is not a token', tokensIn('{"a": 1} {Name} {1st}'), []);
 is('underscores and digits ride along', tokensIn('{their_time} {slot2}'), ['{their_time}', '{slot2}']);
+
+is('the chips of a wording are the fields of its default plus the ones its help names',
+  placeholdersFor({ default: '{name} is live: {url}', help: 'It takes {name} {game} {title} {url} {platform}' }),
+  ['{name}', '{url}', '{game}', '{title}', '{platform}']);
+is('a field only the help mentions belongs to another wording, so no chips',
+  placeholdersFor({ default: 'runs', help: '{part} for a runner' }), []);
+is('the fields of a stored value count', placeholdersFor({ default: 'plain', value: 'hi {user}', help: '' }), ['{user}']);
+is('no spec, no chips', placeholdersFor(null), []);
 
 is('a chip lands at the cursor', insertAt('hello world', 6, 6, '{name} '), { value: 'hello {name} world', start: 13, end: 13 });
 is('a chip replaces the selection', insertAt('hello world', 6, 11, '{name}'), { value: 'hello {name}', start: 12, end: 12 });

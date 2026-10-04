@@ -12,6 +12,12 @@ export function tokensIn(...texts) {
   return found;
 }
 
+export function placeholdersFor(spec) {
+  if (!spec) return [];
+  const own = tokensIn(spec.default, spec.value);
+  return own.length ? tokensIn(spec.default, spec.value, spec.help) : [];
+}
+
 export function insertAt(value, start, end, text) {
   const old = String(value ?? '');
   const from = Math.max(0, Math.min(Number.isInteger(start) ? start : old.length, old.length));
