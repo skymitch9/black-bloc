@@ -6322,9 +6322,9 @@
     },
     {
       "method": "GET",
-      "path": "/api/marathons/{runsheet_marathon_id}/runsheet",
+      "path": "/api/marathons/{tracker_marathon_id}/schedule",
       "read_by": [
-        "page-runsheet.js (runsheet.html) the whole sheet in one read"
+        "page-schedule.js (schedule.html) the whole sheet in one read"
       ],
       "shape": "object",
       "keys": [
@@ -6401,10 +6401,10 @@
     },
     {
       "method": "POST",
-      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/runs/{runsheet_next_run_id}/start",
+      "path": "/api/marathons/{tracker_marathon_id}/schedule/runs/{tracker_next_run_id}/start",
       "body": {},
       "read_by": [
-        "page-runsheet.js (runsheet.html) Started now"
+        "page-schedule.js (schedule.html) Started now"
       ],
       "shape": "object",
       "keys": [
@@ -6491,10 +6491,10 @@
     },
     {
       "method": "POST",
-      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/runs/{runsheet_live_run_id}/finish",
+      "path": "/api/marathons/{tracker_marathon_id}/schedule/runs/{tracker_live_run_id}/finish",
       "body": {},
       "read_by": [
-        "page-runsheet.js (runsheet.html) Finished now"
+        "page-schedule.js (schedule.html) Finished now"
       ],
       "shape": "object",
       "keys": [
@@ -6581,13 +6581,13 @@
     },
     {
       "method": "POST",
-      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/shift",
+      "path": "/api/marathons/{tracker_marathon_id}/schedule/shift",
       "body": {
         "day": "today",
         "minutes": 10
       },
       "read_by": [
-        "page-runsheet.js (runsheet.html) Behind / Ahead"
+        "page-schedule.js (schedule.html) Behind / Ahead"
       ],
       "shape": "object",
       "keys": [
@@ -6674,12 +6674,12 @@
     },
     {
       "method": "POST",
-      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/runs/{runsheet_next_run_id}/estimate",
+      "path": "/api/marathons/{tracker_marathon_id}/schedule/runs/{tracker_next_run_id}/estimate",
       "body": {
         "estimate": "45"
       },
       "read_by": [
-        "page-runsheet.js (runsheet.html) Change estimate…"
+        "page-schedule.js (schedule.html) Change estimate…"
       ],
       "shape": "object",
       "keys": [
@@ -6766,10 +6766,10 @@
     },
     {
       "method": "POST",
-      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/runs/{runsheet_next_run_id}/skip",
+      "path": "/api/marathons/{tracker_marathon_id}/schedule/runs/{tracker_next_run_id}/skip",
       "body": {},
       "read_by": [
-        "page-runsheet.js (runsheet.html) Skip this run"
+        "page-schedule.js (schedule.html) Skip this run"
       ],
       "shape": "object",
       "keys": [
@@ -9448,7 +9448,7 @@
     "/guides.html",
     "/posts.html",
     "/minutes.html",
-    "/runsheet.html"
+    "/schedule.html"
   ],
   "action_kinds": [
     "web.operator.read",
@@ -9656,15 +9656,15 @@
     "web.marathon.run_reset",
     "web.marathon.run_live",
     "web.marathon.sheet_times",
-    "web.marathon.runsheet_started",
-    "web.marathon.runsheet_finished",
-    "web.marathon.runsheet_start_set",
-    "web.marathon.runsheet_shifted",
-    "web.marathon.runsheet_estimate_set",
-    "web.marathon.runsheet_skipped",
-    "web.marathon.runsheet_restored",
-    "web.marathon.runsheet_reset",
-    "web.marathon.runsheet_undone",
+    "web.marathon.tracker_started",
+    "web.marathon.tracker_finished",
+    "web.marathon.tracker_start_set",
+    "web.marathon.tracker_shifted",
+    "web.marathon.tracker_estimate_set",
+    "web.marathon.tracker_skipped",
+    "web.marathon.tracker_restored",
+    "web.marathon.tracker_reset",
+    "web.marathon.tracker_undone",
     "web.marathon.next_suggested",
     "web.marathon.would_suggest_next",
     "web.marathon.next_none",

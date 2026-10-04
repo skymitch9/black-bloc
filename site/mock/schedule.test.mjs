@@ -1,10 +1,10 @@
-// The run sheet's recompute, proved twice: as pure fixtures on `sheetOf`, and — when a mock is
+// The marathon tracker's recompute, proved twice: as pure fixtures on `sheetOf`, and — when a mock is
 // listening on MOCK_PORT — by walking every move route and checking the returned times by rule.
 //
-//   node site/mock/runsheet.test.mjs                 (pure fixtures only)
-//   MOCK_PORT=8798 node site/mock/runsheet.test.mjs  (also walks the mock; it resets the mock's state)
+//   node site/mock/schedule.test.mjs                 (pure fixtures only)
+//   MOCK_PORT=8798 node site/mock/schedule.test.mjs  (also walks the mock; it resets the mock's state)
 
-import { channelsOf, clockMoment, clockNear, clockOf, minutesOf, safeChannel, sheetOf, zoneOr } from './runsheet.mjs';
+import { channelsOf, clockMoment, clockNear, clockOf, minutesOf, safeChannel, sheetOf, zoneOr } from './schedule.mjs';
 import { clockParts, clockTime, cookieLine, dayLabel, fillMoments, validZone, zoneChoice } from '../public/assets/timezone.js';
 
 const MIN = 60000;
@@ -120,7 +120,7 @@ async function walk(port) {
     const response = await fetch(`${base}${path}`, { method, headers: { cookie: 'mock_as=staff', 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: response.status, body: await response.json() };
   };
-  const post = (path, body = {}) => ask('POST', `/api/marathons/60/runsheet/${path}`, body);
+  const post = (path, body = {}) => ask('POST', `/api/marathons/60/schedule/${path}`, body);
   const ms = (iso) => new Date(iso).getTime();
   const today = (found) => found.rows.filter((one) => one.day === found.today);
   const startsOf = (found) => today(found).map((one) => (one.start_at ? ms(one.start_at) : null));
@@ -131,7 +131,7 @@ async function walk(port) {
   };
 
   await ask('POST', '/api/mock/reset', {});
-  const seed = (await ask('GET', '/api/marathons/60/runsheet')).body;
+  const seed = (await ask('GET', '/api/marathons/60/schedule')).body;
   const before = startsOf(seed);
   const states = today(seed).map((one) => one.state);
   is('walk: the seed is two done, one live, eight upcoming', states.join(','), 'done,done,live,upcoming,upcoming,upcoming,upcoming,upcoming,upcoming,upcoming,upcoming');
@@ -196,8 +196,8 @@ async function walk(port) {
   refused('walk: a time that is not a time', await post(`runs/${third.id}/set-start`, { time: '25:99' }), 400, 'bad_time');
   refused('walk: zero minutes', await post('shift', { day: 'today', minutes: 0 }), 400, 'bad_minutes');
   refused('walk: a run that is not there', await post('runs/999/skip'), 404, 'no_such_run');
-  refused('walk: a tracker sheet refuses a shift', await ask('POST', '/api/marathons/1/runsheet/shift', { day: 'today', minutes: 5 }), 409, 'tracker_times');
-  is('walk: a tracker sheet is read-only', (await ask('GET', '/api/marathons/1/runsheet')).body.kind, 'read_only');
+  refused('walk: a tracker sheet refuses a shift', await ask('POST', '/api/marathons/1/schedule/shift', { day: 'today', minutes: 5 }), 409, 'tracker_times');
+  is('walk: a tracker sheet is read-only', (await ask('GET', '/api/marathons/1/schedule')).body.kind, 'read_only');
   is('walk: the moves log is newest first', finished.moves[0].kind, 'finished');
   await ask('POST', '/api/mock/reset', {});
 }
@@ -205,8 +205,8 @@ async function walk(port) {
 if (process.env.MOCK_PORT) await walk(process.env.MOCK_PORT);
 
 if (failures.length) {
-  console.error('runsheet: not ok');
+  console.error('schedule: not ok');
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log(`runsheet: ok - whose time wins, gaps, skips, days and typed times${process.env.MOCK_PORT ? ', and every move walked against the mock' : ' (set MOCK_PORT to walk the mock too)'}`);
+console.log(`schedule: ok - whose time wins, gaps, skips, days and typed times${process.env.MOCK_PORT ? ', and every move walked against the mock' : ' (set MOCK_PORT to walk the mock too)'}`);

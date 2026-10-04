@@ -24,7 +24,7 @@ const FILTER_FROM = 12;
 
 const BACK = '← Events';
 const PICKER_LABEL = 'Marathon';
-const NO_MARATHONS = 'Black Bloc follows no marathon yet, so there is no run sheet to show. Add one on the Events page.';
+const NO_MARATHONS = 'Black Bloc follows no marathon yet, so there is no marathon tracker to show. Add one on the Events page.';
 const NO_SUCH = 'That marathon is not on the list any more. Pick another one above.';
 const HEAD = '{marathon} — {day}';
 const DRIFT_ON = 'On time';
@@ -152,7 +152,7 @@ function dayNow() {
 async function act(path, body = {}) {
   tell(WORKING);
   try {
-    const found = await send(`/api/marathons/${shown.id}/runsheet/${path}`, 'POST', body);
+    const found = await send(`/api/marathons/${shown.id}/schedule/${path}`, 'POST', body);
     sheet = found;
     shown.open = null;
     tell(found.message || '', 'ok');
@@ -443,7 +443,7 @@ function aside() {
 async function quietRefresh() {
   if (!shown.id || shown.open !== null || document.hidden || !root || !root.isConnected) return;
   try {
-    sheet = await api(`/api/marathons/${shown.id}/runsheet`);
+    sheet = await api(`/api/marathons/${shown.id}/schedule`);
     paint();
   } catch (error) {
     return;
@@ -470,7 +470,7 @@ async function load() {
     root.replaceChildren(sayNothing(NO_SUCH));
     return;
   }
-  sheet = await api(`/api/marathons/${id}/runsheet`);
+  sheet = await api(`/api/marathons/${id}/schedule`);
   viewer = viewerZone(sheet.timezone);
   paint();
   if (timer === null) timer = setInterval(quietRefresh, REFRESH_MS);

@@ -199,7 +199,7 @@ export function sheetOf(runs, { now, editable }) {
   return out;
 }
 
-export function runsheetSeed(members, staffId) {
+export function trackerSeed(members, staffId) {
   const anchor = Math.round(Date.now() / MIN) * MIN + 2 * MIN;
   const at = (minutes) => iso(anchor + minutes * MIN);
   const baf = { The_Mathcat: members[6].id, champrul: members[1].id };
@@ -253,10 +253,10 @@ export function runsheetSeed(members, staffId) {
   }
   const marathon = {
     id: DEMO_ID,
-    name: 'GDQueer (run sheet)',
+    name: 'GDQueer (tracker demo)',
     schedule_url: 'https://gamesdonequick.com/hotfix/schedule#gdqueer/2026-10-04',
     source: 'gdq_hotfix',
-    source_ref: 'gdqueer-runsheet/2026-10-04',
+    source_ref: 'gdqueer-tracker/2026-10-04',
     spotlight_id: 5,
     feed_id: null,
     starts_at: at(DEMO_DAY_ONE[0][0]),
@@ -276,7 +276,7 @@ export function runsheetSeed(members, staffId) {
   return { marathon, runs };
 }
 
-export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberName, logAction, state, marathonOf, marathonRow, keepsClock }) {
+export function mountTracker({ route, Refused, requireStaff, actorOf, memberName, logAction, state, marathonOf, marathonRow, keepsClock }) {
   const zone = () => String(state().settings.get('default_timezone') || 'America/Phoenix');
   const clock = (at) => `{{at:${iso(at)}}}`;
   const setupMinutes = () => Number(state().settings.get('marathon_setup_minutes') || 7);
@@ -290,7 +290,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
   const counts = (one) => Boolean(one.user_id) && one.counts !== false;
 
   function bookOf(row) {
-    const books = state().runsheets || (state().runsheets = {});
+    const books = state().trackers || (state().trackers = {});
     return books[row.id] || (books[row.id] = { moves: [], undo: [], next: 1 });
   }
 
@@ -311,7 +311,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     const days = daysOf(sheet(row));
     const wanted = given === 'today' ? todayOf(days) : String(given || '');
     const found = days.find((one) => one.key === wanted);
-    if (!found) throw new Refused(404, 'no_such_day', `**${row.name}** has no day **${String(given || '').slice(0, 20) || 'blank'}** on its run sheet, so nothing was changed. Reload the page and pick a day from the strip.`);
+    if (!found) throw new Refused(404, 'no_such_day', `**${row.name}** has no day **${String(given || '').slice(0, 20) || 'blank'}** on its marathon tracker, so nothing was changed. Reload the page and pick a day from the strip.`);
     return found;
   }
 
@@ -484,20 +484,20 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     if (book.undo.length > UNDO_DEPTH) book.undo.shift();
     const by = actorOf(context.session);
     book.moves.unshift({ id, at: iso(Date.now()), by_id: by, by_name: memberName(by), kind, text: done.text, undone: false });
-    logAction(`web.marathon.runsheet_${kind}`, { details: { marathon_id: row.id, ...done.details, via: 'website' } });
+    logAction(`web.marathon.tracker_${kind}`, { details: { marathon_id: row.id, ...done.details, via: 'website' } });
     return payload(row, typeof done.message === 'function' ? done.message() : done.message);
   }
 
   function runOf(row, id) {
     const run = runsOf(row).find((one) => String(one.id) === String(id));
-    if (!run) throw new Refused(404, 'no_such_run', `That run is not on **${row.name}**'s run sheet any more, so nothing was done. Reload the page to see the sheet as it stands.`);
+    if (!run) throw new Refused(404, 'no_such_run', `That run is not on **${row.name}**'s marathon tracker any more, so nothing was done. Reload the page to see the schedule as it stands.`);
     return run;
   }
 
   function refuseReadOnly(row) {
     if (editableOf(row)) return;
     const word = marathonRow(row).source_word;
-    throw new Refused(409, 'tracker_times', `**${row.name}**'s times come from ${word}, which moves them itself, so a time set here would be overwritten at its next read. Nothing was changed. On this sheet staff can mark a run **Started now** or **Finished now**; to change a time, change it on ${word}.`);
+    throw new Refused(409, 'tracker_times', `**${row.name}**'s times come from ${word}, which moves them itself, so a time set here would be overwritten at its next read. Nothing was changed. On this page staff can mark a run **Started now** or **Finished now**; to change a time, change it on ${word}.`);
   }
 
   function timed(row, run) {
@@ -530,12 +530,12 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     }
   }
 
-  route('GET', '/api/marathons/:marathon_id/runsheet', (context) => {
+  route('GET', '/api/marathons/:marathon_id/schedule', (context) => {
     requireStaff(context.session);
     return payload(marathonOf(context.params.marathon_id));
   });
 
-  route('POST', '/api/marathons/:marathon_id/runsheet/runs/:run_id/start', (context) => move(context, 'started', (row) => {
+  route('POST', '/api/marathons/:marathon_id/schedule/runs/:run_id/start', (context) => move(context, 'started', (row) => {
     const run = runOf(row, context.params.run_id);
     if (run.state !== 'upcoming') throw new Refused(409, 'not_startable', `**${run.game}** is ${STATE_WORDS[run.state] || run.state}, so nothing was changed. Only a run that has not started can be marked **Started now**; **Undo last move** takes back a press made by mistake.`);
     const now = Math.floor(Date.now() / MIN) * MIN;
@@ -556,7 +556,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     };
   }));
 
-  route('POST', '/api/marathons/:marathon_id/runsheet/runs/:run_id/finish', (context) => move(context, 'finished', (row) => {
+  route('POST', '/api/marathons/:marathon_id/schedule/runs/:run_id/finish', (context) => move(context, 'finished', (row) => {
     const run = runOf(row, context.params.run_id);
     if (run.state !== 'live') throw new Refused(409, 'not_live', `**${run.game}** is ${STATE_WORDS[run.state] || run.state}, so nothing was changed. Only the run that is live can be marked **Finished now**.`);
     const now = Math.floor(Date.now() / MIN) * MIN;
@@ -575,7 +575,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     };
   }));
 
-  route('POST', '/api/marathons/:marathon_id/runsheet/runs/:run_id/set-start', async (context) => {
+  route('POST', '/api/marathons/:marathon_id/schedule/runs/:run_id/set-start', async (context) => {
     const body = await context.body();
     return move(context, 'start_set', (row) => {
       refuseReadOnly(row);
@@ -601,7 +601,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     });
   });
 
-  route('POST', '/api/marathons/:marathon_id/runsheet/shift', async (context) => {
+  route('POST', '/api/marathons/:marathon_id/schedule/shift', async (context) => {
     const body = await context.body();
     return move(context, 'shifted', (row) => {
       refuseReadOnly(row);
@@ -626,7 +626,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     });
   });
 
-  route('POST', '/api/marathons/:marathon_id/runsheet/runs/:run_id/estimate', async (context) => {
+  route('POST', '/api/marathons/:marathon_id/schedule/runs/:run_id/estimate', async (context) => {
     const body = await context.body();
     return move(context, 'estimate_set', (row) => {
       refuseReadOnly(row);
@@ -655,7 +655,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     });
   });
 
-  route('POST', '/api/marathons/:marathon_id/runsheet/runs/:run_id/skip', (context) => move(context, 'skipped', (row) => {
+  route('POST', '/api/marathons/:marathon_id/schedule/runs/:run_id/skip', (context) => move(context, 'skipped', (row) => {
     refuseReadOnly(row);
     const run = runOf(row, context.params.run_id);
     if (run.state !== 'upcoming') throw new Refused(409, 'not_skippable', `**${run.game}** is ${STATE_WORDS[run.state] || run.state}, so nothing was changed. Only a run that has not started can be skipped; a live run is ended with **Finished now**.`);
@@ -673,7 +673,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     };
   }));
 
-  route('POST', '/api/marathons/:marathon_id/runsheet/runs/:run_id/restore', (context) => move(context, 'restored', (row) => {
+  route('POST', '/api/marathons/:marathon_id/schedule/runs/:run_id/restore', (context) => move(context, 'restored', (row) => {
     refuseReadOnly(row);
     const run = runOf(row, context.params.run_id);
     if (run.state !== 'dropped') throw new Refused(409, 'not_skipped', `**${run.game}** is ${STATE_WORDS[run.state] || run.state}, not skipped, so nothing was changed.`);
@@ -687,7 +687,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     };
   }));
 
-  route('POST', '/api/marathons/:marathon_id/runsheet/reset', async (context) => {
+  route('POST', '/api/marathons/:marathon_id/schedule/reset', async (context) => {
     const body = await context.body();
     return move(context, 'reset', (row) => {
       refuseReadOnly(row);
@@ -705,12 +705,12 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     });
   });
 
-  route('POST', '/api/marathons/:marathon_id/runsheet/undo', (context) => {
+  route('POST', '/api/marathons/:marathon_id/schedule/undo', (context) => {
     requireStaff(context.session);
     const row = marathonOf(context.params.marathon_id);
     const book = bookOf(row);
     const last = book.undo.pop();
-    if (!last) throw new Refused(409, 'nothing_to_undo', `No staff move has been made on **${row.name}**'s run sheet since the bot started, so there is nothing to undo.`);
+    if (!last) throw new Refused(409, 'nothing_to_undo', `No staff move has been made on **${row.name}**'s marathon tracker since the bot started, so there is nothing to undo.`);
     restore(row, last.runs);
     const undone = book.moves.find((one) => one.id === last.move_id);
     if (undone) undone.undone = true;
@@ -718,7 +718,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     const id = book.next;
     book.next += 1;
     book.moves.unshift({ id, at: iso(Date.now()), by_id: by, by_name: memberName(by), kind: 'undone', text: `Undid: ${last.text}`, undone: false });
-    logAction('web.marathon.runsheet_undone', { details: { marathon_id: row.id, move_id: last.move_id, via: 'website' } });
-    return payload(row, `Undone: ${last.text}. The sheet is as it was before that move.`);
+    logAction('web.marathon.tracker_undone', { details: { marathon_id: row.id, move_id: last.move_id, via: 'website' } });
+    return payload(row, `Undone: ${last.text}. The schedule is as it was before that move.`);
   });
 }
