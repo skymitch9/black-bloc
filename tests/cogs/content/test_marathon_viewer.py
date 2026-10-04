@@ -575,7 +575,12 @@ async def test_switching_the_overlay_mid_day_snaps_the_times_once_each_way(bot, 
         one for one in await runs_of(bot.db, marathon["id"]) if one["game"].startswith("Dr. Rob")
     )
     assert racers["scheduled_at"] == "2026-10-04T18:57:00+00:00"
-    await cogmod.update_run(bot.db, racers["id"], reminders_sent=json.dumps([15, 120]))
+    await cogmod.update_run(
+        bot.db,
+        racers["id"],
+        reminders_sent=json.dumps([15, 120]),
+        reminder_posts=json.dumps({"15": {"posted": False}, "120": {"posted": False}}),
+    )
     cog.clock = lambda: datetime(2026, 10, 4, 18, 45, tzinfo=UTC)
 
     async def racers_now():

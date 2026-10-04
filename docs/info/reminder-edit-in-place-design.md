@@ -171,7 +171,12 @@ it, so flipping the key later edits the newest post.
 7. **The 15-minute copy is still not edited when its run goes live or finishes** (`marathon-role-ping-design.md` B's
    last bullet stays true); only the reason changed — the id is stored now, the rule is rule 5.
 8. **No site surface shows the stored ids.** `GET /api/marathons/{id}` still answers `reminders_sent` only.
-9. **`host_reminder_*` are four more kinds** rather than a `host` flag on the run kinds, following
+9. **One test of the viewer-source build was re-seeded, not re-asserted.**
+    `tests/cogs/content/test_marathon_viewer.py::test_switching_the_overlay_mid_day_snaps_the_times_once_each_way`
+    seeded `reminders_sent = [15, 120]` with nothing remembered and expected the 15 to re-arm. Under this build a
+    mark with nothing remembered is *posted, not editable* and is held, so the seed now says both marks were spent
+    WITHOUT a post (`reminder_posts` with `posted: false`) — the case that still re-arms. Its assertions are unchanged.
+10. **`host_reminder_*` are four more kinds** rather than a `host` flag on the run kinds, following
    `marathon.host_reminded` / `host_reminder_skipped` / `host_reminder_failed`.
 
 ## What was NOT verified
