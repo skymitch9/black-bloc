@@ -390,3 +390,25 @@ async def test_the_thread_controls_carry_the_line_while_the_switch_is_on(bot, co
         bot, bot.guild, await fresh(bot, marathon)
     )
     assert "marathon_role_id" not in content and "heads-up" not in content
+
+
+async def test_a_rehearsal_never_notifies_the_marathon_role(bot, cog):
+    marathon = await pinging(bot, cog)
+    await bot.store.set(GUILD, "marathon_mode", "shadow")
+
+    await at_fifteen(bot, cog, marathon)
+
+    said = [
+        one
+        for channel in bot.guild.channels.values()
+        for one in [*channel.messages, *getattr(channel, "threads", [])]
+        if "allowed_mentions" in getattr(one, "kwargs", {})
+    ]
+    assert said and not any(MARATHON_ROLE in allowed(one) for one in said)
+    copies = [
+        one for one in said if "Super Metroid" in (one.content or "") and ":R>" in one.content
+    ]
+    assert copies and not any(f"<@&{MARATHON_ROLE}>" in one.content for one in copies)
+    logged = await details_of(bot.db, "marathon.would_remind_public")
+    assert (logged["marathon_role"], logged["marathon_role_reason"]) == (None, mrp.REHEARSAL)
+    assert role_ping.verdict_for(bot, bot.guild, marathon).mentions

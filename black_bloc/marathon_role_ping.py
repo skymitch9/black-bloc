@@ -14,6 +14,7 @@ GONE = "gone"
 NOT_MENTIONABLE = "not_mentionable"
 NO_PUBLIC_COPY = "no_public_copy"
 RUNNER_COPY = "runner_copy"
+REHEARSAL = "rehearsal"
 KEY_REASONS = (ROLE_PINGS_OFF, REMINDER_PINGS_OFF, PUBLIC_REMINDERS_OFF)
 REASONS = (
     SWITCH_OFF,
@@ -24,6 +25,7 @@ REASONS = (
     NOT_MENTIONABLE,
     NO_PUBLIC_COPY,
     RUNNER_COPY,
+    REHEARSAL,
 )
 
 
@@ -107,6 +109,7 @@ __all__ = [
     "NO_PUBLIC_COPY",
     "PUBLIC_REMINDERS_OFF",
     "REASONS",
+    "REHEARSAL",
     "REMINDER_PINGS_OFF",
     "ROLE_PINGS_OFF",
     "RUNNER_COPY",
