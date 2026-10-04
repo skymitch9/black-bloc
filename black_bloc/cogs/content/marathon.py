@@ -635,7 +635,9 @@ async def create_marathon(
     cog = cog_of(bot)
     source, ref = found
     try:
-        ref, _event_name = await cog.client.resolve(source, ref)
+        ref, _event_name = await cog.client.resolve(
+            source, ref, **signals.setup_for(bot, guild.id, source)
+        )
     except ScheduleError as exc:
         return refused_with(
             bot, guild.id, MARATHON_COULD_NOT_READ_KEY, UNREADABLE, 422, reason=str(exc)
@@ -813,7 +815,9 @@ async def change_link(
     cog = cog_of(bot)
     source, ref = found
     try:
-        ref, _event_name = await cog.client.resolve(source, ref)
+        ref, _event_name = await cog.client.resolve(
+            source, ref, **signals.setup_for(bot, guild.id, source)
+        )
     except ScheduleError as exc:
         return refused_with(
             bot,
@@ -2018,7 +2022,11 @@ class Marathons(commands.Cog):
         """One read of the schedule, applied as a diff. A failure keeps every run as it was."""
         now = self.clock()
         try:
-            runs = await self.client.runs(marathon["source"], marathon["source_ref"])
+            runs = await self.client.runs(
+                marathon["source"],
+                marathon["source_ref"],
+                **signals.setup_for(self.bot, guild.id, marathon["source"]),
+            )
         except ScheduleError as exc:
             return await self._failed(guild, marathon, exc, now)
         except Exception as exc:
@@ -2074,6 +2082,7 @@ class Marathons(commands.Cog):
             runs,
             move_minutes=int(self.bot.store.get(guild.id, MARATHON_MOVE_MINUTES_KEY)),
         )
+        plan.updates = signals.held_plan(marathon, plan.updates)
         changed = digest != marathon["fetch_hash"]
         counts = {"runs": len(runs), "added": 0, "moved": 0, "dropped": 0}
         stamp = now.isoformat()
@@ -2205,6 +2214,8 @@ class Marathons(commands.Cog):
                 "run_seconds": run.run_seconds,
                 "last_seen_at": stamp,
             }
+            if signals.holds(marathon, row):
+                del fields["scheduled_at"], fields["ends_at"]
             if (row["game"], row["display_name"], row["twitch_game"]) != (
                 run.game,
                 run.display_name,

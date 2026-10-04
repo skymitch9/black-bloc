@@ -112,10 +112,10 @@ class FeedClient:
             raise ScheduleError(f"oengus.io has no event {ref}")
         return self.records[ref]
 
-    async def resolve(self, source, ref):
+    async def resolve(self, source, ref, *, setup_minutes=0):
         return (str(ref), f"{source} {ref}")
 
-    async def runs(self, source, ref):
+    async def runs(self, source, ref, *, setup_minutes=0):
         if source == "oengus" and (source, str(ref)) not in self.runs_by_ref:
             raise ScheduleError("oengus.io has not published it", unpublished=True)
         if source == "fastestfurs" and (source, str(ref)) not in self.runs_by_ref:
@@ -123,7 +123,7 @@ class FeedClient:
         if source == "ladyarcaders" and (source, str(ref)) not in self.runs_by_ref:
             raise ScheduleError("ladyarcaders.com has not published it", unpublished=True)
         if source == "gdq_hotfix":
-            blocks = hf.blocks_of((await self.hotfix_sheet())[0])
+            blocks = hf.blocks_of((await self.hotfix_sheet())[0], setup_minutes)
             return list(hf.block_for(blocks, ref, datetime.now(UTC)).runs)
         return list(self.runs_by_ref.get((source, str(ref)), []))
 
@@ -1602,7 +1602,7 @@ async def test_a_hotfix_check_adds_gdqueer_once_with_its_24_runs_from_the_sheet(
         "Spyro Reignited Trilogy",
         "2026-10-03T17:00:00+00:00",
     )
-    assert runs[1]["scheduled_at"] == "2026-10-03T18:08:00+00:00"
+    assert runs[1]["scheduled_at"] == "2026-10-03T18:15:00+00:00"
     assert (await checked_of(bot, "GDQ Hotfix"))["added"] == 1
     later(cog, 7)
     await cog.tick_once()
@@ -1629,7 +1629,7 @@ async def test_a_moved_run_in_the_sheet_flows_through_the_schedule_read(bot, cog
     read = await refresh_marathon(bot, bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
     assert read.ok, read.message
     runs = await runs_of(bot.db, marathon["id"])
-    assert runs[1]["scheduled_at"] == "2026-10-03T18:38:00+00:00"
+    assert runs[1]["scheduled_at"] == "2026-10-03T18:45:00+00:00"
 
 
 async def test_a_hotfix_page_without_its_sheet_is_a_failed_check_in_words(bot, cog):  # noqa: F811

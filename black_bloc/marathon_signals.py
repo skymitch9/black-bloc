@@ -18,8 +18,10 @@ from .marathon import (
     _cell,
     normalise,
 )
+from .settings_store import MARATHON_SETUP_MAX
 
 CHAIN_SLACK = timedelta(minutes=1)
+CHAIN_REACH = timedelta(minutes=MARATHON_SETUP_MAX)
 LOOK_AGAIN = timedelta(minutes=30)
 
 SHEET_TIMES = "sheet_times"
@@ -191,7 +193,8 @@ def length_of(row: Any) -> timedelta | None:
 
 
 def chains(rows: Any) -> list[list[Any]]:
-    """Runs the sheet puts back to back; a gap (the next day's show) starts a new chain."""
+    """Runs the sheet puts back to back, or a setup buffer apart; a longer gap (the next day's
+    show) starts a new chain."""
     ordered = sorted(
         (
             row
@@ -204,7 +207,9 @@ def chains(rows: Any) -> list[list[Any]]:
     for row in ordered:
         if found:
             ended = sheet_end(found[-1][-1])
-            if ended is not None and abs(sheet_start(row) - ended) <= CHAIN_SLACK:
+            if ended is not None and -CHAIN_SLACK <= sheet_start(row) - ended <= (
+                CHAIN_REACH + CHAIN_SLACK
+            ):
                 found[-1].append(row)
                 continue
         found.append([row])
@@ -219,17 +224,26 @@ def _differs(stored: Any, wanted: datetime | None) -> bool:
     return parse_ts(stored) != wanted
 
 
-def retimed(rows: Any) -> list[Retime]:
+def settled(row: Any) -> bool:
+    return _cell(row, "state") in (LIVE, DONE)
+
+
+def retimed(rows: Any, setup_minutes: int = 0) -> list[Retime]:
     """Each run's start where the stream puts it: a run seen starting is anchored there, and
-    every later run of its chain starts where the one before it should end (its estimate).
-    Runs before the first anchor keep the sheet's times."""
+    every later run of its chain starts `setup_minutes` after the one before it should end
+    (its estimate). Runs before the first anchor keep the sheet's times; a run that is live
+    or done and was never seen starting stays where it is."""
+    setup = timedelta(minutes=max(0, int(setup_minutes or 0)))
     found: list[Retime] = []
     for chain in chains(rows):
         cursor: datetime | None = None
         for row in chain:
             actual = parse_ts(_cell(row, "actual_started_at"))
             ended = parse_ts(_cell(row, "actual_ended_at"))
+            held = actual is None and settled(row)
             if actual is None and cursor is None and ended is None:
+                if held:
+                    continue
                 if _differs(_cell(row, "scheduled_at"), sheet_start(row)) or _differs(
                     _cell(row, "ends_at"), sheet_end(row)
                 ):
@@ -241,10 +255,13 @@ def retimed(rows: Any) -> list[Retime]:
                         )
                     )
                 continue
-            start = actual or cursor or sheet_start(row)
+            kept = parse_ts(_cell(row, "scheduled_at")) if held else None
+            start = actual or kept or cursor or sheet_start(row)
             span = length_of(row)
-            end = ended or (start + span if start is not None and span is not None else None)
-            cursor = end
+            end = ended or (parse_ts(_cell(row, "ends_at")) if kept is not None else None)
+            if end is None and start is not None and span is not None:
+                end = start + span
+            cursor = end + setup if end is not None else None
             if _differs(_cell(row, "scheduled_at"), start) or _differs(_cell(row, "ends_at"), end):
                 found.append(Retime(row, _iso(start), _iso(end)))
     return found

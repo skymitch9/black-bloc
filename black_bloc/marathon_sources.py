@@ -632,9 +632,9 @@ class ScheduleClient:
         self._hotfix_sheet = found[1]
         return found
 
-    async def hotfix_block(self, ref: str) -> Any:
+    async def hotfix_block(self, ref: str, setup_minutes: int = 0) -> Any:
         text, _url = await self.hotfix_sheet()
-        return _hf().block_for(_hf().blocks_of(text), ref, datetime.now(UTC))
+        return _hf().block_for(_hf().blocks_of(text, setup_minutes), ref, datetime.now(UTC))
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
@@ -734,7 +734,7 @@ class ScheduleClient:
             raise ScheduleError(ANSWERED.format(site=site, status=status))
         return parse_oengus(body)
 
-    async def resolve(self, source: str, ref: str) -> tuple[str, str]:
+    async def resolve(self, source: str, ref: str, *, setup_minutes: int = 0) -> tuple[str, str]:
         """(the event id, its name) — a short such as `AGDQ2027` is looked up once here."""
         if source == HORARO:
             schedule = await self.horaro(ref)
@@ -746,7 +746,7 @@ class ScheduleClient:
         if source == FASTESTFURS:
             return await _ff().resolve(self._request, ref)
         if source == GDQ_HOTFIX:
-            block = await self.hotfix_block(ref)
+            block = await self.hotfix_block(ref, setup_minutes)
             return (block.ref, block.show)
         if source == LADYARCADERS:
             from .marathon_ladyarcaders import calendar_resolve
@@ -794,7 +794,7 @@ class ScheduleClient:
             pages += 1
         return found
 
-    async def runs(self, source: str, ref: str) -> list[Run]:
+    async def runs(self, source: str, ref: str, *, setup_minutes: int = 0) -> list[Run]:
         if source == HORARO:
             return parse_horaro(await self.horaro(ref))
         if source == OENGUS:
@@ -802,7 +802,7 @@ class ScheduleClient:
         if source == FASTESTFURS:
             return await _ff().read_runs(self._request, ref)
         if source == GDQ_HOTFIX:
-            return list((await self.hotfix_block(ref)).runs)
+            return list((await self.hotfix_block(ref, setup_minutes)).runs)
         if source == LADYARCADERS:
             from .marathon_ladyarcaders import calendar_runs
 
