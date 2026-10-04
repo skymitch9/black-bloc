@@ -9856,4 +9856,6 @@ Keyed by NAME. Design: `spotlight-design.md` ▸ *Follow-up 2026-10-04 — repla
 | `spotlight.py` `set_replay` | Sets `replay_cleared` back to NULL so a session that was upgraded can be downgraded again. |
 | `spotlight.py` `_now` | The verdict's clock in one place so a test can stand at 13:40Z; reminders still read the real clock. |
 | `black_bloc/cogs/content/marathon_signals.py` `replay_began` | `finish` only — no `actual_ended_at`, no `retime`: the replay starts long after the run ended, and an end stamped now would be a stale anchor for anything after it in the chain. |
-
+| `black_bloc/cogs/content/marathon_signals.py` `guarded` | Only an UPCOMING hit is held; a hit on a live run is left to `confirms`. `early_held` is memory only - one row per run per process. The show-day is `marathon_overlay.chains` even when the overlay is off, because `marathon_signals.chains` breaks at a 30-minute gap and would make every run of a gappy sheet a "first run". |
+| `black_bloc/cogs/content/marathon_signals.py` `undo_early` | Runs first in `advance`, then the rows are read again. `put_back(because=None)`, not `BY_STAFF`: staff did not hold it. `retime(on_move=EDIT)` so a `repost` setting cannot fire a posted mark a second time. It adds the run to `early_held` so the same tick does not also write a held row. |
+| `black_bloc/cogs/content/marathon.py` `put_back` | The one column list for "back to coming up", shared by staff `mark_upcoming` and `undo_early`. |
