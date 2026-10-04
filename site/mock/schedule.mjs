@@ -316,8 +316,9 @@ export function mountTracker({ route, Refused, requireStaff, actorOf, memberName
     return found;
   }
 
-  function driftOf(day) {
-    const next = day.rows.find((one) => one.run.state === 'upcoming') || day.rows.find((one) => one.run.state === 'live');
+  function driftOf(day, row) {
+    const measured = (one) => editableOf(row) || Boolean(one.run.actual_started_at);
+    const next = day.rows.find((one) => one.run.state === 'upcoming' && measured(one)) || day.rows.find((one) => one.run.state === 'live' && measured(one));
     return next ? { minutes: Math.round((next.start - next.plan) / MIN), run_id: next.run.id } : { minutes: null, run_id: null };
   }
 
@@ -418,7 +419,7 @@ export function mountTracker({ route, Refused, requireStaff, actorOf, memberName
       rows.push(...day.rows.map((one) => sheetRow(one, day, editable, first ? first.run.id : null)));
       const staffTimes = day.rows.filter((one) => one.run.staff_at).length;
       const staffEstimates = day.rows.filter((one) => one.run.staff_estimate_seconds).length;
-      const drift = driftOf(day);
+      const drift = driftOf(day, row);
       return {
         key: day.key,
         label: day.label,

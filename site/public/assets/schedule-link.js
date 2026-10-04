@@ -1,7 +1,7 @@
 import { el } from './ui.js';
 
 const TRACKER = 'Marathon tracker';
-const TRACKER_HELP = 'The runs in order with the times the bot is working from, and the staff moves that change them.';
+const TRACKER_HELP = 'The runs in order with the times the bot is working from and what is live right now. It re-reads itself while it is open.';
 
 export function trackerHref(marathonId) {
   return `/schedule.html#marathon-${marathonId}`;
