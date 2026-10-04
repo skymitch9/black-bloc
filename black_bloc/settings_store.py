@@ -4750,6 +4750,7 @@ MARATHON_ROLE_PINGS_KEY = "marathon_role_pings"
 MARATHON_ROLE_PING_LINE_ON_KEY = "marathon_role_ping_line_on"
 MARATHON_ROLE_PING_LINE_KEY_OFF_KEY = "marathon_role_ping_line_key_off"
 MARATHON_ROLE_PING_LINE_ANNOUNCEMENTS_OFF_KEY = "marathon_role_ping_line_announcements_off"
+MARATHON_ROLE_PING_LINE_REHEARSAL_KEY = "marathon_role_ping_line_rehearsal"
 MARATHON_ROLE_PING_LINE_UNSET_KEY = "marathon_role_ping_line_unset"
 MARATHON_ROLE_PING_LINE_GONE_KEY = "marathon_role_ping_line_gone"
 MARATHON_ROLE_PING_LINE_NOT_MENTIONABLE_KEY = "marathon_role_ping_line_not_mentionable"
@@ -6175,6 +6176,12 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "no public heads-up posts.",
         (),
         "the line under a marathon's ping switch while its BaF announcements are off",
+    ),
+    MARATHON_ROLE_PING_LINE_REHEARSAL_KEY: (
+        "The Marathon role is not mentioned while marathon posts rehearse: marathon_mode is "
+        "not on, and a rehearsal copy never pings it.",
+        (),
+        "the line under a marathon's ping switch while marathon_mode is shadow or off",
     ),
     MARATHON_ROLE_PING_LINE_UNSET_KEY: (
         "The Marathon role is not mentioned: no role is picked in marathon_role_id.",

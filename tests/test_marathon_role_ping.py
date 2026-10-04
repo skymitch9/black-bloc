@@ -52,6 +52,11 @@ def test_announcements_off_means_no_public_copy_to_carry_it():
     assert decide(announces=False).reason == mrp.ANNOUNCEMENTS_OFF
 
 
+def test_a_rehearsal_never_mentions_it():
+    assert decide(rehearsing=True).reason == mrp.REHEARSAL
+    assert not decide(rehearsing=True).mentions
+
+
 def test_no_role_picked_and_a_deleted_role_are_two_reasons():
     assert decide(configured=None, role=None).reason == mrp.UNSET
     gone = decide(role=None)

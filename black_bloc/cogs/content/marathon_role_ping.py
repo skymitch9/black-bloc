@@ -18,10 +18,11 @@ from ...settings_store import (
     MARATHON_ROLE_PING_LINE_KEY_OFF_KEY,
     MARATHON_ROLE_PING_LINE_NOT_MENTIONABLE_KEY,
     MARATHON_ROLE_PING_LINE_ON_KEY,
+    MARATHON_ROLE_PING_LINE_REHEARSAL_KEY,
     MARATHON_ROLE_PING_LINE_UNSET_KEY,
     MARATHON_ROLE_PINGS_KEY,
 )
-from .marathon import said_default
+from .marathon import MODE_ON, mode_of, said_default
 from .marathon_announce import announces
 
 REASON_KEYS = (
@@ -32,6 +33,7 @@ REASON_KEYS = (
 KEY_OF = dict(REASON_KEYS)
 LINE_KEYS = {
     mrp.ANNOUNCEMENTS_OFF: MARATHON_ROLE_PING_LINE_ANNOUNCEMENTS_OFF_KEY,
+    mrp.REHEARSAL: MARATHON_ROLE_PING_LINE_REHEARSAL_KEY,
     mrp.UNSET: MARATHON_ROLE_PING_LINE_UNSET_KEY,
     mrp.GONE: MARATHON_ROLE_PING_LINE_GONE_KEY,
     mrp.NOT_MENTIONABLE: MARATHON_ROLE_PING_LINE_NOT_MENTIONABLE_KEY,
@@ -63,6 +65,7 @@ def verdict_for(bot: Any, guild: Any, marathon: Any) -> mrp.Verdict:
         switch_on=mp.pings_role(marathon),
         off=tuple((reason, bool(bot.store.get(guild.id, key))) for reason, key in REASON_KEYS),
         announces=announces(bot, guild.id, marathon),
+        rehearsing=mode_of(bot, guild.id) != MODE_ON,
         configured=configured,
         role=role,
         may_mention_every_role=may_mention_every_role(

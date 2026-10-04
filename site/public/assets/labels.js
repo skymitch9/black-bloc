@@ -165,6 +165,7 @@ export const LABELS = {
   marathon_role_ping_line_on: "The line under the ping switch while the Marathon role is mentioned",
   marathon_role_ping_line_key_off: "The line under the ping switch while a setting keeps the Marathon role out",
   marathon_role_ping_line_announcements_off: "The line under the ping switch while BaF announcements are off",
+  marathon_role_ping_line_rehearsal: "The line under the ping switch while marathon posts rehearse",
   marathon_role_ping_line_unset: "The line under the ping switch while no Marathon role is picked",
   marathon_role_ping_line_gone: "The line under the ping switch while the Marathon role is deleted",
   marathon_role_ping_line_not_mentionable: "The line under the ping switch while the Marathon role cannot notify",

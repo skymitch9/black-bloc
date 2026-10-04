@@ -411,4 +411,4 @@ async def test_a_rehearsal_never_notifies_the_marathon_role(bot, cog):
     assert copies and not any(f"<@&{MARATHON_ROLE}>" in one.content for one in copies)
     logged = await details_of(bot.db, "marathon.would_remind_public")
     assert (logged["marathon_role"], logged["marathon_role_reason"]) == (None, mrp.REHEARSAL)
-    assert role_ping.verdict_for(bot, bot.guild, marathon).mentions
+    assert "while marathon posts rehearse" in role_ping.status_line(bot, bot.guild, marathon)

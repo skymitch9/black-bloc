@@ -444,8 +444,6 @@ def role_for(
     if mark != int(bot.store.get(guild.id, MARATHON_PING_MINUTES_KEY)):
         return None
     verdict = verdict_for(bot, guild, marathon)
-    if rehearsing(bot, guild):
-        return mrp.unsent(verdict, mrp.REHEARSAL)
     if mt.is_ours(block.first) and people_for(marathon, block.first):
         return mrp.unsent(verdict, mrp.RUNNER_COPY)
     return verdict

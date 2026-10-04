@@ -80,8 +80,6 @@ async def post_public_reminder(
     """Rides the staff copy's sent-marker, so a restart never posts it twice; a failure here is
     a log line and never touches the staff copy. It answers what this copy mentioned."""
     bot = cog.bot
-    if marathon_role is not None and mode_of(bot, guild.id) != MODE_ON:
-        marathon_role = mrp.unsent(marathon_role, mrp.REHEARSAL)
     quiet = mrp.row_fields(
         None if marathon_role is None else mrp.unsent(marathon_role, mrp.NO_PUBLIC_COPY)
     )

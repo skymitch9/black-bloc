@@ -51,6 +51,7 @@ def decide(
     switch_on: bool,
     off: tuple[tuple[str, bool], ...],
     announces: bool,
+    rehearsing: bool = False,
     configured: int | None,
     role: Any,
     may_mention_every_role: bool,
@@ -64,6 +65,8 @@ def decide(
             return Verdict(None, reason, configured, name)
     if not announces:
         return Verdict(None, ANNOUNCEMENTS_OFF, configured, name)
+    if rehearsing:
+        return Verdict(None, REHEARSAL, configured, name)
     if configured is None:
         return Verdict(None, UNSET)
     if role is None:
