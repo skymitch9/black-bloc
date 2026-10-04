@@ -51,6 +51,7 @@ from ...marathon_channels import HELD_REFUSAL, OPTED_OUT_REFUSAL, takes_marathon
 from ...marathon_channels import channel_word as channel_word_of
 from ...marathon_sources import (
     GDQ,
+    GDQ_HOTFIX,
     SOURCE_WORDS,
     ScheduleClient,
     ScheduleError,
@@ -367,6 +368,8 @@ MARATHON_COLUMNS = {
     "host_highlight_posts",
     "announcements",
     "announce_opt_out",
+    "overlay",
+    "overlay_sheet",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -888,11 +891,14 @@ async def rename_marathon(
     via: str = VIA_DISCORD,
 ) -> Outcome:
     changes: dict[str, Any] = {}
+    said = ""
     if name is not None:
         wanted = " ".join(str(name).split())[:100]
         if not wanted:
-            return refusal(mt.NO_NAME, NO_NAME_CODE, 422)
-        changes["name"] = wanted
+            return refusal(mt.NO_RENAME, NO_NAME_CODE, 422)
+        if wanted != marathon["name"]:
+            changes["name"] = wanted
+            said = mt.RENAME_SAID.format(old=marathon["name"], name=wanted)
     if poll_minutes is not None:
         if poll_minutes in ("", 0):
             changes["poll_minutes"] = None
@@ -913,7 +919,9 @@ async def rename_marathon(
             actor=actor,
             details={"marathon_id": marathon["id"], **changes, "via": via},
         )
-    return Outcome(True, "", value=await get_marathon(bot.db, guild.id, marathon["id"]))
+        if "name" in changes:
+            await controls_changed(bot, guild, marathon["id"])
+    return Outcome(True, said, value=await get_marathon(bot.db, guild.id, marathon["id"]))
 
 
 async def remove_marathon(
@@ -2034,6 +2042,7 @@ class Marathons(commands.Cog):
             return await self._failed(guild, marathon, exc, now)
         except Exception as exc:
             return await self._failed(guild, marathon, ScheduleError(str(exc)[:200]), now)
+        runs = await viewer_decorated(self.bot, guild, marathon, runs)
         found = await self.apply(guild, marathon, runs, now)
         await self.sync_window(guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
         await self.follow_spotlight(guild, marathon["id"])
@@ -2280,6 +2289,7 @@ class Marathons(commands.Cog):
                 match_hosts=hosts,
                 usernames=usernames,
                 hosts_count=count,
+                commentators_count=marathon["source"] != GDQ_HOTFIX,
             )
             if after == before:
                 continue
@@ -3785,6 +3795,13 @@ class MarathonMoveButton(discord.ui.Button):
                 )
                 current = row["schedule_url"] if row is not None else None
                 await interaction.response.send_modal(LinkModal(view, current))
+        elif action == mt.RENAME:
+            if await still_staff(interaction):
+                row = await get_marathon(
+                    interaction.client.db, interaction.guild.id, view.marathon_id
+                )
+                current = row["name"] if row is not None else None
+                await interaction.response.send_modal(RenameModal(view, current))
         elif action == mt.POLL:
             if await still_staff(interaction):
                 row = await get_marathon(
@@ -4038,6 +4055,32 @@ class LinkModal(AnswersErrors, discord.ui.Modal, title=mi.LINK_TITLE):
         await answer(interaction, outcome.message)
 
 
+class RenameModal(AnswersErrors, discord.ui.Modal, title=mt.RENAME_TITLE):
+    wanted = discord.ui.TextInput(label=mt.RENAME_LABEL, max_length=100)
+
+    def __init__(self, previous: Any = None, current: Any = None) -> None:
+        super().__init__()
+        self.previous = previous
+        self.wanted.default = str(current) if current else None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        bot, guild = interaction.client, interaction.guild
+        marathon_id = getattr(self.previous, "marathon_id", None)
+        row = await get_marathon(bot.db, guild.id, marathon_id)
+        if row is None:
+            await open_root(interaction, self.previous)
+            await answer(interaction, mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
+            return
+        outcome = await rename_marathon(bot, guild, interaction.user, row, str(self.wanted), None)
+        if getattr(self.previous, "where", None) == SCHEDULE_VIEW:
+            await back_to_schedule(interaction, self.previous)
+        else:
+            await open_card(interaction, row["id"], self.previous)
+        await answer(interaction, outcome.message or mt.RENAME_SAME.format(name=row["name"]))
+
+
 class PollModal(AnswersErrors, discord.ui.Modal, title=mt.POLL_TITLE):
     minutes = discord.ui.TextInput(
         label=mt.POLL_LABEL, placeholder=mt.POLL_HINT, required=False, max_length=4
@@ -4073,8 +4116,18 @@ class PollModal(AnswersErrors, discord.ui.Modal, title=mt.POLL_TITLE):
             await answer(interaction, mt.POLL_SAVED.format(name=row["name"], minutes=wanted))
 
 
+async def viewer_decorated(bot: Any, guild: Any, marathon: Any, runs: list[Any]) -> list[Any]:
+    from .marathon_viewer import decorated
+
+    return await decorated(bot, guild, marathon, runs)
+
+
 def _raw_people(run: Any) -> list[dict[str, Any]]:
-    return [{"name": one.name, "login": one.login, "part": one.part} for one in run.people]
+    return [
+        {"name": one.name, "login": one.login, "part": one.part}
+        | ({"login_from": one.login_from} if one.login_from else {})
+        for one in run.people
+    ]
 
 
 def _merged_people(row: Any, run: Any) -> list[dict[str, Any]]:

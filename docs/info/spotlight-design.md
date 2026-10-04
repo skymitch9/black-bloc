@@ -111,7 +111,7 @@ Remove. Plus the event card's **Spotlight this stream** (§B). Nothing a member 
 grows past 25 and gains the Find box like events)
 
 `spotlight_mode` (off / **shadow** / on — shadow posts everything into the shadow home with the note, as go-live itself does
-today), `spotlight_poll_minutes` (5, 2–30), `spotlight_end_misses` (2, 1–5), `spotlight_bump_hours` (4, 1–48),
+today), `spotlight_poll_minutes` (5, 1–30; floor lowered from 2 on 2026-10-03, see the dated line at the end), `spotlight_end_misses` (2, 1–5), `spotlight_bump_hours` (4, 1–48),
 `spotlight_bump_template` (text, the default above; a validator refuses an unknown `{…}`; filled as `render` fills
 `golive_template`), `spotlight_bump_cleanup` (bool, true), `spotlight_pin` (bool, true — the default for a new row),
 `spotlight_default_days` (7, 1–365), `spotlight_event_slack_hours` (2, 0–24). Every posted word is a key (the bump template;
@@ -420,3 +420,5 @@ should — the bot authored it), how the pinned-messages list renders an edited 
 rehearsal line on a real shadow post, and how often a real marathon's title changes (every title
 change is an edit — a stream that retitles every few minutes edits the post every poll). Sweep row
 `PR-a` in `../access/sweeps.md` is the proof that does not exist yet.
+
+> **2026-10-03 — poll floor 2 -> 1 (owner: "yes lower it to 1 minute").** `SPOTLIGHT_POLL_MIN_MINUTES` is 1; default 5 and max 30 unchanged. One poll is one `get_streams` call for the whole list (batches of 100), plus at most one `get_games` for box art, cached for the life of the process; so 8 channels at a 1-minute poll is about 1 request/minute against Twitch's documented 800 points/minute app-token limit (from the docs, not measured). `spotlight_end_misses` (2) now means about 2 minutes of quiet rather than 4. Nothing else assumed a 2-minute gap: the marathon category lookup keeps its own 30-minute `LOOK_AGAIN`, and the marathon tick is already 1 minute.

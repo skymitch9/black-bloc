@@ -556,11 +556,14 @@ def allowed(url: Any) -> bool:
     return hop_allowed(str(url or ""), HOSTS, TAILS)
 
 
-async def fetch(get: Get, url: str, agent: str) -> str:
+async def fetch(
+    get: Get, url: str, agent: str, *, allow: Callable[[Any], bool] | None = None, site: Any = None
+) -> str:
     """One document, redirects followed by hand; every hop is checked BEFORE it is asked."""
-    site = site_of(GDQ_HOTFIX)
+    site = str(site or site_of(GDQ_HOTFIX))
+    allow = allow or allowed
     for _ in range(MAX_HOPS + 1):
-        if not allowed(url):
+        if not allow(url):
             log.info("marathon: the Hotfix read was sent to %s; refused", url[:120])
             host = (urlsplit(url).hostname or "?") if "://" in url else "?"
             raise ScheduleError(WENT_ELSEWHERE.format(site=site, host=host[:60]))

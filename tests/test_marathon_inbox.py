@@ -83,9 +83,11 @@ def test_the_schedule_view_offers_post_it_now_only_while_no_inbox_message_is_up(
     assert mi.schedule_moves(row(inbox_message_id=None)) == (
         mi.LINK_MOVE,
         poll,
+        mt.RENAME_MOVE,
         mi.POST_NOW_MOVE,
         mt.BACK_MOVE,
     )
-    assert mi.schedule_moves(row(inbox_message_id=9)) == (mi.LINK_MOVE, poll, mt.BACK_MOVE)
+    posted = mi.schedule_moves(row(inbox_message_id=9))
+    assert posted == (mi.LINK_MOVE, poll, mt.RENAME_MOVE, mt.BACK_MOVE)
     archived = row(inbox_message_id=None, archived_at="2026-09-26T00:00:00+00:00")
     assert mi.POST_NOW_MOVE not in mi.schedule_moves(archived)

@@ -83,7 +83,7 @@
       "spotlight_default_days": 1,
       "spotlight_end_misses": 1,
       "spotlight_event_slack_hours": 0,
-      "spotlight_poll_minutes": 2,
+      "spotlight_poll_minutes": 1,
       "spotlight_window_keep_days": 1,
       "time_step_minutes": 5,
       "youtube_live_end_misses": 1,
@@ -5116,6 +5116,22 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/api/marathons/feeds/{feed_hotfix_id}/viewer-read",
+      "read_by": [
+        "marathons-section.js (events.html) the GDQ Hotfix feed's drawer — Schedule viewer ▸ Read it now"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source",
+        "viewer_url",
+        "message",
+        "viewer"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/marathons",
       "read_by": [
@@ -5227,6 +5243,7 @@
         "role_ping",
         "public_highlight",
         "announcements",
+        "overlay",
         "tracked_state",
         "tracked",
         "tracked_at",
@@ -5386,6 +5403,22 @@
       "keys": [
         "id",
         "announcements",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_bare_id}",
+      "body": {
+        "overlay": "follow"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Settings foldout — Event schedule (a Hotfix marathon)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "overlay",
         "message"
       ]
     },

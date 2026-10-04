@@ -12,6 +12,7 @@ from ... import marathon as mt
 from ... import marathon_events as me
 from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
+from ... import marathon_overlay as mo
 from ... import marathon_ping as mping
 from ... import marathon_public as mp
 from ... import marathon_spotlight as ms
@@ -39,6 +40,8 @@ from ...settings_store import (
     MARATHON_CONTROLS_KEPT_REFUSED_KEY,
     MARATHON_CONTROLS_NO_CHANNEL_KEY,
     MARATHON_CONTROLS_NO_END_KEY,
+    MARATHON_CONTROLS_OVERLAY_OFF_KEY,
+    MARATHON_CONTROLS_OVERLAY_ON_KEY,
     MARATHON_CONTROLS_PING_OFF_KEY,
     MARATHON_CONTROLS_PING_ON_KEY,
     MARATHON_CONTROLS_RUNS_OFF_KEY,
@@ -103,11 +106,22 @@ LABEL_KEYS = {
     (mtc.PING, mtc.OFF): MARATHON_CONTROLS_PING_OFF_KEY,
     (mtc.ANNOUNCE, mtc.ON): MARATHON_CONTROLS_ANNOUNCE_ON_KEY,
     (mtc.ANNOUNCE, mtc.OFF): MARATHON_CONTROLS_ANNOUNCE_OFF_KEY,
+    (mtc.OVERLAY, mtc.ON): MARATHON_CONTROLS_OVERLAY_ON_KEY,
+    (mtc.OVERLAY, mtc.OFF): MARATHON_CONTROLS_OVERLAY_OFF_KEY,
 }
 STYLES = {
     mtc.ON: discord.ButtonStyle.success,
     mtc.OFF: discord.ButtonStyle.secondary,
 }
+
+
+def overlay_switch(bot: Any, guild_id: int, marathon: Any) -> bool | None:
+    """The Event schedule button's state — None (no button) unless a sheet matches."""
+    from .marathon_hosts import switch_state
+
+    if mo.state_of(marathon) is None:
+        return None
+    return bool(switch_state(bot, guild_id, marathon, mh.OVERLAY)["on"])
 
 
 def shown_lock(cog: Any, marathon_id: Any) -> asyncio.Lock:
@@ -132,6 +146,7 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         mp.highlights(marathon),
         mping.pings_role(marathon),
         announces(bot, guild.id, marathon),
+        overlay_switch(bot, guild.id, marathon),
     )
     starts = label_moment(state.get("starts"), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY))
     labels = tuple(
@@ -514,6 +529,8 @@ async def press(
         outcome = refusal(mh.HOST_EVENTS_GONE, GONE_CODE, 410)
     elif action == mtc.ANNOUNCE:
         outcome = await set_switch(bot, guild, actor, marathon, mh.ANNOUNCE, to == mtc.ON, via=via)
+    elif action == mtc.OVERLAY:
+        outcome = await set_switch(bot, guild, actor, marathon, mh.OVERLAY, to == mtc.ON, via=via)
     elif to == mtc.ON:
         outcome = await start_spotlight(bot, guild, actor, marathon, via=via)
     elif to == mtc.CANCEL:

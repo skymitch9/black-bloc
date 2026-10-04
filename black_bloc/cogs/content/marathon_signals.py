@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from ... import marathon as mt
+from ... import marathon_overlay as overlay
 from ... import marathon_reminder_posts as mrem
 from ... import marathon_signals as sig
 from ...actionlog import log_action
@@ -184,12 +185,17 @@ def _moved_enough(before: Any, after: Any, minutes: int) -> bool:
 
 async def retime(cog: Any, guild: Any, marathon: Any, *, because: str) -> int:
     """The clock kept by Black Bloc for a schedule that does not move itself."""
-    from .marathon import runs_of, update_run
+    from .marathon import get_marathon, runs_of, update_run
 
     if marathon is None or retimes_itself(marathon["source"]):
         return 0
     bot = cog.bot
-    changes = sig.retimed(await runs_of(bot.db, marathon["id"]), setup_minutes(bot, guild.id))
+    kept = await get_marathon(bot.db, guild.id, marathon["id"]) or marathon
+    rows = await runs_of(bot.db, marathon["id"])
+    if overlay.applied(kept):
+        changes = overlay.retimed(rows)
+    else:
+        changes = sig.retimed(rows, setup_minutes(bot, guild.id))
     if not changes:
         return 0
     now = cog.clock()

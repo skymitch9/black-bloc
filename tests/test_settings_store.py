@@ -1511,6 +1511,16 @@ def test_the_raid_train_numbers_refuse_a_figure_that_would_break_the_sweep():
         assert said in str(caught.value)
 
 
+def test_the_spotlight_poll_takes_one_minute_and_refuses_none_in_words():
+    assert coerce_value("spotlight_poll_minutes", 1) == 1
+    assert coerce_value("spotlight_poll_minutes", 30) == 30
+    with pytest.raises(SettingError) as caught:
+        coerce_value("spotlight_poll_minutes", 0)
+    assert "shorter than 1 minute" in str(caught.value)
+    with pytest.raises(SettingError):
+        coerce_value("spotlight_poll_minutes", 31)
+
+
 def test_the_raid_train_switches_only_take_the_words_they_document():
     assert coerce_value("raidtrain_mode", "shadow") == "shadow"
     assert coerce_value("raidtrain_require_link", False) is False
@@ -2295,7 +2305,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 724
+    assert len(settings_store.KEY_TYPES) == 730
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2565,3 +2575,43 @@ def test_the_category_signal_is_a_bool_and_the_retro_category_a_name_never_blank
         settings_store.coerce_value(key, "  ")
     with pytest.raises(settings_store.SettingError, match="not a Twitch category name"):
         settings_store.coerce_value(key, "x" * 61)
+
+
+def test_the_hotfix_viewer_link_is_one_public_https_page_or_blank_for_off():
+    key = settings_store.MARATHON_HOTFIX_VIEWER_URL_KEY
+    page = "https://ogndrahcir.github.io/ScheduleViewer/"
+    assert (settings_store.KEY_TYPES[key], settings_store.MARATHON_DEFAULTS[key]) == ("text", page)
+    assert settings_store.namespace_of(key) == "marathon"
+    assert settings_store.coerce_value(key, f"  {page} ") == page
+    assert settings_store.coerce_value(key, "   ") == ""
+    for bad in (
+        "http://ogndrahcir.github.io/ScheduleViewer/",
+        "https://10.0.0.7/",
+        "https://[fdaa::3]/",
+        "https://localhost/",
+        "https://db.internal/",
+        "https://a.example:8443/",
+        "https://user@a.example/",
+        "https://a.example/ x",
+        "https://a.example/" + "x" * 300,
+        "ScheduleViewer",
+    ):
+        with pytest.raises(settings_store.SettingError, match="not a page Black Bloc can read"):
+            settings_store.coerce_value(key, bad)
+
+
+def test_the_event_schedule_default_is_on_and_its_button_and_answers_are_words():
+    key = settings_store.MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY
+    assert (settings_store.KEY_TYPES[key], settings_store.MARATHON_DEFAULTS[key]) == ("bool", True)
+    for key, said in (
+        (settings_store.MARATHON_CONTROLS_OVERLAY_ON_KEY, "Event schedule: on · turn off"),
+        (settings_store.MARATHON_CONTROLS_OVERLAY_OFF_KEY, "Event schedule: off · turn on"),
+    ):
+        assert settings_store.MARATHON_DEFAULTS[key] == said and len(said) <= 80
+    for key in (
+        settings_store.MARATHON_OVERLAY_ON_SAID_KEY,
+        settings_store.MARATHON_OVERLAY_OFF_SAID_KEY,
+    ):
+        assert "{marathon}" in settings_store.MARATHON_DEFAULTS[key]
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(key, "{member}")

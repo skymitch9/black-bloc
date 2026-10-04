@@ -711,3 +711,28 @@ async def test_a_removed_host_button_clicked_in_discord_answers_in_words(bot, co
 async def test_a_host_button_rebuilds_from_its_custom_id():
     found = re.fullmatch(mtc.TEMPLATE, "marathon:controls:12:hostevents:off")
     assert found and (found["action"], found["to"]) == ("hostevents", "off")
+
+
+async def test_a_rename_re_renders_the_controls_and_the_inbox_post_but_not_the_threads_title(
+    bot, cog
+):
+    from black_bloc.cogs.content.marathon import rename_marathon
+
+    marathon = await tracked_marathon(bot, cog, channel=await quiet_row(bot))
+    thread = the_thread(bot)
+    message = controls_in(thread)[0]
+    opening = thread.messages[0].content
+    assert message.content.startswith("Staff: these buttons set **AGDQ 2027**'s")
+
+    soul = "AGDQ 2027: Soul Train"
+    done = await rename_marathon(bot, bot.guild, FakeActor(), marathon, soul, None)
+    assert done.ok
+
+    assert message.content.startswith("Staff: these buttons set **AGDQ 2027: Soul Train**'s")
+    assert thread.messages[0].content == opening
+    await cog.tick_once()
+    assert controls_in(thread) == [message]
+    inbox_thread = bot.guild.channels[EVENTS].threads[0]
+    posted = [one for one in inbox_thread.messages if one.embeds]
+    assert [one.embeds[-1].title for one in posted] == ["AGDQ 2027: Soul Train"]
+    assert thread.name == "AGDQ 2027"

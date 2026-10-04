@@ -2,6 +2,7 @@
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-10-03 (branch `reminder-edit-in-place`)** — ONE section APPENDED (`RE-a`…`RE-h`, BUILT, NOT MERGED, NOT verified against a browser or Discord); nothing else touched. Before that,
+> **2026-10-03 (branch `hotfix-viewer-source`)** — ONE section APPENDED (`HV-a`…`HV-g`, BUILT, NOT MERGED; both drawers rendered in a browser on the branch's mock, nothing verified against Discord or Fly); nothing else touched. Before that,
 > **2026-10-03 (branch `hotfix-setup-buffer`)** — ONE section APPENDED (`SB-a`…`SB-e`, BUILT, NOT MERGED, NOT verified against a browser, Discord or a live show); `CT-c`'s *Spyro's real start + 1:08* annotated (+ the buffer); nothing else touched. Before that,
 > **2026-09-28 (branch `people-unify`)** — ONE section APPENDED (`PU-a`…`PU-f`, BUILT, NOT MERGED, NOT verified against a browser or Discord), superseding `HS-a`, `HS-g`'s *BaF host events* clause and `MA-h`'s Scan hosts clause (marked); nothing else touched. Before that,
 > **2026-09-28 (branch `marathon-announcements`)** — ONE section APPENDED (`MA-a`…`MA-i`, BUILT, NOT MERGED, NOT verified against a browser or Discord), superseding `HS-m`…`HS-q` (marked); nothing else touched. Before that,
@@ -3945,6 +3946,25 @@ check first: `MOCK_PORT=8921 node site/mock/server.mjs` from the branch, then
 | **`PU-e`** | (Only if the owner wants events) Hidden Heroes ▸ Event select ▸ *An event per BaF run and host block* (or the thread's **BaF run/host events: off · turn on**) | *"…makes one event per BaF run and per BaF host block… 1 run or host block event(s) made."*; ONE event *anarchy hosts Hidden Heroes* Fri 2026-10-02 16:00–18:50 in the Events queue (reviewed while marathon posts are shadow). Turning it off calls it off. |
 | **`PU-f`** | A control message nobody has re-rendered yet (or a screenshot's old id): press an old **Scan hosts** / **BaF host events** button | Ephemeral: *"The Scan hosts switch is gone — hosts are always found now…"* / *"The BaF host events switch is gone — events now follow the one **BaF run/host events** switch…"*; nothing changes; the message re-renders to six buttons. |
 
+## Rows `HV-a` … `HV-g` — Hotfix viewer source: the viewer link, hosts' Twitch names, the event schedule (branch `hotfix-viewer-source`, 2026-10-03)
+
+🔨 **BUILT on branch `hotfix-viewer-source`, NOT merged, NOT deployed.** Owner, 2026-10-03: *"the github link should
+persist as the hotfix host sheet for sometime. lets use that but have the link be changeable on the website."* Design:
+[`../info/hotfix-viewer-source-design.md`](../info/hotfix-viewer-source-design.md). Rows lettered; the conductor
+numbers them. Local check first: a mock started from the merged tree, then `/events.html` ▸ **Sources…** ▸
+**GDQ Hotfix**, and `/events.html#marathon-50` (GDQueer). Rendered in a real browser on the branch's mock 2026-10-03;
+nothing below has been seen live.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`HV-a`** | Events ▸ **Sources…** ▸ **GDQ Hotfix** ▸ *Schedule viewer* | The field holds `https://ogndrahcir.github.io/ScheduleViewer/`, with **Save the link** (off until edited), **Read it now** and *open it ↗*. |
+| **`HV-b`** | Press **Read it now** | *Read the viewer: 61 schedule row(s), 19 host(s) with Twitch names, 1 event schedule(s). **Games Done Queer …** has its own schedule sheet. **Games Done Hitless …** was not read — it goes to gamesdonequick.com, which is not a published Google Sheet.* (numbers move with the week). The log has `web.marathon.viewer_read`. A failure reads *could not be read just now (…)* and names why — from Fly this is the first proof the three hosts answer a datacenter address. |
+| **`HV-c`** | Type `http://example.com` and **Save the link**; then blank it and save; then put the link back | The first is refused in words (*is not a page Black Bloc can read…*), nothing changed. Blank saves and says the viewer is off; **Read it now** greys out. Putting it back restores both. Settings ▸ Marathons shows the same value. |
+| **`HV-d`** | After the first schedule read: Events ▸ **GDQueer** | Under the header: *Times, hosts and commentators come from **Games Done Queer 📅 Oct 3-4 ↗** — 24 of 24 run(s) matched.* The schedule shows the organisers' times (Ring Racers **12:03 Phoenix**, not 11:43) and a host per run; People lists sweetpeebs, chibicarrera, JRisJunior, champrul, SYDNEY J, fletchisafurry, Quacksilver as hosts, and commentators. The log has `marathon.overlay_applied` once. |
+| **`HV-e`** | GDQueer ▸ *Settings for this marathon* ▸ **Event schedule** ▸ Off ▸ save; then Follow ▸ save | Off: *…keeps GDQ's sheet times and host column now…*, the line reads *…but Event schedule is off…*, times go back to the stacked ones, hosts go. Follow: the organisers' times and hosts return. `web.marathon.overlay_set` twice, `marathon.overlay_dropped` once (`because: switched_off`). If GDQueer is tracked, its thread's pinned controls carry **Event schedule: on · turn off** — press it both ways for the same result. |
+| **`HV-f`** | People ▸ **Quacksilver** (a host with no pairing) | *twitch.tv/quacksilverplays* is shown and **Spotlight…** is offered without typing a channel. The log has `marathon.viewer_logins` naming it, once. Fix their Twitch by hand: the staff login shows, *(the schedule says quacksilverplays)*; clear it: the viewer's is back. |
+| **`HV-g`** | With a run of GDQueer live and confirmed by the stream | That run shows its real start; each later run of the day is that much later (its setup gap kept); tomorrow's runs are unmoved. **Back to the sheet's times** returns to the organisers' times. |
+
 ## Rows `SB-a` … `SB-e` — Hotfix setup buffer: minutes between runs where Black Bloc keeps the clock (branch `hotfix-setup-buffer`, 2026-10-03)
 
 🔨 **BUILT on branch `hotfix-setup-buffer`, NOT merged, NOT deployed.** Owner, 2026-10-03: *"for our hotfix schedule we
@@ -3983,6 +4003,12 @@ proven in Discord** — the tests prove the text and the allowed mentions, never
 | **`MR-g`** | ⚠️ **Discord only.** A highlight that is up when its run finishes after the deploy (and a BaF host block's when its last run finishes) | Edited in place to *"**JR** ran **Game** — Any% today on **GDQueer** · link"* (host: *hosted*); no `@role` line left on it; nobody is notified by the edit. After the server's midnight, at the next sync: *today* becomes *on <date>*. |
 | **`MR-h`** | Settings ▸ Marathons: change *The word for a runner once the run is over* to something else, then back; change *What a BaF run’s public highlight says once the run is over* | Saves; a `{word}` it cannot fill is refused in words; `{day}` is accepted on the done template and refused on the live one. |
 
+## `MR-` rename (branch `marathon-rename`, BUILT, NOT MERGED, NOT verified in Discord)
+
+| Row | Do | Expect |
+|---|---|---|
+| **`RN-a`** | Events ▸ a marathon ▸ **Rename…** ▸ set *Black in a Flash: Soul Train* ▸ Rename it | The drawer re-opens under the new name with the sentence naming what follows and what keeps the old name; an empty name stays in the dialog in words. |
+| **`RN-b`** | ⚠️ **Discord only.** The same marathon's pinned controls, inbox post, board; then `/event` ▸ the marathon ▸ **Schedule…** ▸ **Rename…** | Controls at once, inbox/board/runner posts within a tick carry the new name; the thread title and any linked event keep the old one. |
 ## Rows `RE-a` … `RE-h` — a moved run EDITS its heads-up instead of posting again (branch `reminder-edit-in-place`, 2026-10-03)
 
 🔨 **BUILT on branch `reminder-edit-in-place`, NOT merged, NOT deployed, NOT verified in a browser or Discord.** Owner,

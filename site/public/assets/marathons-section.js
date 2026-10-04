@@ -199,6 +199,17 @@ const HIGHLIGHT_HELP = 'On: the moment a BaF run goes live its highlight posts i
   + 'For a BaF host it is their host block: posted when the block goes live, edited to done after its last run. '
   + 'Off (the default): nothing is highlighted. Nobody opted out is highlighted, and nothing is while BaF '
   + 'announcements is off. marathon_public_highlight_default decides where a new marathon starts.';
+const OVERLAY_FIELD = 'Event schedule';
+const OVERLAY_HELP = 'On: when the Hotfix schedule viewer links the event’s own schedule sheet and it matches this '
+  + 'marathon, each run takes that sheet’s start time, hosts and commentators — GDQ’s sheet only gives the show’s '
+  + 'start and the estimates. Off: GDQ’s sheet times and host column. A run the stream shows starting still keeps '
+  + 'its real start, and the runs after it follow by the sheet’s own gaps. Follow uses marathon_hotfix_overlay_default.';
+const OVERLAY_ON_LINE = 'Times, hosts and commentators come from ';
+const OVERLAY_ON_TAIL = ' — {matched} of {runs} run(s) matched.';
+const OVERLAY_OFF_LINE = 'This event has its own schedule sheet, ';
+const OVERLAY_OFF_TAIL = ', but Event schedule is off, so GDQ’s sheet times and host column are used.';
+const OVERLAY_STALE = ' It could not be read just now ({why}), so the last copy is kept.';
+const OVERLAY_NONE = 'The schedule viewer links no event sheet that matches this marathon, so GDQ’s sheet times are used.';
 const ANNOUNCE_FIELD = 'BaF announcements';
 const ANNOUNCE_HELP = 'On: every BaF runner and host of this marathon is announced publicly — the reminders at every '
   + 'marathon_reminder_minutes mark (marathon_public_reminders is the master switch) and, with Auto-highlight on, the '
@@ -281,6 +292,16 @@ const HOTFIX_SEARCH_PLACEHOLDER = 'a show, a host or a BaF name';
 const HOTFIX_NO_HIT = 'No show matches that.';
 const HOTFIX_SHOWS_SAVED = 'The Hotfix feed now reads {shows}. The next check uses them.';
 const HOTFIX_SHEET_LINE = 'Reads the sheet the Hotfix page embeds: ';
+const VIEWER_FIELD = 'Schedule viewer';
+const VIEWER_HELP = 'A second source beside GDQ’s own sheet, never a replacement: the hosts’ Twitch '
+  + 'names and each special event’s own schedule (start times, hosts and commentators) come from '
+  + 'this page. This is marathon_hotfix_viewer_url in Settings; saving here changes it there. '
+  + 'Blank turns it off.';
+const VIEWER_SAVE = 'Save the link';
+const VIEWER_READ = 'Read it now';
+const VIEWER_SAVED = 'The viewer link is now {url}. Read it now says what it finds there.';
+const VIEWER_SAVED_OFF = 'The viewer is off now (the link is blank). The GDQ sheet is read alone.';
+const VIEWER_OPEN = 'open it ↗';
 const PICK_HELP = {
   gdq: 'Every event on the GDQ tracker that is still ahead.',
   rpglb: 'Every event on the RPG Limit Break tracker that is still ahead.',
@@ -978,6 +999,22 @@ function pollWanted(given) {
   return /^\d+$/.test(text) ? Number(text) : text;
 }
 
+function overlayLine(marathon) {
+  if (marathon.source !== 'gdq_hotfix' || !marathon.overlay) return null;
+  const sheet = marathon.overlay.sheet;
+  if (!sheet) return el('p', { class: 'field-help mx-line mx-overlay', text: OVERLAY_NONE });
+  const link = el('a', { href: sheet.url, text: `${sheet.label} ↗`, rel: 'noreferrer', target: '_blank' });
+  if (!sheet.applied) {
+    return el('p', { class: 'field-help mx-line mx-overlay' }, [el('span', { text: OVERLAY_OFF_LINE }), link, el('span', { text: OVERLAY_OFF_TAIL })]);
+  }
+  return el('p', { class: 'field-help mx-line mx-overlay' }, [
+    el('span', { text: OVERLAY_ON_LINE }),
+    link,
+    el('span', { text: said(OVERLAY_ON_TAIL, { matched: sheet.matched, runs: sheet.runs }) }),
+    sheet.stale ? el('span', { class: 'cell-quiet', text: said(OVERLAY_STALE, { why: sheet.stale }) }) : null,
+  ]);
+}
+
 async function settingsFold(marathon, say) {
   const mode = modePicker(marathon.event_mode || 'none');
   const pingNow = marathon.ping_role ? 'on' : 'off';
@@ -985,6 +1022,7 @@ async function settingsFold(marathon, say) {
   const highlightNow = marathon.public_highlight ? 'on' : 'off';
   const highlight = segment(PING_CHOICES, highlightNow);
   const announce = switchPicker(marathon.announcements);
+  const overlay = marathon.source === 'gdq_hotfix' && marathon.overlay ? switchPicker(marathon.overlay) : null;
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
     class: 'input',
@@ -1001,6 +1039,7 @@ async function settingsFold(marathon, say) {
     if (ping.readValue() !== pingNow) body.ping_role = ping.readValue() === 'on';
     if (highlight.readValue() !== highlightNow) body.public_highlight = highlight.readValue() === 'on';
     if (announce.readValue() !== announce.now) body.announcements = switchWanted(announce.readValue());
+    if (overlay && overlay.readValue() !== overlay.now) body.overlay = switchWanted(overlay.readValue());
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
     if (wanted !== (marathon.poll_minutes || null)) body.poll_minutes = wanted;
@@ -1023,6 +1062,7 @@ async function settingsFold(marathon, say) {
     rolePingLine(marathon),
     field(HIGHLIGHT_FIELD, highlight, HIGHLIGHT_HELP),
     field(ANNOUNCE_FIELD, announce, ANNOUNCE_HELP),
+    overlay ? field(OVERLAY_FIELD, overlay, OVERLAY_HELP) : null,
     field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
     bar([save]),
   ], { open: shown.settings });
@@ -1088,6 +1128,24 @@ async function changeLink(marathon) {
   await after(marathon, { ok: true, found: done });
 }
 
+async function renameMarathon(marathon) {
+  const name = el('input', { class: 'input', type: 'text', value: marathon.name, maxlength: '100', 'aria-label': 'Name' });
+  let done = null;
+  const sure = await askForm({
+    title: `Rename ${marathon.name}`,
+    body: [field('Name', name)],
+    confirmLabel: 'Rename it',
+    tone: 'warn',
+    onConfirm: async () => {
+      done = await send(`/api/marathons/${marathon.id}`, 'PATCH', { name: name.value.trim() });
+      return null;
+    },
+  });
+  if (!sure || !done) return;
+  await refresh();
+  await openMarathon(marathon.id, done.name || name.value.trim(), done.message || 'Renamed.');
+}
+
 function linkLine(marathon) {
   return el('p', { class: 'field-help mx-line mx-link' }, joined([
     el('span', {}, [
@@ -1132,6 +1190,7 @@ function moveBar(marathon, say) {
     marathon.active ? step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn') : null,
     marathon.retimed_runs ? step(marathon, say, SHEET_TIMES_ACTION, () => send(`/api/marathons/${marathon.id}/sheet-times`, 'POST', {}), 'quiet') : null,
     step(marathon, say, marathon.active ? 'Pause' : 'Resume', () => send(`/api/marathons/${marathon.id}`, 'PATCH', { active: !marathon.active }), null),
+    button('Rename…', () => renameMarathon(marathon), { tone: 'quiet' }),
     button('Archive it', async () => {
       const sure = await ask({ title: `Archive ${marathon.name}?`, body: [ARCHIVE_BODY], confirmLabel: 'Archive it' });
       if (!sure) return;
@@ -1160,6 +1219,7 @@ async function marathonDrawer(marathon, board, message) {
   return [
     say,
     ...headerBlock(marathon, board, say),
+    overlayLine(marathon),
     ...spotlightBlock(marathon, say),
     peopleCard(marathon, board, say),
     await settingsFold(marathon, say),
@@ -1440,6 +1500,28 @@ function hotfixPicker(feed, say, answer) {
   ];
 }
 
+function viewerField(feed, say) {
+  const before = String(feed.viewer_url || '');
+  const input = el('input', { class: 'input', type: 'url', value: before, placeholder: 'https://…' });
+  const save = button(VIEWER_SAVE, () => {
+    const value = input.value.trim();
+    feedDrawerStep(feed, say, async () => {
+      const stored = await saveSetting('marathon_hotfix_viewer_url', value);
+      const kept = stored && typeof stored === 'object' && 'value' in stored ? stored.value : value;
+      return { message: kept ? said(VIEWER_SAVED, { url: kept }) : VIEWER_SAVED_OFF };
+    });
+  }, { tone: 'warn' });
+  save.disabled = true;
+  input.addEventListener('input', () => { save.disabled = input.value.trim() === before; });
+  const read = button(VIEWER_READ, () => feedDrawerStep(feed, say, () => send(`/api/marathons/feeds/${feed.id}/viewer-read`, 'POST', {})), { tone: 'quiet' });
+  read.disabled = !before;
+  return field(VIEWER_FIELD, el('div', {}, [
+    input,
+    bar([save, read]),
+    before ? el('p', { class: 'field-help mx-line' }, [el('a', { href: before, text: VIEWER_OPEN, rel: 'noreferrer', target: '_blank' })]) : null,
+  ]), VIEWER_HELP);
+}
+
 function hotfixFields(feed, say) {
   if (feed.source !== 'gdq_hotfix') return [];
   const box = el('div', { class: 'mx-hotfix-picker' }, [line(HOTFIX_LOADING)]);
@@ -1450,6 +1532,7 @@ function hotfixFields(feed, say) {
       box.replaceChildren(notice(sentence.text, sentence.tone));
     });
   return [
+    viewerField(feed, say),
     field(HOTFIX_SHOWS_FIELD, box, HOTFIX_SHOWS_HELP),
     feed.sheet_url ? el('p', { class: 'field-help mx-line' }, [
       el('span', { text: HOTFIX_SHEET_LINE }),

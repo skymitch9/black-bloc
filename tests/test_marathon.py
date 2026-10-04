@@ -663,3 +663,26 @@ def test_the_next_moves_offer_add_and_dismiss_only_while_the_suggestion_is_open(
     card = mt.card_moves({"active": 1}, has_unmatched=False, has_next=True)
     assert mt.NEXT_MOVE in card and mt.SCHEDULE_MOVE in card and mt.POLL_MOVE not in card
     assert mt.NEXT_MOVE not in mt.card_moves({"active": 1}, has_unmatched=False)
+
+
+def test_a_login_lent_by_the_viewer_never_costs_a_name_match_and_a_staff_login_beats_it():
+    host = {"name": "anarchy", "login": "anarchyasf", "part": "host", "login_from": "viewer"}
+    by_name = mt.match_people([host], {}, [], usernames={"anarchy": 7})
+    assert by_name == [host | {"user_id": 7}]
+    never = mt.match_people([host], {"anarchyasf": 9}, [], usernames={"anarchy": 7})
+    assert never[0]["user_id"] == 7
+    assert mt.match_people([host], {"anarchyasf": 9}, [])[0]["user_id"] is None
+    given = {"name": "anarchy", "login": "anarchyasf", "part": "host"}
+    assert mt.match_people([given], {}, [], usernames={"anarchy": 7})[0]["user_id"] is None
+    pairing = {"runner_name": "anarchy", "marathon_id": None, "user_id": 5, "twitch_login": "own"}
+    fixed = mt.match_people([host], {"anarchyasf": 9}, [pairing], usernames={"anarchy": 7})
+    assert fixed == [
+        {
+            "name": "anarchy",
+            "login": "own",
+            "part": "host",
+            "user_id": 5,
+            "sheet_login": "anarchyasf",
+            "login_from": "viewer",
+        }
+    ]

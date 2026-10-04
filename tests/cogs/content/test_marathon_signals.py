@@ -513,3 +513,21 @@ async def test_the_discord_schedule_view_says_the_clock_and_puts_it_back_on_the_
     assert "web.marathon.sheet_times" not in await kinds(bot.db)
     assert "marathon.sheet_times" in await kinds(bot.db)
     assert (await times(bot, marathon))[HAMTARO]["scheduled_at"] == z(68)
+
+
+async def test_a_schedule_read_after_a_rename_leaves_a_hotfix_marathons_name_alone(
+    bot, cog, helix
+):
+    from black_bloc.cogs.content.marathon import rename_marathon
+
+    _channel, marathon = await gdqueer(bot, cog, setup=7)
+    done = await rename_marathon(
+        bot, bot.guild, FakeActor(), marathon, "Black in a Flash: Soul Train", None
+    )
+    assert done.ok
+    cog.client.runs_given = gdqueer_runs(setup=7)[:-1]
+    at_show(cog, 30)
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert (await get_marathon(bot.db, GUILD, marathon["id"]))["name"] == (
+        "Black in a Flash: Soul Train"
+    )

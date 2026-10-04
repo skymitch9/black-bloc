@@ -2,13 +2,15 @@
 
 > **Audience:** the conductor, reviewers, and the next session touching marathon reminders, host-block heads-ups, the
 > schedule read or the stream re-time. **Status:** TRACKED · 🔨 **BUILT on branch `reminder-edit-in-place` (off `main`
-> `01f04853`), NOT merged, NOT deployed.** ⚠️ **Schema 84 → 85** (one nullable column, `marathon_runs.reminder_posts`)
-> — ⚠️ **`hotfix-viewer-source` also takes 85; the conductor renumbers at merge.** Registry keys **721 → 724** (+3).
+> `01f04853`, then `main` `77f01b1c` — v196, the viewer source — merged INTO the branch), NOT merged to `main`, NOT
+> deployed.** ⚠️ **Schema 85 → 86** (one nullable column, `marathon_runs.reminder_posts`; built as 84 → 85 and
+> renumbered in the branch's merge commit, because `hotfix-viewer-source` took 85 first). Registry keys **727 → 730**
+> (+3; 721 → 724 before that merge).
 > API routes unchanged, no payload changed. Log kinds **+8** (four for runs, four for host blocks).
 > **Last verified: 2026-10-03 Phoenix** — against the branch's own code by its tests
 > (`tests/test_marathon_reminder_posts.py`, `tests/cogs/content/test_marathon_reminder_posts.py`, three tests in
 > `tests/test_marathon_host_highlights.py`, three in `tests/test_settings_store.py`, one migration test in
-> `tests/storage/test_db.py`), the whole suite, `ruff check`, and `node site/mock/check.mjs` against a mock started from
+> `tests/storage/test_db.py` — from a schema-85 file), the whole suite, `ruff check`, and `node site/mock/check.mjs` against a mock started from
 > the worktree — the exact counts are in the build's final report and, after the merge, in `docs/deploys.log`.
 > ⚠️ **NOT checked:** anything against Discord — no real message was edited, so whether Discord shows *(edited)*,
 > whether an edit to a post that carries a role mention stays silent on a real phone, and what the real rate limit
@@ -164,6 +166,8 @@ it, so flipping the key later edits the newest post.
    as a would-row — the highlights' existing behaviour (`sync_highlights`), kept.
 6. **`_write_plan` and `signals.retime` both still call the re-arm** (now `mrem.run_fields`); there is one re-arm
    *rule* and one *edit* place, not one move site — staff's *sheet times* writes times without re-arming, as before.
+   The organisers' sheet laid over a marathon (v196, `marathon_overlay`) moves runs through `signals.retime`, so its
+   moves are re-armed and edited by the same two paths; no test here drives the overlay itself.
 7. **The 15-minute copy is still not edited when its run goes live or finishes** (`marathon-role-ping-design.md` B's
    last bullet stays true); only the reason changed — the id is stored now, the rule is rule 5.
 8. **No site surface shows the stored ids.** `GET /api/marathons/{id}` still answers `reminders_sent` only.

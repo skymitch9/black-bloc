@@ -160,6 +160,7 @@ class Person:
     name: str
     login: str | None
     part: str
+    login_from: str = ""
 
 
 @dataclass(frozen=True)
@@ -631,6 +632,15 @@ class ScheduleClient:
         )
         self._hotfix_sheet = found[1]
         return found
+
+    async def viewer(self, page_url: str, *, with_rows: bool = False) -> Any:
+        """The Hotfix schedule viewer page: its host table, feed link and event sheets."""
+        from . import marathon_viewer
+        from .doc_import import aiohttp_hop
+
+        return await marathon_viewer.read_viewer(
+            self._hop_request or aiohttp_hop, BROWSER_AGENT, page_url, with_rows=with_rows
+        )
 
     async def hotfix_block(self, ref: str, setup_minutes: int = 0) -> Any:
         text, _url = await self.hotfix_sheet()
