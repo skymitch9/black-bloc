@@ -1,8 +1,14 @@
 # Schedule viewer — a run sheet per marathon, with live staff re-timing
 
 > **Audience:** the owner (to agree the design), then the build agent. **Status:** TRACKED.
-> 📐 **DESIGN — NOT AGREED, NOTHING BUILT ON THE BOT.** Every item under *Open decisions* is the owner's.
-> A local page on the mock exists to react to (branch `runsheet-proto`, 2026-10-03) — see *Prototype 2026-10-03* at the end.
+> 🏷️ **2026-10-03 (owner): the page is named *Marathon tracker* and lives at `/schedule.html#marathon-<id>`;
+> its read is `GET /api/marathons/{id}/schedule`.** Verbatim: *"i dont want it to be called a runsheet, call it a
+> marathon tracker and make the url schedule"*. Older sections below keep the words they were written with
+> ("run sheet", `/runsheet`); read them as the same page.
+> 🔨 **READ-ONLY VERSION BUILT on branch `runsheet-live` (2026-10-03), NOT merged, NOT deployed** — the page on the
+> real bot, updating itself: see *Live, read-only 2026-10-03* at the end. 📐 **The staff re-timing moves are still
+> DESIGN — NOT AGREED**; every item under *Open decisions* is the owner's, and they exist only on the mock
+> (*Prototype 2026-10-03*).
 > Last verified: **2026-10-03 20:4x Phoenix** — the facts under *What exists today* were read off
 > `main` at `455cce06` (the run table in `storage/db.py`, the routes in `api/tools/marathons.py`,
 > `marathon_sources.RETIMES_ITSELF`) and the live action log for GDQueer day 1. ⚠️ **NOT checked:**
@@ -413,3 +419,212 @@ not wired into `scripts/deploy.ps1` or CI.
     marathons, but a press there is not in *Moves today* and cannot be undone from the sheet.
 12. **Starting a run out of order is not handled.** *Started now* on a run that is not next
     leaves the runs skipped over as upcoming, at times after it. Staff would skip them by hand.
+
+## Live, read-only 2026-10-03 — the Marathon tracker on the real bot (branch `runsheet-live`, NOT merged)
+
+> **Owner, verbatim:** *"we need to have the schedule run sheet that auto updates to live tracking times link to
+> each marathon ... for now lets send the schedule pages live with auto updates"*, then *"i dont want it to be
+> called a runsheet, call it a marathon tracker and make the url schedule"*.
+> **Measured 2026-10-03 ~22:30 Phoenix on the branch:** `ruff check black_bloc tests site` clean; the whole suite
+> **10,149 passed, 3 skipped**; `check.mjs` against this branch's mock **ok — 23 pages, 291 routes**; all eleven
+> node fixtures green; 52 of 52 `site/public/assets/*.js` parse as modules. The real route's payload was built
+> from a database seeded through the real cog with the GDQueer Hotfix sheet and the organisers' sheet laid over
+> it (`tests/fixtures/marathon/`), three runs seen on stream, one dropped, a BaF runner and a BaF host — and
+> printed. The page was driven in headless Chrome against the mock at 1280 px and 390 px: one auto-update was
+> watched (below). ⚠️ **NOT checked:** the page against the real bot in a browser (the real payload was read as
+> JSON, the page was read against the mock's copy of the same shape); a real phone; a keyboard-only pass; a
+> screen reader; the themes other than blackbloc dark; a marathon of 150 runs; the Discord link button in a real
+> client; anything on production.
+
+### What is live in this version
+
+| Piece | State |
+|---|---|
+| The page `schedule.html#marathon-<id>` reading the real bot | built |
+| It re-reads itself | built |
+| **Started now** / **Finished now** | built — they call the EXISTING `POST /api/marathons/{id}/runs/{run}/live` and `/done`, then re-read |
+| A **Marathon tracker** button on every marathon row and drawer on Events | built (the prototype's, renamed) |
+| A **Marathon tracker ↗** link button on each tracked marathon's pinned thread controls | built |
+| Set start, Behind / Ahead, estimate, skip, bring back, back to the source's times, undo | **mock only** — `can` is `false` for all of them on the bot and the page draws none of them |
+| A member-facing view | not built — the route is behind the same staff sign-in as every other marathon GET |
+
+No schema change (86), no new write route, no new action kind.
+
+### The route
+
+`GET /api/marathons/{marathon_id}/schedule` — `black_bloc/api/tools/marathon_schedule_page.py` (reads the rows
+and asks the tick's own functions what it would post) over `black_bloc/marathon_schedule_page.py` (pure: rows in,
+payload out). Staff only, as `GET /api/marathons/{id}` is. An archived marathon answers too, as the detail route
+does, with `marathon.archived: true`, phase `archived`, every `can` false and no `next_posts`. An unknown id is
+`404 not_found` in the detail route's words.
+
+The body is the prototype's (*The GET's body* above) with these differences:
+
+| Key | On the bot |
+|---|---|
+| `editable` | `false` for every marathon |
+| `kind` | `tracker` (the source moves its own times) or `clock_kept` (Black Bloc keeps the clock: Hotfix). The mock now says the same two words |
+| `moves_by` | `marks` — Started / Finished now go to the existing `…/runs/{run}/live` and `/done`. The mock says `tracker` on its editable sheets (its own move routes) and `marks` on its tracker sheets |
+| `refresh_seconds` | the `marathon_tracker_refresh_seconds` key |
+| `marathon.next_read_at`, `marathon.archived` | added |
+| `days[].upcoming` | added — runs not yet started that day |
+| `days[].drift_minutes` | `null` on a tracker until a run has really started (below) |
+| `rows[].from` | one more word, `held` (below); never `staff` |
+| `rows[].start_at` | what really happened when known (`actual_started_at`), else `scheduled_at` |
+| `rows[].ends_at` | the stored end — a live run past its estimate is NOT stretched to now, as the mock does |
+| `rows[].estimate_from` | always `source`; `staff_at` always `null` |
+| `rows[].can` | `start` where `marathon.can_mark_live` allows (upcoming or done), `finish` where the *Mark done* rule allows (upcoming or live); the other four `false` |
+| `next_posts[]` | each mark still to fire, with `minutes` and `role` (below); `kind: live` only when the run's shoutout is up |
+| `moves[]` | the marathon's action rows, not a staff-move book (below); `undone` always `false` |
+| `undo` | `{available: false, text: null}` |
+
+### Where a time came from — how each tag is derived
+
+Only stored facts. `plan` is the run's `sheet_at` (else `scheduled_at`).
+
+| Tag | Rule | Words on the page |
+|---|---|---|
+| `stream` | `actual_started_at` is set and `live_because` is not `staff` | seen on stream |
+| `started` | `actual_started_at` is set and `live_because` is `staff` | started by staff |
+| `tracker` | no real start, and the source moves its own times | from the tracker |
+| `organisers` | clock-kept, no real start, the start equals the plan, and the marathon's organisers' sheet is applied (`overlay_sheet.applied`) | organisers' sheet |
+| `source` | the same with no sheet applied — the plan is the Hotfix sheet plus `marathon_setup_minutes` | source sheet + setup |
+| `follows` | clock-kept, no real start, the start differs from the plan, and an EARLIER run of the same day has a real start or a real end | follows the run before |
+| `held` | clock-kept, no real start, the start differs from the plan, and nothing earlier that day really started or ended | kept from an earlier read |
+| *(none)* | a dropped run: no time, no tag | — |
+
+**What cannot be told apart from stored data, and what the page says instead:**
+
+1. **A real start seen on stream vs marked by the schedule's clock.** A run the clock alone called live has no
+   `actual_started_at`, so it is tagged by its stored time (`organisers` / `source` / `follows` / `held`), never
+   `stream`. That is honest: nobody saw it start.
+2. **Staff pressing *Mark live* on a run the stream then confirms.** `live_because` moves to the stream's word,
+   so the tag reads `stream` although the moment is the staff press.
+3. **`organisers` for a run the sheet did not pair.** With the sheet applied, a run with no slot starts where the
+   run before it ends; its `sheet_at` holds that computed time, so it is tagged `organisers`. The marathon's
+   `overlay.sheet.matched` / `runs` on the drawer says how many paired.
+4. **`held`.** A live or done run of a clock-kept schedule is never moved by a read (`holds`), so after the
+   setup key or the organisers' sheet changes its stored time no longer equals the plan and nothing explains
+   it. `follows` would be a guess; `held` says only what is known.
+5. **A tracker's "plan".** A tracker's `sheet_at` is its current time, so an upcoming run is never off plan. The
+   header says **Following the tracker** rather than *On time*, and drift is measured only on a run that really
+   started (its real start against the tracker's time for it).
+
+### People, the BaF mark and links
+
+`baf` on a person is the People card's rule: matched to a member (`user_id`), and **a commentator never is**.
+A row is `ours` when anyone on it is. ⚠️ This is NOT `marathon.is_ours`: a BaF host does not make a run "ours"
+for the tick while `marathon_hosts_count_as_ours` is off, yet the host is marked ✦BaF here, as on the People card.
+
+Links, per site, first hit wins: the member's go-live Twitch (`golive_links`) and YouTube (`youtube_links`) →
+the schedule's own Twitch name (`sheet_login` when staff fixed the name, else `login`; never a name the viewer
+lent) → for a host, the viewer's host table (`login_from = viewer`). Only `https://www.twitch.tv/<login>`
+(2–25 letters, digits, `_`), `https://www.youtube.com/@handle` and `…/channel/UC…` are ever emitted; anything
+else is dropped and the name is plain text. ⚠️ A Twitch name **staff fixed on a pairing** is not used as a link
+(the open question under *Channel links on names*).
+
+### What the bot posts next
+
+For a marathon the tick reminds (active, `marathon_mode` not off, tracked): each upcoming BaF run's marks from
+`marathon.reminder_marks` that are not in `reminders_sent` and that `marathon.due_marks` would not skip as stale.
+For host blocks (the host switches, public reminders, announcements and a reminder channel all on):
+`marathon_host_highlights.blocks` and each block's own record (`claim`), the same way, for blocks none of whose
+runs has started and whose hosts are not all opted out. `role: true` on the ping mark when
+`marathon_role_ping.verdict_for` mentions and the run has someone not opted out (runs), or `role_for` mentions
+(blocks). `passed: true` means the moment has come and the next tick posts it — the page says *due now*.
+⚠️ Not modelled: a public copy skipped because the staff copy already sits in the same channel.
+
+### What changed (`moves[]`)
+
+The marathon's action rows of these kinds, newest first, at most 30: `marathon.retimed`, `run_live`, `run_done`,
+`run_reset`, `member_run_moved`, `schedule_changed`, `overlay_applied`, `overlay_dropped`, `sheet_times` (and
+their `web.` twins). Each is a sentence with its moments as `{{at:ISO}}` tokens. A row with an actor carries the
+staffer's name; a caller who may not see names gets `by_id` and `by_name` `null` (every caller is staff today).
+
+### Auto-update
+
+- The page re-reads the route every `refresh_seconds` (one-second tick; the read is skipped while the tab is
+  hidden and made at once when it shows again).
+- A read is applied by KEY, not by repainting: each card and each run row keeps its node unless what it shows
+  changed, so scroll, focus, the notice and the zone picker stay. A row whose panel holds a typed field is left
+  alone until it is closed; a card holding the focused input is left alone until focus leaves.
+- A row that went live, went done, moved or is new is outlined for 8 seconds (`data-flash`); with
+  `prefers-reduced-motion` it is a still outline.
+- One line under the header: *Updated 12 seconds ago · re-reads every 30 seconds while this tab is showing*. A
+  failed read: *Could not update just now — <why in words> The times below are as they stood at 10:12 PM. Trying
+  again in 7 seconds.* — never a status number; the last good sheet stays up.
+
+**Watched, 2026-10-03 22:23 Phoenix, headless Chrome 1280 px, mock on a spare port, key at 10 s:** AGDQ's sheet
+open; *Celeste* marked live through `POST /api/marathons/1/runs/6/live` from outside the page; **8 s later** its
+row read *live / started by staff* with the outline, the header went from *Following the tracker* to *Running 20
+min ahead*, a marker left on another row's node was still there and the status line was the same node. Then
+**Finished now** pressed in the page: the row went *done*, the notice read *Celeste is marked done.*, and
+**More…** on it offered *Mark live again*. With the read made to fail, the status line read the sentence above
+in the warn tone, the notice stayed, and the next good read cleared it. On the mock's editable sheet a time
+typed into **Edit…** was still there, focused, after a read.
+
+### The keys
+
+| Key | Type | Default | Bounds | What |
+|---|---|---|---|---|
+| `marathon_tracker_refresh_seconds` | int | 30 | 10–300 | seconds between reads on the page; rides the payload as `refresh_seconds` |
+| `marathon_controls_tracker` | text | `Marathon tracker ↗` | 80 chars shown | the link button's label on the thread controls |
+
+Both are in the registry, so Settings ▸ Marathons and `/settings set-value` reach them; both have a label in
+`labels.js` and a row in the mock.
+
+### The Discord link
+
+`marathon_thread_controls.tracker_url(origin, id)` → `<site_origin>/schedule.html#marathon-<id>`. It is the LAST
+item of the pinned controls' view, a link button (no custom id). The switches are six or seven (seven when the
+Event schedule button shows), so Discord lays them five on the first row and the rest on the second; the link
+sits on that **second row**, after the switches — 7 or 8 of the 25 a message may carry. It is part of what
+`refresh_controls` compares, so a posted message gains it at the next tick after a deploy (the cache is empty
+at boot) and takes a changed label within a tick.
+
+### Names chosen (the rename)
+
+| Thing | Name | Why |
+|---|---|---|
+| The page, what people read | **Marathon tracker** | the owner's word |
+| The address | `/schedule.html#marathon-<id>` | the owner's word. ⚠️ No clean `/schedule`: the bot serves pages with `StaticFiles(html=True)` and the mock by file path, and neither maps a bare path to its `.html` — adding that would be a new mechanism |
+| The API | `GET /api/marathons/{id}/schedule`; the mock's moves under it | asked for |
+| Site files | `schedule.html`, `page-schedule.js`, `schedule.css`, `schedule-link.js`, `schedule-merge.js`, `site/mock/schedule.mjs`, `schedule.test.mjs` | follow the address |
+| Python | `marathon_schedule_page.py` (pure) and `api/tools/marathon_schedule_page.py` | "schedule" alone already means the SOURCE's schedule here (`schedule_url`, `marathon.schedule_changed`, the card's *Schedule…*), and "tracker" already means a source that moves its own times (`the GDQ tracker`, `from: tracker`) — `_page` says which schedule this is |
+| Keys | `marathon_tracker_refresh_seconds`, `marathon_controls_tracker` | the page's name; no existing key uses "tracker" |
+| The mock's kinds | `web.marathon.tracker_*` | mock only, never written by the bot |
+| CSS classes | `rs-*` kept | never shown to a person; renaming 120 lines of selectors buys nothing |
+
+### What is still prototype-only
+
+Every move but Started / Finished now; the undo book; `staff_at` and staff estimates; `from: staff`; the editable
+kind; the mock's `web.marathon.tracker_*` kinds. The mock keeps all of it so marathon 60 still plays.
+`contract.json` no longer lists the five mock-only POST routes or the nine mock-only kinds — the bot does not
+answer them — and `schedule.test.mjs` walks every one of them against the mock instead.
+
+## Deviations — live, read-only 2026-10-03
+
+1. **`start_at` is the real start when one is known**, not always `scheduled_at`. For a clock-kept schedule they
+   are the same moment (the re-time writes it). For a tracker they differ, and a row tagged *seen on stream*
+   beside the tracker's time would be false.
+2. **An eighth tag, `held`** (above), rather than guessing `follows`.
+3. **`kind` is `tracker` / `clock_kept`**, not the prototype's `editable` / `read_only`: the brief asked for the
+   kind of source, and `editable` is its own key. The mock was changed to match.
+4. **The BaF mark is the People card's rule, not `is_ours`** (above). So a marathon can show a ✦BaF host on a row
+   for which *What the bot posts next* lists nothing for that run alone — the host BLOCK's posts are listed.
+   ⚠️ On a tracker, a matched COMMENTATOR is not marked BaF here, yet the tick still reminds for them
+   (`commentators_count` is on for every source but Hotfix) and the post is listed, worded "runs".
+5. **`can.start` is true on a DONE run and `can.finish` on an UPCOMING one**, because that is what the existing
+   routes allow. The page keeps the obvious move on the row (*Finished now* on the live run, *Started now* on an
+   upcoming one) and folds the other two behind **More…** as *Mark live again* and *Mark done*.
+6. **Days:** more than four hours with nothing on starts a new day (the prototype's rule), and a block longer than
+   24 hours — a marathon that never stops — is split by calendar date in `default_timezone`. Deviation 5 of the
+   prototype (one rule with `marathon_signals.chains`) is NOT done: chains is a re-timing rule and splits at any
+   gap over the setup reach, which would make a day of every break.
+7. **A tracker's header says *Following the tracker*** while nothing has started, not *On time* (above). The
+   mock's tracker sheets were changed to match.
+8. **`moves` is not in `contract.json`'s row checks.** Both checkers fail an empty list, and a marathon with no
+   re-time, no mark and no read change has none. Its row shape is proved in `tests/test_marathon_schedule_page.py`.
+9. **The page's own sentences are constants in `page-schedule.js`**, as on every other page; the one string the
+   BOT posts (the link button) is a key.
+10. **No clean `/schedule` path** (above).
