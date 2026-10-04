@@ -944,10 +944,10 @@ async function settingsFold(marathon, say) {
     value: marathon.poll_minutes ? String(marathon.poll_minutes) : '',
     'aria-label': `${POLL_LABEL} N ${POLL_UNIT}`,
   });
+  const pollRefusal = el('span', { class: 'counter', 'data-tone': 'danger', text: POLL_BOUNDS, hidden: true });
   poll.addEventListener('input', () => {
     const typed = pollWanted(poll.value);
-    const off = typed !== null && !(Number.isInteger(typed) && typed >= POLL_MIN && typed <= POLL_MAX);
-    say.say(off ? POLL_BOUNDS : '', 'warn');
+    pollRefusal.hidden = typed === null || (Number.isInteger(typed) && typed >= POLL_MIN && typed <= POLL_MAX);
   });
   const save = button(SAVE_SETTINGS, async () => {
     const body = {};
@@ -979,7 +979,7 @@ async function settingsFold(marathon, say) {
     field(HIGHLIGHT_FIELD, highlight),
     field(ANNOUNCE_FIELD, announce),
     overlay ? field(OVERLAY_FIELD, overlay) : null,
-    field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })])),
+    field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), pollRefusal),
     bar([save]),
   ], { open: shown.settings });
   fold.classList.add('mx-settings');
