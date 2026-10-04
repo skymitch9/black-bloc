@@ -45,10 +45,7 @@ const SCHEDULED_WORDS = 'made — it is on the server’s Events list';
 const ANNOUNCED_LINK = 'announcement ↗';
 const SCHEDULED_LINK = 'on the server’s Events list ↗';
 const OUT_MARK = ' ↗';
-const SETTLED = 'This one is settled, so its details cannot be changed — only an event waiting ' +
-  'for a decision or already approved can be edited.';
-const NOT_RESENT = 'Saving does not rewrite an announcement that is already up or a Discord ' +
-  'scheduled event that already exists; the answer says when that applies.';
+const SETTLED = 'This one is settled, so its details cannot be changed.';
 const PLACE_WORD = { room: 'Review channel', post: 'Review post' };
 const PLACE_DELETE = { room: 'Delete this room', post: 'Delete this post' };
 const PLACE_DELETE_BODY = {
@@ -62,7 +59,6 @@ const SPOTLIGHT_LABEL = 'Spotlight this stream';
 const SPOTLIGHT_BODY = 'twitch.tv/{login} goes on the Go-live page’s spotlight list until the '
   + 'event ends (plus the usual slack): the go-live channel announces it, reminds people while it '
   + 'runs, and pins it for the duration.';
-const START_HELP = 'When it begins.';
 const OPEN_STATUSES = ['pending', 'approved', 'live'];
 const MOVE_BUTTON = 'Move to the forum';
 const MOVE_BODY = 'A post goes up in the events forum carrying the same card and the same buttons, '
@@ -71,10 +67,8 @@ const MOVE_BODY = 'A post goes up in the events forum carrying the same card and
 const NOWHERE = '— nowhere in particular —';
 const SOMEWHERE_ELSE = '— somewhere else —';
 const ELSEWHERE = '__other__';
-const WHERE_HELP = 'A voice or stage channel gives everybody a Join button on the Discord '
-  + 'event; anything else is written on it as words.';
-const BESIDE_HELP = 'Optional beside a channel — a Twitch link, say.';
-const INSTEAD_HELP = 'Only used when it is somewhere else.';
+const WHERE_LABEL = 'Where, or a link';
+const BESIDE_LABEL = 'A link too (optional)';
 const TWITCH = /^(?:https?:\/\/)?(?:www\.|m\.)?twitch\.tv\/([A-Za-z0-9_]{1,25})\/?$/i;
 const LINK_SCHEMES = ['https://', 'http://'];
 const BARE_HOST = /^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:\/\S*)?$/i;
@@ -336,17 +330,17 @@ function whereControl(row, channels) {
   else if (!row.where_channel_id) select.value = '';
 
   const typed = el('input', { class: 'input', type: 'text', value: row.location || '', placeholder: 'twitch.tv/blackbloc' });
-  const typedField = field('Where, or a link', typed, INSTEAD_HELP);
-  const hint = typedField.querySelector('.field-help');
+  const typedField = field(WHERE_LABEL, typed);
+  const hint = typedField.querySelector('.field-label');
   const sayHint = () => {
     const beside = select.value !== '' && select.value !== ELSEWHERE;
-    hint.textContent = beside ? BESIDE_HELP : INSTEAD_HELP;
+    hint.textContent = beside ? BESIDE_LABEL : WHERE_LABEL;
   };
   select.addEventListener('change', sayHint);
   sayHint();
 
   return {
-    nodes: [field('Where', select, WHERE_HELP), typedField],
+    nodes: [field('Where', select), typedField],
     payload: () => {
       const location = typed.value.trim();
       if (select.value === '') return { where_kind: null, where_channel_id: null, location };
@@ -370,8 +364,8 @@ async function changeFold(row) {
   const description = el('textarea', { class: 'input area', rows: '3' });
   description.value = row.description || '';
   const where = whereControl(row, await refChannels());
-  const start = whenField({ label: 'Starts', value: localWhen(row.starts_at), min: localWhen(), help: START_HELP });
-  const duration = el('input', { class: 'input', type: 'text', value: row.duration || '', placeholder: '2h' });
+  const start = whenField({ label: 'Starts', value: localWhen(row.starts_at), min: localWhen() });
+  const duration = el('input', { class: 'input', type: 'text', value: row.duration || '', placeholder: '2h — or 1h30m, 45m' });
 
   const save = button('Save', async () => {
     const done = await run(
@@ -392,12 +386,11 @@ async function changeFold(row) {
   }, { tone: 'warn', small: false });
 
   return foldout(CHANGE_IT, [
-    el('p', { class: 'field-help', text: NOT_RESENT }),
     field('Title', title),
     field('What it is', description),
     ...where.nodes,
     start.node,
-    field('How long', duration, 'Like 1h30m, 2h or 45m; blank means two hours.'),
+    field('How long', duration),
     bar([save]),
     say,
   ]);

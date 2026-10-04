@@ -157,17 +157,15 @@ export function feedReading(feed, now = Date.now()) {
 
 export const FEED_WORDS_FIELD = 'Search words';
 export const FEED_OWNER_FIELD = 'Owner';
-const FEED_WORDS_HELP = 'What horaro.net event names are searched for, commas between them — at most five. '
-  + 'Blank searches by the feed’s name.';
-const FEED_OWNER_HELP = 'The horaro.net account that makes the events. Every event it owns is kept, even '
-  + 'one that does not name this channel’s Twitch. Blank keeps only the ones that do.';
+export const FEED_WORDS_MAX = 5;
+export const FEED_OWNER_BLANK = 'only events naming this channel';
 
-/** A horaro.net events feed's two drawer fields, `{ key, label, value, placeholder, help }`; none for other kinds. */
+/** A horaro.net events feed's two drawer fields, `{ key, label, value, placeholder, max? }`; none for other kinds. */
 export function feedSearchFields(feed) {
   if (!feed || feed.source !== 'horaro_events') return [];
   return [
-    { key: 'words', label: FEED_WORDS_FIELD, value: (feed.words || []).join(', '), placeholder: (feed.searches || []).join(', '), help: FEED_WORDS_HELP },
-    { key: 'owner', label: FEED_OWNER_FIELD, value: feed.owner || '', placeholder: '', help: FEED_OWNER_HELP },
+    { key: 'words', label: FEED_WORDS_FIELD, value: (feed.words || []).join(', '), placeholder: (feed.searches || []).join(', '), max: FEED_WORDS_MAX },
+    { key: 'owner', label: FEED_OWNER_FIELD, value: feed.owner || '', placeholder: FEED_OWNER_BLANK },
   ];
 }
 

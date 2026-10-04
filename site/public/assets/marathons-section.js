@@ -75,19 +75,12 @@ let eventModes = [];
 let cadence = { near: null, far: null, lead: null, slack: null, archiveDays: null, modeSpec: null };
 let deepLinked = false;
 
-const LIST_NOTE = 'Every marathon schedule Black Bloc reads; a row opens where it is read from, '
-  + 'its runs, its event and its posts.';
 const NOTHING_YET = 'Black Bloc follows no marathon yet. **Add a marathon** with its GDQ '
   + 'schedule link.';
 const GETTING_IT = 'Reading the schedule…';
-const MODE_OFF = 'Marathon posts are **{mode}**, so nothing is read or posted. **Marathons** '
-  + 'under Settings and logs turns them on.';
+const MODE_OFF = 'Marathon posts are **{mode}**. **Marathons** under Settings and logs turns them on.';
 const MODE_SHADOW = 'Marathon posts are in **shadow**: the board, the reminders and the '
   + 'shoutouts land where shadow_channel_id points, with the rehearsal note.';
-const ADD_NOTE = 'Paste the GDQ schedule link (gamesdonequick.com/schedule/74) or the tracker '
-  + 'event link. Black Bloc reads it at once and every half hour after that while it is near.';
-const CHANNEL_HELP = 'The Twitch channel it airs on, from the Go-live page. With one, its '
-  + 'ping window follows the marathon and its live title confirms which run is on.';
 const NO_CHANNEL = 'No channel — each run links its runner';
 const NO_RUNS = 'No runs on this schedule yet — it may not be published. Black Bloc keeps '
   + 'reading it.';
@@ -130,9 +123,7 @@ const ARCHIVE_BODY = 'It stops being read and its ping window closes. Its runs, 
   + 'kept under Archive below the list, and Restore brings it back paused.';
 const RESTORE_BODY = 'It comes back to the list paused, with its runs and people — nothing is read '
   + 'or posted until someone presses Resume.';
-const ARCHIVE_NOTE = 'Marathons that ended {days} day(s) ago or more, and any staff archived or '
-  + 'removed. Nothing is deleted: a row opens it read-only, with Restore.';
-const ARCHIVE_EMPTY = 'Nothing is archived yet. A marathon moves here {days} day(s) after its last run.';
+const ARCHIVE_EMPTY = 'Nothing is archived yet.';
 const ARCHIVE_FAILED = 'The archive could not be read just now. Reload to try again.';
 const ARCHIVE_MORE = 'Show {count} more';
 const ARCHIVED_NOTE = 'Archived — read-only. **Restore** puts it back on the list, paused.';
@@ -151,60 +142,36 @@ const NOTHING_CHANGED = 'Nothing changed, so nothing was saved.';
 const SCHEDULE_LINK_ACTION = 'Change the schedule link…';
 const SCHEDULE_LINK_TITLE = 'Change the schedule link for {name}';
 const SCHEDULE_LINK_FIELD = 'The new schedule link';
-const SCHEDULE_LINK_NOTE = 'Any schedule Black Bloc reads: a GDQ or RPG Limit Break tracker, horaro.net, Oengus, '
-  + 'Fastest Furs or Lady Arcaders. It keeps its tracking, thread, event and switches, and reads the new '
-  + 'schedule at once.';
+const SCHEDULE_LINK_NOTE = 'It keeps its tracking, thread, event and switches, and reads the new schedule at once.';
 const SCHEDULE_LINK_NOW = 'Reads from ';
 const POLL_LABEL = 'Re-read every';
 const POLL_UNIT = 'minutes';
-const POLL_HELP = 'While it is near, 10 to 120; blank = the default ({minutes}). Far off: every {far} h.';
+const POLL_MIN = 10;
+const POLL_MAX = 120;
+const POLL_BOUNDS = 'Re-read every 10 to 120 minutes, or leave it blank for the default.';
 const NEXT_WHEN_ENDS = 'After this one: ';
 const NEXT_LINE = '{marathon} is over — the next GDQ event is **{next}**, {date} ({relative}).';
 const NEXT_ADDED = 'Added — see **{name}** on the list.';
 const NEXT_DISMISSED = 'Dismissed — **Look again** asks the tracker once more.';
 const NEXT_NONE = '{marathon} is over and the GDQ tracker lists nothing ahead yet.';
 const NEXT_NOT_YET = '{marathon} is over. Black Bloc has not looked up the next GDQ event yet.';
-const NEXT_NOTE = 'Staff decide: nothing is added until someone presses **Add it**. It is read '
-  + 'from the tracker link and airs on this marathon’s channel.';
 const HELD_NOTE = 'held by staff';
 const CERTAIN_NOTE = 'certain';
 const CERTAIN_HELP = 'The stream’s title and its Twitch category both name this run.';
 const SHEET_SAID = ' · sheet said {time}';
 const SHEET_TIMES_ACTION = 'Back to the sheet’s times';
 const EVENT_SELECT = 'Event';
-const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes into the events '
-  + 'review above, dated from the schedule. An event per ' + BAF + ' run and per ' + BAF + ' host block (the runs '
-  + 'a host hosts in a row) is approved at once and follows the schedule as runs move — the events feature '
-  + 'announces each one as it starts. Hosts are always found; they never make a run a ' + BAF + ' run. '
-  + 'Both does the two. marathon_event_mode_default decides where this starts.';
 const SPOTLIGHT_FIELD = 'Follow the schedule';
 const SPOTLIGHT_CHOICES = [{ value: 'follow', label: 'On' }, { value: 'off', label: 'Off' }];
-const SPOTLIGHT_HELP = 'On: the channel is spotlit from marathon_spotlight_lead_minutes before the first run '
-  + 'to marathon_spotlight_tail_minutes after the last, and the end moves when the schedule does. A channel '
-  + 'kept for ever stays as it is. Staff turning the spotlight off, or saving dates, takes it over.';
-const SPOTLIGHT_SHARED = 'These are the channel’s own controls — every change here shows on the Go-live page too.';
 const OPEN_ON_GOLIVE = 'Open on Go-live ↗';
 const SPOTLIT_WORDS = { held: 'spotlit', held_other: 'spotlit', kept: 'spotlit', until: 'spotlit', scheduled: 'scheduled' };
 const NOT_SPOTLIT = 'not spotlit';
 const PING_FIELD = 'Ping the marathon role';
 const PING_CHOICES = [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }];
-const PING_HELP = 'On: the public heads-up marathon_ping_minutes before a BaF run mentions the Marathon role (marathon_role_id, marathon_role_pings), '
-  + 'its run reminders (the thread’s and the public copy), shoutouts and public highlights mention the runner’s ping role and its channel’s, '
-  + 'and its channel gets a ping window while it runs. Off (the default): they still post, with no mention. '
-  + 'marathon_ping_role_default decides where a new marathon starts.';
 const ROLE_PING_ON = 'Marathon role';
 const ROLE_PING_OFF = 'no Marathon role';
 const HIGHLIGHT_FIELD = 'Auto-highlight BaF runners when live';
-const HIGHLIGHT_HELP = 'On: the moment a BaF run goes live its highlight posts in the public channel '
-  + '(marathon_public_channel_id, blank = go-live) — the thread is staff-only, so this is what members see. '
-  + 'For a BaF host it is their host block: posted when the block goes live, edited to done after its last run. '
-  + 'Off (the default): nothing is highlighted. Nobody opted out is highlighted, and nothing is while BaF '
-  + 'announcements is off. marathon_public_highlight_default decides where a new marathon starts.';
 const OVERLAY_FIELD = 'Event schedule';
-const OVERLAY_HELP = 'On: when the Hotfix schedule viewer links the event’s own schedule sheet and it matches this '
-  + 'marathon, each run takes that sheet’s start time, hosts and commentators — GDQ’s sheet only gives the show’s '
-  + 'start and the estimates. Off: GDQ’s sheet times and host column. A run the stream shows starting still keeps '
-  + 'its real start, and the runs after it follow by the sheet’s own gaps. Follow uses marathon_hotfix_overlay_default.';
 const OVERLAY_ON_LINE = 'Times, hosts and commentators come from ';
 const OVERLAY_ON_TAIL = ' — {matched} of {runs} run(s) matched.';
 const OVERLAY_OFF_LINE = 'This event has its own schedule sheet, ';
@@ -212,17 +179,11 @@ const OVERLAY_OFF_TAIL = ', but Event schedule is off, so GDQ’s sheet times an
 const OVERLAY_STALE = ' It could not be read just now ({why}), so the last copy is kept.';
 const OVERLAY_NONE = 'The schedule viewer links no event sheet that matches this marathon, so GDQ’s sheet times are used.';
 const ANNOUNCE_FIELD = 'BaF announcements';
-const ANNOUNCE_HELP = 'On: every BaF runner and host of this marathon is announced publicly — the reminders at every '
-  + 'marathon_reminder_minutes mark (marathon_public_reminders is the master switch) and, with Auto-highlight on, the '
-  + 'highlight. Off: nobody on this marathon gets a public post. Anyone can be opted out on their own from the People '
-  + 'card or the Opt out of highlight button on their run’s post. Follow uses marathon_announcements_default.';
 const SWITCH_FOLLOW = 'Follow the setting ({state})';
 const TWITCH_FIX_FIELD = 'Twitch name (optional)';
-const TWITCH_FIX_HELP = 'Only when the schedule gives the wrong channel. It replaces the schedule’s everywhere Black Bloc '
-  + 'uses one — Spotlight…, the run posts and live matching. Blank keeps what the schedule says.';
 const TWITCH_FIX_TITLE = 'Twitch name for {name}';
-const TWITCH_FIX_NOTE = 'The schedule says **{sheet}**. Type the channel {name} really streams on, or leave it blank to '
-  + 'go back to the schedule’s.';
+const TWITCH_FIX_NOTE = 'The schedule says **{sheet}**.';
+const TWITCH_FIX_BLANK = 'blank keeps the schedule’s';
 const TWITCH_FIX_BUTTON = 'Twitch name…';
 const OPTED_OUT = 'Opted out of public posts';
 const OPT_OUT = 'Opt out of highlight';
@@ -230,8 +191,6 @@ const OPT_IN = 'Opt back in';
 const OPT_OUT_TITLE = 'Opt {name} out of this marathon’s public posts?';
 const OPT_OUT_BODY = 'No reminders and no highlight for them on this marathon. A highlight of theirs that is up is edited to say it was taken down. Opt back in undoes it from the next reminder mark.';
 const FIXED_FROM = ' (fixed from twitch.tv/{sheet})';
-const EVENT_SELECT_SHORT = 'Which Discord events this marathon makes; the setting explains the '
-  + 'four choices.';
 const EVENT_NONE = 'No event.';
 const MODE_LABEL = 'Marathon posts are';
 const EVENT_WAITING = 'Waiting for the schedule to publish, then one event for the marathon.';
@@ -243,30 +202,13 @@ const MODES_FALLBACK = [
   { value: 'both', label: 'Both' },
 ];
 const FEED_MODE_FOLLOW = 'Whatever the setting says';
-const FEED_MODE_HELP = 'What a marathon this feed adds does about events; the first choice '
-  + 'follows marathon_event_mode_default.';
-const FEED_MOVE_NOTE = 'Only a channel-only row that takes marathons and has no feed reading '
-  + 'the same source can be picked.';
 const NO_MARATHONS_CHANNEL = 'opted out of marathons';
 const EVENT_TONE = { pending: 'warn', approved: 'ok', denied: 'danger', cancelled: null, gone: null };
 const PHASE_TONE = { far: null, near: 'warn', live: 'ok', over: null, paused: null };
 const STATE_TONE = { upcoming: null, live: 'ok', done: null, dropped: 'danger' };
-const FEEDS_NOTE = 'A source reads the events list of one channel Black Bloc already watches and '
-  + 'adds (or suggests) every new marathon it finds — only for channels on the Go-live page, '
-  + 'never random ones. A row opens the rest of its moves.';
-const FEEDS_OFF = 'Checks are off (marathon_feeds under **Marathons** in Settings and logs), so '
-  + 'nothing checks on its own. **Check now** still works.';
+const FEEDS_OFF = 'Checks are off. **Marathons** under Settings and logs turns them on.';
 const NO_FEEDS = 'No sources yet. **Add a feed…** starts from a channel on the Go-live page.';
-const FEED_ADD_NOTE = 'Pick the channel first — a feed belongs to a channel Black Bloc already '
-  + 'watches, one feed per source on a channel. Then what to read: the GDQ tracker, the RPG Limit '
-  + 'Break tracker, a horaro.net event by its slug (ESA is `esa`), horaro.net events found by name '
-  + '(Fast Paced Events), Oengus, which finds the channel’s own marathons on oengus.io by '
-  + 'itself, Fastest Furs’ own event list, Lady Arcaders’ next events on ladyarcaders.com, or '
-  + 'the GDQ Hotfix shows on the Hotfix schedule sheet.';
 const HOTFIX_SHOWS_FIELD = 'Shows';
-const HOTFIX_SHOWS_HELP = 'Every show on the Hotfix schedule this week. A ticked show becomes a '
-  + 'marathon each run of days it airs. This is marathon_hotfix_shows in Settings; saving here '
-  + 'changes it there.';
 const HOTFIX_LOADING = 'Reading the Hotfix schedule…';
 const HOTFIX_SAVE = 'Save the shows';
 const HOTFIX_ADD = 'Add';
@@ -280,10 +222,8 @@ const HOTFIX_PERSON = { runs: '{name} runs', hosts: '{name} hosts' };
 const HOTFIX_HOSTED_BY = 'hosted by {hosts}';
 const HOTFIX_NO_HOST = 'no host of its own';
 const HOTFIX_CHIP_TITLE = '{runs} run(s) · host: {hosts}';
-const HOTFIX_PEOPLE_ON = 'Shows a BaF person runs are tracked too, ticked or not '
-  + '(marathon_hotfix_track_people). Hosts always count, like runners.';
-const HOTFIX_PEOPLE_OFF = 'Only the ticked shows are tracked — marathon_hotfix_track_people is '
-  + 'off, so a BaF runner on another show does not add it.';
+const HOTFIX_PEOPLE_ON = 'Shows a BaF person runs are tracked too, ticked or not (marathon_hotfix_track_people).';
+const HOTFIX_PEOPLE_OFF = 'Only the ticked shows are tracked — marathon_hotfix_track_people is off.';
 const HOTFIX_STALE = 'The Hotfix schedule could not be read just now ({why}), so this is the copy '
   + 'read {when}.';
 const HOTFIX_EMPTY_SHEET = 'The Hotfix sheet lists no shows right now.';
@@ -294,55 +234,28 @@ const HOTFIX_NO_HIT = 'No show matches that.';
 const HOTFIX_SHOWS_SAVED = 'The Hotfix feed now reads {shows}. The next check uses them.';
 const HOTFIX_SHEET_LINE = 'Reads the sheet the Hotfix page embeds: ';
 const VIEWER_FIELD = 'Schedule viewer';
-const VIEWER_HELP = 'A second source beside GDQ’s own sheet, never a replacement: the hosts’ Twitch '
-  + 'names and each special event’s own schedule (start times, hosts and commentators) come from '
-  + 'this page. This is marathon_hotfix_viewer_url in Settings; saving here changes it there. '
-  + 'Blank turns it off.';
 const VIEWER_SAVE = 'Save the link';
 const VIEWER_READ = 'Read it now';
 const VIEWER_SAVED = 'The viewer link is now {url}. Read it now says what it finds there.';
 const VIEWER_SAVED_OFF = 'The viewer is off now (the link is blank). The GDQ sheet is read alone.';
 const VIEWER_OPEN = 'open it ↗';
-const PICK_HELP = {
-  gdq: 'Every event on the GDQ tracker that is still ahead.',
-  rpglb: 'Every event on the RPG Limit Break tracker that is still ahead.',
-  horaro: 'Every schedule of one horaro.net event — give its slug below.',
-  oengus: 'Every marathon on oengus.io that streams on this channel’s Twitch — nothing to type.',
-  horaro_events: 'Every horaro.net event that streams on this channel’s Twitch, found by searching '
-    + 'event names for the Name below — Fast Paced Events’ are “Fast Pace for …”, so “Fast Pace”. '
-    + 'Once added, its drawer takes several search words and the horaro.net account that owns the events.',
-  fastestfurs: 'Every event on Fastest Furs’ own list at fastestfurs.com — nothing to type.',
-  ladyarcaders: 'Lady Arcaders’ next events on ladyarcaders.com, found by trying the next event '
-    + 'numbers — nothing to type.',
-  gdq_hotfix: 'The GDQ Hotfix shows named in marathon_hotfix_shows (GDQueer by default), from the '
-    + 'schedule sheet on gamesdonequick.com/hotfix/schedule — each run of days a show airs is one '
-    + 'marathon. Nothing to type.',
-};
 const TRACKER_PICKS = ['gdq', 'rpglb'];
 const sourceKind = (pick) => (TRACKER_PICKS.includes(pick) ? 'tracker' : pick);
 const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus', fastpacedevents: 'horaro_events', fastestfurs: 'fastestfurs', ladyarcaders: 'ladyarcaders' };
-const FEED_SEEN_NOTE = 'Remembers {count} Oengus marathon(s) it has already looked at, so each is '
-  + 'read once. **Look again** reads them all once more.';
-const FEED_SEEN_NOTE_HORARO = 'Remembers {count} horaro.net event(s) it has already looked at, '
-  + 'so each one’s schedules are read once. **Look again** reads them all once more.';
-const FEED_PROBE_NOTE = 'Remembers what {count} Lady Arcaders event number(s) answered; one with '
-  + 'no calendar yet is asked again after four checks. **Look again** asks them all now.';
+const FEED_SEEN_NOTE = 'Remembers {count} Oengus marathon(s) it has already looked at.';
+const FEED_SEEN_NOTE_HORARO = 'Remembers {count} horaro.net event(s) it has already looked at.';
+const FEED_PROBE_NOTE = 'Remembers what {count} Lady Arcaders event number(s) answered.';
 const FEED_NO_CHANNELS = 'There is no channel-only row on the Go-live page that takes '
   + 'marathons. Add the channel there first.';
-const FEED_IGNORED_NOTE = 'A marathon this feed added and staff removed is never added again '
-  + 'until **Forget ignored**.';
+const FEED_WORDS_OVER = 'At most {max} search words.';
 const FEED_ADDED = 'Added by this feed: ';
 const FEED_DRAWER = 'The {feed} feed';
 const SUGGESTION_LINE = '**{feed}** has a new event: **{event}**, {date} ({relative}).';
-const SUGGESTION_NOTE = 'Staff decide: nothing is added until someone presses **Add it**. It airs '
-  + 'on the feed’s channel.';
 const FEED_REMOVE_BODY = 'It stops checking. The marathons it added stay on the list.';
 const FEED_GONE = 'That feed is gone — the list below is current.';
 const ACTION_CHOICES = [{ value: 'add', label: 'Add' }, { value: 'suggest', label: 'Suggest' }];
 const AUTO_CHOICES = [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }];
 const AUTO_FIELD = 'Auto-track';
-const AUTO_HELP = 'On: each marathon this feed adds is tracked the moment its schedule is out — its '
-  + 'thread is made and its posts begin. Off (the default): it waits in the inbox for staff to press Track.';
 const THREAD_LINK = 'thread ↗';
 const POST_NOW = 'Post it to the inbox now';
 const INBOX_LINK = 'inbox ↗';
@@ -352,8 +265,7 @@ const TRACK_MOVES = {
   untrack: { label: 'Untrack', path: 'track', body: { on: false }, tone: 'quiet' },
   ignore: { label: 'Ignore', path: 'ignore', body: { on: true }, tone: 'quiet' },
 };
-const FOUND_NOTE = 'Found, not tracked: it is read and kept current, and posts nothing. **Track** gives it '
-  + 'its own thread beside the inbox for its board, reminders and shoutouts; **Ignore** keeps it quiet on the list.';
+const FOUND_NOTE = 'Found, not tracked: it is read and kept current, and posts nothing.';
 
 function full(node) {
   node.setAttribute('data-span', 'full');
@@ -481,11 +393,10 @@ async function addMarathon() {
   const sure = await askForm({
     title: 'Add a marathon',
     body: [
-      el('p', { class: 'ask-body', text: ADD_NOTE }),
       field('Name', name),
       field('Schedule link', url),
-      field('Channel it airs on', channel, CHANNEL_HELP),
-      field(EVENT_SELECT, mode, EVENT_SELECT_HELP),
+      field('Channel it airs on', channel),
+      field(EVENT_SELECT, mode),
     ],
     confirmLabel: 'Add it',
     tone: 'warn',
@@ -544,7 +455,6 @@ function nextBlock(marathon, say) {
   const moves = nextMoves(marathon, say);
   return [el('div', { class: 'mx-next' }, [
     el('p', { class: 'field-help mx-line' }, [el('span', { class: 'cell-quiet', text: NEXT_WHEN_ENDS }), ...boldParts(nextSentence(marathon))]),
-    marathon.next.state === 'open' ? line(NEXT_NOTE) : null,
     marathon.next.url && marathon.next.state !== 'none'
       ? el('p', { class: 'field-help' }, [el('a', { class: 'say-nothing-do', href: marathon.next.url, text: 'the tracker ↗', rel: 'noreferrer', target: '_blank' })])
       : null,
@@ -634,7 +544,7 @@ function switchWanted(value) {
 }
 
 function twitchInput(value = '') {
-  return el('input', { class: 'input', type: 'text', value, placeholder: 'junior_sm', autocomplete: 'off', spellcheck: 'false', 'aria-label': TWITCH_FIX_FIELD });
+  return el('input', { class: 'input', type: 'text', value, placeholder: TWITCH_FIX_BLANK, autocomplete: 'off', spellcheck: 'false', 'aria-label': TWITCH_FIX_FIELD });
 }
 
 function twitchText(entry) {
@@ -649,7 +559,7 @@ async function fixTwitch(marathon, say, entry, runId) {
     title: said(TWITCH_FIX_TITLE, { name: entry.name }),
     body: [
       el('p', { class: 'ask-body' }, boldParts(said(TWITCH_FIX_NOTE, { name: entry.name, sheet: entry.sheet_login || entry.login || '—' }))),
-      field(TWITCH_FIX_FIELD, input, TWITCH_FIX_HELP),
+      field(TWITCH_FIX_FIELD, input),
     ],
     confirmLabel: 'Save',
     tone: 'warn',
@@ -685,7 +595,7 @@ async function linkPerson(marathon, say, person, entry, runId) {
       el('p', { class: 'ask-body' }, boldParts(said(LINK_NOTE, { name: person.name, marathon: marathon.name }))),
       picker.node,
       field('Where it counts', scope),
-      field(TWITCH_FIX_FIELD, twitch, TWITCH_FIX_HELP),
+      field(TWITCH_FIX_FIELD, twitch),
     ],
     confirmLabel: 'Link them',
     tone: 'warn',
@@ -1030,9 +940,14 @@ async function settingsFold(marathon, say) {
     type: 'text',
     inputmode: 'numeric',
     size: 4,
-    placeholder: 'default',
+    placeholder: cadence.near ? String(cadence.near) : 'default',
     value: marathon.poll_minutes ? String(marathon.poll_minutes) : '',
     'aria-label': `${POLL_LABEL} N ${POLL_UNIT}`,
+  });
+  poll.addEventListener('input', () => {
+    const typed = pollWanted(poll.value);
+    const off = typed !== null && !(Number.isInteger(typed) && typed >= POLL_MIN && typed <= POLL_MAX);
+    say.say(off ? POLL_BOUNDS : '', 'warn');
   });
   const save = button(SAVE_SETTINGS, async () => {
     const body = {};
@@ -1055,16 +970,16 @@ async function settingsFold(marathon, say) {
   }, { tone: 'warn' });
   const fold = foldout(SETTINGS_FOLD, [
     linkLine(marathon),
-    field(EVENT_SELECT, mode, EVENT_SELECT_SHORT),
+    field(EVENT_SELECT, mode),
     eventState(marathon, say),
     marathon.channel_gone ? notice(CHANNEL_GONE, 'warn') : null,
     field('Airs on', picker, windowWords(marathon)),
-    field(PING_FIELD, ping, PING_HELP),
+    field(PING_FIELD, ping),
     rolePingLine(marathon),
-    field(HIGHLIGHT_FIELD, highlight, HIGHLIGHT_HELP),
-    field(ANNOUNCE_FIELD, announce, ANNOUNCE_HELP),
-    overlay ? field(OVERLAY_FIELD, overlay, OVERLAY_HELP) : null,
-    field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
+    field(HIGHLIGHT_FIELD, highlight),
+    field(ANNOUNCE_FIELD, announce),
+    overlay ? field(OVERLAY_FIELD, overlay) : null,
+    field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })])),
     bar([save]),
   ], { open: shown.settings });
   fold.classList.add('mx-settings');
@@ -1100,11 +1015,11 @@ function spotlightBlock(marathon, say) {
   });
   return [
     spotlightCard(one, say, redraw, {
-      head: [said, field(SPOTLIGHT_FIELD, follow, SPOTLIGHT_HELP)],
+      head: [said, field(SPOTLIGHT_FIELD, follow)],
       foot: [
         announcedSaid(one),
         el('div', { class: 'bar' }, announceMoves(one, say, redraw)),
-        el('p', { class: 'field-help' }, [el('span', { text: `${SPOTLIGHT_SHARED} ` }), linkAction(OPEN_ON_GOLIVE, GOLIVE_HREF)]),
+        el('p', { class: 'field-help' }, [linkAction(OPEN_ON_GOLIVE, GOLIVE_HREF)]),
       ],
     }),
     pingsCard(one, say, redraw),
@@ -1348,7 +1263,7 @@ async function moveFeed(feed) {
   let done = null;
   const sure = await askForm({
     title: `Move the ${feed.name} feed`,
-    body: [el('p', { class: 'ask-body', text: FEED_MOVE_NOTE }), field('Channel', channel)],
+    body: [field('Channel', channel)],
     confirmLabel: 'Move it',
     tone: 'warn',
     onConfirm: async () => {
@@ -1382,7 +1297,6 @@ function suggestionCard(feed, record, say, { inDrawer = false } = {}) {
   const dismiss = () => send(base, 'PATCH', { dismiss: record.ref });
   return card('Next up', [
     el('p', {}, boldParts(words)),
-    el('p', { class: 'field-help' }, boldParts(SUGGESTION_NOTE)),
     record.url ? el('p', { class: 'field-help' }, [el('a', { href: record.url, text: 'the schedule ↗', rel: 'noreferrer', target: '_blank' })]) : null,
     bar([
       button('Add it', async () => {
@@ -1400,7 +1314,12 @@ function feedSearchInput(feed, say, one) {
     const wanted = input.value.trim();
     if (wanted !== one.value) feedDrawerStep(feed, say, () => send(`/api/marathons/feeds/${feed.id}`, 'PATCH', { [one.key]: wanted }));
   });
-  return field(one.label, input, one.help);
+  if (!one.max) return field(one.label, input);
+  const over = el('span', { class: 'counter', 'data-tone': 'danger', text: said(FEED_WORDS_OVER, { max: one.max }), hidden: true });
+  const check = () => { over.hidden = input.value.split(',').filter((word) => word.trim()).length <= one.max; };
+  input.addEventListener('input', check);
+  check();
+  return field(one.label, input, over);
 }
 
 function hotfixKey(name) {
@@ -1504,7 +1423,7 @@ function hotfixPicker(feed, say, answer) {
 
 function viewerField(feed, say) {
   const before = String(feed.viewer_url || '');
-  const input = el('input', { class: 'input', type: 'url', value: before, placeholder: 'https://…' });
+  const input = el('input', { class: 'input', type: 'url', value: before, placeholder: 'https://… — blank turns it off' });
   const save = button(VIEWER_SAVE, () => {
     const value = input.value.trim();
     feedDrawerStep(feed, say, async () => {
@@ -1521,7 +1440,7 @@ function viewerField(feed, say) {
     input,
     bar([save, read]),
     before ? el('p', { class: 'field-help mx-line' }, [el('a', { href: before, text: VIEWER_OPEN, rel: 'noreferrer', target: '_blank' })]) : null,
-  ]), VIEWER_HELP);
+  ]));
 }
 
 function hotfixFields(feed, say) {
@@ -1535,7 +1454,7 @@ function hotfixFields(feed, say) {
     });
   return [
     viewerField(feed, say),
-    field(HOTFIX_SHOWS_FIELD, box, HOTFIX_SHOWS_HELP),
+    field(HOTFIX_SHOWS_FIELD, box),
     feed.sheet_url ? el('p', { class: 'field-help mx-line' }, [
       el('span', { text: HOTFIX_SHEET_LINE }),
       el('a', { href: feed.sheet_url, text: 'the sheet ↗', rel: 'noreferrer', target: '_blank' }),
@@ -1595,13 +1514,12 @@ function feedDrawer(feed, message) {
         ]),
       ])
       : null,
-    field('Event', mode, FEED_MODE_HELP),
-    field(AUTO_FIELD, auto, AUTO_HELP),
+    field('Event', mode),
+    field(AUTO_FIELD, auto),
     ...feedSearchFields(feed).map((one) => feedSearchInput(feed, say, one)),
     ...hotfixFields(feed, say),
     ...(feed.suggestions || []).map((one) => suggestionCard(feed, one, say, { inDrawer: true })),
     feed.seen_count ? el('p', { class: 'field-help mx-line' }, boldParts(said({ horaro_events: FEED_SEEN_NOTE_HORARO, ladyarcaders: FEED_PROBE_NOTE }[feed.source] || FEED_SEEN_NOTE, { count: feed.seen_count }))) : null,
-    line(FEED_IGNORED_NOTE),
     bar(moves),
   ];
 }
@@ -1624,10 +1542,8 @@ async function addFeed(payload) {
   const slug = el('input', { class: 'input', type: 'text', placeholder: 'esa' });
   const name = el('input', { class: 'input', type: 'text', placeholder: 'the channel’s name' });
   const action = segment(ACTION_CHOICES, payload.action_default || 'add');
-  const pickHelp = el('p', { class: 'field-help' });
-  const slugField = field('horaro.net event slug', slug, 'The part after horaro.net/.');
+  const slugField = field('The part after horaro.net/', slug);
   const shownPick = () => {
-    pickHelp.textContent = PICK_HELP[source.value] || '';
     slugField.style.display = source.value === 'horaro' ? '' : 'none';
   };
   const guessPick = () => {
@@ -1643,10 +1559,9 @@ async function addFeed(payload) {
   const sure = await askForm({
     title: 'Add a feed',
     body: [
-      el('p', { class: 'ask-body' }, boldParts(free.length ? FEED_ADD_NOTE : FEED_NO_CHANNELS)),
+      free.length ? null : el('p', { class: 'ask-body' }, boldParts(FEED_NO_CHANNELS)),
       field('Channel', channel),
       field('Read from', source),
-      pickHelp,
       slugField,
       field('Name', name, 'Blank uses the channel’s name.'),
       field('New events', action),
@@ -1695,7 +1610,6 @@ function sourcesBody(feeds, say) {
   const waiting = rows.flatMap((feed) => (feed.suggestions || []).map((one) => suggestionCard(feed, one, say)));
   return [
     say,
-    el('p', { class: 'field-help' }, boldParts(FEEDS_NOTE)),
     feeds.enabled === false ? el('p', { class: 'field-help' }, boldParts(FEEDS_OFF)) : null,
     bar([button('Add a feed…', () => addFeed(feeds), { tone: 'warn' })]),
     grid,
@@ -1732,13 +1646,12 @@ function archiveLine(row) {
 }
 
 function archiveFold(archive) {
-  const days = cadence.archiveDays ?? 7;
   if (!archive || archive.error) {
     return foldout(archiveTitle(0), [notice(ARCHIVE_FAILED, 'warn')]);
   }
   const rows = archive.marathons || [];
   const list = el('div', { class: 'mx-archive' }, rows.map(archiveLine));
-  const children = [line(said(ARCHIVE_NOTE, { days })), rows.length ? list : line(said(ARCHIVE_EMPTY, { days }))];
+  const children = [rows.length ? list : line(ARCHIVE_EMPTY)];
   let loaded = rows.length;
   if ((archive.total || 0) > loaded) {
     const more = textAction(said(ARCHIVE_MORE, { count: Math.min(archive.limit || 50, archive.total - loaded) }), async () => {
@@ -1758,7 +1671,7 @@ function archiveFold(archive) {
 
 function listSection(payload, feeds, say, archive) {
   const rows = payload.marathons || [];
-  const list = section('Marathons', LIST_NOTE, { count: rows.length, id: 'marathons', open: true });
+  const list = section('Marathons', null, { count: rows.length, id: 'marathons', open: true });
   const add = button('Add a marathon', () => addMarathon(), { tone: 'warn' });
   const sources = button(SOURCES_BUTTON, () => openSources(), { tone: 'quiet' });
   const grid = table([
