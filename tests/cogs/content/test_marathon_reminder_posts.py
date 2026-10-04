@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import discord
 
 from black_bloc import marathon as mt
+from black_bloc import marathon_host_highlights as mhh
 from black_bloc import marathon_reminder_posts as mrem
 from black_bloc.cogs.content import marathon_reminder_posts as following
 from black_bloc.cogs.content.marathon import update_marathon, update_run
@@ -21,6 +22,19 @@ from tests.cogs.content.test_marathon import (
     cog,
     threading,
 )
+from tests.cogs.content.test_marathon_host_highlights import (
+    DAY,
+    HIDDEN_HEROES_TOMORROW,
+    HOST,
+    LIVE_MARKS,
+    heads_ups,
+    host_copies,
+    role_pinging,
+    show,
+    tick_at,
+    walk,
+)
+from tests.cogs.content.test_marathon_hosts import ANARCHY
 from tests.cogs.content.test_marathon_public import ready
 from tests.cogs.content.test_marathon_public_reminders import at_fifteen, reminders_in
 from tests.cogs.content.test_marathon_role_ping import MARATHON_ROLE, allowed, pinging, rows
@@ -573,3 +587,197 @@ async def test_a_stream_retime_keeps_a_posted_mark_and_the_copy_follows(bot, cog
     cog.clock = lambda: NOW + timedelta(minutes=33)
     await cog.remind(bot.guild, await fresh(bot, marathon), cog.clock())
     assert count(bot) == before
+
+
+# --- a host block's heads-ups --------------------------------------------------------------------
+
+
+def tomorrow(shift=0, *, games=("Titanfall 2", "VHOLUME", "SPRAWL zero")):
+    lengths = {"Titanfall 2": (0, 85), "VHOLUME": (85, 35), "SPRAWL zero": (120, 50)}
+    return [
+        a_run(
+            ident,
+            DAY + lengths[game][0] + shift,
+            game=game,
+            people=((f"runner {ident}", f"r{ident}", "runner"), HOST),
+            length=lengths[game][1],
+        )
+        for ident, game in enumerate(("Titanfall 2", "VHOLUME", "SPRAWL zero"), start=1)
+        if game in games
+    ]
+
+
+def host_words(minutes, game="Titanfall 2", *, head=""):
+    relative, when = stamps(minutes)
+    return (
+        f"{head}<@{ANARCHY}> hosts **{game}** (Any%) on **Hidden Heroes** {relative} — {when}. "
+    )
+
+
+async def host_show(bot, cog, *, until=(60, 1380, 1485), pinging=False):
+    await bot.store.set(GUILD, "marathon_reminder_minutes", LIVE_MARKS)
+    marathon = await show(bot, cog, tomorrow())
+    if pinging:
+        await role_pinging(bot, marathon)
+    await walk(bot, cog, marathon, until)
+    return await fresh(bot, marathon)
+
+
+async def block_reads(bot, cog, marathon, runs, minutes):
+    cog.client.runs_given = runs
+    read = await cog.refresh(bot.guild, await fresh(bot, marathon))
+    assert read.ok, read.message
+    return await tick_at(bot, cog, marathon, minutes)
+
+
+async def the_record(bot, marathon):
+    (record,) = mhh.records(await fresh(bot, marathon))
+    return record
+
+
+async def test_each_heads_up_of_a_host_block_is_remembered_with_its_mark(bot, cog):
+    marathon = await host_show(bot, cog)
+
+    record = await the_record(bot, marathon)
+    said = heads_ups(bot)
+    assert record["marks"] == [15, 120, 1440] and len(said) == 3
+    assert [
+        (mark, name, copy["channel_id"], copy["message_id"])
+        for mark, name, copy in mrem.standing(record["reminders"])
+    ] == [
+        (15, "public", CHANNEL, said[2].id),
+        (120, "public", CHANNEL, said[1].id),
+        (1440, "public", CHANNEL, said[0].id),
+    ]
+    assert all(one["posted"] for one in record["reminders"].values())
+    assert record["reminders"][15]["public"]["at"] == at(DAY)
+    assert said[2].content.startswith(host_words(DAY))
+
+
+async def test_a_host_block_that_moves_edits_every_heads_up_once_and_posts_none_again(bot, cog):
+    marathon = await host_show(bot, cog, pinging=True)
+    said = host_copies(bot)
+    before = len(bot.guild.channels[CHANNEL].messages)
+
+    await block_reads(bot, cog, marathon, tomorrow(10), 1486)
+    await walk(bot, cog, marathon, [1494, 1495, 1496])
+
+    assert len(bot.guild.channels[CHANNEL].messages) == before
+    assert [len(one.edits) for one in said] == [1, 1, 1]
+    assert all(host_words(DAY + 10) in one.content for one in said)
+    assert said[2].content.startswith(f"<@&{MARATHON_ROLE}> {host_words(DAY + 10)}")
+    for one in said:
+        mentions = one.edits[0]["allowed_mentions"]
+        assert (mentions.roles, mentions.users, mentions.everyone) == (False, False, False)
+    edited = await rows(bot, "marathon.host_reminder_edited")
+    assert [(one["mark"], one["copy"], one["from"], one["to"]) for one in edited] == [
+        (15, "public", at(DAY), at(DAY + 10)),
+        (120, "public", at(DAY), at(DAY + 10)),
+        (1440, "public", at(DAY), at(DAY + 10)),
+    ]
+    assert edited[0]["runs"] == [1, 2, 3] and edited[0]["hosts"] == "anarchy"
+    assert (await the_record(bot, marathon))["marks"] == [15, 120, 1440]
+    assert len(await rows(bot, "marathon.host_reminded")) == 3
+
+
+async def test_a_host_block_that_slips_three_minutes_or_moves_earlier_is_corrected(bot, cog):
+    marathon = await host_show(bot, cog)
+    said = heads_ups(bot)
+
+    await block_reads(bot, cog, marathon, tomorrow(3), 1486)
+    assert all(one.content.startswith(host_words(DAY + 3)) for one in said)
+    await block_reads(bot, cog, marathon, tomorrow(-8), 1487)
+
+    assert all(one.content.startswith(host_words(DAY - 8)) for one in said)
+    assert [len(one.edits) for one in said] == [2, 2, 2]
+    await tick_at(bot, cog, marathon, 1488)
+    assert [len(one.edits) for one in said] == [2, 2, 2]
+
+
+async def test_a_block_whose_first_run_is_dropped_shows_the_run_it_now_opens_on(bot, cog):
+    marathon = await host_show(bot, cog, until=(60,))
+    (said,) = heads_ups(bot)
+
+    await block_reads(bot, cog, marathon, tomorrow(games=("VHOLUME", "SPRAWL zero")), 61)
+
+    assert said.content.startswith(host_words(DAY + 85, "VHOLUME"))
+    assert len(heads_ups(bot)) == 1
+
+
+async def test_a_host_block_taken_off_the_schedule_says_so_once(bot, cog):
+    marathon = await host_show(bot, cog, until=(60,))
+    (said,) = heads_ups(bot)
+
+    await block_reads(bot, cog, marathon, [a_run(9, DAY, game="Other")], 61)
+    await tick_at(bot, cog, marathon, 62)
+
+    assert said.content == (
+        f"<@{ANARCHY}> hosts **Titanfall 2** (Any%) on **Hidden Heroes** — off the schedule."
+    )
+    assert len(said.edits) == 1
+    (edited,) = await rows(bot, "marathon.host_reminder_edited")
+    assert edited["dropped"] is True and edited["mark"] == 1440
+
+
+async def test_a_deleted_host_heads_up_is_logged_once_and_never_posted_again(bot, cog):
+    marathon = await host_show(bot, cog, until=(60,))
+    (said,) = heads_ups(bot)
+    await said.delete()
+
+    await block_reads(bot, cog, marathon, tomorrow(10), 61)
+    await block_reads(bot, cog, marathon, tomorrow(20), 62)
+    await tick_at(bot, cog, marathon, 81)
+
+    (lost,) = await rows(bot, "marathon.host_reminder_lost")
+    assert (lost["mark"], lost["reason"]) == (1440, "message_gone")
+    assert lost["message_id"] == str(said.id)
+    record = await the_record(bot, marathon)
+    assert record["reminders"][1440] == {"posted": True} and record["marks"] == [1440]
+    assert heads_ups(bot) == []
+
+
+async def test_a_host_heads_up_from_before_posts_were_remembered_is_never_posted_twice(bot, cog):
+    marathon = await host_show(bot, cog, until=(60,))
+    (said,) = heads_ups(bot)
+    record = await the_record(bot, marathon)
+    del record["reminders"]
+    await update_marathon(bot.db, marathon["id"], host_highlight_posts=mhh.dump([record]))
+
+    await block_reads(bot, cog, marathon, tomorrow(60), 61)
+    await walk(bot, cog, marathon, [119, 120, 121])
+
+    assert heads_ups(bot) == [said] and said.edits == []
+    assert (await the_record(bot, marathon))["marks"] == [1440]
+    assert "marathon.host_reminder_edited" not in await kinds(bot.db)
+
+
+async def test_repost_posts_a_host_heads_up_again_and_edits_nothing(bot, cog):
+    await bot.store.set(GUILD, "marathon_reminder_on_move", "repost")
+    marathon = await host_show(bot, cog, until=(60,))
+    (said,) = heads_ups(bot)
+
+    await block_reads(bot, cog, marathon, tomorrow(60), 61)
+    assert (await the_record(bot, marathon))["marks"] == []
+    await tick_at(bot, cog, marathon, 120)
+
+    again = heads_ups(bot)
+    assert len(again) == 2 and said.edits == [] and said.content.startswith(host_words(DAY))
+    assert again[1].content.startswith(host_words(DAY + 60))
+    record = await the_record(bot, marathon)
+    assert record["reminders"][1440]["public"]["message_id"] == again[1].id
+
+
+async def test_runs_and_host_blocks_share_one_minutes_edits(bot, cog):
+    await bot.store.set(GUILD, "marathon_reminder_edit_limit", 2)
+    marathon = await host_show(bot, cog)
+    said = heads_ups(bot)
+
+    cog.client.runs_given = tomorrow(10)
+    assert (await cog.refresh(bot.guild, await fresh(bot, marathon))).ok
+    cog.clock = lambda: NOW + timedelta(minutes=1486)
+    budget = await following.sync_reminders(cog, bot.guild, marathon)
+
+    assert (budget.left, budget.waiting) == (0, 1)
+    assert [len(one.edits) for one in said] == [0, 1, 1]
+    await following.sync_reminders(cog, bot.guild, marathon)
+    assert [len(one.edits) for one in said] == [1, 1, 1]

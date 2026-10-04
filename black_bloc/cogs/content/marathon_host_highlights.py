@@ -11,6 +11,7 @@ from ... import marathon as mt
 from ... import marathon_announce as ma
 from ... import marathon_host_highlights as mhh
 from ... import marathon_inbox as mi
+from ... import marathon_reminder_posts as mrem
 from ... import marathon_role_ping as mrp
 from ... import shadow as shadow_home
 from ...actionlog import log_action
@@ -19,7 +20,9 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...settings_store import (
     MARATHON_HOST_HIGHLIGHTS_KEY,
     MARATHON_PING_MINUTES_KEY,
+    MARATHON_REMINDER_DROPPED_TEMPLATE_KEY,
     MARATHON_REMINDER_MINUTES_KEY,
+    MARATHON_REMINDER_ON_MOVE_KEY,
     MARATHON_REMINDER_STALE_KEY,
 )
 from ...spotlight import reason_of
@@ -341,6 +344,7 @@ async def remind_hosts(cog: Any, guild: Any, marathon: Any, now: datetime) -> No
     try:
         marks = reminder_marks(bot, guild.id)
         stale = int(bot.store.get(guild.id, MARATHON_REMINDER_STALE_KEY))
+        on_move = str(bot.store.get(guild.id, MARATHON_REMINDER_ON_MOVE_KEY))
         found = mhh.records(fresh)
         for block, record in claimed(found, await blocks_of(bot, guild, fresh)):
             if record is not None:
@@ -348,7 +352,7 @@ async def remind_hosts(cog: Any, guild: Any, marathon: Any, now: datetime) -> No
                 if record.pop("legacy_reminded", False):
                     record["marks"] = mhh.passed_marks(block, marks, now)
                     touched = True
-                if mhh.rearmed(record, block, now) or touched:
+                if mhh.rearmed(record, block, now, on_move) or touched:
                     await save(bot, fresh, found)
             mark, skipped = mhh.due(block, record, marks, now, stale_minutes=stale)
             if mark is None and not skipped:
@@ -359,6 +363,7 @@ async def remind_hosts(cog: Any, guild: Any, marathon: Any, now: datetime) -> No
             record["marks"] = sorted(
                 set(record["marks"]) | set(skipped) | ({mark} if mark is not None else set())
             )
+            record[mrem.HOST_FIELD] = mrem.with_skipped(record[mrem.HOST_FIELD], skipped)
             await save(bot, fresh, found)
             for one in skipped:
                 await log_action(
@@ -368,13 +373,43 @@ async def remind_hosts(cog: Any, guild: Any, marathon: Any, now: datetime) -> No
                     details=details_of(fresh, block, mark=one, because="late"),
                 )
             if mark is not None:
-                await heads_up(bot, guild, fresh, block, mark)
+                copy = await heads_up(bot, guild, fresh, block, mark)
+                record[mrem.HOST_FIELD][mark] = mrem.entry_of(public=copy)
+                await save(bot, fresh, found)
     except Exception as exc:
         log.warning("marathon: a host heads-up failed — %s", reason_of(exc))
 
 
-async def heads_up(bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: int) -> None:
-    """The runner's public reminder for the block, unless the switches or the opt-out say not."""
+def block_text(
+    bot: Any,
+    guild: Any,
+    marathon: Any,
+    block: mhh.Block,
+    people: Any,
+    login: Any,
+    *,
+    dropped: bool = False,
+) -> str:
+    """The block's heads-up as it reads now; `dropped` once every run of it is off the schedule."""
+    url = mt.run_url(block.first, login, marathon["schedule_url"], people=people)
+    if dropped:
+        return reminder_text(
+            bot,
+            guild,
+            marathon,
+            mhh.dropped_row(block),
+            url=url,
+            people=people,
+            key=MARATHON_REMINDER_DROPPED_TEMPLATE_KEY,
+        )
+    return reminder_text(bot, guild, marathon, mhh.view_row(block), url=url, people=people)
+
+
+async def heads_up(
+    bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: int
+) -> dict[str, Any] | None:
+    """The runner's public reminder for the block, unless the switches or the opt-out say not.
+    It answers the post, for the block to remember."""
     marathon_role = role_for(bot, guild, marathon, block, mark)
     quiet = mrp.row_fields(
         None if marathon_role is None else mrp.unsent(marathon_role, mrp.NO_PUBLIC_COPY)
@@ -397,7 +432,7 @@ async def heads_up(bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: 
             "marathon.host_reminder_skipped",
             details=base | quiet | {"because": because},
         )
-        return
+        return None
     home = reminder_channel(bot, guild.id)
     if home is None:
         await log_action(
@@ -406,10 +441,8 @@ async def heads_up(bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: 
             "marathon.host_reminder_failed",
             details=base | quiet | {"reason": "no_channel"},
         )
-        return
-    login = await channel_login(bot, marathon)
-    url = mt.run_url(block.first, login, marathon["schedule_url"], people=people)
-    text = reminder_text(bot, guild, marathon, mhh.view_row(block), url=url, people=people)
+        return None
+    text = block_text(bot, guild, marathon, block, people, await channel_login(bot, marathon))
     roles = mrp.with_role([], marathon_role)
     message, channel_id, why = await send_public(
         bot, guild, ping_prefix(*roles) + text, roles, home=home
@@ -425,7 +458,7 @@ async def heads_up(bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: 
             "marathon.host_reminder_failed",
             details=details | quiet | {"reason": why},
         )
-        return
+        return None
     await log_action(
         bot,
         guild,
@@ -435,6 +468,7 @@ async def heads_up(bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: 
         | mrp.row_fields(marathon_role)
         | rehearsal_of(bot, guild),
     )
+    return mrem.copy_of(message, channel_id, text, mt._cell(block.first, "scheduled_at"))
 
 
 def role_for(
@@ -527,6 +561,7 @@ async def hosts_of(bot: Any, guild: Any, marathon: Any) -> dict[int, str]:
 
 
 __all__ = [
+    "block_text",
     "blocks_of",
     "follow_opt",
     "hosts_of",

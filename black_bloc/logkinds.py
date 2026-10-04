@@ -348,6 +348,8 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.host_highlight_lost",
         "marathon.host_reminded",
         "marathon.host_reminder_skipped",
+        "marathon.host_reminder_edited",
+        "marathon.host_reminder_lost",
         "marathon.announcements_set",
         "marathon.announce_opted_out",
         "marathon.announce_opted_in",
