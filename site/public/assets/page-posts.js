@@ -42,13 +42,6 @@ const SETTING_KEYS = [
   MODE_KEY, 'posts_shadow_channel_id', 'posts_panel_minutes', 'posts_import_style', 'posts_untitled_title',
   'posts_log_level',
 ];
-const SETTINGS_NOTE = 'Whether staff may post at all, where a rehearsal lands, how long the /posts panel stays live, '
-  + 'what style a Google Doc import lands in, what an import with no title is called, and how much of it '
-  + 'is repeated into the Discord log.';
-const MACHINERY_NOTE = 'The reference half of the page: six keys, and everything posts has '
-  + 'done. Both are shut until you want them.';
-const LIST_NOTE = 'One message per post. Black Bloc sends it once and edits that same message '
-  + 'every time after — it never posts a second copy.';
 const NOTHING_YET = 'There are no posts yet.';
 const NO_CHANNEL = 'no channel yet';
 const AMBER_AT = 0.9;
@@ -72,8 +65,6 @@ const SHADOW = 'shadow';
 const PIN_WORDS = { true: 'pins it', false: 'leaves it unpinned' };
 // Blocks (owner, 2026-09-27: "lets do blocks"). A block rides under a post in the same message.
 const BLOCKS_LABEL = 'Blocks';
-const BLOCKS_HELP = 'What rides under this post, in the same message. A block is added or '
-  + 'removed at once — it is not part of Save Changes.';
 const NO_BLOCKS = 'No blocks — the message is only the post.';
 const ADD_A_BLOCK = 'Add a block…';
 const PICK_A_BLOCK = 'Pick a block…';
@@ -83,17 +74,12 @@ const REMOVE_IT = 'Remove';
 const MOVE_UP = '↑';
 const MOVE_DOWN = '↓';
 const WILL_CARRY = ' Its blocks ride under it, in the same message: {names}.';
-const BLOCKS_SECTION_NOTE = 'A block rides under a post, in the same message. Each kind is '
-  + 'listed with the post it is on, and its words are edited here — saving redraws every post '
-  + 'carrying it at once.';
 const ONE_AT_A_TIME = 'one post at a time';
 const ANY_NUMBER = 'any number of posts';
 const EDIT_BLOCK = 'Edit the {name} block';
 const OPEN_IT = 'Open {title}';
 const ON_NO_POST = 'On no post yet — open a post and use Add a block….';
 const LOOKS_LIKE = 'What it looks like in Discord';
-const LOOKS_LIKE_HELP = 'Drawn by the bot from the saved words, alone — on a post it rides under '
-  + 'the post\'s own message. A list that changes by itself is drawn with sample entries.';
 const BLOCKS_FOLD_KEY = 'bb_blocks_fold';
 const BLOCKS_FOLD_MANY = 3;
 const FOLD_ALL = 'Fold all';
@@ -104,16 +90,12 @@ const NO_BLOCK_MATCH = 'No block matches this filter.';
 const STYLE_WORDS = { plain: 'a plain message', embed: 'an embed' };
 // Site words, not posted words: the "every word the bot posts is editable on the site" rule
 // is about what Discord shows. These are the dashboard talking to staff.
-const PASTE_HINT = 'Paste keeps formatting';
 const PASTE_KEPT = 'Pasted with formatting kept (headings, bold, bullets, links). '
   + 'Undo with Ctrl+Z.';
 const PASTE_DISMISS = 'Dismiss';
 const IMPORT_FOLD = 'Import from a Google Doc';
 const IMPORT_PLACEHOLDER = 'https://docs.google.com/document/d/…';
 const IMPORT_IT = 'Import';
-const IMPORT_HELP = 'The doc must be shared Anyone with the link → Viewer. Its words replace the '
-  + 'message box as an unsaved draft — nothing is saved or posted until you press Save Changes or '
-  + 'Post it.';
 const IMPORT_NO_LINK = "Paste a Google Doc's link into the box first — nothing was fetched.";
 const IMPORT_REPLACE_TITLE = 'Replace the message with the doc?';
 const IMPORT_REPLACE_BODY = 'The message box already has words in it. The doc replaces them as an '
@@ -130,11 +112,8 @@ const BOX_WORDS = { embed: 'the embed box, like the welcome post', plain: 'a pla
 const IMPORT_RESTYLED = ' The style is set to {box} too — also unsaved.';
 const NEW_SCRATCH = 'Start from scratch';
 const NEW_IMPORT = 'Import a Google Doc';
-const NEW_TITLE_HELP = 'The title staff see here, and the embed title if you set the style to an embed.';
 const NEW_DOC_LINK = 'The Google Doc’s link';
-const NEW_DOC_HELP = 'Shared Anyone with the link → Viewer. Nothing is posted to Discord — the new post '
-  + 'opens for you to check first.';
-const NEW_DOC_TITLE_HELP = 'Fills with the doc’s own title, else its title line or first heading, once it is read — or “{untitled}” when it has none, numbered {untitled}-1, {untitled}-2 if that is taken. Change it if you like; a title you type is never numbered.';
+const NEW_DOC_TITLE_HINT = 'fills in from the doc';
 const NEW_READ_IT = 'Read the doc';
 const NEW_READ = 'Read “{title}” — {count} characters, as {box}. Check the title, then press Create the post.';
 const NEW_OVER = '“{title}” is {count} characters and {style} holds {cap}, so nothing was made. Shorten '
@@ -625,7 +604,6 @@ async function postDrawer(payload, known, history) {
   });
   const importFold = foldout(IMPORT_FOLD, [
     el('div', { class: 'docimport' }, [docLink, importButton]),
-    el('p', { class: 'field-help', text: IMPORT_HELP }),
     importSay,
   ]);
   importFold.classList.add('docimportfold');
@@ -756,7 +734,6 @@ async function postDrawer(payload, known, history) {
         class: 'field-help',
         text: HELD_LINE.replace('{name}', kind.name).replace('{title}', kind.on[0].title),
       })),
-      el('p', { class: 'field-help', text: BLOCKS_HELP }),
     ].filter(Boolean));
   };
   paintBlocks();
@@ -842,19 +819,16 @@ async function postDrawer(payload, known, history) {
     marks,
     whereLine,
     el('div', { class: 'formrow' }, [
-      field('Title', title, 'Staff see this here; an embed shows it at the top of the message.'),
-      field('Channel', channel, 'Where the message lives. Black Bloc edits that one message.'),
+      field('Title', title),
+      field('Channel', channel),
     ]),
     el('div', { class: 'formrow' }, [
-      field('Style', style, 'A plain message renders # headers; an embed holds more but does not.'),
+      field('Style', style),
     ]),
     el('div', { class: 'postgrid' }, [
       el('div', { class: 'postcol' }, [
         el('div', { class: 'postboxhead' }, [
-          el('span', { class: 'postboxlabel' }, [
-            el('label', { class: 'field-label', for: 'post-body', text: 'The message' }),
-            el('span', { class: 'field-help pastehint', text: PASTE_HINT }),
-          ]),
+          el('label', { class: 'field-label', for: 'post-body', text: 'The message' }),
           counter,
         ]),
         formatBar(box),
@@ -974,7 +948,7 @@ function newPostDrawer(index) {
     if (done.ok) await opened(done);
   }, { tone: 'warn', small: false });
   const scratch = el('div', { class: 'newpost-pane', id: 'new-scratch' }, [
-    el('div', { class: 'formrow' }, [field('What is it called?', title, NEW_TITLE_HELP)]),
+    el('div', { class: 'formrow' }, [field('What is it called?', title)]),
     bar([make]),
   ]);
 
@@ -986,7 +960,7 @@ function newPostDrawer(index) {
     spellcheck: 'false',
     autocomplete: 'off',
   });
-  const docTitle = el('input', { class: 'input', type: 'text', id: 'new-import-title' });
+  const docTitle = el('input', { class: 'input', type: 'text', id: 'new-import-title', placeholder: NEW_DOC_TITLE_HINT });
   let fetched = null;
   let typed = false;
   docTitle.addEventListener('input', () => { typed = true; });
@@ -1067,8 +1041,8 @@ function newPostDrawer(index) {
     readIt.click();
   });
   const fromDoc = el('div', { class: 'newpost-pane', id: 'new-import' }, [
-    field(NEW_DOC_LINK, el('div', { class: 'docimport' }, [link, readIt]), NEW_DOC_HELP),
-    field('What is it called?', docTitle, NEW_DOC_TITLE_HELP.split('{untitled}').join(untitled)),
+    field(NEW_DOC_LINK, el('div', { class: 'docimport' }, [link, readIt])),
+    field('What is it called?', docTitle),
     bar([createIt]),
   ]);
   fromDoc.hidden = true;
@@ -1085,7 +1059,7 @@ function newPostDrawer(index) {
 
 function postsSection(payload, say) {
   const rows = payload.posts.map((post) => ({ post, node: postRow(post, payload) }));
-  const list = section('The posts', LIST_NOTE, { count: payload.posts.length, open: true });
+  const list = section('The posts', null, { count: payload.posts.length, open: true });
   const foot = el('div', { class: 'grid-foot' });
   const grid = el('div', { class: 'grid-table', style: 'min-width: 760px' }, [
     headRow(),
@@ -1193,7 +1167,7 @@ function setAllBlockFolds(cards, folded) {
 async function blocksSection(payload) {
   const kinds = payload.block_kinds || [];
   const defaultFolded = kinds.length > BLOCKS_FOLD_MANY;
-  const one = section('Blocks', BLOCKS_SECTION_NOTE, { id: 'blocks', count: kinds.length });
+  const one = section('Blocks', null, { id: 'blocks', count: kinds.length });
   const cards = [];
   for (const kind of kinds) {
     const editor = BLOCK_EDITORS[kind.kind];
@@ -1238,7 +1212,6 @@ function blockLook(kind) {
   return el('div', { class: 'field blocklook', 'data-kind': kind.kind }, [
     el('span', { class: 'field-label', text: LOOKS_LIKE }),
     el('div', { class: 'preview' }, [mock.node, mock.say]),
-    el('p', { class: 'field-help', text: LOOKS_LIKE_HELP }),
   ]);
 }
 
@@ -1249,10 +1222,9 @@ function unsectioned(node) {
 }
 
 async function machinerySection(specs) {
-  const one = section('Settings and logs', MACHINERY_NOTE, { id: 'machinery' });
+  const one = section('Settings and logs', null, { id: 'machinery' });
   one.body.append(
     foldout('Settings', [
-      el('p', { class: 'field-help', text: SETTINGS_NOTE }),
       await settingsPanel(specs, { where: 'Posts', onSaved: () => refresh() }),
     ], { count: specs.length }),
     foldout('Logs', unsectioned(await logsSection('posts'))),

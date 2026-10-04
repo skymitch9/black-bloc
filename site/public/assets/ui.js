@@ -2067,6 +2067,17 @@ export function placeholderChips(box, tokens, { label = 'Insert' } = {}) {
   })));
 }
 
+export function wordAids(box, spec = null, { tokens = null } = {}) {
+  const shipped = spec && typeof spec.default === 'string' ? spec.default : '';
+  if (shipped && !box.placeholder) box.placeholder = shipped;
+  const chips = placeholderChips(box, tokens || placeholdersOf(spec));
+  const max = Number(box.getAttribute('maxlength')) || 0;
+  const made = document.createDocumentFragment();
+  if (chips) made.append(chips);
+  if (max) made.append(limitCounter(box, max));
+  return made;
+}
+
 export function limitCounter(input, max, { hard = true } = {}) {
   const node = el('span', { class: 'counter limit-counter', role: 'status', hidden: true });
   if (hard) input.setAttribute('maxlength', String(max));
