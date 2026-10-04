@@ -4052,3 +4052,16 @@ from the branch, then <http://localhost:8811/schedule.html#marathon-1> (a tracke
 | **`MT-h`** | Settings ▸ Marathons ▸ *Seconds between reads on the Marathon tracker page* (`marathon_tracker_refresh_seconds`) | **30**. 10 and 300 save; 9 and 301 are refused in words. Reload the tracker: the line says *re-reads every <that> seconds*. `/settings set-value` reaches it too. |
 | **`MT-i`** | ⚠️ **Discord only.** A tracked marathon's thread ▸ the pinned controls | A link button **Marathon tracker ↗** after the switches (second row); it opens that marathon's page. Controls posted before the deploy gain it within a minute of the bot coming back, with no new message. Settings ▸ Marathons ▸ *The thread controls' Marathon tracker link button* changes its label within a minute. |
 | **`MT-j`** | The tracker of a GDQ-tracker marathon (AGDQ / SGDQ), and of an archived one (`#marathon-<archived id>`) | Tracker: *from the tracker* under every time and **Following the tracker** in the pill until a run is seen starting. Archived: its schedule as it ended, the sentence that nothing can be changed, no move buttons, nothing under *What the bot posts next*. |
+
+## Replays mid-stream — rows `RM-a` … `RM-e` (branch `replay-midstream`, 2026-10-04, BUILT, NOT MERGED)
+
+Design: `../info/spotlight-design.md` ▸ *Follow-up 2026-10-04 — replays mid-stream*. None of these has been seen on Discord.
+
+| # | Feature | Do this | Expect |
+|---|---|---|---|
+| `RM-a` | Downgrade | With `gamesdonequick` live, spotlighted and pinned, wait for its title to open with `[Replay]`; read `#golive` two polls later | The SAME message now reads **GamesDoneQuick** is showing a replay — … with no card and no role mention; it is no longer pinned; no new message; Logs has `golive.replay_began` (`reason: tag:replay`) and `golive.spotlight_unpinned` (`because: replay`) |
+| `RM-b` | No reminders | Leave the replay running past `spotlight_bump_hours` | No "still live" post; the earlier reminders are gone when `spotlight_bump_cleanup` is on |
+| `RM-c` | The run ends | Open the marathon's tracker page after `RM-a` | The run that was *on now* is *done*; its history line says *a replay starting on the stream*; the next day's times have not moved |
+| `RM-d` | Upgrade | When the live title returns (no leading tag), read `#golive` two polls later | ONE new full announcement, pinned, with the role mention the row's gate allows; the replay-worded message is deleted; Logs has one `golive.replay_upgraded`; no reminder right after it |
+| `RM-e` | The page | Go-live page ▸ the channel while the replay runs; Settings ▸ Replays drawer | The state line reads *Replay detected (the title opens with “replay”)* with **Treat as live**; the drawer shows the four new rows and each saves |
+
