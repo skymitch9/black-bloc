@@ -267,3 +267,26 @@ async def sheet_times(
         )
         await cog.sync_board(guild, await get_marathon(bot.db, guild.id, fresh["id"]))
     return Outcome(True, sig.SHEET_TIMES_DONE.format(name=fresh["name"], count=len(back)))
+
+
+async def replay_began(bot: Any, guild: Any, spotlight_id: Any) -> int:
+    """How many live runs the replay ended; nothing is anchored and nothing is re-timed."""
+    from ...golive_replay import BECAUSE_REPLAY
+    from .marathon import cog_of, get_marathon, runs_of
+    from .marathon_channels import marathons_on_channel
+
+    cog = cog_of(bot)
+    if cog is None:
+        return 0
+    ended = 0
+    for marathon in await marathons_on_channel(bot.db, guild.id, spotlight_id):
+        async with cog.lock(marathon["id"]):
+            live = [
+                row for row in await runs_of(bot.db, marathon["id"]) if row["state"] == mt.LIVE
+            ]
+            for row in live:
+                await cog.finish(guild, marathon, row, because=BECAUSE_REPLAY)
+            if live:
+                await cog.sync_board(guild, await get_marathon(bot.db, guild.id, marathon["id"]))
+            ended += len(live)
+    return ended

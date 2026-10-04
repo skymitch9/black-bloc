@@ -6530,7 +6530,7 @@ function raidDetail(row) {
 
 const MARATHON_STATE_WORDS = { upcoming: 'coming up', live: 'on now', done: 'done', dropped: 'off the schedule' };
 const MARATHON_PHASE_WORDS = { far: 'far off', near: 'coming up', live: 'on now', over: 'over', paused: 'paused' };
-const MARATHON_BECAUSE_WORDS = { title: "the stream's title", category: "the stream's Twitch category", 'title+category': "the stream's title and Twitch category", schedule: "the schedule's clock", staff: 'staff' };
+const MARATHON_BECAUSE_WORDS = { title: "the stream's title", category: "the stream's Twitch category", 'title+category': "the stream's title and Twitch category", schedule: "the schedule's clock", staff: 'staff', replay: 'a replay starting on the stream' };
 // The bot's marathon_sources.RETIMES_ITSELF: only the Hotfix sheet leaves the clock to Black Bloc.
 const MARATHON_KEEPS_CLOCK = new Set(['gdq_hotfix']);
 const MARATHON_GDQ = /^https?:\/\/(?:www\.)?gamesdonequick\.com\/schedule\/(\d+)\/?(?:[?#].*)?$/i;
