@@ -46,6 +46,7 @@ SPOT_OF_STATE = {
 LABEL_LIMIT = 80
 POSTED_REASON = "Black Bloc: the marathon's controls"
 BECAUSE_STARTED = "staff_started"
+TRACKER_PAGE = "{origin}/schedule.html#marathon-{marathon_id}"
 
 
 class Control(NamedTuple):
@@ -121,6 +122,14 @@ def controls(
     )
 
 
+def tracker_url(origin: Any, marathon_id: Any) -> str | None:
+    """The marathon's Marathon tracker page on the site; None while the site has no address."""
+    base = str(origin or "").strip().rstrip("/")
+    if not base.startswith(("https://", "http://")):
+        return None
+    return TRACKER_PAGE.format(origin=base, marathon_id=int(marathon_id))
+
+
 def label(text: Any) -> str:
     return str(text or "").strip()[:LABEL_LIMIT] or "…"
 
@@ -137,5 +146,6 @@ __all__ = [
     "spot_control",
     "spot_word",
     "switch",
+    "tracker_url",
     "wanted_mode",
 ]

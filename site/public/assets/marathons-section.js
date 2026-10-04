@@ -30,6 +30,7 @@ import {
   trackedLine,
   whenWords,
 } from './marathon-words.js';
+import { trackerLink } from './schedule-link.js';
 import { announceMoves, announcedSaid, pingsCard, spotlightCard } from './spotlight-controls.js';
 import {
   ask,
@@ -1218,6 +1219,7 @@ async function marathonDrawer(marathon, board, message) {
   if (message) say.say(message, 'ok');
   return [
     say,
+    bar([trackerLink(marathon.id)]),
     ...headerBlock(marathon, board, say),
     overlayLine(marathon),
     ...spotlightBlock(marathon, say),
@@ -1775,6 +1777,7 @@ function listSection(payload, feeds, say, archive) {
       text: scheduleCell(row),
     }) },
     { label: 'Event', cell: (row) => eventCell(row) },
+    { label: '', cell: (row) => trackerLink(row.id) },
   ], rows, { empty: NOTHING_YET });
   const switched = cadence.modeSpec
     ? modeSwitch(cadence.modeSpec, { onSaved: () => refresh() })

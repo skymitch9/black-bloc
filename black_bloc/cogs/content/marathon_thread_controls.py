@@ -52,6 +52,7 @@ from ...settings_store import (
     MARATHON_CONTROLS_SPOTLIGHT_ON_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_WAITING_KEY,
     MARATHON_CONTROLS_STARTED_KEY,
+    MARATHON_CONTROLS_TRACKER_KEY,
     MARATHON_CONTROLS_WAITS_KEY,
 )
 from ...spotlight import reason_of, window_when
@@ -173,10 +174,22 @@ def label_moment(value: Any, tz_name: Any) -> str:
     return f"{window_when(value, tz_name)} {local.tzname() or ''}".strip()
 
 
-def view_of(marathon_id: Any, controls: tuple, labels: tuple[str, ...]) -> discord.ui.View:
+def tracker_link(bot: Any, guild: Any, marathon: Any) -> tuple[str, str] | None:
+    """`(label, url)` for the link button to the marathon's page on the site."""
+    url = mtc.tracker_url(getattr(getattr(bot, "settings", None), "origin", ""), marathon["id"])
+    if url is None:
+        return None
+    return (mtc.label(words(bot, guild.id, MARATHON_CONTROLS_TRACKER_KEY)), url)
+
+
+def view_of(
+    marathon_id: Any, controls: tuple, labels: tuple[str, ...], link: Any = None
+) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     for one, text in zip(controls, labels, strict=True):
         view.add_item(ControlButton(marathon_id, one.action, one.to, text, one.disabled, one.word))
+    if link is not None:
+        view.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=link[0], url=link[1]))
     return view
 
 
@@ -186,11 +199,12 @@ async def post_controls(bot: Any, guild: Any, marathon: Any, thread: Any) -> Any
     if guard is not None and not guard.allows_channel(thread.id):
         return None
     content, controls, labels = await rendered(bot, guild, marathon)
+    link = tracker_link(bot, guild, marathon)
     base = {"marathon_id": marathon["id"], "name": marathon["name"], "thread_id": int(thread.id)}
     try:
         message = await thread.send(
             content,
-            view=view_of(marathon["id"], controls, labels),
+            view=view_of(marathon["id"], controls, labels, link),
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except Exception as exc:
@@ -207,7 +221,7 @@ async def post_controls(bot: Any, guild: Any, marathon: Any, thread: Any) -> Any
         shown_cache(cog)[int(marathon["id"])] = (
             int(thread.id),
             int(message.id),
-            (content, controls, labels),
+            (content, controls, labels, link),
         )
     pinned = True
     try:
@@ -259,19 +273,19 @@ async def refresh_controls(bot: Any, guild: Any, marathon_id: Any) -> str:
         if not has_home(bot, guild, fresh) or not _cell(fresh, "controls_message_id"):
             return "skipped"
         thread_id, message_id = int(fresh["thread_id"]), int(fresh["controls_message_id"])
-        shown = await rendered(bot, guild, fresh)
+        shown = (*await rendered(bot, guild, fresh), tracker_link(bot, guild, fresh))
         if shown_cache(cog).get(key) == (thread_id, message_id, shown):
             return "same"
         thread, _lost = await find_channel(bot, guild, thread_id)
         if thread is None:
             return "skipped"
         await reopened(thread)
-        content, controls, labels = shown
+        content, controls, labels, link = shown
         try:
             message = await message_in(thread, message_id)
             await message.edit(
                 content=content,
-                view=view_of(key, controls, labels),
+                view=view_of(key, controls, labels, link),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except (discord.NotFound, LookupError):

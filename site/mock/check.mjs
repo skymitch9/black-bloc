@@ -84,6 +84,7 @@ const IDS = {
   // marathon-category-track: GDQueer (50) keeps its own clock and is re-timed in the seed, so
   // Back to the sheet's times reaches it.
   marathon_retimed_id: '50',
+  tracker_marathon_id: '60',
   // The archive: SGDQ 2026 (40) was moved by the sweep with Rivet as BaF, so the Archive list,
   // the read-only drawer, its People card and Restore all reach it.
   marathon_archived_id: '40',

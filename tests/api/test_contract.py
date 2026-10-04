@@ -1032,6 +1032,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_over_id": str(marathon_over_id),
         "marathon_bare_id": str(marathon_id),
         "marathon_retimed_id": str(marathon_id),
+        "tracker_marathon_id": str(marathon_id),
         "marathon_waiting_id": str(marathon_waiting_id),
         "marathon_unposted_id": str(marathon_waiting_id),
         "marathon_archived_id": str(marathon_archived_id),

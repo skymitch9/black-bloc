@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mountTracker, trackerSeed } from './schedule.mjs';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = resolve(HERE, '..', 'public');
@@ -720,6 +721,7 @@ const SETTING_SPECS = [
   ["marathon_reminder_stale_minutes", "int", 30, 30, "minutes past its moment after which a reminder is skipped and logged instead of posted late. 30 by default", null, 240, 1],
   ["marathon_reminder_on_move", "enum", "edit", "edit", "what happens to a reminder already posted when its run (or its host block) moves: edit rewrites that post in place with the new time — any size of move, earlier or later, in the staff thread and the public channel alike — pings nobody, and never posts that mark a second time; a run taken off the schedule gets marathon_reminder_dropped_template. repost leaves the old post as it was and, when the run moves later by marathon_move_minutes or more, posts the reminder again at the new time (pinging again at marathon_ping_minutes). edit by default", ["edit", "repost"]],
   ["marathon_reminder_edit_limit", "int", 10, 10, "how many posted reminders one marathon may rewrite per minute while marathon_reminder_on_move is edit — when a whole day shifts, the soonest runs are corrected first and the rest follow a minute later. 10 by default", null, 50, 1],
+  ["marathon_tracker_refresh_seconds", "int", 30, 30, "seconds between one read and the next on a marathon's Marathon tracker page on the site, while the tab is open and showing — the page re-reads itself so a run going live, finishing or moving shows without a reload. 30 by default", null, 300, 10],
   ["marathon_pin_board", "bool", true, true, "whether a marathon's board is pinned while the marathon is on; it comes down a day after the marathon ends. on by default"],
   ["marathon_edit_done", "bool", true, true, "whether a shoutout is rewritten in the past tense when the run is over. on by default"],
   ["marathon_runner_posts", "bool", true, true, "whether each BaF run gets its own post in the marathon's thread, edited in place as its slot moves, goes live, ends or is dropped, and the board is only its head. off = the board lists every BaF run as before. on by default"],
@@ -913,6 +915,7 @@ const SETTING_SPECS = [
   ["marathon_hotfix_overlay_default", "bool", true, true, "whether a Hotfix marathon takes its start times, hosts and commentators from the event's own schedule sheet when the viewer page links one that matches it — while the marathon's own Event schedule switch follows this setting. Off, such a marathon keeps GDQ's sheet times (the show's start plus the estimates) and its host column. on by default"],
   ["marathon_controls_overlay_on", "text", "Event schedule: on · turn off", "Event schedule: on · turn off", "the thread controls' event-schedule button while a Hotfix marathon takes its times, hosts and commentators from the event's own schedule sheet. The button is there only when the viewer page links a sheet that matches the marathon"],
   ["marathon_controls_overlay_off", "text", "Event schedule: off · turn on", "Event schedule: off · turn on", "the thread controls' event-schedule button while a Hotfix marathon keeps GDQ's sheet times although the event has a schedule sheet of its own"],
+  ["marathon_controls_tracker", "text", "Marathon tracker ↗", "Marathon tracker ↗", "the link button on a tracked marathon's thread controls that opens its Marathon tracker page on the site — the runs in order with the times the bot is working from"],
   ["marathon_overlay_on_said", "text", "**{marathon}** takes its start times, hosts and commentators from the event's own schedule sheet now, when the viewer links one that matches. The schedule is being read again.", "**{marathon}** takes its start times, hosts and commentators from the event's own schedule sheet now, when the viewer links one that matches. The schedule is being read again.", "what staff are told once a marathon's Event schedule switch is on. It takes {marathon}"],
   ["marathon_overlay_off_said", "text", "**{marathon}** keeps GDQ's sheet times and host column now — the event's own schedule sheet is not laid over it. The schedule is being read again.", "**{marathon}** keeps GDQ's sheet times and host column now — the event's own schedule sheet is not laid over it. The schedule is being read again.", "what staff are told once a marathon's Event schedule switch is off. It takes {marathon}"],
   ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the line above a feed-found marathon's message in the marathon inbox thread, where Track and Ignore are. It takes {feed} {event} {when} {relative} {url} {channel}"],
@@ -6628,6 +6631,7 @@ function seedMarathonRuns() {
     run(50, 50, 1, 0, 'Spyro Reignited Trilogy', 'Spyro the Dragon: 80 Dragons NBS', [marathonPerson('Toronite', 'toronite', 'runner')], hotfixRun('17:00', '18:08', '1', ['17:20', '18:28'], { state: 'live', live_because: 'title+category', actual_started_at: '2026-10-03T17:20:00+00:00' })),
     run(51, 50, 2, 0, 'Hamtaro: Ham-Hams Unite!', 'Any%', [marathonPerson('PumpkinPower14', 'pumpkinpower14', 'runner')], hotfixRun('18:08', '19:00', '2', ['18:28', '19:20'])),
     run(52, 50, 3, 0, 'Bombun', 'Any% NG+', [marathonPerson('debeaunairVT', 'debeaunairvt', 'runner')], hotfixRun('19:00', '19:46', null, ['19:20', '20:06'])),
+    ...trackerSeed(MEMBERS, STAFF.id).runs,
   ];
 }
 
@@ -6646,6 +6650,7 @@ function seedMarathons() {
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     // Found by the GDQ Hotfix feed on the Hotfix sheet: GDQueer's two days are one marathon.
     { id: 50, name: 'GDQueer', schedule_url: 'https://gamesdonequick.com/hotfix/schedule#gdqueer/2026-10-03', source: 'gdq_hotfix', source_ref: 'gdqueer/2026-10-03', spotlight_id: 1, feed_id: 40, starts_at: '2026-10-03T17:00:00+00:00', ends_at: '2026-10-05T03:09:00+00:00', active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(25), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(25), overlay: null, overlay_sheet: { label: 'Games Done Queer \u{1F4C5} Oct 3-4', url: MARATHON_OVERLAY_SHEET, runs: 24, matched: 24, by_order: 0, applied: true, stale: null } },
+    trackerSeed(MEMBERS, STAFF.id).marathon,
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
   ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, public_highlight: false, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
 }
@@ -8857,6 +8862,8 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/done', (context) => {
   logAction('web.marathon.run_done', { details: { marathon_id: row.id, run_id: run.id, because: 'staff', via: 'website' } });
   return { run: marathonRunRow(run), message: `**${run.game}** is marked done.` };
 });
+
+mountTracker({ route, Refused, requireStaff, actorOf, memberName, logAction, state: () => state, marathonOf, marathonRow, keepsClock: MARATHON_KEEPS_CLOCK });
 
 route('GET', '/api/raidtrains/status', (context) => {
   requireStaff(context.session);

@@ -61,6 +61,7 @@
       "marathon_spotlight_lead_minutes": 0,
       "marathon_spotlight_slack_hours": 0,
       "marathon_spotlight_tail_minutes": 0,
+      "marathon_tracker_refresh_seconds": 10,
       "marathon_window_slack_hours": 0,
       "minutes_chunk_seconds": 30,
       "minutes_keep_days": 1,
@@ -132,6 +133,7 @@
       "marathon_spotlight_lead_minutes": 240,
       "marathon_spotlight_slack_hours": 48,
       "marathon_spotlight_tail_minutes": 720,
+      "marathon_tracker_refresh_seconds": 300,
       "marathon_window_slack_hours": 24,
       "minutes_chunk_seconds": 120,
       "minutes_keep_days": 365,
@@ -6321,6 +6323,96 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/api/marathons/{tracker_marathon_id}/schedule",
+      "read_by": [
+        "page-schedule.js (schedule.html) the whole tracker in one read, re-read on a timer"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon",
+        "editable",
+        "kind",
+        "times_from",
+        "times_from_word",
+        "timezone",
+        "now",
+        "refresh_seconds",
+        "moves_by",
+        "setup_minutes",
+        "heads_up_minutes",
+        "today",
+        "days",
+        "rows",
+        "next_posts",
+        "moves",
+        "undo"
+      ],
+      "nested": {
+        "marathon": [
+          "id",
+          "name",
+          "source",
+          "source_word",
+          "schedule_page",
+          "last_fetched_at",
+          "phase",
+          "phase_word",
+          "next_read_at",
+          "channel_login",
+          "watch_url"
+        ],
+        "undo": [
+          "available",
+          "text"
+        ]
+      },
+      "rows": {
+        "days": [
+          "key",
+          "label",
+          "starts_at",
+          "runs",
+          "baf",
+          "drift_minutes",
+          "staff_times",
+          "staff_estimates",
+          "can_shift",
+          "can_reset",
+          "upcoming"
+        ],
+        "rows": [
+          "id",
+          "day",
+          "game",
+          "category",
+          "people",
+          "ours",
+          "state",
+          "start_at",
+          "ends_at",
+          "from",
+          "plan_at",
+          "plan_from",
+          "off_plan_minutes",
+          "estimate_seconds",
+          "estimate_from",
+          "next_up",
+          "can"
+        ],
+        "next_posts": [
+          "at",
+          "kind",
+          "run_id",
+          "day",
+          "passed",
+          "text",
+          "minutes",
+          "role"
+        ]
+      }
+    },
+    {
       "method": "POST",
       "path": "/api/marathons/{marathon_id}/runs/{marathon_run_id}/live",
       "read_by": [
@@ -8913,7 +9005,8 @@
     "/requests.html",
     "/guides.html",
     "/posts.html",
-    "/minutes.html"
+    "/minutes.html",
+    "/schedule.html"
   ],
   "action_kinds": [
     "web.operator.read",

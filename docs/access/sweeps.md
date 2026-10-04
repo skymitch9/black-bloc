@@ -4029,3 +4029,26 @@ Local check first: `MOCK_PORT=8823 node site/mock/server.mjs` from the branch, t
 | **`RE-f`** | ⚠️ **Discord only.** Delete one posted heads-up by hand, then let its run move | It is not posted again. One `marathon.reminder_lost` row (`reason: message_gone`), and no more after it. |
 | **`RE-g`** | ⚠️ **Discord only.** A run with a heads-up out is taken off the schedule | The post reads *"@member runs **Game** (Category) on **Marathon** — off the schedule."* (`marathon_state_dropped`); if the run comes back, its time comes back. |
 | **`RE-h`** | ⚠️ **Discord only.** A BaF HOST block with a heads-up out moves | The block's public heads-up is edited the same way (`marathon.host_reminder_edited`), not posted again. |
+
+## Rows `MT-a` … `MT-j` — Marathon tracker: the schedule page on the real bot, re-reading itself (branch `runsheet-live`, 2026-10-03)
+
+🔨 **BUILT on branch `runsheet-live`, NOT merged, NOT deployed, NOT seen against the real bot in a browser.**
+Owner, 2026-10-03: *"for now lets send the schedule pages live with auto updates"*, and *"call it a marathon
+tracker and make the url schedule"*. Design: [`../info/schedule-viewer-design.md`](../info/schedule-viewer-design.md)
+▸ *Live, read-only 2026-10-03*. Local check first: `MOCK_PORT=8811 MOCK_TEST_MODE=0 node site/mock/server.mjs`
+from the branch, then <http://localhost:8811/schedule.html#marathon-1> (a tracker — the live code path) and
+<http://localhost:8811/schedule.html#marathon-60> (the prototype's editable sheet). After a deploy:
+<https://blackbloc.heygabi.ai/schedule.html#marathon-9> (GDQueer). Phoenix times (UTC−7).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MT-a`** | Events ▸ Marathons: any row, and the top of any marathon's drawer | A **Marathon tracker** button; it opens `/schedule.html#marathon-<id>`. The words "run sheet" appear nowhere. |
+| **`MT-b`** | Open GDQueer's tracker | Heading *GDQueer — <day>*; one pill (*Running N min behind / ahead*, *On time*, or *Every run has started*); *times from the organisers' sheet*; *source read … ago*; *next read <time>*; **Watch on Twitch ↗**; the sentence that Black Bloc keeps the clock and times cannot be typed here yet. Times are in YOUR zone, 12-hour. |
+| **`MT-c`** | The same page, each run row | Under each start, where it came from: *seen on stream* (green) on runs the stream confirmed, *follows the run before* on the runs after one, *organisers' sheet* on a day nothing has started; *sheet said <time>* when the two differ. BaF people carry ✦BaF; a name with a known channel is a link (↗). |
+| **`MT-d`** | The same page: look for *Behind 5*, *Edit…*, *Skip this run*, *Undo last move*, *Back to the source's times* | **None of them is drawn.** The live run has **Finished now**; upcoming runs have **Started now** (the next one solid, the rest quiet); a done or upcoming run has **More…** with *Mark live again* / *Mark done*. |
+| **`MT-e`** | Leave the page open through a run change on the stream (or have someone press *Mark live* on a run from the Events drawer) | Within the refresh time the row turns *live* with an outline for a few seconds, the runs after it move, and the pill changes — **no reload, the scroll does not jump**. The line under the header counts *Updated N seconds ago*. |
+| **`MT-f`** | Switch to another tab for a few minutes, then back | The page reads at once on return (*Updated just now*). |
+| **`MT-g`** | Turn the network off (devtools ▸ Offline) for one refresh, then on | *Could not update just now — Black Bloc did not answer. The times below are as they stood at <time>. Trying again in N seconds.* in the warn colour, the sheet still up; the next good read clears it. Never a status number. |
+| **`MT-h`** | Settings ▸ Marathons ▸ *Seconds between reads on the Marathon tracker page* (`marathon_tracker_refresh_seconds`) | **30**. 10 and 300 save; 9 and 301 are refused in words. Reload the tracker: the line says *re-reads every <that> seconds*. `/settings set-value` reaches it too. |
+| **`MT-i`** | ⚠️ **Discord only.** A tracked marathon's thread ▸ the pinned controls | A link button **Marathon tracker ↗** after the switches (second row); it opens that marathon's page. Controls posted before the deploy gain it within a minute of the bot coming back, with no new message. Settings ▸ Marathons ▸ *The thread controls' Marathon tracker link button* changes its label within a minute. |
+| **`MT-j`** | The tracker of a GDQ-tracker marathon (AGDQ / SGDQ), and of an archived one (`#marathon-<archived id>`) | Tracker: *from the tracker* under every time and **Following the tracker** in the pill until a run is seen starting. Archived: its schedule as it ended, the sentence that nothing can be changed, no move buttons, nothing under *What the bot posts next*. |

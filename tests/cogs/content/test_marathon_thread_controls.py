@@ -137,6 +137,7 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         "Auto-highlight BaF runners when live: off · turn on",
         "Ping the marathon role: off · turn on",
         "BaF announcements: on · turn off",
+        "Marathon tracker ↗",
     ]
     ids = [one.custom_id for one in buttons(message)]
     assert ids == [
@@ -146,6 +147,7 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         f"marathon:controls:{marathon['id']}:highlight:on",
         f"marathon:controls:{marathon['id']}:ping:on",
         f"marathon:controls:{marathon['id']}:announce:off",
+        None,
     ]
     assert message.kwargs["allowed_mentions"].users is False
     posted = await details_of(bot.db, "marathon.controls_posted")
@@ -697,7 +699,7 @@ async def test_a_removed_host_button_answers_in_words_and_changes_nothing(
         before["host_events"],
         before["event_mode"],
     )
-    assert len(labels(message)) == 6
+    assert len(labels(message)) == 7
 
 
 async def test_a_removed_host_button_clicked_in_discord_answers_in_words(bot, cog):
@@ -736,3 +738,54 @@ async def test_a_rename_re_renders_the_controls_and_the_inbox_post_but_not_the_t
     posted = [one for one in inbox_thread.messages if one.embeds]
     assert [one.embeds[-1].title for one in posted] == ["AGDQ 2027: Soul Train"]
     assert thread.name == "AGDQ 2027"
+
+
+# --- the Marathon tracker link ------------------------------------------------------------------
+
+
+def link_of(message):
+    return [one for one in buttons(message) if getattr(one, "url", None)]
+
+
+async def test_the_controls_carry_one_link_to_the_marathons_tracker_page(bot, cog):
+    marathon = await tracked_marathon(bot, cog, channel=await quiet_row(bot))
+    message = controls_in(the_thread(bot))[0]
+
+    found = link_of(message)
+
+    assert [one.label for one in found] == ["Marathon tracker ↗"]
+    assert found[0].url == f"{bot.settings.origin}/schedule.html#marathon-{marathon['id']}"
+    assert buttons(message)[-1] is found[0]
+    assert len(buttons(message)) <= 25 and not found[0].custom_id
+
+
+async def test_the_link_label_is_a_key_and_a_posted_message_takes_it_on_the_tick(bot, cog):
+    await tracked_marathon(bot, cog, channel=await quiet_row(bot))
+    await cog.tick_once()
+    message = controls_in(the_thread(bot))[0]
+    before = len(message.edits)
+
+    await bot.store.set(GUILD, "marathon_controls_tracker", "Open the tracker")
+    await cog.tick_once()
+
+    assert [one.label for one in link_of(message)] == ["Open the tracker"]
+    assert len(message.edits) == before + 1
+    await cog.tick_once()
+    assert len(message.edits) == before + 1
+
+
+async def test_controls_posted_before_the_link_existed_gain_it_on_the_next_tick(bot, cog):
+    marathon = await tracked_marathon(bot, cog, channel=await quiet_row(bot))
+    message = controls_in(the_thread(bot))[0]
+    content, shown, said = await controls.rendered(bot, bot.guild, marathon)
+    await message.edit(content=content, view=controls.view_of(marathon["id"], shown, said))
+    controls.shown_cache(cog)[int(marathon["id"])] = (
+        int(marathon["thread_id"]),
+        int(message.id),
+        (content, shown, said),
+    )
+    assert link_of(message) == []
+
+    await cog.tick_once()
+
+    assert [one.label for one in link_of(message)] == ["Marathon tracker ↗"]

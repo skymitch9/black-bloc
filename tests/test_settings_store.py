@@ -2305,7 +2305,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 730
+    assert len(settings_store.KEY_TYPES) == 732
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2615,3 +2615,23 @@ def test_the_event_schedule_default_is_on_and_its_button_and_answers_are_words()
         assert "{marathon}" in settings_store.MARATHON_DEFAULTS[key]
         with pytest.raises(settings_store.SettingError):
             settings_store.coerce_value(key, "{member}")
+
+
+def test_the_tracker_refresh_is_a_marathon_int_from_10_to_300_and_30_by_default(store):
+    key = settings_store.MARATHON_TRACKER_REFRESH_KEY
+    assert key == "marathon_tracker_refresh_seconds"
+    assert settings_store.KEY_TYPES[key] == "int"
+    assert settings_store.namespace_of(key) == "marathon"
+    assert settings_store.MARATHON_DEFAULTS[key] == store.default(key) == 30
+    assert (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) == (10, 300)
+    for bad in (9, 301, True, "30"):
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(key, bad)
+
+
+def test_the_thread_controls_tracker_link_is_a_label_that_fits_a_button():
+    key = settings_store.MARATHON_CONTROLS_TRACKER_KEY
+    assert key == "marathon_controls_tracker"
+    assert settings_store.KEY_TYPES[key] == "text"
+    assert settings_store.MARATHON_DEFAULTS[key] == "Marathon tracker ↗"
+    assert len(settings_store.MARATHON_DEFAULTS[key]) <= 80

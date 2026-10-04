@@ -411,7 +411,8 @@ async def test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_
     assert button.custom_id.endswith(":optout") and button.label == "Opt out of highlight"
     assert len(controls_message.edits) > control_edits
     shown = [getattr(one, "item", one) for one in current_view(controls_message).children]
-    assert len(shown) == 6
+    assert len(shown) == 7 and shown[-1].label == "Marathon tracker ↗"
+    shown = [one for one in shown if one.custom_id]
     assert [one.label for one in shown][-2:] == [
         "Ping the marathon role: off · turn on",
         "BaF announcements: on · turn off",
