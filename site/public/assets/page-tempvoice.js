@@ -41,7 +41,6 @@ async function nameCard(spec) {
     },
   });
   const preview = card('What a spawned channel is called', [
-    el('p', { class: 'field-help', text: 'Filled in with a made-up member; {user} is whoever joined the lobby.' }),
     shown,
     made.say,
   ]);
@@ -172,13 +171,12 @@ async function load() {
   ], rows, { empty: 'No temporary channels are open right now.' });
 
   const setup = card('Setup and repair', [
-    el('p', { class: 'field-help', text: 'Safe to run twice; it does not delete anybody’s channel.' }),
     await lobbyLine(lobbies, say),
     bar([
       button('Run setup', async () => {
         const sure = await ask({
           title: 'Run temp voice setup?',
-          body: ['This creates or repairs the join-to-create channel in Discord.'],
+          body: ['This creates or repairs the join-to-create channel in Discord.', 'Safe to run twice; it does not delete anybody’s channel.'],
           confirmLabel: 'Run it',
           tone: 'warn',
         });
@@ -193,7 +191,7 @@ async function load() {
     sayAgain('tempvoice.setup', say),
   ]);
 
-  const one = section('Open now', 'These are live from Discord, not a stored guess.', {
+  const one = section('Open now', null, {
     count: rows.length,
   });
   one.body.append(list, sayAgain('tempvoice.rooms', roomsSay));

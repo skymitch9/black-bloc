@@ -26,11 +26,6 @@ import {
 
 const PER_PAGE = 25;
 
-const LOGS_NOTE = 'Every line Black Bloc has written, whether or not it said so in Discord. ' +
-  'Important means it acted on a member or something failed; everything else is routine.';
-const AUDIT_NOTE = 'Every settings change, whoever made it and however they made it.';
-const FROM_HELP = 'The first day to include.';
-const TO_HELP = 'The last day to include.';
 
 function paramsFor(state, { paged = true } = {}) {
   const found = new URLSearchParams();
@@ -94,7 +89,7 @@ async function auditSection() {
   const payload = await api('/api/settings/audit?limit=100');
   const rows = listOf(payload, 'audit');
   await names(idsIn(rows, ['updated_by_id']).concat(idsInValues(rows)));
-  const one = section('Settings audit', AUDIT_NOTE, { count: rows.length, id: 'settings-audit' });
+  const one = section('Settings audit', null, { count: rows.length, id: 'settings-audit' });
   one.body.append(settingsTable(rows));
   return { node: one.node, notes: notesOf(payload) };
 }
@@ -115,7 +110,7 @@ function logsSurface() {
     actor: null,
     target: null,
   };
-  const group = section('Logs', LOGS_NOTE, { id: 'logs' });
+  const group = section('Logs', null, { id: 'logs' });
   const results = el('div', { class: 'logs-results' });
   const chips = el('div', { class: 'chipbar logs-chips' });
   const csv = el('a', {
@@ -220,11 +215,11 @@ function logsSurface() {
     },
   });
 
-  const from = dateBox('From', FROM_HELP, state.since, (value) => {
+  const from = dateBox('From', null, state.since, (value) => {
     state.since = value;
     again();
   });
-  const to = dateBox('To', TO_HELP, state.until, (value) => {
+  const to = dateBox('To', null, state.until, (value) => {
     state.until = value;
     again();
   });
@@ -283,7 +278,7 @@ function logsSurface() {
     el('div', { class: 'formrow' }, [
       from.node,
       to.node,
-      field('Kind', kind, 'The start of a kind, like automod.'),
+      field('Kind starts with', kind),
     ]),
     el('div', { class: 'pickerrow' }, [actor.node, target.node]),
     bar([clear]),

@@ -3,6 +3,7 @@ import { start } from './app.js';
 import { logsSection } from './logs.js';
 import {
   ask,
+  badge,
   bar,
   button,
   card,
@@ -20,6 +21,7 @@ import {
 let refresh = () => {};
 let openMeeting = null;
 
+const AUDIO_FACT = 'The audio is never stored';
 const NOTES_PLACEHOLDER = 'Nothing has been written up for this meeting yet.';
 const NO_TRANSCRIPT = 'No words were transcribed for this meeting.';
 const RECORDING_NOTE = 'This meeting is still being recorded. Press Stop on /minutes in Discord ' +
@@ -44,13 +46,12 @@ function hostLines(host) {
 function transcriptCard(rows) {
   if (rows.length === 0) return card('Transcript', [sayNothing(NO_TRANSCRIPT)]);
   return card('Transcript', [
-    el('p', { class: 'field-help', text: `${rows.length} line(s), oldest first. Deleted after minutes_keep_days.` }),
     table([
       { label: 'When', cell: (row) => when(row.started_at), className: 'mono' },
       { label: 'Who', cell: (row) => row.speaker },
       { label: 'Said', cell: (row) => row.text },
     ], rows, { search: rows.length > 10 }),
-  ]);
+  ], { count: rows.length });
 }
 
 function notesCard(payload) {
@@ -156,7 +157,8 @@ async function load() {
   const [payload, allSettings] = await Promise.all([api('/api/minutes'), settings(true)]);
   const rows = listOf(payload, 'meetings');
 
-  const list = section('Meetings', `${rows.length} recorded.`, { count: rows.length });
+  const list = section('Meetings', null, { count: rows.length });
+  list.body.append(el('p', { class: 'field-help' }, [badge(AUDIO_FACT, 'ok')]));
   for (const line of notesOf(payload)) list.body.append(el('p', { class: 'field-help', text: line }));
   for (const line of hostLines(payload.host)) list.body.append(el('p', { class: 'field-help', text: line }));
   if (payload.guard && payload.guard.said) {
@@ -177,7 +179,7 @@ async function load() {
   }
 
   const specs = settingsNamespace(allSettings, 'events').filter((spec) => spec.key.startsWith('minutes_'));
-  const keys = section('Settings', 'Filed under events, because the /settings group picker is full.', { count: specs.length || null });
+  const keys = section('Settings', null, { count: specs.length || null });
   keys.body.append(await settingsPanel(specs, {
     where: 'Minutes',
     empty: 'The bot registers no minutes settings.',

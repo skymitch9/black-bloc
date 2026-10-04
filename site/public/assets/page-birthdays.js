@@ -32,7 +32,6 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 let refresh = () => {};
 
 const TEMPLATE_KEY = 'birthday_template';
-const COLOR_KEY = 'birthday_color';
 const SAMPLE = { name: 'Casey', age: '30' };
 const BIRTHDAY_FEATURE = 'birthday';
 const POST_KEYS = {
@@ -74,19 +73,12 @@ function postTodayCard(specs) {
 }
 
 /** A6: the card the bot itself would post, redrawn as you type. */
-async function wordingCard(spec, color) {
-  const swatch = el('span', { class: 'swatch', style: color ? `--swatch: ${color}` : undefined });
+async function wordingCard(spec) {
   const made = await templateEditor(spec, {
     sample: () => SAMPLE,
     preview: { feature: BIRTHDAY_FEATURE, sample: () => SAMPLE },
   });
   const preview = card('What a birthday wish looks like', [
-    el('p', { class: 'field-help' }, [
-      'Filled in with a made-up member. The embed’s colour is ',
-      swatch,
-      color ? ` ${color}` : ' not set',
-      ', from birthday_color.',
-    ]),
     made.mock.node,
     made.mock.say,
     made.say,
@@ -125,7 +117,6 @@ function setCard() {
   const node = card('Set a birthday', [
     picker.node,
     el('div', { class: 'formrow dateline' }, [field('Month', month), field('Day', day), field('Year', year)]),
-    el('p', { class: 'field-help', text: 'The year is optional, and only used when birthday_show_age is on.' }),
     bar([save]),
     sayAgain('birthdays.set', say),
   ]);
@@ -148,7 +139,6 @@ async function load() {
   const rows = listOf(payload, 'birthdays');
   const birthday = settingsNamespace(allSettings, 'birthday');
   const template = birthday.find((spec) => spec.key === TEMPLATE_KEY);
-  const color = birthday.find((spec) => spec.key === COLOR_KEY);
   await names(idsIn(rows, ['user_id']));
 
   const aside = document.getElementById('page-aside');
@@ -204,7 +194,7 @@ async function load() {
     // people in it does not need its own search.
   ], list.slice().sort((a, b) => a.day - b.day), { search: false });
 
-  const months = section('By month', `${rows.length} birthday(s) stored.`, { count: rows.length });
+  const months = section('By month', null, { count: rows.length });
   if (rows.length === 0) {
     months.body.append(sayNothing('No birthdays are stored yet.'));
   } else {
@@ -231,7 +221,7 @@ async function load() {
 
   const wording = section('Birthday wording');
   if (template) {
-    wording.body.append(...await wordingCard(template, color ? color.value : null));
+    wording.body.append(...await wordingCard(template));
   } else {
     wording.body.append(sayNothing('The bot did not report a birthday_template key, so this editor is not shown rather than guessed at.'));
   }
