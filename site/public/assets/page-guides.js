@@ -14,11 +14,12 @@ import {
   el,
   field,
   filterChip,
+  keepSaying,
+  limitCounter,
   notice,
   run,
   saveBar,
   sayAgain,
-  keepSaying,
   sayNothing,
   section,
   sentenceFor,
@@ -48,19 +49,10 @@ const SETTING_KEYS = [
   'guides_log_level',
 ];
 
-const SETTINGS_NOTE = 'Whether members see this page at all, who may edit a guide, whether ' +
-  '/help links to one, whether a guide shows live values, and where Something’s off lands.';
-const HUB_NOTE = 'One page per goal. Each one is the shortest set of presses that gets it done, ' +
-  'with the picture of what you should be looking at.';
 const NO_GUIDES = 'Nothing is published yet.';
 const NO_MATCH = 'Nothing here matches those filters.';
-const STALE_NOTE = 'A screenshot is marked stale when the feature it shows has changed since the ' +
-  'picture was taken. The picture stays up until somebody replaces it.';
-const MARK_ALL_NOTE = 'A deploy marks the shots of the features it changed. Nothing else can — ' +
-  'a mode flip, a renamed channel or a rewritten message leave every picture looking current.';
 const MARK_ALL_ASK = 'Every picture in the app is marked for re-shooting. No picture is deleted: ' +
   'each one stays up until somebody replaces it.';
-const MARK_ALL_WHY = 'Optional. It goes on the log line, so the capture session knows what changed.';
 const REASON_MAX = 200;
 
 const FAULT_HEAD = 'If it did not work';
@@ -92,8 +84,8 @@ const PICTURE_GONE = 'This picture did not load. The words above are the whole s
   'if it stays missing.';
 
 const AUDIENCE_SAID = { member: 'For everyone', staff: 'For staff' };
+const STAFF_OPTION = 'For staff — hidden from members and /help';
 const SOURCE_SAID = { capture: 'screenshot', mock: 'illustration' };
-const COMMAND_HINT = 'Several guides may share a command; /help links every published guide for everyone.';
 const WHERE_SAID = { discord: 'in Discord', website: 'on this site' };
 
 const WHERE_CHIPS = [
@@ -254,7 +246,7 @@ function newGuideCard(payload, say) {
   const goal = el('input', { class: 'input', type: 'text', maxlength: String(GOAL_MAX), placeholder: 'one sentence, in their words' });
   const audience = el('select', { class: 'input' }, [
     el('option', { value: 'member', text: 'For everyone' }),
-    el('option', { value: 'staff', text: 'For staff' }),
+    el('option', { value: 'staff', text: STAFF_OPTION }),
   ]);
   const feature = featureSelect(payload, 'core');
   const command = el('input', { class: 'input', type: 'text', placeholder: '/golive — leave blank if there is none' });
@@ -283,13 +275,13 @@ function newGuideCard(payload, say) {
 
   return card(null, [
     el('div', { class: 'formrow' }, [
-      field('Title', title, 'The goal as a person would say it.'),
-      field('Goal', goal, 'One sentence. It is what the card on the hub reads.'),
+      field('Title', title, limitCounter(title, TITLE_MAX)),
+      field('Goal', goal, limitCounter(goal, GOAL_MAX)),
     ]),
     el('div', { class: 'formrow' }, [
-      field('Who it is for', audience, 'Staff guides are hidden from members and from /help.'),
-      field('Which feature', feature, 'Decides the Where it happens link and which release makes its shots stale.'),
-      field('Command', command, COMMAND_HINT),
+      field('Who it is for', audience),
+      field('Which feature', feature),
+      field('Command', command),
     ]),
     bar([make]),
     say,
@@ -324,7 +316,7 @@ async function loadHub(payload) {
   blocks.push(rightNowStrip(payload));
   blocks.push(full(say));
 
-  const list = section('Guides', HUB_NOTE, { count: rows.length || null, open: true });
+  const list = section('Guides', null, { count: rows.length || null, open: true });
   list.body.append(
     filters(payload),
     shown.length === 0
@@ -342,7 +334,7 @@ async function loadHub(payload) {
   blocks.push(full(list.node));
 
   if (payload.may_edit) {
-    const stale = section('Screenshots to re-shoot', STALE_NOTE, { count: payload.stale || null });
+    const stale = section('Screenshots to re-shoot', null, { count: payload.stale || null });
     stale.body.append(await staleList(), markAllCard());
     blocks.push(stale.node);
     const made = section('New guide', null, { count: null });
@@ -351,7 +343,7 @@ async function loadHub(payload) {
 
     const specs = settingsNamespace(await settings(true), 'guides')
       .filter((spec) => SETTING_KEYS.includes(spec.key));
-    const box = section('Settings', SETTINGS_NOTE, { count: specs.length || null });
+    const box = section('Settings', null, { count: specs.length || null });
     box.body.append(await settingsPanel(specs, {
       where: 'Settings',
       empty: 'The bot registers no guide settings yet.',
@@ -402,7 +394,7 @@ function markAllCard() {
   const press = button('Mark every screenshot stale…', async () => {
     const yes = await ask({
       title: 'Mark every screenshot stale?',
-      body: [MARK_ALL_ASK, field('Why', reason, MARK_ALL_WHY)],
+      body: [MARK_ALL_ASK, field('Why (optional)', reason)],
       confirmLabel: 'Mark them all',
       tone: 'warn',
     });
@@ -417,7 +409,7 @@ function markAllCard() {
     refresh();
   }, { tone: 'warn', small: false });
 
-  return card(null, [el('p', { class: 'muted', text: MARK_ALL_NOTE }), bar([press]), say]);
+  return card(null, [bar([press]), say]);
 }
 
 /* ---- one guide, read ------------------------------------------------------ */
@@ -597,7 +589,6 @@ function rail(payload, hub) {
     railBlock('About this page', [
       el('p', { class: 'guiderail-line', title: when.title, text: `Last edited ${when.text}${guide.updated_by_name ? ` by ${guide.updated_by_name}` : ''}.` }),
       el('p', { class: 'guiderail-line', text: guide.seeded ? 'Black Bloc ships this guide; staff may rewrite every word of it.' : 'Staff wrote this guide here.' }),
-      el('p', { class: 'guiderail-line', text: 'Every word and picture on it is edited by staff on this page.' }),
     ]),
   ]);
 }
@@ -621,13 +612,13 @@ function footButtons(payload) {
 
   const wrong = button('Something’s off', async () => {
     const box = el('textarea', { class: 'input area', rows: '3', placeholder: 'what was wrong, and on which step' });
-    const step = el('input', { class: 'input', type: 'number', min: '1', max: String(guide.step_count || 1), placeholder: 'which step' });
+    const step = el('input', { class: 'input', type: 'number', min: '1', max: String(guide.step_count || 1), placeholder: 'the whole guide' });
     const sure = await ask({
       title: `What is wrong with “${guide.title}”?`,
       body: [
         'This files a request under your name, exactly as the Requests page does, and staff answer it there.',
-        field('Which step', step, 'Leave it blank if it is the whole guide.'),
-        field('What was wrong', box, 'One or two lines. Staff read exactly this.'),
+        field('Which step', step),
+        field('What was wrong', box),
       ],
       confirmLabel: 'File it',
       tone: 'warn',
@@ -845,10 +836,10 @@ function pictureControls(slug, step, say, dirty) {
 
   return el('div', { class: 'step-shotedit' }, [
     el('div', { class: 'formrow' }, [
-      field('Caption', caption, 'What the picture shows. It is written under it.'),
-      field('What it is', source, 'A real capture, or a drawing of a screen a capture cannot reach.'),
+      field('Caption', caption, limitCounter(caption, CAPTION_MAX)),
+      field('What it is', source),
       field('Where it is from', surface, null),
-      field('Which release', release, 'The version it was shot at, so staleness can be told.'),
+      field('Shot at release', release),
     ]),
     bar([replace, remove]),
     picker,
@@ -858,13 +849,13 @@ function pictureControls(slug, step, say, dirty) {
 let refreshBar = () => {};
 
 function stepEditor(slug, draft, step, at, say, dirty, repaint) {
-  const doBox = el('textarea', { class: 'input area', rows: '2', maxlength: String(DO_MAX) });
+  const doBox = el('textarea', { class: 'input area', rows: '2', maxlength: String(DO_MAX), placeholder: 'Press **Save Changes**' });
   doBox.value = step.do_text;
   doBox.addEventListener('input', () => {
     step.do_text = doBox.value;
     refreshBar();
   });
-  const expectBox = el('textarea', { class: 'input area', rows: '2', maxlength: String(EXPECT_MAX) });
+  const expectBox = el('textarea', { class: 'input area', rows: '2', maxlength: String(EXPECT_MAX), placeholder: 'what is on the screen afterwards' });
   expectBox.value = step.expect_text;
   expectBox.addEventListener('input', () => {
     step.expect_text = expectBox.value;
@@ -885,10 +876,10 @@ function stepEditor(slug, draft, step, at, say, dirty, repaint) {
     el('span', { class: 'step-n', text: String(at + 1) }),
     el('div', { class: 'step-body' }, [
       el('div', { class: 'formrow' }, [
-        field('Do this', doBox, 'One press. Write the button in **bold**, spelled the way Discord spells it.'),
+        field('Do this', doBox, limitCounter(doBox, DO_MAX)),
       ]),
       el('div', { class: 'formrow' }, [
-        field('Expect', expectBox, 'What is on the screen afterwards. Leave it blank if there is nothing to see.'),
+        field('Expect (optional)', expectBox, limitCounter(expectBox, EXPECT_MAX)),
       ]),
       warningsBlock(step, true),
       pictureBlock(step.media, step.do_text),
@@ -1004,7 +995,7 @@ function editGuide(payload, hub) {
   });
   const audience = el('select', { class: 'input' }, [
     el('option', { value: 'member', text: 'For everyone', selected: draft.audience === 'member' || undefined }),
-    el('option', { value: 'staff', text: 'For staff', selected: draft.audience === 'staff' || undefined }),
+    el('option', { value: 'staff', text: STAFF_OPTION, selected: draft.audience === 'staff' || undefined }),
   ]);
   audience.addEventListener('change', () => {
     draft.audience = audience.value;
@@ -1070,13 +1061,13 @@ function editGuide(payload, hub) {
     body.replaceChildren(
       card('The guide itself', [
         el('div', { class: 'formrow' }, [
-          field('Title', title, 'The goal as a person would say it.'),
-          field('Who it is for', audience, 'A staff guide is hidden from members and from /help.'),
+          field('Title', title, limitCounter(title, TITLE_MAX)),
+          field('Who it is for', audience),
         ]),
-        el('div', { class: 'formrow' }, [field('Goal', goal, 'One sentence — it is what the hub card reads.')]),
+        el('div', { class: 'formrow' }, [field('Goal', goal, limitCounter(goal, GOAL_MAX))]),
         el('div', { class: 'formrow' }, [
-          field('Which feature', feature, 'Sets the Where it happens link and which release makes its shots stale.'),
-          field('Command', command, COMMAND_HINT),
+          field('Which feature', feature),
+          field('Command', command),
         ]),
         bar([publish, reset, remove]),
         say,

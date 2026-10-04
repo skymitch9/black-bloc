@@ -43,36 +43,21 @@ const TONE = { open: 'ok', locked: 'warn', live: 'warn', done: null, cancelled: 
 const STATE_OF = { open: 'ok', locked: 'warn', live: 'info', done: null, cancelled: 'danger' };
 const EVENT_TONE = { pending: 'warn', approved: 'ok', live: 'ok', denied: null, cancelled: null };
 
-const LIST_NOTE = 'Every raid train, the hours on it and who holds them. A row opens the '
-  + 'lineup: claim or free an hour, change two round, lock it, call it off, or give it an event.';
-const MACHINERY_NOTE = 'The reference half of the page: the raid-train settings, and everything '
-  + 'raid trains have done. Both are shut until you want them.';
-const SETTINGS_NOTE = 'Whether raid trains are on, where the lineup post goes, who may build '
-  + 'one, and whether a new train also makes an event.';
 const NOTHING_YET = 'No raid train matches that. Start a raid train above, or run /raidtrain in '
   + 'Discord.';
 const GETTING_IT = 'Getting the lineup…';
 const SHOWING_ALL = '{n} train{s}.';
 const SHOWING_SOME = '{shown} of {n} train{s}.';
 
-const TRAIN_OFF = 'Raid trains are {mode} at the moment, so nothing is posted and no reminder '
-  + 'is sent. **Settings and logs** below turns them on.';
+const TRAIN_OFF = '**Settings and logs** below turns them on.';
 const NO_EVENT = 'no event';
-const NO_EVENT_YET = 'No event is tied to this train yet. **Make an event for it** raises one '
-  + 'and sends it to the events review, where a Lead approves or denies it the same way they '
-  + 'would a proposal.';
-const EVENT_HERE = 'Event **#{id}** carries this train. It is **{status}**, and the Events page '
-  + 'is where it is decided.';
+const NO_EVENT_YET = 'No event is tied to this train yet.';
+const EVENT_HERE = 'Event **#{id}** carries this train. It is **{status}**.';
 const MAKE_EVENT_BODY = 'An event is raised from this train — its title, its start, its finish '
   + 'and the first streamer on the lineup — and goes to the events review like any proposal. '
   + 'Calling the train off afterwards calls the event off too.';
 const SETTLED = 'This train is settled, so its lineup cannot be changed any more.';
 const NO_SLOTS = 'This train has no slots, which should not be possible — tell a Lead.';
-const SWAP_NOTE = 'The people move; the times belong to the position and stay put.';
-const NEW_NOTE = 'The lineup is posted once and edited in place after that.';
-const START_HELP = 'The first slot opens then.';
-const ALSO_EVENT_HELP = 'The event goes to the events review, where a Lead approves or denies '
-  + 'it. Which way this starts is raidtrain_event_default, under Settings and logs below.';
 const PUT_IN_BODY = 'They need a Twitch channel linked, because the lineup carries the name the '
   + 'streamer before them raids.';
 
@@ -273,7 +258,6 @@ function swapCard(train, say) {
     await after(train, done);
   });
   return card('Change two slots round', [
-    el('p', { class: 'field-help', text: SWAP_NOTE }),
     field('One slot', first),
     field('The other', second),
     bar([swap]),
@@ -330,9 +314,9 @@ function newTrainDrawer(eventDefault) {
   const say = notice();
   const title = el('input', { class: 'input', type: 'text', placeholder: 'Saturday raid train' });
   const description = el('textarea', { class: 'input area', rows: '2' });
-  const startsAt = whenField({ label: 'Starts', min: localWhen(), help: START_HELP });
-  const minutes = el('input', { class: 'input', type: 'text', value: '60' });
-  const count = el('input', { class: 'input', type: 'text', value: '8' });
+  const startsAt = whenField({ label: 'Starts', min: localWhen() });
+  const minutes = el('input', { class: 'input', type: 'number', min: '15', max: '720', value: '60' });
+  const count = el('input', { class: 'input', type: 'number', min: '1', max: '24', value: '8' });
   const alsoEvent = segment(
     [{ value: 'true', label: 'Yes' }, { value: 'false', label: 'No' }],
     eventDefault === true ? 'true' : 'false',
@@ -355,20 +339,19 @@ function newTrainDrawer(eventDefault) {
   }, { tone: 'warn', small: false });
 
   return [
-    el('p', { class: 'field-help', text: NEW_NOTE }),
     field('Title', title),
     field('What it is', description),
     startsAt.node,
-    field('Minutes per slot', minutes, '15 to 720.'),
-    field('How many slots', count, '1 to 24 — Discord will not carry a longer lineup in one message.'),
-    field('Also make an event', alsoEvent, ALSO_EVENT_HELP),
+    field('Minutes per slot', minutes),
+    field('How many slots', count),
+    field('Also make an event', alsoEvent),
     bar([make]),
     say,
   ];
 }
 
 function trainsSection(rows, status, eventDefault, say) {
-  const list = section('Raid trains', LIST_NOTE, { count: rows.length, id: 'raidtrains', open: true });
+  const list = section('Raid trains', null, { count: rows.length, id: 'raidtrains', open: true });
   const built = rows.map((row) => ({ row, node: trainRow(row) }));
   const foot = el('div', { class: 'grid-foot' });
   const grid = el('div', { class: 'grid-table', style: 'min-width: 760px' }, [
@@ -408,7 +391,7 @@ function trainsSection(rows, status, eventDefault, say) {
       el('span', { text: '.' }),
     ]),
     status && status.mode !== 'on'
-      ? el('p', { class: 'field-help' }, boldParts(said(TRAIN_OFF, { mode: status.mode })))
+      ? el('p', { class: 'field-help' }, boldParts(TRAIN_OFF))
       : null,
     healthLine(status),
     card(null, [
@@ -429,10 +412,9 @@ function unsectioned(node) {
 }
 
 async function machinerySection(specs) {
-  const one = section('Settings and logs', MACHINERY_NOTE, { id: 'machinery' });
+  const one = section('Settings and logs', null, { id: 'machinery' });
   one.body.append(
     foldout('Settings', [
-      el('p', { class: 'field-help', text: SETTINGS_NOTE }),
       await settingsPanel(specs, { where: 'Raid trains', onSaved: () => refresh() }),
     ], { count: specs.length }),
     foldout('Logs', unsectioned(await logsSection('raidtrain'))),

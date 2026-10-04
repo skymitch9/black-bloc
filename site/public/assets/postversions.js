@@ -1,8 +1,6 @@
 import { ago, badge, bar, button, el, foldout, sayNothing } from './ui.js';
 
 export const VERSIONS_TITLE = 'Versions';
-export const VERSIONS_NOTE = 'Every press of Save changes or Post it that changed something is '
-  + 'here. Nothing else writes a version, and nothing ever removes one.';
 export const VERSIONS_EMPTY = 'Nothing has been saved yet, so there is only what is in the box.';
 export const NO_WORDS = 'Nothing is written in this one.';
 export const TITLE_WAS = 'Title: {title}';
@@ -66,7 +64,6 @@ export function versionsFoldout(versions, { onView, onUse, open = false } = {}) 
   return foldout(
     VERSIONS_TITLE,
     [
-      el('p', { class: 'field-help', text: VERSIONS_NOTE }),
       ...(rows.length ? rows : [sayNothing(VERSIONS_EMPTY)]),
     ],
     { count: (versions || []).length, open },

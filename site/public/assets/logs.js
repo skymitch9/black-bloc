@@ -58,17 +58,6 @@ export function featureLabel(feature) {
 const PER_PAGE = 10;
 const PROBE = 200;
 
-const NOTE = 'Everything this part of Black Bloc has done, whether or not it said so in Discord. ' +
-  'Important means it acted on a member or failed.';
-
-const ROUTINE = {
-  core: 'Settings changes are routine, so nothing here is marked important.',
-  chat: 'Chat replies are routine, so nothing here is marked important.',
-  tempvoice: 'Rooms opening and closing are routine.',
-  poll: 'Creating a poll and reminding people about it are routine.',
-  request: 'Filing a request and moving it along are routine; a decision is not.',
-};
-
 export function kindPill(row) {
   return el('span', {
     class: 'pill kindpill',
@@ -183,7 +172,7 @@ function nothingSaid(feature, state) {
   const bits = [];
   if (state.query) bits.push(`Nothing ${named} has logged has “${state.query}” in it.`);
   else if (state.kind) bits.push(`${named} has logged nothing of kind ${state.kind}${state.important ? ' that was important' : ''}.`);
-  else if (state.important) bits.push(`${named} has logged nothing important.`, ROUTINE[feature]);
+  else if (state.important) bits.push(`${named} has logged nothing important.`);
   else bits.push(`${named} has logged nothing at all yet.`);
   if (state.important) bits.push(SWITCH);
   return bits.filter(Boolean).join(' ');
@@ -194,7 +183,7 @@ function nothingSaid(feature, state) {
  * itself rather than going through the page's own reload, so nothing above it
  * is rebuilt when somebody changes a filter down here.
  */
-export async function logsSection(feature, { title = 'Logs', note = NOTE, perPage = PER_PAGE } = {}) {
+export async function logsSection(feature, { title = 'Logs', note = null, perPage = PER_PAGE } = {}) {
   const state = { page: 1, kind: '', query: '', important: true };
   const group = section(title, note, { id: `logs-${feature}` });
   const results = el('div', { class: 'logs-results' });

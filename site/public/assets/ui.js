@@ -14,6 +14,7 @@ import {
 import { messageTree, mountTree } from './discordmock.js';
 import { ICONS } from './icons.js';
 import { channelLabel, humanLabel } from './labels.js';
+import { capState, counterState, insertAt, placeholdersFor } from './fieldaids.js';
 import { applyFilters, matches, passes } from './listfilter.js';
 import * as md from './mdformat.js';
 
@@ -881,10 +882,16 @@ export function askForm({
 export function field(label, control, help = null) {
   const id = control && control.id ? control.id : null;
   if (control && control.classList) control.classList.add('field-control');
+  if (control && control.type === 'number' && (control.min !== '' || control.max !== '')) {
+    control.addEventListener('change', () => {
+      if (!control.checkValidity()) control.reportValidity();
+    });
+  }
   return el('div', { class: 'field' }, [
     el('label', { class: 'field-label', for: id || undefined, text: label }),
     control,
-    help ? el('p', { class: 'field-help', text: help }) : null,
+    help instanceof Node ? el('div', { class: 'field-help field-aid' }, [help]) : null,
+    help && !(help instanceof Node) ? el('p', { class: 'field-help', text: help }) : null,
   ]);
 }
 
@@ -967,9 +974,10 @@ export function whenField({
   const named = () => (picked ? picked.value : tz || (zone ? HERE_ZONE : null));
   const say = () => {
     const zoneLine = zoneWord === null
-      ? (named() ? `Read in ${named()}.` : null)
+      ? (!picked && named() ? `Read in ${named()}.` : null)
       : zoneWord;
     line.textContent = [help, zoneLine].filter(Boolean).join(' ');
+    line.hidden = !line.textContent;
   };
   if (picked) picked.addEventListener('change', say);
   say();
@@ -1090,7 +1098,7 @@ export function memberPicker({ label = 'Member', onPick = null } = {}) {
   });
 
   const node = el('div', { class: 'picker' }, [
-    field(label, search, 'Names come from the bot\'s own copy of the member list.'),
+    field(label, search),
     results,
     picked,
     status,
@@ -1373,11 +1381,14 @@ export async function settingRow(spec, { onDirty = null, mock = true } = {}) {
       el('span', { class: 'setrow-key', text: spec.key }),
     ]),
     mark,
-    el('div', { class: 'setrow-control' }, [made.node]),
+    el('div', { class: 'setrow-control' }, [
+      made.node,
+      WORDING_TYPES.has(spec.type) ? placeholderChips(made.node, placeholdersOf(spec)) : null,
+    ]),
     wipe,
     say,
-    shown ? el('div', { class: 'setrow-mock' }, [shown.node, shown.say]) : null,
   );
+  if (shown) node.append(el('div', { class: 'setrow-mock' }, [shown.node, shown.say]));
   say.classList.add('setrow-say');
   paint();
   return row;
@@ -1813,10 +1824,8 @@ export function sayAgain(where, say) {
   return say;
 }
 
-export const FORMAT_HINT = 'Discord formatting — what the preview shows is what Discord shows.';
 const FORMAT_TAB_NOTE = 'Tab indents inside the box; Ctrl+M lets Tab leave it.';
 const LINK_TITLE = 'Add a link';
-const LINK_ASK = 'The web address the words should open.';
 const LINK_BAD = 'That is not a web address. Start it with https:// — for example https://example.org.';
 const LINK_OK = 'Add the link';
 const HEADING_LABEL = 'Heading';
@@ -1882,7 +1891,7 @@ async function askLink(box) {
   let url = null;
   const agreed = await askForm({
     title: LINK_TITLE,
-    body: [field('Web address', input, LINK_ASK)],
+    body: [field('Web address', input)],
     confirmLabel: LINK_OK,
     tone: null,
     onConfirm: () => {
@@ -2006,6 +2015,94 @@ export function formatBar(box) {
       'aria-label': 'Formatting',
       'aria-controls': box.id || undefined,
     }, buttons),
-    el('p', { class: 'field-help fmthint', text: FORMAT_HINT, title: FORMAT_TAB_NOTE }),
+    quietHint(box, FORMAT_TAB_NOTE),
   ]);
+}
+
+let hintCount = 0;
+
+export function quietHint(control, text) {
+  hintCount += 1;
+  const id = `quiet-hint-${hintCount}`;
+  const held = control.getAttribute('aria-describedby');
+  control.setAttribute('aria-describedby', held ? `${held} ${id}` : id);
+  return el('span', { class: 'sr-only', id, text });
+}
+
+export function blankMeans(select, text) {
+  const blank = select.querySelector('option[value=""]');
+  if (blank) blank.textContent = text;
+  return select;
+}
+
+export function slugInput(input, { lower = false, join = '-', only = null } = {}) {
+  input.addEventListener('input', () => {
+    const at = input.selectionStart;
+    const spaced = input.value.replace(/\s+/g, join);
+    const kept = only ? spaced.replace(only, '') : spaced;
+    const fixed = lower ? kept.toLowerCase() : kept;
+    if (fixed === input.value) return;
+    input.value = fixed;
+    input.setSelectionRange(at, at);
+  });
+  return input;
+}
+
+export function placeholdersOf(spec) {
+  return placeholdersFor(spec);
+}
+
+export function placeholderChips(box, tokens, { label = 'Insert', said = null } = {}) {
+  const list = tokens || [];
+  if (!list.length) return null;
+  const named = (token) => (said && said[token] ? `${label} ${token} — ${said[token]}` : `${label} ${token}`);
+  return el('div', { class: 'tokenrow', role: 'group', 'aria-label': label }, list.map((token) => el('button', {
+    class: 'chip-filter token-chip',
+    type: 'button',
+    text: token,
+    title: named(token),
+    'aria-label': named(token),
+    on: {
+      mousedown: (event) => event.preventDefault(),
+      click: () => putText(box, insertAt(box.value, box.selectionStart, box.selectionEnd, token)),
+    },
+  })));
+}
+
+export function wordAids(box, spec = null, { tokens = null, said = null } = {}) {
+  const shipped = spec && typeof spec.default === 'string' ? spec.default : '';
+  if (shipped && !box.placeholder) box.placeholder = shipped;
+  const chips = placeholderChips(box, tokens || placeholdersOf(spec), { said });
+  const max = Number(box.getAttribute('maxlength')) || 0;
+  const made = document.createDocumentFragment();
+  if (chips) made.append(chips);
+  if (max) made.append(limitCounter(box, max));
+  return made;
+}
+
+export function limitCounter(input, max, { hard = true } = {}) {
+  const node = el('span', { class: 'counter limit-counter', role: 'status', hidden: true });
+  if (hard) input.setAttribute('maxlength', String(max));
+  node.paint = () => {
+    const found = counterState(input.value.length, max);
+    node.hidden = !found.shown;
+    node.textContent = found.text;
+    if (found.tone) node.setAttribute('data-tone', found.tone);
+    else node.removeAttribute('data-tone');
+  };
+  input.addEventListener('input', node.paint);
+  node.paint();
+  return node;
+}
+
+export function capMark(add, cap) {
+  const node = el('span', { class: 'counter cap-mark' });
+  node.paint = (count) => {
+    const found = capState(count, cap);
+    node.textContent = found.text;
+    add.disabled = found.full;
+    if (found.full) node.setAttribute('data-tone', 'warn');
+    else node.removeAttribute('data-tone');
+  };
+  return node;
 }

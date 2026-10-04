@@ -2347,8 +2347,6 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 }
 .postcol { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .postboxhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.postboxlabel { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.pastehint { white-space: nowrap; }
 .pastenote { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .pastenote[hidden] { display: none; }
 .docimportfold { margin-top: 6px; }
@@ -2425,7 +2423,11 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 .fmt-h1 { font-size: var(--et-ui-lg); font-weight: var(--et-weight-heavy, 700); }
 .fmt-h2 { font-size: var(--et-ui-md); font-weight: var(--et-weight-heavy, 700); }
 .fmt-h3 { font-size: var(--et-ui-sm); font-weight: var(--et-weight-heavy, 700); }
-.fmthint { margin: 0; }
+.tokenrow { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; min-width: 0; }
+.token-chip { padding: 2px 8px; font-family: var(--et-font-mono); font-size: var(--et-ui-2xs); }
+.limit-counter[hidden] { display: none; }
+.field-aid { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.field-aid:not(:has(> :not([hidden]))) { display: none; }
 .input.postbox {
   min-height: 22rem;
   font-family: var(--et-font-mono);
@@ -2584,15 +2586,7 @@ button.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; 
 .gldrawer-head:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 .gldrawer-head .sect-mark { transform: rotate(-90deg); flex: none; margin-top: 4px; }
 .gldrawer[open] > .gldrawer-head .sect-mark { transform: none; }
-/* A drawer says what is inside BEFORE it is opened (owner, 2026-09-21: the settings were
-   "duplicate… and what each of the settings does isnt clear"), so the summary is two lines. */
 .gldrawer-heads { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.gldrawer-note {
-  color: var(--et-muted);
-  font-size: var(--et-ui-xs);
-  font-weight: var(--et-weight-regular, 400);
-  text-wrap: pretty;
-}
 .gldrawer-body { display: flex; flex-direction: column; gap: 12px; padding: 0 0 14px; }
 /* Preview pages (site/public/preview/*) — static-data previews of a redesign, staff-only, deleted when the real page ships. */
 .preview-banner { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 12px 0 4px; padding: 8px 12px; border-radius: 8px; font-size: var(--et-ui-sm, 13px); color: var(--et-warn, #b8860b); background: color-mix(in srgb, var(--et-warn, #b8860b) 14%, transparent); border: 1px solid color-mix(in srgb, var(--et-warn, #b8860b) 40%, transparent); }

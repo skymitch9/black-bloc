@@ -16,6 +16,7 @@ import {
   foldout,
   icon,
   keepSaying,
+  limitCounter,
   listFilter,
   memberPicker,
   notice,
@@ -32,39 +33,11 @@ import {
 } from './ui.js';
 
 const PER_PAGE = 20;
+const REASON_SENT = 'Reason — they are sent exactly this';
 const WHY_MAX = 1000;
 const BUILT_MAX = 1000;
 const SENT_BACK_MAX = 500;
 
-const LIST_NOTE = 'Everything asked for, in one list. The chips narrow it to a state; a row opens ' +
-  'the request, its thread and every move that is legal from where it has got to.';
-const MACHINERY_NOTE = 'The reference half of the page: the request settings, and everything ' +
-  'requests has done. Both are shut until you want them.';
-const SETTINGS_NOTE = 'Whether requests are open, who may file one, where the bot says a request ' +
-  'arrived, where it says one moved, and whether it DMs the person who asked each time.';
-const FORUM_NOTE = 'With a forum, every request is a post of its own — the card is its first ' +
-  'message, every move lands in the same post, and the post is tagged for wherever the request ' +
-  'has got to. Make the forum puts one under the Blackmail category with that category’s own ' +
-  'permissions. Leave it unmade and requests behave exactly as they do today.';
-const OPEN_NOTE = 'Filed and not picked up, longest wait first. Every button here tells the ' +
-  'person who asked — picking one up, putting it on hold, and declining it.';
-const BOARD_NOTE = 'Being worked on. The buttons here save as you press them — there is no ' +
-  'separate Save for the status, the priority or who is on it.';
-const HELD_NOTE = 'Parked with a reason, and the reason is what the person who asked was sent. ' +
-  'Resume puts one back where it came from.';
-const REVIEW_NOTE = 'Built and waiting for somebody to look at it. Accept is the only way a ' +
-  'request reaches Done, so what is written here is what the person who asked ends up reading.';
-const CLOSED_NOTE = 'Requests that shipped, the answers that were no, and the ones the person ' +
-  'who asked took back themselves. Nothing here needs anything from you.';
-const ANY_NOTE = 'Every request this server has, whatever state it is in.';
-const FILE_NOTE = 'The same three fields as /request in Discord. Whoever is signed in is ' +
-  'recorded as the person asking — there is no name to fill in.';
-const MINE_NOTE = 'Every request you have filed and where each one got to. You can take back ' +
-  'one nobody has answered yet.';
-const MEMBER_FILE_NOTE = 'What you want built, and why it is worth building. Staff answer these ' +
-  'on the same page you are looking at.';
-const SENT_EXACTLY = 'Put it on hold, Decline, Send back and Ready to check each ask for a line, ' +
-  'and whoever it concerns is sent exactly what you type.';
 
 const NO_OPEN = 'Nothing is open. Everything filed has been picked up, finished or answered.';
 const NO_BOARD = 'Nothing is being worked on. Pick something up above and it lands here.';
@@ -144,12 +117,12 @@ const STATE_OF = {
 };
 
 const CHIPS = [
-  { key: 'open', label: 'Open', status: 'open', note: OPEN_NOTE, empty: NO_OPEN },
-  { key: 'in_progress', label: 'In progress', status: 'in_progress', note: BOARD_NOTE, empty: NO_BOARD },
-  { key: 'review', label: 'Ready to check', status: 'review', note: REVIEW_NOTE, empty: NO_REVIEW },
-  { key: 'hold', label: 'On hold', status: 'hold', note: HELD_NOTE, empty: NO_HELD },
-  { key: 'closed', label: 'Closed', status: 'done,declined,withdrawn', note: CLOSED_NOTE, empty: NO_CLOSED },
-  { key: 'all', label: 'All', status: '', note: ANY_NOTE, empty: NO_ANY },
+  { key: 'open', label: 'Open', status: 'open', empty: NO_OPEN },
+  { key: 'in_progress', label: 'In progress', status: 'in_progress', empty: NO_BOARD },
+  { key: 'review', label: 'Ready to check', status: 'review', empty: NO_REVIEW },
+  { key: 'hold', label: 'On hold', status: 'hold', empty: NO_HELD },
+  { key: 'closed', label: 'Closed', status: 'done,declined,withdrawn', empty: NO_CLOSED },
+  { key: 'all', label: 'All', status: '', empty: NO_ANY },
 ];
 
 const MINE_CHIPS = [
@@ -175,7 +148,7 @@ const MOVES = {
       title: (row) => `Park ${row.requester ? row.requester.name : 'this'}'s request?`,
       body: 'It moves to On hold and waits there until somebody resumes it.',
       confirm: 'Put it on hold',
-      hint: 'Say what it is waiting on.',
+      hint: 'what it is waiting on',
     },
   },
   declined: {
@@ -185,7 +158,7 @@ const MOVES = {
       title: (row) => `Say no to ${row.requester ? row.requester.name : 'this'}?`,
       body: 'The request is closed for good.',
       confirm: 'Decline it',
-      hint: 'Say why.',
+      hint: 'why',
     },
   },
 };
@@ -532,7 +505,7 @@ function notesRow(row, say) {
     save.disabled = box.value.trim() === String(row.notes || '').trim();
   });
   return el('div', { class: 'formrow' }, [
-    field('Staff note', box, 'What is left to do, or what is blocking it.'),
+    field('Staff note', box),
     bar([save]),
   ]);
 }
@@ -556,10 +529,10 @@ function moveButtons(row, say, moves) {
     return button(spec.label, async () => {
       const body = {};
       if (spec.reason) {
-        const box = el('input', { class: 'input', type: 'text', placeholder: 'why' });
+        const box = el('input', { class: 'input', type: 'text', placeholder: spec.reason.hint });
         const sure = await ask({
           title: spec.reason.title(row),
-          body: [spec.reason.body, field('Reason', box, spec.reason.hint)],
+          body: [spec.reason.body, field(REASON_SENT, box)],
           confirmLabel: spec.reason.confirm,
         });
         if (!sure) return;
@@ -601,8 +574,8 @@ function readyButton(row, say) {
       title: `Say what was built for ${row.requester ? row.requester.name : 'this'}?`,
       body: [
         'Both lines show on the card in Discord and on this page. Either can be edited afterwards without moving the request.',
-        field('What was built', built, 'One or two sentences.'),
-        field('How to test it', how, 'Optional — the steps somebody follows to see it working.'),
+        field('What was built', built, limitCounter(built, BUILT_MAX)),
+        field('How to test it (optional)', how, limitCounter(how, BUILT_MAX)),
       ],
       confirmLabel: 'Mark it ready to check',
     });
@@ -655,7 +628,7 @@ function sendBackButton(row, say) {
       title: 'Send this one back?',
       body: [
         `${row.ready_by_name || 'Whoever marked it ready'} gets this, and it goes back to In progress.`,
-        field('What needs doing', box, 'Say what is missing.'),
+        field('What needs doing', box, limitCounter(box, SENT_BACK_MAX)),
       ],
       confirmLabel: 'Send it back',
     });
@@ -680,7 +653,7 @@ function sendBackButton(row, say) {
  * how-to-test must not need a state change to fix, so this is a partial
  * `/status` save and nothing moves.
  */
-function writtenRow(row, say, name, label, hint) {
+function writtenRow(row, say, name, label) {
   const box = el('textarea', { class: 'input area', rows: '2', maxlength: String(BUILT_MAX) });
   box.value = row[name] || '';
   const save = button('Save', async () => {
@@ -693,7 +666,7 @@ function writtenRow(row, say, name, label, hint) {
   box.addEventListener('input', () => {
     save.disabled = box.value.trim() === String(row[name] || '').trim();
   });
-  return el('div', { class: 'formrow' }, [field(label, box, hint), bar([save])]);
+  return el('div', { class: 'formrow' }, [field(label, box, limitCounter(box, BUILT_MAX)), bar([save])]);
 }
 
 function writtenBlock(row) {
@@ -724,16 +697,11 @@ function movedBlock(row) {
   return line;
 }
 
-function movesNote(moves) {
-  return moves.length ? el('p', { class: 'field-help', text: SENT_EXACTLY }) : null;
-}
-
 function openBody(row, say) {
   const moves = moveButtons(row, say);
   return [
     headBlock(row),
     whyBlock(row.why),
-    movesNote(moves),
     bar(moves),
   ];
 }
@@ -749,7 +717,6 @@ function boardBody(row, say) {
       field('Who is on it', assigneeControl(row, say)),
     ]),
     notesRow(row, say),
-    movesNote(moves),
     bar(moves),
   ];
 }
@@ -765,9 +732,8 @@ function reviewBody(row, say) {
   return [
     headBlock(row, [statusPill(row), readyChip(row), askedChip(row), dueChip(row)]),
     whyBlock(row.why),
-    writtenRow(row, say, 'built', 'What was built', 'The whole answer the person who asked gets.'),
-    writtenRow(row, say, 'how_to_test', 'How to test it', 'Optional — the steps to see it working.'),
-    movesNote(moves),
+    writtenRow(row, say, 'built', 'What was built'),
+    writtenRow(row, say, 'how_to_test', 'How to test it (optional)'),
     bar(moves),
   ];
 }
@@ -781,7 +747,6 @@ function heldBody(row, say) {
     row.decline_reason
       ? el('p', { class: 'req-reason', text: `On hold because: ${row.decline_reason}` })
       : null,
-    movesNote(moves),
     bar(moves),
   ];
 }
@@ -796,8 +761,8 @@ function shutBody(row, say) {
       : null,
     ...(row.status === 'done'
       ? [
-        writtenRow(row, say, 'built', 'What was built', 'Editable — fixing a typo moves nothing.'),
-        writtenRow(row, say, 'how_to_test', 'How to test it', 'Optional — the steps to see it working.'),
+        writtenRow(row, say, 'built', 'What was built'),
+        writtenRow(row, say, 'how_to_test', 'How to test it (optional)'),
       ]
       : writtenBlock(row)),
   ];
@@ -1006,7 +971,7 @@ function outcomeOf(form) {
     `every time staff move it.${dated}`;
 }
 
-function fileForm(note) {
+function fileForm() {
   const say = notice();
   const what = el('input', { class: 'input', type: 'text', placeholder: 'what you want built', maxlength: String(WHY_MAX) });
   const why = el('textarea', { class: 'input area', rows: '3', placeholder: 'why it is worth building', maxlength: String(WHY_MAX) });
@@ -1044,15 +1009,14 @@ function fileForm(note) {
   repaint();
 
   return [
-    el('p', { class: 'section-note', text: note }),
     el('div', { class: 'formrow' }, [
-      field('What', what, 'One line. The detail goes in the why.'),
-      field('Due date', due, 'Only when something actually depends on the date.'),
+      field('What', what, limitCounter(what, WHY_MAX)),
+      field('Due date (optional)', due),
     ]),
     // A bare `.field` lays its label out beside the control; inside a formrow the
     // label sits above it. Why is one field wide, and it still belongs in a row.
     el('div', { class: 'formrow' }, [
-      field('Why', why, 'What it fixes, or what it would let people do.'),
+      field('Why', why, limitCounter(why, WHY_MAX)),
     ]),
     outcome,
     bar([file]),
@@ -1060,9 +1024,9 @@ function fileForm(note) {
   ];
 }
 
-function fileButton(note) {
+function fileButton() {
   const made = button('File a request', () => {
-    openDrawer('File a request', fileForm(note));
+    openDrawer('File a request', fileForm());
   }, { tone: 'warn' });
   made.style.marginLeft = 'auto';
   return made;
@@ -1079,7 +1043,7 @@ function statusChips(tally) {
         state.page = 1;
         refresh();
       },
-      { key: one.key, title: one.note },
+      { key: one.key },
     );
   }));
 }
@@ -1109,7 +1073,7 @@ function emptyDo(payload) {
       refresh();
     });
   }
-  return textAction('File a request', () => openDrawer('File a request', fileForm(FILE_NOTE)));
+  return textAction('File a request', () => openDrawer('File a request', fileForm()));
 }
 
 /**
@@ -1158,7 +1122,7 @@ function pagerFor(payload, rows) {
 
 function listSection(payload, rows, tally, say) {
   const chip = chipOf(state.status);
-  const one = section('Requests', LIST_NOTE, {
+  const one = section('Requests', null, {
     count: tally.get(state.status) ?? payload.total ?? rows.length,
     id: 'requests',
     open: true,
@@ -1187,7 +1151,7 @@ function listSection(payload, rows, tally, say) {
         el('div', { class: 'chipbar' }, assigneeChips()),
         el('span', { class: 'topbar-gap' }),
         el('a', { class: 'btn quiet small', href: '/api/requests/export.csv', text: 'Export CSV' }),
-        fileButton(FILE_NOTE),
+        fileButton(),
       ]),
       rows.length === 0
         ? sayNothing(emptySaid(payload, chip.empty), emptyDo(payload))
@@ -1201,7 +1165,7 @@ function listSection(payload, rows, tally, say) {
 }
 
 function mineSection(payload, rows, say) {
-  const list = section('Your requests', MINE_NOTE, {
+  const list = section('Your requests', null, {
     count: payload.total ?? rows.length,
     id: 'your-requests',
     open: true,
@@ -1246,10 +1210,10 @@ function mineSection(payload, rows, say) {
       el('div', { class: 'card-head' }, [
         ...filter.parts,
         el('span', { class: 'topbar-gap' }),
-        fileButton(MEMBER_FILE_NOTE),
+        fileButton(),
       ]),
       built.length === 0
-        ? sayNothing(NO_MINE, textAction('File a request', () => openDrawer('File a request', fileForm(MEMBER_FILE_NOTE))))
+        ? sayNothing(NO_MINE, textAction('File a request', () => openDrawer('File a request', fileForm())))
         : el('div', { class: 'table-scroll' }, [grid]),
       none,
       foot,
@@ -1282,7 +1246,6 @@ function requestForumCard(forumId) {
     }
   }, { tone: 'warn' });
   return card('Request forum', [
-    el('p', { text: FORUM_NOTE }),
     forumId
       ? sayNothing('Every request gets its own post there.')
       : sayNothing('There is no request forum yet, so cards go to the channels below.'),
@@ -1300,10 +1263,9 @@ function unsectioned(node) {
 }
 
 async function machinerySection(specs) {
-  const one = section('Settings and logs', MACHINERY_NOTE, { id: 'machinery' });
+  const one = section('Settings and logs', null, { id: 'machinery' });
   one.body.append(
     foldout('Settings', [
-      el('p', { class: 'field-help', text: SETTINGS_NOTE }),
       requestForumCard((specs.find((spec) => spec.key === 'request_forum_channel_id') || {}).value ?? null),
       await settingsPanel(specs, {
         where: 'Settings',

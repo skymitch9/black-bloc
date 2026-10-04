@@ -7,7 +7,6 @@ import {
   bar,
   button,
   card,
-  el,
   idsIn,
   nameNode,
   namespaceSettings,
@@ -62,12 +61,11 @@ async function load() {
   ], rows, { empty: 'Nobody has walked into a trap channel.' });
 
   const setup = card('Setup', [
-    el('p', { class: 'field-help', text: 'Safe to run twice; nobody is let into the trap by it.' }),
     bar([
       button('Run setup', async () => {
         const sure = await ask({
           title: 'Run honeypot setup?',
-          body: ['This creates or repairs the trap channel in Discord.'],
+          body: ['This creates or repairs the trap channel in Discord.', 'Safe to run twice; nobody is let into the trap by it.'],
           confirmLabel: 'Run it',
           tone: 'warn',
         });
@@ -78,11 +76,7 @@ async function load() {
     ]),
   ]);
 
-  const one = section(
-    'Hits',
-    'In shadow the trap only writes down what it would have done; Ban now is how a shadow hit gets carried out.',
-    { count: rows.length },
-  );
+  const one = section('Hits', null, { count: rows.length });
   one.body.append(list, say);
   const two = section('Trap channels');
   two.body.append(setup);

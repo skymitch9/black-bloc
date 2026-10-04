@@ -197,9 +197,10 @@ test('a horaro.net events feed draws an Owner and a Search words field; other fe
     ['words', 'Search words', 'RGL, RGLtv, Retrothon'],
     ['owner', 'Owner', 'RGLtvMarathons'],
   ]);
-  assert.ok(fields.every((one) => one.help));
+  assert.ok(fields.every((one) => !('help' in one)));
+  assert.equal(fields[0].max, 5);
   const blank = feedSearchFields({ source: 'horaro_events', owner: '', words: [], searches: ['Fast Pace'] });
-  assert.deepEqual(blank.map((one) => [one.value, one.placeholder]), [['', 'Fast Pace'], ['', '']]);
+  assert.deepEqual(blank.map((one) => [one.value, one.placeholder]), [['', 'Fast Pace'], ['', 'only events naming this channel']]);
   assert.deepEqual(feedSearchFields({ source: 'gdq', owner: null, words: null }), []);
   assert.deepEqual(feedSearchFields(null), []);
 });

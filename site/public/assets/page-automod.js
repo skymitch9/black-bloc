@@ -2,6 +2,7 @@ import { api, listOf, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
 import {
+  badge,
   bar,
   button,
   card,
@@ -66,7 +67,6 @@ function ruleCard(rule) {
   });
 
   const node = card(rule.name, [
-    rule.help ? el('p', { class: 'field-help', text: rule.help }) : null,
     el('div', { class: 'formrow' }, [
       field('Enabled', enabled),
       field('Window, seconds', window),
@@ -79,6 +79,7 @@ function ruleCard(rule) {
     say,
   ]);
   node.setAttribute('data-rule', rule.name);
+  if (rule.help) node.querySelector('h3').setAttribute('title', rule.help);
   return node;
 }
 
@@ -89,16 +90,13 @@ async function load() {
   const mode = automod.find((spec) => spec.key === 'automod_mode');
   const exempt = automod.filter((spec) => spec.key.startsWith('automod_exempt'));
 
-  const arming = section(
-    'Mode',
-    'Arming automod is the switch that starts deleting messages and timing people out.',
-  );
+  const arming = section('Mode');
   arming.body.append(await settingsPanel(mode ? [mode] : [], {
     where: 'Mode',
     empty: 'The bot did not report an automod_mode key, so this switch is not shown rather than guessed at.',
   }));
 
-  const book = section('Rules', 'Each rule is a burst counter: how many in how long, and what happens then.', {
+  const book = section('Rules', null, {
     count: rules.length || null,
   });
   if (rules.length) {
@@ -116,10 +114,13 @@ async function load() {
     book.body.append(sayNothing('Automod reports no rules at all.'));
   }
 
-  const exemptions = section('Exemptions', 'Staff are always exempt on top of whatever is listed here.', {
+  const exemptions = section('Exemptions', null, {
     count: exempt.length || null,
   });
-  exemptions.body.append(await settingsPanel(exempt, {
+  exemptions.body.append(el('div', { class: 'setrow' }, [
+    el('div', { class: 'setrow-head' }, [el('span', { class: 'setrow-label', text: 'Staff' })]),
+    badge('always exempt', 'ok'),
+  ]), await settingsPanel(exempt, {
     where: 'Exemptions',
     empty: 'No exemption keys are registered.',
   }));

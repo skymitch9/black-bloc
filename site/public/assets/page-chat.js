@@ -12,6 +12,7 @@ import {
   field,
   foldout,
   keepSaying,
+  limitCounter,
   memberPicker,
   notice,
   pager,
@@ -22,9 +23,11 @@ import {
   section,
   segment,
   settingsPanel,
+  slugInput,
   table,
   textAction,
   when,
+  wordAids,
 } from './ui.js';
 
 const PER_PAGE = 50;
@@ -98,16 +101,7 @@ const VOICE_WORD_KEYS = [
   'chat_tone_too_long',
 ];
 const SHEET_TITLE = 'The cookout voice — the base every tone sits on';
-const SHEET_NOTE = 'Every answer a model writes is in this voice: the words it reaches for, how it ' +
-  'greets, teases and signs off, and what it never says. A mood below is only a tone on top of ' +
-  'it — the sentence under the sheet is what tells the model so.';
-const TONE_HINT = 'Your wording is kept when Black Bloc starts up. Blank and Save puts the ' +
-  'shipped wording back. Up to 1200 characters.';
-const VOICES_NOTE = 'Which tone each member hears on top of the cookout voice. A pin beats the ' +
-  'server\'s setting until staff clear it; everybody else is rolled once per conversation and ' +
-  'keeps that tone in every channel.';
-const VOICES_EMPTY = 'Nobody has been answered by a conversation model yet, so nobody is listed. ' +
-  'Pin somebody below and they hear that tone from their next answer.';
+const VOICES_EMPTY = 'Nobody has been answered by a conversation model yet, so nobody is listed.';
 const VOICES_OFF = 'The voice is the cookout one, so nobody hears a tone right now — pins ' +
   'included. Pick the pool or a mood under Personality and the pins come back into play.';
 const VOICES_WAITING = 'pinned tone is switched off';
@@ -117,30 +111,9 @@ const VOICE_WORDS_TITLE = 'The words /chat says about who hears what';
 const NO_TONES = 'Every tone is switched off, so there is nothing to pin. Turn one back on under ' +
   'Personality.';
 
-const CHANNELS_NOTE = 'What each channel is for, in one sentence, and the review of the drafted ' +
-  'descriptions — Black Bloc reads these notes before it points anybody anywhere.';
 const CHANNELS_LINK = 'Channel directory → Channels page';
 
-const TRY_NOTE = 'Type what somebody would say after the @-mention and Black Bloc tells you ' +
-  'which intent it lands on and the exact line it would answer with. This is a dry run — ' +
-  'nothing is sent anywhere.';
-const INTENTS_NOTE = 'One card per thing Black Bloc understands. A canned intent answers from ' +
-  'its own lines; a data intent fills its line in from what the server is doing right now; a ' +
-  'route intent hands the person to staff.';
-const NEW_NOTE = 'A canned intent of your own. It is matched before the built-in ones, so a ' +
-  'phrase you claim here wins.';
-const SETTINGS_NOTE = 'Whether Black Bloc answers at all, how often the same person gets a ' +
-  'reply, and the channels it stays out of.';
 
-const KNOWLEDGE_NOTE = 'What Black Bloc knows about this server in its own words. When somebody ' +
-  'asks something the phrases above do not cover, the closest few notes ride along with the ' +
-  'question so the answer quotes them instead of inventing something.';
-const PERSONALITY_NOTE = 'How Black Bloc sounds. The cookout voice is the house one; the pool is ' +
-  'eleven voices it picks between, a different one per conversation, moving a step at a time. ' +
-  'None of them changes what it says — only how it says it.';
-const SPEND_NOTE = 'How many answers came from a model today and which of the three tiers is ' +
-  'actually answering right now. The money itself lives on the Health page, where hosting and ' +
-  'the keys are — this figure links to it.';
 const COSTS_CARD = '/health.html#sect-costs';
 const COSTS_TITLE = 'What everything costs, on the Health page';
 const NO_KNOWLEDGE = 'Black Bloc has nothing written down about this server yet, so it answers ' +
@@ -151,7 +124,6 @@ const NEED_A_TITLE = 'Give the note a heading first — that is the line a quest
   'against.';
 const NEED_A_BODY = 'Write the note first, or there is nothing for Black Bloc to quote.';
 const NOTE_UNCHANGED = 'Nothing in that note is different, so nothing was saved.';
-const CAP_LIVES_IN_SETTINGS = 'The cap itself is a setting.';
 const TIER_LIVE_WORD = 'answering';
 const TIER_QUIET_WORD = 'not answering';
 
@@ -166,8 +138,7 @@ const NEED_TEXT = 'Write something first — that is the message being tested.';
 const NEED_NAME = 'Give it a name first, like wheres_the_food.';
 const NEED_TRIGGER = 'Add at least one trigger phrase, or nothing would ever match it.';
 const NEED_LINE = 'Write the first line, or Black Bloc would have nothing to answer with.';
-const BUILTIN_KEPT = 'Built in, so it cannot be deleted — turn it off above and it stays quiet. ' +
-  'Its phrases and its lines are still yours.';
+const BUILTIN_KEPT = 'Built in, so it cannot be deleted — turn it off above and it stays quiet.';
 
 const KIND_SAID = {
   canned: 'Answers with one of the lines below, picked at random.',
@@ -218,15 +189,15 @@ const state = { page: 1 };
 
 let refresh = () => {};
 
+const NAME_ONLY = /[^A-Za-z0-9_]/g;
+
+function nameShape(input) {
+  return slugInput(input, { join: '_', only: NAME_ONLY });
+}
+
 function tokensOf(intent) {
   const given = Array.isArray(intent.tokens) && intent.tokens.length ? intent.tokens : null;
   return ['{name}', '{attendees}'].concat(given || OWN_TOKENS[intent.name] || []);
-}
-
-function tokenHelp(intent) {
-  return tokensOf(intent)
-    .map((token) => `${token} = ${TOKEN_SAID[token] || 'filled in by the bot'}`)
-    .join(' · ');
 }
 
 function specFor(payload, key) {
@@ -364,7 +335,7 @@ function triggerBlock(intent, say, swap) {
       : el('div', { class: 'chipbar' }, intent.triggers.map((phrase) =>
         triggerChip(intent, phrase, say, swap))),
     el('div', { class: 'formrow' }, [
-      field('Add a phrase', box, 'Whole words, so “help” does not match “helping”. Enter adds it.'),
+      field('Add a phrase', box),
       bar([button('Add', add, { tone: 'quiet' })]),
     ]),
   ]);
@@ -404,7 +375,7 @@ function lineBlock(intent, say, swap) {
       : el('div', { class: 'chatlines' }, intent.lines.map((line) =>
         lineRow(intent, line, say, swap))),
     el('div', { class: 'formrow' }, [
-      field('Add a line', box, `Up to ${LINE_LIMIT} characters. Enter adds it.`),
+      field('Add a line', box, wordAids(box, null, { tokens: tokensOf(intent), said: TOKEN_SAID })),
       bar([button('Add', add, { tone: 'quiet' })]),
     ]),
   ]);
@@ -425,7 +396,7 @@ function intentCard(intent) {
 
   const nameBox = intent.builtin
     ? el('span', { class: 'chat-fixed', text: intent.name })
-    : el('input', { class: 'input mono', type: 'text', value: intent.name, 'aria-label': 'Intent name' });
+    : nameShape(el('input', { class: 'input mono', type: 'text', value: intent.name, 'aria-label': 'Intent name' }));
   const saveName = intent.builtin ? null : button('Rename', async () => {
     const done = await run(
       say,
@@ -478,14 +449,13 @@ function intentCard(intent) {
 
   node.append(card(null, [
     el('div', { class: 'formrow' }, [
-      field('Name', nameBox, intent.builtin ? 'One of Black Bloc’s own, so the name is fixed.' : 'Letters, numbers and underscores.'),
-      field('Kind', kind, KIND_SAID[intent.kind] || null),
-      field('Answers', enabled, 'Quiet leaves the phrases in place and says nothing.'),
+      field('Name', nameBox),
+      field('Kind', kind),
+      field('Answers', enabled),
       saveName ? bar([saveName]) : null,
     ]),
     triggerBlock(intent, say, swap),
     lineBlock(intent, say, swap),
-    el('p', { class: 'section-note', text: tokenHelp(intent) }),
     drop ? bar([drop]) : el('p', { class: 'say-nothing', text: BUILTIN_KEPT }),
     say,
   ]));
@@ -493,7 +463,7 @@ function intentCard(intent) {
 }
 
 function intentsSection(intents, say) {
-  const one = section('Intents', INTENTS_NOTE, { count: intents.length, open: true });
+  const one = section('Intents', null, { count: intents.length, open: true });
   const paged = intents.length > PER_PAGE
     ? intents.slice((state.page - 1) * PER_PAGE, state.page * PER_PAGE)
     : intents;
@@ -563,10 +533,10 @@ function trySection() {
     go();
   });
 
-  const one = section('Try it', TRY_NOTE, { open: true });
+  const one = section('Try it', null, { open: true });
   one.body.append(card(null, [
     el('div', { class: 'formrow' }, [
-      field('Message', box, 'The part after the @-mention. Enter runs it.'),
+      field('Message', box),
       bar([button('Try it', go, { tone: 'warn', small: false })]),
     ]),
     answer,
@@ -576,7 +546,7 @@ function trySection() {
 }
 
 function newIntentSection(say) {
-  const name = el('input', { class: 'input mono', type: 'text', placeholder: 'wheres_the_food' });
+  const name = nameShape(el('input', { class: 'input mono', type: 'text', placeholder: 'wheres_the_food' }));
   const triggers = el('input', { class: 'input', type: 'text', placeholder: 'wheres the food, when do we eat' });
   const line = el('input', {
     class: 'input',
@@ -612,12 +582,12 @@ function newIntentSection(say) {
     }
   }, { tone: 'warn', small: false });
 
-  const one = section('New intent', NEW_NOTE, {});
+  const one = section('New intent', null, {});
   one.body.append(card(null, [
     el('div', { class: 'formrow' }, [
-      field('Name', name, 'Letters, numbers and underscores — this is what the log calls it.'),
-      field('Trigger phrases', triggers, 'Separated by commas. Whole words, not letters inside one.'),
-      field('First line', line, '{name} is filled in with whoever asked.'),
+      field('Name', name),
+      field('Trigger phrases, comma-separated', triggers),
+      field('First line', line, wordAids(line, null, { tokens: ['{name}', '{attendees}'], said: TOKEN_SAID })),
     ]),
     bar([create]),
     say,
@@ -729,15 +699,15 @@ function noteCard(row, say) {
   return el('div', { class: 'card knowledge-note', 'data-source': row.source }, [
     el('div', { class: 'card-body' }, [
       el('div', { class: 'formrow' }, [
-        field('Heading', title, 'What a question is matched against.'),
-        field('About', tag, 'One word, so you can find it again. Optional.'),
+        field('Heading', title, limitCounter(title, TITLE_LIMIT)),
+        field('About', tag, limitCounter(tag, TAG_LIMIT)),
         el('div', { class: 'chipbar' }, [
           badge(row.source === 'server' ? 'Black Bloc wrote this' : 'staff wrote this',
             row.source === 'server' ? 'warn' : null),
           el('span', { class: 'chat-answer-label', text: `${row.characters} characters` }),
         ]),
       ]),
-      field('What it says', body, 'Plain words. Black Bloc quotes this rather than paraphrasing it.'),
+      field('What it says', body, limitCounter(body, BODY_LIMIT)),
       el('p', { class: 'section-note', text: wrote }),
       row.editable ? bar([save, drop]) : said(row.locked_why),
     ]),
@@ -788,10 +758,10 @@ function newNoteCard(say) {
 
   return card('A new note', [
     el('div', { class: 'formrow' }, [
-      field('Heading', title, `Up to ${TITLE_LIMIT} characters.`),
-      field('About', tag, 'Optional, and only for finding it again.'),
+      field('Heading', title, limitCounter(title, TITLE_LIMIT)),
+      field('About (optional)', tag, limitCounter(tag, TAG_LIMIT)),
     ]),
-    field('What it says', body, `Up to ${BODY_LIMIT} characters. A note that will not fit in an answer is left out whole rather than cut short.`),
+    field('What it says', body, limitCounter(body, BODY_LIMIT)),
     bar([add]),
   ], { count: null });
 }
@@ -799,7 +769,7 @@ function newNoteCard(say) {
 function knowledgeSection(payload, say) {
   const rows = Array.isArray(payload?.sections) ? payload.sections : [];
   const counts = payload?.counts || {};
-  const one = section('Knowledge', KNOWLEDGE_NOTE, { count: rows.length || null });
+  const one = section('Knowledge', null, { count: rows.length || null });
   const list = el('div', { class: 'section-body' });
   const focusNew = () => {
     const box = one.body.querySelector('.card input.input:not([disabled])');
@@ -859,8 +829,7 @@ function toneEditor(row, say) {
   const back = row.edited ? button('Put the shipped wording back', () => saveTone(''), { tone: 'quiet' }) : null;
   return el('div', {}, [
     area,
-    bar([save, back]),
-    el('p', { class: 'section-note', text: TONE_HINT }),
+    bar([save, back, limitCounter(area, 1200)]),
   ]);
 }
 
@@ -913,7 +882,7 @@ async function personalitySection(payload, say, sheetSpecs) {
   const rows = Array.isArray(payload?.tropes) ? payload.tropes : [];
   const mode = String(payload?.mode || MODE_COOKOUT);
   const kind = String(payload?.mode_kind || MODE_COOKOUT);
-  const one = section('Personality', PERSONALITY_NOTE, { count: payload?.counts?.enabled ?? null });
+  const one = section('Personality', null, { count: payload?.counts?.enabled ?? null });
 
   const named = rows.find((row) => row.name === mode);
   const choices = [
@@ -944,7 +913,6 @@ async function personalitySection(payload, say, sheetSpecs) {
   for (const row of rows) list.append(tropeCard(row, mode, say));
 
   const sheet = card(SHEET_TITLE, [
-    el('p', { class: 'section-note', text: SHEET_NOTE }),
     await settingsPanel(
       sheetSpecs.map((spec) => ({ ...spec, type: 'longtext' })),
       { where: 'Personality', empty: NO_SETTINGS },
@@ -956,7 +924,7 @@ async function personalitySection(payload, say, sheetSpecs) {
     sheet,
     card(null, [
       el('div', { class: 'formrow' }, [
-        field('The voice', pick, 'A voice is tone and never truth — the same facts either way.'),
+        field('The voice', pick),
       ]),
       el('p', { class: 'chat-answer-line' }, boldParts(payload?.mode_word || '')),
       say,
@@ -1046,7 +1014,7 @@ function pinNew(tropes, say) {
 async function voicesSection(payload, wordSpecs, say) {
   const rows = Array.isArray(payload?.voices) ? payload.voices : [];
   const tropes = Array.isArray(payload?.tropes) ? payload.tropes : [];
-  const one = section('Who hears what', VOICES_NOTE, { count: rows.length || null });
+  const one = section('Who hears what', null, { count: rows.length || null });
   const counts = payload?.counts || {};
   one.body.append(card(null, [
     el('div', { class: 'chipbar' }, [
@@ -1098,7 +1066,7 @@ function spendSection(payload) {
   const today = payload?.today || {};
   const tiers = Array.isArray(payload?.tiers) ? payload.tiers : [];
   const live = tiers.filter((row) => row.live).length;
-  const one = section('Spend & tiers', SPEND_NOTE, { count: live || null });
+  const one = section('Spend & tiers', null, { count: live || null });
   const share = Math.max(0, Math.min(1, Number(month.share) || 0));
 
   one.body.append(card(null, [
@@ -1122,10 +1090,7 @@ function spendSection(payload) {
     ]),
     el('p', { class: 'section-note', text: month.word || '' }),
     el('p', { class: 'section-note', text: today.word || '' }),
-    sayNothing(
-      CAP_LIVES_IN_SETTINGS,
-      textAction(`Change ${payload?.cap_key || 'the cap'}`, openSettings),
-    ),
+    bar([textAction(`Change ${payload?.cap_key || 'the cap'}`, openSettings)]),
   ]));
   one.body.append(el('div', { class: 'chatblock' }, [
     el('h4', { text: `Tiers (${live} of ${tiers.length} answering)` }),
@@ -1140,7 +1105,7 @@ function spendSection(payload) {
 }
 
 function channelsSection() {
-  const one = section('Channel directory', CHANNELS_NOTE);
+  const one = section('Channel directory');
   one.body.append(el('p', { class: 'section-note' }, [
     el('a', { href: '/channels.html', text: CHANNELS_LINK }),
   ]));
@@ -1148,19 +1113,15 @@ function channelsSection() {
 }
 
 async function settingsSection(specs) {
-  const one = section('Settings', SETTINGS_NOTE, { count: specs.length || null });
+  const one = section('Settings', null, { count: specs.length || null });
   one.body.append(await settingsPanel(specs, { where: 'Settings', empty: NO_SETTINGS }));
   return one.node;
 }
 
-const MEMORY_NOTE = 'What Black Bloc remembers about each person between conversations — ' +
-  'preferences only, never anything anybody said. A profile is written after a conversation ' +
-  'ends, never while one is going on.';
 const MEMORY_COUNTS_ONLY = 'This server keeps the notes themselves private to the person they ' +
   'are about, so only the counts are shown here. Set chat_memory_staff_view to full below if ' +
   'staff should read them.';
-const MEMORY_NO_PROFILES = 'Nobody has a profile yet. One is written after somebody has said ' +
-  'two things in a conversation that then goes quiet.';
+const MEMORY_NO_PROFILES = 'Nobody has a profile yet.';
 const MEMORY_FORGOT_FAILED = 'That profile was not cleared.';
 const MEMORY_DM_MARK = 'learned in a DM';
 
@@ -1217,7 +1178,7 @@ function memoryCard(row, say) {
 
 async function memorySection(payload, specs, say) {
   const rows = Array.isArray(payload?.profiles) ? payload.profiles : [];
-  const one = section('Memory', MEMORY_NOTE, { count: rows.length || null });
+  const one = section('Memory', null, { count: rows.length || null });
   one.body.append(card(null, [
     el('div', { class: 'chipbar' }, [
       badge(payload?.on ? 'on' : 'off', payload?.on ? 'ok' : null),
@@ -1243,14 +1204,8 @@ async function memorySection(payload, specs, say) {
 // The review queue (docs/info/chat-review-loop-design.md): answers that may have missed, what the
 // cheap model suggests Black Bloc learns from each, and the moves staff make on them. Every move
 // goes through chat_panel.py's one write path, the same one /chat ▸ Review queue… uses.
-const REVIEW_NOTE = 'Answers that may have missed: a real question no note could ground, somebody ' +
-  'asking again straight away, saying it was not what they meant, or a thumbs down. The cheap ' +
-  'model suggests one thing Black Bloc should learn from each; Approve writes it, Change writes ' +
-  'yours instead, Dismiss learns nothing.';
-const REVIEW_EMPTY = 'Nothing is waiting in this view. An answer lands here when it may have missed.';
+const REVIEW_EMPTY = 'Nothing is waiting in this view.';
 const REVIEW_DOWNLOAD = 'Download as markdown';
-const REVIEW_DOWNLOAD_HELP = 'The open items as one document — the same file a scheduled Claude ' +
-  'routine reads through the read-only operator token.';
 const REVIEW_WORDS_TITLE = 'The words the review queue says';
 const REVIEW_SETTINGS_TITLE = 'How the review queue decides';
 const REVIEW_STATUS_WORDS = { open: 'Waiting', approved: 'Approved', changed: 'Changed', dismissed: 'Dismissed', all: 'Everything' };
@@ -1296,8 +1251,8 @@ function reviewChange(row, intents, say) {
   );
   const intent = reviewPicker('The intent it should reach', intents.map((name) => [name, name]),
     row.suggestion?.intent || intents[0]);
-  const name = el('input', { class: 'input', type: 'text', maxlength: '60', placeholder: 'wheres_the_food',
-    value: row.suggestion?.kind === 'intent' ? row.suggestion.intent || '' : '' });
+  const name = slugInput(el('input', { class: 'input', type: 'text', maxlength: '60', placeholder: 'wheres_the_food',
+    value: row.suggestion?.kind === 'intent' ? row.suggestion.intent || '' : '' }), { lower: true, join: '_', only: NAME_ONLY });
   const phrase = el('input', { class: 'input', type: 'text', maxlength: '60',
     value: row.suggestion?.phrase || '', placeholder: 'when does the grill go on' });
   const line = el('input', { class: 'input', type: 'text', maxlength: '300',
@@ -1305,10 +1260,10 @@ function reviewChange(row, intents, say) {
   const note = el('input', { class: 'input', type: 'text', maxlength: '100',
     value: row.suggestion?.section || '', placeholder: 'From review' });
   const intentField = field('The intent it should reach', intent);
-  const nameField = field('The new intent’s name', name, 'Lowercase words joined by underscores.');
-  const phraseField = field('The phrase', phrase, 'The words somebody would say, up to 60 characters.');
-  const lineField = field('The fact', line, 'One plain line Black Bloc can quote.');
-  const noteField = field('The note it goes in', note, 'Blank uses the From review note.');
+  const nameField = field('The new intent’s name', name, limitCounter(name, 60));
+  const phraseField = field('The phrase', phrase, limitCounter(phrase, 60));
+  const lineField = field('The fact', line, limitCounter(line, 300));
+  const noteField = field('The note it goes in', note, limitCounter(note, 100));
   const shape = () => {
     const now = kind.readValue();
     intentField.hidden = now !== 'phrase';
@@ -1398,7 +1353,7 @@ function reviewPath() {
 async function reviewSection(payload, specs, wordSpecs, say) {
   const counts = payload?.counts || {};
   const tagging = payload?.tagging || {};
-  const one = section('Review queue', REVIEW_NOTE, { count: counts.open || null, id: 'review' });
+  const one = section('Review queue', null, { count: counts.open || null, id: 'review' });
   const list = el('div', {}, [reviewList(payload, say)]);
   const statusPick = reviewPicker('Which items', [...(payload?.statuses || ['open']), 'all']
     .map((value) => [value, REVIEW_STATUS_WORDS[value] || value]), reviewView.status);
@@ -1427,7 +1382,6 @@ async function reviewSection(payload, specs, wordSpecs, say) {
     el('p', { class: 'section-note', text: tagging.word || '' }),
     el('div', { class: 'formrow' }, [field('Which items', statusPick), field('Why they are here', reasonPick)]),
     bar([download]),
-    el('p', { class: 'field-help', text: REVIEW_DOWNLOAD_HELP }),
     say,
   ]));
   one.body.append(

@@ -8,18 +8,6 @@ import { el, keysSwitch, listFilter, sayNothing, section, settingsEditor } from 
 const FIRST = 'core';
 const FLASH_MS = 2400;
 
-const CORE_LOGS_NOTE = 'Everything done from this dashboard and every settings change, ' +
-  'whoever made it. Settings changes are routine — nothing here acts on a member — so switch ' +
-  'to All to see them.';
-
-const NAMESPACE_NOTES = {
-  core: 'staff_channel_id is what decides who may see this dashboard.',
-  automod: 'automod_rules has its own editor on the Automod tab; the JSON box here is the fallback.',
-  cost: 'The Costs card on the Health page is where this figure is read; nothing on the bot can see an invoice.',
-  pings: 'The Pings section on the Go-live tab is where the Events role is set up and a streamer’s own role is started.',
-  marathon: 'The Marathons section of the Events page is where schedules are added, paired and paused; these are the defaults every marathon follows.',
-};
-
 const NAMESPACE_NAMES = {
   core: 'The basics',
   mod: 'Moderation',
@@ -139,7 +127,7 @@ async function load() {
 
   const groups = namespaces.map((namespace) => {
     const rows = payload[namespace];
-    const group = section(named(namespace), NAMESPACE_NOTES[namespace] || null, { count: rows.length, id: namespace });
+    const group = section(named(namespace), null, { count: rows.length, id: namespace });
     group.details.querySelector('.sect-inner').classList.add('flush');
     group.body.append(...rows.map((spec) => byKey.get(spec.key).node));
     return { node: group.node, count: group.count, size: rows.length };
@@ -149,13 +137,8 @@ async function load() {
   if (aside) aside.replaceChildren(filter.box, filter.said, keysSwitch());
 
   target.replaceChildren(
-    el('p', {
-      class: 'section-note',
-      text: 'The ⌫ beside a row puts it back to its default; nothing is written until you press ' +
-        'Save Changes. Show keys puts each setting’s raw name back under it.',
-    }),
     share(groups),
-    await logsSection('core', { title: 'Logs', note: CORE_LOGS_NOTE }),
+    await logsSection('core', { title: 'Logs' }),
   );
   // After mountSections has applied the remembered open/closed state and
   // mountColumns has moved the blocks — otherwise the group is shut again

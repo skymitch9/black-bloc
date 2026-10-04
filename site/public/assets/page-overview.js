@@ -239,8 +239,6 @@ function actionsCard(rows) {
 
 const RESTART_TITLE = 'Restart the bot';
 const RESTART_SECONDS = 15;
-const RESTART_NOTE = 'Only somebody with Manage Server can do this. Black Bloc serves this site, ' +
-  'so the page goes down with it while it restarts.';
 const RESTART_ASK_TITLE = 'Restart Black Bloc?';
 const RESTART_ASK = [
   `Black Bloc stops and starts again. It is usually back within about ${RESTART_SECONDS} seconds.`,
@@ -264,7 +262,6 @@ function restartCard() {
     await run(say, () => send('/api/bot/restart', 'POST', {}), (found) => found?.message || RESTART_SAID);
   }, { tone: 'danger', small: false });
   return card(RESTART_TITLE, [
-    el('p', { class: 'section-note', text: RESTART_NOTE }),
     bar([go]),
     say,
   ]);

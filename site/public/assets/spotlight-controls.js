@@ -20,22 +20,15 @@ import {
 export const SPOTLIGHT_TITLE = 'Spotlight';
 export const SPOTLIGHT_DATES = 'Dates';
 export const SPOTLIGHT_SAVE_DATES = 'Save dates';
-export const SPOTLIGHT_STARTS = 'Starts';
-export const SPOTLIGHT_ENDS = 'Ends';
-export const SPOTLIGHT_STARTS_HELP = 'When Black Bloc starts watching it. Leave it blank to start now '
-  + '— nothing of its is announced, pinned or reminded before this.';
-export const SPOTLIGHT_ENDS_HELP = 'When the row is purged. Leave it blank to keep it for ever, the '
-  + 'way GamesDoneQuick is kept.';
-export const SPOTLIGHT_SCHEDULED_STATE = 'Scheduled — its start has not arrived, so nothing of its '
-  + 'is announced, pinned or reminded yet.';
+export const SPOTLIGHT_STARTS = 'Starts — blank starts now';
+export const SPOTLIGHT_ENDS = 'Ends — blank keeps it for ever';
+export const SPOTLIGHT_SCHEDULED_STATE = 'Scheduled — its start has not arrived.';
 export const PINGS_TITLE = 'Pings';
 export const PING_MODE_CHOICES = [
   { value: 'always', label: 'Always' },
   { value: 'never', label: 'Never' },
   { value: 'events', label: 'During events' },
 ];
-const PINGS_HELP = 'Only the role mentions change. The announcement, the pin and the reminders go '
-  + 'out exactly as they do now, whichever of the three is picked.';
 const WINDOWS_NONE = 'No window yet, so nothing it posts mentions a role.';
 const ADD_WINDOW = 'Add a window…';
 const WINDOW_TITLE = 'Add a ping window';
@@ -43,15 +36,13 @@ const WINDOW_HELP = 'While a window is open this channel mentions the go-live ro
   + 'ping role. If it is already live when the window opens, one reminder that pings goes out.';
 const WINDOW_STARTS = 'Pings start';
 const WINDOW_ENDS = 'Pings stop';
-const WINDOW_NOTE = 'What it is for';
-const WINDOW_NOTE_HELP = 'Optional — for example AGDQ 2027. Shown beside the window here.';
+const WINDOW_NOTE = 'What it is for (optional)';
 const WINDOW_OPEN = 'open now';
 export const SPOTLIGHT_ON = 'Spotlight on';
 export const SPOTLIGHT_OFF = 'Spotlight off';
 export const CHANNEL_OPT_OUT = 'Opt out of announcements';
 export const CHANNEL_OPT_IN = 'Opt back in';
-const CHANNEL_OPTED_OUT_STATE = 'Opted out \u2014 nothing of its is announced, whatever the '
-  + 'spotlight says. The row, its ping role and its YouTube link all stay.';
+const CHANNEL_OPTED_OUT_STATE = 'Opted out \u2014 nothing of its is announced.';
 const CHANNEL_ANNOUNCED_STATE = 'On \u2014 announced in the go-live channel whenever it goes live.';
 
 function rowPath(one, tail = '') {
@@ -125,12 +116,10 @@ export function datesCard(one, say, after) {
   const starts = whenField({
     label: SPOTLIGHT_STARTS,
     value: one.starts_at ? localWhen(one.starts_at) : '',
-    help: SPOTLIGHT_STARTS_HELP,
   });
   const ends = whenField({
     label: SPOTLIGHT_ENDS,
     value: one.expires_at ? localWhen(one.expires_at) : '',
-    help: SPOTLIGHT_ENDS_HELP,
   });
   const go = button(SPOTLIGHT_SAVE_DATES, async () => {
     const done = await run(
@@ -189,7 +178,6 @@ export function pingsCard(one, say, after) {
   const bits = [
     el('span', { class: 'cell-quiet', text: one.ping_state || '' }),
     mode,
-    el('p', { class: 'field-help', text: PINGS_HELP }),
     one.ping_help ? el('p', { class: 'field-help', text: one.ping_help }) : null,
   ].filter(Boolean);
   if (current === 'events') {
@@ -227,7 +215,7 @@ async function addWindow(one, say, after) {
     body: [
       WINDOW_HELP,
       el('div', { class: 'formrow' }, [starts.node, ends.node]),
-      field(WINDOW_NOTE, note, WINDOW_NOTE_HELP),
+      field(WINDOW_NOTE, note),
     ],
     confirmLabel: 'Add the window',
     tone: 'warn',
