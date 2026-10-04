@@ -1,5 +1,22 @@
 {
-  "release": "v199",
-  "commit": "b16c4e42",
-  "changed_features": []
+  "release": "v200",
+  "commit": "7d8b40ad",
+  "changed_features": [
+    "automod",
+    "birthday",
+    "chat",
+    "core",
+    "events",
+    "golive",
+    "guides",
+    "honeypot",
+    "marathon",
+    "mod",
+    "modmail",
+    "poll",
+    "posts",
+    "request",
+    "rolemenu",
+    "tempvoice"
+  ]
 }
