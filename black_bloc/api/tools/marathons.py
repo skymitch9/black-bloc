@@ -82,6 +82,7 @@ from ...cogs.content.marathon_spotlight import set_spotlight_mode
 from ...cogs.content.marathon_spotlight import state_for as spotlight_state_for
 from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
+from ...golive_replay import BECAUSE_REPLAY
 from ...logkinds import VIA_WEBSITE
 from ...marathon_archive import STAFF, WHY_WORDS, page_of
 from ...marathon_events import MODE_WORDS, MODES
@@ -117,6 +118,7 @@ BECAUSE_WORDS = {
     mt.BY_BOTH: "the stream's title and Twitch category",
     mt.BY_SCHEDULE: "the schedule's clock",
     mt.BY_STAFF: "staff",
+    BECAUSE_REPLAY: "a replay starting on the stream",
 }
 TROUBLE = "could not be read since {when} — {why}"
 NEVER_READ = "not read yet"

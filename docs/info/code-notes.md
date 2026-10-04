@@ -9836,3 +9836,24 @@ The record of what was removed, kept and converted is [`no-blurbs-sweep-2026-10-
 | `site/public/assets/golive-join.js` `DRAWERS` | The `note` on each drawer is gone and `placeSettings` no longer carries one; `golive-join.test.mjs` now pins that NO drawer has a note, where it used to demand eight words. The owner asked for those notes on 2026-09-21 and the 2026-10-04 rule supersedes them — see the record. |
 | `site/public/assets/marathon-words.js` `feedSearchFields` | `help` became data the control can act on: `max` (five search words, refused beside the box as a sixth is typed) and the owner box's placeholder. |
 | `site/public/assets/spotlight-controls.js` `SPOTLIGHT_STARTS` / `SPOTLIGHT_ENDS` | A date box has no empty-state text of its own, so *blank starts now* / *blank keeps it for ever* live in the label. |
+
+## Replays mid-stream — a live session can become a replay, and back (branch `replay-midstream`, 2026-10-04)
+
+Keyed by NAME. Design: `spotlight-design.md` ▸ *Follow-up 2026-10-04 — replays mid-stream*.
+
+| Where | Note |
+|---|---|
+| `black_bloc/golive_replay.py` `tag_in` / `LEADING_TAG` | A leading bracket's whole contents are searched, so `[Replay of Day 1]` counts; a bare word needs `:` or bar directly, or a dash with a space on both sides, so `Replay-Value` and `Replay value` do not. |
+| `golive_replay.py` `verdict` | `tag_certain` defaults to False in the pure function so a caller that does not pass it reads exactly as before; the cog passes the key. The tag is checked before the marathon and the live words, which is what makes it certain. |
+| `golive_replay.py` `is_certain` | The one place that says which reasons a marathon may not overrule: `type` and `tag:`. `_verdict` asks it instead of comparing with `REASON_TYPE`. |
+| `golive_replay.py` `day_blocks` / `run_around` | Blocks come from `marathon_signals.chains` — not a third splitter. Each block takes the min and max over `sheet_at`, `scheduled_at`, `sheet_ends_at`, `ends_at`, so a day running late holds its exemption by the re-timed end. No timed run → the marathon's span, as before. |
+| `golive_replay.py` `BECAUSE_REPLAY` | One word, two uses: the unpin's `because` and the run's `because`. |
+| `black_bloc/cogs/content/spotlight.py` `_seen` / `_seen_locked` | Split so the marathon's lock is taken only AFTER the row's lock is released: the marathon tick reads spotlight state, and holding both in opposite orders is the deadlock this avoids. |
+| `spotlight.py` `_replay_began` | Three answers: None (go on as live), False (a replay read is waiting — the look does nothing), True (downgraded). `replay_cleared == staff` stops it: staff's final say outlives the next look. A YouTube-side session is not looked at. |
+| `spotlight.py` `_downgrade` | The row is written before any message moves (checklist 12's order). `skip` deletes; anything else unpins then re-words. The reminders are cleared under the same key an ended session uses. |
+| `spotlight.py` `_reword_replay` | `render`, not `again_render`: the replay sentence carries no role mention, and `again_render` would keep the prefix. `embed=None` takes the card off. Later title changes go through `_refresh_announcement` as for any replay. |
+| `spotlight.py` `replay_reads` / `live_reads` / `downgraded` | Memory only, keyed by session id. `downgraded` is what makes the upgrade wait for the second look and restart the reminder clock; a session that started as a replay is not in it and upgrades at once. |
+| `spotlight.py` `set_replay` | Sets `replay_cleared` back to NULL so a session that was upgraded can be downgraded again. |
+| `spotlight.py` `_now` | The verdict's clock in one place so a test can stand at 13:40Z; reminders still read the real clock. |
+| `black_bloc/cogs/content/marathon_signals.py` `replay_began` | `finish` only — no `actual_ended_at`, no `retime`: the replay starts long after the run ended, and an end stamped now would be a stale anchor for anything after it in the chain. |
+

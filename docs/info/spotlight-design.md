@@ -422,3 +422,113 @@ change is an edit — a stream that retitles every few minutes edits the post ev
 `PR-a` in `../access/sweeps.md` is the proof that does not exist yet.
 
 > **2026-10-03 — poll floor 2 -> 1 (owner: "yes lower it to 1 minute").** `SPOTLIGHT_POLL_MIN_MINUTES` is 1; default 5 and max 30 unchanged. One poll is one `get_streams` call for the whole list (batches of 100), plus at most one `get_games` for box art, cached for the life of the process; so 8 channels at a 1-minute poll is about 1 request/minute against Twitch's documented 800 points/minute app-token limit (from the docs, not measured). `spotlight_end_misses` (2) now means about 2 minutes of quiet rather than 4. Nothing else assumed a 2-minute gap: the marathon category lookup keeps its own 30-minute `LOOK_AGAIN`, and the marathon tick is already 1 minute.
+
+## Follow-up 2026-10-04 — replays mid-stream (branch `replay-midstream`, off `main` `30a44f98`)
+
+**The failure, measured on the live bot 2026-10-04 06:29 local.** `gamesdonequick` carries the
+tracked two-day marathon *GDQueer*. Its broadcast went live Sat 09:52 and never went offline: after
+the show it rolled into `[Replay] GDQueer Day 1 - tune in live for Day 2 starting at 1pm Eastern!`
+(category `Games Done Quick`, Twitch `type` still `live`). The bot kept the full spotlight: pinned
+announcement, a "still live" reminder every 4 hours overnight, and the marathon's last day-1 run
+(Halo Infinite) still `live`. Three causes, each enough on its own:
+
+| # | Cause | Rule now |
+|---|---|---|
+| 1 | The replay verdict was taken only when a session STARTED | **A.** Every look at an open LIVE session takes the verdict again |
+| 2 | A live word (`live`, in "tune in live") overruled the replay word | **B.** A replay word that OPENS the title is certain |
+| 3 | A marathon "within reach" overruled it for the whole two-day span | **C.** The exemption holds only while a run is around; a certain verdict is never overruled |
+| — | Halo Infinite stayed `live` because nothing followed it | **D.** A replay starting ends the marathon's live run |
+
+**A. Mid-session downgrade and upgrade.** `_seen` asks `_replay_began` before the usual
+follow/bump of a live session. A replay read that holds for `golive_replay_midstream_polls` looks
+in a row (2) makes the session a replay from then on: `replay_reason` / `replay_action` are
+written and `replay_cleared` is set back to NULL (`set_replay`), `golive.replay_began` is logged,
+and then, by `golive_replay_action`:
+
+| Action | What happens to the existing announcement |
+|---|---|
+| `plain` | **Edited in place** into the `golive_replay_template` sentence — the card and the role-mention prefix come off, the pin comes off (`golive.spotlight_unpinned`, `because: replay`). No new message. |
+| `skip` | Deleted (`golive.spotlight_post_deleted`) — a skipped replay has no post. |
+| `live` | Nothing: the session is never looked at again, as before. |
+
+The session's "still live" reminders are deleted when `spotlight_bump_cleanup` is on (the same rule
+an ended session follows), and none is posted while it is a replay (`_maybe_bump` already refuses).
+While a replay read is waiting for its second look, that look posts nothing — no reminder, no
+re-wording. The way back is the path that already existed: `_replay_seen` → `upgrade` posts the
+full announcement (pin, mentions per the row's gate), deletes the replay-worded post and writes
+`replay_cleared`. A session downgraded here must read live for the same number of looks before it
+is upgraded, and its reminder clock restarts at the upgrade (`restart_bump_clock`), so the fresh
+announcement is not followed by a reminder one poll later. A session that upgraded can be
+downgraded again (tonight's replay after day 2). **Staff's Treat as live is never undone by a
+later look** (`replay_cleared = staff` stops `_replay_began`).
+
+**Hysteresis: added, one key.** Two looks (1–2 minutes at the 1-minute poll) before a downgrade or
+the upgrade of a session downgraded here. Why: a downgrade unpins and re-words a public post and an
+upgrade posts and pings, so one odd title read must not do either, and a title that flaps
+replay/live/replay posts nothing at all. A session that STARTED as a replay still upgrades at the
+first live look, as before. The counters live on the cog (`replay_reads`, `live_reads`,
+`downgraded`), keyed by session id — no schema change.
+
+**B. A leading tag is certain** (`golive_replay.tag_in`, reason `tag:<word>`). A
+`golive_replay_words` word inside a bracket that opens the title — `[Replay] …`, `(Rerun) …`,
+`[Replay of Day 1] …`, `【Replay】` — or bare at the very start before `:`, `|` or a spaced dash
+(`Replay: …`, `Replay - …`). No live word and no marathon overrules it. Not a tag: `Replay value
+is high`, `No replay: live now`, `Day 1 [Replay]`, `Replay-Value Podcast`, `[LIVE] replay of …`.
+
+**C. The marathon exemption only while a run is around** (`golive_replay.run_around`). The runs
+are split into day blocks by `marathon_signals.chains` (the splitter the re-timer already uses: a
+gap longer than the setup maximum starts a new block); a block runs from its earliest start to its
+latest end, sheet or re-timed, whichever is wider, less `marathon_spotlight_lead_minutes` and plus
+the spotlight tail. A marathon with no timed run keeps its whole span. Only a fuzzy title word asks.
+
+**D. The live run ends** (`cogs/content/marathon_signals.replay_began`, called after the
+spotlight row's lock is released, under the marathon's own lock). Every run of a marathon on the
+channel still `live` goes through `Marathons.finish` with `because: replay`
+(`marathon.run_done`; the tracker page words it *"a replay starting on the stream"*), and the
+board is synced. Nothing is anchored and nothing is re-timed: `actual_ended_at` is left NULL
+because the replay began long after the run really ended, and the next day's runs sit in another
+chain. Only `live` rows are touched.
+
+**Keys — four, namespace `golive`, the Replays drawer.**
+
+| Key | Default | What |
+|---|---|---|
+| `golive_replay_tag_certain` | on | B on/off; off reads a leading tag as any title word |
+| `golive_replay_reason_tag` | `the title opens with “{word}”` | the `{reason}` in `golive_replay_state` for a tag |
+| `golive_replay_midstream_polls` | 2 (0–10) | A and D; 0 never looks again after the start |
+| `golive_replay_marathon_runs` | on | C on/off; off is the whole-span exemption |
+
+With `golive_replay_tag_certain` off, `golive_replay_midstream_polls` 0 and
+`golive_replay_marathon_runs` off the behaviour is v182's exactly.
+
+**A restart.** The counters are memory. A restart before the second look needs two looks again. A
+restart mid-replay keeps the replay (it is the session row): no reminder, no pin; boot
+reconciliation keeps the session because its post still exists. What is lost is the mark that the
+session was downgraded here, so after a restart the first live look upgrades at once (no second
+look) and the reminder clock is not restarted — a reminder can follow the fresh announcement on the
+next poll if `spotlight_bump_hours` has passed since the last one. That is what a session that
+started as a replay has always done.
+
+**Deviations.**
+
+1. **Four keys, not one.** The brief named one bool; the state line needed its own words (every
+   word editable), and A and C each needed a way back to the old behaviour.
+2. **`plain` edits the existing post instead of posting the plain sentence.** `_announce_replay`
+   posts; a second message beside a stale pinned card is the noisier choice. `_reword_replay`
+   renders the same template and strips the mention prefix (`_refresh_announcement` would keep it).
+3. **While a replay read is pending, the look does nothing** — a title change is not written to
+   the post until the verdict settles.
+4. **D logs `marathon.run_done` for a run that is not ours too** (the clock-driven path is quiet
+   for those), so the tracker's history says why the run ended.
+5. **`because: replay` is worded by `BECAUSE_WORDS` in `api/tools/marathons.py`**, a map that is
+   not a settings key — the existing pattern for the other five reasons, left as found.
+6. **The existing replay tests' titles moved the tag off the front** (`AGDQ 2026 [REPLAY] — …`):
+   they are about the fuzzy path, and `[REPLAY] …` at the front is now certain by default — a
+   stream that starts with a leading tag inside a marathon is a replay now, where v182 made it live.
+7. **A fuzzy replay word in a gap between two blocks of one day** (longer than the setup maximum
+   plus lead plus tail) now reads as a replay; before, the span covered it.
+
+⚠️ **NOT verified:** nothing here has met Discord, Helix or the live database. Not seen: Discord
+accepting `embed=None` on the pinned announcement, the unpin, the real GDQueer rows' block edges
+(the fixture sheet is the test's source), and what the real title reads at 09:55.
+

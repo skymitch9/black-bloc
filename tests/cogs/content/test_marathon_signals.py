@@ -16,9 +16,14 @@ from black_bloc.cogs.content.marathon import (
     mark_upcoming,
     runs_of,
 )
-from black_bloc.cogs.content.spotlight import open_session, refresh_session_info, start_session
+from black_bloc.cogs.content.spotlight import (
+    Spotlight,
+    open_session,
+    refresh_session_info,
+    start_session,
+)
 from black_bloc.golive import StreamInfo
-from black_bloc.twitch import TwitchError, TwitchGame
+from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream
 from tests.cogs.content.test_marathon import (
     GUILD,
     added,
@@ -531,3 +536,163 @@ async def test_a_schedule_read_after_a_rename_leaves_a_hotfix_marathons_name_alo
     assert (await get_marathon(bot.db, GUILD, marathon["id"]))["name"] == (
         "Black in a Flash: Soul Train"
     )
+
+
+# --- a replay mid-stream ends the live run (spotlight-design.md, Follow-up 2026-10-04) ---------
+
+HALO = "Halo Infinite"
+WII_FIT = "Wii Fit U"
+GDQ_LOGIN = "gamesdonequick"
+STARTED = "2026-10-03T16:52:00Z"
+DAY_TWO = datetime(2026, 10, 4, 17, 0, tzinfo=UTC)
+GDQUEER_REPLAY = "[Replay] GDQueer Day 1 - tune in live for Day 2 starting at 1pm Eastern!"
+
+
+class FakeTwitch(FakeCategories):
+    def __init__(self):
+        super().__init__()
+        self.streams = []
+
+    async def get_streams(self, logins):
+        return [one for one in self.streams if one.user_login in {x.lower() for x in logins}]
+
+    async def get_games(self, ids):
+        return []
+
+
+def showing(title, game="Games Done Quick", game_id="509663"):
+    return [
+        TwitchStream(
+            "10", GDQ_LOGIN, "GamesDoneQuick", game, title, STARTED, game_id, "", "live"
+        )
+    ]
+
+
+def spot_at(spot, when):
+    spot._now = lambda: when
+
+
+async def day_one_over_but_halo_live(bot, cog):
+    """Yesterday's broadcast never went offline: pinned post up, every day-1 run done but the
+    last, which is still live because nothing followed it."""
+    twitch = FakeTwitch()
+    bot.cogs["GoLive"] = FakeGoLive(twitch)
+    channel, marathon = await gdqueer(bot, cog)
+    spot = Spotlight(bot)
+    bot.cogs["Spotlight"] = spot
+    twitch.streams = showing("GDQueer 2026 !schedule")
+    spot_at(spot, SHOW - timedelta(minutes=8))
+    await spot.poll_once()
+    session = await open_session(bot.db, channel["id"])
+    halo = (await times(bot, marathon))[HALO]
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET started_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=20)).isoformat(), session["id"]),
+    )
+    await bot.db.conn.execute(
+        "UPDATE marathon_runs SET state = 'done', done_at = sheet_ends_at "
+        "WHERE marathon_id = ? AND sheet_at < ? AND id != ?",
+        (marathon["id"], DAY_TWO.isoformat(), halo["id"]),
+    )
+    await bot.db.conn.execute(
+        "UPDATE marathon_runs SET state = 'live', live_at = sheet_at, live_because = 'title', "
+        "actual_started_at = sheet_at WHERE id = ?",
+        (halo["id"],),
+    )
+    await bot.db.conn.commit()
+    return channel, marathon, spot, twitch
+
+
+def day_two_of(rows):
+    return {
+        game: (row["state"], row["scheduled_at"], row["ends_at"])
+        for game, row in rows.items()
+        if row["sheet_at"] >= DAY_TWO.isoformat()
+    }
+
+
+async def test_the_morning_after_the_replay_ends_the_spotlight_and_the_live_show_brings_it_back(
+    bot, cog
+):
+    channel, marathon, spot, twitch = await day_one_over_but_halo_live(bot, cog)
+    pinned = posts(bot)[0]
+    before = await times(bot, marathon)
+    assert pinned.pinned is True and before[HALO]["state"] == mt.LIVE
+    assert len(day_two_of(before)) == 11
+
+    twitch.streams = showing(GDQUEER_REPLAY)
+    spot_at(spot, datetime(2026, 10, 4, 13, 40, tzinfo=UTC))
+    await spot.poll_once()
+    assert pinned.pinned is True and (await times(bot, marathon))[HALO]["state"] == mt.LIVE
+    for _ in range(4):
+        await spot.poll_once()
+
+    session = await open_session(bot.db, channel["id"])
+    assert session["replay_reason"] == "tag:replay" and session["replay_cleared"] is None
+    assert posts(bot) == [pinned] and pinned.pinned is False and pinned.embed is None
+    assert pinned.content.startswith("**GamesDoneQuick** is showing a replay — [Replay] GDQueer")
+    assert "<@&" not in pinned.content
+    assert pinned.edits[-1]["allowed_mentions"].roles is False
+    seen = await kinds(bot.db)
+    assert "golive.spotlight_bumped" not in seen and seen.count("golive.replay_began") == 1
+    after = await times(bot, marathon)
+    assert after[HALO]["state"] == mt.DONE and after[HALO]["actual_ended_at"] is None
+    assert (await details_of(bot.db, "marathon.run_done"))["because"] == "replay"
+    assert day_two_of(after) == day_two_of(before)
+    assert "marathon.retimed" not in seen
+    cog.clock = lambda: datetime(2026, 10, 4, 13, 45, tzinfo=UTC)
+    await tick(cog)
+    assert (await times(bot, marathon))[HALO]["state"] == mt.DONE
+
+    twitch.streams = showing("GDQueer 2026 Day 2 - starting soon !schedule")
+    spot_at(spot, datetime(2026, 10, 4, 16, 55, tzinfo=UTC))
+    await spot.poll_once()
+    assert posts(bot) == [pinned]
+    for _ in range(3):
+        await spot.poll_once()
+    live = posts(bot)
+    assert len(live) == 1 and live[0] is not pinned and pinned.deleted is True
+    assert live[0].pinned is True and live[0].embed is not None
+    seen = await kinds(bot.db)
+    assert seen.count("golive.replay_upgraded") == 1 and "golive.spotlight_bumped" not in seen
+    assert (await open_session(bot.db, channel["id"]))["replay_cleared"] == "title"
+
+    twitch.streams = showing("GDQueer 2026 - Wii Fit U", game=WII_FIT, game_id="77")
+    spot_at(spot, datetime(2026, 10, 4, 17, 2, tzinfo=UTC))
+    await spot.poll_once()
+    cog.clock = lambda: datetime(2026, 10, 4, 17, 2, tzinfo=UTC)
+    await tick(cog)
+    wii = (await times(bot, marathon))[WII_FIT]
+    assert wii["state"] == mt.LIVE and wii["live_because"] in mt.BY_STREAM
+    assert wii["actual_started_at"] == "2026-10-04T17:02:00+00:00"
+    assert len(posts(bot)) == 1 and (await open_session(bot.db, channel["id"])) is not None
+
+
+async def test_a_fuzzy_replay_word_is_live_while_a_run_is_around_and_a_replay_overnight(bot, cog):
+    channel, _marathon, spot, _twitch = await day_one_over_but_halo_live(bot, cog)
+    info = StreamInfo(title="GDQueer Day 1 rerun")
+
+    spot_at(spot, SHOW + timedelta(minutes=30))
+    during = await spot._verdict(bot.guild, channel, info, "live")
+    assert not during.replay and during.overruled == "marathon"
+
+    spot_at(spot, datetime(2026, 10, 4, 13, 40, tzinfo=UTC))
+    assert (await spot._verdict(bot.guild, channel, info, "live")).reason == "title:rerun"
+
+    await bot.store.set(GUILD, "golive_replay_marathon_runs", False)
+    whole = await spot._verdict(bot.guild, channel, info, "live")
+    assert not whole.replay and whole.overruled == "marathon"
+
+
+async def test_a_replay_ends_only_the_live_run_and_a_channel_with_no_marathon_ends_none(bot, cog):
+    channel, marathon, _spot, _twitch = await day_one_over_but_halo_live(bot, cog)
+    before = await times(bot, marathon)
+
+    assert await signals.replay_began(bot, bot.guild, channel["id"]) == 1
+    assert await signals.replay_began(bot, bot.guild, channel["id"]) == 0
+    assert await signals.replay_began(bot, bot.guild, 9999) == 0
+
+    after = await times(bot, marathon)
+    assert after[HALO]["state"] == mt.DONE
+    moved = [game for game in after if after[game]["scheduled_at"] != before[game]["scheduled_at"]]
+    assert moved == [] and after[WII_FIT]["state"] == mt.UPCOMING

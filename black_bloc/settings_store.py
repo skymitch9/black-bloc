@@ -6644,6 +6644,11 @@ GOLIVE_REPLAY_REASON_TITLE_KEY = "golive_replay_reason_title"
 GOLIVE_REPLAY_TREAT_LIVE_KEY = "golive_replay_treat_live_label"
 GOLIVE_REPLAY_TREATED_KEY = "golive_replay_treated_said"
 GOLIVE_REPLAY_NOT_REPLAY_KEY = "golive_replay_not_replay_said"
+GOLIVE_REPLAY_TAG_CERTAIN_KEY = "golive_replay_tag_certain"
+GOLIVE_REPLAY_REASON_TAG_KEY = "golive_replay_reason_tag"
+GOLIVE_REPLAY_MIDSTREAM_POLLS_KEY = "golive_replay_midstream_polls"
+GOLIVE_REPLAY_MARATHON_RUNS_KEY = "golive_replay_marathon_runs"
+GOLIVE_REPLAY_MIDSTREAM_POLLS_MAX = 10
 GOLIVE_REPLAY_ACTIONS = ("plain", "skip", "live")
 GOLIVE_REPLAY_SETTINGS: dict[str, tuple[str, Any, tuple[str, ...] | None, str]] = {
     GOLIVE_REPLAY_ACTION_KEY: (
@@ -6721,10 +6726,46 @@ GOLIVE_REPLAY_SETTINGS: dict[str, tuple[str, Any, tuple[str, ...] | None, str]] 
         "what staff are told when Treat as live finds no replay to treat — the stream ended, "
         "or it is already treated as live; {login} is the channel",
     ),
+    GOLIVE_REPLAY_TAG_CERTAIN_KEY: (
+        "bool",
+        True,
+        None,
+        "whether a golive_replay_words word that OPENS the title — inside a leading bracket, "
+        "[Replay] or (Rerun), or bare before a colon, a bar or a spaced dash — is certain, the "
+        "way Twitch's own rerun mark is: no golive_replay_live_words word and no marathon "
+        "overrules it. on by default; off reads it as any other title word",
+    ),
+    GOLIVE_REPLAY_REASON_TAG_KEY: (
+        "text",
+        "the title opens with “{word}”",
+        ("word",),
+        "the reason in golive_replay_state when the title opened with a golive_replay_words "
+        "tag and golive_replay_tag_certain is on; {word} is the word it matched",
+    ),
+    GOLIVE_REPLAY_MIDSTREAM_POLLS_KEY: (
+        "int",
+        2,
+        None,
+        "how many checks in a row a stream already announced as live must read as a replay "
+        "before it is treated as one from then on — and, after that, how many in a row it must "
+        "read as live before it is announced again. 2 by default, 0 to 10; 0 never looks again "
+        "after the stream starts, the way it was before",
+    ),
+    GOLIVE_REPLAY_MARATHON_RUNS_KEY: (
+        "bool",
+        True,
+        None,
+        "whether a marathon on the channel overrules a replay word in the title only while one "
+        "of its runs is scheduled around now — each day's first run less the spotlight lead to "
+        "its last run plus the tail — rather than for the marathon's whole span, overnight "
+        "gaps included. on by default; a marathon with no timed runs keeps its whole span",
+    ),
 }
 KEY_TYPES.update({key: kind for key, (kind, _, _, _) in GOLIVE_REPLAY_SETTINGS.items()})
 KEY_HELP.update({key: said for key, (_, _, _, said) in GOLIVE_REPLAY_SETTINGS.items()})
 KEY_CHOICES[GOLIVE_REPLAY_ACTION_KEY] = GOLIVE_REPLAY_ACTIONS
+KEY_MIN[GOLIVE_REPLAY_MIDSTREAM_POLLS_KEY] = 0
+KEY_MAX[GOLIVE_REPLAY_MIDSTREAM_POLLS_KEY] = GOLIVE_REPLAY_MIDSTREAM_POLLS_MAX
 TEXT_CHECKS.update(
     {
         key: checked_fields(fields)
