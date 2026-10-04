@@ -211,10 +211,12 @@ def test_a_baf_runner_and_a_baf_host_are_marked_and_a_commentator_who_does_not_c
         person("champrul", "host", user_id=CASEY),
         person("ToastedKat", "commentator", user_id=777, counts=False),
         person("Stranger", "commentator"),
+        person("Counted", "commentator", user_id=778),
+        person("HostOnly", "host", user_id=779, counts=False),
     ]
     found = read(marathon(), [run(1, 30, people=people)], name_of=lambda one: f"member {one}")
     row = found["rows"][0]
-    assert [one["baf"] for one in row["people"]] == [True, True, False, False]
+    assert [one["baf"] for one in row["people"]] == [True, True, False, False, False, True]
     assert row["ours"] is True
     assert row["people"][0]["member_name"] == f"member {DAX}"
     assert row["people"][0]["user_id"] == str(DAX)
@@ -223,8 +225,10 @@ def test_a_baf_runner_and_a_baf_host_are_marked_and_a_commentator_who_does_not_c
 
 
 def test_a_run_with_only_a_commentator_who_does_not_count_is_not_ours():
-    people = [person("ToastedKat", "commentator", user_id=777, counts=False)]
+    people = [person("ToastedKat", "commentator", user_id=777)]
     assert read(marathon(), [run(1, 30, people=people)])["rows"][0]["ours"] is False
+    hosted = [person("champrul", "host", user_id=CASEY, counts=False)]
+    assert read(marathon(), [run(1, 30, people=hosted)])["rows"][0]["ours"] is True
 
 
 def test_the_members_own_links_win_over_the_schedules_and_the_host_table_is_last():

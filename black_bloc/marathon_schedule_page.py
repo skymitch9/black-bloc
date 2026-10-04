@@ -108,7 +108,12 @@ def lead_words(minutes: int) -> str:
 
 
 def counts(person: Any) -> bool:
-    return bool(person.get("user_id")) and person.get("counts") is not False
+    """The People card's BaF: matched to a member; a commentator never is."""
+    return bool(person.get("user_id")) and person.get("part") != mt.COMMENTATOR
+
+
+def has_baf(row: Any) -> bool:
+    return any(counts(one) for one in mt.people_of(row))
 
 
 # --- channel links -------------------------------------------------------------------------
@@ -340,7 +345,7 @@ def sheet_row(
         "game": mt._cell(row, "game"),
         "category": mt._cell(row, "category"),
         "people": people,
-        "ours": mt.is_ours(row),
+        "ours": has_baf(row),
         "state": state,
         "state_word": STATE_WORDS.get(state, state),
         "start_at": None if dropped else _iso(start),
@@ -603,7 +608,7 @@ def payload(
                 "label": day_label(_local_date(plan_of(block[0]), tz_name)),
                 "starts_at": _iso(plan_of(block[0])),
                 "runs": len(kept),
-                "baf": len([one for one in kept if mt.is_ours(one)]),
+                "baf": len([one for one in kept if has_baf(one)]),
                 "upcoming": len([one for one in kept if mt._cell(one, "state") == mt.UPCOMING]),
                 "drift_minutes": minutes,
                 "drift_run_id": run_id,

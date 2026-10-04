@@ -132,9 +132,11 @@ def posting_of(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
     }
 
 
-async def sheet(bot: Any, guild: Any, marathon_id: Any) -> dict[str, Any]:
+async def sheet(
+    bot: Any, guild: Any, marathon_id: Any, *, now: datetime | None = None
+) -> dict[str, Any]:
     db = bot.db
-    now = datetime.now(UTC)
+    now = now or datetime.now(UTC)
     row = await get_marathon(db, guild.id, marathon_id)
     archived = row is None
     if archived:
