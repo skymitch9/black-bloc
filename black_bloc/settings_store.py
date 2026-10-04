@@ -4735,6 +4735,8 @@ MARATHON_REMINDER_ON_MOVE_KEY = "marathon_reminder_on_move"
 MARATHON_REMINDER_ON_MOVES = ("edit", "repost")
 MARATHON_REMINDER_EDIT_LIMIT_KEY = "marathon_reminder_edit_limit"
 MARATHON_REMINDER_EDIT_LIMIT = 10
+MARATHON_TRACKER_REFRESH_KEY = "marathon_tracker_refresh_seconds"
+MARATHON_TRACKER_REFRESH = 30
 MARATHON_PIN_BOARD_KEY = "marathon_pin_board"
 MARATHON_RUNNER_POSTS_KEY = "marathon_runner_posts"
 MARATHON_RUNNER_POSTS_PINNED_KEY = "marathon_runner_posts_pinned"
@@ -4964,6 +4966,7 @@ MARATHON_HOTFIX_VIEWER_INNER = (".internal", ".local", ".localhost", ".lan", ".h
 MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY = "marathon_hotfix_overlay_default"
 MARATHON_CONTROLS_OVERLAY_ON_KEY = "marathon_controls_overlay_on"
 MARATHON_CONTROLS_OVERLAY_OFF_KEY = "marathon_controls_overlay_off"
+MARATHON_CONTROLS_TRACKER_KEY = "marathon_controls_tracker"
 MARATHON_OVERLAY_ON_SAID_KEY = "marathon_overlay_on_said"
 MARATHON_OVERLAY_OFF_SAID_KEY = "marathon_overlay_off_said"
 MARATHON_HOTFIX_HOSTS_TEMPLATE_KEY = "marathon_hotfix_hosts_template"
@@ -5184,6 +5187,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "how many posted reminders one marathon may rewrite per minute while "
         "marathon_reminder_on_move is edit — when a whole day shifts, the soonest runs are "
         "corrected first and the rest follow a minute later. 10 by default",
+    ),
+    MARATHON_TRACKER_REFRESH_KEY: (
+        "int",
+        MARATHON_TRACKER_REFRESH,
+        "seconds between one read and the next on a marathon's Marathon tracker page on the "
+        "site, while the tab is open and showing — the page re-reads itself so a run going "
+        "live, finishing or moving shows without a reload. 30 by default",
     ),
     MARATHON_PIN_BOARD_KEY: (
         "bool",
@@ -5503,6 +5513,12 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the thread controls' event-schedule button while a Hotfix marathon keeps GDQ's sheet "
         "times although the event has a schedule sheet of its own",
+    ),
+    MARATHON_CONTROLS_TRACKER_KEY: (
+        "Marathon tracker ↗",
+        (),
+        "the link button on a tracked marathon's thread controls that opens its Marathon "
+        "tracker page on the site — the runs in order with the times the bot is working from",
     ),
     MARATHON_OVERLAY_ON_SAID_KEY: (
         "**{marathon}** takes its start times, hosts and commentators from the event's own "
@@ -6478,6 +6494,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_PING_MINUTES_KEY: (0, 240),
     MARATHON_REMINDER_STALE_KEY: (1, 240),
     MARATHON_REMINDER_EDIT_LIMIT_KEY: (1, 50),
+    MARATHON_TRACKER_REFRESH_KEY: (10, 300),
     MARATHON_WINDOW_SLACK_KEY: (0, 24),
     MARATHON_SPOTLIGHT_LEAD_KEY: (0, 48),
     MARATHON_SPOTLIGHT_SLACK_KEY: (0, 48),

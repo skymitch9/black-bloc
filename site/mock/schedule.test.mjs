@@ -197,7 +197,7 @@ async function walk(port) {
   refused('walk: zero minutes', await post('shift', { day: 'today', minutes: 0 }), 400, 'bad_minutes');
   refused('walk: a run that is not there', await post('runs/999/skip'), 404, 'no_such_run');
   refused('walk: a tracker sheet refuses a shift', await ask('POST', '/api/marathons/1/schedule/shift', { day: 'today', minutes: 5 }), 409, 'tracker_times');
-  is('walk: a tracker sheet is read-only', (await ask('GET', '/api/marathons/1/schedule')).body.kind, 'read_only');
+  is('walk: a tracker sheet is read-only', (await ask('GET', '/api/marathons/1/schedule')).body.kind, 'tracker');
   is('walk: the moves log is newest first', finished.moves[0].kind, 'finished');
   await ask('POST', '/api/mock/reset', {});
 }

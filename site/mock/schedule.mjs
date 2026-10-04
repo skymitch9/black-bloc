@@ -284,6 +284,7 @@ export function mountTracker({ route, Refused, requireStaff, actorOf, memberName
     const found = String(state().settings.get('marathon_reminder_minutes') || '15').split(',').map((one) => Number(one.trim())).filter((one) => one > 0);
     return found.length ? Math.min(...found) : 15;
   };
+  const refreshSeconds = () => Number(state().settings.get('marathon_tracker_refresh_seconds') || 30);
   const editableOf = (row) => keepsClock.has(row.source);
   const runsOf = (row) => state().marathonRuns.filter((one) => one.marathon_id === row.id);
   const sheet = (row, now = Date.now()) => sheetOf(runsOf(row), { now, editable: editableOf(row) });
@@ -369,12 +370,12 @@ export function mountTracker({ route, Refused, requireStaff, actorOf, memberName
     };
   }
 
-  function nextPosts(days, now) {
+  function nextPosts(days, now, pingsRole = false) {
     const lead = leadMinutes();
     const posts = [];
-    const push = (row, day, kind, text) => {
+    const push = (row, day, kind, text, role = false) => {
       const at = row.start - lead * MIN;
-      posts.push({ at: iso(at), kind, run_id: row.run.id, day: day.key, passed: at < now, text });
+      posts.push({ at: iso(at), kind, run_id: row.run.id, day: day.key, passed: at < now, minutes: lead, role, text });
     };
     for (const day of days) {
       let block = null;
@@ -382,10 +383,10 @@ export function mountTracker({ route, Refused, requireStaff, actorOf, memberName
         const { run } = row;
         const runners = run.people.filter((one) => one.part !== 'host' && counts(one));
         if (runners.length && run.state === 'live') {
-          posts.push({ at: null, kind: 'live', run_id: run.id, day: day.key, passed: false, text: `Highlight is up: **${runners.map((one) => one.name).join(', ')}** on **${run.game}**. It goes past tense when the run finishes.` });
+          posts.push({ at: null, kind: 'live', run_id: run.id, day: day.key, passed: false, minutes: null, role: false, text: `Highlight is up: **${runners.map((one) => one.name).join(', ')}** on **${run.game}**. It goes past tense when the run finishes.` });
         }
         if (runners.length && run.state === 'upcoming') {
-          push(row, day, 'run', `Heads-up: **${runners.map((one) => one.name).join(', ')}** runs **${run.game}** in ${lead} minutes.`);
+          push(row, day, 'run', `Heads-up: **${runners.map((one) => one.name).join(', ')}** runs **${run.game}** in ${lead} minutes.`, pingsRole);
         }
         const host = run.people.find((one) => one.part === 'host' && counts(one)) || null;
         if (!host) {
@@ -423,6 +424,7 @@ export function mountTracker({ route, Refused, requireStaff, actorOf, memberName
         label: day.label,
         starts_at: day.starts_at,
         runs: day.rows.filter((one) => one.run.state !== 'dropped').length,
+        upcoming: day.rows.filter((one) => one.run.state === 'upcoming').length,
         baf: day.rows.filter((one) => one.run.state !== 'dropped' && one.run.people.some(counts)).length,
         drift_minutes: drift.minutes,
         drift_run_id: drift.run_id,
@@ -435,9 +437,11 @@ export function mountTracker({ route, Refused, requireStaff, actorOf, memberName
     const timesFrom = !editable ? 'tracker' : runsOf(row).some((one) => one.organisers_at) ? 'organisers' : 'source';
     const last = book.undo.at(-1) || null;
     return {
-      marathon: { id: base.id, name: base.name, source: base.source, source_word: base.source_word, schedule_page: base.schedule_page, phase: base.phase, phase_word: base.phase_word, last_fetched_at: base.last_fetched_at, channel_login: base.channel_login || null, watch_url: twitchOf(base.channel_login) },
+      marathon: { id: base.id, name: base.name, source: base.source, source_word: base.source_word, schedule_page: base.schedule_page, phase: base.phase, phase_word: base.phase_word, last_fetched_at: base.last_fetched_at, next_read_at: base.next_read_at || null, archived: false, channel_login: base.channel_login || null, watch_url: twitchOf(base.channel_login) },
       editable,
-      kind: editable ? 'editable' : 'read_only',
+      kind: editable ? 'clock_kept' : 'tracker',
+      moves_by: 'tracker',
+      refresh_seconds: refreshSeconds(),
       times_from: timesFrom,
       times_from_word: TIMES_FROM_WORDS[timesFrom],
       timezone: zone(),
@@ -447,7 +451,7 @@ export function mountTracker({ route, Refused, requireStaff, actorOf, memberName
       today: todayOf(days),
       days: dayRows,
       rows,
-      next_posts: nextPosts(days, now),
+      next_posts: nextPosts(days, now, Boolean(base.ping_role)),
       moves: book.moves.slice(0, 100),
       undo: { available: Boolean(last), text: last ? last.text : null },
       ...(message ? { message } : {}),

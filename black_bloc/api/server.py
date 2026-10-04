@@ -27,6 +27,7 @@ from .tools import (
     guides,
     honeypot,
     marathon_feeds,
+    marathon_schedule_page,
     marathons,
     members,
     minutes,
@@ -193,6 +194,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(raidtrain.build_router(bot))
     app.include_router(marathon_feeds.build_router(bot))
     app.include_router(marathons.build_router(bot))
+    app.include_router(marathon_schedule_page.build_router(bot))
     app.include_router(applications.build_router(bot))
     app.include_router(guides.build_router(bot))
     app.include_router(posts.build_router(bot))
