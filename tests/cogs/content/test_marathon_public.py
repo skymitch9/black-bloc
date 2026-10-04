@@ -412,7 +412,7 @@ async def test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_
     assert len(controls_message.edits) > control_edits
     shown = [getattr(one, "item", one) for one in current_view(controls_message).children]
     assert len(shown) == 7
-    assert [one.label for one in shown][-2:] == [
+    assert [one.label for one in shown][-3:-1] == [
         "Ping the marathon role: off · turn on",
         "BaF announcements: on · turn off",
     ]
