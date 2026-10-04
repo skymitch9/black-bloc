@@ -1098,7 +1098,7 @@ export function memberPicker({ label = 'Member', onPick = null } = {}) {
   });
 
   const node = el('div', { class: 'picker' }, [
-    field(label, search, 'Names come from the bot\'s own copy of the member list.'),
+    field(label, search),
     results,
     picked,
     status,

@@ -144,9 +144,10 @@ function modeSwitch(spec) {
     off.disabled = now === 'off';
   }
   paint(spec.value);
+  if (spec.help) chip.setAttribute('title', spec.help);
 
   return card('Members picking roles', [
-    field('Now', chip, spec.help || null),
+    field('Now', chip),
     bar([on, off]),
     say,
   ]);

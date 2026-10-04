@@ -1563,7 +1563,7 @@ async function addFeed(payload) {
       field('Channel', channel),
       field('Read from', source),
       slugField,
-      field('Name', name, 'Blank uses the channel’s name.'),
+      field('Name', name),
       field('New events', action),
     ],
     confirmLabel: 'Add the feed',
