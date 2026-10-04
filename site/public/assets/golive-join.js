@@ -319,8 +319,6 @@ export const DRAWERS = [
   {
     id: 'who',
     title: 'Who gets announced',
-    note: 'Which roles let a stream be announced, how often the same person may be, the role they '
-      + 'wear while live, and what becomes of an announcement when somebody opts out mid-stream.',
     keys: [
       'golive_require_role_id',
       'golive_ignore_role_id',
@@ -334,15 +332,11 @@ export const DRAWERS = [
   {
     id: 'where',
     title: 'Where the announcement goes',
-    note: 'The channel it is posted in, the role mentioned in front of it, and whether it is an '
-      + 'embed with the game’s art or a plain sentence.',
     keys: ['golive_channel_id', 'golive_ping_role_id', 'golive_embed'],
   },
   {
     id: 'spotted',
     title: 'How a stream is spotted',
-    note: 'Discord presence, the YouTube probe and how often it runs, and how a person’s own '
-      + 'channel gets linked to them and unlinked again.',
     keys: [
       'golive_boot_sweep',
       'golive_autolink_presence',
@@ -355,9 +349,6 @@ export const DRAWERS = [
   {
     id: 'spotlight',
     title: 'Spotlighted channels',
-    note: 'Channels with nobody here behind them: how often Twitch is asked, the pin, the '
-      + 'reminders while a long stream runs, how long a row lasts before it is purged, and the '
-      + 'marathon channel a passing date keeps.',
     keys: [
       'spotlight_poll_minutes',
       'spotlight_end_misses',
@@ -376,9 +367,6 @@ export const DRAWERS = [
   {
     id: 'dates',
     title: 'What a spotlight’s dates say',
-    note: 'Every word the start-and-end range is written in — the range itself, the word for a '
-      + 'row whose start has not arrived, the button and boxes that set the dates, and the two '
-      + 'refusals a bad date earns.',
     keys: [
       'spotlight_range_template',
       'spotlight_range_kept_template',
@@ -393,9 +381,6 @@ export const DRAWERS = [
   {
     id: 'pingwindows',
     title: 'When a channel pings',
-    note: 'Whether a new channel pings always, never or only during events, the reminder that '
-      + 'pings when a window opens on a channel already live, how long an ended window is kept, '
-      + 'and every word the ping state is written in.',
     keys: [
       'spotlight_ping_mode_default',
       'spotlight_window_open_reminder',
@@ -411,15 +396,11 @@ export const DRAWERS = [
   {
     id: 'costream',
     title: 'Two platforms at once',
-    note: 'What ONE announcement says when somebody is live on Twitch and YouTube at the same '
-      + 'time, instead of two posts about one stream.',
     keys: ['golive_costream_mode', 'golive_costream_template', 'golive_costream_author'],
   },
   {
     id: 'replays',
     title: 'Replays',
-    note: 'What a spotlighted channel gets when its stream is a replay rather than live — the '
-      + 'words that give one away, the plain post, and the Treat as live button staff press.',
     keys: [
       'golive_replay_action',
       'golive_replay_words',
@@ -436,15 +417,11 @@ export const DRAWERS = [
   {
     id: 'pingsblock',
     title: 'The ping block on a post',
-    note: 'What the ping me when they go live block says when a post carries it — its heading, '
-      + 'its line and its button. The block itself is added on the Posts page.',
     keys: ['pings_block_title', 'pings_block_text', 'pings_block_label'],
   },
   {
     id: 'pings',
     title: 'Ping roles',
-    note: 'The shared Events role, a streamer’s own role that only their followers wear, and '
-      + 'the two Discord onboarding prompts Black Bloc keeps in step with them.',
     holds: (key) => key.startsWith('pings_')
       && key !== 'pings_log_level'
       && key !== 'pings_panel_minutes',
@@ -452,8 +429,6 @@ export const DRAWERS = [
   {
     id: 'panels',
     title: 'Slash panels and log lines',
-    note: 'How long /golive, /youtube and /pings stay clickable after somebody opens one, and how '
-      + 'much of each feature is repeated into the Discord log channel.',
     keys: [
       'golive_panel_minutes',
       'youtube_panel_minutes',
@@ -466,7 +441,6 @@ export const DRAWERS = [
   {
     id: 'rest',
     title: 'Everything else',
-    note: 'Settings this page has no drawer for yet. It is drawn only when something lands here.',
   },
 ];
 
@@ -477,7 +451,6 @@ export function placeSettings(specs) {
   const drawers = DRAWERS.map((one) => ({
     id: one.id,
     title: one.title,
-    note: one.note || null,
     specs: [],
   }));
   const catchAll = drawers[drawers.length - 1];

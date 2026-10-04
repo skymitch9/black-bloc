@@ -550,9 +550,9 @@ const NAMESPACE_KEYS = Object.keys(CONTRACT.settings.help);
   // satisfiable at all.
   same(`${where} — nothing is left over, so Everything else is empty`, home('rest'), []);
   for (const one of DRAWERS) {
-    ok(`${where} — the ${one.title} drawer says what is inside it`,
-      typeof one.note === 'string' && one.note.split(' ').length >= 8,
-      `the ${one.id} drawer has no note worth reading`);
+    ok(`${where} — the ${one.title} drawer carries no explaining note (no blurbs, 2026-10-04)`,
+      !('note' in one),
+      `the ${one.id} drawer carries a note`);
   }
   const titles = DRAWERS.map((one) => one.title);
   is(`${where} — no two drawers share a name`, new Set(titles).size, titles.length);
@@ -561,8 +561,6 @@ const NAMESPACE_KEYS = Object.keys(CONTRACT.settings.help);
   same(`${where} — a key added tomorrow lands in the catch-all, never nowhere`,
     tomorrow.drawers.find((one) => one.id === 'rest').specs.map((one) => one.key),
     ['golive_brand_new_thing']);
-  is(`${where} — and the catch-all carries its note through placeSettings`,
-    tomorrow.drawers.find((one) => one.id === 'rest').note, drawerOf('rest').note);
 }
 
 process.stdout.write('golive-join: the streamers join against its fixtures\n');
@@ -577,6 +575,6 @@ process.stdout.write(
     + 'address is refused in words; a spotlighted channel with no member is its own row and one '
     + 'that IS a linked login is not a second; a channel row carries its YouTube link, its '
     + `opt-out and the side its session opened on; all ${NAMESPACE_KEYS.length} settings keys land in exactly one `
-    + 'NAMED place, no two drawers share a name, every drawer says what is inside it, and the '
+    + 'NAMED place, no two drawers share a name, no drawer carries an explaining note, and the '
     + 'Everything else catch-all is empty\n',
 );
