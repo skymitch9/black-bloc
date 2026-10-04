@@ -882,6 +882,11 @@ export function askForm({
 export function field(label, control, help = null) {
   const id = control && control.id ? control.id : null;
   if (control && control.classList) control.classList.add('field-control');
+  if (control && control.type === 'number' && (control.min !== '' || control.max !== '')) {
+    control.addEventListener('change', () => {
+      if (!control.checkValidity()) control.reportValidity();
+    });
+  }
   return el('div', { class: 'field' }, [
     el('label', { class: 'field-label', for: id || undefined, text: label }),
     control,

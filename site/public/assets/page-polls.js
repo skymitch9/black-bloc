@@ -67,33 +67,15 @@ const WEEKDAYS = [
   ['sun', 'Sunday'],
 ];
 
-const SWITCH_HELP = 'Off hides Create on the /poll panel and refuses new polls. Shadow posts every ' +
-  'poll for real, into the log channel, with a line saying it would have gone elsewhere. Nothing ' +
-  'already running is closed or moved, and every result Black Bloc has kept stays on this page.';
 const NO_MODE_KEY = 'The bot did not report a poll_mode key, so this switch is not shown ' +
   'rather than guessed at.';
 
-const OPEN_NOTE = 'Every poll taking votes right now. Ending one publishes the result; ' +
-  'cancelling stops it without publishing anything.';
-const REVIEW_NOTE = 'Polls waiting on a Lead. Approving posts it straight away and DMs the ' +
-  'person who asked; denying DMs them the reason you type.';
-const RECUR_NOTE = 'Polls that open again on their own. Pausing leaves everything it has ' +
-  'already opened alone; so does deleting it.';
-const CLOSED_NOTE = 'How every finished poll went. The export is a CSV of the totals, plus ' +
-  'one row per voter when the poll kept them.';
-const ARCHIVE_NOTE = 'Polls older than poll_archive_days. The totals are kept forever; the ' +
-  'per-voter rows may have been dropped, and the export says so when they were.';
-const CREATE_NOTE = 'The same rules as the /poll panel in Discord — Black Bloc picks the surface ' +
-  'from what you ask for and tells you which one it picked.';
-const SETTINGS_NOTE = 'Who may start a poll, how long one runs, where a poll made here goes, ' +
-  'and when a finished one moves to the archive.';
 
 const makeOne = () => textAction('Create a poll', () => goToSection('create-a-poll'));
 
 const NO_OPEN = 'Nothing is taking votes right now. Start one below.';
-const NO_REVIEW = 'Nobody is waiting on a Lead. A poll only waits when poll_review_mode is on.';
-const NO_RECUR = 'No poll repeats on its own yet. Repeat on the Create a poll form below starts ' +
-  'one, and so does Repeat… while writing one on the /poll panel in Discord.';
+const NO_REVIEW = 'Nobody is waiting on a Lead.';
+const NO_RECUR = 'No poll repeats on its own yet.';
 const NO_CLOSED = 'No poll has finished yet.';
 const NO_ARCHIVE = 'Nothing has been archived yet.';
 const NEED_A_QUESTION = 'Write the question first — it is the heading everybody votes under.';
@@ -102,14 +84,9 @@ const NEED_A_START = 'A date poll needs a start date, like 2026-09-05.';
 const NEED_A_TIME = 'A repeating poll needs the time of day it opens, on the 24-hour clock — 19:00.';
 const NEED_A_WEEKDAY = 'Pick the day of the week it runs on.';
 const NEED_A_MONTH_DAY = 'A monthly poll runs on a day from 1 to 28 — every month has those.';
-const REPEAT_HELP = 'A repeating poll is a template rather than a poll: nothing is posted when ' +
-  'you save it, and Black Bloc opens a fresh copy each time it comes round.';
-const TZ_HELP = 'The zone the time of day is read in. Leave it on the server’s own zone and it ' +
-  'follows whatever that is set to.';
 const SERVER_ZONE = 'the server’s own zone';
-const FIRST_SLOT_HELP = 'Midnight means the slots are shown as plain dates, with no time on them.';
+const PLAIN_DATES = ' The slots are shown as plain dates, with no time on them.';
 const FIRST_SLOT_ZONE = 'Black Bloc reads it in the server’s own time zone.';
-const OPENS_AT_HELP = 'When each copy opens.';
 const REPEATED = 'Saves “{question}” as a template that opens in {where} {cadence}, each one ' +
   'open for {hours} hour(s). Nothing is posted until it first comes round.';
 const CREATE_LABEL = 'Create the poll';
@@ -230,7 +207,7 @@ function pollActions(row, say) {
 }
 
 function openSection(rows, say) {
-  const one = section('Open polls', OPEN_NOTE, { count: rows.length, open: true });
+  const one = section('Open polls', null, { count: rows.length, open: true });
   one.body.append(
     table([
       { label: 'Question', cell: (row) => row.question, className: 'wrap' },
@@ -269,7 +246,7 @@ function reviewCard(row, say) {
       title: `Say no to ${row.creator_name || row.creator_id}?`,
       body: [
         'They are DM’d exactly what you type here, and the poll is never posted.',
-        field('Reason', reason, 'Say why — they are sent this word for word.'),
+        field('Reason', reason),
       ],
       confirmLabel: 'Deny it',
     });
@@ -305,7 +282,7 @@ function reviewCard(row, say) {
 }
 
 function reviewSection(rows, say) {
-  const one = section('Pending review', REVIEW_NOTE, { count: rows.length, open: rows.length > 0 });
+  const one = section('Pending review', null, { count: rows.length, open: rows.length > 0 });
   one.body.append(
     rows.length === 0
       ? sayNothing(NO_REVIEW, linkAction('Where review is switched on', '/settings.html'))
@@ -360,7 +337,7 @@ function nextCell(row) {
 
 function recurringSection(rows, say) {
   const running = rows.filter((row) => !row.paused).length;
-  const one = section('Repeating', RECUR_NOTE, { count: running || null });
+  const one = section('Repeating', null, { count: running || null });
   one.body.append(
     table([
       { label: 'Question', cell: (row) => row.question, className: 'wrap' },
@@ -404,7 +381,7 @@ function closedCard(row) {
 }
 
 function closedSection(payload, rows) {
-  const one = section('Closed', CLOSED_NOTE, { count: payload.total ?? rows.length });
+  const one = section('Closed', null, { count: payload.total ?? rows.length });
   one.body.append(
     rows.length === 0
       ? sayNothing(NO_CLOSED, makeOne())
@@ -423,7 +400,7 @@ function closedSection(payload, rows) {
 }
 
 function archiveSection(rows) {
-  const one = section('Archive', ARCHIVE_NOTE, { count: rows.length || null });
+  const one = section('Archive', null, { count: rows.length || null });
   one.body.append(foldout(
     'Archived polls',
     [rows.length === 0
@@ -515,11 +492,12 @@ function outcomeOf(form) {
   const held = form.review
     ? ' A Lead has to approve it before anybody sees it.'
     : '';
+  const plain = form.kind.value === 'date' && /T00:00/.test(form.start.value) ? PLAIN_DATES : '';
   const thread = form.thread.readValue() === 'true'
     ? ' A discussion thread opens under it.'
     : '';
   return `Posts “${question}” in ${where} with ${labels.length} options, open for ${hours} ` +
-    `hour(s), as ${shape}.${held}${thread}`;
+    `hour(s), as ${shape}.${held}${thread}${plain}`;
 }
 
 async function createForm(say) {
@@ -535,7 +513,6 @@ async function createForm(say) {
   const start = whenField({
     label: 'First slot',
     zoned: false,
-    help: FIRST_SLOT_HELP,
     zoneWord: FIRST_SLOT_ZONE,
   });
   const slots = el('input', { class: 'input', type: 'number', min: '2', max: '25', value: '5' });
@@ -546,7 +523,7 @@ async function createForm(say) {
   const weekday = el('select', { class: 'input' });
   for (const [value, label] of WEEKDAYS) weekday.append(el('option', { value, text: label }));
   const monthDay = el('input', { class: 'input', type: 'number', min: '1', max: '28', value: '1' });
-  const at = whenField({ label: 'Time of day', timeOnly: true, help: OPENS_AT_HELP });
+  const at = whenField({ label: 'Time of day', timeOnly: true });
   const zone = zoneSelect(null, { blank: SERVER_ZONE });
 
   const list = el('div');
@@ -598,21 +575,21 @@ async function createForm(say) {
   ]);
   const dateBlock = el('div', { class: 'formrow' }, [
     start.node,
-    field('How many slots', slots, 'Two to twenty-five.'),
+    field('How many slots', slots),
     field('Gap between slots', step),
     field('Counted in', stepUnit),
   ]);
 
   const weekdayField = field('Which day', weekday);
-  const monthDayField = field('Day of the month', monthDay, 'One to 28 — every month has those.');
+  const monthDayField = field('Day of the month', monthDay);
   const repeatWhen = el('div', { class: 'formrow' }, [
     weekdayField,
     monthDayField,
     at.node,
-    field('Timezone', zone, TZ_HELP),
+    field('Timezone', zone),
   ]);
   const repeatBlock = el('div', {}, [
-    el('div', { class: 'formrow' }, [field('Repeat', repeat, REPEAT_HELP)]),
+    el('div', { class: 'formrow' }, [field('Repeat', repeat)]),
     repeatWhen,
   ]);
 
@@ -693,15 +670,15 @@ async function createForm(say) {
     el('div', { class: 'formrow' }, [
       field('Question', question),
       field('Kind', kind),
-      field('Open for, hours', hours, 'One hour to 32 days — Discord counts in whole hours.'),
+      field('Open for, hours', hours),
     ]),
     typedBlock,
     dateBlock,
     el('div', { class: 'formrow' }, [
-      field('Channel', where, 'Blank uses poll_channel_id.'),
-      field('Ping', ping, 'Blank pings nobody.'),
-      field('Voters', anonymous, 'Anonymous forces a Black Bloc panel.'),
-      field('Results', results, 'Hidden until close forces one too.'),
+      field('Channel', where),
+      field('Ping', ping),
+      field('Voters', anonymous),
+      field('Results', results),
       field('Thread', thread),
     ]),
     repeatBlock,
@@ -712,7 +689,7 @@ async function createForm(say) {
 }
 
 function createSection(node) {
-  const one = section('Create a poll', CREATE_NOTE, { open: true });
+  const one = section('Create a poll', null, { open: true });
   one.body.append(node);
   return one.node;
 }
@@ -747,13 +724,13 @@ async function load() {
   const recurSay = sayAgain('recurring', notice());
   const createSay = sayAgain('create', notice());
 
-  const switchboard = section('Polls', SWITCH_HELP);
+  const switchboard = section('Polls');
   const flip = mode ? modeSwitch(mode, { onSaved: () => refresh() }) : null;
   switchboard.body.append(flip
-    ? card('Polls on this server', [field('Now', flip.node, SWITCH_HELP), flip.say])
+    ? card('Polls on this server', [field('Now', flip.node), flip.say])
     : sayNothing(NO_MODE_KEY));
 
-  const settingsBox = section('Settings', SETTINGS_NOTE, { count: settingSpecs.length || null });
+  const settingsBox = section('Settings', null, { count: settingSpecs.length || null });
   settingsBox.body.append(await settingsPanel(settingSpecs, {
     where: 'Settings',
     empty: 'The bot registers no poll settings beyond the switch above.',
