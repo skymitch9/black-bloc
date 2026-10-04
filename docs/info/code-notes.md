@@ -9652,3 +9652,30 @@ Keyed by NAME; the numbers are against the branch's code commit `95e58170`. Desi
 | `black_bloc/cogs/content/marathon_signals.py:62` `holds` | A read must not move a live or done run of a clock-kept schedule. Without it the first read after a changed buffer rewrites finished runs' times and logs `marathon.member_run_moved` for each BaF one. |
 | `black_bloc/cogs/content/marathon.py:2085` `held_plan` in `apply` | Applied to the plan before it is written, so `plan.moved` (the count in the read's answer) never counts a held run. The hash is of the sheet's runs, untouched, so a changed buffer is always a changed read. |
 | `black_bloc/cogs/content/marathon.py:2217` `holds` in `_write_plan` | Only `scheduled_at` / `ends_at` are withheld. `sheet_at` / `sheet_ends_at` still take the sheet's new times — `chains` measures on those, and *Back to the sheet's times* must mean the sheet as it is now. |
+
+## Run sheet prototype — one marathon's sheet, re-timed by staff (branch `runsheet-proto`, 2026-10-03)
+
+Keyed by NAME, no line numbers: site and mock only, nothing in `black_bloc/`. Design and the
+route contract: [`schedule-viewer-design.md`](schedule-viewer-design.md) ▸ *Prototype 2026-10-03*.
+
+| Where | Why |
+|---|---|
+| `site/mock/runsheet.mjs` `sheetOf` | THE recompute, and the only one: the page never works a time out. Pure (runs + now + editable in, rows out) so `runsheet.test.mjs` proves it without a server. `planEnd` is tracked across dropped runs on purpose — a run's setup gap is measured from the run before it ON THE SHEET, while `cursor` is the end of the last run that is still on, which is what closes a skipped run's hole. |
+| `site/mock/runsheet.mjs` `sheetOf`, the `begun` branch | A live or done run with no `actual_started_at` keeps its STORED `scheduled_at` / `ends_at`. Without it a move on another run would shift a run that has already happened. |
+| `site/mock/runsheet.mjs` `sheetOf`, `if (run.state === 'live') end = Math.max(end, now)` | A live run past its estimate ends now, so the next run is never predicted in the past. It makes a GET's times depend on the clock; the fixtures pin `now`. |
+| `site/mock/runsheet.mjs` `DAY_GAP_MS` | A day is a block of runs: more than four hours between one run's sheet end and the next run's sheet start begins a new one. Not a calendar date — the demo seed is built around the present and would straddle midnight at night. |
+| `site/mock/runsheet.mjs` `planOf` | For a tracker marathon the plan IS `scheduled_at` (the tracker's current time); `sheet_at` is ignored there, so its drift only moves when staff press Started now. |
+| `site/mock/runsheet.mjs` `clockNear` | A typed clock means the moment with that wall time nearest the run's current start, so `00:10` typed for a run at 23:50 is ten past midnight, not that morning. Midnight is found by subtracting the zone's minutes-into-the-day; a DST change inside the day is not handled (Phoenix has none). |
+| `site/mock/runsheet.mjs` `runsheetSeed` | Called twice per seed (once for the marathon row, once for the runs) and built around `Date.now()` rounded to the minute, so the two calls agree unless they straddle a half-minute — then the marathon's `starts_at` is one minute off its first run, which nothing reads. `DEMO_ACTUALS` is keyed by run id: 63 and 64 done, 65 live. |
+| `site/mock/runsheet.mjs` `move` | Snapshots every run of the marathon BEFORE the work, and pushes the undo entry only after the work returned — a refusal thrown inside leaves no undo entry and no log line. `work` must therefore refuse before it changes anything. `message` may be a function so it can read the sheet after `settle`. |
+| `site/mock/runsheet.mjs` `settle` | Writes `scheduled_at` / `ends_at` from the recompute after each move — the stand-in for design §5 ("a staff move writes `scheduled_at`"). A tracker marathon is never written. |
+| `site/mock/runsheet.mjs` `dropLaterStaffTimes` | Started now and Finished now delete `staff_at` on later upcoming runs of the day. Deviation 3 in the design doc. |
+| `site/mock/runsheet.mjs` `dayOf` | `day: "today"` is accepted so a fixed body (contract.json, later a Discord button) can name the day without knowing its key. |
+| `site/mock/server.mjs` `mountRunsheet(...)` | The mock's own helpers are handed in, and `state` as a function: `POST /api/mock/reset` REPLACES the `state` object, so a captured reference would go stale. The moves log and undo stack hang off `state.runsheets`, made on first use, which is why a reset clears them. |
+| `site/mock/runsheet.test.mjs` | Pure fixtures always; with `MOCK_PORT` set it also walks every move against that mock and RESETS it before and after. Not in `deploy.ps1` or CI. |
+| `site/public/assets/page-runsheet.js` `load` | Everything goes in ONE `div.rs` under `#dash`: `layout.js` `mountColumns` splits a page's top-level blocks into two columns, which would put the sheet beside its own header. |
+| `site/public/assets/page-runsheet.js` `act` | A move's answer IS the new sheet, so the page repaints from it with no second read. The notice node is kept across repaints (`say`), and its bar is hidden while there is nothing to say and nothing to undo. |
+| `site/public/assets/page-runsheet.js` `quietRefresh` | Skipped while a row's Edit panel is open, so a typed time is never wiped by the 60-second read. |
+| `site/public/assets/page-runsheet.js` `start({ tab: 'events' })` | The page is an offshoot of Events: it lights the Events tab and is not in `app.js` `TABS`, so it has no nav entry. |
+| `site/public/assets/runsheet-link.js` | Its own file so `marathons-section.js` takes one import and two calls. |
+| `site/public/assets/runsheet.css` | The page's own sheet, linked only from `runsheet.html`; tokens only (`--et-*`), no theme selectors. `.rs-row` has a FIXED last column — each row is its own grid, so an `auto` column there put every row's cells at different widths. The clock uses `--et-font`, not the display face: blackbloc's display face is hard to read as digits. |

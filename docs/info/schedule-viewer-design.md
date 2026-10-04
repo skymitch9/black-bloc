@@ -1,7 +1,8 @@
 # Schedule viewer — a run sheet per marathon, with live staff re-timing
 
 > **Audience:** the owner (to agree the design), then the build agent. **Status:** TRACKED.
-> 📐 **DESIGN — NOT AGREED, NOTHING BUILT.** Every item under *Open decisions* is the owner's.
+> 📐 **DESIGN — NOT AGREED, NOTHING BUILT ON THE BOT.** Every item under *Open decisions* is the owner's.
+> A local page on the mock exists to react to (branch `runsheet-proto`, 2026-10-03) — see *Prototype 2026-10-03* at the end.
 > Last verified: **2026-10-03 20:4x Phoenix** — the facts under *What exists today* were read off
 > `main` at `455cce06` (the run table in `storage/db.py`, the routes in `api/tools/marathons.py`,
 > `marathon_sources.RETIMES_ITSELF`) and the live action log for GDQueer day 1. ⚠️ **NOT checked:**
@@ -128,4 +129,192 @@ Reordering runs by drag; editing a tracker marathon's times; a member-facing pub
 
 ## Deviations
 
-None yet — nothing is built.
+None from a bot build — nothing on the bot side is built. The local prototype's are listed under
+*Deviations — prototype 2026-10-03* below.
+
+## Prototype 2026-10-03 — a real local page on the mock (branch `runsheet-proto`, NOT merged)
+
+> **What this is:** the site half of this design, built against the mock so the owner can press
+> the buttons. **Nothing in `black_bloc/` exists for it** — no routes, no columns, no Discord door.
+> Measured 2026-10-03 ~21:00 Phoenix on the branch: the page rendered in headless Chrome at
+> 1280 px and 390 px (blackbloc dark, apple light, classic light) with no horizontal page scroll
+> and no console error; every move pressed in the browser or walked through the API
+> (`MOCK_PORT=8798 node site/mock/runsheet.test.mjs`). ⚠️ **NOT checked:** the other four themes,
+> a real phone, a keyboard-only pass, a screen reader, a marathon of 150 runs, and anything on the
+> bot side.
+
+### How to open it
+
+```
+MOCK_PORT=8798 MOCK_TEST_MODE=0 node site/mock/server.mjs
+```
+
+| Sheet | Address | What it is |
+|---|---|---|
+| Editable | `http://localhost:8798/runsheet.html#marathon-60` | **GDQueer (run sheet)** — a Hotfix marathon seeded for this page (below) |
+| Read-only | `http://localhost:8798/runsheet.html#marathon-1` | **AGDQ 2027** — a GDQ tracker marathon, three days |
+| From Events | `http://localhost:8798/events.html` ▸ Marathons | a **Run sheet** button on every row and at the top of every marathon's drawer |
+
+`POST /api/mock/reset` (or restarting the mock) puts the seed back; the seed is rebuilt around the
+moment it is made, so the third run of the day is always live.
+
+### What the page does
+
+- **Top:** *← Events* (opens that marathon's drawer) and a marathon picker. The address is
+  `runsheet.html#marathon-{id}`, the same hash the Events drawer uses.
+- **Header card:** the marathon and the day, one status pill (*Running N min ahead* / *behind* /
+  *On time* / *Every run has started*), the source link, where the times come from, when the
+  source was last read, the zone times are shown in, and one sentence saying which kind of sheet
+  this is.
+- **Day strip** when the marathon has more than one day.
+- **Day bar (editable sheets):** *Behind 5 · Behind 10 · Ahead 5 · Ahead 10*, a typed number with
+  *Behind* / *Ahead*, and *Back to the source's times* (drawn only while the day carries a staff
+  time or estimate).
+- **Notice + Undo last move:** every move answers with one sentence of what changed; the Undo
+  button is drawn while there is a move to take back and its tooltip names it.
+- **The sheet:** one row per run — start (large, tabular), a tag for where that time came from,
+  *sheet said HH:MM* when it differs, game, category, estimate (tagged when staff set it),
+  runners and host as the drawer's chips with `✦BaF`, state, and the moves. The live row is
+  tinted. The next run not yet started carries **Started now**; the live run **Finished now**;
+  every other move for a row is behind its **Edit…** (new start, estimate, *Started now* for a
+  run that is not next, *Skip this run*). A skipped run shows **Bring it back**. A search box
+  (the shared `listFilter`) appears from 12 rows.
+- **What the bot posts next:** for the day shown — a live BaF run's highlight, the heads-up for
+  each upcoming BaF run, and one heads-up per BaF host block (consecutive runs with the same BaF
+  host, announced at the block's first run). Each time is the run's current start minus the
+  smallest number in `marathon_reminder_minutes`.
+- **Moves today:** who, when, what — newest first; a move that was undone is marked.
+- The page asks again every 60 s while no row is being edited.
+
+### The mock routes — the contract the bot's routes will be built to
+
+All under `/api/marathons/{marathon_id}/runsheet`, staff only, refusals in the usual
+`{error, message}` shape. Every POST answers the same body as the GET plus `message`.
+
+| Method + path | Body | Refuses (error) |
+|---|---|---|
+| `GET` | — | `not_found` |
+| `POST …/runs/{run_id}/start` | — | `not_startable` (not upcoming), `no_such_run` |
+| `POST …/runs/{run_id}/finish` | — | `not_live` |
+| `POST …/runs/{run_id}/set-start` | `{time: "14:30"}` — a clock in `default_timezone`, 24-hour or `2:30 pm`; the nearest such moment to the run's current start | `tracker_times`, `not_movable`, `bad_time`, `same_time`, `before_the_run_ahead` |
+| `POST …/shift` | `{day: "<key>" \| "today", minutes: ±1…240}` | `tracker_times`, `bad_minutes`, `no_such_day`, `nothing_to_move`, `before_the_run_ahead` |
+| `POST …/runs/{run_id}/estimate` | `{estimate: "1:20" \| "45"}` (1 min – 12 h) | `tracker_times`, `not_movable`, `bad_estimate`, `same_estimate` |
+| `POST …/runs/{run_id}/skip` · `…/restore` | — | `tracker_times`, `not_skippable` · `not_skipped` |
+| `POST …/reset` | `{day}` | `tracker_times`, `no_such_day`, `not_retimed` |
+| `POST …/undo` | — | `nothing_to_undo` |
+
+The GET's body:
+
+```
+marathon        {id, name, source, source_word, schedule_page, phase, phase_word, last_fetched_at}
+editable        true for a source that never moves its own times (the mock's MARATHON_KEEPS_CLOCK)
+kind            "editable" | "read_only"
+times_from      "organisers" | "source" | "tracker"      times_from_word   the same in words
+timezone        default_timezone                          now               the server's clock
+setup_minutes   marathon_setup_minutes                    heads_up_minutes  min(marathon_reminder_minutes)
+today           the key of the day with the live run, else the first with a run still to start
+days[]          {key, label, starts_at, runs, baf, drift_minutes, drift_run_id,
+                 staff_times, staff_estimates, can_shift, can_reset}
+rows[]          {id, day, order_no, game, category, people[{name, login, part, user_id, member_name, baf}],
+                 ours, state, state_word, start_at, ends_at,
+                 from: stream | started | staff | organisers | source | follows | tracker,
+                 plan_at, plan_from, off_plan_minutes, estimate_seconds, estimate_from, source_estimate_seconds,
+                 actual_started_at, actual_ended_at, staff_at, next_up,
+                 can{start, finish, set_start, estimate, skip, restore}}
+next_posts[]    {at (null = up now), kind: live | run | host, run_id, day, passed, text}
+moves[]         {id, at, by_id, by_name, kind, text, undone}          newest first
+undo            {available, text}
+```
+
+Action kinds written: `web.marathon.runsheet_started` · `_finished` · `_start_set` · `_shifted` ·
+`_estimate_set` · `_skipped` · `_restored` · `_reset` · `_undone`, each with `marathon_id`, the
+run or day, and `before` / `after`.
+
+### The recompute (one place: `site/mock/runsheet.mjs` `sheetOf`)
+
+Runs are taken in sheet order. A gap of more than four hours between one run's sheet end and the
+next run's sheet start begins a new **day**; nothing ever carries across days. Within a day, per run:
+
+1. it really started (`actual_started_at`) → that time (*seen on stream*, or *started by staff*);
+2. it is live or done with no recorded start → its stored time, untouched;
+3. staff set a time (`staff_at`) → that time (*set by staff*);
+4. otherwise the first run of the day takes its sheet time, and every later one starts where the
+   run before it ends plus **its own setup gap** — the gap the sheet left before it. When that
+   lands on its sheet time the tag is *organisers' sheet* (or *source sheet + setup* when the event
+   has no organisers' sheet); when it does not, *follows the run before*.
+
+A run ends at its recorded finish, else start + estimate (staff's estimate when there is one); a
+live run that has outrun its estimate ends *now*, so the next run waits for it. A skipped run has
+no time and the next run takes only its own gap, which closes the hole. After every move the mock
+writes each run's `scheduled_at` / `ends_at` from this, which is how the Events drawer and the
+*next posts* panel follow.
+
+What each move changes: **Started now** — the run is live from this minute, any other live run
+is finished at the same minute, and staff times on later runs of that day are dropped (they
+follow reality). **Finished now** — the same drop. **Set start** — `staff_at` on that run; later
+staff times move by the same amount. **Behind / Ahead** — `staff_at` on the first run not yet
+started (its current start ± N); later staff times move with it. **Estimate** — a staff estimate
+on that run. **Skip / Bring it back** — the run's state. **Back to the source's times** — drops
+the day's staff times and staff estimates; real starts and finishes stay, and so do skips.
+**Undo** — puts every run of the marathon back as it was before the last move (50 deep).
+
+### What is fake
+
+- **The whole bot side.** The mock is the only thing that answers these routes; the moves log and
+  the undo stack live in the mock's memory and go at a restart or `POST /api/mock/reset`.
+- **Marathon 60, *GDQueer (run sheet)*.** A new seed marathon rather than a change to GDQueer
+  (50): `check.mjs` pins 50 as the re-timed marathon for *Back to the sheet's times*, and two
+  other branches were editing its seed. Its day 2 is the real organisers' sheet for Sun 4 Oct —
+  eleven runs, their estimates, runners, hosts and 10-minute setups — but **moved to the present**:
+  the third run's sheet time is two minutes from the moment the seed is made, so the clock on the
+  page is whatever the wall clock is, not 10:00–21:49 Phoenix. The first two runs are done, the
+  third went live five minutes ahead of its sheet time. Its "source sheet" times are invented
+  (the same runs chained with a 7-minute setup). Day 1 is three finished runs a day earlier, there
+  only so the day strip shows on an editable sheet.
+- **BaF people.** The_Mathcat, JRisJunior and champrul are tied to three mock members (Dax,
+  Quiet Kid, Moth) so the `✦BaF` mark and the posts panel have something to show.
+- **The posts panel** is worked out from the sheet; nothing is posted, and "its time has passed"
+  is only the clock, not a record of a post having gone.
+
+### What is red on the branch, and why
+
+`site/mock/contract.json` carries `/runsheet.html`, six run-sheet routes and nine
+`web.marathon.runsheet_*` kinds so `check.mjs` walks them. The Python half reads the same file,
+so on this branch `tests/api/test_contract.py` fails wherever it meets a route, a page or a kind
+the bot does not have. That is the reason the branch stays unmerged until the bot side is built.
+Set-start, restore, reset and undo are **not** in `contract.json` (they need a moment or an
+earlier move a fixed body cannot give); `runsheet.test.mjs` walks them instead. That fixture is
+not wired into `scripts/deploy.ps1` or CI.
+
+## Deviations — prototype 2026-10-03
+
+1. **The status line measures the next run NOT YET STARTED**, falling back to the live run when
+   nothing is left to start. §1 says "from the last confirmed start". Measured on the live run,
+   *Behind 10* left the line reading "5 min ahead" — the move showed nowhere at the top.
+2. **A sixth tag, *started by staff*.** §4 folds staff's *Started now* into "what really
+   happened"; on the sheet it reads differently from *seen on stream*, so staff can tell which
+   starts a person vouched for. Trackers get a seventh, *from the tracker*.
+3. **Started now / Finished now drop the staff times on later runs of that day.** §4 says a later
+   confirmation beats an earlier staff time; the prototype applies that to every later run, not
+   only the one confirmed, so "next = now + setup" holds. ⚠️ It also drops a time staff typed for
+   a far later run (say, after a break). The owner should say whether such a time must survive.
+4. **Started now also finishes whichever run was live**, at the same minute. Not in §3; it is what
+   pressing it during a show means, and Undo takes both back.
+5. **A day is a block of runs, not a calendar date**: a sheet gap over four hours starts a new one.
+   The bot's `marathon_signals.chains` uses the setup-key reach; the two should be made one rule
+   when the bot side is built.
+6. **Set start and Behind / Ahead refuse a time before the start of the live or done run ahead**
+   (`before_the_run_ahead`). Not in the design.
+7. **The rows show the schedule's own name with `✦BaF`** (the member's name is the tooltip), where
+   the drawer shows the member's name. On a run sheet the name on the layout is the one staff are
+   looking for.
+8. **Only the next run shows *Started now* on its row** on an editable sheet; the rest keep it
+   behind **Edit…**. On a read-only sheet every upcoming run shows it, since nothing else is there.
+9. **No timezone picker** (§7's borrowed idea): times are in `default_timezone`, as the drawer's are.
+10. **The Discord door (§6) is not built**, and decision 7 (a post that already went out) is not
+    modelled — the posts panel only shows where the times would land.
+11. **The run sheet uses its own start / finish routes**, not `…/runs/{id}/live` and `/done`:
+    those carry no undo and re-time with the older rule. The drawer's buttons still work on these
+    marathons, but a press there is not in *Moves today* and cannot be undone from the sheet.
+12. **Starting a run out of order is not handled.** *Started now* on a run that is not next
+    leaves the runs skipped over as upcoming, at times after it. Staff would skip them by hand.
