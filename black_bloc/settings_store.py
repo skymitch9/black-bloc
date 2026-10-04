@@ -6,6 +6,7 @@ import re
 from datetime import UTC, datetime
 from inspect import isawaitable
 from typing import Any
+from urllib.parse import urlsplit
 
 from .automod import (
     AUTOMOD_MODES,
@@ -4933,6 +4934,10 @@ MARATHON_HOTFIX_SHOWS = "GDQueer"
 MARATHON_HOTFIX_SHOWS_MAX = 20
 MARATHON_HOTFIX_SHOW_LENGTH = 60
 MARATHON_HOTFIX_TRACK_PEOPLE_KEY = "marathon_hotfix_track_people"
+MARATHON_HOTFIX_VIEWER_URL_KEY = "marathon_hotfix_viewer_url"
+MARATHON_HOTFIX_VIEWER_URL = "https://ogndrahcir.github.io/ScheduleViewer/"
+MARATHON_HOTFIX_VIEWER_URL_LENGTH = 300
+MARATHON_HOTFIX_VIEWER_INNER = (".internal", ".local", ".localhost", ".lan", ".home", ".corp")
 MARATHON_HOTFIX_HOSTS_TEMPLATE_KEY = "marathon_hotfix_hosts_template"
 MARATHON_HOTFIX_RUNS_TEMPLATE_KEY = "marathon_hotfix_runs_template"
 MARATHON_HOTFIX_BECAUSE_FIELDS = ("people", "show")
@@ -4980,6 +4985,11 @@ MARATHON_BAD_SHOWS = (
     "**{given}** names no Hotfix show, so nothing was changed. Write one to {most} show names "
     "as the Show column spells them, up to {longest} characters each, separated by commas — for "
     "example `GDQueer`. To stop the Hotfix feed, pause it instead."
+)
+MARATHON_BAD_VIEWER = (
+    "**{given}** is not a page Black Bloc can read, so nothing was changed. Give one https link "
+    "to a public site (no port, no sign-in, no address made of numbers), at most {longest} "
+    "characters — or leave it blank to turn the Hotfix schedule viewer off."
 )
 MARATHON_BAD_RETRO = (
     "**{given}** is not a Twitch category name, so nothing was changed. Write the category a run "
@@ -5227,6 +5237,15 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "for every schedule, matched by their Twitch link or their Discord name, the same rules "
         "the marathon's People card uses — even when its show is not in marathon_hotfix_shows. "
         "on by default",
+    ),
+    MARATHON_HOTFIX_VIEWER_URL_KEY: (
+        "text",
+        MARATHON_HOTFIX_VIEWER_URL,
+        "the Hotfix schedule viewer page Black Bloc reads beside GDQ's own sheet — a second "
+        "source, never a replacement. From it come the hosts' Twitch names and the links to "
+        "each special event's own schedule (per-run start times, hosts and commentators). One "
+        "https link; blank turns this source off and the GDQ sheet is read alone. "
+        "`https://ogndrahcir.github.io/ScheduleViewer/` by default",
     ),
     MARATHON_EVENT_MODE_DEFAULT_KEY: (
         "enum",
@@ -6332,6 +6351,32 @@ def checked_shows(given: Any) -> str:
     return ", ".join(found)
 
 
+def checked_viewer_url(given: Any) -> str:
+    """One public https page, kept as typed; a blank turns the viewer off."""
+    text = str(given or "").strip()
+    if not text:
+        return ""
+    bad = SettingError(
+        MARATHON_BAD_VIEWER.format(given=text[:60], longest=MARATHON_HOTFIX_VIEWER_URL_LENGTH)
+    )
+    if len(text) > MARATHON_HOTFIX_VIEWER_URL_LENGTH or any(ch.isspace() for ch in text):
+        raise bad
+    try:
+        parts = urlsplit(text)
+        port = parts.port
+    except ValueError:
+        raise bad from None
+    host = (parts.hostname or "").lower()
+    numbers = ":" in host or all(part.isdigit() for part in host.split("."))
+    if parts.scheme.lower() != "https" or port is not None or parts.username is not None:
+        raise bad
+    if parts.password is not None or "." not in host or numbers:
+        raise bad
+    if host.endswith(MARATHON_HOTFIX_VIEWER_INNER):
+        raise bad
+    return text
+
+
 def checked_marathon(fields: tuple[str, ...]) -> Any:
     def check(given: Any) -> str:
         text = str(given or "").strip()
@@ -6365,6 +6410,8 @@ KEY_MIN.update({key: floor for key, (floor, _) in MARATHON_RANGES.items()})
 KEY_MAX.update({key: ceiling for key, (_, ceiling) in MARATHON_RANGES.items()})
 TEXT_CHECKS[MARATHON_REMINDER_MINUTES_KEY] = checked_marks
 TEXT_CHECKS[MARATHON_HOTFIX_SHOWS_KEY] = checked_shows
+TEXT_CHECKS[MARATHON_HOTFIX_VIEWER_URL_KEY] = checked_viewer_url
+TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, MARATHON_HOTFIX_VIEWER_URL_KEY)
 TEXT_CHECKS[MARATHON_RETRO_CATEGORY_KEY] = checked_retro
 TEXT_CHECKS.update(
     {key: checked_marathon(fields) for key, (_, fields, _) in MARATHON_WORDS.items()}

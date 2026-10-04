@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Weekly GDQ Hotfix Schedule</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<h1>Weekly GDQ Hotfix Schedule (<span id="tz-label">All Times Eastern</span>)</h1>
+
+<div id="text-nav" class="sticky-text">
+  <span id="tz-label-nav">All Times Eastern!</span>
+</div>
+
+<div id="schedule-nav" class="navbar"></div>
+<div id="schedule"></div>
+
+<!-- Templates -->
+<template id="show-template">
+  <div class="show-group">
+    <div class="show-header">
+      <a href="#" class="show-logo-link" target="_blank">
+        <div class="show-logo-container">
+          <img class="show-logo" alt="Show logo">
+        </div>
+      </a>
+      <a href="#" class="show-info-link" target="_blank">
+        <div class="show-info">
+          <span class="show-time"></span>
+          <span class="show-subtitle"></span>
+        </div>
+      </a>
+    </div>
+    <div class="run-container">
+      <div class="run-header-row"></div>
+    </div>
+  </div>
+</template>
+
+<template id="run-template">
+  <div class="run-row">
+    <div>
+      <div class="game"></div>
+      <div class="category"></div>
+    </div>
+    <div class="estimate"></div>
+    <div class="runner"></div>
+  </div>
+</template>
+
+<!-- Timezone selector -->
+<!-- Spacer holds the space when the bar is pinned to the viewport bottom -->
+<div id="tz-spacer"></div>
+<div id="tz-bar">
+  <label for="tz-select">Timezone:</label>
+  <select id="tz-select">
+    <option value="America/New_York">Eastern (ET)</option>
+    <option value="America/Chicago">Central (CT)</option>
+    <option value="America/Denver">Mountain (MT)</option>
+    <option value="America/Los_Angeles">Pacific (PT)</option>
+    <option value="America/Anchorage">Alaska (AKT)</option>
+    <option value="Pacific/Honolulu">Hawaii (HT)</option>
+    <option value="Europe/London">London (GMT/BST)</option>
+    <option value="Europe/Paris">Central Europe (CET/CEST)</option>
+    <option value="Europe/Helsinki">Eastern Europe (EET/EEST)</option>
+    <option value="Asia/Tokyo">Japan (JST)</option>
+    <option value="Australia/Sydney">Sydney (AEST/AEDT)</option>
+    <option value="UTC">UTC</option>
+  </select>
+  <button id="tz-refresh">Apply</button>
+  <div id="tz-bar-links">
+    <a id="gdqueer-link" class="tz-bar-button" href="https://gdq.gg/schedule/gdqueer" target="_blank" rel="noopener">Games Done Queer 📅 Oct 3-4</a>
+    <a id="hitless-link" class="tz-bar-button" href="http://gdq.gg/schedule/gdh" target="_blank" rel="noopener">Games Done Hitless 📅 Oct 23-25</a>
+  </div>
+</div>
+
+<script src="js/schedule.js"></script>
+</body>
+</html>

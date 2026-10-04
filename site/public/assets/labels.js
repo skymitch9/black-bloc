@@ -285,6 +285,7 @@ export const LABELS = {
   marathon_ladyarcaders_floor: 'Lady Arcaders event number the probe starts above',
   marathon_hotfix_shows: 'GDQ Hotfix shows that become marathons',
   marathon_hotfix_track_people: 'Hotfix shows a BaF person runs or hosts are tracked too',
+  marathon_hotfix_viewer_url: 'The Hotfix schedule viewer page (hosts’ Twitch names and event schedules)',
   marathon_hotfix_hosts_template: 'The notice line when a Hotfix show was taken for its BaF host',
   marathon_hotfix_runs_template: 'The notice line when a Hotfix show was taken for a BaF runner',
   marathon_feed_added_template: 'The line above a feed-found marathon in the inbox',

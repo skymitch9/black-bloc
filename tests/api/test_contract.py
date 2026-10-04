@@ -126,6 +126,11 @@ class ContractSchedule:
         sheet = pathlib.Path(__file__).parents[1] / "fixtures" / "marathon" / "gdq_hotfix_sheet.csv"
         return (sheet.read_text(encoding="utf-8"), "https://docs.google.com/spreadsheets/d/e/x/pub")
 
+    async def viewer(self, page_url, *, with_rows=False):
+        from black_bloc.marathon_viewer import Viewer
+
+        return Viewer(page=page_url, hosts={"anarchy": "anarchyasf"}, rows=3)
+
     async def events(self, source="gdq"):
         ahead = (datetime.now(UTC) + timedelta(days=90)).replace(microsecond=0)
         return [

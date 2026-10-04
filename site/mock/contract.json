@@ -5112,6 +5112,22 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/api/marathons/feeds/{feed_hotfix_id}/viewer-read",
+      "read_by": [
+        "marathons-section.js (events.html) the GDQ Hotfix feed's drawer — Schedule viewer ▸ Read it now"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source",
+        "viewer_url",
+        "message",
+        "viewer"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/marathons",
       "read_by": [

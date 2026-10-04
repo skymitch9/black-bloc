@@ -2295,7 +2295,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 706
+    assert len(settings_store.KEY_TYPES) == 707
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2505,3 +2505,26 @@ def test_the_category_signal_is_a_bool_and_the_retro_category_a_name_never_blank
         settings_store.coerce_value(key, "  ")
     with pytest.raises(settings_store.SettingError, match="not a Twitch category name"):
         settings_store.coerce_value(key, "x" * 61)
+
+
+def test_the_hotfix_viewer_link_is_one_public_https_page_or_blank_for_off():
+    key = settings_store.MARATHON_HOTFIX_VIEWER_URL_KEY
+    page = "https://ogndrahcir.github.io/ScheduleViewer/"
+    assert (settings_store.KEY_TYPES[key], settings_store.MARATHON_DEFAULTS[key]) == ("text", page)
+    assert settings_store.namespace_of(key) == "marathon"
+    assert settings_store.coerce_value(key, f"  {page} ") == page
+    assert settings_store.coerce_value(key, "   ") == ""
+    for bad in (
+        "http://ogndrahcir.github.io/ScheduleViewer/",
+        "https://10.0.0.7/",
+        "https://[fdaa::3]/",
+        "https://localhost/",
+        "https://db.internal/",
+        "https://a.example:8443/",
+        "https://user@a.example/",
+        "https://a.example/ x",
+        "https://a.example/" + "x" * 300,
+        "ScheduleViewer",
+    ):
+        with pytest.raises(settings_store.SettingError, match="not a page Black Bloc can read"):
+            settings_store.coerce_value(key, bad)

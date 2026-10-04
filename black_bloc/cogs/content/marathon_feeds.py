@@ -60,6 +60,7 @@ from ...settings_store import (
     MARATHON_HOTFIX_RUNS_TEMPLATE_KEY,
     MARATHON_HOTFIX_SHOWS_KEY,
     MARATHON_HOTFIX_TRACK_PEOPLE_KEY,
+    MARATHON_HOTFIX_VIEWER_URL_KEY,
     MARATHON_LADYARCADERS_FLOOR_KEY,
     MARATHON_MATCH_HOSTS_KEY,
 )
@@ -1210,7 +1211,11 @@ def shows_lines(bot: Any, guild: Any, feed: Any) -> list[str]:
     if feed["source"] != mf.HOTFIX_FEED:
         return []
     shows = hf.shows_of(bot.store.get(guild.id, MARATHON_HOTFIX_SHOWS_KEY))
-    return [mf.HOTFIX_SHOWS_LINE.format(shows=", ".join(shows) or mf.HOTFIX_NO_SHOWS)]
+    viewer = str(bot.store.get(guild.id, MARATHON_HOTFIX_VIEWER_URL_KEY) or "").strip()
+    return [
+        mf.HOTFIX_SHOWS_LINE.format(shows=", ".join(shows) or mf.HOTFIX_NO_SHOWS),
+        mf.HOTFIX_VIEWER_LINE.format(url=f"<{viewer}>" if viewer else mf.HOTFIX_VIEWER_OFF),
+    ]
 
 
 def search_move(bot: Any, guild: Any, feed: Any) -> tuple[Any, ...]:

@@ -278,6 +278,16 @@ const HOTFIX_SEARCH_PLACEHOLDER = 'a show, a host or a BaF name';
 const HOTFIX_NO_HIT = 'No show matches that.';
 const HOTFIX_SHOWS_SAVED = 'The Hotfix feed now reads {shows}. The next check uses them.';
 const HOTFIX_SHEET_LINE = 'Reads the sheet the Hotfix page embeds: ';
+const VIEWER_FIELD = 'Schedule viewer';
+const VIEWER_HELP = 'A second source beside GDQ’s own sheet, never a replacement: the hosts’ Twitch '
+  + 'names and each special event’s own schedule (start times, hosts and commentators) come from '
+  + 'this page. This is marathon_hotfix_viewer_url in Settings; saving here changes it there. '
+  + 'Blank turns it off.';
+const VIEWER_SAVE = 'Save the link';
+const VIEWER_READ = 'Read it now';
+const VIEWER_SAVED = 'The viewer link is now {url}. Read it now says what it finds there.';
+const VIEWER_SAVED_OFF = 'The viewer is off now (the link is blank). The GDQ sheet is read alone.';
+const VIEWER_OPEN = 'open it ↗';
 const PICK_HELP = {
   gdq: 'Every event on the GDQ tracker that is still ahead.',
   rpglb: 'Every event on the RPG Limit Break tracker that is still ahead.',
@@ -1426,6 +1436,28 @@ function hotfixPicker(feed, say, answer) {
   ];
 }
 
+function viewerField(feed, say) {
+  const before = String(feed.viewer_url || '');
+  const input = el('input', { class: 'input', type: 'url', value: before, placeholder: 'https://…' });
+  const save = button(VIEWER_SAVE, () => {
+    const value = input.value.trim();
+    feedDrawerStep(feed, say, async () => {
+      const stored = await saveSetting('marathon_hotfix_viewer_url', value);
+      const kept = stored && typeof stored === 'object' && 'value' in stored ? stored.value : value;
+      return { message: kept ? said(VIEWER_SAVED, { url: kept }) : VIEWER_SAVED_OFF };
+    });
+  }, { tone: 'warn' });
+  save.disabled = true;
+  input.addEventListener('input', () => { save.disabled = input.value.trim() === before; });
+  const read = button(VIEWER_READ, () => feedDrawerStep(feed, say, () => send(`/api/marathons/feeds/${feed.id}/viewer-read`, 'POST', {})), { tone: 'quiet' });
+  read.disabled = !before;
+  return field(VIEWER_FIELD, el('div', {}, [
+    input,
+    bar([save, read]),
+    before ? el('p', { class: 'field-help mx-line' }, [el('a', { href: before, text: VIEWER_OPEN, rel: 'noreferrer', target: '_blank' })]) : null,
+  ]), VIEWER_HELP);
+}
+
 function hotfixFields(feed, say) {
   if (feed.source !== 'gdq_hotfix') return [];
   const box = el('div', { class: 'mx-hotfix-picker' }, [line(HOTFIX_LOADING)]);
@@ -1436,6 +1468,7 @@ function hotfixFields(feed, say) {
       box.replaceChildren(notice(sentence.text, sentence.tone));
     });
   return [
+    viewerField(feed, say),
     field(HOTFIX_SHOWS_FIELD, box, HOTFIX_SHOWS_HELP),
     feed.sheet_url ? el('p', { class: 'field-help mx-line' }, [
       el('span', { text: HOTFIX_SHEET_LINE }),

@@ -632,6 +632,15 @@ class ScheduleClient:
         self._hotfix_sheet = found[1]
         return found
 
+    async def viewer(self, page_url: str, *, with_rows: bool = False) -> Any:
+        """The Hotfix schedule viewer page: its host table, feed link and event sheets."""
+        from . import marathon_viewer
+        from .doc_import import aiohttp_hop
+
+        return await marathon_viewer.read_viewer(
+            self._hop_request or aiohttp_hop, BROWSER_AGENT, page_url, with_rows=with_rows
+        )
+
     async def hotfix_block(self, ref: str) -> Any:
         text, _url = await self.hotfix_sheet()
         return _hf().block_for(_hf().blocks_of(text), ref, datetime.now(UTC))

@@ -26,6 +26,8 @@ from ...cogs.content.marathon_feeds import (
     set_feed,
     take_suggestion,
 )
+from ...cogs.content.marathon_viewer import page_of as viewer_page
+from ...cogs.content.marathon_viewer import read_now as viewer_read
 from ...cogs.content.spotlight import channel_by_id
 from ...logkinds import VIA_WEBSITE
 from ...marathon_channels import takes_marathons
@@ -102,6 +104,7 @@ async def feed_row(bot: Any, guild: Any, feed: Any) -> dict[str, Any]:
         "searches": hre.queries(feed) if finds else None,
         "shows": shows,
         "sheet_url": feed["sheet_url"] if hotfix else None,
+        "viewer_url": viewer_page(bot, guild) if hotfix else None,
         "suggestions": [suggestion_row(one) for one in mf.open_suggestions(feed)],
         "dismissed": [suggestion_row(one) for one in mf.dismissed_of(feed)],
         "marathons": [
@@ -268,6 +271,16 @@ def build_router(bot: Any) -> APIRouter:
         guild = writable()
         row = await wanted(guild, feed_id)
         return answered(await hotfix_picker(bot, guild, row)).value
+
+    @router.post("/{feed_id}/viewer-read")
+    async def feed_viewer_read(request: Request, feed_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = writable()
+        row = await wanted(guild, feed_id)
+        done = answered(
+            await viewer_read(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
+        )
+        return await after(guild, feed_id, done.message) | {"viewer": done.value}
 
     @router.post("/{feed_id}/add")
     async def feed_take(request: Request, feed_id: int, payload: dict[str, Any]) -> dict[str, Any]:

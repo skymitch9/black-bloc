@@ -891,6 +891,7 @@ const SETTING_SPECS = [
   ["marathon_ladyarcaders_floor", "int", 24, 24, "the event number the Lady Arcaders feed probes upward from — it asks the next numbers above this or above the highest event it already knows, whichever is higher; staff raise it after a link is pasted. 24 by default", null, 99999, 1],
   ["marathon_hotfix_shows", "text", "GDQueer", "GDQueer", "the GDQ Hotfix shows the Hotfix feed turns into marathons, separated by commas and spelled as the sheet's Show column spells them (capitals do not matter); each run of days a show airs becomes one marathon. `GDQueer` by default"],
   ["marathon_hotfix_track_people", "bool", true, true, "whether the Hotfix feed also takes any show block a BaF person runs or hosts — paired for every schedule, matched by their Twitch link or their Discord name, the same rules the marathon's People card uses — even when its show is not in marathon_hotfix_shows. on by default"],
+  ["marathon_hotfix_viewer_url", "text", "https://ogndrahcir.github.io/ScheduleViewer/", "https://ogndrahcir.github.io/ScheduleViewer/", "the Hotfix schedule viewer page Black Bloc reads beside GDQ's own sheet — a second source, never a replacement. From it come the hosts' Twitch names and the links to each special event's own schedule (per-run start times, hosts and commentators). One https link; blank turns this source off and the GDQ sheet is read alone. `https://ogndrahcir.github.io/ScheduleViewer/` by default"],
   ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the line above a feed-found marathon's message in the marathon inbox thread, where Track and Ignore are. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_feed_suggest_template", "text", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "the staff notice when a feed in suggest mode finds a new event; it carries Add it and Not this one. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_hotfix_hosts_template", "text", "Tracked because **{people}** hosts it.", "Tracked because **{people}** hosts it.", "the line under a Hotfix feed's notice when it took a show that is not in marathon_hotfix_shows because a BaF person hosts it. It takes {people} {show}"],
@@ -2270,6 +2271,7 @@ function validate(key, value) {
   if (type === 'bool') return Boolean(value);
   if (key === 'posts_block_links_rows') return checkedLinks(value);
   if (key === 'marathon_hotfix_shows') return checkedShows(value);
+  if (key === 'marathon_hotfix_viewer_url') return checkedViewerUrl(value);
   if (key === 'marathon_retro_category') return checkedRetro(value);
   return value;
 }
@@ -2295,6 +2297,22 @@ function checkedShows(value) {
     throw new Refused(400, 'bad_value', `**${text.slice(0, 40) || 'Nothing'}** names no Hotfix show, so nothing was changed. Write one to 20 show names as the Show column spells them, up to 60 characters each, separated by commas — for example \`GDQueer\`. To stop the Hotfix feed, pause it instead.`);
   }
   return found.join(', ');
+}
+
+// The twin of settings_store.checked_viewer_url: one public https page, or blank for off.
+function checkedViewerUrl(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const bad = () => new Refused(400, 'bad_value', `**${text.slice(0, 60)}** is not a page Black Bloc can read, so nothing was changed. Give one https link to a public site (no port, no sign-in, no address made of numbers), at most 300 characters — or leave it blank to turn the Hotfix schedule viewer off.`);
+  if (text.length > 300 || /\s/.test(text)) throw bad();
+  let parts;
+  try { parts = new URL(text); } catch (e) { throw bad(); }
+  const host = parts.hostname.toLowerCase();
+  const numbers = host.includes(':') || host.split('.').every((part) => /^\d+$/.test(part));
+  if (parts.protocol !== 'https:' || parts.port || parts.username || parts.password) throw bad();
+  if (!host.includes('.') || numbers) throw bad();
+  if (['.internal', '.local', '.localhost', '.lan', '.home', '.corp'].some((tail) => host.endsWith(tail))) throw bad();
+  return text;
 }
 
 // The twin of settings_store.checked_links: a bad row is refused in words, never dropped.
@@ -7495,6 +7513,7 @@ const FEED_SOURCES = [
   { value: 'gdq_hotfix', label: 'GDQ Hotfix \u2014 the shows named in marathon_hotfix_shows, from the schedule sheet on gamesdonequick.com/hotfix/schedule' },
 ];
 const FEED_HOTFIX_PAGE = 'https://gamesdonequick.com/hotfix/schedule';
+const MARATHON_OVERLAY_SHEET = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSDxkXigxTofZG9IR7q8t2uXCOgR6zZnife29BUSnjQbJK1_a8L1jfu1RVXI4_M0zyikGniTx7zyEVz/pubhtml';
 const FEED_HOTFIX_SHEET = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSxkh22kZxarTgwzgy3xn-g9xqmDYWfpawKBRHv4vBHfrA81gKx9jCqb8FILZ-riUO1hu0d77s3MDNV/pub?gid=728340068&single=true&output=csv';
 const FEED_ACTION_WORDS = { add: 'adds', suggest: 'suggests' };
 
@@ -7759,6 +7778,7 @@ function feedRow(feed) {
     searches: feed.source === 'horaro_events' ? feedSearches(feed) : null,
     shows: feed.source === 'gdq_hotfix' ? hotfixShows() : null,
     sheet_url: feed.source === 'gdq_hotfix' ? feed.sheet_url || null : null,
+    viewer_url: feed.source === 'gdq_hotfix' ? String(state.settings.get('marathon_hotfix_viewer_url') || '') : null,
     suggestions: feed.suggested.filter((one) => !one.dismissed_at).map(feedSuggestionRow),
     dismissed: feed.suggested.filter((one) => one.dismissed_at).map(feedSuggestionRow),
     marathons: state.marathons.filter((one) => one.feed_id === feed.id).map((one) => ({ id: one.id, name: one.name, starts_at: one.starts_at })),
@@ -7962,6 +7982,29 @@ route('GET', '/api/marathons/feeds/:feed_id/hotfix-shows', (context) => {
   const feed = feedOf(context.params.feed_id);
   if (feed.source !== 'gdq_hotfix') throw new Refused(409, 'not_hotfix', `**${feed.name}** does not read the GDQ Hotfix schedule, so it has no shows to pick from.`);
   return hotfixPicker(feed);
+});
+
+// The bot's cogs/content/marathon_viewer.read_now: the viewer page read at once, said in words.
+const VIEWER_SAMPLE = {
+  rows: 61,
+  hosts: 19,
+  events: [{ label: 'Games Done Queer \u{1F4C5} Oct 3-4', href: 'https://gdq.gg/schedule/gdqueer', sheet_url: MARATHON_OVERLAY_SHEET }],
+  skipped: [{ label: 'Games Done Hitless \u{1F4C5} Oct 23-25', why: 'goes to gamesdonequick.com, which is not a published Google Sheet' }],
+};
+route('POST', '/api/marathons/feeds/:feed_id/viewer-read', (context) => {
+  requireStaff(context.session);
+  const feed = feedOf(context.params.feed_id);
+  if (feed.source !== 'gdq_hotfix') throw new Refused(409, 'not_hotfix', `**${feed.name}** does not read the GDQ Hotfix schedule, so it has no viewer to read.`);
+  const page = String(state.settings.get('marathon_hotfix_viewer_url') || '');
+  if (!page) throw new Refused(409, 'viewer_off', 'The viewer link is blank, so this source is off and nothing was read. The GDQ sheet is read alone.');
+  const viewer = { page, feed: true, rows_trouble: null, ...VIEWER_SAMPLE };
+  logAction('web.marathon.viewer_read', { details: { feed_id: feed.id, page, rows: viewer.rows, hosts: viewer.hosts, events: viewer.events.map((one) => one.label), skipped: viewer.skipped, via: 'website' } });
+  const message = [
+    `Read the viewer: ${viewer.rows} schedule row(s), ${viewer.hosts} host(s) with Twitch names, ${viewer.events.length} event schedule(s).`,
+    ...viewer.events.map((one) => `**${one.label}** has its own schedule sheet.`),
+    ...viewer.skipped.map((one) => `**${one.label}** was not read — it ${one.why}.`),
+  ].join(' ');
+  return { ...feedRow(feed), message, viewer };
 });
 
 route('POST', '/api/marathons/feeds/:feed_id/add', async (context) => {
