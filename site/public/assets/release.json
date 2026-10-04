@@ -1,22 +1,7 @@
 {
-  "release": "v200",
-  "commit": "7d8b40ad",
+  "release": "v201",
+  "commit": "da8faa7c",
   "changed_features": [
-    "automod",
-    "birthday",
-    "chat",
-    "core",
-    "events",
-    "golive",
-    "guides",
-    "honeypot",
-    "marathon",
-    "mod",
-    "modmail",
-    "poll",
-    "posts",
-    "request",
-    "rolemenu",
-    "tempvoice"
+    "marathon"
   ]
 }
