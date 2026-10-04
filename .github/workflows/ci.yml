@@ -61,3 +61,5 @@ jobs:
         run: node site/mock/mdformat.test.mjs
       - name: Shared search and filter
         run: node site/mock/listfilter.test.mjs
+      - name: Shared field aids
+        run: node site/mock/fieldaids.test.mjs

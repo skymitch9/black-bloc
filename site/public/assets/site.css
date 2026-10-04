@@ -2425,7 +2425,11 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 .fmt-h1 { font-size: var(--et-ui-lg); font-weight: var(--et-weight-heavy, 700); }
 .fmt-h2 { font-size: var(--et-ui-md); font-weight: var(--et-weight-heavy, 700); }
 .fmt-h3 { font-size: var(--et-ui-sm); font-weight: var(--et-weight-heavy, 700); }
-.fmthint { margin: 0; }
+.tokenrow { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; min-width: 0; }
+.token-chip { padding: 2px 8px; font-family: var(--et-font-mono); font-size: var(--et-ui-2xs); }
+.limit-counter[hidden] { display: none; }
+.field-aid { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.field-aid:not(:has(> :not([hidden]))) { display: none; }
 .input.postbox {
   min-height: 22rem;
   font-family: var(--et-font-mono);

@@ -14,6 +14,7 @@ import {
 import { messageTree, mountTree } from './discordmock.js';
 import { ICONS } from './icons.js';
 import { channelLabel, humanLabel } from './labels.js';
+import { capState, counterState, insertAt, tokensIn } from './fieldaids.js';
 import { applyFilters, matches, passes } from './listfilter.js';
 import * as md from './mdformat.js';
 
@@ -884,7 +885,8 @@ export function field(label, control, help = null) {
   return el('div', { class: 'field' }, [
     el('label', { class: 'field-label', for: id || undefined, text: label }),
     control,
-    help ? el('p', { class: 'field-help', text: help }) : null,
+    help instanceof Node ? el('div', { class: 'field-help field-aid' }, [help]) : null,
+    help && !(help instanceof Node) ? el('p', { class: 'field-help', text: help }) : null,
   ]);
 }
 
@@ -1373,7 +1375,10 @@ export async function settingRow(spec, { onDirty = null, mock = true } = {}) {
       el('span', { class: 'setrow-key', text: spec.key }),
     ]),
     mark,
-    el('div', { class: 'setrow-control' }, [made.node]),
+    el('div', { class: 'setrow-control' }, [
+      made.node,
+      WORDING_TYPES.has(spec.type) ? placeholderChips(made.node, placeholdersOf(spec)) : null,
+    ]),
     wipe,
     say,
     shown ? el('div', { class: 'setrow-mock' }, [shown.node, shown.say]) : null,
@@ -1813,7 +1818,6 @@ export function sayAgain(where, say) {
   return say;
 }
 
-export const FORMAT_HINT = 'Discord formatting — what the preview shows is what Discord shows.';
 const FORMAT_TAB_NOTE = 'Tab indents inside the box; Ctrl+M lets Tab leave it.';
 const LINK_TITLE = 'Add a link';
 const LINK_ASK = 'The web address the words should open.';
@@ -2006,6 +2010,63 @@ export function formatBar(box) {
       'aria-label': 'Formatting',
       'aria-controls': box.id || undefined,
     }, buttons),
-    el('p', { class: 'field-help fmthint', text: FORMAT_HINT, title: FORMAT_TAB_NOTE }),
+    quietHint(box, FORMAT_TAB_NOTE),
   ]);
+}
+
+let hintCount = 0;
+
+export function quietHint(control, text) {
+  hintCount += 1;
+  const id = `quiet-hint-${hintCount}`;
+  const held = control.getAttribute('aria-describedby');
+  control.setAttribute('aria-describedby', held ? `${held} ${id}` : id);
+  return el('span', { class: 'sr-only', id, text });
+}
+
+export function placeholdersOf(spec) {
+  return tokensIn(spec && spec.default, spec && spec.help);
+}
+
+export function placeholderChips(box, tokens, { label = 'Insert' } = {}) {
+  const list = tokens || [];
+  if (!list.length) return null;
+  return el('div', { class: 'tokenrow', role: 'group', 'aria-label': label }, list.map((token) => el('button', {
+    class: 'chip-filter token-chip',
+    type: 'button',
+    text: token,
+    title: `${label} ${token}`,
+    'aria-label': `${label} ${token}`,
+    on: {
+      mousedown: (event) => event.preventDefault(),
+      click: () => putText(box, insertAt(box.value, box.selectionStart, box.selectionEnd, token)),
+    },
+  })));
+}
+
+export function limitCounter(input, max, { hard = true } = {}) {
+  const node = el('span', { class: 'counter limit-counter', role: 'status', hidden: true });
+  if (hard) input.setAttribute('maxlength', String(max));
+  node.paint = () => {
+    const found = counterState(input.value.length, max);
+    node.hidden = !found.shown;
+    node.textContent = found.text;
+    if (found.tone) node.setAttribute('data-tone', found.tone);
+    else node.removeAttribute('data-tone');
+  };
+  input.addEventListener('input', node.paint);
+  node.paint();
+  return node;
+}
+
+export function capMark(add, cap) {
+  const node = el('span', { class: 'counter cap-mark' });
+  node.paint = (count) => {
+    const found = capState(count, cap);
+    node.textContent = found.text;
+    add.disabled = found.full;
+    if (found.full) node.setAttribute('data-tone', 'warn');
+    else node.removeAttribute('data-tone');
+  };
+  return node;
 }
