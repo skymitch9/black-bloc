@@ -713,7 +713,7 @@ const SETTING_SPECS = [
   ["marathon_host_highlights", "bool", true, true, "whether each BaF host of a marathon is posted like a BaF runner, once per host block (the runs they host in a row, through runs with no host listed): the public reminder (marathon_public_reminder_template, with marathon_part_host) at every marathon_reminder_minutes mark before the block's first run in marathon_reminder_channel_id while marathon_public_reminders is on, and the public highlight (marathon_public_template) when the block goes live and the marathon's Auto-highlight is on. Both follow the marathon's BaF announcements switch and each host's opt-out. A host still never makes a run a BaF run. on by default"],
   ["marathon_announcements_default", "bool", true, true, "whether a marathon announces its BaF runners and hosts publicly — the public reminders and highlights — when its own BaF announcements switch follows this setting. Off, nobody on that marathon gets a public post; anyone can still be opted out one by one. on by default"],
   ["marathon_reminder_minutes", "text", "120, 15", "120, 15", "minutes before a BaF run that a reminder is posted, separated by commas; `120, 15` by default. marathon_ping_minutes is always one of them"],
-  ["marathon_ping_minutes", "int", 15, 15, "the one reminder that pings: this many minutes before a BaF run, the member's own ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings at the scheduled start", null, 240, 0],
+  ["marathon_ping_minutes", "int", 15, 15, "the one reminder that pings: this many minutes before a BaF run, the member's own ping role and the marathon channel's ping role are mentioned, and the public copy mentions the Marathon role (marathon_role_pings). 15 by default; 0 pings at the scheduled start", null, 240, 0],
   ["marathon_reminder_pings", "bool", true, true, "whether the marathon_ping_minutes reminder mentions any role at all. on by default"],
   ["marathon_live_pings", "bool", false, false, "whether the shoutout when a BaF run goes live pings too. off by default — the ping already went out marathon_ping_minutes before"],
   ["marathon_reminder_stale_minutes", "int", 30, 30, "minutes past its moment after which a reminder is skipped and logged instead of posted late. 30 by default", null, 240, 1],
@@ -765,6 +765,13 @@ const SETTING_SPECS = [
   ["marathon_ping_role_button_off", "text", "Stop pinging", "Stop pinging", "the /event marathon card's button that turns a marathon's role pings off"],
   ["marathon_ping_role_line_on", "text", "Pings the role", "Pings the role", "the marathon card's line while its reminders and shoutouts mention roles"],
   ["marathon_ping_role_line_off", "text", "Pings no role", "Pings no role", "the marathon card's line while its reminders and shoutouts mention no role"],
+  ["marathon_role_pings", "bool", true, true, "whether the marathon_ping_minutes heads-up mentions the Marathon role (marathon_role_id) when the marathon's own ping switch is on. The mention goes in the public copy members see, once, never in the staff thread, and never on the live highlight or shoutout. on by default; off posts the heads-up without it"],
+  ["marathon_role_ping_line_on", "text", "The public heads-up {minutes} minutes before a BaF run mentions {role}.", "The public heads-up {minutes} minutes before a BaF run mentions {role}.", "the line under a marathon's ping switch (thread controls and the marathon drawer) while the Marathon role will be mentioned. It takes {role} {minutes}; {role} names the role without pinging"],
+  ["marathon_role_ping_line_key_off", "text", "The Marathon role is not mentioned: {key} is off.", "The Marathon role is not mentioned: {key} is off.", "the line under a marathon's ping switch while a setting keeps the Marathon role out of the heads-up. It takes {key}, the setting that is off"],
+  ["marathon_role_ping_line_announcements_off", "text", "The Marathon role is not mentioned: this marathon's BaF announcements are off, so no public heads-up posts.", "The Marathon role is not mentioned: this marathon's BaF announcements are off, so no public heads-up posts.", "the line under a marathon's ping switch while its BaF announcements are off"],
+  ["marathon_role_ping_line_unset", "text", "The Marathon role is not mentioned: no role is picked in marathon_role_id.", "The Marathon role is not mentioned: no role is picked in marathon_role_id.", "the line under a marathon's ping switch while no Marathon role is picked"],
+  ["marathon_role_ping_line_gone", "text", "The Marathon role is not mentioned: the role in marathon_role_id is no longer in this server.", "The Marathon role is not mentioned: the role in marathon_role_id is no longer in this server.", "the line under a marathon's ping switch while the picked Marathon role has been deleted"],
+  ["marathon_role_ping_line_not_mentionable", "text", "The Marathon role is not mentioned: {role} is not mentionable and Black Bloc may not mention every role, so a mention would notify nobody.", "The Marathon role is not mentioned: {role} is not mentionable and Black Bloc may not mention every role, so a mention would notify nobody.", "the line under a marathon's ping switch while Discord would not notify the Marathon role: it is not set mentionable and the bot lacks Mention Everyone. It takes {role}"],
   ["marathon_archive_after_days", "int", 7, 7, "days after a marathon's last run ends that it moves to the archive, with its runs and people — kept, browsable under Archive on the Events page, and Restore brings it back paused. 7 by default; 0 moves it the same day. A marathon with no dates never moves by itself", null, 365, 0],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_archive_question", "text", "Archive **{name}**? It stops being read and its ping window closes; its runs, people and posts are kept, and **Restore** brings it back paused.", "Archive **{name}**? It stops being read and its ping window closes; its runs, people and posts are kept, and **Restore** brings it back paused.", "what staff are asked before Archive it moves a marathon to the archive early. It takes {name}"],
@@ -6884,6 +6891,7 @@ function marathonRow(row) {
     event_mode_word: MARATHON_MODE_WORDS[marathonModeOf(row)],
     spotlight_mode: row.spotlight_mode === 'off' ? 'off' : 'follow',
     ping_role: Boolean(row.ping_role),
+    role_ping: marathonRolePing(row),
     public_highlight: Boolean(row.public_highlight),
     announcements: marathonSwitch(row, 'announcements'),
     ...marathonTracking(row),
@@ -7032,6 +7040,23 @@ const MARATHON_SWITCH_SAID = {
 };
 const MARATHON_SCAN_GONE = 'The Scan hosts switch is gone — hosts are always found now, like runners, so nothing was changed.';
 const MARATHON_HOST_EVENTS_GONE = 'The BaF host events switch is gone — events now follow the one **BaF run/host events** switch, so nothing was changed.';
+
+// The bot's cogs/content/marathon_role_ping.state_of: whether the ping-mark heads-up mentions the
+// Marathon role, and the line staff read under the ping switch (empty while the switch is off).
+function marathonRolePing(row) {
+  const word = (key, fields = {}) => Object.entries(fields)
+    .reduce((text, [name, value]) => text.split(`{${name}}`).join(String(value)), String(state.settings.get(key) ?? ''));
+  if (!row.ping_role) return { mentions: false, reason: 'switch_off', line: '' };
+  const off = [['role_pings_off', 'marathon_role_pings'], ['reminder_pings_off', 'marathon_reminder_pings'], ['public_reminders_off', 'marathon_public_reminders']]
+    .find(([, key]) => !state.settings.get(key));
+  if (off) return { mentions: false, reason: off[0], line: word('marathon_role_ping_line_key_off', { key: off[1] }) };
+  if (!marathonSwitch(row, 'announcements').on) return { mentions: false, reason: 'announcements_off', line: word('marathon_role_ping_line_announcements_off') };
+  const roleId = state.settings.get('marathon_role_id');
+  if (!roleId) return { mentions: false, reason: 'unset', line: word('marathon_role_ping_line_unset') };
+  const role = ROLES.find((one) => String(one.id) === String(roleId));
+  if (!role) return { mentions: false, reason: 'gone', line: word('marathon_role_ping_line_gone') };
+  return { mentions: true, reason: null, line: word('marathon_role_ping_line_on', { role: `@${role.name}`, minutes: state.settings.get('marathon_ping_minutes') }) };
+}
 
 function marathonSwitch(row, which) {
   const fallback = Boolean(state.settings.get(MARATHON_SWITCH_DEFAULTS[which]));

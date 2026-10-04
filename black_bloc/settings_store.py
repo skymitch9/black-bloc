@@ -4746,6 +4746,13 @@ MARATHON_PING_ROLE_BUTTON_ON_KEY = "marathon_ping_role_button_on"
 MARATHON_PING_ROLE_BUTTON_OFF_KEY = "marathon_ping_role_button_off"
 MARATHON_PING_ROLE_LINE_ON_KEY = "marathon_ping_role_line_on"
 MARATHON_PING_ROLE_LINE_OFF_KEY = "marathon_ping_role_line_off"
+MARATHON_ROLE_PINGS_KEY = "marathon_role_pings"
+MARATHON_ROLE_PING_LINE_ON_KEY = "marathon_role_ping_line_on"
+MARATHON_ROLE_PING_LINE_KEY_OFF_KEY = "marathon_role_ping_line_key_off"
+MARATHON_ROLE_PING_LINE_ANNOUNCEMENTS_OFF_KEY = "marathon_role_ping_line_announcements_off"
+MARATHON_ROLE_PING_LINE_UNSET_KEY = "marathon_role_ping_line_unset"
+MARATHON_ROLE_PING_LINE_GONE_KEY = "marathon_role_ping_line_gone"
+MARATHON_ROLE_PING_LINE_NOT_MENTIONABLE_KEY = "marathon_role_ping_line_not_mentionable"
 MARATHON_ARCHIVE_AFTER_DAYS_KEY = "marathon_archive_after_days"
 MARATHON_ARCHIVED_WORD_KEY = "marathon_archived_word"
 MARATHON_ARCHIVE_QUESTION_KEY = "marathon_archive_question"
@@ -5100,8 +5107,9 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "int",
         15,
         "the one reminder that pings: this many minutes before a BaF run, the member's own "
-        "ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings "
-        "at the scheduled start",
+        "ping role and the marathon channel's ping role are mentioned, and the public copy "
+        "mentions the Marathon role (marathon_role_pings). 15 by default; 0 pings at the "
+        "scheduled start",
     ),
     MARATHON_REMINDER_PINGS_KEY: (
         "bool",
@@ -5317,6 +5325,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "schedule name is exactly a member's Discord username, with Link (this marathon), Link "
         "everywhere and Not them buttons for staff. Nobody is linked until staff press. on by "
         "default",
+    ),
+    MARATHON_ROLE_PINGS_KEY: (
+        "bool",
+        True,
+        "whether the marathon_ping_minutes heads-up mentions the Marathon role (marathon_role_id) "
+        "when the marathon's own ping switch is on. The mention goes in the public copy members "
+        "see, once, never in the staff thread, and never on the live highlight or shoutout. on "
+        "by default; off posts the heads-up without it",
     ),
     MARATHON_PUBLIC_REMINDERS_KEY: (
         "bool",
@@ -6111,6 +6127,43 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "Pings no role",
         (),
         "the marathon card's line while its reminders and shoutouts mention no role",
+    ),
+    MARATHON_ROLE_PING_LINE_ON_KEY: (
+        "The public heads-up {minutes} minutes before a BaF run mentions {role}.",
+        ("role", "minutes"),
+        "the line under a marathon's ping switch (thread controls and the marathon drawer) while "
+        "the Marathon role will be mentioned. It takes {role} {minutes}; {role} names the role "
+        "without pinging",
+    ),
+    MARATHON_ROLE_PING_LINE_KEY_OFF_KEY: (
+        "The Marathon role is not mentioned: {key} is off.",
+        ("key",),
+        "the line under a marathon's ping switch while a setting keeps the Marathon role out of "
+        "the heads-up. It takes {key}, the setting that is off",
+    ),
+    MARATHON_ROLE_PING_LINE_ANNOUNCEMENTS_OFF_KEY: (
+        "The Marathon role is not mentioned: this marathon's BaF announcements are off, so "
+        "no public heads-up posts.",
+        (),
+        "the line under a marathon's ping switch while its BaF announcements are off",
+    ),
+    MARATHON_ROLE_PING_LINE_UNSET_KEY: (
+        "The Marathon role is not mentioned: no role is picked in marathon_role_id.",
+        (),
+        "the line under a marathon's ping switch while no Marathon role is picked",
+    ),
+    MARATHON_ROLE_PING_LINE_GONE_KEY: (
+        "The Marathon role is not mentioned: the role in marathon_role_id is no longer in this "
+        "server.",
+        (),
+        "the line under a marathon's ping switch while the picked Marathon role has been deleted",
+    ),
+    MARATHON_ROLE_PING_LINE_NOT_MENTIONABLE_KEY: (
+        "The Marathon role is not mentioned: {role} is not mentionable and Black Bloc may not "
+        "mention every role, so a mention would notify nobody.",
+        ("role",),
+        "the line under a marathon's ping switch while Discord would not notify the Marathon "
+        "role: it is not set mentionable and the bot lacks Mention Everyone. It takes {role}",
     ),
     MARATHON_CHANNEL_PING_HELP_KEY: (
         "On a marathon channel, During events pings only while one of its marathons is running "

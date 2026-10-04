@@ -2558,7 +2558,9 @@ class Marathons(commands.Cog):
     async def _post_reminder(
         self, guild: Any, marathon: Any, row: Any, mark: int, *, pinging: bool
     ) -> None:
+        from ... import marathon_role_ping as role_ping
         from .marathon_public_reminders import post_public_reminder
+        from .marathon_role_ping import verdict_for
 
         words = words_for(self.bot, guild.id)
         login = await channel_login(self.bot, marathon)
@@ -2568,22 +2570,36 @@ class Marathons(commands.Cog):
             said_default(MARATHON_REMINDER_TEMPLATE_KEY),
             **mt.run_fields(row, marathon, words, url=url),
         ).text
-        roles: list[int] = []
+        found: list[int] = []
         if pinging and self.bot.store.get(guild.id, MARATHON_REMINDER_PINGS_KEY):
-            roles = await self._ping_roles(guild, marathon, row)
+            found = await self._ping_roles(guild, marathon, row)
+        marathon_role = verdict_for(self.bot, guild, marathon) if pinging else None
+        roles = role_ping.without_role(found, marathon_role)
         message, channel_id, why = await self._send(
             guild, ping_prefix(*roles) + text, roles, marathon=marathon
         )
-        await post_public_reminder(
-            self, guild, marathon, row, mark, roles, url=url, staff_channel_id=channel_id
+        public = await post_public_reminder(
+            self,
+            guild,
+            marathon,
+            row,
+            mark,
+            roles,
+            url=url,
+            staff_channel_id=channel_id,
+            marathon_role=marathon_role,
         )
-        details = self.run_details(marathon, row) | {
-            "mark": mark,
-            "pinged": bool(roles),
-            "roles": roles,
-            "message_id": str(getattr(message, "id", "")) or None,
-            "channel_id": channel_id,
-        }
+        details = (
+            self.run_details(marathon, row)
+            | {
+                "mark": mark,
+                "pinged": bool(roles),
+                "roles": roles,
+                "message_id": str(getattr(message, "id", "")) or None,
+                "channel_id": channel_id,
+            }
+            | public
+        )
         if message is None:
             await log_action(
                 self.bot, guild, "marathon.reminder_failed", details=details | {"reason": why}

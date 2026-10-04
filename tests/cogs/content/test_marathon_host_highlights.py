@@ -44,6 +44,7 @@ from tests.cogs.content.test_spotlight import (
     GUILD,
     FakeActor,
     FakeChannel,
+    FakeRole,
     details_of,
     kinds,
 )
@@ -417,3 +418,93 @@ async def test_a_host_post_already_up_from_the_last_build_is_edited_in_place(bot
     assert " · on now · " in old_post.content and len(posts(bot)) == count
     (record,) = mhh.records(await get_marathon(bot.db, GUILD, marathon["id"]))
     assert record["runs"] == [first["id"], first["id"] + 1, first["id"] + 2]
+
+
+# --- the Marathon role on the block's ping-mark heads-up ------------------------------------------
+
+MARATHON_ROLE = 6100
+
+
+async def role_pinging(bot, marathon, *, switch=True):
+    role = FakeRole(MARATHON_ROLE, "Marathon")
+    role.mentionable = True
+    bot.guild.roles.append(role)
+    await bot.store.set(GUILD, "marathon_role_id", MARATHON_ROLE)
+    await update_marathon(bot.db, marathon["id"], ping_role=1 if switch else 0)
+
+
+def host_copies(bot, member=ANARCHY):
+    return [one for one in posts(bot) if f"<@{member}> hosts **" in one.content]
+
+
+async def host_rows(bot):
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'marathon.host_reminded' ORDER BY id"
+    )
+    return [json.loads(row["details"]) for row in await cur.fetchall()]
+
+
+async def test_the_blocks_fifteen_minute_heads_up_mentions_the_marathon_role_once(bot, cog):
+    await bot.store.set(GUILD, "marathon_reminder_minutes", LIVE_MARKS)
+    marathon = await show(bot, cog, HIDDEN_HEROES_TOMORROW)
+    await role_pinging(bot, marathon)
+    await walk(bot, cog, marathon, [60, 1380, 1485, DAY + 1, DAY + 90, DAY + 125])
+
+    said = host_copies(bot)
+    assert len(said) == 3
+    assert [f"<@&{MARATHON_ROLE}>" in one.content for one in said] == [False, False, True]
+    last = said[-1]
+    assert last.content.startswith(f"<@&{MARATHON_ROLE}> <@{ANARCHY}> hosts **Titanfall 2**")
+    assert last.content.count("<@&") == 1
+    mentions = last.kwargs["allowed_mentions"]
+    assert [one.id for one in mentions.roles] == [MARATHON_ROLE]
+    assert mentions.users is False and mentions.everyone is False
+    assert all(no_pings(one) for one in said[:2])
+    logged = await host_rows(bot)
+    assert [one["mark"] for one in logged] == [1440, 120, 15]
+    assert [one["roles"] for one in logged] == [[], [], [MARATHON_ROLE]]
+    assert [one["pinged"] for one in logged] == [False, False, True]
+    assert logged[-1]["marathon_role"] == MARATHON_ROLE
+    assert logged[-1]["marathon_role_reason"] is None
+    assert "marathon_role" not in logged[0]
+
+
+async def test_the_block_heads_up_mentions_no_role_while_the_marathons_switch_is_off(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES)
+    await role_pinging(bot, marathon, switch=False)
+    await tick_at(bot, cog, marathon, 45)
+
+    (said,) = heads_ups(bot)
+    assert no_pings(said) and "<@&" not in said.content
+    (logged,) = await host_rows(bot)
+    assert (logged["pinged"], logged["roles"]) == (False, [])
+    assert (logged["marathon_role"], logged["marathon_role_reason"]) == (None, "switch_off")
+
+
+async def test_the_block_heads_up_posts_without_a_role_that_is_gone_and_logs_why(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES)
+    await role_pinging(bot, marathon)
+    bot.guild.roles.clear()
+    await tick_at(bot, cog, marathon, 45)
+
+    (said,) = heads_ups(bot)
+    assert no_pings(said)
+    (logged,) = await host_rows(bot)
+    assert (logged["marathon_role"], logged["marathon_role_reason"]) == (None, "gone")
+
+
+async def test_a_block_that_opens_on_a_baf_run_leaves_the_mention_to_the_runners_copy(bot, cog):
+    opening = a_run(
+        1, 60, game="Titanfall 2", people=(("Sky", "skyruns", "runner"), HOST), length=85
+    )
+    marathon = await show(bot, cog, [opening, *HIDDEN_HEROES[1:]])
+    await role_pinging(bot, marathon)
+    await tick_at(bot, cog, marathon, 45)
+
+    carrying = [one for one in posts(bot) if f"<@&{MARATHON_ROLE}>" in one.content]
+    assert len(carrying) == 1 and f"<@{SKY}> runs **Titanfall 2**" in carrying[0].content
+    (hosted,) = heads_ups(bot)
+    assert no_pings(hosted)
+    (logged,) = await host_rows(bot)
+    assert (logged["marathon_role"], logged["marathon_role_reason"]) == (None, "runner_copy")
+    assert (await details_of(bot.db, "marathon.public_reminded"))["marathon_role"] == MARATHON_ROLE

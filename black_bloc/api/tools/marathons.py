@@ -75,6 +75,7 @@ from ...cogs.content.marathon_people import (
 )
 from ...cogs.content.marathon_ping import set_ping_role
 from ...cogs.content.marathon_public import set_public_highlight
+from ...cogs.content.marathon_role_ping import state_of as role_ping_state
 from ...cogs.content.marathon_signals import sheet_times
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
 from ...cogs.content.marathon_spotlight import state_for as spotlight_state_for
@@ -394,6 +395,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "event_mode_word": MODE_WORDS[event_mode_of(row)],
         "spotlight_mode": spotlight_mode_of(row),
         "ping_role": pings_role(row),
+        "role_ping": role_ping_state(bot, guild, row),
         "public_highlight": highlights(row),
         "announcements": host_switch(bot, guild, row, mh.ANNOUNCE),
         "archived": False,

@@ -5220,6 +5220,7 @@
         "event_mode_word",
         "spotlight_mode",
         "ping_role",
+        "role_ping",
         "public_highlight",
         "announcements",
         "tracked_state",
