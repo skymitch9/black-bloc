@@ -16,6 +16,7 @@ from ...settings_store import (
     MARATHON_CATEGORY_CONFIRMS_KEY,
     MARATHON_MOVE_MINUTES_KEY,
     MARATHON_RETRO_CATEGORY_KEY,
+    MARATHON_SETUP_MINUTES_KEY,
     MARATHON_TITLE_CONFIRMS_KEY,
 )
 from ...twitch import TwitchError
@@ -45,6 +46,27 @@ def _cell(row: Any, key: str) -> Any:
         return row[key]
     except (IndexError, KeyError, TypeError):
         return None
+
+
+def setup_minutes(bot: Any, guild_id: int) -> int:
+    return int(bot.store.get(guild_id, MARATHON_SETUP_MINUTES_KEY) or 0)
+
+
+def setup_for(bot: Any, guild_id: int, source: Any) -> dict[str, int]:
+    """The setup buffer as the schedule reader's keyword — only for a schedule Black Bloc
+    keeps the clock for; any other source is read exactly as before."""
+    if retimes_itself(source):
+        return {}
+    return {"setup_minutes": setup_minutes(bot, guild_id)}
+
+
+def holds(marathon: Any, row: Any) -> bool:
+    """A live or done run of a schedule Black Bloc keeps the clock for is not moved by a read."""
+    return not retimes_itself(_cell(marathon, "source")) and sig.settled(row)
+
+
+def held_plan(marathon: Any, updates: Any) -> list[tuple[Any, Any, bool]]:
+    return [(row, run, moved and not holds(marathon, row)) for row, run, moved in updates]
 
 
 async def resolve_categories(cog: Any, guild: Any, marathon: Any) -> int:
@@ -168,8 +190,11 @@ async def retime(cog: Any, guild: Any, marathon: Any, *, because: str) -> int:
         return 0
     bot = cog.bot
     kept = await get_marathon(bot.db, guild.id, marathon["id"]) or marathon
-    clock = overlay.retimed if overlay.applied(kept) else sig.retimed
-    changes = clock(await runs_of(bot.db, marathon["id"]))
+    rows = await runs_of(bot.db, marathon["id"])
+    if overlay.applied(kept):
+        changes = overlay.retimed(rows)
+    else:
+        changes = sig.retimed(rows, setup_minutes(bot, guild.id))
     if not changes:
         return 0
     now = cog.clock()

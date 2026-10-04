@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from ... import marathon as mt
+from ... import marathon_role_ping as mrp
 from ... import shadow as shadow_home
 from ...actionlog import log_action
 from ...golive import ping_prefix
@@ -74,15 +75,20 @@ async def post_public_reminder(
     *,
     url: str | None,
     staff_channel_id: Any = None,
-) -> None:
+    marathon_role: mrp.Verdict | None = None,
+) -> dict[str, Any]:
     """Rides the staff copy's sent-marker, so a restart never posts it twice; a failure here is
-    a log line and never touches the staff copy."""
+    a log line and never touches the staff copy. It answers what this copy mentioned."""
     bot = cog.bot
+    quiet = mrp.row_fields(
+        None if marathon_role is None else mrp.unsent(marathon_role, mrp.NO_PUBLIC_COPY)
+    )
+    unsent = {"public_roles": []} | quiet
     try:
         if not wanted(bot, guild.id):
-            return
+            return unsent
         home = reminder_channel(bot, guild.id)
-        base = cog.run_details(marathon, row) | {"mark": mark, "public": True}
+        base = cog.run_details(marathon, row) | {"mark": mark, "public": True} | quiet
         if home is None:
             await log_action(
                 bot,
@@ -90,7 +96,7 @@ async def post_public_reminder(
                 "marathon.public_reminder_failed",
                 details=base | {"reason": "no_channel"},
             )
-            return
+            return unsent
         if staff_went_to(cog, guild, staff_channel_id) == home:
             await log_action(
                 bot,
@@ -98,7 +104,7 @@ async def post_public_reminder(
                 "marathon.public_reminder_skipped",
                 details=base | {"because": "same_channel", "channel_id": home},
             )
-            return
+            return unsent
         people = people_for(marathon, row)
         because = (
             "announcements_off"
@@ -109,12 +115,13 @@ async def post_public_reminder(
             await log_action(
                 bot, guild, "marathon.public_reminder_skipped", details=base | {"because": because}
             )
-            return
+            return unsent
         if url and people != mt.ours(mt.people_of(row)):
             url = mt.run_url(
                 row, await channel_login(bot, marathon), marathon["schedule_url"], people=people
             )
         text = reminder_text(bot, guild, marathon, row, url=url, people=people)
+        roles = mrp.with_role(roles, marathon_role)
         message, channel_id, why = await send_public(
             bot, guild, ping_prefix(*roles) + text, roles, home=home
         )
@@ -126,18 +133,23 @@ async def post_public_reminder(
         }
         if message is None:
             await log_action(
-                bot, guild, "marathon.public_reminder_failed", details=details | {"reason": why}
+                bot,
+                guild,
+                "marathon.public_reminder_failed",
+                details=details | {"reason": why, "pinged": False, "roles": []},
             )
-            return
+            return unsent
         shadow = mode_of(bot, guild.id) != MODE_ON
         await log_action(
             bot,
             guild,
             "marathon.would_remind_public" if shadow else "marathon.public_reminded",
-            details=details | rehearsal_of(bot, guild),
+            details=details | mrp.row_fields(marathon_role) | rehearsal_of(bot, guild),
         )
+        return {"public_roles": roles} | mrp.row_fields(marathon_role)
     except Exception as exc:
         log.warning("marathon: the public reminder failed — %s", reason_of(exc))
+        return unsent
 
 
 __all__ = ["post_public_reminder", "reminder_channel", "reminder_text", "staff_went_to", "wanted"]

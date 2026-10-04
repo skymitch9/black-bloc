@@ -4720,6 +4720,9 @@ MARATHON_CATEGORY_CONFIRMS_KEY = "marathon_category_confirms"
 MARATHON_RETRO_CATEGORY_KEY = "marathon_retro_category"
 MARATHON_RETRO_CATEGORY = "Retro"
 MARATHON_RETRO_LENGTH = 60
+MARATHON_SETUP_MINUTES_KEY = "marathon_setup_minutes"
+MARATHON_SETUP_MINUTES = 7
+MARATHON_SETUP_MAX = 30
 MARATHON_LATE_GRACE_KEY = "marathon_late_grace_minutes"
 MARATHON_MATCH_HOSTS_KEY = "marathon_match_hosts"
 MARATHON_HOSTS_COUNT_AS_OURS_KEY = "marathon_hosts_count_as_ours"
@@ -4747,6 +4750,14 @@ MARATHON_PING_ROLE_BUTTON_ON_KEY = "marathon_ping_role_button_on"
 MARATHON_PING_ROLE_BUTTON_OFF_KEY = "marathon_ping_role_button_off"
 MARATHON_PING_ROLE_LINE_ON_KEY = "marathon_ping_role_line_on"
 MARATHON_PING_ROLE_LINE_OFF_KEY = "marathon_ping_role_line_off"
+MARATHON_ROLE_PINGS_KEY = "marathon_role_pings"
+MARATHON_ROLE_PING_LINE_ON_KEY = "marathon_role_ping_line_on"
+MARATHON_ROLE_PING_LINE_KEY_OFF_KEY = "marathon_role_ping_line_key_off"
+MARATHON_ROLE_PING_LINE_ANNOUNCEMENTS_OFF_KEY = "marathon_role_ping_line_announcements_off"
+MARATHON_ROLE_PING_LINE_REHEARSAL_KEY = "marathon_role_ping_line_rehearsal"
+MARATHON_ROLE_PING_LINE_UNSET_KEY = "marathon_role_ping_line_unset"
+MARATHON_ROLE_PING_LINE_GONE_KEY = "marathon_role_ping_line_gone"
+MARATHON_ROLE_PING_LINE_NOT_MENTIONABLE_KEY = "marathon_role_ping_line_not_mentionable"
 MARATHON_ARCHIVE_AFTER_DAYS_KEY = "marathon_archive_after_days"
 MARATHON_ARCHIVED_WORD_KEY = "marathon_archived_word"
 MARATHON_ARCHIVE_QUESTION_KEY = "marathon_archive_question"
@@ -4885,6 +4896,10 @@ MARATHON_PUBLIC_FIELDS = (
     "marathon",
     "state",
 )
+MARATHON_PUBLIC_DONE_TEMPLATE_KEY = "marathon_public_done_template"
+MARATHON_PUBLIC_DAY_TODAY_KEY = "marathon_public_day_today"
+MARATHON_PUBLIC_DAY_EARLIER_KEY = "marathon_public_day_earlier"
+MARATHON_PUBLIC_DONE_FIELDS = (*MARATHON_PUBLIC_FIELDS, "day")
 MARATHON_THREAD_FIELDS = ("marathon", "channel", "when")
 MARATHON_OPENING_FIELDS = ("marathon", "who", "url", "channel", "when")
 MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY = "marathon_channel_ping_mode_default"
@@ -4900,6 +4915,9 @@ MARATHON_DONE_TEMPLATE_KEY = "marathon_done_template"
 MARATHON_PART_RUNNER_KEY = "marathon_part_runner"
 MARATHON_PART_HOST_KEY = "marathon_part_host"
 MARATHON_PART_COMMENTATOR_KEY = "marathon_part_commentator"
+MARATHON_PART_RUNNER_DONE_KEY = "marathon_part_runner_done"
+MARATHON_PART_HOST_DONE_KEY = "marathon_part_host_done"
+MARATHON_PART_COMMENTATOR_DONE_KEY = "marathon_part_commentator_done"
 MARATHON_STATE_UPCOMING_KEY = "marathon_state_upcoming"
 MARATHON_STATE_LIVE_KEY = "marathon_state_live"
 MARATHON_STATE_DONE_KEY = "marathon_state_done"
@@ -5084,6 +5102,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "the Twitch category a run with no category of its own is played under — the channel "
         "in this category stands for such a run. `Retro` by default; capitals do not matter",
     ),
+    MARATHON_SETUP_MINUTES_KEY: (
+        "int",
+        MARATHON_SETUP_MINUTES,
+        "minutes of setup between one run and the next, for a schedule that gives no start time "
+        "per run (GDQ Hotfix) — each run is predicted at the start of the one before it, plus "
+        "its estimate, plus this. 7 by default; 0 stacks the estimates with nothing between",
+    ),
     MARATHON_LATE_GRACE_KEY: (
         "int",
         90,
@@ -5115,8 +5140,9 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "int",
         15,
         "the one reminder that pings: this many minutes before a BaF run, the member's own "
-        "ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings "
-        "at the scheduled start",
+        "ping role and the marathon channel's ping role are mentioned, and the public copy "
+        "mentions the Marathon role (marathon_role_pings). 15 by default; 0 pings at the "
+        "scheduled start",
     ),
     MARATHON_REMINDER_PINGS_KEY: (
         "bool",
@@ -5350,6 +5376,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "schedule name is exactly a member's Discord username, with Link (this marathon), Link "
         "everywhere and Not them buttons for staff. Nobody is linked until staff press. on by "
         "default",
+    ),
+    MARATHON_ROLE_PINGS_KEY: (
+        "bool",
+        True,
+        "whether the marathon_ping_minutes heads-up mentions the Marathon role (marathon_role_id) "
+        "when the marathon's own ping switch is on. The mention goes in the public copy members "
+        "see, once, never in the staff thread, and never on the live highlight or shoutout. on "
+        "by default; off posts the heads-up without it",
     ),
     MARATHON_PUBLIC_REMINDERS_KEY: (
         "bool",
@@ -6059,9 +6093,31 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "**{runner}** {part} **{game}** — {category} on **{marathon}** · {when} ({relative}) · "
         "{state} · {url}",
         MARATHON_PUBLIC_FIELDS,
-        "a BaF run's public highlight, edited in place as its slot moves, it goes live and it "
-        "ends. It takes {runner} {mention} {game} {category} {part} {when} {relative} {url} "
-        "{marathon} {state}; {mention} names the member without pinging",
+        "a BaF run's public highlight, edited in place as its slot moves and it goes live; "
+        "once it ends it becomes marathon_public_done_template. It takes {runner} {mention} "
+        "{game} {category} {part} {when} {relative} {url} {marathon} {state}; {mention} names "
+        "the member without pinging",
+    ),
+    MARATHON_PUBLIC_DONE_TEMPLATE_KEY: (
+        "**{runner}** {part} **{game}** — {category} {day} on **{marathon}** · {url}",
+        MARATHON_PUBLIC_DONE_FIELDS,
+        "what a BaF run's public highlight is edited to once the run is over (a host's: once "
+        "their block is): the past tense, with no role mention, and the edit notifies nobody. "
+        "It takes the same words as marathon_public_template and {day}; {part} is the "
+        "past-tense word (marathon_part_runner_done, marathon_part_host_done)",
+    ),
+    MARATHON_PUBLIC_DAY_TODAY_KEY: (
+        "today",
+        (),
+        "{day} on a finished run's public highlight while it is still the day the run ended, "
+        "by the server's time zone (default_timezone)",
+    ),
+    MARATHON_PUBLIC_DAY_EARLIER_KEY: (
+        "on {date}",
+        ("date",),
+        "{day} on a finished run's public highlight once the day the run ended has passed, by "
+        "the server's time zone. It takes {date}, the day the run ended, drawn by Discord in "
+        "each reader's own language",
     ),
     MARATHON_PUBLIC_REMOVED_KEY: (
         "Staff took down the highlight for **{runner}** on **{marathon}**.",
@@ -6173,6 +6229,49 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the marathon card's line while its reminders and shoutouts mention no role",
     ),
+    MARATHON_ROLE_PING_LINE_ON_KEY: (
+        "The public heads-up {minutes} minutes before a BaF run mentions {role}.",
+        ("role", "minutes"),
+        "the line under a marathon's ping switch (thread controls and the marathon drawer) while "
+        "the Marathon role will be mentioned. It takes {role} {minutes}; {role} names the role "
+        "without pinging",
+    ),
+    MARATHON_ROLE_PING_LINE_KEY_OFF_KEY: (
+        "The Marathon role is not mentioned: {key} is off.",
+        ("key",),
+        "the line under a marathon's ping switch while a setting keeps the Marathon role out of "
+        "the heads-up. It takes {key}, the setting that is off",
+    ),
+    MARATHON_ROLE_PING_LINE_ANNOUNCEMENTS_OFF_KEY: (
+        "The Marathon role is not mentioned: this marathon's BaF announcements are off, so "
+        "no public heads-up posts.",
+        (),
+        "the line under a marathon's ping switch while its BaF announcements are off",
+    ),
+    MARATHON_ROLE_PING_LINE_REHEARSAL_KEY: (
+        "The Marathon role is not mentioned while marathon posts rehearse: marathon_mode is "
+        "not on, and a rehearsal copy never pings it.",
+        (),
+        "the line under a marathon's ping switch while marathon_mode is shadow or off",
+    ),
+    MARATHON_ROLE_PING_LINE_UNSET_KEY: (
+        "The Marathon role is not mentioned: no role is picked in marathon_role_id.",
+        (),
+        "the line under a marathon's ping switch while no Marathon role is picked",
+    ),
+    MARATHON_ROLE_PING_LINE_GONE_KEY: (
+        "The Marathon role is not mentioned: the role in marathon_role_id is no longer in this "
+        "server.",
+        (),
+        "the line under a marathon's ping switch while the picked Marathon role has been deleted",
+    ),
+    MARATHON_ROLE_PING_LINE_NOT_MENTIONABLE_KEY: (
+        "The Marathon role is not mentioned: {role} is not mentionable and Black Bloc may not "
+        "mention every role, so a mention would notify nobody.",
+        ("role",),
+        "the line under a marathon's ping switch while Discord would not notify the Marathon "
+        "role: it is not set mentionable and the bot lacks Mention Everyone. It takes {role}",
+    ),
     MARATHON_CHANNEL_PING_HELP_KEY: (
         "On a marathon channel, During events pings only while one of its marathons is running "
         "— the marathon sets that window from its schedule, and the channel is spotlit for it.",
@@ -6202,6 +6301,24 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_PART_RUNNER_KEY: ("runs", (), "{part} for a runner"),
     MARATHON_PART_HOST_KEY: ("hosts", (), "{part} for a host"),
     MARATHON_PART_COMMENTATOR_KEY: ("is on commentary", (), "{part} for a commentator"),
+    MARATHON_PART_RUNNER_DONE_KEY: (
+        "ran",
+        (),
+        "{part} for a runner once the run is over, on its public highlight "
+        "(marathon_public_done_template)",
+    ),
+    MARATHON_PART_HOST_DONE_KEY: (
+        "hosted",
+        (),
+        "{part} for a host once their host block is over, on its public highlight "
+        "(marathon_public_done_template)",
+    ),
+    MARATHON_PART_COMMENTATOR_DONE_KEY: (
+        "was on commentary",
+        (),
+        "{part} for a commentator once the run is over, on its public highlight "
+        "(marathon_public_done_template)",
+    ),
     MARATHON_STATE_UPCOMING_KEY: (
         "coming up",
         (),
@@ -6324,6 +6441,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_FAR_POLL_HOURS_KEY: (1, 168),
     MARATHON_LEAD_DAYS_KEY: (1, 60),
     MARATHON_MOVE_MINUTES_KEY: (1, 120),
+    MARATHON_SETUP_MINUTES_KEY: (0, MARATHON_SETUP_MAX),
     MARATHON_LATE_GRACE_KEY: (0, 360),
     MARATHON_PING_MINUTES_KEY: (0, 240),
     MARATHON_REMINDER_STALE_KEY: (1, 240),

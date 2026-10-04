@@ -304,7 +304,8 @@ def chains(rows: Any) -> list[list[Any]]:
 def retimed(rows: Any) -> list[sig.Retime]:
     """`marathon_signals.retimed` for a sheet with setup between its runs: a run seen starting
     is anchored there, and each later run of its show-day starts after the one before it by the
-    sheet's own gap. Runs before the first anchor keep the sheet's times."""
+    sheet's own gap. Runs before the first anchor keep the sheet's times; a run that is live or
+    done and was never seen starting stays where it is."""
     found: list[sig.Retime] = []
     for chain in chains(rows):
         cursor: datetime | None = None
@@ -312,16 +313,24 @@ def retimed(rows: Any) -> list[sig.Retime]:
         for row in chain:
             actual = parse_ts(_cell(row, "actual_started_at"))
             ended = parse_ts(_cell(row, "actual_ended_at"))
+            held = actual is None and sig.settled(row)
             gap = timedelta(0)
             if before is not None and sig.sheet_end(before) is not None:
                 gap = max(timedelta(0), sig.sheet_start(row) - sig.sheet_end(before))
             before = row
             if actual is None and cursor is None and ended is None:
+                if held:
+                    continue
                 start, end = sig.sheet_start(row), sig.sheet_end(row)
             else:
-                start = actual or (cursor + gap if cursor is not None else sig.sheet_start(row))
+                stays = parse_ts(_cell(row, "scheduled_at")) if held else None
+                start = actual or stays
+                if start is None:
+                    start = cursor + gap if cursor is not None else sig.sheet_start(row)
                 span = sig.length_of(row)
-                end = ended or (start + span if start is not None and span is not None else None)
+                end = ended or (parse_ts(_cell(row, "ends_at")) if stays is not None else None)
+                if end is None and start is not None and span is not None:
+                    end = start + span
                 cursor = end
             if sig._differs(_cell(row, "scheduled_at"), start) or sig._differs(
                 _cell(row, "ends_at"), end

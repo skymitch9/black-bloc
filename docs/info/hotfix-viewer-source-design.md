@@ -14,6 +14,11 @@
 > reminders), the live database and its migration, the live settings, which BaF members are actually paired or linked
 > on the live server, rate limits. Secret NAMES only — there are none here.
 
+> ⚠️ **2026-10-03 ~21:40 — merged with `main` `c2ba3251` (v195) and four review fixes applied; see *Merge + review
+> fixes 2026-10-03* at the end.** Where that section and an earlier one disagree, IT wins: keys are **727**, the
+> lent login no longer matches anyone by itself, commentators never make a run ours, and the *first tick* section is
+> restated there. Suite on the merged tree: `10029 passed, 3 skipped`; `check.mjs`: `22 pages, 290 routes`.
+
 ## The ask, verbatim
 
 Owner, 2026-10-03 20:0x: *"for gdq hotfix i think i found a mroe accurate source to pull form:
@@ -238,3 +243,94 @@ Fixtures: `hotfix_viewer_page.html`, `hotfix_viewer_schedule.js` (first 150 line
 ## Live check after merge + deploy (the owner's; sweeps `HV-a…HV-g`)
 
 See [`../access/sweeps.md`](../access/sweeps.md).
+
+## Merge + review fixes 2026-10-03
+
+**Merged `origin/main` `c2ba3251` (v195 LIVE: `hotfix-setup-buffer`, `marathon-role-ping`, 512 MB) into the branch, by
+hand.** Counts on the merged tree, measured: **registry keys 727** (main's 721 + this build's 6, by import),
+**schema 85** (main is 84), **contract routes 290** (main's 288 + 2). `ruff check black_bloc tests site` clean;
+`pytest -q -n 16 -rfE` → `10029 passed, 3 skipped`; `check.mjs` on a worktree mock → `ok - 22 pages, 290 routes, 26
+core settings, all keys present`; the ten node fixtures exit 0. ⚠️ Still NOT checked: Fly, Discord, the live database,
+the live settings; the browser render was NOT repeated on the merged tree.
+
+Conflicts and how each was resolved:
+
+- **`cogs/content/marathon_signals.retime` BRANCHES**: a marathon whose sheet is laid over
+  (`marathon_overlay.applied`) uses `marathon_overlay.retimed(rows)` — no buffer passed; every other marathon uses
+  `sig.retimed(rows, setup_minutes(bot, guild.id))` exactly as main has it.
+- **`marathon_sources.ScheduleClient`**: main's `hotfix_block(ref, setup_minutes=0)` and this build's `viewer()` both
+  kept; `runs` / `resolve` pass `setup_minutes` through as on main (three callers in `cogs/content/marathon.py` via
+  `signals.setup_for`, unchanged).
+- **`tests/test_settings_store.py`**: the count is **727**. **Docs** (`sweeps.md`, `code-notes.md`): both sides kept.
+- Everything else auto-merged; the role-ping status line (thread controls and drawer) is main's code untouched, beside
+  the overlay button and line.
+
+The buffer and the overlay, together: GDQ's sheet is read with `marathon_setup_minutes` (7) between runs, as on main.
+While a sheet is laid over, a paired run's start is the organisers' (their own setup is already in it), so the buffer
+shows only on a marathon with no sheet, with the overlay off, or on a loose run's neighbour.
+
+The four fixes:
+
+1. **A live or done run is never moved by the overlay's clock.** `marathon_overlay.retimed` now holds a run that is
+   live or done and has no real start, exactly as `marathon_signals.retimed` does (`sig.settled`): before the first
+   anchor it is skipped; after one it stays at its stored start and end and the runs after it follow from there by the
+   sheet's gaps. (`_write_plan` already keeps `scheduled_at` / `ends_at` of such a row and `held_plan` already drops
+   its *moved* flag — main's code.) Its `sheet_at` does take the overlay's time, silently. Tests:
+   `test_marathon_overlay.py::test_a_live_or_done_run_never_seen_starting_stays_where_it_is`,
+   `cogs/content/test_marathon_viewer.py::test_a_done_or_live_run_is_never_moved_when_the_overlay_is_first_laid_over`
+   (a done run with a real start, a done run without, a live run without: `scheduled_at`, `ends_at`,
+   `reminders_sent`, `previous_scheduled_at`, `moved_at` and `state` identical before and after; no
+   `marathon.retimed` row names one first; no `marathon.member_run_moved` for them; a second retime changes nothing).
+   ⚠️ "No runner-post / board edit caused by them" is proven only through those unchanged columns — no fake Discord
+   edit was counted.
+2. **Commentators are stored and shown, and never make a run ours — on a Hotfix marathon.** `match_people` gained
+   `commentators_count`; `rematch` passes `False` for `gdq_hotfix`, so a matched commentator carries `counts: false`
+   (the hosts' own mechanism) and `mt.ours` leaves them out: no reminder, highlight, runner post, run event or ping,
+   and `baf_people` does not list them. They cannot auto-track a show either: the feed check never reads the overlay,
+   and `marathon_hotfix.reasons_of` knows runners and hosts only. ⚠️ Scoped to Hotfix marathons on purpose: a GDQ
+   tracker commentator behaves as before (`marathon_match_hosts`). **Where a commentator is shown:** the marathon's
+   People card on the site and `/event` ▸ People…, on their run's slot line with the commentator part tag
+   (`marathon_part_commentator`), and in the run's stored people. Test:
+   `test_a_member_who_only_commentates_never_makes_a_run_ours`.
+3. **A lent login never creates a match.** In `match_people`, a login lent by the viewer is NOT looked up in the
+   Go-live links; such a person is matched only by a staff pairing or the exact Discord name — the rules that applied
+   before the login was lent. The login is still shown and still lets staff Spotlight the host without typing it. This
+   SUPERSEDES Layer 2's wording above and Deviation 7 ("matched nobody's Go-live link"). Tests:
+   `test_marathon.py::test_a_login_lent_by_the_viewer_never_costs_a_name_match_and_a_staff_login_beats_it`,
+   `test_a_lent_login_never_pairs_the_member_who_owns_that_channel`.
+4. **The combinations**: overlay on + a run confirmed live (`…keeps_its_real_start_and_later_runs_follow_by_the_gaps`:
+   10-minute sheet gaps, no 7 added); overlay off on a Hotfix marathon (`…is_on_the_buffer_clock`: 18:15 after a 1:08
+   run, and 7 minutes after a late run's end); the switch off and on mid-day
+   (`…snaps_the_times_once_each_way`: one `marathon.schedule_changed` per switch, none on an idle re-read, the
+   15-minute mark re-armed once and never again); **Back to the sheet's times** with the overlay on
+   (`…means_the_organisers_times_while_laid_over`).
+
+### First schedule read after a deploy — GDQueer, Sunday 2026-10-04 (restated for the merged tree)
+
+⚠️ Reasoned from the code and the two sheets as read 2026-10-03; NOT run against Discord, the live rows or the live
+settings. v195 is live, so the stored times are GDQ's with 7 minutes between runs — unless the stream has already
+anchored Sunday's runs, in which case only runs after the last confirmed one are placed by the sheet's gaps.
+
+- **Saturday's 13 runs:** done → held. Nothing moves, nothing is logged as moved, no mark changes. (A Saturday run
+  still `upcoming` in the database — never confirmed — would take the organisers' time; it is in the past, so every
+  mark is stale and nothing posts.)
+- **Sunday's 11 runs, stored → organisers' (Phoenix):** Wii Fit U 10:00 → 10:00 (0); Inazuma 10:30 → 10:33 (+3);
+  Ring Racers 11:57 → 12:03 (+6); Metroid Prime 4 12:20 → 12:29 (+9); E.T. 14:17 → 14:29 (+12); Battle Chef 14:39 →
+  14:54 (+15); Ouendan 2 15:56 → 16:14 (+18); Sayonara 16:53 → 17:14 (+21); Fear the Spotlight 17:50 → 18:14 (+24);
+  Soul Reaver 2 18:37 → 19:04 (+27); Metroid Dread 19:49 → 20:19 (+30). **Nine count as moved** (5 minutes or more:
+  Ring Racers onward); a run already live or done when the read happens is held instead.
+- **Marks that re-arm:** on each moved, still-upcoming BaF run, every sent mark whose moment is in the future again
+  (`mt.rearmed`). In practice only a mark sent within the run's shift before the deploy — e.g. Ring Racers' 15-minute
+  reminder sent at 11:42 is sent again at 11:48 only if the read lands between 11:42 and 11:48.
+- **Log rows:** `marathon.overlay_applied`, `marathon.viewer_logins` (Quacksilver), `marathon.schedule_changed`,
+  `marathon.retimed` if the stream had anchored a run, one `marathon.member_run_moved` per BaF person on a moved
+  upcoming run.
+- **Edits, never new messages:** the thread controls gain the Event schedule button (the role-ping status line stays);
+  board, runner posts and events take the new times and hosts.
+- **Hosts newly found** — JRisJunior and champrul only if a staff pairing or their exact Discord name matches them
+  (Quacksilver's lent login matches nobody). JRisJunior's Sunday block starts 16:14: the 24 h mark is skipped and
+  logged `marathon.host_reminder_skipped` (`late`), the 2 h reminder posts 14:14, the 15 min 15:59. champrul's block
+  starts 20:19: 24 h skipped, 2 h at 18:19, 15 min at 20:04. A mark less than `marathon_reminder_stale_minutes` (30 by
+  default) past at the read posts once, late. Highlights only with Auto-highlight on. Commentators: nothing.
+- Whether the Marathon role is pinged by any of these is main's `marathon-role-ping` rule, unchanged here and not
+  re-derived.

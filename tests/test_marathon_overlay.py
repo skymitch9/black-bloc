@@ -263,3 +263,40 @@ def test_what_a_marathon_remembers_about_its_sheet():
     assert mo.state_of(row) == found and mo.applied(row)
     assert not mo.applied({"overlay_sheet": mo.dump(found | {"applied": False})})
     assert mo.dump(None) is None
+
+
+def test_a_live_or_done_run_never_seen_starting_stays_where_it_is():
+    out, _ = overlaid_rows()
+    stored = {
+        out[0].external_id: {
+            "state": "done",
+            "scheduled_at": "2026-10-03T17:00:00+00:00",
+            "ends_at": "2026-10-03T18:08:00+00:00",
+        },
+        out[1].external_id: {
+            "state": "done",
+            "scheduled_at": "2026-10-03T18:15:00+00:00",
+            "ends_at": "2026-10-03T19:07:00+00:00",
+        },
+        out[2].external_id: {
+            "state": "live",
+            "scheduled_at": "2026-10-03T19:14:00+00:00",
+            "ends_at": "2026-10-03T19:29:00+00:00",
+        },
+        out[3].external_id: {
+            "scheduled_at": "2026-10-03T19:36:00+00:00",
+            "ends_at": "2026-10-03T20:11:00+00:00",
+        },
+    }
+    _out, rows = overlaid_rows(**stored)
+    changes = {one.row["id"]: one for one in mo.retimed(rows)}
+    assert not ({1, 2, 3} & set(changes))
+    assert changes[4].starts_at == "2026-10-03T19:45:00+00:00"
+    anchored = stored | {
+        out[0].external_id: stored[out[0].external_id]
+        | {"actual_started_at": "2026-10-03T17:00:00+00:00"}
+    }
+    _out, rows = overlaid_rows(**anchored)
+    changes = {one.row["id"]: one for one in mo.retimed(rows)}
+    assert not ({1, 2, 3} & set(changes))
+    assert changes[4].starts_at == "2026-10-03T19:39:00+00:00"

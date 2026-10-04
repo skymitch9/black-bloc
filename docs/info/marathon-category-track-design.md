@@ -96,7 +96,9 @@ the drawer — uses the kept clock with no change of its own.
 
 **The anchor:** a run that goes `live` by `title`, `category` or `title+category` gets `actual_started_at` = the tick's
 `now` (the moment of detection). **The re-timing** (`marathon_signals.retimed`, pure): the runs are split into
-**chains** — runs the sheet puts back to back (next sheet start = previous sheet end ± 1 min); a gap, such as the
+**chains** — runs the sheet puts back to back (next sheet start = previous sheet end ± 1 min — ⚠️ **since 2026-10-03,
+0 to 30 minutes after, and every later run also waits `marathon_setup_minutes`**: `marathon-hotfix-design.md` ▸
+*Follow-up 2026-10-03 — setup buffer*); a gap, such as the
 next show-day, starts a new chain. Walking a chain in sheet order: before the first anchor a run keeps the sheet's
 times; an anchored run starts at its actual start; every later run starts where the previous one should end (its
 start + its estimate, or its `actual_ended_at`). `Marathons.retime` writes only the runs whose times differ, re-arms

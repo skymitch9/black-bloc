@@ -33,4 +33,4 @@ primary_region = "lax"   # nearest to Phoenix; Fly has no phx region
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "256mb"
+  memory = "512mb"

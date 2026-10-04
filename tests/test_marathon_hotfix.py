@@ -1,5 +1,5 @@
 import pathlib
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -71,6 +71,57 @@ def test_the_clock_progresses_by_the_estimates_and_restarts_each_day_at_the_show
     )
     for before, after in zip(runs[:12], runs[1:13], strict=True):
         assert before.ends_at == after.starts_at
+
+
+def test_no_setup_buffer_is_the_bare_stack_of_estimates_exactly():
+    assert hf.blocks_of(SHEET, 0) == hf.blocks_of(SHEET)
+    assert hf.parse_hotfix(SHEET, ["GDQueer"], 0) == gdqueer()
+    assert hf.parse_hotfix(SHEET, ["GDQueer"], -5) == gdqueer()
+
+
+def test_a_setup_buffer_of_7_puts_each_run_7_minutes_after_the_one_before_should_end():
+    bare, spaced = gdqueer()[0], hf.parse_hotfix(SHEET, ["GDQueer"], 7)[0]
+    day = 0
+    for position, (before, after) in enumerate(zip(bare.runs, spaced.runs, strict=True)):
+        if position == 13:
+            day = 13
+        nth = position - day
+        shift = timedelta(minutes=7 * nth)
+        assert datetime.fromisoformat(after.starts_at) == (
+            datetime.fromisoformat(before.starts_at) + shift
+        )
+        assert datetime.fromisoformat(after.ends_at) - datetime.fromisoformat(
+            after.starts_at
+        ) == timedelta(seconds=after.run_seconds)
+        assert (after.external_id, after.order, after.people) == (
+            before.external_id,
+            before.order,
+            before.people,
+        )
+    runs = spaced.runs
+    assert [one.starts_at for one in runs[:3]] == [
+        "2026-10-03T17:00:00+00:00",
+        "2026-10-03T18:15:00+00:00",
+        "2026-10-03T19:14:00+00:00",
+    ]
+    assert runs[13].starts_at == "2026-10-04T17:00:00+00:00"
+    assert runs[12].ends_at == "2026-10-04T04:10:00+00:00"
+    assert (spaced.starts_at, spaced.ends_at) == (
+        "2026-10-03T17:00:00+00:00",
+        "2026-10-05T04:19:00+00:00",
+    )
+    assert bare.ends_at == "2026-10-05T03:09:00+00:00"
+    assert spaced.days == bare.days
+
+
+def test_a_candidates_end_follows_the_setup_buffer():
+    bare = hf.candidates(gdqueer(), SEPT, 7, set())[0]
+    spaced = hf.candidates(hf.parse_hotfix(SHEET, ["GDQueer"], 7), SEPT, 7, set())[0]
+    assert spaced.starts_at == bare.starts_at
+    assert (bare.ends_at, spaced.ends_at) == (
+        "2026-10-05T03:09:00+00:00",
+        "2026-10-05T04:19:00+00:00",
+    )
 
 
 def test_eastern_time_follows_daylight_saving():
@@ -279,6 +330,12 @@ async def test_the_client_reads_runs_and_resolves_a_bare_show_and_remembers_the_
     assert fake.asked[-2:] == [hf.PAGE, CSV]
     with pytest.raises(ScheduleError, match="after a #"):
         await client.resolve(GDQ_HOTFIX, "")
+    spaced = await client.runs(GDQ_HOTFIX, ref, setup_minutes=7)
+    assert (runs[1].starts_at, spaced[1].starts_at) == (
+        "2026-10-03T18:08:00+00:00",
+        "2026-10-03T18:15:00+00:00",
+    )
+    assert await client.resolve(GDQ_HOTFIX, "gdqueer", setup_minutes=7) == (ref, name)
 
 
 def test_the_sheet_reads_the_same_with_either_line_ending():

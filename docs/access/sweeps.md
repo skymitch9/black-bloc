@@ -2,6 +2,7 @@
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-10-03 (branch `hotfix-viewer-source`)** — ONE section APPENDED (`HV-a`…`HV-g`, BUILT, NOT MERGED; both drawers rendered in a browser on the branch's mock, nothing verified against Discord or Fly); nothing else touched. Before that,
+> **2026-10-03 (branch `hotfix-setup-buffer`)** — ONE section APPENDED (`SB-a`…`SB-e`, BUILT, NOT MERGED, NOT verified against a browser, Discord or a live show); `CT-c`'s *Spyro's real start + 1:08* annotated (+ the buffer); nothing else touched. Before that,
 > **2026-09-28 (branch `people-unify`)** — ONE section APPENDED (`PU-a`…`PU-f`, BUILT, NOT MERGED, NOT verified against a browser or Discord), superseding `HS-a`, `HS-g`'s *BaF host events* clause and `MA-h`'s Scan hosts clause (marked); nothing else touched. Before that,
 > **2026-09-28 (branch `marathon-announcements`)** — ONE section APPENDED (`MA-a`…`MA-i`, BUILT, NOT MERGED, NOT verified against a browser or Discord), superseding `HS-m`…`HS-q` (marked); nothing else touched. Before that,
 > **2026-09-28 (branch `host-highlights-per-run`)** — SIX rows APPENDED to the `HS` table (`HS-m`…`HS-r`, BUILT, NOT MERGED, NOT verified against a browser or Discord), superseding `HS-h`…`HS-l` (marked, never shipped); nothing else touched. Before that,
@@ -3869,7 +3870,7 @@ site/mock/server.mjs` from the branch, then <http://localhost:8907/events.html> 
 |---|---|---|
 | **`CT-a`** | Settings ▸ Marathons | `marathon_category_confirms` (on) beside `marathon_title_confirms`, and `marathon_retro_category` (`Retro`). Typing only spaces into the Retro box is refused in words. The `/settings` panel's key cards reach the same two keys. |
 | **`CT-b`** | After the deploy, before 10:00: Logs ▸ Marathon | One `marathon.categories_found` for GDQueer (found N, none M — write both numbers down: they are the first real answer to what Twitch has); no `marathon.category_lookup_failed`. |
-| **`CT-c`** | Sat, when Spyro actually starts: Events ▸ Marathons ▸ **GDQueer** | Spyro **on now** (because *the stream's Twitch category*, or the **certain** badge when the title names it too); Hamtaro's time is Spyro's real start + 1:08 with *· sheet said 11:08*; later runs follow. `marathon.retimed` in the log. Nothing pinged anyone. |
+| **`CT-c`** | Sat, when Spyro actually starts: Events ▸ Marathons ▸ **GDQueer** | Spyro **on now** (because *the stream's Twitch category*, or the **certain** badge when the title names it too); Hamtaro's time is Spyro's real start + 1:08 (⚠️ since `hotfix-setup-buffer`: + `marathon_setup_minutes` too — `SB-c`) with *· sheet said 11:08*; later runs follow. `marathon.retimed` in the log. Nothing pinged anyone. |
 | **`CT-d`** | Through the day | Each hand-over moves the clock; a game with no Twitch category is the run on now while the channel is in *Retro*; any `marathon.signals_disagree` row names both runs and which was trusted. Sunday's first run still starts 10:00. |
 | **`CT-e`** | The drawer ▸ **Back to the sheet's times** (or `/event` ▸ Marathons ▸ GDQueer ▸ **Schedule…** ▸ the same button) | Every run back on the sheet's times; the button disappears; `web.marathon.sheet_times` (or `marathon.sheet_times`). The next run the stream shows starting re-times from there. **Mark it live** on a run also moves every later run. |
 
@@ -3962,3 +3963,41 @@ nothing below has been seen live.
 | **`HV-e`** | GDQueer ▸ *Settings for this marathon* ▸ **Event schedule** ▸ Off ▸ save; then Follow ▸ save | Off: *…keeps GDQ's sheet times and host column now…*, the line reads *…but Event schedule is off…*, times go back to the stacked ones, hosts go. Follow: the organisers' times and hosts return. `web.marathon.overlay_set` twice, `marathon.overlay_dropped` once (`because: switched_off`). If GDQueer is tracked, its thread's pinned controls carry **Event schedule: on · turn off** — press it both ways for the same result. |
 | **`HV-f`** | People ▸ **Quacksilver** (a host with no pairing) | *twitch.tv/quacksilverplays* is shown and **Spotlight…** is offered without typing a channel. The log has `marathon.viewer_logins` naming it, once. Fix their Twitch by hand: the staff login shows, *(the schedule says quacksilverplays)*; clear it: the viewer's is back. |
 | **`HV-g`** | With a run of GDQueer live and confirmed by the stream | That run shows its real start; each later run of the day is that much later (its setup gap kept); tomorrow's runs are unmoved. **Back to the sheet's times** returns to the organisers' times. |
+
+## Rows `SB-a` … `SB-e` — Hotfix setup buffer: minutes between runs where Black Bloc keeps the clock (branch `hotfix-setup-buffer`, 2026-10-03)
+
+🔨 **BUILT on branch `hotfix-setup-buffer`, NOT merged, NOT deployed.** Owner, 2026-10-03: *"for our hotfix schedule we
+should try and add a 5 - 10 min buffer beteen each run"*. Design:
+[`../info/marathon-hotfix-design.md`](../info/marathon-hotfix-design.md) ▸ *Follow-up 2026-10-03 — setup buffer*. Rows
+lettered; the conductor numbers them. Local check first: <http://localhost:8797/settings.html#marathon_setup_minutes>
+(the conductor's mock, once it serves the branch).
+
+⏰ GDQueer day two starts **Sun 2026-10-04 10:00 Phoenix** — `SB-c` and `SB-d` need a Hotfix show that is on.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`SB-a`** | Settings ▸ Marathons ▸ *Setup minutes between runs when a schedule gives no start time per run* (`marathon_setup_minutes`) | **7**. 0 and 30 save; 31 is refused in words (*cannot be higher than 30*). The `/settings` panel's key card reaches the same key. |
+| **`SB-b`** | After the deploy: Events ▸ Marathons ▸ **GDQueer**, refresh its schedule, then look at the Sunday runs still ahead | Wii Fit U still 10:00 Phoenix; each later UPCOMING run is 7 minutes × its place in the day later than before (Inazuma Eleven 10:30, was 10:23; Ring Racers 11:57, was 11:43). Runs already live or done have NOT moved. The marathon's end is 21:19 Phoenix Sunday (was 20:09). Logs ▸ Marathon: a `marathon.member_run_moved` for each upcoming BaF run that shifted 5 minutes or more — and none for a finished run. |
+| **`SB-c`** | When a run is seen starting on the stream: the same drawer | The run on now keeps its real start; the next run reads that start + its estimate + 7 minutes, and so on down the day. `marathon.retimed` in the log. |
+| **`SB-d`** | Mid-show, set the key to 10, then refresh the schedule | The run on now and every finished run stay where they were; the runs still ahead move to + 10 between each. Set it back to 7 and refresh: they come back. |
+| **`SB-e`** | Set the key to 0 and refresh a Hotfix marathon whose runs are all ahead | The bare stack of estimates, as before this build. Any GDQ-tracker, Oengus, horaro, Fastest Furs or Lady Arcaders marathon: its times are the same at 0, 7 and 30. Put the key back to 7. |
+## Rows `MR-a` … `MR-h` — Marathon role ping: the role on the 15-minute heads-up; a finished highlight goes past tense (branch `marathon-role-ping`, 2026-10-03)
+
+🔨 **BUILT on branch `marathon-role-ping`, NOT merged, NOT deployed, NOT verified in a browser or Discord.** Owner,
+2026-10-03 20:2x: *"lets do 15 for now, also on the highlights once a run has been completed can we change the text to
+past tense, Jr ran x game today on GDqueen. basically just change runs to ran and remove the ping for marathons."*
+Design: [`../info/marathon-role-ping-design.md`](../info/marathon-role-ping-design.md). ⚠️ **A real ping can only be
+proven in Discord** — the tests prove the text and the allowed mentions, never that a phone buzzed. Local check first:
+`MOCK_PORT=8821 node site/mock/server.mjs` from the branch, then <http://localhost:8821/events.html#marathon-1>
+(AGDQ 2027 ▸ *Settings for this marathon*). Phoenix times (UTC−7).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MR-a`** | BEFORE turning anything on: Settings ▸ Marathons — read `marathon_mode`, *The Marathon role…* (`marathon_role_id`), *Whether the 15-minute heads-up mentions the Marathon role* | The mode is **on** (in `shadow` the role is never pinged — by design); the role is picked; the new switch is **On**. |
+| **`MR-b`** | A tracked marathon's thread ▸ the pinned controls, with **Ping the marathon role: on** | One extra line at the bottom: *The public heads-up 15 minutes before a BaF run mentions @Marathon.* — or the reason in words (*…no role is picked…*, *…is not mentionable…*, *…while marathon posts rehearse…*). Switch off → the line is gone. |
+| **`MR-c`** | Events ▸ the marathon ▸ *Settings for this marathon* | Under *Ping the marathon role*: a badge (**Marathon role** / **no Marathon role**) and the same sentence, the role as `@name`. |
+| **`MR-d`** | ⚠️ **Discord only.** With the switch on, wait for a BaF run's 15-minute mark; watch the public reminder channel AND the staff thread, with an account that holds the Marathon role | Public copy starts `@Marathon` (after the runner's own role if they have one) and **notifies**; the staff thread's copy has no `@Marathon`. Log: `marathon.public_reminded` `roles` holds the role id, `marathon_role` = the id; `marathon.reminded` `public_roles` holds it and `roles` does not. The 24-hour and 2-hour copies mention no Marathon role. |
+| **`MR-e`** | ⚠️ **Discord only.** The same run goes live (Auto-highlight on) | The live highlight and the thread's shoutout carry **no** `@Marathon`. |
+| **`MR-f`** | ⚠️ **Discord only.** Right after the deploy: the public channel's highlights for runs that were ALREADY done | **Unchanged** — still present tense with *· done ·*, no edit mark newer than the deploy. No `marathon.public_highlight_edited` rows with `state=done` at the boot. |
+| **`MR-g`** | ⚠️ **Discord only.** A highlight that is up when its run finishes after the deploy (and a BaF host block's when its last run finishes) | Edited in place to *"**JR** ran **Game** — Any% today on **GDQueer** · link"* (host: *hosted*); no `@role` line left on it; nobody is notified by the edit. After the server's midnight, at the next sync: *today* becomes *on <date>*. |
+| **`MR-h`** | Settings ▸ Marathons: change *The word for a runner once the run is over* to something else, then back; change *What a BaF run’s public highlight says once the run is over* | Saves; a `{word}` it cannot fill is refused in words; `{day}` is accepted on the done template and refused on the live one. |

@@ -148,13 +148,16 @@ class FakeClient:
         self.runs_given = list(runs if runs is not None else SCHEDULE)
         self.raises = raises
         self.calls = 0
+        self.asked = []
 
-    async def resolve(self, source, ref):
+    async def resolve(self, source, ref, **asked):
+        self.asked.append(("resolve", source, asked))
         if self.raises is not None and not self.raises.unpublished:
             raise self.raises
         return ("74", "Awesome Games Done Quick 2027")
 
-    async def runs(self, source, ref):
+    async def runs(self, source, ref, **asked):
+        self.asked.append(("runs", source, asked))
         self.calls += 1
         if self.raises is not None:
             raise self.raises

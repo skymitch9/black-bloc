@@ -72,7 +72,10 @@ there (Deviation 2).
   new one.
 - **Edited in place** (`sync_highlights`, called from `Marathons.sync_board` after the runner posts, so every door that
   refreshes the board — the fetch, the minute follow, Shout it now, Mark live/done/upcoming, pair/unpair — also moves the
-  highlight): the slot moves (`{when}`), it goes live, it is done, it is dropped. The words are the runner post's own
+  highlight): the slot moves (`{when}`), it goes live, ~~it is done~~, it is dropped. ➕ **2026-10-03, branch
+  `marathon-role-ping`: DONE is no longer the same template with `{state}` = done** — the owner asked for the past
+  tense (*"Jr ran x game today"*), so a done post is re-rendered from `marathon_public_done_template`
+  ([`marathon-role-ping-design.md`](marathon-role-ping-design.md) ▸ B). The words are the runner post's own
   fields (`marathon_runner_posts.post_text`) — `{runner}`, `{mention}`, `{game}`, `{category}`, `{part}`, `{when}`,
   `{relative}`, `{url}`, `{marathon}`, `{state}` — so the state words are the existing `marathon_state_*` keys, reused.
   An unchanged tick costs no Discord call (`cog.public_sent`); after a restart each highlight that is up is fetched once.
@@ -129,7 +132,9 @@ is a module constant, as the ping switch's is (it is a site answer, not a posted
    public channel. The ping prefix is not re-sent on that edit.
 4. **Edits drop the ping prefix.** The first post carries the role mention (when `ping_role` is on); the edits as the run
    moves carry the template only — the shout's own done-edit does the same. The compare is `endswith(text)`, so a post
-   that still carries its prefix is not edited for that alone.
+   that still carries its prefix is not edited for that alone. ➕ **2026-10-03, `marathon-role-ping`: true for a run
+   that is upcoming or live; a DONE post that still carries a role mention IS edited for that alone** (the owner:
+   *"remove the ping"*), except one whose run was over before the process started.
 5. **The auto path is hooked in `shout`, not in `advance`.** One place covers the schedule, the title, Mark live and
    Shout it now. It runs before the *said by its event* skip, so a run whose own event announces it is still highlighted
    publicly (the event announcement goes to the events channel, not the public one). A run whose shout already exists is

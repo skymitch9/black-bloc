@@ -66,7 +66,7 @@
 
 One always-on container running `python -m black_bloc`, holding the Discord
 gateway websocket 24/7, with a small persistent disk for SQLite. The owner does
-not need to be at a machine. Cost class: `shared-cpu-1x` / 256 MB ≈ $2–4/month
+not need to be at a machine. Cost class: `shared-cpu-1x` / 512 MB since 2026-10-03 (was 256 MB ≈ $2–4/month; the 512 MB price is NOT looked up)
 (Fly bills by usage; check the current pricing page, do not trust this number).
 
 ## First launch (once)

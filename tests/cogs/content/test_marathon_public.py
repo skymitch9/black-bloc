@@ -18,7 +18,9 @@ from black_bloc.cogs.content.marathon import (
     get_marathon,
     refresh_marathon,
     update_marathon,
+    update_run,
 )
+from black_bloc.settings_store import SettingError
 from tests.cogs.content.test_marathon import (
     FAN_ROLE,
     NOW,
@@ -455,3 +457,160 @@ async def test_pinned_the_marathon_cog_registers_its_eight_buttons_before_the_ro
         public.HighlightButton,
         NearMissButton,
     ]
+
+
+# --- a finished run's highlight: the past tense, no role mention, nobody notified ----------------
+
+ON_NOW = (
+    "**Sky** runs **Super Metroid** — Any% on **SS4C** · "
+    f"<t:{int((NOW + timedelta(minutes=30)).timestamp())}:f> "
+    f"(<t:{int((NOW + timedelta(minutes=30)).timestamp())}:R>) · on now · https://twitch.tv/skyruns"
+)
+RAN_TODAY = "**Sky** ran **Super Metroid** — Any% today on **SS4C** · https://twitch.tv/skyruns"
+RAN_EARLIER = (
+    "**Sky** ran **Super Metroid** — Any% on "
+    f"<t:{int((NOW + timedelta(minutes=90)).timestamp())}:D> on **SS4C** · "
+    "https://twitch.tv/skyruns"
+)
+
+
+async def at_minute(bot, cog, marathon, minutes):
+    cog.clock = lambda: NOW + timedelta(minutes=minutes)
+    await follow(bot, cog, marathon)
+
+
+async def live_with_a_ping(bot, cog):
+    """A highlight posted while the marathon pings roles: it opens with the runner's role."""
+    marathon = await ready(bot, cog)
+    await update_marathon(bot.db, marathon["id"], ping_role=1)
+    await at_minute(bot, cog, marathon, 31)
+    (post,) = await highlighted(bot, cog, marathon)
+    assert post.content == f"<@&{FAN_ROLE}> {ON_NOW}"
+    return marathon, post
+
+
+async def edited_rows(bot):
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'marathon.public_highlight_edited' "
+        "ORDER BY id"
+    )
+    return [json.loads(row["details"]) for row in await cur.fetchall()]
+
+
+async def test_a_finished_run_goes_past_tense_loses_its_role_mention_and_notifies_nobody(
+    bot, cog
+):
+    marathon, post = await live_with_a_ping(bot, cog)
+
+    await at_minute(bot, cog, marathon, 91)
+
+    assert post.content == RAN_TODAY
+    assert "<@&" not in post.content and " runs " not in post.content
+    quiet = post.edits[-1]["allowed_mentions"]
+    assert quiet.roles is False and quiet.users is False and quiet.everyone is False
+    assert len(public_posts(bot)) == 1
+    logged = (await edited_rows(bot))[-1]
+    assert logged["state"] == "done" and logged["message_id"] == str(post.id)
+
+
+async def test_a_done_post_is_edited_once_and_then_left_alone(bot, cog):
+    marathon, post = await live_with_a_ping(bot, cog)
+    await at_minute(bot, cog, marathon, 91)
+    edits = len(post.edits)
+
+    await at_minute(bot, cog, marathon, 120)
+    await at_minute(bot, cog, marathon, 200)
+
+    assert len(post.edits) == edits and post.content == RAN_TODAY
+
+
+async def test_today_becomes_the_date_once_the_servers_day_has_passed(bot, cog):
+    marathon, post = await live_with_a_ping(bot, cog)
+    await at_minute(bot, cog, marathon, 91)
+
+    await at_minute(bot, cog, marathon, 779)
+    assert post.content == RAN_TODAY
+    await at_minute(bot, cog, marathon, 781)
+
+    assert post.content == RAN_EARLIER
+    assert post.edits[-1]["allowed_mentions"].roles is False
+
+
+async def test_the_past_tense_words_and_the_done_template_are_settings(bot, cog):
+    await bot.store.set(GUILD, "marathon_part_runner_done", "smashed")
+    await bot.store.set(GUILD, "marathon_public_day_today", "earlier today")
+    await bot.store.set(GUILD, "marathon_public_done_template", "{runner} {part} {game} {day}!")
+    marathon, post = await live_with_a_ping(bot, cog)
+
+    await at_minute(bot, cog, marathon, 91)
+
+    assert post.content == "Sky smashed Super Metroid earlier today!"
+
+
+async def test_the_done_template_refuses_a_word_it_cannot_fill(bot, cog):
+    with pytest.raises(SettingError):
+        await bot.store.set(GUILD, "marathon_public_done_template", "{runner} {nope}")
+    await bot.store.set(GUILD, "marathon_public_done_template", "{runner} {day} {state}")
+    with pytest.raises(SettingError):
+        await bot.store.set(GUILD, "marathon_public_template", "{runner} {day}")
+
+
+async def test_a_highlight_posted_for_a_run_already_over_mentions_no_role(bot, cog):
+    marathon = await ready(bot, cog)
+    await update_marathon(bot.db, marathon["id"], ping_role=1)
+    await at_minute(bot, cog, marathon, 91)
+
+    (post,) = await highlighted(bot, cog, marathon)
+
+    assert post.content == RAN_TODAY
+    assert post.kwargs["allowed_mentions"].roles is False
+    assert (await details_of(bot.db, "marathon.public_highlight_posted"))["roles"] == []
+
+
+def restarted(bot, cog, minutes):
+    again = type(cog)(bot)
+    again.client = cog.client
+    again.clock = lambda: NOW + timedelta(minutes=minutes)
+    bot.cogs["Marathons"] = again
+    return again
+
+
+async def test_a_highlight_up_before_the_restart_gets_the_done_words_when_its_run_ends_after(
+    bot, cog
+):
+    marathon, post = await live_with_a_ping(bot, cog)
+    again = restarted(bot, cog, 60)
+    await follow(bot, again, marathon)
+    assert post.content == f"<@&{FAN_ROLE}> {ON_NOW}"
+
+    await at_minute(bot, again, marathon, 91)
+
+    assert post.content == RAN_TODAY
+
+
+async def test_a_highlight_already_done_before_the_restart_stays_exactly_as_it_was(bot, cog):
+    marathon, post = await live_with_a_ping(bot, cog)
+    row = await run_of(bot, marathon, "Super Metroid")
+    ended = (NOW + timedelta(minutes=90)).isoformat()
+    await update_run(bot.db, row["id"], state="done", done_at=ended)
+    before = f"<@&{FAN_ROLE}> " + ON_NOW.replace(" · on now · ", " · done · ")
+    post.content = before
+    edits = len(post.edits)
+    again = restarted(bot, cog, 300)
+
+    await follow(bot, again, marathon)
+    await at_minute(bot, again, marathon, 2000)
+
+    assert post.content == before and len(post.edits) == edits
+    assert not any(one["state"] == "done" for one in await edited_rows(bot))
+
+
+async def test_a_run_that_ended_while_the_bot_was_down_is_reworded_at_the_next_boot_with_its_date(
+    bot, cog
+):
+    marathon, post = await live_with_a_ping(bot, cog)
+    again = restarted(bot, cog, 2000)
+
+    await follow(bot, again, marathon)
+
+    assert post.content == RAN_EARLIER and "<@&" not in post.content

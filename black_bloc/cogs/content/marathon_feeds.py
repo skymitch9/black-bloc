@@ -103,6 +103,7 @@ from .marathon import (
     usernames_of,
 )
 from .marathon_events import BAD_MODE_CODE, default_mode, set_event_mode
+from .marathon_signals import setup_minutes
 from .spotlight import channel_by_id
 
 log = logging.getLogger(__name__)
@@ -445,7 +446,7 @@ async def hotfix_candidates_of(
     shows = hf.shows_of(bot.store.get(guild.id, MARATHON_HOTFIX_SHOWS_KEY))
     known = await marathons_by_ref(bot.db, guild.id, GDQ_HOTFIX)
     taken = {str(row["name"]).lower() for row in known.values()}
-    blocks = hf.blocks_of(text)
+    blocks = hf.blocks_of(text, setup_minutes(bot, guild.id))
     chosen = hf.tracked(blocks, shows, await people_on_blocks(bot, guild, blocks))
     because = {block.ref: why for block, why in chosen}
     return hf.candidates([block for block, _ in chosen], now, recent, taken, because)
@@ -518,7 +519,7 @@ async def hotfix_picker(bot: Any, guild: Any, feed: Any) -> Outcome:
     now = cog_of(bot).clock()
     try:
         text, url, read_at, trouble = await hotfix_sheet_cached(bot, feed, now)
-        blocks = hf.blocks_of(text)
+        blocks = hf.blocks_of(text, setup_minutes(bot, guild.id))
     except ScheduleError as exc:
         return refusal(hf.PICKER_UNREADABLE.format(why=str(exc)[:300]), UNREADABLE, 502)
     shows = hf.shows_of(bot.store.get(guild.id, MARATHON_HOTFIX_SHOWS_KEY))

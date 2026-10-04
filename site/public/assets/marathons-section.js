@@ -187,9 +187,12 @@ const SPOTLIT_WORDS = { held: 'spotlit', held_other: 'spotlit', kept: 'spotlit',
 const NOT_SPOTLIT = 'not spotlit';
 const PING_FIELD = 'Ping the marathon role';
 const PING_CHOICES = [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }];
-const PING_HELP = 'On: its run reminders (the thread’s and the public copy), shoutouts and public highlights mention the runner’s ping role and its channel’s, '
+const PING_HELP = 'On: the public heads-up marathon_ping_minutes before a BaF run mentions the Marathon role (marathon_role_id, marathon_role_pings), '
+  + 'its run reminders (the thread’s and the public copy), shoutouts and public highlights mention the runner’s ping role and its channel’s, '
   + 'and its channel gets a ping window while it runs. Off (the default): they still post, with no mention. '
   + 'marathon_ping_role_default decides where a new marathon starts.';
+const ROLE_PING_ON = 'Marathon role';
+const ROLE_PING_OFF = 'no Marathon role';
 const HIGHLIGHT_FIELD = 'Auto-highlight BaF runners when live';
 const HIGHLIGHT_HELP = 'On: the moment a BaF run goes live its highlight posts in the public channel '
   + '(marathon_public_channel_id, blank = go-live) — the thread is staff-only, so this is what members see. '
@@ -975,6 +978,16 @@ function eventState(marathon, say) {
   return el('p', { class: 'field-help mx-line' }, [...state, el('span', { text: ' ' }), move]);
 }
 
+/** Under the ping switch: whether the heads-up mentions the Marathon role, or why it does not. */
+function rolePingLine(marathon) {
+  const found = marathon.role_ping || {};
+  if (!found.line) return null;
+  return el('p', { class: 'field-help mx-line mx-role-ping', 'data-reason': found.reason || '' }, [
+    badge(found.mentions ? ROLE_PING_ON : ROLE_PING_OFF, found.mentions ? 'ok' : 'warn'),
+    el('span', { text: ` ${found.line}` }),
+  ]);
+}
+
 function windowWords(marathon) {
   if (!marathon.window || !marathon.channel_login) return NO_WINDOW;
   return said(WINDOW_PLAIN, { start: when(marathon.window.starts_at), end: when(marathon.window.ends_at) });
@@ -1046,6 +1059,7 @@ async function settingsFold(marathon, say) {
     marathon.channel_gone ? notice(CHANNEL_GONE, 'warn') : null,
     field('Airs on', picker, windowWords(marathon)),
     field(PING_FIELD, ping, PING_HELP),
+    rolePingLine(marathon),
     field(HIGHLIGHT_FIELD, highlight, HIGHLIGHT_HELP),
     field(ANNOUNCE_FIELD, announce, ANNOUNCE_HELP),
     overlay ? field(OVERLAY_FIELD, overlay, OVERLAY_HELP) : null,

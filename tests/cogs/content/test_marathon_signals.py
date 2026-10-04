@@ -51,6 +51,7 @@ BOMBUN = "Bombun"
 KILAFLOW = "Kilaflow"
 CATEGORIES = {SPYRO: "1", HAMTARO: "2", KIRBY: "3", WARIO: "4", KILAFLOW: "5"}
 RETRO_ID = "27284"
+SETUP_KEY = "marathon_setup_minutes"
 
 
 def z(minutes):
@@ -82,10 +83,10 @@ class FakeCategories:
         return None
 
 
-def gdqueer_runs(*, kirby="0:15:00"):
+def gdqueer_runs(*, kirby="0:15:00", setup=0):
     text = (FIXTURES / "gdq_hotfix_sheet.csv").read_text(encoding="utf-8")
     text = text.replace("Any% (Normal Mode),0:15:00", f"Any% (Normal Mode),{kirby}")
-    return list(hf.parse_hotfix(text, ["GDQueer"])[0].runs)
+    return list(hf.parse_hotfix(text, ["GDQueer"], setup)[0].runs)
 
 
 def at_show(cog, minutes):
@@ -99,9 +100,10 @@ def helix(bot):
     return made
 
 
-async def gdqueer(bot, cog):
+async def gdqueer(bot, cog, *, setup=0):
+    await bot.store.set(GUILD, SETUP_KEY, setup)
     channel = await gdq_row(bot)
-    cog.client.runs_given = gdqueer_runs()
+    cog.client.runs_given = gdqueer_runs(setup=setup)
     at_show(cog, -60)
     outcome = await create_marathon(
         bot, bot.guild, FakeActor(), name="GDQueer", url=HOTFIX_URL, spotlight_id=channel["id"]
@@ -293,6 +295,116 @@ async def test_a_gdq_tracker_marathon_is_never_re_timed_by_this(bot, cog, helix)
     assert rows["Super Metroid"]["state"] == mt.LIVE
     assert rows["Super Metroid"]["actual_started_at"] == at(50)
     assert rows["Kirby Air Riders"]["scheduled_at"] == at(90)
+    assert "marathon.retimed" not in await kinds(bot.db)
+
+
+async def test_the_setup_buffer_is_asked_for_only_where_black_bloc_keeps_the_clock(
+    bot, cog, helix
+):
+    assert bot.store.get(GUILD, SETUP_KEY) == 7
+    assert signals.setup_for(bot, GUILD, "gdq_hotfix") == {"setup_minutes": 7}
+    for source in ("gdq", "rpglb", "horaro", "oengus", "fastestfurs", "ladyarcaders"):
+        assert signals.setup_for(bot, GUILD, source) == {}
+    await bot.store.set(GUILD, SETUP_KEY, 30)
+    channel = await gdq_row(bot)
+    marathon = await added(bot, cog, channel=channel)
+    before = {one["game"]: one["scheduled_at"] for one in await runs_of(bot.db, marathon["id"])}
+    await stream(bot, channel, title="Super Metroid Any%")
+    cog.clock = lambda: datetime.fromisoformat(at(50))
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert cog.client.asked and all(asked == {} for _what, _source, asked in cog.client.asked)
+    after = {one["game"]: one["scheduled_at"] for one in await runs_of(bot.db, marathon["id"])}
+    assert after == before
+    assert "marathon.retimed" not in await kinds(bot.db)
+
+
+async def test_spyro_seen_20_minutes_late_puts_hamtaro_7_minutes_after_spyro_should_end(
+    bot, cog, helix
+):
+    channel, marathon = await gdqueer(bot, cog, setup=7)
+    assert cog.client.asked[-1] == ("runs", "gdq_hotfix", {"setup_minutes": 7})
+    rows = await times(bot, marathon)
+    assert (rows[SPYRO]["scheduled_at"], rows[HAMTARO]["scheduled_at"]) == (z(0), z(75))
+    await tick(cog)
+    await stream(bot, channel, game=SPYRO, game_id="1")
+    at_show(cog, 20)
+    await tick(cog)
+    rows = await times(bot, marathon)
+    assert (rows[SPYRO]["scheduled_at"], rows[SPYRO]["ends_at"]) == (z(20), z(88))
+    assert (rows[HAMTARO]["scheduled_at"], rows[HAMTARO]["ends_at"]) == (z(95), z(147))
+    assert rows[HAMTARO]["sheet_at"] == z(75)
+    assert (rows[KIRBY]["scheduled_at"], rows[WARIO]["scheduled_at"]) == (z(154), z(176))
+    day_two = rows["Wii Fit U"]
+    assert day_two["scheduled_at"] == day_two["sheet_at"] == "2026-10-04T17:00:00+00:00"
+
+
+async def test_a_changed_buffer_is_used_by_the_next_re_time_before_any_schedule_read(
+    bot, cog, helix
+):
+    channel, marathon = await gdqueer(bot, cog)
+    await tick(cog)
+    await bot.store.set(GUILD, SETUP_KEY, 7)
+    await stream(bot, channel, game=SPYRO, game_id="1")
+    at_show(cog, 20)
+    await tick(cog)
+    rows = await times(bot, marathon)
+    assert rows[SPYRO]["scheduled_at"] == z(20)
+    assert (rows[HAMTARO]["scheduled_at"], rows[HAMTARO]["sheet_at"]) == (z(95), z(68))
+    assert rows[KIRBY]["scheduled_at"] == z(154)
+
+
+async def test_a_changed_buffer_moves_the_runs_ahead_at_the_next_read_and_never_a_live_or_done_one(
+    bot, cog, helix
+):
+    channel, marathon = await gdqueer(bot, cog)
+    await tick(cog)
+    await stream(bot, channel, game=SPYRO, game_id="1")
+    at_show(cog, 20)
+    await tick(cog)
+    await stream(bot, channel, game=HAMTARO, game_id="2")
+    at_show(cog, 90)
+    await tick(cog)
+    rows = await times(bot, marathon)
+    assert (rows[SPYRO]["state"], rows[HAMTARO]["state"]) == (mt.DONE, mt.LIVE)
+    assert (rows[HAMTARO]["scheduled_at"], rows[KIRBY]["scheduled_at"]) == (z(90), z(142))
+
+    await bot.store.set(GUILD, SETUP_KEY, 7)
+    cog.client.runs_given = gdqueer_runs(setup=7)
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert cog.client.asked[-1] == ("runs", "gdq_hotfix", {"setup_minutes": 7})
+    rows = await times(bot, marathon)
+    assert (rows[SPYRO]["state"], rows[SPYRO]["scheduled_at"]) == (mt.DONE, z(20))
+    assert (rows[HAMTARO]["scheduled_at"], rows[HAMTARO]["ends_at"]) == (z(90), z(142))
+    assert rows[HAMTARO]["sheet_at"] == z(75) and rows[HAMTARO]["moved_at"] is None
+    assert (rows[KIRBY]["scheduled_at"], rows[KIRBY]["sheet_at"]) == (z(149), z(134))
+    assert rows[WARIO]["scheduled_at"] == z(171)
+    assert rows["Wii Fit U"]["scheduled_at"] == "2026-10-04T17:00:00+00:00"
+    assert rows["Inazuma Eleven: Victory Road"]["scheduled_at"] == "2026-10-04T17:30:00+00:00"
+    fresh = await get_marathon(bot.db, GUILD, marathon["id"])
+    assert fresh["ends_at"] == "2026-10-05T04:19:00+00:00"
+
+
+async def test_a_run_live_or_done_by_the_clock_alone_is_not_moved_by_a_changed_buffer(
+    bot, cog, helix
+):
+    await bot.store.set(GUILD, "marathon_title_confirms", False)
+    await bot.store.set(GUILD, "marathon_category_confirms", False)
+    _channel, marathon = await gdqueer(bot, cog)
+    at_show(cog, 70)
+    await tick(cog)
+    rows = await times(bot, marathon)
+    assert (rows[SPYRO]["state"], rows[HAMTARO]["state"]) == (mt.DONE, mt.LIVE)
+    assert rows[HAMTARO]["actual_started_at"] is None
+
+    await bot.store.set(GUILD, SETUP_KEY, 7)
+    cog.client.runs_given = gdqueer_runs(setup=7)
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    rows = await times(bot, marathon)
+    assert (rows[SPYRO]["scheduled_at"], rows[SPYRO]["ends_at"]) == (z(0), z(68))
+    assert (rows[HAMTARO]["scheduled_at"], rows[HAMTARO]["ends_at"]) == (z(68), z(120))
+    assert rows[HAMTARO]["sheet_at"] == z(75) and rows[HAMTARO]["moved_at"] is None
+    assert (rows[KIRBY]["scheduled_at"], rows[KIRBY]["moved_at"] is not None) == (z(134), True)
     assert "marathon.retimed" not in await kinds(bot.db)
 
 

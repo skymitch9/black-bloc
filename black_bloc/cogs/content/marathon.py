@@ -50,6 +50,7 @@ from ...marathon_channels import HELD_REFUSAL, OPTED_OUT_REFUSAL, takes_marathon
 from ...marathon_channels import channel_word as channel_word_of
 from ...marathon_sources import (
     GDQ,
+    GDQ_HOTFIX,
     SOURCE_WORDS,
     ScheduleClient,
     ScheduleError,
@@ -637,7 +638,9 @@ async def create_marathon(
     cog = cog_of(bot)
     source, ref = found
     try:
-        ref, _event_name = await cog.client.resolve(source, ref)
+        ref, _event_name = await cog.client.resolve(
+            source, ref, **signals.setup_for(bot, guild.id, source)
+        )
     except ScheduleError as exc:
         return refused_with(
             bot, guild.id, MARATHON_COULD_NOT_READ_KEY, UNREADABLE, 422, reason=str(exc)
@@ -815,7 +818,9 @@ async def change_link(
     cog = cog_of(bot)
     source, ref = found
     try:
-        ref, _event_name = await cog.client.resolve(source, ref)
+        ref, _event_name = await cog.client.resolve(
+            source, ref, **signals.setup_for(bot, guild.id, source)
+        )
     except ScheduleError as exc:
         return refused_with(
             bot,
@@ -2020,7 +2025,11 @@ class Marathons(commands.Cog):
         """One read of the schedule, applied as a diff. A failure keeps every run as it was."""
         now = self.clock()
         try:
-            runs = await self.client.runs(marathon["source"], marathon["source_ref"])
+            runs = await self.client.runs(
+                marathon["source"],
+                marathon["source_ref"],
+                **signals.setup_for(self.bot, guild.id, marathon["source"]),
+            )
         except ScheduleError as exc:
             return await self._failed(guild, marathon, exc, now)
         except Exception as exc:
@@ -2077,6 +2086,7 @@ class Marathons(commands.Cog):
             runs,
             move_minutes=int(self.bot.store.get(guild.id, MARATHON_MOVE_MINUTES_KEY)),
         )
+        plan.updates = signals.held_plan(marathon, plan.updates)
         changed = digest != marathon["fetch_hash"]
         counts = {"runs": len(runs), "added": 0, "moved": 0, "dropped": 0}
         stamp = now.isoformat()
@@ -2208,6 +2218,8 @@ class Marathons(commands.Cog):
                 "run_seconds": run.run_seconds,
                 "last_seen_at": stamp,
             }
+            if signals.holds(marathon, row):
+                del fields["scheduled_at"], fields["ends_at"]
             if (row["game"], row["display_name"], row["twitch_game"]) != (
                 run.game,
                 run.display_name,
@@ -2266,6 +2278,7 @@ class Marathons(commands.Cog):
                 match_hosts=hosts,
                 usernames=usernames,
                 hosts_count=count,
+                commentators_count=marathon["source"] != GDQ_HOTFIX,
             )
             if after == before:
                 continue
@@ -2561,7 +2574,9 @@ class Marathons(commands.Cog):
     async def _post_reminder(
         self, guild: Any, marathon: Any, row: Any, mark: int, *, pinging: bool
     ) -> None:
+        from ... import marathon_role_ping as role_ping
         from .marathon_public_reminders import post_public_reminder
+        from .marathon_role_ping import verdict_for
 
         words = words_for(self.bot, guild.id)
         login = await channel_login(self.bot, marathon)
@@ -2571,22 +2586,36 @@ class Marathons(commands.Cog):
             said_default(MARATHON_REMINDER_TEMPLATE_KEY),
             **mt.run_fields(row, marathon, words, url=url),
         ).text
-        roles: list[int] = []
+        found: list[int] = []
         if pinging and self.bot.store.get(guild.id, MARATHON_REMINDER_PINGS_KEY):
-            roles = await self._ping_roles(guild, marathon, row)
+            found = await self._ping_roles(guild, marathon, row)
+        marathon_role = verdict_for(self.bot, guild, marathon) if pinging else None
+        roles = role_ping.without_role(found, marathon_role)
         message, channel_id, why = await self._send(
             guild, ping_prefix(*roles) + text, roles, marathon=marathon
         )
-        await post_public_reminder(
-            self, guild, marathon, row, mark, roles, url=url, staff_channel_id=channel_id
+        public = await post_public_reminder(
+            self,
+            guild,
+            marathon,
+            row,
+            mark,
+            roles,
+            url=url,
+            staff_channel_id=channel_id,
+            marathon_role=marathon_role,
         )
-        details = self.run_details(marathon, row) | {
-            "mark": mark,
-            "pinged": bool(roles),
-            "roles": roles,
-            "message_id": str(getattr(message, "id", "")) or None,
-            "channel_id": channel_id,
-        }
+        details = (
+            self.run_details(marathon, row)
+            | {
+                "mark": mark,
+                "pinged": bool(roles),
+                "roles": roles,
+                "message_id": str(getattr(message, "id", "")) or None,
+                "channel_id": channel_id,
+            }
+            | public
+        )
         if message is None:
             await log_action(
                 self.bot, guild, "marathon.reminder_failed", details=details | {"reason": why}

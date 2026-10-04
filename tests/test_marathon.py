@@ -669,8 +669,9 @@ def test_a_login_lent_by_the_viewer_never_costs_a_name_match_and_a_staff_login_b
     host = {"name": "anarchy", "login": "anarchyasf", "part": "host", "login_from": "viewer"}
     by_name = mt.match_people([host], {}, [], usernames={"anarchy": 7})
     assert by_name == [host | {"user_id": 7}]
-    by_link = mt.match_people([host], {"anarchyasf": 9}, [], usernames={"anarchy": 7})
-    assert by_link[0]["user_id"] == 9
+    never = mt.match_people([host], {"anarchyasf": 9}, [], usernames={"anarchy": 7})
+    assert never[0]["user_id"] == 7
+    assert mt.match_people([host], {"anarchyasf": 9}, [])[0]["user_id"] is None
     given = {"name": "anarchy", "login": "anarchyasf", "part": "host"}
     assert mt.match_people([given], {}, [], usernames={"anarchy": 7})[0]["user_id"] is None
     pairing = {"runner_name": "anarchy", "marathon_id": None, "user_id": 5, "twitch_login": "own"}

@@ -156,6 +156,80 @@ def test_a_run_staff_ended_early_pulls_the_next_ones_forward():
     assert found == {1: (iso(0), iso(45)), 2: (iso(45), iso(75))}
 
 
+def spaced(setup, *lengths, at=0):
+    rows, cursor = [], at
+    for ident, length in enumerate(lengths, start=1):
+        rows.append(row(ident, cursor, length))
+        cursor += length + setup
+    return rows
+
+
+def test_no_setup_buffer_re_times_exactly_as_before():
+    rows = [row(1, 0, 68), row(2, 68, 52), row(3, 120, 15)]
+    rows[0] |= {"state": mt.LIVE, "actual_started_at": iso(20)}
+    assert sig.retimed(rows, 0) == sig.retimed(rows)
+    assert [(one.starts_at, one.ends_at) for one in sig.retimed(rows, -3)] == [
+        (iso(20), iso(88)),
+        (iso(88), iso(140)),
+        (iso(140), iso(155)),
+    ]
+
+
+def test_a_setup_buffer_is_added_before_each_run_after_the_one_seen_starting():
+    rows = [*spaced(7, 68, 52, 15), row(4, 24 * 60, 23)]
+    rows[0] |= {"state": mt.LIVE, "actual_started_at": iso(20)}
+    found = {one.row["id"]: (one.starts_at, one.ends_at) for one in sig.retimed(rows, 7)}
+    assert found == {
+        1: (iso(20), iso(88)),
+        2: (iso(95), iso(147)),
+        3: (iso(154), iso(169)),
+    }
+
+
+def test_the_runs_before_the_one_seen_starting_and_the_done_ones_are_left_alone():
+    rows = spaced(7, 60, 30, 40, 20)
+    rows[0] |= {"state": mt.DONE}
+    rows[1] |= {"state": mt.DONE, "actual_started_at": iso(70), "scheduled_at": iso(70)}
+    rows[1] |= {"ends_at": iso(100)}
+    rows[2] |= {"state": mt.LIVE, "actual_started_at": iso(110)}
+    found = {one.row["id"]: (one.starts_at, one.ends_at) for one in sig.retimed(rows, 7)}
+    assert found == {3: (iso(110), iso(150)), 4: (iso(157), iso(177))}
+
+
+def test_a_run_live_or_done_by_the_clock_alone_stays_where_it_is():
+    rows = spaced(0, 60, 30, 40)
+    rows[0] |= {"state": mt.DONE, "actual_started_at": iso(0)}
+    rows[1] |= {"state": mt.LIVE}
+    found = {one.row["id"]: (one.starts_at, one.ends_at) for one in sig.retimed(rows, 7)}
+    assert found == {3: (iso(97), iso(137))}
+    rows[1] |= {"state": mt.UPCOMING}
+    found = {one.row["id"]: (one.starts_at, one.ends_at) for one in sig.retimed(rows, 7)}
+    assert found == {2: (iso(67), iso(97)), 3: (iso(104), iso(144))}
+    alone = row(1, 0, 60, state=mt.DONE) | {"scheduled_at": iso(9), "ends_at": iso(69)}
+    assert sig.retimed([alone, row(2, 60, 30)], 7) == []
+
+
+def test_a_run_staff_ended_is_followed_by_the_setup_buffer():
+    rows = spaced(7, 60, 30)
+    rows[0] |= {"actual_started_at": iso(0), "actual_ended_at": iso(45)}
+    found = {one.row["id"]: (one.starts_at, one.ends_at) for one in sig.retimed(rows, 7)}
+    assert found == {1: (iso(0), iso(45)), 2: (iso(52), iso(82))}
+
+
+def test_runs_a_setup_buffer_apart_are_one_chain_whatever_the_key_says_now():
+    for sheet in (0, 7, 30):
+        rows = [*spaced(sheet, 60, 30, 40), row(4, 24 * 60, 23)]
+        assert [[one["id"] for one in chain] for chain in sig.chains(rows)] == [[1, 2, 3], [4]]
+        rows[0] |= {"state": mt.LIVE, "actual_started_at": iso(5)}
+        found = {one.row["id"]: one.starts_at for one in sig.retimed(rows, 10)}
+        assert (found[2], found[3]) == (iso(75), iso(115))
+        assert 4 not in found
+    apart = [row(1, 0, 60), row(2, 60 + 32, 30)]
+    assert len(sig.chains(apart)) == 2
+    overlapping = [row(1, 0, 60), row(2, 58, 30)]
+    assert len(sig.chains(overlapping)) == 2
+
+
 def test_with_no_anchor_every_run_goes_back_to_the_sheet():
     moved = row(2, 68) | {"scheduled_at": iso(88), "ends_at": iso(148)}
     found = sig.retimed([row(1, 0, 68), moved])
