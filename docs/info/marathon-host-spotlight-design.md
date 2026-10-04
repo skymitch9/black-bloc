@@ -438,7 +438,7 @@ renderer, so the two can never drift.
   (reasoned from the TODO and the release history — the live database was not read); an old-shape record (no
   `run_id`) is simply ignored.
 - **A run that moves later is due again** (`rearm`), as a runner's reminder is re-armed by `mt.rearmed` on a
-  refresh / retime.
+  refresh / retime. ⚠️ **2026-10-03 — superseded in part by [`reminder-edit-in-place-design.md`](reminder-edit-in-place-design.md):** while `marathon_reminder_on_move` is `edit` (the default) a mark that POSTED is never re-armed — its post is edited in place — and a reminder's message id IS stored now.
 - **Auto-highlight is tried once per run**: `auto_wanted` needs the switch on, the run LIVE and no record that was
   tried or taken down — staff's **Remove** is never undone by the switch (the runner rule).
 - **A post already up follows its run to the end** after the key or Scan hosts goes off (`left_behind` uses the

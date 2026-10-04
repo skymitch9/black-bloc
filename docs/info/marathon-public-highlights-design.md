@@ -211,7 +211,7 @@ calls `post_public_reminder` right after the staff-thread copy in `_post_reminde
   `shadow_channel_id`) — no new home key; the home's description now reads *public highlights … and its public
   reminders*. The note names the real reminder channel. Mode off posts nothing.
 - **No double post on restart:** no message id is stored. The reminder's existing sent-marker (`marathon_runs.reminders_sent`)
-  is written BEFORE either copy is sent, and the public copy is sent in the same call, so a restart never re-sends it.
+  is written BEFORE either copy is sent, and the public copy is sent in the same call, so a restart never re-sends it. ⚠️ **2026-10-03 — superseded in part by [`reminder-edit-in-place-design.md`](reminder-edit-in-place-design.md):** while `marathon_reminder_on_move` is `edit` (the default) a mark that POSTED is never re-armed — its post is edited in place — and a reminder's message id IS stored now.
 - **Logs:** routine `marathon.public_reminded`, `marathon.public_reminder_skipped`; shadow `marathon.would_remind_public`;
   `marathon.public_reminder_failed` IMPORTANT by suffix (also for *no channel at all*).
 
