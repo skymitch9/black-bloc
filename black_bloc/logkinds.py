@@ -270,6 +270,8 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.paused",
         "marathon.reminded",
         "marathon.reminder_skipped",
+        "marathon.reminder_edited",
+        "marathon.reminder_lost",
         "marathon.removed",
         "marathon.resumed",
         "marathon.run_done",

@@ -17,6 +17,7 @@ from ... import marathon_feeds as mfeeds
 from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
 from ... import marathon_ping as mp
+from ... import marathon_reminder_posts as mrem
 from ... import marathon_signals as sig
 from ... import marathon_spotlight as ms
 from ... import pings
@@ -105,6 +106,7 @@ from ...settings_store import (
     MARATHON_PING_MINUTES_KEY,
     MARATHON_POLL_MINUTES_KEY,
     MARATHON_REMINDER_MINUTES_KEY,
+    MARATHON_REMINDER_ON_MOVE_KEY,
     MARATHON_REMINDER_PINGS_KEY,
     MARATHON_REMINDER_STALE_KEY,
     MARATHON_REMINDER_TEMPLATE_KEY,
@@ -386,6 +388,7 @@ RUN_COLUMNS = {
     "shout_message_id",
     "shout_channel_id",
     "reminders_sent",
+    "reminder_posts",
     "last_seen_at",
     "event_id",
     "post_message_id",
@@ -2227,8 +2230,11 @@ class Marathons(commands.Cog):
             if moved:
                 fields["previous_scheduled_at"] = row["scheduled_at"]
                 fields["moved_at"] = stamp
-                fields["reminders_sent"] = json.dumps(
-                    mt.rearmed(mt.marks_of(row), run.starts_at, now)
+                fields |= mrem.run_fields(
+                    row,
+                    run.starts_at,
+                    now,
+                    str(self.bot.store.get(guild.id, MARATHON_REMINDER_ON_MOVE_KEY)),
                 )
             await update_run(db, row["id"], **fields)
             if moved and mt.is_ours(row):
@@ -2400,10 +2406,12 @@ class Marathons(commands.Cog):
             return False
         now = self.clock()
         from .marathon_host_highlights import remind_hosts
+        from .marathon_reminder_posts import sync_reminders
 
         moved = await self.advance(guild, marathon, now)
         await self.remind(guild, marathon, now)
         await remind_hosts(self, guild, marathon, now)
+        await sync_reminders(self, guild, marathon)
         await self.sync_board(guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
         return moved
 
@@ -2555,7 +2563,13 @@ class Marathons(commands.Cog):
             sent = sorted(
                 set(mt.marks_of(row)) | set(skipped) | ({mark} if mark is not None else set())
             )
-            await update_run(self.bot.db, row["id"], reminders_sent=json.dumps(sent))
+            posts = mrem.with_skipped(mrem.of_run(row), skipped)
+            await update_run(
+                self.bot.db,
+                row["id"],
+                reminders_sent=json.dumps(sent),
+                reminder_posts=mrem.dump(posts),
+            )
             for one in skipped:
                 await log_action(
                     self.bot,
@@ -2564,23 +2578,32 @@ class Marathons(commands.Cog):
                     details=self.run_details(marathon, row) | {"mark": one},
                 )
             if mark is not None:
-                await self._post_reminder(guild, marathon, row, mark, pinging=mark == ping_mark)
+                posts[mark] = await self._post_reminder(
+                    guild, marathon, row, mark, pinging=mark == ping_mark
+                )
+                await update_run(self.bot.db, row["id"], reminder_posts=mrem.dump(posts))
 
-    async def _post_reminder(
-        self, guild: Any, marathon: Any, row: Any, mark: int, *, pinging: bool
-    ) -> None:
-        from ... import marathon_role_ping as role_ping
-        from .marathon_public_reminders import post_public_reminder
-        from .marathon_role_ping import verdict_for
-
+    async def reminder_words(
+        self, guild: Any, marathon: Any, row: Any, *, key: str = MARATHON_REMINDER_TEMPLATE_KEY
+    ) -> tuple[str, str]:
+        """(the staff copy's words, the link they carry)."""
         words = words_for(self.bot, guild.id)
         login = await channel_login(self.bot, marathon)
         url = mt.run_url(row, login, marathon["schedule_url"])
         text = mt.render(
-            words[MARATHON_REMINDER_TEMPLATE_KEY],
-            said_default(MARATHON_REMINDER_TEMPLATE_KEY),
-            **mt.run_fields(row, marathon, words, url=url),
+            words[key], said_default(key), **mt.run_fields(row, marathon, words, url=url)
         ).text
+        return (text, url)
+
+    async def _post_reminder(
+        self, guild: Any, marathon: Any, row: Any, mark: int, *, pinging: bool
+    ) -> dict[str, Any]:
+        """It answers what was posted, for the run to remember."""
+        from ... import marathon_role_ping as role_ping
+        from .marathon_public_reminders import post_public_reminder
+        from .marathon_role_ping import verdict_for
+
+        text, url = await self.reminder_words(guild, marathon, row)
         found: list[int] = []
         if pinging and self.bot.store.get(guild.id, MARATHON_REMINDER_PINGS_KEY):
             found = await self._ping_roles(guild, marathon, row)
@@ -2600,6 +2623,10 @@ class Marathons(commands.Cog):
             staff_channel_id=channel_id,
             marathon_role=marathon_role,
         )
+        entry = mrem.entry_of(
+            staff=mrem.copy_of(message, channel_id, text, row["scheduled_at"]),
+            public=public.pop("copy", None),
+        )
         details = (
             self.run_details(marathon, row)
             | {
@@ -2615,7 +2642,7 @@ class Marathons(commands.Cog):
             await log_action(
                 self.bot, guild, "marathon.reminder_failed", details=details | {"reason": why}
             )
-            return
+            return entry
         shadow = mode_of(self.bot, guild.id) != MODE_ON
         await log_action(
             self.bot,
@@ -2623,6 +2650,7 @@ class Marathons(commands.Cog):
             "marathon.would_remind" if shadow else "marathon.reminded",
             details=details | rehearsal_details(self.bot, guild),
         )
+        return entry
 
     async def _ping_roles(self, guild: Any, marathon: Any, row: Any) -> list[int]:
         """The member's own ping role, and the channel's through the ping-windows gate — never

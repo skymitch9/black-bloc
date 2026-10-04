@@ -2295,7 +2295,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 721
+    assert len(settings_store.KEY_TYPES) == 724
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2508,6 +2508,50 @@ def test_the_setup_buffer_is_a_marathon_int_from_0_to_30_and_7_by_default(store)
         with pytest.raises(settings_store.SettingError):
             settings_store.coerce_value(key, bad)
     assert "0 stacks the estimates" in settings_store.KEY_HELP[key]
+
+
+def test_what_a_moved_runs_reminder_does_is_a_marathon_enum_defaulting_to_edit(store):
+    key = settings_store.MARATHON_REMINDER_ON_MOVE_KEY
+    assert key == "marathon_reminder_on_move"
+    assert settings_store.KEY_TYPES[key] == "enum"
+    assert settings_store.namespace_of(key) == "marathon"
+    assert settings_store.KEY_CHOICES[key] == ("edit", "repost")
+    assert settings_store.MARATHON_DEFAULTS[key] == store.default(key) == "edit"
+    assert settings_store.coerce_value(key, "repost") == "repost"
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value(key, "delete")
+    assert "pings nobody" in settings_store.KEY_HELP[key]
+
+
+def test_the_reminder_edit_limit_is_a_marathon_int_from_1_to_50_and_10_by_default(store):
+    key = settings_store.MARATHON_REMINDER_EDIT_LIMIT_KEY
+    assert key == "marathon_reminder_edit_limit"
+    assert settings_store.KEY_TYPES[key] == "int"
+    assert settings_store.namespace_of(key) == "marathon"
+    assert settings_store.MARATHON_DEFAULTS[key] == store.default(key) == 10
+    assert (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) == (1, 50)
+    for bad in (0, 51, True, "10"):
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(key, bad)
+
+
+def test_the_dropped_reminder_is_a_marathon_template_that_takes_the_reminder_fields_and_state(
+    store,
+):
+    key = settings_store.MARATHON_REMINDER_DROPPED_TEMPLATE_KEY
+    assert key == "marathon_reminder_dropped_template"
+    assert settings_store.KEY_TYPES[key] == "text"
+    assert settings_store.namespace_of(key) == "marathon"
+    assert store.default(key) == (
+        "{member} {part} **{game}** ({category}) on **{marathon}** — {state}."
+    )
+    assert settings_store.MARATHON_WORDS[key][1] == (
+        *settings_store.MARATHON_REMINDER_FIELDS,
+        "state",
+    )
+    assert settings_store.coerce_value(key, "{game} is {state} {in}") == "{game} is {state} {in}"
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value(key, "{runner}")
 
 
 def test_the_category_signal_is_a_bool_and_the_retro_category_a_name_never_blank():

@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from ... import marathon as mt
+from ... import marathon_reminder_posts as mrem
 from ... import marathon_role_ping as mrp
 from ... import shadow as shadow_home
 from ...actionlog import log_action
@@ -44,15 +45,31 @@ def wanted(bot: Any, guild_id: int) -> bool:
 
 
 def reminder_text(
-    bot: Any, guild: Any, marathon: Any, row: Any, *, url: str, people: Any = None
+    bot: Any,
+    guild: Any,
+    marathon: Any,
+    row: Any,
+    *,
+    url: str,
+    people: Any = None,
+    key: str = MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY,
 ) -> str:
     """A runner's public reminder, or a host's when `people` names the BaF hosts: one template."""
     said = words_for(bot, guild.id)
     return mt.render(
-        said[MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY],
-        said_default(MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY),
+        said[key],
+        said_default(key),
         **mt.run_fields(row, marathon, said, url=url, people=people),
     ).text
+
+
+async def public_url(bot: Any, marathon: Any, row: Any, people: Any, url: str | None) -> str | None:
+    """The staff copy's link, unless an opt-out changed whose stream stands for the run."""
+    if url and people != mt.ours(mt.people_of(row)):
+        return mt.run_url(
+            row, await channel_login(bot, marathon), marathon["schedule_url"], people=people
+        )
+    return url
 
 
 def staff_went_to(cog: Any, guild: Any, staff_channel_id: Any) -> int | None:
@@ -116,10 +133,7 @@ async def post_public_reminder(
                 bot, guild, "marathon.public_reminder_skipped", details=base | {"because": because}
             )
             return unsent
-        if url and people != mt.ours(mt.people_of(row)):
-            url = mt.run_url(
-                row, await channel_login(bot, marathon), marathon["schedule_url"], people=people
-            )
+        url = await public_url(bot, marathon, row, people, url)
         text = reminder_text(bot, guild, marathon, row, url=url, people=people)
         roles = mrp.with_role(roles, marathon_role)
         message, channel_id, why = await send_public(
@@ -146,10 +160,21 @@ async def post_public_reminder(
             "marathon.would_remind_public" if shadow else "marathon.public_reminded",
             details=details | mrp.row_fields(marathon_role) | rehearsal_of(bot, guild),
         )
-        return {"public_roles": roles} | mrp.row_fields(marathon_role)
+        return (
+            {"public_roles": roles}
+            | mrp.row_fields(marathon_role)
+            | {"copy": mrem.copy_of(message, channel_id, text, row["scheduled_at"])}
+        )
     except Exception as exc:
         log.warning("marathon: the public reminder failed — %s", reason_of(exc))
         return unsent
 
 
-__all__ = ["post_public_reminder", "reminder_channel", "reminder_text", "staff_went_to", "wanted"]
+__all__ = [
+    "post_public_reminder",
+    "public_url",
+    "reminder_channel",
+    "reminder_text",
+    "staff_went_to",
+    "wanted",
+]
