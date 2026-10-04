@@ -1,6 +1,7 @@
 import { api, send } from './api.js';
 import { start } from './app.js';
-import { BAF, said, slotTime } from './marathon-words.js';
+import { BAF, said } from './marathon-words.js';
+import { clockParts, clockTime, dayLabel, deviceZone, fillMoments, pickZone, viewerZone } from './timezone.js';
 import {
   ago,
   badge,
@@ -14,6 +15,7 @@ import {
   notice,
   sayNothing,
   sentenceFor,
+  zoneSelect,
 } from './ui.js';
 
 const HASH = /^marathon-(\d+)$/;
@@ -32,7 +34,15 @@ const DRIFT_OVER = 'Every run has started';
 const DRIFT_HELP = 'The next run not yet started, against {source} for it.';
 const SOURCE_LINE = 'times from {from}';
 const READ_LINE = 'source read {ago}';
-const ZONE_LINE = 'shown in {zone} time';
+const ZONE_LINES = {
+  device: 'Times shown in your time — {zone}',
+  remembered: 'Times shown in your time — {zone}',
+  picked: 'Times shown in {zone} time',
+  server: 'Times shown in the server’s time — {zone}',
+};
+const ZONE_PICKER = 'Show times in';
+const ZONE_DEVICE = 'My device’s time ({zone})';
+const ZONE_DEVICE_UNKNOWN = 'My device’s time';
 const KIND_EDITABLE = '{source} never moves its own times, so staff keep this sheet’s clock: every time below can be moved here, and the bot’s posts follow.';
 const KIND_READ_ONLY = 'These times come from {source}, which moves them itself and is re-read every few minutes, so they cannot be changed here. **Started now** and **Finished now** still work.';
 const DAY_CHIP = '{day} · {runs}';
@@ -78,7 +88,7 @@ const RESTORE = 'Bring it back';
 const SKIP = 'Skip this run';
 const SET_START = 'Set start…';
 const SET_START_FIELD = 'New start';
-const SET_START_HELP = 'Later runs keep their gaps.';
+const SET_START_HELP = 'Read in {zone} time — type it like 12:40 PM (13:40 works too). Later runs keep their gaps.';
 const ESTIMATE = 'Change estimate…';
 const ESTIMATE_FIELD = 'Estimate';
 const ESTIMATE_HELP = 'As 1:20, or minutes.';
@@ -101,6 +111,8 @@ const shown = { id: null, day: null, open: null };
 let sheet = null;
 let marathons = [];
 let say = notice();
+let viewer = { zone: 'UTC', picked: false, from: 'server' };
+let lastSaid = { text: '', tone: null };
 let root = null;
 let timer = null;
 let refresh = () => {};
@@ -116,7 +128,21 @@ function length(seconds) {
 }
 
 function clock(iso) {
-  return slotTime(iso, sheet.timezone);
+  return clockTime(iso, viewer.zone);
+}
+
+function filled(text) {
+  return fillMoments(text, viewer.zone);
+}
+
+function tell(text, tone = null) {
+  lastSaid = { text: text || '', tone };
+  if (say.parentNode) say.parentNode.hidden = false;
+  say.say(filled(text), tone);
+}
+
+function stamp(iso) {
+  return `${dayLabel(iso, viewer.zone)} ${clock(iso)}`;
 }
 
 function dayNow() {
@@ -124,19 +150,17 @@ function dayNow() {
 }
 
 async function act(path, body = {}) {
-  say.parentNode.hidden = false;
-  say.say(WORKING);
+  tell(WORKING);
   try {
     const found = await send(`/api/marathons/${shown.id}/runsheet/${path}`, 'POST', body);
     sheet = found;
     shown.open = null;
-    say.say(found.message || '', 'ok');
+    tell(found.message || '', 'ok');
     paint();
     return true;
   } catch (error) {
     const refused = sentenceFor(error);
-    say.parentNode.hidden = false;
-    say.say(refused.text, refused.tone);
+    tell(refused.text, refused.tone);
     return false;
   }
 }
@@ -160,6 +184,22 @@ function dot(parts) {
   return parts.filter(Boolean).flatMap((one, at) => (at ? [el('span', { class: 'mx-dot', text: ' · ' }), one] : [one]));
 }
 
+function zoneLine() {
+  const device = deviceZone();
+  const picker = zoneSelect(viewer.picked ? viewer.zone : '', { blank: device ? said(ZONE_DEVICE, { zone: device }) : ZONE_DEVICE_UNKNOWN });
+  picker.classList.add('rs-zone-pick');
+  picker.setAttribute('aria-label', ZONE_PICKER);
+  picker.addEventListener('change', () => {
+    pickZone(picker.value || null);
+    viewer = viewerZone(sheet.timezone);
+    paint();
+  });
+  return el('p', { class: 'field-help rs-zone' }, [
+    el('span', { text: said(ZONE_LINES[viewer.from] || ZONE_LINES.device, { zone: viewer.zone }) }),
+    el('label', { class: 'rs-zone-change' }, [el('span', { class: 'rs-label', text: ZONE_PICKER }), picker]),
+  ]);
+}
+
 function headCard(day) {
   const { marathon } = sheet;
   const source = marathon.schedule_page
@@ -168,23 +208,23 @@ function headCard(day) {
   const read = marathon.last_fetched_at ? ago(marathon.last_fetched_at) : null;
   return card(null, [
     el('div', { class: 'rs-head' }, [
-      el('h2', { class: 'rs-title', text: said(HEAD, { marathon: marathon.name, day: day ? day.label : '' }) }),
+      el('h2', { class: 'rs-title', text: said(HEAD, { marathon: marathon.name, day: day ? dayLabel(day.starts_at, viewer.zone) : '' }) }),
       day ? driftNode(day) : null,
     ]),
     el('p', { class: 'field-help rs-source' }, dot([
       source,
       el('span', { text: said(SOURCE_LINE, { from: sheet.times_from_word }) }),
-      read ? el('span', { title: read.title, text: said(READ_LINE, { ago: read.text }) }) : null,
-      el('span', { text: said(ZONE_LINE, { zone: sheet.timezone }) }),
+      read ? el('span', { title: stamp(marathon.last_fetched_at), text: said(READ_LINE, { ago: read.text }) }) : null,
       channel(marathon.watch_url) ? el('a', { class: 'say-nothing-do', href: marathon.watch_url, target: '_blank', rel: 'noopener', title: `twitch.tv/${marathon.channel_login}`, text: WATCH }) : null,
     ])),
     el('p', { class: 'field-help' }, boldParts(said(sheet.editable ? KIND_EDITABLE : KIND_READ_ONLY, { source: marathon.source_word }))),
+    zoneLine(),
   ]);
 }
 
 function dayStrip() {
   if (sheet.days.length < 2) return null;
-  const choices = sheet.days.map((one) => [one.key, said(DAY_CHIP, { day: one.label, runs: one.runs })]);
+  const choices = sheet.days.map((one) => [one.key, said(DAY_CHIP, { day: dayLabel(one.starts_at, viewer.zone), runs: one.runs })]);
   return chipBar(choices, shown.day, (key) => {
     shown.day = key;
     shown.open = null;
@@ -198,10 +238,7 @@ function shiftBar(day) {
   const typed = el('input', { class: 'input mono rs-number', type: 'text', inputmode: 'numeric', placeholder: SHIFT_FIELD, 'aria-label': SHIFT_FIELD });
   const byTyped = (sign) => {
     const minutes = Number(typed.value.trim());
-    if (!typed.value.trim()) {
-      say.parentNode.hidden = false;
-      say.say(SHIFT_EMPTY, 'warn');
-    }
+    if (!typed.value.trim()) tell(SHIFT_EMPTY, 'warn');
     else shift(Number.isFinite(minutes) ? sign * Math.abs(minutes) : typed.value.trim());
   };
   const moves = day.can_shift ? [
@@ -220,8 +257,9 @@ function shiftBar(day) {
 
 function saidBar() {
   const undo = sheet.undo.available ? button(UNDO, () => act('undo'), { tone: 'quiet' }) : null;
-  if (undo) undo.title = said(UNDO_HELP, { what: String(sheet.undo.text || '').replaceAll('**', '') });
-  return el('div', { class: 'rs-said', hidden: !say.said && !undo ? true : undefined }, [say, undo]);
+  if (undo) undo.title = said(UNDO_HELP, { what: filled(sheet.undo.text).replaceAll('**', '') });
+  say.say(filled(lastSaid.text), lastSaid.tone);
+  return el('div', { class: 'rs-said', hidden: !lastSaid.text && !undo ? true : undefined }, [say, undo]);
 }
 
 function channel(url) {
@@ -259,11 +297,17 @@ function peopleCell(row) {
   return el('div', { class: 'rs-who mx-chips' }, people.length ? people.map(personChip) : [el('span', { class: 'cell-quiet', text: NOBODY })]);
 }
 
+function clockNode(iso) {
+  const parts = clockParts(iso, viewer.zone);
+  if (!parts) return el('span', { class: 'rs-clock', text: '—' });
+  return el('span', { class: 'rs-clock' }, [parts.time, el('span', { class: 'rs-period', text: ` ${parts.period}` })]);
+}
+
 function clockCell(row) {
   if (!row.start_at) return el('div', { class: 'rs-when' }, [el('span', { class: 'rs-clock', text: '—' })]);
   const off = row.off_plan_minutes !== 0;
   return el('div', { class: 'rs-when' }, [
-    el('span', { class: 'rs-clock', text: clock(row.start_at) }),
+    clockNode(row.start_at),
     el('span', { class: 'rs-from', 'data-from': row.from, text: FROM_WORDS[row.from] || row.from }),
     off ? el('span', { class: 'rs-plan', text: said(PLAN_WORDS[row.plan_from] || '{time}', { time: clock(row.plan_at) }) }) : null,
   ]);
@@ -286,7 +330,7 @@ function typedField(label, value, help, onSave) {
 function editPanel(row) {
   const base = `runs/${row.id}`;
   return el('div', { class: 'rs-edit' }, [
-    row.can.set_start ? typedField(SET_START_FIELD, clock(row.start_at), SET_START_HELP, (time) => act(`${base}/set-start`, { time })) : null,
+    row.can.set_start ? typedField(SET_START_FIELD, clock(row.start_at), said(SET_START_HELP, { zone: viewer.zone }), (time) => act(`${base}/set-start`, { time, zone: viewer.zone })) : null,
     row.can.estimate ? typedField(ESTIMATE_FIELD, length(row.estimate_seconds), ESTIMATE_HELP, (estimate) => act(`${base}/estimate`, { estimate })) : null,
     el('div', { class: 'bar' }, [
       row.can.start && !row.next_up ? button(START_NOW, () => act(`${base}/start`), { tone: 'quiet' }) : null,
@@ -365,7 +409,7 @@ function postsCard(day) {
 }
 
 function movesCard() {
-  const lines = sheet.moves.map((one) => [clock(one.at), new Date(one.at).toLocaleString(), [el('strong', { text: `${one.by_name || one.by_id}: ` }), ...boldParts(one.text)], one.undone ? MOVE_UNDONE : null]);
+  const lines = sheet.moves.map((one) => [clock(one.at), stamp(one.at), [el('strong', { text: `${one.by_name || one.by_id}: ` }), ...boldParts(filled(one.text))], one.undone ? MOVE_UNDONE : null]);
   return card(MOVES_TITLE, [lineList(lines, MOVES_NONE)], { count: sheet.moves.length || null });
 }
 
@@ -414,6 +458,7 @@ async function load() {
   if (String(id) !== String(shown.id)) Object.assign(shown, { day: null, open: null });
   shown.id = id;
   say = notice();
+  lastSaid = { text: '', tone: null };
   root = el('div', { class: 'rs' });
   document.getElementById('dash').replaceChildren(root);
   aside();
@@ -426,6 +471,7 @@ async function load() {
     return;
   }
   sheet = await api(`/api/marathons/${id}/runsheet`);
+  viewer = viewerZone(sheet.timezone);
   paint();
   if (timer === null) timer = setInterval(quietRefresh, REFRESH_MS);
 }

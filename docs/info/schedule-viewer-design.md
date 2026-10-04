@@ -196,7 +196,7 @@ All under `/api/marathons/{marathon_id}/runsheet`, staff only, refusals in the u
 | `GET` | — | `not_found` |
 | `POST …/runs/{run_id}/start` | — | `not_startable` (not upcoming), `no_such_run` |
 | `POST …/runs/{run_id}/finish` | — | `not_live` |
-| `POST …/runs/{run_id}/set-start` | `{time: "14:30"}` — a clock in `default_timezone`, 24-hour or `2:30 pm`; the nearest such moment to the run's current start | `tracker_times`, `not_movable`, `bad_time`, `same_time`, `before_the_run_ahead` |
+| `POST …/runs/{run_id}/set-start` | `{time: "2:30 PM", zone: "America/Denver"}` — a clock read in `zone` (the zone the page is showing; a missing or unknown zone falls back to `default_timezone`); the nearest such moment to the run's current start. See *Times, zones and the 12-hour clock* | `tracker_times`, `not_movable`, `bad_time`, `same_time`, `before_the_run_ahead` |
 | `POST …/shift` | `{day: "<key>" \| "today", minutes: ±1…240}` | `tracker_times`, `bad_minutes`, `no_such_day`, `nothing_to_move`, `before_the_run_ahead` |
 | `POST …/runs/{run_id}/estimate` | `{estimate: "1:20" \| "45"}` (1 min – 12 h) | `tracker_times`, `not_movable`, `bad_estimate`, `same_estimate` |
 | `POST …/runs/{run_id}/skip` · `…/restore` | — | `tracker_times`, `not_skippable` · `not_skipped` |
@@ -211,10 +211,11 @@ marathon        {id, name, source, source_word, schedule_page, phase, phase_word
 editable        true for a source that never moves its own times (the mock's MARATHON_KEEPS_CLOCK)
 kind            "editable" | "read_only"
 times_from      "organisers" | "source" | "tracker"      times_from_word   the same in words
-timezone        default_timezone                          now               the server's clock
+timezone        default_timezone — the page's FALLBACK zone only; every time in this body is an ISO moment
+now             the server's clock
 setup_minutes   marathon_setup_minutes                    heads_up_minutes  min(marathon_reminder_minutes)
 today           the key of the day with the live run, else the first with a run still to start
-days[]          {key, label, starts_at, runs, baf, drift_minutes, drift_run_id,
+days[]          {key (opaque), label (in the server zone — the page labels the day from starts_at), starts_at, runs, baf, drift_minutes, drift_run_id,
                  staff_times, staff_estimates, can_shift, can_reset}
 rows[]          {id, day, order_no, game, category, people[{name, login, part, user_id, member_name, baf,
                  twitch_url, twitch_from, youtube_url, youtube_from, link_from}],
@@ -231,6 +232,44 @@ undo            {available, text}
 Action kinds written: `web.marathon.runsheet_started` · `_finished` · `_start_set` · `_shifted` ·
 `_estimate_set` · `_skipped` · `_restored` · `_reset` · `_undone`, each with `marathon_id`, the
 run or day, and `before` / `after`.
+
+### Times, zones and the 12-hour clock (added 2026-10-03, owner: "have the website get timezone from cookies to always show local time for the person. also lets use am pm and not 24 hour time")
+
+**One formatter, in the page.** The API returns moments and never a formatted time. Row times,
+`days[].starts_at`, `next_posts[].at` and `moves[].at` were already ISO; the answer sentences
+(`message`, `moves[].text`, `undo.text`, and the refusals that name a time) now carry the moment
+as a token — `{{at:2026-10-04T19:03:00.000Z}}` for a clock, `{{day:<ISO>}}` for a day — and the
+page fills them (`timezone.js` `fillMoments`). So a sentence already on the page re-reads in the
+new zone the moment the viewer switches, and the mock holds no clock formatter at all. The bot's
+routes should do the same: moments out, tokens in sentences.
+
+**The zone in use**, first hit: a zone the viewer PICKED on the page → the browser's own
+(`Intl.DateTimeFormat().resolvedOptions().timeZone`) → the one remembered in the cookie (when
+the browser gives none) → the payload's `timezone` (the server's). An unknown zone anywhere is
+skipped, never an error. One small line in the header card says which: *Times shown in your time
+— America/Denver* (or *Times shown in Asia/Tokyo time* when picked, *…the server's time…* on the
+fallback), beside a picker: *My device's time (…)* plus the zones in the `timezone_choices`
+setting (the shared `ui.js` `zoneSelect`).
+
+**The cookie:** `bb_tz`, `Path=/`, `Max-Age=34560000` (400 days), `SameSite=Lax`, not HttpOnly
+(the page writes it). Value: the URL-encoded zone, e.g. `America%2FDenver`; a picked zone is
+`pick%3AAsia%2FTokyo`. Rewritten on every load; *My device's time* deletes it and the next paint
+writes the device zone again. Nothing server-side reads it in the prototype.
+
+**The format:** `12:03 PM` — hour with no leading zero, two-digit minute, one ordinary space,
+upper-case AM / PM. Everywhere: rows, *sheet said*, posts, moves, tooltips, sentences. Days read
+`Sun 4 Oct`. Estimates stay durations (`1:50`). On the sheet the AM / PM is set smaller than the
+digits so the clock column still fits a phone.
+
+**Set start… accepts** `12:40 pm`, `12:40pm`, `1240pm`, `12:40 PM`, `12.40 p.m.`, `7pm`, and
+24-hour `13:40` / `1340`. A clock with no am/pm and an hour from 1 to 12 (`1:40`) is taken as
+whichever of AM and PM is nearer the run's current start. It is read in the zone the page is
+showing (the form says so, and sends it as `zone`), and the answer echoes the time it understood.
+Refused: `25:99`, `13pm`, `0:30 am`, `12:60pm`, a bare `7`, words — with *Type it like
+**2:30 PM** (or 14:30) — it is read in <zone> time.*
+
+**A day** is still a block of runs; its label is the date its first run falls on in the viewer's
+zone, so the same block reads *Sat 3 Oct* in Phoenix and *Sun 4 Oct* in London.
 
 ### Channel links on names (added 2026-10-03, owner: "lets make clicking a host or the runner link to a twitch and or youtube channel if we know it")
 
@@ -270,9 +309,10 @@ it makes an anchor. Links open with `target="_blank" rel="noopener"`.
 
 **Fake in the seed:** every day-2 runner has a `twitch.tv/<their sheet name>` link except
 Lunch_the_great (none) and Ramseyfox (a `http://…example` link, there to show the drop);
-JRisJunior is tied to the mock member Casey, so the name links to `twitch.tv/caseyfast` with a
-YouTube chip — the mock's link rows, not JR's real channels; champrul is tied to Moth, who has no
-link, and is not in the host table; the host table holds Quacksilver → QuacksilverPlays,
+champrul is tied to the mock member Casey, so the name links to `twitch.tv/caseyfast` with a
+YouTube chip — the mock's link rows, not champrul's real channels (the both-links case; it was
+JRisJunior until the owner said, 2026-10-03, "jrisjunior isnt our guy"); JRisJunior is an ordinary
+host with no link and is in no table; the host table holds Quacksilver → QuacksilverPlays,
 anarchy → anarchyasf, sweetpeebs and chibicarrera. SYDNEY J is in no table and stays plain text.
 Marathon 60 now sits on the mock's `gdqhotfix` channel row.
 
@@ -320,8 +360,7 @@ the day's staff times and staff estimates; real starts and finishes stay, and so
   third went live five minutes ahead of its sheet time. Its "source sheet" times are invented
   (the same runs chained with a 7-minute setup). Day 1 is three finished runs a day earlier, there
   only so the day strip shows on an editable sheet.
-- **BaF people.** The_Mathcat, JRisJunior and champrul are tied to three mock members (Dax,
-  Casey, Moth) so the `✦BaF` mark and the posts panel have something to show.
+- **BaF people.** The_Mathcat and champrul are tied to two mock members (Dax, Casey) so the `✦BaF` mark and the posts panel have something to show.
 - **The posts panel** is worked out from the sheet; nothing is posted, and "its time has passed"
   is only the clock, not a record of a post having gone.
 
@@ -363,7 +402,10 @@ not wired into `scripts/deploy.ps1` or CI.
    looking for.
 8. **Only the next run shows *Started now* on its row** on an editable sheet; the rest keep it
    behind **Edit…**. On a read-only sheet every upcoming run shows it, since nothing else is there.
-9. **No timezone picker** (§7's borrowed idea): times are in `default_timezone`, as the drawer's are.
+9. ~~No timezone picker~~ — SUPERSEDED the same day: times are in the viewer's own zone with a
+   picker (*Times, zones and the 12-hour clock*). ⚠️ The run sheet is now the ONLY page that does
+   this; the Events drawer still shows `default_timezone` in 24-hour, so the two disagree until
+   the rest of the site follows.
 10. **The Discord door (§6) is not built**, and decision 7 (a post that already went out) is not
     modelled — the posts panel only shows where the times would land.
 11. **The run sheet uses its own start / finish routes**, not `…/runs/{id}/live` and `/done`:

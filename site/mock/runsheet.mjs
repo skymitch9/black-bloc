@@ -63,15 +63,35 @@ export function clockNear(near, hour, minute, timeZone) {
 }
 
 export function clockOf(given) {
-  const found = /^\s*(\d{1,2})[:.h]?(\d{2})\s*(am|pm)?\s*$/i.exec(String(given ?? ''));
-  if (!found) return null;
+  const said = String(given ?? '').trim().toLowerCase().replace(/\./g, (dot, at, all) => (/\d/.test(all[at + 1] || '') ? ':' : ''));
+  const found = /^(\d{1,2})(?:[:h]?(\d{2}))?\s*(am|pm)?$/.exec(said);
+  if (!found || (found[2] === undefined && !found[3])) return null;
   let hour = Number(found[1]);
-  const minute = Number(found[2]);
-  const half = (found[3] || '').toLowerCase();
+  const minute = Number(found[2] || 0);
+  const half = found[3] || null;
+  if (minute > 59) return null;
   if (half && (hour < 1 || hour > 12)) return null;
   if (half === 'pm' && hour < 12) hour += 12;
   if (half === 'am' && hour === 12) hour = 0;
-  return hour > 23 || minute > 59 ? null : { hour, minute };
+  if (hour > 23) return null;
+  return { hour, minute, either: !half && hour >= 1 && hour <= 12 };
+}
+
+export function clockMoment(near, wanted, timeZone) {
+  const hours = wanted.either ? [wanted.hour % 12, (wanted.hour % 12) + 12] : [wanted.hour];
+  return hours
+    .map((hour) => clockNear(near, hour, wanted.minute, timeZone))
+    .sort((a, b) => Math.abs(a - near) - Math.abs(b - near))[0];
+}
+
+export function zoneOr(given, fallback) {
+  if (typeof given !== 'string' || !given.trim()) return fallback;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: given });
+    return given;
+  } catch (error) {
+    return fallback;
+  }
 }
 
 export function minutesOf(given) {
@@ -182,7 +202,7 @@ export function sheetOf(runs, { now, editable }) {
 export function runsheetSeed(members, staffId) {
   const anchor = Math.round(Date.now() / MIN) * MIN + 2 * MIN;
   const at = (minutes) => iso(anchor + minutes * MIN);
-  const baf = { The_Mathcat: members[6].id, JRisJunior: members[1].id, champrul: members[3].id };
+  const baf = { The_Mathcat: members[6].id, champrul: members[1].id };
   const person = (name, part) => {
     const linked = part === 'runner' && !DEMO_NO_LINK.has(name) && !DEMO_BAD_LINK[name];
     return { name, login: linked ? name.toLowerCase() : null, url: linked ? `https://www.twitch.tv/${name}` : DEMO_BAD_LINK[name] || null, part, user_id: baf[name] || null };
@@ -258,7 +278,7 @@ export function runsheetSeed(members, staffId) {
 
 export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberName, logAction, state, marathonOf, marathonRow, keepsClock }) {
   const zone = () => String(state().settings.get('default_timezone') || 'America/Phoenix');
-  const clock = (at) => zoned(at, zone()).time;
+  const clock = (at) => `{{at:${iso(at)}}}`;
   const setupMinutes = () => Number(state().settings.get('marathon_setup_minutes') || 7);
   const leadMinutes = () => {
     const found = String(state().settings.get('marathon_reminder_minutes') || '15').split(',').map((one) => Number(one.trim())).filter((one) => one > 0);
@@ -280,7 +300,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
       if (!days[row.day]) {
         const found = zoned(row.plan, zone());
         const taken = days.some((one) => one.key === found.key);
-        days[row.day] = { index: row.day, key: taken ? `${found.key}-${row.day}` : found.key, label: found.label, starts_at: iso(row.plan), rows: [] };
+        days[row.day] = { index: row.day, key: taken ? `${found.key}-${row.day}` : found.key, label: found.label, starts_at: iso(row.plan), said: `{{day:${iso(row.plan)}}}`, rows: [] };
       }
       days[row.day].rows.push(row);
     }
@@ -561,10 +581,11 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
       refuseReadOnly(row);
       const run = runOf(row, context.params.run_id);
       if (run.state !== 'upcoming') throw new Refused(409, 'not_movable', `**${run.game}** is ${STATE_WORDS[run.state] || run.state}, so its start was not changed. Only a run that has not started takes a new start time.`);
+      const readIn = zoneOr(body.zone, zone());
       const wanted = clockOf(body.time);
-      if (!wanted) throw new Refused(400, 'bad_time', `**${String(body.time ?? '').slice(0, 20) || 'Nothing'}** is not a time, so nothing was changed. Type it like **14:30** (24-hour, ${zone()} time).`);
+      if (!wanted) throw new Refused(400, 'bad_time', `**${String(body.time ?? '').slice(0, 20) || 'Nothing'}** is not a time, so nothing was changed. Type it like **2:30 PM** (or 14:30) — it is read in ${readIn} time.`);
       const was = timed(row, run);
-      const target = clockNear(was.start, wanted.hour, wanted.minute, zone());
+      const target = clockMoment(was.start, wanted, readIn);
       if (target === was.start) throw new Refused(409, 'same_time', `**${run.game}** already starts at ${clock(target)}, so nothing was changed.`);
       refuseBeforeBegun(row, run, target, clock(target));
       const delta = target - was.start;
@@ -574,7 +595,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
       const by = Math.round(Math.abs(delta) / MIN);
       return {
         text: `**${run.game}** set to start at ${clock(target)} (was ${clock(was.start)})`,
-        details: { run_id: run.id, before: iso(was.start), after: iso(target) },
+        details: { run_id: run.id, before: iso(was.start), after: iso(target), zone: readIn },
         message: `**${run.game}** now starts at ${clock(target)} (was ${clock(was.start)}). The ${plural(after.length, 'run')} after it keep their gaps, so each starts ${by} min ${delta > 0 ? 'later' : 'earlier'}.`,
       };
     });
@@ -590,7 +611,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
       }
       const day = dayOf(row, body.day);
       const waiting = day.rows.filter((one) => one.run.state === 'upcoming');
-      if (!waiting.length) throw new Refused(409, 'nothing_to_move', `Every run on ${day.label} has started already, so there is nothing left to move.`);
+      if (!waiting.length) throw new Refused(409, 'nothing_to_move', `Every run on ${day.said} has started already, so there is nothing left to move.`);
       const [first] = waiting;
       const target = first.start + minutes * MIN;
       refuseBeforeBegun(row, first.run, target, `${Math.abs(minutes)} min ahead`);
@@ -598,9 +619,9 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
       first.run.staff_at = iso(target);
       const way = minutes > 0 ? 'later' : 'earlier';
       return {
-        text: `Every run not yet started on ${day.label} moved ${Math.abs(minutes)} min ${way}`,
+        text: `Every run not yet started on ${day.said} moved ${Math.abs(minutes)} min ${way}`,
         details: { day: day.key, minutes, runs: waiting.length, before: iso(first.start), after: iso(target) },
-        message: `Every run not yet started on ${day.label} now starts **${Math.abs(minutes)} min ${way}**: ${plural(waiting.length, 'run')}, from **${first.run.game}** (${clock(first.start)} → ${clock(target)}). Live and finished runs did not move.`,
+        message: `Every run not yet started on ${day.said} now starts **${Math.abs(minutes)} min ${way}**: ${plural(waiting.length, 'run')}, from **${first.run.game}** (${clock(first.start)} → ${clock(target)}). Live and finished runs did not move.`,
       };
     });
   });
@@ -673,13 +694,13 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
       const day = dayOf(row, body.day);
       const times = day.rows.filter((one) => one.run.staff_at);
       const estimates = day.rows.filter((one) => one.run.staff_estimate_seconds);
-      if (!times.length && !estimates.length) throw new Refused(409, 'not_retimed', `${day.label} carries no staff time and no staff estimate, so it is on the source's times already and nothing was changed.`);
+      if (!times.length && !estimates.length) throw new Refused(409, 'not_retimed', `${day.said} carries no staff time and no staff estimate, so it is on the source's times already and nothing was changed.`);
       for (const one of times) delete one.run.staff_at;
       for (const one of estimates) delete one.run.staff_estimate_seconds;
       return {
-        text: `${day.label} put back on the source's times`,
+        text: `${day.said} put back on the source's times`,
         details: { day: day.key, times: times.length, estimates: estimates.length },
-        message: `${day.label} is back on the source's times: ${plural(times.length, 'staff time')} and ${plural(estimates.length, 'staff estimate')} forgotten. Runs that really started or finished keep what happened, and skipped runs stay skipped.`,
+        message: `${day.said} is back on the source's times: ${plural(times.length, 'staff time')} and ${plural(estimates.length, 'staff estimate')} forgotten. Runs that really started or finished keep what happened, and skipped runs stay skipped.`,
       };
     });
   });

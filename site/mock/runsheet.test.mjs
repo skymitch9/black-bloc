@@ -4,7 +4,8 @@
 //   node site/mock/runsheet.test.mjs                 (pure fixtures only)
 //   MOCK_PORT=8798 node site/mock/runsheet.test.mjs  (also walks the mock; it resets the mock's state)
 
-import { channelsOf, clockNear, clockOf, minutesOf, safeChannel, sheetOf } from './runsheet.mjs';
+import { channelsOf, clockMoment, clockNear, clockOf, minutesOf, safeChannel, sheetOf, zoneOr } from './runsheet.mjs';
+import { clockParts, clockTime, cookieLine, dayLabel, fillMoments, validZone, zoneChoice } from '../public/assets/timezone.js';
 
 const MIN = 60000;
 const failures = [];
@@ -58,10 +59,35 @@ runs = day().map((one) => ({ ...one, organisers_at: null }));
 is('with no organisers sheet the tag is the source sheet', froms(sheet(runs))[0], 'source');
 is('a tracker sheet shows the tracker time and never chains', froms(sheetOf(day(), { now: T0, editable: false })), ['tracker', 'tracker', 'tracker', 'tracker']);
 
-is('clockOf 14:30', clockOf('14:30'), { hour: 14, minute: 30 });
-is('clockOf 2:05 pm', clockOf('2:05 pm'), { hour: 14, minute: 5 });
-is('clockOf 1430', clockOf('1430'), { hour: 14, minute: 30 });
-is('clockOf 25:99', clockOf('25:99'), null);
+const pm = { hour: 12, minute: 40, either: false };
+for (const typed of ['12:40 pm', '12:40pm', '1240pm', '12:40 PM', '12.40 p.m.', ' 12:40 Pm ']) is(`clockOf ${JSON.stringify(typed)}`, clockOf(typed), pm);
+is('clockOf 13:40 (24-hour still works)', clockOf('13:40'), { hour: 13, minute: 40, either: false });
+is('clockOf 1340', clockOf('1340'), { hour: 13, minute: 40, either: false });
+is('clockOf 7pm', clockOf('7pm'), { hour: 19, minute: 0, either: false });
+is('clockOf 12:05 am is five past midnight', clockOf('12:05 am'), { hour: 0, minute: 5, either: false });
+is('clockOf 1:40 with no am or pm could be either', clockOf('1:40'), { hour: 1, minute: 40, either: true });
+for (const typed of ['25:99', '13pm', '0:30 am', '12:60pm', 'abc', '7', '', 'noon']) is(`clockOf refuses ${JSON.stringify(typed)}`, clockOf(typed), null);
+const oneTwenty = Date.UTC(2026, 9, 4, 20, 20);
+is('1:40 typed for a run at 1:20 PM Phoenix means 1:40 PM', new Date(clockMoment(oneTwenty, clockOf('1:40'), 'America/Phoenix')).toISOString(), '2026-10-04T20:40:00.000Z');
+is('…and 1:40 am typed outright is taken at its word', new Date(clockMoment(oneTwenty, clockOf('1:40 am'), 'America/Phoenix')).toISOString(), '2026-10-04T08:40:00.000Z');
+const sunday = '2026-10-04T19:03:00.000Z';
+is('a row time in Phoenix', clockTime(sunday, 'America/Phoenix'), '12:03 PM');
+is('the same moment in New York', clockTime(sunday, 'America/New_York'), '3:03 PM');
+is('the same moment in Tokyo is the next morning', [dayLabel(sunday, 'Asia/Tokyo'), clockTime(sunday, 'Asia/Tokyo')], ['Mon 5 Oct', '4:03 AM']);
+is('the day in Phoenix', dayLabel(sunday, 'America/Phoenix'), 'Sun 4 Oct');
+is('midnight reads 12:00 AM, with a plain space', clockTime('2026-10-04T07:00:00.000Z', 'America/Phoenix'), '12:00 AM');
+is('clockParts splits the period off', clockParts(sunday, 'America/Phoenix'), { time: '12:03', period: 'PM' });
+is('fillMoments fills both kinds', fillMoments('**X** now starts at {{at:2026-10-04T19:03:00.000Z}} on {{day:2026-10-04T19:03:00.000Z}}', 'America/New_York'), '**X** now starts at 3:03 PM on Sun 4 Oct');
+is('a typed 12:10 PM in Tokyo, for a run that is Sunday evening in Phoenix', new Date(clockMoment(Date.UTC(2026, 9, 5, 3, 0), clockOf('12:10 pm'), 'Asia/Tokyo')).toISOString(), '2026-10-05T03:10:00.000Z');
+is('a typed 12:10 AM in Auckland lands on the next calendar day there', new Date(clockMoment(Date.UTC(2026, 9, 4, 10, 50), clockOf('12:10 am'), 'Pacific/Auckland')).toISOString(), '2026-10-04T11:10:00.000Z');
+is('validZone', [validZone('America/Denver'), validZone('Mars/Phobos'), validZone(''), validZone(null)], [true, false, false, false]);
+is('zoneOr falls back on a zone that is not one', [zoneOr('Asia/Tokyo', 'America/Phoenix'), zoneOr('Mars/Phobos', 'America/Phoenix'), zoneOr(undefined, 'America/Phoenix')], ['Asia/Tokyo', 'America/Phoenix', 'America/Phoenix']);
+is('no cookie: the device zone', zoneChoice('', 'America/Denver', 'America/Phoenix'), { zone: 'America/Denver', picked: false, from: 'device' });
+is('a picked zone beats the device', zoneChoice('x=1; bb_tz=pick%3AAsia%2FTokyo', 'America/Denver', 'America/Phoenix'), { zone: 'Asia/Tokyo', picked: true, from: 'picked' });
+is('a remembered device zone gives way to the device as it is now', zoneChoice('bb_tz=America%2FChicago', 'America/Denver', 'America/Phoenix').zone, 'America/Denver');
+is('no device zone: the remembered one', zoneChoice('bb_tz=America%2FChicago', null, 'America/Phoenix'), { zone: 'America/Chicago', picked: false, from: 'remembered' });
+is('a cookie that is not a zone and no device zone: the server zone', zoneChoice('bb_tz=pick%3AMars%2FPhobos', 'Nowhere/Land', 'America/Phoenix'), { zone: 'America/Phoenix', picked: false, from: 'server' });
+is('the cookie line', cookieLine('America/Denver', false), 'bb_tz=America%2FDenver; Path=/; Max-Age=34560000; SameSite=Lax');
 is('minutesOf 1:20', minutesOf('1:20'), 80);
 is('minutesOf 45', minutesOf('45'), 45);
 is('minutesOf abc', minutesOf('abc'), null);
@@ -149,6 +175,22 @@ async function walk(port) {
 
   const finished = (await post(`runs/${next.id}/finish`)).body;
   is('walk: Finished now: next = finish + 10 min setup', ms(today(finished)[4].start_at), ms(today(finished)[3].actual_ended_at) + 10 * MIN);
+
+  const tokyo = (iso) => clockTime(iso, 'Asia/Tokyo');
+  const fifth = today(finished)[5];
+  const inTokyo = (await post(`runs/${fifth.id}/set-start`, { time: tokyo(ms(fifth.start_at) + 20 * MIN), zone: 'Asia/Tokyo' })).body;
+  is('walk: a time typed in Tokyo style and zone moves the run 20 min', ms(today(inTokyo)[5].start_at) - ms(fifth.start_at), 20 * MIN);
+  is('walk: the answer carries the moment, not a formatted time', /\{\{at:\d{4}-/.test(inTokyo.message) && !/\d:\d\d/.test(inTokyo.message.replace(/\{\{[^}]+\}\}/g, '')), true);
+  is('walk: …which fills as 12-hour in the viewer zone', /now starts at \d{1,2}:\d\d (AM|PM) \(was \d{1,2}:\d\d (AM|PM)\)/.test(fillMoments(inTokyo.message, 'Asia/Tokyo')), true);
+  const phoenix = clockTime(ms(today(inTokyo)[5].start_at) + 5 * MIN, seed.timezone);
+  const fallback = (await post(`runs/${fifth.id}/set-start`, { time: phoenix, zone: 'Mars/Phobos' })).body;
+  is('walk: a zone that is not one is read in the server zone', ms(today(fallback)[5].start_at) - ms(today(inTokyo)[5].start_at), 5 * MIN);
+  const badTime = await post(`runs/${fifth.id}/set-start`, { time: 'teatime', zone: 'Asia/Tokyo' });
+  is('walk: a refused time names the new style and the zone', /2:30 PM/.test(badTime.body.message) && /Asia\/Tokyo/.test(badTime.body.message), true);
+  const everyone = seed.rows.flatMap((one) => one.people);
+  is('walk: JRisJunior is an ordinary host', everyone.filter((one) => one.name === 'JRisJunior').map((one) => [one.baf, one.user_id]), [[false, null], [false, null]]);
+  is('walk: no post is about JRisJunior', seed.next_posts.some((one) => one.text.includes('JRisJunior')), false);
+  is('walk: champrul is the BaF host and carries both links', everyone.filter((one) => one.name === 'champrul').map((one) => [one.baf, Boolean(one.twitch_url), Boolean(one.youtube_url)]), [[true, true, true]]);
 
   refused('walk: starting a done run', await post(`runs/${next.id}/start`), 409, 'not_startable');
   refused('walk: a time that is not a time', await post(`runs/${third.id}/set-start`, { time: '25:99' }), 400, 'bad_time');
