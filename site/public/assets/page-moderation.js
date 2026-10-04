@@ -34,8 +34,8 @@ const KINDS = ['warn', 'timeout', 'untimeout', 'kick', 'ban', 'unban'];
 const DESTRUCTIVE = ['kick', 'ban', 'unban'];
 const PILL_FEATURES = [['automod', 'Automod'], ['honeypot', 'Honeypot']];
 const LOG_LEVEL_KEY = 'mod_log_level';
-const LOG_LEVEL_NOTE = 'How much of what moderation does is repeated into the Discord log ' +
-  'channel. The Logs section below is written to whatever this says.';
+const TIMEOUT_MAX_S = 2419200;
+const TIMEOUT_TOO_LONG = 'Discord refuses a timeout over 28 days (2,419,200 seconds).';
 
 const FILTERS = [
   ['all', 'All', null],
@@ -237,8 +237,9 @@ function actionBar() {
   const kind = el('select', { class: 'input' });
   for (const one of KINDS) kind.append(el('option', { value: one, text: one }));
   const reason = el('input', { class: 'input', type: 'text', placeholder: 'why — the member is told this' });
-  const length = el('input', { class: 'input', type: 'number', min: '60', step: '60', value: '300' });
-  const lengthField = field('Timeout length, seconds', length, 'Discord refuses anything over 28 days.');
+  const length = el('input', { class: 'input', type: 'number', min: '60', max: String(TIMEOUT_MAX_S), step: '60', value: '300' });
+  const lengthField = field('Timeout length, seconds', length);
+  length.addEventListener('input', () => say.say(Number(length.value) > TIMEOUT_MAX_S ? TIMEOUT_TOO_LONG : '', 'warn'));
   const paintLength = () => { lengthField.hidden = kind.value !== 'timeout'; };
   kind.addEventListener('change', paintLength);
   paintLength();
@@ -293,9 +294,9 @@ function editors(row, say) {
   const reason = el('input', { class: 'input', type: 'text', value: row.reason || '' });
   const note = el('input', { class: 'input', type: 'text', value: row.note || '' });
   return [
-    field('Reason', reason, 'What the member was told. Editing it leaves one case.reason_edited line.'),
+    field('Reason the member was told', reason),
     bar([button('Save the reason', () => correct(row, say, 'reason', { reason: reason.value }))]),
-    field('Note', note, 'For the next moderator, not for the member. One note per case, replaced not appended.'),
+    field('Staff note', note),
     bar([button(row.note ? 'Save the note' : 'Add the note', () => correct(row, say, 'note', { note: note.value }))]),
   ];
 }
@@ -404,7 +405,7 @@ async function load() {
     },
   });
 
-  const act = section('Take an action', 'The same code path as the slash command, into the same case table.');
+  const act = section('Take an action');
   act.body.append(actionBar());
 
   if (state.userFilter && !state.userName) {
@@ -416,7 +417,7 @@ async function load() {
     : null;
   const only = section(
     'Only one member',
-    filtered || 'Ask the bot for one member’s cases instead of the whole page.',
+    filtered,
     { open: Boolean(state.userFilter) },
   );
   only.body.append(picker.node);
@@ -424,7 +425,7 @@ async function load() {
   const level = Object.values(allSettings || {})
     .flatMap((group) => (Array.isArray(group) ? group : []))
     .filter((spec) => spec.key === LOG_LEVEL_KEY);
-  const levelBox = section('Settings', LOG_LEVEL_NOTE, { count: level.length || null });
+  const levelBox = section('Settings', null, { count: level.length || null });
   levelBox.body.append(await settingsPanel(level, {
     where: 'Settings',
     empty: 'The bot registers no mod_log_level key, so this is not shown rather than guessed at.',

@@ -38,30 +38,14 @@ const SOURCE_LABEL = {
   staff: 'staff',
   practice: 'practice',
 };
-const BUTTON_HELP = 'One message with an Open a ticket button under it. Pressing it asks what is '
-  + 'happening and opens a ticket — the same one a DM opens. Its heading and wording are the '
-  + 'modmail_panel_title and modmail_panel_text settings below.';
-const DOOR_HELP = 'One message with three buttons: Ask staff privately opens a ticket, Request '
-  + 'something files a request, and Propose an event starts an event proposal. Each press opens '
-  + 'the flow that already exists, so each one answers with its own words when it is switched '
-  + 'off. Edit its words (below) changes the heading, the line, the three labels and which '
-  + 'buttons show — the same editor as the Posts page’s Blocks section.';
 const DOOR_WORDS = 'Edit its words';
 const DOOR_OFF_LINE = 'frontdoor_mode is off, so /ask is hidden and no front door stays posted.';
 const DOOR_SHADOW_HOMELESS = 'shadow — the door has nowhere to rehearse, so it is posted nowhere '
   + 'at all. Set shadow_channel_id on the Settings page.';
 const DOOR_SHADOW_NOWHERE_END = '. It has no channel of its own yet, and nothing reaches members '
   + 'until the door is on.';
-const DOOR_SHADOW_FOLLOWS = 'The Open a ticket button follows the door while it is rehearsing, so '
-  + 'it comes down too — frontdoor_replaces_ticket_button below is what switches that off.';
-const DOOR_ONE_PER_CHANNEL = 'While the front door is up in the ticket button’s channel, that '
-  + 'button is taken down — one door per channel. Moving the front door elsewhere, or taking it '
-  + 'down, puts the ticket button back within five minutes. frontdoor_replaces_ticket_button '
-  + 'below is what switches that off.';
-const FORUM_HELP = 'In forum mode every ticket is a post of its own, tagged open while it is '
-  + 'running and closed when it ends, so the list never grows without end. Make the forum puts '
-  + 'one under the ticket category with that category’s own permissions; modmail_mode below is '
-  + 'what starts using it.';
+const DOOR_SHADOW_FOLLOWS = 'The Open a ticket button is down while the door rehearses.';
+const DOOR_ONE_PER_CHANNEL = 'The Open a ticket button in this channel is down while the front door is here.';
 
 function messageNode(message) {
   const direction = message.direction === 'note' ? 'note' : message.direction === 'out' ? 'out' : 'in';
@@ -245,7 +229,6 @@ async function ticketButtonCard(placed) {
     }
   }, { tone: 'danger' });
   return card('Ticket button', [
-    el('p', { text: BUTTON_HELP }),
     posted
       ? el('p', {}, ['It is in ', nameNode(posted), '.'])
       : sayNothing('No ticket button is posted anywhere.'),
@@ -268,7 +251,6 @@ function ticketForumCard(forumId) {
     }
   }, { tone: 'warn' });
   return card('Ticket forum', [
-    el('p', { text: FORUM_HELP }),
     forumId
       ? el('p', {}, ['Ticket posts go in ', nameNode(forumId), '.'])
       : sayNothing('There is no ticket forum yet, so forum mode would have nowhere to post.'),
@@ -305,6 +287,13 @@ function doorPreview(door) {
     el('p', { text: door.text }),
     bar(buttons.map((label) => button(label, () => {}, { tone: 'quiet', disabled: true }))),
   ]);
+}
+
+function doorTicketLine(door) {
+  if (door.replaces === false || door.mode === 'off') return null;
+  if (door.mode === 'shadow') return el('p', { class: 'muted', text: DOOR_SHADOW_FOLLOWS });
+  const shared = door.channel_id && String(door.channel_id) === String(door.ticket_channel_id || '');
+  return shared ? el('p', { class: 'muted', text: DOOR_ONE_PER_CHANNEL }) : null;
 }
 
 async function frontDoorCard(door) {
@@ -349,10 +338,9 @@ async function frontDoorCard(door) {
     }
   }, { tone: 'danger' });
   return card('Front door', [
-    el('p', { text: DOOR_HELP }),
     doorWhere(door),
     doorPreview(door),
-    el('p', { class: 'muted', text: door.mode === 'shadow' ? DOOR_SHADOW_FOLLOWS : DOOR_ONE_PER_CHANNEL }),
+    doorTicketLine(door),
     el('div', { class: 'formrow' }, [field('Put it in', where), bar(posted ? [post, down] : [post])]),
     say,
     foldout(DOOR_WORDS, [await frontDoorWords({
@@ -391,6 +379,8 @@ async function panelSettings() {
       ticket_label: value('frontdoor_ticket_label'),
       request_label: value('frontdoor_request_label'),
       event_label: value('frontdoor_event_label'),
+      replaces: value('frontdoor_replaces_ticket_button'),
+      ticket_channel_id: channelId,
     },
   };
 }
@@ -442,17 +432,17 @@ async function load() {
     nodes.push(view.node);
   }
 
-  const two = section('Snippets', 'Canned replies staff can send without retyping them.', {
+  const two = section('Snippets', null, {
     count: snippets.length,
   });
   two.body.append(snippetsCard(snippets));
 
-  const three = section('Blocks', 'A blocked member’s DMs stop opening tickets, and they are not told.', {
+  const three = section('Blocks', null, {
     count: blocks.length,
   });
   three.body.append(blocksCard(blocks));
 
-  const four = section('Doors', 'The messages Black Bloc keeps posted, and where they live.');
+  const four = section('Doors');
   const placed = await panelSettings();
   four.body.append(await frontDoorCard(placed.door));
   four.body.append(await ticketButtonCard(placed));

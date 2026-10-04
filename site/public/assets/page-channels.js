@@ -41,11 +41,6 @@ const WORD_KEYS = [
   'chat_channel_reach_ignored',
 ];
 
-const REVIEW_NOTE = 'Each channel came with a one-sentence description drafted from its name. ' +
-  'Use it as it is, change the words and save yours, or decide the channel needs no note. ' +
-  'Black Bloc reads only what is used or saved — a draft nobody has decided is never read.';
-const SEES_NOTE = 'The exact channel list the conversation models are handed with every answer. ' +
-  'It is rebuilt each time, so a decision here reaches the very next answer.';
 const SEES_TRIMMED = 'To stay inside the budget, the longest descriptions were left off these ' +
   'channels: {names}. Shorten a note to bring them back.';
 const NO_CHANNELS = 'Black Bloc could not list the server\'s text channels, so there is nothing ' +
@@ -246,7 +241,6 @@ function seesCard(payload) {
   const share = cap > 0 ? Math.max(0, Math.min(1, used / cap)) : 0;
   const trimmed = Array.isArray(budget.trimmed) ? budget.trimmed : [];
   return card(null, [
-    el('p', { class: 'section-note', text: SEES_NOTE }),
     el('div', { class: 'chipbar' }, [
       el('span', { class: 'chat-answer-label', text: `${used} of ${cap} bytes used` }),
       trimmed.length ? badge(`${trimmed.length} description(s) left off`, 'warn') : null,
@@ -362,7 +356,7 @@ async function load() {
   view.review = payload?.review || null;
   paintProgress(payload?.review);
 
-  const review = section('Review', REVIEW_NOTE, { id: 'review', open: true, count: view.rows.length || null });
+  const review = section('Review', null, { id: 'review', open: true, count: view.rows.length || null });
   const list = el('div', { class: 'review-list' });
   const empty = sayNothing(NOTHING_MATCHES);
   const shown = el('p', { class: 'section-note review-shown' });

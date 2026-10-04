@@ -19,11 +19,6 @@ import {
   when,
 } from './ui.js';
 
-const COSTS_NOTE = 'Every dollar Black Bloc costs, in one place. The model figures are ' +
-  'measured from its own ledger; hosting is what somebody typed in off the invoice; the free ' +
-  'things are named at $0 rather than left out.';
-const SECRETS_NOTE = 'The keys Black Bloc is configured with, by name. No value is ever read ' +
-  'out of the bot, so this says set or unset and nothing else.';
 const NO_MODELS = 'No model call has been paid for this month.';
 const HOSTING_SETTING = '/settings.html#cost_hosting_usd';
 const HOSTING_LINK = 'Fill it in';
@@ -153,7 +148,7 @@ function costs(payload) {
   const items = payload?.items || [];
   // Counted explicitly: left to itself the shared rail counts TABLE rows, which here would
   // read as eleven costs when it is really two model rows and nine key names.
-  const one = section('Costs', COSTS_NOTE, { count: items.length + (payload?.models || []).length });
+  const one = section('Costs', null, { count: items.length + (payload?.models || []).length });
   one.body.append(card(null, [
     el('div', { class: 'chipbar' }, [
       el('span', { class: 'spend-figure', text: dollars(total.month_usd) }),
@@ -165,7 +160,7 @@ function costs(payload) {
     total.hosting_usd
       ? null
       : sayNothing(
-        'Hosting is the one figure nobody can read off the bot.',
+        'No hosting figure is set.',
         linkAction(HOSTING_LINK, HOSTING_SETTING),
       ),
   ]));
@@ -177,17 +172,11 @@ function costs(payload) {
   one.body.append(foldout('Keys, by name', [secrets(payload?.secrets || [])], {
     count: (payload?.secrets || []).length || null,
   }));
-  one.body.append(el('p', { class: 'section-note', text: SECRETS_NOTE }));
   return one.node;
 }
 
-const SELFTEST_NOTE = 'Black Bloc exercising itself against this server: every setting’s ' +
-  'channel and role, every read these pages make, and every panel posted as a real card in ' +
-  'Discord. The cards are deleted again a few minutes later; the lines are kept here under Test.';
-const SELFTEST_NEVER = 'It has not run in this server yet. Run it and watch — nothing here is ' +
-  'destructive, and the cards it posts are cleaned up on their own.';
-const SELFTEST_GOING = 'A run is going right now. This card refreshes itself every 15 seconds ' +
-  'until it finishes.';
+const SELFTEST_NEVER = 'It has not run in this server yet.';
+const SELFTEST_GOING = 'A run is going right now.';
 const SELFTEST_LOGS = 'Every Test line';
 const POLL_SECONDS = 15;
 
@@ -223,7 +212,7 @@ function failureRows(checks) {
  * so the button that proves it lives here rather than on Settings, which owns values.
  */
 function selftest() {
-  const one = section('Self-test', SELFTEST_NOTE, { id: 'selftest' });
+  const one = section('Self-test', null, { id: 'selftest' });
   const body = el('div', { class: 'logs-results' });
   const said = el('p', { class: 'section-note', hidden: true });
   let timer = null;

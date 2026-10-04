@@ -969,9 +969,10 @@ export function whenField({
   const named = () => (picked ? picked.value : tz || (zone ? HERE_ZONE : null));
   const say = () => {
     const zoneLine = zoneWord === null
-      ? (named() ? `Read in ${named()}.` : null)
+      ? (!picked && named() ? `Read in ${named()}.` : null)
       : zoneWord;
     line.textContent = [help, zoneLine].filter(Boolean).join(' ');
+    line.hidden = !line.textContent;
   };
   if (picked) picked.addEventListener('change', say);
   say();
@@ -1820,7 +1821,6 @@ export function sayAgain(where, say) {
 
 const FORMAT_TAB_NOTE = 'Tab indents inside the box; Ctrl+M lets Tab leave it.';
 const LINK_TITLE = 'Add a link';
-const LINK_ASK = 'The web address the words should open.';
 const LINK_BAD = 'That is not a web address. Start it with https:// — for example https://example.org.';
 const LINK_OK = 'Add the link';
 const HEADING_LABEL = 'Heading';
@@ -1886,7 +1886,7 @@ async function askLink(box) {
   let url = null;
   const agreed = await askForm({
     title: LINK_TITLE,
-    body: [field('Web address', input, LINK_ASK)],
+    body: [field('Web address', input)],
     confirmLabel: LINK_OK,
     tone: null,
     onConfirm: () => {
