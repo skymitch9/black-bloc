@@ -1824,7 +1824,7 @@ MEMBER_OPTOUT_DELETE = CHANNEL_OPTOUT_DELETE
 MEMBER_OPTOUT_LEAVE = CHANNEL_OPTOUT_LEAVE
 MEMBER_OPTOUT_POSTS = CHANNEL_OPTOUT_POSTS
 SPOTLIGHT_POLL_MINUTES = 5
-SPOTLIGHT_POLL_MIN_MINUTES = 2
+SPOTLIGHT_POLL_MIN_MINUTES = 1
 SPOTLIGHT_POLL_MAX_MINUTES = 30
 SPOTLIGHT_END_MISSES = 2
 SPOTLIGHT_END_MISSES_MIN = 1
@@ -1923,8 +1923,8 @@ KEY_MAX[SPOTLIGHT_DEFAULT_DAYS_KEY] = SPOTLIGHT_DEFAULT_DAYS_MAX
 KEY_MIN[SPOTLIGHT_EVENT_SLACK_KEY] = SPOTLIGHT_EVENT_SLACK_MIN
 KEY_MAX[SPOTLIGHT_EVENT_SLACK_KEY] = SPOTLIGHT_EVENT_SLACK_MAX
 KEY_MIN_REASON[SPOTLIGHT_POLL_MINUTES_KEY] = (
-    "Asking Twitch about the same handful of channels more often than every {limit} minutes "
-    "spends the quota and finds a marathon no sooner."
+    "Twitch is asked at most once a minute: a gap shorter than {limit} minute spends the "
+    "quota and finds a marathon no sooner."
 )
 KEY_MAX_REASON[SPOTLIGHT_POLL_MINUTES_KEY] = (
     "A gap longer than {limit} minutes means a spotlighted stream can be well under way before "
