@@ -108,3 +108,11 @@
   .rs-typed { flex-wrap: wrap; }
   .rs-picker { max-width: 100%; }
 }
+
+.rs-person { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; max-width: 100%; }
+.rs-who .rs-person .mx-chip { flex: none; white-space: nowrap; }
+a.rs-link { text-decoration: none; cursor: pointer; }
+a.rs-link::after { content: "↗"; margin-left: 4px; font-size: 0.85em; opacity: 0.7; }
+a.rs-link:hover { border-color: var(--et-accent); color: var(--et-accent); }
+a.rs-link:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+a.rs-also { border-style: solid; color: var(--et-muted); }

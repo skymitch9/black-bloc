@@ -27,6 +27,13 @@ const DEMO_DAY_TWO = [
   [496, 90, 'Metroid Dread', 'Minimum Items Glitchless', ['araneacharlotte'], 'champrul'],
 ];
 
+const DEMO_NO_LINK = new Set(['Lunch_the_great']);
+const DEMO_BAD_LINK = { Ramseyfox: 'http://ramseyfox.example/live' };
+const HOST_CHANNELS = { quacksilver: 'QuacksilverPlays', anarchy: 'anarchyasf', sweetpeebs: 'sweetpeebs', chibicarrera: 'chibicarrera' };
+const TWITCH_URL = /^https:\/\/(?:www\.)?twitch\.tv\/[A-Za-z0-9_]{2,25}\/?$/;
+const YOUTUBE_URL = /^https:\/\/(?:www\.)?youtube\.com\/(?:@[A-Za-z0-9._-]{3,30}|channel\/UC[A-Za-z0-9_-]{22})\/?$/;
+const LOGIN = /^[A-Za-z0-9_]{2,25}$/;
+
 const DEMO_ACTUALS = { 63: [-121, -99], 64: [-92, -14], 65: [-5, null] };
 const DEMO_SOURCE_SETUP = 7;
 
@@ -72,6 +79,40 @@ export function minutesOf(given) {
   const clock = /^(\d{1,2}):(\d{2})$/.exec(said);
   if (clock) return Number(clock[2]) > 59 ? null : Number(clock[1]) * 60 + Number(clock[2]);
   return /^\d{1,4}$/.test(said) ? Number(said) : null;
+}
+
+export function safeChannel(url) {
+  const given = String(url ?? '').trim();
+  if (TWITCH_URL.test(given)) return { site: 'twitch', url: given };
+  if (YOUTUBE_URL.test(given)) return { site: 'youtube', url: given };
+  return null;
+}
+
+const twitchOf = (login) => (LOGIN.test(String(login ?? '')) ? `https://www.twitch.tv/${login}` : null);
+
+export function channelsOf(person, { golive = [], youtube = [], hosts = HOST_CHANNELS } = {}) {
+  const mine = (rows) => (person.user_id ? rows.find((one) => String(one.user_id) === String(person.user_id)) : null) || null;
+  const found = { twitch: null, youtube: null };
+  const offer = (site, url, from) => {
+    const safe = safeChannel(url);
+    if (safe && safe.site === site && !found[site]) found[site] = { url: safe.url, from };
+  };
+  const live = mine(golive);
+  if (live) offer('twitch', twitchOf(live.twitch_login), 'member');
+  const tube = mine(youtube);
+  if (tube) offer('youtube', `https://www.youtube.com/${tube.handle ? tube.handle : `channel/${tube.channel_id}`}`, 'member');
+  const given = safeChannel(person.url);
+  if (given) offer(given.site, given.url, 'schedule');
+  else if (!person.url) offer('twitch', twitchOf(person.login), 'schedule');
+  if (person.part === 'host') offer('twitch', twitchOf(hosts[String(person.name || '').trim().toLowerCase()]), 'hosts');
+  const first = found.twitch || found.youtube;
+  return {
+    twitch_url: found.twitch ? found.twitch.url : null,
+    twitch_from: found.twitch ? found.twitch.from : null,
+    youtube_url: found.youtube ? found.youtube.url : null,
+    youtube_from: found.youtube ? found.youtube.from : null,
+    link_from: first ? first.from : null,
+  };
 }
 
 function lengthWords(minutes) {
@@ -141,8 +182,11 @@ export function sheetOf(runs, { now, editable }) {
 export function runsheetSeed(members, staffId) {
   const anchor = Math.round(Date.now() / MIN) * MIN + 2 * MIN;
   const at = (minutes) => iso(anchor + minutes * MIN);
-  const baf = { The_Mathcat: members[6].id, JRisJunior: members[5].id, champrul: members[3].id };
-  const person = (name, part) => ({ name, login: name.toLowerCase().replace(/\s+/g, ''), part, user_id: baf[name] || null });
+  const baf = { The_Mathcat: members[6].id, JRisJunior: members[1].id, champrul: members[3].id };
+  const person = (name, part) => {
+    const linked = part === 'runner' && !DEMO_NO_LINK.has(name) && !DEMO_BAD_LINK[name];
+    return { name, login: linked ? name.toLowerCase() : null, url: linked ? `https://www.twitch.tv/${name}` : DEMO_BAD_LINK[name] || null, part, user_id: baf[name] || null };
+  };
   const runs = [];
   const build = (rows, firstId, withOrganisers) => {
     let source = rows[0][0];
@@ -193,7 +237,7 @@ export function runsheetSeed(members, staffId) {
     schedule_url: 'https://gamesdonequick.com/hotfix/schedule#gdqueer/2026-10-04',
     source: 'gdq_hotfix',
     source_ref: 'gdqueer-runsheet/2026-10-04',
-    spotlight_id: 1,
+    spotlight_id: 5,
     feed_id: null,
     starts_at: at(DEMO_DAY_ONE[0][0]),
     ends_at: at(DEMO_DAY_TWO.at(-1)[0] + DEMO_DAY_TWO.at(-1)[1]),
@@ -264,7 +308,8 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
   }
 
   function personRow(one) {
-    return { name: one.name, login: one.login || null, part: one.part, user_id: one.user_id || null, member_name: one.user_id ? memberName(one.user_id) : null, baf: counts(one) };
+    const channels = channelsOf(one, { golive: state().golive.links, youtube: state().youtube.links });
+    return { name: one.name, login: one.login || null, part: one.part, user_id: one.user_id || null, member_name: one.user_id ? memberName(one.user_id) : null, baf: counts(one), ...channels };
   }
 
   function sheetRow(row, day, editable, firstUpcoming) {
@@ -370,7 +415,7 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
     const timesFrom = !editable ? 'tracker' : runsOf(row).some((one) => one.organisers_at) ? 'organisers' : 'source';
     const last = book.undo.at(-1) || null;
     return {
-      marathon: { id: base.id, name: base.name, source: base.source, source_word: base.source_word, schedule_page: base.schedule_page, phase: base.phase, phase_word: base.phase_word, last_fetched_at: base.last_fetched_at },
+      marathon: { id: base.id, name: base.name, source: base.source, source_word: base.source_word, schedule_page: base.schedule_page, phase: base.phase, phase_word: base.phase_word, last_fetched_at: base.last_fetched_at, channel_login: base.channel_login || null, watch_url: twitchOf(base.channel_login) },
       editable,
       kind: editable ? 'editable' : 'read_only',
       times_from: timesFrom,

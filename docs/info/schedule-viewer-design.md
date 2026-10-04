@@ -206,7 +206,8 @@ All under `/api/marathons/{marathon_id}/runsheet`, staff only, refusals in the u
 The GET's body:
 
 ```
-marathon        {id, name, source, source_word, schedule_page, phase, phase_word, last_fetched_at}
+marathon        {id, name, source, source_word, schedule_page, phase, phase_word, last_fetched_at,
+                 channel_login, watch_url (https://www.twitch.tv/<channel_login>, or null)}
 editable        true for a source that never moves its own times (the mock's MARATHON_KEEPS_CLOCK)
 kind            "editable" | "read_only"
 times_from      "organisers" | "source" | "tracker"      times_from_word   the same in words
@@ -215,7 +216,8 @@ setup_minutes   marathon_setup_minutes                    heads_up_minutes  min(
 today           the key of the day with the live run, else the first with a run still to start
 days[]          {key, label, starts_at, runs, baf, drift_minutes, drift_run_id,
                  staff_times, staff_estimates, can_shift, can_reset}
-rows[]          {id, day, order_no, game, category, people[{name, login, part, user_id, member_name, baf}],
+rows[]          {id, day, order_no, game, category, people[{name, login, part, user_id, member_name, baf,
+                 twitch_url, twitch_from, youtube_url, youtube_from, link_from}],
                  ours, state, state_word, start_at, ends_at,
                  from: stream | started | staff | organisers | source | follows | tracker,
                  plan_at, plan_from, off_plan_minutes, estimate_seconds, estimate_from, source_estimate_seconds,
@@ -229,6 +231,53 @@ undo            {available, text}
 Action kinds written: `web.marathon.runsheet_started` · `_finished` · `_start_set` · `_shifted` ·
 `_estimate_set` · `_skipped` · `_restored` · `_reset` · `_undone`, each with `marathon_id`, the
 run or day, and `before` / `after`.
+
+### Channel links on names (added 2026-10-03, owner: "lets make clicking a host or the runner link to a twitch and or youtube channel if we know it")
+
+Every runner and host name on the sheet is a link when a channel is known, plain text when not.
+The lookup is the mock's (`site/mock/runsheet.mjs` `channelsOf`), never the page's.
+
+| Case | What the name looks like |
+|---|---|
+| Twitch only | the name chip is a link to Twitch (a small ↗ on the chip), new tab |
+| Twitch and YouTube | the name chip links to Twitch; a second small chip reading **YouTube** sits right beside it and links to YouTube. The pair wraps together, so at phone width the YouTube chip drops under the name rather than splitting |
+| YouTube only | the name chip links to YouTube |
+| Nothing known, or a link that is not Twitch / YouTube | the same chip as before, plain text, no ↗ |
+
+A race links each person on their own chip. `✦BaF` and the `host` word stay inside the chip. The
+tooltip says the part, the site and where the link came from. The header card carries **Watch on
+Twitch ↗** when the marathon has a channel.
+
+**Precedence, per site (Twitch and YouTube are settled separately), first hit wins:**
+
+1. `member` — the person is matched to a server member: that member's go-live Twitch link
+   (`/api/golive/links`) and their YouTube link (`/api/youtube/links`);
+2. `schedule` — the link the schedule gives for that person (`person.url`), or, where a schedule
+   gives only a Twitch login (the trackers), `https://www.twitch.tv/<login>`;
+3. `hosts` — hosts only: a host-name → Twitch table (`HOST_CHANNELS`, the ScheduleViewer page's
+   idea; names matched case-insensitively).
+
+`twitch_from` / `youtube_from` name the source of each (`member` | `schedule` | `hosts`), and
+`link_from` is the source of the link the NAME carries (Twitch's when there is one, else
+YouTube's). All five are `null` when nothing is known.
+
+**What may be emitted.** Only `https://twitch.tv/<login>` / `https://www.twitch.tv/<login>`
+(login = 2–25 letters, digits, underscores) and `https://youtube.com/…` /
+`https://www.youtube.com/…` as `@handle` or `channel/UC…`. Anything else from the schedule —
+another host, `http:`, a path, a query string — is dropped and the name is plain text; a dropped
+link does NOT fall back to a login guessed from the name. The page checks the address again before
+it makes an anchor. Links open with `target="_blank" rel="noopener"`.
+
+**Fake in the seed:** every day-2 runner has a `twitch.tv/<their sheet name>` link except
+Lunch_the_great (none) and Ramseyfox (a `http://…example` link, there to show the drop);
+JRisJunior is tied to the mock member Casey, so the name links to `twitch.tv/caseyfast` with a
+YouTube chip — the mock's link rows, not JR's real channels; champrul is tied to Moth, who has no
+link, and is not in the host table; the host table holds Quacksilver → QuacksilverPlays,
+anarchy → anarchyasf, sweetpeebs and chibicarrera. SYDNEY J is in no table and stays plain text.
+Marathon 60 now sits on the mock's `gdqhotfix` channel row.
+
+⚠️ **Not decided, the owner's:** whether a staff-set pairing Twitch name (the drawer's *Twitch
+name…* fix) should sit above the member's go-live link. The prototype does not read it.
 
 ### The recompute (one place: `site/mock/runsheet.mjs` `sheetOf`)
 
@@ -272,7 +321,7 @@ the day's staff times and staff estimates; real starts and finishes stay, and so
   (the same runs chained with a 7-minute setup). Day 1 is three finished runs a day earlier, there
   only so the day strip shows on an editable sheet.
 - **BaF people.** The_Mathcat, JRisJunior and champrul are tied to three mock members (Dax,
-  Quiet Kid, Moth) so the `✦BaF` mark and the posts panel have something to show.
+  Casey, Moth) so the `✦BaF` mark and the posts panel have something to show.
 - **The posts panel** is worked out from the sheet; nothing is posted, and "its time has passed"
   is only the clock, not a record of a post having gone.
 

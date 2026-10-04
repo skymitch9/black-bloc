@@ -4,7 +4,7 @@
 //   node site/mock/runsheet.test.mjs                 (pure fixtures only)
 //   MOCK_PORT=8798 node site/mock/runsheet.test.mjs  (also walks the mock; it resets the mock's state)
 
-import { clockNear, clockOf, minutesOf, sheetOf } from './runsheet.mjs';
+import { channelsOf, clockNear, clockOf, minutesOf, safeChannel, sheetOf } from './runsheet.mjs';
 
 const MIN = 60000;
 const failures = [];
@@ -67,6 +67,26 @@ is('minutesOf 45', minutesOf('45'), 45);
 is('minutesOf abc', minutesOf('abc'), null);
 is('clockNear picks the same local day (Phoenix, UTC-7)', new Date(clockNear(Date.UTC(2026, 9, 4, 19, 29), 12, 40, 'America/Phoenix')).toISOString(), '2026-10-04T19:40:00.000Z');
 is('clockNear crosses midnight to the nearer side', new Date(clockNear(Date.UTC(2026, 9, 5, 6, 50), 0, 10, 'America/Phoenix')).toISOString(), '2026-10-05T07:10:00.000Z');
+
+const GOLIVE = [{ user_id: '7', twitch_login: 'memberlive' }];
+const TUBE = [{ user_id: '7', channel_id: 'UCsXVk37bltHxD1rDPwtNM8Q', handle: '@membertube' }, { user_id: '8', channel_id: 'UC_x5XG1OV2P6uZZ5FSM9Ttw', handle: null }];
+const links = (person) => channelsOf(person, { golive: GOLIVE, youtube: TUBE, hosts: { quacksilver: 'QuacksilverPlays' } });
+const none = { twitch_url: null, twitch_from: null, youtube_url: null, youtube_from: null, link_from: null };
+is('a runner the schedule links: Twitch, from the schedule', links({ name: 'BashPrime', part: 'runner', url: 'https://www.twitch.tv/BashPrime' }), { ...none, twitch_url: 'https://www.twitch.tv/BashPrime', twitch_from: 'schedule', link_from: 'schedule' });
+is('a tracker runner with only a login: the same', links({ name: 'Gelly', part: 'runner', login: 'gelly' }).twitch_url, 'https://www.twitch.tv/gelly');
+is('a member with both links: theirs beat the schedule', links({ name: 'JR', part: 'host', user_id: '7', url: 'https://www.twitch.tv/sheetname' }), { twitch_url: 'https://www.twitch.tv/memberlive', twitch_from: 'member', youtube_url: 'https://www.youtube.com/@membertube', youtube_from: 'member', link_from: 'member' });
+is('a member with only YouTube: the name takes YouTube', links({ name: 'Tube', part: 'runner', user_id: '8' }), { ...none, youtube_url: 'https://www.youtube.com/channel/UC_x5XG1OV2P6uZZ5FSM9Ttw', youtube_from: 'member', link_from: 'member' });
+is('a member with YouTube and a schedule Twitch: the name link is the schedule', links({ name: 'Tube', part: 'runner', user_id: '8', url: 'https://twitch.tv/tube' }).link_from, 'schedule');
+is('a host with no link of their own: the host list', links({ name: 'Quacksilver', part: 'host' }), { ...none, twitch_url: 'https://www.twitch.tv/QuacksilverPlays', twitch_from: 'hosts', link_from: 'hosts' });
+is('the host list is for hosts only', links({ name: 'Quacksilver', part: 'runner' }), none);
+is('nobody known: plain text', links({ name: 'SYDNEY J', part: 'host' }), none);
+is('a link that is not Twitch or YouTube is dropped', links({ name: 'Ramseyfox', part: 'runner', url: 'http://ramseyfox.example/live' }), none);
+is('…and a bad link does not fall back to a guessed login', links({ name: 'X', part: 'runner', login: 'x_login', url: 'https://evil.example/twitch.tv/x' }), none);
+for (const bad of ['http://www.twitch.tv/a_b', 'https://www.twitch.tv/a/b', 'https://twitch.tv.evil.example/ab', 'javascript:alert(1)', 'https://www.youtube.com/watch?v=abc', 'https://www.twitch.tv/ab?x=1', '']) {
+  is(`safeChannel refuses ${bad || 'blank'}`, safeChannel(bad), null);
+}
+is('safeChannel takes twitch.tv without www', safeChannel('https://twitch.tv/junior_sm'), { site: 'twitch', url: 'https://twitch.tv/junior_sm' });
+is('safeChannel takes a YouTube handle', safeChannel('https://www.youtube.com/@caseyfast'), { site: 'youtube', url: 'https://www.youtube.com/@caseyfast' });
 
 async function walk(port) {
   const base = `http://127.0.0.1:${port}`;

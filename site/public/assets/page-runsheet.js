@@ -61,6 +61,14 @@ const STATE_TONE = { upcoming: null, live: 'ok', done: null, dropped: 'warn' };
 const OFF_SCHEDULE = 'off the schedule';
 const ESTIMATE_STAFF = 'set by staff';
 const HOST = 'host';
+const WATCH = 'Watch on Twitch ↗';
+const YOUTUBE = 'YouTube';
+const YOUTUBE_HELP = '{name} on YouTube · {from}';
+const LINK_HELP = '{part} · {site} · {from}';
+const SITE_WORDS = { twitch: 'Twitch', youtube: 'YouTube' };
+const LINK_FROM = { member: 'their go-live link', schedule: 'from the schedule', hosts: 'host list' };
+const YOUTUBE_FROM = { member: 'their YouTube link', schedule: 'from the schedule' };
+const CHANNEL_URL = /^https:\/\/(?:www\.)?(?:twitch\.tv|youtube\.com)\/[A-Za-z0-9_@.\/-]+$/;
 const NOBODY = 'nobody named';
 const START_NOW = 'Started now';
 const FINISH_NOW = 'Finished now';
@@ -168,6 +176,7 @@ function headCard(day) {
       el('span', { text: said(SOURCE_LINE, { from: sheet.times_from_word }) }),
       read ? el('span', { title: read.title, text: said(READ_LINE, { ago: read.text }) }) : null,
       el('span', { text: said(ZONE_LINE, { zone: sheet.timezone }) }),
+      channel(marathon.watch_url) ? el('a', { class: 'say-nothing-do', href: marathon.watch_url, target: '_blank', rel: 'noopener', title: `twitch.tv/${marathon.channel_login}`, text: WATCH }) : null,
     ])),
     el('p', { class: 'field-help' }, boldParts(said(sheet.editable ? KIND_EDITABLE : KIND_READ_ONLY, { source: marathon.source_word }))),
   ]);
@@ -215,15 +224,34 @@ function saidBar() {
   return el('div', { class: 'rs-said', hidden: !say.said && !undo ? true : undefined }, [say, undo]);
 }
 
+function channel(url) {
+  return CHANNEL_URL.test(String(url || '')) ? url : null;
+}
+
 function personChip(person) {
   const name = person.baf ? `${person.name} ✦${BAF}` : person.name;
-  return el('span', {
-    class: 'mx-chip',
+  const twitch = channel(person.twitch_url);
+  const youtube = channel(person.youtube_url);
+  const href = twitch || youtube;
+  const who = person.member_name ? `${person.part} · ${person.member_name}` : person.part;
+  const from = twitch ? LINK_FROM[person.twitch_from] : YOUTUBE_FROM[person.youtube_from];
+  const title = href ? said(LINK_HELP, { part: who, site: SITE_WORDS[twitch ? 'twitch' : 'youtube'], from: from || '' }) : who;
+  const main = el(href ? 'a' : 'span', {
+    class: href ? 'mx-chip rs-link' : 'mx-chip',
     'data-baf': person.baf ? 'true' : undefined,
     'data-quiet': person.part === 'runner' ? undefined : 'true',
-    title: person.member_name ? `${person.part} · ${person.member_name}` : person.part,
+    href: href || undefined,
+    target: href ? '_blank' : undefined,
+    rel: href ? 'noopener' : undefined,
+    title,
     text: person.part === 'host' ? `${HOST} ${name}` : name,
   });
+  if (!twitch || !youtube) return main;
+  const also = said(YOUTUBE_HELP, { name: person.name, from: YOUTUBE_FROM[person.youtube_from] || '' });
+  return el('span', { class: 'rs-person' }, [
+    main,
+    el('a', { class: 'mx-chip rs-link rs-also', href: youtube, target: '_blank', rel: 'noopener', title: also, 'aria-label': also, text: YOUTUBE }),
+  ]);
 }
 
 function peopleCell(row) {
