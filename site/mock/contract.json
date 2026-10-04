@@ -6285,6 +6285,540 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/api/marathons/{runsheet_marathon_id}/runsheet",
+      "read_by": [
+        "page-runsheet.js (runsheet.html) the whole sheet in one read"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon",
+        "editable",
+        "kind",
+        "times_from",
+        "times_from_word",
+        "timezone",
+        "now",
+        "setup_minutes",
+        "heads_up_minutes",
+        "today",
+        "days",
+        "rows",
+        "next_posts",
+        "moves",
+        "undo"
+      ],
+      "nested": {
+        "marathon": [
+          "id",
+          "name",
+          "source",
+          "source_word",
+          "schedule_page",
+          "last_fetched_at"
+        ],
+        "undo": [
+          "available",
+          "text"
+        ]
+      },
+      "rows": {
+        "days": [
+          "key",
+          "label",
+          "runs",
+          "baf",
+          "drift_minutes",
+          "staff_times",
+          "staff_estimates",
+          "can_shift",
+          "can_reset"
+        ],
+        "rows": [
+          "id",
+          "day",
+          "game",
+          "category",
+          "people",
+          "ours",
+          "state",
+          "start_at",
+          "ends_at",
+          "from",
+          "plan_at",
+          "plan_from",
+          "off_plan_minutes",
+          "estimate_seconds",
+          "estimate_from",
+          "next_up",
+          "can"
+        ],
+        "next_posts": [
+          "at",
+          "kind",
+          "run_id",
+          "day",
+          "passed",
+          "text"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/runs/{runsheet_next_run_id}/start",
+      "body": {},
+      "read_by": [
+        "page-runsheet.js (runsheet.html) Started now"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon",
+        "editable",
+        "kind",
+        "times_from",
+        "times_from_word",
+        "timezone",
+        "now",
+        "setup_minutes",
+        "heads_up_minutes",
+        "today",
+        "days",
+        "rows",
+        "next_posts",
+        "moves",
+        "undo",
+        "message"
+      ],
+      "nested": {
+        "marathon": [
+          "id",
+          "name",
+          "source",
+          "source_word",
+          "schedule_page",
+          "last_fetched_at"
+        ],
+        "undo": [
+          "available",
+          "text"
+        ]
+      },
+      "rows": {
+        "days": [
+          "key",
+          "label",
+          "runs",
+          "baf",
+          "drift_minutes",
+          "staff_times",
+          "staff_estimates",
+          "can_shift",
+          "can_reset"
+        ],
+        "rows": [
+          "id",
+          "day",
+          "game",
+          "category",
+          "people",
+          "ours",
+          "state",
+          "start_at",
+          "ends_at",
+          "from",
+          "plan_at",
+          "plan_from",
+          "off_plan_minutes",
+          "estimate_seconds",
+          "estimate_from",
+          "next_up",
+          "can"
+        ],
+        "next_posts": [
+          "at",
+          "kind",
+          "run_id",
+          "day",
+          "passed",
+          "text"
+        ],
+        "moves": [
+          "id",
+          "at",
+          "by_id",
+          "by_name",
+          "kind",
+          "text",
+          "undone"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/runs/{runsheet_live_run_id}/finish",
+      "body": {},
+      "read_by": [
+        "page-runsheet.js (runsheet.html) Finished now"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon",
+        "editable",
+        "kind",
+        "times_from",
+        "times_from_word",
+        "timezone",
+        "now",
+        "setup_minutes",
+        "heads_up_minutes",
+        "today",
+        "days",
+        "rows",
+        "next_posts",
+        "moves",
+        "undo",
+        "message"
+      ],
+      "nested": {
+        "marathon": [
+          "id",
+          "name",
+          "source",
+          "source_word",
+          "schedule_page",
+          "last_fetched_at"
+        ],
+        "undo": [
+          "available",
+          "text"
+        ]
+      },
+      "rows": {
+        "days": [
+          "key",
+          "label",
+          "runs",
+          "baf",
+          "drift_minutes",
+          "staff_times",
+          "staff_estimates",
+          "can_shift",
+          "can_reset"
+        ],
+        "rows": [
+          "id",
+          "day",
+          "game",
+          "category",
+          "people",
+          "ours",
+          "state",
+          "start_at",
+          "ends_at",
+          "from",
+          "plan_at",
+          "plan_from",
+          "off_plan_minutes",
+          "estimate_seconds",
+          "estimate_from",
+          "next_up",
+          "can"
+        ],
+        "next_posts": [
+          "at",
+          "kind",
+          "run_id",
+          "day",
+          "passed",
+          "text"
+        ],
+        "moves": [
+          "id",
+          "at",
+          "by_id",
+          "by_name",
+          "kind",
+          "text",
+          "undone"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/shift",
+      "body": {
+        "day": "today",
+        "minutes": 10
+      },
+      "read_by": [
+        "page-runsheet.js (runsheet.html) Behind / Ahead"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon",
+        "editable",
+        "kind",
+        "times_from",
+        "times_from_word",
+        "timezone",
+        "now",
+        "setup_minutes",
+        "heads_up_minutes",
+        "today",
+        "days",
+        "rows",
+        "next_posts",
+        "moves",
+        "undo",
+        "message"
+      ],
+      "nested": {
+        "marathon": [
+          "id",
+          "name",
+          "source",
+          "source_word",
+          "schedule_page",
+          "last_fetched_at"
+        ],
+        "undo": [
+          "available",
+          "text"
+        ]
+      },
+      "rows": {
+        "days": [
+          "key",
+          "label",
+          "runs",
+          "baf",
+          "drift_minutes",
+          "staff_times",
+          "staff_estimates",
+          "can_shift",
+          "can_reset"
+        ],
+        "rows": [
+          "id",
+          "day",
+          "game",
+          "category",
+          "people",
+          "ours",
+          "state",
+          "start_at",
+          "ends_at",
+          "from",
+          "plan_at",
+          "plan_from",
+          "off_plan_minutes",
+          "estimate_seconds",
+          "estimate_from",
+          "next_up",
+          "can"
+        ],
+        "next_posts": [
+          "at",
+          "kind",
+          "run_id",
+          "day",
+          "passed",
+          "text"
+        ],
+        "moves": [
+          "id",
+          "at",
+          "by_id",
+          "by_name",
+          "kind",
+          "text",
+          "undone"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/runs/{runsheet_next_run_id}/estimate",
+      "body": {
+        "estimate": "45"
+      },
+      "read_by": [
+        "page-runsheet.js (runsheet.html) Change estimate…"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon",
+        "editable",
+        "kind",
+        "times_from",
+        "times_from_word",
+        "timezone",
+        "now",
+        "setup_minutes",
+        "heads_up_minutes",
+        "today",
+        "days",
+        "rows",
+        "next_posts",
+        "moves",
+        "undo",
+        "message"
+      ],
+      "nested": {
+        "marathon": [
+          "id",
+          "name",
+          "source",
+          "source_word",
+          "schedule_page",
+          "last_fetched_at"
+        ],
+        "undo": [
+          "available",
+          "text"
+        ]
+      },
+      "rows": {
+        "days": [
+          "key",
+          "label",
+          "runs",
+          "baf",
+          "drift_minutes",
+          "staff_times",
+          "staff_estimates",
+          "can_shift",
+          "can_reset"
+        ],
+        "rows": [
+          "id",
+          "day",
+          "game",
+          "category",
+          "people",
+          "ours",
+          "state",
+          "start_at",
+          "ends_at",
+          "from",
+          "plan_at",
+          "plan_from",
+          "off_plan_minutes",
+          "estimate_seconds",
+          "estimate_from",
+          "next_up",
+          "can"
+        ],
+        "next_posts": [
+          "at",
+          "kind",
+          "run_id",
+          "day",
+          "passed",
+          "text"
+        ],
+        "moves": [
+          "id",
+          "at",
+          "by_id",
+          "by_name",
+          "kind",
+          "text",
+          "undone"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{runsheet_marathon_id}/runsheet/runs/{runsheet_next_run_id}/skip",
+      "body": {},
+      "read_by": [
+        "page-runsheet.js (runsheet.html) Skip this run"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon",
+        "editable",
+        "kind",
+        "times_from",
+        "times_from_word",
+        "timezone",
+        "now",
+        "setup_minutes",
+        "heads_up_minutes",
+        "today",
+        "days",
+        "rows",
+        "next_posts",
+        "moves",
+        "undo",
+        "message"
+      ],
+      "nested": {
+        "marathon": [
+          "id",
+          "name",
+          "source",
+          "source_word",
+          "schedule_page",
+          "last_fetched_at"
+        ],
+        "undo": [
+          "available",
+          "text"
+        ]
+      },
+      "rows": {
+        "days": [
+          "key",
+          "label",
+          "runs",
+          "baf",
+          "drift_minutes",
+          "staff_times",
+          "staff_estimates",
+          "can_shift",
+          "can_reset"
+        ],
+        "rows": [
+          "id",
+          "day",
+          "game",
+          "category",
+          "people",
+          "ours",
+          "state",
+          "start_at",
+          "ends_at",
+          "from",
+          "plan_at",
+          "plan_from",
+          "off_plan_minutes",
+          "estimate_seconds",
+          "estimate_from",
+          "next_up",
+          "can"
+        ],
+        "next_posts": [
+          "at",
+          "kind",
+          "run_id",
+          "day",
+          "passed",
+          "text"
+        ],
+        "moves": [
+          "id",
+          "at",
+          "by_id",
+          "by_name",
+          "kind",
+          "text",
+          "undone"
+        ]
+      }
+    },
+    {
       "method": "POST",
       "path": "/api/marathons/{marathon_id}/runs/{marathon_run_id}/live",
       "read_by": [
@@ -8877,7 +9411,8 @@
     "/requests.html",
     "/guides.html",
     "/posts.html",
-    "/minutes.html"
+    "/minutes.html",
+    "/runsheet.html"
   ],
   "action_kinds": [
     "web.operator.read",
@@ -9085,6 +9620,15 @@
     "web.marathon.run_reset",
     "web.marathon.run_live",
     "web.marathon.sheet_times",
+    "web.marathon.runsheet_started",
+    "web.marathon.runsheet_finished",
+    "web.marathon.runsheet_start_set",
+    "web.marathon.runsheet_shifted",
+    "web.marathon.runsheet_estimate_set",
+    "web.marathon.runsheet_skipped",
+    "web.marathon.runsheet_restored",
+    "web.marathon.runsheet_reset",
+    "web.marathon.runsheet_undone",
     "web.marathon.next_suggested",
     "web.marathon.would_suggest_next",
     "web.marathon.next_none",

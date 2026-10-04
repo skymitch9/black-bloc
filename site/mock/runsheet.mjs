@@ -245,7 +245,8 @@ export function mountRunsheet({ route, Refused, requireStaff, actorOf, memberNam
 
   function dayOf(row, given) {
     const days = daysOf(sheet(row));
-    const found = days.find((one) => one.key === String(given || ''));
+    const wanted = given === 'today' ? todayOf(days) : String(given || '');
+    const found = days.find((one) => one.key === wanted);
     if (!found) throw new Refused(404, 'no_such_day', `**${row.name}** has no day **${String(given || '').slice(0, 20) || 'blank'}** on its run sheet, so nothing was changed. Reload the page and pick a day from the strip.`);
     return found;
   }
