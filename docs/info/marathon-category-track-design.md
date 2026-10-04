@@ -239,3 +239,13 @@ test makes a network call.
 | A game with no Twitch category | the drawer | While the channel is in **Retro**, that run is the one on now; a run with its own category is never matched by Retro. |
 | If the times look wrong | the drawer ▸ **Back to the sheet's times** (or `/event` ▸ Marathons ▸ GDQueer ▸ Schedule…) | Every run back on the sheet's times; the next run the stream shows starting re-times from there. Mark it live / Mark done also move the clock. |
 | Sunday 10:00 | the drawer | Sunday's first run starts from 10:00 (a new chain), whatever Saturday did. |
+
+## The early-start guard — 2026-10-04 (hotfix `early-start-guard`)
+
+**What happened.** On GDQueer day 2 the channel put up *Wii Fit U*'s title and category at 15:40Z as pre-show setup, 80 minutes before its 17:00Z start. The next tick called the run live by title+category, anchored it at 15:41Z and re-timed the day's 11 runs 79 minutes early; a member's run moved from 19:03Z to 17:44Z and its 2-hour reminder went up with the wrong time. Day 1 had the same thing, 7 minutes early.
+
+**The rule.** The stream may not call a show-day's FIRST run live earlier than `marathon_early_start_minutes` (int, 0-240, default 15; 0 = off, the behaviour before) before its planned start (`sheet_at`, else `scheduled_at`). "First" = no run before it in its show-day is live or done; the show-day is `marathon_overlay.chains` (three hours with nothing on starts a new one) for every source, trackers included. While it is held nothing changes and one `marathon.early_match_held` row is written per run (kept in memory, so a restart may write one more). Later runs of a day are never held - a show running ahead is still followed. Staff *mark live* is never held.
+
+**The repair.** Every tick, before the verdict: a run that is live by the stream, opens its show-day, was anchored earlier than that line, and is still before it now, is put back to coming up (`put_back`, the same columns staff *mark upcoming* clears, `live_because` NULL) and the day is re-timed through `retime` (so the overlay's times when it is applied; a tracker is not re-timed, it keeps its own). One `marathon.early_start_undone` row. Nothing is posted: the re-time runs in `edit` mode whatever `marathon_reminder_on_move` says, so a posted mark stays posted and the standing copies are edited by the ordinary sync. Once now is past the line the run is left live.
+
+**Not covered.** A stream set up inside the last N minutes still anchors the day up to N minutes early.

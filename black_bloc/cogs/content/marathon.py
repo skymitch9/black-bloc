@@ -1276,6 +1276,19 @@ async def dismiss_next(
     return Outcome(True, mt.NEXT_DISMISSED.format(next=record["name"], name=fresh["name"]))
 
 
+async def put_back(db: Any, run_id: Any, *, because: Any) -> None:
+    await update_run(
+        db,
+        run_id,
+        state=mt.UPCOMING,
+        live_at=None,
+        done_at=None,
+        live_because=because,
+        actual_started_at=None,
+        actual_ended_at=None,
+    )
+
+
 async def mark_upcoming(
     bot: Any, guild: Any, actor: Any, marathon: Any, run: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
@@ -1291,16 +1304,7 @@ async def mark_upcoming(
                 NOT_RESETTABLE_CODE,
                 409,
             )
-        await update_run(
-            bot.db,
-            row["id"],
-            state=mt.UPCOMING,
-            live_at=None,
-            done_at=None,
-            live_because=mt.BY_STAFF,
-            actual_started_at=None,
-            actual_ended_at=None,
-        )
+        await put_back(bot.db, row["id"], because=mt.BY_STAFF)
         await signals.retime(cog, guild, marathon, because=mt.BY_STAFF)
         await log_action(
             bot,
@@ -2434,11 +2438,14 @@ class Marathons(commands.Cog):
         if marathon["spotlight_id"] and signals.watching(self.bot, guild.id):
             if await channel_by_id(self.bot.db, int(marathon["spotlight_id"])) is not None:
                 session = await open_session(self.bot.db, int(marathon["spotlight_id"]))
+        if await signals.undo_early(self, guild, marathon, rows, now):
+            rows = await runs_of(self.bot.db, marathon["id"])
         verdict = (
             await signals.verdict_of(self, guild, marathon, session, rows, now)
             if session is not None
             else None
         )
+        verdict = await signals.guarded(self, guild, marathon, verdict, rows, now)
         changes = mt.advance(
             rows,
             now,
