@@ -1511,6 +1511,16 @@ def test_the_raid_train_numbers_refuse_a_figure_that_would_break_the_sweep():
         assert said in str(caught.value)
 
 
+def test_the_spotlight_poll_takes_one_minute_and_refuses_none_in_words():
+    assert coerce_value("spotlight_poll_minutes", 1) == 1
+    assert coerce_value("spotlight_poll_minutes", 30) == 30
+    with pytest.raises(SettingError) as caught:
+        coerce_value("spotlight_poll_minutes", 0)
+    assert "shorter than 1 minute" in str(caught.value)
+    with pytest.raises(SettingError):
+        coerce_value("spotlight_poll_minutes", 31)
+
+
 def test_the_raid_train_switches_only_take_the_words_they_document():
     assert coerce_value("raidtrain_mode", "shadow") == "shadow"
     assert coerce_value("raidtrain_require_link", False) is False
