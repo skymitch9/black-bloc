@@ -22,6 +22,11 @@
 
 ## A. The ping switch, as built
 
+> ➕ **2026-10-03, branch `marathon-role-ping`:** the same switch now also puts the **Marathon role**
+> (`marathon_role_id`) on the PUBLIC copy of the `marathon_ping_minutes` heads-up, and the pinned controls carry a
+> line saying so or why not — [`marathon-role-ping-design.md`](marathon-role-ping-design.md) ▸ A. What is below is
+> unchanged.
+
 **Model.** `marathons.ping_role INTEGER NOT NULL DEFAULT 0` through `ADDED_COLUMNS` (schema **72**, mirrored to
 `marathons_archive` at boot). Every existing marathon reads **0 — off** after the migration, so SS4C #6 and Fall Fest #7
 stop mentioning roles until staff turn it on.

@@ -11,8 +11,10 @@ from ... import marathon as mt
 from ... import marathon_announce as ma
 from ... import marathon_host_highlights as mhh
 from ... import marathon_inbox as mi
+from ... import marathon_role_ping as mrp
 from ... import shadow as shadow_home
 from ...actionlog import log_action
+from ...golive import ping_prefix
 from ...logkinds import VIA_DISCORD, kind_via
 from ...settings_store import (
     MARATHON_HOST_HIGHLIGHTS_KEY,
@@ -34,13 +36,17 @@ from .marathon_announce import announces
 from .marathon_public import (
     edit_public,
     fetch_public,
+    people_for,
     public_channel,
     public_text,
     rehearsal_of,
     send_public,
+    since,
+    stands,
 )
 from .marathon_public_reminders import reminder_channel, reminder_text
 from .marathon_public_reminders import wanted as public_reminders_wanted
+from .marathon_role_ping import verdict_for
 
 log = logging.getLogger(__name__)
 
@@ -79,7 +85,13 @@ async def highlight_text(
     bot: Any, guild: Any, marathon: Any, block: mhh.Block, people: Any, *, removed: bool = False
 ) -> str:
     return await public_text(
-        bot, guild, marathon, mhh.view_row(block), removed=removed, people=people or block.hosts
+        bot,
+        guild,
+        marathon,
+        mhh.view_row(block),
+        removed=removed,
+        people=people or block.hosts,
+        over=block.runs[-1],
     )
 
 
@@ -215,7 +227,16 @@ async def follow_one(
         )
         record.update(message_id=None, channel_id=None)
         return True
-    if (getattr(message, "content", None) or "").endswith(text):
+    if await stands(
+        cog,
+        guild,
+        marathon,
+        mhh.view_row(block),
+        message,
+        text,
+        people=people or block.hosts,
+        over=block.runs[-1],
+    ):
         cache[key] = (record["channel_id"], text)
         return False
     why = await edit_public(bot, guild, message, text)
@@ -248,6 +269,7 @@ async def sync_host_highlights(cog: Any, guild: Any, marathon: Any) -> None:
         return
     try:
         found = mhh.records(fresh)
+        since(cog)
         if not any(mhh.is_up(one) for one in found):
             return
         changed = False
@@ -353,6 +375,10 @@ async def remind_hosts(cog: Any, guild: Any, marathon: Any, now: datetime) -> No
 
 async def heads_up(bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: int) -> None:
     """The runner's public reminder for the block, unless the switches or the opt-out say not."""
+    marathon_role = role_for(bot, guild, marathon, block, mark)
+    quiet = mrp.row_fields(
+        None if marathon_role is None else mrp.unsent(marathon_role, mrp.NO_PUBLIC_COPY)
+    )
     base = details_of(marathon, block, mark=mark)
     people = speaking(marathon, block)
     because = (
@@ -366,34 +392,61 @@ async def heads_up(bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: 
     )
     if because is not None:
         await log_action(
-            bot, guild, "marathon.host_reminder_skipped", details=base | {"because": because}
+            bot,
+            guild,
+            "marathon.host_reminder_skipped",
+            details=base | quiet | {"because": because},
         )
         return
     home = reminder_channel(bot, guild.id)
     if home is None:
         await log_action(
-            bot, guild, "marathon.host_reminder_failed", details=base | {"reason": "no_channel"}
+            bot,
+            guild,
+            "marathon.host_reminder_failed",
+            details=base | quiet | {"reason": "no_channel"},
         )
         return
     login = await channel_login(bot, marathon)
     url = mt.run_url(block.first, login, marathon["schedule_url"], people=people)
     text = reminder_text(bot, guild, marathon, mhh.view_row(block), url=url, people=people)
-    message, channel_id, why = await send_public(bot, guild, text, [], home=home)
+    roles = mrp.with_role([], marathon_role)
+    message, channel_id, why = await send_public(
+        bot, guild, ping_prefix(*roles) + text, roles, home=home
+    )
     details = base | {
         "channel_id": channel_id,
         "message_id": str(getattr(message, "id", "")) or None,
     }
     if message is None:
         await log_action(
-            bot, guild, "marathon.host_reminder_failed", details=details | {"reason": why}
+            bot,
+            guild,
+            "marathon.host_reminder_failed",
+            details=details | quiet | {"reason": why},
         )
         return
     await log_action(
         bot,
         guild,
         "marathon.would_remind_host" if rehearsing(bot, guild) else "marathon.host_reminded",
-        details=details | rehearsal_of(bot, guild),
+        details=details
+        | {"pinged": bool(roles), "roles": roles}
+        | mrp.row_fields(marathon_role)
+        | rehearsal_of(bot, guild),
     )
+
+
+def role_for(
+    bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: int
+) -> mrp.Verdict | None:
+    """At the ping mark only; a block opening on a BaF run leaves it to that run's own copy."""
+    if mark != int(bot.store.get(guild.id, MARATHON_PING_MINUTES_KEY)):
+        return None
+    verdict = verdict_for(bot, guild, marathon)
+    if mt.is_ours(block.first) and people_for(marathon, block.first):
+        return mrp.unsent(verdict, mrp.RUNNER_COPY)
+    return verdict
 
 
 async def take_down(

@@ -68,6 +68,7 @@ from .marathon_channels import locked, marathons_on_channel
 from .marathon_events import set_event_mode
 from .marathon_hosts import set_switch
 from .marathon_inbox import find_channel, home_now, reopened, words
+from .marathon_role_ping import status_line as role_ping_line
 from .marathon_spotlight import (
     _row_of,
     after_staff_dim,
@@ -142,6 +143,9 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         content += "\n" + words(
             bot, guild.id, MARATHON_CONTROLS_NO_CHANNEL_KEY, marathon=marathon["name"]
         )
+    role_line = role_ping_line(bot, guild, marathon)
+    if role_line:
+        content += "\n" + role_line
     return (content, controls, labels)
 
 

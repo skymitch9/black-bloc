@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 from typing import Any
 
 import discord
@@ -22,19 +23,24 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import Outcome, answer, refusal, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
+    DEFAULT_TIMEZONE_KEY,
     MARATHON_PUBLIC_AUTO_OFF_SAID_KEY,
     MARATHON_PUBLIC_AUTO_ON_SAID_KEY,
     MARATHON_PUBLIC_AUTO_SAME_KEY,
     MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
     MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
     MARATHON_PUBLIC_CHANNEL_KEY,
+    MARATHON_PUBLIC_DAY_EARLIER_KEY,
+    MARATHON_PUBLIC_DAY_TODAY_KEY,
     MARATHON_PUBLIC_DEFAULT_KEY,
+    MARATHON_PUBLIC_DONE_TEMPLATE_KEY,
     MARATHON_PUBLIC_NOT_POSTABLE_KEY,
     MARATHON_PUBLIC_REMOVED_KEY,
     MARATHON_PUBLIC_TEMPLATE_KEY,
     MARATHON_RUNNER_POST_UNLISTED_KEY,
 )
 from ...spotlight import reason_of
+from ...timezones import DEFAULT_TZ, zone
 from .marathon import (
     GOLIVE_CHANNEL_KEY,
     MODE_IS_OFF,
@@ -49,6 +55,7 @@ from .marathon import (
     cog_of,
     get_marathon,
     mode_of,
+    now_for,
     run_by_id,
     runs_of,
     said_default,
@@ -133,23 +140,96 @@ def view_of(button: mp.Button | None, marathon_id: Any, run_id: Any) -> discord.
     return view
 
 
+def day_of(bot: Any, guild: Any, row: Any, said: dict[str, str]) -> str:
+    """{day} for a finished run: measured from when it ended, in the server's zone."""
+    return mp.day_word(
+        row,
+        now_for(bot),
+        zone(bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)) or zone(DEFAULT_TZ),
+        today=said[MARATHON_PUBLIC_DAY_TODAY_KEY],
+        earlier=said[MARATHON_PUBLIC_DAY_EARLIER_KEY],
+        earlier_default=said_default(MARATHON_PUBLIC_DAY_EARLIER_KEY),
+    )
+
+
 async def public_text(
-    bot: Any, guild: Any, marathon: Any, row: Any, *, removed: bool = False, people: Any = None
+    bot: Any,
+    guild: Any,
+    marathon: Any,
+    row: Any,
+    *,
+    removed: bool = False,
+    people: Any = None,
+    present: bool = False,
+    over: Any = None,
 ) -> str:
-    """A runner's highlight, or a host's when `people` names the BaF hosts: one template."""
+    """A runner's highlight, or a host's when `people` names the BaF hosts: one template, and
+    the past-tense one once the run is done. `present` asks for the words a done post carried
+    before it had its own; `over` is the run whose end dates a host block."""
     said = words_for(bot, guild.id)
-    key = MARATHON_PUBLIC_REMOVED_KEY if removed else MARATHON_PUBLIC_TEMPLATE_KEY
+    done = mp.is_done(row) and not removed and not present
+    key = (
+        MARATHON_PUBLIC_REMOVED_KEY
+        if removed
+        else MARATHON_PUBLIC_DONE_TEMPLATE_KEY
+        if done
+        else MARATHON_PUBLIC_TEMPLATE_KEY
+    )
     login = await channel_login(bot, marathon)
+    url = mt.run_url(row, login, marathon["schedule_url"], people=people)
+    if done:
+        return mp.done_text(
+            row,
+            marathon,
+            said,
+            template=said[key],
+            default=said_default(key),
+            url=url,
+            unlisted=said[MARATHON_RUNNER_POST_UNLISTED_KEY],
+            day=day_of(bot, guild, over if over is not None else row, said),
+            people=people,
+        )
     return mp.text_of(
         row,
         marathon,
         said,
         template=said[key],
         default=said_default(key),
-        url=mt.run_url(row, login, marathon["schedule_url"], people=people),
+        url=url,
         unlisted=said[MARATHON_RUNNER_POST_UNLISTED_KEY],
         people=people,
     )
+
+
+def since(cog: Any) -> datetime:
+    """When this process first followed a highlight: a run over before it is not re-worded."""
+    return cog.__dict__.setdefault("public_since", cog.clock())
+
+
+async def stands(
+    cog: Any,
+    guild: Any,
+    marathon: Any,
+    row: Any,
+    message: Any,
+    text: str,
+    *,
+    people: Any = None,
+    over: Any = None,
+) -> bool:
+    """The post already says it. A run that was over before this process started keeps the
+    present-tense words it finished with, role mention and all."""
+    content = getattr(message, "content", None) or ""
+    done = mp.is_done(row)
+    if mp.says(content, text, done=done):
+        return True
+    if not done:
+        return False
+    ended = mrp.over_at(over if over is not None else row)
+    if ended is None or ended >= since(cog):
+        return False
+    before = await public_text(cog.bot, guild, marathon, row, people=people, present=True)
+    return mp.says(content, before, done=False)
 
 
 def mentions_for(roles: list[int]) -> discord.AllowedMentions:
@@ -252,7 +332,7 @@ async def post_highlight(
                     details=base | {"message_id": str(message.id)} | rehearsal_of(bot, guild),
                 )
                 return (None, int(wanted))
-    roles = await cog._ping_roles(guild, marathon, row)
+    roles = [] if mp.is_done(row) else await cog._ping_roles(guild, marathon, row)
     sent, channel_id, why = await send_public(bot, guild, ping_prefix(*roles) + text, roles)
     if sent is None:
         await log_action(
@@ -330,11 +410,11 @@ async def sync_highlights(cog: Any, guild: Any, marathon: Any) -> None:
         return
     rows = [one for one in await runs_of(bot.db, marathon["id"]) if mp.is_up(one)]
     cache = public_cache(cog, marathon["id"])
+    since(cog)
     for row in rows:
         key = int(row["id"])
-        text = await public_text(
-            bot, guild, marathon, row, people=people_for(marathon, row) or None
-        )
+        people = people_for(marathon, row) or None
+        text = await public_text(bot, guild, marathon, row, people=people)
         if cache.get(key) == (mp.channel_of(row), text):
             continue
         message, lost = await fetch_public(bot, guild, row)
@@ -349,7 +429,7 @@ async def sync_highlights(cog: Any, guild: Any, marathon: Any) -> None:
                     details=details_of(marathon, row) | {"message_id": str(mp.message_id(row))},
                 )
             continue
-        if (getattr(message, "content", None) or "").endswith(text):
+        if await stands(cog, guild, marathon, row, message, text, people=people):
             cache[key] = (mp.channel_of(row), text)
             continue
         why = await edit_public(bot, guild, message, text)
@@ -571,12 +651,15 @@ __all__ = [
     "follow_opt",
     "people_for",
     "post_highlight",
+    "public_text",
     "press",
     "public_channel",
     "put_back",
     "send_public",
     "remove_highlight",
     "set_public_highlight",
+    "since",
+    "stands",
     "sync_highlights",
     "view_of",
 ]

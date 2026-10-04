@@ -3961,3 +3961,23 @@ lettered; the conductor numbers them. Local check first: <http://localhost:8797/
 | **`SB-c`** | When a run is seen starting on the stream: the same drawer | The run on now keeps its real start; the next run reads that start + its estimate + 7 minutes, and so on down the day. `marathon.retimed` in the log. |
 | **`SB-d`** | Mid-show, set the key to 10, then refresh the schedule | The run on now and every finished run stay where they were; the runs still ahead move to + 10 between each. Set it back to 7 and refresh: they come back. |
 | **`SB-e`** | Set the key to 0 and refresh a Hotfix marathon whose runs are all ahead | The bare stack of estimates, as before this build. Any GDQ-tracker, Oengus, horaro, Fastest Furs or Lady Arcaders marathon: its times are the same at 0, 7 and 30. Put the key back to 7. |
+## Rows `MR-a` … `MR-h` — Marathon role ping: the role on the 15-minute heads-up; a finished highlight goes past tense (branch `marathon-role-ping`, 2026-10-03)
+
+🔨 **BUILT on branch `marathon-role-ping`, NOT merged, NOT deployed, NOT verified in a browser or Discord.** Owner,
+2026-10-03 20:2x: *"lets do 15 for now, also on the highlights once a run has been completed can we change the text to
+past tense, Jr ran x game today on GDqueen. basically just change runs to ran and remove the ping for marathons."*
+Design: [`../info/marathon-role-ping-design.md`](../info/marathon-role-ping-design.md). ⚠️ **A real ping can only be
+proven in Discord** — the tests prove the text and the allowed mentions, never that a phone buzzed. Local check first:
+`MOCK_PORT=8821 node site/mock/server.mjs` from the branch, then <http://localhost:8821/events.html#marathon-1>
+(AGDQ 2027 ▸ *Settings for this marathon*). Phoenix times (UTC−7).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MR-a`** | BEFORE turning anything on: Settings ▸ Marathons — read `marathon_mode`, *The Marathon role…* (`marathon_role_id`), *Whether the 15-minute heads-up mentions the Marathon role* | The mode is **on** (in `shadow` the role is never pinged — by design); the role is picked; the new switch is **On**. |
+| **`MR-b`** | A tracked marathon's thread ▸ the pinned controls, with **Ping the marathon role: on** | One extra line at the bottom: *The public heads-up 15 minutes before a BaF run mentions @Marathon.* — or the reason in words (*…no role is picked…*, *…is not mentionable…*, *…while marathon posts rehearse…*). Switch off → the line is gone. |
+| **`MR-c`** | Events ▸ the marathon ▸ *Settings for this marathon* | Under *Ping the marathon role*: a badge (**Marathon role** / **no Marathon role**) and the same sentence, the role as `@name`. |
+| **`MR-d`** | ⚠️ **Discord only.** With the switch on, wait for a BaF run's 15-minute mark; watch the public reminder channel AND the staff thread, with an account that holds the Marathon role | Public copy starts `@Marathon` (after the runner's own role if they have one) and **notifies**; the staff thread's copy has no `@Marathon`. Log: `marathon.public_reminded` `roles` holds the role id, `marathon_role` = the id; `marathon.reminded` `public_roles` holds it and `roles` does not. The 24-hour and 2-hour copies mention no Marathon role. |
+| **`MR-e`** | ⚠️ **Discord only.** The same run goes live (Auto-highlight on) | The live highlight and the thread's shoutout carry **no** `@Marathon`. |
+| **`MR-f`** | ⚠️ **Discord only.** Right after the deploy: the public channel's highlights for runs that were ALREADY done | **Unchanged** — still present tense with *· done ·*, no edit mark newer than the deploy. No `marathon.public_highlight_edited` rows with `state=done` at the boot. |
+| **`MR-g`** | ⚠️ **Discord only.** A highlight that is up when its run finishes after the deploy (and a BaF host block's when its last run finishes) | Edited in place to *"**JR** ran **Game** — Any% today on **GDQueer** · link"* (host: *hosted*); no `@role` line left on it; nobody is notified by the edit. After the server's midnight, at the next sync: *today* becomes *on <date>*. |
+| **`MR-h`** | Settings ▸ Marathons: change *The word for a runner once the run is over* to something else, then back; change *What a BaF run’s public highlight says once the run is over* | Saves; a `{word}` it cannot fill is refused in words; `{day}` is accepted on the done template and refused on the live one. |

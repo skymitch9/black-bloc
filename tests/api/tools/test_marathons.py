@@ -774,6 +774,40 @@ async def test_a_pairings_twitch_fix_is_set_shown_cleared_and_refused_in_words(
     assert (said["from"], said["to"]) == ("some_fix", None)
 
 
+async def test_the_drawer_reads_whether_the_heads_up_mentions_the_marathon_role_and_why_not(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    assert client.get(f"/api/marathons/{marathon_id}").json()["role_ping"] == {
+        "mentions": False,
+        "reason": "switch_off",
+        "line": "",
+    }
+
+    client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": True})
+    unset = client.get(f"/api/marathons/{marathon_id}").json()["role_ping"]
+    assert (unset["mentions"], unset["reason"]) == (False, "unset")
+    assert unset["line"] == (
+        "The Marathon role is not mentioned: no role is picked in marathon_role_id."
+    )
+
+    role = web.guild.roles[0]
+    role.mentionable = True
+    await web.store.set(wf.GUILD_ID, "marathon_role_id", role.id)
+    found = client.get(f"/api/marathons/{marathon_id}").json()["role_ping"]
+    assert (found["mentions"], found["reason"]) == (True, None)
+    assert found["line"] == (
+        f"The public heads-up 15 minutes before a BaF run mentions @{role.name}."
+    )
+    assert "<@&" not in found["line"]
+
+    await web.store.set(wf.GUILD_ID, "marathon_role_pings", False)
+    off = client.get(f"/api/marathons/{marathon_id}").json()["role_ping"]
+    assert (off["mentions"], off["reason"]) == (False, "role_pings_off")
+    assert off["line"] == "The Marathon role is not mentioned: marathon_role_pings is off."
+
+
 async def test_patch_public_highlight_turns_the_auto_switch_on_and_off_and_refuses_a_bad_word(
     client, sign_in, web, cog, wf
 ):
