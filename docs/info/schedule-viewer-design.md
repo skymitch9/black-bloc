@@ -137,9 +137,9 @@ None from a bot build — nothing on the bot side is built. The local prototype'
 > **What this is:** the site half of this design, built against the mock so the owner can press
 > the buttons. **Nothing in `black_bloc/` exists for it** — no routes, no columns, no Discord door.
 > Measured 2026-10-03 ~21:00 Phoenix on the branch: the page rendered in headless Chrome at
-> 1280 px and 390 px (blackbloc dark, apple light, classic light) with no horizontal page scroll
+> 1280 px and 390 px (blackbloc dark, apple light, classic light, cyberpunk dark) with no horizontal page scroll
 > and no console error; every move pressed in the browser or walked through the API
-> (`MOCK_PORT=8798 node site/mock/runsheet.test.mjs`). ⚠️ **NOT checked:** the other four themes,
+> (`MOCK_PORT=8798 node site/mock/runsheet.test.mjs`). ⚠️ **NOT checked:** the other three themes,
 > a real phone, a keyboard-only pass, a screen reader, a marathon of 150 runs, and anything on the
 > bot side.
 
@@ -280,8 +280,12 @@ the day's staff times and staff estimates; real starts and finishes stay, and so
 
 `site/mock/contract.json` carries `/runsheet.html`, six run-sheet routes and nine
 `web.marathon.runsheet_*` kinds so `check.mjs` walks them. The Python half reads the same file,
-so on this branch `tests/api/test_contract.py` fails wherever it meets a route, a page or a kind
-the bot does not have. That is the reason the branch stays unmerged until the bot side is built.
+so on this branch `tests/api/test_contract.py` is red for exactly those six routes
+(`test_every_route_answers_with_the_keys_the_pages_read[…/runsheet…]`: the bot answers 404 / 405
+`unknown_route`). Measured 2026-10-03 21:1x from the worktree: **6 failed, 9,863 passed, 3 skipped**
+over the whole suite; `check.mjs` against this branch's mock: **ok — 23 pages, 294 routes**; the
+eleven node fixtures green. The page and the nine kinds fail nothing on the Python side today.
+That is the reason the branch stays unmerged until the bot side is built.
 Set-start, restore, reset and undo are **not** in `contract.json` (they need a moment or an
 earlier move a fixed body cannot give); `runsheet.test.mjs` walks them instead. That fixture is
 not wired into `scripts/deploy.ps1` or CI.
