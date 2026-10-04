@@ -1,5 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-03 — one section APPENDED, two rows annotated, nothing re-keyed**: *Hotfix setup buffer* (branch `hotfix-setup-buffer`, off `main` `aeca20b6`); the `chains` and `retimed` rows of the category-track section are amended by it, `marathon_signals.py` rows from `chains` on sit 2–17 lower, and `cogs/content/marathon_signals.py` rows after `_cell` sit 22 lower.
+
 > **2026-09-28 — one section APPENDED, the host-spotlight section annotated SUPERSEDED in part, nothing re-keyed**: *People unify* (branch `people-unify`, off `main` `d3916a42`, keyed against `87694fb2`); rows in the *Marathon hosts* and *Marathon Runner/Host announcements* sections that name Scan hosts, `scan_hosts`, `host_events`, `hosted` or the per-host `event_ids` describe code that is gone — the new section wins.
 
 > **2026-09-28 — one section APPENDED, the per-run section annotated SUPERSEDED, nothing re-keyed**: *Marathon Runner/Host announcements* (branch `marathon-announcements`, off `main` `1d5d017d`, keyed against `5a60c782`); `api/tools/marathons.py` rows after `entry_row` sit about the same (the host routes were replaced in place), `marathon_people.py` rows after `slot_card` sit ~5 lower.
@@ -9473,8 +9475,8 @@ Design: [`marathon-category-track-design.md`](marathon-category-track-design.md)
 | `black_bloc/marathon_signals.py:108` `category_matches` | Retro is decided BEFORE any id or name test: it stands only for looked-up runs with no id. A looked-up run with an id compares ids and nothing else. |
 | `black_bloc/marathon_signals.py:144` `_rank` | Direct, then already live, then nearest. The live preference is what stops a repeated game (or two Retro runs) handing over at the midpoint by distance alone. |
 | `black_bloc/marathon_signals.py:155` `decide` | The title's run being ANY of the category's matches is certain — that is how the title picks among several Retro runs. |
-| `black_bloc/marathon_signals.py:193` `chains` | A chain is runs the SHEET puts back to back (±`CHAIN_SLACK`); sorted by sheet time, never by the kept time, so a re-timing never reorders a chain. |
-| `black_bloc/marathon_signals.py:222` `retimed` | Before the first anchor a run is put back on the sheet's exact strings (not re-formatted); after it, start = actual or the cursor, end = actual end or start + estimate. A run with no estimate breaks the cursor, and the rest of the chain goes back to the sheet. |
+| `black_bloc/marathon_signals.py:193` `chains` | A chain is runs the SHEET puts back to back (±`CHAIN_SLACK`); sorted by sheet time, never by the kept time, so a re-timing never reorders a chain. ⚠️ 2026-10-03: the gap is now 0–`CHAIN_REACH` — see *Hotfix setup buffer*. |
+| `black_bloc/marathon_signals.py:222` `retimed` | Before the first anchor a run is put back on the sheet's exact strings (not re-formatted); after it, start = actual or the cursor, end = actual end or start + estimate. A run with no estimate breaks the cursor, and the rest of the chain goes back to the sheet. ⚠️ 2026-10-03: the cursor also carries the setup buffer, and a live/done run never seen starting is held — see *Hotfix setup buffer*. |
 | `black_bloc/marathon_signals.py:262` `on_the_sheet` | Also picks up rows whose times match the sheet but still carry an anchor — clearing the anchor is the point. |
 | `black_bloc/marathon.py:497` | `moved` compares the sheet's new start with `sheet_at`, never the kept time, so a re-timed run is not "moved" on every read. |
 | `black_bloc/marathon.py:651` `confirms` | A run already live is re-recorded only for a stronger reason than it went live by (the clock, or one signal where both now agree); staff-held runs never. |
@@ -9632,3 +9634,21 @@ Keyed against `87694fb2`. Design: [`people-unify-design.md`](people-unify-design
 | `black_bloc/api/tools/marathons.py:691` `marathon_patch` | `scan_hosts` / `host_events` in a PATCH add a sentence to `message` and change nothing — not a refusal, so the rest of an old page's body still saves. |
 | `black_bloc/cogs/content/marathon_people.py:367` `person_line` | A BaF person's slot line shows their parts on the whole marathon (the tag); someone not BaF keeps this slot's part. |
 | `black_bloc/cogs/content/marathon.py:2247` `rematch` | No `scan_hosts` argument: `mt.match_people`'s default (True). `marathon_match_hosts` still gates hosts and commentators together. |
+
+## Hotfix setup buffer — minutes between runs where Black Bloc keeps the clock (branch `hotfix-setup-buffer`, 2026-10-03)
+
+Keyed by NAME; the numbers are against the branch's code commit `95e58170`. Design:
+[`marathon-hotfix-design.md`](marathon-hotfix-design.md) ▸ *Follow-up 2026-10-03 — setup buffer*.
+
+| Where | Why |
+|---|---|
+| `black_bloc/settings_store.py:4722` `MARATHON_SETUP_MINUTES_KEY` | The default (7) and the max (30) live here, not in a marathon module: `marathon.py` imports `settings_store`, so the registry cannot import the marathon side without a cycle. `MARATHON_SETUP_MAX` is read by `marathon_signals.CHAIN_REACH` — one number, one home. |
+| `black_bloc/marathon_hotfix.py:260` `_runs` | The buffer goes on the CURSOR, never on a run's end: `ends_at` stays start + estimate, so a block's end is the last run's predicted end. The first run of each day takes the show start because the cursor is reset before it. A negative or blank value is 0. |
+| `black_bloc/marathon_hotfix.py:300` `blocks_of` | `setup_minutes` defaults to 0 so a caller that only wants shows, people or refs reads the bare sheet; every caller that shows or stores a TIME passes the setting. |
+| `black_bloc/marathon_signals.py:24` `CHAIN_REACH` | A chain link is a sheet gap of 0 to the key's MAX (± `CHAIN_SLACK`), not the key's current value: after the key changes the stored sheet times still carry the old buffer until the next read, and an exact match would break every chain and send re-timed runs back to the sheet. A run that starts BEFORE the one before it should end is still a new chain, as it always was. |
+| `black_bloc/marathon_signals.py:227` `settled` | Live or done. The one test both hold rules share. |
+| `black_bloc/marathon_signals.py:231` `retimed` | `held` = live/done with no `actual_started_at`. Before the first anchor it is skipped outright (not put back on the sheet — an upcoming run still is). After an anchor it keeps its stored start and stored end, and the cursor goes on from that end + the buffer. An anchored run is unchanged: its real start, its estimate. The buffer is added after a real end (`actual_ended_at`) too. |
+| `black_bloc/cogs/content/marathon_signals.py:54` `setup_for` | Answers keyword arguments, `{}` for a source that re-times itself — so those readers are called with exactly the arguments they always were, and a strict fake client (`tests/api/test_contract.py`, `tests/api/tools/test_marathons.py`) proves it by not accepting the keyword. |
+| `black_bloc/cogs/content/marathon_signals.py:62` `holds` | A read must not move a live or done run of a clock-kept schedule. Without it the first read after a changed buffer rewrites finished runs' times and logs `marathon.member_run_moved` for each BaF one. |
+| `black_bloc/cogs/content/marathon.py:2085` `held_plan` in `apply` | Applied to the plan before it is written, so `plan.moved` (the count in the read's answer) never counts a held run. The hash is of the sheet's runs, untouched, so a changed buffer is always a changed read. |
+| `black_bloc/cogs/content/marathon.py:2217` `holds` in `_write_plan` | Only `scheduled_at` / `ends_at` are withheld. `sheet_at` / `sheet_ends_at` still take the sheet's new times — `chains` measures on those, and *Back to the sheet's times* must mean the sheet as it is now. |
