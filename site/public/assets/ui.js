@@ -2035,11 +2035,12 @@ export function blankMeans(select, text) {
   return select;
 }
 
-export function slugInput(input, { lower = false } = {}) {
+export function slugInput(input, { lower = false, join = '-', only = null } = {}) {
   input.addEventListener('input', () => {
     const at = input.selectionStart;
-    const spaced = input.value.replace(/\s+/g, '-');
-    const fixed = lower ? spaced.toLowerCase() : spaced;
+    const spaced = input.value.replace(/\s+/g, join);
+    const kept = only ? spaced.replace(only, '') : spaced;
+    const fixed = lower ? kept.toLowerCase() : kept;
     if (fixed === input.value) return;
     input.value = fixed;
     input.setSelectionRange(at, at);
@@ -2051,15 +2052,16 @@ export function placeholdersOf(spec) {
   return tokensIn(spec && spec.default, spec && spec.help);
 }
 
-export function placeholderChips(box, tokens, { label = 'Insert' } = {}) {
+export function placeholderChips(box, tokens, { label = 'Insert', said = null } = {}) {
   const list = tokens || [];
   if (!list.length) return null;
+  const named = (token) => (said && said[token] ? `${label} ${token} — ${said[token]}` : `${label} ${token}`);
   return el('div', { class: 'tokenrow', role: 'group', 'aria-label': label }, list.map((token) => el('button', {
     class: 'chip-filter token-chip',
     type: 'button',
     text: token,
-    title: `${label} ${token}`,
-    'aria-label': `${label} ${token}`,
+    title: named(token),
+    'aria-label': named(token),
     on: {
       mousedown: (event) => event.preventDefault(),
       click: () => putText(box, insertAt(box.value, box.selectionStart, box.selectionEnd, token)),
@@ -2067,10 +2069,10 @@ export function placeholderChips(box, tokens, { label = 'Insert' } = {}) {
   })));
 }
 
-export function wordAids(box, spec = null, { tokens = null } = {}) {
+export function wordAids(box, spec = null, { tokens = null, said = null } = {}) {
   const shipped = spec && typeof spec.default === 'string' ? spec.default : '';
   if (shipped && !box.placeholder) box.placeholder = shipped;
-  const chips = placeholderChips(box, tokens || placeholdersOf(spec));
+  const chips = placeholderChips(box, tokens || placeholdersOf(spec), { said });
   const max = Number(box.getAttribute('maxlength')) || 0;
   const made = document.createDocumentFragment();
   if (chips) made.append(chips);
