@@ -885,11 +885,14 @@ async def rename_marathon(
     via: str = VIA_DISCORD,
 ) -> Outcome:
     changes: dict[str, Any] = {}
+    said = ""
     if name is not None:
         wanted = " ".join(str(name).split())[:100]
         if not wanted:
-            return refusal(mt.NO_NAME, NO_NAME_CODE, 422)
-        changes["name"] = wanted
+            return refusal(mt.NO_RENAME, NO_NAME_CODE, 422)
+        if wanted != marathon["name"]:
+            changes["name"] = wanted
+            said = mt.RENAME_SAID.format(old=marathon["name"], name=wanted)
     if poll_minutes is not None:
         if poll_minutes in ("", 0):
             changes["poll_minutes"] = None
@@ -910,7 +913,9 @@ async def rename_marathon(
             actor=actor,
             details={"marathon_id": marathon["id"], **changes, "via": via},
         )
-    return Outcome(True, "", value=await get_marathon(bot.db, guild.id, marathon["id"]))
+        if "name" in changes:
+            await controls_changed(bot, guild, marathon["id"])
+    return Outcome(True, said, value=await get_marathon(bot.db, guild.id, marathon["id"]))
 
 
 async def remove_marathon(
@@ -3757,6 +3762,13 @@ class MarathonMoveButton(discord.ui.Button):
                 )
                 current = row["schedule_url"] if row is not None else None
                 await interaction.response.send_modal(LinkModal(view, current))
+        elif action == mt.RENAME:
+            if await still_staff(interaction):
+                row = await get_marathon(
+                    interaction.client.db, interaction.guild.id, view.marathon_id
+                )
+                current = row["name"] if row is not None else None
+                await interaction.response.send_modal(RenameModal(view, current))
         elif action == mt.POLL:
             if await still_staff(interaction):
                 row = await get_marathon(
@@ -4008,6 +4020,32 @@ class LinkModal(AnswersErrors, discord.ui.Modal, title=mi.LINK_TITLE):
         else:
             await open_card(interaction, row["id"], self.previous)
         await answer(interaction, outcome.message)
+
+
+class RenameModal(AnswersErrors, discord.ui.Modal, title=mt.RENAME_TITLE):
+    wanted = discord.ui.TextInput(label=mt.RENAME_LABEL, max_length=100)
+
+    def __init__(self, previous: Any = None, current: Any = None) -> None:
+        super().__init__()
+        self.previous = previous
+        self.wanted.default = str(current) if current else None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        bot, guild = interaction.client, interaction.guild
+        marathon_id = getattr(self.previous, "marathon_id", None)
+        row = await get_marathon(bot.db, guild.id, marathon_id)
+        if row is None:
+            await open_root(interaction, self.previous)
+            await answer(interaction, mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
+            return
+        outcome = await rename_marathon(bot, guild, interaction.user, row, str(self.wanted), None)
+        if getattr(self.previous, "where", None) == SCHEDULE_VIEW:
+            await back_to_schedule(interaction, self.previous)
+        else:
+            await open_card(interaction, row["id"], self.previous)
+        await answer(interaction, outcome.message or mt.RENAME_SAME.format(name=row["name"]))
 
 
 class PollModal(AnswersErrors, discord.ui.Modal, title=mt.POLL_TITLE):

@@ -1088,6 +1088,24 @@ async function changeLink(marathon) {
   await after(marathon, { ok: true, found: done });
 }
 
+async function renameMarathon(marathon) {
+  const name = el('input', { class: 'input', type: 'text', value: marathon.name, maxlength: '100', 'aria-label': 'Name' });
+  let done = null;
+  const sure = await askForm({
+    title: `Rename ${marathon.name}`,
+    body: [field('Name', name)],
+    confirmLabel: 'Rename it',
+    tone: 'warn',
+    onConfirm: async () => {
+      done = await send(`/api/marathons/${marathon.id}`, 'PATCH', { name: name.value.trim() });
+      return null;
+    },
+  });
+  if (!sure || !done) return;
+  await refresh();
+  await openMarathon(marathon.id, done.name || name.value.trim(), done.message || 'Renamed.');
+}
+
 function linkLine(marathon) {
   return el('p', { class: 'field-help mx-line mx-link' }, joined([
     el('span', {}, [
@@ -1132,6 +1150,7 @@ function moveBar(marathon, say) {
     marathon.active ? step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn') : null,
     marathon.retimed_runs ? step(marathon, say, SHEET_TIMES_ACTION, () => send(`/api/marathons/${marathon.id}/sheet-times`, 'POST', {}), 'quiet') : null,
     step(marathon, say, marathon.active ? 'Pause' : 'Resume', () => send(`/api/marathons/${marathon.id}`, 'PATCH', { active: !marathon.active }), null),
+    button('Rename…', () => renameMarathon(marathon), { tone: 'quiet' }),
     button('Archive it', async () => {
       const sure = await ask({ title: `Archive ${marathon.name}?`, body: [ARCHIVE_BODY], confirmLabel: 'Archive it' });
       if (!sure) return;

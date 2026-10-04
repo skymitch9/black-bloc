@@ -664,6 +664,7 @@ async def test_the_schedule_view_offers_post_it_now_only_until_the_message_is_up
     assert labels_of(view) == [
         "Change the schedule link…",
         "Re-read every…",
+        "Rename…",
         "Post it to the inbox now",
         "Back",
     ]

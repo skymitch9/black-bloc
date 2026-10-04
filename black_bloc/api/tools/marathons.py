@@ -643,7 +643,7 @@ def build_router(bot: Any) -> APIRouter:
                 answered(await set_channel(bot, guild, actor, row, wanted_channel, via=VIA_WEBSITE))
         if "name" in payload or "poll_minutes" in payload:
             poll = payload.get("poll_minutes")
-            answered(
+            renamed = answered(
                 await rename_marathon(
                     bot,
                     guild,
@@ -654,6 +654,8 @@ def build_router(bot: Any) -> APIRouter:
                     via=VIA_WEBSITE,
                 )
             )
+            if renamed.message:
+                said.append(renamed.message)
         if "event_mode" in payload:
             done = answered(
                 await set_event_mode(

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .golive import parse_ts
-from .marathon import BACK_MOVE, POLL_MOVE, MarathonMove
+from .marathon import BACK_MOVE, POLL_MOVE, RENAME_MOVE, MarathonMove
 
 FOUND = "found"
 TRACKED = "tracked"
@@ -141,9 +141,10 @@ def has_message(row: Any) -> bool:
 
 
 def schedule_moves(row: Any) -> tuple[MarathonMove, ...]:
-    """The Schedule view: the link, the read gap, and the early post while no message is up."""
+    """The Schedule view: the link, the read gap, the name, and the early post (no message up)."""
     early = () if has_message(row) or state_of(row) == ARCHIVED else (POST_NOW_MOVE,)
-    return (LINK_MOVE, POLL_MOVE._replace(row=2), *early, BACK_MOVE)
+    poll = POLL_MOVE._replace(row=2)
+    return (LINK_MOVE, poll, RENAME_MOVE, *early, BACK_MOVE)
 
 
 def custom_id(marathon_id: Any, action: str) -> str:

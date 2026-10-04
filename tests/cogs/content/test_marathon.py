@@ -17,6 +17,7 @@ from black_bloc.cogs.content.marathon import (
     post_board,
     refresh_marathon,
     remove_marathon,
+    rename_marathon,
     runs_of,
     set_active,
     set_channel,
@@ -1643,3 +1644,71 @@ async def test_hosts_are_found_with_no_switch_anywhere(bot, cog):
     marathon = await added(bot, cog)
     assert mt.people_of((await runs_of(bot.db, marathon["id"]))[0])[0]["user_id"] == 55
     assert mt.is_ours((await runs_of(bot.db, marathon["id"]))[0])
+
+
+# --- renaming: a hand-set name -------------------------------------------------------------
+
+
+async def test_a_rename_says_so_refuses_an_empty_name_and_a_same_name_changes_nothing(bot, cog):
+    marathon = await added(bot, cog)
+    wanted = "  AGDQ   2027: Soul Train "
+    done = await rename_marathon(bot, bot.guild, FakeActor(), marathon, wanted, None)
+    assert done.ok and done.value["name"] == "AGDQ 2027: Soul Train"
+    assert done.message == mt.RENAME_SAID.format(old="AGDQ 2027", name="AGDQ 2027: Soul Train")
+    assert (await details_of(bot.db, "marathon.updated"))["name"] == "AGDQ 2027: Soul Train"
+
+    soul = "AGDQ 2027: Soul Train"
+    same = await rename_marathon(bot, bot.guild, FakeActor(), done.value, soul, None)
+    assert same.ok and same.message == ""
+    assert (await kinds(bot.db)).count("marathon.updated") == 1
+
+    empty = await rename_marathon(bot, bot.guild, FakeActor(), done.value, "   ", None)
+    assert not empty.ok and empty.message == mt.NO_RENAME and empty.status == 422
+    assert (await fresh(bot, marathon))["name"] == "AGDQ 2027: Soul Train"
+
+
+async def test_a_schedule_read_after_a_rename_leaves_the_hand_set_name_alone(bot, cog):
+    marathon = await added(bot, cog)
+    await rename_marathon(bot, bot.guild, FakeActor(), marathon, "Tuesday: Soul Train", None)
+    cog.client.runs_given = [*SCHEDULE[:3], a_run(7, 500, game="New Game")]
+    await cog.refresh(bot.guild, await fresh(bot, marathon))
+    assert (await details_of(bot.db, "marathon.schedule_changed"))["added"] == 1
+    assert (await fresh(bot, marathon))["name"] == "Tuesday: Soul Train"
+
+
+async def test_the_schedule_views_rename_button_opens_a_modal_with_the_name_and_saves_it(bot, cog):
+    marathon = await added(bot, cog)
+    _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    schedule = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pressed(view, "Schedule…").callback(schedule)
+    assert "Rename…" in schedule.labels()
+
+    opening = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pressed(schedule.view, "Rename…").callback(opening)
+    modal = opening.response.modals[-1]
+    assert modal.wanted.default == "AGDQ 2027"
+    modal.wanted._value = "AGDQ 2027: Soul Train"
+    submitted = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(submitted)
+
+    assert (await fresh(bot, marathon))["name"] == "AGDQ 2027: Soul Train"
+    assert submitted.view.where == cogmod.SCHEDULE_VIEW and "is now called" in submitted.sent
+
+    modal.wanted._value = "  "
+    refused = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(refused)
+    assert mt.NO_RENAME in refused.sent
+    assert (await fresh(bot, marathon))["name"] == "AGDQ 2027: Soul Train"
+
+
+async def test_a_renamed_board_and_runner_posts_take_the_new_name_on_the_next_follow(bot, cog):
+    marathon = await added(bot, cog)
+    await cog.follow(bot.guild, await fresh(bot, marathon))
+    before = [one.content for one in posts(bot)]
+    assert any("AGDQ 2027" in text for text in before)
+    await rename_marathon(bot, bot.guild, FakeActor(), marathon, "Tuesday: Soul Train", None)
+    await cog.follow(bot.guild, await fresh(bot, marathon))
+    after = [one.content for one in posts(bot)]
+    assert len(after) == len(before)
+    assert any("Tuesday: Soul Train" in text for text in after)
+    assert not any("AGDQ 2027" in text for text in after)

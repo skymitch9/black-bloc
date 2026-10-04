@@ -7,7 +7,7 @@ import pytest
 
 from black_bloc.cogs.content.marathon import Marathons, get_marathon, runs_of
 from black_bloc.cogs.content.spotlight import add_channel, channel_by_id
-from black_bloc.marathon import BAD_POLL
+from black_bloc.marathon import BAD_POLL, NO_RENAME
 from black_bloc.marathon_people import BY_LINK, MATCHED_WORDS
 from black_bloc.marathon_sources import Person, Run, ScheduleError
 from black_bloc.settings_store import MARATHON_EVENT_MODES
@@ -441,6 +441,31 @@ async def test_a_marathons_own_read_gap_is_set_and_cleared_from_the_page(
     assert body["poll_minutes"] is None
     words = client.patch(f"/api/marathons/{marathon_id}", json={"poll_minutes": "soon"})
     assert words.status_code == 422 and words.json()["message"] == BAD_POLL
+
+
+async def test_a_marathon_is_renamed_from_the_page_and_an_empty_name_is_refused_in_words(
+    client, sign_in, cog
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    before = client.get(f"/api/marathons/{marathon_id}").json()["name"]
+    done = client.patch(
+        f"/api/marathons/{marathon_id}", json={"name": " Black in a Flash:  Soul Train "}
+    )
+    assert done.status_code == 200
+    body = done.json()
+    assert body["name"] == "Black in a Flash: Soul Train"
+    assert f"**{before}** is now called **Black in a Flash: Soul Train**" in body["message"]
+    again = client.patch(
+        f"/api/marathons/{marathon_id}", json={"name": "Black in a Flash: Soul Train"}
+    )
+    assert again.status_code == 200 and again.json()["message"] == ""
+    empty = client.patch(f"/api/marathons/{marathon_id}", json={"name": "   "})
+    assert empty.status_code == 422 and empty.json()["error"] == "no_name"
+    assert empty.json()["message"] == NO_RENAME
+    kept = client.get(f"/api/marathons/{marathon_id}").json()["name"]
+    assert kept == "Black in a Flash: Soul Train"
+    assert client.patch("/api/marathons/99999", json={"name": "x"}).status_code == 404
 
 
 # --- a marathon is an event (docs/info/marathon-events-page-design.md §B) --------------------
