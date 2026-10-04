@@ -419,6 +419,7 @@ def match_people(
     usernames: dict[str, int] | None = None,
     scan_hosts: bool = True,
     hosts_count: bool = True,
+    commentators_count: bool = True,
 ) -> list[dict[str, Any]]:
     """Staff pairings first, then the member's Twitch link, then — only for a name the schedule
     gave no link for — a member whose Discord username is exactly that name."""
@@ -437,6 +438,7 @@ def match_people(
         name = str(_person(person, "name"))
         sheet = _person(person, "sheet_login") or _person(person, "login")
         part = str(_person(person, "part"))
+        lent = str(_person(person, "login_from") or "")
         key = runner_key(name)
         pairing = here.get(key) or everywhere.get(key)
         fixed = pairing_login(pairing)
@@ -444,14 +446,19 @@ def match_people(
         user_id: int | None = None
         if part == RUNNER or (match_hosts and (part != HOST or scan_hosts)):
             user_id = int(_cell(pairing, "user_id")) if pairing is not None else None
-            if user_id is None and login:
+            borrowed = bool(lent) and not fixed
+            if user_id is None and login and not borrowed:
                 user_id = lowered.get(str(login).lower())
-            if user_id is None and not login:
+            if user_id is None and (not login or borrowed):
                 user_id = named.get(key)
         one = {"name": name, "login": login, "part": part, "user_id": user_id}
         if fixed and fixed != sheet:
             one["sheet_login"] = sheet
+        if lent:
+            one["login_from"] = lent
         if user_id is not None and part == HOST and not hosts_count:
+            one["counts"] = False
+        if user_id is not None and part == COMMENTATOR and not commentators_count:
             one["counts"] = False
         found.append(one)
     return found

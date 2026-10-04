@@ -169,6 +169,11 @@ FEED_REREAD = "It read every Oengus marathon's record again ({count} remembered 
 HORARO_EVENTS_WORD = "horaro.net events"
 HOTFIX_SHOWS_LINE = "**Shows:** {shows} — marathon_hotfix_shows in Settings changes them"
 HOTFIX_NO_SHOWS = "nothing yet"
+HOTFIX_VIEWER_LINE = (
+    "**Viewer:** {url} — hosts' Twitch names and event schedules; marathon_hotfix_viewer_url "
+    "in Settings changes it"
+)
+HOTFIX_VIEWER_OFF = "off (the link is blank)"
 FEED_REPROBE = "It asked ladyarcaders.com about the next events again ({count} remembered before)."
 SUGGESTION_GONE = "**{event}** is not waiting on **{name}** any more, so nothing was changed."
 SUGGESTION_DISMISSED = "**{event}** is dismissed — **{name}** will not suggest it again."

@@ -9636,6 +9636,33 @@ Keyed against `87694fb2`. Design: [`people-unify-design.md`](people-unify-design
 | `black_bloc/cogs/content/marathon_people.py:367` `person_line` | A BaF person's slot line shows their parts on the whole marathon (the tag); someone not BaF keeps this slot's part. |
 | `black_bloc/cogs/content/marathon.py:2247` `rematch` | No `scan_hosts` argument: `mt.match_people`'s default (True). `marathon_match_hosts` still gates hosts and commentators together. |
 
+## Hotfix viewer source — the viewer page, lent host logins, the event sheet overlay (branch `hotfix-viewer-source`, 2026-10-03)
+
+Keyed by NAME (anchor text), not line: three layers landed in one day and the merge with `hotfix-setup-buffer` will
+move every number. Design: [`hotfix-viewer-source-design.md`](hotfix-viewer-source-design.md).
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_viewer.py` `allow_for` | One hop check per configured page: its own host plus `script.google.com`, `gdq.gg`, `docs.google.com` and the `.googleusercontent.com` tail. The tail (not `script.googleusercontent.com` alone) because a published sheet's CSV redirects to `doc-…-sheets.googleusercontent.com` — measured 2026-10-03. |
+| `black_bloc/marathon_viewer.py` `script_urls` | Same host as the page ONLY. A viewer page that loads a script from elsewhere gets no host table rather than a fetch outside the allowlist. |
+| `black_bloc/marathon_viewer.py` `HOST_TABLE` / `PAIR` | The table is read by regex out of script TEXT — never evaluated. `[^{}]` stops at the first brace, so a nested object reads as no table; every length is capped. |
+| `black_bloc/marathon_viewer.py` `_resolve` | A `gdq.gg` link is followed by its `Location` header only, and only while the next hop is `gdq.gg` or already a published-sheet link. A tracker target is named in `skipped` and never fetched. |
+| `black_bloc/marathon_viewer.py` `serial_clock` / `serial_seconds` | Sheets writes time-of-day and duration serials five hours ahead ALWAYS (EST baked in), so the five is a constant, not the day's offset; only `serial_day` asks the zone. Ported from the viewer's own script, whose comments say so. |
+| `black_bloc/marathon_viewer.py` `ViewerCache.waiting` | A failed read is not retried for five minutes — every schedule refresh of every Hotfix marathon would otherwise ask a page that is down. |
+| `black_bloc/cogs/content/marathon_viewer.py` `viewer_of` | Catches `Exception`, not only `ScheduleError`: a third party's page must never fail a schedule read. `getattr(client, "viewer")` so a client that cannot read one (the suite's fakes) is "no viewer", not a failure row. |
+| `black_bloc/cogs/content/marathon_viewer.py` `laid` | Sticky: with no sheet to be had and the overlay applied, the runs take what the stored rows last held (`marathon_overlay.kept`). Falling back to GDQ's stacked times would move every run and re-arm reminders on a page hiccup. Only `on == False` or a blank link un-applies it. |
+| `black_bloc/cogs/content/marathon_viewer.py` `host_logins` | With the viewer unreadable the table is the one the stored runs carry (`stored_logins`), so a lent login — and a BaF match made through it — survives an outage. `fresh` compares with the stored table so the log row is written once, not at every read. |
+| `black_bloc/cogs/content/marathon.py` `viewer_decorated` | Called between the read and `apply`, so the overlay is part of the diff: `schedule_hash`, moved runs, re-armed marks and `sheet_at` all see the overlaid runs. Lazy import — `marathon_viewer` imports this module. |
+| `black_bloc/marathon.py` `match_people` (`lent`) | The Discord-name rule also applies to a login lent by the viewer that matched no Go-live link. Without it, lending a host a login could silently un-match a member who was found by name. A staff-fixed login (`fixed`) switches it off again. |
+| `black_bloc/marathon_overlay.py` `show_day` | Eastern, rolling at 6 AM: Halo Infinite at 11:29 PM and the separator at 12:56 AM belong to Saturday's show. Used for the dates test and the order fallback alike. |
+| `black_bloc/marathon_overlay.py` `paired` | Title pass first across the WHOLE event (a run GDQ lists on the other day still pairs); the order pass only inside one show-day and only when the counts left are equal — a guess across an unequal remainder would shift every later run by one. |
+| `black_bloc/marathon_overlay.py` `_people` | Hosts are replaced only when the slot names some; commentators always come from the slot. Runners stay GDQ's — they carry the Twitch links the organisers' sheet lacks (`Mathcat` vs `The_Mathcat`). |
+| `black_bloc/marathon_overlay.py` `retimed` | `marathon_signals.retimed` plus the sheet's own gap before each run. Its `chains` breaks on three hours of nothing, not on one minute, or setup time would make every run its own chain and a late run would move nothing after it. |
+| `black_bloc/cogs/content/marathon_signals.py` `retime` (`kept`) | Re-reads the marathon: `apply` is handed the row as it was BEFORE `decorated` wrote `overlay_sheet`, and the clock must be chosen from the stored state. |
+| `black_bloc/cogs/content/marathon_hosts.py` `set_switch` | Two literal kinds in one conditional, not a lookup table — `tests/test_logkinds.py` enumerates kinds from the source and refuses a dynamic one. The overlay re-reads the schedule only when `on` actually changed. |
+| `black_bloc/marathon_thread_controls.py` `controls` (`overlay`) | `None` = no button. Only a marathon with a matching sheet gets the seventh, so every other marathon's pinned controls are byte-for-byte what they were and are not edited at boot. |
+| `site/mock/server.mjs` `MARATHON_OVERLAY_SHEET` | Declared just above `let state = …seedState()` on purpose: the seed runs at module load, and a `const` further down is in its temporal dead zone (the mock died on start the first time). |
+
 ## Hotfix setup buffer — minutes between runs where Black Bloc keeps the clock (branch `hotfix-setup-buffer`, 2026-10-03)
 
 Keyed by NAME; the numbers are against the branch's code commit `95e58170`. Design:

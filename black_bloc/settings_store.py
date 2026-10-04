@@ -6,6 +6,7 @@ import re
 from datetime import UTC, datetime
 from inspect import isawaitable
 from typing import Any
+from urllib.parse import urlsplit
 
 from .automod import (
     AUTOMOD_MODES,
@@ -4951,6 +4952,15 @@ MARATHON_HOTFIX_SHOWS = "GDQueer"
 MARATHON_HOTFIX_SHOWS_MAX = 20
 MARATHON_HOTFIX_SHOW_LENGTH = 60
 MARATHON_HOTFIX_TRACK_PEOPLE_KEY = "marathon_hotfix_track_people"
+MARATHON_HOTFIX_VIEWER_URL_KEY = "marathon_hotfix_viewer_url"
+MARATHON_HOTFIX_VIEWER_URL = "https://ogndrahcir.github.io/ScheduleViewer/"
+MARATHON_HOTFIX_VIEWER_URL_LENGTH = 300
+MARATHON_HOTFIX_VIEWER_INNER = (".internal", ".local", ".localhost", ".lan", ".home", ".corp")
+MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY = "marathon_hotfix_overlay_default"
+MARATHON_CONTROLS_OVERLAY_ON_KEY = "marathon_controls_overlay_on"
+MARATHON_CONTROLS_OVERLAY_OFF_KEY = "marathon_controls_overlay_off"
+MARATHON_OVERLAY_ON_SAID_KEY = "marathon_overlay_on_said"
+MARATHON_OVERLAY_OFF_SAID_KEY = "marathon_overlay_off_said"
 MARATHON_HOTFIX_HOSTS_TEMPLATE_KEY = "marathon_hotfix_hosts_template"
 MARATHON_HOTFIX_RUNS_TEMPLATE_KEY = "marathon_hotfix_runs_template"
 MARATHON_HOTFIX_BECAUSE_FIELDS = ("people", "show")
@@ -4998,6 +5008,11 @@ MARATHON_BAD_SHOWS = (
     "**{given}** names no Hotfix show, so nothing was changed. Write one to {most} show names "
     "as the Show column spells them, up to {longest} characters each, separated by commas — for "
     "example `GDQueer`. To stop the Hotfix feed, pause it instead."
+)
+MARATHON_BAD_VIEWER = (
+    "**{given}** is not a page Black Bloc can read, so nothing was changed. Give one https link "
+    "to a public site (no port, no sign-in, no address made of numbers), at most {longest} "
+    "characters — or leave it blank to turn the Hotfix schedule viewer off."
 )
 MARATHON_BAD_RETRO = (
     "**{given}** is not a Twitch category name, so nothing was changed. Write the category a run "
@@ -5254,6 +5269,24 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "the marathon's People card uses — even when its show is not in marathon_hotfix_shows. "
         "on by default",
     ),
+    MARATHON_HOTFIX_VIEWER_URL_KEY: (
+        "text",
+        MARATHON_HOTFIX_VIEWER_URL,
+        "the Hotfix schedule viewer page Black Bloc reads beside GDQ's own sheet — a second "
+        "source, never a replacement. From it come the hosts' Twitch names and the links to "
+        "each special event's own schedule (per-run start times, hosts and commentators). One "
+        "https link; blank turns this source off and the GDQ sheet is read alone. "
+        "`https://ogndrahcir.github.io/ScheduleViewer/` by default",
+    ),
+    MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY: (
+        "bool",
+        True,
+        "whether a Hotfix marathon takes its start times, hosts and commentators from the "
+        "event's own schedule sheet when the viewer page links one that matches it — while "
+        "the marathon's own Event schedule switch follows this setting. Off, such a marathon "
+        "keeps GDQ's sheet times (the show's start plus the estimates) and its host column. "
+        "on by default",
+    ),
     MARATHON_EVENT_MODE_DEFAULT_KEY: (
         "enum",
         "none",
@@ -5433,6 +5466,34 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the description of the event made for one BaF host block of a marathon. It takes "
         "{member} "
         "{marathon} {games} {runs}",
+    ),
+    MARATHON_CONTROLS_OVERLAY_ON_KEY: (
+        "Event schedule: on · turn off",
+        (),
+        "the thread controls' event-schedule button while a Hotfix marathon takes its times, "
+        "hosts and commentators from the event's own schedule sheet. The button is there only "
+        "when the viewer page links a sheet that matches the marathon",
+    ),
+    MARATHON_CONTROLS_OVERLAY_OFF_KEY: (
+        "Event schedule: off · turn on",
+        (),
+        "the thread controls' event-schedule button while a Hotfix marathon keeps GDQ's sheet "
+        "times although the event has a schedule sheet of its own",
+    ),
+    MARATHON_OVERLAY_ON_SAID_KEY: (
+        "**{marathon}** takes its start times, hosts and commentators from the event's own "
+        "schedule sheet now, when the viewer links one that matches. The schedule is being "
+        "read again.",
+        ("marathon",),
+        "what staff are told once a marathon's Event schedule switch is on. It takes "
+        "{marathon}",
+    ),
+    MARATHON_OVERLAY_OFF_SAID_KEY: (
+        "**{marathon}** keeps GDQ's sheet times and host column now — the event's own "
+        "schedule sheet is not laid over it. The schedule is being read again.",
+        ("marathon",),
+        "what staff are told once a marathon's Event schedule switch is off. It takes "
+        "{marathon}",
     ),
     MARATHON_CONTROLS_ANNOUNCE_ON_KEY: (
         "BaF announcements: on · turn off",
@@ -6450,6 +6511,32 @@ def checked_shows(given: Any) -> str:
     return ", ".join(found)
 
 
+def checked_viewer_url(given: Any) -> str:
+    """One public https page, kept as typed; a blank turns the viewer off."""
+    text = str(given or "").strip()
+    if not text:
+        return ""
+    bad = SettingError(
+        MARATHON_BAD_VIEWER.format(given=text[:60], longest=MARATHON_HOTFIX_VIEWER_URL_LENGTH)
+    )
+    if len(text) > MARATHON_HOTFIX_VIEWER_URL_LENGTH or any(ch.isspace() for ch in text):
+        raise bad
+    try:
+        parts = urlsplit(text)
+        port = parts.port
+    except ValueError:
+        raise bad from None
+    host = (parts.hostname or "").lower()
+    numbers = ":" in host or all(part.isdigit() for part in host.split("."))
+    if parts.scheme.lower() != "https" or port is not None or parts.username is not None:
+        raise bad
+    if parts.password is not None or "." not in host or numbers:
+        raise bad
+    if host.endswith(MARATHON_HOTFIX_VIEWER_INNER):
+        raise bad
+    return text
+
+
 def checked_marathon(fields: tuple[str, ...]) -> Any:
     def check(given: Any) -> str:
         text = str(given or "").strip()
@@ -6483,6 +6570,8 @@ KEY_MIN.update({key: floor for key, (floor, _) in MARATHON_RANGES.items()})
 KEY_MAX.update({key: ceiling for key, (_, ceiling) in MARATHON_RANGES.items()})
 TEXT_CHECKS[MARATHON_REMINDER_MINUTES_KEY] = checked_marks
 TEXT_CHECKS[MARATHON_HOTFIX_SHOWS_KEY] = checked_shows
+TEXT_CHECKS[MARATHON_HOTFIX_VIEWER_URL_KEY] = checked_viewer_url
+TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, MARATHON_HOTFIX_VIEWER_URL_KEY)
 TEXT_CHECKS[MARATHON_RETRO_CATEGORY_KEY] = checked_retro
 TEXT_CHECKS.update(
     {key: checked_marathon(fields) for key, (_, fields, _) in MARATHON_WORDS.items()}

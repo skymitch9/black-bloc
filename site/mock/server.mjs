@@ -906,6 +906,12 @@ const SETTING_SPECS = [
   ["marathon_ladyarcaders_floor", "int", 24, 24, "the event number the Lady Arcaders feed probes upward from — it asks the next numbers above this or above the highest event it already knows, whichever is higher; staff raise it after a link is pasted. 24 by default", null, 99999, 1],
   ["marathon_hotfix_shows", "text", "GDQueer", "GDQueer", "the GDQ Hotfix shows the Hotfix feed turns into marathons, separated by commas and spelled as the sheet's Show column spells them (capitals do not matter); each run of days a show airs becomes one marathon. `GDQueer` by default"],
   ["marathon_hotfix_track_people", "bool", true, true, "whether the Hotfix feed also takes any show block a BaF person runs or hosts — paired for every schedule, matched by their Twitch link or their Discord name, the same rules the marathon's People card uses — even when its show is not in marathon_hotfix_shows. on by default"],
+  ["marathon_hotfix_viewer_url", "text", "https://ogndrahcir.github.io/ScheduleViewer/", "https://ogndrahcir.github.io/ScheduleViewer/", "the Hotfix schedule viewer page Black Bloc reads beside GDQ's own sheet — a second source, never a replacement. From it come the hosts' Twitch names and the links to each special event's own schedule (per-run start times, hosts and commentators). One https link; blank turns this source off and the GDQ sheet is read alone. `https://ogndrahcir.github.io/ScheduleViewer/` by default"],
+  ["marathon_hotfix_overlay_default", "bool", true, true, "whether a Hotfix marathon takes its start times, hosts and commentators from the event's own schedule sheet when the viewer page links one that matches it — while the marathon's own Event schedule switch follows this setting. Off, such a marathon keeps GDQ's sheet times (the show's start plus the estimates) and its host column. on by default"],
+  ["marathon_controls_overlay_on", "text", "Event schedule: on · turn off", "Event schedule: on · turn off", "the thread controls' event-schedule button while a Hotfix marathon takes its times, hosts and commentators from the event's own schedule sheet. The button is there only when the viewer page links a sheet that matches the marathon"],
+  ["marathon_controls_overlay_off", "text", "Event schedule: off · turn on", "Event schedule: off · turn on", "the thread controls' event-schedule button while a Hotfix marathon keeps GDQ's sheet times although the event has a schedule sheet of its own"],
+  ["marathon_overlay_on_said", "text", "**{marathon}** takes its start times, hosts and commentators from the event's own schedule sheet now, when the viewer links one that matches. The schedule is being read again.", "**{marathon}** takes its start times, hosts and commentators from the event's own schedule sheet now, when the viewer links one that matches. The schedule is being read again.", "what staff are told once a marathon's Event schedule switch is on. It takes {marathon}"],
+  ["marathon_overlay_off_said", "text", "**{marathon}** keeps GDQ's sheet times and host column now — the event's own schedule sheet is not laid over it. The schedule is being read again.", "**{marathon}** keeps GDQ's sheet times and host column now — the event's own schedule sheet is not laid over it. The schedule is being read again.", "what staff are told once a marathon's Event schedule switch is off. It takes {marathon}"],
   ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the line above a feed-found marathon's message in the marathon inbox thread, where Track and Ignore are. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_feed_suggest_template", "text", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "the staff notice when a feed in suggest mode finds a new event; it carries Add it and Not this one. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_hotfix_hosts_template", "text", "Tracked because **{people}** hosts it.", "Tracked because **{people}** hosts it.", "the line under a Hotfix feed's notice when it took a show that is not in marathon_hotfix_shows because a BaF person hosts it. It takes {people} {show}"],
@@ -1981,6 +1987,7 @@ function seedActions() {
   ];
 }
 
+const MARATHON_OVERLAY_SHEET = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSDxkXigxTofZG9IR7q8t2uXCOgR6zZnife29BUSnjQbJK1_a8L1jfu1RVXI4_M0zyikGniTx7zyEVz/pubhtml';
 let state = withRunEvents(seedState());
 
 // The event-modes build (docs/info/marathon-event-modes-design.md): AGDQ 2027 makes BOTH its
@@ -2285,6 +2292,7 @@ function validate(key, value) {
   if (type === 'bool') return Boolean(value);
   if (key === 'posts_block_links_rows') return checkedLinks(value);
   if (key === 'marathon_hotfix_shows') return checkedShows(value);
+  if (key === 'marathon_hotfix_viewer_url') return checkedViewerUrl(value);
   if (key === 'marathon_retro_category') return checkedRetro(value);
   return value;
 }
@@ -2310,6 +2318,22 @@ function checkedShows(value) {
     throw new Refused(400, 'bad_value', `**${text.slice(0, 40) || 'Nothing'}** names no Hotfix show, so nothing was changed. Write one to 20 show names as the Show column spells them, up to 60 characters each, separated by commas — for example \`GDQueer\`. To stop the Hotfix feed, pause it instead.`);
   }
   return found.join(', ');
+}
+
+// The twin of settings_store.checked_viewer_url: one public https page, or blank for off.
+function checkedViewerUrl(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const bad = () => new Refused(400, 'bad_value', `**${text.slice(0, 60)}** is not a page Black Bloc can read, so nothing was changed. Give one https link to a public site (no port, no sign-in, no address made of numbers), at most 300 characters — or leave it blank to turn the Hotfix schedule viewer off.`);
+  if (text.length > 300 || /\s/.test(text)) throw bad();
+  let parts;
+  try { parts = new URL(text); } catch (e) { throw bad(); }
+  const host = parts.hostname.toLowerCase();
+  const numbers = host.includes(':') || host.split('.').every((part) => /^\d+$/.test(part));
+  if (parts.protocol !== 'https:' || parts.port || parts.username || parts.password) throw bad();
+  if (!host.includes('.') || numbers) throw bad();
+  if (['.internal', '.local', '.localhost', '.lan', '.home', '.corp'].some((tail) => host.endsWith(tail))) throw bad();
+  return text;
 }
 
 // The twin of settings_store.checked_links: a bad row is refused in words, never dropped.
@@ -6618,7 +6642,7 @@ function seedMarathons() {
     // was added with its dates and is over now.
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     // Found by the GDQ Hotfix feed on the Hotfix sheet: GDQueer's two days are one marathon.
-    { id: 50, name: 'GDQueer', schedule_url: 'https://gamesdonequick.com/hotfix/schedule#gdqueer/2026-10-03', source: 'gdq_hotfix', source_ref: 'gdqueer/2026-10-03', spotlight_id: 1, feed_id: 40, starts_at: '2026-10-03T17:00:00+00:00', ends_at: '2026-10-05T03:09:00+00:00', active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(25), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(25) },
+    { id: 50, name: 'GDQueer', schedule_url: 'https://gamesdonequick.com/hotfix/schedule#gdqueer/2026-10-03', source: 'gdq_hotfix', source_ref: 'gdqueer/2026-10-03', spotlight_id: 1, feed_id: 40, starts_at: '2026-10-03T17:00:00+00:00', ends_at: '2026-10-05T03:09:00+00:00', active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(25), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(25), overlay: null, overlay_sheet: { label: 'Games Done Queer \u{1F4C5} Oct 3-4', url: MARATHON_OVERLAY_SHEET, runs: 24, matched: 24, by_order: 0, applied: true, stale: null } },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
   ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, public_highlight: false, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
 }
@@ -6902,6 +6926,7 @@ function marathonRow(row) {
     role_ping: marathonRolePing(row),
     public_highlight: Boolean(row.public_highlight),
     announcements: marathonSwitch(row, 'announcements'),
+    overlay: { ...marathonSwitch(row, 'overlay'), sheet: row.overlay_sheet || null },
     ...marathonTracking(row),
   };
 }
@@ -7041,10 +7066,11 @@ function marathonSetPingRole(row, given) {
 // The bot's cogs/content/marathon_hosts: BaF announcements, on, off or following its setting.
 // Scan hosts and BaF host events are retired (people-unify): hosts are always found, and host
 // blocks get events under the one BaF run/host events switch (the runs half of event_mode).
-const MARATHON_SWITCH_DEFAULTS = { announcements: 'marathon_announcements_default' };
-const MARATHON_SWITCH_WHAT = { announcements: 'BaF announcements' };
+const MARATHON_SWITCH_DEFAULTS = { announcements: 'marathon_announcements_default', overlay: 'marathon_hotfix_overlay_default' };
+const MARATHON_SWITCH_WHAT = { announcements: 'BaF announcements', overlay: 'Event schedule' };
 const MARATHON_SWITCH_SAID = {
   announcements: ['marathon_announcements_on_said', 'marathon_announcements_off_said'],
+  overlay: ['marathon_overlay_on_said', 'marathon_overlay_off_said'],
 };
 const MARATHON_SCAN_GONE = 'The Scan hosts switch is gone — hosts are always found now, like runners, so nothing was changed.';
 const MARATHON_HOST_EVENTS_GONE = 'The BaF host events switch is gone — events now follow the one **BaF run/host events** switch, so nothing was changed.';
@@ -7083,6 +7109,7 @@ function marathonSetSwitch(row, which, given) {
   const was = marathonSwitch(row, which);
   row[which] = wanted;
   const after = marathonSwitch(row, which);
+  if (which === 'overlay' && row.overlay_sheet) row.overlay_sheet = { ...row.overlay_sheet, applied: after.on };
   logAction(`web.marathon.${which}_set`, { details: { marathon_id: row.id, name: row.name, from: was.own, to: after.own, on: after.on, via: 'website' } });
   return marathonSaid(MARATHON_SWITCH_SAID[which][after.on ? 0 : 1], { marathon: row.name });
 }
@@ -7793,6 +7820,7 @@ function feedRow(feed) {
     searches: feed.source === 'horaro_events' ? feedSearches(feed) : null,
     shows: feed.source === 'gdq_hotfix' ? hotfixShows() : null,
     sheet_url: feed.source === 'gdq_hotfix' ? feed.sheet_url || null : null,
+    viewer_url: feed.source === 'gdq_hotfix' ? String(state.settings.get('marathon_hotfix_viewer_url') || '') : null,
     suggestions: feed.suggested.filter((one) => !one.dismissed_at).map(feedSuggestionRow),
     dismissed: feed.suggested.filter((one) => one.dismissed_at).map(feedSuggestionRow),
     marathons: state.marathons.filter((one) => one.feed_id === feed.id).map((one) => ({ id: one.id, name: one.name, starts_at: one.starts_at })),
@@ -7996,6 +8024,29 @@ route('GET', '/api/marathons/feeds/:feed_id/hotfix-shows', (context) => {
   const feed = feedOf(context.params.feed_id);
   if (feed.source !== 'gdq_hotfix') throw new Refused(409, 'not_hotfix', `**${feed.name}** does not read the GDQ Hotfix schedule, so it has no shows to pick from.`);
   return hotfixPicker(feed);
+});
+
+// The bot's cogs/content/marathon_viewer.read_now: the viewer page read at once, said in words.
+const VIEWER_SAMPLE = {
+  rows: 61,
+  hosts: 19,
+  events: [{ label: 'Games Done Queer \u{1F4C5} Oct 3-4', href: 'https://gdq.gg/schedule/gdqueer', sheet_url: MARATHON_OVERLAY_SHEET }],
+  skipped: [{ label: 'Games Done Hitless \u{1F4C5} Oct 23-25', why: 'goes to gamesdonequick.com, which is not a published Google Sheet' }],
+};
+route('POST', '/api/marathons/feeds/:feed_id/viewer-read', (context) => {
+  requireStaff(context.session);
+  const feed = feedOf(context.params.feed_id);
+  if (feed.source !== 'gdq_hotfix') throw new Refused(409, 'not_hotfix', `**${feed.name}** does not read the GDQ Hotfix schedule, so it has no viewer to read.`);
+  const page = String(state.settings.get('marathon_hotfix_viewer_url') || '');
+  if (!page) throw new Refused(409, 'viewer_off', 'The viewer link is blank, so this source is off and nothing was read. The GDQ sheet is read alone.');
+  const viewer = { page, feed: true, rows_trouble: null, ...VIEWER_SAMPLE };
+  logAction('web.marathon.viewer_read', { details: { feed_id: feed.id, page, rows: viewer.rows, hosts: viewer.hosts, events: viewer.events.map((one) => one.label), skipped: viewer.skipped, via: 'website' } });
+  const message = [
+    `Read the viewer: ${viewer.rows} schedule row(s), ${viewer.hosts} host(s) with Twitch names, ${viewer.events.length} event schedule(s).`,
+    ...viewer.events.map((one) => `**${one.label}** has its own schedule sheet.`),
+    ...viewer.skipped.map((one) => `**${one.label}** was not read — it ${one.why}.`),
+  ].join(' ');
+  return { ...feedRow(feed), message, viewer };
 });
 
 route('POST', '/api/marathons/feeds/:feed_id/add', async (context) => {
@@ -8322,6 +8373,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   if ('scan_hosts' in body) said.push(MARATHON_SCAN_GONE);
   if ('host_events' in body) said.push(MARATHON_HOST_EVENTS_GONE);
   if ('announcements' in body) said.push(marathonSetSwitch(row, 'announcements', body.announcements));
+  if ('overlay' in body) said.push(marathonSetSwitch(row, 'overlay', body.overlay));
   if ('public_highlight' in body) said.push(marathonSetPublicHighlight(row, body.public_highlight));
   if ('dismiss_next' in body) {
     if (body.dismiss_next !== true) throw new Refused(422, 'bad_dismiss', 'Say true to dismiss the suggested next event, so nothing was changed.');

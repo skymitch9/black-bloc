@@ -10,6 +10,7 @@ from ... import marathon as mt
 from ... import marathon_announce as ma
 from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
+from ... import marathon_overlay as mo
 from ... import marathon_people as mt_people
 from ... import marathon_signals as sig
 from ...cogs.content.marathon import (
@@ -398,6 +399,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "role_ping": role_ping_state(bot, guild, row),
         "public_highlight": highlights(row),
         "announcements": host_switch(bot, guild, row, mh.ANNOUNCE),
+        "overlay": host_switch(bot, guild, row, mh.OVERLAY) | {"sheet": mo.state_of(row)},
         "archived": False,
     } | await tracking_of(bot, guild, row)
 
@@ -705,6 +707,19 @@ def build_router(bot: Any) -> APIRouter:
                     await wanted(guild, marathon_id),
                     mh.ANNOUNCE,
                     payload[mh.ANNOUNCE],
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
+        if mh.OVERLAY in payload:
+            done = answered(
+                await set_switch(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    mh.OVERLAY,
+                    payload[mh.OVERLAY],
                     via=VIA_WEBSITE,
                 )
             )

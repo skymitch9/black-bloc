@@ -10,12 +10,13 @@ from .golive import parse_ts
 
 FOLLOW = "follow"
 ANNOUNCE = "announcements"
+OVERLAY = "overlay"
 YES = ("on", "true", "yes", "1")
 NO = ("off", "false", "no", "0")
 FOLLOWS = ("", "follow", "default", "setting", "null", "none")
 BAD_SWITCH = "Say on, off or follow for **{what}**, so nothing was changed."
 BAD_SWITCH_CODE = "bad_switch"
-WHAT = {ANNOUNCE: "BaF announcements"}
+WHAT = {ANNOUNCE: "BaF announcements", OVERLAY: "Event schedule"}
 SCAN_GONE = (
     "The Scan hosts switch is gone — hosts are always found now, like runners, so nothing was "
     "changed."
@@ -194,6 +195,7 @@ __all__ = [
     "BAD_TWITCH",
     "FOLLOW",
     "HOST_EVENTS_GONE",
+    "OVERLAY",
     "RETIRED",
     "SCAN_GONE",
     "claim",
