@@ -49,8 +49,8 @@ const ZONE_LINES = {
 const ZONE_PICKER = 'Show times in';
 const ZONE_DEVICE = 'My device’s time ({zone})';
 const ZONE_DEVICE_UNKNOWN = 'My device’s time';
-const KIND_ARCHIVED = 'This marathon is archived, so this is its schedule as it ended. Nothing here can be changed.';
-const UPDATED = 'Updated {ago} · re-reads every {seconds} seconds while this tab is showing';
+const KIND_ARCHIVED = 'Archived — read-only.';
+const UPDATED = 'Updated {ago}';
 const UPDATE_FAILED = 'Could not update just now — {why} The times below are as they stood at {time}. Trying again in {seconds} seconds.';
 const UPDATE_OUTAGE = 'Black Bloc did not answer.';
 const DAY_CHIP = '{day} · {runs}';
@@ -100,17 +100,15 @@ const RESTORE = 'Bring it back';
 const SKIP = 'Skip this run';
 const SET_START = 'Set start…';
 const SET_START_FIELD = 'New start';
-const SET_START_HELP = 'Read in {zone} time — type it like 12:40 PM (13:40 works too). Later runs keep their gaps.';
+const SET_START_HELP = 'Read in {zone} time';
 const ESTIMATE = 'Change estimate…';
 const ESTIMATE_FIELD = 'Estimate';
-const ESTIMATE_HELP = 'As 1:20, or minutes.';
 const SAVE = 'Save';
 const FILTER_LABEL = 'Filter the runs';
 const FILTER_PLACEHOLDER = 'game, runner or host';
 const NO_HIT = 'Nothing on this day matches that.';
 const NO_RUNS = 'No runs on this schedule yet — it may not be published.';
 const POSTS_TITLE = 'What the bot posts next';
-const POSTS_NOTE = 'Each heads-up still to go out for a {baf} run or host block, worked out from the start times above — when a run moves, its post moves.';
 const POSTS_NONE = 'No {baf} run or host block is left on this day.';
 const POST_NOW = 'now';
 const POST_PASSED = 'its time has passed';
@@ -409,7 +407,7 @@ function typedField(label, value, help, onSave) {
     el('span', { class: 'rs-label', text: label }),
     input,
     button(SAVE, save),
-    el('span', { class: 'field-help', text: help }),
+    help ? el('span', { class: 'field-help', text: help }) : null,
   ]);
 }
 
@@ -431,7 +429,7 @@ function editPanel(row) {
   const more = folded(row);
   return el('div', { class: 'rs-edit' }, [
     row.can.set_start ? typedField(SET_START_FIELD, clock(row.start_at), said(SET_START_HELP, { zone: viewer.zone }), (time) => act(`${base}/set-start`, { time, zone: viewer.zone })) : null,
-    row.can.estimate ? typedField(ESTIMATE_FIELD, length(row.estimate_seconds), ESTIMATE_HELP, (estimate) => act(`${base}/estimate`, { estimate })) : null,
+    row.can.estimate ? typedField(ESTIMATE_FIELD, length(row.estimate_seconds), null, (estimate) => act(`${base}/estimate`, { estimate })) : null,
     el('div', { class: 'bar' }, [
       more.start ? button(row.state === 'done' ? START_AGAIN : START_NOW, () => startRun(row), { tone: 'quiet' }) : null,
       more.finish ? button(row.state === 'upcoming' ? FINISH_UNRUN : FINISH_NOW, () => finishRun(row), { tone: 'quiet' }) : null,
@@ -547,7 +545,6 @@ function postsCard(day) {
     [one.role ? POST_ROLE : null, one.passed ? (byMarks() ? POST_DUE : POST_PASSED) : null].filter(Boolean),
   ]);
   return card(POSTS_TITLE, [
-    el('p', { class: 'field-help', text: said(POSTS_NOTE, { baf: BAF }) }),
     lineList(lines, said(POSTS_NONE, { baf: BAF })),
   ]);
 }
