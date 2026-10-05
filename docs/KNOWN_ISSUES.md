@@ -729,6 +729,29 @@ at `black_bloc/cogs/moderation/modcmds.py:874` (`"mod.purge_failed"`) and `:895`
 and `grep` over `black_bloc/api/` finds **no** `POST /api/mod/purge`, so the defect is still
 latent. The number stands.
 
+## KI-43 — Memory is written up once a day, and nothing said in a DM is ever written up — `ACCEPTED`
+
+**Symptom.** (a) A conversation becomes a profile at the next `ingest_once`, which runs every
+24 hours and once at each start of the bot — so something said this morning is not remembered
+this afternoon unless the bot restarted in between. `phase17-design.md` §C and `sweeps.md` both
+said "hourly". (b) `chat_llm.llm_is_on` is false with no guild, so a DM is never answered by a
+model, no DM turn is ever written to `chat_window`, and the `dm` scope of a note or a rapport
+line cannot be reached in production. (c) A write-up that fails loses that conversation: the
+turns are swept either way.
+
+**Status:** `ACCEPTED` — found 2026-10-05 by the `memory-rapport` build while tracing why memory
+had stored nothing; none of the three was the cause of that.
+
+**Why tolerated.** (a) and (c) are Phase 17's design ("a missed distillation loses one
+conversation's worth of preference, never a reply"), and the ingest loop also rebuilds the
+server notes, which should not run hourly. (b) is the models' own rule, not memory's. The DM
+scope still does its job the day DMs are answered: `Profile.visible` is proven by test.
+
+**What would change it.** (a) the owner asking for same-day memory — the write-up then moves to
+its own loop; (c) **3** `no_answer` codes on `chat.memory_distil_failed` rows in any 30 days
+after the 1200-token ceiling ships (measured 0 of 8 at that ceiling; 2 of 24 at the old 400);
+(b) `llm_is_on` being opened to DMs, at which point sweep rows are owed for the DM scope.
+
 ## KI-14 — A memory note about a THIRD PERSON is prevented, not proved impossible — `ACCEPTED`
 
 **Symptom.** `chat_memory.parse_distilled` is what stops a preference note

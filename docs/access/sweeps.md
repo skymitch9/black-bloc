@@ -922,6 +922,19 @@ ephemeral and visible to nobody but you — there is no staff row on this panel 
 | 107 | Stopping it, and starting again | **Stop remembering me** → **Yes, stop**; then **Remember me again** | the first wipes AND opts you out in that order — one `chat.memory_optout` row — and the panel then offers **Remember me again · Refresh** only. The second brings the writing back with one `chat.memory_optin` row. ⚠️ Neither one asks staff for anything: this is your own data and the panel never refuses you |
 | 108 | Memory switched off, and the quiet footer | leave the panel alone for `memory_panel_minutes` (10) minutes; then `/settings` ▸ **A setting group…** ▸ chat ▸ `chat_memory_mode` → off and run `/memory` again | after ten minutes every control on the old panel is greyed out and the embed footer reads *This panel has gone quiet — run /memory again*. With the mode off `/memory` ⚠️ **STAYS in the command list** — the one feature the hide-commands-when-off build (rows 183–187) leaves out, because fork I-M1 (owner, 2026-09-03 16:12, "open it") stands: turning memory off does not delete profiles and the site is staff-only and counts-only, so the panel is a MEMBER's only door to their own notes (KI-14). It opens, says Black Bloc is not remembering anybody here as a LINE, whatever it already stored is still listed, and **Forget everything** and the picker still work |
 
+> **Follow-up 2026-10-05 (`memory-rapport`, built, NOT deployed, NOT run against Discord):** rows
+> 295–298. ⚠️ The paragraph above says "hourly sweep"; the write-up has run **daily** (and at every
+> start) since Phase 17 — `INGEST_HOURS = 24`. Proven by the suite with a fake model and by a
+> headless render of the Memory section against the local mock; no row here has been walked on
+> the live bot.
+
+| # | What | Do this | Expect |
+|---|---|---|---|
+| 295 | Memory writes something down | with `chat_memory_mode` on: @-mention Black Bloc once with something worth keeping ("call me Sky, and keep it brief"), get a MODEL answer (not a canned line), then wait for the next write-up — it runs once a day and at every start of the bot, on turns more than an hour old | Chat page ▸ **Memory**: the chips read `1 profile(s)`, `1 name(s)`, and the second row `last write-up <time>` · `1 conversation(s)` · `1 kept`. Logs ▸ Chat: one `chat.memory_distilled` and one `chat.memory_sweep` row, counts only. ⚠️ Before 2026-10-05 this needed TWO messages and failed about 1 time in 12; a `1 no answer` chip here means the model call itself failed — read `no_answer` on the `chat.memory_distil_failed` row |
+| 296 | A quiet write-up is not a failure | have one throwaway exchange ("lol") and wait for the write-up | the second chip row moves: `1 conversation(s)` · `0 kept` · `1 nothing to keep`, and there is NO `chat.memory_distil_failed` row. With `chat_memory_min_turns` set to 2 the same exchange reads `1 too short` instead and no model is called |
+| 297 | How we talk, on your own panel | after a conversation with a running joke in it has been written up: `/memory` | a line `#N how we talk: …` after the open topics; **Forget one of these…** lists it as `#N · how we talk · …`; picking it drops that one line only. The NEXT model answer no longer carries it. `chat_memory_rapport_line` on the Settings page changes the wording (it must keep `{number}` and `{text}`) |
+| 298 | Staff see counts, never lines | Chat page ▸ **Memory** with `chat_memory_staff_view` = `counts` | each profile reads `… · N how-we-talk · …` and the top row `N how-we-talk`; no line text anywhere on the page or in `GET /api/chat/memory`. Flip the key to `full`: the same lines appear tagged `how we talk`, beside the notes |
+
 ## Go-live — `/golive` is ONE command that opens a panel (wave 2)
 
 Built 2026-09-03 (`info/golive-panel-design.md`), branch
