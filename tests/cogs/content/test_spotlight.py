@@ -3125,5 +3125,34 @@ async def test_a_restart_mid_replay_keeps_the_replay_and_upgrades_at_the_first_l
     assert (await kinds(bot.db)).count("golive.replay_upgraded") == 1
 
 
+async def test_a_restart_mid_replay_then_the_live_show_is_one_announcement_and_no_reminder(
+    bot, cog
+):
+    row, helix, posted = await live_then(bot, cog)
+    await cog.poll_once()
+    await cog.poll_once()
+
+    again = Spotlight(bot)
+    bot.cogs["Spotlight"] = again
+    await again.reconcile_open_sessions()
+    assert again.downgraded == set()
+    helix.streams = [replay_stream(LIVE_TITLE)]
+    for _ in range(3):
+        await again.poll_once()
+    now = bot.guild.channel.messages
+    assert len(now) == 1 and now[0] is not posted and now[0].pinned is True
+    seen = await kinds(bot.db)
+    assert seen.count("golive.replay_upgraded") == 1 and "golive.spotlight_bumped" not in seen
+
+    hours = int(bot.store.get(GUILD, "spotlight_bump_hours"))
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET last_bump_at = ?",
+        ((datetime.now(UTC) - timedelta(hours=hours, minutes=1)).isoformat(),),
+    )
+    await bot.db.conn.commit()
+    await again.poll_once()
+    assert (await kinds(bot.db)).count("golive.spotlight_bumped") == 1
+
+
 def replays_of(session):
     return bool(session["replay_reason"]) and not session["replay_cleared"]

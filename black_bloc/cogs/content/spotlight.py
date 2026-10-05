@@ -1281,9 +1281,8 @@ class Spotlight(commands.Cog):
         await set_replay_cleared(self.bot.db, session["id"], because)
         await set_pinging_last(self.bot.db, session["id"], pinging)
         self.live_reads.pop(int(session["id"]), None)
-        if int(session["id"]) in self.downgraded:
-            self.downgraded.discard(int(session["id"]))
-            await restart_bump_clock(self.bot.db, session["id"], now_iso())
+        self.downgraded.discard(int(session["id"]))
+        await restart_bump_clock(self.bot.db, session["id"], now_iso())
         if old is not None:
             try:
                 await old.delete()
