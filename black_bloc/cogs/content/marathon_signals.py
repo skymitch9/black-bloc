@@ -203,13 +203,17 @@ def _early_details(
 async def guarded(
     cog: Any, guild: Any, marathon: Any, verdict: Any, rows: Any, now: datetime
 ) -> Any:
-    """The verdict, or None while the stream shows a run before its show-day's line."""
+    """The verdict, or None while the stream shows a run before its show-day's line; a run let
+    through gets its due reminder first, while it is still coming up."""
     if verdict is None or _cell(verdict.row, "state") != mt.UPCOMING:
         return verdict
     minutes = early_minutes(cog.bot, guild.id)
     row = verdict.row
     line = sig.day_line(row, overlay.chains(rows), minutes)
-    if line is None or now >= line:
+    if line is None:
+        return verdict
+    if now >= line:
+        await cog.remind(guild, marathon, now, only=row["id"])
         return verdict
     seen = cog.__dict__.setdefault("early_held", set())
     if int(row["id"]) not in seen:

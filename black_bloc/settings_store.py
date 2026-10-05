@@ -4724,7 +4724,7 @@ MARATHON_SETUP_MINUTES_KEY = "marathon_setup_minutes"
 MARATHON_SETUP_MINUTES = 7
 MARATHON_SETUP_MAX = 30
 MARATHON_EARLY_START_KEY = "marathon_early_start_minutes"
-MARATHON_EARLY_START_MINUTES = 15
+MARATHON_EARLY_START_MINUTES = 10
 MARATHON_LATE_GRACE_KEY = "marathon_late_grace_minutes"
 MARATHON_MATCH_HOSTS_KEY = "marathon_match_hosts"
 MARATHON_HOSTS_COUNT_AS_OURS_KEY = "marathon_hosts_count_as_ours"
@@ -5123,9 +5123,10 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_EARLY_START_KEY: (
         "int",
         MARATHON_EARLY_START_MINUTES,
-        "minutes before a show-day's first run that the stream's title or category may call it "
-        "live — a channel set up for the show earlier than that is waited out, and the day's "
-        "times stay where the schedule put them. 15 by default; 0 believes the stream at once",
+        "minutes before a show-day's first planned start that the stream's title or category may "
+        "call a run live — a channel set up for the show earlier than that is waited out, and the "
+        "day's times stay where the schedule put them. 10 by default; 0 believes the stream at "
+        "once",
     ),
     MARATHON_LATE_GRACE_KEY: (
         "int",

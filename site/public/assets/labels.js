@@ -98,7 +98,7 @@ export const LABELS = {
   marathon_title_confirms: 'Whether the stream’s title decides which run is on',
   marathon_category_confirms: 'Whether the stream’s Twitch category decides which run is on',
   marathon_retro_category: 'Twitch category a run with no category of its own is played under',
-  marathon_early_start_minutes: 'Minutes before a show-day\'s first run that the stream may call it live',
+  marathon_early_start_minutes: 'Minutes before a show-day\'s first planned start that the stream may call a run live',
   marathon_setup_minutes: 'Setup minutes between runs when a schedule gives no start time per run',
   marathon_late_grace_minutes: 'How long a late run waits before the schedule calls it live',
   marathon_match_hosts: 'Whether hosts and commentators count as BaF',

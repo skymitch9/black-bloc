@@ -2564,7 +2564,9 @@ class Marathons(commands.Cog):
 
     # --- reminders --------------------------------------------------------------------------
 
-    async def remind(self, guild: Any, marathon: Any, now: datetime) -> None:
+    async def remind(
+        self, guild: Any, marathon: Any, now: datetime, *, only: Any = None
+    ) -> None:
         if not mi.is_tracked(marathon):
             return
         store = self.bot.store
@@ -2572,7 +2574,7 @@ class Marathons(commands.Cog):
         marks = mt.reminder_marks(store.get(guild.id, MARATHON_REMINDER_MINUTES_KEY), ping_mark)
         stale_after = int(store.get(guild.id, MARATHON_REMINDER_STALE_KEY))
         for row in await runs_of(self.bot.db, marathon["id"]):
-            if not mt.is_ours(row):
+            if not mt.is_ours(row) or (only is not None and row["id"] != only):
                 continue
             mark, skipped = mt.due_marks(row, marks, now, stale_minutes=stale_after)
             if mark is None and not skipped:
