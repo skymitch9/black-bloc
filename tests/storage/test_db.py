@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 86
+        assert SCHEMA_VERSION == 87
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2512,7 +2512,7 @@ async def test_a_schema_54_file_gains_chat_voice_and_three_columns_and_keeps_its
     await again.connect()
     try:
         cur = await again.conn.execute("PRAGMA table_info(chat_voice)")
-        assert {r["name"] for r in await cur.fetchall()} == {
+        assert {r["name"] for r in await cur.fetchall()} >= {
             "guild_id",
             "user_id",
             "trope",
@@ -3563,6 +3563,154 @@ async def test_a_schema_85_file_gains_the_posted_reminders_of_each_run(tmp_path)
         cur = await again.conn.execute("PRAGMA table_info(marathon_runs_archive)")
         assert "reminder_posts" in {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "86"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()
+
+
+PLACEHOLDER_PINS = (
+    112357806396416000,
+    213475085145604096,
+    165189391583674368,
+    1313381494441377844,
+    103560267496960000,
+    909587042609025034,
+    483851858700533761,
+    346066999727620097,
+    221707047182401536,
+)
+TONE_COLUMNS = (
+    "tone", "how", "settled", "heard", "set_by", "moved_at", "moved_from", "moved_why",
+    "fed_since",
+)
+
+
+async def a_schema_86_file(path):
+    db = Database(path)
+    await db.connect()
+    for column in TONE_COLUMNS:
+        await db.conn.execute(f"ALTER TABLE chat_voice DROP COLUMN {column}")
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '86')"
+    )
+    return db
+
+
+async def test_a_schema_86_file_gains_the_stored_tone_and_keeps_what_each_member_last_heard(
+    tmp_path,
+):
+    """Schema 87: the tone last heard is the stored one; a cookout or an empty row has none."""
+    path = tmp_path / "old86.sqlite3"
+    db = await a_schema_86_file(path)
+    await db.conn.executemany(
+        "INSERT INTO chat_voice(guild_id, user_id, trope, turns, since) VALUES (7, ?, ?, ?, ?)",
+        [(1, "noir", 5, "2026-10-01T10:00:00+00:00"), (2, "cookout", 0, None), (3, None, 0, None)],
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT user_id, trope, turns, since, tone, how, settled, heard FROM chat_voice "
+            "ORDER BY user_id"
+        )
+        assert [tuple(row) for row in await cur.fetchall()] == [
+            (1, "noir", 5, "2026-10-01T10:00:00+00:00", "noir", "rolled", 0, 0),
+            (2, "cookout", 0, None, None, None, 0, 0),
+            (3, None, 0, None, None, None, 0, 0),
+        ]
+        cur = await again.conn.execute("PRAGMA table_info(chat_voice)")
+        assert set(TONE_COLUMNS) <= {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "87"
+    finally:
+        await again.close()
+
+
+async def test_the_nine_placeholder_pins_become_starting_tones_once_and_no_other_pin_moves(
+    tmp_path,
+):
+    """Schema 87: exactly the nine pins of 2026-10-05 UTC start a tone; the rest stay pinned."""
+    path = tmp_path / "pins86.sqlite3"
+    db = await a_schema_86_file(path)
+    day = "2026-10-05T18:52:10.123456+00:00"
+    tones = ("warm", "cozy", "shy", "peppy", "scholar", "noir", "deadpan", "flirty", "dramatic")
+    await db.conn.executemany(
+        "INSERT INTO chat_voice(guild_id, user_id, trope, turns, since, pinned, pinned_by, "
+        "pinned_at) VALUES (7, ?, ?, 3, '2026-10-05T19:00:00+00:00', ?, 42, ?)",
+        [(user, tone, tone, day) for user, tone in zip(PLACEHOLDER_PINS, tones, strict=True)],
+    )
+    await db.conn.executemany(
+        "INSERT INTO chat_voice(guild_id, user_id, trope, pinned, pinned_by, pinned_at) "
+        "VALUES (7, ?, ?, ?, 42, ?)",
+        [
+            (500, "warm", "noir", "2026-09-28T09:00:00+00:00"),
+            (501, None, "shy", day),
+            (PLACEHOLDER_PINS[0] + 1, None, "peppy", "2026-10-06T00:00:01+00:00"),
+        ],
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT user_id, tone, how, set_by, moved_at, pinned, pinned_by, pinned_at, since, "
+            "turns, trope, settled FROM chat_voice WHERE user_id IN "
+            f"({', '.join('?' for _ in PLACEHOLDER_PINS)})",
+            PLACEHOLDER_PINS,
+        )
+        found = {row["user_id"]: tuple(row)[1:] for row in await cur.fetchall()}
+        assert found == {
+            user: (tone, "set", 42, day, None, None, None, None, 0, tone, 0)
+            for user, tone in zip(PLACEHOLDER_PINS, tones, strict=True)
+        }
+        cur = await again.conn.execute(
+            "SELECT user_id, pinned, pinned_at, tone, how FROM chat_voice WHERE user_id NOT IN "
+            f"({', '.join('?' for _ in PLACEHOLDER_PINS)}) ORDER BY user_id",
+            PLACEHOLDER_PINS,
+        )
+        assert [tuple(row) for row in await cur.fetchall()] == [
+            (500, "noir", "2026-09-28T09:00:00+00:00", "warm", "rolled"),
+            (501, "shy", day, None, None),
+            (PLACEHOLDER_PINS[0] + 1, "peppy", "2026-10-06T00:00:01+00:00", None, None),
+        ]
+        await again.conn.execute(
+            "UPDATE chat_voice SET pinned = 'noir', pinned_by = 42, pinned_at = ? "
+            "WHERE user_id = ?",
+            (day, PLACEHOLDER_PINS[0]),
+        )
+        await again.conn.commit()
+    finally:
+        await again.close()
+
+    third = Database(path)
+    await third.connect()
+    try:
+        cur = await third.conn.execute(
+            "SELECT pinned, tone FROM chat_voice WHERE user_id = ?", (PLACEHOLDER_PINS[0],)
+        )
+        assert tuple(await cur.fetchone()) == ("noir", "warm")
+    finally:
+        await third.close()
+
+
+async def test_a_new_database_stores_no_tone_and_converts_nothing(tmp_path):
+    db = Database(tmp_path / "new.sqlite3")
+    await db.connect()
+    try:
+        await db.conn.execute(
+            "INSERT INTO chat_voice(guild_id, user_id, trope, pinned, pinned_at) "
+            "VALUES (7, ?, 'warm', 'warm', '2026-10-05T18:00:00+00:00')",
+            (PLACEHOLDER_PINS[0],),
+        )
+        await db.conn.commit()
+        await db._store_the_tones(0)
+        await db._store_the_tones(SCHEMA_VERSION)
+        cur = await db.conn.execute("SELECT pinned, tone FROM chat_voice")
+        assert tuple(await cur.fetchone()) == ("warm", None)
+    finally:
+        await db.close()

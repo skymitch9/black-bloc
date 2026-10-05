@@ -8,6 +8,7 @@ from inspect import isawaitable
 from typing import Any
 from urllib.parse import urlsplit
 
+from . import tone_keys
 from .automod import (
     AUTOMOD_MODES,
     MOD_DM_STYLES,
@@ -4177,8 +4178,7 @@ VOICE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "takes {member} and {tone}",
     ),
     VOICE_CLEARED_KEY: (
-        "**{member}** is back on the server's setting: their tone is rolled again from their "
-        "next answer.",
+        "**{member}** is unpinned and back on their own tone from their next answer.",
         ("member",),
         "what staff are told when a member's pinned tone is cleared. It takes {member}",
     ),
@@ -4320,6 +4320,40 @@ KEY_TYPES.update({key: "text" for key in VOICE_WORDS})
 KEY_HELP.update({key: said for key, (_, _, said) in VOICE_WORDS.items()})
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in VOICE_WORDS.items()}
+)
+
+
+def checked_order(given: Any) -> str:
+    text = ", ".join(one.strip().lower() for one in str(given or "").split(",") if one.strip())
+    unknown = tone_keys.unknown_tone(text)
+    if unknown is not None:
+        raise SettingError(
+            tone_keys.ORDER_UNKNOWN.format(
+                name=unknown[:40], known=", ".join(tone_keys.KNOWN_TONES)
+            )
+        )
+    return text
+
+
+KEY_TYPES.update({key: kind for key, (kind, _, _) in tone_keys.TONE_SETTINGS.items()})
+KEY_HELP.update({key: said for key, (_, _, said) in tone_keys.TONE_SETTINGS.items()})
+KEY_CHOICES[tone_keys.FEEDBACK_MODE_KEY] = tone_keys.FEEDBACK_MODES
+KEY_MIN.update(
+    {tone_keys.DRIFT_START_KEY: 0, tone_keys.DRIFT_HALVES_KEY: 0, tone_keys.DRIFT_FLOOR_KEY: 0}
+)
+KEY_MAX.update(
+    {
+        tone_keys.DRIFT_START_KEY: tone_keys.PERCENT_MAX,
+        tone_keys.DRIFT_HALVES_KEY: tone_keys.DRIFT_HALVES_MAX,
+        tone_keys.DRIFT_FLOOR_KEY: tone_keys.PERCENT_MAX,
+    }
+)
+TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, *tone_keys.MAY_BE_BLANK)
+TEXT_CHECKS.update({key: checked_order for key in tone_keys.ORDER_KEYS})
+KEY_TYPES.update({key: "text" for key in tone_keys.TONE_WORDS})
+KEY_HELP.update({key: said for key, (_, _, said) in tone_keys.TONE_WORDS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in tone_keys.TONE_WORDS.items()}
 )
 
 
@@ -7590,6 +7624,10 @@ class SettingsStore:
             return PROMPT_WORDS[key][0]
         if key in VOICE_WORDS:
             return VOICE_WORDS[key][0]
+        if key in tone_keys.TONE_SETTINGS:
+            return tone_keys.TONE_SETTINGS[key][1]
+        if key in tone_keys.TONE_WORDS:
+            return tone_keys.TONE_WORDS[key][0]
         if key in MARATHON_DEFAULTS:
             return MARATHON_DEFAULTS[key]
         if key in GOLIVE_REPLAY_DEFAULTS:
