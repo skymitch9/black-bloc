@@ -130,7 +130,8 @@ const SHEET_TITLE = 'The cookout voice — the base every tone sits on';
 const VOICES_EMPTY = 'Nobody has been answered by a conversation model yet, so nobody is listed.';
 const VOICES_OFF = 'The voice is the cookout one, so nobody hears a tone right now — pins ' +
   'included. Pick the pool or a mood under Personality and the pins come back into play.';
-const VOICES_WAITING = 'pinned tone is switched off';
+const VOICES_WAITING = 'pin is off';
+const VOICES_WAITING_TITLE = 'The pinned tone is switched off';
 const VOICES_TALKING = 'talking now';
 const VOICES_PICK_FIRST = 'Pick a member first.';
 const VOICES_ADD = 'A member who is not listed yet';
@@ -1044,7 +1045,7 @@ const pinFor = (say, id, name, tropes, current) => pickTone(say, id, name, trope
 });
 
 function voiceHow(row) {
-  if (row.waiting || !row.state_word) return el('span', { text: '—' });
+  if (!row.state_word) return el('span', { text: '—' });
   const parts = [el('span', { text: row.state_word })];
   if (row.state === 'pinned' && row.pinned_by) parts.push(el('span', { class: 'muted', text: ` · ${row.pinned_by.name}` }));
   if (row.state === 'set' && row.set_by) parts.push(el('span', { class: 'muted', text: ` · ${row.set_by.name}` }));
@@ -1053,7 +1054,7 @@ function voiceHow(row) {
     const gone = ago(stamp);
     parts.push(el('span', { class: 'muted', title: gone.title, text: ` · ${gone.text}` }));
   }
-  return el('span', {}, parts);
+  return el('span', { class: 'voice-how' }, parts);
 }
 
 function voiceSettled(row) {
@@ -1069,13 +1070,13 @@ function voiceSettled(row) {
 
 function voiceMoves(row, tropes, say) {
   if (row.pinned) {
-    return el('div', { class: 'chatline' }, [
+    return el('div', { class: 'voice-moves' }, [
       button('Unpin', () => voiceMove(say, () => api(voicePath(row.user_id), { method: 'DELETE' }), 'Unpinned.'), { tone: 'quiet' }),
     ]);
   }
   if (tropes.length === 0) return null;
   const current = row.tone || row.trope;
-  return el('div', { class: 'chatline' }, [
+  return el('div', { class: 'voice-moves' }, [
     button('Reroll', () => rerollFor(say, row.user_id), { tone: 'quiet' }),
     button('Set tone…', () => setToneFor(say, row.user_id, row.name, tropes, current), { tone: 'quiet' }),
     button('Pin…', () => pinFor(say, row.user_id, row.name, tropes, current), { tone: 'quiet' }),
@@ -1094,7 +1095,7 @@ function voiceNew(tropes, say) {
   };
   return card(null, [
     picker.node,
-    el('div', { class: 'chatline' }, [
+    el('div', { class: 'voice-moves' }, [
       button('Reroll', picked((id) => rerollFor(say, id)), { tone: 'quiet' }),
       button('Set tone…', picked((id, name) => setToneFor(say, id, name, tropes, tropes[0].name)), { tone: 'quiet' }),
       button('Pin…', picked((id, name) => pinFor(say, id, name, tropes, tropes[0].name)), { tone: 'quiet' }),
@@ -1182,7 +1183,7 @@ async function voicesSection(payload, wordSpecs, say, settleSpecs = []) {
       label: 'Hears',
       cell: (row) => el('span', {}, [
         el('span', { class: 'chat-fixed', text: row.label || row.trope }),
-        row.waiting ? badge(VOICES_WAITING, 'warn') : null,
+        row.waiting ? el('span', { title: VOICES_WAITING_TITLE }, [badge(VOICES_WAITING, 'warn')]) : null,
       ]),
     },
     { label: 'How', cell: (row) => voiceHow(row) },

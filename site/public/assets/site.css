@@ -1912,6 +1912,9 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
   background: var(--et-shell-inset);
 }
 .tone-meter-fill { display: block; height: 100%; background: var(--et-accent); }
+.voice-moves { display: flex; flex-wrap: wrap; gap: 6px; }
+.log-table td .voice-how { display: inline-block; min-width: 8rem; white-space: normal; }
+@media (min-width: 1280px) { .voice-moves { flex-wrap: nowrap; } }
 
 /* The channel catalog: the block the model reads, verbatim, and one row per channel. */
 .directory-block {
