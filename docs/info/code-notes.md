@@ -9942,3 +9942,25 @@ Design: `marathon-hotfix-design.md` ▸ *Follow-up 2026-10-04 — a renamed run 
 |---|---|
 | the *Memory that works* block | Its own `KEY_TYPES.update` block above `PROMPT_TOO_LONG`, so the parallel tone build merges textually. `chat_memory_min_turns` has a `KEY_MIN` of 1 and the mock row carries it as its eighth field — `check.mjs` compares the two. |
 | `checked_rapport_line` | Exactly `{number}` and `{text}`, both, nothing else, ≤ `RAPPORT_LINE_CHARS`. |
+
+## Review pass on `memory-rapport` (2026-10-05) — by name
+
+| Name | Note |
+|---|---|
+| `chat_memory_rules.py` | NEW, and the one home for every word list that is about privacy or injection (`CATEGORIES`, `INSTRUCTIONS`, `LINKS`, `RAPPORT_OTHERS`) and for `clean` / `forms`. `THIRD_PARTY`, `AVAILABILITY`, `EVENTS` and `OUTCOMES` stayed in `chat_memory.py` untouched. Its tests are `tests/test_chat_memory_rules.py`. |
+| `chat_memory_rules.CATEGORIES` | ⚠️ **Phrases are matched whole-word against every `forms` reading, so an ambiguous word goes in as a SHAPE** (`their boss`, `the police`, `is broke`). Before adding a bare word, add its gaming neighbour to `test_gaming_talk_is_not_private_talk`; the accepted false positives are pinned in `test_the_false_positives_that_were_accepted_are_written_down` so removing one is a visible decision. |
+| `chat_memory_rules.RAPPORT_ONLY` | `pronouns` — a NOTE may carry a stated pronoun preference (D2, owner-decided); a rapport line may not. |
+| `chat_memory_rules.clean` | Runs before `len` is measured and before anything is stored. Category `Cf` removal is what takes out zero-width characters; do not narrow it to a hand list. |
+| `chat_memory_rules.forms` | Four readings, deduped. The leet reading is ADDED to the plain one, never a replacement, so `top 10` still reads as itself. The closed-up reading exists for `ig.nore`; it can only join letters that had no space between them. |
+| `chat_memory_rules.PLAIN` | The allowlist. `()` are in it because the model writes them in topics and `safe` strips them at render; `[]{}<>` are not. `À-ɏ` minus `×` and `÷` is "Latin with accents". |
+| `chat_memory_rules.INSTRUCTIONS_OUTSIDE_A_TOPIC` | `rule` / `rules` — an order in a note or a rapport line, a legitimate subject in an open topic. |
+| `why_dropped` — order | `link` is tested before `charset` so a URL is reported as a link, and `charset` before `instruction` so a look-alike is reported as what it is. |
+| `passing` | The render-time re-check both blocks share. It has no transcript and no member list, so it re-applies the phrase rules only. |
+| `in_use` | The cap as a slice of the stored tuple, newest first. One definition, used by the prompt, the panel mark and the API count, so the three cannot disagree. |
+| `merged_rapport` — `held` | A lowered cap never deletes: the result is cut to `max(limit, len(old))`, and at 0 the old tuple is returned untouched. |
+| `write_up` | ⚠️ **The only writer the sweep uses, and deliberately not `save_profile`.** `save_profile` is an upsert and would revive a row a member just forgot. `STILL_WANTED` turns the consent model into the one `EXISTS` clause that makes the check and the write a single statement. |
+| `without_the_dropped` | Compares the profile as READ with the profile as it stands; anything in the first and not the second was dropped by the person while the model was thinking. Rapport is matched by theme as well as by words, because the model rephrases. |
+| `chat_distil.not_written` | `write_up` answering False has three causes; this reads back which, so `forgotten` and `withdrawn` are not logged as `not_saved`. |
+| `Chat._ingest` / `knowledge_due` / `memory_once` | One loop, two paces. `_knowledge_at` is monotonic and starts unset, so the first tick after a start is always the full one — the behaviour a deploy had before. `INGEST_SLACK_SECONDS` stops a tick that fires a second early from pushing knowledge to the 25th hour. |
+| `Chat._retime` | Called before the loop, after every tick and from `_settings_changed`. `SWEEP_HOURS_KEY` is in `WATCHED` for that reason alone. |
+| `HELD_BACK_MARK` | A code constant like `DM_MARK` beside it, not a settings key. |

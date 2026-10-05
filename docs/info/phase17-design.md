@@ -417,7 +417,7 @@ talk"*.
 |---|---|---|
 | A turn exists | Only a turn a MODEL answered is written to `chat_window` (`conversational_reply`); a canned line, a wave or a capped turn leaves no row. DMs never reach a model (`llm_is_on` is false with no guild), so no DM turn is ever written in practice. | yes — nothing to distil |
 | It expires | `expiring` reads rows older than **60 minutes** (`WINDOW_KEEP_MINUTES`). | — |
-| The sweep runs | `ingest_once`, on the ingest loop: **every 24 hours** (`INGEST_HOURS = 24`) and once at every start of the process. ⚠️ §C and `sweeps.md` say "hourly"; the code has been daily since Phase 17. | — |
+| The sweep runs | `ingest_once`, on the ingest loop: **every 24 hours** (`INGEST_HOURS = 24`) and once at every start of the process. ⚠️ §C and `sweeps.md` said "hourly"; the code was daily from Phase 17 until this branch. **Now `chat_memory_sweep_hours`, default 1** — see *Review pass* below. | — |
 | One conversation | Every expiring row of one person in one channel, however many hours apart, is ONE conversation. | — |
 | Worth distilling | **≥ 2 member turns** (`DISTIL_MIN_TURNS`) and not one staff word in any of them (`about_staff`: mod, admin, auntie, uncle, report, ban, ticket, warning, appeal …). | yes — skipped, no row, no count |
 | Consent | Not opted out. | yes — skipped silently |
@@ -487,7 +487,7 @@ arrived parsed, and in the 7 whose contents were read back no line was dropped b
 
 ### Rapport — "how we talk"
 
-A profile keeps up to `chat_memory_rapport_max` (**4**, ceiling 20, 0 = none) short lines about
+A profile uses up to `chat_memory_rapport_max` (**4**, ceiling 20, 0 = none read) short lines about
 the manner between ONE member and the bot: how they like to be spoken to, a running joke between
 the two of them, what they laughed about together, a topic that lands well or badly. Asked for
 in the SAME model call (the JSON has a fourth key, `rapport`); an answer without the key is
@@ -504,7 +504,8 @@ the first six already guarded notes):
 | `availability` · `sensitive` · `event` | the existing lists: when they are around, where they live; health, religion, politics, sexuality, age, money; anything that happened |
 | **`instruction`** (new, and now applied to names, notes and threads too) | anything addressed to the bot or shaped like an order or a grant: you/your, ignore, disregard, override, bypass, pretend, obey, must, prompt, instruction(s), act as, developer mode, grant, permission, allowed to, password, token, secret, reveal, admin, moderator, staff, owner, unban |
 | **`link`** (new, all lines) | `http`, `www.`, `://`, `discord.gg` |
-| **`personal`** (new, rapport only) | a trait about their life rather than the conversation: partner and family words, job/school, gender/pronouns/trans, race/ethnicity/nationality, lonely, trauma, addiction, body/weight, belief/faith |
+| **`personal`** / `sensitive` (the lists are now `chat_memory_rules.CATEGORIES`, and apply to notes and topics too — *Review pass*) | a trait about their life rather than the conversation: partner and family words, job/school, health, sexuality and gender, age, location, immigration, criminal history, money, religion, politics |
+| **`charset`** (new, all lines — *Review pass*) | anything outside plain Latin letters (accents allowed), digits, spaces and everyday punctuation, after NFKC and with invisible characters removed |
 
 | Example | Kept? | Why |
 |---|---|---|
@@ -581,7 +582,9 @@ no code path reads a stored line to decide a permission.
 | `chat_memory_rapport_max` | int | 4 | 0–20 |
 | `chat_memory_rapport_line` | text | `**#{number}** *how we talk:* {text}` | both placeholders, ≤ 200 chars |
 
-Registry **737 → 740**; the chat group **128 → 131**. One log kind added: `chat.memory_sweep`.
+| `chat_memory_sweep_hours` | int | 1 | 1–24 |
+
+Registry **737 → 741**; the chat group **128 → 132**. One log kind added: `chat.memory_sweep`.
 
 ### Deviations
 
@@ -597,7 +600,7 @@ Registry **737 → 740**; the chat group **128 → 131**. One log kind added: `c
    counts-only). They predate this build; removing them is a wording decision.
 7. **Real Groq calls were made** (36, synthetic transcripts only, the dev `.env` key, $0) to
    measure the ceiling. The burst drew four 429s on that key at about 14:0x Phoenix.
-8. **The sweep cadence was not changed.** It is daily plus once per start; the docs said hourly.
+8. ~~The sweep cadence was not changed.~~ Superseded the same day: it is a key, hourly by default (*Review pass*, 6).
 
 ### What was NOT verified
 
@@ -610,3 +613,88 @@ Registry **737 → 740**; the chat group **128 → 131**. One log kind added: `c
 - Any model other than `openai/gpt-oss-120b`.
 - That a DM conversation can be learned from at all in production — no DM turn reaches a model
   today, so the DM scope is proven only by seeding the window in a test.
+
+### Review pass — what changed after the first build (2026-10-05, same branch)
+
+An independent review cleared the branch to deploy after six fixes. Fakes only this time: no
+model or network call was made for any of them.
+
+1. **The rapport cap holds when a prompt is BUILT.** `rapport_note(limit=)` reads
+   `chat_memory_rapport_max` on every answer, so lowering it — to 0 included — reaches every
+   member on their very next answer, whether or not they are ever written up again. **Stored
+   lines are not deleted by the cap.** Past it they stay in the row and on the person's own
+   `/memory` panel, marked *(kept, not in use right now)* and still droppable; raising the key
+   brings them back. A write-up under a lowered cap adds no line beyond it and removes none
+   because of it (at 0 it adds none at all). The API and the Chat page count lines IN USE
+   (`rapport`) and say how many are held (`rapport_held`).
+2. **Forget wins over a write-up in flight.** `distil_one` read the profile, awaited the model,
+   then merged and wrote — undoing a Forget or a Stop pressed in between. After the model
+   answers it now reads consent and the row again:
+   - opted out meanwhile → nothing is written (`withdrawn`);
+   - the profile was there and is gone → **nothing is written** (`forgotten`). Merging onto an
+     empty profile was the other choice and was rejected: the conversation being written up
+     happened BEFORE the person said forget, so re-creating a profile from it seconds after the
+     panel said *remembers nothing about you* would make the button a lie;
+   - one line was dropped meanwhile → the merge is onto the row as it stands NOW, and a line the
+     model repeats from the stale read is not handed back (`without_the_dropped`).
+   The write itself (`write_up`) is ONE statement that refuses a row that has gone or a person
+   who has stopped, so the gap between the re-read and the write is closed for those two. The
+   outcomes ride the sweep row as `stood_down {withdrawn, forgotten}` and are not failures.
+   ⚠️ Still open: a single line dropped in the few milliseconds between that re-read and the
+   write is overwritten by it.
+3. **The private categories are data, in one place, and guard notes and topics too.**
+   `black_bloc/chat_memory_rules.py` ▸ `CATEGORIES`: health and mental health, sexuality and
+   gender identity, age and minor status, location, immigration and origin, criminal history,
+   money, religion, politics, and life (family, partner, job, school). `life` reports
+   `personal`; the rest report `sensitive`. `tests/test_chat_memory_rules.py` holds one dropped
+   example and one kept gaming neighbour per category and fails if a category arrives without
+   one. Ambiguous words are matched as SHAPES so game talk survives — `their boss` not `boss`,
+   `the police` not `police`, `is a teen` not `teen`, `is broke` not `broke`, `their job` not
+   `job`, `in school` not `school`, `their race` not `race`, `is from` not `from the`.
+   **False positives found and accepted** (each costs one line; the first seven are pinned by a test):
+   `sick` ("sick combos"), `age` ("age of empires"), `city` ("sim city"), `minor` ("minor
+   spoilers"), `prison` / `jail` ("prison architect"), `dating` ("dating sims"), `country`
+   ("country music"), `rich`, `poor`, `rent`, `visa`, `believes`.
+   **One deliberate exception:** `pronouns` is dropped from rapport only — D2 keeps a stated
+   pronoun preference as a note, and the owner decided that.
+4. **A line is normalised before it is judged and before it is stored.** `clean`: Unicode NFKC,
+   every control, format and unassigned character removed (zero-width joiners, soft hyphens,
+   bidi marks), dashes and curly apostrophes made plain, one line. What is stored is the
+   cleaned line, never the glyphs sent. `forms` then reads it four ways for MATCHING — as
+   typed, with leet digits undone (`0 1 3 4 5 7 8 $ !`), and each with punctuation closed up
+   (`ig.nore`) — after accents are stripped and common Cyrillic and Greek look-alikes folded.
+   A line with anything outside the allowlist is dropped as `charset`: **accented Latin
+   letters are allowed** (`Pokémon`, `jalapeño`) and matched without their accents; any other
+   script, emoji, combining marks and brackets other than `()` are not.
+   **Added to the instruction list, as shapes:** `from now on`, `from this point`, `always
+   say/says/said`, `always reply/replies`, `always respond/responds`, `always answer/answers`,
+   `always agree/agrees`, `never refuse/refuses`, `never say/says no`, `say/says/said yes`,
+   `reply/replies with`, `respond/responds with`, `role request(s)`, `any role`, `every role`,
+   `give(s) the role`, `no rules`, `debug mode`, `admin mode`, `unrestricted mode`; and `rule` /
+   `rules` everywhere EXCEPT an open topic (somebody may be asking about the server rules).
+   The bare words `always`, `never`, `reply`, `respond`, `role` and `mode` were NOT added.
+   **Still pass:** `always greets with a joke` · `never minds a long answer` · `responds well to
+   puns` (also `enjoys role play banter`, `plays hard mode and likes being teased for it`).
+5. **The facts block judges stored lines again**, as the rapport block already did:
+   `memory_note` runs `why_dropped` on the name, each note and each topic at render, so a line
+   stored under older rules cannot walk past newer ones. It stays stored and on `/memory`.
+6. **The write-up interval is a decision: `chat_memory_sweep_hours`, 1–24, default 1** (owner,
+   2026-10-05: *"hourly"*). What rode the daily loop: draft seeding (`seed_drafts`), the memory
+   write-up, the window sweep, and the knowledge ingest with one `chat.knowledge_ingested` row
+   per server. The loop now ticks at the key's pace and re-times itself when the key changes
+   (`_retime`, the `spotlight.py` pattern; discord.py recalculates a sleep in progress). Every
+   tick runs `memory_once` — write-up, then window sweep; **only the tick 24 hours after the
+   last knowledge run** seeds drafts and reads the server again, so neither the knowledge cost
+   nor its log row is multiplied. A write-up with no conversation in front of it writes no row.
+   **Cost against the fuses:** each conversation written up is one ledger turn, counted in the
+   server's `chat_daily_turns` (200) and that person's `chat_person_hourly_turns` (20). Daily,
+   one person in one channel was at most 1 write-up a day; hourly it is one per hour they were
+   active in, at most 24. Ten members each active across three separate hours is 30 of the
+   200 instead of 10. When the daily fuse is full, replies and write-ups both stop until
+   midnight UTC and those conversations are lost (`models_closed`).
+
+**The instruction list is not the protection** — see KI-43.
+
+⚠️ **NOT verified in the review pass:** the same list as above, plus — the loop re-timing on a
+RUNNING loop (the interval attribute is tested; the recalculated sleep is discord.py's own
+code, read, not run); how many real lines the wider category lists and the charset rule drop.

@@ -729,15 +729,22 @@ at `black_bloc/cogs/moderation/modcmds.py:874` (`"mod.purge_failed"`) and `:895`
 and `grep` over `black_bloc/api/` finds **no** `POST /api/mod/purge`, so the defect is still
 latent. The number stands.
 
-## KI-43 — Memory is written up once a day, and nothing said in a DM is ever written up — `ACCEPTED`
+## KI-43 — What chat memory does NOT protect: the word list is not the guard, nothing said in a DM is written up, a failed write-up is lost — `ACCEPTED`
 
-**Symptom.** (a) A conversation becomes a profile at the next `ingest_once`, which runs every
-24 hours and once at each start of the bot — so something said this morning is not remembered
-this afternoon unless the bot restarted in between. `phase17-design.md` §C and `sweeps.md` both
-said "hourly". (b) `chat_llm.llm_is_on` is false with no guild, so a DM is never answered by a
+**Symptom.** (a) ~~A conversation becomes a profile once a day~~ — CLOSED on the same branch:
+`chat_memory_sweep_hours`, hourly by default. (b) `chat_llm.llm_is_on` is false with no guild, so a DM is never answered by a
 model, no DM turn is ever written to `chat_window`, and the `dm` scope of a note or a rapport
 line cannot be reached in production. (c) A write-up that fails loses that conversation: the
-turns are swept either way.
+turns are swept either way. (d) **The instruction word list is not the protection.** A
+determined member can phrase an order the list does not know. What actually protects the server
+is structural: only the SPEAKER'S OWN profile ever enters a prompt (nobody can plant a line in
+somebody else's), and no code path reads a stored line to decide a permission, a role or an
+action — a line can at most colour how Black Bloc talks to the person who caused it. (e) **A
+line learned in one channel is used in every channel of the server.** There is no output filter:
+*"do not repeat it back"* is a request to the model, not a control, so a name or a preference
+said in one channel can be echoed in another. Only the DM/server split is enforced in data.
+(f) **Rollback hazard:** code from before 2026-10-05 reads rapport lines as plain notes, because
+they share the `notes` column.
 
 **Status:** `ACCEPTED` — found 2026-10-05 by the `memory-rapport` build while tracing why memory
 had stored nothing; none of the three was the cause of that.
@@ -745,12 +752,17 @@ had stored nothing; none of the three was the cause of that.
 **Why tolerated.** (a) and (c) are Phase 17's design ("a missed distillation loses one
 conversation's worth of preference, never a reply"), and the ingest loop also rebuilds the
 server notes, which should not run hourly. (b) is the models' own rule, not memory's. The DM
-scope still does its job the day DMs are answered: `Profile.visible` is proven by test.
+scope still does its job the day DMs are answered: `Profile.visible` is proven by test. (d) and
+(e) are the nature of a model-written note; every line is the person's own to read and drop on
+`/memory`, and staff see counts only. (f) is one deploy wide: a rollback shows manner lines as
+preferences to their owner and to the model, and leaks nothing to anybody else.
 
-**What would change it.** (a) the owner asking for same-day memory — the write-up then moves to
-its own loop; (c) **3** `no_answer` codes on `chat.memory_distil_failed` rows in any 30 days
+**What would change it.** (c) **3** `no_answer` codes on `chat.memory_distil_failed` rows in any 30 days
 after the 1200-token ceiling ships (measured 0 of 8 at that ceiling; 2 of 24 at the old 400);
-(b) `llm_is_on` being opened to DMs, at which point sweep rows are owed for the DM scope.
+(b) `llm_is_on` being opened to DMs, at which point sweep rows are owed for the DM scope;
+(d) **1** report of a reply acting on a stored line as an order; (e) **1** member report of a
+line surfacing in a channel they did not want it in — a per-channel scope is then owed;
+(f) closes itself once no deploy older than this branch can be rolled back to.
 
 ## KI-14 — A memory note about a THIRD PERSON is prevented, not proved impossible — `ACCEPTED`
 
