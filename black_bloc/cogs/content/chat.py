@@ -9,7 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ... import channel_drafts, chat_panel, chat_review, chat_tones, tone_keys
+from ... import channel_drafts, chat_feedback, chat_panel, chat_review, chat_tones, tone_keys
 from ...actionlog import log_action, send_logs, stamp
 from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
@@ -1946,12 +1946,14 @@ class Chat(commands.Cog):
             await chat_review.heard(self.bot, message)
         except Exception as exc:
             log.warning("chat: a follow-up was not weighed — %s: %s", type(exc).__name__, exc)
+        chat_feedback.schedule(self.bot, message)
 
     async def remember_answer(self, message: Any, reply: Any, said: Any) -> None:
         try:
             await chat_review.answered(self.bot, message, reply, said)
         except Exception as exc:
             log.warning("chat: an answer was not kept for review — %s: %s", type(exc).__name__, exc)
+        chat_feedback.answered(self.bot, message, reply, said)
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:

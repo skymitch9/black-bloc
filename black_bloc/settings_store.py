@@ -4339,13 +4339,19 @@ KEY_TYPES.update({key: kind for key, (kind, _, _) in tone_keys.TONE_SETTINGS.ite
 KEY_HELP.update({key: said for key, (_, _, said) in tone_keys.TONE_SETTINGS.items()})
 KEY_CHOICES[tone_keys.FEEDBACK_MODE_KEY] = tone_keys.FEEDBACK_MODES
 KEY_MIN.update(
-    {tone_keys.DRIFT_START_KEY: 0, tone_keys.DRIFT_HALVES_KEY: 0, tone_keys.DRIFT_FLOOR_KEY: 0}
+    {
+        tone_keys.DRIFT_START_KEY: 0,
+        tone_keys.DRIFT_HALVES_KEY: 0,
+        tone_keys.DRIFT_FLOOR_KEY: 0,
+        tone_keys.FEEDBACK_MINUTES_KEY: 0,
+    }
 )
 KEY_MAX.update(
     {
         tone_keys.DRIFT_START_KEY: tone_keys.PERCENT_MAX,
         tone_keys.DRIFT_HALVES_KEY: tone_keys.DRIFT_HALVES_MAX,
         tone_keys.DRIFT_FLOOR_KEY: tone_keys.PERCENT_MAX,
+        tone_keys.FEEDBACK_MINUTES_KEY: tone_keys.FEEDBACK_MINUTES_MAX,
     }
 )
 TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, *tone_keys.MAY_BE_BLANK)
