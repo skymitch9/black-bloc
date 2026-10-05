@@ -311,3 +311,19 @@ def test_an_opener_at_the_line_by_staff_or_with_the_day_under_way_needs_no_repai
     assert sig.early_repair(days[0][0], days, NOW, 15) is None
     days = [[row(1, 0, 45), row(2, 45, 30)]]
     assert sig.early_repair(days[0][0], days, NOW, 15) is None
+
+
+def test_an_early_opener_a_replay_ended_comes_back_until_the_days_planned_end():
+    line = NOW - timedelta(minutes=15)
+    days = [[early_opener(-79, state=mt.DONE), row(2, 45, 30)]]
+    opener = days[0][0]
+    for minutes in (-70, 0, 74):
+        assert sig.early_repair(opener, days, NOW + timedelta(minutes=minutes), 15) == (
+            "put_back",
+            line,
+        )
+    assert sig.early_repair(opener, days, NOW + timedelta(minutes=75), 15) is None
+    ended = [[opener | {"actual_ended_at": iso(-60)}, row(2, 45, 30)]]
+    assert sig.early_repair(ended[0][0], ended, NOW, 15) is None
+    on_time = [[early_opener(-5, state=mt.DONE), row(2, 45, 30)]]
+    assert sig.early_repair(on_time[0][0], on_time, NOW, 15) is None

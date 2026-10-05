@@ -295,14 +295,22 @@ def day_line(row: Any, days: Any, minutes: Any) -> datetime | None:
 
 def early_repair(row: Any, days: Any, now: datetime, minutes: Any) -> tuple[str, datetime] | None:
     """What a run the stream started before its show-day's line needs: back to coming up while
-    the line is still ahead, its start moved to the line once it has passed."""
-    if _cell(row, "state") != LIVE or _cell(row, "live_because") not in BY_STREAM:
+    the line is still ahead, its start moved to the line once it has passed. One that ended
+    with no end seen (a replay took the stream) comes back until the day's planned end."""
+    state = _cell(row, "state")
+    if state not in (LIVE, DONE) or _cell(row, "live_because") not in BY_STREAM:
         return None
     actual = parse_ts(_cell(row, "actual_started_at"))
     line = day_line(row, days, minutes)
     if actual is None or line is None or actual >= line:
         return None
-    return (EARLY_PUT_BACK if now < line else EARLY_MOVED, line)
+    if state == LIVE:
+        return (EARLY_PUT_BACK if now < line else EARLY_MOVED, line)
+    last = day_of(row, days)[-1]
+    over = sheet_end(last) or sheet_start(last)
+    if _cell(row, "actual_ended_at") or over is None or now >= over:
+        return None
+    return (EARLY_PUT_BACK, line)
 
 
 def is_retimed(row: Any) -> bool:

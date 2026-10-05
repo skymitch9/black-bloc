@@ -991,3 +991,48 @@ async def test_a_first_run_anchored_early_starts_at_the_line_once_the_line_has_p
         mt.LIVE,
     )
     assert (said["day_starts_at"], said["allowed_minutes"]) == (z(DAY), 15)
+
+
+async def test_a_replay_during_an_early_start_does_not_keep_the_day_early(bot, cog, helix):
+    channel, marathon = await anchored_79_minutes_early(bot, cog)
+    at_show(cog, DAY - 78)
+    assert await signals.replay_began(bot, bot.guild, channel["id"]) == 1
+    rows = await times(bot, marathon)
+    assert rows[WII]["state"] == mt.DONE and rows[WII]["actual_started_at"] == z(DAY - 79)
+    assert len(off_the_sheet(rows)) == len(day_two_of(rows))
+    for minutes in (-70, -69):
+        at_show(cog, DAY + minutes)
+        await tick(cog)
+        rows = await times(bot, marathon)
+        wii = rows[WII]
+        assert (wii["state"], wii["done_at"], wii["actual_started_at"]) == (mt.UPCOMING, None, None)
+        assert off_the_sheet(rows) == []
+        assert await undone_rows(bot) == 1
+    said = await details_of(bot.db, "marathon.early_start_undone")
+    assert (said["outcome"], said["was"], said["started_at"]) == ("put_back", mt.DONE, z(DAY - 79))
+    at_show(cog, DAY - 5)
+    await tick(cog)
+    wii = (await times(bot, marathon))[WII]
+    assert (wii["state"], wii["actual_started_at"]) == (mt.LIVE, z(DAY - 5))
+
+
+async def test_a_replay_ended_early_opener_comes_back_after_the_line_too(bot, cog, helix):
+    channel, marathon = await anchored_79_minutes_early(bot, cog)
+    await signals.replay_began(bot, bot.guild, channel["id"])
+    at_show(cog, DAY + 2)
+    await tick(cog)
+    rows = await times(bot, marathon)
+    assert (rows[WII]["state"], rows[WII]["actual_started_at"]) == (mt.LIVE, z(DAY + 2))
+    assert rows[RACERS]["scheduled_at"] > rows[RACERS]["sheet_at"]
+    assert await undone_rows(bot) == 1
+
+
+async def test_an_early_opener_staff_marked_done_stays_done(bot, cog, helix):
+    _channel, marathon = await anchored_79_minutes_early(bot, cog)
+    at_show(cog, DAY - 75)
+    wii = (await times(bot, marathon))[WII]
+    assert (await mark_done(bot, bot.guild, FakeActor(), marathon, wii)).ok
+    await stream(bot, _channel, title="GDQueer 2026 !schedule")
+    await tick(cog)
+    assert (await times(bot, marathon))[WII]["state"] == mt.DONE
+    assert await undone_rows(bot) == 0
