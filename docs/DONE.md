@@ -44,6 +44,10 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-05 — a tone rolled for the one lead who had none
+
+- 🎭 **Roll a personality for every lead who has none (owner, 2026-10-05 11:3x, verbatim: *"Can we make the effort to grab all the leads of the discord that don't have personalities and roll one for them"*).** Measured 11:3x through the operator token: the server has a role named **Leads** (`1406041634675884174`) held by THREE members — PT (`pleasantlytwstd`), Pawpette (`popnotarts`) and groundzero (`gz_hero`); the *Who hears what* list (`/api/chat/voices`, `chat_personality` = pool) already had a tone for PT and Pawpette, so ONE lead had none: groundzero. A tone is normally rolled the first time a conversation model answers someone and is not stored before that; the only way to give one ahead of time is a PIN. Rolled with `secrets.choice` over the eleven tones → **cozy**; pinned through the site's own route in the owner's signed-in tab (`PUT /api/chat/voices/112357806396416000 {trope: cozy}`), answer read back: *groundzero hears cozy on top of the cookout voice from their next answer on, whatever the pool rolls* — pinned by Sky, 18:36:50Z. The member is not messaged by a pin. ⚠️ A pin does not drift the way a pool tone does; **Clear** on the Chat page hands them back to the pool. Not done: the wider **Staff** role (6 members) and the 11 members the site flags as staff — the owner said *leads*.
+
 ## 2026-10-05 — the Twitch poll is set to 1 minute
 
 - ⏲️ **THE OWNER SETS `spotlight_poll_minutes` TO 1 (from the v196 poll-floor build, owner 2026-10-03 21:1x: *"yes lower it to 1 minute."*).** The floor is 1 since v196 but the live value is still 2 (read through the operator token 2026-10-04 06:50 AM); the session's token is read-only, so the owner sets it on the Settings page. The build's item moved whole to [`DONE.md`](DONE.md) ▸ 2026-10-04 — v195 … v202.
