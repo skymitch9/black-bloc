@@ -56,6 +56,7 @@ MOVE_KINDS = (
     "marathon.run_reset",
     "marathon.member_run_moved",
     "marathon.schedule_changed",
+    "marathon.run_renamed",
     "marathon.overlay_applied",
     "marathon.overlay_dropped",
     "marathon.sheet_times",
@@ -64,6 +65,7 @@ RETIMED_WORDS = {
     STREAM: "the stream showed a run starting",
     mt.BY_STAFF: "a staff move",
 }
+RENAMED_WORDS = ", {renamed} renamed"
 MOVE_WORDS = {
     "marathon.retimed": (
         "{runs} re-timed after {why}: **{game}** moved from {{{{at:{was}}}}} to {{{{at:{to}}}}}"
@@ -75,8 +77,9 @@ MOVE_WORDS = {
         "**{game}** moved from {{{{at:{was}}}}} to {{{{at:{to}}}}} at a read of the source"
     ),
     "marathon.schedule_changed": (
-        "The source changed at a read: {added} added, {moved} moved, {dropped} dropped"
+        "The source changed at a read: {added} added, {moved} moved, {dropped} dropped{renamed}"
     ),
+    "marathon.run_renamed": "**{game}** was renamed at a read of the source",
     "marathon.overlay_applied": (
         "The organisers' sheet **{label}** was laid over the schedule ({matched} of {runs} matched)"
     ),
@@ -488,6 +491,7 @@ def move_text(kind: str, details: Any, because_words: dict[str, str]) -> str | N
     first = _safe(details, "first", {})
     retimed = RETIMED_WORDS if bare == "marathon.retimed" else {}
     because = str(_safe(details, "because"))
+    renamed = _safe(details, "renamed", 0)
     fields = {
         "game": _safe(details, "game") or _safe(first, "game") or "a run",
         "was": _moment(_safe(details, "from") or _safe(first, "from")) or "",
@@ -497,6 +501,7 @@ def move_text(kind: str, details: Any, because_words: dict[str, str]) -> str | N
         "added": _safe(details, "added", 0),
         "moved": _safe(details, "moved", 0),
         "dropped": _safe(details, "dropped", 0),
+        "renamed": RENAMED_WORDS.format(renamed=renamed) if renamed else "",
         "label": _safe(details, "label") or "its sheet",
         "matched": _safe(details, "matched", 0),
     }

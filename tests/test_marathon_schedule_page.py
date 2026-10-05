@@ -517,6 +517,18 @@ def test_reads_overlays_and_sheet_times_have_words_and_unknown_kinds_are_left_ou
     assert "{{at:" in found[3]["text"]
 
 
+def test_a_read_that_renames_runs_says_how_many_and_each_rename_has_its_own_line():
+    counts = {"added": 0, "moved": 0, "dropped": 0, "renamed": 1}
+    rows = [
+        action(2, "marathon.schedule_changed", counts),
+        action(1, "marathon.run_renamed", {"game": "Metroid Dread", "from_id": "a", "to_id": "b"}),
+    ]
+    assert [one["text"] for one in moves(rows)] == [
+        "The source changed at a read: 0 added, 0 moved, 0 dropped, 1 renamed",
+        "**Metroid Dread** was renamed at a read of the source",
+    ]
+
+
 def test_moves_are_capped():
     rows = [action(i, "marathon.run_reset", {"game": "G"}) for i in range(100, 0, -1)]
     found = moves(rows)

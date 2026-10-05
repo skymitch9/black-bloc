@@ -306,6 +306,7 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.signals_disagree",
         "marathon.categories_found",
         "marathon.schedule_changed",
+        "marathon.run_renamed",
         "marathon.shouted",
         "marathon.unpaired",
         "marathon.updated",

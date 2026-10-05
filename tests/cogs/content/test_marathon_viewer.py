@@ -657,3 +657,77 @@ async def test_back_to_the_sheets_times_means_the_organisers_times_while_laid_ov
     assert await starts_of(bot, marathon) == sheet
     assert sheet[1] == "2026-10-03T18:18:00+00:00"
     assert (await runs_of(bot.db, marathon["id"]))[2]["actual_started_at"] is None
+
+
+# --- the 2026-10-05 typo fix: Metroid Dread renamed while it was on ------------------------------
+
+MINIM = "metroid-dread/minim-items-glitchless"
+MINIMUM = "metroid-dread/minimum-items-glitchless"
+REAL_START = "2026-10-05T03:19:00+00:00"
+
+
+async def dread_live(bot, cog):  # noqa: F811
+    await cogmod.upsert_pairing(bot.db, GUILD, None, "champrul", CHAMPRUL, 7)
+    marathon = await gdqueer_of(bot, cog)
+    row = (await runs_of(bot.db, marathon["id"]))[-1]
+    assert (row["game"], row["external_id"]) == ("Metroid Dread", MINIM)
+    await cogmod.update_run(
+        bot.db,
+        row["id"],
+        state=mt.LIVE,
+        live_at=REAL_START,
+        live_because="stream",
+        actual_started_at=REAL_START,
+        reminders_sent="[15, 120]",
+    )
+    return marathon, (await runs_of(bot.db, marathon["id"]))[-1]
+
+
+async def typo_fixed(bot, cog, marathon):  # noqa: F811
+    cog.client.sheet = cog.client.sheet.replace("Minim Items", "Minimum Items")
+    cog.clock = lambda: SEPT + timedelta(minutes=30)
+    await reread(bot, marathon)
+    return await runs_of(bot.db, marathon["id"])
+
+
+def hosts_and_voices(row):
+    people = [one for one in mt.people_of(row) if one["part"] != "runner"]
+    return [(one["name"], one.get("user_id")) for one in people]
+
+
+async def assert_the_same_run(bot, marathon, before, rows):  # noqa: F811
+    after = rows[-1]
+    assert len(rows) == 24 and mt.DROPPED not in [one["state"] for one in rows]
+    assert (after["id"], after["external_id"], after["state"]) == (before["id"], MINIMUM, mt.LIVE)
+    kept = ("live_at", "live_because", "actual_started_at", "reminders_sent", "sheet_at")
+    assert [after[key] for key in kept] == [before[key] for key in kept]
+    assert after["category"] == "Minimum Items Glitchless"
+    assert hosts_and_voices(after) == hosts_and_voices(before)
+    changed = (await logged(bot, "marathon.schedule_changed"))[-1]
+    assert [changed[key] for key in ("added", "dropped", "renamed")] == [0, 0, 1]
+    (row,) = await logged(bot, "marathon.run_renamed")
+    assert (row["run_id"], row["from_id"], row["to_id"]) == (before["id"], MINIM, MINIMUM)
+
+
+async def test_the_typo_fix_keeps_the_live_run_under_the_organisers_sheet(bot, cog):  # noqa: F811
+    ViewerReads(cog.client)
+    marathon, before = await dread_live(bot, cog)
+    assert ("champrul", CHAMPRUL) in hosts_and_voices(before)
+    await assert_the_same_run(bot, marathon, before, await typo_fixed(bot, cog, marathon))
+
+
+async def test_the_typo_fix_keeps_the_live_run_with_no_organisers_sheet(bot, cog):  # noqa: F811
+    marathon, before = await dread_live(bot, cog)
+    assert mo.state_of(await fresh_of(bot, marathon)) is None
+    await assert_the_same_run(bot, marathon, before, await typo_fixed(bot, cog, marathon))
+
+
+async def test_the_typo_fix_keeps_the_host_while_the_organisers_sheet_cannot_be_had(bot, cog):  # noqa: F811
+    reads = ViewerReads(cog.client)
+    marathon, before = await dread_live(bot, cog)
+    mv.cache_of(cog).viewer = None
+    reads.raises = ScheduleError("the Hotfix schedule viewer answered 503")
+    rows = await typo_fixed(bot, cog, marathon)
+    assert ("champrul", CHAMPRUL) in hosts_and_voices(rows[-1])
+    await assert_the_same_run(bot, marathon, before, rows)
+    assert mo.state_of(await fresh_of(bot, marathon))["stale"].endswith("answered 503")

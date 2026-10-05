@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-10-04 (branch `run-identity`)** — ONE section APPENDED (`RI-a`…`RI-b`, BUILT, NOT MERGED, NOT verified against a browser or Discord); nothing else touched. Before that,
 > **2026-10-03 (branch `reminder-edit-in-place`)** — ONE section APPENDED (`RE-a`…`RE-h`, BUILT, NOT MERGED, NOT verified against a browser or Discord); nothing else touched. Before that,
 > **2026-10-03 (branch `hotfix-viewer-source`)** — ONE section APPENDED (`HV-a`…`HV-g`, BUILT, NOT MERGED; both drawers rendered in a browser on the branch's mock, nothing verified against Discord or Fly); nothing else touched. Before that,
 > **2026-10-03 (branch `hotfix-setup-buffer`)** — ONE section APPENDED (`SB-a`…`SB-e`, BUILT, NOT MERGED, NOT verified against a browser, Discord or a live show); `CT-c`'s *Spyro's real start + 1:08* annotated (+ the buffer); nothing else touched. Before that,
@@ -4065,3 +4066,11 @@ Design: `../info/spotlight-design.md` ▸ *Follow-up 2026-10-04 — replays mid-
 | `RM-d` | Upgrade | When the live title returns (no leading tag), read `#golive` two polls later | ONE new full announcement, pinned, with the role mention the row's gate allows; the replay-worded message is deleted; Logs has one `golive.replay_upgraded`; no reminder right after it |
 | `RM-e` | The page | Go-live page ▸ the channel while the replay runs; Settings ▸ Replays drawer | The state line reads *Replay detected (the title opens with “replay”)* with **Treat as live**; the drawer shows the four new rows and each saves |
 
+## A renamed run keeps its identity — rows `RI-a` … `RI-b` (branch `run-identity`, 2026-10-04, BUILT, NOT MERGED)
+
+Design: `../info/marathon-hotfix-design.md` ▸ *Follow-up 2026-10-04 — a renamed run keeps its identity*. Neither has been seen on Discord or in a browser.
+
+| # | Feature | Do this | Expect |
+|---|---|---|---|
+| `RI-a` | A typo fixed mid-show | ⚠️ **Discord only, and only when a source does it.** The next time a Hotfix sheet corrects a game or category while that run is on with a BaF host or runner, read the public channel and Logs | The highlight stays *on now* with the new spelling, marked *(edited)*; no second highlight; no heads-up reads *off the schedule*; the run's start is unchanged. Logs: one `marathon.run_renamed` (old and new id) and a `marathon.schedule_changed` with `renamed: 1, added: 0, dropped: 0` |
+| `RI-b` | The tracker's Moves list | Marathons ▸ the marathon's tracker ▸ **Moves**, after `RI-a` | One line *The source changed at a read: 0 added, 0 moved, 0 dropped, 1 renamed* and one *<game> was renamed at a read of the source*; the run is one row, not a dropped row and a new one |

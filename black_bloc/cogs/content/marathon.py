@@ -371,6 +371,7 @@ MARATHON_COLUMNS = {
     "overlay",
     "overlay_sheet",
 }
+REKEY_PARKED = "~rekey~{id}"
 RUN_COLUMNS = {
     "order_no",
     "game",
@@ -439,6 +440,22 @@ async def update_run(db: Any, run_id: int, **fields: Any) -> None:
     await db.conn.execute(
         f"UPDATE marathon_runs SET {sets} WHERE id = ?", (*wanted.values(), int(run_id))
     )
+    await db.conn.commit()
+
+
+async def rekey_runs(db: Any, rekeyed: Any) -> None:
+    """Rows changing external id in one commit, each parked first so no two ever hold one id."""
+    if not rekeyed:
+        return
+    sql = "UPDATE marathon_runs SET external_id = ? WHERE id = ?"
+    try:
+        for row, _ in rekeyed:
+            await db.conn.execute(sql, (REKEY_PARKED.format(id=int(row["id"])), int(row["id"])))
+        for row, external_id in rekeyed:
+            await db.conn.execute(sql, (str(external_id), int(row["id"])))
+    except Exception:
+        await db.conn.rollback()
+        raise
     await db.conn.commit()
 
 
@@ -2100,7 +2117,7 @@ class Marathons(commands.Cog):
         )
         plan.updates = signals.held_plan(marathon, plan.updates)
         changed = digest != marathon["fetch_hash"]
-        counts = {"runs": len(runs), "added": 0, "moved": 0, "dropped": 0}
+        counts = {"runs": len(runs), "added": 0, "moved": 0, "dropped": 0, "renamed": 0}
         stamp = now.isoformat()
         if changed:
             counts = await self._write_plan(guild, marathon, plan, now) | {"runs": len(runs)}
@@ -2128,7 +2145,7 @@ class Marathons(commands.Cog):
             "marathon.fetched",
             details={"marathon_id": marathon["id"], "changed": changed, **counts},
         )
-        if changed and (counts["added"] or counts["moved"] or counts["dropped"]):
+        if changed and any(counts[key] for key in ("added", "moved", "dropped", "renamed")):
             await log_action(
                 self.bot,
                 guild,
@@ -2188,6 +2205,7 @@ class Marathons(commands.Cog):
     async def _write_plan(self, guild: Any, marathon: Any, plan: Any, now: datetime) -> dict:
         db = self.bot.db
         stamp = now.isoformat()
+        await rekey_runs(db, plan.rekeyed)
         for run in plan.inserts:
             await db.conn.execute(
                 "INSERT INTO marathon_runs(marathon_id, external_id, order_no, game, "
@@ -2268,10 +2286,27 @@ class Marathons(commands.Cog):
                     )
         for row in plan.dropped:
             await update_run(db, row["id"], state=mt.DROPPED)
+        for row, run in plan.renamed:
+            await log_action(
+                self.bot,
+                guild,
+                "marathon.run_renamed",
+                details={
+                    "marathon_id": marathon["id"],
+                    "run_id": row["id"],
+                    "from_id": row["external_id"],
+                    "to_id": run.external_id,
+                    "game": run.game,
+                    "category": run.category,
+                    "was_game": row["game"],
+                    "was_category": row["category"],
+                },
+            )
         return {
             "added": len(plan.inserts),
             "moved": len(plan.moved),
             "dropped": len(plan.dropped),
+            "renamed": len(plan.renamed),
         }
 
     async def rematch(self, guild: Any, marathon: Any) -> int:

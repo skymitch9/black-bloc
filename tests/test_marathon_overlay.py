@@ -1,5 +1,6 @@
 import json
 import pathlib
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -238,6 +239,21 @@ def test_a_read_without_the_sheet_keeps_what_the_stored_runs_last_held():
     ]
     fresh = gdqueer()
     assert mo.kept(fresh, []) == fresh
+
+
+def test_a_renamed_run_keeps_its_overlay_too_once_the_tolerance_is_given():
+    out, rows = overlaid_rows()
+    fresh = gdqueer()
+    fresh[-1] = replace(fresh[-1], external_id="metroid-dread/minimum-items-glitchless")
+    alone = mo.kept(fresh, rows)[-1]
+    paired = mo.kept(fresh, rows, minutes=5)[-1]
+    assert (alone.starts_at, [p.name for p in alone.people]) == (
+        fresh[-1].starts_at,
+        [p.name for p in fresh[-1].people],
+    )
+    assert (paired.starts_at, paired.ends_at) == (out[-1].starts_at, out[-1].ends_at)
+    assert [(p.name, p.part) for p in paired.people] == [(p.name, p.part) for p in out[-1].people]
+    assert paired.external_id == "metroid-dread/minimum-items-glitchless"
 
 
 def test_what_a_marathon_remembers_about_its_sheet():

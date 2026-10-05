@@ -10,7 +10,7 @@ from typing import Any
 
 from . import marathon_signals as sig
 from .golive import parse_ts
-from .marathon import DROPPED, _cell, normalise, people_of
+from .marathon import DROPPED, _cell, normalise, people_of, renames
 from .marathon_hotfix import EASTERN
 from .marathon_sources import COMMENTATOR, HOST, Person, Run, ScheduleError, seconds_of
 from .timezones import zone
@@ -252,10 +252,13 @@ def overlaid(runs: Any, pairing: Pairing) -> list[Run]:
     return found
 
 
-def kept(runs: Any, rows: Any) -> list[Run]:
+def kept(runs: Any, rows: Any, *, minutes: int | None = None) -> list[Run]:
     """The runs as the stored rows last held the overlay: their sheet times, estimate, hosts and
     commentators — for a read on which the event sheet could not be had."""
     known = {str(_cell(row, "external_id")): row for row in rows or ()}
+    if minutes is not None:
+        pairs = renames(rows, list(runs or ()), minutes=minutes)
+        known |= {run.external_id: row for row, run in pairs}
     found: list[Run] = []
     for run in runs or ():
         row = known.get(run.external_id)

@@ -410,3 +410,127 @@ re-time; a changed key at the next read with live/done runs unmoved and the mara
    unmeasured — that is what the key is for.
 4. **The live marathons' first read after deploy** — which upcoming BaF runs log a move — was not rehearsed against
    production data.
+
+## Follow-up 2026-10-04 — a renamed run keeps its identity (branch `run-identity`)
+
+> 🔨 **BUILT on branch `run-identity`** (off `main` `c31878a5`) — **NOT merged, NOT deployed, nothing has met
+> Discord, Fly or a browser.** Schema unchanged; registry keys unchanged (**737**); routes unchanged (`check.mjs`:
+> *23 pages, 291 routes*). One new log kind, `marathon.run_renamed`. **Last verified: 2026-10-04** against the
+> suite and the fixture `gdq_hotfix_sheet.csv` (which still carries the typo) only.
+
+**The incident** (measured by the conductor through the operator token; `docs/TODO.md` ▸ 🪪). At 2026-10-05
+03:43:04Z GDQ's sheet changed Metroid Dread's category from *Minim Items Glitchless* to *Minimum Items Glitchless*.
+A Hotfix run's `external_id` is the slug of its game and category (`marathon_hotfix._runs`), so the read answered
+`added=1 dropped=1`: run 163, LIVE since 03:19Z with a BaF host's highlight up and both heads-ups posted, was
+DROPPED, and run 176 was inserted and went live at 03:43Z. Members saw the highlight edited to its finished
+wording mid-run, a second highlight, and both heads-ups reworded to *off the schedule*.
+
+**What was changed, and what was not.** How `external_id` is derived is untouched (a function that produces a
+persisted key is a migration). The change is in the one place a read reconciles stored rows with fresh runs,
+`marathon.diff`: before a row is dropped and a run inserted, `marathon.renames` pairs them.
+
+**The pairing rule** (`marathon.same_slot`) — a stored row that the read no longer names and a fresh run whose id
+no live row holds are the same run when ALL of:
+
+1. **The slot.** Either the planned starts (`sheet_at`, else `scheduled_at`, against the fresh `starts_at`) are
+   under `marathon_move_minutes` apart (5 by default, never under 1), or the two have the same `order` and their
+   planned starts are under 12 hours apart (`SAME_DAY_HOURS`). With no time on either side, the order alone.
+2. **The runners.** The set of RUNNER names, normalised by `runner_key` (case and spacing), is equal. Hosts and
+   commentators take no part: the organisers' overlay changes them without the run changing.
+3. **No runners on either side** counts only when the game titles are alike: equal after `normalise`, or a
+   `difflib` ratio of 0.8 or more (`SAME_TITLE`). Two blank titles are not alike.
+
+**The tolerance is `marathon_move_minutes`**, not a new key: that key already holds the decision *how far may a
+planned start differ and still be the same time* — below it a start has not moved. A typo fix moves nothing; the
+overlay and the setup buffer shift by seconds or not at all. The order rule covers the read where the clock
+differs by more (the overlay unreadable on that read, a day's start edited in the same save).
+
+**Ambiguity pairs nothing** (`_only_pairs`). Every row is tested against every candidate run; a row is paired only
+when exactly one run fits it AND that run fits no other row. A row fitting two runs, or two rows fitting one run,
+stay a drop and an add — and do not stop a clear pair elsewhere in the same read.
+
+**Several lost rows by the same runners** (added after review, 2026-10-04). When more than one lost row carries the
+fresh run's runner set, a pair also needs the words to be alike (`same_words`: `normalise` of game + category equal,
+or a `difflib` ratio of at least `SAME_WORDS` = 0.93) and exactly one of those rows may pass — otherwise that run pairs
+with nothing; a lone lost row is never word-tested. 0.93 sits between the measured anchors: the incident's pair is
+0.973, *Donkey Kong Country 2 / 102%* against */ True Ending* is 0.759 and against */ Any%* 0.88. It closes the read
+where a runner's first run is deleted and their next one retitled in one save (order and start both shift up, so the
+retitled run sat alone in the deleted run's slot): that read is now two drops and an add. The repeat-counter pass below
+is not word-tested — repeats read alike by definition.
+
+**Kept by a renamed run:** its row — id, state (upcoming / live / done), `live_at`, `live_because`,
+`actual_started_at`, `actual_ended_at`, `done_at`, `reminders_sent`, `reminder_posts`, the shout ids, `first_seen_at`,
+and each person's match where name and part are unchanged (`_merged_people`). The host-block records on the
+marathon are keyed by run id and so still fit. **Taken from the fresh run:** `external_id`, order, game, display
+name, category, estimate, people, sheet times — the ordinary update, so a renamed run whose start also moved by the
+threshold is a move as well.
+
+**What follows.** One `marathon.run_renamed` row per pair (`run_id`, `from_id`, `to_id`, `game`, `category`,
+`was_game`, `was_category`); `marathon.schedule_changed` and `marathon.fetched` carry `renamed` beside `added` /
+`moved` / `dropped`, and a read that only renames still logs `schedule_changed`. Nothing is posted and nothing
+pings. The existing syncs pick up the words: the board and runner post, a posted highlight (edited in place), and
+the heads-ups of a run or block still UPCOMING. A heads-up for a block already live is not reworded — the existing
+reminder sync follows upcoming and dropped blocks only, and no new editor was built.
+
+**The repeat counter.** `_runs` names a second identical game/category `…#2`. Fix a typo on the FIRST of two and
+the read names the fixed one freshly and calls the second by the first's old id, so id matching would move row 1
+onto slot 2 and drop row 2. `renames` therefore looks once more when a lost row is still unpaired: id matches of
+the same family (the id without `#n`) that put a row out of its slot are released and everything is paired by
+slot again. The wider answer is taken only if every released row and run is paired and every first-pass pair
+stands; otherwise the first pass is the answer.
+
+**Flip-back.** (a) The sheet goes back to the old spelling after this build renamed the row: the row is lost
+under the new id and found under the old one — renamed again, same row. (b) The old id is held by a DROPPED row
+(the incident's shape: 163 dropped holding the old id, 176 live holding the new one): the fresh run's id match is
+a dropped row, so it is a candidate for the live row; the live row takes the id and the dropped row takes the id
+the live row gave up (`marathon.rekeys`) and stays dropped. `rekey_runs` writes every id change in one commit,
+parking each row on `~rekey~<id>` first, so `UNIQUE (marathon_id, external_id)` never trips; a failure rolls
+all of it back. The rekey and the field update are two commits; a stop between them leaves the row under its new
+id with its old words, and the next read (the stored hash is written last) finishes it as an ordinary update, without
+a `run_renamed` row.
+
+**A DROPPED row that comes back under its OLD id** is unchanged: it is updated from the fresh run and goes back to
+UPCOMING (`plan.reappeared`). The one exception is (b) above — when a live, upcoming or done row in the same slot
+would be lost in that same read, that row is kept and the dropped row stays dropped.
+
+**The incident's rows (163, 176) were not repaired**; that show is over.
+
+**Deviations**
+
+1. **No new settings key.** The brief allowed one if the tolerance was a real decision; `marathon_move_minutes` is
+   that decision already, reachable both ways.
+2. **"The same show-day block" is 12 hours, not a calendar day.** A stored run carries no day, and only Hotfix has
+   an Eastern show-day (`marathon_overlay.show_day`, which `marathon.py` cannot import). It guards only the order
+   rule; the time rule is far tighter.
+3. **DONE rows are paired too.** Before this build a DONE row missing from a read was left as history and its new
+   spelling inserted as a second, upcoming run; a renamed done run now keeps its one row.
+4. **`marathon_overlay.kept` was touched** (outside the reconcile step). On a read where the organisers' sheet
+   cannot be had, `kept` copies hosts, commentators and times from the stored row by `external_id`; a renamed run
+   was unknown to it and would have lost its BaF host on exactly the incident's read. It now also looks the row up
+   through `renames` when `laid` passes the tolerance (`minutes=None` is the old behaviour).
+5. **The repeat-counter release** (above) goes beyond the brief's pairing of drops with adds; it is all-or-nothing
+   and limited to one id family.
+6. **A live block's posted heads-ups keep the old spelling** (see *What follows*).
+7. **`schedule_changed` in the tracker's Moves list** says `, N renamed` only when N is not 0, so older rows read
+   as they did; `run_renamed` has its own line.
+
+**Tests** — `tests/test_marathon.py` (the slot's two rules and their edges, runners / hosts, the title rule, both
+ambiguities, a swap, two renames, rename + add, done, dropped never renamed, the flip-back swap, two and three
+repeats, a repeat removed beside an add), `tests/cogs/content/test_marathon.py` (upcoming with marks kept, live
+with its real start, done, a title change, another runner, rename + add, a swap, a tracker id, repeats, both
+flip-backs against the real `UNIQUE` index, a failed rekey rolled back), `tests/cogs/content/test_marathon_host_highlights.py`
+(the incident with a posted highlight and two heads-ups: nothing sent, nothing reworded as dropped, the highlight
+edited in place; an upcoming hosted run's heads-up reworded and its 15-minute mark still due once),
+`tests/cogs/content/test_marathon_viewer.py` (the GDQueer fixture's own row, with the organisers' sheet, without
+it, and with it unreadable), `tests/test_marathon_overlay.py` (`kept` with and without the tolerance),
+`tests/test_marathon_schedule_page.py` (the Moves words).
+
+**What was NOT verified**
+
+1. **Nothing met Discord, Fly, the live sheet or a browser.** The edits are fake-channel edits.
+2. **The live database's rows** were not read; whether any other marathon holds a DROPPED twin of a live run is
+   unmeasured.
+3. **The Moves list was not looked at in a browser**; its words are tested as strings, and the mock has no
+   renamed row to show.
+4. **A rename on the same read as a large shift with a changed order** is not paired (neither slot rule holds) and
+   stays a drop and an add, as before.
