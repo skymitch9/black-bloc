@@ -4,11 +4,22 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
-from . import chat_review
+from . import chat_review, tone_keys
 from .actionlog import log_action
 from .channel_notes import NOTE_CHARS, clean_note, clear_note, get_note, set_note
 from .chat_llm import LLM_MODE_KEY, money
-from .chat_voice import pin, roster, talking_now, unpin, voice_rows
+from .chat_voice import (
+    DRIFTED,
+    FEEDBACK,
+    NEW,
+    TONE_OFF,
+    pin,
+    roster,
+    settle_of,
+    talking_now,
+    unpin,
+    voice_rows,
+)
 from .knowledge import (
     SERVER,
     SERVER_ROW_IS_NOT_YOURS,
@@ -113,7 +124,11 @@ NO_SUCH_MEMBER_CODE = "no_such_member"
 TONE_UNUSABLE_CODE = "tone_unusable"
 TONE_TOO_LONG_CODE = "tone_too_long"
 TONE_CHARS = 1200
-WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {**CHANNEL_NOTE_WORDS, **VOICE_WORDS}
+WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    **CHANNEL_NOTE_WORDS,
+    **VOICE_WORDS,
+    **tone_keys.TONE_WORDS,
+}
 
 STATUS_MODE = "Answering @-mentions: **{mode}**. Conversation model: **{llm}**."
 STATUS_OFF_TAIL = " Every answer comes from Black Bloc's own written lines."
@@ -240,6 +255,14 @@ VOICES_MOVE = PanelMove(VOICES, "Who hears what…", "primary", row=3)
 CLEAR_PIN_MOVE = PanelMove(CLEAR_PIN, "Clear the pin", "danger", row=1)
 PREVIOUS_MOVE = PanelMove(PREVIOUS, "‹ Previous", row=2)
 NEXT_MOVE = PanelMove(NEXT, "Next ›", row=2)
+REROLL = "reroll"
+ROLE_ONLY = "role_only"
+ROLE_EVERYONE = "role_everyone"
+REROLL_MOVE = PanelMove(REROLL, "Reroll", "primary", row=2)
+ROLE_ONLY_MOVE = PanelMove(ROLE_ONLY, "Only members with no tone", "primary", row=0)
+ROLE_EVERYONE_MOVE = PanelMove(ROLE_EVERYONE, "Everyone in it", row=0)
+ROLE_UNDO = "role_undo"
+ROLE_UNDO_MOVE = PanelMove(ROLE_UNDO, "Undo this roll", "danger", row=1)
 VOICES_PAGE = 25
 
 PANEL_MOVES: tuple[PanelMove, ...] = (
@@ -259,6 +282,10 @@ PANEL_MOVES: tuple[PanelMove, ...] = (
     CHANNELS_MOVE,
     VOICES_MOVE,
     CLEAR_PIN_MOVE,
+    REROLL_MOVE,
+    ROLE_ONLY_MOVE,
+    ROLE_EVERYONE_MOVE,
+    ROLE_UNDO_MOVE,
     PREVIOUS_MOVE,
     NEXT_MOVE,
     PanelMove(REVIEW, "Review queue…", row=1),
@@ -345,10 +372,29 @@ def voices_buttons(
     return (*found, BACK_MOVE._replace(row=3), REFRESH_MOVE._replace(row=3))
 
 
-def member_buttons(pinned: bool, clear_label: str = "") -> tuple[PanelMove, ...]:
-    """Clear renders only on a member who has a pin to clear."""
-    found = [CLEAR_PIN_MOVE._replace(label=clear_label or CLEAR_PIN_MOVE.label)] if pinned else []
+def member_buttons(
+    pinned: bool, clear_label: str = "", reroll_label: str = "", *, tones: bool = True
+) -> tuple[PanelMove, ...]:
+    """Clear renders only on a pin; Reroll only where no pin holds the tone and a tone is on."""
+    found = []
+    if pinned:
+        found.append(CLEAR_PIN_MOVE._replace(label=clear_label or CLEAR_PIN_MOVE.label, row=2))
+    elif tones:
+        found.append(REROLL_MOVE._replace(label=reroll_label or REROLL_MOVE.label))
     return (*found, BACK_MOVE._replace(row=2), REFRESH_MOVE._replace(row=2))
+
+
+def role_buttons(
+    labels: tuple[str, str] = ("", ""), *, undo: bool = False, undo_label: str = ""
+) -> tuple[PanelMove, ...]:
+    """Undo renders only on the card that has just shown a roll's result."""
+    found = [
+        ROLE_ONLY_MOVE._replace(label=labels[0] or ROLE_ONLY_MOVE.label),
+        ROLE_EVERYONE_MOVE._replace(label=labels[1] or ROLE_EVERYONE_MOVE.label),
+    ]
+    if undo:
+        found.append(ROLE_UNDO_MOVE._replace(label=undo_label or ROLE_UNDO_MOVE.label))
+    return (*found, BACK_MOVE._replace(row=1))
 
 
 def page_count(total: int) -> int:
@@ -864,8 +910,21 @@ async def voice_roster(bot: Any, guild: Any, *, now: Any = None) -> dict[str, An
         "setting": setting,
         "enabled": enabled,
         "labels": {str(row["name"]): str(row["label"]) for row in tropes},
-        "voices": roster(rows, setting, enabled, talking),
+        "voices": roster(rows, setting, enabled, talking, settle_of(bot.store, guild.id)),
     }
+
+
+def state_words(store: Any, guild_id: int, entry: dict[str, Any]) -> str:
+    """How the tone got there, and when it last moved on its own or after feedback."""
+    state = str(entry.get("state") or "")
+    said = words(store, guild_id, tone_keys.STATE_KEYS[state])
+    if state not in (DRIFTED, FEEDBACK, TONE_OFF) or not entry.get("moved_at"):
+        return said
+    try:
+        at = int(datetime.fromisoformat(str(entry["moved_at"])).timestamp())
+    except ValueError:
+        return said
+    return f"{said} · <t:{at}:R>"
 
 
 def voice_line(store: Any, guild_id: int, entry: dict[str, Any], labels: dict[str, str]) -> str:
@@ -885,6 +944,19 @@ def voice_line(store: Any, guild_id: int, entry: dict[str, Any], labels: dict[st
             member=member,
             tone=labels.get(pinned, pinned),
             by=by,
+        )
+    elif entry.get("state") in tone_keys.STATE_KEYS:
+        tone = str(entry["trope"])
+        said = words(
+            store,
+            guild_id,
+            tone_keys.LINE_STORED_KEY,
+            member=member,
+            tone=labels.get(tone, tone),
+            state=state_words(store, guild_id, entry),
+            settled=words(
+                store, guild_id, tone_keys.SETTLED_KEYS[str(entry.get("settled_word") or NEW)]
+            ),
         )
     else:
         tone = str(entry["trope"])
@@ -1226,6 +1298,8 @@ __all__ = [
     "member_of",
     "page_count",
     "pin_voice",
+    "role_buttons",
+    "state_words",
     "voice_line",
     "voice_roster",
     "voices_buttons",

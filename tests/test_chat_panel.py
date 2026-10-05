@@ -1,3 +1,5 @@
+import json
+from functools import partial
 from types import SimpleNamespace
 
 import pytest
@@ -79,6 +81,10 @@ async def pool(db):
 async def kinds(db):
     cur = await db.conn.execute("SELECT kind, details FROM action_log ORDER BY id")
     return [(row["kind"], row["details"]) for row in await cur.fetchall()]
+
+
+async def detailed(db):
+    return [(kind, json.loads(details or "{}")) for kind, details in await kinds(db)]
 
 
 def actions(view):
@@ -172,6 +178,8 @@ def test_every_move_the_panel_can_render_is_in_the_one_table():
     rendered |= {move.action for move in personality_buttons()}
     rendered |= {move.action for move in chat_panel.voices_buttons(2, 3)}
     rendered |= {move.action for move in chat_panel.member_buttons(True)}
+    rendered |= {move.action for move in chat_panel.member_buttons(False)}
+    rendered |= {move.action for move in chat_panel.role_buttons(undo=True)}
     rendered |= {move.action for move in chat_panel.review_buttons(2, 3)}
     rendered |= {move.action for move in chat_panel.review_item_buttons(can_approve=True)}
 
@@ -610,6 +618,46 @@ async def test_a_pin_from_discord_is_one_row_one_log_and_a_keyed_sentence(people
     assert found.message.startswith("**Nia** hears **")
     assert (await voice_row(db, GUILD, 21))["pinned_by"] == ACTOR
     assert [kind for kind, _ in await kinds(db)] == ["chat.voice_pinned"]
+
+
+def test_reroll_renders_only_where_no_pin_holds_the_tone_and_a_tone_is_on():
+    assert actions(chat_panel.member_buttons(False)) == [
+        chat_panel.REROLL, chat_panel.BACK, chat_panel.REFRESH]
+    assert actions(chat_panel.member_buttons(True)) == [
+        chat_panel.CLEAR_PIN, chat_panel.BACK, chat_panel.REFRESH]
+    assert actions(chat_panel.member_buttons(False, tones=False)) == [
+        chat_panel.BACK, chat_panel.REFRESH]
+    assert actions(chat_panel.role_buttons()) == [
+        chat_panel.ROLE_ONLY, chat_panel.ROLE_EVERYONE, chat_panel.BACK]
+    assert [move.label for move in chat_panel.role_buttons(("A", "B"))][:2] == ["A", "B"]
+    assert actions(chat_panel.role_buttons(undo=True)) == [
+        chat_panel.ROLE_ONLY, chat_panel.ROLE_EVERYONE, chat_panel.ROLE_UNDO, chat_panel.BACK]
+
+
+def entry(**given):
+    found = {"user_id": 21, "trope": "warm", "pinned": None, "pinned_by": None, "waiting": False,
+             "turns": 3, "active": False, "state": None, "settled_word": "new", "moved_at": None}
+    found.update(given)
+    return found
+
+
+def test_a_members_line_says_how_the_tone_got_there_and_how_settled_it_is(bot):
+    labels = {"warm": "warm", "noir": "noir"}
+    said = partial(chat_panel.voice_line, bot.store, GUILD)
+
+    assert said(entry(state="rolled"), labels) == "<@21> — **warm** · rolled · new"
+    assert said(entry(state="set", settled_word="settled"), labels) == (
+        "<@21> — **warm** · set by staff · settled")
+    moved = said(entry(state="feedback", moved_at="2026-10-03T12:00:00+00:00",
+                       settled_word="settling"), labels)
+    assert moved == "<@21> — **warm** · moved after feedback · <t:1791028800:R> · settling"
+    drifted = said(entry(state="drifted", moved_at="not a date"), labels)
+    assert drifted == "<@21> — **warm** · drifted · new"
+    assert said(entry(), labels) == "<@21> — **warm** · rolled · 3 turn(s)"
+    off = said(entry(state="tone_off", moved_at="2026-10-03T12:00:00+00:00"), labels)
+    assert off == "<@21> — **warm** · rolled · tone was switched off · <t:1791028800:R> · new"
+    pinned = said(entry(state="pinned", pinned="noir", pinned_by=7, active=True), labels)
+    assert pinned == "<@21> — **noir** · pinned by <@7> · talking now"
 
 
 async def test_the_website_door_writes_the_same_row_under_its_own_kind(people, actor, db):

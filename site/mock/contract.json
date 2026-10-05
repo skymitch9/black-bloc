@@ -36,6 +36,9 @@
       "chat_memory_sweep_hours": 1,
       "chat_review_digest_hour": 0,
       "chat_review_reask_seconds": 0,
+      "chat_tone_drift_floor_percent": 0,
+      "chat_tone_drift_halves_every": 0,
+      "chat_tone_drift_start_percent": 0,
       "error_retry_minutes": 1,
       "events_channel_retention_days": 1,
       "events_default_minutes": 5,
@@ -110,6 +113,9 @@
       "chat_person_hourly_turns": 10000,
       "chat_review_digest_hour": 23,
       "chat_review_reask_seconds": 3600,
+      "chat_tone_drift_floor_percent": 100,
+      "chat_tone_drift_halves_every": 1000,
+      "chat_tone_drift_start_percent": 100,
       "cost_hosting_usd": 10000,
       "error_retry_minutes": 30,
       "events_channel_retention_days": 365,
@@ -3941,7 +3947,18 @@
           "waiting",
           "since",
           "turns",
-          "active"
+          "active",
+          "tone",
+          "state",
+          "state_word",
+          "settled",
+          "settled_share",
+          "settled_word",
+          "chance",
+          "set_by",
+          "moved_at",
+          "moved_from",
+          "moved_why"
         ],
         "tropes": [
           "name",
@@ -3984,7 +4001,18 @@
           "waiting",
           "since",
           "turns",
-          "active"
+          "active",
+          "tone",
+          "state",
+          "state_word",
+          "settled",
+          "settled_share",
+          "settled_word",
+          "chance",
+          "set_by",
+          "moved_at",
+          "moved_from",
+          "moved_why"
         ]
       }
     },
@@ -4013,9 +4041,147 @@
           "waiting",
           "since",
           "turns",
-          "active"
+          "active",
+          "tone",
+          "state",
+          "state_word",
+          "settled",
+          "settled_share",
+          "settled_word",
+          "chance",
+          "set_by",
+          "moved_at",
+          "moved_from",
+          "moved_why"
         ]
       }
+    },
+    {
+      "_": "A starting tone at random. {ping_member_id} because the seed pins {member_id}, and a pinned member is refused in words (409).",
+      "method": "POST",
+      "path": "/api/chat/voices/{ping_member_id}/reroll",
+      "body": {},
+      "read_by": [
+        "page-chat.js Who hears what Reroll"
+      ],
+      "shape": "object",
+      "keys": [
+        "voice",
+        "setting",
+        "message"
+      ],
+      "nested": {
+        "voice": [
+          "user_id",
+          "name",
+          "trope",
+          "label",
+          "pinned",
+          "pinned_label",
+          "pinned_by",
+          "pinned_at",
+          "waiting",
+          "since",
+          "turns",
+          "active",
+          "tone",
+          "state",
+          "state_word",
+          "settled",
+          "settled_share",
+          "settled_word",
+          "chance",
+          "set_by",
+          "moved_at",
+          "moved_from",
+          "moved_why"
+        ]
+      }
+    },
+    {
+      "_": "A starting tone staff chose: not a pin, it drifts like any other.",
+      "method": "PUT",
+      "path": "/api/chat/voices/{ping_member_id}/tone",
+      "body": {
+        "trope": "scholar"
+      },
+      "read_by": [
+        "page-chat.js Who hears what Set tone"
+      ],
+      "shape": "object",
+      "keys": [
+        "voice",
+        "setting",
+        "message"
+      ],
+      "nested": {
+        "voice": [
+          "user_id",
+          "name",
+          "trope",
+          "label",
+          "pinned",
+          "pinned_label",
+          "pinned_by",
+          "pinned_at",
+          "waiting",
+          "since",
+          "turns",
+          "active",
+          "tone",
+          "state",
+          "state_word",
+          "settled",
+          "settled_share",
+          "settled_word",
+          "chance",
+          "set_by",
+          "moved_at",
+          "moved_from",
+          "moved_why"
+        ]
+      }
+    },
+    {
+      "_": "The question before a roll: how many members would get a tone. Writes nothing.",
+      "method": "POST",
+      "path": "/api/chat/voices/roll/preview",
+      "body": {
+        "role_id": "{plain_role_id}",
+        "everyone": true
+      },
+      "read_by": [
+        "page-chat.js Who hears what Roll for a role (the confirm)"
+      ],
+      "shape": "object",
+      "keys": [
+        "message",
+        "role",
+        "count",
+        "pinned",
+        "kept"
+      ]
+    },
+    {
+      "_": "A starting tone for each member of a role; pinned members come back in `pinned`, untouched.",
+      "method": "POST",
+      "path": "/api/chat/voices/roll",
+      "body": {
+        "role_id": "{plain_role_id}",
+        "everyone": false
+      },
+      "read_by": [
+        "page-chat.js Who hears what Roll for a role"
+      ],
+      "shape": "object",
+      "keys": [
+        "message",
+        "roll_id",
+        "role",
+        "rolled",
+        "pinned",
+        "kept"
+      ]
     },
     {
       "method": "GET",
@@ -9143,6 +9309,10 @@
     "web.request.comment",
     "web.chat.voice_pinned",
     "web.chat.voice_cleared",
+    "web.chat.voice_rerolled",
+    "web.chat.voice_set",
+    "web.chat.voice_role_rolled",
+    "web.chat.voice_role_undone",
     "web.chat.tone_edited",
     "web.chat.memory_forgot",
     "web.raidtrain.create",

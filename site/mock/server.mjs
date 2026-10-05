@@ -538,7 +538,7 @@ const SETTING_SPECS = [
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
   ['chat_llm_mode', 'enum', 'on', 'off', 'off, or on (an @-mention no built-in intent recognises is answered by a language model instead of the catch-all line). Off is the default and off is safe: with it off, or with no keys set, Black Bloc answers exactly as it does today', ['off', 'on']],
   ['chat_simple_model', 'text', 'openai/gpt-oss-120b', 'openai/gpt-oss-120b', 'which Groq model the quick tier asks; it is a setting because Groq retires model names faster than a deploy can follow'],
-  ['chat_personality', 'enum', 'cookout', 'cookout', 'the voice Black Bloc writes a conversational answer in: cookout is the house voice, pool lets a conversation pick one of the moods and drift a step at a time, or name one mood to keep it. Only used when chat_llm_mode is on', PERSONALITY_CHOICES],
+  ['chat_personality', 'enum', 'pool', 'cookout', 'the voice Black Bloc writes a conversational answer in: cookout is the house voice, pool lets a conversation pick one of the moods and drift a step at a time, or name one mood to keep it. Only used when chat_llm_mode is on', PERSONALITY_CHOICES],
   ['chat_person_hourly_turns', 'int', 20, 20, "how many conversational answers one member may get in a rolling hour, up to 10000; 0 means no ceiling of its own. Past it they still get Black Bloc's own written lines", null, 10000],
   ['chat_daily_turns', 'int', 200, 200, 'how many conversational answers the whole server may get in a UTC day, up to 10000; 0 means no ceiling of its own', null, 10000],
   ['chat_monthly_cap_usd', 'int', 20, 20, "whole dollars a month Black Bloc may run the conversation models for, up to 1000. At the figure it stops calling them until the 1st and answers from its own written lines; 0 stops them altogether", null, 1000],
@@ -579,7 +579,7 @@ const SETTING_SPECS = [
   ["chat_banter_style", 'text', "For a greeting or small talk, answer in one or two lines in your own voice \u2014 no lists, no tour of channels, no offers of help nobody asked for.", "For a greeting or small talk, answer in one or two lines in your own voice \u2014 no lists, no tour of channels, no offers of help nobody asked for.", "the line every answer reads about greetings and small talk \u2014 how short to keep them and what never to pile on. Blank goes back to the default"],
   ["chat_grounding_note", 'text', "These are notes for you from the server \u2014 use them silently: never quote, list or bullet them back, and mention a channel only when the person's question needs it. Do not invent anything they do not say.", "These are notes for you from the server \u2014 use them silently: never quote, list or bullet them back, and mention a channel only when the person's question needs it. Do not invent anything they do not say.", "the sentence in front of the server notes a careful answer is handed \u2014 how to use them (silently, never quoted or listed back). Blank goes back to the default"],
   ["chat_voice_pinned", 'text', "**{member}** hears **{tone}** on top of the cookout voice from their next answer on, whatever the pool rolls. **Clear** hands them back to the server's setting.", "**{member}** hears **{tone}** on top of the cookout voice from their next answer on, whatever the pool rolls. **Clear** hands them back to the server's setting.", "what staff are told when a member's tone is pinned, on /chat and on the Chat page. It takes {member} and {tone}"],
-  ["chat_voice_cleared", 'text', "**{member}** is back on the server's setting: their tone is rolled again from their next answer.", "**{member}** is back on the server's setting: their tone is rolled again from their next answer.", "what staff are told when a member's pinned tone is cleared. It takes {member}"],
+  ["chat_voice_cleared", 'text', "**{member}** is unpinned and back on their own tone from their next answer.", "**{member}** is unpinned and back on their own tone from their next answer.", "what staff are told when a member's pinned tone is cleared. It takes {member}"],
   ["chat_voice_nothing", 'text', "**{member}** had no tone pinned, so nothing changed.", "**{member}** had no tone pinned, so nothing changed.", "what staff are told when they clear a pin that was never set. It takes {member}"],
   ["chat_voice_no_member", 'text', "**{member}** is not in this server, so nothing was pinned. Pick somebody from the list again.", "**{member}** is not in this server, so nothing was pinned. Pick somebody from the list again.", "what staff are told when the member a tone was meant for is not in the server. It takes {member}, the id that was given"],
   ["chat_voice_no_tone", 'text', "**{tone}** is not one of the tones Black Bloc knows, so nothing was pinned. The list beside it is all of them.", "**{tone}** is not one of the tones Black Bloc knows, so nothing was pinned. The list beside it is all of them.", "what staff are told when a pin names a tone that does not exist. It takes {tone}"],
@@ -594,12 +594,49 @@ const SETTING_SPECS = [
   ["chat_voice_line_waiting", 'text', "{member} — pinned to **{tone}**, which is switched off, so the setting decides for now", "{member} — pinned to **{tone}**, which is switched off, so the setting decides for now", "the line for a member whose pinned tone is switched off. It takes {member} and {tone}"],
   ["chat_voice_active", 'text', "talking now", "talking now", "the word added after a member's line while their conversation window is open"],
   ["chat_voice_set_placeholder", 'text', "Set a member's tone…", "Set a member's tone…", "the member picker's placeholder on that card. Discord shows at most 150 characters"],
-  ["chat_voice_tone_placeholder", 'text', "The tone for {member}…", "The tone for {member}…", "the tone picker's placeholder once a member is picked. It takes {member}; Discord shows at most 150 characters"],
+  ["chat_voice_tone_placeholder", "text", "Pin… (fix {member}'s tone)", "Pin… (fix {member}'s tone)", "the placeholder of the picker that pins a member's tone, once a member is picked. It takes {member}; Discord shows at most 150 characters"],
   ["chat_voice_clear_button", 'text', "Clear the pin", "Clear the pin", "the button that hands a pinned member back to the server's setting. Discord shows at most 80 characters on a button"],
   ["chat_voice_previous_button", 'text', "‹ Previous", "‹ Previous", "the button that shows the previous 25 members on that card"],
   ["chat_voice_next_button", 'text', "Next ›", "Next ›", "the button that shows the next 25 members on that card"],
   ["chat_voice_page", 'text', "Page {page} of {pages}", "Page {page} of {pages}", "the page line on that card when there are more than 25 members. It takes {page} and {pages}"],
   ["chat_voice_member_title", 'text', "The tone for {member}", "The tone for {member}", "the heading of one member's card, where a tone is pinned or cleared. It takes {member}"],
+  ["chat_tone_drift_start_percent", "int", 25, 25, "the chance, in percent, that a member's tone takes one step to a neighbouring tone when it is checked (every few answers) while the tone is new. 0 to 100; 0 means a tone never moves on its own", null, 100, 0],
+  ["chat_tone_drift_halves_every", "int", 4, 4, "how many of a member's conversations pass before that chance is halved again, so a tone settles the longer nobody complains. 0 means it never settles, up to 1000", null, 1000, 0],
+  ["chat_tone_drift_floor_percent", "int", 2, 2, "the lowest that chance ever falls to, in percent, however settled a tone is. 0 to 100; 0 means a fully settled tone stops moving on its own", null, 100, 0],
+  ["chat_tone_feedback_mode", "enum", "on", "on", "on (when a member genuinely tells Black Bloc it was mean or wrong, their tone moves one step gentler or more careful and is new again; joking never counts) or off (nothing a member says moves their tone)", ["off", "on"]],
+  ["chat_tone_feedback_cues", "text", "mean, rude, hurtful, harsh, uncalled for, not cool, not okay, not ok, offensive, disrespectful, condescending, patronizing, patronising, that hurt, hurt my feelings, be nice, wrong, incorrect, not true, not right, not correct, inaccurate, made that up, making things up, a lie, lying, misinformation, mistake", "mean, rude, hurtful, harsh, uncalled for, not cool, not okay, not ok, offensive, disrespectful, condescending, patronizing, patronising, that hurt, hurt my feelings, be nice, wrong, incorrect, not true, not right, not correct, inaccurate, made that up, making things up, a lie, lying, misinformation, mistake", "words and phrases, separated by commas, that might mean a member is telling Black Bloc it was mean or wrong. Only a message said TO Black Bloc (a reply to its answer, or an @-mention) with one of them is handed to the quick model to judge. Blank means no message is ever judged"],
+  ["chat_tone_gentle_order", "text", "warm, cozy, shy, peppy, scholar, dramatic, flirty, noir, deadpan, mischievous, tsundere", "warm, cozy, shy, peppy, scholar, dramatic, flirty, noir, deadpan, mischievous, tsundere", "the tones from gentlest to sharpest, separated by commas. A member who says Black Bloc was mean moves to the nearest tone before theirs in this list that is switched on; a tone left out never moves this way"],
+  ["chat_tone_careful_order", "text", "scholar, shy, warm, cozy, deadpan, noir, peppy, flirty, tsundere, mischievous, dramatic", "scholar, shy, warm, cozy, deadpan, noir, peppy, flirty, tsundere, mischievous, dramatic", "the tones from most careful to least, separated by commas. A member who says Black Bloc was wrong moves to the nearest tone before theirs in this list that is switched on; a tone left out never moves this way"],
+  ["chat_voice_rerolled", "text", "Rolled **{tone}** for **{member}**, from their next answer on.", "Rolled **{tone}** for **{member}**, from their next answer on.", "what staff are told when a member's tone is rerolled, on /chat and on the Chat page. It takes {member} and {tone}"],
+  ["chat_voice_tone_set", "text", "**{member}** starts from **{tone}** from their next answer on.", "**{member}** starts from **{tone}** from their next answer on.", "what staff are told when a member is given a starting tone. It takes {member} and {tone}"],
+  ["chat_voice_is_pinned", "text", "**{member}** is pinned to **{tone}**, so nothing was changed. Clear the pin first.", "**{member}** is pinned to **{tone}**, so nothing was changed. Clear the pin first.", "what staff are told when they reroll or set a tone for a member who is pinned. It takes {member} and {tone}"],
+  ["chat_voice_no_tones", "text", "No tone is switched on in the pool, so nothing was rolled. Turn one on under Personality first.", "No tone is switched on in the pool, so nothing was rolled. Turn one on under Personality first.", "what staff are told when a tone is rolled while every tone is switched off"],
+  ["chat_voice_no_role", "text", "That role is not in this server, so nothing was rolled. Pick one from the list again.", "That role is not in this server, so nothing was rolled. Pick one from the list again.", "what staff are told when the role a tone was rolled for is not in the server"],
+  ["chat_voice_role_rolled", "text", "Rolled a tone for **{rolled}** member(s) of **{role}**. Left alone: **{pinned}** pinned, **{kept}** who already had a tone.", "Rolled a tone for **{rolled}** member(s) of **{role}**. Left alone: **{pinned}** pinned, **{kept}** who already had a tone.", "the first line of the answer when a tone is rolled for everybody in a role. It takes {rolled}, {role}, {pinned} and {kept}, the three counts and the role's name"],
+  ["chat_voice_role_line", "text", "{member} — **{tone}**", "{member} — **{tone}**", "one member's line in that answer. It takes {member} and {tone}"],
+  ["chat_voice_role_pinned_line", "text", "{member} — pinned to **{tone}**, left alone", "{member} — pinned to **{tone}**, left alone", "the line for a pinned member in that answer. It takes {member} and {tone}"],
+  ["chat_voice_role_placeholder", "text", "Roll for a role…", "Roll for a role…", "the role picker's placeholder on the Who hears what card. Discord shows at most 150 characters"],
+  ["chat_voice_role_title", "text", "A tone for everybody in {role}", "A tone for everybody in {role}", "the heading of the card that rolls a tone for a role. It takes {role}"],
+  ["chat_voice_role_only_button", "text", "Only members with no tone", "Only members with no tone", "the button that rolls a tone for the members of the role who have none yet. Discord shows at most 80 characters on a button"],
+  ["chat_voice_role_everyone_button", "text", "Everyone in it", "Everyone in it", "the button that rolls a new tone for every member of the role who is not pinned. Discord shows at most 80 characters on a button"],
+  ["chat_voice_reroll_button", "text", "Reroll", "Reroll", "the button that rolls a member a new starting tone. Discord shows at most 80 characters on a button"],
+  ["chat_voice_start_placeholder", "text", "Set tone… (a starting tone for {member})", "Set tone… (a starting tone for {member})", "the placeholder of the picker that gives a member a starting tone. It takes {member}; Discord shows at most 150 characters"],
+  ["chat_voice_line_stored", "text", "{member} — **{tone}** · {state} · {settled}", "{member} — **{tone}** · {state} · {settled}", "the line of a member who has a tone of their own on the Who hears what card. It takes {member}, {tone}, {state} (how the tone got there) and {settled} (how settled it is)"],
+  ["chat_voice_state_rolled", "text", "rolled", "rolled", "how a tone got there, when Black Bloc or staff rolled it"],
+  ["chat_voice_state_set", "text", "set by staff", "set by staff", "how a tone got there, when staff chose it as a starting tone"],
+  ["chat_voice_state_drifted", "text", "drifted", "drifted", "how a tone got there, when it took a step on its own"],
+  ["chat_voice_state_feedback", "text", "moved after feedback", "moved after feedback", "how a tone got there, when the member said Black Bloc was mean or wrong"],
+  ["chat_voice_state_pinned", "text", "pinned", "pinned", "how a tone got there, when staff pinned it"],
+  ["chat_voice_settled_new", "text", "new", "new", "how settled a tone is, while it is still likely to take a step"],
+  ["chat_voice_settled_settling", "text", "settling", "settling", "how settled a tone is, once it is less than half as likely to take a step"],
+  ["chat_voice_settled_settled", "text", "settled", "settled", "how settled a tone is, once it is as unlikely to take a step as it ever gets"],
+  ["chat_voice_role_confirm", "text", "Roll a new tone for **{count}** member(s) of **{role}**? **{pinned}** pinned and **{kept}** who already have a tone are left alone.", "Roll a new tone for **{count}** member(s) of **{role}**? **{pinned}** pinned and **{kept}** who already have a tone are left alone.", "the question staff answer before a tone is rolled for a role, on /chat and on the Chat page. It takes {count} (how many get a new tone), {role}, {pinned} and {kept}"],
+  ["chat_voice_role_confirm_button", "text", "Yes, roll", "Yes, roll", "the button that goes ahead with a roll for a role. Discord shows at most 80 characters on a button"],
+  ["chat_voice_role_undo_button", "text", "Undo this roll", "Undo this roll", "the button that puts every member of the last roll for a role back to the tone they had. Discord shows at most 80 characters on a button"],
+  ["chat_voice_role_undone", "text", "Put **{restored}** member(s) of **{role}** back to the tone they had. **{skipped}** whose tone changed again since, or who were pinned, were left alone.", "Put **{restored}** member(s) of **{role}** back to the tone they had. **{skipped}** whose tone changed again since, or who were pinned, were left alone.", "what staff are told when a roll for a role is undone. It takes {restored}, {role} and {skipped}"],
+  ["chat_voice_role_no_undo", "text", "There is no roll to undo: only the newest roll for a role can be put back, once.", "There is no roll to undo: only the newest roll for a role can be put back, once.", "what staff are told when Undo this roll is pressed on a roll that was already undone, or after a newer roll"],
+  ["chat_voice_role_everyone", "text", "**@everyone** is the whole server, so nothing was rolled. Pick a role instead.", "**@everyone** is the whole server, so nothing was rolled. Pick a role instead.", "what staff are told when a tone is rolled for @everyone"],
+  ["chat_voice_state_tone_off", "text", "rolled · tone was switched off", "rolled · tone was switched off", "how a tone got there, when the member's own tone was switched off and Black Bloc rolled them another at their next answer"],
   ["chat_tone_edited", 'text', "**{tone}** now reads the way you wrote it, from the next answer on. The boot sync keeps your wording.", "**{tone}** now reads the way you wrote it, from the next answer on. The boot sync keeps your wording.", "what staff are told when a tone's wording is saved on the Chat page. It takes {tone}"],
   ["chat_tone_reset", 'text', "**{tone}** is back to the wording Black Bloc ships with.", "**{tone}** is back to the wording Black Bloc ships with.", "what staff are told when a tone's wording is put back. It takes {tone}"],
   ["chat_tone_too_long", 'text', "That tone is {length} characters and a tone holds {limit}, so nothing was saved. Take {over} out and save it again.", "That tone is {length} characters and a tone holds {limit}, so nothing was saved. Take {over} out and save it again.", "what staff are told when a tone's wording is too long. It takes {length}, {limit} and {over}"],
@@ -1937,11 +1974,22 @@ function seedTropes() {
 // Personality tones (2026-09-23): who hears what. Casey is mid-conversation on a rolled tone,
 // Rivet is pinned to scholarly, and Moth is pinned to noir — which ships switched off, so the
 // page has a waiting pin to draw.
+function voiceSeed(at, given) {
+  return {
+    user_id: MEMBERS[at].id, trope: null, turns: 0, since: null, pinned: null, pinned_by: null, pinned_at: null, active: false,
+    tone: null, how: null, settled: 0, set_by: null, moved_at: null, moved_from: null, moved_why: null,
+    ...given,
+  };
+}
+
 function seedVoices() {
   return [
-    { user_id: MEMBERS[1].id, trope: 'warm', turns: 3, since: minutesAgo(8), pinned: null, pinned_by: null, pinned_at: null, active: true },
-    { user_id: MEMBERS[2].id, trope: 'scholar', turns: 0, since: minutesAgo(95), pinned: 'scholar', pinned_by: STAFF.id, pinned_at: minutesAgo(60), active: false },
-    { user_id: MEMBERS[3].id, trope: 'peppy', turns: 1, since: minutesAgo(200), pinned: 'noir', pinned_by: STAFF.id, pinned_at: minutesAgo(30), active: false },
+    voiceSeed(1, { trope: 'warm', tone: 'warm', how: 'rolled', settled: 2, turns: 3, since: minutesAgo(8), active: true }),
+    voiceSeed(2, { trope: 'scholar', since: minutesAgo(95), pinned: 'scholar', pinned_by: STAFF.id, pinned_at: minutesAgo(60) }),
+    voiceSeed(3, { trope: 'warm', tone: 'warm', how: 'feedback', turns: 1, since: minutesAgo(2900), moved_at: minutesAgo(2880), moved_from: 'mischievous', moved_why: 'mean' }),
+    voiceSeed(4, { trope: 'shy', tone: 'shy', how: 'set', set_by: STAFF.id, moved_at: minutesAgo(400) }),
+    voiceSeed(5, { trope: 'peppy', tone: 'peppy', how: 'rolled', settled: 20, since: minutesAgo(200), pinned: 'noir', pinned_by: STAFF.id, pinned_at: minutesAgo(30) }),
+    voiceSeed(6, { trope: 'deadpan', tone: 'deadpan', how: 'drifted', settled: 9, since: minutesAgo(700), moved_at: minutesAgo(13000), moved_from: 'noir' }),
   ];
 }
 
@@ -12187,7 +12235,33 @@ function hearsNow(row) {
   if (mode === 'cookout') return 'cookout';
   if (row.pinned && on.has(row.pinned)) return row.pinned;
   if (mode !== 'pool') return on.has(mode) ? mode : 'cookout';
+  if (row.tone) return on.has(row.tone) ? row.tone : 'cookout';
   return row.trope || 'cookout';
+}
+
+const VOICE_STATE_KEYS = { rolled: 'chat_voice_state_rolled', set: 'chat_voice_state_set', drifted: 'chat_voice_state_drifted', feedback: 'chat_voice_state_feedback', pinned: 'chat_voice_state_pinned', tone_off: 'chat_voice_state_tone_off' };
+
+/** chat_voice.drift_chance and settled_share, on the three keys the Settings page edits. */
+function voiceSettle(settled) {
+  const start = Math.max(0, Math.min(1, Number(state.settings.get('chat_tone_drift_start_percent')) / 100));
+  const floor = Math.min(start, Math.max(0, Number(state.settings.get('chat_tone_drift_floor_percent')) / 100));
+  const halves = Number(state.settings.get('chat_tone_drift_halves_every')) || 0;
+  const chance = halves <= 0 ? start : Math.max(floor, start * 0.5 ** (Math.max(0, settled) / halves));
+  const share = start <= floor ? 1 : Math.max(0, Math.min(1, (start - chance) / (start - floor)));
+  const word = share >= 1 ? 'settled' : share >= 0.5 ? 'settling' : 'new';
+  return { chance, share, word };
+}
+
+function voiceState(row, on) {
+  const mode = personaMode();
+  if (mode === 'cookout') return null;
+  if (row.pinned && on.has(row.pinned)) return 'pinned';
+  if (mode !== 'pool' || !row.tone) return null;
+  return row.how || 'rolled';
+}
+
+function voicePerson(id) {
+  return id ? { id: String(id), name: memberName(id) || String(id) } : null;
 }
 
 function toneLabel(name) {
@@ -12198,7 +12272,20 @@ function toneLabel(name) {
 function voiceRow(row) {
   const on = new Set(state.tropes.filter((one) => one.enabled).map((one) => one.name));
   const tone = hearsNow(row);
+  const stateNow = voiceState(row, on);
+  const settle = voiceSettle(Number(row.settled) || 0);
   return {
+    tone: row.tone || null,
+    state: stateNow,
+    state_word: stateNow ? noteWords(VOICE_STATE_KEYS[stateNow], {}) : null,
+    settled: Number(row.settled) || 0,
+    settled_share: Number(settle.share.toFixed(3)),
+    settled_word: stateNow ? noteWords(`chat_voice_settled_${settle.word}`, {}) : null,
+    chance: Number(settle.chance.toFixed(4)),
+    set_by: voicePerson(row.set_by),
+    moved_at: row.moved_at || null,
+    moved_from: row.moved_from || null,
+    moved_why: row.moved_why || null,
     user_id: String(row.user_id),
     name: memberName(row.user_id) || String(row.user_id),
     trope: tone,
@@ -12255,16 +12342,157 @@ route('PUT', '/api/chat/voices/:id', async (context) => {
   const found = state.tropes.find((one) => one.name === wanted);
   if (!found) throw new Refused(422, 'tone_unusable', noteWords('chat_voice_no_tone', { tone: wanted.slice(0, 40) || 'nothing' }));
   if (!found.enabled) throw new Refused(422, 'tone_unusable', noteWords('chat_voice_tone_off', { tone: found.label }));
-  let row = state.voices.find((one) => one.user_id === id);
-  if (!row) {
-    row = { user_id: id, trope: null, turns: 0, since: null, pinned: null, pinned_by: null, pinned_at: null, active: false };
-    state.voices.push(row);
-  }
+  const row = voiceRowFor(id);
   row.pinned = found.name;
   row.pinned_by = STAFF.id;
   row.pinned_at = now();
   logAction('web.chat.voice_pinned', { target_id: id, details: { member: id, tone: found.name, via: 'website' } });
   return voiceAnswer(id, noteWords('chat_voice_pinned', { member: who, tone: found.label }));
+});
+
+function voiceRowFor(id) {
+  let row = state.voices.find((one) => one.user_id === id);
+  if (!row) {
+    row = { user_id: id, trope: null, turns: 0, since: null, pinned: null, pinned_by: null, pinned_at: null, active: false, tone: null, how: null, settled: 0, set_by: null, moved_at: null, moved_from: null, moved_why: null };
+    state.voices.push(row);
+  }
+  return row;
+}
+
+function voiceMember(id) {
+  const who = memberName(id);
+  if (!who || !MEMBERS.some((one) => one.id === id)) {
+    throw new Refused(404, 'no_such_member', noteWords('chat_voice_no_member', { member: id.slice(0, 40) }));
+  }
+  return who;
+}
+
+function voiceNotPinned(id, who) {
+  const row = state.voices.find((one) => one.user_id === id);
+  if (row && row.pinned) {
+    throw new Refused(409, 'voice_is_pinned', noteWords('chat_voice_is_pinned', { member: who, tone: toneLabel(row.pinned) }));
+  }
+}
+
+function voiceStart(id, name, how) {
+  const row = voiceRowFor(id);
+  Object.assign(row, { moved_from: row.tone, tone: name, trope: name, how, set_by: STAFF.id, moved_at: now(), moved_why: null, settled: 0, since: null, turns: 0 });
+  return row;
+}
+
+/** A reroll never lands on the tone the member has while another one is on. */
+function voiceAnother(current) {
+  const on = state.tropes.filter((one) => one.enabled);
+  const others = on.filter((one) => one.name !== current);
+  const pool = others.length ? others : on;
+  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+}
+
+/** Who a roll would touch, read before anything is written — chat_tones.plan_role. */
+function voiceRollPlan(body) {
+  const role = ROLES.find((one) => one.id === String(body.role_id || ''));
+  if (!role) throw new Refused(404, 'no_such_role', noteWords('chat_voice_no_role', {}));
+  if (!state.tropes.some((one) => one.enabled)) throw new Refused(409, 'no_tones_on', noteWords('chat_voice_no_tones', {}));
+  const everyone = body.everyone === true;
+  const wanted = [];
+  const pinned = [];
+  let kept = 0;
+  for (const member of ROSTER.filter((one) => !one.bot && one.role_ids.includes(role.id) && MEMBERS.some((known) => known.id === one.id))) {
+    const row = state.voices.find((one) => one.user_id === member.id);
+    const entry = { user_id: member.id, name: memberName(member.id) || member.id };
+    if (row && row.pinned) pinned.push({ ...entry, trope: row.pinned, label: toneLabel(row.pinned) });
+    else if (row && row.tone && !everyone) kept += 1;
+    else wanted.push({ entry, row });
+  }
+  return { role, everyone, wanted, pinned, kept };
+}
+
+route('POST', '/api/chat/voices/roll/preview', async (context) => {
+  requireStaff(context.session);
+  const plan = voiceRollPlan(await context.body());
+  const counts = { count: plan.wanted.length, pinned: plan.pinned.length, kept: plan.kept };
+  return { message: noteWords('chat_voice_role_confirm', { role: plan.role.name, ...counts }), role: plan.role.name, ...counts };
+});
+
+route('POST', '/api/chat/voices/roll/undo', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const roll = state.voiceRoll;
+  if (!roll || roll.undone || (body.roll_id !== undefined && body.roll_id !== null && String(body.roll_id) !== String(roll.id))) {
+    throw new Refused(409, 'no_roll_to_undo', noteWords('chat_voice_role_no_undo', {}));
+  }
+  roll.undone = true;
+  let restored = 0;
+  let skipped = 0;
+  for (const move of roll.moves) {
+    const at = state.voices.findIndex((one) => one.user_id === move.user_id);
+    const row = at >= 0 ? state.voices[at] : null;
+    if (!row || row.pinned || row.tone !== move.to) {
+      skipped += 1;
+    } else {
+      if (move.before) state.voices[at] = { ...move.before };
+      else state.voices.splice(at, 1);
+      restored += 1;
+    }
+  }
+  logAction('web.chat.voice_role_undone', { details: { roll: roll.id, role_id: roll.role_id, role: roll.role, restored, skipped, via: 'website' } });
+  return { message: noteWords('chat_voice_role_undone', { restored, role: roll.role, skipped }), roll_id: roll.id, role: roll.role, restored, skipped };
+});
+
+route('POST', '/api/chat/voices/roll', async (context) => {
+  requireStaff(context.session);
+  const plan = voiceRollPlan(await context.body());
+  const { role, everyone, pinned, kept } = plan;
+  const rolled = [];
+  const moves = [];
+  for (const { entry, row } of plan.wanted) {
+    const found = voiceAnother(row ? row.tone : null);
+    moves.push({ user_id: entry.user_id, to: found.name, before: row ? { ...row } : null });
+    voiceStart(entry.user_id, found.name, 'rolled');
+    rolled.push({ ...entry, trope: found.name, label: found.label });
+  }
+  state.voiceRollSeq = (state.voiceRollSeq || 0) + 1;
+  state.voiceRoll = { id: String(state.voiceRollSeq), role_id: role.id, role: role.name, moves, undone: false };
+  logAction('web.chat.voice_role_rolled', { details: { roll: state.voiceRoll.id, role_id: role.id, role: role.name, everyone, rolled: rolled.length, pinned: pinned.length, kept, via: 'website' } });
+  return {
+    message: noteWords('chat_voice_role_rolled', { rolled: rolled.length, role: role.name, pinned: pinned.length, kept }),
+    roll_id: state.voiceRoll.id,
+    role: role.name,
+    rolled,
+    pinned,
+    kept,
+  };
+});
+
+route('POST', '/api/chat/voices/:id/reroll', (context) => {
+  requireStaff(context.session);
+  const id = String(context.params.id);
+  const who = voiceMember(id);
+  voiceNotPinned(id, who);
+  const before = state.voices.find((one) => one.user_id === id);
+  const found = voiceAnother(before ? before.tone : null);
+  if (!found) throw new Refused(409, 'no_tones_on', noteWords('chat_voice_no_tones', {}));
+  const from = before ? before.tone : null;
+  voiceStart(id, found.name, 'rolled');
+  logAction('web.chat.voice_rerolled', { target_id: id, details: { member: id, from, tone: found.name, via: 'website' } });
+  return voiceAnswer(id, noteWords('chat_voice_rerolled', { member: who, tone: found.label }));
+});
+
+route('PUT', '/api/chat/voices/:id/tone', async (context) => {
+  requireStaff(context.session);
+  const id = String(context.params.id);
+  const who = voiceMember(id);
+  voiceNotPinned(id, who);
+  const body = await context.body();
+  const wanted = String(body.trope || '').trim().toLowerCase();
+  const found = state.tropes.find((one) => one.name === wanted);
+  if (!found) throw new Refused(422, 'tone_unusable', noteWords('chat_voice_no_tone', { tone: wanted.slice(0, 40) || 'nothing' }));
+  if (!found.enabled) throw new Refused(422, 'tone_unusable', noteWords('chat_voice_tone_off', { tone: found.label }));
+  const before = state.voices.find((one) => one.user_id === id);
+  const from = before ? before.tone : null;
+  voiceStart(id, found.name, 'set');
+  logAction('web.chat.voice_set', { target_id: id, details: { member: id, from, tone: found.name, via: 'website' } });
+  return voiceAnswer(id, noteWords('chat_voice_tone_set', { member: who, tone: found.label }));
 });
 
 route('DELETE', '/api/chat/voices/:id', (context) => {

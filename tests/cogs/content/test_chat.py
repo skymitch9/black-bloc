@@ -1947,17 +1947,157 @@ async def test_picking_a_member_and_a_tone_pins_it_and_clear_takes_it_off(
     assert "Clear the pin" not in labels(interaction.view)
     assert interaction.view.again is not None
 
-    await pick_one(interaction, "The tone for Ada…", "noir")
+    await pick_one(interaction, "Pin… (fix Ada's tone)", "noir")
     assert interaction.sent.startswith("**Ada** hears **")
     assert "pinned by <@" in interaction.embed.description
     assert "Clear the pin" in labels(interaction.view)
+    assert "Reroll" not in labels(interaction.view)
+    assert placeholders(interaction.view) == ["Pin… (fix Ada's tone)"]
 
     await button(interaction.view, "Clear the pin").callback(interaction)
-    assert "is back on the server's setting" in interaction.sent
+    assert interaction.sent == (
+        "**Ada** is unpinned and back on their own tone from their next answer."
+    )
     assert await kinds_of(db) == ["chat.voice_pinned", "chat.voice_cleared"]
+    assert "Reroll" in labels(interaction.view)
 
     await button(interaction.view, "Back").callback(interaction)
     assert "<@321>" in interaction.embed.description
+
+
+async def test_a_starting_tone_and_a_reroll_are_two_moves_on_the_members_card(
+    cog, bot, member, db, monkeypatch
+):
+    ada = FakeMember(bot.guild, user_id=321, display_name="Ada", admin=False)
+    with_people(bot, member, ada)
+    await bot.store.set(GUILD, "chat_personality", "pool")
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+    await pick_one(interaction, "Set a member's tone…", SimpleNamespace(id=321))
+
+    assert placeholders(interaction.view) == [
+        "Set tone… (a starting tone for Ada)", "Pin… (fix Ada's tone)"]
+    assert labels(interaction.view)[:1] == ["Reroll"]
+
+    await pick_one(interaction, "Set tone… (a starting tone for Ada)", "noir")
+    assert interaction.sent == "**Ada** starts from **noir** from their next answer on."
+    assert interaction.embed.description == "<@321> — **noir** · set by staff · new"
+
+    await button(interaction.view, "Reroll").callback(interaction)
+    assert interaction.sent.startswith("Rolled **") and "for **Ada**" in interaction.sent
+    assert "· rolled · new" in interaction.embed.description
+    assert "**noir**" not in interaction.embed.description
+    assert await kinds_of(db) == ["chat.voice_set", "chat.voice_rerolled"]
+
+
+async def test_reroll_and_the_pickers_render_only_while_a_tone_is_on(
+    cog, bot, member, db, monkeypatch
+):
+    ada = FakeMember(bot.guild, user_id=321, display_name="Ada", admin=False)
+    with_people(bot, member, ada)
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+    await db.conn.execute("UPDATE personality_tropes SET enabled = 0")
+    await db.conn.commit()
+    await button(interaction.view, "Refresh").callback(interaction)
+
+    assert "Roll for a role…" not in placeholders(interaction.view)
+    await pick_one(interaction, "Set a member's tone…", SimpleNamespace(id=321))
+    assert placeholders(interaction.view) == []
+    assert "Reroll" not in labels(interaction.view)
+
+
+def with_role(bot, *people):
+    role = SimpleNamespace(id=777, name="Aunties / Uncles", members=list(people))
+    bot.guild.get_role = lambda role_id: role if int(role_id) == 777 else None
+    return role
+
+
+async def test_a_role_is_picked_and_rolled_for_the_untoned_then_for_everyone(
+    cog, bot, member, db, monkeypatch
+):
+    from black_bloc.chat_voice import pin, set_tone, voice_row
+
+    ada = FakeMember(bot.guild, user_id=321, display_name="Ada", admin=False)
+    bea = FakeMember(bot.guild, user_id=322, display_name="Bea", admin=False)
+    cal = FakeMember(bot.guild, user_id=323, display_name="Cal", admin=False)
+    with_people(bot, member, ada, bea, cal)
+    with_role(bot, ada, bea, cal)
+    await bot.store.set(GUILD, "chat_personality", "pool")
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+    await pin(bot.db, GUILD, 321, "noir", by=1)
+    await set_tone(bot.db, GUILD, 322, "warm", by=1)
+
+    await pick_one(interaction, "Roll for a role…", SimpleNamespace(id=777))
+    assert interaction.embed.title == "A tone for everybody in Aunties / Uncles"
+    assert labels(interaction.view) == ["Only members with no tone", "Everyone in it", "Back"]
+    assert interaction.view.again is not None
+
+    await button(interaction.view, "Only members with no tone").callback(interaction)
+    asked = interaction.embed.fields[-1].value
+    assert asked == (
+        "Roll a new tone for **1** member(s) of **Aunties / Uncles**? **1** pinned and **1** "
+        "who already have a tone are left alone."
+    )
+    assert labels(interaction.view) == ["Yes, roll", "Keep it"]
+    assert await voice_row(bot.db, GUILD, 323) is None and await kinds_of(db) == []
+
+    await button(interaction.view, "Keep it").callback(interaction)
+    assert labels(interaction.view) == ["Only members with no tone", "Everyone in it", "Back"]
+    assert await voice_row(bot.db, GUILD, 323) is None
+
+    await button(interaction.view, "Only members with no tone").callback(interaction)
+    await button(interaction.view, "Yes, roll").callback(interaction)
+    assert interaction.sent == (
+        "Rolled a tone for **1** member(s) of **Aunties / Uncles**. Left alone: **1** pinned, "
+        "**1** who already had a tone."
+    )
+    lines = interaction.embed.description.splitlines()
+    assert lines[0].startswith("<@323> — **") and lines[1] == (
+        "<@321> — pinned to **noir**, left alone")
+    assert (await voice_row(bot.db, GUILD, 322))["tone"] == "warm"
+    assert "Undo this roll" in labels(interaction.view)
+
+    await button(interaction.view, "Everyone in it").callback(interaction)
+    assert "Roll a new tone for **2** member(s)" in interaction.embed.fields[-1].value
+    await button(interaction.view, "Yes, roll").callback(interaction)
+    assert "Rolled a tone for **2** member(s)" in interaction.sent
+    assert (await voice_row(bot.db, GUILD, 322))["tone"] != "warm"
+    assert (await voice_row(bot.db, GUILD, 321))["pinned"] == "noir"
+    assert await kinds_of(db) == ["chat.voice_role_rolled", "chat.voice_role_rolled"]
+
+    await button(interaction.view, "Undo this roll").callback(interaction)
+    assert interaction.sent.startswith("Put **2** member(s) of **Aunties / Uncles** back")
+    assert (await voice_row(bot.db, GUILD, 322))["tone"] == "warm"
+    assert "Undo this roll" not in labels(interaction.view)
+    assert (await kinds_of(db))[-1] == "chat.voice_role_undone"
+
+    await button(interaction.view, "Back").callback(interaction)
+    assert interaction.embed.title == "Who hears what"
+
+
+async def test_at_everyone_cannot_be_rolled_from_discord(cog, bot, member, db, monkeypatch):
+    with_people(bot, member)
+    everyone = SimpleNamespace(id=GUILD, name="@everyone", members=[member])
+    bot.guild.get_role = lambda role_id: everyone
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+    await pick_one(interaction, "Roll for a role…", SimpleNamespace(id=GUILD))
+
+    await button(interaction.view, "Everyone in it").callback(interaction)
+
+    assert interaction.sent == (
+        "**@everyone** is the whole server, so nothing was rolled. Pick a role instead."
+    )
+    assert "Yes, roll" not in labels(interaction.view) and await kinds_of(db) == []
+
+
+async def test_a_role_that_is_gone_is_answered_in_words(cog, bot, member, monkeypatch):
+    with_people(bot, member)
+    bot.guild.get_role = lambda role_id: None
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+
+    await pick_one(interaction, "Roll for a role…", SimpleNamespace(id=4242))
+
+    assert "That role is not in this server" in interaction.sent
+    assert interaction.embed.title == "Who hears what"
 
 
 async def test_a_member_who_is_not_in_the_server_is_answered_in_words(
@@ -2044,6 +2184,106 @@ async def test_asking_again_right_after_an_answer_queues_it(cog, bot, member, db
     found = await review_rows(db)
     assert [(row["reason"], row["reply_id"]) for row in found] == [("reask", 500)]
     assert found[0]["asked"] == "<@55> hi there"
+
+
+async def test_a_model_answer_and_the_words_after_it_reach_the_tone_feedback(
+    cog, bot, member, db, monkeypatch, no_tagging
+):
+    from black_bloc import chat_feedback
+
+    weighed = []
+    monkeypatch.setattr(chat_feedback, "schedule", lambda bot, message: weighed.append(message.id))
+
+    async def reply(bot, *, guild, member, channel, text, greeting=False):
+        return ("Fine, fine, cousin.", "simple", "tsundere")
+
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+
+    await cog.on_message(numbered(bot, member, "<@55> what time does the thing start tonight?"))
+    await cog.on_message(numbered(bot, member, "that was rude", message_id=2, mentions=[]))
+
+    kept = chat_feedback.tracker(bot).answers[(GUILD, member.id)]
+    assert (kept.text, kept.reply_id, kept.message_id) == ("Fine, fine, cousin.", 500, 1)
+    assert weighed == [1, 2]
+
+
+async def test_a_complaint_said_to_the_bot_is_judged_before_its_answer_is_worded(
+    cog, bot, member, db, monkeypatch, no_tagging
+):
+    """Judge, then move, then reply: the answer to "that was rude" is written in the new tone."""
+    from black_bloc import chat_feedback
+
+    order = []
+
+    async def heard(bot, message, **_):
+        order.append(("judge", message.id))
+
+    async def reply(bot, *, guild, member, channel, text, greeting=False):
+        order.append(("reply", text))
+        return ("Fine, fine, cousin.", "simple", "tsundere")
+
+    monkeypatch.setattr(chat_feedback, "heard", heard)
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+
+    await cog.on_message(numbered(bot, member, "<@55> what time does the thing start tonight?"))
+    cog._answered.clear()
+    await cog.on_message(numbered(bot, member, "<@55> that was rude of you", message_id=2))
+
+    assert [one[0] for one in order] == ["reply", "judge", "reply"]
+    assert order[1] == ("judge", 2)
+
+
+async def test_a_message_to_somebody_else_is_never_handed_to_the_feedback_judge(
+    cog, bot, member, db, monkeypatch, no_tagging
+):
+    """No mention and no reply to the bot: it is weighed locally and dropped, with no model."""
+    from datetime import UTC, datetime
+
+    from black_bloc import chat_feedback
+    from black_bloc.chat_voice import set_tone
+
+    judged = []
+
+    async def judge(*args, **kwargs):
+        judged.append(args)
+        return chat_feedback.Verdict()
+
+    async def reply(bot, *, guild, member, channel, text, greeting=False):
+        return ("Fine, fine, cousin.", "simple", "tsundere")
+
+    async def never_closed(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(chat_feedback, "judge", judge)
+    monkeypatch.setattr(chat_feedback, "closed_why", never_closed)
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    await bot.store.set(GUILD, "chat_personality", "pool")
+    await set_tone(db, GUILD, member.id, "tsundere", by=1)
+    started = datetime.now(UTC).isoformat()
+    await db.conn.execute("UPDATE chat_voice SET since = ?", (started,))
+
+    await cog.on_message(numbered(bot, member, "<@55> what time does the thing start tonight?"))
+    await cog.on_message(
+        numbered(bot, member, "nah that's wrong lol", message_id=2, mentions=[])
+    )
+    for task in list(chat_feedback.tracker(bot).tasks):
+        await task
+    assert judged == []
+
+    cog._answered.clear()
+    await cog.on_message(numbered(bot, member, "<@55> that is wrong", message_id=3))
+    assert len(judged) == 1
+
+
+async def test_a_written_line_is_not_kept_for_the_tone_feedback(cog, bot, member, db, no_tagging):
+    from black_bloc import chat_feedback
+
+    await cog.on_message(numbered(bot, member, "<@55> hi there"))
+
+    assert chat_feedback.tracker(bot).answers == {}
 
 
 async def test_a_thanks_after_an_answer_queues_nothing(cog, bot, member, db, no_tagging):

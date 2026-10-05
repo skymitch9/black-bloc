@@ -983,6 +983,195 @@ async def test_a_pin_answers_in_the_words_staff_wrote(seeded, client, guild, wf,
     assert said.startswith("Done: Nia gets ")
 
 
+async def test_a_starting_tone_is_set_listed_and_is_not_a_pin(seeded, client, guild, wf, web):
+    wf.member(guild, 21, name="nia")
+    client.put("/api/chat/personality", json={"mode": "pool"})
+
+    done = client.put("/api/chat/voices/21/tone", json={"trope": "scholar"})
+
+    assert done.status_code == 200, done.text
+    row = done.json()["voice"]
+    assert (row["trope"], row["tone"], row["pinned"]) == ("scholar", "scholar", None)
+    assert (row["state"], row["state_word"]) == ("set", "set by staff")
+    assert (row["settled"], row["settled_word"], row["settled_share"]) == (0, "new", 0.0)
+    assert row["set_by"]["id"] == "7" and row["moved_at"]
+    assert done.json()["message"] == "**Nia** starts from **scholarly** from their next answer on."
+    rows = [one for one in await wf.web_rows_in(web.db) if one[0] == "web.chat.voice_set"]
+    assert rows == [("web.chat.voice_set",
+                     {"member": "21", "from": None, "tone": "scholar", "via": "website"})]
+
+
+async def test_a_reroll_gives_a_new_tone_and_says_which(seeded, client, guild, wf, web):
+    wf.member(guild, 21, name="nia")
+    client.put("/api/chat/personality", json={"mode": "pool"})
+    client.put("/api/chat/voices/21/tone", json={"trope": "scholar"})
+
+    done = client.post("/api/chat/voices/21/reroll")
+
+    assert done.status_code == 200, done.text
+    row = done.json()["voice"]
+    assert row["tone"] != "scholar" and row["state"] == "rolled" and row["moved_from"] == "scholar"
+    said = f"Rolled **{row['label']}** for **Nia**, from their next answer on."
+    assert done.json()["message"] == said
+    kinds = [kind for kind in await wf.kinds_in(web.db) if kind.startswith("web.chat.voice")]
+    assert kinds == ["web.chat.voice_set", "web.chat.voice_rerolled"]
+
+
+async def test_a_pinned_member_is_not_rerolled_or_given_a_start(seeded, client, guild, wf, web):
+    wf.member(guild, 21, name="nia")
+    client.put("/api/chat/voices/21", json={"trope": "noir"})
+
+    rerolled = client.post("/api/chat/voices/21/reroll")
+    started = client.put("/api/chat/voices/21/tone", json={"trope": "warm"})
+
+    assert rerolled.status_code == started.status_code == 409
+    assert rerolled.json()["message"] == (
+        "**Nia** is pinned to **noir**, so nothing was changed. Clear the pin first."
+    )
+    assert started.json()["error"] == "voice_is_pinned"
+    kinds = [kind for kind in await wf.kinds_in(web.db) if kind.startswith("web.chat.voice")]
+    assert kinds == ["web.chat.voice_pinned"]
+
+
+async def test_a_start_or_a_reroll_is_refused_in_words(seeded, client, guild, wf):
+    wf.member(guild, 21, name="nia")
+    client.get("/api/chat/personality")
+
+    stranger = client.post("/api/chat/voices/4242/reroll")
+    nobody = client.put("/api/chat/voices/4242/tone", json={"trope": "warm"})
+    unknown = client.put("/api/chat/voices/21/tone", json={"trope": "swashbuckling"})
+    blank = client.put("/api/chat/voices/21/tone", json={})
+
+    assert stranger.status_code == nobody.status_code == 404
+    assert "not in this server" in stranger.json()["message"]
+    assert unknown.status_code == blank.status_code == 422
+    assert "not one of the tones" in unknown.json()["message"]
+
+
+async def test_a_reroll_with_every_tone_off_is_refused_in_words(seeded, client, guild, wf, web):
+    wf.member(guild, 21, name="nia")
+    client.get("/api/chat/personality")
+    await web.db.conn.execute("UPDATE personality_tropes SET enabled = 0")
+    await web.db.conn.commit()
+
+    refused = client.post("/api/chat/voices/21/reroll")
+
+    assert refused.status_code == 409 and refused.json()["error"] == "no_tones_on"
+    assert "No tone is switched on" in refused.json()["message"]
+
+
+def in_role(guild, wf, *ids):
+    role = guild.get_role(wf.PLAIN_ROLE_ID)
+    role.members = []
+    for uid in ids:
+        role.members.append(wf.member(guild, uid, name=f"m{uid}"))
+    return role
+
+
+async def test_a_roll_for_a_role_tones_only_the_members_who_have_none(
+    seeded, client, guild, wf, web
+):
+    role = in_role(guild, wf, 21, 22, 23)
+    client.put("/api/chat/voices/21", json={"trope": "noir"})
+    client.put("/api/chat/voices/22/tone", json={"trope": "warm"})
+
+    done = client.post("/api/chat/voices/roll", json={"role_id": str(role.id)})
+
+    assert done.status_code == 200, done.text
+    body = done.json()
+    assert [one["user_id"] for one in body["rolled"]] == ["23"]
+    assert body["rolled"][0]["name"] == "M23" and body["rolled"][0]["label"]
+    assert [(one["user_id"], one["trope"]) for one in body["pinned"]] == [("21", "noir")]
+    assert body["kept"] == 1 and body["role"] == "Member"
+    assert body["message"] == (
+        "Rolled a tone for **1** member(s) of **Member**. Left alone: **1** pinned, **1** who "
+        "already had a tone."
+    )
+    listed = {row["user_id"]: row for row in client.get("/api/chat/voices").json()["voices"]}
+    assert listed["22"]["tone"] == "warm" and listed["23"]["tone"] == body["rolled"][0]["trope"]
+    rows = [one for one in await wf.web_rows_in(web.db) if one[0] == "web.chat.voice_role_rolled"]
+    assert len(rows) == 1
+    assert (rows[0][1]["rolled"], rows[0][1]["pinned"], rows[0][1]["kept"]) == (1, 1, 1)
+    assert rows[0][1]["everyone"] is False and list(rows[0][1]["moves"]) == ["23"]
+    assert body["roll_id"] == str(rows[0][1]["roll"])
+
+
+async def test_a_roll_for_everyone_in_a_role_still_skips_the_pinned(seeded, client, guild, wf):
+    role = in_role(guild, wf, 21, 22, 23)
+    client.put("/api/chat/voices/21", json={"trope": "noir"})
+    client.put("/api/chat/voices/22/tone", json={"trope": "warm"})
+
+    body = client.post(
+        "/api/chat/voices/roll", json={"role_id": str(role.id), "everyone": True}
+    ).json()
+
+    assert [one["user_id"] for one in body["rolled"]] == ["22", "23"]
+    assert body["rolled"][0]["trope"] != "warm"
+    assert [one["user_id"] for one in body["pinned"]] == ["21"] and body["kept"] == 0
+
+
+async def test_the_page_asks_before_a_roll_and_can_undo_it(seeded, client, guild, wf, web):
+    role = in_role(guild, wf, 21, 22, 23)
+    client.put("/api/chat/voices/21", json={"trope": "noir"})
+    client.put("/api/chat/voices/22/tone", json={"trope": "warm"})
+    wanted = {"role_id": str(role.id), "everyone": True}
+
+    asked = client.post("/api/chat/voices/roll/preview", json=wanted)
+
+    assert asked.status_code == 200, asked.text
+    assert asked.json() == {
+        "message": "Roll a new tone for **2** member(s) of **Member**? **1** pinned and **0** "
+        "who already have a tone are left alone.",
+        "role": "Member",
+        "count": 2,
+        "pinned": 1,
+        "kept": 0,
+    }
+    listed = {row["user_id"]: row for row in client.get("/api/chat/voices").json()["voices"]}
+    assert listed["22"]["tone"] == "warm" and "23" not in listed
+    assert "web.chat.voice_role_rolled" not in await wf.kinds_in(web.db)
+
+    rolled = client.post("/api/chat/voices/roll", json=wanted).json()
+    undone = client.post("/api/chat/voices/roll/undo", json={"roll_id": rolled["roll_id"]})
+
+    assert undone.status_code == 200, undone.text
+    assert (undone.json()["restored"], undone.json()["skipped"]) == (2, 0)
+    assert "Put **2** member(s) of **Member** back" in undone.json()["message"]
+    listed = {row["user_id"]: row for row in client.get("/api/chat/voices").json()["voices"]}
+    assert (listed["22"]["tone"], listed["22"]["state"]) == ("warm", None) and "23" not in listed
+    again = client.post("/api/chat/voices/roll/undo", json={"roll_id": rolled["roll_id"]})
+    assert again.status_code == 409 and again.json()["error"] == "no_roll_to_undo"
+    kinds = [kind for kind in await wf.kinds_in(web.db) if "voice_role" in kind]
+    assert kinds == ["web.chat.voice_role_rolled", "web.chat.voice_role_undone"]
+
+
+async def test_a_roll_for_at_everyone_is_refused_in_words(seeded, client, guild, wf, web):
+    client.get("/api/chat/personality")
+    guild.roles.append(guild.default_role)
+
+    for where in ("/api/chat/voices/roll/preview", "/api/chat/voices/roll"):
+        refused = client.post(where, json={"role_id": str(wf.GUILD_ID), "everyone": True})
+        assert refused.status_code == 422 and refused.json()["error"] == "everyone_role"
+        assert "Pick a role instead" in refused.json()["message"]
+    assert [kind for kind in await wf.kinds_in(web.db) if "voice" in kind] == []
+
+
+async def test_a_roll_for_a_role_nobody_has_or_with_no_tone_on_is_refused_in_words(
+    seeded, client, guild, wf, web
+):
+    client.get("/api/chat/personality")
+
+    missing = client.post("/api/chat/voices/roll", json={"role_id": "424242"})
+    blank = client.post("/api/chat/voices/roll", json={})
+    await web.db.conn.execute("UPDATE personality_tropes SET enabled = 0")
+    await web.db.conn.commit()
+    off = client.post("/api/chat/voices/roll", json={"role_id": str(wf.PLAIN_ROLE_ID)})
+
+    assert missing.status_code == blank.status_code == 404
+    assert "not in this server" in missing.json()["message"]
+    assert off.status_code == 409 and "No tone is switched on" in off.json()["message"]
+
+
 async def test_a_tone_body_can_be_rewritten_and_put_back(seeded, client, wf, web):
     client.get("/api/chat/personality")
 
@@ -1019,6 +1208,11 @@ async def test_the_voice_routes_are_staff_only(client, sign_in, guild, wf, web):
         ("GET", "/api/chat/voices", None),
         ("PUT", "/api/chat/voices/8", {"trope": "noir"}),
         ("DELETE", "/api/chat/voices/8", None),
+        ("POST", "/api/chat/voices/8/reroll", None),
+        ("PUT", "/api/chat/voices/8/tone", {"trope": "noir"}),
+        ("POST", "/api/chat/voices/roll", {"role_id": "1", "everyone": True}),
+        ("POST", "/api/chat/voices/roll/preview", {"role_id": "1", "everyone": True}),
+        ("POST", "/api/chat/voices/roll/undo", {}),
         ("PUT", "/api/chat/personality/noir", {"voice": "mine"}),
     ):
         response = client.request(method, where, json=body)

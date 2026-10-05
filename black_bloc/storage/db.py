@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 86
+SCHEMA_VERSION = 87
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -984,7 +984,31 @@ CREATE TABLE IF NOT EXISTS chat_voice (
     pinned     TEXT,
     pinned_by  INTEGER,
     pinned_at  TEXT,
+    tone       TEXT,
+    how        TEXT,
+    settled    INTEGER NOT NULL DEFAULT 0,
+    heard      INTEGER NOT NULL DEFAULT 0,
+    set_by     INTEGER,
+    moved_at   TEXT,
+    moved_from TEXT,
+    moved_why  TEXT,
+    fed_since  TEXT,
+    avoid      TEXT,
+    avoid_left INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS chat_voice_rolls (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id  INTEGER NOT NULL,
+    role_id   INTEGER NOT NULL,
+    role      TEXT    NOT NULL,
+    everyone  INTEGER NOT NULL DEFAULT 0,
+    rolled_by INTEGER,
+    at        TEXT    NOT NULL,
+    undone_at TEXT,
+    undone_by INTEGER,
+    moves     TEXT    NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS channel_drafts (
@@ -1289,6 +1313,17 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "overlay", "INTEGER"),
     ("marathons", "overlay_sheet", "TEXT"),
     ("marathon_runs", "reminder_posts", "TEXT"),
+    ("chat_voice", "tone", "TEXT"),
+    ("chat_voice", "how", "TEXT"),
+    ("chat_voice", "settled", "INTEGER NOT NULL DEFAULT 0"),
+    ("chat_voice", "heard", "INTEGER NOT NULL DEFAULT 0"),
+    ("chat_voice", "set_by", "INTEGER"),
+    ("chat_voice", "moved_at", "TEXT"),
+    ("chat_voice", "moved_from", "TEXT"),
+    ("chat_voice", "moved_why", "TEXT"),
+    ("chat_voice", "fed_since", "TEXT"),
+    ("chat_voice", "avoid", "TEXT"),
+    ("chat_voice", "avoid_left", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {
@@ -1354,6 +1389,31 @@ BACKFILL_POST_BLOCKS = (
 )
 BLOCKS_SINCE = 78
 
+TONES_STORED_SINCE = 87
+TONES_KEPT_FROM_THE_LAST_HEARD = (
+    "UPDATE chat_voice SET tone = trope, how = 'rolled' WHERE tone IS NULL "
+    "AND trope IS NOT NULL AND trope != 'cookout'"
+)
+PLACEHOLDER_PIN_DAY = "2026-10-05"
+PLACEHOLDER_PINNED = (
+    112357806396416000,
+    213475085145604096,
+    165189391583674368,
+    1313381494441377844,
+    103560267496960000,
+    909587042609025034,
+    483851858700533761,
+    346066999727620097,
+    221707047182401536,
+)
+PLACEHOLDER_PINS_TO_STARTING_TONES = (
+    "UPDATE chat_voice SET tone = pinned, how = 'set', set_by = pinned_by, "
+    "moved_at = pinned_at, moved_from = NULL, moved_why = NULL, settled = 0, heard = 0, "
+    "since = NULL, turns = 0, trope = pinned, pinned = NULL, pinned_by = NULL, "
+    "pinned_at = NULL WHERE pinned IS NOT NULL AND substr(pinned_at, 1, 10) = ? "
+    f"AND user_id IN ({', '.join('?' for _ in PLACEHOLDER_PINNED)})"
+)
+
 MOD_CASES_CARRIED_OVER = (
     "id, guild_id, user_id, kind, moderator_id, reason, duration_s, at, mode, applied, "
     "log_message_id"
@@ -1417,6 +1477,7 @@ class Database:
         await self._open_the_retired_request_statuses()
         await self._backfill_post_versions()
         await self._backfill_post_blocks(before)
+        await self._store_the_tones(before)
         await self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -1537,6 +1598,21 @@ class Database:
         if cur.rowcount and cur.rowcount > 0:
             log.warning(
                 "database: %d post(s) carrying the front door now carry it as a block", cur.rowcount
+            )
+
+    async def _store_the_tones(self, before: int) -> None:
+        """Schema 87: the last tone heard is the stored one; the placeholder pins start, not fix."""
+        if not 0 < before < TONES_STORED_SINCE:
+            return
+        await self.conn.execute(TONES_KEPT_FROM_THE_LAST_HEARD)
+        cur = await self.conn.execute(
+            PLACEHOLDER_PINS_TO_STARTING_TONES, (PLACEHOLDER_PIN_DAY, *PLACEHOLDER_PINNED)
+        )
+        if cur.rowcount and cur.rowcount > 0:
+            log.warning(
+                "database: %d pin(s) of %s are starting tones now",
+                cur.rowcount,
+                PLACEHOLDER_PIN_DAY,
             )
 
     async def _add_missing_columns(self) -> None:

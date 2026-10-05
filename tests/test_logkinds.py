@@ -399,6 +399,8 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/chat_review.py::OPENED_KIND": ("chat.review_opened",),
     "black_bloc/chat_review.py::TAGGED_KIND": ("chat.review_tagged",),
     "black_bloc/chat_review.py::DIGEST_KIND": ("chat.review_digest",),
+    "black_bloc/chat_feedback.py::MOVED_KIND": ("chat.voice_feedback",),
+    "black_bloc/chat_feedback.py::HELD_KIND": ("chat.voice_feedback_held",),
     "black_bloc/chat_panel.py::kind": (
         "chat.review_approved",
         "chat.review_changed",
@@ -1081,6 +1083,10 @@ CHAT_HOUSEKEEPING = (
     "chat.channel_reach_cleared",
     "chat.voice_pinned",
     "chat.voice_cleared",
+    "chat.voice_rerolled",
+    "chat.voice_set",
+    "chat.voice_role_rolled",
+    "chat.voice_role_undone",
     "chat.tone_edited",
 )
 
@@ -1093,6 +1099,15 @@ def test_chat_housekeeping_is_routine_from_either_door_and_files_under_chat(kind
     assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
     assert is_important(kind) is False
     assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
+
+
+@pytest.mark.parametrize(
+    "kind", ["chat.voice_drifted", "chat.voice_feedback", "chat.voice_feedback_held"]
+)
+def test_a_tone_that_moved_by_itself_is_a_routine_row_under_chat(kind):
+    """A drift step or a feedback move is the bot's own: a row for the Logs page, no post."""
+    assert kind in ROUTINE and kind in emitted_kinds()
+    assert is_important(kind) is False and feature_of(kind) == "chat"
 
 
 def test_seeding_the_channel_drafts_is_routine():

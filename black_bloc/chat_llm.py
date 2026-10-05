@@ -12,7 +12,7 @@ from .actionlog import log_action
 from .channel_notes import notes_or_nothing
 from .chat import MENTION, has_phrase, normalise
 from .chat_check import FIXED_KIND, check_reply
-from .chat_voice import heard_for
+from .chat_voice import heard_for, settle_of
 from .directory import DIRECTORY_NONE, directory_block
 from .groq import GroqClient
 from .knowledge import (
@@ -610,8 +610,60 @@ async def mood_for(
         return pick_trope(
             setting, rows, key=window_key(channel_id, user_id), turns=llm_turns(window)
         )
-    heard = await heard_for(db, setting, rows, guild_id=guild_id, user_id=user_id, now=at)
+    heard = await heard_for(
+        db,
+        setting,
+        rows,
+        guild_id=guild_id,
+        user_id=user_id,
+        now=at,
+        settle=settle_of(bot.store, guild_id),
+    )
+    if heard.moved is not None:
+        await tone_drifted(bot, guild_id, user_id, heard)
+    if heard.rerolled is not None:
+        await tone_rerolled(bot, guild_id, user_id, heard)
     return heard.trope
+
+
+async def tone_rerolled(bot: Any, guild_id: Any, user_id: int, heard: Any) -> None:
+    """A stored tone that was switched off is rolled again out loud, never quietly."""
+    getter = getattr(bot, "get_guild", None)
+    guild = getter(int(guild_id)) if getter is not None else None
+    if guild is None:
+        return
+    await log_action(
+        bot,
+        guild,
+        "chat.voice_rerolled",
+        target=user_id,
+        details={
+            "member": str(user_id),
+            "from": heard.rerolled[0],
+            "tone": heard.rerolled[1],
+            "reason": "tone_off",
+        },
+    )
+
+
+async def tone_drifted(bot: Any, guild_id: Any, user_id: int, heard: Any) -> None:
+    """A tone that took a step on its own leaves a row, so staff can see it moved."""
+    getter = getattr(bot, "get_guild", None)
+    guild = getter(int(guild_id)) if getter is not None else None
+    if guild is None:
+        return
+    await log_action(
+        bot,
+        guild,
+        "chat.voice_drifted",
+        target=user_id,
+        details={
+            "member": str(user_id),
+            "from": heard.moved[0],
+            "tone": heard.moved[1],
+            "chance": round(heard.chance, 4),
+        },
+    )
 
 
 async def made_real(bot: Any, guild: Any, text: Any, people: Any = ()) -> str:

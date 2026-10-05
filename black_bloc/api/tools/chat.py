@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -14,8 +15,10 @@ from ... import (
     chat_llm,
     chat_panel,
     chat_review,
+    chat_tones,
     knowledge,
     personas,
+    tone_keys,
 )
 from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
@@ -255,11 +258,27 @@ def trope_row(guild: Any, row: Any, mode: str) -> dict[str, Any]:
     }
 
 
-def voice_entry(guild: Any, entry: dict[str, Any], labels: dict[str, str]) -> dict[str, Any]:
+def voice_entry(
+    guild: Any, entry: dict[str, Any], labels: dict[str, str], say: Any = None
+) -> dict[str, Any]:
     """One member of Who hears what, with names from the guild cache only."""
     tone = str(entry["trope"])
     pinned = entry["pinned"]
+    state = entry.get("state")
+    settled = str(entry.get("settled_word") or "")
+    worded = say or (lambda key: tone_keys.TONE_WORDS[key][0])
     return {
+        "tone": entry.get("tone"),
+        "state": state,
+        "state_word": worded(tone_keys.STATE_KEYS[state]) if state else None,
+        "settled": int(entry.get("settled") or 0),
+        "settled_share": float(entry.get("settled_share") or 0.0),
+        "settled_word": worded(tone_keys.SETTLED_KEYS[settled]) if settled and state else None,
+        "chance": float(entry.get("chance") or 0.0),
+        "set_by": person(guild, entry.get("set_by")),
+        "moved_at": entry.get("moved_at"),
+        "moved_from": entry.get("moved_from"),
+        "moved_why": entry.get("moved_why"),
         "user_id": str(entry["user_id"]),
         "name": resolve_one(guild, entry["user_id"])["display_name"] or str(entry["user_id"]),
         "trope": tone,
@@ -883,7 +902,8 @@ def build_router(bot: Any) -> APIRouter:
         await personas.sync_tropes(bot.db, full=False)
         found = await chat_panel.voice_roster(bot, guild)
         labels = found["labels"]
-        rows = [voice_entry(guild, one, labels) for one in found["voices"]]
+        say = partial(chat_panel.words, bot.store, guild.id)
+        rows = [voice_entry(guild, one, labels, say) for one in found["voices"]]
         return {
             "setting": found["setting"],
             "setting_kind": mode_kind(found["setting"]),
@@ -919,6 +939,105 @@ def build_router(bot: Any) -> APIRouter:
         await personas.sync_tropes(bot.db, full=False)
         outcome = answered(
             await chat_panel.pin_voice(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                user_id,
+                payload.get("trope"),
+                via=VIA_WEBSITE,
+            )
+        )
+        return await _voice_answer(guild, user_id, outcome)
+
+    @router.post("/voices/roll/preview")
+    async def chat_voice_roll_preview(payload: dict[str, Any]) -> dict[str, Any]:
+        """The question the page asks before a roll: how many, and who is left alone."""
+        guild = require_guild(bot)
+        require_db(bot)
+        await personas.sync_tropes(bot.db, full=False)
+        outcome = answered(
+            await chat_tones.preview_role(
+                bot, guild, payload.get("role_id"), everyone=payload.get("everyone") is True
+            )
+        )
+        return {"message": outcome.message, **outcome.value}
+
+    @router.post("/voices/roll/undo")
+    async def chat_voice_roll_undo(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        """Only the newest roll, once: every member back to the tone the roll recorded."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = answered(
+            await chat_tones.undo_roll(
+                bot, guild, actor_for(bot, who, guild), payload.get("roll_id"), via=VIA_WEBSITE
+            )
+        )
+        return {"message": outcome.message, **outcome.value}
+
+    @router.post("/voices/roll")
+    async def chat_voice_roll_role(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        """A starting tone for each member of a role; pinned members are left and listed."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await personas.sync_tropes(bot.db, full=False)
+        outcome = answered(
+            await chat_tones.roll_role(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                payload.get("role_id"),
+                everyone=payload.get("everyone") is True,
+                via=VIA_WEBSITE,
+            )
+        )
+        found = outcome.value
+
+        def listed(rows: Any) -> list[dict[str, Any]]:
+            return [
+                {
+                    "user_id": str(one["user_id"]),
+                    "name": one["name"],
+                    "trope": one["tone"],
+                    "label": one["label"],
+                }
+                for one in rows
+            ]
+
+        return {
+            "message": outcome.message,
+            "roll_id": str(found["roll_id"]),
+            "role": found["role"],
+            "rolled": listed(found["rolled"]),
+            "pinned": listed(found["pinned"]),
+            "kept": int(found["kept"]),
+        }
+
+    @router.post("/voices/{user_id}/reroll")
+    async def chat_voice_reroll(request: Request, user_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await personas.sync_tropes(bot.db, full=False)
+        outcome = answered(
+            await chat_tones.reroll_voice(
+                bot, guild, actor_for(bot, who, guild), user_id, via=VIA_WEBSITE
+            )
+        )
+        return await _voice_answer(guild, user_id, outcome)
+
+    @router.put("/voices/{user_id}/tone")
+    async def chat_voice_start(
+        request: Request, user_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """A starting tone, not a pin: used from the next answer and free to drift."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await personas.sync_tropes(bot.db, full=False)
+        outcome = answered(
+            await chat_tones.start_voice(
                 bot,
                 guild,
                 actor_for(bot, who, guild),
