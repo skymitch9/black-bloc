@@ -1,7 +1,7 @@
 {
-  "release": "v204",
-  "commit": "0eaf7759",
+  "release": "v205",
+  "commit": "060c0fd7",
   "changed_features": [
-    "marathon"
+    "chat"
   ]
 }
