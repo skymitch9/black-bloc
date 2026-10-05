@@ -181,6 +181,38 @@ An empty window re-rolls (`since` = now, turns 0); inside it the tone drifts exa
 > ⚠️ **Schema 86 → 87 on this branch.** `memory-rapport` is being built in parallel; if it also takes 87, one of the two
 > must move to 88 at the merge, and the pin conversion below runs only on the boot that crosses THIS branch's number.
 
+### Review pass, same day — what changed and why
+
+An independent review cleared the migration and the drift arithmetic and asked for seven fixes before a deploy. All
+seven are in (`02f261a8`, `86cfc11f`, `93c830e9`); the sections below are edited in place to say what the code does NOW.
+
+| # | Was | Now | Why |
+|---|---|---|---|
+| 1 | Any message by the member in the same channel within `chat_tone_feedback_minutes` of an answer could be judged | **Only words said TO the bot are ever judged**: a Discord reply to the bot's own model answer to that same member, or an @-mention of the bot. The minutes path and the key are DELETED. | A member telling a friend "nah that's wrong lol" was being sent to the model provider — member text leaving the server that the bot would never otherwise have read. |
+| 1b | The verdict ran in the background, so the reply to "that was rude" was worded in the OLD tone | **Judge → move → reply.** For an @-mention the cog awaits the verdict before wording the answer, for at most 3 s (`REPLY_WAIT_SECONDS`); past that the answer goes out and the verdict finishes behind it. | The member who complains should be answered in the gentler tone; a slow model must not hold or replace the answer. |
+| 2 | An opted-out member's cue was stored as `""` | Still judged when they address the bot; the row says the move happened with `cue: null`, `cue_kept: false`. Tested that their words are in no table. | Their message goes to the provider for the reply anyway; nothing of it is kept. |
+| 3 | A pinned member's complaint was judged, then held | The pin is read BEFORE the model: no call, one `chat.voice_feedback_held` (`held: pinned`, `judged: false`) per conversation. | A pin can never move, so a verdict on it buys nothing. |
+| 4 | Feedback ledger rows had no member | They carry the member's `user_id` and stop at that member's `chat_person_hourly_turns`. | One member could otherwise multiply the server's daily-turn burn. |
+| 5 | A feedback move reset settledness to 0 and drift could walk straight back | **Un-settle = one halving back**, and the tone left behind is out of a drift step's reach for a while (below). | The owner asked for an adjustment — "we adjust the tone" — not for the tone to start wandering again; and `tsundere → mischievous → 25 % back to tsundere` undid the move. |
+| 6 | A stored tone that was switched off was re-rolled silently | A `chat.voice_rerolled` row (`reason: tone_off`, member, from, tone), `how = tone_off`, and the row reads *rolled · tone was switched off*. | Staff could not see why somebody's tone changed. |
+| 7 | *Everyone in it* overwrote a role's tones on one press | A confirm with the count on both doors; `@everyone` refused in words; every from → to logged; **Undo this roll**. | A one-press mistake with no way back. |
+
+**Un-settle, in numbers** (`chat_voice.eased`, defaults): the count is moved to where the drift chance is twice what
+it was, never past *new*. Settled at the 2 % floor (15+ conversations) → 10 conversations, **4.4 %**; 12 (3.1 %) → 8,
+**6.25 %**; 8 (6.25 %) → 4, **12.5 %**; 4 or fewer → 0, **25 %**.
+
+**The tone complained about stays out of reach** (`chat_voice.avoid`, `avoid_left`): a drift step may not land on it
+for **two halvings' worth of the member's conversations — 8 at the defaults (2 × `chat_tone_drift_halves_every`)**,
+counted from the complaint's own conversation, or until staff Set tone / Reroll. Two halvings was picked because by
+then the drift chance is at most a quarter of where it started, so a walk back is as unlikely as any other step; it is
+derived from the existing key rather than a new one (with `halves_every = 0`, "never settles", it holds until staff
+act). A drift step elsewhere does not clear it.
+
+**Undo this roll is valid until the next Roll for a role in the server, and once** — only the newest row of
+`chat_voice_rolls` can be undone; there is no time limit. Each member goes back to the tone, how, settledness and
+counters the roll recorded; a member who had no tone has their row removed; a member whose tone changed again since,
+or who was pinned since, is skipped and counted.
+
 ### The owner's words (verbatim, 2026-10-05)
 
 > "I don't want these to be pins just starting points. Maybe we need a reroll and a pin option."
@@ -202,10 +234,10 @@ neither read nor written (tested).
 | Staff may set a start ahead of time | **Set tone…** writes `tone` with `how = set`; it is used from the next answer and drifts like any other. It is not a pin. |
 | It may still take a step | Weighed every `DRIFT_EVERY_TURNS` (4, the shared manifest's) model answers **heard in this tone**, counted across conversations (`chat_voice.heard`). At most one step, to a graph neighbour that is switched on (`personas.step_from`, unchanged). |
 | …but less as time goes on | The chance is `max(floor, start × 0.5 ^ (settled ÷ halves))`. `settled` is how many of the member's conversations have **ended** in this tone since it was rolled, set or moved; it goes up by one when a new conversation opens at least 30 minutes after the last one began. |
-| Any move un-settles it | A drift step, a feedback move, a Reroll and a Set tone all put `settled` and `heard` back to 0. |
+| A move un-settles it | A drift step, a Reroll and a Set tone put `settled` and `heard` back to 0. A FEEDBACK move eases `settled` one halving back instead (see *Review pass*). |
 | Real feedback moves it | See *Feedback* below. One move per member per conversation. |
 | A pin holds | A pinned member is never drifted, never settled and never moved by feedback; the stored tone underneath is kept and is what **Unpin** hands them back to. |
-| A stored tone that is switched off | is rolled again from the tones that are on, at the member's next answer (`how = rolled`). The roster shows `cookout` for them until then. |
+| A stored tone that is switched off | is rolled again from the tones that are on, at the member's next answer — out loud: `how = tone_off`, a `chat.voice_rerolled` row with `reason: tone_off`. The roster shows `cookout` for them until then. |
 
 `chat_voice.trope` is still what was LAST HEARD (a pin or a named mood writes it); `chat_voice.tone` is the member's
 own. The two differ exactly when a pin or a named mood is in force.
@@ -218,16 +250,17 @@ own. The two differ exactly when a pin or a named mood is in force.
 | `chat_tone_drift_halves_every` | **4** conversations | 0–1000 | how many conversations halve that chance; 0 = never settles |
 | `chat_tone_drift_floor_percent` | **2** | 0–100 | the lowest the chance gets; 0 = a settled tone stops moving |
 | `chat_tone_feedback_mode` | **on** | off / on | whether a member's words may move their tone at all |
-| `chat_tone_feedback_cues` | 28 words and phrases (`tone_keys.FEEDBACK_CUES`) | may be blank | the free pre-filter: only a message with one of them is judged |
-| `chat_tone_feedback_minutes` | **5** | 0–30 | how long after an answer the member's next words in that channel may be judged; a Discord reply to the answer counts for 30 minutes regardless |
+| `chat_tone_feedback_cues` | 28 words and phrases (`tone_keys.FEEDBACK_CUES`) | may be blank | the free pre-filter: only a message said TO the bot with one of them is judged |
 | `chat_tone_gentle_order` | `warm, cozy, shy, peppy, scholar, dramatic, flirty, noir, deadpan, mischievous, tsundere` | known tones only, may be blank | gentlest → sharpest |
 | `chat_tone_careful_order` | `scholar, shy, warm, cozy, deadpan, noir, peppy, flirty, tsundere, mischievous, dramatic` | known tones only, may be blank | most careful → least |
 
-Plus **23 word keys** (`tone_keys.TONE_WORDS`): every sentence, button, placeholder and state word either door says —
+Plus **30 word keys** (`tone_keys.TONE_WORDS`): every sentence, button, placeholder and state word either door says —
 `chat_voice_rerolled`, `_tone_set`, `_is_pinned`, `_no_tones`, `_no_role`, `_role_rolled`, `_role_line`,
 `_role_pinned_line`, `_role_placeholder`, `_role_title`, `_role_only_button`, `_role_everyone_button`,
-`_reroll_button`, `_start_placeholder`, `_line_stored`, `_state_rolled|set|drifted|feedback|pinned`,
-`_settled_new|settling|settled`. **31 keys in all: the registry is 737 → 768**, the chat group 128 → 159.
+`_role_confirm`, `_role_confirm_button`, `_role_undo_button`, `_role_undone`, `_role_no_undo`, `_role_everyone`,
+`_reroll_button`, `_start_placeholder`, `_line_stored`, `_state_rolled|set|drifted|feedback|pinned|tone_off`,
+`_settled_new|settling|settled`. **37 keys in all (7 behaviour + 30 words): the registry is 737 → 774**, the chat
+group 128 → 165.
 Two shipped defaults changed: `chat_voice_cleared` (it said the tone "is rolled again", which is no longer true) and
 `chat_voice_tone_placeholder` (now the PIN picker's placeholder, *Pin… (fix {member}'s tone)*).
 
@@ -259,33 +292,43 @@ never sees the member's NEXT message, which is the one that says "that was rude"
 taken: `black_bloc/chat_feedback.py`.
 
 1. The cog keeps, in memory, the last **model** answer each member got (a written line is never kept).
-2. The member's later message is weighed when it is a Discord reply to that answer (for 30 minutes), or is in the same
-   channel within `chat_tone_feedback_minutes`.
+2. ⚠️ **Only a message ADDRESSED TO THE BOT is a candidate**, for 30 minutes after that answer: a Discord reply to
+   the bot's own answer to THAT member, or a message that @-mentions the bot. A reply to anything else — including
+   the bot's answer to somebody else, which also pings the bot — is not. A message to a friend in the same channel is
+   never a candidate, whatever it says: no model call, no ledger row, no log line (tested).
 3. **Free, local:** it must contain one of `chat_tone_feedback_cues` (matched the way the review loop matches phrases).
    No cue → nothing else happens. The server must be on `pool`, the member must have a stored tone, and this
-   conversation must not already have had its one verdict.
+   conversation must not already have had its one verdict. A PINNED member stops here: one held row, no model.
+   The models must be open AND the member's own `chat_person_hourly_turns` must have room.
 4. **One call to the quick model** (`chat_simple_model`, Groq, ledger tier `feedback`, JSON only) with the bot's answer
    and the member's message, each clipped to 500 characters. It must answer
    `{"reaction": "none"|"mean"|"wrong", "genuine": true|false, "cue": "<their words or null>"}`.
    `parse_verdict` is strict: not JSON, an unknown reaction, a `genuine` that is not a real boolean, or a non-string
    cue → no verdict, a warning in the log, nothing moved. `genuine: false` (banter) moves nothing.
 5. `mean` → one step toward the front of `chat_tone_gentle_order`; `wrong` → one step toward the front of
-   `chat_tone_careful_order`. `settled` and `heard` go to 0, `how = feedback`, `moved_at/from/why` are written, and a
-   `chat.voice_feedback` row carries member, from, to, why, the cue words and the message id.
-6. **Held, and said so** (`chat.voice_feedback_held`, `held: pinned | no_step`): a pinned member, or no gentler / more
-   careful tone switched on. Either way it counts as this conversation's one verdict.
+   `chat_tone_careful_order`. `settled` is eased one halving back, `heard` goes to 0, `how = feedback`,
+   `moved_at/from/why` and `avoid` are written, and a `chat.voice_feedback` row carries member, from, to, why, the cue
+   words (unless the member opted out of memory) and the message id.
+6. **Held, and said so** (`chat.voice_feedback_held`, `held: pinned | no_step`): a pinned member (before any model
+   call), or no gentler / more careful tone switched on. Either way it counts as this conversation's one verdict.
+7. **Order: judge → move → reply.** An @-mention that passes the local checks is judged BEFORE the bot words its
+   answer, so the answer is in the moved tone; the wait is capped at 3 seconds and never replaces the answer. A
+   reply to the bot's answer that does not ping it gets no answer, so its verdict simply runs in the background.
 
 **Cost per message:** nothing for a message with no cue word (no model call, no ledger row). A cue-matched follow-up
 costs one Groq call — priced **$0** in `llm.PRICES` today (`llama-3.3-70b-versatile`, `openai/gpt-oss-120b`), a few hundred
 input tokens (a 969-character instruction plus two messages of at most 500 characters each; estimated, not measured)
-— and one turn toward `chat_daily_turns`. At most
+— and one turn toward `chat_daily_turns` AND toward that member's own
+`chat_person_hourly_turns` (the ledger row carries their id). At most
 **2** messages are judged after one answer (`JUDGED_PER_ANSWER`, a constant) and at most one MOVE per conversation.
 **The caps hold:** no Groq key, the month at `chat_monthly_cap_usd`, or the day at `chat_daily_turns` → nothing is
 judged and nothing is adjusted, logged ONCE per closing (`chat feedback: nothing is judged in <guild> for now
 (<why>)`), not per message. The judging prompt is code (`JUDGE_SYSTEM`), like the tagger's, and for the same reason.
 
-**Privacy:** nothing of the member's message is stored except the model's `cue` (≤ 80 characters) on the action row,
-and not even that for a member the `/memory` consent says is not remembered (`chat_review.keeps_text`, tested).
+**Privacy:** the only member text that reaches the provider through this path is a message the member addressed
+to the bot — one the bot already reads to answer. Nothing of it is stored except the model's `cue` (≤ 80 characters)
+on the action row, and not even that for a member the `/memory` consent says is not remembered
+(`chat_review.keeps_text`; the row then carries `cue: null`, `cue_kept: false` — tested against every table).
 A `wrong` complaint still reaches the review queue exactly as before (`not_it` / `reask`); this build changed nothing
 there.
 
@@ -301,7 +344,8 @@ One write path: `black_bloc/chat_tones.py` — `reroll_voice`, `start_voice`, `r
 | **Reroll** | row button | button on the member's card | `POST /api/chat/voices/{id}/reroll` | pinned → 409 `voice_is_pinned`; no tone on → 409 `no_tones_on`; not a member → 404 |
 | **Set tone…** | row button → a tone dialog | the first picker on the member's card | `PUT /api/chat/voices/{id}/tone` `{trope}` | the same, plus an unknown / switched-off tone → 422 |
 | **Pin…** / **Unpin** | row buttons | the second picker / *Clear the pin* | `PUT` / `DELETE /api/chat/voices/{id}` (unchanged) | as before |
-| **Roll for a role…** | button on the section → role + *Only members with no tone* (default) / *Everyone in it* | a role picker on the list → a card with the two buttons | `POST /api/chat/voices/roll` `{role_id, everyone}` | role gone → 404; no tone on → 409 |
+| **Roll for a role…** | button on the section → role + *Only members with no tone* (default) / *Everyone in it* → **a question with the count** → *Yes, roll* | a role picker on the list → a card with the two buttons → the same question → *Yes, roll* / *Keep it* | `POST /api/chat/voices/roll/preview` (writes nothing), then `POST /api/chat/voices/roll` `{role_id, everyone}` | role gone → 404; `@everyone` → 422 `everyone_role`; no tone on → 409 |
+| **Undo this roll** | button on the result card | button on the role card right after a roll | `POST /api/chat/voices/roll/undo` `{roll_id}` | not the newest roll, or already undone → 409 `no_roll_to_undo` |
 
 A reroll never lands on the tone the member already has while another one is on. Roll for a role skips bots, leaves
 pinned members alone and lists them, and (by default) leaves members who already have a tone. On Discord a move renders
@@ -311,8 +355,10 @@ long ago), a small meter with *new / settling / settled*, and the moves.
 
 ### Storage (schema 87)
 
-`chat_voice` gains nine columns, all additive (`ADDED_COLUMNS`): `tone`, `how` (`rolled|set|drifted|feedback`),
-`settled`, `heard`, `set_by`, `moved_at`, `moved_from`, `moved_why`, `fed_since`. A row from before has none of them
+`chat_voice` gains eleven columns, all additive (`ADDED_COLUMNS`): `tone`, `how`
+(`rolled|set|drifted|feedback|tone_off`), `settled`, `heard`, `set_by`, `moved_at`, `moved_from`, `moved_why`,
+`fed_since`, `avoid`, `avoid_left`. One new table, `chat_voice_rolls` (one row per Roll for a role: role, who, when,
+`undone_at`, and `moves` — each member's `to` and everything the roll wrote over), is what Undo reads. A row from before has none of them
 set; `_store_the_tones` (runs ONCE, on the boot that finds a stored schema under 87) copies `trope` into `tone`
 (`how = rolled`) for every row whose `trope` is a tone — a row whose `trope` is `cookout` or NULL has no stored tone
 and gets one rolled at its next pool answer.
@@ -345,7 +391,8 @@ pins were written under, so the rule is the nine ids AND the day (Deviation 5).
 7. **`chat_llm.mood_for` gained the settle numbers and one log call** (`tone_drifted`) — a file the brief did not name.
 8. **A reroll or Set tone on a pinned member is refused in words** (409) rather than silently changing the tone under
    the pin; staff unpin first. The buttons are not drawn there.
-9. **One more behaviour key than the brief listed**: `chat_tone_feedback_minutes`.
+9. ~~One more behaviour key than the brief listed: `chat_tone_feedback_minutes`.~~ **Deleted in the review pass** —
+   it was the switch for the same-channel path, and that path is gone.
 10. **The mock's `chat_personality` is `pool`** (was `cookout`), so the section shows states on the local mock; its
     default is still `cookout`. The page's *pinned tone is switched off* badge now reads *pin is off* (the full
     sentence is its tooltip) so the table fits at 1280 without scrolling sideways inside its frame.
@@ -354,8 +401,12 @@ pins were written under, so the rule is the nine ids AND the day (Deviation 5).
 
 ### Not verified
 
-- **No live model.** Whether Groq's model tells banter from a real complaint is NOT measured: every verdict in the
-  tests is a faked model answer. The first real `chat.voice_feedback` rows should be read by a person (sweep `TS-g`).
+- **No live model — still unproven after the review pass.** Whether Groq's model tells banter from a real complaint
+  is NOT measured: every verdict in the tests is a faked model answer. Also unmeasured against a real model: how long
+  a verdict takes (so how often the 3-second wait before a reply is hit, and what it adds to a reply's latency), and
+  what a judged message costs in tokens. The first real `chat.voice_feedback` rows should be read by a person
+  (sweep `TS-g`).
+- **A reply that does not ping** depends on Discord handing the bot `message.reference`; seen with test fakes only.
 - **No live Discord:** the member card's two pickers and Reroll, the role picker and its card were driven with the
   test fakes only. Discord's `RoleSelect` with a real role cache was not seen.
 - **No live database:** the 86 → 87 step ran on test files only (a schema-86 file made from the current schema with
