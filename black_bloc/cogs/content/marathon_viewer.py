@@ -12,7 +12,7 @@ from ...actionlog import log_action
 from ...logkinds import VIA_DISCORD, kind_via
 from ...marathon_sources import GDQ_HOTFIX, ScheduleError
 from ...panels import Outcome, refusal
-from ...settings_store import MARATHON_HOTFIX_VIEWER_URL_KEY
+from ...settings_store import MARATHON_HOTFIX_VIEWER_URL_KEY, MARATHON_MOVE_MINUTES_KEY
 from .marathon import UNREADABLE, cog_of, runs_of, update_marathon
 
 log = logging.getLogger(__name__)
@@ -165,7 +165,13 @@ def sheet_for(viewer: Any, runs: list[Any]) -> tuple[Any, Any] | None:
 
 
 def laid(
-    runs: list[Any], rows: Any, viewer: Any, before: Any, on: bool, trouble: Any
+    runs: list[Any],
+    rows: Any,
+    viewer: Any,
+    before: Any,
+    on: bool,
+    trouble: Any,
+    minutes: int | None = None,
 ) -> tuple[list[Any], dict[str, Any] | None]:
     """(the runs, what the marathon remembers about its sheet). Once laid over, the sheet's
     times and people stay until staff switch it off: a read without the sheet keeps what the
@@ -179,7 +185,8 @@ def laid(
     if not on:
         return (runs, before | {"applied": False, "stale": None})
     if before.get("applied"):
-        return (mo.kept(runs, rows), before | {"stale": str(trouble or mo.NO_LONGER_LINKED)[:300]})
+        stale = str(trouble or mo.NO_LONGER_LINKED)[:300]
+        return (mo.kept(runs, rows, minutes=minutes), before | {"stale": stale})
     return (runs, before)
 
 
@@ -211,7 +218,8 @@ async def _decorated(bot: Any, guild: Any, marathon: Any, runs: list[Any]) -> li
         return runs
     rows = await runs_of(bot.db, marathon["id"])
     on = bool(switch_state(bot, guild.id, marathon, mh.OVERLAY)["on"])
-    found, after = laid(runs, rows, viewer, before, on, trouble)
+    minutes = int(bot.store.get(guild.id, MARATHON_MOVE_MINUTES_KEY))
+    found, after = laid(runs, rows, viewer, before, on, trouble, minutes)
     await remember(bot, guild, marathon, before, after, SWITCHED_OFF if not on else NO_SHEET)
     return await host_logins(bot, guild, marathon, found, rows, viewer)
 

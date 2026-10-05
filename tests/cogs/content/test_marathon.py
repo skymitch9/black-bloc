@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -23,6 +24,7 @@ from black_bloc.cogs.content.marathon import (
     set_channel,
     shout_now,
     unpair_runner,
+    update_run,
 )
 from black_bloc.cogs.content.spotlight import (
     delete_channel,
@@ -1712,3 +1714,233 @@ async def test_a_renamed_board_and_runner_posts_take_the_new_name_on_the_next_fo
     assert len(after) == len(before)
     assert any("Tuesday: Soul Train" in text for text in after)
     assert not any("AGDQ 2027" in text for text in after)
+
+
+# --- a renamed run keeps its row ------------------------------------------------------------
+
+
+def renamed(run, key, **changes):
+    return replace(run, external_id=key, **changes)
+
+
+async def reread(bot, cog, marathon, runs, minutes=1):
+    cog.client.runs_given = list(runs)
+    cog.clock = lambda: NOW + timedelta(minutes=minutes)
+    read = await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert read.ok, read.message
+    return await runs_of(bot.db, marathon["id"])
+
+
+async def all_details(bot, kind):
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id", (kind,)
+    )
+    return [json.loads(row["details"]) for row in await cur.fetchall()]
+
+
+async def last_change(bot):
+    found = (await all_details(bot, "marathon.schedule_changed"))[-1]
+    return tuple(found[key] for key in ("added", "moved", "dropped", "renamed"))
+
+
+async def test_an_upcoming_run_of_ours_renamed_keeps_its_row_its_marks_and_its_match(bot, cog):
+    marathon = await added(bot, cog)
+    before = (await runs_by_game(bot, marathon))["Super Metroid"]
+    await update_run(bot.db, before["id"], reminders_sent="[120]", reminder_posts="{}")
+    said = len(posts(bot))
+    fixed = renamed(SCHEDULE[2], "3b", category="Any% Glitchless")
+    rows = await reread(bot, cog, marathon, [*SCHEDULE[:2], fixed, *SCHEDULE[3:]])
+
+    assert len(rows) == 5
+    after = (await runs_by_game(bot, marathon))["Super Metroid"]
+    assert (after["id"], after["external_id"], after["state"]) == (before["id"], "3b", mt.UPCOMING)
+    assert after["category"] == "Any% Glitchless"
+    assert (after["reminders_sent"], after["reminder_posts"]) == ("[120]", "{}")
+    assert after["first_seen_at"] == before["first_seen_at"]
+    assert after["previous_scheduled_at"] is None and after["moved_at"] is None
+    assert mt.member_ids(after) == [SKY]
+    assert await last_change(bot) == (0, 0, 0, 1)
+    (row,) = await all_details(bot, "marathon.run_renamed")
+    assert (row["run_id"], row["from_id"], row["to_id"]) == (before["id"], "3", "3b")
+    assert (row["game"], row["category"], row["was_category"]) == (
+        "Super Metroid",
+        "Any% Glitchless",
+        "Any%",
+    )
+    assert len(await all_details(bot, "marathon.run_matched")) == 1
+    assert "marathon.member_run_moved" not in await kinds(bot.db)
+    assert len(posts(bot)) == said
+
+
+async def test_a_live_run_renamed_stays_live_with_its_real_start(bot, cog):
+    marathon = await added(bot, cog)
+    before = (await runs_by_game(bot, marathon))["Super Metroid"]
+    real = at(34)
+    await update_run(
+        bot.db,
+        before["id"],
+        state=mt.LIVE,
+        live_at=real,
+        live_because="stream",
+        actual_started_at=real,
+        shout_message_id=77,
+        shout_channel_id=CHANNEL,
+    )
+    fixed = renamed(SCHEDULE[2], "3b", category="Any% Glitchless")
+    await reread(bot, cog, marathon, [*SCHEDULE[:2], fixed, *SCHEDULE[3:]], minutes=40)
+
+    after = (await runs_by_game(bot, marathon))["Super Metroid"]
+    kept = ("id", "state", "live_at", "live_because", "actual_started_at", "shout_message_id")
+    assert [after[key] for key in kept] == [before["id"], mt.LIVE, real, "stream", real, 77]
+    assert after["external_id"] == "3b"
+    assert mt.DROPPED not in [one["state"] for one in await runs_of(bot.db, marathon["id"])]
+    assert await last_change(bot) == (0, 0, 0, 1)
+
+
+async def test_a_done_run_renamed_stays_done_and_is_not_added_again(bot, cog):
+    marathon = await added(bot, cog)
+    before = (await runs_by_game(bot, marathon))["Celeste"]
+    await update_run(bot.db, before["id"], state=mt.DONE, done_at=at(0), actual_ended_at=at(0))
+    fixed = renamed(SCHEDULE[1], "2b", category="All Red Berries")
+    rows = await reread(bot, cog, marathon, [SCHEDULE[0], fixed, *SCHEDULE[2:]])
+
+    after = (await runs_by_game(bot, marathon))["Celeste"]
+    assert len(rows) == 5
+    assert (after["id"], after["state"], after["done_at"]) == (before["id"], mt.DONE, at(0))
+    assert (after["external_id"], after["actual_ended_at"]) == ("2b", at(0))
+
+
+async def test_a_game_title_changed_in_the_same_slot_is_a_rename(bot, cog):
+    marathon = await added(bot, cog)
+    before = (await runs_by_game(bot, marathon))["Super Metroid"]
+    title = "Super Metroid Redux"
+    fixed = renamed(SCHEDULE[2], "3b", game=title, display_name=title)
+    await reread(bot, cog, marathon, [*SCHEDULE[:2], fixed, *SCHEDULE[3:]])
+
+    rows = await runs_by_game(bot, marathon)
+    assert "Super Metroid" not in rows and rows["Super Metroid Redux"]["id"] == before["id"]
+    assert mt.member_ids(rows["Super Metroid Redux"]) == [SKY]
+
+
+async def test_another_runner_in_the_same_slot_is_a_drop_and_an_add_as_before(bot, cog):
+    marathon = await added(bot, cog)
+    before = (await runs_by_game(bot, marathon))["Super Metroid"]
+    other = renamed(SCHEDULE[2], "3b", people=(Person("Ash", "ashruns", "runner"),))
+    rows = await reread(bot, cog, marathon, [*SCHEDULE[:2], other, *SCHEDULE[3:]])
+
+    assert len(rows) == 6
+    by_key = {row["external_id"]: row for row in rows}
+    assert (by_key["3"]["id"], by_key["3"]["state"]) == (before["id"], mt.DROPPED)
+    assert by_key["3b"]["state"] == mt.UPCOMING and by_key["3b"]["id"] != before["id"]
+    assert await last_change(bot) == (1, 0, 1, 0)
+    assert await all_details(bot, "marathon.run_renamed") == []
+
+
+async def test_a_rename_beside_an_unrelated_add_is_counted_as_one_of_each(bot, cog):
+    marathon = await added(bot, cog)
+    fixed = renamed(SCHEDULE[2], "3b", category="Any% Glitchless")
+    extra = a_run(6, 400, game="New Game", people=(("Ash", None, "runner"),))
+    rows = await reread(bot, cog, marathon, [*SCHEDULE[:2], fixed, *SCHEDULE[3:], extra])
+
+    assert len(rows) == 6
+    assert await last_change(bot) == (1, 0, 0, 1)
+
+
+async def test_two_runs_swapping_slots_are_moved_and_never_renamed(bot, cog):
+    marathon = await added(bot, cog)
+    ids = {row["external_id"]: row["id"] for row in await runs_of(bot.db, marathon["id"])}
+    third, fourth = SCHEDULE[2], SCHEDULE[3]
+    swapped = [
+        *SCHEDULE[:2],
+        replace(fourth, order=3, starts_at=third.starts_at, ends_at=third.ends_at),
+        replace(third, order=4, starts_at=fourth.starts_at, ends_at=fourth.ends_at),
+        SCHEDULE[4],
+    ]
+    rows = await reread(bot, cog, marathon, swapped)
+
+    assert {row["external_id"]: row["id"] for row in rows} == ids
+    assert await last_change(bot) == (0, 2, 0, 0)
+
+
+async def test_a_tracker_id_that_changes_in_the_same_slot_keeps_the_row(bot, cog):
+    marathon = await added(bot, cog)
+    before = (await runs_by_game(bot, marathon))["Kirby Air Riders"]
+    read = [*SCHEDULE[:3], renamed(SCHEDULE[3], "9104"), SCHEDULE[4]]
+    rows = await reread(bot, cog, marathon, read)
+
+    after = (await runs_by_game(bot, marathon))["Kirby Air Riders"]
+    assert len(rows) == 5 and (after["id"], after["external_id"]) == (before["id"], "9104")
+
+
+def repeat(key, order, start, category="Any%"):
+    run = a_run(order, start, game="Tetris", people=(("Sky", "skyruns", "runner"),))
+    return replace(run, external_id=key, category=category)
+
+
+async def test_the_first_of_two_repeats_renamed_leaves_both_rows_where_they_were(bot, cog):
+    cog.client.runs_given = [repeat("tetris/any", 1, 30), repeat("tetris/any#2", 2, 120)]
+    marathon = await added(bot, cog)
+    first, second = await runs_of(bot.db, marathon["id"])
+    read = [repeat("tetris/any-b", 1, 30, "Any% B"), repeat("tetris/any", 2, 120)]
+    rows = await reread(bot, cog, marathon, read)
+
+    assert [(row["id"], row["external_id"], row["scheduled_at"], row["state"]) for row in rows] == [
+        (first["id"], "tetris/any-b", at(30), mt.UPCOMING),
+        (second["id"], "tetris/any", at(120), mt.UPCOMING),
+    ]
+    assert rows[0]["category"] == "Any% B" and rows[1]["previous_scheduled_at"] is None
+    assert await last_change(bot) == (0, 0, 0, 2)
+
+
+async def test_a_flip_back_to_the_old_spelling_renames_the_same_row_again(bot, cog):
+    marathon = await added(bot, cog)
+    before = (await runs_by_game(bot, marathon))["Super Metroid"]
+    fixed = renamed(SCHEDULE[2], "3b", category="Any% Glitchless")
+    await reread(bot, cog, marathon, [*SCHEDULE[:2], fixed, *SCHEDULE[3:]])
+    rows = await reread(bot, cog, marathon, SCHEDULE, minutes=2)
+
+    after = (await runs_by_game(bot, marathon))["Super Metroid"]
+    assert len(rows) == 5
+    assert (after["id"], after["external_id"], after["category"]) == (before["id"], "3", "Any%")
+    assert len(await all_details(bot, "marathon.run_renamed")) == 2
+
+
+async def test_a_flip_back_onto_an_id_a_dropped_row_holds_keeps_the_live_row(bot, cog):
+    marathon = await added(bot, cog)
+    old = (await runs_by_game(bot, marathon))["Super Metroid"]
+    await update_run(bot.db, old["id"], state=mt.DROPPED)
+    await bot.db.conn.execute(
+        "INSERT INTO marathon_runs(marathon_id, external_id, order_no, game, display_name, "
+        "category, runners_text, people, scheduled_at, ends_at, sheet_at, sheet_ends_at, state, "
+        "live_at, actual_started_at, first_seen_at, last_seen_at) "
+        "SELECT marathon_id, '3b', order_no, game, display_name, 'Any% Glitchless', runners_text, "
+        "people, scheduled_at, ends_at, sheet_at, sheet_ends_at, 'live', ?, ?, ?, ? "
+        "FROM marathon_runs WHERE id = ?",
+        (at(34), at(34), at(34), at(34), old["id"]),
+    )
+    await bot.db.conn.commit()
+    fixed = renamed(SCHEDULE[2], "3b", category="Any% Glitchless")
+    rows = await reread(bot, cog, marathon, [*SCHEDULE[:2], fixed, *SCHEDULE[3:]], minutes=39)
+    live = next(one for one in rows if one["external_id"] == "3b")
+    assert (live["state"], old["id"] != live["id"]) == (mt.LIVE, True)
+    rows = await reread(bot, cog, marathon, SCHEDULE, minutes=40)
+
+    by_id = {row["id"]: row for row in rows}
+    assert len(rows) == 6
+    assert (by_id[live["id"]]["external_id"], by_id[live["id"]]["state"]) == ("3", mt.LIVE)
+    assert (by_id[live["id"]]["actual_started_at"], by_id[live["id"]]["category"]) == (
+        at(34),
+        "Any%",
+    )
+    assert (by_id[old["id"]]["external_id"], by_id[old["id"]]["state"]) == ("3b", mt.DROPPED)
+    assert await last_change(bot) == (0, 0, 0, 1)
+    assert not [row for row in rows if row["external_id"].startswith("~")]
+
+
+async def test_a_rekey_that_fails_leaves_every_id_as_it_was(bot, cog):
+    marathon = await added(bot, cog)
+    first, second = (await runs_of(bot.db, marathon["id"]))[:2]
+    with pytest.raises(Exception, match="UNIQUE"):
+        await cogmod.rekey_runs(bot.db, [(first, "x"), (second, "x")])
+    rows = await runs_of(bot.db, marathon["id"])
+    assert [row["external_id"] for row in rows[:2]] == ["1", "2"]
