@@ -192,6 +192,222 @@ def test_a_dropped_run_that_reappears_is_named_so_it_goes_back_to_upcoming():
     assert plan.dropped == []
 
 
+def runners(*names):
+    return [{"name": name, "login": None, "part": "runner", "user_id": None} for name in names]
+
+
+def kept(ident, key, *, at, order, names=("Sky",), game="Dread", state=mt.UPCOMING, **extra):
+    people = runners(*names) + extra.pop("others", [])
+    found = row(ident, at=at, state=state, game=game, people=people, order=order, **extra)
+    return found | {"external_id": key, "sheet_at": iso(at)}
+
+
+def fresh(key, *, at, order, names=("Sky",), game="Dread", others=()):
+    people = tuple(Person(name, None, "runner") for name in names) + tuple(others)
+    return Run(key, order, game, game, "Any%", iso(at), iso(at + 60), 3600, people)
+
+
+def pairs(found):
+    return [
+        (one["id"], other.external_id if isinstance(other, Run) else other) for one, other in found
+    ]
+
+
+def test_a_row_dropped_beside_its_own_slots_new_id_is_the_same_run_renamed():
+    live = kept(2, "dread/minim", at=60, order=2, state=mt.LIVE)
+    stored = [kept(1, "a/any", at=0, order=1), live]
+    read = [fresh("a/any", at=0, order=1), fresh("dread/minimum", at=60, order=2)]
+    plan = mt.diff(stored, read, move_minutes=5)
+    assert pairs(plan.renamed) == [(2, "dread/minimum")]
+    assert pairs(plan.rekeyed) == [(2, "dread/minimum")]
+    assert plan.inserts == [] and plan.dropped == [] and plan.reappeared == []
+    assert [(one[0]["id"], one[1].external_id, one[2]) for one in plan.updates] == [
+        (1, "a/any", False),
+        (2, "dread/minimum", False),
+    ]
+
+
+def test_nothing_is_paired_when_nothing_is_both_dropped_and_added():
+    stored = [kept(1, "a", at=0, order=1), kept(2, "b", at=60, order=2)]
+    more = [fresh("a", at=0, order=1), fresh("c", at=0, order=1)]
+    assert mt.renames(stored, [fresh("a", at=0, order=1)], minutes=5) == []
+    assert mt.renames(stored[:1], more, minutes=5) == []
+
+
+@pytest.mark.parametrize(
+    ("at", "order", "same"),
+    [
+        (60, 9, True),
+        (64, 9, True),
+        (65, 9, False),
+        (65, 2, True),
+        (60 + 11 * 60, 2, True),
+        (60 + 12 * 60, 2, False),
+    ],
+)
+def test_the_slot_is_the_planned_start_or_the_place_in_one_day(at, order, same):
+    stored = kept(2, "b", at=60, order=2)
+    assert mt.same_slot(stored, fresh("c", at=at, order=order), minutes=5) is same
+
+
+def test_a_slot_with_no_times_goes_by_the_order_alone():
+    bare = kept(2, "b", at=60, order=2) | {"sheet_at": None, "scheduled_at": None}
+    assert mt.same_slot(bare, fresh("c", at=999, order=2), minutes=5)
+    assert not mt.same_slot(bare, fresh("c", at=60, order=3), minutes=5)
+
+
+def test_the_runners_decide_and_hosts_and_commentators_take_no_part():
+    host = [{"name": "Champ", "login": None, "part": "host", "user_id": 7}]
+    stored = kept(2, "b", at=60, order=2, names=("Sky", "  RIVER "), others=host)
+    voice = (Person("Other", None, "commentator"),)
+    same = fresh("c", at=60, order=2, names=("river", "sky"), others=voice)
+    assert mt.same_slot(stored, same, minutes=5)
+    assert not mt.same_slot(stored, fresh("c", at=60, order=2, names=("Sky",)), minutes=5)
+    assert not mt.same_slot(stored, fresh("c", at=60, order=2, names=("Sky", "Ash")), minutes=5)
+
+
+def test_with_no_runners_on_either_side_the_titles_must_be_alike():
+    stored = kept(2, "b", at=60, order=2, names=(), game="Super Metroid")
+
+    def read(game, names=()):
+        return fresh("c", at=60, order=2, names=names, game=game)
+
+    assert mt.same_slot(stored, read("Super Metriod!"), minutes=5)
+    assert not mt.same_slot(stored, read("Celeste"), minutes=5)
+    assert not mt.same_slot(stored, read("Super Metroid", ("Sky",)), minutes=5)
+    blank = kept(3, "d", at=60, order=2, names=(), game="")
+    assert not mt.same_slot(blank, read(""), minutes=5)
+
+
+def test_a_new_runner_in_the_same_slot_is_a_drop_and_an_add():
+    read = [fresh("c", at=60, order=2, names=("Ash",))]
+    plan = mt.diff([kept(2, "b", at=60, order=2)], read, move_minutes=5)
+    assert plan.renamed == [] and plan.rekeyed == []
+    assert [one.external_id for one in plan.inserts] == ["c"]
+    assert [one["id"] for one in plan.dropped] == [2]
+
+
+def test_one_row_fitting_two_runs_is_paired_with_neither():
+    stored = [kept(2, "b", at=60, order=2)]
+    read = [fresh("c", at=60, order=2), fresh("d", at=62, order=3)]
+    plan = mt.diff(stored, read, move_minutes=5)
+    assert plan.renamed == []
+    assert [one.external_id for one in plan.inserts] == ["c", "d"]
+    assert [one["id"] for one in plan.dropped] == [2]
+
+
+def test_two_rows_fitting_one_run_are_paired_with_nothing():
+    stored = [kept(2, "b", at=60, order=2), kept(3, "c", at=62, order=3)]
+    plan = mt.diff(stored, [fresh("d", at=61, order=2)], move_minutes=5)
+    assert plan.renamed == []
+    assert [one["id"] for one in plan.dropped] == [2, 3]
+
+
+def test_one_ambiguous_row_does_not_stop_a_clear_pair():
+    stored = [kept(1, "a", at=0, order=1, names=("Ash",)), kept(2, "b", at=600, order=5)]
+    read = [
+        fresh("a2", at=0, order=1, names=("Ash",)),
+        fresh("c", at=600, order=5),
+        fresh("d", at=602, order=6),
+    ]
+    plan = mt.diff(stored, read, move_minutes=5)
+    assert pairs(plan.renamed) == [(1, "a2")]
+    assert [one["id"] for one in plan.dropped] == [2]
+
+
+def test_two_runs_swapping_slots_keep_their_ids_and_are_only_moved():
+    stored = [kept(1, "a", at=0, order=1), kept(2, "b", at=60, order=2, names=("Ash",))]
+    read = [fresh("b", at=0, order=1, names=("Ash",)), fresh("a", at=60, order=2)]
+    plan = mt.diff(stored, read, move_minutes=5)
+    assert plan.renamed == [] and plan.inserts == [] and plan.dropped == []
+    assert sorted((one[0]["id"], one[1].external_id, one[2]) for one in plan.updates) == [
+        (1, "a", True),
+        (2, "b", True),
+    ]
+
+
+def test_two_renamed_runs_each_keep_their_own_slot():
+    stored = [kept(1, "a", at=0, order=1), kept(2, "b", at=60, order=2)]
+    read = [fresh("a2", at=0, order=1), fresh("b2", at=60, order=2)]
+    assert pairs(mt.renames(stored, read, minutes=5)) == [(1, "a2"), (2, "b2")]
+
+
+def test_a_rename_beside_an_unrelated_add_is_one_of_each():
+    stored = [kept(1, "a", at=0, order=1)]
+    read = [fresh("a2", at=0, order=1), fresh("z", at=60, order=2, names=("Ash",))]
+    plan = mt.diff(stored, read, move_minutes=5)
+    assert pairs(plan.renamed) == [(1, "a2")]
+    assert [one.external_id for one in plan.inserts] == ["z"]
+    assert plan.dropped == []
+
+
+def test_a_done_run_renamed_keeps_its_row_and_is_not_added_again():
+    stored = [kept(1, "a", at=-120, order=1, state=mt.DONE)]
+    plan = mt.diff(stored, [fresh("a2", at=-120, order=1)], move_minutes=5)
+    assert pairs(plan.renamed) == [(1, "a2")]
+    assert plan.inserts == [] and plan.dropped == []
+
+
+def test_a_dropped_row_is_never_renamed_and_still_comes_back_under_its_own_id():
+    stored = [kept(1, "a", at=0, order=1, state=mt.DROPPED)]
+    gone = mt.diff(stored, [fresh("a2", at=0, order=1)], move_minutes=5)
+    back = mt.diff(stored, [fresh("a", at=0, order=1)], move_minutes=5)
+    assert gone.renamed == [] and [one.external_id for one in gone.inserts] == ["a2"]
+    assert back.renamed == [] and [one["id"] for one in back.reappeared] == [1]
+
+
+def test_a_flip_back_onto_a_dropped_rows_id_keeps_the_live_row_and_swaps_the_ids():
+    stored = [
+        kept(163, "dread/minim", at=60, order=2, state=mt.DROPPED),
+        kept(176, "dread/minimum", at=60, order=2, state=mt.LIVE),
+    ]
+    plan = mt.diff(stored, [fresh("dread/minim", at=60, order=2)], move_minutes=5)
+    assert pairs(plan.renamed) == [(176, "dread/minim")]
+    assert pairs(plan.rekeyed) == [(176, "dread/minim"), (163, "dread/minimum")]
+    assert [(one[0]["id"], one[1].external_id) for one in plan.updates] == [(176, "dread/minim")]
+    assert plan.reappeared == [] and plan.dropped == [] and plan.inserts == []
+
+
+def test_the_first_of_two_repeats_renamed_leaves_both_rows_in_their_slots():
+    stored = [kept(1, "g/c", at=0, order=1), kept(2, "g/c#2", at=60, order=2)]
+    read = [fresh("g/cc", at=0, order=1), fresh("g/c", at=60, order=2)]
+    plan = mt.diff(stored, read, move_minutes=5)
+    assert sorted(pairs(plan.renamed)) == [(1, "g/cc"), (2, "g/c")]
+    assert sorted(pairs(plan.rekeyed)) == [(1, "g/cc"), (2, "g/c")]
+    assert plan.inserts == [] and plan.dropped == [] and plan.moved == []
+
+
+def test_the_first_of_three_repeats_renamed_leaves_all_three_in_their_slots():
+    old, new = ("g/c", "g/c#2", "g/c#3"), ("g/cc", "g/c", "g/c#2")
+    stored = [kept(n, key, at=60 * n, order=n) for n, key in enumerate(old, 1)]
+    read = [fresh(key, at=60 * n, order=n) for n, key in enumerate(new, 1)]
+    plan = mt.diff(stored, read, move_minutes=5)
+    assert sorted(pairs(plan.renamed)) == [(1, "g/cc"), (2, "g/c"), (3, "g/c#2")]
+    assert plan.inserts == [] and plan.dropped == [] and plan.moved == []
+
+
+def test_the_second_of_two_repeats_renamed_is_one_plain_rename():
+    stored = [kept(1, "g/c", at=0, order=1), kept(2, "g/c#2", at=60, order=2)]
+    read = [fresh("g/c", at=0, order=1), fresh("g/cc", at=60, order=2)]
+    assert pairs(mt.diff(stored, read, move_minutes=5).renamed) == [(2, "g/cc")]
+
+
+def test_a_repeat_removed_beside_an_unrelated_add_is_left_as_it_was():
+    stored = [kept(1, "g/c", at=0, order=1), kept(2, "g/c#2", at=60, order=2)]
+    read = [fresh("g/c", at=60, order=1), fresh("z", at=300, order=2, names=("Ash",))]
+    plan = mt.diff(stored, read, move_minutes=5)
+    assert plan.renamed == []
+    assert [one["id"] for one in plan.dropped] == [2]
+    assert [(one[0]["id"], one[2]) for one in plan.updates] == [(1, True)]
+    assert [one.external_id for one in plan.inserts] == ["z"]
+
+
+def test_a_displaced_dropped_row_takes_an_id_the_renames_left_free():
+    stored = [kept(1, "a", at=0, order=1), kept(9, "b", at=0, order=1, state=mt.DROPPED)]
+    found = mt.rekeys(stored, [(stored[0], fresh("b", at=0, order=1))])
+    assert pairs(found) == [(1, "b"), (9, "a")]
+
+
 def test_the_hash_moves_with_the_schedule_and_not_otherwise():
     first = mt.schedule_hash([run(1, at=0)])
     assert first == mt.schedule_hash([run(1, at=0)])

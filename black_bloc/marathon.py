@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from difflib import SequenceMatcher
 from typing import Any, NamedTuple
 
 from .golive import parse_ts
@@ -51,6 +53,9 @@ PHASE_WORDS = {
 AFTER_END = timedelta(days=1)
 TITLE_REACH = timedelta(hours=12)
 NAME_FLOOR = 3
+SAME_DAY_HOURS = 12
+SAME_TITLE = 0.8
+REPEAT = re.compile(r"#\d+$")
 
 PART_KEYS = {
     RUNNER: MARATHON_PART_RUNNER_KEY,
@@ -509,6 +514,8 @@ class Plan:
     updates: list[tuple[Any, Run, bool]] = field(default_factory=list)
     dropped: list[Any] = field(default_factory=list)
     reappeared: list[Any] = field(default_factory=list)
+    renamed: list[tuple[Any, Run]] = field(default_factory=list)
+    rekeyed: list[tuple[Any, str]] = field(default_factory=list)
 
     @property
     def moved(self) -> list[tuple[Any, Run, bool]]:
@@ -522,23 +529,128 @@ def moved_by(before: Any, after: Any) -> float | None:
     return abs((new - old).total_seconds()) / 60
 
 
+def runner_set(people: Any) -> frozenset[str]:
+    names = {
+        runner_key(_person(one, "name")) for one in people or () if _person(one, "part") == RUNNER
+    }
+    return frozenset(names - {""})
+
+
+def similar_titles(one: Any, other: Any) -> bool:
+    mine, theirs = normalise(one), normalise(other)
+    if not mine or not theirs:
+        return False
+    return mine == theirs or SequenceMatcher(None, mine, theirs).ratio() >= SAME_TITLE
+
+
+def same_slot(row: Any, run: Run, *, minutes: int) -> bool:
+    """A stored row and a fresh run in one slot: the same planned start, or the same place in
+    the order within one show-day, and the same runners (a similar title when neither has any)."""
+    shift = moved_by(_cell(row, "sheet_at") or _cell(row, "scheduled_at"), run.starts_at)
+    order = _cell(row, "order_no")
+    placed = order is not None and run.order is not None and int(order) == int(run.order)
+    if shift is None:
+        near = placed
+    else:
+        near = shift < max(1, int(minutes)) or (placed and shift < SAME_DAY_HOURS * 60)
+    if not near:
+        return False
+    mine, theirs = runner_set(people_of(row)), runner_set(run.people)
+    if mine != theirs:
+        return False
+    return bool(mine) or similar_titles(_cell(row, "game"), run.game)
+
+
+def _only_pairs(rows: list[Any], runs: list[Run], minutes: int) -> list[tuple[Any, Run]]:
+    fits = [
+        [at for at, run in enumerate(runs) if same_slot(row, run, minutes=minutes)] for row in rows
+    ]
+    wanted = Counter(at for one in fits for at in one)
+    return [
+        (row, runs[one[0]])
+        for row, one in zip(rows, fits, strict=True)
+        if len(one) == 1 and wanted[one[0]] == 1
+    ]
+
+
+def _family(external_id: Any) -> str:
+    return REPEAT.sub("", str(external_id or ""))
+
+
+def renames(rows: Any, runs: list[Run], *, minutes: int) -> list[tuple[Any, Run]]:
+    """The stored rows a read would lose, each with the fresh run that is the same slot under a
+    new id. A row or a run that fits more than one is paired with nothing."""
+    known = {str(_cell(row, "external_id")): row for row in rows or ()}
+    read = {run.external_id for run in runs}
+    gone = [row for key, row in known.items() if key not in read and _cell(row, "state") != DROPPED]
+    if not gone:
+        return []
+    free = [
+        run
+        for run in runs
+        if run.external_id not in known or _cell(known[run.external_id], "state") == DROPPED
+    ]
+    direct = _only_pairs(gone, free, minutes)
+    settled = {id(row) for row, _ in direct}
+    families = {_family(_cell(row, "external_id")) for row in gone if id(row) not in settled} - {""}
+    loose = [
+        (known[run.external_id], run)
+        for run in runs
+        if run.external_id in known
+        and _cell(known[run.external_id], "state") != DROPPED
+        and _family(run.external_id) in families
+        and not same_slot(known[run.external_id], run, minutes=minutes)
+    ]
+    if not loose:
+        return direct
+    wider = _only_pairs(
+        gone + [row for row, _ in loose], free + [run for _, run in loose], minutes
+    )
+    rows_in = {id(row) for row, _ in wider}
+    runs_in = {run.external_id for _, run in wider}
+    whole = all(id(row) in rows_in and run.external_id in runs_in for row, run in loose)
+    kept = all(any(row is one and run is other for one, other in wider) for row, run in direct)
+    return wider if whole and kept else direct
+
+
+def rekeys(rows: Any, pairs: list[tuple[Any, Run]]) -> list[tuple[Any, str]]:
+    """Every external id a rename writes: the renamed rows take the fresh ids, and a dropped
+    row that held one takes an id the renames left free."""
+    known = {str(_cell(row, "external_id")): row for row in rows or ()}
+    taken = {run.external_id for _, run in pairs}
+    renamed = {id(row) for row, _ in pairs}
+    free = sorted({str(_cell(row, "external_id")) for row, _ in pairs} - taken)
+    found = [(row, run.external_id) for row, run in pairs]
+    for row, run in pairs:
+        holder = known.get(run.external_id)
+        if holder is None or id(holder) in renamed:
+            continue
+        mine = str(_cell(row, "external_id"))
+        found.append((holder, free.pop(free.index(mine) if mine in free else 0)))
+    return found
+
+
 def diff(rows: Any, runs: list[Run], *, move_minutes: int) -> Plan:
-    """By external id: new rows in, moved ones flagged, missing ones dropped, never deleted."""
+    """By external id: new rows in, moved ones flagged, missing ones dropped, never deleted; a
+    row that would be dropped beside its own slot's new id is the same run, renamed."""
     known = {str(_cell(row, "external_id")): row for row in rows or ()}
     plan = Plan()
-    seen: set[str] = set()
+    plan.renamed = renames(rows, runs, minutes=int(move_minutes))
+    plan.rekeyed = rekeys(rows, plan.renamed)
+    owner = known | {run.external_id: row for row, run in plan.renamed}
+    held: set[int] = set()
     for run in runs:
-        seen.add(run.external_id)
-        row = known.get(run.external_id)
+        row = owner.get(run.external_id)
         if row is None:
             plan.inserts.append(run)
             continue
+        held.add(id(row))
         shift = moved_by(_cell(row, "sheet_at") or _cell(row, "scheduled_at"), run.starts_at)
         plan.updates.append((row, run, shift is not None and shift >= int(move_minutes)))
         if _cell(row, "state") == DROPPED:
             plan.reappeared.append(row)
-    for external_id, row in known.items():
-        if external_id not in seen and _cell(row, "state") not in (DROPPED, DONE):
+    for row in known.values():
+        if id(row) not in held and _cell(row, "state") not in (DROPPED, DONE):
             plan.dropped.append(row)
     return plan
 
