@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-25 19:3x** — KI-10 only, at the v166 docs ritual: a KI-10 line for the v166 swap (the line itself NOT read — `flyctl logs --no-tail` at 19:3x starts at 02:32:34Z, after the boot). ⚠️ Nothing else re-read.
+> Last verified: **2026-10-04 18:3x** — the v202 docs ritual (v195 to v202): KI-41 was added 2026-10-04 (already in the file) and **KI-42 ADDED** (the 256 MB OOM kill, `WATCHING`; read from the TODO 💥 bullet, not re-measured). ⚠️ KI-10 and KI-40 were NOT re-read for these eight deploys; nothing else in this file was re-tested.
+> Before that, **2026-09-25 19:3x** — KI-10 only, at the v166 docs ritual: a KI-10 line for the v166 swap (the line itself NOT read — `flyctl logs --no-tail` at 19:3x starts at 02:32:34Z, after the boot). ⚠️ Nothing else re-read.
 > Before that, **2026-09-25 16:2x** — KI-10 and KI-26 only, at the v165 docs ritual: a KI-10 line for the v165 swap (the line itself NOT read — Fly's log buffer starts at the new machine); KI-26: the fix shipped inside v165, CI green (`gh run list`). ⚠️ Nothing else re-read.
 > Before that, **2026-09-25 14:2x** — KI-10 only, at the v164 docs ritual: one sighting line (21:15:49Z, the v164 swap, from `deploys.log`). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 18:3x** — KI-10 only, at the v163 docs ritual: one sighting line (01:32:43Z, the v163 swap, from `deploys.log`). ⚠️ Nothing else re-read.
@@ -168,6 +169,16 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-42 — The bot's 256 MB machine was OOM-killed mid-marathon; what filled the memory is NOT known — `WATCHING`
+
+**Symptom:** `flyctl machine status` read `exit_code=137, oom_killed=true, requested_stop=false` at **Sat 2026-10-03 13:12:49 Phoenix**, nine minutes before a run went live; Fly restarted the machine in 8 s and nothing was missed. The machine was `shared-cpu-1x` at 256 MB (`fly.toml`); it was raised to **512 MB** the same evening (`flyctl scale memory 512` at 20:36, and `fly.toml` `[[vm]] memory = "512mb"`, shipped in v195). Detail and the owner's go: the 💥 *Chunk 6* bullet in [`TODO.md`](TODO.md).
+
+**Status:** `WATCHING` since 2026-10-04.
+
+**Why tolerated:** the restart was fast and lossless, and the machine has had twice the memory since. ⚠️ NOT known: what filled the memory, and whether it is a leak or a spike — the bot's memory use was not measured (the in-machine read needs the owner's go; it was blocked once).
+
+**What would change it:** **1** more OOM kill at 512 MB, or a measured growth trend in the bot's memory over a marathon day — then find what grows.
 
 ## KI-41 — An event that lives in a forum post never gets its *has ended* line — `ACCEPTED`
 
