@@ -9879,3 +9879,88 @@ Design: `marathon-hotfix-design.md` ▸ *Follow-up 2026-10-04 — a renamed run 
 | `black_bloc/cogs/content/marathon.py` `_write_plan` | A renamed pair is also in `plan.updates`, so it gets the ordinary field update (state untouched unless DROPPED, marks re-armed only if it also moved). `run_renamed` reads `row["external_id"]` from the row as loaded before the rekey — that is the old id. |
 | `black_bloc/marathon_overlay.py` `kept` | `minutes=None` is the old lookup by id alone. With it, a renamed run finds its stored row through `renames`, so a read without the organisers' sheet does not strip the hosts and commentators off a run whose id just changed. |
 | `black_bloc/marathon_schedule_page.py` `RENAMED_WORDS` | Added to the `schedule_changed` line only when the count is not 0, so rows logged before this build read as they did. `run_renamed` details use `from_id` / `to_id`, not `from` / `to`, which `move_text` reads as moments. |
+
+
+# Memory that works, and how we talk (2026-10-05, branch `memory-rapport`)
+
+> Keyed BY NAME, not by line, against the `memory-rapport` branch — two builds are editing
+> `settings_store.py`, `cogs/content/chat.py` and `site/mock/server.mjs` at once and every
+> number will move at the merge. ⚠️ **No key above this section was re-keyed**, and
+> `chat_memory.py` and `chat_distil.py` WERE edited in place, so the Phase 17 keys into those two
+> files should be trusted by anchor text. Design: `phase17-design.md` ▸ *Follow-up 2026-10-05*.
+
+## `black_bloc/chat_distil.py`
+
+| Name | Note |
+|---|---|
+| `DISTIL_MAX_TOKENS` | ⚠️ **1200, and it is finally USED.** The constant existed at 600 and was passed to nothing; the memory client was the reply path's 400-token `GroqClient`. `gpt-oss-120b` reasons out of the same budget — measured 153–307 tokens of thinking per call — and 2 of 24 real calls died with Groq's 400 `json_validate_failed`. Do not lower it to "save tokens": the tier is priced at $0 and the saving is a failed write-up. |
+| `distiller` | Built here rather than through `chat_llm.groq` because that helper has no ceiling to pass and belongs to the reply path. It shares `clients_for(bot)` under the `memory` slot, so a test still injects a fake by putting one there; a fake has no `max_tokens` and is left alone, a real cramped client is replaced. |
+| `Outcome` | One conversation's result as a CODE, not a bool. `stored` is true only for `kept`. `dropped` carries rule names, never text. |
+| `KEPT` / `NOTHING` / `ALL_DROPPED` | Three different "the model answered" endings. `NOTHING` = the model offered no line (routine). `ALL_DROPPED` = it offered lines and every one broke a rule (goes on the failed row with the rules, because that is the KI-14 shape and somebody should see it). Neither writes a profile. |
+| `FAILURES` vs `TROUBLES` | `failed` in the summary counts only `FAILURES` (no answer, bad shape, no model key, not saved) so the number keeps its old meaning; the failed ROW is written for any of `TROUBLES`, which adds `all_dropped` and `models_closed`. |
+| `why_skipped` | Returns the reason so the sweep can count it. `worth_distilling` is kept as the bool wrapper the old tests and callers use. |
+| `run` — `continue`, not `break`, on a closed fuse | The old `break` meant one member at their own hourly ceiling ended the write-up for everybody after them in the loop. A capped month now costs three cheap SELECTs per remaining conversation, once a day. |
+| `run` — the empty answer | ⚠️ An empty `Distilled` returns before `merge`, standing profile or not. It used to re-save a standing profile, which moved `updated_at` and so reset the 180-day clock on a profile nobody had added to. |
+| `run` — when rows are written | `chat.memory_sweep` only when `seen` ≥ 1, so an idle server does not get a row of zeros a day; `chat.memory_distil_failed` only when `reasons` is non-empty. `ran_at` is the sweep's own clock, because `log_action` stamps the row with the real one. |
+| `last_run` | Reads the newest `chat.memory_sweep` row back. The action log is the ONE home for the last outcome — the cog's `last_distil` dies with the process and the API must survive a restart. Missing keys are filled from `EMPTY_RUN` so an older row still renders. |
+
+## `black_bloc/chat_memory.py`
+
+| Name | Note |
+|---|---|
+| `DISTIL_MIN_TURNS` | 2 → **1**, and now only the fallback for `chat_memory_min_turns`. With 11 model replies in 20 days a two-turn floor was the main reason nothing reached the model. |
+| `INSTRUCTIONS` | ⚠️ **Checked against every stored line — names, notes, threads, rapport.** `you` / `your` are on it on purpose: a line is a third-person description, so anything addressed to the reader is an order by shape. `rules`, `here`, `everyone` and `role` are NOT on it: "was asking about the server rules" and "new here" are KEEP examples, and `@everyone` is already caught by the `@`. |
+| `PERSONAL` / `RAPPORT_OTHERS` | Rapport only. A NOTE may say "is a student" (a standing fact they stated); a rapport line may not, because rapport is about the conversation and an inferred trait is exactly what the owner's rule forbids. |
+| `why_dropped(rapport=True)` | Order matters for the log: `instruction` is tested before `third_person`, so an injected line that also names somebody is counted as an injection. |
+| `notes_of(kind)` | ⚠️ **Rapport shares the `notes` column.** A dict with no `kind` is a note; `"kind": "rapport"` is a rapport line. This is why there is no schema 87. Old code reading a new row would show rapport as notes — the one rollback hazard. |
+| `theme` / `same_theme` | Lexical on purpose. Half of the SHORTER line's own words, after `THEME_FILLER`, so a two-word line is not immune to replacement. With nothing left after filler, only identical words match. |
+| `merged_rapport` | `newest` is the count of fresh lines: an old line is compared only against fresh ones, never against another old one, so merging cannot delete history by itself. The DM branch keeps the public line when a DM line would replace it. |
+| `safe` | Strips brackets and the backtick at RENDER, for every stored line. Parsing cannot be the only guard: a line stored last month is not re-parsed. |
+| `rapport_note` | Re-runs `why_dropped` on each stored line with no transcript and no member list — the phrase rules only. A rule added later therefore reaches lines already stored. |
+| `memory_note` | No longer returns early on `seen.empty`: a profile holding ONLY rapport must yield no facts block rather than an opener with nothing after it. |
+| `memory_blocks` | The one thing `chat_llm.memory_for` calls. Two blocks, facts then manner, so the model can be told different things about each. |
+| `RAPPORT_LINE` | Lives here, not in the cog, so `settings_store` can use it as the key's default without importing a cog. |
+
+## `black_bloc/cogs/content/chat_memory.py`
+
+| Name | Note |
+|---|---|
+| `rapport_line` / `fact_line` | Two fallbacks, because the value is staff-typed: a stored wording missing a placeholder is ignored, and one that still fails `.format` renders the shipped line. `{text}` is an argument, never part of the template, so a brace in a line cannot break it. |
+| `FACT_WORDS[FACT_RAPPORT]` | The picker option reads `#4 · how we talk · …` so a member can tell a manner line from a preference before dropping it. |
+
+## `black_bloc/api/tools/chat_memory.py`, `site/public/assets/page-chat.js`
+
+| Name | Note |
+|---|---|
+| `memory_index` | `names` / `notes` / `threads` / `rapport` are totals across profiles; `last_run` is `chat_distil.last_run`. Nothing in the payload is a line unless `chat_memory_staff_view` is `full`. |
+| `summary` — `lines` | Rapport lines are appended after notes and threads with `kind: rapport`, under the SAME `full` test — there is no second switch. |
+| `memoryLastRun` | Chips only. A reason code with no label falls back to the code with underscores removed, so a new code added in Python shows up readable before anybody labels it. |
+
+## `black_bloc/settings_store.py`
+
+| Name | Note |
+|---|---|
+| the *Memory that works* block | Its own `KEY_TYPES.update` block above `PROMPT_TOO_LONG`, so the parallel tone build merges textually. `chat_memory_min_turns` has a `KEY_MIN` of 1 and the mock row carries it as its eighth field — `check.mjs` compares the two. |
+| `checked_rapport_line` | Exactly `{number}` and `{text}`, both, nothing else, ≤ `RAPPORT_LINE_CHARS`. |
+
+## Review pass on `memory-rapport` (2026-10-05) — by name
+
+| Name | Note |
+|---|---|
+| `chat_memory_rules.py` | NEW, and the one home for every word list that is about privacy or injection (`CATEGORIES`, `INSTRUCTIONS`, `LINKS`, `RAPPORT_OTHERS`) and for `clean` / `forms`. `THIRD_PARTY`, `AVAILABILITY`, `EVENTS` and `OUTCOMES` stayed in `chat_memory.py` untouched. Its tests are `tests/test_chat_memory_rules.py`. |
+| `chat_memory_rules.CATEGORIES` | ⚠️ **Phrases are matched whole-word against every `forms` reading, so an ambiguous word goes in as a SHAPE** (`their boss`, `the police`, `is broke`). Before adding a bare word, add its gaming neighbour to `test_gaming_talk_is_not_private_talk`; the accepted false positives are pinned in `test_the_false_positives_that_were_accepted_are_written_down` so removing one is a visible decision. |
+| `chat_memory_rules.RAPPORT_ONLY` | `pronouns` — a NOTE may carry a stated pronoun preference (D2, owner-decided); a rapport line may not. |
+| `chat_memory_rules.clean` | Runs before `len` is measured and before anything is stored. Category `Cf` removal is what takes out zero-width characters; do not narrow it to a hand list. |
+| `chat_memory_rules.forms` | Four readings, deduped. The leet reading is ADDED to the plain one, never a replacement, so `top 10` still reads as itself. The closed-up reading exists for `ig.nore`; it can only join letters that had no space between them. |
+| `chat_memory_rules.PLAIN` | The allowlist. `()` are in it because the model writes them in topics and `safe` strips them at render; `[]{}<>` are not. `À-ɏ` minus `×` and `÷` is "Latin with accents". |
+| `chat_memory_rules.INSTRUCTIONS_OUTSIDE_A_TOPIC` | `rule` / `rules` — an order in a note or a rapport line, a legitimate subject in an open topic. |
+| `why_dropped` — order | `link` is tested before `charset` so a URL is reported as a link, and `charset` before `instruction` so a look-alike is reported as what it is. |
+| `passing` | The render-time re-check both blocks share. It has no transcript and no member list, so it re-applies the phrase rules only. |
+| `in_use` | The cap as a slice of the stored tuple, newest first. One definition, used by the prompt, the panel mark and the API count, so the three cannot disagree. |
+| `merged_rapport` — `held` | A lowered cap never deletes: the result is cut to `max(limit, len(old))`, and at 0 the old tuple is returned untouched. |
+| `write_up` | ⚠️ **The only writer the sweep uses, and deliberately not `save_profile`.** `save_profile` is an upsert and would revive a row a member just forgot. `STILL_WANTED` turns the consent model into the one `EXISTS` clause that makes the check and the write a single statement. |
+| `without_the_dropped` | Compares the profile as READ with the profile as it stands; anything in the first and not the second was dropped by the person while the model was thinking. Rapport is matched by theme as well as by words, because the model rephrases. |
+| `chat_distil.not_written` | `write_up` answering False has three causes; this reads back which, so `forgotten` and `withdrawn` are not logged as `not_saved`. |
+| `Chat._ingest` / `knowledge_due` / `memory_once` | One loop, two paces. `_knowledge_at` is monotonic and starts unset, so the first tick after a start is always the full one — the behaviour a deploy had before. `INGEST_SLACK_SECONDS` stops a tick that fires a second early from pushing knowledge to the 25th hour. |
+| `Chat._retime` | Called before the loop, after every tick and from `_settings_changed`. `SWEEP_HOURS_KEY` is in `WATCHED` for that reason alone. |
+| `HELD_BACK_MARK` | A code constant like `DM_MARK` beside it, not a settings key. |

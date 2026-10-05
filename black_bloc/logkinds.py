@@ -597,6 +597,7 @@ ROUTINE: frozenset[str] = frozenset(
         "request.updated",
         "request.withdrawn",
         "chat.memory_distilled",
+        "chat.memory_sweep",
         "chat.memory_expired",
         "chat.memory_optin",
         "role.changed_by_hand",

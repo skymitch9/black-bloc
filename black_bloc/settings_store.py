@@ -18,13 +18,26 @@ from .automod import (
 )
 from .chat_memory import (
     CONSENT_CHOICES,
+    DISTIL_MIN_TURNS,
+    DISTIL_MIN_TURNS_CEILING,
     DM_SCOPES,
     MEMORY_MODES,
+    MIN_TURNS_KEY,
     NOTES_CEILING,
     NOTES_MAX,
+    RAPPORT_CEILING,
+    RAPPORT_LINE,
+    RAPPORT_LINE_CHARS,
+    RAPPORT_LINE_FIELDS,
+    RAPPORT_LINE_KEY,
+    RAPPORT_MAX,
+    RAPPORT_MAX_KEY,
     RETENTION_DAYS,
     RETENTION_MAX_DAYS,
     STAFF_VIEWS,
+    SWEEP_HOURS,
+    SWEEP_HOURS_KEY,
+    SWEEP_HOURS_MAX,
     THREADS_CEILING,
     THREADS_MAX,
 )
@@ -4085,6 +4098,78 @@ VOICE_SHEET_CHARS = 4000
 TONE_CLAUSE_CHARS = 600
 BANTER_STYLE_CHARS = 600
 GROUNDING_NOTE_CHARS = 600
+# Memory that works, and how we talk (2026-10-05) — its own block so parallel branches merge
+# textually.
+MEMORY_MIN_TURNS_KEY = MIN_TURNS_KEY
+KEY_TYPES.update(
+    {
+        MEMORY_MIN_TURNS_KEY: "int",
+        RAPPORT_MAX_KEY: "int",
+        RAPPORT_LINE_KEY: "text",
+        SWEEP_HOURS_KEY: "int",
+    }
+)
+KEY_MAX.update(
+    {
+        MEMORY_MIN_TURNS_KEY: DISTIL_MIN_TURNS_CEILING,
+        RAPPORT_MAX_KEY: RAPPORT_CEILING,
+        SWEEP_HOURS_KEY: SWEEP_HOURS_MAX,
+    }
+)
+KEY_MIN[MEMORY_MIN_TURNS_KEY] = 1
+KEY_MIN[SWEEP_HOURS_KEY] = 1
+KEY_MIN_REASON[SWEEP_HOURS_KEY] = (
+    "A conversation is only written up once it is an hour old, so checking more often than "
+    "every {limit} hour would find nothing new."
+)
+KEY_MIN_REASON[MEMORY_MIN_TURNS_KEY] = (
+    "A conversation with no message from the person in it has nothing to remember, so the "
+    "fewest Black Bloc will take is {limit}."
+)
+KEY_HELP.update(
+    {
+        MEMORY_MIN_TURNS_KEY: (
+            f"how many messages a person must have sent Black Bloc in one conversation before "
+            f"it is written up into their profile, up to {DISTIL_MIN_TURNS_CEILING}; 1 means a "
+            f"single exchange can be remembered"
+        ),
+        RAPPORT_MAX_KEY: (
+            f"how many lines about how a person and Black Bloc talk — the manner they like, a "
+            f"running joke — Black Bloc uses from one profile, up to {RAPPORT_CEILING}; a newer "
+            f"line on the same subject replaces the older one. Lowering it takes effect on the "
+            f"very next answer: lines past the number stay stored and stay on the person's own "
+            f"`/memory` panel but are not read, 0 reads none, and raising it brings them back"
+        ),
+        SWEEP_HOURS_KEY: (
+            f"how often, in hours, Black Bloc writes finished conversations up into what it "
+            f"remembers, from 1 to {SWEEP_HOURS_MAX}; 1 by default, and a change takes effect "
+            f"without a restart. Each conversation written up counts as one of the server's "
+            f"chat_daily_turns, so a shorter interval can spend more of them"
+        ),
+        RAPPORT_LINE_KEY: (
+            "how one how-we-talk line reads on a person's own `/memory` panel; {number} is its "
+            "place on the list and {text} is the line itself, and both must be there"
+        ),
+    }
+)
+RAPPORT_LINE_BROKEN = (
+    "That line needs both {{number}} and {{text}} and no other placeholder, and it holds "
+    "{limit} characters, so nothing was changed. The shipped one is `{shipped}`."
+)
+
+
+def checked_rapport_line(given: Any) -> str:
+    text = str(given or "").strip()
+    found = sorted({one.strip() for one in PLACEHOLDERS.findall(text)})
+    if found != sorted(RAPPORT_LINE_FIELDS) or len(text) > RAPPORT_LINE_CHARS:
+        raise SettingError(
+            RAPPORT_LINE_BROKEN.format(limit=RAPPORT_LINE_CHARS, shipped=RAPPORT_LINE)
+        )
+    return text
+
+
+TEXT_CHECKS[RAPPORT_LINE_KEY] = checked_rapport_line
+
 PROMPT_TOO_LONG = (
     "That is {length} characters and {what} holds {limit}, so nothing was changed. Every "
     "character is read on every answer; take {over} out and save it again."
@@ -7650,6 +7735,14 @@ class SettingsStore:
             return THREADS_MAX
         if key == "chat_memory_model":
             return ""
+        if key == MEMORY_MIN_TURNS_KEY:
+            return DISTIL_MIN_TURNS
+        if key == RAPPORT_MAX_KEY:
+            return RAPPORT_MAX
+        if key == SWEEP_HOURS_KEY:
+            return SWEEP_HOURS
+        if key == RAPPORT_LINE_KEY:
+            return RAPPORT_LINE
         if key == "emoji_skin_tone":
             return SKIN_TONE_DEFAULT
         if key == "cost_hosting_usd":

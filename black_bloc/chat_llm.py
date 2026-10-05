@@ -547,8 +547,10 @@ async def memory_for(bot: Any, db: Any, guild_id: Any, user_id: int, *, in_dm: b
     from .chat_memory import (
         DM_SCOPE_KEY,
         MODE_KEY,
+        RAPPORT_MAX,
+        RAPPORT_MAX_KEY,
         SHARED,
-        memory_note,
+        memory_blocks,
         profile_for,
     )
 
@@ -556,7 +558,13 @@ async def memory_for(bot: Any, db: Any, guild_id: Any, user_id: int, *, in_dm: b
     if home is None or read_setting(bot.store, home, MODE_KEY, "off") != ON:
         return ""
     shared = read_setting(bot.store, home, DM_SCOPE_KEY, "") == SHARED
-    return memory_note(await profile_for(db, user_id, home), in_dm=in_dm, shared=shared)
+    try:
+        cap = int(read_setting(bot.store, home, RAPPORT_MAX_KEY, RAPPORT_MAX))
+    except (TypeError, ValueError):
+        cap = RAPPORT_MAX
+    return memory_blocks(
+        await profile_for(db, user_id, home), in_dm=in_dm, shared=shared, rapport_max=cap
+    )
 
 
 async def say_capped(bot: Any, guild: Any, at: datetime) -> None:

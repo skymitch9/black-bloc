@@ -2345,3 +2345,82 @@ async def test_a_greeting_through_the_model_never_opens_a_review_item(
     await cog.on_message(numbered(bot, member, "<@55> whats good"))
 
     assert await review_rows(db) == []
+
+
+# The write-up's own pace (`chat_memory_sweep_hours`): the loop ticks at it, and the knowledge
+# half of the tick still happens once a day.
+
+
+async def test_the_tick_writes_memory_up_every_time_and_reads_the_server_once_a_day(
+    cog, monkeypatch
+):
+    ran = []
+    clock = [1000.0]
+
+    async def knowledge():
+        ran.append("knowledge")
+        return 0
+
+    async def memory():
+        ran.append("memory")
+
+    async def drafts():
+        ran.append("drafts")
+        return 0
+
+    monkeypatch.setattr(cog_module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(cog, "ingest_once", knowledge)
+    monkeypatch.setattr(cog, "memory_once", memory)
+    monkeypatch.setattr(cog, "seed_drafts", drafts)
+
+    await cog._ingest()
+    for _ in range(23):
+        clock[0] += 3600
+        await cog._ingest()
+    assert ran == ["drafts", "knowledge", *["memory"] * 23]
+
+    clock[0] += 3600
+    await cog._ingest()
+
+    assert ran[-2:] == ["drafts", "knowledge"] and ran.count("knowledge") == 2
+    assert cog.loop_health("_ingest")[1] is None
+
+
+async def test_an_hourly_write_up_with_nothing_in_front_of_it_leaves_no_log_row(cog, bot, db):
+    await bot.store.set(GUILD, "chat_memory_mode", "on")
+
+    for _ in range(3):
+        await cog.memory_once()
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM action_log")
+
+    assert (await cur.fetchone())["n"] == 0
+    assert cog.last_distil["seen"] == 0
+
+
+async def test_the_write_up_interval_is_a_setting_that_re_times_the_loop_without_a_restart(
+    cog, bot
+):
+    assert bot.store.get(GUILD, "chat_memory_sweep_hours") == 1
+    assert cog._ingest.hours == 1 and cog.sweep_hours() == 1
+    await cog.cog_load()
+    try:
+        await bot.store.set(GUILD, "chat_memory_sweep_hours", 6)
+        assert cog._ingest.hours == 6
+
+        await bot.store.set(GUILD, "chat_memory_sweep_hours", 24)
+        assert cog._ingest.hours == 24
+    finally:
+        await cog.cog_unload()
+
+
+async def test_the_full_ingest_still_writes_memory_up_first(cog, monkeypatch):
+    ran = []
+
+    async def memory():
+        ran.append("memory")
+
+    monkeypatch.setattr(cog, "memory_once", memory)
+
+    await cog.ingest_once()
+
+    assert ran == ["memory"]

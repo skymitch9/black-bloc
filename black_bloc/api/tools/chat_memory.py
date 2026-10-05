@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ...chat_distil import last_run
 from ...chat_memory import (
     BY_STAFF,
     COUNTS,
@@ -12,7 +13,10 @@ from ...chat_memory import (
     FULL,
     MODE_KEY,
     ON,
+    RAPPORT_MAX,
+    RAPPORT_MAX_KEY,
     STAFF_VIEW_KEY,
+    in_use,
     optout_count,
     profile_from_row,
     profile_rows,
@@ -49,7 +53,7 @@ NO_SUCH_PROFILE = (
 FORGOT_SAID = "Cleared. Black Bloc remembers nothing about {who} here."
 
 
-def summary(guild: Any, row: Any, *, full: bool) -> dict[str, Any]:
+def summary(guild: Any, row: Any, *, full: bool, cap: int = RAPPORT_MAX) -> dict[str, Any]:
     """Counts always; the notes themselves only where the server has said staff may read them."""
     profile = profile_from_row(row)
     number = as_id(row["user_id"])
@@ -60,6 +64,8 @@ def summary(guild: Any, row: Any, *, full: bool) -> dict[str, Any]:
         },
         "notes": len(profile.notes),
         "threads": len(profile.threads),
+        "rapport": len(in_use(profile, cap)),
+        "rapport_held": len(profile.rapport) - len(in_use(profile, cap)),
         "turns_seen": profile.turns_seen,
         "created_at": profile.created_at,
         "updated_at": profile.updated_at,
@@ -67,7 +73,11 @@ def summary(guild: Any, row: Any, *, full: bool) -> dict[str, Any]:
         "lines": (
             [
                 {"text": one.text, "where": one.where, "kind": kind}
-                for kind, source in (("note", profile.notes), ("thread", profile.threads))
+                for kind, source in (
+                    ("note", profile.notes),
+                    ("thread", profile.threads),
+                    ("rapport", profile.rapport),
+                )
                 for one in source
             ]
             if full
@@ -89,6 +99,9 @@ def build_router(bot: Any) -> APIRouter:
     def _full(guild_id: int) -> bool:
         return bot.store.get(guild_id, STAFF_VIEW_KEY) == FULL
 
+    def _cap(guild_id: int) -> int:
+        return max(0, int(bot.store.get(guild_id, RAPPORT_MAX_KEY)))
+
     async def _row(guild: Any, member_id: int) -> Any:
         for row in await profile_rows(bot.db, guild.id):
             if int(row["user_id"]) == int(member_id):
@@ -101,7 +114,9 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         full = _full(guild.id)
         rows = await profile_rows(bot.db, guild.id)
-        shown = [summary(guild, row, full=full) for row in rows]
+        cap = _cap(guild.id)
+        shown = [summary(guild, row, full=full, cap=cap) for row in rows]
+        profiles = [profile_from_row(row) for row in rows]
         return {
             "mode": bot.store.get(guild.id, MODE_KEY),
             "on": bot.store.get(guild.id, MODE_KEY) == ON,
@@ -109,12 +124,20 @@ def build_router(bot: Any) -> APIRouter:
             "profiles": shown,
             "total": len(shown),
             "opted_out": await optout_count(bot.db, guild.id),
+            "names": sum(1 for one in profiles if one.call_me),
+            "notes": sum(len(one.notes) for one in profiles),
+            "threads": sum(len(one.threads) for one in profiles),
+            "rapport": sum(len(in_use(one, cap)) for one in profiles),
+            "rapport_held": sum(
+                len(one.rapport) - len(in_use(one, cap)) for one in profiles
+            ),
             "dm_notes": sum(
                 1
-                for row in rows
-                for one in profile_from_row(row).notes
+                for profile in profiles
+                for one in (*profile.notes, *profile.threads, *profile.rapport)
                 if one.where == DM
             ),
+            "last_run": await last_run(bot.db, guild.id),
             "message": "" if bot.store.get(guild.id, MODE_KEY) == ON else MEMORY_IS_OFF,
         }
 
@@ -125,7 +148,8 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         if not _full(guild.id):
             raise Refused(403, "memory_is_private", CONTENTS_ARE_PRIVATE)
-        return {"profile": summary(guild, await _row(guild, member_id), full=True)}
+        row = await _row(guild, member_id)
+        return {"profile": summary(guild, row, full=True, cap=_cap(guild.id))}
 
     @router.delete("/{member_id}")
     async def memory_forget(request: Request, member_id: int) -> dict[str, Any]:
@@ -133,7 +157,7 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         row = await _row(guild, member_id)
-        shown = summary(guild, row, full=False)
+        shown = summary(guild, row, full=False, cap=_cap(guild.id))
         await forget_profile(
             bot,
             guild,

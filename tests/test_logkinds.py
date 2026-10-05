@@ -381,6 +381,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/chat_distil.py::kind": (
         "chat.memory_distil_failed",
         "chat.memory_expired",
+        "chat.memory_sweep",
     ),
     "black_bloc/cogs/content/chat_memory.py::kind": (
         "chat.memory_forgot",
@@ -1101,7 +1102,12 @@ def test_seeding_the_channel_drafts_is_routine():
 
 def test_memory_is_loud_when_something_is_forgotten_and_quiet_the_rest_of_the_time():
     """Writing a profile is housekeeping; losing one, and somebody opting out, are not."""
-    for kind in ("chat.memory_distilled", "chat.memory_expired", "chat.memory_optin"):
+    for kind in (
+        "chat.memory_distilled",
+        "chat.memory_expired",
+        "chat.memory_optin",
+        "chat.memory_sweep",
+    ):
         assert is_important(kind) is False, kind
     for kind in ("chat.memory_forgot", "chat.memory_optout"):
         assert is_important(kind) is True, kind
