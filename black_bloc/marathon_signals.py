@@ -8,6 +8,7 @@ from .golive import parse_ts
 from .marathon import (
     BY_BOTH,
     BY_CATEGORY,
+    BY_STREAM,
     BY_TITLE,
     DONE,
     DROPPED,
@@ -33,6 +34,8 @@ RETIMED_LINE = (
 SHEET_TIMES_DONE = "**{name}** is back on the sheet's times ({count} run(s))."
 SHEET_TIMES_NONE = "**{name}** is on the sheet's times already, so nothing was changed."
 SHEET_TIMES_CODE = "not_retimed"
+EARLY_PUT_BACK = "put_back"
+EARLY_MOVED = "moved_to_line"
 
 
 class Match(NamedTuple):
@@ -267,31 +270,47 @@ def retimed(rows: Any, setup_minutes: int = 0) -> list[Retime]:
     return found
 
 
-def opens_day(row: Any, days: Any) -> bool:
-    """No run before it in its show-day is live or done."""
+def day_of(row: Any, days: Any) -> list[Any]:
     for day in days or ():
-        for index, one in enumerate(day):
-            if same(one, row):
-                return not any(settled(before) for before in day[:index])
-    return False
+        if any(same(one, row) for one in day):
+            return list(day)
+    return []
 
 
 def early_line(row: Any, minutes: Any) -> datetime | None:
-    """The moment from which the stream may call this run live; None when nothing holds it."""
     planned = sheet_start(row)
     if planned is None or int(minutes or 0) <= 0:
         return None
     return planned - timedelta(minutes=int(minutes))
 
 
-def too_early(row: Any, now: datetime, minutes: Any) -> bool:
-    line = early_line(row, minutes)
-    return line is not None and now < line
+def day_line(row: Any, days: Any, minutes: Any) -> datetime | None:
+    """From when the stream may call a run of this show-day live: so long before the day's
+    first planned start. None once another run of the day is live or done, or nothing holds."""
+    day = day_of(row, days)
+    if not day or any(settled(one) for one in day if not same(one, row)):
+        return None
+    return early_line(day[0], minutes)
 
 
-def started_early(row: Any, minutes: Any) -> bool:
+def early_repair(row: Any, days: Any, now: datetime, minutes: Any) -> tuple[str, datetime] | None:
+    """What a run the stream started before its show-day's line needs: back to coming up while
+    the line is still ahead, its start moved to the line once it has passed. One that ended
+    with no end seen (a replay took the stream) comes back until the day's planned end."""
+    state = _cell(row, "state")
+    if state not in (LIVE, DONE) or _cell(row, "live_because") not in BY_STREAM:
+        return None
     actual = parse_ts(_cell(row, "actual_started_at"))
-    return actual is not None and too_early(row, actual, minutes)
+    line = day_line(row, days, minutes)
+    if actual is None or line is None or actual >= line:
+        return None
+    if state == LIVE:
+        return (EARLY_PUT_BACK if now < line else EARLY_MOVED, line)
+    last = day_of(row, days)[-1]
+    over = sheet_end(last) or sheet_start(last)
+    if _cell(row, "actual_ended_at") or over is None or now >= over:
+        return None
+    return (EARLY_PUT_BACK, line)
 
 
 def is_retimed(row: Any) -> bool:

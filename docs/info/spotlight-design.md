@@ -462,6 +462,13 @@ announcement is not followed by a reminder one poll later. A session that upgrad
 downgraded again (tonight's replay after day 2). **Staff's Treat as live is never undone by a
 later look** (`replay_cleared = staff` stops `_replay_began`).
 
+**Review fix 2026-10-04 (branch `early-start-fixes`): the reminder clock ALWAYS restarts at an
+upgrade.** It used to restart only when the session id was in the in-memory `downgraded` set, so a
+bot restart during a replay (every overnight deploy) lost it: the return to live posted the fresh
+announcement and then a stale "still live" reminder under it one poll later. `upgrade` now calls
+`restart_bump_clock` every time - after a restart, for a session that started as a replay, and
+for staff's Treat as live. The next reminder is `spotlight_bump_hours` after the upgrade.
+
 **Hysteresis: added, one key.** Two looks (1–2 minutes at the 1-minute poll) before a downgrade or
 the upgrade of a session downgraded here. Why: a downgrade unpins and re-words a public post and an
 upgrade posts and pings, so one odd title read must not do either, and a title that flaps

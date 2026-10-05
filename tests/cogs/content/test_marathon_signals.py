@@ -744,7 +744,7 @@ async def test_a_days_first_run_shown_80_minutes_early_is_held_and_logged_once(b
         assert off_the_sheet(rows) == []
     assert await held_rows(bot) == 1
     said = await details_of(bot.db, "marathon.early_match_held")
-    assert (said["game"], said["early_minutes"], said["allowed_minutes"]) == (WII, 80, 15)
+    assert (said["game"], said["early_minutes"], said["allowed_minutes"]) == (WII, 80, 10)
     assert said["planned_at"] == z(DAY) and said["because"] == mt.BY_BOTH
     assert "marathon.retimed" not in await kinds(bot.db)
 
@@ -779,6 +779,66 @@ async def test_a_later_run_of_the_day_shown_40_minutes_early_is_followed(bot, co
     assert await held_rows(bot) == 0
 
 
+def second_of_day_two(rows):
+    day = sorted(
+        (row for row in rows.values() if row["sheet_at"] >= DAY_TWO.isoformat()),
+        key=lambda row: row["sheet_at"],
+    )
+    assert day[0]["game"] == WII
+    return day[1]
+
+
+async def test_a_day_opening_with_its_second_run_at_the_days_start_is_live_at_once(bot, cog, helix):
+    channel, marathon = await day_two_ahead(bot, cog)
+    second = second_of_day_two(await times(bot, marathon))
+    assert datetime.fromisoformat(second["sheet_at"]) > DAY_TWO + timedelta(minutes=15)
+    await set_up_for(bot, channel, second["game"])
+    at_show(cog, DAY)
+    await tick(cog)
+    rows = await times(bot, marathon)
+    now = rows[second["game"]]
+    assert (now["state"], now["actual_started_at"], now["scheduled_at"]) == (
+        mt.LIVE,
+        z(DAY),
+        z(DAY),
+    )
+    assert rows[WII]["state"] == mt.DONE and await held_rows(bot) == 0
+
+
+async def test_a_days_second_run_shown_60_minutes_before_the_days_start_is_held(bot, cog, helix):
+    channel, marathon = await day_two_ahead(bot, cog)
+    second = second_of_day_two(await times(bot, marathon))
+    await set_up_for(bot, channel, second["game"])
+    at_show(cog, DAY - 60)
+    await tick(cog)
+    rows = await times(bot, marathon)
+    assert (rows[second["game"]]["state"], rows[WII]["state"]) == (mt.UPCOMING, mt.UPCOMING)
+    assert off_the_sheet(rows) == []
+    said = await details_of(bot.db, "marathon.early_match_held")
+    assert (said["game"], said["early_minutes"]) == (second["game"], 60)
+    assert (said["day_starts_at"], said["planned_at"]) == (z(DAY), second["sheet_at"])
+    at_show(cog, DAY - 10)
+    await tick(cog)
+    now = (await times(bot, marathon))[second["game"]]
+    assert (now["state"], now["actual_started_at"]) == (mt.LIVE, z(DAY - 10))
+    assert await held_rows(bot) == 1
+
+
+async def test_a_tracker_that_moves_its_own_times_is_never_held_and_never_repaired(bot, cog, helix):
+    channel = await gdq_row(bot)
+    marathon = await added(bot, cog, channel=channel)
+    assert marathon["source"] == "gdq"
+    await stream(bot, channel, title="AGDQ 2027 - Super Metroid Any% by Sky")
+    await tick(cog)
+    metroid = (await times(bot, marathon))["Super Metroid"]
+    opened = datetime.fromisoformat(metroid["actual_started_at"])
+    assert metroid["state"] == mt.LIVE
+    assert datetime.fromisoformat(metroid["scheduled_at"]) - opened == timedelta(minutes=30)
+    await tick(cog)
+    assert (await times(bot, marathon))["Super Metroid"]["state"] == mt.LIVE
+    assert await held_rows(bot) == 0 and await undone_rows(bot) == 0
+
+
 async def test_with_the_early_key_at_0_the_stream_is_believed_at_once(bot, cog, helix):
     await bot.store.set(GUILD, EARLY_KEY, 0)
     channel, marathon = await day_two_ahead(bot, cog)
@@ -803,6 +863,49 @@ async def test_staff_calling_a_days_first_run_live_80_minutes_early_is_never_hel
     assert (rows[WII]["state"], rows[WII]["live_because"]) == (mt.LIVE, mt.BY_STAFF)
     assert rows[WII]["actual_started_at"] == z(DAY - 80)
     assert await undone_rows(bot) == 0
+
+
+async def reminder_rows(bot):
+    cur = await bot.db.conn.execute(
+        "SELECT kind, details FROM action_log "
+        "WHERE kind IN ('marathon.reminded', 'marathon.would_remind') ORDER BY id"
+    )
+    return [(row["kind"], json.loads(row["details"])) for row in await cur.fetchall()]
+
+
+async def test_the_early_key_is_10_by_default(bot, cog, helix):
+    assert bot.store.get(GUILD, EARLY_KEY) == 10
+    assert bot.store.get(GUILD, "marathon_ping_minutes") == 15
+
+
+async def test_a_held_opener_of_ours_gets_its_15_minute_reminder_before_it_goes_live(
+    bot, cog, helix
+):
+    await bot.store.set(GUILD, EARLY_KEY, 15)
+    await bot.db.conn.execute(
+        "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (4242, ?, ?)",
+        ("dragonz4477", z(-9999)),
+    )
+    channel, marathon = await day_two_ahead(bot, cog)
+    await set_up_for(bot, channel, WII)
+    at_show(cog, DAY - 60)
+    await tick(cog)
+    wii = (await times(bot, marathon))[WII]
+    assert mt.is_ours(wii) and wii["state"] == mt.UPCOMING
+    assert await held_rows(bot) == 1 and await reminder_rows(bot) == []
+    at_show(cog, DAY - 15)
+    await tick(cog)
+    wii = (await times(bot, marathon))[WII]
+    assert (wii["state"], wii["actual_started_at"]) == (mt.LIVE, z(DAY - 15))
+    assert mt.marks_of(wii) == [15, 120]
+    said = await reminder_rows(bot)
+    assert [(kind, details["mark"]) for kind, details in said] == [("marathon.reminded", 15)]
+    assert said[0][1]["run_id"] == wii["id"] and said[0][1]["scheduled_at"] == z(DAY)
+    logged = await kinds(bot.db)
+    assert logged.index("marathon.reminded") < logged.index("marathon.run_live")
+    at_show(cog, DAY - 14)
+    await tick(cog)
+    assert len(await reminder_rows(bot)) == 1
 
 
 async def anchored_79_minutes_early(bot, cog):
@@ -857,14 +960,79 @@ async def test_a_first_run_anchored_79_minutes_early_is_put_back_and_nothing_is_
     assert (wii["state"], wii["actual_started_at"]) == (mt.LIVE, z(DAY - 5))
 
 
-async def test_a_first_run_anchored_early_stays_live_once_the_show_is_about_to_start(
+async def test_a_first_run_anchored_early_starts_at_the_line_once_the_line_has_passed(
     bot, cog, helix
 ):
+    """Was `..._stays_live_once_the_show_is_about_to_start`, which asserted the early day kept."""
     _channel, marathon = await anchored_79_minutes_early(bot, cog)
-    before = day_two_of(await times(bot, marathon))
-    at_show(cog, DAY - 15)
+    early = await times(bot, marathon)
+    for minutes in (-15, -14, 5):
+        at_show(cog, DAY + minutes)
+        await tick(cog)
+        rows = await times(bot, marathon)
+        wii = rows[WII]
+        assert (wii["state"], wii["live_because"]) == (mt.LIVE, mt.BY_BOTH)
+        assert wii["actual_started_at"] == wii["scheduled_at"] == z(DAY - 15)
+        for game in day_two_of(rows):
+            moved = datetime.fromisoformat(rows[game]["scheduled_at"]) - datetime.fromisoformat(
+                early[game]["scheduled_at"]
+            )
+            assert moved == timedelta(minutes=64), game
+        assert mt.marks_of(rows[RACERS]) == [120, 1440]
+        assert not [one for one in await kinds(bot.db) if "reminder" in one or "remind" in one]
+        said = [one.content for chan in bot.guild.channels.values() for one in chan.messages]
+        assert not any("<@&" in one or "Heads-up" in one for one in said)
+        assert await undone_rows(bot) == 1 and await held_rows(bot) == 0
+        assert (await kinds(bot.db)).count("marathon.retimed") == 2
+    said = await details_of(bot.db, "marathon.early_start_undone")
+    assert (said["outcome"], said["started_at"], said["was"]) == (
+        "moved_to_line",
+        z(DAY - 79),
+        mt.LIVE,
+    )
+    assert (said["day_starts_at"], said["allowed_minutes"]) == (z(DAY), 15)
+
+
+async def test_a_replay_during_an_early_start_does_not_keep_the_day_early(bot, cog, helix):
+    channel, marathon = await anchored_79_minutes_early(bot, cog)
+    at_show(cog, DAY - 78)
+    assert await signals.replay_began(bot, bot.guild, channel["id"]) == 1
+    rows = await times(bot, marathon)
+    assert rows[WII]["state"] == mt.DONE and rows[WII]["actual_started_at"] == z(DAY - 79)
+    assert len(off_the_sheet(rows)) == len(day_two_of(rows))
+    for minutes in (-70, -69):
+        at_show(cog, DAY + minutes)
+        await tick(cog)
+        rows = await times(bot, marathon)
+        wii = rows[WII]
+        assert (wii["state"], wii["done_at"], wii["actual_started_at"]) == (mt.UPCOMING, None, None)
+        assert off_the_sheet(rows) == []
+        assert await undone_rows(bot) == 1
+    said = await details_of(bot.db, "marathon.early_start_undone")
+    assert (said["outcome"], said["was"], said["started_at"]) == ("put_back", mt.DONE, z(DAY - 79))
+    at_show(cog, DAY - 5)
+    await tick(cog)
+    wii = (await times(bot, marathon))[WII]
+    assert (wii["state"], wii["actual_started_at"]) == (mt.LIVE, z(DAY - 5))
+
+
+async def test_a_replay_ended_early_opener_comes_back_after_the_line_too(bot, cog, helix):
+    channel, marathon = await anchored_79_minutes_early(bot, cog)
+    await signals.replay_began(bot, bot.guild, channel["id"])
+    at_show(cog, DAY + 2)
     await tick(cog)
     rows = await times(bot, marathon)
-    assert rows[WII]["state"] == mt.LIVE and rows[WII]["actual_started_at"] == z(DAY - 79)
-    assert day_two_of(rows) == before
+    assert (rows[WII]["state"], rows[WII]["actual_started_at"]) == (mt.LIVE, z(DAY + 2))
+    assert rows[RACERS]["scheduled_at"] > rows[RACERS]["sheet_at"]
+    assert await undone_rows(bot) == 1
+
+
+async def test_an_early_opener_staff_marked_done_stays_done(bot, cog, helix):
+    _channel, marathon = await anchored_79_minutes_early(bot, cog)
+    at_show(cog, DAY - 75)
+    wii = (await times(bot, marathon))[WII]
+    assert (await mark_done(bot, bot.guild, FakeActor(), marathon, wii)).ok
+    await stream(bot, _channel, title="GDQueer 2026 !schedule")
+    await tick(cog)
+    assert (await times(bot, marathon))[WII]["state"] == mt.DONE
     assert await undone_rows(bot) == 0

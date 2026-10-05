@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from ... import marathon as mt
@@ -183,14 +183,18 @@ def early_minutes(bot: Any, guild_id: int) -> int:
     return int(bot.store.get(guild_id, MARATHON_EARLY_START_KEY) or 0)
 
 
-def _early_details(marathon: Any, row: Any, now: datetime, minutes: int) -> dict[str, Any]:
+def _early_details(
+    marathon: Any, row: Any, now: datetime, minutes: int, line: datetime
+) -> dict[str, Any]:
+    opens = line + timedelta(minutes=minutes)
     planned = sig.sheet_start(row)
     return {
         "marathon_id": marathon["id"],
         "run_id": row["id"],
         "game": row["game"],
-        "planned_at": planned.isoformat(),
-        "early_minutes": int((planned - now).total_seconds() // 60),
+        "planned_at": planned.isoformat() if planned is not None else None,
+        "day_starts_at": opens.isoformat(),
+        "early_minutes": int((opens - now).total_seconds() // 60),
         "allowed_minutes": minutes,
     }
 
@@ -198,12 +202,19 @@ def _early_details(marathon: Any, row: Any, now: datetime, minutes: int) -> dict
 async def guarded(
     cog: Any, guild: Any, marathon: Any, verdict: Any, rows: Any, now: datetime
 ) -> Any:
-    """The verdict, or None while the stream shows a show-day's first run too long before it."""
+    """The verdict, or None while the stream shows a run before its show-day's line; a run let
+    through gets its due reminder first, while it is still coming up."""
     if verdict is None or _cell(verdict.row, "state") != mt.UPCOMING:
+        return verdict
+    if retimes_itself(_cell(marathon, "source")):
         return verdict
     minutes = early_minutes(cog.bot, guild.id)
     row = verdict.row
-    if not sig.too_early(row, now, minutes) or not sig.opens_day(row, overlay.chains(rows)):
+    line = sig.day_line(row, overlay.chains(rows), minutes)
+    if line is None:
+        return verdict
+    if now >= line:
+        await cog.remind(guild, marathon, now, only=row["id"])
         return verdict
     seen = cog.__dict__.setdefault("early_held", set())
     if int(row["id"]) not in seen:
@@ -212,36 +223,43 @@ async def guarded(
             cog.bot,
             guild,
             "marathon.early_match_held",
-            details=_early_details(marathon, row, now, minutes) | {"because": verdict.because},
+            details=_early_details(marathon, row, now, minutes, line)
+            | {"because": verdict.because},
         )
     return None
 
 
 async def undo_early(cog: Any, guild: Any, marathon: Any, rows: Any, now: datetime) -> bool:
-    """A show-day's first run the stream made live too long before it goes back to coming up,
-    and the day back to its planned times; nothing is posted."""
+    """A run the stream made live before its show-day's line goes back to coming up, or once
+    the line has passed starts at the line, and the day is re-timed; nothing is posted."""
     from .marathon import put_back
 
+    if retimes_itself(_cell(marathon, "source")):
+        return False
     minutes = early_minutes(cog.bot, guild.id)
     days = overlay.chains(rows)
     found = [
-        row
+        (row, *repair)
         for row in rows
-        if _cell(row, "state") == mt.LIVE
-        and _cell(row, "live_because") in mt.BY_STREAM
-        and sig.started_early(row, minutes)
-        and sig.too_early(row, now, minutes)
-        and sig.opens_day(row, days)
+        if (repair := sig.early_repair(row, days, now, minutes)) is not None
     ]
-    for row in found:
-        await put_back(cog.bot.db, row["id"], because=None)
-        cog.__dict__.setdefault("early_held", set()).add(int(row["id"]))
+    for row, what, line in found:
+        if what == sig.EARLY_PUT_BACK:
+            await put_back(cog.bot.db, row["id"], because=None)
+            cog.__dict__.setdefault("early_held", set()).add(int(row["id"]))
+        else:
+            await anchor(cog.bot.db, row, line)
         await log_action(
             cog.bot,
             guild,
             "marathon.early_start_undone",
-            details=_early_details(marathon, row, now, minutes)
-            | {"because": row["live_because"], "started_at": row["actual_started_at"]},
+            details=_early_details(marathon, row, now, minutes, line)
+            | {
+                "because": row["live_because"],
+                "started_at": row["actual_started_at"],
+                "outcome": what,
+                "was": row["state"],
+            },
         )
     if found:
         await retime(cog, guild, marathon, because="early_start", on_move=mrem.EDIT)

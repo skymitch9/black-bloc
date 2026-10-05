@@ -266,3 +266,64 @@ def test_a_category_is_found_by_exact_name_first_then_by_a_search_with_the_same_
     searched = {"Hamtaro: Ham-Hams Unite!": [wrong, near]}
     assert sig.found_in(hamtaro, {}, searched) is near
     assert sig.found_in(hamtaro, {}, {"Hamtaro: Ham-Hams Unite!": [wrong]}) is None
+
+
+def test_the_early_line_is_the_days_first_planned_start_whichever_run_is_asked_about():
+    days = [[row(1, 0, 45), row(2, 45, 30)], [row(3, 24 * 60, 30)]]
+    for one in days[0]:
+        assert sig.day_line(one, days, 15) == NOW - timedelta(minutes=15)
+    assert sig.day_line(days[1][0], days, 15) == NOW + timedelta(minutes=24 * 60 - 15)
+    assert sig.day_line(days[0][1], days, 0) is None
+    assert sig.day_line(row(9, 0), days, 15) is None
+
+
+def test_the_early_line_is_gone_once_another_run_of_the_day_is_live_or_done():
+    for state in (mt.LIVE, mt.DONE):
+        days = [[row(1, 0, 45, state=state), row(2, 45, 30)]]
+        assert sig.day_line(days[0][1], days, 15) is None
+        assert sig.day_line(days[0][0], days, 15) == NOW - timedelta(minutes=15)
+
+
+def early_opener(started, **extra):
+    opener = row(1, 0, 45, state=mt.LIVE) | {"actual_started_at": iso(started)}
+    return opener | {"live_because": mt.BY_BOTH} | extra
+
+
+def test_an_opener_the_stream_started_before_the_line_is_put_back_then_moved_to_the_line():
+    line = NOW - timedelta(minutes=15)
+    days = [[early_opener(-79), row(2, 45, 30)]]
+    opener = days[0][0]
+    assert sig.early_repair(opener, days, NOW - timedelta(minutes=16), 15) == ("put_back", line)
+    assert sig.early_repair(opener, days, line, 15) == ("moved_to_line", line)
+    assert sig.early_repair(opener, days, NOW + timedelta(minutes=30), 15) == (
+        "moved_to_line",
+        line,
+    )
+    assert sig.early_repair(opener, days, NOW, 0) is None
+
+
+def test_an_opener_at_the_line_by_staff_or_with_the_day_under_way_needs_no_repair():
+    days = [[early_opener(-15), row(2, 45, 30)]]
+    assert sig.early_repair(days[0][0], days, NOW, 15) is None
+    days = [[early_opener(-79, live_because=mt.BY_STAFF), row(2, 45, 30)]]
+    assert sig.early_repair(days[0][0], days, NOW, 15) is None
+    days = [[early_opener(-79), row(2, 45, 30, state=mt.LIVE)]]
+    assert sig.early_repair(days[0][0], days, NOW, 15) is None
+    days = [[row(1, 0, 45), row(2, 45, 30)]]
+    assert sig.early_repair(days[0][0], days, NOW, 15) is None
+
+
+def test_an_early_opener_a_replay_ended_comes_back_until_the_days_planned_end():
+    line = NOW - timedelta(minutes=15)
+    days = [[early_opener(-79, state=mt.DONE), row(2, 45, 30)]]
+    opener = days[0][0]
+    for minutes in (-70, 0, 74):
+        assert sig.early_repair(opener, days, NOW + timedelta(minutes=minutes), 15) == (
+            "put_back",
+            line,
+        )
+    assert sig.early_repair(opener, days, NOW + timedelta(minutes=75), 15) is None
+    ended = [[opener | {"actual_ended_at": iso(-60)}, row(2, 45, 30)]]
+    assert sig.early_repair(ended[0][0], ended, NOW, 15) is None
+    on_time = [[early_opener(-5, state=mt.DONE), row(2, 45, 30)]]
+    assert sig.early_repair(on_time[0][0], on_time, NOW, 15) is None

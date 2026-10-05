@@ -526,7 +526,6 @@ async def live_title(bot, channel, title, game=""):
 async def test_the_title_naming_our_game_flips_it_live_and_shouts_without_a_ping(bot, cog):
     channel = await gdq_row(bot)
     marathon = await added(bot, cog, channel=channel)
-    cog.clock = lambda: NOW + timedelta(minutes=20)
     await live_title(bot, channel, "AGDQ 2027 - Super Metroid Any% by Sky !schedule")
     await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
     rows = await runs_by_game(bot, marathon)
@@ -563,7 +562,6 @@ async def test_a_race_with_two_of_baf_on_it_shouts_once_naming_both(bot, cog):
 async def test_a_restart_after_the_shout_posts_nothing_again(bot, cog):
     channel = await gdq_row(bot)
     marathon = await added(bot, cog, channel=channel)
-    cog.clock = lambda: NOW + timedelta(minutes=20)
     await live_title(bot, channel, "Super Metroid")
     await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
     before = len(posts(bot))
