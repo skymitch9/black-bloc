@@ -4265,10 +4265,10 @@ VOICE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the member picker's placeholder on that card. Discord shows at most 150 characters",
     ),
     VOICE_TONE_PLACEHOLDER_KEY: (
-        "The tone for {member}…",
+        "Pin… (fix {member}'s tone)",
         ("member",),
-        "the tone picker's placeholder once a member is picked. It takes {member}; Discord "
-        "shows at most 150 characters",
+        "the placeholder of the picker that pins a member's tone, once a member is picked. It "
+        "takes {member}; Discord shows at most 150 characters",
     ),
     VOICE_CLEAR_BUTTON_KEY: (
         "Clear the pin",

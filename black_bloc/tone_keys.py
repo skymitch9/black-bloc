@@ -105,7 +105,6 @@ ROLE_ONLY_BUTTON_KEY = "chat_voice_role_only_button"
 ROLE_EVERYONE_BUTTON_KEY = "chat_voice_role_everyone_button"
 REROLL_BUTTON_KEY = "chat_voice_reroll_button"
 START_PLACEHOLDER_KEY = "chat_voice_start_placeholder"
-PIN_PLACEHOLDER_KEY = "chat_voice_pin_placeholder"
 LINE_STORED_KEY = "chat_voice_line_stored"
 STATE_ROLLED_KEY = "chat_voice_state_rolled"
 STATE_SET_KEY = "chat_voice_state_set"
@@ -197,12 +196,6 @@ TONE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("member",),
         "the placeholder of the picker that gives a member a starting tone. It takes "
         "{member}; Discord shows at most 150 characters",
-    ),
-    PIN_PLACEHOLDER_KEY: (
-        "Pin… (fix {member}'s tone)",
-        ("member",),
-        "the placeholder of the picker that pins a member's tone. It takes {member}; Discord "
-        "shows at most 150 characters",
     ),
     LINE_STORED_KEY: (
         "{member} — **{tone}** · {state} · {settled}",

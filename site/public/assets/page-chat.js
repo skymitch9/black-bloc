@@ -2,7 +2,9 @@ import { api, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
 import {
+  ago,
   ask,
+  askForm,
   badge,
   bar,
   boldParts,
@@ -16,6 +18,7 @@ import {
   memberPicker,
   notice,
   pager,
+  roleSelect,
   run,
   sayAgain,
   sayNothing,
@@ -96,6 +99,29 @@ const VOICE_WORD_KEYS = [
   'chat_voice_next_button',
   'chat_voice_page',
   'chat_voice_member_title',
+  'chat_voice_rerolled',
+  'chat_voice_tone_set',
+  'chat_voice_is_pinned',
+  'chat_voice_no_tones',
+  'chat_voice_no_role',
+  'chat_voice_role_rolled',
+  'chat_voice_role_line',
+  'chat_voice_role_pinned_line',
+  'chat_voice_role_placeholder',
+  'chat_voice_role_title',
+  'chat_voice_role_only_button',
+  'chat_voice_role_everyone_button',
+  'chat_voice_reroll_button',
+  'chat_voice_start_placeholder',
+  'chat_voice_line_stored',
+  'chat_voice_state_rolled',
+  'chat_voice_state_set',
+  'chat_voice_state_drifted',
+  'chat_voice_state_feedback',
+  'chat_voice_state_pinned',
+  'chat_voice_settled_new',
+  'chat_voice_settled_settling',
+  'chat_voice_settled_settled',
   'chat_tone_edited',
   'chat_tone_reset',
   'chat_tone_too_long',
@@ -106,7 +132,23 @@ const VOICES_OFF = 'The voice is the cookout one, so nobody hears a tone right n
   'included. Pick the pool or a mood under Personality and the pins come back into play.';
 const VOICES_WAITING = 'pinned tone is switched off';
 const VOICES_TALKING = 'talking now';
-const VOICES_PICK_FIRST = 'Pick a member first, then a tone.';
+const VOICES_PICK_FIRST = 'Pick a member first.';
+const VOICES_ADD = 'A member who is not listed yet';
+const VOICES_SET = 'Set tone';
+const VOICES_PIN = 'Pin';
+const VOICES_ROLE = 'Roll for a role…';
+const VOICES_ROLE_FIRST = 'Pick a role first.';
+const VOICES_ROLE_PINNED = 'pinned — left alone';
+const VOICE_SETTLE_TITLE = 'How a tone settles and moves';
+const VOICE_SETTLE_KEYS = [
+  'chat_tone_drift_start_percent',
+  'chat_tone_drift_halves_every',
+  'chat_tone_drift_floor_percent',
+  'chat_tone_feedback_mode',
+  'chat_tone_feedback_cues',
+  'chat_tone_gentle_order',
+  'chat_tone_careful_order',
+];
 const VOICE_WORDS_TITLE = 'The words /chat says about who hears what';
 const NO_TONES = 'Every tone is switched off, so there is nothing to pin. Turn one back on under ' +
   'Personality.';
@@ -959,59 +1001,158 @@ function toneSelect(tropes, current) {
   return select;
 }
 
-async function pinTo(say, id, trope) {
-  const done = await run(
-    say,
-    () => send(`/api/chat/voices/${encodeURIComponent(id)}`, 'PUT', { trope }),
-    (found) => found?.message || 'Pinned.',
-  );
+const voicePath = (id, tail = '') => `/api/chat/voices/${encodeURIComponent(id)}${tail}`;
+
+async function voiceMove(say, work, fallback) {
+  const done = await run(say, work, (found) => found?.message || fallback);
   if (done.ok) {
     keepSaying('chat-voices', say);
     refresh();
   }
+  return done;
 }
+
+const rerollFor = (say, id) => voiceMove(say, () => send(voicePath(id, '/reroll'), 'POST', {}), 'Rolled.');
+
+/** One dialog for the two moves that need a tone: a starting tone, or a pin. */
+async function pickTone(say, id, name, tropes, current, { title, confirmLabel, path, fallback }) {
+  const select = toneSelect(tropes, current);
+  let said = null;
+  const sent = await askForm({
+    title: `${title} — ${name}`,
+    body: [field('Tone', select)],
+    confirmLabel,
+    tone: null,
+    onConfirm: async () => {
+      const found = await send(voicePath(id, path), 'PUT', { trope: select.value });
+      said = found?.message || fallback;
+      return null;
+    },
+  });
+  if (!sent) return;
+  say.say(said, 'ok');
+  keepSaying('chat-voices', say);
+  refresh();
+}
+
+const setToneFor = (say, id, name, tropes, current) => pickTone(say, id, name, tropes, current, {
+  title: VOICES_SET, confirmLabel: 'Set tone', path: '/tone', fallback: 'Set.',
+});
+const pinFor = (say, id, name, tropes, current) => pickTone(say, id, name, tropes, current, {
+  title: VOICES_PIN, confirmLabel: 'Pin', path: '', fallback: 'Pinned.',
+});
 
 function voiceHow(row) {
-  if (row.pinned) {
-    const by = row.pinned_by ? row.pinned_by.name : 'staff';
-    return `pinned to ${row.pinned_label || row.pinned} by ${by}${row.pinned_at ? `, ${when(row.pinned_at)}` : ''}`;
+  if (row.waiting || !row.state_word) return el('span', { text: '—' });
+  const parts = [el('span', { text: row.state_word })];
+  if (row.state === 'pinned' && row.pinned_by) parts.push(el('span', { class: 'muted', text: ` · ${row.pinned_by.name}` }));
+  if (row.state === 'set' && row.set_by) parts.push(el('span', { class: 'muted', text: ` · ${row.set_by.name}` }));
+  const stamp = row.state === 'pinned' ? row.pinned_at : row.moved_at;
+  if (stamp) {
+    const gone = ago(stamp);
+    parts.push(el('span', { class: 'muted', title: gone.title, text: ` · ${gone.text}` }));
   }
-  return `rolled${row.since ? ` ${when(row.since)}` : ''}`;
+  return el('span', {}, parts);
 }
 
-function voiceChange(row, tropes, say) {
+function voiceSettled(row) {
+  if (!row.settled_word || row.state === 'pinned') return el('span', { text: '—' });
+  const share = Math.max(0, Math.min(1, Number(row.settled_share) || 0));
+  return el('span', { class: 'tone-settled' }, [
+    el('span', { class: 'tone-meter', role: 'img', 'aria-label': row.settled_word }, [
+      el('span', { class: 'tone-meter-fill', style: `width: ${(share * 100).toFixed(0)}%` }),
+    ]),
+    el('span', { text: row.settled_word }),
+  ]);
+}
+
+function voiceMoves(row, tropes, say) {
+  if (row.pinned) {
+    return el('div', { class: 'chatline' }, [
+      button('Unpin', () => voiceMove(say, () => api(voicePath(row.user_id), { method: 'DELETE' }), 'Unpinned.'), { tone: 'quiet' }),
+    ]);
+  }
   if (tropes.length === 0) return null;
-  const select = toneSelect(tropes, row.pinned || row.trope);
-  const pinIt = button('Pin', () => pinTo(say, row.user_id, select.value), { tone: 'quiet' });
-  const clear = row.pinned ? button('Clear', async () => {
-    const done = await run(
-      say,
-      () => api(`/api/chat/voices/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
-      (found) => found?.message || 'Cleared.',
-    );
-    if (done.ok) {
-      keepSaying('chat-voices', say);
-      refresh();
-    }
-  }, { tone: 'quiet' }) : null;
-  return el('div', { class: 'chatline' }, [select, pinIt, clear]);
+  const current = row.tone || row.trope;
+  return el('div', { class: 'chatline' }, [
+    button('Reroll', () => rerollFor(say, row.user_id), { tone: 'quiet' }),
+    button('Set tone…', () => setToneFor(say, row.user_id, row.name, tropes, current), { tone: 'quiet' }),
+    button('Pin…', () => pinFor(say, row.user_id, row.name, tropes, current), { tone: 'quiet' }),
+  ]);
 }
 
-function pinNew(tropes, say) {
-  const picker = memberPicker({ label: 'Pin somebody who is not listed yet' });
+function voiceNew(tropes, say) {
   if (tropes.length === 0) return card(null, [sayNothing(NO_TONES)]);
-  const select = toneSelect(tropes, tropes[0].name);
-  const pinIt = button('Pin', () => {
+  const picker = memberPicker({ label: VOICES_ADD });
+  const picked = (then) => () => {
     if (!picker.id) {
       say.say(VOICES_PICK_FIRST, 'warn');
       return;
     }
-    pinTo(say, picker.id, select.value);
-  }, { tone: 'quiet' });
-  return card(null, [picker.node, el('div', { class: 'chatline' }, [select, pinIt])]);
+    then(picker.id, picker.name || 'this member');
+  };
+  return card(null, [
+    picker.node,
+    el('div', { class: 'chatline' }, [
+      button('Reroll', picked((id) => rerollFor(say, id)), { tone: 'quiet' }),
+      button('Set tone…', picked((id, name) => setToneFor(say, id, name, tropes, tropes[0].name)), { tone: 'quiet' }),
+      button('Pin…', picked((id, name) => pinFor(say, id, name, tropes, tropes[0].name)), { tone: 'quiet' }),
+    ]),
+  ]);
 }
 
-async function voicesSection(payload, wordSpecs, say) {
+let lastRoll = null;
+
+async function rollForRole(say) {
+  const role = await roleSelect(null, { id: 'voices-role' });
+  const who = segment([
+    { value: 'only', label: 'Only members with no tone' },
+    { value: 'everyone', label: 'Everyone in it' },
+  ], 'only');
+  let found = null;
+  const sent = await askForm({
+    title: VOICES_ROLE,
+    body: [field('Role', role), who],
+    confirmLabel: 'Roll',
+    tone: null,
+    onConfirm: async () => {
+      if (!role.value) return VOICES_ROLE_FIRST;
+      found = await send('/api/chat/voices/roll', 'POST', {
+        role_id: role.value,
+        everyone: who.readValue() === 'everyone',
+      });
+      return null;
+    },
+  });
+  if (!sent || !found) return;
+  lastRoll = found;
+  say.say(found.message || 'Rolled.', 'ok');
+  keepSaying('chat-voices', say);
+  refresh();
+}
+
+function rollResult() {
+  if (!lastRoll) return null;
+  const rolled = Array.isArray(lastRoll.rolled) ? lastRoll.rolled : [];
+  const pinned = Array.isArray(lastRoll.pinned) ? lastRoll.pinned : [];
+  const line = (one, mark) => el('div', { class: 'chatline' }, [
+    el('span', { text: one.name }),
+    el('span', { class: 'chat-fixed', text: one.label || one.trope }),
+    mark ? badge(mark, 'warn') : null,
+  ]);
+  return card(`@${lastRoll.role}`, [
+    ...rolled.map((one) => line(one, null)),
+    ...pinned.map((one) => line(one, VOICES_ROLE_PINNED)),
+  ], {
+    count: rolled.length,
+    actions: button('Clear', () => {
+      lastRoll = null;
+      refresh();
+    }, { tone: 'quiet' }),
+  });
+}
+
+async function voicesSection(payload, wordSpecs, say, settleSpecs = []) {
   const rows = Array.isArray(payload?.voices) ? payload.voices : [];
   const tropes = Array.isArray(payload?.tropes) ? payload.tropes : [];
   const one = section('Who hears what', null, { count: rows.length || null });
@@ -1021,10 +1162,13 @@ async function voicesSection(payload, wordSpecs, say) {
       badge(`the setting is ${payload?.setting || MODE_COOKOUT}`, payload?.setting_kind === MODE_COOKOUT ? null : 'ok'),
       badge(`${counts.pinned ?? 0} pinned`, null),
       badge(`${counts.active ?? 0} talking now`, counts.active ? 'ok' : null),
+      tropes.length ? button(VOICES_ROLE, () => rollForRole(say), { tone: 'quiet' }) : null,
     ]),
     payload?.setting_kind === MODE_COOKOUT ? el('p', { class: 'section-note', text: VOICES_OFF }) : null,
     say,
   ]));
+  const result = rollResult();
+  if (result) one.body.append(result);
   one.body.append(table([
     {
       label: 'Member',
@@ -1041,11 +1185,14 @@ async function voicesSection(payload, wordSpecs, say) {
       ]),
     },
     { label: 'How', cell: (row) => voiceHow(row) },
-    { label: 'Turns', cell: (row) => String(row.turns ?? 0) },
-    { label: 'Change', cell: (row) => voiceChange(row, tropes, say) },
+    { label: 'Settled', cell: (row) => voiceSettled(row) },
+    { label: 'Moves', cell: (row) => voiceMoves(row, tropes, say) },
   ], rows, { empty: VOICES_EMPTY, searchLabel: 'Search the members' }));
   one.body.append(
-    pinNew(tropes, say),
+    voiceNew(tropes, say),
+    foldout(VOICE_SETTLE_TITLE, [
+      await settingsPanel(settleSpecs, { where: 'Who hears what', empty: NO_SETTINGS }),
+    ], { count: settleSpecs.length || null }),
     foldout(VOICE_WORDS_TITLE, [
       await settingsPanel(wordSpecs, { where: 'Who hears what', empty: NO_SETTINGS }),
     ], { count: wordSpecs.length || null }),
@@ -1421,6 +1568,7 @@ async function load() {
   const memorySpecs = MEMORY_SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
   const toneSpecs = TONE_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
   const voiceWordSpecs = VOICE_WORD_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
+  const voiceSettleSpecs = VOICE_SETTLE_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
   const reviewSpecs = REVIEW_SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
   const reviewWordSpecs = [...fromRoute.values()]
     .filter((spec) => spec.key.startsWith(REVIEW_WORD_PREFIX) && !REVIEW_SETTING_KEYS.includes(spec.key));
@@ -1441,7 +1589,7 @@ async function load() {
     await reviewSection(review, reviewSpecs, reviewWordSpecs, reviewSay),
     channelsSection(),
     await personalitySection(personality, personalitySay, toneSpecs),
-    await voicesSection(voices, voiceWordSpecs, voicesSay),
+    await voicesSection(voices, voiceWordSpecs, voicesSay, voiceSettleSpecs),
     await memorySection(memory, memorySpecs, memorySay),
     spendSection(spend),
     await settingsSection(specs),

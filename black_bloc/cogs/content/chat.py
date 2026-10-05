@@ -9,7 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ... import channel_drafts, chat_panel, chat_review
+from ... import channel_drafts, chat_panel, chat_review, chat_tones, tone_keys
 from ...actionlog import log_action, send_logs, stamp
 from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
@@ -139,7 +139,9 @@ STAFF_NOTE = "{who} asked for a mod in {where}. {link}"
 ADMIN_ONLY_KEY = "chat_status_admin_only"
 CHAT_KEYS = tuple(key for key in KEY_TYPES if key.startswith("chat_"))
 MEMORY_PREFIX = "chat_memory_"
-WORDING_KEYS = frozenset({*CHANNEL_NOTE_WORDS, *PROMPT_WORDS, *VOICE_WORDS, *REVIEW_WORDS})
+WORDING_KEYS = frozenset(
+    {*CHANNEL_NOTE_WORDS, *PROMPT_WORDS, *VOICE_WORDS, *REVIEW_WORDS, *tone_keys.TONE_WORDS}
+)
 SETTINGS_FOOTER = (
     "`/settings` ▸ **A setting group…** ▸ chat changes any of these, and the Chat page on "
     "the dashboard edits the words themselves."
@@ -192,6 +194,7 @@ SETTINGS_VIEW = "settings"
 CHANNELS_VIEW = "channels"
 VOICES_VIEW = "voices"
 MEMBER_VIEW = "member"
+ROLE_VIEW = "role"
 REVIEW_VIEW = "review"
 REVIEW_ITEM_VIEW = "review_item"
 REVIEW_TICK_MINUTES = 10
@@ -327,6 +330,7 @@ class ChatPanel(Panel):
         self.query = ""
         self.page = 1
         self.member_id: int | None = None
+        self.role_id: int | None = None
         self.review_id: int | None = None
 
 
@@ -450,6 +454,9 @@ async def build_voices(bot: Any, guild: Any, page: Any = 1) -> tuple[discord.Emb
     view.where = VOICES_VIEW
     view.page = at
     view.add_item(VoiceMemberPick(say(bot, guild, VOICE_SET_KEY)[:PLACEHOLDER_CHARS]))
+    if found["enabled"]:
+        role_words = say(bot, guild, tone_keys.ROLE_PLACEHOLDER_KEY)[:PLACEHOLDER_CHARS]
+        view.add_item(VoiceRolePick(role_words))
     labels = (
         say(bot, guild, VOICE_PREVIOUS_KEY)[:BUTTON_CHARS],
         say(bot, guild, VOICE_NEXT_KEY)[:BUTTON_CHARS],
@@ -463,7 +470,7 @@ async def build_voices(bot: Any, guild: Any, page: Any = 1) -> tuple[discord.Emb
 async def build_member(
     bot: Any, guild: Any, member_id: Any, page: int = 1
 ) -> tuple[discord.Embed | None, ChatPanel | None]:
-    """One member's tone: the tones that are on to pin, and Clear when there is a pin."""
+    """One member's tone: a start and Reroll while no pin holds it, a pin, and Clear on one."""
     member = chat_panel.member_of(guild, member_id)
     if member is None:
         return (None, None)
@@ -487,13 +494,43 @@ async def build_member(
     view.page = page
     view.member_id = int(member.id)
     tones = [(one, found["labels"][one]) for one in found["enabled"]]
-    if tones:
-        placeholder = say(bot, guild, VOICE_TONE_PLACEHOLDER_KEY, member=name)
-        view.add_item(TonePick(tones, placeholder[:PLACEHOLDER_CHARS]))
     row = await voice_row(bot.db, guild.id, member.id)
     pinned = row is not None and bool(row["pinned"])
+    if tones and not pinned:
+        start = say(bot, guild, tone_keys.START_PLACEHOLDER_KEY, member=name)
+        view.add_item(TonePick(tones, start[:PLACEHOLDER_CHARS], pin=False, row=0))
+    if tones:
+        placeholder = say(bot, guild, VOICE_TONE_PLACEHOLDER_KEY, member=name)
+        view.add_item(TonePick(tones, placeholder[:PLACEHOLDER_CHARS], pin=True, row=1))
     clear = say(bot, guild, VOICE_CLEAR_BUTTON_KEY)[:BUTTON_CHARS]
-    for move in chat_panel.member_buttons(pinned, clear):
+    reroll = say(bot, guild, tone_keys.REROLL_BUTTON_KEY)[:BUTTON_CHARS]
+    for move in chat_panel.member_buttons(pinned, clear, reroll, tones=bool(tones)):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def build_role(
+    bot: Any, guild: Any, role_id: Any, page: int = 1, result: Any = None
+) -> tuple[discord.Embed | None, ChatPanel | None]:
+    """A role's card: two ways to roll, and who got what once one was pressed."""
+    role = chat_tones.role_of(guild, role_id)
+    if role is None:
+        return (None, None)
+    lines = chat_tones.role_lines(bot.store, guild.id, result) if result else []
+    title = say(bot, guild, tone_keys.ROLE_TITLE_KEY, role=str(role.name))
+    embed = discord.Embed(title=title[:EMBED_TITLE_CHARS], description=clamped(lines) or None)
+    wanted = int(role.id)
+    view = ChatPanel(
+        minutes_for(bot, guild.id), again=lambda one, prev: open_role(one, wanted, prev)
+    )
+    view.where = ROLE_VIEW
+    view.page = page
+    view.role_id = wanted
+    labels = (
+        say(bot, guild, tone_keys.ROLE_ONLY_BUTTON_KEY)[:BUTTON_CHARS],
+        say(bot, guild, tone_keys.ROLE_EVERYONE_BUTTON_KEY)[:BUTTON_CHARS],
+    )
+    for move in chat_panel.role_buttons(labels):
         view.add_item(MoveButton(move))
     return (embed, view)
 
@@ -826,6 +863,28 @@ async def render_member(
     await render(interaction, embed, view, previous)
 
 
+async def render_role(
+    interaction: discord.Interaction, role_id: Any, previous: Any = None, result: Any = None
+) -> None:
+    """A role that is gone goes back to the list with the reason, in the words staff chose."""
+    page = int(getattr(previous, "page", 1) or 1)
+    bot, guild = interaction.client, interaction.guild
+    embed, view = await build_role(bot, guild, role_id, page, result)
+    if view is None:
+        await render_voices(interaction, page, previous)
+        await answer(interaction, say(bot, guild, tone_keys.NO_ROLE_KEY))
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def open_role(
+    interaction: discord.Interaction, role_id: Any, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    await render_role(interaction, role_id, previous)
+
+
 async def open_voices(
     interaction: discord.Interaction, page: Any = 1, previous: Any = None
 ) -> None:
@@ -937,6 +996,9 @@ async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
     if view.where == MEMBER_VIEW:
         await open_member(interaction, view.member_id, view)
         return
+    if view.where == ROLE_VIEW:
+        await open_role(interaction, view.role_id, view)
+        return
     if view.where == REVIEW_VIEW:
         await open_review(interaction, view.page, view)
         return
@@ -950,7 +1012,7 @@ async def back_from(interaction: discord.Interaction, view: Any) -> None:
     if view.where == NOTE_VIEW:
         await open_knowledge(interaction, view.query, view)
         return
-    if view.where == MEMBER_VIEW:
+    if view.where in (MEMBER_VIEW, ROLE_VIEW):
         await open_voices(interaction, view.page, view)
         return
     if view.where == VOICES_VIEW:
@@ -996,6 +1058,40 @@ async def run_pin(
         interaction.client, interaction.guild, interaction.user, member_id, tone
     )
     await render_member(interaction, member_id, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_start(
+    interaction: discord.Interaction, member_id: Any, tone: str, previous: Any
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await chat_tones.start_voice(
+        interaction.client, interaction.guild, interaction.user, member_id, tone
+    )
+    await render_member(interaction, member_id, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_reroll(interaction: discord.Interaction, member_id: Any, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await chat_tones.reroll_voice(
+        interaction.client, interaction.guild, interaction.user, member_id
+    )
+    await render_member(interaction, member_id, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_role_roll(
+    interaction: discord.Interaction, role_id: Any, everyone: bool, previous: Any
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await chat_tones.roll_role(
+        interaction.client, interaction.guild, interaction.user, role_id, everyone=everyone
+    )
+    await render_role(interaction, role_id, previous, outcome.value if outcome.ok else None)
     await answer(interaction, outcome.message)
 
 
@@ -1141,6 +1237,13 @@ class MoveButton(discord.ui.Button):
         if action == chat_panel.CLEAR_PIN:
             await run_clear_pin(interaction, view.member_id, view)
             return
+        if action == chat_panel.REROLL:
+            await run_reroll(interaction, view.member_id, view)
+            return
+        if action in (chat_panel.ROLE_ONLY, chat_panel.ROLE_EVERYONE):
+            everyone = action == chat_panel.ROLE_EVERYONE
+            await run_role_roll(interaction, view.role_id, everyone, view)
+            return
         if action == chat_panel.CHAT_TOGGLE:
             await run_mode(interaction, chat_panel.MODE_KEY, view)
             return
@@ -1274,9 +1377,20 @@ class VoiceMemberPick(discord.ui.UserSelect):
         await open_member(interaction, self.values[0].id, self.view)
 
 
+class VoiceRolePick(discord.ui.RoleSelect):
+    def __init__(self, placeholder: str) -> None:
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_role(interaction, self.values[0].id, self.view)
+
+
 class TonePick(discord.ui.Select):
-    def __init__(self, tones: Any, placeholder: str) -> None:
+    """One list of the tones that are on, as a pin or as a starting tone."""
+
+    def __init__(self, tones: Any, placeholder: str, *, pin: bool = True, row: int = 0) -> None:
         found = list(tones)[:SELECT_CAP]
+        self.pin = pin
         super().__init__(
             placeholder=placeholder,
             options=[
@@ -1285,11 +1399,12 @@ class TonePick(discord.ui.Select):
             ],
             min_values=1,
             max_values=1,
-            row=0,
+            row=row,
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await run_pin(interaction, self.view.member_id, self.values[0], self.view)
+        move = run_pin if self.pin else run_start
+        await move(interaction, self.view.member_id, self.values[0], self.view)
 
 
 class NotePick(discord.ui.Select):
