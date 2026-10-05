@@ -31,9 +31,9 @@ from .chat_voice import (
     MEAN,
     WINDOW_MINUTES,
     WRONG,
+    claim_feedback,
     col,
     fed_already,
-    hold_feedback,
     move_for_feedback,
     order_of,
     step_toward,
@@ -253,6 +253,8 @@ async def moved(
     bot: Any, guild_id: int, user_id: int, row: Any, found: Verdict, message: Any, at: datetime
 ) -> str | None:
     """One step toward gentle or careful; a pin, or nowhere to step, holds and says why."""
+    if not await claim_feedback(bot.db, guild_id, user_id):
+        return None
     guild = guild_of(bot, guild_id)
     tone = str(col(row, "tone", ""))
     cue = found.cue if await keeps_text(bot, guild_id, user_id) else ""
@@ -273,7 +275,6 @@ async def moved(
         if wanted is None:
             held = HELD_NO_STEP
     if held is not None:
-        await hold_feedback(bot.db, guild_id, user_id)
         log.info("chat feedback: %s keeps %s (%s)", user_id, col(row, "pinned") or tone, held)
         if guild is not None:
             await log_action(

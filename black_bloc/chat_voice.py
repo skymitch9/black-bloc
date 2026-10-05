@@ -82,6 +82,7 @@ class Heard:
     moved: tuple[str, str] | None = None
     chance: float = 0.0
     stored: bool = False
+    was: str | None = None
 
     @property
     def name(self) -> str:
@@ -232,7 +233,8 @@ def stored_tone(
     if not pool:
         return Heard(None, COOKOUT, turns, since)
     live = {one.name: one for one in pool}
-    tone = live.get(str(col(row, "tone", "")))
+    was = col(row, "tone")
+    tone = live.get(str(was or ""))
     if tone is None:
         rolled = pool[random.Random(key).randrange(len(pool))]
         return Heard(
@@ -244,6 +246,7 @@ def stored_tone(
             heard=1,
             chance=drift_chance(0, settle),
             stored=True,
+            was=was,
         )
     how = str(col(row, "how", ROLLED))
     settled = int(col(row, "settled", 0)) + (1 if fresh and lapsed(row, now) else 0)
@@ -268,6 +271,7 @@ def stored_tone(
         moved=moved,
         chance=chance,
         stored=True,
+        was=was,
     )
 
 
@@ -280,11 +284,12 @@ KEEP_STORED = (
     "INSERT INTO chat_voice(guild_id, user_id, trope, turns, since, tone, how, settled, heard) "
     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET "
     "trope = excluded.trope, turns = excluded.turns, since = excluded.since, "
-    "tone = excluded.tone, how = excluded.how, settled = excluded.settled, heard = excluded.heard"
+    "tone = excluded.tone, how = excluded.how, settled = excluded.settled, heard = excluded.heard "
+    "WHERE chat_voice.tone IS ?"
 )
 KEEP_MOVED = (
     "UPDATE chat_voice SET moved_at = ?, moved_from = ?, moved_why = NULL, set_by = NULL "
-    "WHERE guild_id = ? AND user_id = ?"
+    "WHERE guild_id = ? AND user_id = ? AND tone = ?"
 )
 
 
@@ -297,10 +302,10 @@ async def remember_heard(
         await db.conn.commit()
         return
     kept = (heard.name, heard.turns, heard.since, heard.name, heard.how, heard.settled, heard.heard)
-    await db.conn.execute(KEEP_STORED, (*where, *kept))
+    await db.conn.execute(KEEP_STORED, (*where, *kept, heard.was))
     if heard.moved is not None:
         at = (now or datetime.now(UTC)).isoformat()
-        await db.conn.execute(KEEP_MOVED, (at, heard.moved[0], *where))
+        await db.conn.execute(KEEP_MOVED, (at, heard.moved[0], *where, heard.name))
     await db.conn.commit()
 
 
@@ -369,7 +374,10 @@ FEED_TONE = (
     "moved_why = ?, set_by = NULL, settled = 0, heard = 0, fed_since = since "
     "WHERE guild_id = ? AND user_id = ?"
 )
-HELD_FEEDBACK = "UPDATE chat_voice SET fed_since = since WHERE guild_id = ? AND user_id = ?"
+CLAIM_FEEDBACK = (
+    "UPDATE chat_voice SET fed_since = since WHERE guild_id = ? AND user_id = ? "
+    "AND since IS NOT NULL AND (fed_since IS NULL OR fed_since != since)"
+)
 
 
 async def set_tone(
@@ -413,9 +421,11 @@ async def move_for_feedback(
     await db.conn.commit()
 
 
-async def hold_feedback(db: Any, guild_id: Any, user_id: Any) -> None:
-    await db.conn.execute(HELD_FEEDBACK, (int(guild_id), int(user_id)))
+async def claim_feedback(db: Any, guild_id: Any, user_id: Any) -> bool:
+    """This conversation's one verdict, taken in one statement so two at once cannot both win."""
+    cur = await db.conn.execute(CLAIM_FEEDBACK, (int(guild_id), int(user_id)))
     await db.conn.commit()
+    return bool(cur.rowcount)
 
 
 def order_of(value: Any) -> tuple[str, ...]:

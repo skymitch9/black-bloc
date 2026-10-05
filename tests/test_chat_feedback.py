@@ -313,6 +313,24 @@ async def test_only_one_move_per_member_per_conversation(bot, db):
     assert len(await rows_of(db)) == 1
 
 
+async def test_two_complaints_judged_at_once_still_move_the_tone_once(bot, db):
+    """Both pass the checks before either verdict is back; the second finds the first's stamp."""
+    import asyncio
+
+    with_client(bot, FakeGroq(verdict("mean", True, "rude")))
+    await answered(bot, "tsundere")
+    at = NOW + timedelta(minutes=1)
+
+    found = await asyncio.gather(
+        feedback.heard(bot, message("that was rude"), now=at),
+        feedback.heard(bot, message("so rude", message_id=3), now=at),
+    )
+
+    assert sorted(found, key=str) == [None, "mischievous"]
+    assert (await voice_row(db, GUILD, MEMBER))["tone"] == "mischievous"
+    assert len(await rows_of(db)) == 1
+
+
 async def test_the_next_conversation_may_move_it_again(bot, db):
     with_client(bot, FakeGroq(verdict("mean", True, "rude")))
     await answered(bot, "tsundere")

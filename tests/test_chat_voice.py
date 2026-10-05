@@ -19,15 +19,16 @@ from black_bloc.chat_voice import (
     Heard,
     Settle,
     another,
+    claim_feedback,
     drift_chance,
     fed_already,
     heard_for,
     heard_from,
     hears_now,
-    hold_feedback,
     move_for_feedback,
     order_of,
     pin,
+    remember_heard,
     roster,
     set_tone,
     settle_of,
@@ -428,6 +429,22 @@ async def test_a_step_is_written_down_with_where_it_came_from(db):
     assert (kept["settled"], kept["heard"], kept["set_by"]) == (0, 0, None)
 
 
+async def test_a_tone_staff_set_while_an_answer_was_being_written_is_not_written_over(db):
+    """The answer read `warm`; staff set `noir` before it was kept — the answer's copy loses."""
+    pool = rows(*TROPE_NAMES)
+    await set_tone(db, GUILD, 900, "warm", by=7, now=NOW)
+    read = await voice_row(db, GUILD, 900)
+    stale = heard_from(POOL, pool, read, guild_id=GUILD, user_id=900, turns=0, now=NOW,
+                       settle=ALWAYS)
+    await set_tone(db, GUILD, 900, "noir", by=8, now=NOW)
+
+    await remember_heard(db, GUILD, 900, stale, now=NOW)
+
+    kept = await voice_row(db, GUILD, 900)
+    assert (stale.name, stale.was) == ("warm", "warm")
+    assert (kept["tone"], kept["how"], kept["set_by"], kept["heard"]) == ("noir", SET, 8, 0)
+
+
 async def test_a_stored_tone_that_was_switched_off_is_rolled_again_from_what_is_on(db):
     await set_tone(db, GUILD, 900, "noir", by=7, now=NOW)
     found = await heard_for(db, POOL, rows("warm", "cozy"), guild_id=GUILD, user_id=900, now=NOW)
@@ -479,10 +496,14 @@ async def test_feedback_moves_the_tone_unsettles_it_and_counts_once_a_conversati
 
 
 async def test_feedback_that_moved_nothing_is_still_the_one_for_this_conversation(db):
+    assert await claim_feedback(db, GUILD, 900) is False
+    await set_tone(db, GUILD, 900, "warm", by=7, now=NOW)
+    assert await claim_feedback(db, GUILD, 900) is False
     await heard_for(db, POOL, rows("warm"), guild_id=GUILD, user_id=900, now=NOW, settle=NEVER)
-    await hold_feedback(db, GUILD, 900)
+    assert await claim_feedback(db, GUILD, 900) is True
+    assert await claim_feedback(db, GUILD, 900) is False
     kept = await voice_row(db, GUILD, 900)
-    assert fed_already(kept) is True and kept["tone"] == "warm" and kept["how"] == ROLLED
+    assert fed_already(kept) is True and kept["tone"] == "warm" and kept["how"] == SET
     assert fed_already(row(since=None, fed_since=None)) is False
     assert fed_already(None) is False
 

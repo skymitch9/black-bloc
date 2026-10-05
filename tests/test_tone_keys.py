@@ -84,9 +84,7 @@ def test_the_shipped_orders_are_the_eleven_tones_gentle_first_and_careful_first(
     assert sorted(gentle) == sorted(careful) == sorted(TROPE_NAMES)
     assert (gentle[0], gentle[-1]) == ("warm", "tsundere")
     assert (careful[0], careful[-1]) == ("scholar", "dramatic")
-    assert tone_keys.KNOWN_TONES == tuple(TROPE_NAMES) or sorted(tone_keys.KNOWN_TONES) == sorted(
-        TROPE_NAMES
-    )
+    assert sorted(tone_keys.KNOWN_TONES) == sorted(TROPE_NAMES)
 
 
 async def test_a_word_refuses_a_slot_it_does_not_have(store):
