@@ -605,7 +605,6 @@ export const LABELS = {
   chat_tone_drift_floor_percent: "Lowest that chance ever gets (percent)",
   chat_tone_feedback_mode: "Move a tone when a member says it was mean or wrong",
   chat_tone_feedback_cues: "Words that might be a complaint",
-  chat_tone_feedback_minutes: "Minutes after an answer a message may be judged",
   chat_tone_gentle_order: "Tones from gentlest to sharpest",
   chat_tone_careful_order: "Tones from most careful to least",
   chat_voice_rerolled: "What staff are told when a tone is rerolled",

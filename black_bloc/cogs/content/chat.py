@@ -1870,6 +1870,7 @@ class Chat(commands.Cog):
             return
         await self.follow_up(message)
         if not mentions_bot(message, me):
+            chat_feedback.schedule(self.bot, message)
             return
         guild = getattr(message, "guild", None)
         guild_id = getattr(guild, "id", None)
@@ -1887,6 +1888,7 @@ class Chat(commands.Cog):
                 getattr(channel, "id", "?"),
             )
             return
+        await chat_feedback.before_reply(self.bot, message)
         now = time.monotonic()
         user_id = getattr(author, "id", 0)
         if self.cooling(user_id, self.cooldown_seconds(guild_id), now):
@@ -1946,7 +1948,6 @@ class Chat(commands.Cog):
             await chat_review.heard(self.bot, message)
         except Exception as exc:
             log.warning("chat: a follow-up was not weighed — %s: %s", type(exc).__name__, exc)
-        chat_feedback.schedule(self.bot, message)
 
     async def remember_answer(self, message: Any, reply: Any, said: Any) -> None:
         try:

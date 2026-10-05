@@ -4343,7 +4343,6 @@ KEY_MIN.update(
         tone_keys.DRIFT_START_KEY: 0,
         tone_keys.DRIFT_HALVES_KEY: 0,
         tone_keys.DRIFT_FLOOR_KEY: 0,
-        tone_keys.FEEDBACK_MINUTES_KEY: 0,
     }
 )
 KEY_MAX.update(
@@ -4351,7 +4350,6 @@ KEY_MAX.update(
         tone_keys.DRIFT_START_KEY: tone_keys.PERCENT_MAX,
         tone_keys.DRIFT_HALVES_KEY: tone_keys.DRIFT_HALVES_MAX,
         tone_keys.DRIFT_FLOOR_KEY: tone_keys.PERCENT_MAX,
-        tone_keys.FEEDBACK_MINUTES_KEY: tone_keys.FEEDBACK_MINUTES_MAX,
     }
 )
 TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, *tone_keys.MAY_BE_BLANK)

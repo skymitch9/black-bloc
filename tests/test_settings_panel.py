@@ -231,8 +231,8 @@ def test_three_groups_are_over_the_cap_and_find_is_what_reaches_the_rest():
 
     every = editable_options("chat")
     assert len(every.keys) == SELECT_LIMIT
-    assert every.total == 159
-    assert "25 of 159" in every.placeholder
+    assert every.total == 158
+    assert "25 of 158" in every.placeholder
 
     filtered = editable_options("chat", "memory")
     assert filtered.total == len(filtered.keys) < SELECT_LIMIT

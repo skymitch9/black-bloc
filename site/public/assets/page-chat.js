@@ -147,7 +147,6 @@ const VOICE_SETTLE_KEYS = [
   'chat_tone_drift_floor_percent',
   'chat_tone_feedback_mode',
   'chat_tone_feedback_cues',
-  'chat_tone_feedback_minutes',
   'chat_tone_gentle_order',
   'chat_tone_careful_order',
 ];

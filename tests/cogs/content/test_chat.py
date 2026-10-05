@@ -2170,6 +2170,76 @@ async def test_a_model_answer_and_the_words_after_it_reach_the_tone_feedback(
     assert weighed == [1, 2]
 
 
+async def test_a_complaint_said_to_the_bot_is_judged_before_its_answer_is_worded(
+    cog, bot, member, db, monkeypatch, no_tagging
+):
+    """Judge, then move, then reply: the answer to "that was rude" is written in the new tone."""
+    from black_bloc import chat_feedback
+
+    order = []
+
+    async def heard(bot, message, **_):
+        order.append(("judge", message.id))
+
+    async def reply(bot, *, guild, member, channel, text, greeting=False):
+        order.append(("reply", text))
+        return ("Fine, fine, cousin.", "simple", "tsundere")
+
+    monkeypatch.setattr(chat_feedback, "heard", heard)
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+
+    await cog.on_message(numbered(bot, member, "<@55> what time does the thing start tonight?"))
+    cog._answered.clear()
+    await cog.on_message(numbered(bot, member, "<@55> that was rude of you", message_id=2))
+
+    assert [one[0] for one in order] == ["reply", "judge", "reply"]
+    assert order[1] == ("judge", 2)
+
+
+async def test_a_message_to_somebody_else_is_never_handed_to_the_feedback_judge(
+    cog, bot, member, db, monkeypatch, no_tagging
+):
+    """No mention and no reply to the bot: it is weighed locally and dropped, with no model."""
+    from datetime import UTC, datetime
+
+    from black_bloc import chat_feedback
+    from black_bloc.chat_voice import set_tone
+
+    judged = []
+
+    async def judge(*args, **kwargs):
+        judged.append(args)
+        return chat_feedback.Verdict()
+
+    async def reply(bot, *, guild, member, channel, text, greeting=False):
+        return ("Fine, fine, cousin.", "simple", "tsundere")
+
+    async def never_closed(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(chat_feedback, "judge", judge)
+    monkeypatch.setattr(chat_feedback, "closed_why", never_closed)
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    await bot.store.set(GUILD, "chat_personality", "pool")
+    await set_tone(db, GUILD, member.id, "tsundere", by=1)
+    started = datetime.now(UTC).isoformat()
+    await db.conn.execute("UPDATE chat_voice SET since = ?", (started,))
+
+    await cog.on_message(numbered(bot, member, "<@55> what time does the thing start tonight?"))
+    await cog.on_message(
+        numbered(bot, member, "nah that's wrong lol", message_id=2, mentions=[])
+    )
+    for task in list(chat_feedback.tracker(bot).tasks):
+        await task
+    assert judged == []
+
+    cog._answered.clear()
+    await cog.on_message(numbered(bot, member, "<@55> that is wrong", message_id=3))
+    assert len(judged) == 1
+
+
 async def test_a_written_line_is_not_kept_for_the_tone_feedback(cog, bot, member, db, no_tagging):
     from black_bloc import chat_feedback
 

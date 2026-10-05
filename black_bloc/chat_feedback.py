@@ -52,6 +52,7 @@ ON = "on"
 TEXT_CHARS = 500
 CUE_CHARS = 80
 JUDGED_PER_ANSWER = 2
+REPLY_WAIT_SECONDS = 3.0
 ANSWERS_KEPT = 500
 MOVED_KIND = "chat.voice_feedback"
 HELD_KIND = "chat.voice_feedback_held"
@@ -174,18 +175,21 @@ def replies_to(message: Any, last: Answered) -> bool:
     return wanted is not None and last.reply_id is not None and int(wanted) == int(last.reply_id)
 
 
-def follows(bot: Any, guild_id: int, message: Any, last: Answered, at: datetime) -> bool:
-    """A reply to the answer, or the member's next words in that channel soon after it."""
+def mentions_bot(bot: Any, message: Any) -> bool:
+    me = getattr(getattr(bot, "user", None), "id", None)
+    if me is None or getattr(message, "mention_everyone", False):
+        return False
+    return any(getattr(one, "id", None) == me for one in getattr(message, "mentions", ()) or ())
+
+
+def addressed(bot: Any, message: Any, last: Answered, at: datetime) -> bool:
+    """Only words said TO the bot: a reply to its answer to this member, or an @-mention."""
     gap = at - last.at
     if gap < timedelta(0) or gap > timedelta(minutes=WINDOW_MINUTES):
         return False
-    if replies_to(message, last):
-        return True
-    if int(getattr(getattr(message, "channel", None), "id", 0) or 0) != last.channel_id:
-        return False
-    key = tone_keys.FEEDBACK_MINUTES_KEY
-    minutes = whole(setting(bot.store, guild_id, key, tone_keys.TONE_SETTINGS[key][1]), 0)
-    return gap <= timedelta(minutes=minutes)
+    if getattr(getattr(message, "reference", None), "message_id", None) is not None:
+        return replies_to(message, last)
+    return mentions_bot(bot, message)
 
 
 async def closed_why(bot: Any, guild_id: int, at: datetime) -> str | None:
@@ -214,8 +218,18 @@ def said_once(bot: Any, guild_id: int, why: str | None) -> None:
     log.info("chat feedback: nothing is judged in %s for now (%s)", guild_id, why)
 
 
-async def judge(bot: Any, guild_id: int, last: Answered, said: str, at: datetime) -> Verdict:
-    """One capped call to the quick model; an error is no verdict at all."""
+async def fuse_open(bot: Any, guild_id: int, user_id: int, at: datetime) -> bool:
+    """The member's own hourly turns bound the verdicts they can cause, as they bound replies."""
+    from .chat_llm import CHAT_PERSON_HOURLY_TURNS, PERSON_TURNS_KEY, hour_before, person_turns
+
+    limit = whole(setting(bot.store, guild_id, PERSON_TURNS_KEY, CHAT_PERSON_HOURLY_TURNS), 0)
+    return not limit or await person_turns(bot.db, user_id, hour_before(at)) < limit
+
+
+async def judge(
+    bot: Any, guild_id: int, user_id: int, last: Answered, said: str, at: datetime
+) -> Verdict:
+    """One capped call to the quick model, on the member's own count; an error is no verdict."""
     from .chat_llm import groq
 
     model = str(setting(bot.store, guild_id, SIMPLE_MODEL_KEY, "") or "")
@@ -224,7 +238,7 @@ async def judge(bot: Any, guild_id: int, last: Answered, said: str, at: datetime
         return Verdict(shaped=False)
     asked = JUDGE_USER.format(answered=last.text[:TEXT_CHARS], said=said[:TEXT_CHARS])
     turn = uuid.uuid4().hex
-    spent = {"db": bot.db, "guild_id": guild_id, "user_id": None, "turn": turn, "at": at}
+    spent = {"db": bot.db, "guild_id": guild_id, "user_id": user_id, "turn": turn, "at": at}
     try:
         reply = await client.reply(
             system=JUDGE_SYSTEM, messages=[{"role": "user", "content": asked}], json_only=True
@@ -255,13 +269,15 @@ async def moved(
     """One step toward gentle or careful; a pin, or nowhere to step, holds and says why."""
     if not await claim_feedback(bot.db, guild_id, user_id):
         return None
+    row = await voice_row(bot.db, guild_id, user_id)
     guild = guild_of(bot, guild_id)
     tone = str(col(row, "tone", ""))
-    cue = found.cue if await keeps_text(bot, guild_id, user_id) else ""
+    kept = await keeps_text(bot, guild_id, user_id)
     details = {
         "member": str(user_id),
         "why": found.reaction,
-        "cue": cue,
+        "cue": found.cue if kept else None,
+        "cue_kept": kept,
         "message_id": str(getattr(message, "id", "") or ""),
     }
     held = None
@@ -297,6 +313,33 @@ async def moved(
     return wanted
 
 
+async def pin_held(bot: Any, guild_id: int, user_id: int, row: Any, message: Any) -> None:
+    """A pinned member's complaint costs no model call: one row a conversation says it held."""
+    if not await claim_feedback(bot.db, guild_id, user_id):
+        return
+    pinned = str(col(row, "pinned", ""))
+    log.info("chat feedback: %s keeps %s (%s)", user_id, pinned, HELD_PINNED)
+    guild = guild_of(bot, guild_id)
+    if guild is None:
+        return
+    await log_action(
+        bot,
+        guild,
+        HELD_KIND,
+        target=user_id,
+        details={
+            "member": str(user_id),
+            "why": None,
+            "cue": None,
+            "cue_kept": False,
+            "judged": False,
+            "message_id": str(getattr(message, "id", "") or ""),
+            "tone": pinned,
+            "held": HELD_PINNED,
+        },
+    )
+
+
 async def heard(bot: Any, message: Any, *, now: datetime | None = None) -> str | None:
     """Weigh one message against the last model answer its author got; the tone it moved to."""
     guild_id = getattr(getattr(message, "guild", None), "id", None)
@@ -310,23 +353,26 @@ async def heard(bot: Any, message: Any, *, now: datetime | None = None) -> str |
         return None
     at = now or datetime.now(UTC)
     text = str(getattr(message, "content", "") or "")
-    if not follows(bot, guild_id, message, last, at):
+    if not addressed(bot, message, last, at):
         return None
     if not is_on(bot, guild_id) or not cue_in(bot, guild_id, text):
         return None
     if str(setting(bot.store, guild_id, PERSONALITY_KEY, "")).strip().lower() != POOL:
         return None
     row = await voice_row(db, guild_id, user_id)
-    if row is None or not col(row, "tone") or fed_already(row):
+    if row is None or fed_already(row):
         return None
-    if last.judged >= JUDGED_PER_ANSWER:
+    if col(row, "pinned"):
+        await pin_held(bot, guild_id, user_id, row, message)
+        return None
+    if not col(row, "tone") or last.judged >= JUDGED_PER_ANSWER:
         return None
     why = await closed_why(bot, guild_id, at)
     said_once(bot, guild_id, why)
-    if why is not None:
+    if why is not None or not await fuse_open(bot, guild_id, user_id, at):
         return None
     last.judged += 1
-    found = await judge(bot, guild_id, last, text, at)
+    found = await judge(bot, guild_id, user_id, last, text, at)
     if not found.moves:
         return None
     return await moved(bot, guild_id, user_id, row, found, message, at)
@@ -339,16 +385,28 @@ async def weighed(bot: Any, message: Any) -> None:
         log.warning("chat feedback: a message was not weighed — %s: %s", type(exc).__name__, exc)
 
 
-def schedule(bot: Any, message: Any) -> None:
-    """Judging never holds up a reply or the next listener; most messages follow no answer."""
+def schedule(bot: Any, message: Any) -> Any:
+    """A task for a member who has a tracked answer, and nothing at all for anybody else."""
     guild_id = getattr(getattr(message, "guild", None), "id", None)
     user_id = int(getattr(getattr(message, "author", None), "id", 0) or 0)
     if guild_id is None or (int(guild_id), user_id) not in tracker(bot).answers:
-        return
+        return None
     try:
         task = asyncio.get_running_loop().create_task(weighed(bot, message))
     except RuntimeError:
-        return
+        return None
     held = tracker(bot).tasks
     held.add(task)
     task.add_done_callback(held.discard)
+    return task
+
+
+async def before_reply(bot: Any, message: Any, *, seconds: float = REPLY_WAIT_SECONDS) -> None:
+    """The verdict lands before the answer is worded, but never holds the answer for long."""
+    task = schedule(bot, message)
+    if task is None:
+        return
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=seconds)
+    except TimeoutError:
+        log.info("chat feedback: a verdict was still out, so the answer did not wait for it")

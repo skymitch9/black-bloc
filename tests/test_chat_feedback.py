@@ -107,10 +107,15 @@ def with_client(bot, client):
     return client
 
 
-def message(text, *, message_id=2, user_id=MEMBER, channel_id=CHANNEL, reply_to=None):
+def message(
+    text, *, message_id=2, user_id=MEMBER, channel_id=CHANNEL, reply_to=None, mention=True
+):
+    """Said TO the bot unless a test says otherwise: an @-mention, or a reply to an answer."""
     return SimpleNamespace(
         id=message_id,
         content=text,
+        mentions=[SimpleNamespace(id=5)] if mention else [],
+        mention_everyone=False,
         guild=SimpleNamespace(id=GUILD),
         channel=SimpleNamespace(id=channel_id),
         author=SimpleNamespace(id=user_id),
@@ -251,13 +256,14 @@ async def test_a_genuine_mean_moves_the_tone_one_step_gentler_and_unsettles_it(
                 "member": str(MEMBER),
                 "why": "mean",
                 "cue": json.loads(answer)["cue"],
+                "cue_kept": True,
                 "message_id": "2",
                 "from": "tsundere",
                 "tone": "mischievous",
             },
         )
     ]
-    assert await ledger(db) == [("feedback", "ok", None)]
+    assert await ledger(db) == [("feedback", "ok", MEMBER)]
 
 
 @pytest.mark.parametrize(("said", "answer"), GENUINE_WRONG)
@@ -353,7 +359,9 @@ async def test_the_next_conversation_may_move_it_again(bot, db):
     assert [one[1]["tone"] for one in await rows_of(db)] == ["mischievous", "deadpan"]
 
 
-async def test_a_pinned_member_is_never_moved_and_the_row_says_the_pin_held(bot, db):
+async def test_a_pinned_members_complaint_costs_no_model_call_and_one_row_a_conversation(
+    bot, db
+):
     client = with_client(bot, FakeGroq(verdict("mean", True, "rude")))
     await answered(bot, "tsundere")
     await pin(db, GUILD, MEMBER, "noir", by=1)
@@ -364,16 +372,58 @@ async def test_a_pinned_member_is_never_moved_and_the_row_says_the_pin_held(bot,
     )
 
     kept = await voice_row(db, GUILD, MEMBER)
-    assert moved is None and again is None and len(client.calls) == 1
+    assert moved is None and again is None
+    assert client.calls == [] and await ledger(db) == []
     assert (kept["pinned"], kept["tone"], kept["how"], kept["settled"]) == (
         "noir", "tsundere", SET, 9)
     assert await rows_of(db) == [
         (
             "chat.voice_feedback_held",
-            {"member": str(MEMBER), "why": "mean", "cue": "rude", "message_id": "2",
-             "tone": "noir", "held": "pinned"},
+            {"member": str(MEMBER), "why": None, "cue": None, "cue_kept": False,
+             "judged": False, "message_id": "2", "tone": "noir", "held": "pinned"},
         )
     ]
+
+
+async def test_a_pin_made_while_the_verdict_was_out_still_holds(bot, db):
+    class Pinning(FakeGroq):
+        async def reply(self, **given):
+            await pin(db, GUILD, MEMBER, "noir", by=1)
+            return await super().reply(**given)
+
+    with_client(bot, Pinning(verdict("mean", True, "rude")))
+    await answered(bot, "tsundere")
+
+    moved = await feedback.heard(bot, message("that was rude"), now=NOW + timedelta(minutes=1))
+
+    assert moved is None and (await voice_row(db, GUILD, MEMBER))["tone"] == "tsundere"
+    assert (await rows_of(db))[0][1]["held"] == "pinned"
+
+
+async def test_the_verdicts_count_against_the_member_who_caused_them_and_nobody_else(bot, db):
+    """Three turns an hour: two already spent on answers, one verdict, then the fuse is shut."""
+    client = with_client(bot, FakeGroq(verdict("mean", False, "rude")))
+    await bot.store.set(GUILD, "chat_person_hourly_turns", 3)
+    for turn in ("a", "b"):
+        await record(db, guild_id=GUILD, user_id=MEMBER, turn=turn, provider=GROQ, model="m",
+                     tier=SIMPLE, at=NOW)
+    await answered(bot, "tsundere")
+    await answered(bot, "noir", user_id=901)
+
+    for n in range(6):
+        await answered(bot, "tsundere", at=NOW + timedelta(seconds=n))
+        await feedback.heard(
+            bot, message("lol rude", message_id=10 + n), now=NOW + timedelta(seconds=30 + n)
+        )
+    assert len(client.calls) == 1
+    assert [one for one in await ledger(db) if one[0] == "feedback"] == [
+        ("feedback", "ok", MEMBER)]
+
+    await feedback.heard(
+        bot, message("lol rude", message_id=40, user_id=901), now=NOW + timedelta(seconds=50)
+    )
+    assert len(client.calls) == 2
+    assert (await ledger(db))[-1] == ("feedback", "ok", 901)
 
 
 async def test_with_no_gentler_tone_switched_on_it_stays_and_says_why(bot, db, caplog):
@@ -390,8 +440,8 @@ async def test_with_no_gentler_tone_switched_on_it_stays_and_says_why(bot, db, c
     assert moved is None and (kept["tone"], kept["how"], kept["settled"]) == ("cozy", SET, 9)
     assert (await rows_of(db))[0] == (
         "chat.voice_feedback_held",
-        {"member": str(MEMBER), "why": "mean", "cue": "rude", "message_id": "2",
-         "tone": "cozy", "held": "no_step"},
+        {"member": str(MEMBER), "why": "mean", "cue": "rude", "cue_kept": True,
+         "message_id": "2", "tone": "cozy", "held": "no_step"},
     )
     assert "keeps cozy (no_step)" in caplog.text
 
@@ -442,45 +492,118 @@ async def test_switched_off_nothing_is_judged(bot, db):
 # --- which message counts --------------------------------------------------------------------
 
 
-async def test_a_reply_to_the_answer_counts_for_the_half_hour_and_other_words_for_five_minutes(
-    bot, db
-):
+async def test_words_not_said_to_the_bot_never_leave_the_server(bot, db, caplog):
+    """A member telling a FRIEND "nah that's wrong lol" a minute after an answer, same channel."""
+    client = with_client(bot, FakeGroq())
+    await answered(bot, "tsundere")
+
+    with caplog.at_level(logging.DEBUG, logger="black_bloc.chat_feedback"):
+        for n, said in enumerate(("nah that's wrong lol", "that was rude", "so mean, not cool")):
+            found = await feedback.heard(
+                bot, message(said, message_id=10 + n, mention=False),
+                now=NOW + timedelta(minutes=1),
+            )
+            assert found is None
+
+    assert client.calls == [] and await ledger(db) == []
+    assert await rows_of(db, "chat.") == [] and caplog.text == ""
+    kept = await voice_row(db, GUILD, MEMBER)
+    assert (kept["tone"], kept["settled"], kept["fed_since"]) == ("tsundere", 9, None)
+
+
+async def test_a_reply_to_the_bots_answer_is_judged_with_or_without_the_ping(bot, db):
     client = with_client(bot, FakeGroq(verdict("none", False)))
     await answered(bot, "tsundere")
     at = NOW + timedelta(minutes=12)
 
-    late = await feedback.heard(bot, message("that was rude", message_id=3), now=at)
-    elsewhere = await feedback.heard(
-        bot, message("that was rude", message_id=4, channel_id=222),
-        now=NOW + timedelta(minutes=1),
+    await feedback.heard(
+        bot, message("that was rude", message_id=5, reply_to=500, mention=False), now=at
     )
-    assert late is None and elsewhere is None and client.calls == []
-
-    await feedback.heard(bot, message("that was rude", message_id=5, reply_to=500), now=at)
     assert len(client.calls) == 1
     await feedback.heard(
         bot, message("that was rude", message_id=6, reply_to=500, channel_id=222), now=at
     )
-    assert len(client.calls) == 2
-    await feedback.heard(
-        bot, message("that was rude", message_id=7, reply_to=500),
-        now=NOW + timedelta(minutes=31),
-    )
-    await feedback.heard(bot, message("that was rude", message_id=8, reply_to=499), now=at)
-    assert len(client.calls) == 2
+    assert len(client.calls) == 2 and await ledger(db) == [("feedback", "ok", MEMBER)] * 2
 
 
-async def test_the_minutes_are_a_setting_and_nought_means_only_a_reply(bot, db):
+async def test_an_at_mention_is_judged_and_a_role_or_everyone_ping_is_not(bot, db):
     client = with_client(bot, FakeGroq(verdict("none", False)))
-    await bot.store.set(GUILD, tone_keys.FEEDBACK_MINUTES_KEY, 0)
+    await answered(bot, "tsundere")
+    at = NOW + timedelta(minutes=12)
+
+    everyone = message("that was rude", message_id=4)
+    everyone.mention_everyone = True
+    await feedback.heard(bot, everyone, now=at)
+    assert client.calls == []
+
+    await feedback.heard(bot, message("that was rude", message_id=5), now=at)
+    assert len(client.calls) == 1
+
+
+async def test_a_reply_to_the_bots_answer_to_somebody_else_is_not_judged_for_the_replier(
+    bot, db
+):
+    """Replying pings the bot, so the mention is there — the reply is still about HER answer."""
+    client = with_client(bot, FakeGroq())
+    await answered(bot, "tsundere")
+    await answered(bot, "noir", user_id=901)
+    feedback.tracker(bot).answers[(GUILD, 901)].reply_id = 777
+
+    found = await feedback.heard(
+        bot, message("that was rude", message_id=8, reply_to=777), now=NOW + timedelta(minutes=1)
+    )
+    other = await feedback.heard(
+        bot, message("that was rude", message_id=9, reply_to=4242),
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert found is None and other is None and client.calls == []
+    assert (await voice_row(db, GUILD, MEMBER))["tone"] == "tsundere"
+    assert (await voice_row(db, GUILD, 901))["tone"] == "noir"
+
+
+async def test_nothing_is_judged_once_the_half_hour_has_passed(bot, db):
+    client = with_client(bot, FakeGroq())
+    await answered(bot, "tsundere")
+    late = NOW + timedelta(minutes=31)
+
+    await feedback.heard(bot, message("that was rude", message_id=7, reply_to=500), now=late)
+    await feedback.heard(bot, message("that was rude", message_id=8), now=late)
+
+    assert client.calls == []
+
+
+async def test_the_verdict_lands_before_the_answer_but_never_holds_it_for_long(
+    bot, db, monkeypatch
+):
+    import asyncio
+
+    release = asyncio.Event()
+    seen = []
+
+    async def slow(_bot, _message, **_):
+        seen.append("judging")
+        await release.wait()
+        seen.append("judged")
+
+    monkeypatch.setattr(feedback, "heard", slow)
+    await feedback.before_reply(bot, message("that was rude", user_id=4242), seconds=0.01)
+    assert seen == []
     await answered(bot, "tsundere")
 
-    await feedback.heard(bot, message("that was rude"), now=NOW + timedelta(seconds=20))
-    assert client.calls == []
-    await feedback.heard(
-        bot, message("that was rude", message_id=3, reply_to=500), now=NOW + timedelta(seconds=30)
-    )
-    assert len(client.calls) == 1
+    await feedback.before_reply(bot, message("that was rude"), seconds=0.01)
+
+    assert seen == ["judging"]
+    release.set()
+    await asyncio.gather(*feedback.tracker(bot).tasks)
+    assert seen == ["judging", "judged"]
+
+    async def quick(_bot, _message, **_):
+        seen.append("quick")
+
+    monkeypatch.setattr(feedback, "heard", quick)
+    await feedback.before_reply(bot, message("that was rude", message_id=3), seconds=5)
+    assert seen[-1] == "quick"
 
 
 async def test_at_most_two_messages_are_judged_after_one_answer(bot, db):
@@ -598,7 +721,7 @@ async def test_a_model_error_is_a_ledger_row_and_no_move(bot, db):
 
     moved = await feedback.heard(bot, message("that was rude"), now=NOW + timedelta(minutes=1))
 
-    assert moved is None and await ledger(db) == [("feedback", "error", None)]
+    assert moved is None and await ledger(db) == [("feedback", "error", MEMBER)]
     assert (await voice_row(db, GUILD, MEMBER))["tone"] == "tsundere"
 
 
@@ -615,15 +738,28 @@ async def test_an_answer_out_of_shape_moves_nothing_and_is_warned_about(bot, db,
     assert (await voice_row(db, GUILD, MEMBER))["how"] == SET
 
 
-async def test_a_member_who_opted_out_of_memory_leaves_no_words_on_the_row(bot, db):
-    with_client(bot, FakeGroq(verdict("mean", True, "really rude")))
+async def test_a_member_who_opted_out_of_memory_is_judged_and_leaves_no_words_anywhere(bot, db):
+    """Their message goes to the provider for the reply anyway; nothing of it is kept here."""
+    client = with_client(bot, FakeGroq(verdict("mean", True, "really rude")))
     await answered(bot, "tsundere")
     await set_override(db, MEMBER, GUILD)
 
-    moved = await feedback.heard(bot, message("that was rude"), now=NOW + timedelta(minutes=1))
+    moved = await feedback.heard(
+        bot, message("that was really rude of you"), now=NOW + timedelta(minutes=1)
+    )
 
-    assert moved == "mischievous"
-    assert (await rows_of(db))[0][1]["cue"] == ""
+    assert moved == "mischievous" and len(client.calls) == 1
+    assert await rows_of(db) == [
+        (
+            "chat.voice_feedback",
+            {"member": str(MEMBER), "why": "mean", "cue": None, "cue_kept": False,
+             "message_id": "2", "from": "tsundere", "tone": "mischievous"},
+        )
+    ]
+    for table in ("action_log", "chat_voice", "llm_ledger", "chat_review"):
+        cur = await db.conn.execute(f"SELECT * FROM {table}")
+        for row in await cur.fetchall():
+            assert "really rude" not in " ".join(str(one) for one in tuple(row))
 
 
 async def test_a_rolled_tone_moves_the_same_way(bot, db):

@@ -11,7 +11,6 @@ DRIFT_HALVES_KEY = "chat_tone_drift_halves_every"
 DRIFT_FLOOR_KEY = "chat_tone_drift_floor_percent"
 FEEDBACK_MODE_KEY = "chat_tone_feedback_mode"
 FEEDBACK_CUES_KEY = "chat_tone_feedback_cues"
-FEEDBACK_MINUTES_KEY = "chat_tone_feedback_minutes"
 GENTLE_ORDER_KEY = "chat_tone_gentle_order"
 CAREFUL_ORDER_KEY = "chat_tone_careful_order"
 
@@ -21,8 +20,6 @@ DRIFT_HALVES_MAX = 1000
 DRIFT_FLOOR_PERCENT = 2
 PERCENT_MAX = 100
 FEEDBACK_MODES = ("off", "on")
-FEEDBACK_MINUTES = 5
-FEEDBACK_MINUTES_MAX = 30
 FEEDBACK_CUES = (
     "mean, rude, hurtful, harsh, uncalled for, not cool, not okay, not ok, offensive, "
     "disrespectful, condescending, patronizing, patronising, that hurt, hurt my feelings, "
@@ -73,15 +70,9 @@ TONE_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "text",
         FEEDBACK_CUES,
         "words and phrases, separated by commas, that might mean a member is telling Black "
-        "Bloc it was mean or wrong. Only a message with one of them is handed to the quick "
-        "model to judge. Blank means no message is ever judged",
-    ),
-    FEEDBACK_MINUTES_KEY: (
-        "int",
-        FEEDBACK_MINUTES,
-        "minutes after an answer in which the member's next messages in that channel may be "
-        "judged as feedback on it. A Discord reply to the answer is judged for half an hour "
-        f"whatever this says. 0 means only such a reply counts, up to {FEEDBACK_MINUTES_MAX}",
+        "Bloc it was mean or wrong. Only a message said TO Black Bloc (a reply to its answer, "
+        "or an @-mention) with one of them is handed to the quick model to judge. Blank means "
+        "no message is ever judged",
     ),
     GENTLE_ORDER_KEY: (
         "text",
