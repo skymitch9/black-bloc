@@ -425,6 +425,7 @@ ROUTINE: frozenset[str] = frozenset(
         "chat.voice_pinned",
         "chat.voice_rerolled",
         "chat.voice_role_rolled",
+        "chat.voice_role_undone",
         "chat.voice_set",
         "commands.visibility",
         PANEL_EXPIRED_CLICK,

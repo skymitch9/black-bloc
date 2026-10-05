@@ -105,6 +105,12 @@ ROLE_TITLE_KEY = "chat_voice_role_title"
 ROLE_ONLY_BUTTON_KEY = "chat_voice_role_only_button"
 ROLE_EVERYONE_BUTTON_KEY = "chat_voice_role_everyone_button"
 REROLL_BUTTON_KEY = "chat_voice_reroll_button"
+ROLE_CONFIRM_KEY = "chat_voice_role_confirm"
+ROLE_CONFIRM_BUTTON_KEY = "chat_voice_role_confirm_button"
+ROLE_UNDO_BUTTON_KEY = "chat_voice_role_undo_button"
+ROLE_UNDONE_KEY = "chat_voice_role_undone"
+ROLE_NO_UNDO_KEY = "chat_voice_role_no_undo"
+ROLE_EVERYONE_KEY = "chat_voice_role_everyone"
 START_PLACEHOLDER_KEY = "chat_voice_start_placeholder"
 LINE_STORED_KEY = "chat_voice_line_stored"
 STATE_ROLLED_KEY = "chat_voice_state_rolled"
@@ -186,6 +192,43 @@ TONE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the button that rolls a new tone for every member of the role who is not pinned. "
         "Discord shows at most 80 characters on a button",
+    ),
+    ROLE_CONFIRM_KEY: (
+        "Roll a new tone for **{count}** member(s) of **{role}**? **{pinned}** pinned and "
+        "**{kept}** who already have a tone are left alone.",
+        ("count", "role", "pinned", "kept"),
+        "the question staff answer before a tone is rolled for a role, on /chat and on the "
+        "Chat page. It takes {count} (how many get a new tone), {role}, {pinned} and {kept}",
+    ),
+    ROLE_CONFIRM_BUTTON_KEY: (
+        "Yes, roll",
+        (),
+        "the button that goes ahead with a roll for a role. Discord shows at most 80 "
+        "characters on a button",
+    ),
+    ROLE_UNDO_BUTTON_KEY: (
+        "Undo this roll",
+        (),
+        "the button that puts every member of the last roll for a role back to the tone "
+        "they had. Discord shows at most 80 characters on a button",
+    ),
+    ROLE_UNDONE_KEY: (
+        "Put **{restored}** member(s) of **{role}** back to the tone they had. **{skipped}** "
+        "whose tone changed again since, or who were pinned, were left alone.",
+        ("restored", "role", "skipped"),
+        "what staff are told when a roll for a role is undone. It takes {restored}, {role} "
+        "and {skipped}",
+    ),
+    ROLE_NO_UNDO_KEY: (
+        "There is no roll to undo: only the newest roll for a role can be put back, once.",
+        (),
+        "what staff are told when Undo this roll is pressed on a roll that was already "
+        "undone, or after a newer roll",
+    ),
+    ROLE_EVERYONE_KEY: (
+        "**@everyone** is the whole server, so nothing was rolled. Pick a role instead.",
+        (),
+        "what staff are told when a tone is rolled for @everyone",
     ),
     REROLL_BUTTON_KEY: (
         "Reroll",

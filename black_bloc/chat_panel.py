@@ -261,6 +261,8 @@ ROLE_EVERYONE = "role_everyone"
 REROLL_MOVE = PanelMove(REROLL, "Reroll", "primary", row=2)
 ROLE_ONLY_MOVE = PanelMove(ROLE_ONLY, "Only members with no tone", "primary", row=0)
 ROLE_EVERYONE_MOVE = PanelMove(ROLE_EVERYONE, "Everyone in it", row=0)
+ROLE_UNDO = "role_undo"
+ROLE_UNDO_MOVE = PanelMove(ROLE_UNDO, "Undo this roll", "danger", row=1)
 VOICES_PAGE = 25
 
 PANEL_MOVES: tuple[PanelMove, ...] = (
@@ -283,6 +285,7 @@ PANEL_MOVES: tuple[PanelMove, ...] = (
     REROLL_MOVE,
     ROLE_ONLY_MOVE,
     ROLE_EVERYONE_MOVE,
+    ROLE_UNDO_MOVE,
     PREVIOUS_MOVE,
     NEXT_MOVE,
     PanelMove(REVIEW, "Review queue…", row=1),
@@ -381,12 +384,17 @@ def member_buttons(
     return (*found, BACK_MOVE._replace(row=2), REFRESH_MOVE._replace(row=2))
 
 
-def role_buttons(labels: tuple[str, str] = ("", "")) -> tuple[PanelMove, ...]:
-    return (
+def role_buttons(
+    labels: tuple[str, str] = ("", ""), *, undo: bool = False, undo_label: str = ""
+) -> tuple[PanelMove, ...]:
+    """Undo renders only on the card that has just shown a roll's result."""
+    found = [
         ROLE_ONLY_MOVE._replace(label=labels[0] or ROLE_ONLY_MOVE.label),
         ROLE_EVERYONE_MOVE._replace(label=labels[1] or ROLE_EVERYONE_MOVE.label),
-        BACK_MOVE._replace(row=1),
-    )
+    ]
+    if undo:
+        found.append(ROLE_UNDO_MOVE._replace(label=undo_label or ROLE_UNDO_MOVE.label))
+    return (*found, BACK_MOVE._replace(row=1))
 
 
 def page_count(total: int) -> int:

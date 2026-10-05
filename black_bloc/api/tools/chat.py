@@ -949,6 +949,32 @@ def build_router(bot: Any) -> APIRouter:
         )
         return await _voice_answer(guild, user_id, outcome)
 
+    @router.post("/voices/roll/preview")
+    async def chat_voice_roll_preview(payload: dict[str, Any]) -> dict[str, Any]:
+        """The question the page asks before a roll: how many, and who is left alone."""
+        guild = require_guild(bot)
+        require_db(bot)
+        await personas.sync_tropes(bot.db, full=False)
+        outcome = answered(
+            await chat_tones.preview_role(
+                bot, guild, payload.get("role_id"), everyone=payload.get("everyone") is True
+            )
+        )
+        return {"message": outcome.message, **outcome.value}
+
+    @router.post("/voices/roll/undo")
+    async def chat_voice_roll_undo(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        """Only the newest roll, once: every member back to the tone the roll recorded."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = answered(
+            await chat_tones.undo_roll(
+                bot, guild, actor_for(bot, who, guild), payload.get("roll_id"), via=VIA_WEBSITE
+            )
+        )
+        return {"message": outcome.message, **outcome.value}
+
     @router.post("/voices/roll")
     async def chat_voice_roll_role(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         """A starting tone for each member of a role; pinned members are left and listed."""
@@ -981,6 +1007,7 @@ def build_router(bot: Any) -> APIRouter:
 
         return {
             "message": outcome.message,
+            "roll_id": str(found["roll_id"]),
             "role": found["role"],
             "rolled": listed(found["rolled"]),
             "pinned": listed(found["pinned"]),

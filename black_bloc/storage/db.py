@@ -998,6 +998,19 @@ CREATE TABLE IF NOT EXISTS chat_voice (
     PRIMARY KEY (guild_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS chat_voice_rolls (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id  INTEGER NOT NULL,
+    role_id   INTEGER NOT NULL,
+    role      TEXT    NOT NULL,
+    everyone  INTEGER NOT NULL DEFAULT 0,
+    rolled_by INTEGER,
+    at        TEXT    NOT NULL,
+    undone_at TEXT,
+    undone_by INTEGER,
+    moves     TEXT    NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS channel_drafts (
     guild_id   INTEGER NOT NULL,
     channel_id INTEGER NOT NULL,

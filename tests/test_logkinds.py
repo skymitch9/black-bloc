@@ -1085,6 +1085,7 @@ CHAT_HOUSEKEEPING = (
     "chat.voice_rerolled",
     "chat.voice_set",
     "chat.voice_role_rolled",
+    "chat.voice_role_undone",
     "chat.tone_edited",
 )
 

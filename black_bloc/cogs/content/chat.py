@@ -331,6 +331,7 @@ class ChatPanel(Panel):
         self.page = 1
         self.member_id: int | None = None
         self.role_id: int | None = None
+        self.roll_id: int | None = None
         self.review_id: int | None = None
 
 
@@ -530,7 +531,9 @@ async def build_role(
         say(bot, guild, tone_keys.ROLE_ONLY_BUTTON_KEY)[:BUTTON_CHARS],
         say(bot, guild, tone_keys.ROLE_EVERYONE_BUTTON_KEY)[:BUTTON_CHARS],
     )
-    for move in chat_panel.role_buttons(labels):
+    view.roll_id = (result or {}).get("roll_id")
+    undo = say(bot, guild, tone_keys.ROLE_UNDO_BUTTON_KEY)[:BUTTON_CHARS]
+    for move in chat_panel.role_buttons(labels, undo=view.roll_id is not None, undo_label=undo):
         view.add_item(MoveButton(move))
     return (embed, view)
 
@@ -1083,6 +1086,43 @@ async def run_reroll(interaction: discord.Interaction, member_id: Any, previous:
     await answer(interaction, outcome.message)
 
 
+async def open_role_confirm(interaction: discord.Interaction, view: Any, everyone: bool) -> None:
+    """Nothing is written on the first press: the card asks, with the count in the question."""
+    if not await opened(interaction):
+        return
+    bot, guild, role_id = interaction.client, interaction.guild, view.role_id
+    found = await chat_tones.preview_role(bot, guild, role_id, everyone=everyone)
+    embed, fresh = await build_role(bot, guild, role_id, view.page)
+    if not found.ok or fresh is None:
+        await render_role(interaction, role_id, view)
+        await answer(interaction, found.message)
+        return
+    fresh.clear_items()
+    await confirm(
+        interaction,
+        fresh,
+        embed,
+        confirm_items(
+            yes=say(bot, guild, tone_keys.ROLE_CONFIRM_BUTTON_KEY)[:BUTTON_CHARS],
+            no=chat_panel.KEEP_IT,
+            on_yes=lambda one, card: run_role_roll(one, card.role_id, everyone, card),
+            on_no=lambda one, card: open_role(one, card.role_id, card),
+        ),
+        view,
+        question=found.message,
+    )
+
+
+async def run_role_undo(interaction: discord.Interaction, view: Any) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await chat_tones.undo_roll(
+        interaction.client, interaction.guild, interaction.user, view.roll_id
+    )
+    await render_role(interaction, view.role_id, view)
+    await answer(interaction, outcome.message)
+
+
 async def run_role_roll(
     interaction: discord.Interaction, role_id: Any, everyone: bool, previous: Any
 ) -> None:
@@ -1241,8 +1281,10 @@ class MoveButton(discord.ui.Button):
             await run_reroll(interaction, view.member_id, view)
             return
         if action in (chat_panel.ROLE_ONLY, chat_panel.ROLE_EVERYONE):
-            everyone = action == chat_panel.ROLE_EVERYONE
-            await run_role_roll(interaction, view.role_id, everyone, view)
+            await open_role_confirm(interaction, view, action == chat_panel.ROLE_EVERYONE)
+            return
+        if action == chat_panel.ROLE_UNDO:
+            await run_role_undo(interaction, view)
             return
         if action == chat_panel.CHAT_TOGGLE:
             await run_mode(interaction, chat_panel.MODE_KEY, view)

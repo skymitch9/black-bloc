@@ -2032,6 +2032,20 @@ async def test_a_role_is_picked_and_rolled_for_the_untoned_then_for_everyone(
     assert interaction.view.again is not None
 
     await button(interaction.view, "Only members with no tone").callback(interaction)
+    asked = interaction.embed.fields[-1].value
+    assert asked == (
+        "Roll a new tone for **1** member(s) of **Aunties / Uncles**? **1** pinned and **1** "
+        "who already have a tone are left alone."
+    )
+    assert labels(interaction.view) == ["Yes, roll", "Keep it"]
+    assert await voice_row(bot.db, GUILD, 323) is None and await kinds_of(db) == []
+
+    await button(interaction.view, "Keep it").callback(interaction)
+    assert labels(interaction.view) == ["Only members with no tone", "Everyone in it", "Back"]
+    assert await voice_row(bot.db, GUILD, 323) is None
+
+    await button(interaction.view, "Only members with no tone").callback(interaction)
+    await button(interaction.view, "Yes, roll").callback(interaction)
     assert interaction.sent == (
         "Rolled a tone for **1** member(s) of **Aunties / Uncles**. Left alone: **1** pinned, "
         "**1** who already had a tone."
@@ -2040,15 +2054,39 @@ async def test_a_role_is_picked_and_rolled_for_the_untoned_then_for_everyone(
     assert lines[0].startswith("<@323> — **") and lines[1] == (
         "<@321> — pinned to **noir**, left alone")
     assert (await voice_row(bot.db, GUILD, 322))["tone"] == "warm"
+    assert "Undo this roll" in labels(interaction.view)
 
     await button(interaction.view, "Everyone in it").callback(interaction)
+    assert "Roll a new tone for **2** member(s)" in interaction.embed.fields[-1].value
+    await button(interaction.view, "Yes, roll").callback(interaction)
     assert "Rolled a tone for **2** member(s)" in interaction.sent
     assert (await voice_row(bot.db, GUILD, 322))["tone"] != "warm"
     assert (await voice_row(bot.db, GUILD, 321))["pinned"] == "noir"
     assert await kinds_of(db) == ["chat.voice_role_rolled", "chat.voice_role_rolled"]
 
+    await button(interaction.view, "Undo this roll").callback(interaction)
+    assert interaction.sent.startswith("Put **2** member(s) of **Aunties / Uncles** back")
+    assert (await voice_row(bot.db, GUILD, 322))["tone"] == "warm"
+    assert "Undo this roll" not in labels(interaction.view)
+    assert (await kinds_of(db))[-1] == "chat.voice_role_undone"
+
     await button(interaction.view, "Back").callback(interaction)
     assert interaction.embed.title == "Who hears what"
+
+
+async def test_at_everyone_cannot_be_rolled_from_discord(cog, bot, member, db, monkeypatch):
+    with_people(bot, member)
+    everyone = SimpleNamespace(id=GUILD, name="@everyone", members=[member])
+    bot.guild.get_role = lambda role_id: everyone
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+    await pick_one(interaction, "Roll for a role…", SimpleNamespace(id=GUILD))
+
+    await button(interaction.view, "Everyone in it").callback(interaction)
+
+    assert interaction.sent == (
+        "**@everyone** is the whole server, so nothing was rolled. Pick a role instead."
+    )
+    assert "Yes, roll" not in labels(interaction.view) and await kinds_of(db) == []
 
 
 async def test_a_role_that_is_gone_is_answered_in_words(cog, bot, member, monkeypatch):

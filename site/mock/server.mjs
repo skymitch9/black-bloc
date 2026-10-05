@@ -625,6 +625,12 @@ const SETTING_SPECS = [
   ["chat_voice_settled_new", "text", "new", "new", "how settled a tone is, while it is still likely to take a step"],
   ["chat_voice_settled_settling", "text", "settling", "settling", "how settled a tone is, once it is less than half as likely to take a step"],
   ["chat_voice_settled_settled", "text", "settled", "settled", "how settled a tone is, once it is as unlikely to take a step as it ever gets"],
+  ["chat_voice_role_confirm", "text", "Roll a new tone for **{count}** member(s) of **{role}**? **{pinned}** pinned and **{kept}** who already have a tone are left alone.", "Roll a new tone for **{count}** member(s) of **{role}**? **{pinned}** pinned and **{kept}** who already have a tone are left alone.", "the question staff answer before a tone is rolled for a role, on /chat and on the Chat page. It takes {count} (how many get a new tone), {role}, {pinned} and {kept}"],
+  ["chat_voice_role_confirm_button", "text", "Yes, roll", "Yes, roll", "the button that goes ahead with a roll for a role. Discord shows at most 80 characters on a button"],
+  ["chat_voice_role_undo_button", "text", "Undo this roll", "Undo this roll", "the button that puts every member of the last roll for a role back to the tone they had. Discord shows at most 80 characters on a button"],
+  ["chat_voice_role_undone", "text", "Put **{restored}** member(s) of **{role}** back to the tone they had. **{skipped}** whose tone changed again since, or who were pinned, were left alone.", "Put **{restored}** member(s) of **{role}** back to the tone they had. **{skipped}** whose tone changed again since, or who were pinned, were left alone.", "what staff are told when a roll for a role is undone. It takes {restored}, {role} and {skipped}"],
+  ["chat_voice_role_no_undo", "text", "There is no roll to undo: only the newest roll for a role can be put back, once.", "There is no roll to undo: only the newest roll for a role can be put back, once.", "what staff are told when Undo this roll is pressed on a roll that was already undone, or after a newer roll"],
+  ["chat_voice_role_everyone", "text", "**@everyone** is the whole server, so nothing was rolled. Pick a role instead.", "**@everyone** is the whole server, so nothing was rolled. Pick a role instead.", "what staff are told when a tone is rolled for @everyone"],
   ["chat_voice_state_tone_off", "text", "rolled · tone was switched off", "rolled · tone was switched off", "how a tone got there, when the member's own tone was switched off and Black Bloc rolled them another at their next answer"],
   ["chat_tone_edited", 'text', "**{tone}** now reads the way you wrote it, from the next answer on. The boot sync keeps your wording.", "**{tone}** now reads the way you wrote it, from the next answer on. The boot sync keeps your wording.", "what staff are told when a tone's wording is saved on the Chat page. It takes {tone}"],
   ["chat_tone_reset", 'text', "**{tone}** is back to the wording Black Bloc ships with.", "**{tone}** is back to the wording Black Bloc ships with.", "what staff are told when a tone's wording is put back. It takes {tone}"],
@@ -12346,32 +12352,75 @@ function voiceAnother(current) {
   return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
 }
 
-route('POST', '/api/chat/voices/roll', async (context) => {
-  requireStaff(context.session);
-  const body = await context.body();
+/** Who a roll would touch, read before anything is written — chat_tones.plan_role. */
+function voiceRollPlan(body) {
   const role = ROLES.find((one) => one.id === String(body.role_id || ''));
   if (!role) throw new Refused(404, 'no_such_role', noteWords('chat_voice_no_role', {}));
   if (!state.tropes.some((one) => one.enabled)) throw new Refused(409, 'no_tones_on', noteWords('chat_voice_no_tones', {}));
   const everyone = body.everyone === true;
-  const rolled = [];
+  const wanted = [];
   const pinned = [];
   let kept = 0;
   for (const member of ROSTER.filter((one) => !one.bot && one.role_ids.includes(role.id) && MEMBERS.some((known) => known.id === one.id))) {
     const row = state.voices.find((one) => one.user_id === member.id);
     const entry = { user_id: member.id, name: memberName(member.id) || member.id };
-    if (row && row.pinned) {
-      pinned.push({ ...entry, trope: row.pinned, label: toneLabel(row.pinned) });
-    } else if (row && row.tone && !everyone) {
-      kept += 1;
+    if (row && row.pinned) pinned.push({ ...entry, trope: row.pinned, label: toneLabel(row.pinned) });
+    else if (row && row.tone && !everyone) kept += 1;
+    else wanted.push({ entry, row });
+  }
+  return { role, everyone, wanted, pinned, kept };
+}
+
+route('POST', '/api/chat/voices/roll/preview', async (context) => {
+  requireStaff(context.session);
+  const plan = voiceRollPlan(await context.body());
+  const counts = { count: plan.wanted.length, pinned: plan.pinned.length, kept: plan.kept };
+  return { message: noteWords('chat_voice_role_confirm', { role: plan.role.name, ...counts }), role: plan.role.name, ...counts };
+});
+
+route('POST', '/api/chat/voices/roll/undo', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const roll = state.voiceRoll;
+  if (!roll || roll.undone || (body.roll_id !== undefined && body.roll_id !== null && String(body.roll_id) !== String(roll.id))) {
+    throw new Refused(409, 'no_roll_to_undo', noteWords('chat_voice_role_no_undo', {}));
+  }
+  roll.undone = true;
+  let restored = 0;
+  let skipped = 0;
+  for (const move of roll.moves) {
+    const at = state.voices.findIndex((one) => one.user_id === move.user_id);
+    const row = at >= 0 ? state.voices[at] : null;
+    if (!row || row.pinned || row.tone !== move.to) {
+      skipped += 1;
     } else {
-      const found = voiceAnother(row ? row.tone : null);
-      voiceStart(member.id, found.name, 'rolled');
-      rolled.push({ ...entry, trope: found.name, label: found.label });
+      if (move.before) state.voices[at] = { ...move.before };
+      else state.voices.splice(at, 1);
+      restored += 1;
     }
   }
-  logAction('web.chat.voice_role_rolled', { details: { role_id: role.id, role: role.name, everyone, rolled: rolled.length, pinned: pinned.length, kept, via: 'website' } });
+  logAction('web.chat.voice_role_undone', { details: { roll: roll.id, role_id: roll.role_id, role: roll.role, restored, skipped, via: 'website' } });
+  return { message: noteWords('chat_voice_role_undone', { restored, role: roll.role, skipped }), roll_id: roll.id, role: roll.role, restored, skipped };
+});
+
+route('POST', '/api/chat/voices/roll', async (context) => {
+  requireStaff(context.session);
+  const plan = voiceRollPlan(await context.body());
+  const { role, everyone, pinned, kept } = plan;
+  const rolled = [];
+  const moves = [];
+  for (const { entry, row } of plan.wanted) {
+    const found = voiceAnother(row ? row.tone : null);
+    moves.push({ user_id: entry.user_id, to: found.name, before: row ? { ...row } : null });
+    voiceStart(entry.user_id, found.name, 'rolled');
+    rolled.push({ ...entry, trope: found.name, label: found.label });
+  }
+  state.voiceRollSeq = (state.voiceRollSeq || 0) + 1;
+  state.voiceRoll = { id: String(state.voiceRollSeq), role_id: role.id, role: role.name, moves, undone: false };
+  logAction('web.chat.voice_role_rolled', { details: { roll: state.voiceRoll.id, role_id: role.id, role: role.name, everyone, rolled: rolled.length, pinned: pinned.length, kept, via: 'website' } });
   return {
     message: noteWords('chat_voice_role_rolled', { rolled: rolled.length, role: role.name, pinned: pinned.length, kept }),
+    roll_id: state.voiceRoll.id,
     role: role.name,
     rolled,
     pinned,

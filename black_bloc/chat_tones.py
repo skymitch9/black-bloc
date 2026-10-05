@@ -16,7 +16,20 @@ from .chat_panel import (
     usable_tone,
     words,
 )
-from .chat_voice import ROLLED, SET, another, col, set_tone, voice_row
+from .chat_voice import (
+    ROLLED,
+    SET,
+    another,
+    before_a_roll,
+    col,
+    keep_roll,
+    last_roll,
+    mark_undone,
+    moves_of,
+    put_back,
+    set_tone,
+    voice_row,
+)
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
 from .personas import enabled_tropes, list_tropes
@@ -27,6 +40,8 @@ log = logging.getLogger(__name__)
 PINNED_CODE = "voice_is_pinned"
 NO_TONES_CODE = "no_tones_on"
 NO_SUCH_ROLE_CODE = "no_such_role"
+EVERYONE_CODE = "everyone_role"
+NO_UNDO_CODE = "no_roll_to_undo"
 LOGGED_TONES = 50
 
 
@@ -186,6 +201,73 @@ def role_lines(store: Any, guild_id: int, found: dict[str, Any]) -> list[str]:
     return lines
 
 
+def is_everyone(guild: Any, role: Any) -> bool:
+    check = getattr(role, "is_default", None)
+    return int(role.id) == int(guild.id) or bool(check() if callable(check) else False)
+
+
+async def plan_role(
+    bot: Any, guild: Any, role_id: Any, everyone: bool
+) -> tuple[Any, dict[str, Any] | None, Outcome | None]:
+    """Who a roll would touch, read before anything is written: both doors ask on this."""
+    role = role_of(guild, role_id)
+    if role is None:
+        return (None, None, refusal(
+            words(bot.store, guild.id, tone_keys.NO_ROLE_KEY), NO_SUCH_ROLE_CODE, 404
+        ))
+    if is_everyone(guild, role):
+        return (None, None, refusal(
+            words(bot.store, guild.id, tone_keys.ROLE_EVERYONE_KEY), EVERYONE_CODE, 422
+        ))
+    if not enabled_tropes(await list_tropes(bot.db)):
+        return (None, None, refusal(
+            words(bot.store, guild.id, tone_keys.NO_TONES_KEY), NO_TONES_CODE, 409
+        ))
+    labels = await labels_of(bot)
+    members = sorted(
+        (one for one in getattr(role, "members", ()) or () if not getattr(one, "bot", False)),
+        key=lambda one: int(one.id),
+    )
+    wanted, pinned, kept = [], [], 0
+    for member in members:
+        row = await voice_row(bot.db, guild.id, member.id)
+        fixed = str(col(row, "pinned", ""))
+        if fixed:
+            pinned.append(
+                {
+                    "user_id": int(member.id),
+                    "name": member_name(member),
+                    "tone": fixed,
+                    "label": labels.get(fixed, fixed),
+                }
+            )
+        elif col(row, "tone") and not everyone:
+            kept += 1
+        else:
+            wanted.append((member, row))
+    return (role, {"wanted": wanted, "pinned": pinned, "kept": kept}, None)
+
+
+async def preview_role(
+    bot: Any, guild: Any, role_id: Any, *, everyone: bool = False
+) -> Outcome:
+    """The question, with the count in it; nothing is written."""
+    role, plan, held = await plan_role(bot, guild, role_id, everyone)
+    if held is not None:
+        return held
+    name = str(getattr(role, "name", role.id))
+    counts = {"count": len(plan["wanted"]), "pinned": len(plan["pinned"]), "kept": plan["kept"]}
+    return Outcome(
+        True,
+        words(bot.store, guild.id, tone_keys.ROLE_CONFIRM_KEY, role=name, **counts),
+        value={"role": name, **counts},
+    )
+
+
+def chunks(found: list[Any], size: int = LOGGED_TONES) -> list[list[Any]]:
+    return [found[at : at + size] for at in range(0, len(found), size)] or [[]]
+
+
 async def roll_role(
     bot: Any,
     guild: Any,
@@ -197,53 +279,50 @@ async def roll_role(
     rng: Any = None,
     now: datetime | None = None,
 ) -> Outcome:
-    """A starting tone for each member of a role; a pin is skipped and said so."""
-    role = role_of(guild, role_id)
-    if role is None:
-        return refusal(
-            words(bot.store, guild.id, tone_keys.NO_ROLE_KEY), NO_SUCH_ROLE_CODE, 404
-        )
+    """A starting tone for each member of a role; every from and to is kept, so it can be undone."""
+    role, plan, held = await plan_role(bot, guild, role_id, everyone)
+    if held is not None:
+        return held
     pool = enabled_tropes(await list_tropes(bot.db))
-    if not pool:
-        return refusal(words(bot.store, guild.id, tone_keys.NO_TONES_KEY), NO_TONES_CODE, 409)
-    labels = await labels_of(bot)
-    members = sorted(
-        (one for one in getattr(role, "members", ()) or () if not getattr(one, "bot", False)),
-        key=lambda one: int(one.id),
-    )
-    rolled, pinned, kept = [], [], 0
     by = actor_id(actor)
-    for member in members:
-        row = await voice_row(bot.db, guild.id, member.id)
-        fixed = str(col(row, "pinned", ""))
-        entry = {"user_id": int(member.id), "name": member_name(member)}
-        if fixed:
-            pinned.append({**entry, "tone": fixed, "label": labels.get(fixed, fixed)})
-            continue
+    rolled, moves = [], []
+    for member, row in plan["wanted"]:
         before = col(row, "tone")
-        if before and not everyone:
-            kept += 1
-            continue
         found = another(pool, before, rng)
+        moves.append({"user_id": str(member.id), "to": found.name, "before": before_a_roll(row)})
         await set_tone(bot.db, guild.id, member.id, found.name, how=ROLLED, by=by, now=now)
-        rolled.append({**entry, "tone": found.name, "label": found.label})
+        rolled.append(
+            {
+                "user_id": int(member.id),
+                "name": member_name(member),
+                "tone": found.name,
+                "label": found.label,
+                "from": before,
+            }
+        )
     name = str(getattr(role, "name", role.id))
-    await log_action(
-        bot,
-        guild,
-        kind_via("chat.voice_role_rolled", via),
-        actor=actor,
-        details={
-            "role_id": str(role.id),
-            "role": name,
-            "everyone": bool(everyone),
-            "rolled": len(rolled),
-            "pinned": len(pinned),
-            "kept": kept,
-            "tones": {str(one["user_id"]): one["tone"] for one in rolled[:LOGGED_TONES]},
-            "via": via,
-        },
-    )
+    roll_id = await keep_roll(bot.db, guild.id, role, moves, everyone=everyone, by=by, now=now)
+    parts = chunks(rolled)
+    for at, part in enumerate(parts, start=1):
+        await log_action(
+            bot,
+            guild,
+            kind_via("chat.voice_role_rolled", via),
+            actor=actor,
+            details={
+                "roll": roll_id,
+                "role_id": str(role.id),
+                "role": name,
+                "everyone": bool(everyone),
+                "rolled": len(rolled),
+                "pinned": len(plan["pinned"]),
+                "kept": plan["kept"],
+                "part": at,
+                "parts": len(parts),
+                "moves": {str(one["user_id"]): [one["from"], one["tone"]] for one in part},
+                "via": via,
+            },
+        )
     return Outcome(
         True,
         words(
@@ -252,8 +331,77 @@ async def roll_role(
             tone_keys.ROLE_ROLLED_KEY,
             rolled=len(rolled),
             role=name,
-            pinned=len(pinned),
-            kept=kept,
+            pinned=len(plan["pinned"]),
+            kept=plan["kept"],
         ),
-        value={"role": name, "rolled": rolled, "pinned": pinned, "kept": kept},
+        value={
+            "roll_id": roll_id,
+            "role": name,
+            "rolled": rolled,
+            "pinned": plan["pinned"],
+            "kept": plan["kept"],
+        },
+    )
+
+
+async def undo_roll(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    roll_id: Any = None,
+    *,
+    via: str = VIA_DISCORD,
+    now: datetime | None = None,
+) -> Outcome:
+    """The newest roll of this server, once: each member back to the tone and settledness kept."""
+    roll = await last_roll(bot.db, guild.id)
+    stale = roll is None or roll["undone_at"] is not None
+    if not stale and roll_id is not None:
+        stale = str(roll_id) != str(roll["id"])
+    if stale or not await mark_undone(bot.db, roll["id"], by=actor_id(actor), now=now):
+        return refusal(
+            words(bot.store, guild.id, tone_keys.ROLE_NO_UNDO_KEY), NO_UNDO_CODE, 409
+        )
+    restored, skipped = [], 0
+    for move in moves_of(roll):
+        if await put_back(bot.db, guild.id, move):
+            restored.append(move)
+        else:
+            skipped += 1
+    await bot.db.conn.commit()
+    name = str(roll["role"])
+    parts = chunks(restored)
+    for at, part in enumerate(parts, start=1):
+        await log_action(
+            bot,
+            guild,
+            kind_via("chat.voice_role_undone", via),
+            actor=actor,
+            details={
+                "roll": int(roll["id"]),
+                "role_id": str(roll["role_id"]),
+                "role": name,
+                "restored": len(restored),
+                "skipped": skipped,
+                "part": at,
+                "parts": len(parts),
+                "moves": {
+                    str(one["user_id"]): [one["to"], (one.get("before") or {}).get("tone")]
+                    for one in part
+                },
+                "via": via,
+            },
+        )
+    return Outcome(
+        True,
+        words(
+            bot.store,
+            guild.id,
+            tone_keys.ROLE_UNDONE_KEY,
+            restored=len(restored),
+            role=name,
+            skipped=skipped,
+        ),
+        value={"roll_id": int(roll["id"]), "role": name, "restored": len(restored),
+               "skipped": skipped},
     )

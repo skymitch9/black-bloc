@@ -4138,6 +4138,26 @@
       }
     },
     {
+      "_": "The question before a roll: how many members would get a tone. Writes nothing.",
+      "method": "POST",
+      "path": "/api/chat/voices/roll/preview",
+      "body": {
+        "role_id": "{plain_role_id}",
+        "everyone": true
+      },
+      "read_by": [
+        "page-chat.js Who hears what Roll for a role (the confirm)"
+      ],
+      "shape": "object",
+      "keys": [
+        "message",
+        "role",
+        "count",
+        "pinned",
+        "kept"
+      ]
+    },
+    {
       "_": "A starting tone for each member of a role; pinned members come back in `pinned`, untouched.",
       "method": "POST",
       "path": "/api/chat/voices/roll",
@@ -4151,6 +4171,7 @@
       "shape": "object",
       "keys": [
         "message",
+        "roll_id",
         "role",
         "rolled",
         "pinned",
@@ -9278,6 +9299,7 @@
     "web.chat.voice_rerolled",
     "web.chat.voice_set",
     "web.chat.voice_role_rolled",
+    "web.chat.voice_role_undone",
     "web.chat.tone_edited",
     "web.chat.memory_forgot",
     "web.raidtrain.create",

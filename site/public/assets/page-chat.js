@@ -122,6 +122,12 @@ const VOICE_WORD_KEYS = [
   'chat_voice_settled_new',
   'chat_voice_settled_settling',
   'chat_voice_settled_settled',
+  'chat_voice_role_confirm',
+  'chat_voice_role_confirm_button',
+  'chat_voice_role_undo_button',
+  'chat_voice_role_undone',
+  'chat_voice_role_no_undo',
+  'chat_voice_role_everyone',
   'chat_voice_state_tone_off',
   'chat_tone_edited',
   'chat_tone_reset',
@@ -141,6 +147,8 @@ const VOICES_PIN = 'Pin';
 const VOICES_ROLE = 'Roll for a role…';
 const VOICES_ROLE_FIRST = 'Pick a role first.';
 const VOICES_ROLE_PINNED = 'pinned — left alone';
+const VOICES_ROLE_YES = 'Yes, roll';
+const VOICES_ROLE_UNDO = 'Undo this roll';
 const VOICE_SETTLE_TITLE = 'How a tone settles and moves';
 const VOICE_SETTLE_KEYS = [
   'chat_tone_drift_start_percent',
@@ -1111,29 +1119,47 @@ async function rollForRole(say) {
     { value: 'only', label: 'Only members with no tone' },
     { value: 'everyone', label: 'Everyone in it' },
   ], 'only');
-  let found = null;
-  const sent = await askForm({
+  let wanted = null;
+  let question = null;
+  const picked = await askForm({
     title: VOICES_ROLE,
     body: [field('Role', role), who],
     confirmLabel: 'Roll',
     tone: null,
     onConfirm: async () => {
       if (!role.value) return VOICES_ROLE_FIRST;
-      found = await send('/api/chat/voices/roll', 'POST', {
-        role_id: role.value,
-        everyone: who.readValue() === 'everyone',
-      });
+      wanted = { role_id: role.value, everyone: who.readValue() === 'everyone' };
+      question = await send('/api/chat/voices/roll/preview', 'POST', wanted);
       return null;
     },
   });
-  if (!sent || !found) return;
-  lastRoll = found;
-  say.say(found.message || 'Rolled.', 'ok');
+  if (!picked || !question) return;
+  const sure = await ask({
+    title: `@${question.role}`,
+    body: [el('p', { class: 'ask-body' }, boldParts(question.message || ''))],
+    confirmLabel: VOICES_ROLE_YES,
+  });
+  if (!sure) return;
+  const done = await run(say, () => send('/api/chat/voices/roll', 'POST', wanted), (found) => found?.message || 'Rolled.');
+  if (!done.ok) return;
+  lastRoll = done.found || null;
   keepSaying('chat-voices', say);
   refresh();
 }
 
-function rollResult() {
+async function undoRoll(say) {
+  const roll = lastRoll;
+  const done = await run(
+    say,
+    () => send('/api/chat/voices/roll/undo', 'POST', { roll_id: roll.roll_id }),
+    (found) => found?.message || 'Undone.',
+  );
+  lastRoll = null;
+  if (done.ok) keepSaying('chat-voices', say);
+  refresh();
+}
+
+function rollResult(say) {
   if (!lastRoll) return null;
   const rolled = Array.isArray(lastRoll.rolled) ? lastRoll.rolled : [];
   const pinned = Array.isArray(lastRoll.pinned) ? lastRoll.pinned : [];
@@ -1147,10 +1173,13 @@ function rollResult() {
     ...pinned.map((one) => line(one, VOICES_ROLE_PINNED)),
   ], {
     count: rolled.length,
-    actions: button('Clear', () => {
-      lastRoll = null;
-      refresh();
-    }, { tone: 'quiet' }),
+    actions: el('div', { class: 'voice-moves' }, [
+      lastRoll.roll_id && rolled.length ? button(VOICES_ROLE_UNDO, () => undoRoll(say), { tone: 'quiet' }) : null,
+      button('Clear', () => {
+        lastRoll = null;
+        refresh();
+      }, { tone: 'quiet' }),
+    ]),
   });
 }
 
@@ -1169,7 +1198,7 @@ async function voicesSection(payload, wordSpecs, say, settleSpecs = []) {
     payload?.setting_kind === MODE_COOKOUT ? el('p', { class: 'section-note', text: VOICES_OFF }) : null,
     say,
   ]));
-  const result = rollResult();
+  const result = rollResult(say);
   if (result) one.body.append(result);
   one.body.append(table([
     {

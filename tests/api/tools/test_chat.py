@@ -1092,7 +1092,8 @@ async def test_a_roll_for_a_role_tones_only_the_members_who_have_none(
     rows = [one for one in await wf.web_rows_in(web.db) if one[0] == "web.chat.voice_role_rolled"]
     assert len(rows) == 1
     assert (rows[0][1]["rolled"], rows[0][1]["pinned"], rows[0][1]["kept"]) == (1, 1, 1)
-    assert rows[0][1]["everyone"] is False and list(rows[0][1]["tones"]) == ["23"]
+    assert rows[0][1]["everyone"] is False and list(rows[0][1]["moves"]) == ["23"]
+    assert body["roll_id"] == str(rows[0][1]["roll"])
 
 
 async def test_a_roll_for_everyone_in_a_role_still_skips_the_pinned(seeded, client, guild, wf):
@@ -1107,6 +1108,52 @@ async def test_a_roll_for_everyone_in_a_role_still_skips_the_pinned(seeded, clie
     assert [one["user_id"] for one in body["rolled"]] == ["22", "23"]
     assert body["rolled"][0]["trope"] != "warm"
     assert [one["user_id"] for one in body["pinned"]] == ["21"] and body["kept"] == 0
+
+
+async def test_the_page_asks_before_a_roll_and_can_undo_it(seeded, client, guild, wf, web):
+    role = in_role(guild, wf, 21, 22, 23)
+    client.put("/api/chat/voices/21", json={"trope": "noir"})
+    client.put("/api/chat/voices/22/tone", json={"trope": "warm"})
+    wanted = {"role_id": str(role.id), "everyone": True}
+
+    asked = client.post("/api/chat/voices/roll/preview", json=wanted)
+
+    assert asked.status_code == 200, asked.text
+    assert asked.json() == {
+        "message": "Roll a new tone for **2** member(s) of **Member**? **1** pinned and **0** "
+        "who already have a tone are left alone.",
+        "role": "Member",
+        "count": 2,
+        "pinned": 1,
+        "kept": 0,
+    }
+    listed = {row["user_id"]: row for row in client.get("/api/chat/voices").json()["voices"]}
+    assert listed["22"]["tone"] == "warm" and "23" not in listed
+    assert "web.chat.voice_role_rolled" not in await wf.kinds_in(web.db)
+
+    rolled = client.post("/api/chat/voices/roll", json=wanted).json()
+    undone = client.post("/api/chat/voices/roll/undo", json={"roll_id": rolled["roll_id"]})
+
+    assert undone.status_code == 200, undone.text
+    assert (undone.json()["restored"], undone.json()["skipped"]) == (2, 0)
+    assert "Put **2** member(s) of **Member** back" in undone.json()["message"]
+    listed = {row["user_id"]: row for row in client.get("/api/chat/voices").json()["voices"]}
+    assert (listed["22"]["tone"], listed["22"]["state"]) == ("warm", None) and "23" not in listed
+    again = client.post("/api/chat/voices/roll/undo", json={"roll_id": rolled["roll_id"]})
+    assert again.status_code == 409 and again.json()["error"] == "no_roll_to_undo"
+    kinds = [kind for kind in await wf.kinds_in(web.db) if "voice_role" in kind]
+    assert kinds == ["web.chat.voice_role_rolled", "web.chat.voice_role_undone"]
+
+
+async def test_a_roll_for_at_everyone_is_refused_in_words(seeded, client, guild, wf, web):
+    client.get("/api/chat/personality")
+    guild.roles.append(guild.default_role)
+
+    for where in ("/api/chat/voices/roll/preview", "/api/chat/voices/roll"):
+        refused = client.post(where, json={"role_id": str(wf.GUILD_ID), "everyone": True})
+        assert refused.status_code == 422 and refused.json()["error"] == "everyone_role"
+        assert "Pick a role instead" in refused.json()["message"]
+    assert [kind for kind in await wf.kinds_in(web.db) if "voice" in kind] == []
 
 
 async def test_a_roll_for_a_role_nobody_has_or_with_no_tone_on_is_refused_in_words(
@@ -1164,6 +1211,8 @@ async def test_the_voice_routes_are_staff_only(client, sign_in, guild, wf, web):
         ("POST", "/api/chat/voices/8/reroll", None),
         ("PUT", "/api/chat/voices/8/tone", {"trope": "noir"}),
         ("POST", "/api/chat/voices/roll", {"role_id": "1", "everyone": True}),
+        ("POST", "/api/chat/voices/roll/preview", {"role_id": "1", "everyone": True}),
+        ("POST", "/api/chat/voices/roll/undo", {}),
         ("PUT", "/api/chat/personality/noir", {"voice": "mine"}),
     ):
         response = client.request(method, where, json=body)

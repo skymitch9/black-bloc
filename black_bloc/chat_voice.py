@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import random
@@ -428,6 +429,90 @@ async def set_tone(
         SET_TONE, (int(guild_id), int(user_id), str(tone), how, by, at, str(tone))
     )
     await db.conn.commit()
+
+
+KEPT_BY_A_ROLL = (
+    "tone", "how", "settled", "heard", "set_by", "moved_at", "moved_from", "moved_why", "since",
+    "turns", "trope", "fed_since", "avoid", "avoid_left",
+)
+PUT_BACK = (
+    f"UPDATE chat_voice SET {', '.join(f'{name} = ?' for name in KEPT_BY_A_ROLL)} "
+    "WHERE guild_id = ? AND user_id = ? AND tone = ? AND pinned IS NULL"
+)
+NEVER_HAD_ONE = (
+    "DELETE FROM chat_voice WHERE guild_id = ? AND user_id = ? AND tone = ? AND pinned IS NULL"
+)
+ROLL_KEPT = (
+    "INSERT INTO chat_voice_rolls(guild_id, role_id, role, everyone, rolled_by, at, moves) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?)"
+)
+
+
+def before_a_roll(row: Any) -> dict[str, Any]:
+    """Everything a roll writes over, so Undo puts back the tone AND how settled it was."""
+    found = {name: col(row, name) for name in KEPT_BY_A_ROLL}
+    for name in ("settled", "heard", "turns", "avoid_left"):
+        found[name] = int(found[name] or 0)
+    return found
+
+
+async def keep_roll(
+    db: Any,
+    guild_id: Any,
+    role: Any,
+    moves: list[dict[str, Any]],
+    *,
+    everyone: bool,
+    by: Any = None,
+    now: datetime | None = None,
+) -> int:
+    at = (now or datetime.now(UTC)).isoformat()
+    kept = (int(guild_id), int(role.id), str(getattr(role, "name", role.id)), int(everyone), by)
+    cur = await db.conn.execute(ROLL_KEPT, (*kept, at, json.dumps(moves)))
+    await db.conn.commit()
+    return int(cur.lastrowid)
+
+
+async def last_roll(db: Any, guild_id: Any) -> Any:
+    """Only the newest roll of a server can be undone; the next roll closes the one before."""
+    cur = await db.conn.execute(
+        "SELECT * FROM chat_voice_rolls WHERE guild_id = ? ORDER BY id DESC LIMIT 1",
+        (int(guild_id),),
+    )
+    return await cur.fetchone()
+
+
+def moves_of(roll: Any) -> list[dict[str, Any]]:
+    try:
+        found = json.loads(str(roll["moves"] or "[]"))
+    except (TypeError, ValueError):
+        return []
+    return [one for one in found if isinstance(one, dict)] if isinstance(found, list) else []
+
+
+async def put_back(db: Any, guild_id: Any, move: dict[str, Any]) -> bool:
+    """A member whose tone changed again since the roll, or who was pinned, is left alone."""
+    before = move.get("before") or {}
+    where = (int(guild_id), int(move["user_id"]), str(move["to"]))
+    if before.get("tone") is None and before.get("trope") is None:
+        cur = await db.conn.execute(NEVER_HAD_ONE, where)
+        return bool(cur.rowcount)
+    kept = tuple(before.get(name) for name in KEPT_BY_A_ROLL)
+    cur = await db.conn.execute(PUT_BACK, (*kept, *where))
+    return bool(cur.rowcount)
+
+
+async def mark_undone(
+    db: Any, roll_id: Any, *, by: Any = None, now: datetime | None = None
+) -> bool:
+    at = (now or datetime.now(UTC)).isoformat()
+    cur = await db.conn.execute(
+        "UPDATE chat_voice_rolls SET undone_at = ?, undone_by = ? WHERE id = ? "
+        "AND undone_at IS NULL",
+        (at, by, int(roll_id)),
+    )
+    await db.conn.commit()
+    return bool(cur.rowcount)
 
 
 def another(pool: list[Trope], current: Any, rng: Any = None) -> Trope | None:

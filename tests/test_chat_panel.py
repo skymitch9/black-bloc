@@ -179,7 +179,7 @@ def test_every_move_the_panel_can_render_is_in_the_one_table():
     rendered |= {move.action for move in chat_panel.voices_buttons(2, 3)}
     rendered |= {move.action for move in chat_panel.member_buttons(True)}
     rendered |= {move.action for move in chat_panel.member_buttons(False)}
-    rendered |= {move.action for move in chat_panel.role_buttons()}
+    rendered |= {move.action for move in chat_panel.role_buttons(undo=True)}
     rendered |= {move.action for move in chat_panel.review_buttons(2, 3)}
     rendered |= {move.action for move in chat_panel.review_item_buttons(can_approve=True)}
 
@@ -630,6 +630,8 @@ def test_reroll_renders_only_where_no_pin_holds_the_tone_and_a_tone_is_on():
     assert actions(chat_panel.role_buttons()) == [
         chat_panel.ROLE_ONLY, chat_panel.ROLE_EVERYONE, chat_panel.BACK]
     assert [move.label for move in chat_panel.role_buttons(("A", "B"))][:2] == ["A", "B"]
+    assert actions(chat_panel.role_buttons(undo=True)) == [
+        chat_panel.ROLE_ONLY, chat_panel.ROLE_EVERYONE, chat_panel.ROLE_UNDO, chat_panel.BACK]
 
 
 def entry(**given):
