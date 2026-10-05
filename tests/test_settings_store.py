@@ -1421,6 +1421,14 @@ async def test_memory_that_works_and_how_we_talk_are_three_keys_both_doors_reach
     assert store.get(7, "chat_memory_rapport_line") == RAPPORT_LINE
     for key in ("chat_memory_min_turns", "chat_memory_rapport_max", "chat_memory_rapport_line"):
         assert KEY_HELP.get(key) and settings_store.namespace_of(key) == "chat"
+    assert KEY_TYPES["chat_memory_sweep_hours"] == "int"
+    assert store.get(7, "chat_memory_sweep_hours") == 1
+    assert settings_store.namespace_of("chat_memory_sweep_hours") == "chat"
+    assert "chat_daily_turns" in KEY_HELP["chat_memory_sweep_hours"]
+    assert coerce_value("chat_memory_sweep_hours", 24) == 24
+    for bad in (0, 25):
+        with pytest.raises(SettingError):
+            coerce_value("chat_memory_sweep_hours", bad)
     assert coerce_value("chat_memory_min_turns", 10) == 10
     assert coerce_value("chat_memory_rapport_max", 0) == 0
     assert coerce_value("chat_memory_rapport_line", "{number}. {text}") == "{number}. {text}"
@@ -2331,7 +2339,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 740
+    assert len(settings_store.KEY_TYPES) == 741
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):

@@ -560,6 +560,7 @@ const SETTING_SPECS = [
   ['chat_memory_threads_max', 'int', 5, 5, 'how many open topics (“was asking about the Thursday event”) one profile holds, up to 20', null, 20],
   ['chat_memory_model', 'text', '', '', 'which Groq model writes the profile up after a conversation ends; blank uses chat_simple_model, the same quick tier that answers'],
   ['chat_memory_min_turns', 'int', 1, 1, 'how many messages a person must have sent Black Bloc in one conversation before it is written up into their profile, up to 10; 1 means a single exchange can be remembered', null, 10, 1],
+  ['chat_memory_sweep_hours', 'int', 1, 1, "how often, in hours, Black Bloc writes finished conversations up into what it remembers, from 1 to 24; 1 by default, and a change takes effect without a restart. Each conversation written up counts as one of the server's chat_daily_turns, so a shorter interval can spend more of them", null, 24, 1],
   ['chat_memory_rapport_max', 'int', 4, 4, 'how many lines about how a person and Black Bloc talk — the manner they like, a running joke — Black Bloc uses from one profile, up to 20; a newer line on the same subject replaces the older one. Lowering it takes effect on the very next answer: lines past the number stay stored and stay on the person\'s own `/memory` panel but are not read, 0 reads none, and raising it brings them back', null, 20],
   ['chat_memory_rapport_line', 'text', '**#{number}** *how we talk:* {text}', '**#{number}** *how we talk:* {text}', "how one how-we-talk line reads on a person's own `/memory` panel; {number} is its place on the list and {text} is the line itself, and both must be there"],
   ["chat_channel_note_saved", 'text', "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's topic from its next answer on.", "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's topic from its next answer on.", "what staff are told when a channel note is saved, on /chat and on the Chat page. It takes {channel}, the channel's name"],
@@ -11012,7 +11013,8 @@ const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_ch
 const CHAT_MEMORY_SETTING_KEYS = ['chat_memory_mode', 'chat_memory_consent',
   'chat_memory_retention_days', 'chat_memory_dm_scope', 'chat_memory_staff_view',
   'chat_memory_notes_max', 'chat_memory_threads_max', 'chat_memory_model',
-  'chat_memory_min_turns', 'chat_memory_rapport_max', 'chat_memory_rapport_line'];
+  'chat_memory_min_turns', 'chat_memory_sweep_hours', 'chat_memory_rapport_max',
+  'chat_memory_rapport_line'];
 const CHAT_UNKNOWN_LINE = 'Not sure I follow, {name} — try `/help` for what I can do.';
 const CHAT_NO_SUCH_INTENT = 'Black Bloc has no chat intent **#%s** any more, so nothing was done. The Chat page lists the ones it has.';
 const CHAT_NO_SUCH_LINE = 'Black Bloc has no chat line **#%s** any more, so nothing was done. Somebody may have removed it while this page was open.';

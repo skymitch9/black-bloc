@@ -35,6 +35,9 @@ from .chat_memory import (
     RETENTION_DAYS,
     RETENTION_MAX_DAYS,
     STAFF_VIEWS,
+    SWEEP_HOURS,
+    SWEEP_HOURS_KEY,
+    SWEEP_HOURS_MAX,
     THREADS_CEILING,
     THREADS_MAX,
 )
@@ -4099,12 +4102,26 @@ GROUNDING_NOTE_CHARS = 600
 # textually.
 MEMORY_MIN_TURNS_KEY = MIN_TURNS_KEY
 KEY_TYPES.update(
-    {MEMORY_MIN_TURNS_KEY: "int", RAPPORT_MAX_KEY: "int", RAPPORT_LINE_KEY: "text"}
+    {
+        MEMORY_MIN_TURNS_KEY: "int",
+        RAPPORT_MAX_KEY: "int",
+        RAPPORT_LINE_KEY: "text",
+        SWEEP_HOURS_KEY: "int",
+    }
 )
 KEY_MAX.update(
-    {MEMORY_MIN_TURNS_KEY: DISTIL_MIN_TURNS_CEILING, RAPPORT_MAX_KEY: RAPPORT_CEILING}
+    {
+        MEMORY_MIN_TURNS_KEY: DISTIL_MIN_TURNS_CEILING,
+        RAPPORT_MAX_KEY: RAPPORT_CEILING,
+        SWEEP_HOURS_KEY: SWEEP_HOURS_MAX,
+    }
 )
 KEY_MIN[MEMORY_MIN_TURNS_KEY] = 1
+KEY_MIN[SWEEP_HOURS_KEY] = 1
+KEY_MIN_REASON[SWEEP_HOURS_KEY] = (
+    "A conversation is only written up once it is an hour old, so checking more often than "
+    "every {limit} hour would find nothing new."
+)
 KEY_MIN_REASON[MEMORY_MIN_TURNS_KEY] = (
     "A conversation with no message from the person in it has nothing to remember, so the "
     "fewest Black Bloc will take is {limit}."
@@ -4122,6 +4139,12 @@ KEY_HELP.update(
             f"line on the same subject replaces the older one. Lowering it takes effect on the "
             f"very next answer: lines past the number stay stored and stay on the person's own "
             f"`/memory` panel but are not read, 0 reads none, and raising it brings them back"
+        ),
+        SWEEP_HOURS_KEY: (
+            f"how often, in hours, Black Bloc writes finished conversations up into what it "
+            f"remembers, from 1 to {SWEEP_HOURS_MAX}; 1 by default, and a change takes effect "
+            f"without a restart. Each conversation written up counts as one of the server's "
+            f"chat_daily_turns, so a shorter interval can spend more of them"
         ),
         RAPPORT_LINE_KEY: (
             "how one how-we-talk line reads on a person's own `/memory` panel; {number} is its "
@@ -7716,6 +7739,8 @@ class SettingsStore:
             return DISTIL_MIN_TURNS
         if key == RAPPORT_MAX_KEY:
             return RAPPORT_MAX
+        if key == SWEEP_HOURS_KEY:
+            return SWEEP_HOURS
         if key == RAPPORT_LINE_KEY:
             return RAPPORT_LINE
         if key == "emoji_skin_tone":

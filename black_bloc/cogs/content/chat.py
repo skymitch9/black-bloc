@@ -32,6 +32,7 @@ from ...chat_llm import (
     sweep_window,
     tier_errors,
 )
+from ...chat_memory import SWEEP_HOURS, SWEEP_HOURS_KEY, SWEEP_HOURS_MAX
 from ...chat_voice import voice_row
 from ...command_errors import AnswersErrors
 from ...command_visibility import STAFF_ONLY
@@ -134,6 +135,7 @@ WATCHED = (
     "chat_greeting_reaction",
     "chat_reply_in_threads",
     "chat_route_ping_staff",
+    SWEEP_HOURS_KEY,
 )
 STAFF_NOTE = "{who} asked for a mod in {where}. {link}"
 ADMIN_ONLY_KEY = "chat_status_admin_only"
@@ -150,6 +152,7 @@ MEMORY_SETTINGS_HEADER = (
 )
 
 INGEST_HOURS = 24
+INGEST_SLACK_SECONDS = 120
 KNOWLEDGE_INGESTED = "chat.knowledge_ingested"
 KNOWLEDGE_LIST_MAX = 15
 NO_NOTES = (
@@ -1539,7 +1542,8 @@ class Chat(commands.Cog):
         self._seeded: set[int] = set()
         self.last_ingest_at: str | None = None
         self.last_ingest_error: str | None = None
-        self.last_distil: dict[str, int] | None = None
+        self.last_distil: dict[str, Any] | None = None
+        self._knowledge_at: float | None = None
         self.last_review_at: str | None = None
         self.last_review_error: str | None = None
 
@@ -1622,23 +1626,56 @@ class Chat(commands.Cog):
                 log.warning("chat: the review digest failed in %s — %s", guild.id, exc)
         return tagged
 
-    @tasks.loop(hours=INGEST_HOURS)
+    @tasks.loop(hours=SWEEP_HOURS)
     async def _ingest(self) -> None:
+        """Ticks at the memory write-up's pace; the knowledge half still runs once a day."""
         if self.usable_db() is None:
             return
-        await self.seed_drafts()
         try:
-            await self.ingest_once()
+            if self.knowledge_due():
+                await self.seed_drafts()
+                await self.ingest_once()
+                self._knowledge_at = time.monotonic()
+            else:
+                await self.memory_once()
         except Exception as exc:
             self.last_ingest_error = f"{type(exc).__name__}: {exc}"
-            log.exception("chat: the daily knowledge ingest failed")
+            log.exception("chat: the ingest tick failed")
             return
+        finally:
+            self._retime()
         self.last_ingest_error = None
         self.last_ingest_at = datetime.now(UTC).isoformat()
 
     @_ingest.before_loop
     async def _before_ingest(self) -> None:
-        await wait_ready(self.bot, self._ingest_stopped)
+        if await wait_ready(self.bot, self._ingest_stopped):
+            self._retime()
+
+    def knowledge_due(self) -> bool:
+        if self._knowledge_at is None:
+            return True
+        waited = time.monotonic() - self._knowledge_at
+        return waited >= INGEST_HOURS * 3600 - INGEST_SLACK_SECONDS
+
+    def sweep_hours(self) -> int:
+        home = getattr(self.bot.settings, "dev_guild_id", None)
+        if home is None:
+            guild = next(iter(getattr(self.bot, "guilds", ()) or ()), None)
+            home = getattr(guild, "id", None)
+        if home is None:
+            return SWEEP_HOURS
+        try:
+            found = int(self.bot.store.get(int(home), SWEEP_HOURS_KEY))
+        except Exception as exc:
+            log.warning("chat: the write-up interval was unreadable — %s", exc)
+            return SWEEP_HOURS
+        return max(1, min(SWEEP_HOURS_MAX, found))
+
+    def _retime(self) -> None:
+        wanted = self.sweep_hours()
+        if self._ingest.hours != wanted:
+            self._ingest.change_interval(hours=wanted)
 
     @_ingest.error
     async def _ingest_stopped(self, exc: BaseException) -> None:
@@ -1662,14 +1699,7 @@ class Chat(commands.Cog):
         db = self.usable_db()
         if db is None:
             return 0
-        try:
-            self.last_distil = await distil_run(self.bot)
-        except Exception as exc:
-            log.warning("chat: nothing was remembered — %s: %s", type(exc).__name__, exc)
-        try:
-            await sweep_window(db)
-        except Exception as exc:
-            log.warning("chat: the window was not swept — %s: %s", type(exc).__name__, exc)
+        await self.memory_once()
         written = 0
         for guild in list(getattr(self.bot, "guilds", ()) or ()):
             if getattr(guild, "unavailable", False):
@@ -1689,7 +1719,24 @@ class Chat(commands.Cog):
             )
         return written
 
+    async def memory_once(self) -> None:
+        """The write-up and the window sweep behind it: no knowledge, and no log row of its own."""
+        db = self.usable_db()
+        if db is None:
+            return
+        try:
+            self.last_distil = await distil_run(self.bot)
+        except Exception as exc:
+            log.warning("chat: nothing was remembered — %s: %s", type(exc).__name__, exc)
+        try:
+            await sweep_window(db)
+        except Exception as exc:
+            log.warning("chat: the window was not swept — %s: %s", type(exc).__name__, exc)
+
     def _settings_changed(self, guild_id: int, key: str, value: Any, by: Any) -> None:
+        if key == SWEEP_HOURS_KEY:
+            self._retime()
+            return
         invalidate(self.bot, guild_id)
 
     async def seed_guilds(self) -> None:

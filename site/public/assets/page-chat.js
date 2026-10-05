@@ -68,6 +68,7 @@ const MEMORY_SETTING_KEYS = [
   'chat_memory_threads_max',
   'chat_memory_model',
   'chat_memory_min_turns',
+  'chat_memory_sweep_hours',
   'chat_memory_rapport_max',
   'chat_memory_rapport_line',
 ];

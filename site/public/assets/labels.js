@@ -564,6 +564,7 @@ export const LABELS = {
   chat_memory_threads_max: 'How many open topics one profile holds',
   chat_memory_model: 'Which model writes a profile up after a conversation',
   chat_memory_min_turns: 'How many messages make a conversation worth remembering',
+  chat_memory_sweep_hours: 'How often finished conversations are written up',
   chat_memory_rapport_max: 'How many how-we-talk lines one profile holds',
   chat_memory_rapport_line: 'How a how-we-talk line reads on /memory',
   chat_channel_note_saved: "What staff are told when a channel note is saved",

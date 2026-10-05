@@ -33,6 +33,7 @@
     "min": {
       "chat_cooldown_seconds": 5,
       "chat_memory_min_turns": 1,
+      "chat_memory_sweep_hours": 1,
       "chat_review_digest_hour": 0,
       "chat_review_reask_seconds": 0,
       "error_retry_minutes": 1,
@@ -103,6 +104,7 @@
       "chat_memory_notes_max": 20,
       "chat_memory_rapport_max": 20,
       "chat_memory_retention_days": 3650,
+      "chat_memory_sweep_hours": 24,
       "chat_memory_threads_max": 20,
       "chat_monthly_cap_usd": 1000,
       "chat_person_hourly_turns": 10000,

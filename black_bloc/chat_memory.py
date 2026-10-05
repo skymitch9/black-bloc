@@ -55,6 +55,8 @@ QUOTE_RUN_WORDS = 6
 DISTIL_MIN_TURNS = 1
 DISTIL_MIN_TURNS_CEILING = 10
 DISTIL_MAX_TURNS = 24
+SWEEP_HOURS = 1
+SWEEP_HOURS_MAX = 24
 
 MODE_KEY = "chat_memory_mode"
 CONSENT_KEY = "chat_memory_consent"
@@ -65,6 +67,7 @@ NOTES_MAX_KEY = "chat_memory_notes_max"
 THREADS_MAX_KEY = "chat_memory_threads_max"
 MODEL_KEY = "chat_memory_model"
 MIN_TURNS_KEY = "chat_memory_min_turns"
+SWEEP_HOURS_KEY = "chat_memory_sweep_hours"
 RAPPORT_MAX_KEY = "chat_memory_rapport_max"
 RAPPORT_LINE_KEY = "chat_memory_rapport_line"
 RAPPORT_LINE = "**#{number}** *how we talk:* {text}"
