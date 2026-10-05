@@ -244,3 +244,18 @@ async def test_staff_clearing_a_profile_takes_the_rapport_with_it(as_staff, web,
     as_staff.delete(f"/api/chat/memory/{ASKER}")
 
     assert await profile_for(web.db, ASKER, wf.GUILD_ID) is None
+
+
+async def test_the_counts_follow_the_cap_as_it_stands_and_say_how_many_are_held_back(
+    as_staff, web, wf
+):
+    await with_rapport(web, wf)
+    await web.store.set(wf.GUILD_ID, "chat_memory_rapport_max", 1, by=LEAD)
+
+    one = as_staff.get("/api/chat/memory").json()
+    await web.store.set(wf.GUILD_ID, "chat_memory_rapport_max", 0, by=LEAD)
+    none = as_staff.get("/api/chat/memory").json()
+
+    assert (one["rapport"], one["rapport_held"]) == (1, 1)
+    assert (one["profiles"][0]["rapport"], one["profiles"][0]["rapport_held"]) == (1, 1)
+    assert (none["rapport"], none["rapport_held"]) == (0, 2)

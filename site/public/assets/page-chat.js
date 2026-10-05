@@ -1240,6 +1240,7 @@ async function memorySection(payload, specs, say) {
       badge(`${payload?.notes ?? 0} preference(s)`, null),
       badge(`${payload?.threads ?? 0} open topic(s)`, null),
       badge(`${payload?.rapport ?? 0} how-we-talk`, null),
+      payload?.rapport_held ? badge(`${payload.rapport_held} held back by the cap`, null) : null,
       badge(`${payload?.opted_out ?? 0} opted out`, null),
       badge(`${payload?.dm_notes ?? 0} learned in a DM`, null),
     ]),

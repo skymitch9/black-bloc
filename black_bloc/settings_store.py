@@ -4118,8 +4118,10 @@ KEY_HELP.update(
         ),
         RAPPORT_MAX_KEY: (
             f"how many lines about how a person and Black Bloc talk — the manner they like, a "
-            f"running joke — one profile holds, up to {RAPPORT_CEILING}; a newer line on the "
-            f"same subject replaces the older one, and 0 keeps none"
+            f"running joke — Black Bloc uses from one profile, up to {RAPPORT_CEILING}; a newer "
+            f"line on the same subject replaces the older one. Lowering it takes effect on the "
+            f"very next answer: lines past the number stay stored and stay on the person's own "
+            f"`/memory` panel but are not read, 0 reads none, and raising it brings them back"
         ),
         RAPPORT_LINE_KEY: (
             "how one how-we-talk line reads on a person's own `/memory` panel; {number} is its "

@@ -560,7 +560,7 @@ const SETTING_SPECS = [
   ['chat_memory_threads_max', 'int', 5, 5, 'how many open topics (“was asking about the Thursday event”) one profile holds, up to 20', null, 20],
   ['chat_memory_model', 'text', '', '', 'which Groq model writes the profile up after a conversation ends; blank uses chat_simple_model, the same quick tier that answers'],
   ['chat_memory_min_turns', 'int', 1, 1, 'how many messages a person must have sent Black Bloc in one conversation before it is written up into their profile, up to 10; 1 means a single exchange can be remembered', null, 10, 1],
-  ['chat_memory_rapport_max', 'int', 4, 4, 'how many lines about how a person and Black Bloc talk — the manner they like, a running joke — one profile holds, up to 20; a newer line on the same subject replaces the older one, and 0 keeps none', null, 20],
+  ['chat_memory_rapport_max', 'int', 4, 4, 'how many lines about how a person and Black Bloc talk — the manner they like, a running joke — Black Bloc uses from one profile, up to 20; a newer line on the same subject replaces the older one. Lowering it takes effect on the very next answer: lines past the number stay stored and stay on the person\'s own `/memory` panel but are not read, 0 reads none, and raising it brings them back', null, 20],
   ['chat_memory_rapport_line', 'text', '**#{number}** *how we talk:* {text}', '**#{number}** *how we talk:* {text}', "how one how-we-talk line reads on a person's own `/memory` panel; {number} is its place on the list and {text} is the line itself, and both must be there"],
   ["chat_channel_note_saved", 'text', "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's topic from its next answer on.", "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's topic from its next answer on.", "what staff are told when a channel note is saved, on /chat and on the Chat page. It takes {channel}, the channel's name"],
   ["chat_channel_note_cleared", 'text', "The note for **#{channel}** is gone. Black Bloc goes back to the channel's own topic, or just its name when it has none.", "The note for **#{channel}** is gone. Black Bloc goes back to the channel's own topic, or just its name when it has none.", "what staff are told when a channel note is cleared. It takes {channel}"],
@@ -12041,12 +12041,17 @@ function memoryFull() {
   return state.settings.get('chat_memory_staff_view') === 'full';
 }
 
+function memoryInUse(row) {
+  return (row.rapport || []).slice(0, Math.max(0, Number(state.settings.get('chat_memory_rapport_max')) || 0));
+}
+
 function memoryRow(row, full) {
   return {
     member: { id: String(row.user_id), name: memberName(row.user_id) || String(row.user_id) },
     notes: row.notes.length,
     threads: row.threads.length,
-    rapport: (row.rapport || []).length,
+    rapport: memoryInUse(row).length,
+    rapport_held: (row.rapport || []).length - memoryInUse(row).length,
     turns_seen: row.turns_seen,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -12081,7 +12086,8 @@ route('GET', '/api/chat/memory', (context) => {
     names: state.profiles.filter((row) => row.call_me).length,
     notes: state.profiles.reduce((sum, row) => sum + row.notes.length, 0),
     threads: state.profiles.reduce((sum, row) => sum + row.threads.length, 0),
-    rapport: state.profiles.reduce((sum, row) => sum + (row.rapport || []).length, 0),
+    rapport: state.profiles.reduce((sum, row) => sum + memoryInUse(row).length, 0),
+    rapport_held: state.profiles.reduce((sum, row) => sum + (row.rapport || []).length - memoryInUse(row).length, 0),
     dm_notes: state.profiles.reduce((sum, row) => sum
       + [...row.notes, ...row.threads, ...(row.rapport || [])].filter((one) => one.where === 'dm').length, 0),
     last_run: state.memoryLastRun,

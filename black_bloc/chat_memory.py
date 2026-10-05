@@ -6,6 +6,21 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from .chat_memory_rules import (
+    RAPPORT_OTHERS,
+    RULE_CHARSET,
+    RULE_INSTRUCTION,
+    RULE_LINK,
+    clean,
+    forms,
+    is_a_link,
+    is_an_instruction,
+    is_plain,
+    private_rule,
+)
+from .chat_memory_rules import RULE_PERSONAL as RULE_PERSONAL
+from .chat_memory_rules import RULE_SENSITIVE as RULE_SENSITIVE
+
 log = logging.getLogger(__name__)
 
 DM = "dm"
@@ -74,12 +89,8 @@ RULE_QUOTE = "quote"
 RULE_THIRD = "third_person"
 RULE_EVENT = "event"
 RULE_AVAILABILITY = "availability"
-RULE_SENSITIVE = "sensitive"
 RULE_LONG = "too_long"
 RULE_EMPTY = "empty"
-RULE_INSTRUCTION = "instruction"
-RULE_LINK = "link"
-RULE_PERSONAL = "personal"
 
 KIND_NOTE = "note"
 KIND_RAPPORT = "rapport"
@@ -197,190 +208,6 @@ OUTCOMES: tuple[str, ...] = (
 
 OTHER_NAME_CHARS = 3
 OTHER_NAMES_MAX = 2000
-
-SENSITIVE: tuple[str, ...] = (
-    "depressed",
-    "depression",
-    "anxiety",
-    "anxious",
-    "adhd",
-    "autistic",
-    "autism",
-    "bipolar",
-    "therapy",
-    "therapist",
-    "medication",
-    "meds",
-    "diagnosed",
-    "disabled",
-    "disability",
-    "illness",
-    "surgery",
-    "christian",
-    "muslim",
-    "jewish",
-    "hindu",
-    "buddhist",
-    "atheist",
-    "religion",
-    "religious",
-    "church",
-    "mosque",
-    "synagogue",
-    "republican",
-    "democrat",
-    "conservative",
-    "liberal",
-    "politics",
-    "political",
-    "voted",
-    "gay",
-    "lesbian",
-    "bisexual",
-    "asexual",
-    "queer",
-    "years old",
-    "age",
-    "aged",
-    "born in",
-    "birthday",
-    "minor",
-    "underage",
-    "broke",
-    "poor",
-    "rich",
-    "salary",
-    "wage",
-    "rent",
-    "unemployed",
-    "money",
-    "paycheck",
-    "bills",
-    "debt",
-)
-
-INSTRUCTIONS: tuple[str, ...] = (
-    "you",
-    "your",
-    "yours",
-    "yourself",
-    "ignore",
-    "ignores",
-    "ignoring",
-    "disregard",
-    "override",
-    "overrides",
-    "bypass",
-    "jailbreak",
-    "pretend",
-    "obey",
-    "comply",
-    "must",
-    "prompt",
-    "prompts",
-    "system message",
-    "instruction",
-    "instructions",
-    "act as",
-    "developer mode",
-    "grant",
-    "grants",
-    "granted",
-    "permission",
-    "permissions",
-    "allowed to",
-    "authorised",
-    "authorized",
-    "password",
-    "token",
-    "api key",
-    "secret",
-    "secrets",
-    "reveal",
-    "admin",
-    "administrator",
-    "moderator",
-    "staff",
-    "owner",
-    "unban",
-)
-
-LINKS: tuple[str, ...] = ("http", "www.", "://", "discord.gg", ".com/", ".gg/")
-
-PERSONAL: tuple[str, ...] = (
-    "girlfriend",
-    "boyfriend",
-    "wife",
-    "husband",
-    "spouse",
-    "partner",
-    "married",
-    "divorced",
-    "dating",
-    "relationship",
-    "relationships",
-    "family",
-    "mom",
-    "mum",
-    "mother",
-    "dad",
-    "father",
-    "parents",
-    "kids",
-    "children",
-    "son",
-    "daughter",
-    "brother",
-    "sister",
-    "job",
-    "career",
-    "boss",
-    "school",
-    "college",
-    "university",
-    "gender",
-    "pronouns",
-    "trans",
-    "transgender",
-    "nonbinary",
-    "non binary",
-    "race",
-    "ethnicity",
-    "nationality",
-    "immigrant",
-    "lonely",
-    "suicidal",
-    "trauma",
-    "addiction",
-    "addicted",
-    "drunk",
-    "drugs",
-    "weight",
-    "body",
-    "believes",
-    "belief",
-    "beliefs",
-    "faith",
-)
-
-RAPPORT_OTHERS: tuple[str, ...] = (
-    "friend",
-    "friends",
-    "another member",
-    "other members",
-    "other people",
-    "others",
-    "someone",
-    "somebody",
-    "everybody",
-    "people",
-    "members",
-    "he",
-    "she",
-    "him",
-    "his",
-    "hers",
-)
 
 THEME_FILLER: frozenset[str] = frozenset(
     """
@@ -504,21 +331,24 @@ def why_dropped(
     rapport: bool = False,
 ) -> str | None:
     """The rule a line breaks, by name, or None when it may be kept."""
-    said = str(text or "").strip()
+    said = clean(text)
     if not said:
         return RULE_EMPTY
     if len(said) > NOTE_CHARS:
         return RULE_LONG
     if any(mark in said for mark in QUOTE_MARKS):
         return RULE_QUOTE
-    if "<@" in said or "@" in said:
+    if "@" in said:
         return RULE_THIRD
-    if any(mark in said.lower() for mark in LINKS):
+    read = forms(said)
+    if is_a_link(said, read):
         return RULE_LINK
+    if not is_plain(said):
+        return RULE_CHARSET
     words = normalise(said)
     if not words:
         return RULE_EMPTY
-    if any(has_phrase(words, phrase) for phrase in INSTRUCTIONS):
+    if is_an_instruction(read, thread=thread):
         return RULE_INSTRUCTION
     if any(has_phrase(words, phrase) for phrase in THIRD_PARTY):
         return RULE_THIRD
@@ -528,10 +358,9 @@ def why_dropped(
         return RULE_THIRD
     if any(has_phrase(words, phrase) for phrase in AVAILABILITY):
         return RULE_AVAILABILITY
-    if any(has_phrase(words, phrase) for phrase in SENSITIVE):
-        return RULE_SENSITIVE
-    if rapport and any(has_phrase(words, phrase) for phrase in PERSONAL):
-        return RULE_PERSONAL
+    private = private_rule(read, rapport=rapport)
+    if private is not None:
+        return private
     against = OUTCOMES if thread else (*EVENTS, *OUTCOMES)
     if any(has_phrase(words, phrase) for phrase in against):
         return RULE_EVENT
@@ -700,7 +529,7 @@ def parse_distilled(text: Any, *, turns: Any = (), others: Any = ()) -> Distille
     call_me = found.get("call_me")
     if call_me is not None and not isinstance(call_me, str):
         return None
-    name = " ".join(str(call_me or "").split())
+    name = clean(call_me)
     if len(name) > CALL_ME_CHARS:
         return None
     quoted = shingles(turns)
@@ -729,7 +558,7 @@ def parse_distilled(text: Any, *, turns: Any = (), others: Any = ()) -> Distille
             if broke is not None:
                 dropped.append(broke)
                 continue
-            kept[field].append(" ".join(one.split()))
+            kept[field].append(clean(one))
     return Distilled(
         call_me=name,
         notes=tuple(kept["notes"]),
@@ -791,7 +620,13 @@ def same_theme(first: Any, second: Any) -> bool:
 def merged_rapport(
     fresh: Any, old: Any, *, where: str, at: str, limit: int
 ) -> tuple[Note, ...]:
-    """Newest first; a newer line on a theme replaces the older, but a DM never unseats public."""
+    """Newest first; a newer line on a theme replaces the older, but a DM never unseats public.
+
+    A lowered cap stops lines being ADDED and read; it never deletes what is already stored.
+    """
+    held = tuple(old or ())
+    if int(limit) <= 0:
+        return held
     found: list[Note] = []
     for text in fresh or ():
         if any(same_theme(text, one.text) for one in found):
@@ -811,7 +646,7 @@ def merged_rapport(
             found[spot] = Note(text=twin.text, where=widest(twin.where, note.where), at=twin.at)
         elif twin.where == DM and note.where == SERVER:
             found.append(note)
-    return tuple(found[: max(0, int(limit))])
+    return tuple(found[: max(int(limit), len(held))])
 
 
 def merge(
@@ -849,45 +684,56 @@ def safe(text: Any) -> str:
     return " ".join(cleaned.split())
 
 
+def passing(lines: Any, **how: Any) -> list[str]:
+    """Stored lines are judged again on the way out, so a newer rule reaches an older line."""
+    kept = [safe(one.text) for one in lines or () if why_dropped(one.text, **how) is None]
+    return [one for one in kept if one]
+
+
 def memory_note(profile: Profile | None, *, in_dm: bool, shared: bool = False) -> str:
     """The block that rides beside the people note; empty when there is nothing to say."""
     if profile is None:
         return ""
     seen = profile.visible(in_dm=in_dm, shared=shared)
     parts: list[str] = []
-    if seen.call_me:
+    if seen.call_me and why_dropped(seen.call_me) is None:
         parts.append(CALL_ME_PART.format(name=safe(seen.call_me)))
-    parts.extend(safe(one.text) for one in seen.notes)
-    if seen.threads:
-        parts.append(
-            THREADS_PART.format(threads="; ".join(safe(one.text) for one in seen.threads))
-        )
+    parts.extend(passing(seen.notes))
+    open_topics = passing(seen.threads, thread=True)
+    if open_topics:
+        parts.append(THREADS_PART.format(threads="; ".join(open_topics)))
     parts = [one for one in parts if one]
     if not parts:
         return ""
     return f"{MEMORY_OPENER} {' · '.join(parts)}{MEMORY_CLOSER}"
 
 
-def rapport_note(profile: Profile | None, *, in_dm: bool, shared: bool = False) -> str:
-    """Manner, not facts: every line is checked again on the way out, whenever it was stored."""
+def in_use(profile: Profile | None, limit: int = RAPPORT_MAX) -> tuple[Note, ...]:
+    """The rapport lines the cap lets through today; the rest stay stored and unread."""
+    if profile is None:
+        return ()
+    return profile.rapport[: max(0, int(limit))]
+
+
+def rapport_note(
+    profile: Profile | None, *, in_dm: bool, shared: bool = False, limit: int = RAPPORT_MAX
+) -> str:
+    """Manner, not facts: capped as the setting stands NOW, and judged again on the way out."""
     if profile is None:
         return ""
-    seen = profile.visible(in_dm=in_dm, shared=shared)
-    parts = [
-        safe(one.text)
-        for one in seen.rapport
-        if why_dropped(one.text, rapport=True) is None
-    ]
-    parts = [one for one in parts if one]
+    capped = Profile(rapport=in_use(profile, limit)).visible(in_dm=in_dm, shared=shared)
+    parts = passing(capped.rapport, rapport=True)
     if not parts:
         return ""
     return f"{RAPPORT_OPENER} {' · '.join(parts)}{RAPPORT_CLOSER}"
 
 
-def memory_blocks(profile: Profile | None, *, in_dm: bool, shared: bool = False) -> str:
+def memory_blocks(
+    profile: Profile | None, *, in_dm: bool, shared: bool = False, rapport_max: int = RAPPORT_MAX
+) -> str:
     found = (
         memory_note(profile, in_dm=in_dm, shared=shared),
-        rapport_note(profile, in_dm=in_dm, shared=shared),
+        rapport_note(profile, in_dm=in_dm, shared=shared, limit=rapport_max),
     )
     return "\n\n".join(one for one in found if one)
 

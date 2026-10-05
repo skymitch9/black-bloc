@@ -1230,3 +1230,60 @@ def test_a_broken_wording_falls_back_to_the_shipped_line():
     assert rapport_line(SimpleNamespace(store=store), GUILD) == RAPPORT_LINE
     assert fact_line(fact, 2, "{number} {text} {nope}") == "**#2** *how we talk:* likes puns {x}"
     assert fact_line(fact, 2, "{number}: {text}") == "2: likes puns {x}"
+
+
+async def test_the_cap_at_zero_empties_the_very_next_prompt_and_raising_it_brings_them_back(road):
+    """Nobody has to chat again, and nothing is deleted: the lines are held back, not lost."""
+    from black_bloc.chat_memory import RAPPORT_OPENER
+
+    stored = Profile(
+        call_me="Sky",
+        rapport=(
+            Note("likes dry teasing back", "server", AT),
+            Note("running joke about the toaster", "server", AT),
+        ),
+        created_at=E2E_START.isoformat(),
+        updated_at=E2E_START.isoformat(),
+    )
+    await save_profile(road.db, MEMBER, GUILD, stored)
+    await says(road, "what should I play next")
+    assert "toaster" in road.talker.last_turn and "dry teasing" in road.talker.last_turn
+
+    await road.store.set(GUILD, "chat_memory_rapport_max", 0)
+    await says(road, "and after that one")
+    panel = await open_panel(road.bot, road.member)
+
+    assert RAPPORT_OPENER not in road.talker.last_turn
+    assert "toaster" not in road.talker.last_turn and "they go by Sky" in road.talker.last_turn
+    assert panel.words.count("*(kept, not in use right now)*") == 2
+    assert "running joke about the toaster" in panel.words
+    assert (await profile_for(road.db, MEMBER, GUILD)).rapport == stored.rapport
+
+    await road.store.set(GUILD, "chat_memory_rapport_max", 1)
+    await says(road, "one more")
+    assert "dry teasing" in road.talker.last_turn and "toaster" not in road.talker.last_turn
+
+    await road.store.set(GUILD, "chat_memory_rapport_max", 4)
+    await says(road, "and another")
+    panel = await open_panel(road.bot, road.member)
+
+    assert "toaster" in road.talker.last_turn and "dry teasing" in road.talker.last_turn
+    assert "not in use" not in panel.words
+
+
+async def test_a_write_up_under_a_zero_cap_adds_no_rapport_and_deletes_none(road):
+    stored = (Note("likes dry teasing back", "server", AT),)
+    await save_profile(
+        road.db,
+        MEMBER,
+        GUILD,
+        Profile(rapport=stored, created_at=E2E_START.isoformat(), updated_at=E2E_START.isoformat()),
+    )
+    await road.store.set(GUILD, "chat_memory_rapport_max", 0)
+    await says(road, "call me Sky from this point")
+
+    await later(road, hours=2)
+    await road.chat.ingest_once()
+    profile = await profile_for(road.db, MEMBER, GUILD)
+
+    assert profile.call_me == "Sky" and profile.rapport == stored
