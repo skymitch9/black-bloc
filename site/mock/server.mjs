@@ -1885,6 +1885,7 @@ function seedState() {
     reasons: { no_answer: 1 },
     no_answer: { rate_limited: 1 },
     closed_why: {},
+    stood_down: { forgotten: 1 },
     rules: { third_person: 2, instruction: 1 },
     lines: { names: 1, notes: 2, threads: 1, rapport: 2 },
   },

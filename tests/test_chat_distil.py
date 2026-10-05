@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -635,3 +636,134 @@ async def test_the_last_sweep_reads_back_off_the_log_as_counts(bot, db):
     assert (found["seen"], found["distilled"], found["failed"]) == (1, 1, 0)
     assert found["lines"] == {"names": 1, "notes": 1, "threads": 1, "rapport": 0}
     assert "Sky" not in json.dumps(found)
+
+
+class SlowGroq(FakeGroq):
+    """Holds its answer until told, so something can happen while the model is thinking."""
+
+    def __init__(self, text=ANSWER):
+        super().__init__(text=text)
+        self.asked = asyncio.Event()
+        self.answer_now = asyncio.Event()
+
+    async def reply(self, *, system, messages, json_only=False):
+        self.asked.set()
+        await self.answer_now.wait()
+        return await super().reply(system=system, messages=messages, json_only=json_only)
+
+
+async def while_the_model_thinks(bot, db, client, meanwhile):
+    sweep = asyncio.create_task(run_it.run(bot, now=NOW))
+    await asyncio.wait_for(client.asked.wait(), 5)
+    await meanwhile()
+    client.answer_now.set()
+    return await asyncio.wait_for(sweep, 5)
+
+
+async def standing_profile(db):
+    from black_bloc.chat_memory import Note, Profile, save_profile
+
+    old = (NOW - timedelta(days=3)).isoformat()
+    await save_profile(
+        db,
+        MEMBER,
+        GUILD,
+        Profile(
+            call_me="Skylar",
+            notes=(Note("hates emoji", "server", old), Note("likes short answers", "server", old)),
+            created_at=old,
+            updated_at=old,
+        ),
+    )
+
+
+async def test_forget_everything_wins_over_a_write_up_already_in_flight(bot, db):
+    """Nothing is merged onto the stale read, and nothing onto an empty profile either: the
+    conversation being written up happened BEFORE the person said forget."""
+    from black_bloc.chat_memory import forget
+
+    client = with_client(bot, SlowGroq())
+    await standing_profile(db)
+    await turns_at(db, A_PREFERENCE)
+
+    async def forgets():
+        assert await forget(db, MEMBER, GUILD) is True
+
+    found = await while_the_model_thinks(bot, db, client, forgets)
+
+    assert await profile_for(db, MEMBER, GUILD) is None
+    assert (found["distilled"], found["failed"]) == (0, 0)
+    assert found["stood_down"] == {"forgotten": 1} and found["reasons"] == {}
+    assert (await details_of(db, "chat.memory_sweep"))["stood_down"] == {"forgotten": 1}
+    assert await details_of(db, "chat.memory_distil_failed") is None
+
+
+async def test_stop_remembering_me_wins_over_a_write_up_already_in_flight(bot, db):
+    from black_bloc.chat_memory import forget, set_remembered
+
+    client = with_client(bot, SlowGroq())
+    await standing_profile(db)
+    await turns_at(db, A_PREFERENCE)
+
+    async def stops():
+        await set_remembered(db, MEMBER, GUILD, consent="optout", wanted=False)
+        await forget(db, MEMBER, GUILD)
+
+    found = await while_the_model_thinks(bot, db, client, stops)
+
+    assert await profile_for(db, MEMBER, GUILD) is None
+    assert found["stood_down"] == {"withdrawn": 1} and found["distilled"] == 0
+
+
+async def test_somebody_with_no_profile_yet_who_stops_in_flight_gets_none(bot, db):
+    client = with_client(bot, SlowGroq())
+    await turns_at(db, A_PREFERENCE)
+
+    async def stops():
+        await set_override(db, MEMBER, GUILD)
+
+    found = await while_the_model_thinks(bot, db, client, stops)
+
+    assert await profile_for(db, MEMBER, GUILD) is None
+    assert found["stood_down"] == {"withdrawn": 1}
+
+
+async def test_a_line_dropped_in_flight_is_not_handed_straight_back(bot, db):
+    """The model read the old profile and repeats the note; the person had just dropped it."""
+    from black_bloc.chat_memory import drop_fact, save_profile
+
+    answer = json.dumps(
+        {"call_me": "Sky", "notes": ["likes short answers", "enjoys puns"], "threads": []}
+    )
+    client = with_client(bot, SlowGroq(text=answer))
+    await standing_profile(db)
+    await turns_at(db, A_PREFERENCE)
+
+    async def drops_one():
+        fresh, gone = drop_fact(await profile_for(db, MEMBER, GUILD), "note:1")
+        assert gone == 1
+        await save_profile(db, MEMBER, GUILD, fresh)
+
+    found = await while_the_model_thinks(bot, db, client, drops_one)
+    profile = await profile_for(db, MEMBER, GUILD)
+
+    assert found["distilled"] == 1
+    assert [one.text for one in profile.notes] == ["enjoys puns", "hates emoji"]
+    assert profile.call_me == "Sky"
+
+
+async def test_the_write_itself_refuses_a_row_that_went_or_a_person_who_stopped(db):
+    """The last gap, closed in SQL: the check and the write are one statement."""
+    from black_bloc.chat_memory import Profile, write_up
+
+    at = NOW.isoformat()
+    fresh = Profile(call_me="Sky", created_at=at, updated_at=at)
+
+    assert await write_up(db, MEMBER, GUILD, fresh, existed=True, consent="optout") is False
+    assert await profile_for(db, MEMBER, GUILD) is None
+    await set_override(db, MEMBER, GUILD)
+    assert await write_up(db, MEMBER, GUILD, fresh, existed=False, consent="optout") is False
+    assert await write_up(db, MEMBER, GUILD, fresh, existed=False, consent="optin") is True
+    assert await write_up(db, OTHER, GUILD, fresh, existed=False, consent="optin") is False
+    assert await write_up(db, OTHER, GUILD, fresh, existed=False, consent="optout") is True
+    assert (await profile_for(db, OTHER, GUILD)).call_me == "Sky"

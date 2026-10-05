@@ -49,8 +49,9 @@ from .chat_memory import (
     parse_distilled,
     profile_for,
     remembers,
-    save_profile,
     turn_speaker,
+    without_the_dropped,
+    write_up,
 )
 from .groq import GroqClient
 from .llm import ERROR, GROQ, OK, LLMError, record
@@ -67,6 +68,9 @@ BAD_SHAPE = "bad_shape"
 NO_MODEL = "no_model"
 NOT_SAVED = "not_saved"
 CLOSED = "models_closed"
+WITHDRAWN = "withdrawn"
+FORGOTTEN = "forgotten"
+STOOD_DOWN = (WITHDRAWN, FORGOTTEN)
 FAILURES = (NO_ANSWER, BAD_SHAPE, NO_MODEL, NOT_SAVED)
 TROUBLES = (*FAILURES, ALL_DROPPED, CLOSED)
 
@@ -231,8 +235,17 @@ async def distil_one(
         return Outcome(BAD_SHAPE)
     if found.empty:
         return Outcome(ALL_DROPPED if found.dropped else NOTHING, dropped=found.dropped)
+    consent = read_setting(store, guild_id, CONSENT_KEY, OPTOUT)
+    if not await remembers(db, user_id, guild_id, consent=consent):
+        return Outcome(WITHDRAWN)
+    current = await profile_for(db, user_id, guild_id)
+    if standing is not None and current is None:
+        return Outcome(FORGOTTEN)
+    found = without_the_dropped(found, standing, current)
+    if found.empty:
+        return Outcome(NOTHING, dropped=found.dropped)
     fresh = merge(
-        standing,
+        current,
         found,
         where=where,
         at=now.isoformat(),
@@ -241,8 +254,10 @@ async def distil_one(
         rapport_max=rapport_max,
         seen=len(member_turns(turns)),
     )
-    if not await save_profile(db, user_id, guild_id, fresh):
-        return Outcome(NOT_SAVED, dropped=found.dropped)
+    if not await write_up(
+        db, user_id, guild_id, fresh, existed=current is not None, consent=consent
+    ):
+        return await not_written(db, user_id, guild_id, consent, existed=current is not None)
     if guild is not None:
         await log_action(
             bot,
@@ -265,6 +280,17 @@ async def distil_one(
         threads=len(found.threads),
         rapport=len(found.rapport),
     )
+
+
+async def not_written(
+    db: Any, user_id: int, guild_id: Any, consent: Any, *, existed: bool
+) -> Outcome:
+    """Why the one statement touched no row: the person stopped, forgot, or the write failed."""
+    if not await remembers(db, user_id, guild_id, consent=consent):
+        return Outcome(WITHDRAWN)
+    if existed and await profile_for(db, user_id, guild_id) is None:
+        return Outcome(FORGOTTEN)
+    return Outcome(NOT_SAVED)
 
 
 def summed(
@@ -293,6 +319,7 @@ def summed(
         "reasons": dict(reasons),
         "no_answer": dict(Counter(one.why for one in outcomes if one.code == NO_ANSWER)),
         "closed_why": dict(closed),
+        "stood_down": {code: codes[code] for code in STOOD_DOWN if codes[code]},
         "rules": dict(Counter(rule for one in outcomes for rule in one.dropped)),
         "lines": {
             "names": sum(one.name for one in outcomes),

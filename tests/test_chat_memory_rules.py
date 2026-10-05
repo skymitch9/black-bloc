@@ -5,13 +5,13 @@ from black_bloc.chat_memory import why_dropped
 
 CASES = {
     rules.HEALTH: ("was diagnosed with cancer", "killed the boss without healing"),
-    rules.SEXUALITY_GENDER: ("is nonbinary and jokes about it", "likes the transition between levels"),
+    rules.SEXUALITY_GENDER: ("is nonbinary, jokes about it", "likes the level transitions"),
     rules.AGE: ("is a teen who likes puns", "quotes teen titans a lot"),
     rules.LOCATION: ("is from the UK, jokes about tea", "jokes from the last stream land"),
     rules.IMMIGRATION: ("worries about a visa renewal", "likes the visage boss fight"),
     rules.CRIMINAL: ("was arrested once and jokes about it", "loves police quest references"),
     rules.MONEY: ("is broke and laughs about it", "broke the record and likes hearing it"),
-    rules.RELIGION: ("goes to church and likes clean jokes", "likes the cathedral level music"),
+    rules.RELIGION: ("goes to church, likes clean jokes", "likes the cathedral level music"),
     rules.POLITICS: ("is a liberal who enjoys debate", "enjoys a spirited debate about tier lists"),
     rules.LIFE: ("jokes about their girlfriend a lot", "likes dad jokes and old school games"),
 }

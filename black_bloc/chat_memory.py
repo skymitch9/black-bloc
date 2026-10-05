@@ -898,6 +898,89 @@ async def save_profile(db: Any, user_id: Any, guild_id: Any, profile: Profile) -
     return True
 
 
+STILL_WANTED = {
+    OPTOUT: "NOT EXISTS (SELECT 1 FROM chat_memory_optout WHERE user_id = ? AND guild_id = ?)",
+    OPTIN: "EXISTS (SELECT 1 FROM chat_memory_optout WHERE user_id = ? AND guild_id = ?)",
+}
+
+
+async def write_up(
+    db: Any, user_id: Any, guild_id: Any, profile: Profile, *, existed: bool, consent: Any
+) -> bool:
+    """One statement, so a Forget or a Stop that lands first wins: no row revived, none made."""
+    who = (int(user_id or 0), int(guild_id or 0))
+    at = profile.updated_at or datetime.now(UTC).isoformat()
+    wanted = STILL_WANTED.get(str(consent or OPTOUT), STILL_WANTED[OPTOUT])
+    lines = json.dumps(
+        [
+            *(one.as_dict() for one in profile.notes),
+            *({**one.as_dict(), "kind": KIND_RAPPORT} for one in profile.rapport),
+        ],
+        ensure_ascii=False,
+    )
+    threads = json.dumps([one.as_dict() for one in profile.threads], ensure_ascii=False)
+    try:
+        if existed:
+            cur = await db.conn.execute(
+                "UPDATE chat_profiles SET call_me = ?, notes = ?, threads = ?, turns_seen = ?, "
+                f"updated_at = ? WHERE user_id = ? AND guild_id = ? AND {wanted}",
+                (profile.call_me or None, lines, threads, int(profile.turns_seen), at, *who, *who),
+            )
+        else:
+            cur = await db.conn.execute(
+                "INSERT INTO chat_profiles(user_id, guild_id, call_me, notes, threads, "
+                "turns_seen, created_at, updated_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? "
+                f"WHERE {wanted} ON CONFLICT(user_id, guild_id) DO NOTHING",
+                (
+                    *who,
+                    profile.call_me or None,
+                    lines,
+                    threads,
+                    int(profile.turns_seen),
+                    profile.created_at or at,
+                    at,
+                    *who,
+                ),
+            )
+        await db.conn.commit()
+    except Exception as exc:
+        log.warning("chat memory: a write-up was not saved — %s: %s", type(exc).__name__, exc)
+        return False
+    return bool(cur.rowcount)
+
+
+def lines_of(profile: Profile | None) -> set[str]:
+    if profile is None:
+        return set()
+    every = (*profile.notes, *profile.threads, *profile.rapport)
+    return {normalise(one.text) for one in every}
+
+
+def without_the_dropped(
+    new: Distilled, read: Profile | None, now: Profile | None
+) -> Distilled:
+    """What the person dropped while the model was thinking is not handed straight back."""
+    gone = lines_of(read) - lines_of(now)
+    lost_name = bool(read and read.call_me) and not (now and now.call_me)
+    if not gone and not lost_name:
+        return new
+
+    def kept(lines: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(
+            one
+            for one in lines
+            if normalise(one) not in gone and not any(same_theme(one, was) for was in gone)
+        )
+
+    return Distilled(
+        call_me="" if lost_name else new.call_me,
+        notes=kept(new.notes),
+        threads=kept(new.threads),
+        dropped=new.dropped,
+        rapport=kept(new.rapport),
+    )
+
+
 async def forget(db: Any, user_id: Any, guild_id: Any) -> bool:
     try:
         cur = await db.conn.execute(

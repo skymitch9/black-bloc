@@ -1129,7 +1129,13 @@ const MEMORY_FORGOT_FAILED = 'That profile was not cleared.';
 const MEMORY_DM_MARK = 'learned in a DM';
 const MEMORY_RAPPORT_MARK = 'how we talk';
 const MEMORY_NO_RUN = 'no write-up yet';
-const MEMORY_SKIPPED = { short: 'too short', staff: 'staff talk', opted_out: 'opted out' };
+const MEMORY_SKIPPED = {
+  short: 'too short',
+  staff: 'staff talk',
+  opted_out: 'opted out',
+  withdrawn: 'stopped meanwhile',
+  forgotten: 'forgotten meanwhile',
+};
 const MEMORY_REASONS = {
   no_answer: 'no answer',
   bad_shape: 'bad shape',
@@ -1167,6 +1173,7 @@ function memoryLastRun(run) {
     badge(`${run.distilled ?? 0} kept`, run.distilled ? 'ok' : null),
     badge(`${run.nothing ?? 0} nothing to keep`, null),
     ...memoryTally(run.skipped, MEMORY_SKIPPED, null),
+    ...memoryTally(run.stood_down, MEMORY_SKIPPED, null),
     ...memoryTally(run.reasons, MEMORY_REASONS, 'warn'),
     ...memoryTally(why, {}, 'warn'),
     ...memoryTally(run.rules, MEMORY_RULES, null).map((one) => {
