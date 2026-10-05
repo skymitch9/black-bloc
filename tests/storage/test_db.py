@@ -3581,7 +3581,7 @@ PLACEHOLDER_PINS = (
 )
 TONE_COLUMNS = (
     "tone", "how", "settled", "heard", "set_by", "moved_at", "moved_from", "moved_why",
-    "fed_since",
+    "fed_since", "avoid", "avoid_left",
 )
 
 

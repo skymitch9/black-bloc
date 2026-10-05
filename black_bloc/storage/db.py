@@ -993,6 +993,8 @@ CREATE TABLE IF NOT EXISTS chat_voice (
     moved_from TEXT,
     moved_why  TEXT,
     fed_since  TEXT,
+    avoid      TEXT,
+    avoid_left INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (guild_id, user_id)
 );
 
@@ -1307,6 +1309,8 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("chat_voice", "moved_from", "TEXT"),
     ("chat_voice", "moved_why", "TEXT"),
     ("chat_voice", "fed_since", "TEXT"),
+    ("chat_voice", "avoid", "TEXT"),
+    ("chat_voice", "avoid_left", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

@@ -625,6 +625,7 @@ const SETTING_SPECS = [
   ["chat_voice_settled_new", "text", "new", "new", "how settled a tone is, while it is still likely to take a step"],
   ["chat_voice_settled_settling", "text", "settling", "settling", "how settled a tone is, once it is less than half as likely to take a step"],
   ["chat_voice_settled_settled", "text", "settled", "settled", "how settled a tone is, once it is as unlikely to take a step as it ever gets"],
+  ["chat_voice_state_tone_off", "text", "rolled · tone was switched off", "rolled · tone was switched off", "how a tone got there, when the member's own tone was switched off and Black Bloc rolled them another at their next answer"],
   ["chat_tone_edited", 'text', "**{tone}** now reads the way you wrote it, from the next answer on. The boot sync keeps your wording.", "**{tone}** now reads the way you wrote it, from the next answer on. The boot sync keeps your wording.", "what staff are told when a tone's wording is saved on the Chat page. It takes {tone}"],
   ["chat_tone_reset", 'text', "**{tone}** is back to the wording Black Bloc ships with.", "**{tone}** is back to the wording Black Bloc ships with.", "what staff are told when a tone's wording is put back. It takes {tone}"],
   ["chat_tone_too_long", 'text', "That tone is {length} characters and a tone holds {limit}, so nothing was saved. Take {over} out and save it again.", "That tone is {length} characters and a tone holds {limit}, so nothing was saved. Take {over} out and save it again.", "what staff are told when a tone's wording is too long. It takes {length}, {limit} and {over}"],
@@ -12196,7 +12197,7 @@ function hearsNow(row) {
   return row.trope || 'cookout';
 }
 
-const VOICE_STATE_KEYS = { rolled: 'chat_voice_state_rolled', set: 'chat_voice_state_set', drifted: 'chat_voice_state_drifted', feedback: 'chat_voice_state_feedback', pinned: 'chat_voice_state_pinned' };
+const VOICE_STATE_KEYS = { rolled: 'chat_voice_state_rolled', set: 'chat_voice_state_set', drifted: 'chat_voice_state_drifted', feedback: 'chat_voice_state_feedback', pinned: 'chat_voice_state_pinned', tone_off: 'chat_voice_state_tone_off' };
 
 /** chat_voice.drift_chance and settled_share, on the three keys the Settings page edits. */
 function voiceSettle(settled) {

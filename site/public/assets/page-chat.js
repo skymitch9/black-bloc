@@ -122,6 +122,7 @@ const VOICE_WORD_KEYS = [
   'chat_voice_settled_new',
   'chat_voice_settled_settling',
   'chat_voice_settled_settled',
+  'chat_voice_state_tone_off',
   'chat_tone_edited',
   'chat_tone_reset',
   'chat_tone_too_long',

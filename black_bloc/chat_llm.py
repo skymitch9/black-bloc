@@ -613,7 +613,29 @@ async def mood_for(
     )
     if heard.moved is not None:
         await tone_drifted(bot, guild_id, user_id, heard)
+    if heard.rerolled is not None:
+        await tone_rerolled(bot, guild_id, user_id, heard)
     return heard.trope
+
+
+async def tone_rerolled(bot: Any, guild_id: Any, user_id: int, heard: Any) -> None:
+    """A stored tone that was switched off is rolled again out loud, never quietly."""
+    getter = getattr(bot, "get_guild", None)
+    guild = getter(int(guild_id)) if getter is not None else None
+    if guild is None:
+        return
+    await log_action(
+        bot,
+        guild,
+        "chat.voice_rerolled",
+        target=user_id,
+        details={
+            "member": str(user_id),
+            "from": heard.rerolled[0],
+            "tone": heard.rerolled[1],
+            "reason": "tone_off",
+        },
+    )
 
 
 async def tone_drifted(bot: Any, guild_id: Any, user_id: int, heard: Any) -> None:

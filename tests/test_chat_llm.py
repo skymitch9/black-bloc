@@ -1368,6 +1368,32 @@ async def test_a_step_a_tone_takes_by_itself_leaves_a_row_staff_can_read(wired, 
     ]
 
 
+async def test_a_tone_that_was_switched_off_is_rerolled_with_a_row_that_says_why(
+    wired, monkeypatch
+):
+    from black_bloc.chat_voice import set_tone, voice_row
+    from black_bloc.personas import forget_tropes, set_enabled
+
+    await tones_ready(wired)
+    wired.get_guild = lambda guild_id: wired.guild
+    wired.store.values["chat_personality"] = "pool"
+    now = datetime(2026, 10, 5, 19, 0, tzinfo=UTC)
+    await set_tone(wired.db, 7, 900, "noir", by=1, now=now)
+    await set_enabled(wired.db, "noir", False)
+    forget_tropes(wired)
+
+    tone = await chat_llm.mood_for(wired, wired.db, 7, 11, 900, [], now + timedelta(hours=1))
+
+    kept = await voice_row(wired.db, 7, 900)
+    assert tone.name != "noir" and (kept["how"], kept["moved_from"]) == ("tone_off", "noir")
+    assert wired.logged == [
+        (
+            "chat.voice_rerolled",
+            {"member": "900", "from": "noir", "tone": tone.name, "reason": "tone_off"},
+        )
+    ]
+
+
 async def test_a_dm_keeps_the_per_conversation_roll_and_writes_no_member_row(wired, monkeypatch):
     from black_bloc.chat_voice import voice_row
 

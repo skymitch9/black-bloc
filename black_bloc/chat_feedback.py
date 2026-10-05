@@ -31,11 +31,14 @@ from .chat_voice import (
     MEAN,
     WINDOW_MINUTES,
     WRONG,
+    avoid_span,
     claim_feedback,
     col,
+    eased,
     fed_already,
     move_for_feedback,
     order_of,
+    settle_of,
     step_toward,
     voice_row,
 )
@@ -301,7 +304,17 @@ async def moved(
                 details={**details, "tone": col(row, "pinned") or tone, "held": held},
             )
         return None
-    await move_for_feedback(bot.db, guild_id, user_id, wanted, found.reaction, now=at)
+    settle = settle_of(bot.store, guild_id)
+    await move_for_feedback(
+        bot.db,
+        guild_id,
+        user_id,
+        wanted,
+        found.reaction,
+        now=at,
+        settled=eased(col(row, "settled", 0), settle),
+        avoid_for=avoid_span(settle),
+    )
     if guild is not None:
         await log_action(
             bot,

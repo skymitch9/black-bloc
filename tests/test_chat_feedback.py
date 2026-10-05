@@ -244,7 +244,8 @@ async def test_a_genuine_mean_moves_the_tone_one_step_gentler_and_unsettles_it(
     assert moved == "mischievous"
     assert (kept["tone"], kept["how"], kept["moved_from"], kept["moved_why"]) == (
         "mischievous", FEEDBACK, "tsundere", "mean")
-    assert (kept["settled"], kept["heard"], kept["moved_at"]) == (0, 0, at.isoformat())
+    assert (kept["settled"], kept["heard"], kept["moved_at"]) == (5, 0, at.isoformat())
+    assert (kept["avoid"], kept["avoid_left"]) == ("tsundere", 8)
     assert len(client.calls) == 1 and client.calls[0]["json_only"] is True
     asked = client.calls[0]["messages"][0]["content"]
     assert ANSWER in asked and said in asked
@@ -335,6 +336,49 @@ async def test_two_complaints_judged_at_once_still_move_the_tone_once(bot, db):
     assert sorted(found, key=str) == [None, "mischievous"]
     assert (await voice_row(db, GUILD, MEMBER))["tone"] == "mischievous"
     assert len(await rows_of(db)) == 1
+
+
+async def test_after_a_mean_move_drift_never_walks_back_to_the_tone_complained_about(bot, db):
+    """mischievous neighbours tsundere on the graph; for eight conversations it is out of reach."""
+    from black_bloc.chat_voice import Settle, stored_tone
+    from black_bloc.personas import DRIFT_EVERY_TURNS, enabled_tropes
+
+    with_client(bot, FakeGroq(verdict("mean", True, "rude")))
+    await answered(bot, "tsundere")
+    await feedback.heard(bot, message("that was rude"), now=NOW + timedelta(minutes=1))
+    pool = enabled_tropes(await list_tropes(db))
+    always = Settle(start=1.0, halves=4, floor=1.0)
+
+    for conversation in range(8):
+        at = NOW + timedelta(days=conversation + 1)
+        await db.conn.execute(
+            "UPDATE chat_voice SET tone = 'mischievous', heard = ?", (DRIFT_EVERY_TURNS - 1,)
+        )
+        kept = await voice_row(db, GUILD, MEMBER)
+        if conversation < 8:
+            assert kept["avoid"] == "tsundere"
+        landed = set()
+        for seed in range(60):
+            found = stored_tone(pool, kept, key=f"s{seed}", fresh=True, turns=0,
+                                since=at.isoformat(), now=at, settle=always)
+            landed.add(found.name)
+        if kept["avoid_left"] > 1:
+            assert "tsundere" not in landed and landed, (conversation, landed)
+        await heard_for(db, POOL, await list_tropes(db), guild_id=GUILD, user_id=MEMBER, now=at,
+                        settle=feedback_never())
+
+    kept = await voice_row(db, GUILD, MEMBER)
+    assert kept["avoid_left"] == 0
+    await db.conn.execute(
+        "UPDATE chat_voice SET tone = 'mischievous', heard = ?", (DRIFT_EVERY_TURNS - 1,)
+    )
+    kept = await voice_row(db, GUILD, MEMBER)
+    after = {
+        stored_tone(pool, kept, key=f"s{seed}", fresh=False, turns=3, since=kept["since"],
+                    now=NOW + timedelta(days=20), settle=always).name
+        for seed in range(60)
+    }
+    assert "tsundere" in after
 
 
 async def test_the_next_conversation_may_move_it_again(bot, db):

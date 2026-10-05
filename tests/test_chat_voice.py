@@ -16,11 +16,15 @@ from black_bloc.chat_voice import (
     SET,
     SETTLED,
     SETTLING,
+    TONE_OFF,
+    UNTIL_STAFF,
     Heard,
     Settle,
     another,
+    avoid_span,
     claim_feedback,
     drift_chance,
+    eased,
     fed_already,
     heard_for,
     heard_from,
@@ -181,6 +185,52 @@ def test_the_chance_takes_a_zero_floor_a_start_of_nothing_and_never_settling():
     assert drift_chance(50, Settle(start=0.25, halves=0, floor=0.02)) == 0.25
     assert drift_chance(-3, Settle()) == DRIFT_CHANCE
     assert drift_chance(None, Settle(start=7, halves=4, floor=9)) == 1.0
+
+
+def test_a_feedback_move_eases_a_tone_one_halving_back_and_never_past_new():
+    """An adjustment, not a restart: 2 % becomes about 4 %, 3.1 % becomes 6.25 %."""
+    settle = Settle(start=0.25, halves=4, floor=0.02)
+    assert [eased(n, settle) for n in (0, 3, 4, 8, 12, 15, 40)] == [0, 0, 0, 4, 8, 10, 10]
+    for n in range(0, 60):
+        before, after = drift_chance(n, settle), drift_chance(eased(n, settle), settle)
+        assert before <= after <= min(0.25, before * 2 + 0.005)
+    assert eased(9, Settle(start=0.25, halves=0, floor=0.02)) == 9
+    assert eased(9, Settle(start=0.0, halves=4, floor=0.0)) == 9
+    assert eased(None, settle) == 0
+
+
+def test_a_complained_about_tone_stays_out_of_reach_for_two_halvings_of_conversations():
+    assert avoid_span(Settle(start=0.25, halves=4, floor=0.02)) == 8
+    assert avoid_span(Settle(start=0.25, halves=1, floor=0.02)) == 2
+    assert avoid_span(Settle(start=0.25, halves=0, floor=0.02)) == UNTIL_STAFF
+
+
+def test_a_drift_step_never_lands_on_the_tone_a_member_complained_about():
+    pool = enabled_tropes(rows(*TROPE_NAMES))
+
+    def landed(**given):
+        found = set()
+        for seed in range(200):
+            kept = row(since=NOW.isoformat(), tone="mischievous", how=FEEDBACK,
+                       heard=DRIFT_EVERY_TURNS - 1, **given)
+            found.add(stored_tone(pool, kept, key=f"s{seed}", fresh=False, turns=3,
+                                  since=NOW.isoformat(), now=NOW, settle=ALWAYS).name)
+        return found
+
+    assert "tsundere" in landed()
+    assert "tsundere" in landed(avoid="tsundere", avoid_left=0)
+    held = landed(avoid="tsundere", avoid_left=8)
+    assert "tsundere" not in held and held <= {"flirty", "dramatic", "peppy"}
+    assert "tsundere" not in landed(avoid="tsundere", avoid_left=UNTIL_STAFF)
+
+
+def test_a_tone_whose_only_neighbour_is_the_one_complained_about_stays_put():
+    pool = enabled_tropes(rows("shy", "cozy"))
+    kept = row(since=NOW.isoformat(), tone="shy", how=FEEDBACK, heard=DRIFT_EVERY_TURNS - 1,
+               avoid="cozy", avoid_left=3)
+    found = stored_tone(pool, kept, key="k", fresh=False, turns=3, since=NOW.isoformat(),
+                        now=NOW, settle=ALWAYS)
+    assert found.name == "shy" and found.moved is None and found.avoid_left == 3
 
 
 def test_how_settled_a_tone_is_runs_from_new_to_settled():
@@ -445,11 +495,74 @@ async def test_a_tone_staff_set_while_an_answer_was_being_written_is_not_written
     assert (kept["tone"], kept["how"], kept["set_by"], kept["heard"]) == ("noir", SET, 8, 0)
 
 
-async def test_a_stored_tone_that_was_switched_off_is_rolled_again_from_what_is_on(db):
+async def test_a_stored_tone_that_was_switched_off_is_rolled_again_and_says_so(db):
     await set_tone(db, GUILD, 900, "noir", by=7, now=NOW)
+    later = NOW + timedelta(hours=2)
+    found = await heard_for(db, POOL, rows("warm", "cozy"), guild_id=GUILD, user_id=900,
+                            now=later)
+    kept = await voice_row(db, GUILD, 900)
+    assert found.name in ("warm", "cozy") and found.how == TONE_OFF
+    assert found.rerolled == ("noir", found.name)
+    assert (kept["tone"], kept["how"], kept["moved_from"], kept["moved_at"], kept["set_by"]) == (
+        found.name, TONE_OFF, "noir", later.isoformat(), None)
+    assert state_of(kept, {"warm", "cozy"}) == TONE_OFF
+    again = await heard_for(db, POOL, rows("warm", "cozy"), guild_id=GUILD, user_id=900,
+                            now=later + timedelta(minutes=1))
+    assert again.rerolled is None and again.name == found.name
+
+
+async def test_a_first_roll_is_not_a_reroll(db):
     found = await heard_for(db, POOL, rows("warm", "cozy"), guild_id=GUILD, user_id=900, now=NOW)
-    assert found.name in ("warm", "cozy") and found.how == ROLLED
-    assert (await voice_row(db, GUILD, 900))["tone"] == found.name
+    assert found.rerolled is None and found.how == ROLLED
+    assert (await voice_row(db, GUILD, 900))["moved_from"] is None
+
+
+async def test_a_placeholder_pin_whose_tone_is_switched_off_is_rerolled_out_loud(db):
+    """The real conversion statement, then the member's next answer with that tone off."""
+    from black_bloc.storage.db import (
+        PLACEHOLDER_PIN_DAY,
+        PLACEHOLDER_PINNED,
+        PLACEHOLDER_PINS_TO_STARTING_TONES,
+    )
+
+    who = PLACEHOLDER_PINNED[0]
+    await db.conn.execute(
+        "INSERT INTO chat_voice(guild_id, user_id, trope, pinned, pinned_by, pinned_at) "
+        "VALUES (?, ?, 'noir', 'noir', 42, '2026-10-05T18:52:10+00:00')",
+        (GUILD, who),
+    )
+    await db.conn.execute(
+        PLACEHOLDER_PINS_TO_STARTING_TONES, (PLACEHOLDER_PIN_DAY, *PLACEHOLDER_PINNED)
+    )
+    assert (await voice_row(db, GUILD, who))["tone"] == "noir"
+
+    found = await heard_for(db, POOL, rows("warm", "cozy"), guild_id=GUILD, user_id=who, now=NOW)
+
+    kept = await voice_row(db, GUILD, who)
+    assert found.rerolled == ("noir", found.name) and found.name in ("warm", "cozy")
+    assert (kept["how"], kept["moved_from"], kept["pinned"]) == (TONE_OFF, "noir", None)
+
+
+async def test_a_feedback_move_keeps_the_old_tone_out_of_reach_and_counts_it_down(db):
+    pool = rows(*TROPE_NAMES)
+    await set_tone(db, GUILD, 900, "tsundere", by=7, now=NOW)
+    await heard_for(db, POOL, pool, guild_id=GUILD, user_id=900, now=NOW, settle=NEVER)
+    await move_for_feedback(db, GUILD, 900, "mischievous", "mean", now=NOW, settled=5,
+                            avoid_for=2)
+    kept = await voice_row(db, GUILD, 900)
+    assert (kept["avoid"], kept["avoid_left"], kept["settled"]) == ("tsundere", 2, 5)
+    for day, left in ((1, 1), (2, 0), (3, 0)):
+        await heard_for(db, POOL, pool, guild_id=GUILD, user_id=900,
+                        now=NOW + timedelta(days=day), settle=NEVER)
+        assert (await voice_row(db, GUILD, 900))["avoid_left"] == left
+    await move_for_feedback(db, GUILD, 900, "deadpan", "mean", now=NOW)
+    assert (await voice_row(db, GUILD, 900))["avoid_left"] == UNTIL_STAFF
+    await heard_for(db, POOL, pool, guild_id=GUILD, user_id=900, now=NOW + timedelta(days=9),
+                    settle=NEVER)
+    assert (await voice_row(db, GUILD, 900))["avoid_left"] == UNTIL_STAFF
+    await set_tone(db, GUILD, 900, "warm", by=7, now=NOW)
+    kept = await voice_row(db, GUILD, 900)
+    assert (kept["avoid"], kept["avoid_left"]) == (None, 0)
 
 
 async def test_a_pin_and_a_named_mood_leave_the_stored_tone_alone(db):

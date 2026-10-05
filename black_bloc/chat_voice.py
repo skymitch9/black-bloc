@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import random
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -29,7 +30,10 @@ ROLLED = "rolled"
 SET = "set"
 DRIFTED = "drifted"
 FEEDBACK = "feedback"
-HOWS = (ROLLED, SET, DRIFTED, FEEDBACK)
+TONE_OFF = "tone_off"
+HOWS = (ROLLED, SET, DRIFTED, FEEDBACK, TONE_OFF)
+AVOID_HALVINGS = 2
+UNTIL_STAFF = -1
 MEAN = "mean"
 WRONG = "wrong"
 SETTLE_HALVES = 4
@@ -83,6 +87,8 @@ class Heard:
     chance: float = 0.0
     stored: bool = False
     was: str | None = None
+    rerolled: tuple[str, str] | None = None
+    avoid_left: int = 0
 
     @property
     def name(self) -> str:
@@ -104,6 +110,23 @@ def drift_chance(settled: Any, settle: Settle = STOCK) -> float:
     if int(settle.halves or 0) <= 0:
         return start
     return max(floor, start * 0.5 ** (passed / int(settle.halves)))
+
+
+def eased(settled: Any, settle: Settle = STOCK) -> int:
+    """One halving back: the count at which the chance is twice what it is now, never past new."""
+    start = share(settle.start)
+    halves = int(settle.halves or 0)
+    now = drift_chance(settled, settle)
+    if halves <= 0 or start <= 0 or now <= 0:
+        return max(0, int(settled or 0))
+    doubled = min(start, now * 2)
+    return max(0, math.floor(halves * math.log2(start / doubled) + 1e-9))
+
+
+def avoid_span(settle: Settle = STOCK) -> int:
+    """How many conversations a complained-about tone stays out of reach of a drift step."""
+    halves = int(settle.halves or 0)
+    return AVOID_HALVINGS * halves if halves > 0 else UNTIL_STAFF
 
 
 def settled_share(settled: Any, settle: Settle = STOCK) -> float:
@@ -242,21 +265,27 @@ def stored_tone(
             ROLLED,
             turns,
             since,
-            how=ROLLED,
+            how=TONE_OFF if was else ROLLED,
             heard=1,
             chance=drift_chance(0, settle),
             stored=True,
             was=was,
+            rerolled=(str(was), rolled.name) if was else None,
         )
     how = str(col(row, "how", ROLLED))
-    settled = int(col(row, "settled", 0)) + (1 if fresh and lapsed(row, now) else 0)
+    again = fresh and lapsed(row, now)
+    settled = int(col(row, "settled", 0)) + (1 if again else 0)
     heard = int(col(row, "heard", 0)) + 1
     chance = drift_chance(settled, settle)
+    avoid_left = int(col(row, "avoid_left", 0))
+    if again and avoid_left > 0:
+        avoid_left -= 1
+    avoided = str(col(row, "avoid", "")) if avoid_left != 0 else ""
     moved = None
     if heard % DRIFT_EVERY_TURNS == 0:
         rng = random.Random(f"{key}:{heard}")
         if rng.random() < chance:
-            stepped = step_from(tone, pool, rng)
+            stepped = step_from(tone, [one for one in pool if one.name != avoided], rng)
             if stepped.name != tone.name:
                 moved = (tone.name, stepped.name)
                 tone, how, settled, heard = stepped, DRIFTED, 0, 0
@@ -272,6 +301,7 @@ def stored_tone(
         chance=chance,
         stored=True,
         was=was,
+        avoid_left=avoid_left,
     )
 
 
@@ -281,11 +311,11 @@ KEEP_HEARD = (
     "turns = excluded.turns, since = excluded.since"
 )
 KEEP_STORED = (
-    "INSERT INTO chat_voice(guild_id, user_id, trope, turns, since, tone, how, settled, heard) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET "
-    "trope = excluded.trope, turns = excluded.turns, since = excluded.since, "
-    "tone = excluded.tone, how = excluded.how, settled = excluded.settled, heard = excluded.heard "
-    "WHERE chat_voice.tone IS ?"
+    "INSERT INTO chat_voice(guild_id, user_id, trope, turns, since, tone, how, settled, heard, "
+    "avoid_left) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(guild_id, user_id) DO UPDATE "
+    "SET trope = excluded.trope, turns = excluded.turns, since = excluded.since, "
+    "tone = excluded.tone, how = excluded.how, settled = excluded.settled, "
+    "heard = excluded.heard, avoid_left = excluded.avoid_left WHERE chat_voice.tone IS ?"
 )
 KEEP_MOVED = (
     "UPDATE chat_voice SET moved_at = ?, moved_from = ?, moved_why = NULL, set_by = NULL "
@@ -302,10 +332,11 @@ async def remember_heard(
         await db.conn.commit()
         return
     kept = (heard.name, heard.turns, heard.since, heard.name, heard.how, heard.settled, heard.heard)
-    await db.conn.execute(KEEP_STORED, (*where, *kept, heard.was))
-    if heard.moved is not None:
+    await db.conn.execute(KEEP_STORED, (*where, *kept, heard.avoid_left, heard.was))
+    came = heard.moved or heard.rerolled
+    if came is not None:
         at = (now or datetime.now(UTC)).isoformat()
-        await db.conn.execute(KEEP_MOVED, (at, heard.moved[0], *where, heard.name))
+        await db.conn.execute(KEEP_MOVED, (at, came[0], *where, heard.name))
     await db.conn.commit()
 
 
@@ -367,12 +398,13 @@ SET_TONE = (
     "VALUES (?, ?, ?, ?, ?, ?, NULL, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET "
     "moved_from = chat_voice.tone, tone = excluded.tone, how = excluded.how, "
     "set_by = excluded.set_by, moved_at = excluded.moved_at, moved_why = NULL, settled = 0, "
-    "heard = 0, since = NULL, turns = 0, fed_since = NULL, trope = excluded.trope"
+    "heard = 0, since = NULL, turns = 0, fed_since = NULL, trope = excluded.trope, "
+    "avoid = NULL, avoid_left = 0"
 )
 FEED_TONE = (
-    "UPDATE chat_voice SET moved_from = tone, tone = ?, trope = ?, how = ?, moved_at = ?, "
-    "moved_why = ?, set_by = NULL, settled = 0, heard = 0, fed_since = since "
-    "WHERE guild_id = ? AND user_id = ?"
+    "UPDATE chat_voice SET moved_from = tone, avoid = tone, avoid_left = ?, tone = ?, trope = ?, "
+    "how = ?, moved_at = ?, moved_why = ?, set_by = NULL, settled = ?, heard = 0, "
+    "fed_since = since WHERE guild_id = ? AND user_id = ?"
 )
 CLAIM_FEEDBACK = (
     "UPDATE chat_voice SET fed_since = since WHERE guild_id = ? AND user_id = ? "
@@ -412,12 +444,21 @@ def fed_already(row: Any) -> bool:
 
 
 async def move_for_feedback(
-    db: Any, guild_id: Any, user_id: Any, tone: str, why: str, *, now: datetime | None = None
+    db: Any,
+    guild_id: Any,
+    user_id: Any,
+    tone: str,
+    why: str,
+    *,
+    now: datetime | None = None,
+    settled: int = 0,
+    avoid_for: int = UNTIL_STAFF,
 ) -> None:
+    """An adjustment, not a restart: the tone left behind is out of a drift step's reach."""
     at = (now or datetime.now(UTC)).isoformat()
-    await db.conn.execute(
-        FEED_TONE, (str(tone), str(tone), FEEDBACK, at, str(why), int(guild_id), int(user_id))
-    )
+    where = (int(guild_id), int(user_id))
+    kept = (int(avoid_for), str(tone), str(tone), FEEDBACK, at, str(why), int(settled))
+    await db.conn.execute(FEED_TONE, (*kept, *where))
     await db.conn.commit()
 
 

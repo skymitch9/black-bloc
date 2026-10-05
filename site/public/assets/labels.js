@@ -630,6 +630,7 @@ export const LABELS = {
   chat_voice_settled_new: "The word for a new tone",
   chat_voice_settled_settling: "The word for a tone that is settling",
   chat_voice_settled_settled: "The word for a settled tone",
+  chat_voice_state_tone_off: "The words for a tone rolled again because it was switched off",
   chat_tone_edited: "What staff are told when a tone's wording is saved",
   chat_tone_reset: "What staff are told when a tone's wording is put back",
   chat_tone_too_long: "What is said when a tone's wording is too long",

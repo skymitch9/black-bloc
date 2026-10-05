@@ -112,6 +112,7 @@ STATE_SET_KEY = "chat_voice_state_set"
 STATE_DRIFTED_KEY = "chat_voice_state_drifted"
 STATE_FEEDBACK_KEY = "chat_voice_state_feedback"
 STATE_PINNED_KEY = "chat_voice_state_pinned"
+STATE_TONE_OFF_KEY = "chat_voice_state_tone_off"
 SETTLED_NEW_KEY = "chat_voice_settled_new"
 SETTLED_SETTLING_KEY = "chat_voice_settled_settling"
 SETTLED_SETTLED_KEY = "chat_voice_settled_settled"
@@ -229,6 +230,12 @@ TONE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "how a tone got there, when staff pinned it",
     ),
+    STATE_TONE_OFF_KEY: (
+        "rolled · tone was switched off",
+        (),
+        "how a tone got there, when the member's own tone was switched off and Black Bloc "
+        "rolled them another at their next answer",
+    ),
     SETTLED_NEW_KEY: (
         "new",
         (),
@@ -251,6 +258,7 @@ STATE_KEYS = {
     "drifted": STATE_DRIFTED_KEY,
     "feedback": STATE_FEEDBACK_KEY,
     "pinned": STATE_PINNED_KEY,
+    "tone_off": STATE_TONE_OFF_KEY,
 }
 SETTLED_KEYS = {
     "new": SETTLED_NEW_KEY,

@@ -12,6 +12,7 @@ from .chat_voice import (
     DRIFTED,
     FEEDBACK,
     NEW,
+    TONE_OFF,
     pin,
     roster,
     settle_of,
@@ -909,7 +910,7 @@ def state_words(store: Any, guild_id: int, entry: dict[str, Any]) -> str:
     """How the tone got there, and when it last moved on its own or after feedback."""
     state = str(entry.get("state") or "")
     said = words(store, guild_id, tone_keys.STATE_KEYS[state])
-    if state not in (DRIFTED, FEEDBACK) or not entry.get("moved_at"):
+    if state not in (DRIFTED, FEEDBACK, TONE_OFF) or not entry.get("moved_at"):
         return said
     try:
         at = int(datetime.fromisoformat(str(entry["moved_at"])).timestamp())

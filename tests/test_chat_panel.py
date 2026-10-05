@@ -652,6 +652,8 @@ def test_a_members_line_says_how_the_tone_got_there_and_how_settled_it_is(bot):
     drifted = said(entry(state="drifted", moved_at="not a date"), labels)
     assert drifted == "<@21> — **warm** · drifted · new"
     assert said(entry(), labels) == "<@21> — **warm** · rolled · 3 turn(s)"
+    off = said(entry(state="tone_off", moved_at="2026-10-03T12:00:00+00:00"), labels)
+    assert off == "<@21> — **warm** · rolled · tone was switched off · <t:1791028800:R> · new"
     pinned = said(entry(state="pinned", pinned="noir", pinned_by=7, active=True), labels)
     assert pinned == "<@21> — **noir** · pinned by <@7> · talking now"
 
