@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from black_bloc import marathon_hotfix as hf
+from black_bloc import marathon_sources
 from black_bloc.doc_import import DocImportError, Hop
 from black_bloc.marathon_sources import GDQ_HOTFIX, ScheduleClient, ScheduleError
 
@@ -318,7 +319,14 @@ async def test_too_big_unreachable_and_not_a_sheet_are_said_in_words():
         await hf.read_sheet(wrong, "agent")
 
 
-async def test_the_client_reads_runs_and_resolves_a_bare_show_and_remembers_the_sheet():
+class BeforeTheShow(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 9, 28, 17, 0, tzinfo=UTC).astimezone(tz)
+
+
+async def test_the_client_reads_runs_and_resolves_a_bare_show_and_remembers_the_sheet(monkeypatch):
+    monkeypatch.setattr(marathon_sources, "datetime", BeforeTheShow)
     fake = Fake({hf.PAGE: ok(PAGE_HTML), CSV: ok(SHEET, "text/csv")})
     client = ScheduleClient(hop_request=fake)
     ref, name = await client.resolve(GDQ_HOTFIX, "gdqueer")
