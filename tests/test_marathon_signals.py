@@ -266,3 +266,19 @@ def test_a_category_is_found_by_exact_name_first_then_by_a_search_with_the_same_
     searched = {"Hamtaro: Ham-Hams Unite!": [wrong, near]}
     assert sig.found_in(hamtaro, {}, searched) is near
     assert sig.found_in(hamtaro, {}, {"Hamtaro: Ham-Hams Unite!": [wrong]}) is None
+
+
+def test_the_early_line_is_the_days_first_planned_start_whichever_run_is_asked_about():
+    days = [[row(1, 0, 45), row(2, 45, 30)], [row(3, 24 * 60, 30)]]
+    for one in days[0]:
+        assert sig.day_line(one, days, 15) == NOW - timedelta(minutes=15)
+    assert sig.day_line(days[1][0], days, 15) == NOW + timedelta(minutes=24 * 60 - 15)
+    assert sig.day_line(days[0][1], days, 0) is None
+    assert sig.day_line(row(9, 0), days, 15) is None
+
+
+def test_the_early_line_is_gone_once_another_run_of_the_day_is_live_or_done():
+    for state in (mt.LIVE, mt.DONE):
+        days = [[row(1, 0, 45, state=state), row(2, 45, 30)]]
+        assert sig.day_line(days[0][1], days, 15) is None
+        assert sig.day_line(days[0][0], days, 15) == NOW - timedelta(minutes=15)

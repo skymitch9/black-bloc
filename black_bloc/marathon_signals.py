@@ -267,31 +267,27 @@ def retimed(rows: Any, setup_minutes: int = 0) -> list[Retime]:
     return found
 
 
-def opens_day(row: Any, days: Any) -> bool:
-    """No run before it in its show-day is live or done."""
+def day_of(row: Any, days: Any) -> list[Any]:
     for day in days or ():
-        for index, one in enumerate(day):
-            if same(one, row):
-                return not any(settled(before) for before in day[:index])
-    return False
+        if any(same(one, row) for one in day):
+            return list(day)
+    return []
 
 
 def early_line(row: Any, minutes: Any) -> datetime | None:
-    """The moment from which the stream may call this run live; None when nothing holds it."""
     planned = sheet_start(row)
     if planned is None or int(minutes or 0) <= 0:
         return None
     return planned - timedelta(minutes=int(minutes))
 
 
-def too_early(row: Any, now: datetime, minutes: Any) -> bool:
-    line = early_line(row, minutes)
-    return line is not None and now < line
-
-
-def started_early(row: Any, minutes: Any) -> bool:
-    actual = parse_ts(_cell(row, "actual_started_at"))
-    return actual is not None and too_early(row, actual, minutes)
+def day_line(row: Any, days: Any, minutes: Any) -> datetime | None:
+    """From when the stream may call a run of this show-day live: so long before the day's
+    first planned start. None once another run of the day is live or done, or nothing holds."""
+    day = day_of(row, days)
+    if not day or any(settled(one) for one in day if not same(one, row)):
+        return None
+    return early_line(day[0], minutes)
 
 
 def is_retimed(row: Any) -> bool:

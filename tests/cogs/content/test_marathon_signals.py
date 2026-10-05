@@ -779,6 +779,51 @@ async def test_a_later_run_of_the_day_shown_40_minutes_early_is_followed(bot, co
     assert await held_rows(bot) == 0
 
 
+def second_of_day_two(rows):
+    day = sorted(
+        (row for row in rows.values() if row["sheet_at"] >= DAY_TWO.isoformat()),
+        key=lambda row: row["sheet_at"],
+    )
+    assert day[0]["game"] == WII
+    return day[1]
+
+
+async def test_a_day_opening_with_its_second_run_at_the_days_start_is_live_at_once(bot, cog, helix):
+    channel, marathon = await day_two_ahead(bot, cog)
+    second = second_of_day_two(await times(bot, marathon))
+    assert datetime.fromisoformat(second["sheet_at"]) > DAY_TWO + timedelta(minutes=15)
+    await set_up_for(bot, channel, second["game"])
+    at_show(cog, DAY)
+    await tick(cog)
+    rows = await times(bot, marathon)
+    now = rows[second["game"]]
+    assert (now["state"], now["actual_started_at"], now["scheduled_at"]) == (
+        mt.LIVE,
+        z(DAY),
+        z(DAY),
+    )
+    assert rows[WII]["state"] == mt.DONE and await held_rows(bot) == 0
+
+
+async def test_a_days_second_run_shown_60_minutes_before_the_days_start_is_held(bot, cog, helix):
+    channel, marathon = await day_two_ahead(bot, cog)
+    second = second_of_day_two(await times(bot, marathon))
+    await set_up_for(bot, channel, second["game"])
+    at_show(cog, DAY - 60)
+    await tick(cog)
+    rows = await times(bot, marathon)
+    assert (rows[second["game"]]["state"], rows[WII]["state"]) == (mt.UPCOMING, mt.UPCOMING)
+    assert off_the_sheet(rows) == []
+    said = await details_of(bot.db, "marathon.early_match_held")
+    assert (said["game"], said["early_minutes"]) == (second["game"], 60)
+    assert (said["day_starts_at"], said["planned_at"]) == (z(DAY), second["sheet_at"])
+    at_show(cog, DAY - 15)
+    await tick(cog)
+    now = (await times(bot, marathon))[second["game"]]
+    assert (now["state"], now["actual_started_at"]) == (mt.LIVE, z(DAY - 15))
+    assert await held_rows(bot) == 1
+
+
 async def test_with_the_early_key_at_0_the_stream_is_believed_at_once(bot, cog, helix):
     await bot.store.set(GUILD, EARLY_KEY, 0)
     channel, marathon = await day_two_ahead(bot, cog)
