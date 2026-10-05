@@ -154,6 +154,10 @@ flyctl logs --app black-bloc --no-tail        # boot log: cogs loaded, "commands
 flyctl releases --app black-bloc              # a NEW version number = it landed
 ```
 
+### ⚠️ A pre-deploy snapshot needs a UNIQUE name — `backup_db.ps1` can log "ok" and keep the old file (measured 2026-10-03 21:31)
+
+`scripts/backup_db.ps1` writes `backup-<date>.sqlite3`. Measured 2026-10-03 21:31, before v196: it logged "ok" but did NOT replace the 04:00 file of the same name. For a pre-deploy snapshot use a unique name: run `python3 -m black_bloc.dbsnapshot` over `flyctl ssh console -C`, then `flyctl ssh sftp get /data/black_bloc-nightly-snapshot.sqlite3 <unique path>` (v196 and v197 used `~/black-bloc-backups/backup-<date>-pre-vNNN.sqlite3`), and check the file's size and timestamp BEFORE launching the deploy.
+
 ### Where `release.json` is written — LAST, after every gate (changed 2026-09-20)
 
 The order inside `scripts/deploy.ps1` is now:
