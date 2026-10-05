@@ -824,6 +824,21 @@ async def test_a_days_second_run_shown_60_minutes_before_the_days_start_is_held(
     assert await held_rows(bot) == 1
 
 
+async def test_a_tracker_that_moves_its_own_times_is_never_held_and_never_repaired(bot, cog, helix):
+    channel = await gdq_row(bot)
+    marathon = await added(bot, cog, channel=channel)
+    assert marathon["source"] == "gdq"
+    await stream(bot, channel, title="AGDQ 2027 - Super Metroid Any% by Sky")
+    await tick(cog)
+    metroid = (await times(bot, marathon))["Super Metroid"]
+    opened = datetime.fromisoformat(metroid["actual_started_at"])
+    assert metroid["state"] == mt.LIVE
+    assert datetime.fromisoformat(metroid["scheduled_at"]) - opened == timedelta(minutes=30)
+    await tick(cog)
+    assert (await times(bot, marathon))["Super Metroid"]["state"] == mt.LIVE
+    assert await held_rows(bot) == 0 and await undone_rows(bot) == 0
+
+
 async def test_with_the_early_key_at_0_the_stream_is_believed_at_once(bot, cog, helix):
     await bot.store.set(GUILD, EARLY_KEY, 0)
     channel, marathon = await day_two_ahead(bot, cog)

@@ -207,6 +207,8 @@ async def guarded(
     through gets its due reminder first, while it is still coming up."""
     if verdict is None or _cell(verdict.row, "state") != mt.UPCOMING:
         return verdict
+    if retimes_itself(_cell(marathon, "source")):
+        return verdict
     minutes = early_minutes(cog.bot, guild.id)
     row = verdict.row
     line = sig.day_line(row, overlay.chains(rows), minutes)
@@ -233,6 +235,8 @@ async def undo_early(cog: Any, guild: Any, marathon: Any, rows: Any, now: dateti
     day back to its planned times; nothing is posted."""
     from .marathon import put_back
 
+    if retimes_itself(_cell(marathon, "source")):
+        return False
     minutes = early_minutes(cog.bot, guild.id)
     days = overlay.chains(rows)
     found: list[tuple[Any, datetime]] = []
