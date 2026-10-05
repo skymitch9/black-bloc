@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -327,8 +328,8 @@ def test_two_runs_swapping_slots_keep_their_ids_and_are_only_moved():
 
 
 def test_two_renamed_runs_each_keep_their_own_slot():
-    stored = [kept(1, "a", at=0, order=1), kept(2, "b", at=60, order=2)]
-    read = [fresh("a2", at=0, order=1), fresh("b2", at=60, order=2)]
+    stored = [kept(1, "a", at=0, order=1, game="Celeste"), kept(2, "b", at=60, order=2)]
+    read = [fresh("a2", at=0, order=1, game="Celeste"), fresh("b2", at=60, order=2)]
     assert pairs(mt.renames(stored, read, minutes=5)) == [(1, "a2"), (2, "b2")]
 
 
@@ -406,6 +407,67 @@ def test_a_displaced_dropped_row_takes_an_id_the_renames_left_free():
     stored = [kept(1, "a", at=0, order=1), kept(9, "b", at=0, order=1, state=mt.DROPPED)]
     found = mt.rekeys(stored, [(stored[0], fresh("b", at=0, order=1))])
     assert pairs(found) == [(1, "b"), (9, "a")]
+
+
+def worded(found, category):
+    if isinstance(found, Run):
+        return replace(found, category=category)
+    return found | {"category": category}
+
+
+@pytest.mark.parametrize(
+    ("was", "now", "same"),
+    [
+        (
+            ("Metroid Dread", "Minim Items Glitchless"),
+            ("Metroid Dread", "Minimum Items Glitchless"),
+            True,
+        ),
+        (("Donkey Kong Country 2", "102%"), ("Donkey Kong Country 2", "True Ending"), False),
+        (("Donkey Kong Country 2", "102%"), ("Donkey Kong Country 2", "Any%"), False),
+        (("Tetris", "Any%"), ("tetris", "ANY %"), True),
+        (("", ""), ("", ""), False),
+    ],
+)
+def test_words_are_alike_for_a_typo_and_not_for_another_category(was, now, same):
+    stored = worded(kept(1, "a", at=0, order=1, game=was[0]), was[1])
+    read = worded(fresh("b", at=0, order=1, game=now[0]), now[1])
+    assert mt.same_words(stored, read) is same
+
+
+@pytest.mark.parametrize("state", [mt.UPCOMING, mt.LIVE, mt.DONE])
+def test_a_run_retitled_as_the_one_before_it_is_deleted_never_takes_that_runs_row(state):
+    game = "Donkey Kong Country 2"
+    first = worded(kept(1, "dkc2/102", at=0, order=1, game=game, state=state, sent=[120]), "102%")
+    second = worded(kept(2, "dkc2/true-endng", at=60, order=2, game=game), "True Endng")
+    read = [worded(fresh("dkc2/true-ending", at=0, order=1, game=game), "True Ending")]
+    plan = mt.diff([first, second], read, move_minutes=5)
+    assert plan.renamed == [] and plan.rekeyed == [] and plan.updates == []
+    assert [one.external_id for one in plan.inserts] == ["dkc2/true-ending"]
+    assert [one["id"] for one in plan.dropped] == ([2] if state == mt.DONE else [1, 2])
+
+
+def test_of_two_lost_rows_by_one_runner_the_one_that_reads_alike_in_the_slot_is_paired():
+    game = "Donkey Kong Country 2"
+    first = worded(kept(1, "dkc2/102", at=0, order=1, game=game), "102%")
+    second = worded(kept(2, "dkc2/true-endng", at=60, order=2, game=game), "True Endng")
+    read = [worded(fresh("dkc2/true-ending", at=60, order=2, game=game), "True Ending")]
+    plan = mt.diff([first, second], read, move_minutes=5)
+    assert pairs(plan.renamed) == [(2, "dkc2/true-ending")]
+    assert [one["id"] for one in plan.dropped] == [1] and plan.inserts == []
+
+
+def test_two_lost_rows_by_one_runner_that_both_read_alike_are_paired_with_nothing():
+    stored = [kept(1, "a", at=0, order=1), kept(2, "b", at=60, order=2)]
+    read = [fresh("a2", at=0, order=1), fresh("b2", at=60, order=2)]
+    plan = mt.diff(stored, read, move_minutes=5)
+    assert plan.renamed == [] and [one["id"] for one in plan.dropped] == [1, 2]
+
+
+def test_a_lone_lost_row_needs_no_words_alike_so_a_new_game_in_its_slot_is_a_rename():
+    stored = [worded(kept(1, "a", at=0, order=1, game="Celeste"), "Any%")]
+    read = [worded(fresh("b", at=0, order=1, game="Hollow Knight"), "112%")]
+    assert pairs(mt.diff(stored, read, move_minutes=5).renamed) == [(1, "b")]
 
 
 def test_the_hash_moves_with_the_schedule_and_not_otherwise():

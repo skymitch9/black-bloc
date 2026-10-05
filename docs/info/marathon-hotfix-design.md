@@ -449,6 +449,15 @@ differs by more (the overlay unreadable on that read, a day's start edited in th
 when exactly one run fits it AND that run fits no other row. A row fitting two runs, or two rows fitting one run,
 stay a drop and an add — and do not stop a clear pair elsewhere in the same read.
 
+**Several lost rows by the same runners** (added after review, 2026-10-04). When more than one lost row carries the
+fresh run's runner set, a pair also needs the words to be alike (`same_words`: `normalise` of game + category equal,
+or a `difflib` ratio of at least `SAME_WORDS` = 0.93) and exactly one of those rows may pass — otherwise that run pairs
+with nothing; a lone lost row is never word-tested. 0.93 sits between the measured anchors: the incident's pair is
+0.973, *Donkey Kong Country 2 / 102%* against */ True Ending* is 0.759 and against */ Any%* 0.88. It closes the read
+where a runner's first run is deleted and their next one retitled in one save (order and start both shift up, so the
+retitled run sat alone in the deleted run's slot): that read is now two drops and an add. The repeat-counter pass below
+is not word-tested — repeats read alike by definition.
+
 **Kept by a renamed run:** its row — id, state (upcoming / live / done), `live_at`, `live_because`,
 `actual_started_at`, `actual_ended_at`, `done_at`, `reminders_sent`, `reminder_posts`, the shout ids, `first_seen_at`,
 and each person's match where name and part are unchanged (`_merged_people`). The host-block records on the

@@ -55,6 +55,7 @@ TITLE_REACH = timedelta(hours=12)
 NAME_FLOOR = 3
 SAME_DAY_HOURS = 12
 SAME_TITLE = 0.8
+SAME_WORDS = 0.93
 REPEAT = re.compile(r"#\d+$")
 
 PART_KEYS = {
@@ -561,9 +562,38 @@ def same_slot(row: Any, run: Run, *, minutes: int) -> bool:
     return bool(mine) or similar_titles(_cell(row, "game"), run.game)
 
 
-def _only_pairs(rows: list[Any], runs: list[Run], minutes: int) -> list[tuple[Any, Run]]:
+def same_words(row: Any, run: Run) -> bool:
+    mine = normalise(f"{_cell(row, 'game') or ''} {_cell(row, 'category') or ''}")
+    theirs = normalise(f"{run.game} {run.category}")
+    if not mine or not theirs:
+        return False
+    return mine == theirs or SequenceMatcher(None, mine, theirs).ratio() >= SAME_WORDS
+
+
+def _candidates(rows: list[Any], run: Run) -> list[Any]:
+    """The rows a run may pair with: any, unless several lost rows share its runners — then
+    only the one whose game and category read alike, and none when that is not exactly one."""
+    people = runner_set(run.people)
+    peers = [row for row in rows if runner_set(people_of(row)) == people]
+    if len(peers) < 2:
+        return rows
+    alike = [row for row in peers if same_words(row, run)]
+    return alike if len(alike) == 1 else []
+
+
+def _only_pairs(
+    rows: list[Any], runs: list[Run], minutes: int, *, worded: bool = True
+) -> list[tuple[Any, Run]]:
+    open_to = [
+        {id(row) for row in (_candidates(rows, run) if worded else rows)} for run in runs
+    ]
     fits = [
-        [at for at, run in enumerate(runs) if same_slot(row, run, minutes=minutes)] for row in rows
+        [
+            at
+            for at, run in enumerate(runs)
+            if id(row) in open_to[at] and same_slot(row, run, minutes=minutes)
+        ]
+        for row in rows
     ]
     wanted = Counter(at for one in fits for at in one)
     return [
@@ -604,7 +634,10 @@ def renames(rows: Any, runs: list[Run], *, minutes: int) -> list[tuple[Any, Run]
     if not loose:
         return direct
     wider = _only_pairs(
-        gone + [row for row, _ in loose], free + [run for _, run in loose], minutes
+        gone + [row for row, _ in loose],
+        free + [run for _, run in loose],
+        minutes,
+        worded=False,
     )
     rows_in = {id(row) for row, _ in wider}
     runs_in = {run.external_id for _, run in wider}

@@ -1944,3 +1944,43 @@ async def test_a_rekey_that_fails_leaves_every_id_as_it_was(bot, cog):
         await cogmod.rekey_runs(bot.db, [(first, "x"), (second, "x")])
     rows = await runs_of(bot.db, marathon["id"])
     assert [row["external_id"] for row in rows[:2]] == ["1", "2"]
+
+
+
+
+def dkc2(key, order, start, category):
+    run = a_run(order, start, game="Donkey Kong Country 2", people=(("Sky", "skyruns", "runner"),))
+    return replace(run, external_id=key, category=category)
+
+
+@pytest.mark.parametrize("state", [mt.UPCOMING, mt.LIVE, mt.DONE])
+async def test_a_run_retitled_as_the_one_before_it_is_deleted_is_a_new_row(bot, cog, state):
+    cog.client.runs_given = [
+        dkc2("dkc2/102", 1, 30, "102%"),
+        dkc2("dkc2/endng", 2, 90, "True Endng"),
+    ]
+    marathon = await added(bot, cog)
+    first, second = await runs_of(bot.db, marathon["id"])
+    await update_run(
+        bot.db,
+        first["id"],
+        state=state,
+        reminders_sent="[120]",
+        actual_started_at=None if state == mt.UPCOMING else at(31),
+    )
+    rows = await reread(bot, cog, marathon, [dkc2("dkc2/ending", 1, 30, "True Ending")])
+
+    by_key = {row["external_id"]: row for row in rows}
+    assert len(rows) == 3 and await all_details(bot, "marathon.run_renamed") == []
+    kept = by_key["dkc2/102"]
+    assert (kept["id"], kept["category"], kept["reminders_sent"]) == (first["id"], "102%", "[120]")
+    assert kept["state"] == (mt.DONE if state == mt.DONE else mt.DROPPED)
+    assert (by_key["dkc2/endng"]["id"], by_key["dkc2/endng"]["state"]) == (second["id"], mt.DROPPED)
+    new = by_key["dkc2/ending"]
+    assert new["id"] not in (first["id"], second["id"])
+    assert (new["state"], new["actual_started_at"], new["reminders_sent"]) == (
+        mt.UPCOMING,
+        None,
+        "[]",
+    )
+    assert await last_change(bot) == (1, 0, 1 if state == mt.DONE else 2, 0)
