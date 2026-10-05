@@ -272,6 +272,7 @@ const ROUTINE_KINDS = [
   'request.notify_skipped_test_mode',
   'request.in_progress', 'request.updated', 'request.comment', 'request.check_asked',
   'chat.memory_distilled', 'chat.memory_expired', 'chat.memory_optin',
+  'chat.memory_sweep',
   'application.submitted', 'application.withdrawn', 'application.panel_posted',
   'application.form_created', 'application.form_updated', 'application.form_deleted',
   'application.question_changed', 'application.mode', 'application.removed',
@@ -558,6 +559,9 @@ const SETTING_SPECS = [
   ['chat_memory_notes_max', 'int', 6, 6, 'how many preferences one profile holds, up to 20; the oldest drops off when a newer one arrives', null, 20],
   ['chat_memory_threads_max', 'int', 5, 5, 'how many open topics (“was asking about the Thursday event”) one profile holds, up to 20', null, 20],
   ['chat_memory_model', 'text', '', '', 'which Groq model writes the profile up after a conversation ends; blank uses chat_simple_model, the same quick tier that answers'],
+  ['chat_memory_min_turns', 'int', 1, 1, 'how many messages a person must have sent Black Bloc in one conversation before it is written up into their profile, up to 10; 1 means a single exchange can be remembered', null, 10],
+  ['chat_memory_rapport_max', 'int', 4, 4, 'how many lines about how a person and Black Bloc talk — the manner they like, a running joke — one profile holds, up to 20; a newer line on the same subject replaces the older one, and 0 keeps none', null, 20],
+  ['chat_memory_rapport_line', 'text', '**#{number}** *how we talk:* {text}', '**#{number}** *how we talk:* {text}', "how one how-we-talk line reads on a person's own `/memory` panel; {number} is its place on the list and {text} is the line itself, and both must be there"],
   ["chat_channel_note_saved", 'text', "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's topic from its next answer on.", "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's topic from its next answer on.", "what staff are told when a channel note is saved, on /chat and on the Chat page. It takes {channel}, the channel's name"],
   ["chat_channel_note_cleared", 'text', "The note for **#{channel}** is gone. Black Bloc goes back to the channel's own topic, or just its name when it has none.", "The note for **#{channel}** is gone. Black Bloc goes back to the channel's own topic, or just its name when it has none.", "what staff are told when a channel note is cleared. It takes {channel}"],
   ["chat_channel_note_nothing", 'text', "**#{channel}** had no note, so nothing changed.", "**#{channel}** had no note, so nothing changed.", "what staff are told when they clear a channel note that was never written. It takes {channel}"],
@@ -1844,6 +1848,10 @@ function seedState() {
         { text: 'reads on a phone, so keep paragraphs small', where: 'server', at: minutesAgo(200) },
       ],
       threads: [{ text: 'was asking about the Thursday cookout', where: 'server', at: minutesAgo(200) }],
+      rapport: [
+        { text: 'likes dry teasing back', where: 'server', at: minutesAgo(200) },
+        { text: 'running joke about the toaster', where: 'dm', at: minutesAgo(200) },
+      ],
       turns_seen: 14,
       created_at: minutesAgo(9000),
       updated_at: minutesAgo(200),
@@ -1870,6 +1878,16 @@ function seedState() {
     },
   ],
   memoryOptOut: [{ user_id: MEMBERS[5].id, at: minutesAgo(3000) }],
+  memoryLastRun: {
+    at: minutesAgo(200),
+    seen: 6, looked: 4, distilled: 2, nothing: 1, dropped: 0, failed: 1, closed: 0, expired: 0,
+    skipped: { short: 1, staff: 1 },
+    reasons: { no_answer: 1 },
+    no_answer: { rate_limited: 1 },
+    closed_why: {},
+    rules: { third_person: 2, instruction: 1 },
+    lines: { names: 1, notes: 2, threads: 1, rapport: 2 },
+  },
   nextKnowledge: 4,
   channelReach: new Map([
     ['1285371141476581509', true],
@@ -10992,7 +11010,8 @@ const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_ch
 // Phase 17. Their own list because the Memory section reads them as one block.
 const CHAT_MEMORY_SETTING_KEYS = ['chat_memory_mode', 'chat_memory_consent',
   'chat_memory_retention_days', 'chat_memory_dm_scope', 'chat_memory_staff_view',
-  'chat_memory_notes_max', 'chat_memory_threads_max', 'chat_memory_model'];
+  'chat_memory_notes_max', 'chat_memory_threads_max', 'chat_memory_model',
+  'chat_memory_min_turns', 'chat_memory_rapport_max', 'chat_memory_rapport_line'];
 const CHAT_UNKNOWN_LINE = 'Not sure I follow, {name} — try `/help` for what I can do.';
 const CHAT_NO_SUCH_INTENT = 'Black Bloc has no chat intent **#%s** any more, so nothing was done. The Chat page lists the ones it has.';
 const CHAT_NO_SUCH_LINE = 'Black Bloc has no chat line **#%s** any more, so nothing was done. Somebody may have removed it while this page was open.';
@@ -12027,6 +12046,7 @@ function memoryRow(row, full) {
     member: { id: String(row.user_id), name: memberName(row.user_id) || String(row.user_id) },
     notes: row.notes.length,
     threads: row.threads.length,
+    rapport: (row.rapport || []).length,
     turns_seen: row.turns_seen,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -12035,6 +12055,7 @@ function memoryRow(row, full) {
       ? [
         ...row.notes.map((one) => ({ text: one.text, where: one.where, kind: 'note' })),
         ...row.threads.map((one) => ({ text: one.text, where: one.where, kind: 'thread' })),
+        ...(row.rapport || []).map((one) => ({ text: one.text, where: one.where, kind: 'rapport' })),
       ]
       : [],
   };
@@ -12057,7 +12078,13 @@ route('GET', '/api/chat/memory', (context) => {
     profiles: state.profiles.map((row) => memoryRow(row, full)),
     total: state.profiles.length,
     opted_out: state.memoryOptOut.length,
-    dm_notes: state.profiles.reduce((sum, row) => sum + row.notes.filter((one) => one.where === 'dm').length, 0),
+    names: state.profiles.filter((row) => row.call_me).length,
+    notes: state.profiles.reduce((sum, row) => sum + row.notes.length, 0),
+    threads: state.profiles.reduce((sum, row) => sum + row.threads.length, 0),
+    rapport: state.profiles.reduce((sum, row) => sum + (row.rapport || []).length, 0),
+    dm_notes: state.profiles.reduce((sum, row) => sum
+      + [...row.notes, ...row.threads, ...(row.rapport || [])].filter((one) => one.where === 'dm').length, 0),
+    last_run: state.memoryLastRun,
     message: on ? '' : MEMORY_IS_OFF,
   };
 });

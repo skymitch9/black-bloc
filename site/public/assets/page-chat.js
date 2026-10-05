@@ -67,6 +67,9 @@ const MEMORY_SETTING_KEYS = [
   'chat_memory_notes_max',
   'chat_memory_threads_max',
   'chat_memory_model',
+  'chat_memory_min_turns',
+  'chat_memory_rapport_max',
+  'chat_memory_rapport_line',
 ];
 
 // Personality tones (docs/info/personality-tones-design.md): the cookout sheet and the tone
@@ -1124,11 +1127,60 @@ const MEMORY_COUNTS_ONLY = 'This server keeps the notes themselves private to th
 const MEMORY_NO_PROFILES = 'Nobody has a profile yet.';
 const MEMORY_FORGOT_FAILED = 'That profile was not cleared.';
 const MEMORY_DM_MARK = 'learned in a DM';
+const MEMORY_RAPPORT_MARK = 'how we talk';
+const MEMORY_NO_RUN = 'no write-up yet';
+const MEMORY_SKIPPED = { short: 'too short', staff: 'staff talk', opted_out: 'opted out' };
+const MEMORY_REASONS = {
+  no_answer: 'no answer',
+  bad_shape: 'bad shape',
+  no_model: 'no model key',
+  not_saved: 'not saved',
+  all_dropped: 'all dropped by rule',
+  models_closed: 'models closed',
+};
+const MEMORY_RULES = {
+  quote: 'quote',
+  third_person: 'third person',
+  event: 'event',
+  availability: 'availability',
+  sensitive: 'sensitive',
+  too_long: 'too long',
+  empty: 'empty',
+  instruction: 'instruction',
+  link: 'link',
+  personal: 'personal',
+};
+
+function memoryTally(found, names, tone) {
+  return Object.entries(found || {})
+    .filter(([, count]) => Number(count) > 0)
+    .map(([code, count]) => badge(`${count} ${names[code] || code.replace(/_/g, ' ')}`, tone));
+}
+
+/** The last sweep that had a conversation in front of it, as counts and reason codes only. */
+function memoryLastRun(run) {
+  if (!run) return el('div', { class: 'chipbar' }, [badge(MEMORY_NO_RUN, null)]);
+  const why = { ...(run.no_answer || {}), ...(run.closed_why || {}) };
+  return el('div', { class: 'chipbar' }, [
+    badge(`last write-up ${when(run.at)}`, null),
+    badge(`${run.seen ?? 0} conversation(s)`, null),
+    badge(`${run.distilled ?? 0} kept`, run.distilled ? 'ok' : null),
+    badge(`${run.nothing ?? 0} nothing to keep`, null),
+    ...memoryTally(run.skipped, MEMORY_SKIPPED, null),
+    ...memoryTally(run.reasons, MEMORY_REASONS, 'warn'),
+    ...memoryTally(why, {}, 'warn'),
+    ...memoryTally(run.rules, MEMORY_RULES, null).map((one) => {
+      one.textContent = `dropped: ${one.textContent}`;
+      return one;
+    }),
+  ]);
+}
 
 /** Counts always; the notes themselves only where the server has said staff may read them. */
 function memoryLine(one) {
   return el('li', { class: 'chatline' }, [
     el('span', { class: 'chatline-text', text: one.text }),
+    one.kind === 'rapport' ? badge(MEMORY_RAPPORT_MARK, 'info') : null,
     one.where === 'dm' ? badge(MEMORY_DM_MARK, 'warn') : null,
   ]);
 }
@@ -1155,7 +1207,8 @@ function memoryCard(row, say) {
   }, { tone: 'danger' });
 
   const counts = `${row.notes} preference${row.notes === 1 ? '' : 's'} · ` +
-    `${row.threads} open topic${row.threads === 1 ? '' : 's'} · ${row.turns_seen} turn` +
+    `${row.threads} open topic${row.threads === 1 ? '' : 's'} · ${row.rapport ?? 0} how-we-talk · ` +
+    `${row.turns_seen} turn` +
     `${row.turns_seen === 1 ? '' : 's'} seen`;
 
   return card(null, [
@@ -1183,9 +1236,14 @@ async function memorySection(payload, specs, say) {
     el('div', { class: 'chipbar' }, [
       badge(payload?.on ? 'on' : 'off', payload?.on ? 'ok' : null),
       badge(`${payload?.total ?? rows.length} profile(s)`, null),
+      badge(`${payload?.names ?? 0} name(s)`, null),
+      badge(`${payload?.notes ?? 0} preference(s)`, null),
+      badge(`${payload?.threads ?? 0} open topic(s)`, null),
+      badge(`${payload?.rapport ?? 0} how-we-talk`, null),
       badge(`${payload?.opted_out ?? 0} opted out`, null),
       badge(`${payload?.dm_notes ?? 0} learned in a DM`, null),
     ]),
+    memoryLastRun(payload?.last_run),
     payload?.message ? el('p', { class: 'section-note', text: payload.message }) : null,
     payload?.staff_view === 'counts'
       ? el('p', { class: 'section-note', text: MEMORY_COUNTS_ONLY })

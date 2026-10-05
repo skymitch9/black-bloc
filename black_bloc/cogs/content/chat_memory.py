@@ -14,6 +14,7 @@ from ...chat_memory import (
     CONSENT_KEY,
     FACT_NAME,
     FACT_NOTE,
+    FACT_RAPPORT,
     FACT_THREAD,
     FORGOT_KIND,
     MODE_KEY,
@@ -22,6 +23,9 @@ from ...chat_memory import (
     OPTIN_KIND,
     OPTOUT,
     OPTOUT_KIND,
+    RAPPORT_LINE,
+    RAPPORT_LINE_FIELDS,
+    RAPPORT_LINE_KEY,
     drop_fact,
     drop_matching,
     fact_at,
@@ -127,8 +131,18 @@ STOP = "stop"
 START = "start"
 REFRESH = "refresh"
 
-FACT_WORDS = {FACT_NAME: "what it calls you", FACT_NOTE: "", FACT_THREAD: "still open"}
-FACT_LINES = {FACT_NAME: CALL_ME_LINE, FACT_NOTE: NOTE_LINE, FACT_THREAD: THREAD_LINE}
+FACT_WORDS = {
+    FACT_NAME: "what it calls you",
+    FACT_NOTE: "",
+    FACT_THREAD: "still open",
+    FACT_RAPPORT: "how we talk",
+}
+FACT_LINES = {
+    FACT_NAME: CALL_ME_LINE,
+    FACT_NOTE: NOTE_LINE,
+    FACT_THREAD: THREAD_LINE,
+    FACT_RAPPORT: RAPPORT_LINE,
+}
 STYLES = {
     "primary": discord.ButtonStyle.primary,
     "secondary": discord.ButtonStyle.secondary,
@@ -173,14 +187,30 @@ def scope_mark(note: Any) -> str:
     return DM_MARK if getattr(note, "where", "") == "dm" else ""
 
 
-def fact_line(fact: Any, number: int) -> str:
-    return FACT_LINES[fact.kind].format(number=number, text=fact.text) + scope_mark(fact)
+def rapport_line(bot: Any, home: int) -> str:
+    """The server's own wording for a how-we-talk line; a broken one falls back to the shipped."""
+    try:
+        found = str(bot.store.get(home, RAPPORT_LINE_KEY) or "")
+    except Exception as exc:
+        log.warning("memory: the rapport line was unreadable — %s: %s", type(exc).__name__, exc)
+        return RAPPORT_LINE
+    return found if all(f"{{{one}}}" in found for one in RAPPORT_LINE_FIELDS) else RAPPORT_LINE
 
 
-def profile_words(profile: Any) -> list[str]:
+def fact_line(fact: Any, number: int, rapport: str = RAPPORT_LINE) -> str:
+    shipped = FACT_LINES[fact.kind]
+    template = rapport if fact.kind == FACT_RAPPORT else shipped
+    try:
+        said = template.format(number=number, text=fact.text)
+    except (KeyError, IndexError, ValueError):
+        said = shipped.format(number=number, text=fact.text)
+    return said + scope_mark(fact)
+
+
+def profile_words(profile: Any, rapport: str = RAPPORT_LINE) -> list[str]:
     """What the person reads back; if a line would embarrass the bot here, it is content."""
     lines = [HEADER]
-    lines += [fact_line(one, spot + 1) for spot, one in enumerate(facts_of(profile))]
+    lines += [fact_line(one, spot + 1, rapport) for spot, one in enumerate(facts_of(profile))]
     return lines
 
 
@@ -357,7 +387,7 @@ async def panel_state(bot: Any, home: int, member: Any) -> tuple[bool, Any]:
 
 
 def memory_embed(bot: Any, home: int, remembered: bool, profile: Any) -> discord.Embed:
-    lines = profile_words(profile)
+    lines = profile_words(profile, rapport_line(bot, home))
     if not facts_of(profile):
         lines.append(NOTHING_YET)
     if not remembered:

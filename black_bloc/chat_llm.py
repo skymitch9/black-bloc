@@ -548,7 +548,7 @@ async def memory_for(bot: Any, db: Any, guild_id: Any, user_id: int, *, in_dm: b
         DM_SCOPE_KEY,
         MODE_KEY,
         SHARED,
-        memory_note,
+        memory_blocks,
         profile_for,
     )
 
@@ -556,7 +556,7 @@ async def memory_for(bot: Any, db: Any, guild_id: Any, user_id: int, *, in_dm: b
     if home is None or read_setting(bot.store, home, MODE_KEY, "off") != ON:
         return ""
     shared = read_setting(bot.store, home, DM_SCOPE_KEY, "") == SHARED
-    return memory_note(await profile_for(db, user_id, home), in_dm=in_dm, shared=shared)
+    return memory_blocks(await profile_for(db, user_id, home), in_dm=in_dm, shared=shared)
 
 
 async def say_capped(bot: Any, guild: Any, at: datetime) -> None:

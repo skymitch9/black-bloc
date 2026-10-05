@@ -1410,6 +1410,32 @@ async def test_every_memory_decision_is_a_key_the_dashboard_and_the_bot_both_rea
         assert "/memory" in KEY_HELP[key]
 
 
+async def test_memory_that_works_and_how_we_talk_are_three_keys_both_doors_reach(store):
+    from black_bloc.chat_memory import RAPPORT_LINE
+
+    assert KEY_TYPES["chat_memory_min_turns"] == "int"
+    assert KEY_TYPES["chat_memory_rapport_max"] == "int"
+    assert KEY_TYPES["chat_memory_rapport_line"] == "text"
+    assert store.get(7, "chat_memory_min_turns") == 1
+    assert store.get(7, "chat_memory_rapport_max") == 4
+    assert store.get(7, "chat_memory_rapport_line") == RAPPORT_LINE
+    for key in ("chat_memory_min_turns", "chat_memory_rapport_max", "chat_memory_rapport_line"):
+        assert KEY_HELP.get(key) and settings_store.namespace_of(key) == "chat"
+    assert coerce_value("chat_memory_min_turns", 10) == 10
+    assert coerce_value("chat_memory_rapport_max", 0) == 0
+    assert coerce_value("chat_memory_rapport_line", "{number}. {text}") == "{number}. {text}"
+    for key, bad in (
+        ("chat_memory_min_turns", 0),
+        ("chat_memory_min_turns", 11),
+        ("chat_memory_rapport_max", 21),
+        ("chat_memory_rapport_line", "no placeholders at all"),
+        ("chat_memory_rapport_line", "{number} {text} {secret}"),
+        ("chat_memory_rapport_line", "{number} {text} " + "x" * 200),
+    ):
+        with pytest.raises(SettingError):
+            coerce_value(key, bad)
+
+
 def test_the_memory_choices_refuse_anything_else():
     assert coerce_value("chat_memory_mode", "on") == "on"
     assert coerce_value("chat_memory_consent", "optin") == "optin"
@@ -2305,7 +2331,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 737
+    assert len(settings_store.KEY_TYPES) == 740
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):

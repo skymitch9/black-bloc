@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ...chat_distil import last_run
 from ...chat_memory import (
     BY_STAFF,
     COUNTS,
@@ -60,6 +61,7 @@ def summary(guild: Any, row: Any, *, full: bool) -> dict[str, Any]:
         },
         "notes": len(profile.notes),
         "threads": len(profile.threads),
+        "rapport": len(profile.rapport),
         "turns_seen": profile.turns_seen,
         "created_at": profile.created_at,
         "updated_at": profile.updated_at,
@@ -67,7 +69,11 @@ def summary(guild: Any, row: Any, *, full: bool) -> dict[str, Any]:
         "lines": (
             [
                 {"text": one.text, "where": one.where, "kind": kind}
-                for kind, source in (("note", profile.notes), ("thread", profile.threads))
+                for kind, source in (
+                    ("note", profile.notes),
+                    ("thread", profile.threads),
+                    ("rapport", profile.rapport),
+                )
                 for one in source
             ]
             if full
@@ -102,6 +108,7 @@ def build_router(bot: Any) -> APIRouter:
         full = _full(guild.id)
         rows = await profile_rows(bot.db, guild.id)
         shown = [summary(guild, row, full=full) for row in rows]
+        profiles = [profile_from_row(row) for row in rows]
         return {
             "mode": bot.store.get(guild.id, MODE_KEY),
             "on": bot.store.get(guild.id, MODE_KEY) == ON,
@@ -109,12 +116,17 @@ def build_router(bot: Any) -> APIRouter:
             "profiles": shown,
             "total": len(shown),
             "opted_out": await optout_count(bot.db, guild.id),
+            "names": sum(1 for one in profiles if one.call_me),
+            "notes": sum(len(one.notes) for one in profiles),
+            "threads": sum(len(one.threads) for one in profiles),
+            "rapport": sum(len(one.rapport) for one in profiles),
             "dm_notes": sum(
                 1
-                for row in rows
-                for one in profile_from_row(row).notes
+                for profile in profiles
+                for one in (*profile.notes, *profile.threads, *profile.rapport)
                 if one.where == DM
             ),
+            "last_run": await last_run(bot.db, guild.id),
             "message": "" if bot.store.get(guild.id, MODE_KEY) == ON else MEMORY_IS_OFF,
         }
 
