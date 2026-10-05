@@ -282,3 +282,32 @@ def test_the_early_line_is_gone_once_another_run_of_the_day_is_live_or_done():
         days = [[row(1, 0, 45, state=state), row(2, 45, 30)]]
         assert sig.day_line(days[0][1], days, 15) is None
         assert sig.day_line(days[0][0], days, 15) == NOW - timedelta(minutes=15)
+
+
+def early_opener(started, **extra):
+    opener = row(1, 0, 45, state=mt.LIVE) | {"actual_started_at": iso(started)}
+    return opener | {"live_because": mt.BY_BOTH} | extra
+
+
+def test_an_opener_the_stream_started_before_the_line_is_put_back_then_moved_to_the_line():
+    line = NOW - timedelta(minutes=15)
+    days = [[early_opener(-79), row(2, 45, 30)]]
+    opener = days[0][0]
+    assert sig.early_repair(opener, days, NOW - timedelta(minutes=16), 15) == ("put_back", line)
+    assert sig.early_repair(opener, days, line, 15) == ("moved_to_line", line)
+    assert sig.early_repair(opener, days, NOW + timedelta(minutes=30), 15) == (
+        "moved_to_line",
+        line,
+    )
+    assert sig.early_repair(opener, days, NOW, 0) is None
+
+
+def test_an_opener_at_the_line_by_staff_or_with_the_day_under_way_needs_no_repair():
+    days = [[early_opener(-15), row(2, 45, 30)]]
+    assert sig.early_repair(days[0][0], days, NOW, 15) is None
+    days = [[early_opener(-79, live_because=mt.BY_STAFF), row(2, 45, 30)]]
+    assert sig.early_repair(days[0][0], days, NOW, 15) is None
+    days = [[early_opener(-79), row(2, 45, 30, state=mt.LIVE)]]
+    assert sig.early_repair(days[0][0], days, NOW, 15) is None
+    days = [[row(1, 0, 45), row(2, 45, 30)]]
+    assert sig.early_repair(days[0][0], days, NOW, 15) is None

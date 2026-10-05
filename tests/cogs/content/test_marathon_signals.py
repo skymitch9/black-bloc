@@ -960,14 +960,34 @@ async def test_a_first_run_anchored_79_minutes_early_is_put_back_and_nothing_is_
     assert (wii["state"], wii["actual_started_at"]) == (mt.LIVE, z(DAY - 5))
 
 
-async def test_a_first_run_anchored_early_stays_live_once_the_show_is_about_to_start(
+async def test_a_first_run_anchored_early_starts_at_the_line_once_the_line_has_passed(
     bot, cog, helix
 ):
+    """Was `..._stays_live_once_the_show_is_about_to_start`, which asserted the early day kept."""
     _channel, marathon = await anchored_79_minutes_early(bot, cog)
-    before = day_two_of(await times(bot, marathon))
-    at_show(cog, DAY - 15)
-    await tick(cog)
-    rows = await times(bot, marathon)
-    assert rows[WII]["state"] == mt.LIVE and rows[WII]["actual_started_at"] == z(DAY - 79)
-    assert day_two_of(rows) == before
-    assert await undone_rows(bot) == 0
+    early = await times(bot, marathon)
+    for minutes in (-15, -14, 5):
+        at_show(cog, DAY + minutes)
+        await tick(cog)
+        rows = await times(bot, marathon)
+        wii = rows[WII]
+        assert (wii["state"], wii["live_because"]) == (mt.LIVE, mt.BY_BOTH)
+        assert wii["actual_started_at"] == wii["scheduled_at"] == z(DAY - 15)
+        for game in day_two_of(rows):
+            moved = datetime.fromisoformat(rows[game]["scheduled_at"]) - datetime.fromisoformat(
+                early[game]["scheduled_at"]
+            )
+            assert moved == timedelta(minutes=64), game
+        assert mt.marks_of(rows[RACERS]) == [120, 1440]
+        assert not [one for one in await kinds(bot.db) if "reminder" in one or "remind" in one]
+        said = [one.content for chan in bot.guild.channels.values() for one in chan.messages]
+        assert not any("<@&" in one or "Heads-up" in one for one in said)
+        assert await undone_rows(bot) == 1 and await held_rows(bot) == 0
+        assert (await kinds(bot.db)).count("marathon.retimed") == 2
+    said = await details_of(bot.db, "marathon.early_start_undone")
+    assert (said["outcome"], said["started_at"], said["was"]) == (
+        "moved_to_line",
+        z(DAY - 79),
+        mt.LIVE,
+    )
+    assert (said["day_starts_at"], said["allowed_minutes"]) == (z(DAY), 15)

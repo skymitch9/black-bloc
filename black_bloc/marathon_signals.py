@@ -8,6 +8,7 @@ from .golive import parse_ts
 from .marathon import (
     BY_BOTH,
     BY_CATEGORY,
+    BY_STREAM,
     BY_TITLE,
     DONE,
     DROPPED,
@@ -33,6 +34,8 @@ RETIMED_LINE = (
 SHEET_TIMES_DONE = "**{name}** is back on the sheet's times ({count} run(s))."
 SHEET_TIMES_NONE = "**{name}** is on the sheet's times already, so nothing was changed."
 SHEET_TIMES_CODE = "not_retimed"
+EARLY_PUT_BACK = "put_back"
+EARLY_MOVED = "moved_to_line"
 
 
 class Match(NamedTuple):
@@ -288,6 +291,18 @@ def day_line(row: Any, days: Any, minutes: Any) -> datetime | None:
     if not day or any(settled(one) for one in day if not same(one, row)):
         return None
     return early_line(day[0], minutes)
+
+
+def early_repair(row: Any, days: Any, now: datetime, minutes: Any) -> tuple[str, datetime] | None:
+    """What a run the stream started before its show-day's line needs: back to coming up while
+    the line is still ahead, its start moved to the line once it has passed."""
+    if _cell(row, "state") != LIVE or _cell(row, "live_because") not in BY_STREAM:
+        return None
+    actual = parse_ts(_cell(row, "actual_started_at"))
+    line = day_line(row, days, minutes)
+    if actual is None or line is None or actual >= line:
+        return None
+    return (EARLY_PUT_BACK if now < line else EARLY_MOVED, line)
 
 
 def is_retimed(row: Any) -> bool:
