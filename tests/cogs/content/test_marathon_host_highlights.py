@@ -1,5 +1,6 @@
 # ruff: noqa: F401, F811
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -510,3 +511,93 @@ async def test_a_block_that_opens_on_a_baf_run_leaves_the_mention_to_the_runners
     (logged,) = await host_rows(bot)
     assert (logged["marathon_role"], logged["marathon_role_reason"]) == (None, "runner_copy")
     assert (await details_of(bot.db, "marathon.public_reminded"))["marathon_role"] == MARATHON_ROLE
+
+
+# --- a hosted run renamed at a read -------------------------------------------------------------
+
+MINIM = "metroid-dread/minim-items-glitchless"
+MINIMUM = "metroid-dread/minimum-items-glitchless"
+OPENER = a_run(1, 120, game="Celeste", people=(("madeline", "md", "runner"),), length=60)
+
+
+def dread(key, category):
+    run = a_run(2, 180, game="Metroid Dread", people=(("aranea", "ar", "runner"), HOST), length=60)
+    return replace(run, external_id=key, category=category)
+
+
+async def read_at(bot, cog, marathon, runs, minutes):
+    cog.client.runs_given = list(runs)
+    cog.clock = lambda: NOW + timedelta(minutes=minutes)
+    async with cog.lock(marathon["id"]):
+        read = await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert read.ok, read.message
+
+
+async def logged(bot, kind):
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id", (kind,)
+    )
+    return [json.loads(row["details"]) for row in await cur.fetchall()]
+
+
+async def test_a_category_typo_fixed_mid_run_leaves_the_live_hosted_run_as_it_was(bot, cog):
+    await bot.store.set(GUILD, "marathon_reminder_minutes", "120, 15")
+    first = [OPENER, dread(MINIM, "Minim Items Glitchless")]
+    marathon = await show(bot, cog, first, auto=True)
+    await walk(bot, cog, marathon, [60, 165, 181, 200])
+    live = await run_named(bot, marathon, "Metroid Dread")
+    await cogmod.update_run(bot.db, live["id"], actual_started_at=live["live_at"])
+    before = await run_named(bot, marathon, "Metroid Dread")
+    (post,) = highlights(bot)
+    said = [one.content for one in heads_ups(bot)]
+    everything = [len(one.messages) for one in bot.guild.channels.values()]
+    blocks = mhh.records(await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert before["state"] == mt.LIVE and before["actual_started_at"] and len(said) == 2
+    assert "— Minim Items Glitchless on" in post.content
+
+    await read_at(bot, cog, marathon, [OPENER, dread(MINIMUM, "Minimum Items Glitchless")], 205)
+    await walk(bot, cog, marathon, [206, 207, 220])
+
+    rows = await runs_of(bot.db, marathon["id"])
+    after = await run_named(bot, marathon, "Metroid Dread")
+    assert len(rows) == 2 and mt.DROPPED not in [one["state"] for one in rows]
+    assert (after["id"], after["external_id"], after["state"]) == (before["id"], MINIMUM, mt.LIVE)
+    kept = ("live_at", "live_because", "actual_started_at", "reminders_sent", "reminder_posts")
+    assert [after[key] for key in kept] == [before[key] for key in kept]
+    assert after["category"] == "Minimum Items Glitchless"
+    assert mt.people_of(after) == mt.people_of(before)
+    (change,) = (await logged(bot, "marathon.schedule_changed"))[1:]
+    assert [change[key] for key in ("added", "moved", "dropped", "renamed")] == [0, 0, 0, 1]
+    (row,) = await logged(bot, "marathon.run_renamed")
+    assert (row["run_id"], row["from_id"], row["to_id"]) == (before["id"], MINIM, MINIMUM)
+    assert [len(one.messages) for one in bot.guild.channels.values()] == everything
+    assert highlights(bot) == [post] and " · on now · " in post.content
+    assert "— Minimum Items Glitchless on" in post.content
+    assert [one.content for one in heads_ups(bot)] == said
+    assert all(one.edits == [] for one in heads_ups(bot))
+    assert len(await logged(bot, "marathon.host_highlight_posted")) == 1
+    assert len(await logged(bot, "marathon.host_reminded")) == 2
+    assert await logged(bot, "marathon.host_reminder_edited") == []
+    now = mhh.records(await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert [one["runs"] for one in now] == [one["runs"] for one in blocks]
+
+
+async def test_a_hosted_run_renamed_before_it_starts_has_its_heads_up_reworded_in_place(bot, cog):
+    await bot.store.set(GUILD, "marathon_reminder_minutes", "120, 15")
+    marathon = await show(bot, cog, [OPENER, dread(MINIM, "Minim Items Glitchless")])
+    await walk(bot, cog, marathon, [60, 70])
+    before = await run_named(bot, marathon, "Metroid Dread")
+    (first,) = heads_ups(bot)
+    assert "(Minim Items Glitchless)" in first.content
+
+    await read_at(bot, cog, marathon, [OPENER, dread(MINIMUM, "Minimum Items Glitchless")], 75)
+    await walk(bot, cog, marathon, [76, 77])
+
+    assert heads_ups(bot) == [first] and "(Minimum Items Glitchless)" in first.content
+    assert "off the schedule" not in first.content and no_pings(first)
+    (edit,) = await logged(bot, "marathon.host_reminder_edited")
+    assert edit["dropped"] is False
+    after = await run_named(bot, marathon, "Metroid Dread")
+    assert (after["id"], after["state"]) == (before["id"], mt.UPCOMING)
+    await walk(bot, cog, marathon, [165, 166])
+    assert len(heads_ups(bot)) == 2 and await marks_logged(bot) == [120, 15]
