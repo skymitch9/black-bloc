@@ -102,7 +102,7 @@ looking at the answer. Comparing and downloading stored snapshots stays open in 
   against now), download one as JSON, the feature's settings, its log.
 - **API** (`black_bloc/api/tools/structure.py`, staff only): `GET /api/structure`,
   `POST /api/structure/snapshots`, `GET /api/structure/compare?old=&new=`,
-  `GET /api/structure/snapshots/{id}/download`.
+  `POST /api/structure/snapshots/{id}/download` (a POST because it writes a log row, and a GET on this site never writes).
 - The download is `structure.export(row)`: built from `SNAPSHOT_FIELDS` and the field lists in
   §A, never the row. Each download leaves a `structure.downloaded` row.
 

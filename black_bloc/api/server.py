@@ -41,6 +41,7 @@ from .tools import (
     requests,
     rolemenus,
     roles,
+    structure,
     tempvoice,
     youtube,
 )
@@ -201,6 +202,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(posts.build_blocks_router(bot))
     app.include_router(preview.build_router(bot))
     app.include_router(minutes.build_router(bot))
+    app.include_router(structure.build_router(bot))
     app.include_router(selftest_api.build_router(bot))
     app.include_router(bot_api.build_router(bot))
 

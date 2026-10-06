@@ -272,6 +272,12 @@ class WebGuild:
         self.made_roles.append(role)
         return role
 
+    async def fetch_roles(self):
+        return [self.default_role, *self.roles]
+
+    async def fetch_channels(self):
+        return list(self.channels)
+
     def add_member(self, member: WebMember) -> WebMember:
         member.guild = self
         self.members[member.id] = member
