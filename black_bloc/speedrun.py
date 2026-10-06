@@ -17,6 +17,7 @@ API_URL = "https://www.speedrun.com/api/v1"
 SITE = "speedrun.com"
 REQUEST_TIMEOUT_SECONDS = 20
 MAX_BODY_BYTES = 16_000_000
+READ_BYTES = 65_536
 PAGE_MAX = 200
 PAGE_LIMIT = 5
 LOOKUP_MAX = 20
@@ -232,6 +233,18 @@ def more_pages(payload: dict[str, Any], asked: int) -> bool:
         return False
 
 
+async def whole_body(content: Any, cap: int) -> bytes | None:
+    """The answer read to its end, or None once it has really passed the cap."""
+    pieces: list[bytes] = []
+    size = 0
+    async for piece in content.iter_chunked(READ_BYTES):
+        size += len(piece)
+        if size > cap:
+            return None
+        pieces.append(piece)
+    return b"".join(pieces)
+
+
 class SpeedrunClient:
     """One GET per question, timed out and under the bot's own agent; it raises SpeedrunError."""
 
@@ -256,15 +269,15 @@ class SpeedrunClient:
 
         try:
             async with self._open().get(url, headers=headers) as response:
-                if response.status != 200:
+                body = await whole_body(response.content, MAX_BODY_BYTES)
+                if body is None:
+                    if response.status == 200:
+                        raise SpeedrunError(TOO_LARGE)
                     return (response.status, None)
-                body = await response.content.read(MAX_BODY_BYTES + 1)
-                if len(body) > MAX_BODY_BYTES:
-                    raise SpeedrunError(TOO_LARGE)
                 try:
-                    return (200, json.loads(body))
+                    return (response.status, json.loads(body))
                 except ValueError:
-                    return (200, None)
+                    return (response.status, None)
         except (TimeoutError, aiohttp.ClientError, OSError) as exc:
             raise SpeedrunError(UNREACHABLE, why=type(exc).__name__) from exc
 

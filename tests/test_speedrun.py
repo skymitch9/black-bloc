@@ -267,8 +267,9 @@ class _Content:
     def __init__(self, body):
         self.body = body
 
-    async def read(self, limit):
-        return self.body[:limit]
+    async def iter_chunked(self, size):
+        for start in range(0, len(self.body), 5):
+            yield self.body[start : start + 5]
 
 
 class _Answer:
@@ -330,3 +331,83 @@ async def test_the_transport_wraps_a_timeout_and_reads_json(monkeypatch):
 
 def test_every_call_has_a_timeout():
     assert 0 < speedrun.REQUEST_TIMEOUT_SECONDS <= 30
+
+
+def padded(size):
+    """A personal-bests answer that is exactly `size` bytes of real JSON."""
+    empty = len(json.dumps({"data": [], "pad": ""}))
+    return json.dumps({"data": [], "pad": "x" * (size - empty)}).encode()
+
+
+async def loopback(body, *, chunked):
+    """A real aiohttp server on 127.0.0.1 answering every GET with `body`."""
+    import asyncio
+
+    from aiohttp import web
+
+    async def answer(request):
+        if not chunked:
+            return web.Response(body=body, content_type="application/json")
+        response = web.StreamResponse(headers={"Content-Type": "application/json"})
+        response.enable_chunked_encoding()
+        await response.prepare(request)
+        for start in range(0, len(body), 1024):
+            await response.write(body[start : start + 1024])
+            await asyncio.sleep(0)
+        await response.write_eof()
+        return response
+
+    app = web.Application()
+    app.router.add_get("/{tail:.*}", answer)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    port = site._server.sockets[0].getsockname()[1]
+    return runner, f"http://127.0.0.1:{port}"
+
+
+@pytest.mark.parametrize("chunked", [False, True])
+@pytest.mark.parametrize("size", [500, 11_000, 110_000])
+async def test_the_real_transport_reads_a_whole_answer_from_a_real_server(
+    monkeypatch, chunked, size
+):
+    import aiohttp
+
+    body = padded(size)
+    runner, origin = await loopback(body, chunked=chunked)
+    monkeypatch.setattr(speedrun, "API_URL", origin)
+    client = SpeedrunClient()
+    client._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+    try:
+        found = await client.get("/users/u1/personal-bests")
+    finally:
+        await client.close()
+        await runner.cleanup()
+
+    assert found == json.loads(body) and len(body) == size
+
+
+@pytest.mark.parametrize("chunked", [False, True])
+async def test_the_real_transport_refuses_only_an_answer_that_really_passes_the_cap(
+    monkeypatch, chunked
+):
+    import aiohttp
+
+    monkeypatch.setattr(speedrun, "MAX_BODY_BYTES", 50_000)
+    under, over = padded(50_000), padded(50_001)
+    for body, wanted in ((under, None), (over, TOO_LARGE)):
+        runner, origin = await loopback(body, chunked=chunked)
+        monkeypatch.setattr(speedrun, "API_URL", origin)
+        client = SpeedrunClient()
+        client._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+        try:
+            if wanted is None:
+                assert await client.get("/x") == json.loads(body)
+            else:
+                with pytest.raises(SpeedrunError) as caught:
+                    await client.get("/x")
+                assert caught.value.kind == wanted
+        finally:
+            await client.close()
+            await runner.cleanup()
