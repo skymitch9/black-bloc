@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..actionlog import log_action
 from ..logkinds import VIA_OPERATOR
+from ..structure import may_see
 from . import sessions
 
 log = logging.getLogger(__name__)
@@ -378,6 +379,17 @@ def member_state(who: dict[str, Any]) -> str:
     return "member" if who["member"] else "not_a_member"
 
 
+def sees_structure(bot: Any, who: dict[str, Any]) -> bool:
+    """Whether this session passes the structure-backup rule; the operator never does."""
+    if who.get("operator") or staff_state(who) != "staff":
+        return False
+    guild = guild_of(bot)
+    if guild is None:
+        return False
+    member = guild.get_member(int(who["id"]))
+    return may_see(bot.store, guild, member if member is not None else who["id"])
+
+
 def staff_dependency(bot: Any):
     async def dependency(request: Request) -> dict[str, Any]:
         who = await current_session(request, bot)
@@ -642,6 +654,7 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
             "staff": state == "staff",
             "member": member,
             "operator": bool(who.get("operator")),
+            "structure": sees_structure(bot, who),
             "state": state,
             "guild": {"id": str(guild.id), "name": guild.name} if guild is not None else None,
             "message": MEMBER_NOT_STAFF if state == "not_staff" and member else said,
@@ -689,6 +702,7 @@ __all__ = [
     "member_state",
     "read_session",
     "refused_handler",
+    "sees_structure",
     "session_dependency",
     "sign_session",
     "staff_dependency",

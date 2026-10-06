@@ -4,7 +4,10 @@
 > 🔨 **MERGED to `main` at `c16deab1`** (2026-10-05, the build and the independent review's fixes),
 > **NOT deployed.** Branch `structure-fold-words` (off `c16deab1`, code in `59e62d81`, NOT merged,
 > NOT deployed) folds the 46 change sentences into code and is what this page now describes — see
-> *Wording folded into code 2026-10-05* near the foot.
+> *Wording folded into code 2026-10-05* near the foot. Branch `structure-leads` (off `main`
+> `6e5136c5`, code in `c35746f6`, NOT merged, NOT deployed) makes the whole feature **leads
+> only** and stops the notice falling back to any other channel — see *Leads only 2026-10-05*;
+> the struck lines in §B, §D, §E and *Decisions* 4 are what it reversed.
 > **Last verified: 2026-10-05** — by the hermetic test suite and the local mock only (figures at the
 > foot under *Gate*). ⚠️ **NOT checked:** nothing here has met Discord. No real guild was captured,
 > no notice was posted, `/structure` was never opened in a client, and the claim that the bot is
@@ -49,7 +52,8 @@ reads *member 123…* because no name is stored.
   (the repo's one configured zone, default America/Phoenix). The loop ticks every ten minutes;
   a guild is due when its local hour has reached the key and `structure_looks.last_day` is not
   today, so a bot that was down at the hour catches up when it comes back.
-- **On demand** by staff: `/structure` ▸ **Take one now**, or the Structure page.
+- **On demand** by ~~staff~~ the server's leads (*Leads only 2026-10-05*): `/structure` ▸
+  **Take one now**, or the Structure page.
 - Roles and channels are **fetched** (`guild.fetch_roles()`, `guild.fetch_channels()`) rather
   than read off the cache: two calls a day, and a Discord refusal becomes a failure the log
   names instead of a silently stale copy. Guild-level fields come off the cached guild. Each
@@ -125,8 +129,13 @@ to names from the two snapshots themselves (new first, then old).
 | Mode | Capture (daily + on demand) | *Structure changed* notice |
 |---|---|---|
 | `off` | no; **Take one now** refuses in words | none |
-| `shadow` | yes, silently | to the feature's shadow home (`structure_backup_shadow_channel_id`, then `shadow_channel_id`, then the log channel — `black_bloc/shadow.py`), under the rehearsal note |
-| `on` | yes, silently | to `structure_backup_channel_id`; blank means `staff_channel_id` |
+| `shadow` | yes, silently | to `structure_backup_shadow_channel_id` **and nowhere else**, under the rehearsal note; blank posts nothing. ~~to the feature's shadow home (`structure_backup_shadow_channel_id`, then `shadow_channel_id`, then the log channel — `black_bloc/shadow.py`)~~ — reversed 2026-10-05 on `structure-leads` (`c35746f6`) |
+| `on` | yes, silently | to `structure_backup_channel_id` **and nowhere else**; blank posts nothing. ~~blank means `staff_channel_id`~~ — reversed 2026-10-05 on `structure-leads` (`c35746f6`) |
+
+Why both fallbacks went: the notice lists every changed role and channel by name, private
+ones included, and the staff channel, the rehearsal home and the log channel are all read by
+ordinary staff. A blank destination leaves one routine `structure.notice_unsent` row (no
+names in it) and moves the notice mark, exactly as `structure_backup_notify` = false does.
 
 ~~The notice is posted only when a **daily** snapshot differs from the one before it~~ —
 reversed 2026-10-05 on `structure-fixes` (review S2): a snapshot taken by hand between two
@@ -151,7 +160,9 @@ notice's 4096-character description.
 
 ## E. Doors
 
-- **Discord:** `/structure` (staff, `STAFF_ONLY`), one ephemeral panel: the latest snapshot's
+- **Discord:** `/structure` (~~staff~~ leads only since 2026-10-05 — `require_lead` at the
+  command, `lead_opened` on every press; still `STAFF_ONLY` in Discord's own command list),
+  one ephemeral panel: the latest snapshot's
   time and counts, the last look and how it went, **Take one now**, **What changed** (latest vs
   now), a link button to the page, and the **off / shadow / on picker** every feature panel
   has (`ModePick`, through `cogs.core.set_key`, so it leaves one `settings.set` row). No second
@@ -160,7 +171,8 @@ notice's 4096-character description.
   against now), download one as JSON, the feature's settings (wording folded), and its twenty
   most recent log rows, asked for by kind (`/api/actions?kind=structure` and
   `kind=web.structure`, merged newest first) — never fetched wide and filtered in the page.
-- **API** (`black_bloc/api/tools/structure.py`, staff only): `GET /api/structure`,
+- **API** (`black_bloc/api/tools/structure.py`, ~~staff only~~ leads only since 2026-10-05,
+  one router-level `leads_dependency`; the operator token is refused): `GET /api/structure`,
   `POST /api/structure/snapshots`, `GET /api/structure/compare?old=&new=`,
   `POST /api/structure/snapshots/{id}/download` (a POST because it writes a log row, and a GET on this site never writes).
 - The download is `structure.export(row)`: built from `SNAPSHOT_FIELDS` and the field lists in
@@ -229,6 +241,10 @@ Routine: `structure.captured`, `structure.unchanged`, `structure.pruned`,
 the `web.` head through `kind_via`. Success, *looked and nothing changed*, and failure are three
 different kinds (checklist 2).
 
+`structure.notice_unsent` (routine, added 2026-10-05) is the daily look finding changes with
+no channel to send them to; it carries `mode`, `key`, `snapshot_id`, `since_id`, `changes`
+and a `reason` sentence.
+
 **A notice posted in `shadow` is `structure.would_notice`; `structure.notice_posted` is `on`
 only** (review N9). It needs no `logkinds.py` entry: a `.would_` kind is routine by rule, and
 `tests/test_logkinds.py` refuses one that is listed as well. A notice that could not be posted
@@ -255,7 +271,9 @@ key of its own (the kinds follow `core_log_level`).
    failure a snapshot row cannot.
 3. **Three attempts a day** for a failed daily look (§B), four hours apart since the review
    fixes. One would lose a day to a blip; a retry every tick would write 144 failure rows.
-4. **Blank `structure_backup_channel_id` means the staff channel** in `on` (§D).
+4. ~~**Blank `structure_backup_channel_id` means the staff channel** in `on` (§D).~~ —
+   **reversed by the owner's decision 2026-10-05** (`structure-leads`, `c35746f6`): blank
+   means no notice. The staff channel is read by people who may not see the structure.
 5. **`structure_backup_notify`** is the switch that makes the notice optional (§D).
 6. **Keys are `core`** (§G), and there is **no `structure` feature** in `logkinds.FEATURES` —
    a 23rd feature would add a log-level key and a 26th setting group.
@@ -383,6 +401,104 @@ Branch `structure-fold-words` off `main` `c16deab1`; code and tests in `59e62d81
   JavaScript stand-in and does not say tag changes; no button on the page was pressed this
   time; `docs/info/code-notes.md` was not re-keyed; `ruff format --check` was not run
   repo-wide (`structure_diff.py` was formatted whole, it was not format-clean before).
+
+## Leads only 2026-10-05
+
+Branch `structure-leads` off `main` `6e5136c5`; code and tests in `c35746f6`.
+
+**The owner's decision.** A snapshot holds the name, topic and permission layout of every
+channel, including ones an ordinary staff member cannot open in Discord. Asked whether all
+staff may see that, the owner answered **"b"**: the Structure page and its notice are Leads
+only — and added, verbatim: *"im the exception though or i cant verify anything"*.
+
+**The rule — one function, `black_bloc/structure.py:may_see(store, guild, person)`.** True for
+the server **owner** (`guild.owner_id`, by id, so it holds with no role and when the owner is
+not in the member cache), for anyone whose `guild_permissions.administrator` is `True`, and
+for a holder of the role in **`structure_backup_role_id`** (type `role`, default blank). Blank
+means owner and administrators only. Manage Server alone is staff, not a lead.
+
+**It only narrows.** Every door asks the staff gate first and this rule second, so a holder of
+the role who is not staff is still refused as *not staff*; nobody who was refused before gets
+in now.
+
+| Door | Where the rule is asked |
+|---|---|
+| `GET /api/structure`, `POST …/snapshots`, `GET …/compare` (stored and `new=now`), `POST …/snapshots/{id}/download` | `api/tools/structure.py:leads_dependency`, the router's one dependency → `api/auth.py:sees_structure` → `may_see`. 403 `structure_leads_only` with `structure.LEADS_ONLY` |
+| The operator read token on those routes | refused first, in words (`structure.OPERATOR_REFUSED`, 403 `structure_no_operator`), **before** the token is checked — so a right and a wrong token read the same, no `web.operator.read` row is written, and no live fetch is made. It was able to `GET` the list and the compare, `new=now` included |
+| `/structure` | `cogs/moderation/structure_backup.py:require_lead` (staff, then the rule) |
+| **Take one now**, **What changed**, the mode picker | `lead_opened` as the first statement of each `callback` — staff and the rule re-asked on every press, before the defer |
+| The rail entry | `/api/auth/me` carries `structure` (`sees_structure`); `shell.js` draws the entry hidden and `paintNavFor` shows it only when that is `true`. The command palette lists what the rail shows |
+| `structure.html` opened directly | the API's refusal reaches `app.js:handle` → *Structure is for the server's leads* and the sentence: what it is, who it is for, how to get in. No retry button, no empty page |
+| Overview's feature row, `/settings` ▸ *What each feature is doing*, `/api/status` | unchanged: ordinary staff see the feature and its mode, and may change the mode. The row carried no snapshot data. Overview no longer links the row to a page the rail does not offer (`page-overview.js:reachable`) |
+| `structure_backup_role_id`, `_channel_id`, `_shadow_channel_id` (`structure.LEADS_KEYS`) | `cogs/core.py:leads_only` inside `set_key` and `clear_key` — the one writer behind both `/settings` and `PUT`/`DELETE /api/settings/{key}`. Without it any staff member could name their own role or point the notice at a channel they read |
+| The notice | §D: only its own key's channel |
+| Logs / Audit | not gated — see below |
+
+**What `structure.*` log rows hold, and why they stay with staff.** Read off the code and
+pinned by `test_no_structure_log_row_carries_a_role_or_channel_name_or_a_change_list`: counts
+(`roles`, `categories`, `channels`, `overwrites`, `changes`, `removed`), snapshot ids
+(`snapshot_id`, `previous_id`, `since_id`), `source`, `via`, `mode`, `key`, the notice's own
+`channel_id` / `aimed_at`, and a `reason` sentence (ours, or Discord's own error text). **No
+role name, no channel name, no topic, no change list.** So the rows are left visible to staff
+and the test fails if a name or a list is ever added to one.
+
+**Keys: +4, 854 → 858** (`CORE_KEYS` 95 → 99; this feature's 29 → 33, its text keys 21 → 24).
+`structure_backup_role_id`; and three words for the panel's new **Notice** field, which states
+where the notice goes: `structure_backup_notice_label`, `_notice_nowhere` (`{setting}`),
+`_notice_off`. The page says the same with a badge (`notice → #channel · Category`, *notice
+goes nowhere*, *notice off*) read from the two keys. `KEY_HELP` for `_mode`, `_notify`,
+`_channel_id` and `_shadow_channel_id` was reworded to say blank means no notice.
+
+**Decisions this build made beyond the brief.**
+
+1. **The three keys that decide who sees it are leads-only to change** (table above). Not in
+   the brief; the gate is decorative without it.
+2. **A notice with nowhere to go is not owed.** The mark moves, as it does when
+   `structure_backup_notify` is false; otherwise the default configuration (shadow, both keys
+   blank) would log a row every day for ever. Changes are never lost — the page compares any two.
+3. **The operator is refused before its token is read** (table above).
+4. **The owner is matched by id**, so a session whose member is not cached still gets in if it
+   is the owner's; an administrator or role holder who is not cached is refused until they are.
+5. **`administrator` must be exactly `True`** — a fake or a truthy stand-in does not pass.
+6. **In shadow with the real channel blank, the rehearsal line ends with the
+   `_notice_nowhere` sentence** rather than an empty *this is where it would go:*.
+7. **The refusal sentences are constants in `structure.py`**, like every other refusal here
+   (`staff_refusal`, `NOT_STAFF`); they are not settings keys.
+8. **The mock gained `?as=mod`** — staff who is not a lead; `staff` stays a lead.
+9. **The mode stays with staff**: turning the feature off or on shows nobody anything.
+
+**Tests.** `tests/test_structure.py` (the rule), `tests/cogs/moderation/test_structure_backup.py`
+(the command, every control, losing the role mid-panel, the AST walk
+`test_every_door_in_the_cog_is_behind_the_one_gate`, the notice, the log rows),
+`tests/api/tools/test_structure.py` (every route read off the app's own schema, the operator,
+the keys, the rail), `tests/cogs/test_core.py` (the writer), `tests/api/test_auth.py` (`/me`).
+The new test files were run against a throwaway checkout of `6e5136c5`: **46 failed** there,
+308 passed (the API file with its five new imports stubbed, since they do not exist on main).
+The ones that passed on main guard behaviour that must not move (the owner and an
+administrator open the panel, a member and a visitor are refused, the other keys stay with
+staff). Two tests were **removed** because they pinned the fallbacks:
+`test_in_shadow_with_no_home_of_its_own_the_notice_follows_the_rehearsal_home` and
+`test_on_with_no_channel_set_the_notice_goes_to_the_staff_channel`. The no-write guard test is
+untouched and passes.
+
+**Gate, measured 2026-10-05 on `structure-leads`:** `python -m pytest tests -q -p
+no:cacheprovider -n 8` **11377 passed, 3 skipped** (11323 passed, 3 skipped on `main`
+`6e5136c5`, run in a throwaway checkout); `python -m ruff check .` clean; `node
+site/mock/check.mjs` **ok — 25 pages, 312 routes, 99 core settings, all keys present** (port
+8771); the thirteen `site/mock/*.test.mjs` files ok. In a browser against the mock:
+`structure.html?as=staff` drew Snapshots (2), Compare, Settings (32, the role key among them),
+Wording (24) and Logs, the badge *notice goes nowhere*, and the rail entry;
+`structure.html?as=mod` drew the gate row *Structure is for the server's leads* with the
+sentence, no button, an empty dashboard and no Structure entry in the rail; `index.html?as=mod`
+drew the Structure backup feature row with its mode and no link. No console error.
+
+**NOT verified:** nothing has met Discord — `/structure` was never opened in a client by an
+owner, an administrator, a role holder or a mod; `guild.owner_id` and
+`guild_permissions.administrator` are discord.py's documented attributes, read through fakes.
+The live site was not touched. `docs/info/code-notes.md` was not re-keyed.
+`docs/access/operator-read.md` does not mention structure and was not edited, so the refusal
+is recorded only here. ⚠️ **On deploy:** production is in `shadow` with `structure_backup_shadow_channel_id`
+blank unless somebody set it, so the notice will go nowhere until a lead sets it.
 
 ## Gate
 

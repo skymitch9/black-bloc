@@ -1006,17 +1006,21 @@ const SETTING_SPECS = [
   // The pin-notice cleanup (docs/info/quiet-pins-design.md); core too.
   ["quiet_bot_pins", "bool", true, true, "whether Black Bloc deletes the 'pinned a message' notice Discord posts under a pin Black Bloc made itself (marathon boards, runner posts, spotlights, posts). on — the default — keeps channels tidy; off leaves the notice. A pin a person makes is never touched. It needs Manage Messages in the channel"],
   // Structure backup (docs/info/structure-backup-design.md); all of it sits under core.
-  ["structure_backup_mode", "enum", "shadow", "shadow", "off, shadow or on. off takes no structure snapshot at all; shadow — the default — takes the daily snapshot silently and sends the structure-changed notice to the rehearsal home; on sends that notice to structure_backup_channel_id. A snapshot is a copy of roles, channels and permissions only: never messages, never members", ["off", "shadow", "on"]],
+  ["structure_backup_mode", "enum", "shadow", "shadow", "off, shadow or on. off takes no structure snapshot at all; shadow — the default — takes the daily snapshot silently and sends the structure-changed notice to structure_backup_shadow_channel_id; on sends that notice to structure_backup_channel_id. Either one blank means no notice is posted. A snapshot is a copy of roles, channels and permissions only: never messages, never members"],
   ["structure_backup_hour", "int", 4, 4, "the hour of the day, 0 to 23 in default_timezone, at or after which the daily structure snapshot is taken; 4 by default. A bot that was down at that hour takes it when it comes back", null, 23],
   ["structure_backup_keep", "int", 60, 60, "how many structure snapshots are kept; 60 by default. The oldest beyond that are deleted each time a new one is stored, except the one the next notice starts from. A day with no change stores nothing, so 60 is 60 distinct structures, not 60 days", null, 365, 1],
-  ["structure_backup_notify", "bool", true, true, "true — the default — posts a notice for staff when the daily look finds the structure changed since the last notice, snapshots taken by hand included; false takes the snapshot and says nothing"],
-  ["structure_backup_channel_id", "channel", null, null, "where the structure-changed notice goes while structure_backup_mode is on; blank means staff_channel_id"],
-  ["structure_backup_shadow_channel_id", "channel", null, null, "where the structure-changed notice goes while structure_backup_mode is shadow; blank means shadow_channel_id"],
+  ["structure_backup_notify", "bool", true, true, "true — the default — posts a notice when the daily look finds the structure changed since the last notice, snapshots taken by hand included; false takes the snapshot and says nothing"],
+  ["structure_backup_channel_id", "channel", null, null, "the only place the structure-changed notice goes while structure_backup_mode is on. Blank means no notice is posted — it never falls back to the staff channel, because the notice names private channels. Only the server's leads can change this"],
+  ["structure_backup_shadow_channel_id", "channel", null, null, "the only place the structure-changed notice goes while structure_backup_mode is shadow. Blank means no notice is posted — it never falls back to shadow_channel_id or the log channel, because the notice names private channels. Only the server's leads can change this"],
+  ["structure_backup_role_id", "role", null, null, "the role whose holders may open /structure and the Structure page, beside the server owner and anyone with Discord's Administrator permission. Blank means the owner and administrators only. Only the server's leads can change this"],
   ["structure_backup_notice_lines", "int", 15, 15, "how many changes the structure-changed notice and the /structure panel list before they say how many more there are; 15 by default", null, 40, 1],
   ["structure_backup_panel_minutes", "int", 10, 10, "minutes the /structure panel stays live before its buttons disable themselves; 10 by default", null, 14, 1],
   ["structure_backup_notice_title", "text", "Server structure changed", "Server structure changed", "the heading of the notice staff get when a daily structure snapshot differs from the one before it"],
   ["structure_backup_notice_text", "text", "{n} change(s) since the snapshot of {when}.", "{n} change(s) since the snapshot of {when}.", "the first line of the structure-changed notice; {n} is how many changes and {when} is when the snapshot before it was taken"],
   ["structure_backup_notice_more", "text", "…and {n} more — the Structure page lists every one.", "…and {n} more — the Structure page lists every one.", "the last line of the structure-changed notice when it holds more changes than structure_backup_notice_lines lets it list; {n} is how many were left off"],
+  ["structure_backup_notice_label", "text", "Notice", "Notice", "what the /structure panel calls the line that says where the structure-changed notice goes"],
+  ["structure_backup_notice_nowhere", "text", "Nowhere — {setting} is blank.", "Nowhere — {setting} is blank.", "what the /structure panel says when the structure-changed notice has no channel to go to; {setting} is the key that would give it one"],
+  ["structure_backup_notice_off", "text", "Off — structure_backup_notify is false.", "Off — structure_backup_notify is false.", "what the /structure panel says about the notice while structure_backup_notify is false"],
   ["structure_backup_panel_title", "text", "Server structure", "Server structure", "the heading of the /structure panel"],
   ["structure_backup_panel_footer", "text", "This panel timed out — run /structure again for a fresh one.", "This panel timed out — run /structure again for a fresh one.", "the footer the /structure panel gains when its buttons stop working"],
   ["structure_backup_mode_label", "text", "Mode", "Mode", "what the /structure panel calls the line that says off, shadow or on"],
@@ -2172,7 +2176,7 @@ function withRunEvents(seeded) {
 }
 
 const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text', 'quiet_bot_pins'];
-const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour", "structure_backup_keep", "structure_backup_notify", "structure_backup_channel_id", "structure_backup_shadow_channel_id", "structure_backup_notice_lines", "structure_backup_panel_minutes", "structure_backup_notice_title", "structure_backup_notice_text", "structure_backup_notice_more", "structure_backup_panel_title", "structure_backup_panel_footer", "structure_backup_mode_label", "structure_backup_latest_label", "structure_backup_latest_line", "structure_backup_none_yet", "structure_backup_look_label", "structure_backup_look_saved", "structure_backup_look_unchanged", "structure_backup_look_failed", "structure_backup_take_label", "structure_backup_changes_label", "structure_backup_site_label", "structure_backup_saved_said", "structure_backup_unchanged_said", "structure_backup_failed_said", "structure_backup_off_said", "structure_backup_no_changes_said"];
+const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour", "structure_backup_keep", "structure_backup_notify", "structure_backup_channel_id", "structure_backup_shadow_channel_id", "structure_backup_role_id", "structure_backup_notice_lines", "structure_backup_panel_minutes", "structure_backup_notice_title", "structure_backup_notice_text", "structure_backup_notice_more", "structure_backup_notice_label", "structure_backup_notice_nowhere", "structure_backup_notice_off", "structure_backup_panel_title", "structure_backup_panel_footer", "structure_backup_mode_label", "structure_backup_latest_label", "structure_backup_latest_line", "structure_backup_none_yet", "structure_backup_look_label", "structure_backup_look_saved", "structure_backup_look_unchanged", "structure_backup_look_failed", "structure_backup_take_label", "structure_backup_changes_label", "structure_backup_site_label", "structure_backup_saved_said", "structure_backup_unchanged_said", "structure_backup_failed_said", "structure_backup_off_said", "structure_backup_no_changes_said"];
 CORE_KEYS.push(...STRUCTURE_BACKUP_KEYS);
 const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_channel_id", "pb_feed_ping_role_id", "pb_feed_auto_match", "pb_feed_interval_minutes", "pb_feed_cycle_requests", "pb_feed_rematch_days", "pb_feed_max_age_days", "pb_feed_max_posts", "pb_feed_panel_minutes", "pb_feed_post_title", "pb_feed_post_text", "pb_feed_place_text", "pb_feed_link_label", "pb_feed_no_channel_words", "pb_feed_panel_title", "pb_feed_panel_footer", "pb_feed_you_matched", "pb_feed_you_set", "pb_feed_you_none", "pb_feed_you_waiting", "pb_feed_you_unlinked", "pb_feed_you_opted_out", "pb_feed_you_blocked", "pb_feed_opt_out_label", "pb_feed_opt_in_label", "pb_feed_opted_out_said", "pb_feed_opted_in_said", "pb_feed_set_said", "pb_feed_unmatched_said", "pb_feed_blocked_said", "pb_feed_unblocked_said", "pb_feed_no_runner_said", "pb_feed_taken_said", "pb_feed_not_now_said", "pb_feed_nothing_to_do_said", "pb_feed_looked_said", "pb_feed_failed_said", "pb_feed_off_said"];
 CORE_KEYS.push(...PB_FEED_KEYS);
@@ -2359,6 +2363,15 @@ function requireStaff(session) {
   if (session === 'down') throw new Refused(503, 'database_unavailable', 'Black Bloc’s database is not reachable right now, so this page cannot load its data; try again in a minute.');
 }
 
+const STRUCTURE_LEADS_KEYS = ['structure_backup_role_id', 'structure_backup_channel_id', 'structure_backup_shadow_channel_id'];
+const STRUCTURE_LEADS_ONLY = 'Structure backup is the saved copy of every role, channel and permission in the server, private channels included, so it is for the server’s leads: the owner, anyone with Discord’s Administrator permission, and holders of the role in structure_backup_role_id. You are staff, but none of those, so nothing was shown or changed. Ask the server owner to give you that role.';
+
+/** `as=mod` is staff who is not a lead: the dashboard, but never structure backup. */
+function requireLeads(session) {
+  requireStaff(session);
+  if (session === 'mod') throw new Refused(403, 'structure_leads_only', STRUCTURE_LEADS_ONLY);
+}
+
 function guard(what) {
   // Only where the REAL API refuses in test mode. A modmail reply and a warn are not on that
   // list: black_bloc/api/tools/mod.py lets warn past the guard and tools/modmail.py's reply
@@ -2380,7 +2393,7 @@ function meBody(session) {
   if (session === 'unknown') {
     return { status: 200, body: { user, staff: false, member: false, state: 'staff_unknown', guild, message: STAFF_UNKNOWN } };
   }
-  return { status: 200, body: { user, staff: true, member: true, state: 'staff', guild, message: null } };
+  return { status: 200, body: { user, staff: true, member: true, structure: session !== 'mod', state: 'staff', guild, message: null } };
 }
 
 function statusBody() {
@@ -4617,6 +4630,7 @@ route('GET', '/api/settings/audit', (context) => {
 
 route('PUT', '/api/settings/:key', async (context) => {
   requireStaff(context.session);
+  if (STRUCTURE_LEADS_KEYS.includes(context.params.key)) requireLeads(context.session);
   const body = await context.body();
   const value = validate(context.params.key, body.value === undefined ? null : body.value);
   armingRefusal(context.params.key, value);
@@ -4628,6 +4642,7 @@ route('PUT', '/api/settings/:key', async (context) => {
 
 route('DELETE', '/api/settings/:key', (context) => {
   requireStaff(context.session);
+  if (STRUCTURE_LEADS_KEYS.includes(context.params.key)) requireLeads(context.session);
   const spec = specOf(context.params.key);
   if (spec === null) throw new Refused(400, 'unknown_key', `Black Bloc has no setting called ${context.params.key}.`);
   state.settings.set(context.params.key, spec[3] ?? null);
@@ -14055,7 +14070,7 @@ function structureWanted(given) {
 }
 
 route('GET', '/api/structure', (context) => {
-  requireStaff(context.session);
+  requireLeads(context.session);
   const held = structureState();
   return {
     mode: state.settings.get('structure_backup_mode') ?? 'shadow',
@@ -14068,7 +14083,7 @@ route('GET', '/api/structure', (context) => {
 });
 
 route('POST', '/api/structure/snapshots', (context) => {
-  requireStaff(context.session);
+  requireLeads(context.session);
   if ((state.settings.get('structure_backup_mode') ?? 'shadow') === 'off') {
     throw new Refused(409, 'structure_off', state.settings.get('structure_backup_off_said'));
   }
@@ -14097,7 +14112,7 @@ route('POST', '/api/structure/snapshots', (context) => {
 });
 
 route('GET', '/api/structure/compare', (context) => {
-  requireStaff(context.session);
+  requireLeads(context.session);
   const old = structureWanted(context.url.searchParams.get('old'));
   const wanted = String(context.url.searchParams.get('new') || '').trim().toLowerCase();
   const next = wanted === 'now' ? null : structureWanted(wanted);
@@ -14106,7 +14121,7 @@ route('GET', '/api/structure/compare', (context) => {
 });
 
 route('POST', '/api/structure/snapshots/:id/download', (context) => {
-  requireStaff(context.session);
+  requireLeads(context.session);
   const row = structureWanted(context.params.id);
   logAction('web.structure.downloaded', { details: { snapshot_id: row.id } });
   const snapshot = { id: row.id, taken_at: row.taken_at, source: row.source, digest: row.digest, ...structureCounts(row.body), guild_id: row.body.guild.id };

@@ -115,6 +115,10 @@ export function handle(error) {
     refuse({ title: 'This dashboard is for staff', message: error.message, state: 'warn' });
     return;
   }
+  if (error.code === 'structure_leads_only') {
+    refuse({ title: 'Structure is for the server’s leads', message: error.message, state: 'warn' });
+    return;
+  }
   if (error.code === 'staff_unknown') {
     refuse({ title: UNKNOWN_TITLE, message: error.message, state: 'info', canRetry: true });
     return;

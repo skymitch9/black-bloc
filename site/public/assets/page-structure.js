@@ -1,4 +1,4 @@
-import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
+import { api, listOf, names, refChannels, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsTable } from './logs.js';
 import {
@@ -6,6 +6,7 @@ import {
   bar,
   boldParts,
   button,
+  channelLabel,
   el,
   field,
   foldout,
@@ -30,9 +31,12 @@ const OPERATIONAL = [
   'structure_backup_notify',
   'structure_backup_channel_id',
   'structure_backup_shadow_channel_id',
+  'structure_backup_role_id',
   'structure_backup_notice_lines',
   'structure_backup_panel_minutes',
 ];
+const NOTIFY_KEY = 'structure_backup_notify';
+const NOTICE_KEYS = { on: 'structure_backup_channel_id', shadow: 'structure_backup_shadow_channel_id' };
 const NOW = 'now';
 const NOW_LABEL = 'The server now';
 const AREAS = [
@@ -146,6 +150,18 @@ function compareCard(rows, results, say) {
   return { node, compare };
 }
 
+async function noticeBadge(mode, specs) {
+  const key = NOTICE_KEYS[mode];
+  if (!key) return null;
+  const value = (wanted) => (specs.find((spec) => spec.key === wanted) || {}).value;
+  if (value(NOTIFY_KEY) === false) return badge('notice off');
+  const id = value(key);
+  if (!id) return badge('notice goes nowhere', 'warn');
+  const channels = await refChannels();
+  const channel = channels.find((one) => String(one.id) === String(id));
+  return badge(`notice → ${channel ? channelLabel(channel, channels) : id}`);
+}
+
 async function logRows() {
   const pages = await Promise.all(LOG_KINDS.map((kind) => api(`/api/actions?kind=${kind}&per_page=${LOG_ROWS}`)));
   const rows = pages
@@ -176,6 +192,7 @@ async function load() {
       if (done.ok) refresh();
     }, { small: false }),
     look ? badge(`last look ${when(look.at)} · ${look.outcome}`, OUTCOME_TONES[look.outcome] || null) : null,
+    await noticeBadge(payload.mode, specs),
   ]);
   const why = look && look.outcome === 'failed' && look.reason ? notice(look.reason, 'danger') : null;
 

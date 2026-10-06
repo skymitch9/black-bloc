@@ -80,8 +80,13 @@ function modeNode(row, specs, say) {
   return modeSwitch(spec, { say, label: title(row.feature) }).node;
 }
 
+function reachable(tab) {
+  const link = tab ? document.querySelector(`.nav-link[data-tab="${tab}"]`) : null;
+  return link && link.hidden ? null : tab;
+}
+
 function featureRow(row, open, specs, say) {
-  const tab = FEATURE_TABS[row.feature];
+  const tab = reachable(FEATURE_TABS[row.feature]);
   const said = featureNote(row.feature, open);
   const name = el('span', { class: 'rowlist-name', text: title(row.feature) });
   const main = el(tab ? 'a' : 'div', {

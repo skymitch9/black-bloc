@@ -1775,3 +1775,46 @@ async def test_a_second_slash_test_while_one_is_going_is_refused_in_words(
 
     assert "already running" in seen[0].sent
     assert "**1 ok, 0 failed**" in interaction.sent
+
+
+# --- the keys that decide who sees structure backup ---------------------------------------------
+
+
+STRUCTURE_LEADS_KEYS = (
+    "structure_backup_role_id",
+    "structure_backup_channel_id",
+    "structure_backup_shadow_channel_id",
+)
+
+
+@pytest.mark.parametrize("key", STRUCTURE_LEADS_KEYS)
+async def test_staff_who_may_not_see_structure_backup_cannot_set_or_clear_who_may(
+    bot, db, lead, key
+):
+    value = STAFF_ROLE if key.endswith("role_id") else TEST_CHANNEL
+
+    put = await set_key(bot, bot.guild, key, value, lead)
+    gone = await clear_key(bot, bot.guild, key, lead, via="website")
+    nobody = await set_key(bot, bot.guild, key, value, None)
+
+    for found in (put, gone, nobody):
+        assert (found.ok, found.code, found.status) == (False, "structure_leads_only", 403)
+        assert "server's leads" in found.message and "nothing was shown or changed" in found.message
+    assert bot.store.get(GUILD, key) is None and await kinds(db) == []
+
+
+@pytest.mark.parametrize("key", STRUCTURE_LEADS_KEYS)
+async def test_the_owner_and_an_administrator_set_and_clear_who_may(bot, db, lead, member, key):
+    value = STAFF_ROLE if key.endswith("role_id") else TEST_CHANNEL
+    bot.guild.owner_id = member.id
+    lead.guild_permissions.administrator = True
+
+    assert (await set_key(bot, bot.guild, key, value, member)).ok
+    assert bot.store.get(GUILD, key) == value
+    assert (await clear_key(bot, bot.guild, key, lead)).ok
+    assert await kinds(db) == ["settings.set", "settings.clear"]
+
+
+async def test_every_other_structure_key_stays_with_staff(bot, lead):
+    assert (await set_key(bot, bot.guild, "structure_backup_mode", "off", lead)).ok
+    assert (await set_key(bot, bot.guild, "structure_backup_hour", 5, lead)).ok

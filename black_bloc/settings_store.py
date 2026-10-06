@@ -81,6 +81,7 @@ from .storage.db import Database
 from .structure import FEATURE as STRUCTURE_FEATURE
 from .structure import MODE_DEFAULT as STRUCTURE_MODE_DEFAULT
 from .structure import MODES as STRUCTURE_MODES
+from .structure import ROLE_KEY as STRUCTURE_ROLE_KEY
 from .timezones import DEFAULT_TZ, is_known, suggest
 
 log = logging.getLogger(__name__)
@@ -3589,6 +3590,7 @@ STRUCTURE_BACKUP_KEEP = "structure_backup_keep"
 STRUCTURE_BACKUP_NOTIFY = "structure_backup_notify"
 STRUCTURE_BACKUP_CHANNEL = "structure_backup_channel_id"
 STRUCTURE_BACKUP_SHADOW_CHANNEL = shadow_feature_key(STRUCTURE_FEATURE)
+STRUCTURE_BACKUP_ROLE = STRUCTURE_ROLE_KEY
 STRUCTURE_BACKUP_NOTICE_LINES = "structure_backup_notice_lines"
 STRUCTURE_BACKUP_PANEL_MINUTES = "structure_backup_panel_minutes"
 STRUCTURE_BACKUP_NUMBERS: dict[str, tuple[int, int, int]] = {
@@ -3615,6 +3617,24 @@ STRUCTURE_BACKUP_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("n",),
         "the last line of the structure-changed notice when it holds more changes than "
         "structure_backup_notice_lines lets it list; {n} is how many were left off",
+    ),
+    "structure_backup_notice_label": (
+        "Notice",
+        (),
+        "what the /structure panel calls the line that says where the structure-changed "
+        "notice goes",
+    ),
+    "structure_backup_notice_nowhere": (
+        "Nowhere — {setting} is blank.",
+        ("setting",),
+        "what the /structure panel says when the structure-changed notice has no channel to "
+        "go to; {setting} is the key that would give it one",
+    ),
+    "structure_backup_notice_off": (
+        "Off — structure_backup_notify is false.",
+        (),
+        "what the /structure panel says about the notice while structure_backup_notify is "
+        "false",
     ),
     "structure_backup_panel_title": (
         "Server structure",
@@ -3742,6 +3762,7 @@ STRUCTURE_BACKUP_SLOT: dict[str, str] = {
     "structure_backup_site_label": STRUCTURE_LABEL,
     "structure_backup_mode_label": STRUCTURE_HINT,
     "structure_backup_notice_title": STRUCTURE_HEADING,
+    "structure_backup_notice_label": STRUCTURE_HEADING,
     "structure_backup_panel_title": STRUCTURE_HEADING,
     "structure_backup_panel_footer": STRUCTURE_HEADING,
     "structure_backup_latest_label": STRUCTURE_HEADING,
@@ -3785,6 +3806,7 @@ STRUCTURE_BACKUP_KEYS: tuple[str, ...] = (
     STRUCTURE_BACKUP_NOTIFY,
     STRUCTURE_BACKUP_CHANNEL,
     STRUCTURE_BACKUP_SHADOW_CHANNEL,
+    STRUCTURE_BACKUP_ROLE,
     STRUCTURE_BACKUP_NOTICE_LINES,
     STRUCTURE_BACKUP_PANEL_MINUTES,
     *STRUCTURE_BACKUP_WORDS,
@@ -3795,6 +3817,7 @@ KEY_TYPES.update(
         STRUCTURE_BACKUP_NOTIFY: "bool",
         STRUCTURE_BACKUP_CHANNEL: "channel",
         STRUCTURE_BACKUP_SHADOW_CHANNEL: "channel",
+        STRUCTURE_BACKUP_ROLE: "role",
         **{key: "int" for key in STRUCTURE_BACKUP_NUMBERS},
         **{key: "text" for key in STRUCTURE_BACKUP_FIELDS},
     }
@@ -3806,9 +3829,11 @@ KEY_HELP.update(
     {
         STRUCTURE_BACKUP_MODE: (
             "off, shadow or on. off takes no structure snapshot at all; shadow — the default — "
-            "takes the daily snapshot silently and sends the structure-changed notice to the "
-            "rehearsal home; on sends that notice to structure_backup_channel_id. A snapshot "
-            "is a copy of roles, channels and permissions only: never messages, never members"
+            "takes the daily snapshot silently and sends the structure-changed notice to "
+            "structure_backup_shadow_channel_id; on sends that notice to "
+            "structure_backup_channel_id. Either one blank means no notice is posted. A "
+            "snapshot is a copy of roles, channels and permissions only: never messages, never "
+            "members"
         ),
         STRUCTURE_BACKUP_HOUR: (
             "the hour of the day, 0 to 23 in default_timezone, at or after which the daily "
@@ -3822,17 +3847,25 @@ KEY_HELP.update(
             "60 days"
         ),
         STRUCTURE_BACKUP_NOTIFY: (
-            "true — the default — posts a notice for staff when the daily look finds the "
-            "structure changed since the last notice, snapshots taken by hand included; false "
-            "takes the snapshot and says nothing"
+            "true — the default — posts a notice when the daily look finds the structure "
+            "changed since the last notice, snapshots taken by hand included; false takes the "
+            "snapshot and says nothing"
         ),
         STRUCTURE_BACKUP_CHANNEL: (
-            "where the structure-changed notice goes while structure_backup_mode is on; blank "
-            "means staff_channel_id"
+            "the only place the structure-changed notice goes while structure_backup_mode is "
+            "on. Blank means no notice is posted — it never falls back to the staff channel, "
+            "because the notice names private channels. Only the server's leads can change this"
         ),
         STRUCTURE_BACKUP_SHADOW_CHANNEL: (
-            "where the structure-changed notice goes while structure_backup_mode is shadow; "
-            "blank means shadow_channel_id"
+            "the only place the structure-changed notice goes while structure_backup_mode is "
+            "shadow. Blank means no notice is posted — it never falls back to shadow_channel_id "
+            "or the log channel, because the notice names private channels. Only the server's "
+            "leads can change this"
+        ),
+        STRUCTURE_BACKUP_ROLE: (
+            "the role whose holders may open /structure and the Structure page, beside the "
+            "server owner and anyone with Discord's Administrator permission. Blank means the "
+            "owner and administrators only. Only the server's leads can change this"
         ),
         STRUCTURE_BACKUP_NOTICE_LINES: (
             "how many changes the structure-changed notice and the /structure panel list "

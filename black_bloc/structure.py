@@ -11,6 +11,25 @@ MODES = ("off", "shadow", "on")
 MODE_DEFAULT = "shadow"
 FEATURE = "structure_backup"
 PAGE = "structure.html"
+ROLE_KEY = "structure_backup_role_id"
+CHANNEL_KEY = "structure_backup_channel_id"
+SHADOW_CHANNEL_KEY = "structure_backup_shadow_channel_id"
+LEADS_KEYS = (ROLE_KEY, CHANNEL_KEY, SHADOW_CHANNEL_KEY)
+LEADS_ONLY_CODE = "structure_leads_only"
+OPERATOR_CODE = "structure_no_operator"
+LEADS_ONLY = (
+    "Structure backup is the saved copy of every role, channel and permission in the server, "
+    "private channels included, so it is for the server's leads: the owner, anyone with "
+    "Discord's Administrator permission, and holders of the role in structure_backup_role_id. "
+    "You are staff, but none of those, so nothing was shown or changed. Ask the server owner to "
+    "give you that role."
+)
+OPERATOR_REFUSED = (
+    "The operator token does not open structure backup, so nothing was read. It is the saved "
+    "copy of every role, channel and permission, private channels included, and only the "
+    "server's leads may see it. Sign in on the dashboard as the owner, an administrator or a "
+    "holder of the role in structure_backup_role_id."
+)
 
 DAILY = "daily"
 MANUAL = "manual"
@@ -181,6 +200,26 @@ def export(row: Any) -> dict[str, Any]:
     return {"snapshot": snapshot, **body_of(row)}
 
 
+def may_see(store: Any, guild: Any, person: Any) -> bool:
+    """The one rule for every structure door: the owner, an administrator, or the leads role."""
+    if guild is None or person is None:
+        return False
+    try:
+        user_id = int(getattr(person, "id", person))
+    except (TypeError, ValueError):
+        return False
+    if getattr(guild, "owner_id", None) == user_id:
+        return True
+    if getattr(getattr(person, "guild_permissions", None), "administrator", False) is True:
+        return True
+    try:
+        wanted = int(store.get(guild.id, ROLE_KEY) or 0)
+    except (TypeError, ValueError):
+        return False
+    held = {getattr(role, "id", None) for role in getattr(person, "roles", None) or ()}
+    return bool(wanted) and wanted in held
+
+
 def export_name(row: Any) -> str:
     day = str(row["taken_at"] or "")[:10] or "undated"
     return f"structure-{row['guild_id']}-{day}-{row['id']}.json"
@@ -189,22 +228,30 @@ def export_name(row: Any) -> str:
 __all__ = [
     "CATEGORY",
     "CHANNEL_FIELDS",
+    "CHANNEL_KEY",
     "COUNT_FIELDS",
     "DAILY",
     "FAILED",
     "FEATURE",
     "GUILD_FIELDS",
+    "LEADS_KEYS",
+    "LEADS_ONLY",
+    "LEADS_ONLY_CODE",
     "MANUAL",
     "MEMBER",
     "MODES",
     "MODE_DEFAULT",
     "OFF",
+    "OPERATOR_CODE",
+    "OPERATOR_REFUSED",
     "OUTCOMES",
     "OVERWRITE_FIELDS",
     "PAGE",
     "ROLE",
     "ROLE_FIELDS",
+    "ROLE_KEY",
     "SAVED",
+    "SHADOW_CHANNEL_KEY",
     "SNAPSHOT_FIELDS",
     "SOURCES",
     "TAG_FIELDS",
@@ -222,6 +269,7 @@ __all__ = [
     "export_name",
     "in_id_order",
     "in_order",
+    "may_see",
     "only",
     "placed",
     "top_down",

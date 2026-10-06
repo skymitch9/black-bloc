@@ -21,9 +21,20 @@ from ...settings_store import (
     STRUCTURE_BACKUP_HOUR,
     STRUCTURE_BACKUP_KEEP,
 )
-from ...structure import FAILED, MANUAL, OFF, body_of, export, export_name
+from ...structure import (
+    FAILED,
+    LEADS_ONLY,
+    LEADS_ONLY_CODE,
+    MANUAL,
+    OFF,
+    OPERATOR_CODE,
+    OPERATOR_REFUSED,
+    body_of,
+    export,
+    export_name,
+)
 from ...structure_diff import changes as changes_between
-from ..auth import Refused, staff_dependency
+from ..auth import Refused, bearer_token, sees_structure, staff_dependency
 from ..names import resolve_one
 from ..writes import actor_for, reader_dependency, require_db, require_guild, writer_dependency
 
@@ -88,13 +99,28 @@ async def stored(bot: Any, guild: Any, given: Any) -> Any:
     return row
 
 
+def leads_dependency(bot: Any):
+    """The one gate on every structure route: staff, then the leads rule; never the operator."""
+    staff = staff_dependency(bot)
+
+    async def dependency(request: Request) -> dict[str, Any]:
+        if bearer_token(request) is not None and bot.settings.operator_read_enabled:
+            raise Refused(403, OPERATOR_CODE, OPERATOR_REFUSED)
+        who = await staff(request)
+        if not sees_structure(bot, who):
+            raise Refused(403, LEADS_ONLY_CODE, LEADS_ONLY)
+        return who
+
+    return dependency
+
+
 def build_router(bot: Any) -> APIRouter:
     writer = writer_dependency(bot)
     reader = reader_dependency(bot)
     router = APIRouter(
         prefix="/api/structure",
         tags=["structure"],
-        dependencies=[Depends(staff_dependency(bot))],
+        dependencies=[Depends(leads_dependency(bot))],
     )
 
     @router.get("")

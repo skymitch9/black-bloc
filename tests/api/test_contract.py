@@ -299,6 +299,7 @@ def inbox_forum(guild, wf):
 def seed_members(guild, wf) -> None:
     wf.member(guild, MEMBER_ID, name="ada")
     wf.member(guild, 7, name="lead", staff=True)
+    guild.owner_id = 7
     # F14: {member_id} is given a ping role below, so the POST needs somebody who has none —
     # otherwise it answers the 409 that says they already have one.
     wf.member(guild, PING_MEMBER_ID, name="namu")
