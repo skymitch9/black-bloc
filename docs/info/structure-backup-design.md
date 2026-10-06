@@ -99,7 +99,8 @@ looking at the answer. Comparing and downloading stored snapshots stays open in 
   time and counts, the last look and how it went, **Take one now**, **What changed** (latest vs
   now), and a link button to the page. No second slash command.
 - **Site:** `structure.html` — the snapshots table, **Take one now**, compare any two (or one
-  against now), download one as JSON, the feature's settings, its log.
+  against now), download one as JSON, the feature's settings (wording folded), and its twenty
+  most recent log rows (the Logs page's Dashboard filter holds them all).
 - **API** (`black_bloc/api/tools/structure.py`, staff only): `GET /api/structure`,
   `POST /api/structure/snapshots`, `GET /api/structure/compare?old=&new=`,
   `POST /api/structure/snapshots/{id}/download` (a POST because it writes a log row, and a GET on this site never writes).
@@ -176,4 +177,23 @@ key of its own (the kinds follow `core_log_level`).
 
 ## Gate
 
-Recorded by the build at its last commit — see the branch's final report for the exact lines.
+Measured 2026-10-05 on branch `structure-backup`, before its last docs commit:
+`python -m pytest tests -q -p no:cacheprovider -n 8` **10813 passed, 3 skipped** (10618 on `main`);
+`python -m ruff check .` clean; `node site/mock/check.mjs` **ok — 24 pages, 300 routes, 101 core
+settings, all keys present**; the eleven `site/mock/*.test.mjs` files ok. By import:
+`len(KEY_TYPES)` **854** (779 + 75), `len(CORE_KEYS)` **101** (26 + 75), `SCHEMA_VERSION` **88**,
+`len(COGS)` **27**. The Structure page was opened in a browser against the local mock: the table,
+Compare, *What changed since*, *Take one now* and the Settings section drew and worked; the
+console showed no error.
+
+## What was NOT verified
+
+- **Nothing has met Discord.** No real guild was fetched, no notice posted, `/structure` never
+  opened in a client, the panel's buttons never pressed outside the fakes.
+- Whether `guild.fetch_channels()` returns channels the bot cannot view, and their overwrites.
+- The schema change has not run on the live database (two `CREATE TABLE IF NOT EXISTS`).
+- The mock's change list is a short JavaScript stand-in (roles, channels, overwrites); the real
+  list comes from `structure_diff.py` and was only seen through the tests.
+- Download was not pressed in the browser (the route was exercised by the contract check).
+- `docs/info/code-notes.md` was not re-keyed and no guide was added to `guides_seed.json`.
+- `ruff format --check` was not run.
