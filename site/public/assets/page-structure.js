@@ -31,6 +31,7 @@ const OPERATIONAL = [
   'structure_backup_notify',
   'structure_backup_channel_id',
   'structure_backup_shadow_channel_id',
+  'structure_backup_role_id',
   'structure_backup_notice_lines',
   'structure_backup_panel_minutes',
 ];
