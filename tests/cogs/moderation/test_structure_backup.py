@@ -22,7 +22,6 @@ from black_bloc.settings_store import (
     STRUCTURE_BACKUP_DEFAULTS,
     STRUCTURE_BACKUP_KEYS,
     STRUCTURE_BACKUP_LIMITS,
-    STRUCTURE_SAY_KEYS,
     SettingError,
     SettingsStore,
     coerce_value,
@@ -298,7 +297,7 @@ def test_the_feature_ships_in_shadow_with_every_key_under_core():
     assert STRUCTURE_BACKUP_DEFAULTS["structure_backup_keep"] == 60
     assert (KEY_MIN.get("structure_backup_hour"), KEY_MAX["structure_backup_hour"]) == (None, 23)
     assert (KEY_MIN["structure_backup_keep"], KEY_MAX["structure_backup_keep"]) == (1, 365)
-    assert len(STRUCTURE_BACKUP_KEYS) == len(set(STRUCTURE_BACKUP_KEYS)) == 75
+    assert len(STRUCTURE_BACKUP_KEYS) == len(set(STRUCTURE_BACKUP_KEYS)) == 29
     for key in STRUCTURE_BACKUP_KEYS:
         assert key in CORE_KEYS and namespace_of(key) == "core", key
         assert KEY_HELP.get(key), key
@@ -311,11 +310,12 @@ async def test_every_default_reaches_the_store_and_every_word_is_a_text_key(bot)
     for key, shipped in STRUCTURE_BACKUP_DEFAULTS.items():
         assert bot.store.get(GUILD, key) == shipped
     assert bot.store.get(GUILD, "structure_backup_channel_id") is None
-    assert set(STRUCTURE_SAY_KEYS) == set(WORDS)
-    for name, key in STRUCTURE_SAY_KEYS.items():
-        assert KEY_TYPES[key] == "text" and bot.store.get(GUILD, key) == WORDS[name][0]
+    assert not [key for key in KEY_TYPES if key.startswith("structure_backup_say_")]
+    for name in WORDS:
+        with pytest.raises(SettingError):
+            bot.store.get(GUILD, f"structure_backup_say_{name}")
     with pytest.raises(SettingError):
-        coerce_value("structure_backup_say_role_added", "Role {member} joined")
+        coerce_value("structure_backup_notice_text", "{member} changes")
     with pytest.raises(SettingError):
         coerce_value("structure_backup_hour", 24)
     with pytest.raises(SettingError):
@@ -367,14 +367,24 @@ async def test_a_changed_server_is_a_new_snapshot_that_carries_the_changes_in_wo
     assert found["changes"] == 1 and found["previous_id"] == taken.previous["id"]
 
 
-async def test_the_change_list_uses_the_wording_staff_stored(bot, guild):
+async def test_a_change_sentence_stored_before_they_left_the_settings_is_ignored_at_boot(
+    bot, guild, db, caplog
+):
     await sb.take_snapshot(bot, guild)
-    await bot.store.set(GUILD, "structure_backup_say_role_added", "New role: {role}")
+    await db.conn.execute(
+        "INSERT INTO settings(guild_id, key, value, updated_at) VALUES (?, ?, ?, ?)",
+        (GUILD, "structure_backup_say_role_added", json.dumps("New role: {role}"), "2026-10-05"),
+    )
+    await db.conn.commit()
     guild.roles.append(role(MODS, "Mods", 2, 1))
 
+    with caplog.at_level("WARNING", logger="black_bloc.settings_store"):
+        await bot.store.load()
     taken = await sb.take_snapshot(bot, guild)
 
-    assert [one["text"] for one in taken.changes] == ["New role: Mods"]
+    assert "settings ignored: structure_backup_say_role_added" in caplog.text
+    assert [one["text"] for one in taken.changes] == ["Role **Mods** was added."]
+    assert "structure_backup_say_role_added" not in bot.store.all(GUILD)
 
 
 async def test_off_captures_nothing_and_says_how_to_turn_it_on(bot, guild, db):
@@ -1060,7 +1070,6 @@ LIMITS = [
     ("structure_backup_panel_footer", 256),
     ("structure_backup_none_yet", 1024),
     ("structure_backup_no_changes_said", 1024),
-    ("structure_backup_say_nothing", 1024),
     ("structure_backup_off_said", 4096),
 ]
 
@@ -1080,7 +1089,7 @@ def test_wording_longer_than_discord_holds_is_refused_at_save_in_words(key, limi
 def test_every_structure_wording_key_has_a_limit_its_own_default_fits():
     words = [key for key in STRUCTURE_BACKUP_KEYS if KEY_TYPES[key] == "text"]
 
-    assert set(STRUCTURE_BACKUP_LIMITS) == set(words) and len(words) == 67
+    assert set(STRUCTURE_BACKUP_LIMITS) == set(words) and len(words) == 21
     for key in words:
         assert len(STRUCTURE_BACKUP_DEFAULTS[key]) <= STRUCTURE_BACKUP_LIMITS[key], key
     assert set(STRUCTURE_BACKUP_LIMITS.values()) == {80, 150, 256, 1024, 4096}
@@ -1101,11 +1110,7 @@ async def test_wording_stored_before_the_limits_cannot_break_the_panel(
     stored_already(
         bot,
         monkeypatch,
-        **{
-            key: "word " * 2000
-            for key in STRUCTURE_BACKUP_LIMITS
-            if not key.startswith("structure_backup_say_")
-        },
+        **{key: "word " * 2000 for key in STRUCTURE_BACKUP_LIMITS},
     )
     found = await sb.changes_since(bot, guild, await structure_store.latest(bot.db, GUILD))
 

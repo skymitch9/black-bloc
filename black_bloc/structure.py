@@ -25,6 +25,7 @@ OUTCOMES = (SAVED, UNCHANGED, FAILED)
 CATEGORY = "category"
 ROLE = "role"
 MEMBER = "member"
+VOICE_TYPES = ("voice", "stage_voice")
 
 GUILD_FIELDS = (
     "id",
@@ -105,12 +106,50 @@ def clean(body: Any) -> dict[str, Any]:
     }
 
 
+def by_id(rows: list[dict[str, Any]], field: str = "id") -> dict[str, dict[str, Any]]:
+    return {str(row[field]): row for row in rows if row.get(field) is not None}
+
+
+def top_down(roles: dict[str, dict[str, Any]]) -> list[str]:
+    return sorted(roles, key=lambda one: (-int(roles[one]["position"] or 0), one))
+
+
+def bucket(channel: dict[str, Any]) -> str:
+    if channel["type"] == CATEGORY:
+        return CATEGORY
+    return "voice" if channel["type"] in VOICE_TYPES else "text"
+
+
+def in_order(channels: dict[str, dict[str, Any]]) -> dict[tuple[Any, str], list[str]]:
+    groups: dict[tuple[Any, str], list[str]] = {}
+    ranked = sorted(channels, key=lambda one: (int(channels[one]["position"] or 0), one))
+    for ident in ranked:
+        channel = channels[ident]
+        groups.setdefault((channel["parent_id"], bucket(channel)), []).append(ident)
+    return groups
+
+
+def placed(body: Any) -> dict[str, Any]:
+    """A clean body with each position read as a place in its list, so renumbering is no change."""
+    found = clean(body)
+    roles = by_id(found["roles"])
+    for place, ident in enumerate(top_down(roles)):
+        roles[ident]["position"] = place
+    channels = by_id(found["channels"])
+    for group in in_order(channels).values():
+        for place, ident in enumerate(group):
+            channels[ident]["position"] = place
+    return found
+
+
 def canonical(body: Any) -> str:
     return json.dumps(clean(body), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
 def digest(body: Any) -> str:
-    return hashlib.sha256(canonical(body).encode("utf-8")).hexdigest()
+    """One digest per structure a person could tell apart: order counts, raw positions do not."""
+    marked = json.dumps(placed(body), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(marked.encode("utf-8")).hexdigest()
 
 
 def counts(body: Any) -> dict[str, int]:
@@ -171,7 +210,10 @@ __all__ = [
     "TAG_FIELDS",
     "UNCHANGED",
     "VERSION",
+    "VOICE_TYPES",
     "body_of",
+    "bucket",
+    "by_id",
     "canonical",
     "clean",
     "counts",
@@ -179,5 +221,8 @@ __all__ = [
     "export",
     "export_name",
     "in_id_order",
+    "in_order",
     "only",
+    "placed",
+    "top_down",
 ]

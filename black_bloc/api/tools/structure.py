@@ -13,7 +13,6 @@ from ...cogs.moderation.structure_backup import (
     mode_of,
     record_download,
     said,
-    say_words,
     take_snapshot,
 )
 from ...logkinds import VIA_WEBSITE
@@ -152,9 +151,7 @@ def build_router(bot: Any) -> APIRouter:
             after = None
         else:
             after_row = await stored(bot, guild, new)
-            found = changes_between(
-                body_of(before), body_of(after_row), say_words(bot.store, guild.id)
-            )
+            found = changes_between(body_of(before), body_of(after_row))
             after = snapshot_row(guild, after_row)
         return {
             "old": snapshot_row(guild, before),

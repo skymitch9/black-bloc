@@ -1,9 +1,10 @@
 # Structure backup — a dated copy of the server's roles, channels and permissions
 
 > **Audience:** the build agent, reviewers and future Claude sessions. **Status:** TRACKED ·
-> 🔨 **MERGED to `main` at `0d159774`** (2026-10-05), **NOT deployed.** The independent review's
-> fixes are on branch `structure-fixes` (off `0d159774`, NOT merged, NOT deployed) and are what
-> this page now describes — see *Review fixes 2026-10-05* near the foot.
+> 🔨 **MERGED to `main` at `c16deab1`** (2026-10-05, the build and the independent review's fixes),
+> **NOT deployed.** Branch `structure-fold-words` (off `c16deab1`, code in `59e62d81`, NOT merged,
+> NOT deployed) folds the 46 change sentences into code and is what this page now describes — see
+> *Wording folded into code 2026-10-05* near the foot.
 > **Last verified: 2026-10-05** — by the hermetic test suite and the local mock only (figures at the
 > foot under *Gate*). ⚠️ **NOT checked:** nothing here has met Discord. No real guild was captured,
 > no notice was posted, `/structure` was never opened in a client, and the claim that the bot is
@@ -56,14 +57,22 @@ reads *member 123…* because no name is stored.
   be reached*, never a permission sentence.
 - **A capture with no roles or no channels is refused** (`NO_ROLES`, `NO_CHANNELS`) — a server
   always has both, so an empty list is Discord answering badly, not a structure to store.
-- **Unchanged means no second copy, and "unchanged" has one rule: the change list has nothing
-  to say** (`structure_store.same`). Equal digests are the fast path; when the digests differ
-  but `structure_diff.changes` returns nothing (a forum tag's emoji or `moderated` flag,
-  positions renumbered with the order kept), no row is inserted either — the latest row's body
-  and digest are **refreshed in place** so the copy held is still exact, its `checked_at` and
-  `checks` move, and `structure.unchanged` is logged. ~~When the digest equals the latest
-  snapshot's, nothing is inserted~~ — reversed 2026-10-05 on `structure-fixes` (review N1): the
-  digest alone stored new rows whose change list read *0 changes*.
+- **Unchanged means no second copy, and "unchanged" has one rule: the digest equals the latest
+  snapshot's.** The digest and the change list agree — a digest that differs always has
+  something to say — because (a) every field a snapshot holds has a sentence, a forum tag's
+  emoji and `moderated` flag included, and (b) the digest is taken over each role's and
+  channel's **place in the order** (`structure.placed`: roles top down, channels within their
+  category and kind — the same `top_down` / `in_order` the change list uses), not its raw
+  position number, so positions renumbered with the order kept are the same structure. On an
+  unchanged look the latest row's body is still **refreshed in place** so the copy held is
+  exact (raw positions included), its `checked_at` and `checks` move, and
+  `structure.unchanged` is logged. ~~"unchanged" has one rule: the change list has nothing to
+  say (`structure_store.same`), equal digests being only the fast path~~ — reversed 2026-10-05
+  on `structure-fold-words` (`59e62d81`): that rule existed because two differences had no
+  sentence and adding one cost a settings key; with the wording in code they have sentences
+  and `same` is gone. (It had itself reversed ~~when the digest equals the latest snapshot's,
+  nothing is inserted~~ on `structure-fixes`, review N1, when the raw-position digest stored
+  rows whose change list read *0 changes*.)
 - **Kept:** `structure_backup_keep` (default **60**) snapshots per server, oldest pruned after
   every stored snapshot (`structure.pruned`) — **except the snapshot the next notice starts
   from** (`structure_looks.noticed_id`), which is held until that notice is posted, so a server
@@ -81,11 +90,12 @@ reads *member 123…* because no name is stored.
 
 ## C. Compare
 
-`black_bloc/structure_diff.py:changes(old, new, say)` — a pure function over two snapshot
-dicts, no Discord objects. It returns `{area, kind, text}` rows in words: server fields, roles
+`black_bloc/structure_diff.py:changes(old, new)` — a pure function over two snapshot
+dicts, no Discord objects, no settings: its wording is `structure_diff.WORDS`, fixed in code. It returns `{area, kind, text}` rows in words: server fields, roles
 added / removed / renamed / permissions gained and lost **by name** / colour, hoist,
 mentionable / moved; channels added / removed / renamed / moved to another category / reordered
-/ topic, slowmode, age-restricted, bitrate, user limit, type; forum tags; overwrites added /
+/ topic, slowmode, age-restricted, bitrate, user limit, type; forum tags added / removed /
+renamed / emoji / moderators-only; overwrites added /
 removed / changed with the allowed and denied permissions gained and lost by name. Ids resolve
 to names from the two snapshots themselves (new first, then old).
 
@@ -99,14 +109,14 @@ to names from the two snapshots themselves (new first, then old).
   <id>` when the category is shared too (`Names.label`). A name nobody shares is left alone.
 - **An overwrite is its target AND its kind** (`by_target`), so a target whose kind changed is
   one overwrite removed and one added, never silence.
-- **Two readers.** `changes(old, new, say, escape=...)`: Discord's readers (the panel and the
+- **Two readers.** `changes(old, new, escape=...)`: Discord's readers (the panel and the
   notice) pass `structure_backup.safe` — `escape_markdown` then `escape_mentions` — over every
   role, channel, tag and server name and every free-text value (a topic), so a role named
   `**x** [click](https://…)` is shown as written. The website passes nothing: its page draws
-  text nodes. Staff's own wording is never escaped.
-- **Not said, on purpose for now:** a forum tag's emoji and its `moderated` flag. Saying them
-  needs two new wording keys, and the key count is the owner's open decision; until then the
-  one rule in §B keeps them from making a row.
+  text nodes. A tag's emoji is escaped like any other free text.
+- ~~**Not said, on purpose for now:** a forum tag's emoji and its `moderated` flag~~ — reversed
+  2026-10-05 on `structure-fold-words` (`59e62d81`): both are said (`tag_emoji`,
+  `tag_moderated`), which needed no key once the wording was code.
 
 ## D. Mode, and the only thing the feature posts
 
@@ -186,7 +196,10 @@ cap of 25, so every key is added to `CORE_KEYS`. Operational: `structure_backup_
 `_hour`, `_keep`, `_notify`, `_channel_id`, `_shadow_channel_id`, `_notice_lines`,
 `_panel_minutes`. Wording: the notice's three lines, the panel's title, labels, lines and
 answers, and one `structure_backup_say_<name>` key per sentence and label the change list can
-write (`structure_diff.WORDS` is the one home of the defaults). Channel type names and
+write (`structure_diff.WORDS` is the one home of the defaults). ~~one
+`structure_backup_say_<name>` key per sentence~~ — reversed 2026-10-05, owner decision (see
+*Decisions* 8): the change list's sentences and field labels are fixed wording in
+`structure_diff.WORDS`; **29 keys remain** (8 operational + 21 wording). Channel type names and
 permission names are Discord's own identifiers, title-cased, not prose.
 
 **Every wording key has the limit of the place Discord shows it in**
@@ -200,12 +213,13 @@ number (`structure_backup.said`), so a value stored before the limits cannot bre
 | a button's label | **80** | `_take_label`, `_changes_label` (also a field name), `_site_label` |
 | a picker's hint | **150** | `_mode_label` (also a field name) |
 | a heading | **256** | `_notice_title`, `_panel_title`, `_latest_label`, `_look_label`, `_panel_footer` |
-| one block of a card | **1024** | every other line, and every `_say_` key |
+| one block of a card | **1024** | every other line (~~and every `_say_` key~~ — no longer keys) |
 | a card's main text | **4096** | `_saved_said`, `_unchanged_said`, `_failed_said`, `_off_said` |
 
 An embed also holds 6000 characters in all: `within` shortens the panel's main text, with the
 timed-out footer's room kept. `_panel_footer` is held to 256 rather than Discord's 2048 so
-that sum can always be met. No key was added or removed for any of this — **860**.
+that sum can always be met. No key was added or removed for the limits (860 then); the fold
+removed 46 — **854** registry keys measured on `structure-fold-words`, 29 of them this feature's.
 
 ## H. Log kinds — head `structure`, filed under `core`
 
@@ -247,8 +261,15 @@ key of its own (the kinds follow `core_log_level`).
    a 23rd feature would add a log-level key and a 26th setting group.
 7. **`/structure` is not hidden when the mode is `off`.** Stored snapshots stay readable and
    comparable in `off`; hiding the command would hide them.
-8. **Every change-list sentence is a settings key** (§G), per the every-word-editable rule.
-   It is ~45 keys; the alternative was prose only the code knows.
+8. ~~**Every change-list sentence is a settings key** (§G), per the every-word-editable rule.
+   It is ~45 keys; the alternative was prose only the code knows.~~ — **reversed by the owner
+   2026-10-05** (branch `structure-fold-words`, `59e62d81`). Asked whether to keep the 46
+   `structure_backup_say_*` keys editable or fold them into code, he answered **"B"**: fold the
+   46 change sentences into code; titles, button labels and the notice heading stay editable.
+   Why it flipped: 46 of the feature's 75 keys were sentence fragments nobody is likely to
+   reword, none of them reachable in `/settings` without a search, and each new sayable
+   difference cost a key (which is what left N1's two differences unsaid). This is a decided
+   exception to the every-word-editable rule for the change list only.
 9. **Member overwrites are kept, by id only** (§A).
 10. **Downloads are logged** (`structure.downloaded`) — it is a copy of the permission layout
     leaving the bot.
@@ -289,7 +310,9 @@ named.
 | N13 | The download's filename had two homes | §E | `tests/test_structure.py::test_a_download_is_built_from_the_field_lists_never_from_the_row`; `tests/api/tools/test_structure.py::test_the_page_takes_the_download_name_from_the_api_and_builds_none_of_its_own` |
 | N14 | The page asked for 20 rows and then filtered them | §E | `tests/api/tools/test_structure.py::test_the_page_asks_the_api_for_structure_rows_and_filters_none_itself`, `::test_the_two_kinds_the_page_asks_for_bring_back_only_structure_rows`° |
 
-**Open, for the owner — not changed here.** `reachable_on_the_panel` is truthful now and no
+**~~Open, for the owner — not changed here.~~ Answered 2026-10-05: the 46 `_say_` keys were
+folded into code (see the next section; the figures below are as measured before that).**
+`reachable_on_the_panel` is truthful now and no
 guard test fails, because every group over the cap has a search. Measured 2026-10-05: of the
 **860** keys, **527** are past the first 25 of their group and are reached in `/settings` only
 by typing a search — and **all 75** structure keys are among them (`core` holds 102). The 46
@@ -305,6 +328,61 @@ not `block_look.plain`, which doubles the backslash in front of a `[` — this s
 names are full of them. (7) `ModePick`'s options read `off` / `shadow` / `on`, the setting's
 own values, and its hint is `structure_backup_mode_label`: no new wording, no new key.
 (8) Two `KEY_HELP` sentences (`_keep`, `_notify`) were reworded to match, with their mock rows.
+
+## Wording folded into code 2026-10-05
+
+Branch `structure-fold-words` off `main` `c16deab1`; code and tests in `59e62d81`.
+
+- **Removed (46):** every `structure_backup_say_*` key — the 31 sentences and fragments
+  (`server_changed` … `no`) and the 15 `f_*` field labels — from `settings_store` (registry,
+  `CORE_KEYS`, text checks, limits, help), the mock's rows and core-key list, `labels.js` and
+  `contract.json`. None was a heading or a button.
+- **Kept (29), untouched:** `structure_backup_mode`, `_hour`, `_keep`, `_notify`,
+  `_channel_id`, `_shadow_channel_id`, `_notice_lines`, `_panel_minutes`; `_notice_title`,
+  `_notice_text`, `_notice_more`, `_panel_title`, `_panel_footer`, `_mode_label`,
+  `_latest_label`, `_latest_line`, `_none_yet`, `_look_label`, `_look_saved`,
+  `_look_unchanged`, `_look_failed`, `_take_label`, `_changes_label`, `_site_label`,
+  `_saved_said`, `_unchanged_said`, `_failed_said`, `_off_said`, `_no_changes_said`.
+- **A value already stored for a removed key** is not migrated and cannot crash: the store's
+  `load` skips any key outside `KEY_TYPES` and logs `settings ignored: <keys>` once at boot —
+  the path a retired key has always taken (`youtube_mode`). Pinned by
+  `test_a_change_sentence_stored_before_they_left_the_settings_is_ignored_at_boot`.
+- **`structure_diff`**: `WORDS` is `name → sentence`; `sentence(name, **fields)` has no
+  fallback because there is no staff template to break; `changes(old, new, *, escape=None)`.
+  `cogs…structure_backup.say_words` and `settings_store.STRUCTURE_SAY_KEYS` are gone.
+- **N1 finished**: `tag_emoji`, `tag_moderated` (§C) and the order-based digest (§B).
+  `structure.py` now owns `by_id`, `top_down`, `bucket`, `in_order`, `VOICE_TYPES` (one home;
+  the change list imports them) and `placed`. Pinned in `tests/test_structure_diff.py` by
+  `test_every_field_a_snapshot_holds_moves_the_digest_and_has_something_to_say` (31 fields, read
+  off the five field lists), `test_the_field_table_covers_every_field_list_so_a_new_field_needs_a_sentence`,
+  `test_positions_renumbered_with_the_order_kept_are_the_same_digest_and_say_nothing`,
+  `test_an_order_that_changed_moves_the_digest_and_is_said`, and the four tag tests; in
+  `tests/test_structure_store.py` by
+  `test_a_forum_tags_emoji_or_moderated_flag_changing_is_a_new_snapshot` and
+  `test_positions_renumbered_refresh_the_copy_already_held`.
+- ⚠️ **The agreement is proved for what a capture can produce**, one field at a time. A
+  hand-made body that differs only in a way the readers coerce away (a permission value of
+  `null` against `0`) would move the digest and say nothing; `structure_capture` writes
+  integers, so no capture produces one.
+- **Reach in Discord `/settings`, measured 2026-10-05:** `core` holds **96** keys (95 + the log
+  level); **0 of the 29** structure keys are in its first 25, so none is reachable without
+  typing a search (the first sits at place 28). Searching `structure_backup` finds 29 and
+  lists 25; all 29 pass `reachable_on_the_panel`. Registry-wide, **521 of 854** keys are past
+  the first 25 of their group (527 of 860 before).
+- **Pinned counts moved:** `len(KEY_TYPES)` 900 → **854** and `len(CORE_KEYS)` 141 → **95**
+  (`tests/test_settings_store.py`); the feature's own keys 75 → **29** and its text keys
+  67 → **21** (`tests/cogs/moderation/test_structure_backup.py`); `contract.json` core keys
+  141 → **95**. Nothing in `tests/test_settings_panel.py` pins a count this moved.
+- **Gate, measured 2026-10-05 at `59e62d81`:** `python -m pytest tests -q -p no:cacheprovider
+  -n 8` **11323 passed, 3 skipped** (11327 on `main` `c16deab1`); `python -m ruff check .`
+  clean; `node site/mock/check.mjs` **ok — 25 pages, 312 routes, 95 core settings, all keys
+  present** (port 8796); the thirteen `site/mock/*.test.mjs` files ok. The Structure page was
+  opened in a browser against the mock: Snapshots, Compare, Settings (28: 7 + 21 under
+  *Wording*) and Logs drew, no `_say_` key on the page, no console error.
+- **NOT verified:** nothing has met Discord; the mock's change list is still its short
+  JavaScript stand-in and does not say tag changes; no button on the page was pressed this
+  time; `docs/info/code-notes.md` was not re-keyed; `ruff format --check` was not run
+  repo-wide (`structure_diff.py` was formatted whole, it was not format-clean before).
 
 ## Gate
 
@@ -341,6 +419,6 @@ console showed no error.
   Discord; `structure_looks.noticed_id` has not been added to the live database; and whether
   `fetch_channels()` hands back typed `Object` targets for overwrites on uncached members is
   discord.py 2.7.1's source read, not a capture.
-- Stale after these fixes and NOT edited (shared with other branches): the structure rows in
-  `docs/info/README.md`, `docs/info/architecture.md` and `docs/access/RECOVERY.md` still say
-  *not merged*.
+- ~~Stale after these fixes and NOT edited: the structure rows in `docs/info/README.md`,
+  `docs/info/architecture.md` and `docs/access/RECOVERY.md` still say *not merged*~~ —
+  corrected 2026-10-05 on `structure-fold-words`.
