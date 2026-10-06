@@ -410,7 +410,9 @@ async def heads_up(
 ) -> dict[str, Any] | None:
     """The runner's public reminder for the block, unless the switches or the opt-out say not.
     It answers the post, for the block to remember."""
-    marathon_role = role_for(bot, guild, marathon, block, mark)
+    marathon_role = role_for(
+        bot, guild, marathon, block, mark, await day_reading(bot, guild, marathon, mark)
+    )
     quiet = mrp.row_fields(
         None if marathon_role is None else mrp.unsent(marathon_role, mrp.NO_PUBLIC_COPY)
     )
@@ -471,13 +473,28 @@ async def heads_up(
     return mrem.copy_of(message, channel_id, text, mt._cell(block.first, "scheduled_at"))
 
 
+async def day_reading(bot: Any, guild: Any, marathon: Any, mark: int) -> Any:
+    """The marathon's show-days, read only for the mark that could carry the role."""
+    from .marathon_baf_event import reading_now
+
+    if mark != int(bot.store.get(guild.id, MARATHON_PING_MINUTES_KEY)):
+        return None
+    return await reading_now(bot, guild, marathon)
+
+
 def role_for(
-    bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: int
+    bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: int, days: Any = None
 ) -> mrp.Verdict | None:
-    """At the ping mark only; a block opening on a BaF run leaves it to that run's own copy."""
+    """At the ping mark only; a block opening on a BaF run leaves it to that run's own copy,
+    and a block on a BaF event day leaves it to the day's one ping."""
+    from .marathon_baf_event import quiet_for
+
     if mark != int(bot.store.get(guild.id, MARATHON_PING_MINUTES_KEY)):
         return None
     verdict = verdict_for(bot, guild, marathon)
+    quiet = quiet_for(days, block.first, verdict)
+    if quiet is not None:
+        return quiet
     if mt.is_ours(block.first) and people_for(marathon, block.first):
         return mrp.unsent(verdict, mrp.RUNNER_COPY)
     return verdict

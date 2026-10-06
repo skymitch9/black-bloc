@@ -16,15 +16,21 @@ HOSTS = "hosts"
 HOST_EVENTS = "hostevents"
 ANNOUNCE = "announce"
 OVERLAY = "overlay"
-ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, ANNOUNCE, OVERLAY)
+BAF = "baf"
+ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, ANNOUNCE, OVERLAY, BAF)
 RETIRED = (HOSTS, HOST_EVENTS)
 ON = "on"
 OFF = "off"
 CANCEL = "cancel"
+FOLLOW = "follow"
+YES = "yes"
+NO = "no"
+BAF_CHOICES = (FOLLOW, YES, NO)
+BAF_ROW = 4
 TEMPLATE = (
     r"marathon:controls:(?P<marathon_id>[0-9]+)"
-    r":(?P<action>event|runs|spotlight|highlight|ping|hosts|hostevents|announce|overlay)"
-    r":(?P<to>on|off|cancel)"
+    r":(?P<action>event|runs|spotlight|highlight|ping|hosts|hostevents|announce|overlay|baf)"
+    r":(?P<to>on|off|cancel|follow|yes|no)"
 )
 CUSTOM_ID = "marathon:controls:{marathon_id}:{action}:{to}"
 
@@ -54,6 +60,7 @@ class Control(NamedTuple):
     to: str
     word: str
     disabled: bool = False
+    row: int | None = None
 
 
 def custom_id(marathon_id: Any, action: str, to: str) -> str:
@@ -100,6 +107,16 @@ def switch(action: str, on: bool) -> Control:
     return Control(action, OFF if on else ON, ON if on else OFF)
 
 
+def baf_controls(choice: Any) -> tuple[Control, ...]:
+    """The BaF event switch: one button per answer in a row of its own, the one that stands
+    lit and not pressable."""
+    chosen = str(choice or FOLLOW)
+    return tuple(
+        Control(BAF, one, ON if one == chosen else OFF, disabled=one == chosen, row=BAF_ROW)
+        for one in BAF_CHOICES
+    )
+
+
 def controls(
     mode: Any,
     spot_state: Any,
@@ -136,8 +153,10 @@ def label(text: Any) -> str:
 
 __all__ = [
     "ACTIONS",
+    "BAF_CHOICES",
     "Control",
     "RETIRED",
+    "baf_controls",
     "controls",
     "custom_id",
     "halves",

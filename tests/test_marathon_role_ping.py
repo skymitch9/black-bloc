@@ -100,4 +100,4 @@ def test_the_row_fields_say_which_role_or_why_not():
 
 
 def test_every_reason_is_listed_once():
-    assert len(set(mrp.REASONS)) == len(mrp.REASONS) == 11
+    assert len(set(mrp.REASONS)) == len(mrp.REASONS) == 13

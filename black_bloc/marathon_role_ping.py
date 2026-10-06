@@ -15,6 +15,9 @@ NOT_MENTIONABLE = "not_mentionable"
 NO_PUBLIC_COPY = "no_public_copy"
 RUNNER_COPY = "runner_copy"
 REHEARSAL = "rehearsal"
+BAF_EVENT_DAY = "baf_event_day"
+BAF_EVENT_PINGED = "baf_event_pinged"
+BAF_EVENT_REASONS = (BAF_EVENT_DAY, BAF_EVENT_PINGED)
 KEY_REASONS = (ROLE_PINGS_OFF, REMINDER_PINGS_OFF, PUBLIC_REMINDERS_OFF)
 REASONS = (
     SWITCH_OFF,
@@ -26,6 +29,7 @@ REASONS = (
     NO_PUBLIC_COPY,
     RUNNER_COPY,
     REHEARSAL,
+    *BAF_EVENT_REASONS,
 )
 
 
@@ -34,6 +38,7 @@ class Verdict(NamedTuple):
     reason: str | None
     configured: int | None = None
     name: str = ""
+    day: str | None = None
 
     @property
     def mentions(self) -> bool:
@@ -80,7 +85,7 @@ def unsent(verdict: Verdict, reason: str) -> Verdict:
     """A verdict that would have mentioned, on a copy that will not."""
     if not verdict.mentions:
         return verdict
-    return Verdict(None, reason, verdict.configured, verdict.name)
+    return verdict._replace(role_id=None, reason=reason)
 
 
 def with_role(roles: Any, verdict: Verdict | None) -> list[int]:
@@ -101,11 +106,20 @@ def without_role(roles: Any, verdict: Verdict | None) -> list[int]:
 def row_fields(verdict: Verdict | None) -> dict[str, Any]:
     if verdict is None:
         return {}
-    return {"marathon_role": verdict.role_id, "marathon_role_reason": verdict.reason}
+    found = {"marathon_role": verdict.role_id, "marathon_role_reason": verdict.reason}
+    return found | ({"baf_event_day": verdict.day} if verdict.day else {})
+
+
+def on_day(verdict: Verdict, day: Any) -> Verdict:
+    """The same verdict, marked as a BaF event day's: the day's first planned start."""
+    return verdict._replace(day=str(day) if day else None)
 
 
 __all__ = [
     "ANNOUNCEMENTS_OFF",
+    "BAF_EVENT_DAY",
+    "BAF_EVENT_PINGED",
+    "BAF_EVENT_REASONS",
     "GONE",
     "KEY_REASONS",
     "NOT_MENTIONABLE",
@@ -121,6 +135,7 @@ __all__ = [
     "Verdict",
     "decide",
     "notifies",
+    "on_day",
     "row_fields",
     "unsent",
     "with_role",

@@ -9,6 +9,7 @@ from typing import Any
 import discord
 
 from ... import marathon as mt
+from ... import marathon_baf_event as baf
 from ... import marathon_events as me
 from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
@@ -30,6 +31,9 @@ from ...settings_store import (
     MARATHON_CONTROLS_ALREADY_ON_KEY,
     MARATHON_CONTROLS_ANNOUNCE_OFF_KEY,
     MARATHON_CONTROLS_ANNOUNCE_ON_KEY,
+    MARATHON_CONTROLS_BAF_FOLLOW_KEY,
+    MARATHON_CONTROLS_BAF_NO_KEY,
+    MARATHON_CONTROLS_BAF_YES_KEY,
     MARATHON_CONTROLS_CANCELLED_KEY,
     MARATHON_CONTROLS_CANNOT_WAIT_KEY,
     MARATHON_CONTROLS_EVENT_OFF_KEY,
@@ -64,6 +68,7 @@ from .marathon import (
     cog_of,
     get_marathon,
     now_for,
+    runs_of,
     update_marathon,
 )
 from .marathon import mode_of as posts_mode_of
@@ -110,6 +115,11 @@ LABEL_KEYS = {
     (mtc.OVERLAY, mtc.ON): MARATHON_CONTROLS_OVERLAY_ON_KEY,
     (mtc.OVERLAY, mtc.OFF): MARATHON_CONTROLS_OVERLAY_OFF_KEY,
 }
+BAF_LABEL_KEYS = {
+    mtc.FOLLOW: MARATHON_CONTROLS_BAF_FOLLOW_KEY,
+    mtc.YES: MARATHON_CONTROLS_BAF_YES_KEY,
+    mtc.NO: MARATHON_CONTROLS_BAF_NO_KEY,
+}
 STYLES = {
     mtc.ON: discord.ButtonStyle.success,
     mtc.OFF: discord.ButtonStyle.secondary,
@@ -148,21 +158,26 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         mping.pings_role(marathon),
         announces(bot, guild.id, marathon),
         overlay_switch(bot, guild.id, marathon),
-    )
+    ) + mtc.baf_controls(baf.choice_of(baf.stored(marathon)))
     starts = label_moment(state.get("starts"), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY))
     labels = tuple(
-        mtc.label(words(bot, guild.id, LABEL_KEYS[(one.action, one.word)], starts=starts))
-        for one in controls
+        mtc.label(words(bot, guild.id, label_key(one), starts=starts)) for one in controls
     )
     content = words(bot, guild.id, MARATHON_CONTROLS_HELP_KEY, marathon=marathon["name"])
     if state["state"] == ms.NO_CHANNEL:
         content += "\n" + words(
             bot, guild.id, MARATHON_CONTROLS_NO_CHANNEL_KEY, marathon=marathon["name"]
         )
-    role_line = role_ping_line(bot, guild, marathon)
+    role_line = role_ping_line(bot, guild, marathon, rows=await runs_of(bot.db, marathon["id"]))
     if role_line:
         content += "\n" + role_line
     return (content, controls, labels)
+
+
+def label_key(control: Any) -> str:
+    if control.action == mtc.BAF:
+        return BAF_LABEL_KEYS[control.to]
+    return LABEL_KEYS[(control.action, control.word)]
 
 
 def label_moment(value: Any, tz_name: Any) -> str:
@@ -186,10 +201,21 @@ def view_of(
     marathon_id: Any, controls: tuple, labels: tuple[str, ...], link: Any = None
 ) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
-    for one, text in zip(controls, labels, strict=True):
-        view.add_item(ControlButton(marathon_id, one.action, one.to, text, one.disabled, one.word))
+    paired = list(zip(controls, labels, strict=True))
+    for one, text in paired:
+        if one.row is None:
+            view.add_item(
+                ControlButton(marathon_id, one.action, one.to, text, one.disabled, one.word)
+            )
     if link is not None:
         view.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=link[0], url=link[1]))
+    for one, text in paired:
+        if one.row is not None:
+            view.add_item(
+                ControlButton(
+                    marathon_id, one.action, one.to, text, one.disabled, one.word, one.row
+                )
+            )
     return view
 
 
@@ -545,6 +571,10 @@ async def press(
         outcome = await set_switch(bot, guild, actor, marathon, mh.ANNOUNCE, to == mtc.ON, via=via)
     elif action == mtc.OVERLAY:
         outcome = await set_switch(bot, guild, actor, marathon, mh.OVERLAY, to == mtc.ON, via=via)
+    elif action == mtc.BAF:
+        from .marathon_baf_event import set_baf_event
+
+        outcome = await set_baf_event(bot, guild, actor, marathon, to, via=via)
     elif to == mtc.ON:
         outcome = await start_spotlight(bot, guild, actor, marathon, via=via)
     elif to == mtc.CANCEL:
@@ -566,6 +596,7 @@ class ControlButton(
         label: str | None = None,
         disabled: bool = False,
         word: str | None = None,
+        row: int | None = None,
     ) -> None:
         self.marathon_id = int(marathon_id)
         self.action = action
@@ -576,6 +607,7 @@ class ControlButton(
                 style=STYLES.get(word or "", discord.ButtonStyle.primary),
                 custom_id=mtc.custom_id(marathon_id, action, to),
                 disabled=disabled,
+                row=row,
             )
         )
 

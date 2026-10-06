@@ -371,6 +371,9 @@ MARATHON_COLUMNS = {
     "announce_opt_out",
     "overlay",
     "overlay_sheet",
+    "baf_event",
+    "baf_event_ask",
+    "baf_event_pings",
 }
 REKEY_PARKED = "~rekey~{id}"
 RUN_COLUMNS = {
@@ -1710,6 +1713,7 @@ class Marathons(commands.Cog):
         return found
 
     async def cog_load(self) -> None:
+        from .marathon_baf_event import AskButton
         from .marathon_feeds import FeedButton, NoticeModePick
         from .marathon_inbox import InboxButton
         from .marathon_near_miss import NearMissButton
@@ -1727,6 +1731,7 @@ class Marathons(commands.Cog):
             ControlButton,
             HighlightButton,
             NearMissButton,
+            AskButton,
             MarathonRoleButton,
         )
         if not self.bot.db.is_connected:
@@ -2455,12 +2460,14 @@ class Marathons(commands.Cog):
         if marathon is None or not marathon["active"] or mode_of(self.bot, guild.id) == MODE_OFF:
             return False
         now = self.clock()
+        from .marathon_baf_event import sync as sync_baf_event
         from .marathon_host_highlights import remind_hosts
         from .marathon_reminder_posts import sync_reminders
 
         moved = await self.advance(guild, marathon, now)
         await self.remind(guild, marathon, now)
         await remind_hosts(self, guild, marathon, now)
+        await sync_baf_event(self, guild, marathon, now)
         await sync_reminders(self, guild, marathon)
         await self.sync_board(guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
         return moved
@@ -2655,14 +2662,14 @@ class Marathons(commands.Cog):
     ) -> dict[str, Any]:
         """It answers what was posted, for the run to remember."""
         from ... import marathon_role_ping as role_ping
+        from .marathon_baf_event import heads_up_role, settle
         from .marathon_public_reminders import post_public_reminder
-        from .marathon_role_ping import verdict_for
 
         text, url = await self.reminder_words(guild, marathon, row)
         found: list[int] = []
         if pinging and self.bot.store.get(guild.id, MARATHON_REMINDER_PINGS_KEY):
             found = await self._ping_roles(guild, marathon, row)
-        marathon_role = verdict_for(self.bot, guild, marathon) if pinging else None
+        marathon_role, claim = await heads_up_role(self, guild, marathon, row, mark)
         roles = role_ping.without_role(found, marathon_role)
         place, _why = await self._place(guild, marathon)
         public = await post_public_reminder(
@@ -2676,6 +2683,7 @@ class Marathons(commands.Cog):
             staff_channel_id=place,
             marathon_role=marathon_role,
         )
+        await settle(self, guild, marathon, claim, public)
         went_public = public.pop("copy", None)
         if went_public and not self.bot.store.get(guild.id, MARATHON_THREAD_REMINDERS_KEY):
             return mrem.entry_of(public=went_public)

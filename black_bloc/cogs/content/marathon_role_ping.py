@@ -80,7 +80,22 @@ def role_word(verdict: mrp.Verdict, *, mention: bool) -> str:
     return f"@{verdict.name}" if verdict.name else "the Marathon role"
 
 
-def status_line(bot: Any, guild: Any, marathon: Any, *, mention: bool = True) -> str:
+def status_line(
+    bot: Any, guild: Any, marathon: Any, *, mention: bool = True, rows: Any = None
+) -> str:
+    """The ping switch's line, then one line per show-day when the runs are given."""
+    own = switch_line(bot, guild, marathon, mention=mention)
+    if rows is None:
+        return own
+    from .marathon_baf_event import state_of as baf_state
+
+    found = baf_state(bot, guild, marathon, rows, mention=mention)
+    if found["all_governed"] and verdict_for(bot, guild, marathon).mentions:
+        own = ""
+    return "\n".join(one for one in (own, *found["lines"]) if one)
+
+
+def switch_line(bot: Any, guild: Any, marathon: Any, *, mention: bool = True) -> str:
     """Empty while the marathon's ping switch is off: the switch itself says so."""
     verdict = verdict_for(bot, guild, marathon)
     if verdict.reason == mrp.SWITCH_OFF:
@@ -101,14 +116,17 @@ def status_line(bot: Any, guild: Any, marathon: Any, *, mention: bool = True) ->
     return words(bot, guild.id, LINE_KEYS[verdict.reason], role=role)
 
 
-def state_of(bot: Any, guild: Any, marathon: Any) -> dict[str, Any]:
-    """What the dashboard draws under the ping switch."""
+def state_of(bot: Any, guild: Any, marathon: Any, rows: Any = None) -> dict[str, Any]:
+    """What the dashboard draws under the ping switch; with the runs, the per-run line gives
+    way to the BaF event lines when every day shown has its one ping."""
     verdict = verdict_for(bot, guild, marathon)
-    return {
-        "mentions": verdict.mentions,
-        "reason": verdict.reason,
-        "line": status_line(bot, guild, marathon, mention=False),
-    }
+    line = switch_line(bot, guild, marathon, mention=False)
+    if rows is not None and verdict.mentions:
+        from .marathon_baf_event import state_of as baf_state
+
+        if baf_state(bot, guild, marathon, rows)["all_governed"]:
+            line = ""
+    return {"mentions": verdict.mentions, "reason": verdict.reason, "line": line}
 
 
 __all__ = [
@@ -116,6 +134,7 @@ __all__ = [
     "role_word",
     "state_of",
     "status_line",
+    "switch_line",
     "verdict_for",
     "words",
 ]
