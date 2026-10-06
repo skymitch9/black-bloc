@@ -3624,7 +3624,7 @@ async def test_a_schema_86_file_gains_the_stored_tone_and_keeps_what_each_member
         cur = await again.conn.execute("PRAGMA table_info(chat_voice)")
         assert set(TONE_COLUMNS) <= {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "87"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "88"
     finally:
         await again.close()
 
@@ -3712,5 +3712,25 @@ async def test_a_new_database_stores_no_tone_and_converts_nothing(tmp_path):
         await db._store_the_tones(SCHEMA_VERSION)
         cur = await db.conn.execute("SELECT pinned, tone FROM chat_voice")
         assert tuple(await cur.fetchone()) == ("warm", None)
+    finally:
+        await db.close()
+
+
+async def test_schema_88_keeps_one_sticky_message_per_channel(tmp_path):
+    db = Database(tmp_path / "sticky.sqlite3")
+    await db.connect()
+    insert = (
+        "INSERT INTO sticky_messages(guild_id, channel_id, text, created_at, updated_at) "
+        "VALUES (7, ?, 'words', '2026-10-05', '2026-10-05')"
+    )
+    try:
+        await db.conn.execute(insert, (333,))
+        await db.conn.execute(insert, (334,))
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(insert, (333,))
+        cur = await db.conn.execute(
+            "SELECT paused, trouble, message_id, reposts FROM sticky_messages WHERE channel_id=333"
+        )
+        assert tuple(await cur.fetchone()) == (0, None, None, 0)
     finally:
         await db.close()

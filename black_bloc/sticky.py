@@ -20,7 +20,7 @@ from .settings_store import (
 
 FEATURE = "sticky"
 LOG_FEATURE = "posts"
-SITE_ANCHOR = "#sticky"
+SITE_ANCHOR = "#sect-sticky"
 TEXT_MAX = 1800
 PREVIEW_CHARS = 60
 LOGGED_CHARS = 200

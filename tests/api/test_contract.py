@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 from discord.ext import tasks
 
-from black_bloc import applications, doc_import, guides, knowledge, minutes, pings, posts
+from black_bloc import applications, doc_import, guides, knowledge, minutes, pings, posts, sticky
 from black_bloc import rolegrants as grants
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.settings_api import grouped

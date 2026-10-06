@@ -181,7 +181,8 @@ export async function stickySection(reload) {
     .filter((spec) => spec.key.startsWith('sticky_'));
   const mode = specs.find((spec) => spec.key === MODE_KEY);
   const say = sayAgain(SAID, notice());
-  const one = section(TITLE, null, { count: rows.length, id: SLUG });
+  const asked = location.hash === `#sect-${SLUG}`;
+  const one = section(TITLE, null, { count: rows.length, id: SLUG, open: asked });
 
   const items = rows.map((row) => ({ row, node: stickyRow(row, channels, say, reload) }));
   const filter = listFilter({
@@ -221,5 +222,11 @@ export async function stickySection(reload) {
     ], { count: specs.length - (mode ? 1 : 0) }),
   );
   one.node.setAttribute('data-span', 'full');
+  if (asked) {
+    requestAnimationFrame(() => {
+      one.details.open = true;
+      one.node.scrollIntoView({ block: 'start' });
+    });
+  }
   return one.node;
 }

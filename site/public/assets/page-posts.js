@@ -189,7 +189,7 @@ function where(slug, tail = '') {
 
 function wantedSlug() {
   const hash = String(location.hash || '').replace(/^#/, '').trim();
-  return hash || null;
+  return hash && !hash.startsWith('sect-') ? hash : null;
 }
 
 /** `close` is dispatched a task late, so a drawer replaced in the meantime keeps its hash. */

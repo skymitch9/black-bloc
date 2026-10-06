@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-05 — one section APPENDED, nothing re-keyed**: *Sticky messages* (branch `sticky-messages`, off `main` `1cde5594`); keyed by NAME. Before that:
 > **2026-10-05 — one section APPENDED, nothing re-keyed**: *Tone settles* (branch `tone-settles`, off `main` `3335d929`); keyed by NAME. It amends the *Personality tones* rows for `heard_from`, `hears_now` and `window_turns` (`black_bloc/chat_voice.py`): the pool branch reads a STORED tone now. `path:line` rows in `chat_voice.py`, `chat_panel.py`, `chat_llm.py` below `mood_for`, `api/tools/chat.py` below `voice_entry`, `cogs/content/chat.py` and `page-chat.js` below `toneSelect` sit lower than keyed (not re-measured) — trust the anchor text.
 > **2026-10-04 — one section APPENDED, nothing re-keyed**: *Run identity* (branch `run-identity`, off `main` `c31878a5`); keyed by NAME. It amends the `diff` row (`black_bloc/marathon.py`) and adds `same_slot`, `renames`, `rekeys`, `rekey_runs`; `path:line` rows in `marathon.py` below `moved_by` and in `cogs/content/marathon.py` below `update_run` sit lower than keyed (not re-measured) — trust the names.
 > **2026-10-04 — one section APPENDED, nothing re-keyed**: *No-blurbs sweep* (branch `no-blurbs-sweep`, off `main` `97036645`); keyed by NAME. Every page script lost lines (constants and paragraphs removed), so `path:line` rows for `site/public/assets/page-*.js`, `blockwords.js`, `marathons-section.js`, `spotlight-controls.js`, `event-drawer.js`, `golive-join.js`, `logs.js` and `ui.js` sit HIGHER than keyed — trust the anchor text.
@@ -10022,3 +10023,34 @@ keyed (not re-measured) — trust the anchor text.
 | `site/public/assets/site.css` `.voice-how` | `.log-table td` is `nowrap` for every table; this one cell wraps so five columns fit a 1280 window beside the nav. `.voice-moves` goes back to wrapping under 1280. |
 | `site/mock/server.mjs` `voiceSettle` | The same arithmetic as `chat_voice.drift_chance` / `settled_share`, on the mock's own three keys — a near-duplicate on purpose (the mock is JavaScript); `check.mjs` only checks shapes, so the two can drift in VALUE. |
 | `black_bloc/chat_voice.py` `KEEP_STORED` / `Heard.was` | The upsert carries `WHERE chat_voice.tone IS ?` with the tone as it was READ (`was`, NULL-safe), so an answer that was being written while staff set a tone, or while a feedback move landed, does not write its stale copy over it — the answer already went out in the old tone, and the next one reads the new. `KEEP_MOVED` carries `AND tone = ?` for the same reason. |
+
+## Sticky messages (branch `sticky-messages`, keyed by NAME)
+
+Design: [`sticky-messages-design.md`](sticky-messages-design.md).
+
+| Where | Why it is the way it is |
+|---|---|
+| `black_bloc/sticky.py` `counts` | `message.type` is filtered before anything else (checklist 23): a pin notice or a join message carries a member as author and must not move a sticky. A webhook is checked apart from `author.bot` because not every fake or partial author says it is a bot. |
+| `black_bloc/sticky.py` `seconds_left` | An unreadable or future `posted_at` answers 0 — a bad row must never hold a copy back for ever (checklist 5). A naive time is read as UTC. |
+| `black_bloc/sticky.py` `state_of` | `stopped` wins over `paused`: a row can be both, and the reason is what staff need to see. `live` vs `rehearsing` is decided by where the copy IS (`posted_channel_id`), not by the mode, so a copy left in the wrong place after a failed move still reads truthfully. |
+| `black_bloc/sticky.py` `write_words` | One upsert that also clears `trouble`: an edit is a retry. `created_by` / `created_at` are not in the `DO UPDATE` list on purpose. |
+| `black_bloc/sticky.py` `postable` | Fakes without a `type` fall back to "has a `send`"; real channels are matched by type NAME (`text`, `news`) so the api's fakes and discord.py agree. |
+| `black_bloc/sticky_posts.py` `Desk.on_message` | The `watched` set is the cheap gate: every message in every channel passes through here, and only a channel with a running sticky costs more than a set lookup. The row is read once the COUNT is reached, never per message. |
+| `black_bloc/sticky_posts.py` `Desk._later` | One timer per channel (`waiting`), so a burst inside the gap schedules a single post. It pops itself before `place` so a refused placement cannot leave the channel looking busy. |
+| `black_bloc/sticky_posts.py` `Desk._place` | Runs with the channel's lock HELD and re-reads the row inside it (checklist 37). The gap is re-checked here for talk-driven moves (`TOO_SOON`) because two messages can both pass `on_message`'s check before either posts. Order: target, permissions, guard, take down, send, store — nothing is deleted until the bot knows it may post. |
+| `black_bloc/sticky_posts.py` `Desk._take_down` | Reads where the copy is off the ROW, never from the mode (checklist 3). `NotFound` is success. A channel that is gone clears the ids. Any other refusal is returned as words and the caller stops rather than posting a second copy. |
+| `black_bloc/sticky_posts.py` `Desk._stopped` | The single place a failure is recorded: the reason on the row, the channel out of `watched`, one `sticky.post_failed`. Nothing calls it twice for one stop because a row with `trouble` is not running. |
+| `black_bloc/sticky_posts.py` `Desk._would` | `once=True` is for the test-mode guard only: that refusal leaves the row running, so without the per-boot `said` set it would log on every move. |
+| `black_bloc/sticky_posts.py` `_safely` / literal kinds | Each `log_action` call carries its kind as a literal because `tests/test_logkinds.py` finds kinds by AST; `_safely` swallows a failed row on the paths a listener reaches. |
+| `black_bloc/sticky_posts.py` `Desk.save` | An EXISTING row may be edited even when its channel is gone or is no longer a text channel — otherwise staff could not fix the words of a sticky they are about to move; only a NEW row is checked for a postable channel. |
+| `black_bloc/sticky_posts.py` `Desk.settle` | Takes each channel's lock in turn, so it is safe beside a move or a timer. `_in_place` compares the copy's channel with where the mode wants it, which is what makes a second `settle` a no-op and a boot's three reconciles post once. |
+| `black_bloc/sticky_posts.py` `desk_of` | The desk hangs off the bot by attribute so the cog and the api routes share one set of locks without the routes needing the cog loaded; `tests/api/conftest.py:reset_bot` drops it with everything else a test hung there. |
+| `black_bloc/sticky_panel.py` `StickyPanel.shown_again` | Checklist 36: the root and a card each know how to redraw themselves, and `WordsModal` borrows its `previous`'s. |
+| `black_bloc/sticky_panel.py` `open_words` | A modal must be the FIRST response, so staff and the database are asked with `still_staff` / `db_up` (no defer) instead of `opened`. |
+| `black_bloc/sticky_panel.py` `run_save` | A refused save answers and leaves the card as it was, so a refusal cannot read as a save. |
+| `black_bloc/cogs/moderation/sticky.py` `MOVES_THE_COPIES` | Three keys whose change moves copies: the mode, the feature's own rehearsal home and the global one. The hook runs `settle`, so nobody has to talk for a flip to take effect. |
+| `black_bloc/cogs/moderation/sticky.py` `on_ready` | `Reconciler` with `skip_if_recent=True` (checklist 37). `cog_load` only loads the watch list — no guild is available that early. |
+| `black_bloc/settings_store.py` `STICKY_KEYS` → `NAMESPACE_OVERRIDE` | Filed under `posts`: the `/settings` group select is at its cap of 25 groups. |
+| `site/public/assets/sticky-section.js` `textChannelSelect` | The shared `channelSelect` (so labels read `# name · Category`) with the voice and category options removed after it is built; the route still refuses them in words. |
+| `site/public/assets/sticky-section.js` `kept` | Module state, because `refresh()` redraws the whole page and the search and chip must survive a save. |
+| `site/public/assets/page-posts.js` `wantedSlug` | A `#sect-…` hash is a section link, not a post slug. |
