@@ -163,3 +163,26 @@ def test_a_role_row_reads_plain_numbers_as_well_as_discords_own_objects():
     plain = SimpleNamespace(id=12, name="Plain", color=255, permissions=1024, position=1)
 
     assert role_row(plain)["permissions"] == 1024 and role_row(plain)["color"] == 255
+
+
+def test_a_capture_with_no_channels_is_refused_rather_than_stored():
+    with pytest.raises(CaptureError) as refused:
+        capture(guild(), [role(GUILD, "@everyone", 1024)], [])
+
+    assert "no channels" in str(refused.value)
+
+
+def test_an_overwrites_kind_is_discords_own_and_not_a_guess_from_the_role_list():
+    unlisted_role = discord.Object(id=77, type=discord.Role)
+    someone = discord.Object(id=MEMBER, type=discord.User)
+    overwrites = {
+        unlisted_role: discord.PermissionOverwrite(view_channel=True),
+        someone: discord.PermissionOverwrite(send_messages=False),
+    }
+
+    found = capture(
+        guild(), [role(GUILD, "@everyone", 1024)], [channel(41, "general", overwrites=overwrites)]
+    )
+
+    kinds = {one["target_id"]: one["target_type"] for one in found["channels"][0]["overwrites"]}
+    assert kinds == {"77": "role", "900": "member"}

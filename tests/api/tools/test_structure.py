@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import pathlib
 
 import pytest
 
 from black_bloc import structure_store
+from black_bloc.cogs.core import set_key
+from black_bloc.cogs.moderation.structure_backup import take_snapshot
 from black_bloc.structure import MANUAL, SNAPSHOT_FIELDS
 
 ROUTES = [
@@ -174,7 +177,8 @@ async def test_a_download_is_the_named_fields_as_a_file_and_leaves_one_row(
     )
     found = response.json()
     assert set(found) == {"snapshot", "version", "guild", "roles", "channels"}
-    assert set(found["snapshot"]) == {*SNAPSHOT_FIELDS, "guild_id"}
+    assert set(found["snapshot"]) == {*SNAPSHOT_FIELDS, "guild_id", "filename"}
+    assert f'filename="{found["snapshot"]["filename"]}"' in response.headers["content-disposition"]
     said = json.dumps(found)
     assert "spammer" not in said and "Ada" not in said and "taken_by" not in said
     assert {role["name"] for role in found["roles"]} >= {"@everyone", "Member", "Admin"}
@@ -203,3 +207,38 @@ async def test_one_servers_snapshots_are_not_reachable_from_another(
 
     assert response.status_code == 404
     assert client.get("/api/structure").json()["snapshots"] == []
+
+
+PAGE = pathlib.Path(__file__).resolve().parents[3] / "site/public/assets/page-structure.js"
+
+
+def test_the_page_takes_the_download_name_from_the_api_and_builds_none_of_its_own():
+    source = PAGE.read_text(encoding="utf-8")
+
+    assert "saveFile(found.snapshot.filename, found)" in source
+    assert "structure-${" not in source and ".json`" not in source
+
+
+def test_the_page_asks_the_api_for_structure_rows_and_filters_none_itself():
+    source = PAGE.read_text(encoding="utf-8")
+
+    assert "const LOG_KINDS = ['structure', 'web.structure'];" in source
+    assert "/api/actions?kind=${kind}&per_page=${LOG_ROWS}" in source
+    assert "q=structure" not in source and ".test(String(row.kind))" not in source
+
+
+async def test_the_two_kinds_the_page_asks_for_bring_back_only_structure_rows(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    client.post("/api/structure/snapshots", json={})
+    await take_snapshot(web, guild)
+    await set_key(web, guild, "structure_backup_hour", 5, None)
+
+    by_hand = client.get("/api/actions?kind=web.structure&per_page=20").json()["actions"]
+    by_bot = client.get("/api/actions?kind=structure&per_page=20").json()["actions"]
+    searched = client.get("/api/actions?feature=core&q=structure&per_page=20").json()["actions"]
+
+    assert [row["kind"] for row in by_hand] == ["web.structure.captured"]
+    assert [row["kind"] for row in by_bot] == ["structure.unchanged"]
+    assert "settings.set" in {row["kind"] for row in searched}

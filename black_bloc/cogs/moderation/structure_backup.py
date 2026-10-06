@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,19 +15,24 @@ from ...actionlog import entity_id, log_action
 from ...command_visibility import STAFF_ONLY
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
-from ...panels import Panel, answer, clamped, db_up, opened, retire
+from ...panels import Panel, answer, db_up, opened, retire
 from ...settings_store import (
     DEFAULT_TIMEZONE_KEY,
     GUILD_ONLY,
+    STRUCTURE_ANSWER,
     STRUCTURE_BACKUP_CHANNEL,
     STRUCTURE_BACKUP_DEFAULTS,
     STRUCTURE_BACKUP_HOUR,
     STRUCTURE_BACKUP_KEEP,
+    STRUCTURE_BACKUP_LIMITS,
     STRUCTURE_BACKUP_MODE,
     STRUCTURE_BACKUP_NOTICE_LINES,
     STRUCTURE_BACKUP_NOTIFY,
     STRUCTURE_BACKUP_PANEL_MINUTES,
+    STRUCTURE_EMBED_CHARS,
+    STRUCTURE_LINE,
     STRUCTURE_SAY_KEYS,
+    STRUCTURE_SLOTS,
     require_staff,
 )
 from ...structure import (
@@ -45,17 +50,27 @@ from ...structure import (
 from ...structure_capture import CaptureError, capture
 from ...structure_diff import changes as changes_between
 from ...timezones import unix, zone
+from ..core import set_key
 
 log = logging.getLogger(__name__)
 
 COG_NAME = "StructureBackup"
 LOOP_MINUTES = 10
 DAILY_RETRIES = 3
-LOCK_ATTR = "_structure_backup_lock"
+RETRY_GAP_MINUTES = 240
+FETCH_SECONDS = 30
+SHADOW = "shadow"
+ELLIPSIS = "…"
+FIELD_CHARS = STRUCTURE_SLOTS[STRUCTURE_LINE][0]
+DESCRIPTION_CHARS = STRUCTURE_SLOTS[STRUCTURE_ANSWER][0]
 
 UNAVAILABLE = (
     "Discord says the server is unavailable right now, so its roles and channels could not be "
     "read. Try again in a few minutes."
+)
+UNREACHABLE = (
+    "Discord could not be reached — it did not answer within {seconds} seconds — so nothing "
+    "was read. Try again in a few minutes."
 )
 FORBIDDEN = (
     "Discord refused to list the server's roles and channels (Discord said: {said}). Check "
@@ -89,15 +104,39 @@ def mode_of(bot: Any, guild_id: int) -> str:
     return found if found in MODES else OFF
 
 
+def cut(text: Any, limit: int) -> str:
+    """As much as fits, ended at a word with an ellipsis; never longer than the limit."""
+    words = str(text)
+    if len(words) <= limit:
+        return words
+    room = max(int(limit) - 1, 0)
+    head = words[:room]
+    if not words[room : room + 1].isspace():
+        spot = head.rfind(" ")
+        if spot >= room // 2:
+            head = head[:spot]
+    return (head.rstrip() + ELLIPSIS)[: max(int(limit), 0)]
+
+
+def safe(text: Any) -> str:
+    """A server's own names and topics, shown as written: no markdown, no link, no mention."""
+    return discord.utils.escape_mentions(discord.utils.escape_markdown(str(text)))
+
+
 def said(store: Any, guild_id: int, key: str, **fields: Any) -> str:
-    """Staff wording first; a template that cannot be filled falls back to the shipped one."""
+    """Staff wording first, the shipped one when it cannot be filled; cut to what Discord holds."""
+    limit = STRUCTURE_BACKUP_LIMITS.get(key, DESCRIPTION_CHARS)
     wording = str(store.get(guild_id, key) or "").strip()
     if wording:
         try:
-            return wording.format(**fields)
-        except (IndexError, KeyError, ValueError):
-            log.warning("structure: %s could not be filled in; the shipped wording was used", key)
-    return str(STRUCTURE_BACKUP_DEFAULTS[key]).format(**fields)
+            return cut(wording.format(**fields), limit)
+        except Exception as exc:
+            log.warning(
+                "structure: %s could not be filled in (%s); the shipped wording was used",
+                key,
+                type(exc).__name__,
+            )
+    return cut(str(STRUCTURE_BACKUP_DEFAULTS[key]).format(**fields), limit)
 
 
 def say_words(store: Any, guild_id: int) -> dict[str, str]:
@@ -114,6 +153,8 @@ def when_words(at: Any) -> str:
 def failure_reason(exc: BaseException) -> str:
     if isinstance(exc, CaptureError):
         return str(exc)
+    if isinstance(exc, TimeoutError | OSError):
+        return UNREACHABLE.format(seconds=FETCH_SECONDS)
     if isinstance(exc, discord.Forbidden):
         return FORBIDDEN.format(said=exc.text or exc.status)
     if isinstance(exc, discord.HTTPException):
@@ -122,19 +163,19 @@ def failure_reason(exc: BaseException) -> str:
 
 
 def lock_for(bot: Any) -> asyncio.Lock:
-    found = getattr(bot, LOCK_ATTR, None)
-    if found is None:
-        found = asyncio.Lock()
-        setattr(bot, LOCK_ATTR, found)
-    return found
+    try:
+        return bot._structure_backup_lock
+    except AttributeError:
+        bot._structure_backup_lock = asyncio.Lock()
+        return bot._structure_backup_lock
 
 
 async def read_structure(guild: Any) -> dict[str, Any]:
     """Reads only. Nothing in this feature writes a role, a channel or a permission."""
     if getattr(guild, "unavailable", False):
         raise CaptureError(UNAVAILABLE)
-    roles = await guild.fetch_roles()
-    channels = await guild.fetch_channels()
+    roles = await asyncio.wait_for(guild.fetch_roles(), FETCH_SECONDS)
+    channels = await asyncio.wait_for(guild.fetch_channels(), FETCH_SECONDS)
     return capture(guild, roles, channels)
 
 
@@ -155,6 +196,11 @@ def snapshot_details(row: Any, source: str) -> dict[str, Any]:
         "channels": row["channels"],
         "overwrites": row["overwrites"],
     }
+
+
+async def noticed_id(bot: Any, guild_id: int) -> int | None:
+    looked = await structure_store.look(bot.db, guild_id)
+    return looked["noticed_id"] if looked is not None else None
 
 
 async def take_snapshot(
@@ -181,14 +227,22 @@ async def take_snapshot(
                 source=source,
                 taken_by=entity_id(actor),
                 keep=int(store.get(guild.id, STRUCTURE_BACKUP_KEEP)),
+                protect=await noticed_id(bot, guild.id),
                 now=now,
             )
         except Exception as exc:
-            return await failed(bot, guild, exc, source=source, actor=actor, via=via, day=day)
+            return await failed(
+                bot, guild, exc, source=source, actor=actor, via=via, day=day, now=now
+            )
         await safely(
             structure_store.record_look(bot.db, guild.id, stored.outcome, day=day, now=now),
             "the look",
         )
+        if stored.previous is None:
+            await safely(
+                structure_store.mark_noticed(bot.db, guild.id, stored.row["id"]),
+                "the notice mark",
+            )
     row = stored.row
     if stored.outcome == UNCHANGED:
         await safely(
@@ -229,12 +283,20 @@ async def take_snapshot(
 
 
 async def failed(
-    bot: Any, guild: Any, exc: BaseException, *, source: str, actor: Any, via: str, day: Any
+    bot: Any,
+    guild: Any,
+    exc: BaseException,
+    *,
+    source: str,
+    actor: Any,
+    via: str,
+    day: Any,
+    now: datetime | None = None,
 ) -> Taken:
     reason = failure_reason(exc)
     log.warning("structure: no snapshot of guild %s — %s: %s", guild.id, type(exc).__name__, exc)
     await safely(
-        structure_store.record_look(bot.db, guild.id, FAILED, day=day, reason=reason),
+        structure_store.record_look(bot.db, guild.id, FAILED, day=day, reason=reason, now=now),
         "the look",
     )
     await safely(
@@ -254,10 +316,15 @@ async def failed(
     )
 
 
-async def changes_since(bot: Any, guild: Any, row: Any) -> list[dict[str, str]]:
+async def changes_since(
+    bot: Any, guild: Any, row: Any, *, escape: Any = None
+) -> list[dict[str, str]]:
     """A stored snapshot against the server as it is now; read, compared, thrown away."""
     return changes_between(
-        body_of(row), await read_structure(guild), say_words(bot.store, guild.id)
+        body_of(row),
+        await read_structure(guild),
+        say_words(bot.store, guild.id),
+        escape=escape,
     )
 
 
@@ -273,27 +340,49 @@ async def record_download(
     )
 
 
-def change_lines(store: Any, guild_id: int, found: Any) -> list[str]:
-    limit = int(store.get(guild_id, STRUCTURE_BACKUP_NOTICE_LINES))
-    lines = [f"• {one['text']}" for one in list(found)[:limit]]
-    left = len(found) - len(lines)
-    if left > 0:
-        lines.append(said(store, guild_id, "structure_backup_notice_more", n=left))
-    return lines
+def change_lines(store: Any, guild_id: int, found: Any, room: int) -> list[str]:
+    """The lines that fit, then how many did not; the count's own line always has its room."""
+    rows = list(found)
+    wanted = [
+        f"• {one['text']}"
+        for one in rows[: int(store.get(guild_id, STRUCTURE_BACKUP_NOTICE_LINES))]
+    ]
+    if len(wanted) == len(rows) and sum(len(line) + 1 for line in wanted) - 1 <= room:
+        return wanted
+
+    def more(left: int) -> str:
+        return cut(said(store, guild_id, "structure_backup_notice_more", n=left), room // 2)
+
+    spare = room - len(more(len(rows))) - 1
+    kept: list[str] = []
+    spent = 0
+    for line in wanted:
+        if spent + len(line) > spare:
+            break
+        kept.append(line)
+        spent += len(line) + 1
+    if not kept and wanted:
+        kept = [cut(wanted[0], spare)]
+    left = len(rows) - len(kept)
+    return [*kept, more(left)] if left else kept
 
 
 def notice_embed(bot: Any, guild: Any, taken: Taken) -> discord.Embed:
     store = bot.store
-    first = said(
-        store,
-        guild.id,
-        "structure_backup_notice_text",
-        n=len(taken.changes),
-        when=when_words(taken.previous["taken_at"]),
+    first = cut(
+        said(
+            store,
+            guild.id,
+            "structure_backup_notice_text",
+            n=len(taken.changes),
+            when=when_words(taken.previous["taken_at"]),
+        ),
+        DESCRIPTION_CHARS // 2,
     )
+    lines = change_lines(store, guild.id, taken.changes, DESCRIPTION_CHARS - len(first) - 1)
     return discord.Embed(
         title=said(store, guild.id, "structure_backup_notice_title"),
-        description=clamped([first, *change_lines(store, guild.id, taken.changes)]),
+        description=cut("\n".join([first, *lines]), DESCRIPTION_CHARS),
     )
 
 
@@ -303,7 +392,7 @@ def notice_home(bot: Any, guild: Any) -> tuple[int | None, int | None, str]:
     aimed = shadow.as_channel_id(
         store.get(guild.id, STRUCTURE_BACKUP_CHANNEL) or store.get(guild.id, "staff_channel_id")
     )
-    if mode_of(bot, guild.id) != "shadow":
+    if mode_of(bot, guild.id) != SHADOW:
         return (aimed, aimed, "")
     home = shadow.channel_id(bot, guild, feature=FEATURE)
     words = f"<#{aimed}>" if aimed else ""
@@ -311,14 +400,19 @@ def notice_home(bot: Any, guild: Any) -> tuple[int | None, int | None, str]:
 
 
 async def post_notice(bot: Any, guild: Any, taken: Taken) -> bool:
-    """The only thing this feature posts: staff are told a daily snapshot differs."""
+    """The only thing this feature posts: staff are told the structure differs."""
     if not taken.changes or taken.previous is None:
-        return False
-    if not bot.store.get(guild.id, STRUCTURE_BACKUP_NOTIFY):
         return False
     mode = mode_of(bot, guild.id)
     home, aimed, note = notice_home(bot, guild)
-    details = {"mode": mode, "channel_id": home, "aimed_at": aimed, "snapshot_id": taken.row["id"]}
+    details = {
+        "mode": mode,
+        "channel_id": home,
+        "aimed_at": aimed,
+        "snapshot_id": taken.row["id"],
+        "since_id": taken.previous["id"],
+        "changes": len(taken.changes),
+    }
     channel = shadow.channel_of(bot, guild, home)
     try:
         if channel is None:
@@ -339,9 +433,36 @@ async def post_notice(bot: Any, guild: Any, taken: Taken) -> bool:
         )
         return False
     await safely(
-        log_action(bot, guild, "structure.notice_posted", details=details), "the log row"
+        log_action(
+            bot,
+            guild,
+            "structure.would_notice" if mode == SHADOW else "structure.notice_posted",
+            details=details,
+        ),
+        "the log row",
     )
     return True
+
+
+async def tell_staff(bot: Any, guild: Any, taken: Taken) -> bool:
+    """The daily notice covers everything since the last snapshot a notice covered."""
+    row = taken.row
+    marked = await noticed_id(bot, guild.id)
+    since = await structure_store.get(bot.db, guild.id, marked) if marked is not None else None
+    if since is None:
+        since = taken.previous
+    found: list[dict[str, str]] = []
+    if since is not None and since["id"] != row["id"]:
+        found = changes_between(
+            body_of(since), body_of(row), say_words(bot.store, guild.id), escape=safe
+        )
+    wanted = bool(found) and bool(bot.store.get(guild.id, STRUCTURE_BACKUP_NOTIFY))
+    posted = wanted and await post_notice(
+        bot, guild, replace(taken, previous=since, changes=tuple(found))
+    )
+    if posted or not wanted:
+        await safely(structure_store.mark_noticed(bot.db, guild.id, row["id"]), "the notice mark")
+    return posted
 
 
 def local_now(bot: Any, guild_id: int, now: datetime | None = None) -> datetime:
@@ -349,20 +470,30 @@ def local_now(bot: Any, guild_id: int, now: datetime | None = None) -> datetime:
     return moment.astimezone(zone(bot.store.get(guild_id, DEFAULT_TIMEZONE_KEY)) or UTC)
 
 
+def retry_gap(hour: int) -> int:
+    """A failed daily look's tries share what is left of the day, at most four hours apart."""
+    left = (24 - int(hour)) * 60
+    return max(LOOP_MINUTES, min(RETRY_GAP_MINUTES, left // DAILY_RETRIES))
+
+
 async def run_daily(bot: Any, guild: Any, now: datetime | None = None) -> Taken | None:
     """One guild's turn: nothing before the hour, once a day after it, a failure tried again."""
-    if mode_of(bot, guild.id) == OFF or getattr(guild, "unavailable", False):
+    if mode_of(bot, guild.id) == OFF:
         return None
-    local = local_now(bot, guild.id, now)
-    if local.hour < int(bot.store.get(guild.id, STRUCTURE_BACKUP_HOUR)):
+    moment = now or datetime.now(UTC)
+    local = local_now(bot, guild.id, moment)
+    hour = int(bot.store.get(guild.id, STRUCTURE_BACKUP_HOUR))
+    if local.hour < hour:
         return None
     day = local.date().isoformat()
     looked = await structure_store.look(bot.db, guild.id)
-    if not structure_store.daily_due(looked, day, retries=DAILY_RETRIES):
+    if not structure_store.daily_due(
+        looked, day, retries=DAILY_RETRIES, now=moment, gap_minutes=retry_gap(hour)
+    ):
         return None
     taken = await take_snapshot(bot, guild, source=DAILY, day=day, now=now)
-    if taken.outcome == SAVED:
-        await post_notice(bot, guild, taken)
+    if taken.outcome in (SAVED, UNCHANGED):
+        await tell_staff(bot, guild, taken)
     return taken
 
 
@@ -401,7 +532,7 @@ class ChangesButton(discord.ui.Button):
             await render_panel(interaction, self.view)
             return
         try:
-            found = await changes_since(bot, guild, row)
+            found = await changes_since(bot, guild, row, escape=safe)
         except Exception as exc:
             reason = failure_reason(exc)
             log.warning("structure: could not compare — %s: %s", type(exc).__name__, exc)
@@ -409,6 +540,32 @@ class ChangesButton(discord.ui.Button):
             await render_panel(interaction, self.view, note=note)
             return
         await render_panel(interaction, self.view, found=found)
+
+
+class ModePick(discord.ui.Select):
+    def __init__(self, placeholder: str, current: str) -> None:
+        super().__init__(
+            placeholder=placeholder,
+            options=[
+                discord.SelectOption(label=mode, value=mode, default=mode == current)
+                for mode in MODES
+            ],
+            min_values=1,
+            max_values=1,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        outcome = await set_key(
+            interaction.client,
+            interaction.guild,
+            STRUCTURE_BACKUP_MODE,
+            self.values[0],
+            interaction.user,
+        )
+        await render_panel(interaction, self.view, note=outcome.message)
 
 
 def look_line(store: Any, guild_id: int, looked: Any) -> str | None:
@@ -447,6 +604,14 @@ def site_url(bot: Any) -> str | None:
     return f"{origin.rstrip('/')}/{PAGE}" if origin else None
 
 
+def within(embed: discord.Embed, footer: str) -> discord.Embed:
+    """An embed holds 6000 characters in all; the main text gives way, the footer keeps room."""
+    over = len(embed) + len(footer) - STRUCTURE_EMBED_CHARS
+    if over > 0 and embed.description:
+        embed.description = cut(embed.description, max(len(embed.description) - over, 1))
+    return embed
+
+
 async def build_panel(
     bot: Any, guild: Any, *, note: str = "", found: Any = None
 ) -> tuple[discord.Embed, StructurePanel]:
@@ -454,31 +619,31 @@ async def build_panel(
     mode = mode_of(bot, guild_id)
     row = await structure_store.latest(bot.db, guild_id)
     looked = await structure_store.look(bot.db, guild_id)
+    mode_label = said(store, guild_id, "structure_backup_mode_label")
     embed = discord.Embed(
-        title=said(store, guild_id, "structure_backup_panel_title"), description=note or None
+        title=said(store, guild_id, "structure_backup_panel_title"),
+        description=cut(note, DESCRIPTION_CHARS) or None,
     )
-    embed.add_field(
-        name=said(store, guild_id, "structure_backup_mode_label"), value=mode, inline=False
-    )
+    embed.add_field(name=mode_label, value=mode, inline=False)
     embed.add_field(
         name=said(store, guild_id, "structure_backup_latest_label"),
-        value=latest_line(store, guild_id, row)[:1024],
+        value=latest_line(store, guild_id, row),
         inline=False,
     )
     last = look_line(store, guild_id, looked)
     if last:
         embed.add_field(
             name=said(store, guild_id, "structure_backup_look_label"),
-            value=last[:1024],
+            value=last,
             inline=False,
         )
     if found is not None:
-        lines = change_lines(store, guild_id, found) or [
+        lines = change_lines(store, guild_id, found, FIELD_CHARS) or [
             said(store, guild_id, "structure_backup_no_changes_said")
         ]
         embed.add_field(
             name=said(store, guild_id, "structure_backup_changes_label"),
-            value=fitted(lines),
+            value=cut("\n".join(lines), FIELD_CHARS),
             inline=False,
         )
     view = StructurePanel(bot, guild_id)
@@ -496,19 +661,8 @@ async def build_panel(
                 row=0,
             )
         )
-    return (embed, view)
-
-
-def fitted(lines: list[str], limit: int = 1024) -> str:
-    """An embed field holds 1024 characters; whole lines are kept until the next would not fit."""
-    kept: list[str] = []
-    spent = 0
-    for line in lines:
-        if spent + len(line) + 1 > limit:
-            break
-        kept.append(line)
-        spent += len(line) + 1
-    return "\n".join(kept) or lines[0][:limit]
+    view.add_item(ModePick(mode_label, mode))
+    return (within(embed, view.footer), view)
 
 
 async def render_panel(

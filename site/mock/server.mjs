@@ -1008,8 +1008,8 @@ const SETTING_SPECS = [
   // Structure backup (docs/info/structure-backup-design.md); all of it sits under core.
   ["structure_backup_mode", "enum", "shadow", "shadow", "off, shadow or on. off takes no structure snapshot at all; shadow — the default — takes the daily snapshot silently and sends the structure-changed notice to the rehearsal home; on sends that notice to structure_backup_channel_id. A snapshot is a copy of roles, channels and permissions only: never messages, never members", ["off", "shadow", "on"]],
   ["structure_backup_hour", "int", 4, 4, "the hour of the day, 0 to 23 in default_timezone, at or after which the daily structure snapshot is taken; 4 by default. A bot that was down at that hour takes it when it comes back", null, 23],
-  ["structure_backup_keep", "int", 60, 60, "how many structure snapshots are kept; 60 by default. The oldest beyond that are deleted each time a new one is stored. A day with no change stores nothing, so 60 is 60 distinct structures, not 60 days", null, 365, 1],
-  ["structure_backup_notify", "bool", true, true, "true — the default — posts a notice for staff when the daily structure snapshot differs from the one before it; false takes the snapshot and says nothing"],
+  ["structure_backup_keep", "int", 60, 60, "how many structure snapshots are kept; 60 by default. The oldest beyond that are deleted each time a new one is stored, except the one the next notice starts from. A day with no change stores nothing, so 60 is 60 distinct structures, not 60 days", null, 365, 1],
+  ["structure_backup_notify", "bool", true, true, "true — the default — posts a notice for staff when the daily look finds the structure changed since the last notice, snapshots taken by hand included; false takes the snapshot and says nothing"],
   ["structure_backup_channel_id", "channel", null, null, "where the structure-changed notice goes while structure_backup_mode is on; blank means staff_channel_id"],
   ["structure_backup_shadow_channel_id", "channel", null, null, "where the structure-changed notice goes while structure_backup_mode is shadow; blank means shadow_channel_id"],
   ["structure_backup_notice_lines", "int", 15, 15, "how many changes the structure-changed notice and the /structure panel list before they say how many more there are; 15 by default", null, 40, 1],
@@ -14156,6 +14156,7 @@ route('POST', '/api/structure/snapshots/:id/download', (context) => {
   const row = structureWanted(context.params.id);
   logAction('web.structure.downloaded', { details: { snapshot_id: row.id } });
   const snapshot = { id: row.id, taken_at: row.taken_at, source: row.source, digest: row.digest, ...structureCounts(row.body), guild_id: row.body.guild.id };
+  snapshot.filename = `structure-${snapshot.guild_id}-${String(row.taken_at).slice(0, 10)}-${row.id}.json`;
   return { snapshot, ...row.body };
 });
 

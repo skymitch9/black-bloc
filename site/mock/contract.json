@@ -9596,7 +9596,8 @@
           "categories",
           "channels",
           "overwrites",
-          "guild_id"
+          "guild_id",
+          "filename"
         ],
         "guild": [
           "id",
