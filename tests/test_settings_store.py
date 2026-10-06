@@ -2689,3 +2689,60 @@ async def test_the_structure_role_follows_the_config_until_a_lead_stores_one(tmp
         assert seeded.get(7, "structure_backup_role_id") == 777
     finally:
         await db.close()
+
+
+def test_the_baf_event_decisions_are_five_marathon_keys_with_the_owners_defaults(store):
+    wanted = {
+        "marathon_baf_event_names": ("text", "Black in a Flash"),
+        "marathon_baf_event_min_runs": ("int", 2),
+        "marathon_baf_event_ask_percent": ("int", 75),
+        "marathon_baf_event_ping_minutes": ("int", 120),
+        "marathon_baf_event_ask_role_id": ("role", None),
+    }
+    for key, (kind, default) in wanted.items():
+        assert settings_store.KEY_TYPES[key] == kind
+        assert settings_store.namespace_of(key) == "marathon"
+        assert settings_store.MARATHON_DEFAULTS[key] == store.default(key) == default
+        assert list(settings_store.KEY_TYPES).count(key) == 1
+    bounds = {key: (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) for key in wanted
+              if settings_store.KEY_TYPES[key] == "int"}  # fmt: skip
+    assert bounds == {
+        "marathon_baf_event_min_runs": (1, 50),
+        "marathon_baf_event_ask_percent": (1, 100),
+        "marathon_baf_event_ping_minutes": (1, 1440),
+    }
+    for key, bad in (
+        ("marathon_baf_event_min_runs", 0),
+        ("marathon_baf_event_ask_percent", 101),
+        ("marathon_baf_event_ping_minutes", 0),
+    ):
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(key, bad)
+
+
+def test_the_baf_event_names_are_a_trimmed_list_and_a_blank_one_is_refused_in_words():
+    check = settings_store.TEXT_CHECKS["marathon_baf_event_names"]
+    assert check(" Black in a Flash ,  black  in a flash, Soul Train") == (
+        "Black in a Flash, Soul Train"
+    )
+    for bad in ("", " , ", "x" * 61, ", ".join(f"Show {index}" for index in range(21))):
+        with pytest.raises(settings_store.SettingError) as refused:
+            check(bad)
+        assert "is not a list of show names" in str(refused.value)
+
+
+def test_every_word_the_baf_event_posts_is_a_marathon_text_key_with_its_fields(store):
+    words = [
+        key
+        for key in settings_store.MARATHON_WORDS
+        if key.startswith(("marathon_baf_event_", "marathon_controls_baf_"))
+    ]
+    assert len(words) == 25
+    for key in words:
+        assert settings_store.KEY_TYPES[key] == "text"
+        assert settings_store.namespace_of(key) == "marathon"
+        assert store.default(key) == settings_store.MARATHON_WORDS[key][0]
+    ask = settings_store.TEXT_CHECKS["marathon_baf_event_ask_text"]
+    assert ask("{marathon}: {baf}/{runs} on {day}?") == "{marathon}: {baf}/{runs} on {day}?"
+    with pytest.raises(settings_store.SettingError):
+        ask("Is {show} ours?")

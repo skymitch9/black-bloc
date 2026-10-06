@@ -56,6 +56,8 @@ from ...cogs.content.marathon_archive import (
     list_archived,
     restore_marathon,
 )
+from ...cogs.content.marathon_baf_event import set_baf_event
+from ...cogs.content.marathon_baf_event import state_of as baf_event_state
 from ...cogs.content.marathon_events import (
     default_mode,
     make_run_event_now,
@@ -398,7 +400,8 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "event_mode_word": MODE_WORDS[event_mode_of(row)],
         "spotlight_mode": spotlight_mode_of(row),
         "ping_role": pings_role(row),
-        "role_ping": role_ping_state(bot, guild, row),
+        "role_ping": role_ping_state(bot, guild, row, rows),
+        "baf_event": baf_event_state(bot, guild, row, rows),
         "public_highlight": highlights(row),
         "announcements": host_switch(bot, guild, row, mh.ANNOUNCE),
         "overlay": host_switch(bot, guild, row, mh.OVERLAY) | {"sheet": mo.state_of(row)},
@@ -692,6 +695,18 @@ def build_router(bot: Any) -> APIRouter:
                     actor,
                     await wanted(guild, marathon_id),
                     payload["ping_role"],
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
+        if "baf_event" in payload:
+            done = answered(
+                await set_baf_event(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    payload["baf_event"],
                     via=VIA_WEBSITE,
                 )
             )

@@ -4027,3 +4027,35 @@ async def test_a_pb_matches_table_from_the_first_build_gains_the_review_columns(
         assert rows == [(2, "2026-10-05T00:00:00+00:00", 0), (3, None, 0)]
     finally:
         await again.close()
+
+
+async def test_a_file_from_before_baf_events_gains_the_answer_the_question_and_the_pings(tmp_path):
+    """No schema bump: three nullable marathon columns, added when missing and mirrored to the
+    archive. NULL = follow what the bot works out, never asked, no day pinged."""
+    path = tmp_path / "before.sqlite3"
+    db = Database(path)
+    await db.connect()
+    columns = ("baf_event", "baf_event_ask", "baf_event_pings")
+    for table in ("marathons", "marathons_archive"):
+        for column in columns:
+            await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at, "
+        "ping_role) VALUES (1, 'Black in a Flash', 'https://x', 'gdq_hotfix', 'q', 'x', 1)"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT name, ping_role, baf_event, baf_event_ask, baf_event_pings FROM marathons"
+        )
+        assert tuple(await cur.fetchone()) == ("Black in a Flash", 1, None, None, None)
+        cur = await again.conn.execute("PRAGMA table_info(marathons_archive)")
+        assert set(columns) <= {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()

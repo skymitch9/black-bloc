@@ -101,3 +101,23 @@ def test_the_row_fields_say_which_role_or_why_not():
 
 def test_every_reason_is_listed_once():
     assert len(set(mrp.REASONS)) == len(mrp.REASONS) == 13
+
+
+def test_a_baf_event_days_verdict_carries_the_day_into_the_row_and_keeps_it_when_unsent():
+    verdict = mrp.on_day(mrp.Verdict(6100, None, 6100, "Marathon"), "2027-01-04T21:00:00+00:00")
+    assert mrp.row_fields(verdict) == {
+        "marathon_role": 6100,
+        "marathon_role_reason": None,
+        "baf_event_day": "2027-01-04T21:00:00+00:00",
+    }
+    quiet = mrp.unsent(verdict, mrp.BAF_EVENT_PINGED)
+    assert (quiet.role_id, quiet.reason, quiet.day, quiet.configured, quiet.name) == (
+        None,
+        mrp.BAF_EVENT_PINGED,
+        verdict.day,
+        6100,
+        "Marathon",
+    )
+    plain = mrp.Verdict(6100, None, 6100, "Marathon")
+    assert "baf_event_day" not in mrp.row_fields(plain)
+    assert mrp.BAF_EVENT_REASONS == ("baf_event_day", "baf_event_pinged")

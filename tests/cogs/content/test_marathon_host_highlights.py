@@ -601,3 +601,19 @@ async def test_a_hosted_run_renamed_before_it_starts_has_its_heads_up_reworded_i
     assert (after["id"], after["state"]) == (before["id"], mt.UPCOMING)
     await walk(bot, cog, marathon, [165, 166])
     assert len(heads_ups(bot)) == 2 and await marks_logged(bot) == [120, 15]
+
+
+async def test_a_host_blocks_heads_up_carries_no_marathon_role_on_a_baf_event_day(bot, cog):
+    from black_bloc.cogs.content.marathon_baf_event import set_baf_event
+
+    marathon = await show(bot, cog, HIDDEN_HEROES)
+    await role_pinging(bot, marathon)
+    await set_baf_event(bot, bot.guild, FakeActor(), marathon, True)
+    await tick_at(bot, cog, marathon, 45)
+
+    (said,) = heads_ups(bot)
+    assert no_pings(said) and "<@&" not in said.content
+    (logged,) = await host_rows(bot)
+    assert (logged["pinged"], logged["roles"]) == (False, [])
+    assert (logged["marathon_role"], logged["marathon_role_reason"]) == (None, "baf_event_day")
+    assert logged["baf_event_day"]

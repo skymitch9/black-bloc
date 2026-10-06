@@ -335,7 +335,7 @@ async def test_yes_inside_the_last_two_hours_pings_once_at_the_next_heads_up(bot
 async def test_the_questions_buttons_work_after_a_restart_and_refuse_a_non_staff_press(bot, cog):
     marathon = await unsure(bot, cog)
     await at(bot, cog, marathon, 0)
-    custom = getattr(questions(bot)[0].kwargs["view"].children[1], "item").custom_id
+    custom = questions(bot)[0].kwargs["view"].children[1].item.custom_id
     button = await event.AskButton.from_custom_id(
         None, None, re.fullmatch(event.ASK_TEMPLATE, custom)
     )
