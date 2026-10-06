@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
@@ -26,6 +27,9 @@ PREVIEW_CHARS = 60
 LOGGED_CHARS = 200
 COUNTED_TYPES = (discord.MessageType.default, discord.MessageType.reply)
 POSTABLE_KINDS = ("text", "news")
+DISCORD_LIMIT = 2000
+CUT = "…"
+MESSAGE_LINK = "https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
 
 COLUMNS = (
     "guild_id, channel_id, text, paused, trouble, message_id, posted_channel_id, posted_at, "
@@ -116,8 +120,24 @@ SAVED_TEST_MODE = (
     "logged what it would have done."
 )
 SAVED_BUT = "Saved, but it could not be posted: {trouble}"
-PAUSED_NOW = "Paused. The copy in <#{channel_id}> was taken down and the words are kept."
+SAVED_UNREACHABLE = "Saved, but it is not posted yet: {reason}"
+SAVED_OWN_HOME = (
+    "Saved. Sticky messages are in **shadow** and <#{channel_id}> is the rehearsal home itself, "
+    "so nothing was posted there. Set `sticky_shadow_channel_id` to another channel to see a "
+    "rehearsal copy, or set `sticky_mode` to on."
+)
+PAUSED_NOW = "Paused. The copy in <#{where}> was taken down and the words are kept."
+PAUSED_NO_COPY = "Paused. No copy was up, and the words are kept."
+PAUSED_COPY_LEFT = (
+    "Paused, so it will not move again, but the copy is still in <#{where}>: {reason}. Delete "
+    "it by hand — {link} — or give Black Bloc what it is missing there and press **Resume**, "
+    "then **Pause**."
+)
 REMOVED_NOW = "Removed. <#{channel_id}> has no sticky message now."
+REMOVED_COPY_LEFT = (
+    "Removed, and the words are deleted, but its last copy is still in <#{where}>: {reason}. "
+    "Black Bloc no longer tracks that message, so delete it by hand — {link}"
+)
 NO_STICKY = (
     "That channel has no sticky message, so nothing was changed. The list on this panel and on "
     "the Posts page is every channel that has one."
@@ -130,6 +150,10 @@ NOT_PAUSED = (
 NO_WORDS = (
     "A sticky message needs some words, so nothing was saved. Type what it should say and save "
     "again."
+)
+NOT_WORDS = (
+    "The words of a sticky message have to be plain text, so nothing was saved. Type what it "
+    "should say and save again."
 )
 TOO_LONG = (
     "That is {given} characters and a sticky message holds {limit}, so nothing was saved. "
@@ -157,12 +181,24 @@ TROUBLE_PERMISSION = (
     "Black Bloc is missing {missing} in <#{channel_id}>. Give it that permission there, then "
     "press Try again."
 )
-TROUBLE_REFUSED = "Discord refused ({status}): {text}. Press Try again once that is sorted."
+REFUSED_WHY = "Discord refused ({status}): {text}"
+TROUBLE_REFUSED = REFUSED_WHY + ". Press Try again once that is sorted."
 TROUBLE_OLD_COPY = (
     "The last copy could not be deleted — {reason} — so a new one was not posted on top of it. "
     "Press Try again once that is sorted."
 )
 TROUBLE_UNEXPECTED = "It could not be posted — {reason}. Press Try again."
+UNREACHABLE_WHY = "Discord could not be reached ({why})"
+UNREACHABLE_ANSWERED = "it answered {status}"
+UNREACHABLE_REASON = (
+    UNREACHABLE_WHY + ". Black Bloc tries again by itself at the next message in <#{channel_id}>."
+)
+HOME_TROUBLES = re.compile(
+    "|".join(
+        re.escape(words).replace(re.escape("{home}"), r"\d+")
+        for words in (TROUBLE_NO_HOME, TROUBLE_HOME_GONE)
+    )
+)
 
 
 def now_iso(at: datetime | None = None) -> str:
@@ -179,6 +215,28 @@ def text_refusal(text: str) -> str | None:
     if len(text) > TEXT_MAX:
         return TOO_LONG.format(given=len(text), limit=TEXT_MAX)
     return None
+
+
+def is_home_trouble(trouble: Any) -> bool:
+    return bool(trouble) and HOME_TROUBLES.fullmatch(str(trouble)) is not None
+
+
+def fit(note: str, words: str, limit: int = DISCORD_LIMIT) -> str:
+    """The note shortens to make room; the words staff wrote are never cut."""
+    if not note:
+        return words
+    room = limit - len(words) - 1
+    if room < len(CUT) + 1:
+        return words
+    if len(note) > room:
+        note = note[: room - len(CUT)].rstrip() + CUT
+    return f"{note}\n{words}"
+
+
+def message_link(guild_id: Any, channel_id: Any, message_id: Any) -> str:
+    return MESSAGE_LINK.format(
+        guild_id=int(guild_id), channel_id=int(channel_id), message_id=int(message_id)
+    )
 
 
 def postable(channel: Any) -> bool:
@@ -230,7 +288,7 @@ def state_of(row: Any, mode: str) -> str:
         return OFF
     if not row["message_id"]:
         return WAITING
-    if int(row["posted_channel_id"] or 0) == int(row["channel_id"]):
+    if mode != "shadow" and int(row["posted_channel_id"] or 0) == int(row["channel_id"]):
         return LIVE
     return REHEARSING
 
@@ -389,7 +447,7 @@ async def write_copy(
     await db.conn.commit()
 
 
-async def write_trouble(db: Any, guild_id: int, channel_id: int, trouble: str) -> None:
+async def write_trouble(db: Any, guild_id: int, channel_id: int, trouble: str | None) -> None:
     await db.conn.execute(
         "UPDATE sticky_messages SET trouble = ? WHERE guild_id = ? AND channel_id = ?",
         (trouble, int(guild_id), int(channel_id)),

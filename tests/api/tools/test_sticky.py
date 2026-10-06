@@ -81,7 +81,7 @@ async def test_pause_resume_and_remove_each_leave_one_web_row(client, sign_in, w
     assert removed.json() == {
         "removed": True,
         "channel_id": str(wf.OTHER_CHANNEL_ID),
-        "message": rules.REMOVED_NOW.format(channel_id=wf.OTHER_CHANNEL_ID),
+        "message": "Removed. #general has no sticky message now.",
     }
     assert here.messages == [] and client.get("/api/sticky").json() == []
     web_kinds = [kind for kind in await wf.kinds_in(web.db) if kind.startswith("web.")]
@@ -110,6 +110,44 @@ def test_a_refusal_is_a_sentence_and_never_a_bare_status(client, sign_in, wf):
     assert gone.status_code == 404 and words.status_code == 400
     for refused in (blank, voice, nowhere, nothing, gone, words):
         assert len(refused.json()["message"].split()) > 6
+
+
+@pytest.mark.parametrize("given", [["a", "b"], {"a": 1}, 7, True])
+def test_words_that_are_not_a_string_are_refused_and_nothing_is_stored(client, sign_in, wf, given):
+    sign_in(client)
+
+    refused = client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"text": given})
+
+    assert (refused.status_code, refused.json()["error"]) == (400, "bad_text")
+    assert refused.json()["message"] == rules.NOT_WORDS
+    assert client.get("/api/sticky").json() == []
+
+
+async def test_the_page_is_answered_in_channel_names_never_discord_markup(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    path = f"/api/sticky/{wf.OTHER_CHANNEL_ID}"
+
+    off = client.put(path, json={"text": WORDS})
+    assert "<#" not in off.json()["message"] and "`" not in off.json()["message"]
+
+    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.TEST_CHANNEL_ID)
+    saved = client.put(path, json={"text": WORDS}).json()
+    voice = client.put(f"/api/sticky/{wf.VOICE_CHANNEL_ID}", json={"text": WORDS}).json()
+    await rules.write_trouble(
+        web.db, wf.GUILD_ID, wf.OTHER_CHANNEL_ID, rules.TROUBLE_HOME_GONE.format(home=424242)
+    )
+    listed = client.get("/api/sticky").json()[0]
+    paused = client.post(f"{path}/pause").json()
+    removed = client.delete(path).json()
+
+    assert "#general" in saved["message"] and "**shadow**" in saved["message"]
+    assert "#voice" in voice["message"]
+    assert "424242" in listed["trouble"] and "sticky_shadow_channel_id" in listed["trouble"]
+    for words in (saved["message"], voice["message"], listed["trouble"], paused["message"]):
+        assert "<#" not in words and "`" not in words
+    assert removed["message"] == "Removed. #general has no sticky message now."
 
 
 async def test_a_sticky_whose_channel_is_gone_still_lists_so_it_can_be_removed(
