@@ -1879,7 +1879,7 @@ function seedState() {
   sticky: [
     { channel_id: '800000000000000002', text: '**How to submit a run** — post the link, the category and your time, and a Lead will add it.', paused: false, trouble: null, message_id: '830000000000000101', posted_channel_id: '800000000000000004', posted_at: minutesAgo(12), reposts: 7, updated_by: STAFF.id, updated_at: minutesAgo(4000) },
     { channel_id: '800000000000000003', text: 'Test posts only — nothing here is real.', paused: true, trouble: null, message_id: null, posted_channel_id: null, posted_at: null, reposts: 0, updated_by: STAFF.id, updated_at: minutesAgo(9000) },
-    { channel_id: '800000000000000006', text: 'Announcements are staff-only. Questions go in #general.', paused: false, trouble: 'Black Bloc is missing Send Messages in <#800000000000000004>. Give it that permission there, then press Try again.', message_id: null, posted_channel_id: null, posted_at: null, reposts: 2, updated_by: STAFF.id, updated_at: minutesAgo(700) },
+    { channel_id: '800000000000000006', text: 'Announcements are staff-only. Questions go in #general.', paused: false, trouble: 'Black Bloc is missing Send Messages in #bot-log. Give it that permission there, then press Try again.', message_id: null, posted_channel_id: null, posted_at: null, reposts: 2, updated_by: STAFF.id, updated_at: minutesAgo(700) },
   ],
   honeypot: [
     { id: 7, user_id: MEMBERS[4].id, channel_id: '800000000000000007', message_id: '820000000000000001', content: 'free nitro at scam-link.example', at: minutesAgo(30), mode: 'shadow', action: 'would_ban' },
@@ -10665,6 +10665,21 @@ route('POST', '/api/tempvoice/forget', async (context) => {
 // Sticky messages (docs/info/sticky-messages-design.md). The mock keeps the rows and the state
 // word; it posts nothing, so `on` reads as live and `shadow` as rehearsing in the log channel.
 const STICKY_TEXT_MAX = 1800;
+const STICKY_POSTABLE = ['text', 'news'];
+const STICKY_NOT_WORDS = 'The words of a sticky message have to be plain text, so nothing was saved. Type what it should say and save again.';
+
+function stickyName(channelId) {
+  const channel = CHANNELS.find((one) => one.id === String(channelId));
+  return channel ? `#${channel.name}` : `a channel Discord no longer has (${channelId})`;
+}
+
+function stickyHome() {
+  return state.settings.get('sticky_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id');
+}
+
+function stickyOwnHome(row) {
+  return String(state.settings.get('sticky_mode') || 'shadow') === 'shadow' && String(stickyHome()) === String(row.channel_id);
+}
 const STICKY_NONE = 'That channel has no sticky message, so nothing was changed. The list on this panel and on the Posts page is every channel that has one.';
 
 function stickyState(row) {
@@ -10673,20 +10688,19 @@ function stickyState(row) {
   if (row.paused) return 'paused';
   if (mode === 'off') return 'off';
   if (!row.message_id) return 'waiting';
-  return String(row.posted_channel_id) === String(row.channel_id) ? 'live' : 'rehearsing';
+  return mode !== 'shadow' && String(row.posted_channel_id) === String(row.channel_id) ? 'live' : 'rehearsing';
 }
 
 function stickyPlace(row) {
   const mode = String(state.settings.get('sticky_mode') || 'shadow');
-  if (row.paused || mode === 'off') {
+  if (row.paused || mode === 'off' || stickyOwnHome(row)) {
     row.message_id = null;
     row.posted_channel_id = null;
     row.posted_at = null;
     return;
   }
-  const home = state.settings.get('sticky_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id');
   row.message_id = String(830000000000000000n + BigInt(Date.now()));
-  row.posted_channel_id = mode === 'on' ? row.channel_id : String(home);
+  row.posted_channel_id = mode === 'on' ? row.channel_id : String(stickyHome());
   row.posted_at = new Date().toISOString();
 }
 
@@ -10712,10 +10726,11 @@ function stickyRow(row) {
 
 function stickySaid(row) {
   const said = stickyState(row);
-  if (said === 'live') return `Saved. It is at the bottom of <#${row.channel_id}> now.`;
-  if (said === 'rehearsing') return `Saved. Sticky messages are in **shadow**, so nothing was posted in <#${row.channel_id}> — the rehearsal copy is in <#${row.posted_channel_id}>.`;
+  if (said === 'live') return `Saved. It is at the bottom of ${stickyName(row.channel_id)} now.`;
+  if (said === 'rehearsing') return `Saved. Sticky messages are in **shadow**, so nothing was posted in ${stickyName(row.channel_id)} — the rehearsal copy is in ${stickyName(row.posted_channel_id)}.`;
   if (said === 'paused') return 'Saved. It is paused, so nothing was posted — press **Resume** when it should run.';
-  return 'Saved. Sticky messages are **off**, so nothing was posted — set `sticky_mode` to shadow or on when it should run.';
+  if (stickyOwnHome(row)) return `Saved. Sticky messages are in **shadow** and ${stickyName(row.channel_id)} is the rehearsal home itself, so nothing was posted there. Set sticky_shadow_channel_id to another channel to see a rehearsal copy, or set sticky_mode to on.`;
+  return 'Saved. Sticky messages are **off**, so nothing was posted — set sticky_mode to shadow or on when it should run.';
 }
 
 function stickyOf(context) {
@@ -10732,6 +10747,7 @@ route('GET', '/api/sticky', (context) => {
 route('PUT', '/api/sticky/:channel_id', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
+  if (body.text !== undefined && body.text !== null && typeof body.text !== 'string') throw new Refused(400, 'bad_text', STICKY_NOT_WORDS);
   const text = String(body.text || '').trim();
   if (!text) throw new Refused(400, 'bad_text', 'A sticky message needs some words, so nothing was saved. Type what it should say and save again.');
   if (text.length > STICKY_TEXT_MAX) {
@@ -10743,7 +10759,7 @@ route('PUT', '/api/sticky/:channel_id', async (context) => {
   if (made) {
     const channel = CHANNELS.find((one) => one.id === wanted);
     if (!channel) throw new Refused(404, 'no_such_channel', 'Black Bloc cannot find that channel in this server, so nothing was saved. Pick a channel it can see.');
-    if (channel.type !== 'text') throw new Refused(400, 'not_postable', `<#${wanted}> is not a text channel, so a sticky message cannot sit in it and nothing was saved. Pick a text or announcement channel.`);
+    if (!STICKY_POSTABLE.includes(channel.type)) throw new Refused(400, 'not_postable', `#${channel.name} is not a text channel, so a sticky message cannot sit in it and nothing was saved. Pick a text or announcement channel.`);
     row = { channel_id: wanted, text, paused: false, trouble: null, message_id: null, posted_channel_id: null, posted_at: null, reposts: 0 };
     state.sticky.push(row);
   }
@@ -10760,11 +10776,13 @@ route('POST', '/api/sticky/:channel_id/pause', (context) => {
   requireStaff(context.session);
   const row = stickyOf(context);
   if (row.paused) throw new Refused(409, 'already_paused', 'That sticky message is already paused, so nothing was changed.');
+  const was = row.message_id ? row.posted_channel_id : null;
   row.paused = true;
   row.trouble = null;
   stickyPlace(row);
   logAction('web.sticky.paused', { details: { channel_id: row.channel_id, via: 'website' } });
-  return { sticky: stickyRow(row), message: `Paused. The copy in <#${row.channel_id}> was taken down and the words are kept.` };
+  const message = was ? `Paused. The copy in ${stickyName(was)} was taken down and the words are kept.` : 'Paused. No copy was up, and the words are kept.';
+  return { sticky: stickyRow(row), message };
 });
 
 route('POST', '/api/sticky/:channel_id/resume', (context) => {
@@ -10783,7 +10801,7 @@ route('DELETE', '/api/sticky/:channel_id', (context) => {
   const row = stickyOf(context);
   state.sticky = state.sticky.filter((one) => one !== row);
   logAction('web.sticky.removed', { details: { channel_id: row.channel_id, text: row.text.slice(0, 200), via: 'website' } });
-  return { removed: true, channel_id: String(row.channel_id), message: `Removed. <#${row.channel_id}> has no sticky message now.` };
+  return { removed: true, channel_id: String(row.channel_id), message: `Removed. ${stickyName(row.channel_id)} has no sticky message now.` };
 });
 
 route('GET', '/api/honeypot/hits', (context) => {
