@@ -1,7 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from black_bloc import structure_store
 from black_bloc.structure import DAILY, FAILED, MANUAL, SAVED, UNCHANGED, body_of, digest
+from black_bloc.structure_diff import changes
 
 GUILD = 7
 OTHER = 8
@@ -157,3 +160,132 @@ async def test_a_look_by_hand_never_spends_the_days_turn(db):
 
     assert found["last_day"] is None
     assert structure_store.daily_due(found, "2026-10-05", retries=3)
+
+
+def with_a_forum(change=None):
+    found = body()
+    found["channels"][1]["position"] = 0
+    found["channels"].append(
+        {
+            "id": "43",
+            "name": "help",
+            "type": "forum",
+            "parent_id": "40",
+            "position": 1,
+            "tags": [{"id": "70", "name": "solved", "moderated": False, "emoji": "✅"}],
+        }
+    )
+    if change is not None:
+        change(found)
+    return found
+
+
+def a_new_emoji(found):
+    found["channels"][2]["tags"][0]["emoji"] = "🎉"
+
+
+def a_moderated_tag(found):
+    found["channels"][2]["tags"][0]["moderated"] = True
+
+
+def positions_renumbered(found):
+    found["channels"][1]["position"] = 5
+    found["channels"][2]["position"] = 9
+
+
+def a_renamed_tag(found):
+    found["channels"][2]["tags"][0]["name"] = "done"
+
+
+def a_flipped_overwrite(found):
+    found["channels"][1]["overwrites"][0]["target_type"] = "member"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [a_new_emoji, a_moderated_tag, positions_renumbered, a_renamed_tag, a_flipped_overwrite],
+)
+async def test_a_new_row_is_stored_exactly_when_the_change_list_has_something_to_say(db, change):
+    await keep(db, GUILD, with_a_forum())
+    after = with_a_forum(change)
+    sayable = bool(changes(with_a_forum(), after))
+
+    stored = await keep(db, GUILD, after)
+
+    assert stored.outcome == (SAVED if sayable else UNCHANGED)
+    assert await structure_store.count(db, GUILD) == (2 if sayable else 1)
+
+
+def test_the_two_differences_a_person_would_act_on_are_ones_the_change_list_says():
+    assert changes(with_a_forum(), with_a_forum(a_renamed_tag))
+    assert changes(with_a_forum(), with_a_forum(a_flipped_overwrite))
+
+
+async def test_a_difference_nothing_can_say_refreshes_the_copy_already_held(db):
+    first = await keep(db, GUILD, with_a_forum())
+
+    again = await keep(db, GUILD, with_a_forum(a_new_emoji))
+
+    assert again.outcome == UNCHANGED and again.row["id"] == first.row["id"]
+    assert again.row["digest"] == digest(with_a_forum(a_new_emoji))
+    assert body_of(again.row)["channels"][2]["tags"][0]["emoji"] == "🎉"
+    assert again.row["taken_at"] == first.row["taken_at"] and again.row["checks"] == 1
+
+
+async def test_a_failed_look_by_hand_never_re_arms_a_daily_look_that_worked(db):
+    await structure_store.record_look(db, GUILD, SAVED, day="2026-10-05", now=NOON)
+
+    await structure_store.record_look(db, GUILD, FAILED, reason="Discord said no")
+    found = await structure_store.look(db, GUILD)
+
+    assert (found["outcome"], found["reason"]) == (FAILED, "Discord said no")
+    assert (found["last_day"], found["attempts"]) == ("2026-10-05", 0)
+    assert not structure_store.daily_due(found, "2026-10-05", retries=3)
+
+
+async def test_a_look_by_hand_that_works_never_spends_a_failed_daily_looks_tries(db):
+    await structure_store.record_look(db, GUILD, FAILED, day="2026-10-05", reason="no", now=NOON)
+
+    await structure_store.record_look(db, GUILD, UNCHANGED)
+    found = await structure_store.look(db, GUILD)
+
+    assert (found["outcome"], found["attempts"]) == (UNCHANGED, 1)
+    assert structure_store.daily_due(found, "2026-10-05", retries=3)
+
+
+async def test_a_failed_daily_look_waits_out_the_gap_before_it_is_tried_again(db):
+    await structure_store.record_look(db, GUILD, FAILED, day="2026-10-05", reason="no", now=NOON)
+    found = await structure_store.look(db, GUILD)
+
+    def due(minutes):
+        return structure_store.daily_due(
+            found,
+            "2026-10-05",
+            retries=3,
+            now=NOON + timedelta(minutes=minutes),
+            gap_minutes=240,
+        )
+
+    assert [due(10), due(239), due(240), due(600)] == [False, False, True, True]
+
+
+async def test_the_snapshot_a_notice_last_covered_is_remembered_across_looks(db):
+    first = await keep(db, GUILD, body())
+    await structure_store.record_look(db, GUILD, SAVED, day="2026-10-05")
+
+    await structure_store.mark_noticed(db, GUILD, first.row["id"])
+    await structure_store.record_look(db, GUILD, FAILED, reason="no")
+    await structure_store.record_look(db, GUILD, UNCHANGED, day="2026-10-06")
+
+    assert (await structure_store.look(db, GUILD))["noticed_id"] == first.row["id"]
+
+
+async def test_pruning_never_takes_the_snapshot_the_next_notice_starts_from(db):
+    first = await keep(db, GUILD, body(), keep=1)
+
+    await keep(db, GUILD, body(extra_roles=1), keep=1, protect=first.row["id"])
+    last = await keep(db, GUILD, body(extra_roles=2), keep=1, protect=first.row["id"])
+
+    rows = await structure_store.listed(db, GUILD)
+    assert [row["id"] for row in rows] == [last.row["id"], first.row["id"]]
+    assert last.pruned == 1

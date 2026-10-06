@@ -138,6 +138,7 @@ def export(row: Any) -> dict[str, Any]:
     """What a download carries: named fields of the row and the body, never the row itself."""
     snapshot = {name: row[name] for name in SNAPSHOT_FIELDS}
     snapshot["guild_id"] = str(row["guild_id"])
+    snapshot["filename"] = export_name(row)
     return {"snapshot": snapshot, **body_of(row)}
 
 

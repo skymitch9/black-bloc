@@ -45,6 +45,7 @@ const AREAS = [
 const KIND_TONES = { added: 'ok', removed: 'danger', changed: 'warn', moved: null };
 const OUTCOME_TONES = { saved: 'ok', unchanged: null, failed: 'danger' };
 const LOG_ROWS = 20;
+const LOG_KINDS = ['structure', 'web.structure'];
 
 let refresh = () => {};
 
@@ -75,7 +76,7 @@ function saveFile(name, payload) {
 async function download(row, say) {
   await run(say, async () => {
     const found = await send(`/api/structure/snapshots/${encodeURIComponent(row.id)}/download`, 'POST', {});
-    saveFile(`structure-${found.snapshot.guild_id}-${String(found.snapshot.taken_at).slice(0, 10)}-${found.snapshot.id}.json`, found);
+    saveFile(found.snapshot.filename, found);
     return found;
   }, (found) => `Snapshot #${found.snapshot.id} downloaded.`);
 }
@@ -146,8 +147,11 @@ function compareCard(rows, results, say) {
 }
 
 async function logRows() {
-  const payload = await api(`/api/actions?feature=core&q=structure&per_page=${LOG_ROWS}`);
-  const rows = listOf(payload, 'actions').filter((row) => /^(web\.)?structure\./.test(String(row.kind)));
+  const pages = await Promise.all(LOG_KINDS.map((kind) => api(`/api/actions?kind=${kind}&per_page=${LOG_ROWS}`)));
+  const rows = pages
+    .flatMap((payload) => listOf(payload, 'actions'))
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .slice(0, LOG_ROWS);
   await names(idsIn(rows, ['actor_id', 'target_id']));
   return rows;
 }

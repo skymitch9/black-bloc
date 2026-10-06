@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import json
 import pathlib
 from datetime import UTC, datetime, timedelta
@@ -7,10 +8,10 @@ from types import SimpleNamespace
 import discord
 import pytest
 
-from black_bloc import structure_store
+from black_bloc import settings_panel, structure_store
 from black_bloc.cogs.moderation import structure_backup as sb
 from black_bloc.config import load_settings
-from black_bloc.settings_panel import reachable_on_the_panel
+from black_bloc.settings_panel import mode_lines, reachable_on_the_panel
 from black_bloc.settings_store import (
     CORE_KEYS,
     KEY_CHOICES,
@@ -20,6 +21,7 @@ from black_bloc.settings_store import (
     KEY_TYPES,
     STRUCTURE_BACKUP_DEFAULTS,
     STRUCTURE_BACKUP_KEYS,
+    STRUCTURE_BACKUP_LIMITS,
     STRUCTURE_SAY_KEYS,
     SettingError,
     SettingsStore,
@@ -47,30 +49,70 @@ class _Response:
         self.reason = "refused"
 
 
-class Thing(SimpleNamespace):
+REFUSED: list[str] = []
+
+
+class Refuses:
+    """Anything a fake was not told it may do: reading it is harmless, calling it is not."""
+
+    def __init__(self, owner, name):
+        self.what = f"{owner}.{name}"
+
+    def __call__(self, *args, **kwargs):
+        REFUSED.append(self.what)
+        raise AssertionError(f"structure backup must never call {self.what}")
+
+
+class Strict:
+    KIND = "thing"
     __hash__ = object.__hash__
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return Refuses(self.KIND, name)
+
+
+@pytest.fixture(autouse=True)
+def nothing_outside_the_read_list_was_called():
+    REFUSED.clear()
+    yield
+    assert not REFUSED, REFUSED
+
+
+class FakeRole(Strict):
+    KIND = "role"
+
+    def __init__(self, role_id, name, permissions=0, position=0):
+        self.id = role_id
+        self.name = name
+        self.color = 0
+        self.permissions = discord.Permissions(permissions)
+        self.position = position
+        self.hoist = False
+        self.mentionable = False
+        self.managed = False
 
 
 def role(role_id, name, permissions=0, position=0):
-    return Thing(
-        id=role_id,
-        name=name,
-        color=0,
-        permissions=discord.Permissions(permissions),
-        position=position,
-        hoist=False,
-        mentionable=False,
-        managed=False,
-    )
+    return FakeRole(role_id, name, permissions, position)
 
 
-class FakeChannel:
+class FakeChannel(Strict):
+    KIND = "channel"
+
     def __init__(self, channel_id, name, kind=discord.ChannelType.text, category_id=None):
         self.id = channel_id
         self.name = name
         self.type = kind
         self.category_id = category_id
         self.position = 0
+        self.topic = None
+        self.slowmode_delay = 0
+        self.nsfw = False
+        self.bitrate = None
+        self.user_limit = None
+        self.available_tags = []
         self.overwrites = {}
         self.sent = []
         self.send_raises = None
@@ -82,7 +124,13 @@ class FakeChannel:
         return SimpleNamespace(id=len(self.sent))
 
 
-class FakeGuild:
+class FakeHTTP(Strict):
+    KIND = "bot.http"
+
+
+class FakeGuild(Strict):
+    KIND = "guild"
+
     def __init__(self):
         self.id = GUILD
         self.name = "Black Bloc"
@@ -91,6 +139,9 @@ class FakeGuild:
         self.default_notifications = discord.NotificationLevel.only_mentions
         self.system_channel = None
         self.rules_channel = None
+        self.system_channel_id = None
+        self.rules_channel_id = None
+        self.hangs = False
         self.roles = [role(GUILD, "@everyone", 1024), role(LEADS, "Leads", 8, 2)]
         self.channels = {
             one.id: one
@@ -111,17 +162,14 @@ class FakeGuild:
 
     async def fetch_roles(self):
         self.fetches += 1
+        if self.hangs:
+            await asyncio.sleep(60)
         if self.fetch_raises is not None:
             raise self.fetch_raises
         return list(self.roles)
 
     async def fetch_channels(self):
         return list(self.channels.values())
-
-    def __getattr__(self, name):
-        if name.startswith(("create_", "edit", "delete")):
-            raise AssertionError(f"structure backup must never call guild.{name}")
-        raise AttributeError(name)
 
 
 class FakeBot:
@@ -133,6 +181,7 @@ class FakeBot:
         self.guild = guild
         self.guilds = [guild]
         self.user = SimpleNamespace(id=42)
+        self.http = FakeHTTP()
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
@@ -168,7 +217,7 @@ class FakeInteraction:
         roles = [SimpleNamespace(id=LEADS)] if staff else []
         self.user = SimpleNamespace(
             id=USER,
-            guild=bot.guild,
+            guild=SimpleNamespace(id=GUILD, roles=[], get_channel=lambda _id: None),
             roles=roles,
             guild_permissions=SimpleNamespace(manage_guild=staff),
         )
@@ -222,11 +271,15 @@ async def details_of(db, kind):
 
 
 def labels(view):
-    return [item.label for item in view.children]
+    return [item.label for item in view.children if isinstance(item, discord.ui.Button)]
 
 
 def button(view, label):
-    return next(item for item in view.children if item.label == label)
+    return next(item for item in view.children if getattr(item, "label", None) == label)
+
+
+def mode_pick(view):
+    return next(item for item in view.children if isinstance(item, sb.ModePick))
 
 
 def field(embed, name):
@@ -387,7 +440,7 @@ async def test_the_oldest_snapshots_are_pruned_and_the_log_says_how_many(bot, gu
     await bot.store.set(GUILD, "structure_backup_keep", 2)
     for n in range(4):
         guild.roles.append(role(100 + n, f"role-{n}", 0, 3 + n))
-        await sb.take_snapshot(bot, guild)
+        await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=n))
 
     assert await structure_store.count(db, GUILD) == 2
     assert (await kinds(db)).count("structure.pruned") == 2
@@ -422,30 +475,52 @@ async def test_the_hour_is_a_key(bot, guild):
     assert (await sb.run_daily(bot, guild, PHOENIX_3AM)).outcome == SAVED
 
 
-async def test_a_failed_daily_look_is_tried_three_times_that_day_then_waits(bot, guild, db):
+async def test_a_failed_daily_look_is_tried_three_times_spread_across_the_day(bot, guild, db):
     guild.fetch_raises = refused()
 
     outcomes = []
-    for n in range(5):
-        taken = await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(minutes=10 * n))
+    for minutes in (0, 10, 230, 240, 250, 480, 490, 720, 900):
+        taken = await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(minutes=minutes))
         outcomes.append(getattr(taken, "outcome", None))
 
-    assert outcomes == [FAILED, FAILED, FAILED, None, None]
+    assert outcomes == [FAILED, None, None, FAILED, None, FAILED, None, None, None]
     assert (await kinds(db)).count("structure.capture_failed") == 3
     guild.fetch_raises = None
     assert (await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))).outcome == SAVED
 
 
-async def test_the_daily_look_does_nothing_while_off_or_while_the_server_is_unavailable(
-    bot, guild, db
-):
-    guild.unavailable = True
-    assert await sb.run_daily(bot, guild, PHOENIX_5AM) is None
-    guild.unavailable = False
+def test_a_late_hour_still_fits_its_three_tries_into_the_day():
+    assert [sb.retry_gap(hour) for hour in (0, 4, 12, 20, 23)] == [240, 240, 240, 80, 20]
+
+
+async def test_the_daily_look_does_nothing_while_off(bot, guild, db):
     await bot.store.set(GUILD, "structure_backup_mode", "off")
     assert await sb.run_daily(bot, guild, PHOENIX_5AM) is None
 
     assert await kinds(db) == [] and guild.fetches == 0
+    assert await structure_store.look(db, GUILD) is None
+
+
+async def test_a_daily_look_at_an_unavailable_server_leaves_a_row_that_says_why(
+    bot, guild, db
+):
+    guild.unavailable = True
+
+    taken = await sb.run_daily(bot, guild, PHOENIX_5AM)
+
+    assert taken.outcome == FAILED and guild.fetches == 0
+    looked = await structure_store.look(db, GUILD)
+    assert (looked["outcome"], looked["last_day"], looked["attempts"]) == (
+        FAILED,
+        "2026-10-05",
+        1,
+    )
+    assert looked["reason"] == sb.UNAVAILABLE
+    assert await kinds(db) == ["structure.capture_failed"]
+    assert await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(minutes=10)) is None
+    guild.unavailable = False
+    again = await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(hours=4))
+    assert again.outcome == SAVED
 
 
 async def changed_overnight(bot, guild):
@@ -458,7 +533,7 @@ async def test_the_first_snapshot_ever_posts_no_notice(bot, guild, db):
     await sb.run_daily(bot, guild, PHOENIX_5AM)
 
     assert all(not channel.sent for channel in guild.channels.values())
-    assert "structure.notice_posted" not in await kinds(db)
+    assert not {"structure.notice_posted", "structure.would_notice"} & set(await kinds(db))
 
 
 async def test_in_shadow_the_notice_goes_to_the_features_own_rehearsal_home(bot, guild, db):
@@ -475,8 +550,9 @@ async def test_in_shadow_the_notice_goes_to_the_features_own_rehearsal_home(bot,
     assert "1 change(s) since the snapshot of <t:" in sent["embed"].description
     assert "• Role **Mods** was added." in sent["embed"].description
     assert sent["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()
-    found = await details_of(db, "structure.notice_posted")
+    found = await details_of(db, "structure.would_notice")
     assert (found["mode"], found["channel_id"], found["aimed_at"]) == ("shadow", REHEARSAL, ALERTS)
+    assert "structure.notice_posted" not in await kinds(db)
 
 
 async def test_in_shadow_with_no_home_of_its_own_the_notice_follows_the_rehearsal_home(
@@ -501,6 +577,7 @@ async def test_on_the_notice_goes_to_its_channel_with_no_rehearsal_line(bot, gui
     assert sent["content"] is None
     assert not guild.channels[REHEARSAL].sent
     assert (await details_of(db, "structure.notice_posted"))["mode"] == "on"
+    assert "structure.would_notice" not in await kinds(db)
 
 
 async def test_on_with_no_channel_set_the_notice_goes_to_the_staff_channel(bot, guild):
@@ -518,7 +595,7 @@ async def test_the_notice_is_optional(bot, guild, db):
 
     assert taken.outcome == SAVED and taken.changes
     assert all(not channel.sent for channel in guild.channels.values())
-    assert "structure.notice_posted" not in await kinds(db)
+    assert not {"structure.notice_posted", "structure.would_notice"} & set(await kinds(db))
 
 
 async def test_a_snapshot_taken_by_hand_posts_no_notice(bot, guild):
@@ -710,23 +787,596 @@ async def test_a_download_leaves_a_row_that_names_the_door(bot, guild, db):
     assert (await details_of(db, "web.structure.downloaded"))["snapshot_id"] == taken.row["id"]
 
 
-WRITES = {
-    "create_role",
-    "create_text_channel",
-    "create_voice_channel",
-    "create_category",
-    "create_forum",
-    "create_stage_channel",
-    "edit",
-    "edit_role_positions",
-    "set_permissions",
-    "delete",
-    "move",
-    "add_roles",
-    "remove_roles",
-    "ban",
-    "kick",
-}
+ADMIN = discord.Permissions(administrator=True).value
+EVERYTHING = discord.Permissions.all().value
+MORE = "…and {n} more — the Structure page lists every one."
+
+
+async def test_a_snapshot_taken_by_hand_never_hides_a_change_from_the_daily_notice(
+    bot, guild, db
+):
+    guild.roles.append(role(MODS, "Mods", 2, 1))
+    first = await sb.run_daily(bot, guild, PHOENIX_5AM)
+    guild.roles[-1].permissions = discord.Permissions(2 | ADMIN)
+    by_hand = await sb.take_snapshot(bot, guild, actor=SimpleNamespace(id=USER))
+    assert by_hand.outcome == SAVED and not guild.channels[LOGS].sent
+
+    daily = await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))
+
+    assert daily.outcome == UNCHANGED
+    (sent,) = guild.channels[LOGS].sent
+    said = sent["embed"].description.splitlines()
+    assert said[0] == f"1 change(s) since the snapshot of {sb.when_words(first.row['taken_at'])}."
+    assert said[1:] == ["• Role **Mods** gained: Administrator."]
+    found = await details_of(db, "structure.would_notice")
+    assert (found["since_id"], found["snapshot_id"]) == (first.row["id"], by_hand.row["id"])
+    assert (await structure_store.look(db, GUILD))["noticed_id"] == by_hand.row["id"]
+
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=2))
+    assert len(guild.channels[LOGS].sent) == 1
+
+
+async def test_a_notice_covers_every_snapshot_since_the_last_one_it_covered(bot, guild, db):
+    await sb.run_daily(bot, guild, PHOENIX_5AM)
+    guild.roles.append(role(MODS, "Mods", 2, 1))
+    await sb.take_snapshot(bot, guild)
+    guild.roles.append(role(100, "Streamers", 0, 3))
+    await sb.take_snapshot(bot, guild)
+    guild.channels[STAFF].name = "staff-room"
+
+    daily = await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))
+
+    assert daily.outcome == SAVED and len(daily.changes) == 1
+    said = guild.channels[LOGS].sent[0]["embed"].description.splitlines()
+    assert said[0].startswith("3 change(s) since the snapshot of ")
+    assert sorted(said[1:]) == [
+        "• Channel **staff** was renamed **staff-room**.",
+        "• Role **Mods** was added.",
+        "• Role **Streamers** was added.",
+    ]
+
+
+async def test_a_change_made_and_undone_between_two_daily_looks_is_not_a_notice(bot, guild, db):
+    await sb.run_daily(bot, guild, PHOENIX_5AM)
+    guild.roles.append(role(MODS, "Mods", 2, 1))
+    await sb.take_snapshot(bot, guild)
+    guild.roles.pop()
+
+    daily = await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))
+
+    assert daily.outcome == SAVED and not guild.channels[LOGS].sent
+    assert (await structure_store.look(db, GUILD))["noticed_id"] == daily.row["id"]
+
+
+async def test_a_notice_that_failed_is_owed_and_the_next_daily_look_pays_it(bot, guild, db):
+    guild.channels[LOGS].send_raises = refused()
+    await changed_overnight(bot, guild)
+    assert (await kinds(db))[-1] == "structure.notice_failed"
+    guild.channels[LOGS].send_raises = None
+
+    daily = await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=2))
+
+    assert daily.outcome == UNCHANGED
+    notices = [one for one in guild.channels[LOGS].sent if one.get("embed") is not None]
+    assert "• Role **Mods** was added." in notices[-1]["embed"].description
+
+
+async def test_with_the_notice_switched_off_nothing_is_owed_when_it_comes_back_on(
+    bot, guild, db
+):
+    await bot.store.set(GUILD, "structure_backup_notify", False)
+    await changed_overnight(bot, guild)
+    await bot.store.set(GUILD, "structure_backup_notify", True)
+
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=2))
+
+    assert all(not channel.sent for channel in guild.channels.values())
+
+
+async def test_keeping_one_snapshot_still_keeps_the_one_the_next_notice_starts_from(
+    bot, guild, db
+):
+    await bot.store.set(GUILD, "structure_backup_keep", 1)
+    first = await sb.run_daily(bot, guild, PHOENIX_5AM)
+    guild.roles.append(role(MODS, "Mods", 2, 1))
+    await sb.take_snapshot(bot, guild)
+    assert await structure_store.get(db, GUILD, first.row["id"]) is not None
+
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))
+
+    assert "• Role **Mods** was added." in guild.channels[LOGS].sent[0]["embed"].description
+    guild.roles.append(role(100, "Streamers", 0, 3))
+    await sb.take_snapshot(bot, guild)
+    assert await structure_store.get(db, GUILD, first.row["id"]) is None
+    assert await structure_store.count(db, GUILD) == 2
+
+
+async def test_the_first_snapshot_ever_taken_by_hand_is_where_the_first_notice_starts(
+    bot, guild, db
+):
+    first = await sb.take_snapshot(bot, guild)
+    guild.roles.append(role(MODS, "Mods", 2, 1))
+    await sb.take_snapshot(bot, guild)
+
+    await sb.run_daily(bot, guild, PHOENIX_5AM)
+
+    found = await details_of(db, "structure.would_notice")
+    assert found["since_id"] == first.row["id"] and found["changes"] == 1
+
+
+async def test_a_look_by_hand_that_fails_never_brings_a_second_daily_look(bot, guild, db):
+    assert (await sb.run_daily(bot, guild, PHOENIX_5AM)).outcome == SAVED
+    guild.fetch_raises = refused()
+    assert (await sb.take_snapshot(bot, guild)).outcome == FAILED
+    guild.fetch_raises = None
+
+    for hours in (1, 4, 8):
+        assert await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(hours=hours)) is None
+
+    assert guild.fetches == 2
+
+
+def shown_and_more(text):
+    lines = text.splitlines()
+    return ([line for line in lines if line.startswith("• ")], lines)
+
+
+def forty_roles_reversed(guild):
+    for n in range(40):
+        guild.roles.append(role(100 + n, f"role-{n:02d}", 0, 3 + n))
+
+    def change():
+        for one in guild.roles[1:]:
+            one.position = 43 - one.position
+
+    return change
+
+
+async def test_forty_moves_keep_the_line_that_counts_the_rest_on_the_panel(bot, guild):
+    await bot.store.set(GUILD, "structure_backup_notice_lines", 40)
+    change = forty_roles_reversed(guild)
+    await sb.take_snapshot(bot, guild)
+    change()
+    _, view = await sb.build_panel(bot, guild)
+    press = FakeInteraction(bot)
+
+    await button(view, "What changed").callback(press)
+
+    value = field(press.rendered["embed"], "What changed")
+    shown, lines = shown_and_more(value)
+    assert len(value) <= 1024 and 1 <= len(shown) < 40
+    assert all(line.endswith(".") and "moved" in line for line in shown)
+    assert lines == [*shown, MORE.format(n=40 - len(shown))]
+
+
+async def test_forty_moves_all_fit_the_notice_and_fifteen_say_how_many_more(bot, guild):
+    await bot.store.set(GUILD, "structure_backup_notice_lines", 40)
+    change = forty_roles_reversed(guild)
+    await sb.run_daily(bot, guild, PHOENIX_5AM)
+    change()
+
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))
+    await bot.store.set(GUILD, "structure_backup_notice_lines", 15)
+    change()
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=2))
+
+    whole, cut = (one["embed"].description for one in guild.channels[LOGS].sent)
+    shown, lines = shown_and_more(whole)
+    assert lines[0].startswith("40 change(s)") and lines[1:] == shown and len(shown) == 40
+    shown, lines = shown_and_more(cut)
+    assert len(shown) == 15 and lines[-1] == MORE.format(n=25) and len(lines) == 17
+
+
+def allowed(everything):
+    allow, deny = (EVERYTHING, 0) if everything else (0, EVERYTHING)
+    return discord.PermissionOverwrite.from_pair(
+        discord.Permissions(allow), discord.Permissions(deny)
+    )
+
+
+def thirty_long_overwrites(guild):
+    leads = guild.roles[1]
+    rooms = [FakeChannel(600 + n, f"room-{n:02d}", category_id=40) for n in range(30)]
+    for room in rooms:
+        guild.channels[room.id] = room
+
+    def flip(everything):
+        for room in rooms:
+            room.overwrites = {leads: allowed(everything)}
+
+    flip(True)
+    return flip
+
+
+async def test_thirty_long_permission_lines_never_push_out_the_count_of_the_rest(bot, guild):
+    await bot.store.set(GUILD, "structure_backup_notice_lines", 40)
+    flip = thirty_long_overwrites(guild)
+    await sb.run_daily(bot, guild, PHOENIX_5AM)
+    flip(False)
+
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))
+    _, view = await sb.build_panel(bot, guild)
+    flip(True)
+    press = FakeInteraction(bot)
+    await button(view, "What changed").callback(press)
+
+    described = guild.channels[LOGS].sent[0]["embed"].description
+    shown, lines = shown_and_more(described)
+    assert len(described) <= 4096 and lines[0].startswith("30 change(s)")
+    assert 1 <= len(shown) < 30 and all(line.endswith(".") for line in shown)
+    assert lines[1:] == [*shown, MORE.format(n=30 - len(shown))]
+    value = field(press.rendered["embed"], "What changed")
+    shown, lines = shown_and_more(value)
+    assert len(value) <= 1024 and len(shown) == 1
+    assert lines == [*shown, MORE.format(n=29)]
+
+
+async def test_one_line_longer_than_the_field_is_cut_at_a_word_with_an_ellipsis(bot, guild):
+    leads = guild.roles[1]
+    guild.channels[STAFF].overwrites = {leads: allowed(True)}
+    taken = await sb.take_snapshot(bot, guild)
+    guild.channels[STAFF].overwrites = {leads: allowed(False)}
+    (whole,) = await sb.changes_since(bot, guild, taken.row)
+    full = f"• {whole['text']}"
+    assert len(full) > 1024
+    _, view = await sb.build_panel(bot, guild)
+    press = FakeInteraction(bot)
+
+    await button(view, "What changed").callback(press)
+
+    value = field(press.rendered["embed"], "What changed")
+    assert len(value) <= 1024 and "\n" not in value and value.endswith("…")
+    kept = value[:-1]
+    assert len(kept) > 512 and full.startswith(kept) and full[len(kept)] == " "
+    assert "more" not in value.splitlines()[-1]
+
+
+def test_cutting_keeps_whole_words_and_never_runs_past_the_limit():
+    assert sb.cut("one two three", 13) == "one two three"
+    assert sb.cut("one two three", 12) == "one two…"
+    assert sb.cut("one two three", 8) == "one two…"
+    assert sb.cut("x" * 50, 10) == "x" * 9 + "…"
+    assert sb.cut("ab", 1) == "…" and sb.cut("ab", 0) == ""
+
+
+async def test_a_line_longer_than_the_whole_notice_is_cut_and_nothing_is_miscounted(bot):
+    long = [{"text": "word " * 2000}, {"text": "short"}]
+
+    lines = sb.change_lines(bot.store, GUILD, long, 4000)
+
+    assert len(lines) == 2 and lines[0].endswith("…") and lines[1] == MORE.format(n=1)
+    assert len("\n".join(lines)) <= 4000
+
+
+LIMITS = [
+    ("structure_backup_take_label", 80),
+    ("structure_backup_changes_label", 80),
+    ("structure_backup_site_label", 80),
+    ("structure_backup_mode_label", 150),
+    ("structure_backup_panel_title", 256),
+    ("structure_backup_notice_title", 256),
+    ("structure_backup_latest_label", 256),
+    ("structure_backup_look_label", 256),
+    ("structure_backup_panel_footer", 256),
+    ("structure_backup_none_yet", 1024),
+    ("structure_backup_no_changes_said", 1024),
+    ("structure_backup_say_nothing", 1024),
+    ("structure_backup_off_said", 4096),
+]
+
+
+@pytest.mark.parametrize(("key", "limit"), LIMITS)
+def test_wording_longer_than_discord_holds_is_refused_at_save_in_words(key, limit):
+    assert coerce_value(key, "x" * limit) == "x" * limit
+
+    with pytest.raises(SettingError) as refused_save:
+        coerce_value(key, "x" * (limit + 1))
+
+    said = str(refused_save.value)
+    assert f"{limit + 1} characters" in said and f"holds {limit} on Discord" in said
+    assert "nothing was changed" in said and "Take 1 out" in said
+
+
+def test_every_structure_wording_key_has_a_limit_its_own_default_fits():
+    words = [key for key in STRUCTURE_BACKUP_KEYS if KEY_TYPES[key] == "text"]
+
+    assert set(STRUCTURE_BACKUP_LIMITS) == set(words) and len(words) == 67
+    for key in words:
+        assert len(STRUCTURE_BACKUP_DEFAULTS[key]) <= STRUCTURE_BACKUP_LIMITS[key], key
+    assert set(STRUCTURE_BACKUP_LIMITS.values()) == {80, 150, 256, 1024, 4096}
+
+
+def stored_already(bot, monkeypatch, **values):
+    real = bot.store.get
+    monkeypatch.setattr(
+        bot.store, "get", lambda guild_id, key, *rest: values.get(key, real(guild_id, key, *rest))
+    )
+
+
+async def test_wording_stored_before_the_limits_cannot_break_the_panel(
+    bot, guild, monkeypatch
+):
+    await sb.take_snapshot(bot, guild)
+    guild.roles.append(role(MODS, "Mods", 2, 1))
+    stored_already(
+        bot,
+        monkeypatch,
+        **{
+            key: "word " * 2000
+            for key in STRUCTURE_BACKUP_LIMITS
+            if not key.startswith("structure_backup_say_")
+        },
+    )
+    found = await sb.changes_since(bot, guild, await structure_store.latest(bot.db, GUILD))
+
+    embed, view = await sb.build_panel(bot, guild, note="word " * 2000, found=found)
+
+    assert len(embed.title) <= 256 and len(embed) + len(view.footer) <= 6000
+    assert len(embed.fields) == 4
+    for one in embed.fields:
+        assert 1 <= len(one.name) <= 256 and 1 <= len(one.value) <= 1024
+    assert all(len(label) <= 80 for label in labels(view))
+    assert len(mode_pick(view).placeholder) <= 150 and len(view.footer) <= 256
+    assert embed.to_dict() and all(item.to_component_dict() for item in view.children)
+
+
+async def test_wording_stored_before_the_limits_cannot_break_the_notice(
+    bot, guild, monkeypatch
+):
+    stored_already(
+        bot,
+        monkeypatch,
+        structure_backup_notice_title="word " * 2000,
+        structure_backup_notice_text="word " * 2000,
+        structure_backup_notice_more="word " * 2000,
+        structure_backup_notice_lines=1,
+    )
+    await sb.run_daily(bot, guild, PHOENIX_5AM)
+    guild.roles.append(role(MODS, "Mods", 2, 1))
+    guild.roles.append(role(100, "Streamers", 0, 3))
+
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))
+
+    embed = guild.channels[LOGS].sent[0]["embed"]
+    assert len(embed.title) <= 256 and len(embed.description) <= 4096 and len(embed) <= 6000
+    assert "• Role **Mods** was added." in embed.description.splitlines()
+
+
+@pytest.mark.parametrize("broken", ["{id.nope}", "{id[a]}", "{id!x}", "{0}", "{id:q}"])
+async def test_a_template_that_breaks_in_any_way_falls_back_to_the_shipped_wording(
+    bot, monkeypatch, broken
+):
+    stored_already(bot, monkeypatch, structure_backup_saved_said=broken)
+
+    assert sb.said(bot.store, GUILD, "structure_backup_saved_said", id=3) == "Snapshot #3 saved."
+
+
+def test_settings_lists_structure_backup_with_every_other_feature_mode(bot):
+    assert "**Structure backup** — shadow · `/structure` to change" in mode_lines(
+        bot.store, GUILD
+    )
+
+
+async def test_the_panel_carries_the_mode_control_and_it_changes_the_mode(bot, guild, db):
+    _, view = await sb.build_panel(bot, guild)
+    pick = mode_pick(view)
+    assert pick.placeholder == "Mode"
+    assert [(one.value, one.default) for one in pick.options] == [
+        ("off", False),
+        ("shadow", True),
+        ("on", False),
+    ]
+    press = FakeInteraction(bot)
+    pick._values = ["on"]
+
+    await pick.callback(press)
+
+    assert bot.store.get(GUILD, "structure_backup_mode") == "on"
+    shown = press.rendered
+    assert field(shown["embed"], "Mode") == "on"
+    assert shown["embed"].description == "**structure_backup_mode** is now on."
+    assert [one.default for one in mode_pick(shown["view"]).options] == [False, False, True]
+    found = await details_of(db, "settings.set")
+    assert (found["key"], found["value"], found["actor_id"]) == (
+        "structure_backup_mode",
+        "on",
+        USER,
+    )
+
+
+async def test_the_mode_control_brings_the_feature_back_from_off(bot, guild):
+    await bot.store.set(GUILD, "structure_backup_mode", "off")
+    _, view = await sb.build_panel(bot, guild)
+    assert labels(view) == ["Open the Structure page"]
+    press = FakeInteraction(bot)
+    pick = mode_pick(view)
+    pick._values = ["shadow"]
+
+    await pick.callback(press)
+
+    assert labels(press.rendered["view"]) == ["Take one now", "Open the Structure page"]
+
+
+async def test_the_mode_control_is_refused_to_someone_who_is_not_staff(bot, guild):
+    _, view = await sb.build_panel(bot, guild)
+    press = FakeInteraction(bot, staff=False)
+    pick = mode_pick(view)
+    pick._values = ["off"]
+
+    await pick.callback(press)
+
+    assert "staff only" in press.said[0] and not press.edits
+    assert bot.store.get(GUILD, "structure_backup_mode") == "shadow"
+
+
+def test_reachable_on_the_panel_counts_the_picker_cap_and_the_search(monkeypatch):
+    beyond = settings_panel.keys_in("core")[settings_panel.SELECT_LIMIT]
+    first = settings_panel.keys_in("core")[0]
+    assert beyond not in settings_panel.editable_options("core").keys
+    assert reachable_on_the_panel(beyond) and reachable_on_the_panel(first)
+
+    monkeypatch.setattr(settings_panel, "needs_find", lambda group: False)
+
+    assert reachable_on_the_panel(first) and not reachable_on_the_panel(beyond)
+
+
+EVIL = "**x** [click](https://evil.example)"
+TAMED = "\\*\\*x\\*\\* \\[click](https://evil.example)"
+
+
+async def test_a_name_written_as_markdown_is_shown_as_written_on_the_panel(bot, guild):
+    await sb.take_snapshot(bot, guild)
+    guild.roles.append(role(MODS, EVIL, 2, 1))
+    guild.channels[STAFF].topic = EVIL
+    _, view = await sb.build_panel(bot, guild)
+    press = FakeInteraction(bot)
+
+    await button(view, "What changed").callback(press)
+
+    value = field(press.rendered["embed"], "What changed")
+    assert value.splitlines() == [
+        f"• Role **{TAMED}** was added.",
+        f"• Channel **staff**'s topic changed from nothing to {TAMED}.",
+    ]
+
+
+async def test_a_name_written_as_markdown_is_shown_as_written_in_the_notice(bot, guild):
+    await sb.run_daily(bot, guild, PHOENIX_5AM)
+    guild.roles.append(role(MODS, EVIL, 2, 1))
+
+    taken = await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))
+
+    said = guild.channels[LOGS].sent[0]["embed"].description
+    assert f"• Role **{TAMED}** was added." in said and " [click](" not in said
+    assert [one["text"] for one in taken.changes] == [f"Role **{EVIL}** was added."]
+
+
+async def test_a_capture_with_no_channels_never_replaces_the_only_good_snapshot(
+    bot, guild, db
+):
+    await bot.store.set(GUILD, "structure_backup_keep", 1)
+    good = await sb.take_snapshot(bot, guild)
+    held = dict(guild.channels)
+    guild.channels.clear()
+
+    taken = await sb.take_snapshot(bot, guild)
+
+    guild.channels.update(held)
+    assert taken.outcome == FAILED and "no channels" in taken.reason
+    assert (await structure_store.latest(db, GUILD))["id"] == good.row["id"]
+    assert await structure_store.count(db, GUILD) == 1
+
+
+async def test_discord_not_answering_is_a_timeout_in_words_and_the_lock_is_let_go(
+    bot, guild, db, monkeypatch
+):
+    monkeypatch.setattr(sb, "FETCH_SECONDS", 0.05)
+    guild.hangs = True
+
+    taken = await sb.take_snapshot(bot, guild)
+
+    assert taken.outcome == FAILED
+    assert "Discord could not be reached" in taken.reason
+    assert "refused" not in taken.reason and "View Channels" not in taken.reason
+    assert not sb.lock_for(bot).locked()
+    guild.hangs = False
+    assert (await sb.take_snapshot(bot, guild)).outcome == SAVED
+
+
+def test_a_network_failure_is_never_worded_as_a_permission_problem():
+    for exc in (TimeoutError(), ConnectionResetError("reset"), OSError("down")):
+        said = sb.failure_reason(exc)
+        assert "Discord could not be reached" in said and "refused" not in said
+
+
+def test_the_fakes_refuse_every_call_they_were_not_told_about(bot, guild):
+    tried = (
+        (guild, "edit"),
+        (guild, "create_role"),
+        (guild, "create_text_channel"),
+        (guild, "edit_role_positions"),
+        (guild.roles[0], "edit"),
+        (guild.roles[0], "delete"),
+        (guild.channels[STAFF], "set_permissions"),
+        (guild.channels[STAFF], "clone"),
+        (guild.channels[STAFF], "create_webhook"),
+        (guild.channels[STAFF], "create_invite"),
+        (guild.channels[STAFF], "create_thread"),
+        (bot.http, "request"),
+        (bot.http, "edit_role"),
+    )
+    for thing, name in tried:
+        with pytest.raises(AssertionError, match="must never call"):
+            getattr(thing, name)()
+
+    assert len(REFUSED) == len(tried)
+    REFUSED.clear()
+
+
+WRITE_NAMES = frozenset(
+    {
+        "edit",
+        "delete",
+        "move",
+        "clone",
+        "set_permissions",
+        "add_roles",
+        "remove_roles",
+        "ban",
+        "unban",
+        "kick",
+        "timeout",
+        "purge",
+        "prune_members",
+        "follow",
+        "publish",
+        "pin",
+        "unpin",
+        "leave",
+    }
+)
+WRITE_PREFIXES = ("create_", "delete_", "edit_", "bulk_")
+NOT_A_WRITE = frozenset({"edit_original_response"})
+REFLECTION = frozenset({"getattr", "setattr", "delattr", "hasattr"})
+NEVER_NAMED = frozenset(
+    {"Route", "http", "eval", "exec", "vars", "globals", "locals", "__import__"}
+)
+ALLOWED_IMPORTS = frozenset(
+    {
+        "__future__",
+        "asyncio",
+        "bisect",
+        "collections",
+        "collections.abc",
+        "dataclasses",
+        "datetime",
+        "hashlib",
+        "json",
+        "logging",
+        "typing",
+        "discord",
+        "discord.ext",
+        "fastapi",
+        "fastapi.responses",
+        "black_bloc.actionlog",
+        "black_bloc.command_visibility",
+        "black_bloc.logkinds",
+        "black_bloc.loops",
+        "black_bloc.panels",
+        "black_bloc.settings_store",
+        "black_bloc.shadow",
+        "black_bloc.structure",
+        "black_bloc.structure_capture",
+        "black_bloc.structure_diff",
+        "black_bloc.structure_store",
+        "black_bloc.timezones",
+        "black_bloc.cogs.core",
+        "black_bloc.cogs.moderation.structure_backup",
+        "black_bloc.api.auth",
+        "black_bloc.api.names",
+        "black_bloc.api.writes",
+    }
+)
 STRUCTURE_MODULES = (
     "structure.py",
     "structure_capture.py",
@@ -735,18 +1385,116 @@ STRUCTURE_MODULES = (
     "cogs/moderation/structure_backup.py",
     "api/tools/structure.py",
 )
+COG = "cogs/moderation/structure_backup.py"
+
+
+def is_write(name):
+    if name in NOT_A_WRITE:
+        return False
+    return name in WRITE_NAMES or name.startswith(WRITE_PREFIXES)
+
+
+def reached(module, node):
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    package = ["black_bloc", *module.split("/")[:-1]]
+    base = package[: len(package) - (node.level - 1)] if node.level else []
+    if node.module:
+        return [".".join([*base, node.module])]
+    return [".".join([*base, alias.name]) for alias in node.names]
+
+
+def named_badly(name):
+    return name in NEVER_NAMED or is_write(name)
+
+
+def write_paths(source, module=COG):
+    """Every way this source could reach a write: by name, by reflection, by http, by import."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Attribute) and named_badly(node.attr):
+            found.append(f"line {node.lineno}: .{node.attr}")
+        elif isinstance(node, ast.Name) and named_badly(node.id):
+            found.append(f"line {node.lineno}: {node.id}")
+        elif isinstance(node, ast.Import | ast.ImportFrom):
+            for wanted in reached(module, node):
+                if wanted not in ALLOWED_IMPORTS:
+                    found.append(f"line {node.lineno}: import of {wanted}")
+            for alias in node.names:
+                for name in (alias.name.rsplit(".", 1)[-1], alias.asname or ""):
+                    if named_badly(name):
+                        found.append(f"line {node.lineno}: import named {name}")
+        elif isinstance(node, ast.Call) and getattr(node.func, "id", None) in REFLECTION:
+            name = node.args[1] if len(node.args) > 1 else None
+            if not (isinstance(name, ast.Constant) and isinstance(name.value, str)):
+                found.append(f"line {node.lineno}: {node.func.id} with a computed name")
+            elif named_badly(name.value):
+                found.append(f"line {node.lineno}: {node.func.id} of {name.value}")
+    return found
 
 
 def test_no_structure_module_can_write_a_role_a_channel_or_a_permission():
     """Capture and compare only: restoring is the owner's separate decision."""
     package = pathlib.Path(sb.__file__).resolve().parents[2]
-    called: set[str] = set()
-    for name in STRUCTURE_MODULES:
-        tree = ast.parse((package / name).read_text(encoding="utf-8"))
-        called |= {
-            node.func.attr
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-        }
+    found = {
+        name: write_paths((package / name).read_text(encoding="utf-8"), name)
+        for name in STRUCTURE_MODULES
+    }
 
-    assert not (called & WRITES), sorted(called & WRITES)
+    assert not {name: paths for name, paths in found.items() if paths}
+
+
+SPELLINGS = [
+    "async def go(role):\n    await role.edit(name='x')",
+    "getattr(role, 'edit')(name='x')",
+    "go = role.edit\nresult = go(name='x')",
+    "role.delete",
+    "bot.http.edit_role(1, 2, name='x')",
+    "client = bot.http",
+    "Route('PATCH', '/guilds/1/roles/2')",
+    "from discord.http import Route",
+    "import discord.http",
+    "from discord import http",
+    "from x import set_permissions",
+    "from discord.abc import GuildChannel as edit",
+    "from ..community.events import change_settings",
+    "from ... import modcases",
+    "import importlib",
+    "channel.clone()",
+    "channel.create_webhook(name='x')",
+    "channel.create_invite()",
+    "channel.create_thread(name='x')",
+    "guild.create_role(name='x')",
+    "guild.edit_role_positions({})",
+    "channel.set_permissions(role, overwrite=None)",
+    "getattr(role, name)()",
+    "setattr(role, name, 1)",
+    "getattr(bot, 'http')",
+    "vars(role)['edit']()",
+    "member.timeout(None)",
+]
+
+
+@pytest.mark.parametrize("source", SPELLINGS)
+def test_the_guard_trips_on_every_spelling_of_a_write(source):
+    assert write_paths(source), source
+
+
+def test_the_guard_lets_the_reads_this_feature_makes_through():
+    reads = (
+        "async def go(guild, channel, interaction):\n"
+        "    roles = await guild.fetch_roles()\n"
+        "    channels = await guild.fetch_channels()\n"
+        "    for target, overwrite in channel.overwrites.items():\n"
+        "        allow, deny = overwrite.pair()\n"
+        "    name = getattr(channel, 'name', None)\n"
+        "    await channel.send('x')\n"
+        "    await interaction.response.send_message('x')\n"
+        "    await interaction.response.defer()\n"
+        "    await interaction.edit_original_response(content='x')\n"
+        "from ... import shadow, structure_store\n"
+        "from ..core import set_key\n"
+        "import discord\n"
+    )
+
+    assert write_paths(reads) == []

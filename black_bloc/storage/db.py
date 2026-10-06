@@ -1229,11 +1229,13 @@ CREATE TABLE IF NOT EXISTS structure_looks (
     last_day TEXT,
     outcome  TEXT    NOT NULL,
     reason   TEXT,
-    attempts INTEGER NOT NULL DEFAULT 0
+    attempts INTEGER NOT NULL DEFAULT 0,
+    noticed_id INTEGER
 );
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("structure_looks", "noticed_id", "INTEGER"),
     ("role_menus", "approval", "INTEGER NOT NULL DEFAULT 0"),
     ("role_menus", "expires_days", "INTEGER"),
     ("role_menus", "retry_days", "INTEGER NOT NULL DEFAULT 7"),

@@ -19,6 +19,7 @@ from .settings_store import (
     SELFTEST_PURGE_MINUTES,
     SETTINGS_CORE_KEYS_ADMIN_ONLY,
     SETTINGS_PANEL_MINUTES,
+    STRUCTURE_BACKUP_MODE,
     display_value,
     namespace_of,
 )
@@ -108,6 +109,7 @@ EXTRA_MODES: tuple[FeatureMode, ...] = (
         MODMAIL_ENABLED_KEY, "modmail", "Modmail", (MODMAIL_ANSWERING, MODMAIL_NOT_ANSWERING)
     ),
     FeatureMode(MARATHON_MODE_KEY, "event", FEATURE_LABELS["marathon"]),
+    FeatureMode(STRUCTURE_BACKUP_MODE, "structure", "Structure backup"),
 )
 
 
@@ -408,8 +410,11 @@ def keys_in(group: str) -> tuple[str, ...]:
 
 
 def reachable_on_the_panel(key: str) -> bool:
-    """Checklist 33 — `A setting group…` opens this key and its card carries a real editor."""
-    return key in keys_in(namespace_of(key)) and has_editor(key)
+    """Checklist 33 — the group's picker lists this key, or its search brings it up."""
+    group = namespace_of(key)
+    listed = key in editable_options(group).keys
+    found = needs_find(group) and key in editable_options(group, key).keys
+    return (listed or found) and has_editor(key)
 
 
 def matches(key: str, needle: str) -> bool:

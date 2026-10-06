@@ -3731,6 +3731,62 @@ STRUCTURE_BACKUP_FIELDS: dict[str, tuple[str, ...]] = {
         for name, (words, _) in STRUCTURE_SAY_WORDS.items()
     },
 }
+STRUCTURE_LABEL = "label"
+STRUCTURE_HINT = "hint"
+STRUCTURE_HEADING = "heading"
+STRUCTURE_LINE = "line"
+STRUCTURE_ANSWER = "answer"
+STRUCTURE_EMBED_CHARS = 6000
+STRUCTURE_SLOTS: dict[str, tuple[int, str]] = {
+    STRUCTURE_LABEL: (80, "a button's label"),
+    STRUCTURE_HINT: (150, "a picker's hint"),
+    STRUCTURE_HEADING: (256, "a heading"),
+    STRUCTURE_LINE: (1024, "one block of a card"),
+    STRUCTURE_ANSWER: (4096, "a card's main text"),
+}
+STRUCTURE_BACKUP_SLOT: dict[str, str] = {
+    **{key: STRUCTURE_LINE for key in STRUCTURE_BACKUP_FIELDS},
+    "structure_backup_take_label": STRUCTURE_LABEL,
+    "structure_backup_changes_label": STRUCTURE_LABEL,
+    "structure_backup_site_label": STRUCTURE_LABEL,
+    "structure_backup_mode_label": STRUCTURE_HINT,
+    "structure_backup_notice_title": STRUCTURE_HEADING,
+    "structure_backup_panel_title": STRUCTURE_HEADING,
+    "structure_backup_panel_footer": STRUCTURE_HEADING,
+    "structure_backup_latest_label": STRUCTURE_HEADING,
+    "structure_backup_look_label": STRUCTURE_HEADING,
+    "structure_backup_saved_said": STRUCTURE_ANSWER,
+    "structure_backup_unchanged_said": STRUCTURE_ANSWER,
+    "structure_backup_failed_said": STRUCTURE_ANSWER,
+    "structure_backup_off_said": STRUCTURE_ANSWER,
+}
+STRUCTURE_BACKUP_LIMITS: dict[str, int] = {
+    key: STRUCTURE_SLOTS[slot][0] for key, slot in STRUCTURE_BACKUP_SLOT.items()
+}
+STRUCTURE_TOO_LONG = (
+    "That is {length} characters and {what} holds {limit} on Discord, so nothing was changed. "
+    "Take {over} out and save it again."
+)
+
+
+def checked_structure_words(key: str) -> Any:
+    """Known placeholders only, and no longer than the place Discord shows it in."""
+    fields = STRUCTURE_BACKUP_FIELDS[key]
+    limit, what = STRUCTURE_SLOTS[STRUCTURE_BACKUP_SLOT[key]]
+
+    def check(given: Any) -> str:
+        text = _checked_words(given, fields)
+        if len(text) > limit:
+            raise SettingError(
+                STRUCTURE_TOO_LONG.format(
+                    length=len(text), what=what, limit=limit, over=len(text) - limit
+                )
+            )
+        return text
+
+    return check
+
+
 def structure_say_help(what: str, fields: tuple[str, ...]) -> str:
     said = f"how the structure change list words {what}"
     if not fields:
@@ -3778,12 +3834,14 @@ KEY_HELP.update(
         ),
         STRUCTURE_BACKUP_KEEP: (
             "how many structure snapshots are kept; 60 by default. The oldest beyond that are "
-            "deleted each time a new one is stored. A day with no change stores nothing, so 60 "
-            "is 60 distinct structures, not 60 days"
+            "deleted each time a new one is stored, except the one the next notice starts "
+            "from. A day with no change stores nothing, so 60 is 60 distinct structures, not "
+            "60 days"
         ),
         STRUCTURE_BACKUP_NOTIFY: (
-            "true — the default — posts a notice for staff when the daily structure snapshot "
-            "differs from the one before it; false takes the snapshot and says nothing"
+            "true — the default — posts a notice for staff when the daily look finds the "
+            "structure changed since the last notice, snapshots taken by hand included; false "
+            "takes the snapshot and says nothing"
         ),
         STRUCTURE_BACKUP_CHANNEL: (
             "where the structure-changed notice goes while structure_backup_mode is on; blank "
@@ -4417,9 +4475,7 @@ def checked_fields(fields: tuple[str, ...]) -> Any:
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in CHANNEL_NOTE_WORDS.items()}
 )
-TEXT_CHECKS.update(
-    {key: checked_fields(fields) for key, fields in STRUCTURE_BACKUP_FIELDS.items()}
-)
+TEXT_CHECKS.update({key: checked_structure_words(key) for key in STRUCTURE_BACKUP_FIELDS})
 
 VOICE_SHEET_CHARS = 4000
 TONE_CLAUSE_CHARS = 600

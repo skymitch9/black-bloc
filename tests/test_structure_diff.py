@@ -352,3 +352,83 @@ def test_the_kept_run_is_the_longest_one_still_in_order():
     assert moved(list("abcde"), list("eabcd")) == ["e"]
     assert moved(list("abcde"), list("xacbe")) in (["c"], ["b"])
     assert moved(list("abc"), list("xyz")) == []
+
+
+def test_two_channels_with_one_name_are_told_apart_by_their_category():
+    old = base()
+    by_id(old["channels"], 51)["name"] = "general"
+
+    def change(new):
+        by_id(new["channels"], 51)["name"] = "general"
+        by_id(new["channels"], 51)["topic"] = "staff only"
+        by_id(new["channels"], 41)["overwrites"].append(overwrite(12, allow=SEND))
+
+    assert texts(old, edited(change)) == [
+        "Channel **general · Staff**'s topic changed from nothing to staff only.",
+        "In **general · Lobby**, role **Mods** got its own permissions: "
+        "now allowed Send Messages.",
+    ]
+
+
+def test_two_channels_with_one_name_in_one_place_fall_back_to_their_ids():
+    old = base()
+    by_id(old["channels"], 42)["name"] = "general"
+
+    def change(new):
+        by_id(new["channels"], 42)["name"] = "general"
+        by_id(new["channels"], 42)["topic"] = "second"
+
+    assert texts(old, edited(change)) == [
+        "Channel **general · Lobby · 42**'s topic changed from nothing to second."
+    ]
+
+
+def test_a_name_that_is_unique_is_left_as_it_is():
+    def change(new):
+        by_id(new["channels"], 42)["topic"] = "only memes"
+
+    assert texts(base(), edited(change)) == [
+        "Channel **memes**'s topic changed from nothing to only memes."
+    ]
+
+
+def test_names_and_free_text_are_escaped_when_the_reader_is_discord():
+    evil = "**x** [click](https://evil.example)"
+
+    def change(new):
+        new["roles"].append(role(14, evil, VIEW, 4))
+        by_id(new["channels"], 42)["name"] = evil
+        by_id(new["channels"], 43)["topic"] = evil
+        new["guild"]["name"] = evil
+
+    new = edited(change)
+    said = [
+        one["text"]
+        for one in changes(base(), new, None, escape=discord.utils.escape_markdown)
+    ]
+
+    assert len(said) == 4
+    for line in said:
+        assert "\\*\\*x\\*\\* \\[click](https://evil.example)" in line, line
+        assert " [click](" not in line and "**x**" not in line, line
+    assert f"Role **{evil}** was added." in texts(base(), new)
+
+
+def test_an_overwrite_whose_target_changed_kind_is_a_change_that_is_said():
+    old = base()
+    by_id(old["channels"], 41)["overwrites"].append(overwrite(12, allow=SEND))
+
+    def change(new):
+        by_id(new["channels"], 41)["overwrites"].append(overwrite(12, allow=SEND, kind="member"))
+
+    assert texts(old, edited(change)) == [
+        "In **general**, member 12 got its own permissions: now allowed Send Messages.",
+        "In **general**, role **Mods**'s own permissions were removed.",
+    ]
+
+
+def test_a_template_that_breaks_in_any_way_falls_back_to_the_shipped_wording():
+    for broken in ("{role.nope}", "{role[a]}", "{role!x}", "{0}", "{role:d}"):
+        assert sentence({"role_added": broken}, "role_added", role="Mods") == (
+            "Role **Mods** was added."
+        ), broken

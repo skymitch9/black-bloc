@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 from bisect import bisect_left
-from collections.abc import Mapping
+from collections import Counter
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import discord
 
 from .structure import CATEGORY, MEMBER, clean
+
+log = logging.getLogger(__name__)
 
 SERVER = "server"
 ROLES = "roles"
@@ -161,8 +165,13 @@ def sentence(say: Mapping[str, str] | None, name: str, /, **fields: Any) -> str:
     if wording:
         try:
             return wording.format(**fields)
-        except (IndexError, KeyError, ValueError):
-            pass
+        except Exception as exc:
+            log.warning(
+                "structure: the wording for %s could not be filled in (%s); the shipped one "
+                "was used",
+                name,
+                type(exc).__name__,
+            )
     return DEFAULTS[name].format(**fields)
 
 
@@ -189,14 +198,14 @@ def clipped(value: Any) -> str:
     return text if len(text) <= TEXT_LIMIT else text[: TEXT_LIMIT - 1] + "…"
 
 
-def shown(say: Mapping[str, str] | None, value: Any) -> str:
+def shown(say: Mapping[str, str] | None, value: Any, text: Callable[[Any], str] = str) -> str:
     if value is None or value == "":
         return sentence(say, "nothing")
     if value is True:
         return sentence(say, "yes")
     if value is False:
         return sentence(say, "no")
-    return clipped(value)
+    return text(clipped(value))
 
 
 def colour(value: Any) -> str:
@@ -205,6 +214,15 @@ def colour(value: Any) -> str:
 
 def by_id(rows: list[dict[str, Any]], field: str = "id") -> dict[str, dict[str, Any]]:
     return {str(row[field]): row for row in rows if row.get(field) is not None}
+
+
+def by_target(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+    """An overwrite is who it is on AND what kind of thing that is."""
+    return {
+        (str(row.get("target_type")), str(row["target_id"])): row
+        for row in rows
+        if row.get("target_id") is not None
+    }
 
 
 def kept_in_order(before: list[str], after: list[str]) -> set[str]:
@@ -244,21 +262,55 @@ def top_down(roles: dict[str, dict[str, Any]]) -> list[str]:
 
 
 class Names:
-    """Ids read back as names, the newer snapshot's first."""
+    """Ids read back as names, the newer snapshot's first, made safe for whoever reads them."""
 
-    def __init__(self, old: dict[str, Any], new: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        old: dict[str, Any],
+        new: dict[str, Any],
+        say: Mapping[str, str] | None = None,
+        escape: Callable[[str], str] | None = None,
+    ) -> None:
+        self.say = say
+        self.escape = escape
         self.roles = {**self.of(old["roles"]), **self.of(new["roles"])}
-        self.channels = {**self.of(old["channels"]), **self.of(new["channels"])}
+        held = {**by_id(old["channels"]), **by_id(new["channels"])}
+        plain = self.of(list(held.values()))
+        named = Counter(plain.values())
+        placed = Counter((plain[ident], one["parent_id"]) for ident, one in held.items())
+        self.channels = {
+            ident: self.label(ident, one, plain, named, placed) for ident, one in held.items()
+        }
 
     @staticmethod
     def of(rows: list[dict[str, Any]]) -> dict[str, str]:
         return {str(row["id"]): str(row["name"] or row["id"]) for row in rows}
 
+    def text(self, value: Any) -> str:
+        return self.escape(str(value)) if self.escape is not None else str(value)
+
+    def label(
+        self, ident: str, one: dict[str, Any], plain: dict[str, str], named: Any, placed: Any
+    ) -> str:
+        """A name two channels share also says where it is, and its id when that is shared too."""
+        name = plain[ident]
+        if named[name] < 2:
+            return self.text(name)
+        parent = one["parent_id"]
+        if parent is None:
+            place = sentence(self.say, "top_level")
+        else:
+            place = self.text(plain.get(str(parent), parent))
+        parts = [self.text(name), place]
+        if placed[(name, parent)] > 1:
+            parts.append(ident)
+        return " · ".join(parts)
+
     def role(self, ident: Any) -> str:
-        return self.roles.get(str(ident), str(ident))
+        return self.text(self.roles.get(str(ident), str(ident)))
 
     def channel(self, ident: Any) -> str:
-        return self.channels.get(str(ident), str(ident))
+        return self.channels.get(str(ident), self.text(ident))
 
 
 def row(area: str, kind: str, text: str) -> dict[str, str]:
@@ -288,8 +340,8 @@ def server_changes(old: dict, new: dict, names: Names, say: Any) -> list[dict[st
                     say,
                     "server_changed",
                     what=sentence(say, label),
-                    old=shown(say, was),
-                    new=shown(say, now),
+                    old=shown(say, was, names.text),
+                    new=shown(say, now, names.text),
                 ),
             )
         )
@@ -304,7 +356,7 @@ def role_changes(old: dict, new: dict, names: Names, say: Any) -> list[dict[str,
     for ident in was.keys() - now.keys():
         found.append(row(ROLES, REMOVED, sentence(say, "role_removed", role=names.role(ident))))
     for ident in was.keys() & now.keys():
-        found.extend(one_role(was[ident], now[ident], say))
+        found.extend(one_role(was[ident], now[ident], names, say))
     order = top_down(now)
     for ident in moved(top_down(was), order):
         above = order.index(ident) - 1
@@ -318,13 +370,12 @@ def role_changes(old: dict, new: dict, names: Names, say: Any) -> list[dict[str,
     return found
 
 
-def one_role(was: dict, now: dict, say: Any) -> list[dict[str, str]]:
+def one_role(was: dict, now: dict, names: Names, say: Any) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
-    name = str(now["name"] or now["id"])
+    name = names.role(now["id"])
     if was["name"] != now["name"]:
-        found.append(
-            row(ROLES, CHANGED, sentence(say, "role_renamed", old=was["name"], new=name))
-        )
+        old = names.text(was["name"])
+        found.append(row(ROLES, CHANGED, sentence(say, "role_renamed", old=old, new=name)))
     before, after = permission_names(was["permissions"]), permission_names(now["permissions"])
     if after - before:
         found.append(
@@ -436,11 +487,10 @@ def channel_changes(old: dict, new: dict, names: Names, say: Any) -> list[dict[s
 
 def one_channel(was: dict, now: dict, names: Names, say: Any) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
-    name = str(now["name"] or now["id"])
+    name = names.channel(now["id"])
     if was["name"] != now["name"]:
-        found.append(
-            row(CHANNELS, CHANGED, sentence(say, "channel_renamed", old=was["name"], new=name))
-        )
+        old = names.text(was["name"])
+        found.append(row(CHANNELS, CHANGED, sentence(say, "channel_renamed", old=old, new=name)))
     if was["parent_id"] != now["parent_id"]:
         found.append(
             row(
@@ -467,17 +517,19 @@ def one_channel(was: dict, now: dict, names: Names, say: Any) -> list[dict[str, 
                     "channel_changed",
                     channel=name,
                     what=sentence(say, label),
-                    old=shown(say, was.get(field)),
-                    new=shown(say, now.get(field)),
+                    old=shown(say, was.get(field), names.text),
+                    new=shown(say, now.get(field), names.text),
                 ),
             )
         )
-    found.extend(tag_changes(was, now, name, say))
+    found.extend(tag_changes(was, now, name, names, say))
     found.extend(overwrite_changes(was, now, name, names, say))
     return found
 
 
-def tag_changes(was: dict, now: dict, name: str, say: Any) -> list[dict[str, str]]:
+def tag_changes(
+    was: dict, now: dict, name: str, names: Names, say: Any
+) -> list[dict[str, str]]:
     before, after = by_id(was["tags"]), by_id(now["tags"])
     found: list[dict[str, str]] = []
     for ident in after.keys() - before.keys():
@@ -485,7 +537,9 @@ def tag_changes(was: dict, now: dict, name: str, say: Any) -> list[dict[str, str
             row(
                 CHANNELS,
                 ADDED,
-                sentence(say, "tag_added", channel=name, tag=after[ident]["name"]),
+                sentence(
+                    say, "tag_added", channel=name, tag=names.text(after[ident]["name"])
+                ),
             )
         )
     for ident in before.keys() - after.keys():
@@ -493,7 +547,9 @@ def tag_changes(was: dict, now: dict, name: str, say: Any) -> list[dict[str, str
             row(
                 CHANNELS,
                 REMOVED,
-                sentence(say, "tag_removed", channel=name, tag=before[ident]["name"]),
+                sentence(
+                    say, "tag_removed", channel=name, tag=names.text(before[ident]["name"])
+                ),
             )
         )
     for ident in before.keys() & after.keys():
@@ -506,8 +562,8 @@ def tag_changes(was: dict, now: dict, name: str, say: Any) -> list[dict[str, str
                         say,
                         "tag_renamed",
                         channel=name,
-                        old=before[ident]["name"],
-                        new=after[ident]["name"],
+                        old=names.text(before[ident]["name"]),
+                        new=names.text(after[ident]["name"]),
                     ),
                 )
             )
@@ -537,7 +593,7 @@ def detail(was: dict[str, Any] | None, now: dict[str, Any], say: Any) -> str:
 def overwrite_changes(
     was: dict, now: dict, name: str, names: Names, say: Any
 ) -> list[dict[str, str]]:
-    before, after = by_id(was["overwrites"], "target_id"), by_id(now["overwrites"], "target_id")
+    before, after = by_target(was["overwrites"]), by_target(now["overwrites"])
     found: list[dict[str, str]] = []
     for ident in after.keys() - before.keys():
         found.append(
@@ -586,10 +642,16 @@ def overwrite_changes(
     return found
 
 
-def changes(old: Any, new: Any, say: Mapping[str, str] | None = None) -> list[dict[str, str]]:
+def changes(
+    old: Any,
+    new: Any,
+    say: Mapping[str, str] | None = None,
+    *,
+    escape: Callable[[str], str] | None = None,
+) -> list[dict[str, str]]:
     """Every difference between two snapshot bodies, grouped by area, steady in its order."""
     before, after = clean(old), clean(new)
-    names = Names(before, after)
+    names = Names(before, after, say, escape)
     found = [
         *server_changes(before, after, names, say),
         *role_changes(before, after, names, say),

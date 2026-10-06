@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
+import discord
+
 from .structure import MEMBER, ROLE, clean
 
 NO_ROLES = "Discord sent no roles at all, so there was nothing trustworthy to copy"
+NO_CHANNELS = (
+    "Discord sent no channels at all, so there was nothing trustworthy to copy. A server "
+    "always has at least one, so this is Discord answering badly; try again in a few minutes"
+)
+MEMBER_TYPES = (discord.Member, discord.User)
 
 
 class CaptureError(RuntimeError):
@@ -84,6 +91,16 @@ def tag_row(tag: Any) -> dict[str, Any]:
     }
 
 
+def target_kind(target: Any, target_id: str, role_ids: set[str]) -> str:
+    """Discord's own word for what an overwrite is on; the role list only when it has none."""
+    kind = getattr(target, "type", None) if isinstance(target, discord.Object) else type(target)
+    if isinstance(kind, type) and issubclass(kind, discord.Role):
+        return ROLE
+    if isinstance(kind, type) and issubclass(kind, MEMBER_TYPES):
+        return MEMBER
+    return ROLE if target_id in role_ids else MEMBER
+
+
 def overwrite_rows(channel: Any, role_ids: set[str]) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     for target, overwrite in (getattr(channel, "overwrites", None) or {}).items():
@@ -94,7 +111,7 @@ def overwrite_rows(channel: Any, role_ids: set[str]) -> list[dict[str, Any]]:
         found.append(
             {
                 "target_id": target_id,
-                "target_type": ROLE if target_id in role_ids else MEMBER,
+                "target_type": target_kind(target, target_id, role_ids),
                 "allow": whole(allow) or 0,
                 "deny": whole(deny) or 0,
             }
@@ -128,16 +145,14 @@ def capture(guild: Any, roles: Any, channels: Any) -> dict[str, Any]:
     guild_id = text_id(guild)
     if guild_id is not None:
         role_ids.add(guild_id)
-    return clean(
-        {
-            "guild": guild_row(guild),
-            "roles": role_rows,
-            "channels": [channel_row(channel, role_ids) for channel in channels or ()],
-        }
-    )
+    channel_rows = [channel_row(channel, role_ids) for channel in channels or ()]
+    if not channel_rows:
+        raise CaptureError(NO_CHANNELS)
+    return clean({"guild": guild_row(guild), "roles": role_rows, "channels": channel_rows})
 
 
 __all__ = [
+    "NO_CHANNELS",
     "NO_ROLES",
     "CaptureError",
     "capture",

@@ -3751,7 +3751,15 @@ STRUCTURE_SNAPSHOT_COLUMNS = {
     "checks",
     "body",
 }
-STRUCTURE_LOOK_COLUMNS = {"guild_id", "last_at", "last_day", "outcome", "reason", "attempts"}
+STRUCTURE_LOOK_COLUMNS = {
+    "guild_id",
+    "last_at",
+    "last_day",
+    "outcome",
+    "reason",
+    "attempts",
+    "noticed_id",
+}
 
 
 async def structure_columns(db: Database) -> tuple[set[str], set[str]]:
@@ -3799,5 +3807,33 @@ async def test_a_schema_87_file_gains_the_structure_tables_and_loses_nothing(tmp
         assert [row["user_id"] for row in await cur.fetchall()] == [900]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_looks_table_from_before_the_notice_mark_gains_it_and_keeps_its_row(tmp_path):
+    from black_bloc.storage.db import ADDED_COLUMNS
+
+    path = tmp_path / "looks.sqlite3"
+    db = Database(path)
+    await db.connect()
+    try:
+        await db.conn.execute("ALTER TABLE structure_looks DROP COLUMN noticed_id")
+        await db.conn.execute(
+            "INSERT INTO structure_looks(guild_id, last_at, last_day, outcome, attempts) "
+            "VALUES (7, '2026-10-05T11:00:00+00:00', '2026-10-05', 'saved', 0)"
+        )
+        await db.conn.commit()
+    finally:
+        await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        assert ("structure_looks", "noticed_id", "INTEGER") in ADDED_COLUMNS
+        assert (await structure_columns(again))[1] == STRUCTURE_LOOK_COLUMNS
+        cur = await again.conn.execute("SELECT last_day, noticed_id FROM structure_looks")
+        row = await cur.fetchone()
+        assert (row["last_day"], row["noticed_id"]) == ("2026-10-05", None)
     finally:
         await again.close()

@@ -134,7 +134,8 @@ def test_a_download_is_built_from_the_field_lists_never_from_the_row():
     found = export(row(secret="never", body=json.dumps(body() | {"members": ["900"]})))
 
     assert set(found) == {"snapshot", "version", "guild", "roles", "channels"}
-    assert set(found["snapshot"]) == {*SNAPSHOT_FIELDS, "guild_id"}
+    assert set(found["snapshot"]) == {*SNAPSHOT_FIELDS, "guild_id", "filename"}
+    assert found["snapshot"]["filename"] == export_name(row())
     assert "taken_by" not in found["snapshot"]
     assert "never" not in json.dumps(found) and "900" not in json.dumps(found)
     assert found["snapshot"]["guild_id"] == "7"
