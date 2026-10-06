@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 87
+SCHEMA_VERSION = 88
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1187,6 +1187,32 @@ CREATE TABLE IF NOT EXISTS marathon_inbox (
     thread_id  INTEGER NOT NULL,
     made_at    TEXT    NOT NULL,
     PRIMARY KEY (guild_id, home)
+);
+
+CREATE TABLE IF NOT EXISTS structure_snapshots (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER NOT NULL,
+    taken_at   TEXT    NOT NULL,
+    source     TEXT    NOT NULL,
+    taken_by   INTEGER,
+    digest     TEXT    NOT NULL,
+    roles      INTEGER NOT NULL DEFAULT 0,
+    categories INTEGER NOT NULL DEFAULT 0,
+    channels   INTEGER NOT NULL DEFAULT 0,
+    overwrites INTEGER NOT NULL DEFAULT 0,
+    checked_at TEXT    NOT NULL,
+    checks     INTEGER NOT NULL DEFAULT 0,
+    body       TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS structure_snapshots_by_guild ON structure_snapshots(guild_id, id);
+
+CREATE TABLE IF NOT EXISTS structure_looks (
+    guild_id INTEGER PRIMARY KEY,
+    last_at  TEXT    NOT NULL,
+    last_day TEXT,
+    outcome  TEXT    NOT NULL,
+    reason   TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0
 );
 """
 

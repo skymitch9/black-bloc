@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 87
+        assert SCHEMA_VERSION == 88
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3624,7 +3624,7 @@ async def test_a_schema_86_file_gains_the_stored_tone_and_keeps_what_each_member
         cur = await again.conn.execute("PRAGMA table_info(chat_voice)")
         assert set(TONE_COLUMNS) <= {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "87"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "88"
     finally:
         await again.close()
 
@@ -3714,3 +3714,70 @@ async def test_a_new_database_stores_no_tone_and_converts_nothing(tmp_path):
         assert tuple(await cur.fetchone()) == ("warm", None)
     finally:
         await db.close()
+
+
+STRUCTURE_SNAPSHOT_COLUMNS = {
+    "id",
+    "guild_id",
+    "taken_at",
+    "source",
+    "taken_by",
+    "digest",
+    "roles",
+    "categories",
+    "channels",
+    "overwrites",
+    "checked_at",
+    "checks",
+    "body",
+}
+STRUCTURE_LOOK_COLUMNS = {"guild_id", "last_at", "last_day", "outcome", "reason", "attempts"}
+
+
+async def structure_columns(db: Database) -> tuple[set[str], set[str]]:
+    cur = await db.conn.execute("PRAGMA table_info(structure_snapshots)")
+    snapshots = {row["name"] for row in await cur.fetchall()}
+    cur = await db.conn.execute("PRAGMA table_info(structure_looks)")
+    return snapshots, {row["name"] for row in await cur.fetchall()}
+
+
+async def test_a_fresh_database_carries_the_two_structure_tables(tmp_path):
+    db = Database(tmp_path / "structure.sqlite3")
+    await db.connect()
+    try:
+        assert await structure_columns(db) == (STRUCTURE_SNAPSHOT_COLUMNS, STRUCTURE_LOOK_COLUMNS)
+    finally:
+        await db.close()
+
+
+async def test_a_schema_87_file_gains_the_structure_tables_and_loses_nothing(tmp_path):
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    try:
+        await db.conn.execute("DROP TABLE structure_snapshots")
+        await db.conn.execute("DROP TABLE structure_looks")
+        await db.conn.execute(
+            "INSERT INTO birthdays(guild_id, user_id, month, day, source, set_at) "
+            "VALUES (7, 900, 10, 5, 'self', '2026-10-05T00:00:00+00:00')"
+        )
+        await db.conn.execute("UPDATE schema_meta SET value = '87' WHERE key = 'schema_version'")
+        await db.conn.commit()
+    finally:
+        await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        assert await structure_columns(again) == (
+            STRUCTURE_SNAPSHOT_COLUMNS,
+            STRUCTURE_LOOK_COLUMNS,
+        )
+        cur = await again.conn.execute("SELECT COUNT(*) AS n FROM structure_snapshots")
+        assert (await cur.fetchone())["n"] == 0
+        cur = await again.conn.execute("SELECT user_id FROM birthdays")
+        assert [row["user_id"] for row in await cur.fetchall()] == [900]
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()

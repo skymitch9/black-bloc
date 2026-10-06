@@ -1225,6 +1225,8 @@ def test_like_patterns_cover_every_head_of_a_feature():
         "web.commands.%",
         "presence.%",
         "web.presence.%",
+        "structure.%",
+        "web.structure.%",
     )
 
 

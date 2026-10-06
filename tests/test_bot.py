@@ -25,6 +25,7 @@ STAFF_COMMANDS = {
     "reply",
     "rolemenu",
     "settings",
+    "structure",
     "test",
     "timeout",
     "unban",
