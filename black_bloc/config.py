@@ -66,6 +66,10 @@ class Settings(BaseSettings):
 
     test_mode: bool = True
     test_channel_id: int | None = None
+    structure_backup_role_id: int | None = Field(
+        default=None,
+        description="the role that may see structure backup until a lead sets one on the site",
+    )
 
     site_origin: str = "https://blackbloc.heygabi.ai"
     session_cookie_samesite: str = "lax"
@@ -88,7 +92,8 @@ class Settings(BaseSettings):
     )
 
     @field_validator(
-        "dev_guild_id", "test_channel_id", "twitch_client_id", "twitch_client_secret",
+        "dev_guild_id", "test_channel_id", "structure_backup_role_id",
+        "twitch_client_id", "twitch_client_secret",
         "discord_client_id", "discord_client_secret", "session_secret", "poll_vote_secret",
         "anthropic_api_key", "groq_api_key", "youtube_api_key", "operator_read_token",
         mode="before",

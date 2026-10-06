@@ -538,3 +538,14 @@ console showed no error.
 - ~~Stale after these fixes and NOT edited: the structure rows in `docs/info/README.md`,
   `docs/info/architecture.md` and `docs/access/RECOVERY.md` still say *not merged*~~ —
   corrected 2026-10-05 on `structure-fold-words`.
+
+## The role's first value comes from config 2026-10-05
+
+Owner, verbatim, asked how he gets in when he is neither server owner nor administrator: *"a"* (open it to the Aunties / Uncles role he holds).
+
+- The Leads-only build made `structure_backup_role_id` changeable only by someone who already passes the rule. With the key blank that is the server owner and administrators only, so the role could not have been set by the owner or through his dashboard session - a lock with the key inside.
+- `Settings.structure_backup_role_id` (env `STRUCTURE_BACKUP_ROLE_ID`, `black_bloc/config.py`) is now the key's DEFAULT (`SettingsStore.default`). `fly.toml` `[env]` sets it to Aunties / Uncles (`1073711363337236601`). A role id is not a secret.
+- A value stored on the site by someone who passes the rule wins over the config, as for every key. Clearing the stored value falls back to the config role, not to blank.
+- Pinned by `tests/test_settings_store.py::test_the_structure_role_follows_the_config_until_a_lead_stores_one`.
+- NOT verified: that the owner holds that role in Discord and can open the page; nothing here has met Discord.
+

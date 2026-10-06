@@ -2670,3 +2670,22 @@ def test_the_thread_controls_tracker_link_is_a_label_that_fits_a_button():
     assert settings_store.KEY_TYPES[key] == "text"
     assert settings_store.MARATHON_DEFAULTS[key] == "Marathon tracker ↗"
     assert len(settings_store.MARATHON_DEFAULTS[key]) <= 80
+
+
+async def test_the_structure_role_follows_the_config_until_a_lead_stores_one(tmp_path):
+    db = Database(tmp_path / "role.sqlite3")
+    await db.connect()
+    try:
+        plain = SettingsStore(db, load_settings(_env_file=None, test_mode=False))
+        await plain.load()
+        assert plain.get(7, "structure_backup_role_id") is None
+
+        seeded = SettingsStore(
+            db, load_settings(_env_file=None, test_mode=False, structure_backup_role_id=555)
+        )
+        await seeded.load()
+        assert seeded.get(7, "structure_backup_role_id") == 555
+        await seeded.set(7, "structure_backup_role_id", 777, by=1)
+        assert seeded.get(7, "structure_backup_role_id") == 777
+    finally:
+        await db.close()

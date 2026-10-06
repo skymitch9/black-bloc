@@ -13,6 +13,7 @@ primary_region = "lax"   # nearest to Phoenix; Fly has no phx region
   LOG_LEVEL = "INFO"
   API_ENABLED = "true"
   API_HOST = "0.0.0.0"
+  STRUCTURE_BACKUP_ROLE_ID = "1073711363337236601"
 
 # Persistent disk for SQLite. Create once: fly volumes create black_bloc_data --size 1
 [mounts]

@@ -8103,6 +8103,8 @@ class SettingsStore:
             return REHEARSAL_NOTE_DEFAULT
         if key == "staff_channel_id":
             return self.settings.test_channel_id
+        if key == "structure_backup_role_id":
+            return getattr(self.settings, "structure_backup_role_id", None)
         if key == "log_channel_id":
             return self.settings.test_channel_id if self.settings.test_mode else None
         if key == "golive_channel_id":
