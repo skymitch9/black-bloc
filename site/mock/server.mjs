@@ -1005,6 +1005,82 @@ const SETTING_SPECS = [
   ['panel_expired_text', 'text', 'This panel has gone quiet — it timed out, or Black Bloc restarted since it was opened, so its buttons no longer reach anything. Run {command} again for a fresh one.', 'This panel has gone quiet — it timed out, or Black Bloc restarted since it was opened, so its buttons no longer reach anything. Run {command} again for a fresh one.', 'what somebody is told when they press a button, pick from a menu or submit a form on a panel Black Bloc no longer holds — it timed out, or the bot restarted (every deploy is a restart) while it was open. `{command}` is filled in with the slash command that opened the panel when Discord says which, and with \'the command\' when it does not'],
   // The pin-notice cleanup (docs/info/quiet-pins-design.md); core too.
   ["quiet_bot_pins", "bool", true, true, "whether Black Bloc deletes the 'pinned a message' notice Discord posts under a pin Black Bloc made itself (marathon boards, runner posts, spotlights, posts). on — the default — keeps channels tidy; off leaves the notice. A pin a person makes is never touched. It needs Manage Messages in the channel"],
+  // Structure backup (docs/info/structure-backup-design.md); all of it sits under core.
+  ["structure_backup_mode", "enum", "shadow", "shadow", "off, shadow or on. off takes no structure snapshot at all; shadow — the default — takes the daily snapshot silently and sends the structure-changed notice to the rehearsal home; on sends that notice to structure_backup_channel_id. A snapshot is a copy of roles, channels and permissions only: never messages, never members", ["off", "shadow", "on"]],
+  ["structure_backup_hour", "int", 4, 4, "the hour of the day, 0 to 23 in default_timezone, at or after which the daily structure snapshot is taken; 4 by default. A bot that was down at that hour takes it when it comes back", null, 23],
+  ["structure_backup_keep", "int", 60, 60, "how many structure snapshots are kept; 60 by default. The oldest beyond that are deleted each time a new one is stored. A day with no change stores nothing, so 60 is 60 distinct structures, not 60 days", null, 365, 1],
+  ["structure_backup_notify", "bool", true, true, "true — the default — posts a notice for staff when the daily structure snapshot differs from the one before it; false takes the snapshot and says nothing"],
+  ["structure_backup_channel_id", "channel", null, null, "where the structure-changed notice goes while structure_backup_mode is on; blank means staff_channel_id"],
+  ["structure_backup_shadow_channel_id", "channel", null, null, "where the structure-changed notice goes while structure_backup_mode is shadow; blank means shadow_channel_id"],
+  ["structure_backup_notice_lines", "int", 15, 15, "how many changes the structure-changed notice and the /structure panel list before they say how many more there are; 15 by default", null, 40, 1],
+  ["structure_backup_panel_minutes", "int", 10, 10, "minutes the /structure panel stays live before its buttons disable themselves; 10 by default", null, 14, 1],
+  ["structure_backup_notice_title", "text", "Server structure changed", "Server structure changed", "the heading of the notice staff get when a daily structure snapshot differs from the one before it"],
+  ["structure_backup_notice_text", "text", "{n} change(s) since the snapshot of {when}.", "{n} change(s) since the snapshot of {when}.", "the first line of the structure-changed notice; {n} is how many changes and {when} is when the snapshot before it was taken"],
+  ["structure_backup_notice_more", "text", "…and {n} more — the Structure page lists every one.", "…and {n} more — the Structure page lists every one.", "the last line of the structure-changed notice when it holds more changes than structure_backup_notice_lines lets it list; {n} is how many were left off"],
+  ["structure_backup_panel_title", "text", "Server structure", "Server structure", "the heading of the /structure panel"],
+  ["structure_backup_panel_footer", "text", "This panel timed out — run /structure again for a fresh one.", "This panel timed out — run /structure again for a fresh one.", "the footer the /structure panel gains when its buttons stop working"],
+  ["structure_backup_mode_label", "text", "Mode", "Mode", "what the /structure panel calls the line that says off, shadow or on"],
+  ["structure_backup_latest_label", "text", "Latest snapshot", "Latest snapshot", "what the /structure panel calls the newest stored snapshot"],
+  ["structure_backup_latest_line", "text", "#{id} · {when} · {roles} roles · {categories} categories · {channels} channels · {overwrites} permission overwrites", "#{id} · {when} · {roles} roles · {categories} categories · {channels} channels · {overwrites} permission overwrites", "the line that describes one snapshot on the /structure panel: its number, when it was taken and what it counted"],
+  ["structure_backup_none_yet", "text", "No snapshot has been taken yet.", "No snapshot has been taken yet.", "what the /structure panel says before the first snapshot exists"],
+  ["structure_backup_look_label", "text", "Last look", "Last look", "what the /structure panel calls the most recent time the structure was read"],
+  ["structure_backup_look_saved", "text", "{when} — a new snapshot was stored.", "{when} — a new snapshot was stored.", "the last-look line when the structure had changed and a snapshot was stored"],
+  ["structure_backup_look_unchanged", "text", "{when} — nothing had changed.", "{when} — nothing had changed.", "the last-look line when the structure matched the latest snapshot and no copy was stored"],
+  ["structure_backup_look_failed", "text", "{when} — it failed: {reason}", "{when} — it failed: {reason}", "the last-look line when the structure could not be read; {reason} says why"],
+  ["structure_backup_take_label", "text", "Take one now", "Take one now", "what the button that takes a structure snapshot straight away is called"],
+  ["structure_backup_changes_label", "text", "What changed", "What changed", "what the button that compares the latest snapshot with the server as it is now is called, and the heading of the list it answers with"],
+  ["structure_backup_site_label", "text", "Open the Structure page", "Open the Structure page", "what the link from the /structure panel to the Structure page is called"],
+  ["structure_backup_saved_said", "text", "Snapshot #{id} saved.", "Snapshot #{id} saved.", "what staff are told when Take one now stored a new snapshot"],
+  ["structure_backup_unchanged_said", "text", "Nothing has changed since snapshot #{id}, so no second copy was stored.", "Nothing has changed since snapshot #{id}, so no second copy was stored.", "what staff are told when Take one now found the structure unchanged"],
+  ["structure_backup_failed_said", "text", "No snapshot was taken — {reason}", "No snapshot was taken — {reason}", "what staff are told when a structure snapshot could not be taken; {reason} says why and what to do"],
+  ["structure_backup_off_said", "text", "Structure backup is **off**, so nothing was captured. Set structure_backup_mode to shadow or on — in /settings or on the Settings page — and press it again.", "Structure backup is **off**, so nothing was captured. Set structure_backup_mode to shadow or on — in /settings or on the Settings page — and press it again.", "what staff are told when they ask for a snapshot while structure_backup_mode is off"],
+  ["structure_backup_no_changes_said", "text", "Nothing has changed since the latest snapshot.", "Nothing has changed since the latest snapshot.", "what What changed answers when the server matches the latest snapshot"],
+  ["structure_backup_say_server_changed", "text", "The server's {what} changed from {old} to {new}.", "The server's {what} changed from {old} to {new}.", "how the structure change list words a server-level setting that changed; it may stand in for {what}, {old}, {new}"],
+  ["structure_backup_say_role_added", "text", "Role **{role}** was added.", "Role **{role}** was added.", "how the structure change list words a role that is new; it may stand in for {role}"],
+  ["structure_backup_say_role_removed", "text", "Role **{role}** was removed.", "Role **{role}** was removed.", "how the structure change list words a role that is gone; it may stand in for {role}"],
+  ["structure_backup_say_role_renamed", "text", "Role **{old}** was renamed **{new}**.", "Role **{old}** was renamed **{new}**.", "how the structure change list words a role with a new name; it may stand in for {old}, {new}"],
+  ["structure_backup_say_role_gained", "text", "Role **{role}** gained: {permissions}.", "Role **{role}** gained: {permissions}.", "how the structure change list words the permissions a role was given; it may stand in for {role}, {permissions}"],
+  ["structure_backup_say_role_lost", "text", "Role **{role}** lost: {permissions}.", "Role **{role}** lost: {permissions}.", "how the structure change list words the permissions a role lost; it may stand in for {role}, {permissions}"],
+  ["structure_backup_say_role_changed", "text", "Role **{role}**'s {what} changed from {old} to {new}.", "Role **{role}**'s {what} changed from {old} to {new}.", "how the structure change list words a role's colour or switches changing; it may stand in for {role}, {what}, {old}, {new}"],
+  ["structure_backup_say_role_moved", "text", "Role **{role}** moved in the role list; it now sits under **{above}**.", "Role **{role}** moved in the role list; it now sits under **{above}**.", "how the structure change list words a role that moved in the role list; it may stand in for {role}, {above}"],
+  ["structure_backup_say_role_moved_top", "text", "Role **{role}** moved to the top of the role list.", "Role **{role}** moved to the top of the role list.", "how the structure change list words a role that moved to the top of the role list; it may stand in for {role}"],
+  ["structure_backup_say_channel_added", "text", "Channel **{channel}** ({type}) was added in {place} with {n} permission overwrite(s).", "Channel **{channel}** ({type}) was added in {place} with {n} permission overwrite(s).", "how the structure change list words a channel or category that is new; it may stand in for {channel}, {type}, {place}, {n}"],
+  ["structure_backup_say_channel_removed", "text", "Channel **{channel}** ({type}) was removed from {place}.", "Channel **{channel}** ({type}) was removed from {place}.", "how the structure change list words a channel or category that is gone; it may stand in for {channel}, {type}, {place}"],
+  ["structure_backup_say_channel_renamed", "text", "Channel **{old}** was renamed **{new}**.", "Channel **{old}** was renamed **{new}**.", "how the structure change list words a channel with a new name; it may stand in for {old}, {new}"],
+  ["structure_backup_say_channel_changed", "text", "Channel **{channel}**'s {what} changed from {old} to {new}.", "Channel **{channel}**'s {what} changed from {old} to {new}.", "how the structure change list words a channel's topic, slowmode or limits changing; it may stand in for {channel}, {what}, {old}, {new}"],
+  ["structure_backup_say_channel_recategorised", "text", "Channel **{channel}** moved from {old} to {new}.", "Channel **{channel}** moved from {old} to {new}.", "how the structure change list words a channel that moved to another category; it may stand in for {channel}, {old}, {new}"],
+  ["structure_backup_say_channel_reordered", "text", "Channel **{channel}** moved within {place}.", "Channel **{channel}** moved within {place}.", "how the structure change list words a channel that moved up or down inside its category; it may stand in for {channel}, {place}"],
+  ["structure_backup_say_tag_added", "text", "Forum **{channel}** gained the tag **{tag}**.", "Forum **{channel}** gained the tag **{tag}**.", "how the structure change list words a forum tag that is new; it may stand in for {channel}, {tag}"],
+  ["structure_backup_say_tag_removed", "text", "Forum **{channel}** lost the tag **{tag}**.", "Forum **{channel}** lost the tag **{tag}**.", "how the structure change list words a forum tag that is gone; it may stand in for {channel}, {tag}"],
+  ["structure_backup_say_tag_renamed", "text", "Forum **{channel}**'s tag **{old}** was renamed **{new}**.", "Forum **{channel}**'s tag **{old}** was renamed **{new}**.", "how the structure change list words a forum tag with a new name; it may stand in for {channel}, {old}, {new}"],
+  ["structure_backup_say_overwrite_added", "text", "In **{channel}**, {target} got its own permissions: {detail}.", "In **{channel}**, {target} got its own permissions: {detail}.", "how the structure change list words a role or member given its own permissions in a channel; it may stand in for {channel}, {target}, {detail}"],
+  ["structure_backup_say_overwrite_removed", "text", "In **{channel}**, {target}'s own permissions were removed.", "In **{channel}**, {target}'s own permissions were removed.", "how the structure change list words a role or member losing its own permissions in a channel; it may stand in for {channel}, {target}"],
+  ["structure_backup_say_overwrite_changed", "text", "In **{channel}**, {target}'s permissions changed: {detail}.", "In **{channel}**, {target}'s permissions changed: {detail}.", "how the structure change list words a role's or member's own permissions in a channel changing; it may stand in for {channel}, {target}, {detail}"],
+  ["structure_backup_say_allow_gained", "text", "now allowed {permissions}", "now allowed {permissions}", "how the structure change list words the permissions newly allowed in a channel; it may stand in for {permissions}"],
+  ["structure_backup_say_allow_lost", "text", "no longer allowed {permissions}", "no longer allowed {permissions}", "how the structure change list words the permissions no longer allowed in a channel; it may stand in for {permissions}"],
+  ["structure_backup_say_deny_gained", "text", "now denied {permissions}", "now denied {permissions}", "how the structure change list words the permissions newly denied in a channel; it may stand in for {permissions}"],
+  ["structure_backup_say_deny_lost", "text", "no longer denied {permissions}", "no longer denied {permissions}", "how the structure change list words the permissions no longer denied in a channel; it may stand in for {permissions}"],
+  ["structure_backup_say_target_role", "text", "role **{name}**", "role **{name}**", "how the structure change list words how a role is named in a channel's permissions; it may stand in for {name}"],
+  ["structure_backup_say_target_member", "text", "member {id}", "member {id}", "how the structure change list words how a member is named in a channel's permissions; it may stand in for {id}"],
+  ["structure_backup_say_top_level", "text", "the top level", "the top level", "how the structure change list words a channel that sits in no category"],
+  ["structure_backup_say_nothing", "text", "nothing", "nothing", "how the structure change list words a value that is not set"],
+  ["structure_backup_say_yes", "text", "on", "on", "how the structure change list words a switch that is on"],
+  ["structure_backup_say_no", "text", "off", "off", "how the structure change list words a switch that is off"],
+  ["structure_backup_say_f_name", "text", "name", "name", "how the structure change list words the label for the server's name"],
+  ["structure_backup_say_f_verification", "text", "verification level", "verification level", "how the structure change list words the label for the verification level"],
+  ["structure_backup_say_f_notifications", "text", "default notifications", "default notifications", "how the structure change list words the label for default notifications"],
+  ["structure_backup_say_f_system_channel", "text", "system messages channel", "system messages channel", "how the structure change list words the label for the system channel"],
+  ["structure_backup_say_f_rules_channel", "text", "rules channel", "rules channel", "how the structure change list words the label for the rules channel"],
+  ["structure_backup_say_f_colour", "text", "colour", "colour", "how the structure change list words the label for a role's colour"],
+  ["structure_backup_say_f_hoist", "text", "shown separately", "shown separately", "how the structure change list words the label for a role shown separately"],
+  ["structure_backup_say_f_mentionable", "text", "anyone can mention", "anyone can mention", "how the structure change list words the label for a role anyone can mention"],
+  ["structure_backup_say_f_managed", "text", "managed by an integration", "managed by an integration", "how the structure change list words the label for a managed role"],
+  ["structure_backup_say_f_type", "text", "type", "type", "how the structure change list words the label for a channel's type"],
+  ["structure_backup_say_f_topic", "text", "topic", "topic", "how the structure change list words the label for a channel's topic"],
+  ["structure_backup_say_f_slowmode", "text", "slowmode in seconds", "slowmode in seconds", "how the structure change list words the label for a channel's slowmode"],
+  ["structure_backup_say_f_nsfw", "text", "age-restricted", "age-restricted", "how the structure change list words the label for an age-restricted channel"],
+  ["structure_backup_say_f_bitrate", "text", "bitrate", "bitrate", "how the structure change list words the label for a voice channel's bitrate"],
+  ["structure_backup_say_f_user_limit", "text", "user limit", "user limit", "how the structure change list words the label for a voice channel's user limit"],
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
@@ -2101,6 +2177,8 @@ function withRunEvents(seeded) {
 }
 
 const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text', 'quiet_bot_pins'];
+const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour", "structure_backup_keep", "structure_backup_notify", "structure_backup_channel_id", "structure_backup_shadow_channel_id", "structure_backup_notice_lines", "structure_backup_panel_minutes", "structure_backup_notice_title", "structure_backup_notice_text", "structure_backup_notice_more", "structure_backup_panel_title", "structure_backup_panel_footer", "structure_backup_mode_label", "structure_backup_latest_label", "structure_backup_latest_line", "structure_backup_none_yet", "structure_backup_look_label", "structure_backup_look_saved", "structure_backup_look_unchanged", "structure_backup_look_failed", "structure_backup_take_label", "structure_backup_changes_label", "structure_backup_site_label", "structure_backup_saved_said", "structure_backup_unchanged_said", "structure_backup_failed_said", "structure_backup_off_said", "structure_backup_no_changes_said", "structure_backup_say_server_changed", "structure_backup_say_role_added", "structure_backup_say_role_removed", "structure_backup_say_role_renamed", "structure_backup_say_role_gained", "structure_backup_say_role_lost", "structure_backup_say_role_changed", "structure_backup_say_role_moved", "structure_backup_say_role_moved_top", "structure_backup_say_channel_added", "structure_backup_say_channel_removed", "structure_backup_say_channel_renamed", "structure_backup_say_channel_changed", "structure_backup_say_channel_recategorised", "structure_backup_say_channel_reordered", "structure_backup_say_tag_added", "structure_backup_say_tag_removed", "structure_backup_say_tag_renamed", "structure_backup_say_overwrite_added", "structure_backup_say_overwrite_removed", "structure_backup_say_overwrite_changed", "structure_backup_say_allow_gained", "structure_backup_say_allow_lost", "structure_backup_say_deny_gained", "structure_backup_say_deny_lost", "structure_backup_say_target_role", "structure_backup_say_target_member", "structure_backup_say_top_level", "structure_backup_say_nothing", "structure_backup_say_yes", "structure_backup_say_no", "structure_backup_say_f_name", "structure_backup_say_f_verification", "structure_backup_say_f_notifications", "structure_backup_say_f_system_channel", "structure_backup_say_f_rules_channel", "structure_backup_say_f_colour", "structure_backup_say_f_hoist", "structure_backup_say_f_mentionable", "structure_backup_say_f_managed", "structure_backup_say_f_type", "structure_backup_say_f_topic", "structure_backup_say_f_slowmode", "structure_backup_say_f_nsfw", "structure_backup_say_f_bitrate", "structure_backup_say_f_user_limit"];
+CORE_KEYS.push(...STRUCTURE_BACKUP_KEYS);
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
@@ -13563,6 +13641,249 @@ route('POST', '/api/applications/:id/remove', async (context) => {
     application: applicationRow(row),
     message: 'Taken off the list, and they have been told why.',
   };
+});
+
+// Structure backup (docs/info/structure-backup-design.md): the snapshots, the compare and the
+// download. The mock's change list covers roles, channels and overwrites; the bot's covers more.
+const STRUCTURE_PERMISSIONS = [
+  [1 << 1, 'Kick Members'],
+  [1 << 2, 'Ban Members'],
+  [1 << 4, 'Manage Channels'],
+  [1 << 5, 'Manage Guild'],
+  [1 << 10, 'View Channel'],
+  [1 << 11, 'Send Messages'],
+  [1 << 13, 'Manage Messages'],
+];
+const STRUCTURE_ROLE_PERMISSIONS = { 'Aunties / Uncles': 0x2c12, Leads: 0x2c36 };
+const STRUCTURE_EVERYONE = '500000000000000001';
+
+function structureNow() {
+  const roles = [
+    { id: STRUCTURE_EVERYONE, name: '@everyone', color: 0, permissions: 0xc00, position: 0, hoist: false, mentionable: false, managed: false },
+    ...ROLES.map((role) => ({
+      id: role.id,
+      name: role.name,
+      color: Number.parseInt(String(role.color || '#000000').slice(1), 16) || 0,
+      permissions: STRUCTURE_ROLE_PERMISSIONS[role.name] ?? 0xc00,
+      position: role.position,
+      hoist: role.position > 10,
+      mentionable: false,
+      managed: Boolean(role.managed),
+    })),
+  ];
+  const channels = CHANNELS.slice(0, 12).map((channel) => ({
+    id: channel.id,
+    name: channel.name,
+    type: channel.type,
+    parent_id: channel.category_id,
+    position: channel.position,
+    topic: null,
+    slowmode: channel.type === 'text' ? 0 : null,
+    nsfw: false,
+    bitrate: channel.type === 'voice' ? 64000 : null,
+    user_limit: channel.type === 'voice' ? 0 : null,
+    tags: [],
+    overwrites: CHANNELS_NOBODY_SEES.includes(channel.id)
+      ? [
+        { target_id: STRUCTURE_EVERYONE, target_type: 'role', allow: 0, deny: 1 << 10 },
+        { target_id: '900000000000000002', target_type: 'role', allow: 1 << 10, deny: 0 },
+      ]
+      : [],
+  }));
+  return {
+    version: 1,
+    guild: {
+      id: STRUCTURE_EVERYONE,
+      name: 'Black in a Flash!',
+      verification_level: 'medium',
+      default_notifications: 'only_mentions',
+      system_channel_id: '800000000000000001',
+      rules_channel_id: null,
+    },
+    roles,
+    channels,
+  };
+}
+
+function structureCounts(body) {
+  const categories = body.channels.filter((channel) => channel.type === 'category').length;
+  return {
+    roles: body.roles.length,
+    categories,
+    channels: body.channels.length - categories,
+    overwrites: body.channels.reduce((sum, channel) => sum + channel.overwrites.length, 0),
+  };
+}
+
+function structureDigest(body) {
+  let hash = 0;
+  for (const char of JSON.stringify(body)) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return hash.toString(16).padStart(12, '0');
+}
+
+function structureSnapshot(id, body, { taken_at, source, taken_by = null, checks = 0, checked_at = null }) {
+  return { id, taken_at, source, taken_by, digest: structureDigest(body), checked_at: checked_at || taken_at, checks, body };
+}
+
+function seedStructure() {
+  const newest = structureNow();
+  newest.roles = newest.roles.filter((role) => role.name !== 'GamesDoneQuick pings');
+  newest.channels.find((channel) => channel.name === 'staff-room').overwrites.pop();
+  const oldest = structuredClone(newest);
+  oldest.roles = oldest.roles.filter((role) => role.name !== 'Casey pings');
+  oldest.roles.find((role) => role.name === 'Aunties / Uncles').permissions &= ~(1 << 13);
+  oldest.channels = oldest.channels.filter((channel) => channel.name !== 'modmail-log');
+  oldest.channels.find((channel) => channel.name === 'general').name = 'lounge';
+  return {
+    nextId: 3,
+    look: { at: minutesAgo(180), outcome: 'unchanged', reason: null },
+    snapshots: [
+      structureSnapshot(2, newest, { taken_at: minutesAgo(60 * 28), source: 'daily', checks: 1, checked_at: minutesAgo(180) }),
+      structureSnapshot(1, oldest, { taken_at: minutesAgo(60 * 24 * 9), source: 'manual', taken_by: STAFF.id }),
+    ],
+  };
+}
+
+function structureState() {
+  if (!state.structure) state.structure = seedStructure();
+  return state.structure;
+}
+
+function structureRow(row) {
+  return {
+    id: row.id,
+    taken_at: row.taken_at,
+    source: row.source,
+    taken_by_id: row.taken_by,
+    taken_by_name: row.taken_by ? memberName(row.taken_by) : null,
+    digest: row.digest,
+    ...structureCounts(row.body),
+    checked_at: row.checked_at,
+    checks: row.checks,
+  };
+}
+
+function structurePermissions(bits) {
+  return STRUCTURE_PERMISSIONS.filter(([bit]) => bits & bit).map(([, name]) => name);
+}
+
+function structureChanges(old, next) {
+  const found = [];
+  const say = (area, kind, text) => found.push({ area, kind, text });
+  const roleName = (id) => (next.roles.find((role) => role.id === id) || old.roles.find((role) => role.id === id) || { name: id }).name;
+  for (const role of next.roles) {
+    const was = old.roles.find((one) => one.id === role.id);
+    if (!was) {
+      say('roles', 'added', `Role **${role.name}** was added.`);
+      continue;
+    }
+    if (was.name !== role.name) say('roles', 'changed', `Role **${was.name}** was renamed **${role.name}**.`);
+    const gained = structurePermissions(role.permissions & ~was.permissions);
+    const lost = structurePermissions(was.permissions & ~role.permissions);
+    if (gained.length) say('permissions', 'added', `Role **${role.name}** gained: ${gained.join(', ')}.`);
+    if (lost.length) say('permissions', 'removed', `Role **${role.name}** lost: ${lost.join(', ')}.`);
+  }
+  for (const role of old.roles) {
+    if (!next.roles.some((one) => one.id === role.id)) say('roles', 'removed', `Role **${role.name}** was removed.`);
+  }
+  const place = (body, channel) => {
+    const parent = body.channels.find((one) => one.id === channel.parent_id);
+    return parent ? `**${parent.name}**` : 'the top level';
+  };
+  for (const channel of next.channels) {
+    const was = old.channels.find((one) => one.id === channel.id);
+    if (!was) {
+      say('channels', 'added', `Channel **${channel.name}** (${channel.type}) was added in ${place(next, channel)} with ${channel.overwrites.length} permission overwrite(s).`);
+      continue;
+    }
+    if (was.name !== channel.name) say('channels', 'changed', `Channel **${was.name}** was renamed **${channel.name}**.`);
+    for (const one of channel.overwrites) {
+      if (!was.overwrites.some((other) => other.target_id === one.target_id)) {
+        const allowed = structurePermissions(one.allow);
+        const denied = structurePermissions(one.deny);
+        const detail = [allowed.length ? `now allowed ${allowed.join(', ')}` : null, denied.length ? `now denied ${denied.join(', ')}` : null].filter(Boolean).join('; ');
+        say('permissions', 'added', `In **${channel.name}**, role **${roleName(one.target_id)}** got its own permissions: ${detail || 'nothing'}.`);
+      }
+    }
+    for (const one of was.overwrites) {
+      if (!channel.overwrites.some((other) => other.target_id === one.target_id)) {
+        say('permissions', 'removed', `In **${channel.name}**, role **${roleName(one.target_id)}**'s own permissions were removed.`);
+      }
+    }
+  }
+  for (const channel of old.channels) {
+    if (!next.channels.some((one) => one.id === channel.id)) say('channels', 'removed', `Channel **${channel.name}** (${channel.type}) was removed from ${place(old, channel)}.`);
+  }
+  const order = ['server', 'roles', 'channels', 'permissions'];
+  return found.sort((a, b) => order.indexOf(a.area) - order.indexOf(b.area) || a.text.localeCompare(b.text));
+}
+
+function structureWanted(given) {
+  const text = String(given || '').trim();
+  if (!text) throw new Refused(400, 'bad_request', 'Comparing needs an older snapshot and something to compare it with, so nothing was compared. Pick both and try again.');
+  if (!/^\d+$/.test(text)) throw new Refused(400, 'bad_request', `**${text.slice(0, 40)}** is not a snapshot number, so nothing was compared. Pick a snapshot from the list and try again.`);
+  const row = structureState().snapshots.find((one) => String(one.id) === text);
+  if (!row) throw new Refused(404, 'no_such_snapshot', `Black Bloc has no structure snapshot **#${text}** — it may have been pruned since this page was loaded. Refresh the page and pick one from the list.`);
+  return row;
+}
+
+route('GET', '/api/structure', (context) => {
+  requireStaff(context.session);
+  const held = structureState();
+  return {
+    mode: state.settings.get('structure_backup_mode') ?? 'shadow',
+    hour: state.settings.get('structure_backup_hour') ?? 4,
+    keep: state.settings.get('structure_backup_keep') ?? 60,
+    timezone: state.settings.get('default_timezone') ?? 'America/Phoenix',
+    last_look: held.look,
+    snapshots: held.snapshots.map(structureRow),
+  };
+});
+
+route('POST', '/api/structure/snapshots', (context) => {
+  requireStaff(context.session);
+  if ((state.settings.get('structure_backup_mode') ?? 'shadow') === 'off') {
+    throw new Refused(409, 'structure_off', state.settings.get('structure_backup_off_said'));
+  }
+  const held = structureState();
+  const body = structureNow();
+  const latest = held.snapshots[0];
+  if (latest && latest.digest === structureDigest(body)) {
+    latest.checks += 1;
+    latest.checked_at = now();
+    held.look = { at: now(), outcome: 'unchanged', reason: null };
+    logAction('web.structure.unchanged', { details: { snapshot_id: latest.id, source: 'manual' } });
+    return {
+      outcome: 'unchanged',
+      message: `Nothing has changed since snapshot #${latest.id}, so no second copy was stored.`,
+      snapshot: structureRow(latest),
+      changes: 0,
+    };
+  }
+  const row = structureSnapshot(held.nextId++, body, { taken_at: now(), source: 'manual', taken_by: STAFF.id });
+  const changes = latest ? structureChanges(latest.body, body).length : 0;
+  held.snapshots.unshift(row);
+  held.snapshots.splice(Number(state.settings.get('structure_backup_keep') ?? 60));
+  held.look = { at: now(), outcome: 'saved', reason: null };
+  logAction('web.structure.captured', { details: { snapshot_id: row.id, source: 'manual', changes } });
+  return { outcome: 'saved', message: `Snapshot #${row.id} saved.`, snapshot: structureRow(row), changes };
+});
+
+route('GET', '/api/structure/compare', (context) => {
+  requireStaff(context.session);
+  const old = structureWanted(context.url.searchParams.get('old'));
+  const wanted = String(context.url.searchParams.get('new') || '').trim().toLowerCase();
+  const next = wanted === 'now' ? null : structureWanted(wanted);
+  const changes = structureChanges(old.body, next ? next.body : structureNow());
+  return { old: structureRow(old), new: next ? structureRow(next) : null, now: next === null, count: changes.length, changes };
+});
+
+route('POST', '/api/structure/snapshots/:id/download', (context) => {
+  requireStaff(context.session);
+  const row = structureWanted(context.params.id);
+  logAction('web.structure.downloaded', { details: { snapshot_id: row.id } });
+  const snapshot = { id: row.id, taken_at: row.taken_at, source: row.source, digest: row.digest, ...structureCounts(row.body), guild_id: row.body.guild.id };
+  return { snapshot, ...row.body };
 });
 
 const server = createServer(async (request, response) => {

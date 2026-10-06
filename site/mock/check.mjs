@@ -31,6 +31,8 @@ const IDS = {
   // so Pause, Remove and Resume each reach a row their move is legal on.
   sticky_channel_id: '800000000000000002',
   sticky_paused_channel_id: '800000000000000003',
+  structure_old_id: '1',
+  structure_new_id: '2',
   test_channel_id: '800000000000000003',
   lobby_channel_id: '800000000000000009',
   room_channel_id: '800000000000000010',

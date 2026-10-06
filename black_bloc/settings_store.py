@@ -78,6 +78,10 @@ from .shadow import NOTE_KEY as REHEARSAL_NOTE
 from .shadow import REHEARSAL_KEY as SHADOW_CHANNEL
 from .shadow import feature_key as shadow_feature_key
 from .storage.db import Database
+from .structure import FEATURE as STRUCTURE_FEATURE
+from .structure import MODE_DEFAULT as STRUCTURE_MODE_DEFAULT
+from .structure import MODES as STRUCTURE_MODES
+from .structure_diff import WORDS as STRUCTURE_SAY_WORDS
 from .timezones import DEFAULT_TZ, is_known, suggest
 
 log = logging.getLogger(__name__)
@@ -3578,6 +3582,237 @@ KEY_HELP.update(
 STICKY_KEYS = (*STICKY_DEFAULTS, SHADOW_HOME_KEYS["sticky"])
 
 
+# Structure backup (docs/info/structure-backup-design.md) — its own block so parallel branches
+# merge textually. Every key sits under `core`: `structure_` would be a 26th setting group.
+STRUCTURE_BACKUP_MODE = "structure_backup_mode"
+STRUCTURE_BACKUP_HOUR = "structure_backup_hour"
+STRUCTURE_BACKUP_KEEP = "structure_backup_keep"
+STRUCTURE_BACKUP_NOTIFY = "structure_backup_notify"
+STRUCTURE_BACKUP_CHANNEL = "structure_backup_channel_id"
+STRUCTURE_BACKUP_SHADOW_CHANNEL = shadow_feature_key(STRUCTURE_FEATURE)
+STRUCTURE_BACKUP_NOTICE_LINES = "structure_backup_notice_lines"
+STRUCTURE_BACKUP_PANEL_MINUTES = "structure_backup_panel_minutes"
+STRUCTURE_BACKUP_NUMBERS: dict[str, tuple[int, int, int]] = {
+    STRUCTURE_BACKUP_HOUR: (4, 0, 23),
+    STRUCTURE_BACKUP_KEEP: (60, 1, 365),
+    STRUCTURE_BACKUP_NOTICE_LINES: (15, 1, 40),
+    STRUCTURE_BACKUP_PANEL_MINUTES: (10, 1, 14),
+}
+STRUCTURE_BACKUP_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "structure_backup_notice_title": (
+        "Server structure changed",
+        (),
+        "the heading of the notice staff get when a daily structure snapshot differs from the "
+        "one before it",
+    ),
+    "structure_backup_notice_text": (
+        "{n} change(s) since the snapshot of {when}.",
+        ("n", "when"),
+        "the first line of the structure-changed notice; {n} is how many changes and {when} "
+        "is when the snapshot before it was taken",
+    ),
+    "structure_backup_notice_more": (
+        "…and {n} more — the Structure page lists every one.",
+        ("n",),
+        "the last line of the structure-changed notice when it holds more changes than "
+        "structure_backup_notice_lines lets it list; {n} is how many were left off",
+    ),
+    "structure_backup_panel_title": (
+        "Server structure",
+        (),
+        "the heading of the /structure panel",
+    ),
+    "structure_backup_panel_footer": (
+        "This panel timed out — run /structure again for a fresh one.",
+        (),
+        "the footer the /structure panel gains when its buttons stop working",
+    ),
+    "structure_backup_mode_label": (
+        "Mode",
+        (),
+        "what the /structure panel calls the line that says off, shadow or on",
+    ),
+    "structure_backup_latest_label": (
+        "Latest snapshot",
+        (),
+        "what the /structure panel calls the newest stored snapshot",
+    ),
+    "structure_backup_latest_line": (
+        "#{id} · {when} · {roles} roles · {categories} categories · {channels} channels · "
+        "{overwrites} permission overwrites",
+        ("id", "when", "roles", "categories", "channels", "overwrites"),
+        "the line that describes one snapshot on the /structure panel: its number, when it "
+        "was taken and what it counted",
+    ),
+    "structure_backup_none_yet": (
+        "No snapshot has been taken yet.",
+        (),
+        "what the /structure panel says before the first snapshot exists",
+    ),
+    "structure_backup_look_label": (
+        "Last look",
+        (),
+        "what the /structure panel calls the most recent time the structure was read",
+    ),
+    "structure_backup_look_saved": (
+        "{when} — a new snapshot was stored.",
+        ("when",),
+        "the last-look line when the structure had changed and a snapshot was stored",
+    ),
+    "structure_backup_look_unchanged": (
+        "{when} — nothing had changed.",
+        ("when",),
+        "the last-look line when the structure matched the latest snapshot and no copy was "
+        "stored",
+    ),
+    "structure_backup_look_failed": (
+        "{when} — it failed: {reason}",
+        ("when", "reason"),
+        "the last-look line when the structure could not be read; {reason} says why",
+    ),
+    "structure_backup_take_label": (
+        "Take one now",
+        (),
+        "what the button that takes a structure snapshot straight away is called",
+    ),
+    "structure_backup_changes_label": (
+        "What changed",
+        (),
+        "what the button that compares the latest snapshot with the server as it is now is "
+        "called, and the heading of the list it answers with",
+    ),
+    "structure_backup_site_label": (
+        "Open the Structure page",
+        (),
+        "what the link from the /structure panel to the Structure page is called",
+    ),
+    "structure_backup_saved_said": (
+        "Snapshot #{id} saved.",
+        ("id",),
+        "what staff are told when Take one now stored a new snapshot",
+    ),
+    "structure_backup_unchanged_said": (
+        "Nothing has changed since snapshot #{id}, so no second copy was stored.",
+        ("id",),
+        "what staff are told when Take one now found the structure unchanged",
+    ),
+    "structure_backup_failed_said": (
+        "No snapshot was taken — {reason}",
+        ("reason",),
+        "what staff are told when a structure snapshot could not be taken; {reason} says why "
+        "and what to do",
+    ),
+    "structure_backup_off_said": (
+        "Structure backup is **off**, so nothing was captured. Set structure_backup_mode to "
+        "shadow or on — in /settings or on the Settings page — and press it again.",
+        (),
+        "what staff are told when they ask for a snapshot while structure_backup_mode is off",
+    ),
+    "structure_backup_no_changes_said": (
+        "Nothing has changed since the latest snapshot.",
+        (),
+        "what What changed answers when the server matches the latest snapshot",
+    ),
+}
+STRUCTURE_SAY_KEYS: dict[str, str] = {
+    name: f"structure_backup_say_{name}" for name in STRUCTURE_SAY_WORDS
+}
+STRUCTURE_BACKUP_DEFAULTS: dict[str, Any] = {
+    STRUCTURE_BACKUP_MODE: STRUCTURE_MODE_DEFAULT,
+    STRUCTURE_BACKUP_NOTIFY: True,
+    **{key: default for key, (default, _, _) in STRUCTURE_BACKUP_NUMBERS.items()},
+    **{key: default for key, (default, _, _) in STRUCTURE_BACKUP_WORDS.items()},
+    **{STRUCTURE_SAY_KEYS[name]: words for name, (words, _) in STRUCTURE_SAY_WORDS.items()},
+}
+STRUCTURE_BACKUP_FIELDS: dict[str, tuple[str, ...]] = {
+    **{key: fields for key, (_, fields, _) in STRUCTURE_BACKUP_WORDS.items()},
+    **{
+        STRUCTURE_SAY_KEYS[name]: tuple(re.findall(r"\{([^{}]*)\}", words))
+        for name, (words, _) in STRUCTURE_SAY_WORDS.items()
+    },
+}
+def structure_say_help(what: str, fields: tuple[str, ...]) -> str:
+    said = f"how the structure change list words {what}"
+    if not fields:
+        return said
+    return said + "; it may stand in for " + ", ".join(f"{{{field}}}" for field in fields)
+
+
+STRUCTURE_BACKUP_KEYS: tuple[str, ...] = (
+    STRUCTURE_BACKUP_MODE,
+    STRUCTURE_BACKUP_HOUR,
+    STRUCTURE_BACKUP_KEEP,
+    STRUCTURE_BACKUP_NOTIFY,
+    STRUCTURE_BACKUP_CHANNEL,
+    STRUCTURE_BACKUP_SHADOW_CHANNEL,
+    STRUCTURE_BACKUP_NOTICE_LINES,
+    STRUCTURE_BACKUP_PANEL_MINUTES,
+    *STRUCTURE_BACKUP_WORDS,
+    *STRUCTURE_SAY_KEYS.values(),
+)
+KEY_TYPES.update(
+    {
+        STRUCTURE_BACKUP_MODE: "enum",
+        STRUCTURE_BACKUP_NOTIFY: "bool",
+        STRUCTURE_BACKUP_CHANNEL: "channel",
+        STRUCTURE_BACKUP_SHADOW_CHANNEL: "channel",
+        **{key: "int" for key in STRUCTURE_BACKUP_NUMBERS},
+        **{key: "text" for key in STRUCTURE_BACKUP_FIELDS},
+    }
+)
+KEY_CHOICES[STRUCTURE_BACKUP_MODE] = STRUCTURE_MODES
+KEY_MIN.update({key: low for key, (_, low, _) in STRUCTURE_BACKUP_NUMBERS.items() if low})
+KEY_MAX.update({key: high for key, (_, _, high) in STRUCTURE_BACKUP_NUMBERS.items()})
+KEY_HELP.update(
+    {
+        STRUCTURE_BACKUP_MODE: (
+            "off, shadow or on. off takes no structure snapshot at all; shadow — the default — "
+            "takes the daily snapshot silently and sends the structure-changed notice to the "
+            "rehearsal home; on sends that notice to structure_backup_channel_id. A snapshot "
+            "is a copy of roles, channels and permissions only: never messages, never members"
+        ),
+        STRUCTURE_BACKUP_HOUR: (
+            "the hour of the day, 0 to 23 in default_timezone, at or after which the daily "
+            "structure snapshot is taken; 4 by default. A bot that was down at that hour takes "
+            "it when it comes back"
+        ),
+        STRUCTURE_BACKUP_KEEP: (
+            "how many structure snapshots are kept; 60 by default. The oldest beyond that are "
+            "deleted each time a new one is stored. A day with no change stores nothing, so 60 "
+            "is 60 distinct structures, not 60 days"
+        ),
+        STRUCTURE_BACKUP_NOTIFY: (
+            "true — the default — posts a notice for staff when the daily structure snapshot "
+            "differs from the one before it; false takes the snapshot and says nothing"
+        ),
+        STRUCTURE_BACKUP_CHANNEL: (
+            "where the structure-changed notice goes while structure_backup_mode is on; blank "
+            "means staff_channel_id"
+        ),
+        STRUCTURE_BACKUP_SHADOW_CHANNEL: (
+            "where the structure-changed notice goes while structure_backup_mode is shadow; "
+            "blank means shadow_channel_id"
+        ),
+        STRUCTURE_BACKUP_NOTICE_LINES: (
+            "how many changes the structure-changed notice and the /structure panel list "
+            "before they say how many more there are; 15 by default"
+        ),
+        STRUCTURE_BACKUP_PANEL_MINUTES: (
+            "minutes the /structure panel stays live before its buttons disable themselves; "
+            "10 by default"
+        ),
+        **{key: said for key, (_, _, said) in STRUCTURE_BACKUP_WORDS.items()},
+        **{
+            key: structure_say_help(what, STRUCTURE_BACKUP_FIELDS[key])
+            for key, what in (
+                (STRUCTURE_SAY_KEYS[name], what)
+                for name, (_, what) in STRUCTURE_SAY_WORDS.items()
+            )
+        },
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -3606,6 +3841,7 @@ CORE_KEYS = (
     SHUTDOWN_STATUS_TEXT_KEY,
     PANEL_EXPIRED_TEXT_KEY,
     QUIET_BOT_PINS,
+    *STRUCTURE_BACKUP_KEYS,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -4180,6 +4416,9 @@ def checked_fields(fields: tuple[str, ...]) -> Any:
 
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in CHANNEL_NOTE_WORDS.items()}
+)
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, fields in STRUCTURE_BACKUP_FIELDS.items()}
 )
 
 VOICE_SHEET_CHARS = 4000
@@ -8064,6 +8303,8 @@ class SettingsStore:
             return MINUTES_KEEP_DAYS_DEFAULT
         if key == "minutes_panel_minutes":
             return MINUTES_PANEL_MINUTES_DEFAULT
+        if key in STRUCTURE_BACKUP_DEFAULTS:
+            return STRUCTURE_BACKUP_DEFAULTS[key]
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

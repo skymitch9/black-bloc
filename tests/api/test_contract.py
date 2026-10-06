@@ -980,9 +980,12 @@ async def seed_world(client, web, guild, wf) -> dict:
     for channel_id, paused in ((wf.OTHER_CHANNEL_ID, False), (wf.TEST_CHANNEL_ID, True)):
         await sticky.write_words(db, guild_id, channel_id, "How to submit a run.", 7)
         await sticky.write_paused(db, guild_id, channel_id, paused, 7)
+    structure_old, structure_new = await seed_structure(db, guild_id)
     return {
         "sticky_channel_id": str(wf.OTHER_CHANNEL_ID),
         "sticky_paused_channel_id": str(wf.TEST_CHANNEL_ID),
+        "structure_old_id": str(structure_old),
+        "structure_new_id": str(structure_new),
         "member_id": str(MEMBER_ID),
         "case_id": str(case_id),
         "voided_case_id": str(voided_case_id),
@@ -1107,6 +1110,25 @@ def google_answers_the_contract_doc(monkeypatch):
         return doc_import.Hop(200, None, "text/html; charset=utf-8", page)
 
     monkeypatch.setattr(doc_import, "aiohttp_hop", hop)
+
+
+async def seed_structure(db, guild_id: int) -> tuple[int, int]:
+    """Two snapshots that differ from each other and from the fake server as it stands."""
+    from black_bloc import structure_store
+    from black_bloc.structure import DAILY
+
+    def body(*names: str) -> dict:
+        roles = [{"id": str(60 + at), "name": name} for at, name in enumerate(names)]
+        channels = [{"id": "80", "name": "general", "type": "text"}]
+        return {
+            "guild": {"id": str(guild_id), "name": "Contract"},
+            "roles": roles,
+            "channels": channels,
+        }
+
+    old = await structure_store.store(db, guild_id, body("Leads"), source=DAILY, keep=60)
+    new = await structure_store.store(db, guild_id, body("Leads", "Mods"), source=DAILY, keep=60)
+    return old.row["id"], new.row["id"]
 
 
 @pytest.fixture
