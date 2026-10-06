@@ -96,6 +96,7 @@ HEADS: dict[str, str] = {
     "guides": "guides",
     "post": "posts",
     "posts": "posts",
+    "sticky": "posts",
     "minutes": "minutes",
 }
 
@@ -240,6 +241,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "post.shadow_updated",
         "post.taken_down",
         "post.restored",
+        "sticky.channel_gone",
     }
 )
 
@@ -691,6 +693,13 @@ ROUTINE: frozenset[str] = frozenset(
         "post.shadow_taken_down",
         "post.seeded",
         "post.seed_channel_unknown",
+        "sticky.set",
+        "sticky.edited",
+        "sticky.paused",
+        "sticky.resumed",
+        "sticky.removed",
+        "sticky.mode",
+        "sticky.posted",
         "minutes.started",
         "minutes.ended",
         "minutes.notes_written",

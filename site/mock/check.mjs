@@ -27,6 +27,10 @@ const IDS = {
   event_id: '3',
   ticket_id: '5',
   hit_id: '7',
+  // Sticky messages: #general carries a running one and the test channel a paused one,
+  // so Pause, Remove and Resume each reach a row their move is legal on.
+  sticky_channel_id: '800000000000000002',
+  sticky_paused_channel_id: '800000000000000003',
   test_channel_id: '800000000000000003',
   lobby_channel_id: '800000000000000009',
   room_channel_id: '800000000000000010',
@@ -391,6 +395,12 @@ async function checkActionKinds() {
   await seed();
   await post('/api/tempvoice/setup');
   await post('/api/honeypot/setup');
+  // The five web.sticky.* kinds: set on a channel with none, then one row walked through.
+  await send('PUT', '/api/sticky/800000000000000001', { text: 'contract check' });
+  await send('PUT', `/api/sticky/${IDS.sticky_channel_id}`, { text: 'contract check, edited' });
+  await post(`/api/sticky/${IDS.sticky_channel_id}/pause`, {});
+  await post(`/api/sticky/${IDS.sticky_channel_id}/resume`, {});
+  await send('DELETE', `/api/sticky/${IDS.sticky_channel_id}`, undefined);
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post(`/api/rolemenus/requests/${IDS.request_id}/deny`, { reason: 'contract check' });
   await send('DELETE', `/api/roles/grants/${IDS.grant_id}`, undefined);

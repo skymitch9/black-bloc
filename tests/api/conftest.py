@@ -203,6 +203,12 @@ class WebChannel:
             raise LookupError(message_id)
         return found
 
+    def get_partial_message(self, message_id: int) -> WebMessage:
+        """A message that is already gone deletes to nothing, as a partial one does not raise
+        until Discord is asked."""
+        found = next((m for m in self.messages if m.id == int(message_id)), None)
+        return found if found is not None else WebMessage(int(message_id), self)
+
     async def create_thread(self, name: str, **kwargs: Any) -> Any:
         """A forum post, handed back the way `ForumChannel.create_thread` hands one over."""
         self.threads = getattr(self, "threads", [])

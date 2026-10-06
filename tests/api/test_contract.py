@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 from discord.ext import tasks
 
-from black_bloc import applications, doc_import, guides, knowledge, minutes, pings, posts
+from black_bloc import applications, doc_import, guides, knowledge, minutes, pings, posts, sticky
 from black_bloc import rolegrants as grants
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.settings_api import grouped
@@ -977,7 +977,12 @@ async def seed_world(client, web, guild, wf) -> dict:
     )
     await db.conn.commit()
     arm_minutes(web)
+    for channel_id, paused in ((wf.OTHER_CHANNEL_ID, False), (wf.TEST_CHANNEL_ID, True)):
+        await sticky.write_words(db, guild_id, channel_id, "How to submit a run.", 7)
+        await sticky.write_paused(db, guild_id, channel_id, paused, 7)
     return {
+        "sticky_channel_id": str(wf.OTHER_CHANNEL_ID),
+        "sticky_paused_channel_id": str(wf.TEST_CHANNEL_ID),
         "member_id": str(MEMBER_ID),
         "case_id": str(case_id),
         "voided_case_id": str(voided_case_id),

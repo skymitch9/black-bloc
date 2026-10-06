@@ -30,6 +30,7 @@ HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "raidtrain_mode": ("raidtrain",),
     "request_mode": ("request",),
     "rolemenu_mode": ("rolemenu",),
+    "sticky_mode": ("sticky",),
     "tempvoice_mode": ("voice",),
     "youtube_live_mode": ("youtube",),
 }

@@ -247,6 +247,7 @@ const KIND_HEADS = {
   pings: 'pings', raidtrain: 'raidtrain', marathon: 'marathon',
   application: 'applications', applications: 'applications',
   selftest: 'selftest',
+  post: 'posts', posts: 'posts', sticky: 'posts',
 };
 // Mirrors black_bloc/logkinds.py:HIDDEN_BY_DEFAULT — the Logs page's unfiltered view
 // leaves these out, and the Test chip is the only way to them.
@@ -277,6 +278,7 @@ const ROUTINE_KINDS = [
   'application.form_created', 'application.form_updated', 'application.form_deleted',
   'application.question_changed', 'application.mode', 'application.removed',
   'selftest.started', 'selftest.check', 'selftest.finished', 'selftest.purged',
+  'sticky.set', 'sticky.edited', 'sticky.paused', 'sticky.resumed', 'sticky.removed', 'sticky.mode', 'sticky.posted',
 ];
 
 function bareKind(kind) {
@@ -362,6 +364,12 @@ const SETTING_SPECS = [
   ["marathon_public_shadow_channel_id", "channel", null, null, "where this feature's rehearsals land while it is in shadow (a marathon's public highlights of BaF runners and its public reminders); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["poll_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (polls and their results); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["birthday_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (birthday wishes); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
+  ["sticky_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (sticky messages); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
+  ["sticky_mode", "enum", "shadow", "shadow", "off, shadow or on. shadow — the default — posts nothing in the real channel: each copy goes to the rehearsal home with a line naming where it would have gone. on keeps each sticky message at the bottom of its own channel. off takes every copy down and keeps the words", ["off", "shadow", "on"]],
+  ["sticky_after_messages", "int", 5, 5, "how many new messages from people it takes before a sticky message is posted again at the bottom; 5 by default, 1 to 100. Black Bloc's own messages and other bots' do not count", null, 100, 1],
+  ["sticky_min_seconds", "int", 30, 30, "the shortest gap, in seconds, between two copies of one sticky message; 30 by default, 5 to 3600. Both this and sticky_after_messages have to be met, so a busy channel never gets a copy per message", null, 3600, 5],
+  ["sticky_silent", "bool", true, true, "whether a sticky message is posted silently, so moving it to the bottom never lights up anybody's notifications. on by default"],
+  ["sticky_panel_minutes", "int", 10, 10, "minutes the /sticky panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, undefined, 1],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
   ['role_menu_channel_id', 'channel', '800000000000000002', null, 'the channel /rolemenu offers first when a menu is posted'],
   ['golive_mode', 'enum', 'shadow', 'off', 'whether a stream is announced at all. off watches nobody; shadow watches and logs what it would have posted without posting it; on posts the announcement. Off by default, so nothing reaches the server until somebody turns it on', ['off', 'shadow', 'on']],
@@ -1792,6 +1800,11 @@ function seedState() {
   tempvoice: [
     { channel_id: '800000000000000010', owner_id: MEMBERS[1].id, creator_id: '800000000000000009', created_at: minutesAgo(45), user_limit: 0, locked: false, hidden: false },
   ],
+  sticky: [
+    { channel_id: '800000000000000002', text: '**How to submit a run** — post the link, the category and your time, and a Lead will add it.', paused: false, trouble: null, message_id: '830000000000000101', posted_channel_id: '800000000000000004', posted_at: minutesAgo(12), reposts: 7, updated_by: STAFF.id, updated_at: minutesAgo(4000) },
+    { channel_id: '800000000000000003', text: 'Test posts only — nothing here is real.', paused: true, trouble: null, message_id: null, posted_channel_id: null, posted_at: null, reposts: 0, updated_by: STAFF.id, updated_at: minutesAgo(9000) },
+    { channel_id: '800000000000000006', text: 'Announcements are staff-only. Questions go in #general.', paused: false, trouble: 'Black Bloc is missing Send Messages in <#800000000000000004>. Give it that permission there, then press Try again.', message_id: null, posted_channel_id: null, posted_at: null, reposts: 2, updated_by: STAFF.id, updated_at: minutesAgo(700) },
+  ],
   honeypot: [
     { id: 7, user_id: MEMBERS[4].id, channel_id: '800000000000000007', message_id: '820000000000000001', content: 'free nitro at scam-link.example', at: minutesAgo(30), mode: 'shadow', action: 'would_ban' },
     { id: 6, user_id: MEMBERS[7].id, channel_id: '800000000000000007', message_id: '820000000000000002', content: 'steam gift card giveaway', at: minutesAgo(900), mode: 'shadow', action: 'would_ban' },
@@ -2116,6 +2129,12 @@ const NAMESPACE_OVERRIDE = {
   frontdoor_show_request: 'modmail',
   frontdoor_show_event: 'modmail',
   frontdoor_shadow_channel_id: 'modmail',
+  sticky_mode: 'posts',
+  sticky_after_messages: 'posts',
+  sticky_min_seconds: 'posts',
+  sticky_silent: 'posts',
+  sticky_panel_minutes: 'posts',
+  sticky_shadow_channel_id: 'posts',
   handoff_mode: 'request',
   handoff_confirm_hours: 'request',
   minutes_mode: 'events',
@@ -10563,6 +10582,130 @@ route('POST', '/api/tempvoice/forget', async (context) => {
     channel_id: wanted,
     message: `Black Bloc has forgotten **${wanted}** — joining it no longer makes anybody a temporary channel.`,
   };
+});
+
+// Sticky messages (docs/info/sticky-messages-design.md). The mock keeps the rows and the state
+// word; it posts nothing, so `on` reads as live and `shadow` as rehearsing in the log channel.
+const STICKY_TEXT_MAX = 1800;
+const STICKY_NONE = 'That channel has no sticky message, so nothing was changed. The list on this panel and on the Posts page is every channel that has one.';
+
+function stickyState(row) {
+  const mode = String(state.settings.get('sticky_mode') || 'shadow');
+  if (row.trouble) return 'stopped';
+  if (row.paused) return 'paused';
+  if (mode === 'off') return 'off';
+  if (!row.message_id) return 'waiting';
+  return String(row.posted_channel_id) === String(row.channel_id) ? 'live' : 'rehearsing';
+}
+
+function stickyPlace(row) {
+  const mode = String(state.settings.get('sticky_mode') || 'shadow');
+  if (row.paused || mode === 'off') {
+    row.message_id = null;
+    row.posted_channel_id = null;
+    row.posted_at = null;
+    return;
+  }
+  const home = state.settings.get('sticky_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id');
+  row.message_id = String(830000000000000000n + BigInt(Date.now()));
+  row.posted_channel_id = mode === 'on' ? row.channel_id : String(home);
+  row.posted_at = new Date().toISOString();
+}
+
+function stickyRow(row) {
+  const channel = CHANNELS.find((one) => one.id === String(row.channel_id));
+  return {
+    channel_id: String(row.channel_id),
+    channel_name: channel ? channel.name : null,
+    gone: !channel,
+    text: row.text,
+    paused: Boolean(row.paused),
+    trouble: row.trouble || null,
+    state: stickyState(row),
+    message_id: row.message_id ? String(row.message_id) : null,
+    posted_channel_id: row.posted_channel_id ? String(row.posted_channel_id) : null,
+    posted_at: row.posted_at || null,
+    reposts: Number(row.reposts || 0),
+    updated_by: row.updated_by ? String(row.updated_by) : null,
+    updated_by_name: row.updated_by ? memberName(row.updated_by) : null,
+    updated_at: row.updated_at,
+  };
+}
+
+function stickySaid(row) {
+  const said = stickyState(row);
+  if (said === 'live') return `Saved. It is at the bottom of <#${row.channel_id}> now.`;
+  if (said === 'rehearsing') return `Saved. Sticky messages are in **shadow**, so nothing was posted in <#${row.channel_id}> — the rehearsal copy is in <#${row.posted_channel_id}>.`;
+  if (said === 'paused') return 'Saved. It is paused, so nothing was posted — press **Resume** when it should run.';
+  return 'Saved. Sticky messages are **off**, so nothing was posted — set `sticky_mode` to shadow or on when it should run.';
+}
+
+function stickyOf(context) {
+  const row = state.sticky.find((one) => String(one.channel_id) === String(context.params.channel_id));
+  if (!row) throw new Refused(404, 'no_sticky', STICKY_NONE);
+  return row;
+}
+
+route('GET', '/api/sticky', (context) => {
+  requireStaff(context.session);
+  return state.sticky.map(stickyRow);
+});
+
+route('PUT', '/api/sticky/:channel_id', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const text = String(body.text || '').trim();
+  if (!text) throw new Refused(400, 'bad_text', 'A sticky message needs some words, so nothing was saved. Type what it should say and save again.');
+  if (text.length > STICKY_TEXT_MAX) {
+    throw new Refused(400, 'bad_text', `That is ${text.length} characters and a sticky message holds ${STICKY_TEXT_MAX}, so nothing was saved. Shorten it and save again.`);
+  }
+  const wanted = String(context.params.channel_id);
+  let row = state.sticky.find((one) => String(one.channel_id) === wanted);
+  const made = !row;
+  if (made) {
+    const channel = CHANNELS.find((one) => one.id === wanted);
+    if (!channel) throw new Refused(404, 'no_such_channel', 'Black Bloc cannot find that channel in this server, so nothing was saved. Pick a channel it can see.');
+    if (channel.type !== 'text') throw new Refused(400, 'not_postable', `<#${wanted}> is not a text channel, so a sticky message cannot sit in it and nothing was saved. Pick a text or announcement channel.`);
+    row = { channel_id: wanted, text, paused: false, trouble: null, message_id: null, posted_channel_id: null, posted_at: null, reposts: 0 };
+    state.sticky.push(row);
+  }
+  row.text = text;
+  row.trouble = null;
+  row.updated_by = STAFF.id;
+  row.updated_at = new Date().toISOString();
+  stickyPlace(row);
+  logAction(made ? 'web.sticky.set' : 'web.sticky.edited', { details: { channel_id: wanted, text: text.slice(0, 200), via: 'website' } });
+  return { sticky: stickyRow(row), message: stickySaid(row) };
+});
+
+route('POST', '/api/sticky/:channel_id/pause', (context) => {
+  requireStaff(context.session);
+  const row = stickyOf(context);
+  if (row.paused) throw new Refused(409, 'already_paused', 'That sticky message is already paused, so nothing was changed.');
+  row.paused = true;
+  row.trouble = null;
+  stickyPlace(row);
+  logAction('web.sticky.paused', { details: { channel_id: row.channel_id, via: 'website' } });
+  return { sticky: stickyRow(row), message: `Paused. The copy in <#${row.channel_id}> was taken down and the words are kept.` };
+});
+
+route('POST', '/api/sticky/:channel_id/resume', (context) => {
+  requireStaff(context.session);
+  const row = stickyOf(context);
+  if (!row.paused && !row.trouble) throw new Refused(409, 'not_paused', 'That sticky message is already running, so nothing was changed. **Pause** is the move that takes it down.');
+  row.paused = false;
+  row.trouble = null;
+  stickyPlace(row);
+  logAction('web.sticky.resumed', { details: { channel_id: row.channel_id, via: 'website' } });
+  return { sticky: stickyRow(row), message: stickySaid(row) };
+});
+
+route('DELETE', '/api/sticky/:channel_id', (context) => {
+  requireStaff(context.session);
+  const row = stickyOf(context);
+  state.sticky = state.sticky.filter((one) => one !== row);
+  logAction('web.sticky.removed', { details: { channel_id: row.channel_id, text: row.text.slice(0, 200), via: 'website' } });
+  return { removed: true, channel_id: String(row.channel_id), message: `Removed. <#${row.channel_id}> has no sticky message now.` };
 });
 
 route('GET', '/api/honeypot/hits', (context) => {

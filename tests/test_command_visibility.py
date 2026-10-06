@@ -255,7 +255,7 @@ async def test_every_command_in_the_table_is_a_real_top_level_command(real_tree)
     assert named.isdisjoint(cv.NEVER_HIDDEN)
 
 
-async def test_the_seventeen_features_that_hide_each_map_to_one_command():
+async def test_the_eighteen_features_that_hide_each_map_to_one_command():
     """`rolemenu_mode` came back (owner, 2026-09-25 "B") once `/mod` ▸ Role grants… became a
     door onto the Grants console that no mode hides."""
     assert cv.HIDDEN_WHEN_OFF == {
@@ -274,6 +274,7 @@ async def test_the_seventeen_features_that_hide_each_map_to_one_command():
         "raidtrain_mode": ("raidtrain",),
         "request_mode": ("request",),
         "rolemenu_mode": ("rolemenu",),
+        "sticky_mode": ("sticky",),
         "tempvoice_mode": ("voice",),
         "youtube_live_mode": ("youtube",),
     }
