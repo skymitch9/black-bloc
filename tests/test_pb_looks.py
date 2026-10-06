@@ -11,6 +11,7 @@ from black_bloc.pb_looks import Feed, feed_of
 from black_bloc.settings_store import SettingsStore
 from black_bloc.speedrun import (
     NOT_FOUND,
+    REFUSED,
     SERVER,
     THROTTLED,
     TOO_LARGE,
@@ -21,6 +22,7 @@ from black_bloc.speedrun import (
     SpeedrunError,
 )
 
+MALFORMED = "malformed"
 GUILD = 7
 LOGS = 501
 REHEARSAL = 502
@@ -119,6 +121,8 @@ class FakeChannel:
 
 class FakeMember:
     def __init__(self, user_id, name, guild, *, staff=False):
+        self.dms = []
+        self.dms_closed = False
         self.id = user_id
         self.display_name = name
         self.name = name.lower()
@@ -126,6 +130,11 @@ class FakeMember:
         self.guild = guild
         self.roles = [SimpleNamespace(id=LEADS)] if staff else []
         self.guild_permissions = SimpleNamespace(manage_guild=staff)
+
+    async def send(self, content=None, **kwargs):
+        if self.dms_closed:
+            raise discord.Forbidden(_Response(403), "Cannot send messages to this user")
+        self.dms.append({"content": content, **kwargs})
 
 
 class FakeGuild:
@@ -311,9 +320,7 @@ async def test_on_posts_in_the_channel_with_no_ping_by_default(bot, guild, feed,
     assert post["content"] is None
     assert post["embed"].description == f"<@{ADA}> ran **Ocarina of Time** — Any% in **1:40**."
     assert post["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()
-    assert [item.url for item in post["view"].children] == [
-        "https://www.speedrun.com/oot/runs/r1"
-    ]
+    assert [item.url for item in post["view"].children] == ["https://www.speedrun.com/oot/runs/r1"]
     assert "pbfeed.posted" in await kinds(bot.db)
     assert (await pb_store.posts(bot.db, GUILD))[0]["message_id"] == 1001
 
@@ -618,17 +625,76 @@ async def test_a_match_staff_set_does_not_follow_the_link(bot, guild, feed, clie
     assert row["src_user_id"] == ZFG.id and client.asked == []
 
 
-async def test_a_runner_speedrun_no_longer_has_is_unmatched_and_said_once(
+async def test_one_404_is_recorded_and_retried_and_wipes_nothing(bot, guild, feed, client):
+    await matched(bot)
+    await seen(feed, client, [best("r1")])
+    client.bests[ZFG.id] = SpeedrunError(NOT_FOUND, status=404)
+
+    looked = await feed.look(guild, ADA, now=NOW + timedelta(hours=1))
+
+    row = await pb_store.match(bot.db, GUILD, ADA)
+    assert not looked.gone and "404" in looked.trouble
+    assert (row["state"], row["src_user_id"], row["misses"]) == ("matched", ZFG.id, 1)
+    assert (
+        row["baseline_at"] == NOW.isoformat() and "asks again at the next look" in row["look_error"]
+    )
+    assert row["looked_at"] == (NOW + timedelta(hours=1)).isoformat()
+    assert len(await pb_store.baseline(bot.db, GUILD, ADA)) == 1
+    assert await kinds(bot.db) == ["pbfeed.baseline"]
+
+    client.bests[ZFG.id] = [best("r1")]
+    await feed.look(guild, ADA, now=NOW + timedelta(hours=2))
+    client.bests[ZFG.id] = SpeedrunError(NOT_FOUND, status=404)
+    await feed.look(guild, ADA, now=NOW + timedelta(hours=3))
+
+    row = await pb_store.match(bot.db, GUILD, ADA)
+    assert (row["state"], row["misses"]) == ("matched", 1)
+    assert "pbfeed.runner_gone" not in await kinds(bot.db)
+
+
+async def test_a_second_404_in_a_row_undoes_an_automatic_match_and_keeps_the_baseline(
     bot, guild, feed, client
 ):
     await matched(bot)
+    await seen(feed, client, [best("r1")])
     client.bests[ZFG.id] = SpeedrunError(NOT_FOUND, status=404)
 
-    looked = await feed.look(guild, ADA, now=NOW)
+    await feed.look(guild, ADA, now=NOW + timedelta(hours=1))
+    looked = await feed.look(guild, ADA, now=NOW + timedelta(hours=2))
 
     row = await pb_store.match(bot.db, GUILD, ADA)
     assert looked.gone and (row["state"], row["reason"]) == (pb_store.NONE, "runner_gone")
-    assert await kinds(bot.db) == ["pbfeed.runner_gone"]
+    assert (row["src_user_id"], row["gone_src_user_id"]) == (None, ZFG.id)
+    assert len(await pb_store.baseline(bot.db, GUILD, ADA)) == 1
+    assert (await kinds(bot.db)).count("pbfeed.runner_gone") == 1
+
+    client.by_twitch["zfg1"] = [ZFG]
+    back = await feed.lookup(guild, ADA, "zfg1", now=NOW + timedelta(days=8))
+
+    assert (back["state"], back["baseline_at"], back["misses"]) == ("matched", NOW.isoformat(), 0)
+    assert (
+        len(await pb_store.baseline(bot.db, GUILD, ADA)) == 1 and back["gone_src_user_id"] is None
+    )
+
+
+async def test_a_match_staff_set_is_never_undone_by_404s_and_says_so_for_staff(
+    bot, guild, feed, client
+):
+    await matched(bot, source=pb_store.STAFF)
+    await seen(feed, client, [best("r1")])
+    client.bests[ZFG.id] = SpeedrunError(NOT_FOUND, status=404)
+
+    for hour in (1, 2, 3):
+        looked = await feed.look(guild, ADA, now=NOW + timedelta(hours=hour))
+
+    row = await pb_store.match(bot.db, GUILD, ADA)
+    assert not looked.gone
+    assert (row["state"], row["source"], row["src_user_id"]) == ("matched", "staff", ZFG.id)
+    assert row["misses"] == 3 and "Staff set this match" in row["look_error"]
+    assert "Unmatch" in row["look_error"] and "3 looks in a row" in row["look_error"]
+    assert len(await pb_store.baseline(bot.db, GUILD, ADA)) == 1
+    logged = await kinds(bot.db)
+    assert logged.count("pbfeed.runner_missing") == 1 and "pbfeed.runner_gone" not in logged
 
 
 async def test_one_oversized_runner_is_their_own_trouble_not_an_outage(bot, guild, feed, client):
@@ -640,7 +706,8 @@ async def test_one_oversized_runner_is_their_own_trouble_not_an_outage(bot, guil
 
     assert await kinds(bot.db) == ["pbfeed.look_failed"]
     assert "larger" in (await pb_store.match(bot.db, GUILD, ADA))["look_error"]
-    assert await pb_store.looks(bot.db, GUILD) is None
+    state = await pb_store.looks(bot.db, GUILD)
+    assert (state["outcome"], state["failures"], state["backoff_until"]) == ("ok", 0, None)
 
 
 async def test_a_tick_does_nothing_at_all_while_the_mode_is_off(bot, guild, feed, client):
@@ -759,14 +826,152 @@ async def test_a_restart_inside_an_outage_does_not_log_it_again(bot, guild, feed
     assert await kinds(bot.db) == ["pbfeed.look_failed"]
 
 
-async def test_a_bug_in_a_look_backs_off_instead_of_raising_out_of_the_tick(
+async def two_matched(bot, feed, client):
+    """Ada and Bea, both with a baseline, Ada the longer overdue."""
+    await matched(bot)
+    await matched(bot, BEA, OTHER, login="bea_tv")
+    await seen(feed, client, [best("r1")], at=NOW - timedelta(minutes=5))
+    await seen(feed, client, [best("b1")], BEA, OTHER, at=NOW)
+
+
+@pytest.mark.parametrize("what", ["refused", "malformed", "bug"])
+async def test_one_members_bad_answer_is_theirs_alone_and_the_feed_moves_on(
+    bot, guild, feed, client, what
+):
+    await two_matched(bot, feed, client)
+    if what == "refused":
+        client.bests[ZFG.id] = SpeedrunError(REFUSED, status=403)
+    elif what == "malformed":
+        client.bests[ZFG.id] = SpeedrunError(MALFORMED, why="data was a dict")
+    else:
+        client.bests[ZFG.id] = RuntimeError("boom")
+    first = NOW + timedelta(minutes=61)
+
+    took = [await feed.tick(guild, first + timedelta(minutes=at)) for at in range(4)]
+
+    ada = await pb_store.match(bot.db, GUILD, ADA)
+    bea = await pb_store.match(bot.db, GUILD, BEA)
+    assert took == [1, 1, 0, 0]
+    assert ada["looked_at"] == first.isoformat() and ada["state"] == "matched"
+    assert ada["look_error"] and "pbfeed.look_failed" in await kinds(bot.db)
+    assert (await details_of(bot.db, "pbfeed.look_failed"))["target_id"] == ADA
+    assert bea["looked_at"] == (first + timedelta(minutes=1)).isoformat() and not bea["look_error"]
+    state = await pb_store.looks(bot.db, GUILD)
+    assert state["backoff_until"] is None and int(state["failures"]) == 0
+    assert [what for what, _ in client.asked[-2:]] == ["bests", "bests"]
+    assert not any(word in ada["look_error"] for word in ("permission", "not allowed"))
+
+
+async def test_one_members_refused_lookup_does_not_hold_the_queue(bot, guild, feed, client):
+    await link(bot.db, ADA, "zfg1")
+    await link(bot.db, BEA, "bea_tv")
+    client.by_twitch["bea_tv"] = [OTHER]
+    real = client.users_by_twitch
+
+    async def picky(login):
+        if login == "zfg1":
+            client.requests += 1
+            raise SpeedrunError(REFUSED, status=403)
+        return await real(login)
+
+    client.users_by_twitch = picky
+
+    took = [await feed.tick(guild, NOW + timedelta(minutes=at)) for at in range(3)]
+
+    ada = await pb_store.match(bot.db, GUILD, ADA)
+    bea = await pb_store.match(bot.db, GUILD, BEA)
+    assert took[:2] == [1, 1]
+    assert (ada["state"], ada["reason"], ada["checked_at"]) == ("none", "trouble", NOW.isoformat())
+    assert "refused the question" in ada["look_error"]
+    assert (bea["state"], bea["src_user_id"]) == ("matched", OTHER.id)
+    assert (await pb_store.looks(bot.db, GUILD))["backoff_until"] is None
+    assert (await kinds(bot.db)).count("pbfeed.look_failed") == 1
+
+
+async def test_runs_that_were_recorded_and_not_posted_are_counted_by_reason(
     bot, guild, feed, client
 ):
     await matched(bot)
-    client.raises = RuntimeError("boom")
+    await seen(feed, client, [best("r1")])
+    later = NOW + timedelta(days=20)
+    client.bests[ZFG.id] = [
+        best("r1"),
+        best("old", slot="g2|c1||", verified_at=NOW + timedelta(days=1)),
+        best("older", slot="g3|c1||", verified_at=NOW - timedelta(days=30)),
+        best("undated", slot="g4|c1||", verified_at=None),
+        best("undated2", slot="g5|c1||", verified_at=None),
+    ]
 
-    assert await feed.tick(guild, NOW) == 0
-    assert "RuntimeError" in (await details_of(bot.db, "pbfeed.look_failed"))["reason"]
+    looked = await feed.look(guild, ADA, now=later)
+    again = await feed.look(guild, ADA, now=later + timedelta(hours=1))
+
+    assert (looked.found, again.found) == (0, 0) and sent(guild) == {}
+    assert (await kinds(bot.db)).count("pbfeed.not_news") == 1
+    found = await details_of(bot.db, "pbfeed.not_news")
+    assert (found["too_old"], found["before_baseline"], found["undated"]) == (1, 1, 2)
+    assert found["target_id"] == ADA and found["runner"] == "zfg"
+    kept = pb_store.quiet_of(await pb_store.match(bot.db, GUILD, ADA))
+    assert kept == {"too_old": 1, "before_baseline": 1, "undated": 2, "at": later.isoformat()}
+
+
+async def test_a_claim_no_look_settled_is_said_once_at_boot_and_stops_hiding(
+    bot, guild, feed, client
+):
+    await matched(bot)
+    await pb_store.claim_post(bot.db, GUILD, ADA, best("lost"), "zfg", now=NOW)
+    assert await pb_store.posts(bot.db, GUILD) == []
+
+    reborn = Feed(bot, client)
+    await reborn.tick(guild, NOW + timedelta(minutes=1))
+    await reborn.tick(guild, NOW + timedelta(minutes=2))
+
+    shown = await pb_store.posts(bot.db, GUILD)
+    assert [(row["run_id"], row["outcome"]) for row in shown] == [("lost", "unconfirmed")]
+    assert "cannot say whether the post was made" in shown[0]["reason"]
+    assert (await kinds(bot.db)).count("pbfeed.unconfirmed") == 1
+    found = await details_of(bot.db, "pbfeed.unconfirmed")
+    assert (found["runs"], found["run_ids"]) == (1, ["lost"])
+
+
+async def test_a_post_that_cannot_be_built_is_a_failure_in_words_not_a_stuck_claim(
+    bot, guild, feed, client, monkeypatch
+):
+    from black_bloc import pb_looks
+
+    def broken(*args, **kwargs):
+        raise KeyError("boom")
+
+    await matched(bot)
+    await seen(feed, client, [best("r1", seconds=100.0)])
+    later = NOW + timedelta(hours=2)
+    client.bests[ZFG.id] = [best("r9", seconds=95.5, verified_at=later)]
+    monkeypatch.setattr(pb_looks, "post_embed", broken)
+
+    await feed.look(guild, ADA, now=later)
+
+    posts = await pb_store.posts(bot.db, GUILD)
+    assert [(row["run_id"], row["outcome"]) for row in posts] == [("r9", pb_store.FAILED)]
+    assert "pbfeed.post_failed" in await kinds(bot.db)
+
+
+async def test_running_without_the_sub_categories_is_said_once_in_the_log(bot, guild, feed, client):
+    await matched(bot)
+    client.plain_since = None
+    real = client.personal_bests
+
+    async def refused_embed(runner_id):
+        client.plain_since = 1.0
+        return await real(runner_id)
+
+    client.personal_bests = refused_embed
+    client.bests[ZFG.id] = [best("r1")]
+
+    await feed.look(guild, ADA, now=NOW)
+    await feed.look(guild, ADA, now=NOW + timedelta(hours=1))
+
+    assert (await kinds(bot.db)).count("pbfeed.subcategories_untold") == 1
+    said = (await details_of(bot.db, "pbfeed.subcategories_untold"))["reason"]
+    assert "never compared" in said and "about 6 hours" in said
 
 
 async def test_an_interval_of_looks_with_no_news_is_one_nothing_new_row(bot, guild, feed, client):

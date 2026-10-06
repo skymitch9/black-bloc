@@ -11,6 +11,7 @@ from . import pb_moves, pb_store
 from .command_errors import AnswersErrors
 from .panels import Panel, db_up, opened, retire, still_staff
 from .pb_feed import OFF, PAGE, mode_of, said
+from .pb_moves import NAME_LIMIT, REASON_LIMIT
 from .settings_store import PB_FEED_PANEL_MINUTES, PB_FEED_REMATCH_DAYS
 from .timezones import unix
 
@@ -31,6 +32,7 @@ BACK_LABEL = "Back"
 PICK_PLACEHOLDER = "Pick a member…"
 SET_TITLE = "speedrun.com account"
 SET_LABEL = "Their speedrun.com name"
+REASON_LABEL = "Reason (the member is told)"
 STAFF_LABELS = {
     UNMATCH: "Unmatch",
     BLOCK: "Block",
@@ -64,7 +66,7 @@ STATE_WORDS = {
 }
 LOOKED_LINE = "last looked {when}"
 LAST_PB_LINE = "last new personal best {when}"
-NAME_LIMIT = 64
+REASONED = (UNMATCH, BLOCK, CLEAR)
 
 
 class PbPanel(Panel):
@@ -97,7 +99,7 @@ def own_line(store: Any, guild_id: int, row: Any, login: str | None) -> str:
         return said(store, guild_id, "pb_feed_you_blocked")
     if state == pb_store.MATCHED:
         key = "pb_feed_you_set" if row["source"] == pb_store.STAFF else "pb_feed_you_matched"
-        return said(
+        matched = said(
             store,
             guild_id,
             key,
@@ -105,6 +107,7 @@ def own_line(store: Any, guild_id: int, row: Any, login: str | None) -> str:
             link=row["src_weblink"],
             login=row["twitch_login"] or login or "",
         )
+        return f"{matched} {posting_line(store, guild_id)}"
     if not login:
         return said(store, guild_id, "pb_feed_you_unlinked")
     if state == pb_store.NONE:
@@ -118,6 +121,11 @@ def own_line(store: Any, guild_id: int, row: Any, login: str | None) -> str:
     return said(store, guild_id, "pb_feed_you_waiting")
 
 
+def posting_line(store: Any, guild_id: int) -> str:
+    """Whether a personal best is posted right now; it never promises a post the mode forbids."""
+    return said(store, guild_id, f"pb_feed_posting_{mode_of(store, guild_id)}")
+
+
 def own_move(row: Any) -> str | None:
     state = row["state"] if row is not None else None
     if state == pb_store.BLOCKED:
@@ -129,8 +137,9 @@ def staff_moves(row: Any, mode: str) -> list[str]:
     """Only the moves that are valid on this member right now."""
     state = row["state"] if row is not None else None
     moves: list[str] = []
-    if state != pb_store.OPTED_OUT:
-        moves.append(SET)
+    if state != pb_store.OPTED_OUT and not (row is not None and row["opted_out_at"]):
+        if mode != OFF:
+            moves.append(SET)
     if state == pb_store.MATCHED:
         moves.append(UNMATCH)
         if mode != OFF:
@@ -278,7 +287,12 @@ async def run_own(interaction: discord.Interaction, move: str, previous: Any = N
 
 
 async def run_staff(
-    interaction: discord.Interaction, move: str, user_id: int, previous: Any = None
+    interaction: discord.Interaction,
+    move: str,
+    user_id: int,
+    previous: Any = None,
+    *,
+    reason: str = "",
 ) -> None:
     if not await opened(interaction):
         return
@@ -289,28 +303,34 @@ async def run_staff(
         CLEAR: pb_moves.clear_opt_out,
         LOOK: pb_moves.look_now,
     }[move]
-    outcome = await act(interaction.client, interaction.guild, user_id, interaction.user)
+    words = {"reason": reason} if move in REASONED else {}
+    outcome = await act(interaction.client, interaction.guild, user_id, interaction.user, **words)
     await render_member(interaction, user_id, previous, note=outcome.message)
 
 
 async def run_set(
-    interaction: discord.Interaction, user_id: int, name: str, previous: Any = None
+    interaction: discord.Interaction,
+    user_id: int,
+    name: str,
+    previous: Any = None,
+    *,
+    reason: str = "",
 ) -> None:
     if not await opened(interaction):
         return
     outcome = await pb_moves.set_by_hand(
-        interaction.client, interaction.guild, user_id, name, interaction.user
+        interaction.client, interaction.guild, user_id, name, interaction.user, reason=reason
     )
     await render_member(interaction, user_id, previous, note=outcome.message)
 
 
-async def open_set(interaction: discord.Interaction, user_id: int, previous: Any = None) -> None:
+async def open_modal(interaction: discord.Interaction, modal: discord.ui.Modal) -> None:
     """A modal has to be the first answer, so staff and the database are asked without a defer."""
     if not await still_staff(interaction):
         return
     if not await db_up(interaction):
         return
-    await interaction.response.send_modal(SetModal(user_id, previous))
+    await interaction.response.send_modal(modal)
 
 
 class OwnButton(discord.ui.Button):
@@ -364,7 +384,10 @@ class StaffButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if self.move == SET:
-            await open_set(interaction, self.user_id, self.view)
+            await open_modal(interaction, SetModal(self.user_id, self.view))
+            return
+        if self.move in REASONED:
+            await open_modal(interaction, ReasonModal(self.move, self.user_id, self.view))
             return
         await run_staff(interaction, self.move, self.user_id, self.view)
 
@@ -374,13 +397,42 @@ class SetModal(AnswersErrors, discord.ui.Modal):
         label=SET_LABEL, style=discord.TextStyle.short, max_length=NAME_LIMIT
     )
 
+    reason = discord.ui.TextInput(
+        label=REASON_LABEL,
+        style=discord.TextStyle.paragraph,
+        max_length=REASON_LIMIT,
+        required=False,
+    )
+
     def __init__(self, user_id: int, previous: Any = None) -> None:
         super().__init__(title=SET_TITLE)
         self.user_id = int(user_id)
         self.previous = previous
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await run_set(interaction, self.user_id, str(self.runner), self.previous)
+        await run_set(
+            interaction, self.user_id, str(self.runner), self.previous, reason=str(self.reason)
+        )
+
+
+class ReasonModal(AnswersErrors, discord.ui.Modal):
+    reason = discord.ui.TextInput(
+        label=REASON_LABEL,
+        style=discord.TextStyle.paragraph,
+        max_length=REASON_LIMIT,
+        required=False,
+    )
+
+    def __init__(self, move: str, user_id: int, previous: Any = None) -> None:
+        super().__init__(title=STAFF_LABELS[move])
+        self.move = move
+        self.user_id = int(user_id)
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_staff(
+            interaction, self.move, self.user_id, self.previous, reason=str(self.reason)
+        )
 
 
 async def open_panel(interaction: discord.Interaction) -> None:
@@ -399,6 +451,7 @@ __all__ = [
     "MemberPick",
     "OwnButton",
     "PbPanel",
+    "ReasonModal",
     "SetModal",
     "StaffButton",
     "build_manage",
@@ -408,5 +461,6 @@ __all__ = [
     "open_panel",
     "own_line",
     "own_move",
+    "posting_line",
     "staff_moves",
 ]

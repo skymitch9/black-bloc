@@ -3896,7 +3896,7 @@ PB_FEED_MAX_POSTS = "pb_feed_max_posts"
 PB_FEED_PANEL_MINUTES = "pb_feed_panel_minutes"
 PB_FEED_NUMBERS: dict[str, tuple[int, int, int]] = {
     PB_FEED_INTERVAL: (60, 15, 1440),
-    PB_FEED_CYCLE_REQUESTS: (120, 1, 600),
+    PB_FEED_CYCLE_REQUESTS: (400, 1, 600),
     PB_FEED_REMATCH_DAYS: (7, 1, 90),
     PB_FEED_MAX_AGE_DAYS: (7, 1, 60),
     PB_FEED_MAX_POSTS: (5, 1, 20),
@@ -3954,16 +3954,32 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the footer the /pb panel gets when its buttons have timed out",
     ),
     "pb_feed_you_matched": (
-        "**speedrun.com** — [{runner}]({link}), found from twitch.tv/{login}. A personal best "
-        "is posted once speedrun.com has verified it.",
+        "**speedrun.com** — [{runner}]({link}), found from twitch.tv/{login}.",
         ("runner", "link", "login"),
         "what /pb tells a member Black Bloc matched from their Twitch link",
     ),
     "pb_feed_you_set": (
-        "**speedrun.com** — [{runner}]({link}), set by staff. A personal best is posted once "
-        "speedrun.com has verified it.",
+        "**speedrun.com** — [{runner}]({link}), set by staff.",
         ("runner", "link"),
         "what /pb tells a member whose speedrun.com account staff set by hand",
+    ),
+    "pb_feed_posting_on": (
+        "A personal best is posted once speedrun.com has verified it.",
+        (),
+        "what /pb adds for a matched member while pb_feed_mode is on",
+    ),
+    "pb_feed_posting_shadow": (
+        "Staff are still trying this out: a new personal best is not posted in the server's "
+        "personal best channel yet, only copied to where staff rehearse.",
+        (),
+        "what /pb adds for a matched member while pb_feed_mode is shadow, in place of "
+        "pb_feed_posting_on",
+    ),
+    "pb_feed_posting_off": (
+        "The personal best feed is switched off, so nothing is looked at and nothing is posted.",
+        (),
+        "what /pb adds for a matched member while pb_feed_mode is off, in place of "
+        "pb_feed_posting_on",
     ),
     "pb_feed_you_none": (
         "No speedrun.com account lists twitch.tv/{login} as its Twitch channel. Add your Twitch "
@@ -4010,7 +4026,7 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what a member is told after opting out of the personal best feed",
     ),
     "pb_feed_opted_in_said": (
-        "Done — your personal bests will be posted again. Runs verified before now are not "
+        "Done — you are back in the personal best feed. Runs verified before now are never "
         "posted.",
         (),
         "what a member is told after opting back in to the personal best feed",
@@ -4037,6 +4053,12 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{member} is back in the personal best feed. Runs verified before now are not posted.",
         ("member",),
         "what staff are told after unblocking a member, or clearing their opt-out",
+    ),
+    "pb_feed_unblocked_opted_out_said": (
+        "{member} is unblocked. They had asked not to have personal bests posted, and that "
+        "still stands: only they, or staff pressing Clear the opt-out, can end it.",
+        ("member",),
+        "what staff are told after unblocking a member who had opted out before the block",
     ),
     "pb_feed_no_runner_said": (
         "speedrun.com has no single account named exactly **{given}**, so nothing was changed. "
@@ -4077,7 +4099,43 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "Set pb_feed_mode to shadow or on — in /settings or on the Settings page — and try "
         "again.",
         (),
-        "what staff are told when they ask for a look while pb_feed_mode is off",
+        "what staff are told when they ask for a look, or set an account by hand, while "
+        "pb_feed_mode is off",
+    ),
+    "pb_feed_dm_set": (
+        "Staff in **{server}** matched you to **{runner}** on speedrun.com for the personal best "
+        "feed. Their reason: {reason}\nRun /pb in the server to see it, or to opt out.",
+        ("server", "runner", "reason"),
+        "the DM a member gets when staff set their speedrun.com account by hand. {server} is "
+        "the server's name, {runner} the account, {reason} what staff typed or "
+        "pb_feed_dm_no_reason",
+    ),
+    "pb_feed_dm_unmatched": (
+        "Staff in **{server}** removed your match to **{runner}** on speedrun.com from the "
+        "personal best feed. Their reason: {reason}\nBlack Bloc may find your account again "
+        "from your Twitch link; run /pb in the server to see where it stands, or to opt out.",
+        ("server", "runner", "reason"),
+        "the DM a member gets when staff unmatch them from the personal best feed",
+    ),
+    "pb_feed_dm_blocked": (
+        "Staff in **{server}** turned the personal best feed off for you: Black Bloc no longer "
+        "looks at your speedrun.com runs. Their reason: {reason}\nAsk staff if you think that "
+        "should change.",
+        ("server", "runner", "reason"),
+        "the DM a member gets when staff block them from the personal best feed; {runner} is "
+        "the account they were matched to, or nothing",
+    ),
+    "pb_feed_dm_opt_out_cleared": (
+        "You had asked Black Bloc in **{server}** to leave your personal bests alone. Staff "
+        "have put you back in the personal best feed. Their reason: {reason}\nRun /pb in the "
+        "server to opt out again.",
+        ("server", "reason"),
+        "the DM a member gets when staff clear their opt-out",
+    ),
+    "pb_feed_dm_no_reason": (
+        "none was given.",
+        (),
+        "what {reason} becomes in a personal best DM when staff typed no reason",
     ),
 }
 PB_FEED_DEFAULTS: dict[str, Any] = {
@@ -4146,8 +4204,9 @@ KEY_HELP.update(
         ),
         PB_FEED_CYCLE_REQUESTS: (
             "the most requests Black Bloc sends speedrun.com within one "
-            "pb_feed_interval_minutes; 120 by default. At the cap it stops until the interval "
-            "has passed and says so once in the log"
+            "pb_feed_interval_minutes; 400 by default, which covers 300 members looked at "
+            "once an hour with room for lookups. At the cap it stops until the interval has "
+            "passed and says so once in the log; Look now and Set by hand stop there too"
         ),
         PB_FEED_REMATCH_DAYS: (
             "how many days pass before Black Bloc looks again for the speedrun.com account of "

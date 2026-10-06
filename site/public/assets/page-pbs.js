@@ -2,7 +2,6 @@ import { api, listOf, names, send, settings, settingsNamespace } from './api.js'
 import { start } from './app.js';
 import { logsTable } from './logs.js';
 import {
-  ask,
   askForm,
   badge,
   bar,
@@ -53,6 +52,12 @@ const REASON_WORDS = {
   taken: 'that account is another member’s',
   runner_gone: 'the account is gone from speedrun.com',
   link_moved: 'their Twitch link changed',
+  trouble: 'could not be looked up',
+};
+const NOT_NEWS_WORDS = {
+  too_old: 'verified too long ago',
+  before_baseline: 'verified before the first look',
+  undated: 'with no verify date',
 };
 const OUTCOME_WORDS = {
   posted: 'posted',
@@ -60,8 +65,9 @@ const OUTCOME_WORDS = {
   dry: 'not sent',
   held: 'held back',
   failed: 'failed',
+  unconfirmed: 'not confirmed',
 };
-const OUTCOME_TONES = { posted: 'ok', rehearsed: 'warn', failed: 'danger' };
+const OUTCOME_TONES = { posted: 'ok', rehearsed: 'warn', failed: 'danger', unconfirmed: 'danger' };
 const FILTERS = [
   ['all', 'All', null],
   ['matched', 'Matched', (row) => row.state === 'matched'],
@@ -75,9 +81,10 @@ const NO_POSTS = 'No personal best has been posted or rehearsed yet.';
 const NO_LOGS = 'The personal best feed has logged nothing yet.';
 const NEED_A_MEMBER = 'Pick the member first.';
 const NEED_A_NAME = 'Type their speedrun.com name, then save again.';
+const REASON_LABEL = 'Reason (the member is told)';
 const LOG_ROWS = 20;
 
-const kept = { query: '', filter: 'all' };
+const kept = { query: '', filter: 'all', mode: 'shadow' };
 let refresh = () => {};
 
 function where(userId, tail = '') {
@@ -122,18 +129,52 @@ function nameBox() {
   });
 }
 
+function reasonBox() {
+  return el('input', {
+    class: 'input',
+    type: 'text',
+    id: 'pb-reason',
+    maxlength: '300',
+    autocomplete: 'off',
+  });
+}
+
 async function setByHand(userId, title, say, picker = null) {
   const box = nameBox();
+  const reason = reasonBox();
   await askForm({
     title,
-    body: [picker ? picker.node : null, field('Their speedrun.com name', box)],
+    body: [
+      picker ? picker.node : null,
+      field('Their speedrun.com name', box),
+      field(REASON_LABEL, reason),
+    ],
     confirmLabel: 'Save it',
     tone: 'warn',
     onConfirm: async () => {
       const wanted = picker ? picker.id : userId;
       if (!wanted) return NEED_A_MEMBER;
       if (!box.value.trim()) return NEED_A_NAME;
-      const found = await send(where(wanted), 'PUT', { runner: box.value.trim() });
+      const found = await send(where(wanted), 'PUT', {
+        runner: box.value.trim(),
+        reason: reason.value.trim(),
+      });
+      say.say(found.message, 'ok');
+      refresh();
+      return null;
+    },
+  });
+}
+
+async function withReason(row, say, { title, confirmLabel, tone, method, tail }) {
+  const reason = reasonBox();
+  await askForm({
+    title,
+    body: [field(REASON_LABEL, reason)],
+    confirmLabel,
+    tone,
+    onConfirm: async () => {
+      const found = await send(where(row.user_id, tail), method, { reason: reason.value.trim() });
       say.say(found.message, 'ok');
       refresh();
       return null;
@@ -147,28 +188,38 @@ function actions(row, say) {
     if (done.ok) refresh();
   };
   const moves = [];
-  if (row.state !== 'opted_out') {
+  if (row.state !== 'opted_out' && !row.opted_out_at && kept.mode !== 'off') {
     moves.push(button('Set by hand…', () => setByHand(row.user_id, row.name, say)));
   }
   if (row.state === 'matched') {
-    moves.push(button('Look now', () => act('POST', '/look')));
-    moves.push(button('Unmatch', async () => {
-      const sure = await ask({
-        title: `Unmatch ${row.name} from ${row.runner}?`,
-        body: [],
-        confirmLabel: 'Unmatch',
-        tone: 'warn',
-      });
-      if (sure) await act('DELETE', '');
-    }));
+    if (kept.mode !== 'off') moves.push(button('Look now', () => act('POST', '/look')));
+    moves.push(button('Unmatch', () => withReason(row, say, {
+      title: `Unmatch ${row.name} from ${row.runner}?`,
+      confirmLabel: 'Unmatch',
+      tone: 'warn',
+      method: 'DELETE',
+      tail: '',
+    })));
   }
   if (row.state === 'opted_out') {
-    moves.push(button('Clear the opt-out', () => act('POST', '/optin'), { tone: 'warn' }));
+    moves.push(button('Clear the opt-out', () => withReason(row, say, {
+      title: `Clear ${row.name}’s opt-out?`,
+      confirmLabel: 'Clear the opt-out',
+      tone: 'warn',
+      method: 'POST',
+      tail: '/optin',
+    }), { tone: 'warn' }));
   }
   if (row.state === 'blocked') {
     moves.push(button('Unblock', () => act('POST', '/unblock'), { tone: 'warn' }));
   } else {
-    moves.push(button('Block', () => act('POST', '/block'), { tone: 'danger' }));
+    moves.push(button('Block', () => withReason(row, say, {
+      title: `Block ${row.name}?`,
+      confirmLabel: 'Block',
+      tone: 'danger',
+      method: 'POST',
+      tail: '/block',
+    }), { tone: 'danger' }));
   }
   return bar(moves);
 }
@@ -193,6 +244,19 @@ function seenLine(row) {
   return el('span', { class: 'rowlist-note', text: parts.join(' · ') });
 }
 
+function notNewsLine(row) {
+  const found = row.not_news;
+  if (!found) return null;
+  const parts = Object.entries(NOT_NEWS_WORDS)
+    .filter(([key]) => Number(found[key]) > 0)
+    .map(([key, words]) => `${found[key]} ${words}`);
+  if (parts.length === 0) return null;
+  return el('span', {
+    class: 'rowlist-note',
+    text: `recorded, not posted ${when(found.at)}: ${parts.join(' · ')}`,
+  });
+}
+
 function personRow(row, say) {
   return el('div', { class: 'rowlist-row', 'data-member': String(row.user_id) }, [
     el('div', { class: 'rowlist-main' }, [
@@ -202,6 +266,7 @@ function personRow(row, say) {
         : null,
       stateLine(row),
       seenLine(row),
+      notNewsLine(row),
       row.look_error ? notice(row.look_error, 'danger') : null,
     ]),
     actions(row, say),
@@ -236,8 +301,10 @@ function peopleSection(payload, modeSpec) {
   });
   filter.apply();
 
-  const add = button('Match a member…', () => setByHand(null, 'Match a member', say, memberPicker({ label: 'Member' })), { tone: 'warn' });
-  add.style.marginLeft = 'auto';
+  const add = kept.mode === 'off'
+    ? null
+    : button('Match a member…', () => setByHand(null, 'Match a member', say, memberPicker({ label: 'Member' })), { tone: 'warn' });
+  if (add) add.style.marginLeft = 'auto';
   const one = section('Members', null, { count: rows.length, open: true });
   const why = look && look.outcome === 'failed' && look.reason ? notice(look.reason, 'danger') : null;
   one.body.append(...[
@@ -304,6 +371,7 @@ async function logsSectionNode() {
 
 async function load() {
   const [payload, all] = await Promise.all([api('/api/pbs'), settings()]);
+  kept.mode = payload.mode || 'off';
   await names(idsIn(listOf(payload, 'people'), ['user_id']).concat(idsIn(listOf(payload, 'posts'), ['user_id'])));
   const specs = settingsNamespace(all, 'core').filter((spec) => spec.key.startsWith(KEY_PREFIX));
   const modeSpec = specs.find((spec) => spec.key === MODE_KEY);

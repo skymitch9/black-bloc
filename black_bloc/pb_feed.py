@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -33,9 +34,13 @@ ON = "on"
 TICK_CAP = 5
 BACKOFF_FIRST_MINUTES = 5
 BACKOFF_MAX_MINUTES = 360
+LOOK_NOW_COOLDOWN_MINUTES = 5
+MISSES_BEFORE_GONE = 2
 EMBED_COLOUR = 0xF4C430
 DESCRIPTION_LIMIT = 4000
 TITLE_LIMIT = 256
+BRACKETS = re.compile(r"([\[\]])")
+ZERO_WIDTH = "\u200b"
 
 LOOKUP = "lookup"
 LOOK = "look"
@@ -53,6 +58,41 @@ NO_SHADOW_HOME = (
     "log_channel_id are all blank or gone. Set one of them to see rehearsal copies."
 )
 TEST_MODE_REFUSED = "test mode keeps Black Bloc out of that channel"
+FAULT = (
+    "Black Bloc hit a fault of its own while reading this member ({error}), so nothing was "
+    "taken from this look. Nobody else is affected and it tries again at the next look; tell a "
+    "Lead if it keeps happening."
+)
+MISSED_ONCE = (
+    "speedrun.com had nothing at this account's address at the last look (it answered 404). "
+    "Nothing was changed; Black Bloc asks again at the next look."
+)
+MISSED_STAFF = (
+    "speedrun.com has had nothing at this account's address for {misses} looks in a row (it "
+    "answered 404). Staff set this match, so Black Bloc leaves it alone: press Unmatch, or Set "
+    "by hand again, if the account is gone."
+)
+UNCONFIRMED = (
+    "Black Bloc stopped between claiming this run and posting it, so it cannot say whether the "
+    "post was made. It is not posted again; look in the channel if it matters."
+)
+UNTOLD = (
+    "speedrun.com refused to list the sub-category choices, so runs are read without them: a "
+    "post names no sub-category, and runs with different choices are never compared with one "
+    "another. Black Bloc asks for them again in about {hours} hours."
+)
+BACKING_OFF = (
+    "speedrun.com could not be read a moment ago and Black Bloc is waiting before it asks "
+    "again. That is the network or their site, not a setting here. Try again in about "
+    "{minutes} minute(s)."
+)
+JUST_LOOKED = (
+    "this member was looked at {ago} minute(s) ago. Try again in about {minutes} minute(s)."
+)
+AT_THE_CAP = (
+    "Black Bloc has sent speedrun.com {cap} requests in the last {interval} minutes, which is "
+    "the most pb_feed_cycle_requests allows. Try again in about {minutes} minute(s)."
+)
 SEND_FORBIDDEN = (
     "Discord refused the post (Discord said: {said}). Give Black Bloc View Channel, Send "
     "Messages and Embed Links in that channel; this run will not be posted later."
@@ -102,16 +142,32 @@ def per_tick(people: int, interval_minutes: int) -> int:
     return max(1, min(TICK_CAP, math.ceil(people / max(1, int(interval_minutes)))))
 
 
+def plain(text: Any) -> str:
+    """Somebody else's words as words: no markdown, no masked link, no address that links."""
+    pieces = BRACKETS.split(str(text or ""))
+    escaped = "".join(
+        f"\\{piece}"
+        if piece in ("[", "]")
+        else discord.utils.escape_markdown(piece, ignore_links=False)
+        for piece in pieces
+    )
+    return escaped.replace("://", f":{ZERO_WIDTH}//")
+
+
+def minutes_until(when: datetime, now: datetime) -> int:
+    return max(1, math.ceil((when - now).total_seconds() / 60))
+
+
 def post_fields(
     store: Any, guild_id: int, member: Any, user_id: int, runner: str, best: PersonalBest
 ) -> dict[str, str]:
     place = best.place
     return {
         "member": getattr(member, "mention", None) or f"<@{user_id}>",
-        "name": str(getattr(member, "display_name", None) or runner),
-        "runner": runner,
-        "game": discord.utils.escape_markdown(best.game),
-        "category": discord.utils.escape_markdown(best.category),
+        "name": plain(getattr(member, "display_name", None) or runner),
+        "runner": plain(runner),
+        "game": plain(best.game),
+        "category": plain(best.category),
         "time": time_words(best.seconds),
         "place": str(place or ""),
         "place_line": f" {said(store, guild_id, 'pb_feed_place_text', place=place)}"
@@ -179,7 +235,7 @@ def wants_lookup(
         return False
     if row is None:
         return True
-    if row["state"] != pb_store.NONE:
+    if row["state"] != pb_store.NONE or row["opted_out_at"]:
         return False
     checked = pb_store.parsed(row["checked_at"])
     if checked is None or (row["twitch_login"] or "") != login:
@@ -246,12 +302,20 @@ def population(rows: dict[int, Any], links: dict[int, str], present: Any) -> int
 
 
 __all__ = [
+    "AT_THE_CAP",
+    "BACKING_OFF",
     "BACKOFF_FIRST_MINUTES",
     "BACKOFF_MAX_MINUTES",
     "CHANNEL_GONE",
+    "FAULT",
     "FEATURE",
+    "JUST_LOOKED",
     "LOOK",
     "LOOKUP",
+    "LOOK_NOW_COOLDOWN_MINUTES",
+    "MISSED_ONCE",
+    "MISSED_STAFF",
+    "MISSES_BEFORE_GONE",
     "NO_CHANNEL",
     "NO_SHADOW_HOME",
     "OFF",
@@ -260,14 +324,18 @@ __all__ = [
     "SHADOW",
     "TEST_MODE_REFUSED",
     "TICK_CAP",
+    "UNCONFIRMED",
+    "UNTOLD",
     "aimed_at",
     "backoff_minutes",
     "link_moved",
     "link_view",
     "look_due",
+    "minutes_until",
     "mode_of",
     "per_tick",
     "ping_role",
+    "plain",
     "population",
     "post_embed",
     "post_fields",

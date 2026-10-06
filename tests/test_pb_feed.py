@@ -34,6 +34,7 @@ def row(state, *, source="auto", login="zfg1", checked=None, looked=None, runner
         "checked_at": checked.isoformat() if checked else None,
         "looked_at": looked.isoformat() if looked else None,
         "src_user_id": runner if state == pb_store.MATCHED else None,
+        "opted_out_at": None,
     }
 
 
@@ -58,7 +59,7 @@ def test_the_feature_ships_in_shadow_with_no_channel_and_no_ping(bot):
 
 
 def test_every_key_is_under_core_typed_explained_and_reachable_from_settings():
-    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 40
+    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 49
     for key in PB_FEED_KEYS:
         assert key in CORE_KEYS and namespace_of(key) == "core", key
         assert KEY_TYPES.get(key) and KEY_HELP.get(key), key
@@ -244,3 +245,50 @@ def test_with_auto_match_off_nobody_is_looked_up_but_matches_are_still_looked_at
     work = pb_feed.work_list(rows, {BEA: "bea"}, {ADA, BEA}, store=store, guild_id=GUILD, now=NOW)
 
     assert work == [(pb_feed.LOOK, ADA)]
+
+
+def test_a_display_name_or_a_runner_name_cannot_smuggle_a_link_into_a_post(guild):
+    member = SimpleNamespace(mention=f"<@{ADA}>", display_name="[free nitro](https://evil.example)")
+    fresh = a_best("r1", game="Play at https://evil.example now", category="[x](http://a.b) *y*")
+
+    fields = pb_feed.post_fields(Store(), GUILD, member, ADA, "[a](https://b.example) _z_", fresh)
+
+    for key in ("name", "runner", "game", "category"):
+        assert "](" not in fields[key].replace("\\](", ""), key
+        assert "://" not in fields[key], key
+        assert "\\[" in fields[key] or key == "game", key
+    assert fields["name"] == "\\[free nitro\\](https:\u200b//evil.example)"
+    assert fields["runner"].endswith("\\_z\\_")
+    embed = pb_feed.post_embed(
+        Store(pb_feed_post_text="{name} / {runner} / {game} / {category}"), GUILD, member, ADA,
+        "[a](https://b.example)", fresh,
+    )
+    assert "://" not in embed.description and "[free nitro](" not in embed.description
+
+
+def test_the_shipped_request_cap_covers_300_members_and_stays_far_under_the_limit():
+    cap = PB_FEED_DEFAULTS["pb_feed_cycle_requests"]
+    interval = PB_FEED_DEFAULTS["pb_feed_interval_minutes"]
+
+    assert pb_feed.per_tick(300, interval) * interval >= 300
+    assert cap >= 300 + 60
+    assert cap / interval <= SPEEDRUN_LIMIT_PER_MINUTE / 10
+    assert KEY_MAX["pb_feed_cycle_requests"] / KEY_MIN["pb_feed_interval_minutes"] < 50
+
+
+def test_no_sentence_a_member_reads_promises_a_post_unless_the_mode_is_on():
+    promise = "is posted once"
+    told = [key for key in PB_FEED_WORDS if key.startswith(("pb_feed_you_", "pb_feed_dm_"))]
+    told += ["pb_feed_opted_in_said", "pb_feed_opted_out_said", "pb_feed_posting_shadow"]
+    told += ["pb_feed_posting_off"]
+
+    for key in told:
+        assert promise not in PB_FEED_DEFAULTS[key], key
+        assert "will be posted" not in PB_FEED_DEFAULTS[key], key
+    assert promise in PB_FEED_DEFAULTS["pb_feed_posting_on"]
+
+
+def test_an_opted_out_member_staff_unblocked_is_never_looked_up():
+    found = row(pb_store.NONE) | {"opted_out_at": NOW.isoformat()}
+
+    assert pb_feed.wants_lookup(found, "zfg1", auto=True, now=NOW, rematch_days=7) is False

@@ -3,25 +3,40 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
+
+import discord
 
 from . import pb_match, pb_store
 from .actionlog import entity_id, log_action
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
-from .pb_feed import OFF, mode_of, said
+from .pb_feed import JUST_LOOKED, LOOK_NOW_COOLDOWN_MINUTES, OFF, ON, minutes_until, mode_of, said
 from .pb_looks import feed_of, safely
 from .speedrun import SpeedrunError
 
 log = logging.getLogger(__name__)
 
 NAME_LIMIT = 64
+REASON_LIMIT = 300
+DM_LIMIT = 1900
+DM_REFUSED = (
+    "Discord would not deliver the DM: their DMs are closed, or they are no longer somewhere "
+    "Black Bloc can reach them. The move itself was made; tell them yourself if it matters."
+)
+NOT_ON = (
+    "pb_feed_mode is {mode}, so nothing is sent to a member. This is the DM they would have got."
+)
 
 
 def mention(guild: Any, user_id: int) -> str:
     member = guild.get_member(int(user_id))
     return getattr(member, "mention", None) or f"<@{int(user_id)}>"
+
+
+def given_reason(reason: Any) -> str:
+    return " ".join(str(reason or "").split())[:REASON_LIMIT]
 
 
 async def note(
@@ -35,6 +50,63 @@ async def note(
             actor=actor,
             target=int(user_id),
             details={"via": via, **details},
+        ),
+        "the log row",
+    )
+
+
+async def dm(user: Any, text: str) -> bool:
+    """Whether the member actually got told."""
+    send = getattr(user, "send", None)
+    if send is None:
+        return False
+    try:
+        await send(text[:DM_LIMIT], allowed_mentions=discord.AllowedMentions.none())
+    except Exception as exc:
+        log.info("pb feed: could not DM %s: %s", getattr(user, "id", "?"), exc)
+        return False
+    return True
+
+
+async def tell(
+    bot: Any, guild: Any, user_id: int, move: str, key: str, reason: str, **fields: Any
+) -> None:
+    """The DM a member is owed when staff change their part; never in the way of the move."""
+    store = bot.store
+    text = said(
+        store,
+        guild.id,
+        key,
+        server=discord.utils.escape_markdown(str(getattr(guild, "name", "") or "")),
+        reason=discord.utils.escape_markdown(reason)
+        or said(store, guild.id, "pb_feed_dm_no_reason"),
+        **fields,
+    )
+    details = {"move": move, "text": text}
+    mode = mode_of(store, guild.id)
+    if mode != ON:
+        await safely(
+            log_action(
+                bot,
+                guild,
+                "pbfeed.would_dm",
+                target=int(user_id),
+                details=details | {"reason": NOT_ON.format(mode=mode)},
+            ),
+            "the log row",
+        )
+        return
+    finder = getattr(bot, "get_user", None)
+    member = guild.get_member(int(user_id)) or (finder(int(user_id)) if finder else None)
+    if await dm(member, text):
+        return
+    await safely(
+        log_action(
+            bot,
+            guild,
+            "pbfeed.dm_failed",
+            target=int(user_id),
+            details=details | {"reason": DM_REFUSED},
         ),
         "the log row",
     )
@@ -73,14 +145,18 @@ async def opt_in(bot: Any, guild: Any, member: Any, *, via: str = VIA_DISCORD) -
             return refusal(said(bot.store, guild.id, "pb_feed_you_blocked"), "blocked", 409)
         if row is None or row["state"] != pb_store.OPTED_OUT:
             return Outcome(True, said(bot.store, guild.id, "pb_feed_opted_in_said"), value=row)
-        row = await back_in(bot, guild, user_id, pb_store.MEMBER, user_id)
+        row = await back_in(bot, guild, user_id, pb_store.MEMBER, user_id, ends_opt_out=True)
     await note(bot, guild, "pbfeed.opted_in", member, user_id, via)
     return Outcome(True, said(bot.store, guild.id, "pb_feed_opted_in_said"), value=row)
 
 
-async def back_in(bot: Any, guild: Any, user_id: int, state_by: str, set_by: Any) -> Any:
+async def back_in(
+    bot: Any, guild: Any, user_id: int, state_by: str, set_by: Any, *, ends_opt_out: bool
+) -> Any:
     """Out of an opt-out or a block, with the baseline taken again so nothing old is posted."""
-    await pb_store.restore(bot.db, guild.id, user_id, state_by=state_by, set_by=set_by)
+    await pb_store.restore(
+        bot.db, guild.id, user_id, state_by=state_by, set_by=set_by, ends_opt_out=ends_opt_out
+    )
     await pb_store.forget_runs(bot.db, guild.id, user_id)
     await bot.db.conn.execute(
         "UPDATE pb_matches SET baseline_at = NULL, looked_at = NULL WHERE guild_id = ? "
@@ -92,12 +168,23 @@ async def back_in(bot: Any, guild: Any, user_id: int, state_by: str, set_by: Any
 
 
 async def set_by_hand(
-    bot: Any, guild: Any, user_id: int, name: Any, actor: Any, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    user_id: int,
+    name: Any,
+    actor: Any,
+    *,
+    reason: Any = None,
+    via: str = VIA_DISCORD,
+    now: datetime | None = None,
 ) -> Outcome:
     """Staff name the speedrun.com account; it must be exactly one account's name."""
     store = bot.store
     given = str(name or "").strip().lstrip("@")[:NAME_LIMIT]
+    why = given_reason(reason)
     who = mention(guild, user_id)
+    if mode_of(store, guild.id) == OFF:
+        return refusal(said(store, guild.id, "pb_feed_off_said"), "pb_feed_off", 409)
     if not given:
         return refusal(
             said(store, guild.id, "pb_feed_no_runner_said", given=""), "bad_request", 400
@@ -105,20 +192,26 @@ async def set_by_hand(
     feed = feed_of(bot)
     async with feed.lock:
         row = await pb_store.match(bot.db, guild.id, user_id)
-        if row is not None and row["state"] == pb_store.OPTED_OUT:
+        if row is not None and (row["state"] == pb_store.OPTED_OUT or row["opted_out_at"]):
             return refusal(
                 said(store, guild.id, "pb_feed_not_now_said", member=who), "opted_out", 409
+            )
+        now = now or datetime.now(UTC)
+        held = await feed.hold(guild.id, now)
+        if held:
+            return refusal(
+                said(store, guild.id, "pb_feed_failed_said", reason=held), "not_yet", 429
             )
         before = int(feed.client.requests)
         try:
             answer = await pb_match.by_name(feed.client, given)
         except SpeedrunError as exc:
-            feed.count(before, datetime.now(UTC))
             log.warning("pb feed: could not look a runner up — %s", exc)
             return refusal(
                 said(store, guild.id, "pb_feed_failed_said", reason=str(exc)), "could_not_look", 502
             )
-        feed.count(before, datetime.now(UTC))
+        finally:
+            feed.count(before, now)
         if answer.outcome != pb_match.FOUND:
             return refusal(
                 said(store, guild.id, "pb_feed_no_runner_said", given=given), "no_such_runner", 404
@@ -155,6 +248,16 @@ async def set_by_hand(
         via,
         runner=runner.name,
         runner_id=runner.id,
+        reason=why,
+    )
+    await tell(
+        bot,
+        guild,
+        user_id,
+        "set_by_hand",
+        "pb_feed_dm_set",
+        why,
+        runner=discord.utils.escape_markdown(runner.name),
     )
     return Outcome(
         True, said(store, guild.id, "pb_feed_set_said", member=who, runner=runner.name), value=row
@@ -171,10 +274,13 @@ async def _to_state(
     state: str,
     kind: str,
     words: str,
-    allowed: tuple[str, ...],
+    allowed: tuple[str | None, ...],
+    reason: Any,
+    dm_key: str,
 ) -> Outcome:
     store = bot.store
     who = mention(guild, user_id)
+    why = given_reason(reason)
     async with feed_of(bot).lock:
         row = await pb_store.match(bot.db, guild.id, user_id)
         found = row["state"] if row is not None else None
@@ -198,12 +304,22 @@ async def _to_state(
             set_by=entity_id(actor),
             twitch_login=await login_of(bot, user_id),
         )
-    await note(bot, guild, kind, actor, user_id, via, runner=before)
+    move = kind.rsplit(".", 1)[-1]
+    await note(bot, guild, kind, actor, user_id, via, runner=before, reason=why)
+    await tell(
+        bot,
+        guild,
+        user_id,
+        move,
+        dm_key,
+        why,
+        runner=discord.utils.escape_markdown(str(before or "")),
+    )
     return Outcome(True, said(store, guild.id, words, member=who), value=row)
 
 
 async def unmatch(
-    bot: Any, guild: Any, user_id: int, actor: Any, *, via: str = VIA_DISCORD
+    bot: Any, guild: Any, user_id: int, actor: Any, *, reason: Any = None, via: str = VIA_DISCORD
 ) -> Outcome:
     return await _to_state(
         bot,
@@ -215,12 +331,15 @@ async def unmatch(
         kind="pbfeed.unmatched",
         words="pb_feed_unmatched_said",
         allowed=(pb_store.MATCHED,),
+        reason=reason,
+        dm_key="pb_feed_dm_unmatched",
     )
 
 
 async def block(
-    bot: Any, guild: Any, user_id: int, actor: Any, *, via: str = VIA_DISCORD
+    bot: Any, guild: Any, user_id: int, actor: Any, *, reason: Any = None, via: str = VIA_DISCORD
 ) -> Outcome:
+    """An opt-out is remembered under a block, and is what an unblock goes back to."""
     return await _to_state(
         bot,
         guild,
@@ -231,48 +350,76 @@ async def block(
         kind="pbfeed.blocked",
         words="pb_feed_blocked_said",
         allowed=(None, pb_store.MATCHED, pb_store.NONE, pb_store.OPTED_OUT),
+        reason=reason,
+        dm_key="pb_feed_dm_blocked",
     )
 
 
-async def _staff_back_in(
-    bot: Any, guild: Any, user_id: int, actor: Any, via: str, *, was: str, kind: str
+async def unblock(
+    bot: Any, guild: Any, user_id: int, actor: Any, *, reason: Any = None, via: str = VIA_DISCORD
 ) -> Outcome:
+    """Back to where the member stood: opted out if they had opted out, else in the feed."""
     store = bot.store
     who = mention(guild, user_id)
     async with feed_of(bot).lock:
         row = await pb_store.match(bot.db, guild.id, user_id)
-        if row is None or row["state"] != was:
+        if row is None or row["state"] != pb_store.BLOCKED:
             return refusal(
                 said(store, guild.id, "pb_feed_nothing_to_do_said", member=who),
                 "nothing_to_do",
                 409,
             )
-        row = await back_in(bot, guild, user_id, pb_store.STAFF, entity_id(actor))
-    await note(bot, guild, kind, actor, user_id, via)
-    return Outcome(True, said(store, guild.id, "pb_feed_unblocked_said", member=who), value=row)
-
-
-async def unblock(
-    bot: Any, guild: Any, user_id: int, actor: Any, *, via: str = VIA_DISCORD
-) -> Outcome:
-    return await _staff_back_in(
-        bot, guild, user_id, actor, via, was=pb_store.BLOCKED, kind="pbfeed.unblocked"
+        row = await back_in(
+            bot, guild, user_id, pb_store.STAFF, entity_id(actor), ends_opt_out=False
+        )
+    out = row is not None and row["state"] == pb_store.OPTED_OUT
+    await note(
+        bot,
+        guild,
+        "pbfeed.unblocked",
+        actor,
+        user_id,
+        via,
+        reason=given_reason(reason),
+        still_opted_out=out,
     )
+    words = "pb_feed_unblocked_opted_out_said" if out else "pb_feed_unblocked_said"
+    return Outcome(True, said(store, guild.id, words, member=who), value=row)
 
 
 async def clear_opt_out(
-    bot: Any, guild: Any, user_id: int, actor: Any, *, via: str = VIA_DISCORD
+    bot: Any, guild: Any, user_id: int, actor: Any, *, reason: Any = None, via: str = VIA_DISCORD
 ) -> Outcome:
-    """Staff have the final say over a member's opt-out; the row says who."""
-    return await _staff_back_in(
-        bot, guild, user_id, actor, via, was=pb_store.OPTED_OUT, kind="pbfeed.opt_out_cleared"
-    )
+    """Staff have the final say over a member's opt-out; the row says who, the member is told."""
+    store = bot.store
+    who = mention(guild, user_id)
+    why = given_reason(reason)
+    async with feed_of(bot).lock:
+        row = await pb_store.match(bot.db, guild.id, user_id)
+        if row is None or row["state"] != pb_store.OPTED_OUT:
+            return refusal(
+                said(store, guild.id, "pb_feed_nothing_to_do_said", member=who),
+                "nothing_to_do",
+                409,
+            )
+        row = await back_in(
+            bot, guild, user_id, pb_store.STAFF, entity_id(actor), ends_opt_out=True
+        )
+    await note(bot, guild, "pbfeed.opt_out_cleared", actor, user_id, via, reason=why)
+    await tell(bot, guild, user_id, "opt_out_cleared", "pb_feed_dm_opt_out_cleared", why)
+    return Outcome(True, said(store, guild.id, "pb_feed_unblocked_said", member=who), value=row)
 
 
 async def look_now(
-    bot: Any, guild: Any, user_id: int, actor: Any, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    user_id: int,
+    actor: Any,
+    *,
+    via: str = VIA_DISCORD,
+    now: datetime | None = None,
 ) -> Outcome:
-    """One member, now: outside the spread and the backoff, inside the request count."""
+    """One member, now: outside the spread; inside the backoff, the cap and its own cooldown."""
     store = bot.store
     who = mention(guild, user_id)
     if mode_of(store, guild.id) == OFF:
@@ -282,17 +429,25 @@ async def look_now(
         return refusal(
             said(store, guild.id, "pb_feed_nothing_to_do_said", member=who), "nothing_to_do", 409
         )
+    feed = feed_of(bot)
+    now = now or datetime.now(UTC)
+    held = await feed.hold(guild.id, now) or just_looked(row, now)
+    if held:
+        return refusal(said(store, guild.id, "pb_feed_failed_said", reason=held), "not_yet", 429)
     try:
-        looked = await feed_of(bot).look(guild, user_id)
+        looked = await feed.look(guild, user_id, now=now)
     except SpeedrunError as exc:
         log.warning("pb feed: Look now failed — %s", exc)
+        await feed.outage(guild, exc, now)
         return refusal(
             said(store, guild.id, "pb_feed_failed_said", reason=str(exc)), "could_not_look", 502
         )
     if looked.trouble or looked.gone:
-        reason = looked.trouble or said(store, guild.id, "pb_feed_unmatched_said", member=who)
+        gone = said(store, guild.id, "pb_feed_unmatched_said", member=who)
         return refusal(
-            said(store, guild.id, "pb_feed_failed_said", reason=reason), "could_not_look", 502
+            said(store, guild.id, "pb_feed_failed_said", reason=looked.trouble or gone),
+            "could_not_look",
+            502,
         )
     await note(
         bot, guild, "pbfeed.looked", actor, user_id, via, found=looked.found, seen=looked.seen
@@ -311,7 +466,19 @@ async def look_now(
     )
 
 
+def just_looked(row: Any, now: datetime) -> str | None:
+    """Why this member cannot be looked at by hand again yet, in words, or None."""
+    looked = pb_store.parsed(row["looked_at"])
+    again = looked + timedelta(minutes=LOOK_NOW_COOLDOWN_MINUTES) if looked else None
+    if again is None or now >= again or now < looked:
+        return None
+    ago = max(0, int((now - looked).total_seconds() // 60))
+    return JUST_LOOKED.format(ago=ago, minutes=minutes_until(again, now))
+
+
 __all__ = [
+    "NAME_LIMIT",
+    "REASON_LIMIT",
     "block",
     "clear_opt_out",
     "look_now",

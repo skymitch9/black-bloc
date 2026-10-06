@@ -180,7 +180,9 @@ async def test_unmatch_block_and_unblock_walk_one_member_through_the_states(
     assert unmatched["person"]["runner"] is None
     assert await wf.kinds_in(web.db) == [
         "web.pbfeed.unmatched",
+        "pbfeed.would_dm",
         "web.pbfeed.blocked",
+        "pbfeed.would_dm",
         "web.pbfeed.unblocked",
     ]
 
@@ -256,3 +258,93 @@ def test_an_id_that_is_not_a_number_is_a_400_in_words(client, sign_in, speedrun)
 
     assert response.status_code == 400 and "is not an id" in response.text
 
+
+async def test_a_reason_typed_on_the_site_reaches_the_member_and_the_row(
+    client, sign_in, web, guild, wf, people, speedrun
+):
+    await match(web, wf)
+    await web.store.set(wf.GUILD_ID, "pb_feed_mode", "on")
+    sent = []
+
+    async def send(content=None, **kwargs):
+        sent.append(content)
+
+    guild.get_member(ADA).send = send
+    sign_in(client)
+
+    response = client.request("DELETE", f"/api/pbs/{ADA}", json={"reason": "not their account"})
+    bare = client.post(f"/api/pbs/{ADA}/block")
+
+    assert response.status_code == 200 and bare.status_code == 200
+    assert len(sent) == 2
+    assert "removed your match to **zfg**" in sent[0]
+    assert "Their reason: not their account" in sent[0]
+    assert "Their reason: none was given." in sent[1]
+    rows = dict(await wf.web_rows_in(web.db))
+    assert rows["web.pbfeed.unmatched"]["reason"] == "not their account"
+    assert rows["web.pbfeed.blocked"]["reason"] == ""
+
+
+async def test_an_opt_out_survives_a_block_and_an_unblock_from_the_site(
+    client, sign_in, web, wf, people, speedrun
+):
+    await match(web, wf)
+    await pb_store.write_state(
+        web.db, wf.GUILD_ID, ADA, pb_store.OPTED_OUT, state_by="member", keep_runner=True
+    )
+    sign_in(client)
+
+    client.post(f"/api/pbs/{ADA}/block")
+    unblocked = client.post(f"/api/pbs/{ADA}/unblock").json()
+    refused = client.put(f"/api/pbs/{ADA}", json={"runner": "zfg"})
+
+    assert unblocked["person"]["state"] == "opted_out" and unblocked["person"]["opted_out_at"]
+    assert "still stands" in unblocked["message"]
+    assert refused.status_code == 409 and "asked not to have" in refused.text
+
+
+async def test_the_index_carries_what_a_look_recorded_without_posting_and_the_misses(
+    client, sign_in, web, wf, people, speedrun
+):
+    await match(web, wf)
+    await pb_store.record_look(
+        web.db, wf.GUILD_ID, ADA, [best("r1")], first=True, quiet={"too_old": 2}, now=NOW
+    )
+    await pb_store.record_miss(web.db, wf.GUILD_ID, ADA, "nothing there", NOW)
+    await pb_store.claim_post(web.db, wf.GUILD_ID, ADA, best("lost"), "zfg", now=NOW)
+    await pb_store.settle_stale_claims(web.db, wf.GUILD_ID, "never confirmed")
+    sign_in(client)
+
+    found = client.get("/api/pbs").json()
+
+    ada = found["people"][0]
+    assert ada["not_news"] == {"too_old": 2, "at": NOW.isoformat()}
+    assert (ada["misses"], ada["look_error"]) == (1, "nothing there")
+    assert [(one["run_id"], one["outcome"]) for one in found["posts"]] == [("lost", "unconfirmed")]
+
+
+async def test_set_by_hand_and_look_now_are_refused_in_words_at_the_cap(
+    client, sign_in, web, wf, people, speedrun
+):
+    await web.store.set(wf.GUILD_ID, "pb_feed_cycle_requests", 1)
+    speedrun.by_name["zfg"] = [ZFG]
+    sign_in(client)
+
+    first = client.put(f"/api/pbs/{ADA}", json={"runner": "zfg"})
+    second = client.post(f"/api/pbs/{ADA}/look")
+
+    assert first.status_code == 200 and second.status_code == 429
+    assert "pb_feed_cycle_requests" in second.json()["message"] and speedrun.requests == 1
+
+
+async def test_set_by_hand_is_refused_in_words_while_the_feed_is_off(
+    client, sign_in, web, wf, people, speedrun
+):
+    await web.store.set(wf.GUILD_ID, "pb_feed_mode", "off")
+    speedrun.by_name["zfg"] = [ZFG]
+    sign_in(client)
+
+    response = client.put(f"/api/pbs/{ADA}", json={"runner": "zfg"})
+
+    assert response.status_code == 409 and "pb_feed_mode" in response.text
+    assert speedrun.asked == []
