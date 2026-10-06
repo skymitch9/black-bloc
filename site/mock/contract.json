@@ -93,6 +93,9 @@
       "spotlight_event_slack_hours": 0,
       "spotlight_poll_minutes": 1,
       "spotlight_window_keep_days": 1,
+      "sticky_after_messages": 1,
+      "sticky_min_seconds": 5,
+      "sticky_panel_minutes": 1,
       "time_step_minutes": 5,
       "youtube_live_end_misses": 1,
       "youtube_live_poll_minutes": 2
@@ -176,6 +179,8 @@
       "spotlight_event_slack_hours": 24,
       "spotlight_poll_minutes": 30,
       "spotlight_window_keep_days": 365,
+      "sticky_after_messages": 100,
+      "sticky_min_seconds": 3600,
       "time_step_minutes": 60,
       "youtube_live_end_misses": 5,
       "youtube_live_poll_minutes": 60
@@ -2440,6 +2445,109 @@
       "shape": "object",
       "keys": [
         "created",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/sticky",
+      "read_by": [
+        "sticky-section.js"
+      ],
+      "shape": "list",
+      "keys": [
+        "channel_id",
+        "channel_name",
+        "gone",
+        "text",
+        "paused",
+        "trouble",
+        "state",
+        "posted_channel_id",
+        "posted_at",
+        "reposts",
+        "updated_by_name",
+        "updated_at"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/sticky/{sticky_channel_id}",
+      "body": {
+        "text": "contract check"
+      },
+      "read_by": [
+        "sticky-section.js Add / Edit"
+      ],
+      "shape": "object",
+      "keys": [
+        "sticky",
+        "message"
+      ],
+      "nested": {
+        "sticky": [
+          "channel_id",
+          "text",
+          "paused",
+          "trouble",
+          "state"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/sticky/{sticky_channel_id}/pause",
+      "body": {},
+      "read_by": [
+        "sticky-section.js Pause"
+      ],
+      "shape": "object",
+      "keys": [
+        "sticky",
+        "message"
+      ],
+      "nested": {
+        "sticky": [
+          "channel_id",
+          "text",
+          "paused",
+          "trouble",
+          "state"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/sticky/{sticky_paused_channel_id}/resume",
+      "body": {},
+      "read_by": [
+        "sticky-section.js Resume / Try again"
+      ],
+      "shape": "object",
+      "keys": [
+        "sticky",
+        "message"
+      ],
+      "nested": {
+        "sticky": [
+          "channel_id",
+          "text",
+          "paused",
+          "trouble",
+          "state"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/sticky/{sticky_channel_id}",
+      "read_by": [
+        "sticky-section.js Remove"
+      ],
+      "shape": "object",
+      "keys": [
+        "removed",
+        "channel_id",
         "message"
       ]
     },
@@ -9245,6 +9353,11 @@
     "web.tempvoice.show",
     "web.honeypot.banned",
     "web.honeypot.setup",
+    "web.sticky.set",
+    "web.sticky.edited",
+    "web.sticky.paused",
+    "web.sticky.resumed",
+    "web.sticky.removed",
     "web.mod.warned",
     "web.mod.timed_out",
     "web.mod.untimed_out",

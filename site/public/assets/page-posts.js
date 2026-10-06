@@ -7,6 +7,7 @@ import { BLOCK_FILTERS, blockText } from './listfilter.js';
 import { logsSection } from './logs.js';
 import { remember, remembered } from './layout.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
+import { stickySection } from './sticky-section.js';
 import {
   ago,
   ask,
@@ -1243,6 +1244,7 @@ async function load() {
   document.getElementById('dash').replaceChildren(
     postsSection(payload, say),
     await blocksSection(payload),
+    await stickySection(() => refresh()),
     await machinerySection(specs),
   );
 

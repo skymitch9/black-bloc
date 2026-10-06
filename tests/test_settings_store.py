@@ -1948,6 +1948,7 @@ async def test_every_feature_that_rehearses_has_its_own_home_key_shipped_blank(s
         "marathon_public_shadow_channel_id": "marathon",
         "poll_shadow_channel_id": "poll",
         "birthday_shadow_channel_id": "birthday",
+        "sticky_shadow_channel_id": "posts",
     }
 
     assert set(settings_store.SHADOW_HOME_KEYS.values()) == set(wanted)

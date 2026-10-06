@@ -147,7 +147,7 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_three_hand_added_rows():
     `rolemenu_mode` left them 2026-09-25 (owner, "B") when it went back to hiding `/rolemenu`."""
     from black_bloc.settings_panel import FEATURE_MODES
 
-    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 20
+    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 21
     assert len(EXTRA_MODES) == 3
     assert "marathon_mode" in {row.key for row in EXTRA_MODES}
     assert "rolemenu_mode" in HIDDEN_WHEN_OFF
@@ -163,7 +163,8 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     lines = mode_lines(store, GUILD)
     said = "\n".join(lines)
 
-    assert len(lines) == 20
+    assert len(lines) == 21
+    assert "**Sticky messages** — None · `/sticky` to change" in lines
     assert any(line.startswith("**The front door** —") and "`/ask`" in line for line in lines)
     assert f"**Modmail** — {MODMAIL_ANSWERING} · `/modmail` to change" in lines
     assert "**YouTube** — shadow · `/youtube` to change" in lines
@@ -315,7 +316,7 @@ def test_row_two_never_grows_past_the_five_controls_discord_allows():
 
 @pytest.mark.parametrize(
     "hidden,expected",
-    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 17)],
+    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 18)],
 )
 def test_turn_a_feature_back_on_lists_exactly_what_is_hidden_and_never_more(hidden, expected):
     values = {HIDE_COMMANDS_WHEN_OFF: True}
@@ -356,7 +357,7 @@ def test_every_log_level_fits_one_select_and_shows_the_level_it_is_on():
 def test_every_panel_minutes_key_fits_one_select_including_the_panels_own():
     found = panel_minutes_keys()
     assert "settings_panel_minutes" in found
-    assert len(found) == 21 <= SELECT_LIMIT
+    assert len(found) == 22 <= SELECT_LIMIT
 
     store = FakeStore(defaults=dict.fromkeys(found, 10))
     assert all(label.endswith("— 10 minute(s)") for _, label in panel_minutes_options(store, GUILD))
