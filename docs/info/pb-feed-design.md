@@ -218,3 +218,35 @@ Routine: `pbfeed.matched`, `pbfeed.baseline`, `pbfeed.posted`, `pbfeed.nothing_n
 
 A DM to the member on a staff override; a member door on the site; game cover art on the post;
 retrying a failed post; per-game or per-category filters; a log-level key of its own.
+
+## Gate
+
+Measured 2026-10-05 on branch `pb-feed`, before its docs commit:
+`python -m pytest tests -q -p no:cacheprovider -n 8` **11190 passed, 3 skipped** (10911 on `main`);
+`python -m ruff check .` clean; `node site/mock/check.mjs` **ok — 25 pages, 312 routes, 141 core
+settings, all keys present** (24 / 305 / 101 on `main`); the twelve `site/mock/*.test.mjs` files
+exit 0. By import: `len(KEY_TYPES)` **900** (860 + 40), `len(CORE_KEYS)` **141**,
+`SCHEMA_VERSION` **89**, `len(COGS)` **29**. The Personal bests page was opened once in a browser
+against the local mock: the members list, the mode switch, the filters, the recent posts and the
+two folded sections drew, and the console showed no error.
+
+## What was NOT verified
+
+- **Nothing has met Discord.** No post, no rehearsal copy, `/pb` never opened in a client; the
+  panel, the user picker, the modal and the link button were exercised through fakes only.
+- **The bot's own client has never called speedrun.com.** `SpeedrunClient` was run only against
+  fakes and the three trimmed fixtures. Unproven live: the nested `category.variables` embed (and
+  the `400` the fallback expects if it is refused), the `lookup` filter used by Set by hand, a
+  real `420`, and the size of a prolific runner's answer.
+- **A run moving from `new` to `verified`** was never watched on the live API; that
+  personal-bests lists only verified runs is an observation of one runner.
+- **Whether a personal best appears in personal-bests at all before it is verified** — the code
+  filters on status either way.
+- The schema change has not run on the live database (four `CREATE TABLE IF NOT EXISTS`).
+- On the site, no button was pressed in a browser (Set by hand, Match a member, Unmatch, Block,
+  Look now, the mode switch); they are covered by `check.mjs` at the route level only. The page
+  was not looked at on a phone-width screen.
+- The mock's rows are a JavaScript stand-in; the real rows come from `api/tools/pbs.py`.
+- TEST_MODE with a guard installed: one test, fakes.
+- `ruff format --check` was not run. No guide was added to `guides_seed.json`. `/pb` was not
+  added to the self-test's panel doors.
