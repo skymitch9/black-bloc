@@ -29,7 +29,7 @@ def speedrun(web):
     found = FakeClient()
     web._pb_feed = Feed(web, found)
     yield found
-    del web._pb_feed
+    web.__dict__.pop("_pb_feed", None)
 
 
 @pytest.fixture

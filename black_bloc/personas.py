@@ -169,6 +169,9 @@ happening and opens one, and staff answer by DM. DMing Black Bloc does the same 
 `/golive` — your Twitch channel, and whether your streams get announced. It opens a panel:
 **Link my Twitch channel** connects one so going live gets announced, and **Stop announcing my
 streams** turns it off again.
+`/pb` — your speedrun.com personal bests. It opens a panel saying which speedrun.com account
+Black Bloc found from the Twitch channel you linked on `/golive`. A new personal best is posted
+once speedrun.com has verified it, never before; **Do not post my personal bests** turns it off.
 `/youtube` — your YouTube channel. It opens a panel saying whether your live streams are
 announced, with **Link my channel** to connect one and **Unlink** to stop it.
 `/pings` — which pings you get. It opens a panel saying what you already wear, with **Follow a

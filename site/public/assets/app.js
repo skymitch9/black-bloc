@@ -28,6 +28,7 @@ export const TABS = [
   { tab: 'posts', href: '/posts.html', label: 'Posts' },
   { tab: 'minutes', href: '/minutes.html', label: 'Minutes' },
   { tab: 'structure', href: '/structure.html', label: 'Structure' },
+  { tab: 'pbs', href: '/pbs.html', label: 'Personal bests' },
 ];
 
 export const FEATURE_TABS = {
@@ -49,6 +50,7 @@ export const FEATURE_TABS = {
   posts: 'posts',
   minutes: 'minutes',
   structure_backup: 'structure',
+  pb_feed: 'pbs',
 };
 
 export function tabHref(tab) {

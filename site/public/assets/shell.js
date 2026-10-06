@@ -32,6 +32,7 @@ export const GROUPS = [
     head: 'Runs the cookout',
     items: [
       { tab: 'golive', label: 'Go-live', icon: 'navGolive', feature: 'golive' },
+      { tab: 'pbs', label: 'Personal bests', icon: 'navPbs' },
       { tab: 'events', label: 'Events', icon: 'navEvents', feature: 'events' },
       { tab: 'raidtrain', label: 'Raid trains', icon: 'navRaidtrain', feature: 'raidtrain' },
       { tab: 'birthdays', label: 'Birthdays', icon: 'navBirthdays', feature: 'birthday' },
