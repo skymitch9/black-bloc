@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 from black_bloc import structure
 from black_bloc.structure import (
@@ -144,3 +145,56 @@ def test_a_download_is_built_from_the_field_lists_never_from_the_row():
 
 def test_a_download_is_named_for_its_server_day_and_number():
     assert export_name(row()) == "structure-7-2026-10-05-3.json"
+
+
+class Kept:
+    def __init__(self, role_id=None):
+        self.role_id = role_id
+
+    def get(self, guild_id, key):
+        assert (guild_id, key) == (7, structure.ROLE_KEY)
+        return self.role_id
+
+
+def someone(user_id=5, *, admin=False, roles=()):
+    return SimpleNamespace(
+        id=user_id,
+        roles=[SimpleNamespace(id=one) for one in roles],
+        guild_permissions=SimpleNamespace(manage_guild=True, administrator=admin),
+    )
+
+
+def test_the_owner_an_administrator_and_the_role_may_see_and_nobody_else_may():
+    guild = SimpleNamespace(id=7, owner_id=1)
+
+    assert structure.may_see(Kept(), guild, someone(1))
+    assert structure.may_see(Kept(), guild, 1) and structure.may_see(Kept(), guild, "1")
+    assert structure.may_see(Kept(), guild, someone(admin=True))
+    assert structure.may_see(Kept(44), guild, someone(roles=[9, 44]))
+    assert structure.may_see(Kept("44"), guild, someone(roles=[44]))
+    assert not structure.may_see(Kept(44), guild, someone(roles=[9]))
+    assert not structure.may_see(Kept(), guild, someone(roles=[9, 44, 0, None]))
+    assert not structure.may_see(Kept(0), guild, someone(roles=[0]))
+    assert not structure.may_see(Kept("junk"), guild, someone(roles=[44]))
+    assert not structure.may_see(Kept(44), guild, 5)
+    assert not structure.may_see(Kept(44), guild, None)
+    assert not structure.may_see(Kept(44), None, someone(admin=True))
+    assert not structure.may_see(Kept(44), guild, "nobody")
+
+
+def test_the_refusals_say_what_it_is_who_it_is_for_and_how_to_get_in():
+    for needed in (
+        "every role, channel and permission",
+        "private channels included",
+        "the owner",
+        "Administrator",
+        "structure_backup_role_id",
+        "Ask the server owner",
+    ):
+        assert needed in structure.LEADS_ONLY, needed
+    assert "403" not in structure.LEADS_ONLY and "403" not in structure.OPERATOR_REFUSED
+    assert structure.LEADS_KEYS == (
+        structure.ROLE_KEY,
+        structure.CHANNEL_KEY,
+        structure.SHADOW_CHANNEL_KEY,
+    )

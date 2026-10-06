@@ -15,7 +15,7 @@ from ...actionlog import entity_id, log_action
 from ...command_visibility import STAFF_ONLY
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
-from ...panels import Panel, answer, db_up, opened, retire
+from ...panels import Panel, answer, db_up, opened, retire, still_allowed, still_staff
 from ...settings_store import (
     DEFAULT_TIMEZONE_KEY,
     GUILD_ONLY,
@@ -29,6 +29,7 @@ from ...settings_store import (
     STRUCTURE_BACKUP_NOTICE_LINES,
     STRUCTURE_BACKUP_NOTIFY,
     STRUCTURE_BACKUP_PANEL_MINUTES,
+    STRUCTURE_BACKUP_SHADOW_CHANNEL,
     STRUCTURE_EMBED_CHARS,
     STRUCTURE_LINE,
     STRUCTURE_SLOTS,
@@ -37,7 +38,7 @@ from ...settings_store import (
 from ...structure import (
     DAILY,
     FAILED,
-    FEATURE,
+    LEADS_ONLY,
     MANUAL,
     MODES,
     OFF,
@@ -45,6 +46,7 @@ from ...structure import (
     SAVED,
     UNCHANGED,
     body_of,
+    may_see,
 )
 from ...structure_capture import CaptureError, capture
 from ...structure_diff import changes as changes_between
@@ -84,6 +86,11 @@ UNEXPECTED = (
     "if it keeps happening."
 )
 NO_NOTICE_CHANNEL = "the channel the notice is aimed at is not one Black Bloc can find"
+NOTICE_UNSENT = (
+    "The structure changed and no notice was posted, because {key} is blank and the notice "
+    "goes only where it was sent. Set {key} to be told, or open /structure to see what "
+    "changed."
+)
 
 
 @dataclass(frozen=True)
@@ -96,6 +103,26 @@ class Taken:
     previous: Any = None
     changes: tuple[dict[str, str], ...] = ()
     reason: str = ""
+
+
+def is_lead(interaction: Any) -> bool:
+    return may_see(interaction.client.store, interaction.guild, interaction.user)
+
+
+async def require_lead(interaction: Any) -> bool:
+    """Staff first, then the leads rule; anyone else is answered in words."""
+    if not await require_staff(interaction):
+        return False
+    return await still_allowed(interaction, is_lead(interaction), LEADS_ONLY)
+
+
+async def lead_opened(interaction: Any) -> bool:
+    """Every press re-asks both gates before anything is read or done."""
+    if not await still_staff(interaction):
+        return False
+    if not await still_allowed(interaction, is_lead(interaction), LEADS_ONLY):
+        return False
+    return await opened(interaction, staff=False)
 
 
 def mode_of(bot: Any, guild_id: int) -> str:
@@ -380,17 +407,60 @@ def notice_embed(bot: Any, guild: Any, taken: Taken) -> discord.Embed:
     )
 
 
+def notice_key(bot: Any, guild_id: int) -> str:
+    if mode_of(bot, guild_id) == SHADOW:
+        return STRUCTURE_BACKUP_SHADOW_CHANNEL
+    return STRUCTURE_BACKUP_CHANNEL
+
+
 def notice_home(bot: Any, guild: Any) -> tuple[int | None, int | None, str]:
-    """Where the notice goes, where it is aimed, and the rehearsal line when those differ."""
+    """Where the notice goes, only ever where its own key sends it, and the rehearsal line."""
     store = bot.store
-    aimed = shadow.as_channel_id(
-        store.get(guild.id, STRUCTURE_BACKUP_CHANNEL) or store.get(guild.id, "staff_channel_id")
-    )
+    aimed = shadow.as_channel_id(store.get(guild.id, STRUCTURE_BACKUP_CHANNEL))
     if mode_of(bot, guild.id) != SHADOW:
         return (aimed, aimed, "")
-    home = shadow.channel_id(bot, guild, feature=FEATURE)
-    words = f"<#{aimed}>" if aimed else ""
+    home = shadow.as_channel_id(store.get(guild.id, STRUCTURE_BACKUP_SHADOW_CHANNEL))
+    words = (
+        f"<#{aimed}>"
+        if aimed
+        else said(
+            store, guild.id, "structure_backup_notice_nowhere", setting=STRUCTURE_BACKUP_CHANNEL
+        )
+    )
     return (home, aimed, shadow.note_line(bot, guild, words))
+
+
+def notice_line(bot: Any, guild: Any) -> str:
+    """Where the notice goes right now, as the panel states it."""
+    store = bot.store
+    if not store.get(guild.id, STRUCTURE_BACKUP_NOTIFY):
+        return said(store, guild.id, "structure_backup_notice_off")
+    home = notice_home(bot, guild)[0]
+    if home is None:
+        return said(
+            store, guild.id, "structure_backup_notice_nowhere", setting=notice_key(bot, guild.id)
+        )
+    return f"<#{home}>"
+
+
+async def notice_unsent(bot: Any, guild: Any, row: Any, since: Any, count: int) -> None:
+    key = notice_key(bot, guild.id)
+    await safely(
+        log_action(
+            bot,
+            guild,
+            "structure.notice_unsent",
+            details={
+                "mode": mode_of(bot, guild.id),
+                "key": key,
+                "snapshot_id": row["id"],
+                "since_id": since["id"],
+                "changes": count,
+                "reason": NOTICE_UNSENT.format(key=key),
+            },
+        ),
+        "the log row",
+    )
 
 
 async def post_notice(bot: Any, guild: Any, taken: Taken) -> bool:
@@ -449,6 +519,9 @@ async def tell_staff(bot: Any, guild: Any, taken: Taken) -> bool:
     if since is not None and since["id"] != row["id"]:
         found = changes_between(body_of(since), body_of(row), escape=safe)
     wanted = bool(found) and bool(bot.store.get(guild.id, STRUCTURE_BACKUP_NOTIFY))
+    if wanted and notice_home(bot, guild)[0] is None:
+        await notice_unsent(bot, guild, row, since, len(found))
+        wanted = False
     posted = wanted and await post_notice(
         bot, guild, replace(taken, previous=since, changes=tuple(found))
     )
@@ -503,7 +576,7 @@ class TakeButton(discord.ui.Button):
         super().__init__(label=label, style=discord.ButtonStyle.primary, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if not await opened(interaction):
+        if not await lead_opened(interaction):
             return
         taken = await take_snapshot(
             interaction.client, interaction.guild, source=MANUAL, actor=interaction.user
@@ -516,7 +589,7 @@ class ChangesButton(discord.ui.Button):
         super().__init__(label=label, style=discord.ButtonStyle.secondary, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if not await opened(interaction):
+        if not await lead_opened(interaction):
             return
         bot, guild = interaction.client, interaction.guild
         row = await structure_store.latest(bot.db, guild.id)
@@ -548,7 +621,7 @@ class ModePick(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if not await opened(interaction):
+        if not await lead_opened(interaction):
             return
         outcome = await set_key(
             interaction.client,
@@ -617,6 +690,12 @@ async def build_panel(
         description=cut(note, DESCRIPTION_CHARS) or None,
     )
     embed.add_field(name=mode_label, value=mode, inline=False)
+    if mode != OFF:
+        embed.add_field(
+            name=said(store, guild_id, "structure_backup_notice_label"),
+            value=notice_line(bot, guild),
+            inline=False,
+        )
     embed.add_field(
         name=said(store, guild_id, "structure_backup_latest_label"),
         value=latest_line(store, guild_id, row),
@@ -724,7 +803,7 @@ class StructureBackup(commands.Cog):
         if interaction.guild is None:
             await answer(interaction, GUILD_ONLY)
             return
-        if not await require_staff(interaction):
+        if not await require_lead(interaction):
             return
         if not await db_up(interaction):
             return

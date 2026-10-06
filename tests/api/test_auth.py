@@ -712,3 +712,22 @@ def test_a_read_the_bucket_refused_never_reaches_the_guess_bucket(client, web):
     assert client.get("/api/settings", headers=BEARER).status_code == 429
 
     assert getattr(web, OPERATOR_BUCKET_ATTR, None) is None
+
+
+def test_the_me_route_says_whether_this_person_may_see_structure_backup(client, sign_in, guild):
+    sign_in(client, uid=USER_ID)
+    assert client.get("/api/auth/me").json()["structure"] is False
+
+    guild.owner_id = USER_ID
+
+    assert client.get("/api/auth/me").json()["structure"] is True
+    client.cookies.clear()
+    sign_in(client, uid=1234, staff=False)
+    assert client.get("/api/auth/me").json()["structure"] is False
+
+
+def test_a_member_who_owns_nothing_and_an_operator_never_see_structure_backup(client, web, guild):
+    with_token(web)
+    guild.owner_id = int(OPERATOR_WHO["id"])
+
+    assert client.get("/api/auth/me", headers=BEARER).json()["structure"] is False

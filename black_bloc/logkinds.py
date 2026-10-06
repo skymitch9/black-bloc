@@ -262,6 +262,7 @@ ROUTINE: frozenset[str] = frozenset(
         "structure.unchanged",
         "structure.pruned",
         "structure.notice_posted",
+        "structure.notice_unsent",
         "structure.downloaded",
         "pbfeed.matched",
         "pbfeed.baseline",

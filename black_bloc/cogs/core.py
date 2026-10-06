@@ -41,6 +41,7 @@ from ..settings_store import (
     parse_value,
     require_staff,
 )
+from ..structure import LEADS_KEYS, LEADS_ONLY, LEADS_ONLY_CODE, may_see
 from .presence import COG_NAME as PRESENCE_COG
 from .presence import reapply_presence
 
@@ -81,10 +82,20 @@ def actor_id(actor: Any) -> int | None:
     return int(getattr(actor, "id", actor) or 0) or None
 
 
+def leads_only(bot: Any, guild: Any, key: str, actor: Any) -> Outcome | None:
+    """The keys that decide who sees structure backup are changed only by who already may."""
+    if key in LEADS_KEYS and not may_see(bot.store, guild, actor):
+        return refusal(LEADS_ONLY, LEADS_ONLY_CODE, 403)
+    return None
+
+
 async def set_key(
     bot: Any, guild: Any, key: str, value: Any, actor: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """One write and one `settings.set` row, whatever control on the panel made the change."""
+    refused = leads_only(bot, guild, key, actor)
+    if refused is not None:
+        return refused
     try:
         stored = await bot.store.set(guild.id, key, value, by=actor_id(actor))
     except SettingError as exc:
@@ -103,6 +114,9 @@ async def clear_key(
     bot: Any, guild: Any, key: str, actor: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """One delete and one `settings.clear` row; `value` is whether a row was actually there."""
+    refused = leads_only(bot, guild, key, actor)
+    if refused is not None:
+        return refused
     try:
         cleared = await bot.store.clear(guild.id, key, by=actor_id(actor))
     except SettingError as exc:

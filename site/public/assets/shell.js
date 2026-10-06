@@ -25,7 +25,7 @@ export const GROUPS = [
       { tab: 'honeypot', label: 'Honeypot', icon: 'navHoneypot', feature: 'honeypot' },
       { tab: 'modmail', label: 'Modmail', icon: 'navModmail', feature: 'modmail' },
       { tab: 'posts', label: 'Posts', icon: 'navPosts', feature: 'posts' },
-      { tab: 'structure', label: 'Structure', icon: 'navStructure' },
+      { tab: 'structure', label: 'Structure', icon: 'navStructure', leads: true },
     ],
   },
   {
@@ -131,6 +131,8 @@ export function renderNav(current, hrefFor) {
       href: hrefFor(item.tab),
       'data-tab': item.tab,
       'data-feature': item.feature || undefined,
+      'data-leads': item.leads ? 'true' : undefined,
+      hidden: item.leads ? true : undefined,
       'aria-current': item.tab === current ? 'page' : undefined,
     }, [
       icon(item.icon, 16, 'nav-icon'),
@@ -284,9 +286,10 @@ function paintCounts(tally, waiting, running) {
  * other page would refuse them. The nav is built before `me` arrives, so this
  * trims it rather than the renderer knowing who is looking.
  */
-function paintNavFor(member) {
+function paintNavFor(member, lead) {
   for (const link of document.querySelectorAll('.nav-link')) {
-    link.hidden = member && !MEMBER_TABS.includes(link.getAttribute('data-tab'));
+    const leadsOnly = link.getAttribute('data-leads') === 'true';
+    link.hidden = (member && !MEMBER_TABS.includes(link.getAttribute('data-tab'))) || (leadsOnly && !lead);
   }
   paintGroups();
 }
@@ -310,7 +313,7 @@ export function isMemberOnly(me) {
 
 export async function paintShell(me) {
   paintUser(me);
-  paintNavFor(isMemberOnly(me));
+  paintNavFor(isMemberOnly(me), Boolean(me) && me.structure === true);
   if (isMemberOnly(me)) {
     // Every tally below this line is a staff route, so a member is asked for none of them.
     paintCounts(null, null, null);

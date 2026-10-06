@@ -9,6 +9,7 @@ import discord
 import pytest
 
 from black_bloc import settings_panel, structure_store
+from black_bloc import structure as structure_rules
 from black_bloc.cogs.moderation import structure_backup as sb
 from black_bloc.config import load_settings
 from black_bloc.settings_panel import mode_lines, reachable_on_the_panel
@@ -38,6 +39,7 @@ LOGS = 501
 REHEARSAL = 502
 ALERTS = 503
 USER = 900
+OWNER = 901
 PHOENIX_5AM = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
 PHOENIX_3AM = datetime(2026, 10, 5, 10, 0, tzinfo=UTC)
 
@@ -132,6 +134,7 @@ class FakeGuild(Strict):
 
     def __init__(self):
         self.id = GUILD
+        self.owner_id = OWNER
         self.name = "Black Bloc"
         self.unavailable = False
         self.verification_level = discord.VerificationLevel.low
@@ -210,15 +213,17 @@ class FakeFollowup:
 
 
 class FakeInteraction:
-    def __init__(self, bot, *, staff=True, guild=True):
+    def __init__(self, bot, *, staff=True, guild=True, lead=None, roles=None):
         self.client = bot
         self.guild = bot.guild if guild else None
-        roles = [SimpleNamespace(id=LEADS)] if staff else []
+        held = [LEADS] if staff and roles is None else list(roles or [])
         self.user = SimpleNamespace(
             id=USER,
             guild=SimpleNamespace(id=GUILD, roles=[], get_channel=lambda _id: None),
-            roles=roles,
-            guild_permissions=SimpleNamespace(manage_guild=staff),
+            roles=[SimpleNamespace(id=one) for one in held],
+            guild_permissions=SimpleNamespace(
+                manage_guild=staff, administrator=staff if lead is None else lead
+            ),
         )
         self.response = FakeResponse()
         self.followup = FakeFollowup(self.response)
@@ -252,6 +257,7 @@ async def bot(db, guild, monkeypatch):
     store = SettingsStore(db, settings)
     await store.load()
     await store.set(GUILD, "log_channel_id", LOGS)
+    await store.set(GUILD, "structure_backup_shadow_channel_id", LOGS)
     return FakeBot(db, store, settings, guild)
 
 
@@ -297,7 +303,7 @@ def test_the_feature_ships_in_shadow_with_every_key_under_core():
     assert STRUCTURE_BACKUP_DEFAULTS["structure_backup_keep"] == 60
     assert (KEY_MIN.get("structure_backup_hour"), KEY_MAX["structure_backup_hour"]) == (None, 23)
     assert (KEY_MIN["structure_backup_keep"], KEY_MAX["structure_backup_keep"]) == (1, 365)
-    assert len(STRUCTURE_BACKUP_KEYS) == len(set(STRUCTURE_BACKUP_KEYS)) == 29
+    assert len(STRUCTURE_BACKUP_KEYS) == len(set(STRUCTURE_BACKUP_KEYS)) == 33
     for key in STRUCTURE_BACKUP_KEYS:
         assert key in CORE_KEYS and namespace_of(key) == "core", key
         assert KEY_HELP.get(key), key
@@ -565,17 +571,6 @@ async def test_in_shadow_the_notice_goes_to_the_features_own_rehearsal_home(bot,
     assert "structure.notice_posted" not in await kinds(db)
 
 
-async def test_in_shadow_with_no_home_of_its_own_the_notice_follows_the_rehearsal_home(
-    bot, guild
-):
-    await bot.store.set(GUILD, "shadow_channel_id", REHEARSAL)
-
-    await changed_overnight(bot, guild)
-
-    assert len(guild.channels[REHEARSAL].sent) == 1
-    assert not guild.channels[STAFF].sent
-
-
 async def test_on_the_notice_goes_to_its_channel_with_no_rehearsal_line(bot, guild, db):
     await bot.store.set(GUILD, "structure_backup_mode", "on")
     await bot.store.set(GUILD, "structure_backup_channel_id", ALERTS)
@@ -588,14 +583,6 @@ async def test_on_the_notice_goes_to_its_channel_with_no_rehearsal_line(bot, gui
     assert not guild.channels[REHEARSAL].sent
     assert (await details_of(db, "structure.notice_posted"))["mode"] == "on"
     assert "structure.would_notice" not in await kinds(db)
-
-
-async def test_on_with_no_channel_set_the_notice_goes_to_the_staff_channel(bot, guild):
-    await bot.store.set(GUILD, "structure_backup_mode", "on")
-
-    await changed_overnight(bot, guild)
-
-    assert len(guild.channels[STAFF].sent) == 1
 
 
 async def test_the_notice_is_optional(bot, guild, db):
@@ -690,7 +677,8 @@ async def test_the_panel_opens_with_the_state_and_only_the_moves_that_are_valid(
     assert shown["embed"].title == "Server structure"
     assert field(shown["embed"], "Mode") == "shadow"
     assert field(shown["embed"], "Latest snapshot") == "No snapshot has been taken yet."
-    assert [one.name for one in shown["embed"].fields] == ["Mode", "Latest snapshot"]
+    assert [one.name for one in shown["embed"].fields] == ["Mode", "Notice", "Latest snapshot"]
+    assert field(shown["embed"], "Notice") == f"<#{LOGS}>"
     assert labels(shown["view"]) == ["Take one now", "Open the Structure page"]
     link = button(shown["view"], "Open the Structure page")
     assert link.url == f"{bot.settings.origin}/structure.html"
@@ -1089,7 +1077,7 @@ def test_wording_longer_than_discord_holds_is_refused_at_save_in_words(key, limi
 def test_every_structure_wording_key_has_a_limit_its_own_default_fits():
     words = [key for key in STRUCTURE_BACKUP_KEYS if KEY_TYPES[key] == "text"]
 
-    assert set(STRUCTURE_BACKUP_LIMITS) == set(words) and len(words) == 21
+    assert set(STRUCTURE_BACKUP_LIMITS) == set(words) and len(words) == 24
     for key in words:
         assert len(STRUCTURE_BACKUP_DEFAULTS[key]) <= STRUCTURE_BACKUP_LIMITS[key], key
     assert set(STRUCTURE_BACKUP_LIMITS.values()) == {80, 150, 256, 1024, 4096}
@@ -1117,7 +1105,7 @@ async def test_wording_stored_before_the_limits_cannot_break_the_panel(
     embed, view = await sb.build_panel(bot, guild, note="word " * 2000, found=found)
 
     assert len(embed.title) <= 256 and len(embed) + len(view.footer) <= 6000
-    assert len(embed.fields) == 4
+    assert len(embed.fields) == 5
     for one in embed.fields:
         assert 1 <= len(one.name) <= 256 and 1 <= len(one.value) <= 1024
     assert all(len(label) <= 80 for label in labels(view))
@@ -1503,3 +1491,358 @@ def test_the_guard_lets_the_reads_this_feature_makes_through():
     )
 
     assert write_paths(reads) == []
+
+
+# ---------------------------------------------------------------- leads only (2026-10-05)
+
+PRIVATE_ROLE = "Zebra Council"
+PRIVATE_CHANNEL = "zebra-private"
+LOG_DETAIL_KEYS = frozenset(
+    {
+        "via",
+        "source",
+        "snapshot_id",
+        "previous_id",
+        "since_id",
+        "roles",
+        "categories",
+        "channels",
+        "overwrites",
+        "changes",
+        "removed",
+        "reason",
+        "mode",
+        "key",
+        "channel_id",
+        "aimed_at",
+        "actor_id",
+    }
+)
+
+
+async def opened_by(bot, interaction):
+    cog = sb.StructureBackup(bot)
+    await cog.structure.callback(cog, interaction)
+    return interaction
+
+
+def test_the_rule_is_the_owner_an_administrator_or_the_role_and_nobody_else(bot, guild):
+    def person(user_id=USER, *, admin=False, roles=()):
+        return SimpleNamespace(
+            id=user_id,
+            roles=[SimpleNamespace(id=one) for one in roles],
+            guild_permissions=SimpleNamespace(manage_guild=True, administrator=admin),
+        )
+
+    assert sb.may_see(bot.store, guild, person(OWNER))
+    assert sb.may_see(bot.store, guild, OWNER) and sb.may_see(bot.store, guild, str(OWNER))
+    assert sb.may_see(bot.store, guild, person(admin=True))
+    assert not sb.may_see(bot.store, guild, person(roles=[LEADS, MODS]))
+    assert not sb.may_see(bot.store, guild, USER)
+    assert not sb.may_see(bot.store, guild, None)
+    assert not sb.may_see(bot.store, None, person(admin=True))
+    assert not sb.may_see(bot.store, guild, "not an id")
+    truthy = SimpleNamespace(id=USER, roles=[], guild_permissions=SimpleNamespace(administrator=1))
+    assert not sb.may_see(bot.store, guild, truthy)
+
+
+async def test_the_owner_opens_the_panel_holding_no_role_and_no_permission_bit(bot, guild):
+    guild.owner_id = USER
+
+    shown = await opened_by(bot, FakeInteraction(bot, lead=False, roles=[]))
+
+    assert shown.rendered["embed"].title == "Server structure" and shown.rendered["view"]
+
+
+async def test_an_administrator_opens_the_panel(bot):
+    shown = await opened_by(bot, FakeInteraction(bot, lead=True, roles=[]))
+
+    assert shown.rendered["embed"].title == "Server structure"
+
+
+async def test_a_holder_of_the_structure_role_opens_the_panel(bot):
+    await bot.store.set(GUILD, "structure_backup_role_id", MODS)
+
+    shown = await opened_by(bot, FakeInteraction(bot, lead=False, roles=[MODS]))
+
+    assert shown.rendered["embed"].title == "Server structure"
+
+
+async def test_ordinary_staff_are_refused_at_the_command_in_words(bot, db):
+    await bot.store.set(GUILD, "structure_backup_role_id", MODS)
+
+    refused_ = await opened_by(bot, FakeInteraction(bot, lead=False, roles=[LEADS]))
+
+    assert refused_.said == [sb.LEADS_ONLY] and not refused_.edits
+    assert "view" not in refused_.response.messages[0]
+    assert refused_.response.messages[0]["ephemeral"] is True
+    for needed in ("every role, channel and permission", "server's leads", "Ask the server owner"):
+        assert needed in sb.LEADS_ONLY
+    assert await kinds(db) == []
+
+
+async def test_with_no_role_set_only_the_owner_and_administrators_get_in(bot):
+    assert bot.store.get(GUILD, "structure_backup_role_id") is None
+
+    refused_ = await opened_by(bot, FakeInteraction(bot, lead=False, roles=[LEADS, MODS, 0]))
+
+    assert refused_.said == [sb.LEADS_ONLY]
+    assert (await opened_by(bot, FakeInteraction(bot, lead=True))).rendered["view"]
+
+
+async def test_a_member_is_still_refused_as_not_staff_before_the_leads_rule_is_asked(bot):
+    await bot.store.set(GUILD, "structure_backup_role_id", MODS)
+    outsider = FakeInteraction(bot, staff=False, roles=[MODS])
+
+    await opened_by(bot, outsider)
+
+    assert "staff only" in outsider.said[0] and sb.LEADS_ONLY not in outsider.said
+
+
+async def full_panel(bot, guild):
+    await sb.take_snapshot(bot, guild)
+    _, view = await sb.build_panel(bot, guild)
+    return view
+
+
+def controls(view):
+    return [item for item in view.children if getattr(item, "url", None) is None]
+
+
+async def test_every_control_on_the_panel_refuses_ordinary_staff_in_words(bot, guild, db):
+    view = await full_panel(bot, guild)
+    before = await kinds(db)
+
+    assert [type(item) for item in controls(view)] == [
+        sb.TakeButton,
+        sb.ChangesButton,
+        sb.ModePick,
+    ]
+    assert len(view.children) == len(controls(view)) + 1
+    for item in controls(view):
+        press = FakeInteraction(bot, lead=False, roles=[LEADS])
+        if isinstance(item, sb.ModePick):
+            item._values = ["off"]
+        await item.callback(press)
+        assert press.said == [sb.LEADS_ONLY], type(item)
+        assert not press.edits and not press.response.deferred, type(item)
+    assert guild.fetches == 1
+    assert await structure_store.count(db, GUILD) == 1
+    assert bot.store.get(GUILD, "structure_backup_mode") == "shadow"
+    assert await kinds(db) == before
+
+
+async def test_someone_who_loses_the_role_mid_panel_is_refused_on_the_next_press(bot, guild, db):
+    await bot.store.set(GUILD, "structure_backup_role_id", MODS)
+    opening = await opened_by(bot, FakeInteraction(bot, lead=False, roles=[LEADS, MODS]))
+    view = opening.rendered["view"]
+    held = FakeInteraction(bot, lead=False, roles=[LEADS, MODS])
+    await button(view, "Take one now").callback(held)
+    assert held.rendered["embed"].description.startswith("Snapshot #")
+
+    lost = FakeInteraction(bot, lead=False, roles=[LEADS])
+    await button(held.rendered["view"], "What changed").callback(lost)
+    unset = FakeInteraction(bot, lead=False, roles=[LEADS, MODS])
+    await bot.store.clear(GUILD, "structure_backup_role_id")
+    await button(held.rendered["view"], "Take one now").callback(unset)
+
+    assert lost.said == [sb.LEADS_ONLY] and not lost.edits
+    assert unset.said == [sb.LEADS_ONLY] and not unset.edits
+    assert await structure_store.count(db, GUILD) == 1
+
+
+def test_every_door_in_the_cog_is_behind_the_one_gate():
+    source = pathlib.Path(sb.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    def calls(node):
+        return {
+            getattr(one.func, "id", None) for one in ast.walk(node) if isinstance(one, ast.Call)
+        }
+
+    pressed = [
+        (one.name, item)
+        for one in tree.body
+        if isinstance(one, ast.ClassDef)
+        for item in one.body
+        if isinstance(item, ast.AsyncFunctionDef) and item.name == "callback"
+    ]
+    assert [name for name, _ in pressed] == ["TakeButton", "ChangesButton", "ModePick"]
+    for name, item in pressed:
+        first = item.body[0]
+        assert isinstance(first, ast.If) and "lead_opened" in calls(first.test), name
+        assert isinstance(first.body[0], ast.Return), name
+    items = [
+        one.name
+        for one in tree.body
+        if isinstance(one, ast.ClassDef)
+        and any("ui" in ast.unparse(base) and "View" not in ast.unparse(base) for base in one.bases)
+    ]
+    assert items == [name for name, _ in pressed]
+    commands_ = [
+        item
+        for one in tree.body
+        if isinstance(one, ast.ClassDef)
+        for item in one.body
+        if isinstance(item, ast.AsyncFunctionDef)
+        and any("app_commands.command" in ast.unparse(mark) for mark in item.decorator_list)
+    ]
+    assert [item.name for item in commands_] == ["structure"]
+    assert "require_lead" in calls(commands_[0])
+    gates = {
+        one.name: calls(one)
+        for one in tree.body
+        if isinstance(one, ast.AsyncFunctionDef | ast.FunctionDef)
+        and one.name in ("require_lead", "lead_opened", "is_lead")
+    }
+    assert "is_lead" in gates["require_lead"] and "is_lead" in gates["lead_opened"]
+    assert gates["is_lead"] == {"may_see"}
+    opened_calls = [
+        one
+        for one in ast.walk(tree)
+        if isinstance(one, ast.Call) and getattr(one.func, "id", None) == "opened"
+    ]
+    assert len(opened_calls) == 1 and sb.may_see is structure_rules.may_see
+
+
+async def test_in_shadow_with_no_channel_of_its_own_no_notice_is_posted_anywhere(bot, guild, db):
+    await bot.store.clear(GUILD, "structure_backup_shadow_channel_id")
+    await bot.store.set(GUILD, "shadow_channel_id", REHEARSAL)
+    await bot.store.set(GUILD, "staff_channel_id", STAFF)
+    await bot.store.set(GUILD, "structure_backup_channel_id", ALERTS)
+    bot.guard = SimpleNamespace(test_channel_id=STAFF)
+
+    taken = await changed_overnight(bot, guild)
+
+    assert taken.outcome == SAVED and await structure_store.count(db, GUILD) == 2
+    assert all(not channel.sent for channel in guild.channels.values())
+    found = await kinds(db)
+    assert found.count("structure.notice_unsent") == 1
+    posted = {"structure.would_notice", "structure.notice_posted", "structure.notice_failed"}
+    assert not posted & set(found)
+    row = await details_of(db, "structure.notice_unsent")
+    assert (row["mode"], row["key"], row["changes"]) == (
+        "shadow",
+        "structure_backup_shadow_channel_id",
+        1,
+    )
+    assert row["reason"] == sb.NOTICE_UNSENT.format(key="structure_backup_shadow_channel_id")
+    assert "Mods" not in json.dumps(row)
+
+
+async def test_on_with_no_channel_set_no_notice_is_posted_and_nothing_falls_back(bot, guild, db):
+    await bot.store.set(GUILD, "structure_backup_mode", "on")
+    await bot.store.set(GUILD, "staff_channel_id", STAFF)
+    await bot.store.set(GUILD, "shadow_channel_id", REHEARSAL)
+    await bot.store.set(GUILD, "structure_backup_shadow_channel_id", ALERTS)
+
+    await changed_overnight(bot, guild)
+
+    assert all(not channel.sent for channel in guild.channels.values())
+    row = await details_of(db, "structure.notice_unsent")
+    assert (row["mode"], row["key"]) == ("on", "structure_backup_channel_id")
+    assert "structure.notice_posted" not in await kinds(db)
+
+
+async def test_a_notice_with_nowhere_to_go_is_said_once_and_is_not_owed(bot, guild, db):
+    await bot.store.clear(GUILD, "structure_backup_shadow_channel_id")
+    await changed_overnight(bot, guild)
+
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=2))
+    await bot.store.set(GUILD, "structure_backup_shadow_channel_id", ALERTS)
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=3))
+
+    assert (await kinds(db)).count("structure.notice_unsent") == 1
+    assert not guild.channels[ALERTS].sent
+
+
+async def test_in_shadow_the_rehearsal_line_says_when_the_real_notice_has_nowhere_to_go(
+    bot, guild
+):
+    await changed_overnight(bot, guild)
+
+    (sent,) = guild.channels[LOGS].sent
+    assert sent["content"] == (
+        "Rehearsal — this is where it would go: Nowhere — structure_backup_channel_id is blank."
+    )
+
+
+async def test_the_panel_states_where_the_notice_goes_or_that_it_goes_nowhere(bot, guild):
+    async def notice():
+        embed, _ = await sb.build_panel(bot, guild)
+        return next((one.value for one in embed.fields if one.name == "Notice"), None)
+
+    assert await notice() == f"<#{LOGS}>"
+    await bot.store.clear(GUILD, "structure_backup_shadow_channel_id")
+    await bot.store.set(GUILD, "shadow_channel_id", REHEARSAL)
+    assert await notice() == "Nowhere — structure_backup_shadow_channel_id is blank."
+    await bot.store.set(GUILD, "structure_backup_mode", "on")
+    await bot.store.set(GUILD, "staff_channel_id", STAFF)
+    assert await notice() == "Nowhere — structure_backup_channel_id is blank."
+    await bot.store.set(GUILD, "structure_backup_channel_id", ALERTS)
+    assert await notice() == f"<#{ALERTS}>"
+    await bot.store.set(GUILD, "structure_backup_notify", False)
+    assert await notice() == "Off — structure_backup_notify is false."
+    await bot.store.set(GUILD, "structure_backup_mode", "off")
+    assert await notice() is None
+
+
+def test_the_two_notice_keys_say_blank_means_nowhere():
+    for key, never in (
+        ("structure_backup_channel_id", "staff channel"),
+        ("structure_backup_shadow_channel_id", "shadow_channel_id"),
+    ):
+        assert "Blank means no notice is posted" in KEY_HELP[key], key
+        assert "never falls back" in KEY_HELP[key] and never in KEY_HELP[key], key
+    assert "Either one blank means no notice is posted" in KEY_HELP["structure_backup_mode"]
+    assert KEY_TYPES["structure_backup_role_id"] == "role"
+    assert "Blank means the owner and administrators only" in KEY_HELP["structure_backup_role_id"]
+    assert "structure_backup_role_id" not in STRUCTURE_BACKUP_DEFAULTS
+
+
+async def test_no_structure_log_row_carries_a_role_or_channel_name_or_a_change_list(
+    bot, guild, db
+):
+    guild.roles.append(role(77, PRIVATE_ROLE, 8, 3))
+    guild.channels[77] = FakeChannel(77, PRIVATE_CHANNEL, category_id=40)
+    await bot.store.set(GUILD, "structure_backup_keep", 1)
+    await sb.run_daily(bot, guild, PHOENIX_5AM)
+    guild.roles[-1].name = f"{PRIVATE_ROLE} II"
+    guild.channels[77].topic = f"what {PRIVATE_ROLE} decides"
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=1))
+    await bot.store.clear(GUILD, "structure_backup_shadow_channel_id")
+    guild.channels[77].name = f"{PRIVATE_CHANNEL}-2"
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=2))
+    await bot.store.set(GUILD, "structure_backup_mode", "on")
+    await bot.store.set(GUILD, "structure_backup_channel_id", 99999)
+    guild.roles[-1].name = PRIVATE_ROLE
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=3))
+    await bot.store.set(GUILD, "structure_backup_channel_id", ALERTS)
+    await sb.run_daily(bot, guild, PHOENIX_5AM + timedelta(days=4))
+    taken = await sb.take_snapshot(bot, guild, actor=SimpleNamespace(id=USER))
+    await sb.record_download(bot, guild, SimpleNamespace(id=USER), taken.row)
+    guild.fetch_raises = refused()
+    await sb.take_snapshot(bot, guild)
+
+    cur = await db.conn.execute(
+        "SELECT kind, details, reason FROM action_log WHERE kind LIKE 'structure.%' ORDER BY id"
+    )
+    rows = await cur.fetchall()
+    assert {row["kind"] for row in rows} == {
+        "structure.captured",
+        "structure.unchanged",
+        "structure.pruned",
+        "structure.would_notice",
+        "structure.notice_unsent",
+        "structure.notice_failed",
+        "structure.notice_posted",
+        "structure.downloaded",
+        "structure.capture_failed",
+    }
+    assert PRIVATE_ROLE in guild.channels[ALERTS].sent[0]["embed"].description
+    for row in rows:
+        details = json.loads(row["details"] or "{}")
+        assert set(details) <= LOG_DETAIL_KEYS, (row["kind"], set(details) - LOG_DETAIL_KEYS)
+        said = f"{row['details']} {row['reason']}".lower()
+        assert "zebra" not in said, row["kind"]
+        assert not [one for one in details.values() if isinstance(one, list | dict)], row["kind"]
