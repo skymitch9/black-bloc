@@ -209,6 +209,10 @@ deploys ONLY via
 `scripts/deploy.ps1`; CI must stay green; every decision configurable both ways;
 docs bookkeeping lands with the work, not after.
 
+## 📋 Session 2026-10-05 (afternoon)
+
+- **Owner 2026-10-05 ~3:50 PM, verbatim: "why is the annoucement timing post, posting in upcming events and in the event in marathons" → "keep only the upcoming events copy".** A runner's reminder posted twice by design: the public copy in `marathon_reminder_channel_id` (#upcoming-events) and a second copy in the marathon's own thread (the events forum). DECIDED: only the public copy. BUILD (branch `thread-reminders-off`, main loop): new key `marathon_thread_reminders` (bool, **off**) - the thread gets a reminder only when no public copy went out (public reminders off, the marathon's announcements off, the runner opted out, same channel, or the public send failed), so a reminder is never lost. Host heads-ups were already public-only. Status: **MERGED to main 4:2x PM, NOT DEPLOYED** - suite 10618 passed / 3 skipped, ruff clean, check.mjs ok, keys 778 -> 779, no schema change; design note at the foot of `info/marathon-announcements-design.md`. NOT reviewed independently (a 12-line change in `_post_reminder`); NOT seen in Discord. ❓ Deploy as v206: asked 4:2x PM - the show running now (Make Your Own Victory) keeps posting both copies until it ships.
+
 ## ⏳ Waiting on the owner
 
 - 📌 **DECIDED 2026-09-27 21:1x (owner, verbatim): *"No leave welcome as welcome test still"*** — the combined Welcome and rules + front door message stays in **#welcome-test** (posts and the front door stay in shadow; their rehearsal home is #welcome-test). Do NOT point the post at #welcome. ⚠️ Known, left as is by this decision: the post's own channel field reads #blackbloc-logs, so the door's "real channel" follows it there; it only matters the day posts/front door are switched to ON — re-ask then, not before.

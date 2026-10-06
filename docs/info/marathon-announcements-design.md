@@ -259,3 +259,15 @@ unchanged: the public copy at every mark, per run, in #upcoming-events (the staf
 | the runner post in GDQueer's thread | reads **Opt out of highlight**; pressing it → *JR is opted out of GDQueer's public posts…*, the button becomes **Opt back in**, and JR's remaining marks post nothing publicly (the thread copy still does). |
 | highlight | none — Auto-highlight is off on GDQueer. |
 | hosts | GDQueer follows the Scan hosts default, now on: a paired BaF host there would get block posts too (not verified live). |
+
+## Follow-up 2026-10-05 — one copy of a reminder, the public one
+
+Owner, verbatim: *"why is the annoucement timing post, posting in upcming events and in the event in marathons"* → *"keep only the upcoming events copy"*.
+
+- New key `marathon_thread_reminders` (bool, **off**). `Marathons._post_reminder` now sends the public copy FIRST and returns when it went out; the copy in the marathon's own thread is sent only when the key is on, or when no public copy went out.
+- No public copy means any of: `marathon_public_reminders` off, the marathon's announcements switch off, every runner opted out, the reminder channel is the thread's own channel (`same_channel`), no reminder channel, or the send failed. In each the thread copy posts as before, so a mark is never silent.
+- The same-channel check reads the thread's place from `_place` before anything is sent — the same id `_send` used to hand back.
+- A public-only reminder writes `marathon.public_reminded` and NO `marathon.reminded` row; the run remembers `{posted: true, public: {...}}` with no `staff` copy, which the edit-in-place follower already handles (it walks the copies that exist).
+- Host heads-ups were always public-only (`marathon_host_highlights.heads_up`); nothing changed there.
+- NOT changed: the dropped-run words, shoutouts, runner posts and the near-miss posts still go in the thread.
+

@@ -393,7 +393,7 @@ async def test_with_the_key_on_a_host_makes_the_run_ours_again(bot, cog):  # noq
     assert all(mt.member_ids(row) == [ANARCHY] for row in rows)
     assert all(mp.postable(row) for row in rows)
     assert said_about(bot, "Titanfall 2")
-    assert "marathon.reminded" in await kinds(bot.db)
+    assert "marathon.public_reminded" in await kinds(bot.db)
 
 
 async def test_turning_the_key_off_takes_the_runs_back_at_the_next_rematch(bot, cog):  # noqa: F811

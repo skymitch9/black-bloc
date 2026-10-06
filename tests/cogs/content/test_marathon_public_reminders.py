@@ -64,8 +64,22 @@ async def at_fifteen(bot, cog, marathon):
     await follow(bot, cog, marathon)
 
 
+async def test_a_reminder_posts_in_the_reminder_channel_and_not_in_the_thread(bot, cog):
+    marathon = await ready(bot, cog)
+
+    await at_fifteen(bot, cog, marathon)
+
+    assert len(reminders_in(bot.guild.channels[CHANNEL])) == 1
+    assert reminders_in(the_thread(bot)) == []
+    held = json.loads((await run_of(bot, marathon, "Super Metroid"))["reminder_posts"])["15"]
+    assert held["posted"] is True and "public" in held and "staff" not in held
+    assert "marathon.public_reminded" in await kinds(bot.db)
+    assert "marathon.reminded" not in await kinds(bot.db)
+
+
 async def test_a_tracked_marathons_reminder_posts_in_the_thread_and_the_reminder_channel(bot, cog):
     marathon = await ready(bot, cog)
+    await bot.store.set(GUILD, "marathon_thread_reminders", True)
 
     await at_fifteen(bot, cog, marathon)
 
@@ -82,6 +96,7 @@ async def test_a_tracked_marathons_reminder_posts_in_the_thread_and_the_reminder
 
 async def test_a_reminder_posts_once_even_after_a_restart(bot, cog):
     marathon = await ready(bot, cog)
+    await bot.store.set(GUILD, "marathon_thread_reminders", True)
     await at_fifteen(bot, cog, marathon)
     await follow(bot, cog, marathon)
     restarted = type(cog)(bot)
@@ -120,6 +135,7 @@ async def test_the_public_copy_pings_only_while_the_marathon_pings_roles(bot, co
 
 async def test_the_public_copy_has_its_own_words(bot, cog):
     marathon = await ready(bot, cog)
+    await bot.store.set(GUILD, "marathon_thread_reminders", True)
     await bot.store.set(GUILD, "marathon_public_reminder_template", "{member} on **{game}** {in}!")
 
     await at_fifteen(bot, cog, marathon)
@@ -188,7 +204,7 @@ async def test_a_baf_runner_gets_the_public_copy_at_every_mark_of_every_run(bot,
         await follow(bot, cog, marathon)
 
     shown = reminders_in(bot.guild.channels[CHANNEL])
-    assert len(shown) == 3 and len(reminders_in(the_thread(bot))) == 3
+    assert len(shown) == 3 and reminders_in(the_thread(bot)) == []
     assert await public_marks(bot) == [1440, 120, 15]
     assert all("<@&" not in one.content for one in shown)
 
@@ -204,6 +220,7 @@ async def test_an_opted_out_runner_gets_no_public_copy_and_the_thread_still_does
     assert reminders_in(bot.guild.channels[CHANNEL]) == []
     skipped = await details_of(bot.db, "marathon.public_reminder_skipped")
     assert skipped["because"] == "opted_out"
+    assert "marathon.reminded" in await kinds(bot.db)
 
 
 async def test_the_announcements_switch_off_stops_the_public_copy(bot, cog):

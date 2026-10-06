@@ -4,6 +4,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import discord
+import pytest
 
 from black_bloc import marathon as mt
 from black_bloc import marathon_host_highlights as mhh
@@ -56,6 +57,11 @@ from tests.cogs.content.test_spotlight import (
 )
 
 GAME = "Super Metroid"
+
+@pytest.fixture(autouse=True)
+async def both_copies(bot):
+    await bot.store.set(GUILD, "marathon_thread_reminders", True)
+
 
 
 def stamps(minutes):
