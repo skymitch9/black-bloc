@@ -27,6 +27,7 @@ export const TABS = [
   { tab: 'guides', href: '/guides.html', label: 'Guides' },
   { tab: 'posts', href: '/posts.html', label: 'Posts' },
   { tab: 'minutes', href: '/minutes.html', label: 'Minutes' },
+  { tab: 'structure', href: '/structure.html', label: 'Structure' },
 ];
 
 export const FEATURE_TABS = {
@@ -47,6 +48,7 @@ export const FEATURE_TABS = {
   guides: 'guides',
   posts: 'posts',
   minutes: 'minutes',
+  structure_backup: 'structure',
 };
 
 export function tabHref(tab) {

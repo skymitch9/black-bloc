@@ -27,6 +27,8 @@ const IDS = {
   event_id: '3',
   ticket_id: '5',
   hit_id: '7',
+  structure_old_id: '1',
+  structure_new_id: '2',
   test_channel_id: '800000000000000003',
   lobby_channel_id: '800000000000000009',
   room_channel_id: '800000000000000010',

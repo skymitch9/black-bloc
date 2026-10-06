@@ -28,7 +28,82 @@
       "shutdown_status_text",
       "spawned_channels_staff_reach",
       "staff_channel_id",
-      "status_prefix"
+      "status_prefix",
+      "structure_backup_changes_label",
+      "structure_backup_channel_id",
+      "structure_backup_failed_said",
+      "structure_backup_hour",
+      "structure_backup_keep",
+      "structure_backup_latest_label",
+      "structure_backup_latest_line",
+      "structure_backup_look_failed",
+      "structure_backup_look_label",
+      "structure_backup_look_saved",
+      "structure_backup_look_unchanged",
+      "structure_backup_mode",
+      "structure_backup_mode_label",
+      "structure_backup_no_changes_said",
+      "structure_backup_none_yet",
+      "structure_backup_notice_lines",
+      "structure_backup_notice_more",
+      "structure_backup_notice_text",
+      "structure_backup_notice_title",
+      "structure_backup_notify",
+      "structure_backup_off_said",
+      "structure_backup_panel_footer",
+      "structure_backup_panel_minutes",
+      "structure_backup_panel_title",
+      "structure_backup_saved_said",
+      "structure_backup_say_allow_gained",
+      "structure_backup_say_allow_lost",
+      "structure_backup_say_channel_added",
+      "structure_backup_say_channel_changed",
+      "structure_backup_say_channel_recategorised",
+      "structure_backup_say_channel_removed",
+      "structure_backup_say_channel_renamed",
+      "structure_backup_say_channel_reordered",
+      "structure_backup_say_deny_gained",
+      "structure_backup_say_deny_lost",
+      "structure_backup_say_f_bitrate",
+      "structure_backup_say_f_colour",
+      "structure_backup_say_f_hoist",
+      "structure_backup_say_f_managed",
+      "structure_backup_say_f_mentionable",
+      "structure_backup_say_f_name",
+      "structure_backup_say_f_notifications",
+      "structure_backup_say_f_nsfw",
+      "structure_backup_say_f_rules_channel",
+      "structure_backup_say_f_slowmode",
+      "structure_backup_say_f_system_channel",
+      "structure_backup_say_f_topic",
+      "structure_backup_say_f_type",
+      "structure_backup_say_f_user_limit",
+      "structure_backup_say_f_verification",
+      "structure_backup_say_no",
+      "structure_backup_say_nothing",
+      "structure_backup_say_overwrite_added",
+      "structure_backup_say_overwrite_changed",
+      "structure_backup_say_overwrite_removed",
+      "structure_backup_say_role_added",
+      "structure_backup_say_role_changed",
+      "structure_backup_say_role_gained",
+      "structure_backup_say_role_lost",
+      "structure_backup_say_role_moved",
+      "structure_backup_say_role_moved_top",
+      "structure_backup_say_role_removed",
+      "structure_backup_say_role_renamed",
+      "structure_backup_say_server_changed",
+      "structure_backup_say_tag_added",
+      "structure_backup_say_tag_removed",
+      "structure_backup_say_tag_renamed",
+      "structure_backup_say_target_member",
+      "structure_backup_say_target_role",
+      "structure_backup_say_top_level",
+      "structure_backup_say_yes",
+      "structure_backup_shadow_channel_id",
+      "structure_backup_site_label",
+      "structure_backup_take_label",
+      "structure_backup_unchanged_said"
     ],
     "min": {
       "chat_cooldown_seconds": 5,
@@ -93,6 +168,9 @@
       "spotlight_event_slack_hours": 0,
       "spotlight_poll_minutes": 1,
       "spotlight_window_keep_days": 1,
+      "structure_backup_keep": 1,
+      "structure_backup_notice_lines": 1,
+      "structure_backup_panel_minutes": 1,
       "time_step_minutes": 5,
       "youtube_live_end_misses": 1,
       "youtube_live_poll_minutes": 2
@@ -176,6 +254,10 @@
       "spotlight_event_slack_hours": 24,
       "spotlight_poll_minutes": 30,
       "spotlight_window_keep_days": 365,
+      "structure_backup_hour": 23,
+      "structure_backup_keep": 365,
+      "structure_backup_notice_lines": 40,
+      "structure_backup_panel_minutes": 14,
       "time_step_minutes": 60,
       "youtube_live_end_misses": 5,
       "youtube_live_poll_minutes": 60
@@ -9168,6 +9250,203 @@
         "deleted",
         "message"
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/structure",
+      "read_by": [
+        "page-structure.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "hour",
+        "keep",
+        "timezone",
+        "last_look",
+        "snapshots"
+      ],
+      "rows": {
+        "snapshots": [
+          "id",
+          "taken_at",
+          "source",
+          "taken_by_id",
+          "taken_by_name",
+          "digest",
+          "roles",
+          "categories",
+          "channels",
+          "overwrites",
+          "checked_at",
+          "checks"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/structure/snapshots",
+      "body": {},
+      "read_by": [
+        "page-structure.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "outcome",
+        "message",
+        "snapshot",
+        "changes"
+      ],
+      "nested": {
+        "snapshot": [
+          "id",
+          "taken_at",
+          "source",
+          "taken_by_id",
+          "taken_by_name",
+          "digest",
+          "roles",
+          "categories",
+          "channels",
+          "overwrites",
+          "checked_at",
+          "checks"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/structure/compare?old={structure_old_id}&new={structure_new_id}",
+      "read_by": [
+        "page-structure.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "old",
+        "new",
+        "now",
+        "count",
+        "changes"
+      ],
+      "rows": {
+        "changes": [
+          "area",
+          "kind",
+          "text"
+        ]
+      },
+      "nested": {
+        "old": [
+          "id",
+          "taken_at",
+          "source",
+          "taken_by_id",
+          "taken_by_name",
+          "digest",
+          "roles",
+          "categories",
+          "channels",
+          "overwrites",
+          "checked_at",
+          "checks"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/structure/compare?old={structure_old_id}&new=now",
+      "read_by": [
+        "page-structure.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "old",
+        "new",
+        "now",
+        "count",
+        "changes"
+      ],
+      "rows": {
+        "changes": [
+          "area",
+          "kind",
+          "text"
+        ]
+      },
+      "nested": {
+        "old": [
+          "id",
+          "taken_at",
+          "source",
+          "taken_by_id",
+          "taken_by_name",
+          "digest",
+          "roles",
+          "categories",
+          "channels",
+          "overwrites",
+          "checked_at",
+          "checks"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/structure/snapshots/{structure_new_id}/download",
+      "body": {},
+      "read_by": [
+        "page-structure.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "snapshot",
+        "version",
+        "guild",
+        "roles",
+        "channels"
+      ],
+      "rows": {
+        "roles": [
+          "id",
+          "name",
+          "color",
+          "permissions",
+          "position",
+          "hoist",
+          "mentionable",
+          "managed"
+        ],
+        "channels": [
+          "id",
+          "name",
+          "type",
+          "parent_id",
+          "position",
+          "tags",
+          "overwrites"
+        ]
+      },
+      "nested": {
+        "snapshot": [
+          "id",
+          "taken_at",
+          "source",
+          "digest",
+          "roles",
+          "categories",
+          "channels",
+          "overwrites",
+          "guild_id"
+        ],
+        "guild": [
+          "id",
+          "name",
+          "verification_level",
+          "default_notifications",
+          "system_channel_id",
+          "rules_channel_id"
+        ]
+      }
     }
   ],
   "pages": [
@@ -9193,7 +9472,8 @@
     "/guides.html",
     "/posts.html",
     "/minutes.html",
-    "/schedule.html"
+    "/schedule.html",
+    "/structure.html"
   ],
   "action_kinds": [
     "web.operator.read",
@@ -9423,6 +9703,10 @@
     "web.marathon.feed_dismissed",
     "web.marathon.feed_taken",
     "web.marathon.link_changed",
-    "web.marathon.inbox_posted"
+    "web.marathon.inbox_posted",
+    "web.structure.captured",
+    "web.structure.unchanged",
+    "web.structure.capture_failed",
+    "web.structure.downloaded"
   ]
 }

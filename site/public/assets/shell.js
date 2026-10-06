@@ -25,6 +25,7 @@ export const GROUPS = [
       { tab: 'honeypot', label: 'Honeypot', icon: 'navHoneypot', feature: 'honeypot' },
       { tab: 'modmail', label: 'Modmail', icon: 'navModmail', feature: 'modmail' },
       { tab: 'posts', label: 'Posts', icon: 'navPosts', feature: 'posts' },
+      { tab: 'structure', label: 'Structure', icon: 'navStructure' },
     ],
   },
   {
