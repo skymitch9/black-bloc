@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -11,13 +12,16 @@ from black_bloc.settings_store import SettingsStore
 from black_bloc.sticky_posts import (
     FAILED,
     NOT_RUNNING,
+    OWN_HOME,
     POSTED,
     REHEARSED,
     TEST_MODE,
     TOO_SOON,
+    UNREACHABLE,
     Desk,
     desk_of,
     missing_permissions,
+    passing,
 )
 
 GUILD = 7
@@ -550,3 +554,341 @@ def test_missing_permissions_names_them_and_trusts_what_it_cannot_ask():
     assert missing_permissions(guild, blind) == ["View Channel", "Send Messages"]
     assert missing_permissions(guild, FakeChannel(2)) == []
     assert missing_permissions(SimpleNamespace(), blind) == []
+
+
+def unavailable():
+    return discord.DiscordServerError(_Response(503), "upstream connect error")
+
+
+async def details_of(db, kind):
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id", (kind,)
+    )
+    return [json.loads(row["details"]) for row in await cur.fetchall()]
+
+
+def link_to(channel_id, message_id):
+    return f"https://discord.com/channels/{GUILD}/{channel_id}/{message_id}"
+
+
+@pytest.mark.parametrize("mode", ["off", "shadow"])
+async def test_a_stopped_stickys_copy_comes_down_when_the_mode_leaves_on(bot, desk, clock, mode):
+    await live(bot, desk)
+    first = channel(bot).messages[0].id
+    channel(bot).perms.send_messages = False
+    clock.tick(600)
+    await talk(desk, bot, 5)
+    assert (await row_of(bot))["trouble"] and [one.id for one in channel(bot).messages] == [first]
+
+    await bot.store.set(GUILD, "sticky_mode", mode)
+    await desk.settle(bot.guild)
+
+    assert channel(bot).messages == [] and channel(bot).deleted == [first]
+    row = await row_of(bot)
+    assert row["message_id"] is None and row["trouble"]
+    assert channel(bot, HOME).messages == []
+
+
+@pytest.mark.parametrize("mode", ["off", "shadow", "on"])
+async def test_a_paused_sticky_whose_copy_would_not_delete_loses_it_at_the_next_settle(
+    bot, desk, mode
+):
+    await live(bot, desk)
+    channel(bot).delete_raises = forbidden()
+    await desk.pause(bot.guild, RUNS, STAFFER)
+    assert len(channel(bot).messages) == 1
+    channel(bot).delete_raises = None
+
+    await bot.store.set(GUILD, "sticky_mode", mode)
+    await desk.settle(bot.guild)
+
+    assert channel(bot).messages == []
+    row = await row_of(bot)
+    assert row["message_id"] is None and row["paused"]
+    assert channel(bot, HOME).messages == []
+
+
+@pytest.mark.parametrize("outage", [unavailable, TimeoutError, ConnectionResetError])
+async def test_an_outage_leaves_it_running_says_so_once_and_the_next_message_retries(
+    bot, desk, clock, db, outage
+):
+    await live(bot, desk)
+    channel(bot).send_raises = outage()
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+
+    row = await row_of(bot)
+    assert row["trouble"] is None and rules.is_running(row)
+    assert rules.state_of(row, "on") == rules.WAITING
+    assert RUNS in desk.watched and channel(bot).messages == []
+
+    clock.tick(600)
+    await talk(desk, bot, 1)
+    clock.tick(600)
+    assert await desk.place(bot.guild, RUNS) == UNREACHABLE
+
+    said = await details_of(db, "sticky.post_failed")
+    assert len(said) == 1 and said[0]["retrying"] is True
+    assert "could not be reached" in said[0]["reason"]
+    assert "refused" not in said[0]["reason"] and "ermission" not in said[0]["reason"]
+
+    channel(bot).send_raises = None
+    clock.tick(600)
+    await talk(desk, bot, 1)
+
+    assert len(channel(bot).messages) == 1
+    assert (await row_of(bot))["message_id"] == channel(bot).messages[0].id
+    assert desk.outage == {} and desk.tried == {}
+
+
+async def test_an_outage_is_retried_no_sooner_than_the_gap(bot, desk, clock):
+    await live(bot, desk)
+    channel(bot).send_raises = unavailable()
+    clock.tick(600)
+    await talk(desk, bot, 5)
+    channel(bot).send_raises = None
+    clock.gate = asyncio.Event()
+
+    await talk(desk, bot, 3)
+
+    assert channel(bot).messages == [] and list(desk.waiting) == [RUNS]
+    clock.gate.set()
+    await desk.waiting[RUNS]
+    assert clock.slept == [30.0] and len(channel(bot).messages) == 1
+
+
+async def test_a_copy_that_times_out_on_delete_is_kept_on_the_row_and_tried_again(
+    bot, desk, clock, db
+):
+    await live(bot, desk)
+    first = channel(bot).messages[0].id
+    channel(bot).delete_raises = TimeoutError()
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+
+    row = await row_of(bot)
+    assert row["trouble"] is None and row["message_id"] == first
+    assert [one.id for one in channel(bot).messages] == [first]
+
+    channel(bot).delete_raises = None
+    clock.tick(600)
+    await talk(desk, bot, 1)
+
+    assert channel(bot).deleted == [first] and len(channel(bot).messages) == 1
+
+
+@pytest.mark.parametrize(
+    ("raised", "said"),
+    [
+        (forbidden, "Discord refused (403): Missing Permissions"),
+        (lambda: RuntimeError(""), "RuntimeError"),
+        (lambda: RuntimeError("no"), "RuntimeError: no"),
+    ],
+)
+async def test_an_old_copy_that_will_not_delete_says_one_sentence_not_two(
+    bot, desk, clock, raised, said
+):
+    await live(bot, desk)
+    channel(bot).delete_raises = raised()
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+
+    trouble = (await row_of(bot))["trouble"]
+    assert "It could not be posted" not in trouble and trouble.count("Try again") == 1
+    assert trouble == rules.TROUBLE_OLD_COPY.format(reason=said)
+    assert ": ." not in trouble and ". —" not in trouble
+
+
+async def test_a_sticky_stopped_for_a_missing_home_comes_back_when_one_is_set(bot, desk, db):
+    del bot.guild.channels[HOME]
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    await desk.save(bot.guild, LOG, WORDS, STAFFER)
+    assert (await row_of(bot))["trouble"] == rules.TROUBLE_HOME_GONE.format(home=HOME)
+
+    await bot.store.set(GUILD, "sticky_shadow_channel_id", OTHER_HOME)
+    await desk.settle(bot.guild)
+
+    for channel_id in (RUNS, LOG):
+        row = await row_of(bot, channel_id)
+        assert row["trouble"] is None and row["posted_channel_id"] == OTHER_HOME
+        assert channel_id in desk.watched
+    assert len(channel(bot, OTHER_HOME).messages) == 2
+
+
+async def test_a_sticky_stopped_for_no_home_at_all_comes_back_too_and_no_other_stop_does(
+    bot, desk, clock
+):
+    await bot.store.clear(GUILD, "shadow_channel_id")
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    assert (await row_of(bot))["trouble"] == rules.TROUBLE_NO_HOME
+    await rules.write_words(bot.db, GUILD, LOG, WORDS, STAFFER)
+    refused = rules.TROUBLE_REFUSED.format(status=403, text="no")
+    await rules.write_trouble(bot.db, GUILD, LOG, refused)
+
+    await bot.store.set(GUILD, "shadow_channel_id", HOME)
+    await desk.settle(bot.guild)
+
+    assert (await row_of(bot))["trouble"] is None
+    assert len(channel(bot, HOME).messages) == 1
+    assert (await row_of(bot, LOG))["trouble"]
+
+
+async def test_pause_says_the_copy_is_still_up_when_discord_would_not_delete_it(bot, desk, db):
+    await live(bot, desk)
+    first = channel(bot).messages[0].id
+    channel(bot).delete_raises = forbidden()
+
+    outcome = await desk.pause(bot.guild, RUNS, STAFFER)
+
+    assert outcome.ok and len(channel(bot).messages) == 1
+    assert "was taken down" not in outcome.message
+    assert "still in" in outcome.message and f"<#{RUNS}>" in outcome.message
+    assert "Discord refused (403)" in outcome.message
+    assert link_to(RUNS, first) in outcome.message
+    row = await row_of(bot)
+    assert row["paused"] and row["message_id"] == first
+    said = (await details_of(db, "sticky.paused"))[0]
+    assert (said["left_channel_id"], said["left_message_id"]) == (RUNS, first)
+
+
+async def test_remove_names_the_copy_it_could_not_delete_with_a_link(bot, desk, db):
+    await live(bot, desk)
+    first = channel(bot).messages[0].id
+    channel(bot).delete_raises = forbidden()
+
+    outcome = await desk.remove(bot.guild, RUNS, STAFFER)
+
+    assert outcome.ok and len(channel(bot).messages) == 1
+    assert outcome.message != rules.REMOVED_NOW.format(channel_id=RUNS)
+    assert link_to(RUNS, first) in outcome.message and "still in" in outcome.message
+    assert await row_of(bot) is None
+    said = (await details_of(db, "sticky.removed"))[0]
+    assert (said["left_channel_id"], said["left_message_id"]) == (RUNS, first)
+    assert "Discord refused (403)" in said["copy_left"]
+
+
+async def test_a_pause_in_shadow_names_the_rehearsal_home_the_copy_was_in(bot, desk):
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+
+    outcome = await desk.pause(bot.guild, RUNS, STAFFER)
+
+    assert f"<#{HOME}>" in outcome.message and f"<#{RUNS}>" not in outcome.message
+    assert outcome.message == rules.PAUSED_NOW.format(where=HOME)
+    assert channel(bot, HOME).messages == []
+
+
+async def test_a_pause_with_no_copy_up_does_not_claim_to_have_taken_one_down(bot, desk):
+    await bot.store.set(GUILD, "sticky_mode", "off")
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+
+    outcome = await desk.pause(bot.guild, RUNS, STAFFER)
+
+    assert "taken down" not in outcome.message
+    assert outcome.message == rules.PAUSED_NO_COPY
+
+
+async def test_a_rehearsal_home_that_is_the_stickys_own_channel_gets_no_copy_in_shadow(
+    bot, desk, clock, db
+):
+    await bot.store.set(GUILD, "sticky_shadow_channel_id", RUNS)
+
+    outcome = await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    clock.tick(600)
+    await talk(desk, bot, 10)
+
+    assert channel(bot).messages == []
+    row = await row_of(bot)
+    assert row["trouble"] is None and row["message_id"] is None
+    assert rules.state_of(row, "shadow") == rules.WAITING
+    assert outcome.ok and "rehearsal home itself" in outcome.message
+    assert "rehearsal copy is in" not in outcome.message
+    assert outcome.message == rules.SAVED_OWN_HOME.format(channel_id=RUNS)
+    said = await details_of(db, "sticky.would_post")
+    assert [(one["channel_id"], one["reason"]) for one in said] == [(RUNS, OWN_HOME)]
+
+
+async def test_a_live_copy_comes_down_when_shadow_makes_its_own_channel_the_home(bot, desk):
+    await live(bot, desk)
+    await bot.store.set(GUILD, "sticky_shadow_channel_id", RUNS)
+    await bot.store.set(GUILD, "sticky_mode", "shadow")
+
+    await desk.settle(bot.guild)
+    await desk.settle(bot.guild)
+
+    assert channel(bot).messages == []
+    assert (await row_of(bot))["message_id"] is None
+
+
+async def test_a_copy_sent_but_not_stored_is_deleted_so_the_next_one_is_the_only_one(
+    bot, desk, clock, monkeypatch
+):
+    await live(bot, desk)
+    first = channel(bot).messages[0].id
+    clock.tick(600)
+    stored = rules.write_copy
+
+    async def failing(db, guild_id, channel_id, message_id, posted_in, **kwargs):
+        if message_id:
+            raise RuntimeError("database is locked")
+        await stored(db, guild_id, channel_id, message_id, posted_in, **kwargs)
+
+    monkeypatch.setattr(rules, "write_copy", failing)
+    with pytest.raises(RuntimeError):
+        await desk.place(bot.guild, RUNS)
+
+    assert channel(bot).messages == []
+    assert (await row_of(bot))["message_id"] is None
+
+    monkeypatch.setattr(rules, "write_copy", stored)
+    assert await desk.place(bot.guild, RUNS) == POSTED
+    assert len(channel(bot).messages) == 1 and first in channel(bot).deleted
+    assert (await row_of(bot))["message_id"] == channel(bot).messages[0].id
+
+
+async def test_a_long_rehearsal_note_is_cut_and_the_staff_words_never_are(bot, desk):
+    words = "w" * rules.TEXT_MAX
+    await bot.store.set(GUILD, "rehearsal_note", "N" * 380 + " {channel}")
+
+    await desk.save(bot.guild, RUNS, words, STAFFER)
+
+    copy = channel(bot, HOME).messages[0]
+    assert len(copy.content) <= 2000
+    assert rules.DISCORD_LIMIT == 2000
+    assert copy.content.endswith("\n" + words)
+    assert copy.content.startswith("NNN") and copy.content.split("\n")[0].endswith(rules.CUT)
+    assert (await row_of(bot))["trouble"] is None
+
+
+async def test_six_messages_at_once_make_one_tracked_timer(bot, desk, clock):
+    await live(bot, desk)
+    clock.tick(10)
+    clock.gate = asyncio.Event()
+    await talk(desk, bot, 4)
+
+    await asyncio.gather(*(desk.on_message(person(channel(bot))) for _ in range(6)))
+
+    timers = [one for one in asyncio.all_tasks() if one.get_name() == f"sticky-{RUNS}"]
+    assert len(timers) == 1 and desk.waiting == {RUNS: timers[0]}
+    desk.close()
+    await asyncio.gather(*timers, return_exceptions=True)
+    assert all(one.cancelled() for one in timers)
+
+
+@pytest.mark.parametrize("given", [["a", "b"], {"a": 1}, 7, True])
+async def test_words_that_are_not_a_string_are_refused_in_words(bot, desk, db, given):
+    outcome = await desk.save(bot.guild, RUNS, given, STAFFER)
+
+    assert (outcome.ok, outcome.code, outcome.status) == (False, "bad_text", 400)
+    assert outcome.message == rules.NOT_WORDS
+    assert await rules.rows_for_guild(db, GUILD) == []
+
+
+def test_only_an_outage_that_passes_by_itself_is_retried():
+    assert passing(unavailable()) and passing(TimeoutError()) and passing(ConnectionError())
+    assert passing(discord.HTTPException(_Response(429), "slow down"))
+    for status in (400, 403, 404):
+        assert not passing(discord.HTTPException(_Response(status), "no"))
+    assert not passing(forbidden()) and not passing(ValueError("no"))

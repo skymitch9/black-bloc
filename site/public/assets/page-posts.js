@@ -7,6 +7,7 @@ import { BLOCK_FILTERS, blockText } from './listfilter.js';
 import { logsSection } from './logs.js';
 import { remember, remembered } from './layout.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
+import { postSlugOf } from './posts-hash.js';
 import { stickySection } from './sticky-section.js';
 import {
   ago,
@@ -188,8 +189,7 @@ function where(slug, tail = '') {
 }
 
 function wantedSlug() {
-  const hash = String(location.hash || '').replace(/^#/, '').trim();
-  return hash && !hash.startsWith('sect-') ? hash : null;
+  return postSlugOf(location.hash);
 }
 
 /** `close` is dispatched a task late, so a drawer replaced in the meantime keeps its hash. */

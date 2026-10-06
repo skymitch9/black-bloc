@@ -255,7 +255,7 @@ async def test_the_list_opens_a_card_whose_buttons_are_only_the_valid_moves(bot,
     paused = await press(bot, lead, card.view, "Pause")
     assert labels(paused.view) == ["Edit…", "Resume", "Remove", "Back"]
     assert bot.guild.get_channel(RUNS).messages == []
-    assert paused.sent == rules.PAUSED_NOW.format(channel_id=RUNS)
+    assert paused.sent == rules.PAUSED_NOW.format(where=RUNS)
 
     resumed = await press(bot, lead, paused.view, "Resume")
     assert labels(resumed.view) == ["Edit…", "Pause", "Remove", "Back"]

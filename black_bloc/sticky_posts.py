@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
+import aiohttp
 import discord
 
 from . import shadow as shadow_home
@@ -28,10 +29,38 @@ TEST_MODE = "test_mode"
 NOT_RUNNING = "not_running"
 TOO_SOON = "too_soon"
 FAILED = "failed"
+UNREACHABLE = "unreachable"
+OWN_HOME = "own_home"
+PASSING_STATUS = 429
+PASSING = (TimeoutError, OSError, aiohttp.ClientError)
 
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def passing(exc: BaseException) -> bool:
+    """True for an outage that ends by itself; a refusal Discord means is never one."""
+    if isinstance(exc, discord.HTTPException):
+        return exc.status >= 500 or exc.status == PASSING_STATUS
+    return isinstance(exc, PASSING)
+
+
+def why(exc: BaseException) -> str:
+    if isinstance(exc, discord.HTTPException):
+        return rules.REFUSED_WHY.format(status=exc.status, text=exc.text or type(exc).__name__)
+    said = str(exc).strip()
+    return f"{type(exc).__name__}: {said}" if said else type(exc).__name__
+
+
+def outage_why(exc: BaseException) -> str:
+    if isinstance(exc, discord.HTTPException):
+        return rules.UNREACHABLE_ANSWERED.format(status=exc.status)
+    return type(exc).__name__
+
+
+def left_words(exc: BaseException) -> str:
+    return rules.UNREACHABLE_WHY.format(why=outage_why(exc)) if passing(exc) else why(exc)
 
 
 def refusal_words(exc: BaseException) -> str:
@@ -39,7 +68,7 @@ def refusal_words(exc: BaseException) -> str:
         return rules.TROUBLE_REFUSED.format(
             status=exc.status, text=exc.text or type(exc).__name__
         )
-    return rules.TROUBLE_UNEXPECTED.format(reason=f"{type(exc).__name__}: {exc}")
+    return rules.TROUBLE_UNEXPECTED.format(reason=why(exc))
 
 
 def missing_permissions(guild: Any, channel: Any) -> list[str]:
@@ -74,6 +103,9 @@ class Desk:
         self.waiting: dict[int, asyncio.Task] = {}
         self.locks: dict[int, asyncio.Lock] = {}
         self.said: set[tuple[int, str]] = set()
+        self.deciding: set[int] = set()
+        self.outage: dict[int, str] = {}
+        self.tried: dict[int, datetime] = {}
 
     def lock(self, channel_id: int) -> asyncio.Lock:
         return self.locks.setdefault(int(channel_id), asyncio.Lock())
@@ -97,6 +129,8 @@ class Desk:
     def forget(self, channel_id: int) -> None:
         self.watched.discard(channel_id)
         self.heard.pop(channel_id, None)
+        self.outage.pop(channel_id, None)
+        self.tried.pop(channel_id, None)
         task = self.waiting.pop(channel_id, None)
         if task is not None and task is not asyncio.current_task():
             task.cancel()
@@ -110,19 +144,34 @@ class Desk:
             return
         after, gap, _ = rules.numbers(self.store, guild.id)
         self.heard[channel_id] = self.heard.get(channel_id, 0) + 1
-        if self.heard[channel_id] < after or channel_id in self.waiting:
+        needed = 1 if channel_id in self.outage else after
+        if self.heard[channel_id] < needed:
             return
-        row = await rules.get_row(self.db, guild.id, channel_id)
-        if not rules.is_running(row):
-            self.forget(channel_id)
+        if channel_id in self.waiting or channel_id in self.deciding:
             return
-        wait = rules.seconds_left(row, self.now(), gap)
-        if wait > 0:
-            self.waiting[channel_id] = asyncio.create_task(
-                self._later(guild, channel_id, wait), name=f"sticky-{channel_id}"
-            )
-            return
+        self.deciding.add(channel_id)
+        try:
+            row = await rules.get_row(self.db, guild.id, channel_id)
+            if not rules.is_running(row):
+                self.forget(channel_id)
+                return
+            wait = self._wait(row, gap)
+            if wait > 0:
+                self.waiting[channel_id] = asyncio.create_task(
+                    self._later(guild, channel_id, wait), name=f"sticky-{channel_id}"
+                )
+                return
+        finally:
+            self.deciding.discard(channel_id)
         await self.place(guild, channel_id)
+
+    def _wait(self, row: Any, gap: int) -> float:
+        """Seconds until a copy may move: the gap since the last one, or since a failed try."""
+        left = rules.seconds_left(row, self.now(), gap)
+        tried = self.tried.get(int(row["channel_id"]))
+        if tried is not None:
+            left = max(left, float(gap) - (self.now() - tried).total_seconds())
+        return max(0.0, left)
 
     async def _later(self, guild: Any, channel_id: int, wait: float) -> None:
         try:
@@ -142,7 +191,7 @@ class Desk:
             return await self._place(guild, channel_id, first=first)
 
     def _target(self, guild: Any, row: Any, mode: str) -> tuple[Any, int | None, str | None]:
-        """The channel a copy goes in, the rehearsal home when it is one, or why neither."""
+        """The channel a copy goes in and its home; neither and no reason means OWN_HOME."""
         channel_id = int(row["channel_id"])
         real = shadow_home.channel_of(self.bot, guild, channel_id)
         if real is None:
@@ -152,10 +201,28 @@ class Desk:
         home = shadow_home.channel_id(self.bot, guild, feature=rules.FEATURE)
         if not home:
             return (None, None, rules.TROUBLE_NO_HOME)
+        if int(home) == channel_id:
+            return (None, int(home), None)
         found = shadow_home.channel_of(self.bot, guild, home)
         if found is None:
             return (None, home, rules.TROUBLE_HOME_GONE.format(home=home))
         return (found, int(home), None)
+
+    def _wanted(self, guild: Any, row: Any, mode: str) -> int | None:
+        """Where the row's copy belongs right now; None when it belongs nowhere."""
+        if mode == "off" or row["paused"]:
+            return None
+        if mode != "shadow":
+            return int(row["channel_id"])
+        home = shadow_home.channel_id(self.bot, guild, feature=rules.FEATURE)
+        if not home or int(home) == int(row["channel_id"]):
+            return None
+        return int(home)
+
+    def _misplaced(self, guild: Any, row: Any, mode: str) -> bool:
+        if not row["message_id"]:
+            return False
+        return int(row["posted_channel_id"] or 0) != (self._wanted(guild, row, mode) or -1)
 
     async def _place(self, guild: Any, channel_id: int, *, first: bool = False) -> str:
         """Called with the channel's lock held, so the row read here is the one acted on."""
@@ -164,9 +231,11 @@ class Desk:
         if not rules.is_running(row) or mode == "off":
             return NOT_RUNNING
         _, gap, silent = rules.numbers(self.store, guild.id)
-        if not first and rules.seconds_left(row, self.now(), gap) > 0:
+        if not first and self._wait(row, gap) > 0:
             return TOO_SOON
         target, home, trouble = self._target(guild, row, mode)
+        if trouble is None and target is None:
+            return await self._own_home(guild, row)
         if trouble is None:
             missing = missing_permissions(guild, target)
             if missing:
@@ -182,28 +251,56 @@ class Desk:
             return TEST_MODE
         undone = await self._take_down(guild, row)
         if undone is not None:
-            return await self._stopped(
-                guild, row, rules.TROUBLE_OLD_COPY.format(reason=undone)
-            )
+            return await self._failed(guild, row, undone, old_copy=True)
         note = shadow_home.note_line(self.bot, guild, f"<#{channel_id}>") if home else ""
-        body = f"{note}\n{row['text']}" if note else row["text"]
         try:
             sent = await target.send(
-                body, allowed_mentions=discord.AllowedMentions.none(), silent=silent
+                rules.fit(note, row["text"]),
+                allowed_mentions=discord.AllowedMentions.none(),
+                silent=silent,
             )
         except Exception as exc:
-            return await self._stopped(guild, row, refusal_words(exc))
-        await rules.write_copy(
-            self.db, guild.id, channel_id, sent.id, target.id, moved=not first, at=self.now()
-        )
+            return await self._failed(guild, row, exc)
+        try:
+            await rules.write_copy(
+                self.db, guild.id, channel_id, sent.id, target.id, moved=not first, at=self.now()
+            )
+        except BaseException:
+            await self._unsend(sent)
+            raise
         self.heard[channel_id] = 0
+        self.outage.pop(channel_id, None)
+        self.tried.pop(channel_id, None)
         self.watched.add(channel_id)
         if first:
             await self._posted(guild, row, target, home, sent.id)
         return REHEARSED if home else POSTED
 
-    async def _take_down(self, guild: Any, row: Any) -> str | None:
-        """None when no copy is left anywhere; otherwise why the old one is still up."""
+    async def _unsend(self, sent: Any) -> None:
+        """A copy the row never learned of is deleted, so the next one is not a second."""
+        try:
+            await sent.delete()
+        except Exception as exc:
+            log.warning(
+                "sticky: copy %s in channel %s was posted, not stored and not deleted — %s: %s",
+                getattr(sent, "id", "?"),
+                getattr(getattr(sent, "channel", None), "id", "?"),
+                type(exc).__name__,
+                exc,
+            )
+
+    async def _own_home(self, guild: Any, row: Any) -> str:
+        channel_id = int(row["channel_id"])
+        undone = await self._take_down(guild, row)
+        if undone is not None:
+            return await self._failed(guild, row, undone, old_copy=True)
+        await self._would(guild, row, None, None, reason=OWN_HOME, once=True)
+        self.heard[channel_id] = 0
+        self.watched.add(channel_id)
+        return OWN_HOME
+
+    async def _take_down(self, guild: Any, row: Any) -> Exception | None:
+        """None when no copy is left anywhere; otherwise what kept the old one up."""
         if not row["message_id"] or not row["posted_channel_id"]:
             return None
         channel = shadow_home.channel_of(self.bot, guild, row["posted_channel_id"])
@@ -213,12 +310,42 @@ class Desk:
             except discord.NotFound:
                 pass
             except Exception as exc:
-                return refusal_words(exc)
+                return exc
         await rules.write_copy(self.db, guild.id, row["channel_id"], None, None)
         return None
 
+    async def _failed(
+        self, guild: Any, row: Any, exc: Exception, *, old_copy: bool = False
+    ) -> str:
+        if passing(exc):
+            return await self._unreachable(guild, row, exc)
+        if old_copy:
+            return await self._stopped(guild, row, rules.TROUBLE_OLD_COPY.format(reason=why(exc)))
+        return await self._stopped(guild, row, refusal_words(exc))
+
+    async def _unreachable(self, guild: Any, row: Any, exc: Exception) -> str:
+        """The row stays running; one log row per outage, however many tries it takes."""
+        channel_id = int(row["channel_id"])
+        known = channel_id in self.outage
+        reason = rules.UNREACHABLE_REASON.format(why=outage_why(exc), channel_id=channel_id)
+        self.tried[channel_id] = self.now()
+        self.outage[channel_id] = reason
+        self.watched.add(channel_id)
+        if known:
+            return UNREACHABLE
+        log.warning("sticky: channel %s not reached, will try again — %s", channel_id, reason)
+        await self._safely(
+            log_action(
+                self.bot,
+                guild,
+                "sticky.post_failed",
+                details={"channel_id": channel_id, "reason": reason, "retrying": True},
+            )
+        )
+        return UNREACHABLE
+
     async def _stopped(self, guild: Any, row: Any, trouble: str) -> str:
-        """Said once: the row carries the reason, and a stopped row is never tried again."""
+        """Said once: the row carries the reason, and only staff or a found home restart it."""
         channel_id = int(row["channel_id"])
         await rules.write_trouble(self.db, guild.id, channel_id, trouble)
         self.forget(channel_id)
@@ -290,6 +417,10 @@ class Desk:
             return rules.SAVED_TEST_MODE
         if done == FAILED:
             return rules.SAVED_BUT.format(trouble=row["trouble"])
+        if done == UNREACHABLE:
+            return rules.SAVED_UNREACHABLE.format(reason=self.outage.get(channel_id, ""))
+        if done == OWN_HOME:
+            return rules.SAVED_OWN_HOME.format(channel_id=channel_id)
         if row["paused"]:
             return rules.SAVED_PAUSED
         return rules.SAVED_OFF
@@ -301,6 +432,8 @@ class Desk:
     async def save(
         self, guild: Any, channel_id: int, text: Any, actor: Any, *, via: str = VIA_DISCORD
     ) -> Outcome:
+        if text is not None and not isinstance(text, str):
+            return refusal(rules.NOT_WORDS, "bad_text", 400)
         words = rules.clean(text)
         refused = rules.text_refusal(words)
         if refused is not None:
@@ -351,13 +484,39 @@ class Desk:
                 guild,
                 kind_via("sticky.paused", via),
                 actor=actor,
-                details={"channel_id": int(channel_id), "via": via}
-                | ({"copy_left": left} if left else {}),
+                details={"channel_id": int(channel_id), "via": via} | self._left_details(row, left),
+            )
+            words = self._down_words(
+                guild, row, left, rules.PAUSED_NOW, rules.PAUSED_COPY_LEFT, rules.PAUSED_NO_COPY
             )
             row = await rules.get_row(self.db, guild.id, channel_id)
-            return Outcome(
-                True, rules.PAUSED_NOW.format(channel_id=channel_id), "paused", 200, row
-            )
+            return Outcome(True, words, "paused", 200, row)
+
+    def _left_details(self, row: Any, left: Exception | None) -> dict[str, Any]:
+        if left is None:
+            return {}
+        return {
+            "copy_left": left_words(left),
+            "left_channel_id": int(row["posted_channel_id"]),
+            "left_message_id": int(row["message_id"]),
+        }
+
+    def _down_words(
+        self, guild: Any, row: Any, left: Exception | None, down: str, kept: str, none: str
+    ) -> str:
+        """What became of the copy the row had: taken down, still up and why, or never there."""
+        channel_id = int(row["channel_id"])
+        if not row["message_id"] or not row["posted_channel_id"]:
+            return none.format(channel_id=channel_id)
+        where = int(row["posted_channel_id"])
+        if left is None:
+            return down.format(channel_id=channel_id, where=where)
+        return kept.format(
+            channel_id=channel_id,
+            where=where,
+            reason=left_words(left),
+            link=rules.message_link(guild.id, where, row["message_id"]),
+        )
 
     async def resume(
         self, guild: Any, channel_id: int, actor: Any, *, via: str = VIA_DISCORD
@@ -401,11 +560,12 @@ class Desk:
                     "text": str(row["text"])[: rules.LOGGED_CHARS],
                     "via": via,
                 }
-                | ({"copy_left": left} if left else {}),
+                | self._left_details(row, left),
             )
-            return Outcome(
-                True, rules.REMOVED_NOW.format(channel_id=channel_id), "removed", 200
+            words = self._down_words(
+                guild, row, left, rules.REMOVED_NOW, rules.REMOVED_COPY_LEFT, rules.REMOVED_NOW
             )
+            return Outcome(True, words, "removed", 200)
 
     async def channel_deleted(self, guild: Any, channel_id: int) -> bool:
         """Discord already took the copy with the channel, so only the row is left to go."""
@@ -448,32 +608,49 @@ class Desk:
         return Outcome(True, rules.MODE_SET.format(mode=value), "set", 200, value)
 
     async def settle(self, guild: Any) -> None:
-        """Every running sticky is put where the mode says it belongs, and nowhere else."""
+        """Every copy is put where the mode says it belongs, and taken down anywhere else."""
         if getattr(guild, "unavailable", False) or not self.db.is_connected:
             return
         mode = rules.mode_of(self.store, guild.id)
         for found in await rules.rows_for_guild(self.db, guild.id):
             channel_id = int(found["channel_id"])
-            async with self.lock(channel_id):
-                row = await rules.get_row(self.db, guild.id, channel_id)
-                if not rules.is_running(row):
-                    continue
-                if mode == "off":
-                    await self._take_down(guild, row)
-                    continue
-                self.watched.add(channel_id)
-                if self._in_place(guild, row, mode):
-                    continue
-                await self._place(guild, channel_id, first=True)
+            try:
+                async with self.lock(channel_id):
+                    await self._settle_one(guild, channel_id, mode)
+            except Exception as exc:
+                log.warning(
+                    "sticky: channel %s was not settled — %s: %s",
+                    channel_id,
+                    type(exc).__name__,
+                    exc,
+                )
 
-    def _in_place(self, guild: Any, row: Any, mode: str) -> bool:
-        if not row["message_id"]:
+    async def _settle_one(self, guild: Any, channel_id: int, mode: str) -> None:
+        row = await rules.get_row(self.db, guild.id, channel_id)
+        if row is None:
+            return
+        if self._misplaced(guild, row, mode):
+            left = await self._take_down(guild, row)
+            if left is not None:
+                log.warning(
+                    "sticky: the copy of channel %s is still up — %s", channel_id, left_words(left)
+                )
+                return
+            row = await rules.get_row(self.db, guild.id, channel_id)
+        if mode != "off" and self._home_is_back(guild, row, mode):
+            await rules.write_trouble(self.db, guild.id, channel_id, None)
+            row = await rules.get_row(self.db, guild.id, channel_id)
+        if not rules.is_running(row) or mode == "off":
+            return
+        self.watched.add(channel_id)
+        if row["message_id"]:
+            return
+        await self._place(guild, channel_id, first=True)
+
+    def _home_is_back(self, guild: Any, row: Any, mode: str) -> bool:
+        if not rules.is_home_trouble(row["trouble"]):
             return False
-        if mode == "shadow":
-            wanted = shadow_home.channel_id(self.bot, guild, feature=rules.FEATURE)
-        else:
-            wanted = row["channel_id"]
-        return bool(wanted) and int(row["posted_channel_id"] or 0) == int(wanted)
+        return self._target(guild, row, mode)[2] is None
 
 
 def desk_of(bot: Any) -> Desk:
@@ -488,12 +665,15 @@ __all__ = [
     "DESK_ATTR",
     "FAILED",
     "NOT_RUNNING",
+    "OWN_HOME",
     "POSTED",
     "REHEARSED",
     "TEST_MODE",
     "TOO_SOON",
+    "UNREACHABLE",
     "Desk",
     "desk_of",
     "missing_permissions",
+    "passing",
     "refusal_words",
 ]

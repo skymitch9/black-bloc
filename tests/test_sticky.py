@@ -111,6 +111,8 @@ def test_the_gap_is_measured_from_the_last_copy_and_a_bad_time_never_blocks():
         ({}, "on", rules.WAITING),
         ({"message_id": 5, "posted_channel_id": RUNS}, "on", rules.LIVE),
         ({"message_id": 5, "posted_channel_id": 444}, "shadow", rules.REHEARSING),
+        ({"message_id": 5, "posted_channel_id": RUNS}, "shadow", rules.REHEARSING),
+        ({"message_id": 5, "posted_channel_id": 444}, "on", rules.REHEARSING),
     ],
 )
 def test_the_state_word_is_read_off_the_row_and_the_mode(given, mode, wanted):

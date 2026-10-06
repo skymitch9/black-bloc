@@ -232,7 +232,20 @@ async def test_moving_the_rehearsal_home_moves_the_rehearsal_copy(cog, bot):
         "sticky_mode",
         "sticky_shadow_channel_id",
         "shadow_channel_id",
+        "log_channel_id",
     }
+
+
+async def test_moving_the_log_channel_moves_a_copy_that_rehearses_in_it(cog, bot):
+    await bot.store.clear(GUILD, "shadow_channel_id")
+    await bot.store.set(GUILD, "log_channel_id", HOME)
+    await cog.desk.save(bot.guild, RUNS, WORDS, 1)
+    assert len(channel(bot, HOME).messages) == 1
+
+    await bot.store.set(GUILD, "log_channel_id", OTHER_HOME)
+
+    assert channel(bot, HOME).messages == []
+    assert len(channel(bot, OTHER_HOME).messages) == 1
 
 
 async def test_a_deleted_channel_takes_its_sticky_with_it(cog, bot, db):

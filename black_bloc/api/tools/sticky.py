@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -14,6 +15,20 @@ from ..writes import actor_for, require_db, require_guild, wanted_id, writer_dep
 
 log = logging.getLogger(__name__)
 
+MENTION = re.compile(r"<#(\d+)>")
+
+
+def site_words(guild: Any, text: Any) -> Any:
+    """Discord's own markup in a sentence, as the page can show it: #name and no backticks."""
+    if not text:
+        return text
+
+    def named(found: re.Match[str]) -> str:
+        name = getattr(guild.get_channel(int(found[1])), "name", None)
+        return f"#{name}" if name else rules.GONE_CHANNEL.format(ident=found[1])
+
+    return MENTION.sub(named, str(text)).replace("`", "")
+
 
 def sticky_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
     channel = guild.get_channel(int(row["channel_id"]))
@@ -24,7 +39,7 @@ def sticky_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
         "gone": channel is None,
         "text": row["text"],
         "paused": bool(row["paused"]),
-        "trouble": row["trouble"],
+        "trouble": site_words(guild, row["trouble"]),
         "state": rules.state_of(row, rules.mode_of(bot.store, guild.id)),
         "message_id": str(row["message_id"]) if row["message_id"] else None,
         "posted_channel_id": str(posted_in) if posted_in else None,
@@ -44,10 +59,14 @@ def build_router(bot: Any) -> APIRouter:
         prefix="/api/sticky", tags=["sticky"], dependencies=[Depends(staff_dependency(bot))]
     )
 
-    def answered(guild: Any, outcome: Any) -> dict[str, Any]:
+    def said(guild: Any, outcome: Any) -> str:
         if not outcome.ok:
-            raise Refused(outcome.status or 400, outcome.code, outcome.message)
-        return {"sticky": sticky_row(bot, guild, outcome.value), "message": outcome.message}
+            raise Refused(outcome.status or 400, outcome.code, site_words(guild, outcome.message))
+        return site_words(guild, outcome.message)
+
+    def answered(guild: Any, outcome: Any) -> dict[str, Any]:
+        message = said(guild, outcome)
+        return {"sticky": sticky_row(bot, guild, outcome.value), "message": message}
 
     @router.get("")
     async def sticky_list() -> list[dict[str, Any]]:
@@ -102,8 +121,6 @@ def build_router(bot: Any) -> APIRouter:
         outcome = await desk_of(bot).remove(
             guild, wanted, actor_for(bot, who, guild), via=VIA_WEBSITE
         )
-        if not outcome.ok:
-            raise Refused(outcome.status or 400, outcome.code, outcome.message)
-        return {"removed": True, "channel_id": str(wanted), "message": outcome.message}
+        return {"removed": True, "channel_id": str(wanted), "message": said(guild, outcome)}
 
     return router
