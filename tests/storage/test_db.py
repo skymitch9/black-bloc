@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 88
+        assert SCHEMA_VERSION == 89
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3624,7 +3624,7 @@ async def test_a_schema_86_file_gains_the_stored_tone_and_keeps_what_each_member
         cur = await again.conn.execute("PRAGMA table_info(chat_voice)")
         assert set(TONE_COLUMNS) <= {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "88"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "89"
     finally:
         await again.close()
 
@@ -3799,5 +3799,154 @@ async def test_a_schema_87_file_gains_the_structure_tables_and_loses_nothing(tmp
         assert [row["user_id"] for row in await cur.fetchall()] == [900]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+PB_TABLES = {
+    "pb_matches": {
+        "guild_id",
+        "user_id",
+        "twitch_login",
+        "src_user_id",
+        "src_name",
+        "src_weblink",
+        "source",
+        "state",
+        "state_by",
+        "set_by",
+        "reason",
+        "checked_at",
+        "matched_at",
+        "baseline_at",
+        "looked_at",
+        "look_error",
+        "last_pb_at",
+        "updated_at",
+    },
+    "pb_runs": {
+        "guild_id",
+        "user_id",
+        "slot",
+        "run_id",
+        "seconds",
+        "place",
+        "game",
+        "category",
+        "weblink",
+        "verified_at",
+        "seen_at",
+    },
+    "pb_posts": {
+        "id",
+        "guild_id",
+        "user_id",
+        "run_id",
+        "src_name",
+        "game",
+        "category",
+        "seconds",
+        "place",
+        "weblink",
+        "verified_at",
+        "outcome",
+        "reason",
+        "channel_id",
+        "aimed_at",
+        "message_id",
+        "at",
+    },
+    "pb_looks": {
+        "guild_id",
+        "last_at",
+        "last_ok_at",
+        "outcome",
+        "reason",
+        "failures",
+        "outage_since",
+        "backoff_until",
+        "summary_at",
+        "looks",
+        "found",
+    },
+}
+
+
+async def pb_columns(db: Database) -> dict[str, set[str]]:
+    found = {}
+    for table in PB_TABLES:
+        cur = await db.conn.execute(f"PRAGMA table_info({table})")
+        found[table] = {row["name"] for row in await cur.fetchall()}
+    return found
+
+
+async def test_a_fresh_database_carries_the_four_pb_feed_tables(tmp_path):
+    db = Database(tmp_path / "pb.sqlite3")
+    await db.connect()
+    try:
+        assert await pb_columns(db) == PB_TABLES
+        insert = (
+            "INSERT INTO pb_matches(guild_id, user_id, src_user_id, state, state_by, updated_at) "
+            "VALUES (7, ?, ?, 'matched', 'auto', '2026-10-05')"
+        )
+        await db.conn.execute(insert, (900, "e8e5v680"))
+        await db.conn.execute(insert, (901, None))
+        await db.conn.execute(insert, (902, None))
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(insert, (903, "e8e5v680"))
+        post = (
+            "INSERT INTO pb_posts(guild_id, user_id, run_id, seconds, outcome, at) "
+            "VALUES (7, 900, ?, 1.5, 'posted', '2026-10-05')"
+        )
+        await db.conn.execute(post, ("r1",))
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(post, ("r1",))
+    finally:
+        await db.close()
+
+
+async def test_a_schema_88_file_gains_the_pb_feed_tables_and_loses_nothing(tmp_path):
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    try:
+        for table in PB_TABLES:
+            await db.conn.execute(f"DROP TABLE {table}")
+        await db.conn.execute(
+            "INSERT INTO golive_links(user_id, twitch_login, linked_at) "
+            "VALUES (900, 'zfg1', '2026-10-05T00:00:00+00:00')"
+        )
+        await db.conn.execute(
+            "INSERT INTO sticky_messages(guild_id, channel_id, text, created_at, updated_at) "
+            "VALUES (7, 333, 'words', '2026-10-05', '2026-10-05')"
+        )
+        await db.conn.execute(
+            "INSERT INTO structure_looks(guild_id, last_at, outcome) "
+            "VALUES (7, '2026-10-05', 'saved')"
+        )
+        await db.conn.execute("UPDATE schema_meta SET value = '88' WHERE key = 'schema_version'")
+        await db.conn.commit()
+        cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        before = {row["name"] for row in await cur.fetchall()}
+    finally:
+        await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        assert await pb_columns(again) == PB_TABLES
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        assert {row["name"] for row in await cur.fetchall()} == before | set(PB_TABLES)
+        for table in PB_TABLES:
+            cur = await again.conn.execute(f"SELECT COUNT(*) AS n FROM {table}")
+            assert (await cur.fetchone())["n"] == 0
+        cur = await again.conn.execute("SELECT user_id, twitch_login FROM golive_links")
+        assert [tuple(row) for row in await cur.fetchall()] == [(900, "zfg1")]
+        cur = await again.conn.execute("SELECT channel_id, text FROM sticky_messages")
+        assert [tuple(row) for row in await cur.fetchall()] == [(333, "words")]
+        cur = await again.conn.execute("SELECT outcome FROM structure_looks")
+        assert [row["outcome"] for row in await cur.fetchall()] == ["saved"]
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "89"
     finally:
         await again.close()

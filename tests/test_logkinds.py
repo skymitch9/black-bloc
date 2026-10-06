@@ -49,6 +49,21 @@ ROOT = PACKAGE.parent
 # A call site the table does not cover fails `test_every_dynamic_kind_is_enumerated`
 # by name, which is what stops a new kind going quietly unclassified.
 KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
+    "black_bloc/pb_looks.py::kind": ("pbfeed.would_post", "pbfeed.post_failed"),
+    "black_bloc/pb_moves.py::kind": tuple(
+        f"{head}pbfeed.{name}"
+        for head in ("", "web.")
+        for name in (
+            "opted_out",
+            "opted_in",
+            "set_by_hand",
+            "unmatched",
+            "blocked",
+            "unblocked",
+            "opt_out_cleared",
+            "looked",
+        )
+    ),
     # Meeting minutes keeps its kinds as module constants in `minutes.py` so the module, the
     # session, the cog and the routes name each one once. The four a website door can also
     # write are listed in both spellings.
@@ -1227,6 +1242,8 @@ def test_like_patterns_cover_every_head_of_a_feature():
         "web.presence.%",
         "structure.%",
         "web.structure.%",
+        "pbfeed.%",
+        "web.pbfeed.%",
     )
 
 

@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 88
+SCHEMA_VERSION = 89
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1230,6 +1230,81 @@ CREATE TABLE IF NOT EXISTS structure_looks (
     outcome  TEXT    NOT NULL,
     reason   TEXT,
     attempts INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS pb_matches (
+    guild_id     INTEGER NOT NULL,
+    user_id      INTEGER NOT NULL,
+    twitch_login TEXT,
+    src_user_id  TEXT,
+    src_name     TEXT,
+    src_weblink  TEXT,
+    source       TEXT,
+    state        TEXT    NOT NULL,
+    state_by     TEXT    NOT NULL,
+    set_by       INTEGER,
+    reason       TEXT,
+    checked_at   TEXT,
+    matched_at   TEXT,
+    baseline_at  TEXT,
+    looked_at    TEXT,
+    look_error   TEXT,
+    last_pb_at   TEXT,
+    updated_at   TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS pb_matches_one_member_per_runner
+    ON pb_matches(guild_id, src_user_id) WHERE src_user_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS pb_runs (
+    guild_id    INTEGER NOT NULL,
+    user_id     INTEGER NOT NULL,
+    slot        TEXT    NOT NULL,
+    run_id      TEXT    NOT NULL,
+    seconds     REAL    NOT NULL,
+    place       INTEGER,
+    game        TEXT,
+    category    TEXT,
+    weblink     TEXT,
+    verified_at TEXT,
+    seen_at     TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, user_id, slot)
+);
+
+CREATE TABLE IF NOT EXISTS pb_posts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    INTEGER NOT NULL,
+    user_id     INTEGER NOT NULL,
+    run_id      TEXT    NOT NULL,
+    src_name    TEXT,
+    game        TEXT,
+    category    TEXT,
+    seconds     REAL    NOT NULL,
+    place       INTEGER,
+    weblink     TEXT,
+    verified_at TEXT,
+    outcome     TEXT    NOT NULL,
+    reason      TEXT,
+    channel_id  INTEGER,
+    aimed_at    INTEGER,
+    message_id  INTEGER,
+    at          TEXT    NOT NULL,
+    UNIQUE (guild_id, run_id)
+);
+CREATE INDEX IF NOT EXISTS pb_posts_by_guild ON pb_posts(guild_id, id);
+
+CREATE TABLE IF NOT EXISTS pb_looks (
+    guild_id      INTEGER PRIMARY KEY,
+    last_at       TEXT,
+    last_ok_at    TEXT,
+    outcome       TEXT,
+    reason        TEXT,
+    failures      INTEGER NOT NULL DEFAULT 0,
+    outage_since  TEXT,
+    backoff_until TEXT,
+    summary_at    TEXT,
+    looks         INTEGER NOT NULL DEFAULT 0,
+    found         INTEGER NOT NULL DEFAULT 0
 );
 """
 

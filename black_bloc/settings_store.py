@@ -3812,6 +3812,297 @@ KEY_HELP.update(
     }
 )
 
+# The personal best feed (docs/info/pb-feed-design.md) — its own block so parallel branches
+# merge textually. Every key sits under `core`: `pb_` would be a 26th setting group.
+PB_FEED_FEATURE = "pb_feed"
+PB_FEED_MODES = ("off", "shadow", "on")
+PB_FEED_MODE = "pb_feed_mode"
+PB_FEED_CHANNEL = "pb_feed_channel_id"
+PB_FEED_SHADOW_CHANNEL = shadow_feature_key(PB_FEED_FEATURE)
+PB_FEED_PING_ROLE = "pb_feed_ping_role_id"
+PB_FEED_AUTO_MATCH = "pb_feed_auto_match"
+PB_FEED_INTERVAL = "pb_feed_interval_minutes"
+PB_FEED_CYCLE_REQUESTS = "pb_feed_cycle_requests"
+PB_FEED_REMATCH_DAYS = "pb_feed_rematch_days"
+PB_FEED_MAX_AGE_DAYS = "pb_feed_max_age_days"
+PB_FEED_MAX_POSTS = "pb_feed_max_posts"
+PB_FEED_PANEL_MINUTES = "pb_feed_panel_minutes"
+PB_FEED_NUMBERS: dict[str, tuple[int, int, int]] = {
+    PB_FEED_INTERVAL: (60, 15, 1440),
+    PB_FEED_CYCLE_REQUESTS: (120, 1, 600),
+    PB_FEED_REMATCH_DAYS: (7, 1, 90),
+    PB_FEED_MAX_AGE_DAYS: (7, 1, 60),
+    PB_FEED_MAX_POSTS: (5, 1, 20),
+    PB_FEED_PANEL_MINUTES: (10, 1, 14),
+}
+PB_FEED_POST_FIELDS = (
+    "member",
+    "name",
+    "runner",
+    "game",
+    "category",
+    "time",
+    "place",
+    "place_line",
+    "link",
+)
+PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "pb_feed_post_title": (
+        "New personal best",
+        PB_FEED_POST_FIELDS,
+        "the heading of a personal best post",
+    ),
+    "pb_feed_post_text": (
+        "{member} ran **{game}** — {category} in **{time}**{place_line}.",
+        PB_FEED_POST_FIELDS,
+        "the body of a personal best post. {member} mentions the member without pinging them, "
+        "{name} is their display name, {runner} their speedrun.com name, {category} carries "
+        "the level and sub-category where the run has them, {place_line} is "
+        "pb_feed_place_text or nothing when speedrun.com gave no place, {link} is the run",
+    ),
+    "pb_feed_place_text": (
+        "— #{place} on the leaderboard",
+        ("place",),
+        "what {place_line} becomes in a personal best post when speedrun.com gives the run's "
+        "place, after a space; {place} is the number",
+    ),
+    "pb_feed_link_label": (
+        "Watch the run",
+        (),
+        "the label of the link button under a personal best post",
+    ),
+    "pb_feed_no_channel_words": (
+        "nowhere yet — pb_feed_channel_id is blank",
+        (),
+        "what the rehearsal note names as the real channel while pb_feed_channel_id is blank",
+    ),
+    "pb_feed_panel_title": (
+        "Personal bests",
+        (),
+        "the heading of the /pb panel",
+    ),
+    "pb_feed_panel_footer": (
+        "This panel has gone quiet — run /pb again",
+        (),
+        "the footer the /pb panel gets when its buttons have timed out",
+    ),
+    "pb_feed_you_matched": (
+        "**speedrun.com** — [{runner}]({link}), found from twitch.tv/{login}. A personal best "
+        "is posted once speedrun.com has verified it.",
+        ("runner", "link", "login"),
+        "what /pb tells a member Black Bloc matched from their Twitch link",
+    ),
+    "pb_feed_you_set": (
+        "**speedrun.com** — [{runner}]({link}), set by staff. A personal best is posted once "
+        "speedrun.com has verified it.",
+        ("runner", "link"),
+        "what /pb tells a member whose speedrun.com account staff set by hand",
+    ),
+    "pb_feed_you_none": (
+        "No speedrun.com account lists twitch.tv/{login} as its Twitch channel. Add your Twitch "
+        "channel to your speedrun.com profile and Black Bloc finds it within {days} day(s), or "
+        "ask staff to set it.",
+        ("login", "days"),
+        "what /pb tells a member whose Twitch login matched no speedrun.com account",
+    ),
+    "pb_feed_you_waiting": (
+        "Black Bloc has not looked for your speedrun.com account yet. It looks for a few "
+        "members a minute.",
+        (),
+        "what /pb tells a linked member Black Bloc has not looked up yet",
+    ),
+    "pb_feed_you_unlinked": (
+        "You have not linked a Twitch channel, so Black Bloc cannot find your speedrun.com "
+        "account. Link one with /golive, or ask staff to set it.",
+        (),
+        "what /pb tells a member with no Twitch link and no match",
+    ),
+    "pb_feed_you_opted_out": (
+        "You asked Black Bloc not to post your personal bests, so it does not look.",
+        (),
+        "what /pb tells a member who opted out",
+    ),
+    "pb_feed_you_blocked": (
+        "Staff have turned personal best posts off for you. Ask staff if that should change.",
+        (),
+        "what /pb tells a member staff have blocked from the personal best feed",
+    ),
+    "pb_feed_opt_out_label": (
+        "Do not post my personal bests",
+        (),
+        "the button a member presses on /pb to opt out",
+    ),
+    "pb_feed_opt_in_label": (
+        "Post my personal bests",
+        (),
+        "the button a member presses on /pb to opt back in",
+    ),
+    "pb_feed_opted_out_said": (
+        "Done — Black Bloc will not post your personal bests and has stopped looking.",
+        (),
+        "what a member is told after opting out of the personal best feed",
+    ),
+    "pb_feed_opted_in_said": (
+        "Done — your personal bests will be posted again. Runs verified before now are not "
+        "posted.",
+        (),
+        "what a member is told after opting back in to the personal best feed",
+    ),
+    "pb_feed_set_said": (
+        "{member} is now matched to **{runner}** on speedrun.com. Their existing personal "
+        "bests are recorded at the next look and not posted.",
+        ("member", "runner"),
+        "what staff are told after setting a member's speedrun.com account by hand",
+    ),
+    "pb_feed_unmatched_said": (
+        "{member} is no longer matched. Black Bloc may find a match from their Twitch link "
+        "again; press Block to stop that.",
+        ("member",),
+        "what staff are told after unmatching a member from the personal best feed",
+    ),
+    "pb_feed_blocked_said": (
+        "{member} is blocked: no match is looked for and nothing of theirs is posted until "
+        "staff unblock them or set an account by hand.",
+        ("member",),
+        "what staff are told after blocking a member from the personal best feed",
+    ),
+    "pb_feed_unblocked_said": (
+        "{member} is back in the personal best feed. Runs verified before now are not posted.",
+        ("member",),
+        "what staff are told after unblocking a member, or clearing their opt-out",
+    ),
+    "pb_feed_no_runner_said": (
+        "speedrun.com has no single account named exactly **{given}**, so nothing was changed. "
+        "Copy the name from the end of their speedrun.com profile address and try again.",
+        ("given",),
+        "what staff are told when the speedrun.com name they typed matches no account",
+    ),
+    "pb_feed_taken_said": (
+        "**{runner}** on speedrun.com is already matched to {holder}, so nothing was changed. "
+        "Unmatch them first if this is the right person.",
+        ("runner", "holder"),
+        "what staff are told when the speedrun.com account is already another member's",
+    ),
+    "pb_feed_not_now_said": (
+        "{member} asked not to have personal bests posted, so nothing was changed. Clear the "
+        "opt-out first if staff have decided otherwise.",
+        ("member",),
+        "what staff are told when they act on a member who opted out",
+    ),
+    "pb_feed_nothing_to_do_said": (
+        "{member} has nothing to change there, so nothing was done.",
+        ("member",),
+        "what staff are told when a personal best move does not apply to that member",
+    ),
+    "pb_feed_looked_said": (
+        "Looked at **{runner}** — {found} new personal best(s), {seen} on record.",
+        ("runner", "found", "seen"),
+        "what staff are told after Look now on a matched member",
+    ),
+    "pb_feed_failed_said": (
+        "Nothing was changed — {reason}",
+        ("reason",),
+        "what staff are told when speedrun.com could not be read; {reason} says why and what "
+        "to do",
+    ),
+    "pb_feed_off_said": (
+        "The personal best feed is **off**, so Black Bloc did not ask speedrun.com anything. "
+        "Set pb_feed_mode to shadow or on — in /settings or on the Settings page — and try "
+        "again.",
+        (),
+        "what staff are told when they ask for a look while pb_feed_mode is off",
+    ),
+}
+PB_FEED_DEFAULTS: dict[str, Any] = {
+    PB_FEED_MODE: "shadow",
+    PB_FEED_AUTO_MATCH: True,
+    **{key: default for key, (default, _, _) in PB_FEED_NUMBERS.items()},
+    **{key: default for key, (default, _, _) in PB_FEED_WORDS.items()},
+}
+PB_FEED_KEYS: tuple[str, ...] = (
+    PB_FEED_MODE,
+    PB_FEED_CHANNEL,
+    PB_FEED_SHADOW_CHANNEL,
+    PB_FEED_PING_ROLE,
+    PB_FEED_AUTO_MATCH,
+    *PB_FEED_NUMBERS,
+    *PB_FEED_WORDS,
+)
+KEY_TYPES.update(
+    {
+        PB_FEED_MODE: "enum",
+        PB_FEED_CHANNEL: "channel",
+        PB_FEED_SHADOW_CHANNEL: "channel",
+        PB_FEED_PING_ROLE: "role",
+        PB_FEED_AUTO_MATCH: "bool",
+        **{key: "int" for key in PB_FEED_NUMBERS},
+        **{key: "text" for key in PB_FEED_WORDS},
+    }
+)
+KEY_CHOICES[PB_FEED_MODE] = PB_FEED_MODES
+KEY_MIN.update({key: low for key, (_, low, _) in PB_FEED_NUMBERS.items()})
+KEY_MAX.update({key: high for key, (_, _, high) in PB_FEED_NUMBERS.items()})
+KEY_MIN_REASON[PB_FEED_INTERVAL] = (
+    "speedrun.com allows 100 requests a minute from one address; under {limit} minutes "
+    "Black Bloc would be asking about the same members more often than a run gets verified."
+)
+KEY_HELP.update(
+    {
+        PB_FEED_MODE: (
+            "off, shadow or on. off asks speedrun.com nothing; shadow — the default — looks, "
+            "and sends each new personal best to the rehearsal home with a line naming where "
+            "it would have gone; on posts it in pb_feed_channel_id. A personal best is posted "
+            "only once speedrun.com has verified it, and a member's existing ones are never "
+            "posted"
+        ),
+        PB_FEED_CHANNEL: (
+            "where a new personal best is posted while pb_feed_mode is on. Blank posts "
+            "nothing and says so in the log — Black Bloc never picks a channel itself"
+        ),
+        PB_FEED_SHADOW_CHANNEL: (
+            "where a new personal best is rehearsed while pb_feed_mode is shadow; blank means "
+            "shadow_channel_id"
+        ),
+        PB_FEED_PING_ROLE: (
+            "a role mentioned above each personal best post; blank — the default — pings "
+            "nobody. A rehearsal copy never pings"
+        ),
+        PB_FEED_AUTO_MATCH: (
+            "true — the default — finds a member's speedrun.com account from the Twitch "
+            "channel they linked with /golive, when exactly one account lists that channel; "
+            "false leaves matching to staff. A member who opted out, or whom staff blocked, "
+            "is never matched automatically either way"
+        ),
+        PB_FEED_INTERVAL: (
+            "how many minutes pass between two looks at one member's personal bests; 60 by "
+            "default, 15 to 1440. The members are spread across the interval, a few a minute"
+        ),
+        PB_FEED_CYCLE_REQUESTS: (
+            "the most requests Black Bloc sends speedrun.com within one "
+            "pb_feed_interval_minutes; 120 by default. At the cap it stops until the interval "
+            "has passed and says so once in the log"
+        ),
+        PB_FEED_REMATCH_DAYS: (
+            "how many days pass before Black Bloc looks again for the speedrun.com account of "
+            "a member it found none for; 7 by default"
+        ),
+        PB_FEED_MAX_AGE_DAYS: (
+            "a run verified more than this many days ago is recorded and not posted; 7 by "
+            "default. It is what stops old runs being posted after a long outage or when a "
+            "leaderboard is reorganised"
+        ),
+        PB_FEED_MAX_POSTS: (
+            "the most personal bests posted for one member from one look; 5 by default. The "
+            "rest are recorded and never posted"
+        ),
+        PB_FEED_PANEL_MINUTES: (
+            "minutes the /pb panel stays live before its buttons disable themselves; 10 by "
+            "default"
+        ),
+        **{key: said for key, (_, _, said) in PB_FEED_WORDS.items()},
+    }
+)
+
 
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
@@ -3842,6 +4133,7 @@ CORE_KEYS = (
     PANEL_EXPIRED_TEXT_KEY,
     QUIET_BOT_PINS,
     *STRUCTURE_BACKUP_KEYS,
+    *PB_FEED_KEYS,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -4419,6 +4711,9 @@ TEXT_CHECKS.update(
 )
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, fields in STRUCTURE_BACKUP_FIELDS.items()}
+)
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in PB_FEED_WORDS.items()}
 )
 
 VOICE_SHEET_CHARS = 4000
@@ -8305,6 +8600,8 @@ class SettingsStore:
             return MINUTES_PANEL_MINUTES_DEFAULT
         if key in STRUCTURE_BACKUP_DEFAULTS:
             return STRUCTURE_BACKUP_DEFAULTS[key]
+        if key in PB_FEED_DEFAULTS:
+            return PB_FEED_DEFAULTS[key]
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

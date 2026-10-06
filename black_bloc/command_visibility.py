@@ -24,6 +24,7 @@ HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "golive_mode": ("golive",),
     "honeypot_mode": ("honeypot",),
     "minutes_mode": ("minutes",),
+    "pb_feed_mode": ("pb",),
     "pings_mode": ("pings",),
     "poll_mode": ("poll",),
     "posts_mode": ("posts",),
