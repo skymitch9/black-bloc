@@ -3429,6 +3429,7 @@ SHADOW_HOME_WORDS = {
     "marathon_public": "a marathon's public highlights of BaF runners and its public reminders",
     "poll": "polls and their results",
     "birthday": "birthday wishes",
+    "sticky": "sticky messages",
 }
 SHADOW_HOME_KEYS = {feature: shadow_feature_key(feature) for feature in SHADOW_HOME_WORDS}
 KEY_TYPES.update({key: "channel" for key in SHADOW_HOME_KEYS.values()})
@@ -3492,6 +3493,91 @@ KEY_HELP.update(
 )
 
 
+# Sticky messages: one staff-set note per channel that is kept at the bottom.
+STICKY_MODE = "sticky_mode"
+STICKY_AFTER_MESSAGES = "sticky_after_messages"
+STICKY_MIN_SECONDS = "sticky_min_seconds"
+STICKY_SILENT = "sticky_silent"
+STICKY_PANEL_MINUTES = "sticky_panel_minutes"
+STICKY_MODES = ("off", "shadow", "on")
+STICKY_MODE_DEFAULT = "shadow"
+STICKY_AFTER_MESSAGES_DEFAULT = 5
+STICKY_AFTER_MESSAGES_MIN = 1
+STICKY_AFTER_MESSAGES_MAX = 100
+STICKY_MIN_SECONDS_DEFAULT = 30
+STICKY_MIN_SECONDS_MIN = 5
+STICKY_MIN_SECONDS_MAX = 3600
+STICKY_SILENT_DEFAULT = True
+STICKY_PANEL_MINUTES_DEFAULT = 10
+STICKY_DEFAULTS: dict[str, Any] = {
+    STICKY_MODE: STICKY_MODE_DEFAULT,
+    STICKY_AFTER_MESSAGES: STICKY_AFTER_MESSAGES_DEFAULT,
+    STICKY_MIN_SECONDS: STICKY_MIN_SECONDS_DEFAULT,
+    STICKY_SILENT: STICKY_SILENT_DEFAULT,
+    STICKY_PANEL_MINUTES: STICKY_PANEL_MINUTES_DEFAULT,
+}
+KEY_TYPES.update(
+    {
+        STICKY_MODE: "enum",
+        STICKY_AFTER_MESSAGES: "int",
+        STICKY_MIN_SECONDS: "int",
+        STICKY_SILENT: "bool",
+        STICKY_PANEL_MINUTES: "int",
+    }
+)
+KEY_CHOICES[STICKY_MODE] = STICKY_MODES
+KEY_MIN[STICKY_AFTER_MESSAGES] = STICKY_AFTER_MESSAGES_MIN
+KEY_MAX[STICKY_AFTER_MESSAGES] = STICKY_AFTER_MESSAGES_MAX
+KEY_MIN[STICKY_MIN_SECONDS] = STICKY_MIN_SECONDS_MIN
+KEY_MAX[STICKY_MIN_SECONDS] = STICKY_MIN_SECONDS_MAX
+KEY_MIN[STICKY_PANEL_MINUTES] = 1
+KEY_MIN_REASON[STICKY_AFTER_MESSAGES] = (
+    "A sticky message has to wait for at least {limit} new message before it moves."
+)
+KEY_MAX_REASON[STICKY_AFTER_MESSAGES] = (
+    "Past {limit} messages a sticky message is so far up the channel that nobody reads it."
+)
+KEY_MIN_REASON[STICKY_MIN_SECONDS] = (
+    "Under {limit} seconds a busy channel would have Black Bloc deleting and posting faster "
+    "than Discord allows."
+)
+KEY_MAX_REASON[STICKY_MIN_SECONDS] = (
+    "{limit} seconds is an hour; longer than that and the sticky message is not at the bottom "
+    "when people need it."
+)
+KEY_HELP.update(
+    {
+        STICKY_MODE: (
+            "off, shadow or on. shadow — the default — posts nothing in the real channel: each "
+            "copy goes to the rehearsal home with a line naming where it would have gone. on "
+            "keeps each sticky message at the bottom of its own channel. off takes every copy "
+            "down and keeps the words"
+        ),
+        STICKY_AFTER_MESSAGES: (
+            "how many new messages from people it takes before a sticky message is posted "
+            "again at the bottom; 5 by default, 1 to 100. Black Bloc's own messages and other "
+            "bots' do not count"
+        ),
+        STICKY_MIN_SECONDS: (
+            "the shortest gap, in seconds, between two copies of one sticky message; 30 by "
+            "default, 5 to 3600. Both this and sticky_after_messages have to be met, so a busy "
+            "channel never gets a copy per message"
+        ),
+        STICKY_SILENT: (
+            "whether a sticky message is posted silently, so moving it to the bottom never "
+            "lights up anybody's notifications. on by default"
+        ),
+        STICKY_PANEL_MINUTES: (
+            "minutes the /sticky panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
+STICKY_KEYS = (*STICKY_DEFAULTS, SHADOW_HOME_KEYS["sticky"])
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -3548,6 +3634,7 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_SHOW_REQUEST: "modmail",
     FRONTDOOR_SHOW_EVENT: "modmail",
     SHADOW_HOME_KEYS["frontdoor"]: "modmail",
+    **{key: "posts" for key in STICKY_KEYS},
     HANDOFF_MODE: "request",
     HANDOFF_CONFIRM_HOURS: "request",
     "minutes_mode": "events",
@@ -7907,6 +7994,8 @@ class SettingsStore:
             return SETTINGS_CORE_KEYS_ADMIN_ONLY_DEFAULT
         if key == QUIET_BOT_PINS:
             return QUIET_BOT_PINS_DEFAULT
+        if key in STICKY_DEFAULTS:
+            return STICKY_DEFAULTS[key]
         if key == ERROR_SENTENCE_KEY:
             return ERROR_SENTENCE
         if key == ERROR_RETRY_LABEL_KEY:
