@@ -110,7 +110,7 @@ def posting_of(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
     following = bool(row["active"]) and mode_of(bot, guild.id) != MODE_OFF
 
     def run_role(run: Any) -> bool:
-        return verdict.mentions and bool(people_for(row, run))
+        return verdict.mentions and bool(people_for(bot, guild, row, run))
 
     def block_role(block: Any) -> bool:
         found = role_for(bot, guild, row, block, ping_mark)
@@ -128,7 +128,7 @@ def posting_of(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
         and reminder_channel(bot, guild.id) is not None,
         "run_role": run_role,
         "block_role": block_role,
-        "block_speaks": lambda block: bool(speaking(row, block)),
+        "block_speaks": lambda block: bool(speaking(bot, guild, row, block)),
     }
 
 

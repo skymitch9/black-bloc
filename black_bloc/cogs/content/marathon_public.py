@@ -117,26 +117,45 @@ def shadowed(bot: Any, guild: Any, text: str, home: int | None = None) -> str:
     return f"{said}\n{text}" if said else text
 
 
-def button_of(bot: Any, guild: Any, marathon: Any, row: Any) -> mp.Button | None:
-    return mp.button_for(
+def button_of(bot: Any, guild: Any, marathon: Any, row: Any) -> tuple:
+    """What a run's post carries: the whole-marathon opt-out, then each person's own moves."""
+    from .marathon_announce import controls_of
+
+    whole = mp.button_for(
         marathon["id"],
         row,
         opted=ma.opted_out(marathon),
         out_label=words(bot, guild.id, MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY),
         in_label=words(bot, guild.id, MARATHON_PUBLIC_BUTTON_OPT_IN_KEY),
     )
+    return (() if whole is None else (whole,)) + controls_of(bot, guild, marathon, row)
 
 
-def people_for(marathon: Any, row: Any) -> list[dict[str, Any]]:
-    """Everyone of ours on the run who is not opted out: the names a public post carries."""
-    return ma.run_people(row, ma.opted_out(marathon))
+def people_for(
+    bot: Any, guild: Any, marathon: Any, row: Any, *, standing: bool = False
+) -> list[dict[str, Any]]:
+    """Everyone of ours a public post about the run names, as it writes them."""
+    from .marathon_announce import people_for as announced
+
+    return announced(bot, guild, marathon, row, standing=standing)
 
 
-def view_of(button: mp.Button | None, marathon_id: Any, run_id: Any) -> discord.ui.View | None:
-    if button is None:
+def view_of(buttons: Any, marathon_id: Any, run_id: Any) -> discord.ui.View | None:
+    """The whole-marathon button on the first row, then a row a person, or the one menu."""
+    if not buttons:
         return None
     view = discord.ui.View(timeout=None)
-    view.add_item(HighlightButton(marathon_id, run_id, button.to, button.label))
+    rows: dict[int, int] = {}
+    for one in buttons:
+        if isinstance(one, ma.Pick):
+            view.add_item(AnnouncePick(marathon_id, run_id, one.label, one.options))
+        elif isinstance(one, ma.Move):
+            row = rows.setdefault(one.user_id, len(rows) + 1)
+            view.add_item(
+                AnnounceButton(marathon_id, run_id, one.user_id, one.to, one.label, row=row)
+            )
+        else:
+            view.add_item(HighlightButton(marathon_id, run_id, one.to, one.label))
     return view
 
 
@@ -310,7 +329,9 @@ async def post_highlight(
     """`(why, channel_id)`: a highlight staff took down comes back in place when it is still in
     the channel it would go to now; otherwise a new one is posted."""
     bot = cog.bot
-    text = await public_text(bot, guild, marathon, row, people=people_for(marathon, row) or None)
+    text = await public_text(
+        bot, guild, marathon, row, people=people_for(bot, guild, marathon, row) or None
+    )
     shadow = mode_of(bot, guild.id) != MODE_ON
     base = details_of(marathon, row) | {"auto": auto, "via": via}
     if mp.message_id(row) and mp.is_removed(row):
@@ -413,7 +434,7 @@ async def sync_highlights(cog: Any, guild: Any, marathon: Any) -> None:
     since(cog)
     for row in rows:
         key = int(row["id"])
-        people = people_for(marathon, row) or None
+        people = people_for(bot, guild, marathon, row, standing=True) or None
         text = await public_text(bot, guild, marathon, row, people=people)
         if cache.get(key) == (mp.channel_of(row), text):
             continue
@@ -465,7 +486,9 @@ async def auto_highlight(cog: Any, guild: Any, marathon: Any, row: Any) -> None:
             return
         if mode_of(cog.bot, guild.id) == MODE_OFF or public_channel(cog.bot, guild.id) is None:
             return
-        if not announces(cog.bot, guild.id, marathon) or not people_for(marathon, row):
+        if not announces(cog.bot, guild.id, marathon):
+            return
+        if not people_for(cog.bot, guild, marathon, row):
             return
         await post_highlight(cog, guild, marathon, row, auto=True)
     except Exception as exc:
@@ -518,7 +541,9 @@ async def put_back(
     message, _lost = await fetch_public(bot, guild, row)
     if message is None:
         return False
-    text = await public_text(bot, guild, marathon, row, people=people_for(marathon, row) or None)
+    text = await public_text(
+        bot, guild, marathon, row, people=people_for(bot, guild, marathon, row) or None
+    )
     if await edit_public(bot, guild, message, text) is not None:
         return False
     await update_run(bot.db, row["id"], public_removed=0)
@@ -538,18 +563,27 @@ async def put_back(
 async def follow_opt(
     cog: Any, guild: Any, marathon: Any, user_ids: Any, *, actor: Any, via: str
 ) -> None:
-    """After an opt-out: a highlight that names nobody any more is taken down; after an opt-in,
-    one that was taken down comes back in place while its run is not over."""
+    """After an answer changed: a highlight that names nobody any more is taken down, one
+    that still names someone is rewritten in place, and one that was taken down comes back in
+    place while its run is not over and the marathon still announces."""
     bot = cog.bot
     wanted = {int(one) for one in user_ids}
+    changed = False
     for row in await runs_of(bot.db, marathon["id"]):
         if not mp.message_id(row) or not wanted & set(mt.member_ids(row)):
             continue
-        people = people_for(marathon, row)
-        if mp.is_up(row) and not people:
+        if mp.is_up(row) and not people_for(bot, guild, marathon, row, standing=True):
             await remove_highlight(cog, guild, marathon, row, actor=actor, via=via)
-        elif mp.is_removed(row) and people and row["state"] in (mt.UPCOMING, mt.LIVE):
+        elif mp.is_up(row):
+            changed = True
+        elif (
+            mp.is_removed(row)
+            and row["state"] in (mt.UPCOMING, mt.LIVE)
+            and people_for(bot, guild, marathon, row)
+        ):
             await put_back(cog, guild, marathon, row, actor=actor, via=via)
+    if changed:
+        await sync_highlights(cog, guild, marathon)
 
 
 async def set_public_highlight(
@@ -643,7 +677,117 @@ class HighlightButton(
         await answer(interaction, outcome.message)
 
 
+async def gated(interaction: discord.Interaction) -> bool:
+    """A press on a run's post: the test guard, staff re-checked, the database up."""
+    bot = interaction.client
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(interaction.channel_id):
+        await answer(interaction, guard.refusal_message())
+        return False
+    if not await still_staff(interaction):
+        return False
+    if not bot.db.is_connected:
+        await answer(interaction, DB_UNAVAILABLE)
+        return False
+    await interaction.response.defer(ephemeral=True)
+    return True
+
+
+class AnnounceButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=ma.MOVE_TEMPLATE
+):
+    def __init__(
+        self,
+        marathon_id: int,
+        run_id: int,
+        user_id: int,
+        to: str,
+        label: str | None = None,
+        row: int | None = None,
+    ) -> None:
+        self.marathon_id = int(marathon_id)
+        self.run_id = int(run_id)
+        self.user_id = int(user_id)
+        self.to = to
+        super().__init__(
+            discord.ui.Button(
+                label=ma.label(label or to),
+                style=discord.ButtonStyle.secondary,
+                custom_id=ma.MOVE_ID.format(
+                    marathon_id=int(marathon_id), run_id=int(run_id), user_id=int(user_id), to=to
+                ),
+                row=row,
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
+        return cls(
+            int(match["marathon_id"]), int(match["run_id"]), int(match["user_id"]), match["to"]
+        )
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        from .marathon_announce import press as person_press
+
+        if not await gated(interaction):
+            return
+        outcome = await person_press(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.marathon_id,
+            self.run_id,
+            self.user_id,
+            self.to,
+        )
+        await answer(interaction, outcome.message)
+
+
+class AnnouncePick(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Select], template=ma.PICK_TEMPLATE
+):
+    def __init__(
+        self, marathon_id: int, run_id: int, placeholder: str | None = None, options: Any = ()
+    ) -> None:
+        self.marathon_id = int(marathon_id)
+        self.run_id = int(run_id)
+        super().__init__(
+            discord.ui.Select(
+                placeholder=ma.label(placeholder, ma.OPTION_LABEL_LIMIT),
+                options=[discord.SelectOption(label=said, value=value) for value, said in options],
+                custom_id=ma.PICK_ID.format(marathon_id=int(marathon_id), run_id=int(run_id)),
+                row=1,
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
+        return cls(int(match["marathon_id"]), int(match["run_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        from .marathon_announce import press as person_press
+
+        if not await gated(interaction):
+            return
+        found = ma.option_of((self.item.values or [None])[0])
+        if found is None:
+            await answer(interaction, ma.BAD_RUN)
+            return
+        outcome = await person_press(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.marathon_id,
+            self.run_id,
+            found[0],
+            found[1],
+        )
+        await answer(interaction, outcome.message)
+
+
 __all__ = [
+    "AnnounceButton",
+    "AnnouncePick",
     "HighlightButton",
     "auto_highlight",
     "button_of",

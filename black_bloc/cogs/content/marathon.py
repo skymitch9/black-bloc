@@ -369,6 +369,8 @@ MARATHON_COLUMNS = {
     "host_highlight_posts",
     "announcements",
     "announce_opt_out",
+    "host_announcements",
+    "mention_people",
     "overlay",
     "overlay_sheet",
 }
@@ -394,6 +396,7 @@ RUN_COLUMNS = {
     "shout_channel_id",
     "reminders_sent",
     "reminder_posts",
+    "announce_people",
     "last_seen_at",
     "event_id",
     "post_message_id",
@@ -1714,7 +1717,7 @@ class Marathons(commands.Cog):
         from .marathon_inbox import InboxButton
         from .marathon_near_miss import NearMissButton
         from .marathon_people import PeopleButton
-        from .marathon_public import HighlightButton
+        from .marathon_public import AnnounceButton, AnnouncePick, HighlightButton
         from .marathon_role import MarathonRoleButton
         from .marathon_thread_controls import ControlButton
 
@@ -1726,6 +1729,8 @@ class Marathons(commands.Cog):
             InboxButton,
             ControlButton,
             HighlightButton,
+            AnnounceButton,
+            AnnouncePick,
             NearMissButton,
             MarathonRoleButton,
         )

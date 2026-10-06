@@ -37,7 +37,10 @@ def test_a_press_moves_one_half_and_keeps_the_other(mode, action, to, wanted):
 
 
 def test_each_button_carries_the_move_it_makes():
-    event, runs, spot, highlight, ping, announce = mtc.controls("marathon", ms.DARK)
+    event, runs, spot, highlight, ping, announce, hosts = mtc.controls("marathon", ms.DARK)
+    assert (hosts.action, hosts.to, hosts.word) == ("hostannounce", "on", "off")
+    hosts_on = mtc.controls("marathon", ms.DARK, host_announce=True)[6]
+    assert (hosts_on.action, hosts_on.to, hosts_on.word) == ("hostannounce", "off", "on")
     assert (event.to, event.word) == ("off", "on")
     assert (runs.to, runs.word) == ("on", "off")
     assert (spot.to, spot.word, spot.disabled) == ("on", "off", False)
@@ -92,7 +95,7 @@ def test_a_label_is_clamped_and_never_empty():
 
 
 def test_the_event_schedule_button_is_there_only_when_a_sheet_matches():
-    assert len(mtc.controls("marathon", ms.DARK)) == 6
+    assert len(mtc.controls("marathon", ms.DARK)) == 7
     on = mtc.controls("marathon", ms.DARK, overlay=True)[-1]
     assert (on.action, on.to, on.word) == ("overlay", "off", "on")
     off = mtc.controls("marathon", ms.DARK, overlay=False)[-1]

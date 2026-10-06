@@ -61,6 +61,8 @@ LINK_NEAR = "link_near"
 TWITCH = "twitch"
 OPT_OUT = "opt_out"
 OPT_IN = "opt_in"
+RUN_ANSWER = "run_answer"
+MENTION = "mention"
 BACK = "back"
 LABELS = {
     SPOTLIGHT: ("Spotlight", discord.ButtonStyle.primary),
@@ -70,6 +72,8 @@ LABELS = {
     TWITCH: ("Twitch name…", discord.ButtonStyle.secondary),
     OPT_OUT: ("{label}", discord.ButtonStyle.secondary),
     OPT_IN: ("{label}", discord.ButtonStyle.primary),
+    RUN_ANSWER: ("{label}", discord.ButtonStyle.secondary),
+    MENTION: ("{label}", discord.ButtonStyle.secondary),
     BACK: ("Back", discord.ButtonStyle.secondary),
 }
 PEOPLE_BUTTON = "People…"
@@ -461,6 +465,9 @@ def slot_card(
         opt_move = opt_move_for(bot, guild, marathon, chosen)
         if opt_move is not None:
             view.add_item(opt_move)
+        for one in run_moves_for(bot, guild, marathon, run, chosen):
+            view.add_item(one)
+        lines += run_state_for(bot, guild, marathon, run, chosen)
         near = entry.get("looks_like")
         if near and not chosen.get("user_id"):
             view.add_item(PeopleMove(LINK_NEAR, username=near["username"]))
@@ -480,6 +487,44 @@ def opt_move_for(bot: Any, guild: Any, marathon: Any, chosen: dict[str, Any]) ->
         return PeopleMove(OPT_IN, label=label, user_id=chosen["user_id"])
     label = public_words(bot, guild.id, MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY)
     return PeopleMove(OPT_OUT, label=label, user_id=chosen["user_id"])
+
+
+def announced_person(run: Any, chosen: dict[str, Any]) -> dict[str, Any] | None:
+    if not chosen.get("user_id"):
+        return None
+    return next(
+        (one for one in ma.baf_on(run) if int(one["user_id"]) == int(chosen["user_id"])), None
+    )
+
+
+def run_moves_for(bot: Any, guild: Any, marathon: Any, run: Any, chosen: dict[str, Any]) -> list:
+    """This run's own answer for a BaF person and their @ — the run post's buttons, here."""
+    from .marathon_announce import labels_of, policy_of
+
+    person = announced_person(run, chosen)
+    if person is None or not ma.shown(run):
+        return []
+    found = policy_of(bot, guild.id, marathon)
+    labels = labels_of(bot, guild.id)
+    name = str(person.get("name") or person["user_id"])
+    made = []
+    for action, to in (
+        (RUN_ANSWER, ma.run_move(found, run, person)),
+        (MENTION, ma.mention_move(found, person)),
+    ):
+        said = mt.render(labels[to], "{name}", name=name).text
+        made.append(PeopleMove(action, label=said, user_id=person["user_id"], to=to, row=3))
+    return made
+
+
+def run_state_for(bot: Any, guild: Any, marathon: Any, run: Any, chosen: dict[str, Any]) -> list:
+    from .marathon_announce import state_lines
+
+    person = announced_person(run, chosen)
+    if person is None:
+        return []
+    found = state_lines(bot, guild, marathon, run, only=person["user_id"])
+    return ["", *found] if found else []
 
 
 async def render(interaction: discord.Interaction, embed: Any, view: Any, previous: Any) -> None:
@@ -594,7 +639,17 @@ class TwitchModal(AnswersErrors, discord.ui.Modal, title=TWITCH_TITLE):
         )
 
 
-def doing_for(action: str, name: Any, run_id: Any, member_id: Any) -> Any:
+def doing_for(action: str, name: Any, run_id: Any, member_id: Any, to: Any = None) -> Any:
+    if action == RUN_ANSWER:
+        from .marathon_announce import set_run_answer
+
+        return lambda bot, guild, actor, row: set_run_answer(
+            bot, guild, actor, row, run_id, member_id, to
+        )
+    if action == MENTION:
+        from .marathon_announce import set_mention
+
+        return lambda bot, guild, actor, row: set_mention(bot, guild, actor, row, member_id, to)
     if action in (OPT_OUT, OPT_IN):
         from .marathon_announce import set_opt_out
 
@@ -614,17 +669,25 @@ def doing_for(action: str, name: Any, run_id: Any, member_id: Any) -> Any:
 
 class PeopleMove(discord.ui.Button):
     def __init__(
-        self, action: str, *, username: str = "", label: str = "", user_id: Any = None
+        self,
+        action: str,
+        *,
+        username: str = "",
+        label: str = "",
+        user_id: Any = None,
+        to: Any = None,
+        row: int = 2,
     ) -> None:
         words, style = LABELS[action]
         super().__init__(
             label=words.format(username=username, label=label)[:80] or "…",
             style=style,
-            row=4 if action == BACK else 2,
+            row=4 if action == BACK else row,
         )
         self.action = action
         self.username = username
         self.user_id = user_id
+        self.to = to
 
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
@@ -648,7 +711,9 @@ class PeopleMove(discord.ui.Button):
                 await interaction.response.send_modal(TwitchModal(view, current))
             return
         member_id = self.user_id or usernames_of(interaction.guild).get(self.username)
-        await people_move(interaction, view, doing_for(self.action, name, view.run_id, member_id))
+        await people_move(
+            interaction, view, doing_for(self.action, name, view.run_id, member_id, self.to)
+        )
 
 
 class DayPick(discord.ui.Select):

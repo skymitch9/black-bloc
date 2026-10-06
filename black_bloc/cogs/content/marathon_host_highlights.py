@@ -70,9 +70,13 @@ def wanted(bot: Any, guild: Any, marathon: Any) -> bool:
     )
 
 
-def speaking(marathon: Any, block: mhh.Block) -> list[dict[str, Any]]:
-    """The block's hosts who are not opted out: the names its public posts carry."""
-    return ma.kept(block.hosts, ma.opted_out(marathon))
+def speaking(
+    bot: Any, guild: Any, marathon: Any, block: mhh.Block, *, standing: bool = False
+) -> list[dict[str, Any]]:
+    """The block's hosts its public posts name: each one announced for a run of it."""
+    from .marathon_announce import speaking as announced
+
+    return announced(bot, guild, marathon, block, standing=standing)
 
 
 def sent_cache(cog: Any, marathon_id: Any) -> dict[int, tuple[int | None, str]]:
@@ -282,7 +286,8 @@ async def sync_host_highlights(cog: Any, guild: Any, marathon: Any) -> None:
                 continue
             seen.add(id(record))
             changed = mhh.attach(record, block) or changed
-            if await follow_one(cog, guild, fresh, block, record, speaking(fresh, block)):
+            people = speaking(bot, guild, fresh, block, standing=True)
+            if await follow_one(cog, guild, fresh, block, record, people):
                 changed = True
         runs = await runs_of(bot.db, fresh["id"])
         for record in found:
@@ -290,7 +295,7 @@ async def sync_host_highlights(cog: Any, guild: Any, marathon: Any) -> None:
                 continue
             block = mhh.left_behind(record, runs)
             if block is not None and await follow_one(
-                cog, guild, fresh, block, record, speaking(fresh, block)
+                cog, guild, fresh, block, record, speaking(bot, guild, fresh, block, standing=True)
             ):
                 changed = True
         if changed:
@@ -313,7 +318,7 @@ async def went_live(cog: Any, guild: Any, marathon: Any, run_id: Any) -> None:
         for block, record in claimed(found, await blocks_of(bot, guild, fresh)):
             if int(run_id) not in block.run_ids:
                 continue
-            people = speaking(fresh, block)
+            people = speaking(bot, guild, fresh, block)
             if not people or not mhh.auto_wanted(fresh, block, record):
                 return
             if record is None:
@@ -415,13 +420,13 @@ async def heads_up(
         None if marathon_role is None else mrp.unsent(marathon_role, mrp.NO_PUBLIC_COPY)
     )
     base = details_of(marathon, block, mark=mark)
-    people = speaking(marathon, block)
+    people = speaking(bot, guild, marathon, block)
     because = (
         "public_reminders_off"
         if not public_reminders_wanted(bot, guild.id)
         else "announcements_off"
         if not announces(bot, guild.id, marathon)
-        else "opted_out"
+        else quiet_because(bot, guild, marathon, block)
         if not people
         else None
     )
@@ -471,6 +476,16 @@ async def heads_up(
     return mrem.copy_of(message, channel_id, text, mt._cell(block.first, "scheduled_at"))
 
 
+def quiet_because(bot: Any, guild: Any, marathon: Any, block: mhh.Block) -> str:
+    """Why a block names nobody: the host default, unless turning it on would change nothing."""
+    from .marathon_announce import policy_of
+
+    found = policy_of(bot, guild.id, marathon)
+    if not found.hosts_on and ma.block_people(block, found._replace(hosts_on=True)):
+        return "host_announcements_off"
+    return "opted_out"
+
+
 def role_for(
     bot: Any, guild: Any, marathon: Any, block: mhh.Block, mark: int
 ) -> mrp.Verdict | None:
@@ -478,7 +493,7 @@ def role_for(
     if mark != int(bot.store.get(guild.id, MARATHON_PING_MINUTES_KEY)):
         return None
     verdict = verdict_for(bot, guild, marathon)
-    if mt.is_ours(block.first) and people_for(marathon, block.first):
+    if mt.is_ours(block.first) and people_for(bot, guild, marathon, block.first):
         return mrp.unsent(verdict, mrp.RUNNER_COPY)
     return verdict
 
@@ -532,23 +547,32 @@ async def take_down(
 async def follow_opt(
     cog: Any, guild: Any, marathon: Any, user_ids: Any, *, actor: Any, via: str
 ) -> None:
-    """After an opt-out a block's post that names nobody any more is taken down; after an
-    opt-in one taken down comes back in place while its block is not over."""
+    """After an answer changed a block's post that names nobody any more is taken down, one
+    that still names someone is rewritten in place, and one taken down comes back in place
+    while its block is not over and the marathon still announces."""
     bot = cog.bot
     wanted_ids = {int(one) for one in user_ids}
     found = mhh.records(marathon)
     if not any(one.get("message_id") for one in found):
         return
+    changed = False
     for block, record in claimed(found, await blocks_of(bot, guild, marathon)):
         if record is None or not record.get("message_id"):
             continue
         if not wanted_ids & set(block.user_ids):
             continue
-        people = speaking(marathon, block)
-        if mhh.is_up(record) and not people:
+        if mhh.is_up(record) and not speaking(bot, guild, marathon, block, standing=True):
             await take_down(cog, guild, marathon, block, record, found, actor=actor, via=via)
-        elif record["removed"] and people and mhh.state_of(block) != mhh.DONE:
-            await put_back(cog, guild, marathon, block, record, found, people, actor=actor, via=via)
+        elif mhh.is_up(record):
+            changed = True
+        elif record["removed"] and mhh.state_of(block) != mhh.DONE:
+            people = speaking(bot, guild, marathon, block)
+            if people:
+                await put_back(
+                    cog, guild, marathon, block, record, found, people, actor=actor, via=via
+                )
+    if changed:
+        await sync_host_highlights(cog, guild, marathon)
 
 
 async def hosts_of(bot: Any, guild: Any, marathon: Any) -> dict[int, str]:

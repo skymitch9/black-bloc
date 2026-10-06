@@ -175,7 +175,7 @@ async def run_text(cog: Any, guild: Any, marathon: Any, row: Any, name: str) -> 
     )
     if name == mrem.STAFF:
         return staff
-    people = people_for(marathon, row)
+    people = people_for(cog.bot, guild, marathon, row, standing=True)
     if not people:
         return None
     return reminder_text(
@@ -264,7 +264,7 @@ async def follow_block(
 ) -> bool:
     bot = cog.bot
     at = mt._cell(block.first, "scheduled_at")
-    people = speaking(marathon, block)
+    people = speaking(bot, guild, marathon, block, standing=True)
     login = await channel_login(bot, marathon)
 
     async def text_for(name: str) -> str | None:

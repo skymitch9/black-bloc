@@ -412,14 +412,14 @@ async def test_a_baf_persons_slot_offers_opt_out_and_opt_back_in(bot, cog):  # n
         return [one for one in view.children if isinstance(one, people.PeopleMove)]
 
     (move,) = [one for one in await slot() if one.action == people.OPT_OUT]
-    assert move.label == "Opt out of highlight" and move.user_id == ANARCHY
+    assert move.label == "Opt out of every run on this marathon" and move.user_id == ANARCHY
     said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id)(
         bot, bot.guild, FakeActor(), marathon
     )
     assert said.ok and "is opted out of" in said.message
     assert ma.opted_out(await get_marathon(bot.db, GUILD, marathon["id"])) == {ANARCHY}
     (move,) = [one for one in await slot() if one.action == people.OPT_IN]
-    assert move.label == "Opt back in"
+    assert move.label == "Opt back in to this marathon"
     said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id)(
         bot, bot.guild, FakeActor(), marathon
     )

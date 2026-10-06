@@ -19,6 +19,9 @@ from ...settings_store import (
     MARATHON_ANNOUNCEMENTS_DEFAULT_KEY,
     MARATHON_ANNOUNCEMENTS_OFF_SAID_KEY,
     MARATHON_ANNOUNCEMENTS_ON_SAID_KEY,
+    MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY,
+    MARATHON_HOST_ANNOUNCEMENTS_OFF_SAID_KEY,
+    MARATHON_HOST_ANNOUNCEMENTS_ON_SAID_KEY,
     MARATHON_HOST_EVENT_DESCRIPTION_KEY,
     MARATHON_HOST_EVENT_TITLE_KEY,
     MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY,
@@ -42,11 +45,14 @@ HOST_GONE = "marathon_removed"
 SAID = {
     (mh.ANNOUNCE, True): MARATHON_ANNOUNCEMENTS_ON_SAID_KEY,
     (mh.ANNOUNCE, False): MARATHON_ANNOUNCEMENTS_OFF_SAID_KEY,
+    (mh.HOST_ANNOUNCE, True): MARATHON_HOST_ANNOUNCEMENTS_ON_SAID_KEY,
+    (mh.HOST_ANNOUNCE, False): MARATHON_HOST_ANNOUNCEMENTS_OFF_SAID_KEY,
     (mh.OVERLAY, True): MARATHON_OVERLAY_ON_SAID_KEY,
     (mh.OVERLAY, False): MARATHON_OVERLAY_OFF_SAID_KEY,
 }
 DEFAULTS = {
     mh.ANNOUNCE: MARATHON_ANNOUNCEMENTS_DEFAULT_KEY,
+    mh.HOST_ANNOUNCE: MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY,
     mh.OVERLAY: MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY,
 }
 
@@ -104,7 +110,12 @@ async def set_switch(
         bot,
         guild,
         kind_via(
-            "marathon.overlay_set" if which == mh.OVERLAY else "marathon.announcements_set", via
+            "marathon.overlay_set"
+            if which == mh.OVERLAY
+            else "marathon.host_announcements_set"
+            if which == mh.HOST_ANNOUNCE
+            else "marathon.announcements_set",
+            via,
         ),
         actor=actor,
         details=details,

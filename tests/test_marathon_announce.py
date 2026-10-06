@@ -28,11 +28,15 @@ def test_toggling_adds_or_takes_away_only_the_people_named():
     assert ma.toggled({1, 2}, [2], False) == {1}
 
 
+def out(*ids):
+    return ma.Policy(opted=frozenset(ids))
+
+
 def test_a_runs_public_names_leave_out_whoever_opted_out():
     row = {"people": json.dumps([SKY, RIVET, {"name": "Nobody", "part": "runner"}])}
-    assert [one["user_id"] for one in ma.run_people(row, set())] == [9001, 9002]
-    assert [one["user_id"] for one in ma.run_people(row, {9001})] == [9002]
-    assert ma.run_people(row, {9001, 9002}) == []
+    assert [one["user_id"] for one in ma.run_people(row, ma.Policy())] == [9001, 9002]
+    assert [one["user_id"] for one in ma.run_people(row, out(9001))] == [9002]
+    assert ma.run_people(row, out(9001, 9002)) == []
     assert ma.all_out([9001, 9002], {9001, 9002}) and not ma.all_out([9001, 9002], {9001})
     assert not ma.all_out([], {9001})
 

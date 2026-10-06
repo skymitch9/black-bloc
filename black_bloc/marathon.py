@@ -1048,7 +1048,7 @@ def stamp_of(value: Any, style: str) -> str:
 
 
 def mention_line(people: list[dict[str, Any]]) -> str:
-    return ", ".join(f"<@{int(one['user_id'])}>" for one in people)
+    return ", ".join(str(one.get("plain") or f"<@{int(one['user_id'])}>") for one in people)
 
 
 def member_ids(row: Any) -> list[int]:
