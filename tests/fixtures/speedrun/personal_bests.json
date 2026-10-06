@@ -1,0 +1,245 @@
+{
+ "data": [
+  {
+   "place": 6,
+   "run": {
+    "id": "pm3126z0",
+    "weblink": "https://www.speedrun.com/nightsky/runs/pm3126z0",
+    "game": "946wwn6r",
+    "level": null,
+    "category": "mndxgj2q",
+    "status": {
+     "status": "verified",
+     "examiner": "v8l0z28m",
+     "verify-date": null
+    },
+    "players": [
+     {
+      "rel": "user",
+      "id": "e8e5v680",
+      "uri": "https://www.speedrun.com/api/v1/users/e8e5v680"
+     }
+    ],
+    "date": "2013-03-20",
+    "submitted": null,
+    "times": {
+     "primary": "PT35M29S",
+     "primary_t": 2129,
+     "realtime": "PT35M29S",
+     "realtime_t": 2129,
+     "realtime_noloads": null,
+     "realtime_noloads_t": 0,
+     "ingame": null,
+     "ingame_t": 0
+    },
+    "values": {}
+   },
+   "game": {
+    "data": {
+     "id": "946wwn6r",
+     "names": {
+      "international": "NightSky",
+      "japanese": null,
+      "twitch": "NightSky"
+     },
+     "abbreviation": "nightsky",
+     "weblink": "https://www.speedrun.com/nightsky"
+    }
+   },
+   "category": {
+    "data": {
+     "id": "mndxgj2q",
+     "name": "100% Normal",
+     "type": "per-game",
+     "weblink": "https://www.speedrun.com/nightsky?h=100%25_Normal&x=mndxgj2q"
+    }
+   },
+   "level": {
+    "data": []
+   }
+  },
+  {
+   "place": 4,
+   "run": {
+    "id": "jy92pqez",
+    "weblink": "https://www.speedrun.com/oot/runs/jy92pqez",
+    "game": "j1l9qz1g",
+    "level": "592n4796",
+    "category": "02qe4z2y",
+    "status": {
+     "status": "verified",
+     "examiner": "48gz7yjp",
+     "verify-date": null
+    },
+    "players": [
+     {
+      "rel": "user",
+      "id": "e8e5v680",
+      "uri": "https://www.speedrun.com/api/v1/users/e8e5v680"
+     }
+    ],
+    "date": "2009-10-18",
+    "submitted": "2015-02-28T01:44:49Z",
+    "times": {
+     "primary": "PT10M16.900S",
+     "primary_t": 616.9,
+     "realtime": "PT10M16.900S",
+     "realtime_t": 616.9,
+     "realtime_noloads": null,
+     "realtime_noloads_t": 0,
+     "ingame": null,
+     "ingame_t": 0
+    },
+    "values": {
+     "2lgzqr78": "9qjz82o1"
+    }
+   },
+   "game": {
+    "data": {
+     "id": "j1l9qz1g",
+     "names": {
+      "international": "The Legend of Zelda: Ocarina of Time",
+      "japanese": null,
+      "twitch": "The Legend of Zelda: Ocarina of Time"
+     },
+     "abbreviation": "oot",
+     "weblink": "https://www.speedrun.com/oot"
+    }
+   },
+   "category": {
+    "data": {
+     "id": "02qe4z2y",
+     "name": "Any%",
+     "type": "per-level",
+     "weblink": "https://www.speedrun.com/oot/levels?h=Any&x=02qe4z2y"
+    }
+   },
+   "level": {
+    "data": {
+     "id": "592n4796",
+     "name": "Spirit Temple",
+     "weblink": "https://www.speedrun.com/oot?h=Spirit_Temple&x=l_592n4796"
+    }
+   }
+  },
+  {
+   "place": 553,
+   "run": {
+    "id": "9meo58z7",
+    "weblink": "https://www.speedrun.com/portal/runs/9meo58z7",
+    "game": "4pd0n31e",
+    "level": null,
+    "category": "lvdowokp",
+    "status": {
+     "status": "verified",
+     "examiner": "48gel1jp",
+     "verify-date": null
+    },
+    "players": [
+     {
+      "rel": "user",
+      "id": "e8e5v680",
+      "uri": "https://www.speedrun.com/api/v1/users/e8e5v680"
+     }
+    ],
+    "date": null,
+    "submitted": null,
+    "times": {
+     "primary": "PT14M29S",
+     "primary_t": 869,
+     "realtime": "PT14M29S",
+     "realtime_t": 869,
+     "realtime_noloads": "PT14M29S",
+     "realtime_noloads_t": 869,
+     "ingame": null,
+     "ingame_t": 0
+    },
+    "values": {
+     "0nwoe0lq": "4qy362l7",
+     "kn0mz7ol": "jq6nxjnl"
+    }
+   },
+   "game": {
+    "data": {
+     "id": "4pd0n31e",
+     "names": {
+      "international": "Portal",
+      "japanese": null,
+      "twitch": "Portal"
+     },
+     "abbreviation": "portal",
+     "weblink": "https://www.speedrun.com/portal"
+    }
+   },
+   "category": {
+    "data": {
+     "id": "lvdowokp",
+     "name": "Out of Bounds",
+     "type": "per-game",
+     "weblink": "https://www.speedrun.com/portal?h=Out_of_Bounds&x=lvdowokp"
+    }
+   },
+   "level": {
+    "data": []
+   }
+  },
+  {
+   "place": 12,
+   "run": {
+    "id": "mred6k8y",
+    "weblink": "https://www.speedrun.com/ootextras/runs/mred6k8y",
+    "game": "76rkv4d8",
+    "level": null,
+    "category": "02q8z4z2",
+    "status": {
+     "status": "verified",
+     "examiner": "y8dvrm86",
+     "verify-date": "2020-01-23T13:09:52Z"
+    },
+    "players": [
+     {
+      "rel": "user",
+      "id": "e8e5v680",
+      "uri": "https://www.speedrun.com/api/v1/users/e8e5v680"
+     }
+    ],
+    "date": "2020-01-22",
+    "submitted": "2020-01-23T04:17:50Z",
+    "times": {
+     "primary": "PT35M27S",
+     "primary_t": 2127,
+     "realtime": "PT35M27S",
+     "realtime_t": 2127,
+     "realtime_noloads": null,
+     "realtime_noloads_t": 0,
+     "ingame": null,
+     "ingame_t": 0
+    },
+    "values": {}
+   },
+   "game": {
+    "data": {
+     "id": "76rkv4d8",
+     "names": {
+      "international": "Ocarina of Time Category Extensions",
+      "japanese": null,
+      "twitch": "The Legend of Zelda: Ocarina of Time"
+     },
+     "abbreviation": "ootextras",
+     "weblink": "https://www.speedrun.com/ootextras"
+    }
+   },
+   "category": {
+    "data": {
+     "id": "02q8z4z2",
+     "name": "100% NSR",
+     "type": "per-game",
+     "weblink": "https://www.speedrun.com/ootextras?h=100_NSR&x=02q8z4z2"
+    }
+   },
+   "level": {
+    "data": []
+   }
+  }
+ ]
+}

@@ -10054,3 +10054,22 @@ Design: [`sticky-messages-design.md`](sticky-messages-design.md).
 | `site/public/assets/sticky-section.js` `textChannelSelect` | The shared `channelSelect` (so labels read `# name · Category`) with the voice and category options removed after it is built; the route still refuses them in words. |
 | `site/public/assets/sticky-section.js` `kept` | Module state, because `refresh()` redraws the whole page and the search and chip must survive a save. |
 | `site/public/assets/page-posts.js` `wantedSlug` | A `#sect-…` hash is a section link, not a post slug. |
+
+## Personal best feed — keyed by NAME (branch `pb-feed`, 2026-10-05; re-key after the merge)
+
+Design: [`pb-feed-design.md`](pb-feed-design.md).
+
+- `black_bloc/speedrun.py` `SpeedrunClient._bests_page` — asks for `embed=game,category.variables,level`; a `400` drops to `game,category,level` for the life of the process. The nested embed was never tried against the live API (the three allowed GETs were spent), so the fallback is what makes the feed work either way.
+- `speedrun.py` `SpeedrunClient._aiohttp_request` — reads at most `MAX_BODY_BYTES` + 1 and raises `TOO_LARGE`, which is NOT an outage kind: one runner with thousands of runs is their own trouble (`pb_matches.look_error`), not a backoff for everybody.
+- `speedrun.py` `personal_best_from` — the slot is game | category | level | sub-category value pairs. Only variables flagged `is-subcategory` enter it; without the variables embed the fourth part is empty and two sub-categories share a slot, which the run-id check in `pb_news.why_quiet` keeps from ever replaying a run.
+- `black_bloc/pb_match.py` `exact` — speedrun.com's own `twitch` filter is not trusted; each returned user's `twitch.uri` is compared case-folded. Two different users is `ambiguous`, never a pick.
+- `black_bloc/pb_news.py` `why_quiet` — the order matters: same run id first (a place change is the commonest case), then not-faster, then the three date guards. `since is None` short-circuits in `news` before any of it.
+- `black_bloc/pb_store.py` `record_look` — upserts only. Deleting slots a look did not return is the bug that would let an empty answer arm a replay.
+- `pb_store.py` `write_match` / `write_state` — both wipe `pb_runs` for the member (except an opt-out, which keeps the runner AND the runs; `pb_moves.back_in` wipes them on the way back so the next look is a first sight).
+- `pb_store.py` `claim_post` — `INSERT OR IGNORE` on `UNIQUE (guild_id, run_id)` before the send. A crash between the send and `record_look` cannot double-post: the next look finds the run new, and the claim refuses it.
+- `black_bloc/pb_feed.py` `per_tick` / `work_list` — the spread is `ceil(people / interval minutes)` capped at `TICK_CAP`; lookups come first so a new link is matched within a minute or two.
+- `pb_feed.py` `post_fields` — `{place_line}` gets its leading space from the code because the store strips a text setting's edges.
+- `black_bloc/pb_looks.py` `Feed.tick` — any exception from a look, not only `SpeedrunError`, goes to `outage`: a bug backs off instead of raising out of the loop every minute.
+- `pb_looks.py` `Feed.post` — under a TEST_MODE guard a refused channel is a dry run (`pbfeed.would_post`, reason `test mode…`), the same as sticky messages; a blank or missing channel in `on` is `pbfeed.post_failed`.
+- `pb_looks.py` `Feed.lock` — one lock for every look and every move. `pb_moves.look_now` must NOT hold it when it calls `Feed.look` (an `asyncio.Lock` is not re-entrant).
+- `tests/conftest.py` `refuse_speedrun` — an autouse guard: a test that reaches `SpeedrunClient._open` without a session it supplied fails by name. `tests/api/test_contract.py` `arm_pbs` puts a stub feed back after every rewind because `reset_bot` empties the bot.

@@ -43,6 +43,7 @@ MEMBER_COMMANDS = {
     "help",
     "memory",
     "modmail",
+    "pb",
     "ping",
     "pings",
     "poll",

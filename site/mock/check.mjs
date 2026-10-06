@@ -31,6 +31,11 @@ const IDS = {
   // so Pause, Remove and Resume each reach a row their move is legal on.
   sticky_channel_id: '800000000000000002',
   sticky_paused_channel_id: '800000000000000003',
+  // The personal best feed: one member in each state a move is legal from.
+  pb_matched_member_id: '700000000000000002',
+  pb_free_member_id: '700000000000000003',
+  pb_opted_out_member_id: '700000000000000006',
+  pb_blocked_member_id: '700000000000000007',
   structure_old_id: '1',
   structure_new_id: '2',
   test_channel_id: '800000000000000003',
@@ -403,6 +408,13 @@ async function checkActionKinds() {
   await post(`/api/sticky/${IDS.sticky_channel_id}/pause`, {});
   await post(`/api/sticky/${IDS.sticky_channel_id}/resume`, {});
   await send('DELETE', `/api/sticky/${IDS.sticky_channel_id}`, undefined);
+  // The six web.pbfeed.* kinds, each on a member its move is legal for.
+  await send('PUT', `/api/pbs/${IDS.pb_free_member_id}`, { runner: 'zfg' });
+  await post(`/api/pbs/${IDS.pb_matched_member_id}/look`, {});
+  await send('DELETE', `/api/pbs/${IDS.pb_matched_member_id}`, undefined);
+  await post(`/api/pbs/${IDS.pb_matched_member_id}/block`, {});
+  await post(`/api/pbs/${IDS.pb_blocked_member_id}/unblock`, {});
+  await post(`/api/pbs/${IDS.pb_opted_out_member_id}/optin`, {});
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post(`/api/rolemenus/requests/${IDS.request_id}/deny`, { reason: 'contract check' });
   await send('DELETE', `/api/roles/grants/${IDS.grant_id}`, undefined);

@@ -981,7 +981,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         await sticky.write_words(db, guild_id, channel_id, "How to submit a run.", 7)
         await sticky.write_paused(db, guild_id, channel_id, paused, 7)
     structure_old, structure_new = await seed_structure(db, guild_id)
-    return {
+    return await seed_pbs(web, guild_id) | {
         "sticky_channel_id": str(wf.OTHER_CHANNEL_ID),
         "sticky_paused_channel_id": str(wf.TEST_CHANNEL_ID),
         "structure_old_id": str(structure_old),
@@ -1081,6 +1081,7 @@ class Seed:
         for kwargs in self.sent:
             await guild.get_channel(self.wf.TEST_CHANNEL_ID).send(**kwargs)
         self.web.cogs.update(self.cogs)
+        arm_pbs(self.web)
         await self.wf.put(self.web.db, self.rows)
         await self.web.store.load()
         arm_minutes(self.web)
@@ -1110,6 +1111,85 @@ def google_answers_the_contract_doc(monkeypatch):
         return doc_import.Hop(200, None, "text/html; charset=utf-8", page)
 
     monkeypatch.setattr(doc_import, "aiohttp_hop", hop)
+
+
+PB_MATCHED, PB_FREE, PB_OPTED_OUT, PB_BLOCKED = 5002, 5001, 5003, 5004
+
+
+class ContractSpeedrun:
+    """speedrun.com for the contract: one name it knows, and nobody has any runs."""
+
+    def __init__(self) -> None:
+        self.requests = 0
+
+    async def users_by_name(self, name: str) -> list:
+        from black_bloc.speedrun import Runner
+
+        self.requests += 1
+        return [Runner("e8e5v680", "zfg", "https://www.speedrun.com/users/zfg", "zfg1")]
+
+    async def personal_bests(self, runner_id: str) -> list:
+        self.requests += 1
+        return []
+
+    async def close(self) -> None:
+        return None
+
+
+def arm_pbs(web) -> None:
+    """`reset_bot` empties the bot, so the feed that asks nobody goes back on after every rewind."""
+    from black_bloc.pb_looks import Feed
+
+    web._pb_feed = Feed(web, ContractSpeedrun())
+
+
+async def seed_pbs(web, guild_id: int) -> dict:
+    """One member in each state a staff move is legal from."""
+    from black_bloc import pb_store
+    from black_bloc.speedrun import PersonalBest, Runner
+
+    arm_pbs(web)
+    for user_id, name in ((PB_MATCHED, "caseyfast"), (PB_OPTED_OUT, "quietkid")):
+        runner = Runner(f"sr{user_id}", name, f"https://www.speedrun.com/users/{name}", name)
+        await pb_store.write_match(
+            web.db, guild_id, user_id, runner, source=pb_store.AUTO, twitch_login=name
+        )
+    await pb_store.write_state(
+        web.db,
+        guild_id,
+        PB_OPTED_OUT,
+        pb_store.OPTED_OUT,
+        state_by=pb_store.MEMBER,
+        keep_runner=True,
+    )
+    await pb_store.write_state(
+        web.db, guild_id, PB_BLOCKED, pb_store.BLOCKED, state_by=pb_store.STAFF
+    )
+    claimed = await pb_store.claim_post(
+        web.db,
+        guild_id,
+        PB_MATCHED,
+        PersonalBest(
+            run_id="yd4ol82m",
+            slot="celeste|any||",
+            game="Celeste",
+            category="Any%",
+            seconds=1643.218,
+            place=212,
+            weblink="https://www.speedrun.com/celeste/runs/yd4ol82m",
+            status="verified",
+            verified_at=None,
+        ),
+        "caseyfast",
+    )
+    await pb_store.settle_post(web.db, claimed, pb_store.REHEARSED, channel_id=1, message_id=2)
+    await pb_store.record_ok(web.db, guild_id, found=1)
+    return {
+        "pb_matched_member_id": str(PB_MATCHED),
+        "pb_free_member_id": str(PB_FREE),
+        "pb_opted_out_member_id": str(PB_OPTED_OUT),
+        "pb_blocked_member_id": str(PB_BLOCKED),
+    }
 
 
 async def seed_structure(db, guild_id: int) -> tuple[int, int]:

@@ -4122,3 +4122,16 @@ Design: [`../info/sticky-messages-design.md`](../info/sticky-messages-design.md)
 | `SM-d` | The site door | Posts ▸ **Sticky messages** ▸ **New sticky message**; then **Edit**, **Pause** on its row | The channel picker reads `# name · Category` and lists no voice channels. Each move answers in a sentence; Logs shows `web.sticky.*` once per move |
 | `SM-e` | ⚠️ `on` (owner's flip) | Set `sticky_mode` to **on** | Without anybody talking: the rehearsal copies vanish from the home and each sticky appears at the bottom of its own channel, silently. Back to **shadow** reverses it; **off** takes every copy down and keeps the words |
 | `SM-f` | A lost permission says so once | With the mode on, deny the bot Send Messages in a sticky's channel, then have 5 people talk | ONE `sticky.post_failed` card naming the permission; the row reads *stopped* with the same sentence and offers **Try again**; nothing more is logged however long people talk |
+
+## Rows `PB-a` … `PB-f` — the personal best feed (branch `pb-feed`, 2026-10-05)
+
+Design: [`../info/pb-feed-design.md`](../info/pb-feed-design.md). Ships `pb_feed_mode` = **shadow**.
+
+| # | Feature | Do this | Expect |
+|---|---|---|---|
+| `PB-a` | Members are found by themselves | Wait an hour after the deploy, then open **Personal bests** on the site | Everyone with a Twitch link is listed: *matched* with a speedrun.com name that is really theirs and *from Twitch*, or *no match*. Nothing was posted anywhere. Logs: one `pbfeed.matched` and one `pbfeed.baseline` per matched member, no `pbfeed.look_failed` |
+| `PB-b` | ⚠️ The first real call | Read the bot's log for `speedrun:` in the first minutes | No line saying the nested embed was refused. If there is one, posts will name no sub-category until the embed is fixed (design §A) |
+| `PB-c` | A verified PB is rehearsed once | When a matched member gets a run VERIFIED on speedrun.com, wait up to an hour | ONE copy in the rehearsal home, under the rehearsal line: their mention (no ping), game, category, time, place, a **Watch the run** button. `pbfeed.would_post`. A run only submitted, not verified, produces nothing |
+| `PB-d` | The member door | As a member, `/pb` ▸ **Do not post my personal bests**, then **Post my personal bests** | The card says which account was found and from which Twitch channel; after opting out the page shows *opted out* and nothing of theirs is looked at; opting back in posts nothing old |
+| `PB-e` | The staff doors | `/pb` ▸ **Manage…** ▸ pick a member ▸ **Set by hand…**; on the site **Unmatch**, **Block**, **Unblock**, **Look now** | Each answers in a sentence and leaves one log row (`web.pbfeed.*` from the site). A name speedrun.com does not have is refused in words. A blocked member is never matched again by itself |
+| `PB-f` | ⚠️ `on` (owner's flip) | Set `pb_feed_channel_id`, then `pb_feed_mode` to **on** | The next verified PB is posted in that channel, no ping unless `pb_feed_ping_role_id` is set. With the channel blank: nothing is posted and ONE `pbfeed.post_failed` says the channel is blank |

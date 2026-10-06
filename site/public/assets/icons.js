@@ -28,6 +28,7 @@ export const ICONS = {
   navChannels: { body: '<path d="M9.5 3.5 7.5 20.5M16.5 3.5l-2 17M4 8.5h16.5M3.5 15.5H20"></path>', width: 1.7 },
   navPosts: { body: '<rect x="3.5" y="4" width="17" height="13" rx="2"></rect><path d="M7 8.5h10M7 12h6"></path><path d="M8.5 17 7 21l4.5-4"></path>', width: 1.7 },
   navStructure: { body: '<rect x="9" y="3" width="6" height="5" rx="1"></rect><rect x="3" y="16" width="6" height="5" rx="1"></rect><rect x="15" y="16" width="6" height="5" rx="1"></rect><path d="M12 8v4M6 16v-4h12v4"></path>', width: 1.7 },
+  navPbs: { body: '<circle cx="12" cy="13.5" r="7"></circle><path d="M12 13.5V10M9.5 3.5h5M12 3.5v3M18.2 7.3l1.3-1.3"></path>', width: 1.7 },
   navGuides: { body: '<path d="M4 5.2A1.7 1.7 0 0 1 5.7 3.5H10a2 2 0 0 1 2 2v13a1.7 1.7 0 0 0-1.7-1.7H4z"></path><path d="M20 5.2a1.7 1.7 0 0 0-1.7-1.7H14a2 2 0 0 0-2 2v13a1.7 1.7 0 0 1 1.7-1.7H20z"></path>', width: 1.7 },
   navSettings: { body: '<path d="M4 8h16M4 16h16"></path><circle cx="9.5" cy="8" r="2.3"></circle><circle cx="14.5" cy="16" r="2.3"></circle>', width: 1.7 },
 

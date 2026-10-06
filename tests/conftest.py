@@ -75,6 +75,14 @@ def no_test_ever_opens_a_link(monkeypatch):
 
     monkeypatch.setattr("black_bloc.doc_import.aiohttp_hop", refuse_hop)
 
+    def refuse_speedrun(client):
+        held = client._session
+        if held is not None and not held.closed:
+            return held
+        pytest.fail("a test asked speedrun.com for something; pass `request` or a fake client")
+
+    monkeypatch.setattr("black_bloc.speedrun.SpeedrunClient._open", refuse_speedrun)
+
 
 @pytest.fixture
 def settings(tmp_path):
