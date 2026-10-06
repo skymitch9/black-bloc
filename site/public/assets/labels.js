@@ -164,6 +164,7 @@ export const LABELS = {
   marathon_public_highlight_default: "Whether a new marathon highlights BaF runs when live",
   marathon_reminder_channel_id: "Where a marathon’s public reminders go",
   marathon_public_reminders: "Whether marathon reminders also post publicly",
+  marathon_thread_reminders: "Whether a public reminder also posts in the marathon’s thread",
   marathon_ping_role_on_said: "What staff are told when a marathon's pings are turned on",
   marathon_ping_role_off_said: "What staff are told when a marathon's pings are turned off",
   marathon_ping_role_same_said: "What staff are told when the ping switch is already set",

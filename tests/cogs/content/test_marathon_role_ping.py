@@ -41,6 +41,11 @@ from tests.cogs.content.test_spotlight import (
 
 MARATHON_ROLE = 6100
 
+@pytest.fixture(autouse=True)
+async def both_copies(bot):
+    await bot.store.set(GUILD, "marathon_thread_reminders", True)
+
+
 
 def the_role(bot, *, mentionable=True):
     role = FakeRole(MARATHON_ROLE, "Marathon")

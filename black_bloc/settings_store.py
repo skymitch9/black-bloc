@@ -4993,6 +4993,7 @@ MARATHON_ANNOUNCE_OPTED_IN_SAID_KEY = "marathon_announce_opted_in_said"
 MARATHON_SPOTLIGHT_HOST_NOTE_KEY = "marathon_spotlight_host_note_template"
 MARATHON_REMINDER_CHANNEL_KEY = "marathon_reminder_channel_id"
 MARATHON_PUBLIC_REMINDERS_KEY = "marathon_public_reminders"
+MARATHON_THREAD_REMINDERS_KEY = "marathon_thread_reminders"
 MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY = "marathon_public_reminder_template"
 MARATHON_PUBLIC_CHANNEL_KEY = "marathon_public_channel_id"
 MARATHON_PUBLIC_DEFAULT_KEY = "marathon_public_highlight_default"
@@ -5532,7 +5533,8 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "channel",
         None,
         "where the public copy of a tracked marathon's reminders goes (the *is up in 15 "
-        "minutes* posts members see; the staff thread keeps its own copy). Blank uses the "
+        "minutes* posts members see; marathon_thread_reminders adds a copy in the marathon's "
+        "own thread). Blank uses the "
         "go-live channel. Its own row: it never moves the go-live spotlight post or the public "
         "highlights",
     ),
@@ -5559,6 +5561,12 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "marathon_reminder_channel_id — the master switch over every marathon's BaF "
         "announcements, for reminders. on by default; off keeps reminders in the staff thread "
         "only",
+    ),
+    MARATHON_THREAD_REMINDERS_KEY: (
+        "bool",
+        False,
+        "whether a reminder that posted publicly also posts in the marathon's own thread. off "
+        "by default: the thread gets a reminder only when no public copy went out",
     ),
     MARATHON_ARCHIVE_AFTER_DAYS_KEY: (
         "int",

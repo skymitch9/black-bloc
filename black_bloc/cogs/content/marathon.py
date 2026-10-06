@@ -115,6 +115,7 @@ from ...settings_store import (
     MARATHON_RUNNER_POSTS_KEY,
     MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY,
     MARATHON_SUGGEST_NEXT_KEY,
+    MARATHON_THREAD_REMINDERS_KEY,
     MARATHON_UNKNOWN_SITE_KEY,
     MARATHON_WINDOW_SLACK_KEY,
     MARATHON_WORDS,
@@ -2663,9 +2664,7 @@ class Marathons(commands.Cog):
             found = await self._ping_roles(guild, marathon, row)
         marathon_role = verdict_for(self.bot, guild, marathon) if pinging else None
         roles = role_ping.without_role(found, marathon_role)
-        message, channel_id, why = await self._send(
-            guild, ping_prefix(*roles) + text, roles, marathon=marathon
-        )
+        place, _why = await self._place(guild, marathon)
         public = await post_public_reminder(
             self,
             guild,
@@ -2674,12 +2673,18 @@ class Marathons(commands.Cog):
             mark,
             roles,
             url=url,
-            staff_channel_id=channel_id,
+            staff_channel_id=place,
             marathon_role=marathon_role,
+        )
+        went_public = public.pop("copy", None)
+        if went_public and not self.bot.store.get(guild.id, MARATHON_THREAD_REMINDERS_KEY):
+            return mrem.entry_of(public=went_public)
+        message, channel_id, why = await self._send(
+            guild, ping_prefix(*roles) + text, roles, marathon=marathon
         )
         entry = mrem.entry_of(
             staff=mrem.copy_of(message, channel_id, text, row["scheduled_at"]),
-            public=public.pop("copy", None),
+            public=went_public,
         )
         details = (
             self.run_details(marathon, row)
