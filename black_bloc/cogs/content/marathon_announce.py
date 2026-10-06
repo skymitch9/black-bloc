@@ -119,24 +119,36 @@ def named(guild: Any, found: ma.Policy, people: Any) -> list[dict[str, Any]]:
 
 
 def people_for(
-    bot: Any, guild: Any, marathon: Any, row: Any, *, standing: bool = False
+    bot: Any,
+    guild: Any,
+    marathon: Any,
+    row: Any,
+    *,
+    standing: bool = False,
+    carried: bool = True,
 ) -> list[dict[str, Any]]:
     """Everyone of ours a run's public post names. `standing` is a post already up: the master
-    going off never empties it, and neither does the host default."""
+    going off never empties it, and (`carried`) neither does the host default going off."""
     found = policy_of(bot, guild.id, marathon, standing=standing)
     people = ma.run_people(row, found)
-    if standing and not people:
+    if standing and carried and not people:
         people = ma.run_people(row, found._replace(hosts_on=True))
     return named(guild, found, people)
 
 
 def speaking(
-    bot: Any, guild: Any, marathon: Any, block: Any, *, standing: bool = False
+    bot: Any,
+    guild: Any,
+    marathon: Any,
+    block: Any,
+    *,
+    standing: bool = False,
+    carried: bool = True,
 ) -> list[dict[str, Any]]:
-    """The hosts a block's public posts name; `standing` as for a run."""
+    """The hosts a block's public posts name; `standing` and `carried` as for a run."""
     found = policy_of(bot, guild.id, marathon, standing=standing)
     people = ma.block_people(block, found)
-    if standing and not people:
+    if standing and carried and not people:
         people = ma.block_people(block, found._replace(hosts_on=True))
     return named(guild, found, people)
 

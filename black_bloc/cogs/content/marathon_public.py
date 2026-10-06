@@ -132,12 +132,18 @@ def button_of(bot: Any, guild: Any, marathon: Any, row: Any) -> tuple:
 
 
 def people_for(
-    bot: Any, guild: Any, marathon: Any, row: Any, *, standing: bool = False
+    bot: Any,
+    guild: Any,
+    marathon: Any,
+    row: Any,
+    *,
+    standing: bool = False,
+    carried: bool = True,
 ) -> list[dict[str, Any]]:
     """Everyone of ours a public post about the run names, as it writes them."""
     from .marathon_announce import people_for as announced
 
-    return announced(bot, guild, marathon, row, standing=standing)
+    return announced(bot, guild, marathon, row, standing=standing, carried=carried)
 
 
 def view_of(buttons: Any, marathon_id: Any, run_id: Any) -> discord.ui.View | None:
@@ -572,7 +578,8 @@ async def follow_opt(
     for row in await runs_of(bot.db, marathon["id"]):
         if not mp.message_id(row) or not wanted & set(mt.member_ids(row)):
             continue
-        if mp.is_up(row) and not people_for(bot, guild, marathon, row, standing=True):
+        still = people_for(bot, guild, marathon, row, standing=True, carried=False)
+        if mp.is_up(row) and not still:
             await remove_highlight(cog, guild, marathon, row, actor=actor, via=via)
         elif mp.is_up(row):
             changed = True

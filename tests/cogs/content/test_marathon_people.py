@@ -484,3 +484,44 @@ async def test_a_runner_a_host_and_both_get_one_set_of_moves_and_their_part_tag(
     )
     tags = {one["name"]: people.part_words(bot, bot.guild, one["parts"]) for one in state["baf"]}
     assert tags == {"Sky": "runs", "anarchy": "runs + hosts", "Mo": "hosts"}
+
+
+async def test_a_baf_persons_slot_offers_this_runs_answer_and_their_at(bot, cog):  # noqa: F811
+    from black_bloc import marathon_announce as ma
+    from tests.cogs.content.test_marathon_host_highlights import ANARCHY, HOSTED_ONLY, show
+
+    await bot.store.set(GUILD, "events_create_scheduled", False)
+    marathon = await show(bot, cog, HOSTED_ONLY, hosts=False)
+    run = (await runs_of(bot.db, marathon["id"]))[1]
+
+    async def slot(person="anarchy"):
+        embed, view = await people.build_people(
+            bot, bot.guild, FakeActor(), marathon["id"], run_id=run["id"], person=person
+        )
+        moves = [one for one in view.children if isinstance(one, people.PeopleMove)]
+        return embed.description, {one.action: one for one in moves}
+
+    words, moves = await slot()
+    assert moves[people.RUN_ANSWER].label == "Announce anarchy for this run"
+    assert (moves[people.RUN_ANSWER].to, moves[people.RUN_ANSWER].row) == ("in", 3)
+    assert moves[people.MENTION].label == "No @ for anarchy" and moves[people.MENTION].to == "plain"
+    assert "anarchy: not announced for this run — host announcements are off" in words
+    move = moves[people.RUN_ANSWER]
+    said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id, move.to)(
+        bot, bot.guild, FakeActor(), marathon
+    )
+    assert said.ok and "is announced for" in said.message
+    rows = await runs_of(bot.db, marathon["id"])
+    assert ma.run_answers(rows[1]) == {ANARCHY: "in"} and ma.run_answers(rows[0]) == {}
+    move = moves[people.MENTION]
+    said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id, move.to)(
+        bot, bot.guild, FakeActor(), marathon
+    )
+    assert said.ok and "with no @" in said.message
+
+    words, moves = await slot()
+    assert moves[people.RUN_ANSWER].label == "anarchy: back to the default for this run"
+    assert moves[people.MENTION].label == "@ anarchy again"
+    assert "anarchy: announced for this run — set for this run · written without an @" in words
+    _, others = await slot("Vee")
+    assert people.RUN_ANSWER not in others and people.MENTION not in others

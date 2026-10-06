@@ -71,12 +71,18 @@ def wanted(bot: Any, guild: Any, marathon: Any) -> bool:
 
 
 def speaking(
-    bot: Any, guild: Any, marathon: Any, block: mhh.Block, *, standing: bool = False
+    bot: Any,
+    guild: Any,
+    marathon: Any,
+    block: mhh.Block,
+    *,
+    standing: bool = False,
+    carried: bool = True,
 ) -> list[dict[str, Any]]:
     """The block's hosts its public posts name: each one announced for a run of it."""
     from .marathon_announce import speaking as announced
 
-    return announced(bot, guild, marathon, block, standing=standing)
+    return announced(bot, guild, marathon, block, standing=standing, carried=carried)
 
 
 def sent_cache(cog: Any, marathon_id: Any) -> dict[int, tuple[int | None, str]]:
@@ -561,7 +567,8 @@ async def follow_opt(
             continue
         if not wanted_ids & set(block.user_ids):
             continue
-        if mhh.is_up(record) and not speaking(bot, guild, marathon, block, standing=True):
+        still = speaking(bot, guild, marathon, block, standing=True, carried=False)
+        if mhh.is_up(record) and not still:
             await take_down(cog, guild, marathon, block, record, found, actor=actor, via=via)
         elif mhh.is_up(record):
             changed = True
