@@ -90,8 +90,13 @@ async def test_restoring_goes_back_to_the_kept_runner_or_to_be_looked_up(db):
     )
     await pb_store.write_state(db, GUILD, BEA, pb_store.BLOCKED, state_by=pb_store.STAFF)
 
-    ada = await pb_store.restore(db, GUILD, ADA, state_by=pb_store.MEMBER, set_by=ADA)
+    kept = await pb_store.restore(db, GUILD, ADA, state_by=pb_store.STAFF, set_by=BEA)
+    assert (kept["state"], kept["state_by"], kept["set_by"]) == ("opted_out", "member", ADA)
+    ada = await pb_store.restore(
+        db, GUILD, ADA, state_by=pb_store.MEMBER, set_by=ADA, ends_opt_out=True
+    )
     bea = await pb_store.restore(db, GUILD, BEA, state_by=pb_store.STAFF)
+    assert ada["opted_out_at"] is None
 
     assert (ada["state"], ada["state_by"], ada["src_user_id"]) == ("matched", "member", ZFG.id)
     assert (bea["state"], bea["checked_at"]) == ("none", None)
@@ -175,3 +180,75 @@ async def test_the_summary_hands_over_its_counts_and_starts_again(db):
 def test_a_timestamp_that_cannot_be_read_is_none_not_a_crash():
     assert pb_store.parsed("not a time") is None and pb_store.parsed(None) is None
     assert pb_store.parsed("2026-10-05T18:00:00").tzinfo is not None
+
+
+async def test_an_opt_out_is_remembered_under_every_state_staff_put_on_top(db):
+    await write(db)
+    out = await pb_store.write_state(
+        db, GUILD, ADA, pb_store.OPTED_OUT, state_by=pb_store.MEMBER, keep_runner=True, now=NOW
+    )
+
+    blocked = await pb_store.write_state(db, GUILD, ADA, pb_store.BLOCKED, state_by=pb_store.STAFF)
+
+    assert out["opted_out_at"] == NOW.isoformat() == blocked["opted_out_at"]
+    assert (await pb_store.match(db, GUILD, BEA)) is None
+
+
+async def test_a_miss_counts_up_and_a_good_look_starts_the_count_again(db):
+    await write(db)
+    await pb_store.record_look(db, GUILD, ADA, [best("r1")], first=True, now=NOW)
+
+    assert await pb_store.record_miss(db, GUILD, ADA, "nothing there", NOW) == 1
+    assert await pb_store.record_miss(db, GUILD, ADA, "nothing there", NOW) == 2
+    assert (await pb_store.match(db, GUILD, ADA))["look_error"] == "nothing there"
+    assert len(await pb_store.baseline(db, GUILD, ADA)) == 1
+
+    await pb_store.record_look(db, GUILD, ADA, [best("r1")], first=False, now=NOW)
+    row = await pb_store.match(db, GUILD, ADA)
+    assert (row["misses"], row["look_error"]) == (0, None)
+
+
+async def test_a_runner_that_went_keeps_the_baseline_for_the_same_runner_only(db):
+    await write(db)
+    await pb_store.record_look(db, GUILD, ADA, [best("r1")], first=True, now=NOW)
+
+    gone = await pb_store.runner_gone(db, GUILD, ADA, "runner_gone", NOW)
+    assert (gone["state"], gone["src_user_id"], gone["gone_src_user_id"]) == ("none", None, ZFG.id)
+    assert await pb_store.holder_of(db, GUILD, ZFG.id) is None
+    assert len(await pb_store.baseline(db, GUILD, ADA)) == 1
+
+    back = await write(db)
+    assert back["baseline_at"] == NOW.isoformat() and back["gone_src_user_id"] is None
+    assert len(await pb_store.baseline(db, GUILD, ADA)) == 1
+
+    await pb_store.runner_gone(db, GUILD, ADA, "runner_gone", NOW)
+    other = await write(db, runner=OTHER)
+    assert other["baseline_at"] is None and await pb_store.baseline(db, GUILD, ADA) == {}
+
+
+async def test_the_last_runs_recorded_without_a_post_stay_until_the_next_such_look(db):
+    await write(db)
+
+    await pb_store.record_look(
+        db, GUILD, ADA, [best("r1")], first=True, quiet={"too_old": 2}, now=NOW
+    )
+    await pb_store.record_look(db, GUILD, ADA, [best("r1")], first=False, now=NOW)
+
+    row = await pb_store.match(db, GUILD, ADA)
+    assert pb_store.quiet_of(row) == {"too_old": 2, "at": NOW.isoformat()}
+    assert pb_store.quiet_of(None) is None and pb_store.quiet_of({"quiet": "{"}) is None
+
+
+async def test_stale_claims_become_unconfirmed_once_and_are_listed(db):
+    await pb_store.claim_post(db, GUILD, ADA, best("r1"), "zfg", now=NOW)
+    settled = await pb_store.claim_post(db, GUILD, ADA, best("r2"), "zfg", now=NOW)
+    await pb_store.settle_post(db, settled, pb_store.POSTED)
+
+    first = await pb_store.settle_stale_claims(db, GUILD, "never confirmed")
+    second = await pb_store.settle_stale_claims(db, GUILD, "never confirmed")
+
+    assert [row["run_id"] for row in first] == ["r1"] and second == []
+    shown = {
+        row["run_id"]: (row["outcome"], row["reason"]) for row in await pb_store.posts(db, GUILD)
+    }
+    assert shown == {"r1": ("unconfirmed", "never confirmed"), "r2": ("posted", None)}

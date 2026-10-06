@@ -1252,6 +1252,10 @@ CREATE TABLE IF NOT EXISTS pb_matches (
     look_error   TEXT,
     last_pb_at   TEXT,
     updated_at   TEXT    NOT NULL,
+    opted_out_at TEXT,
+    misses       INTEGER NOT NULL DEFAULT 0,
+    gone_src_user_id TEXT,
+    quiet        TEXT,
     PRIMARY KEY (guild_id, user_id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS pb_matches_one_member_per_runner
@@ -1310,6 +1314,10 @@ CREATE TABLE IF NOT EXISTS pb_looks (
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ("pb_matches", "opted_out_at", "TEXT"),
+    ("pb_matches", "misses", "INTEGER NOT NULL DEFAULT 0"),
+    ("pb_matches", "gone_src_user_id", "TEXT"),
+    ("pb_matches", "quiet", "TEXT"),
     ("structure_looks", "noticed_id", "INTEGER"),
     ("role_menus", "approval", "INTEGER NOT NULL DEFAULT 0"),
     ("role_menus", "expires_days", "INTEGER"),
@@ -1479,7 +1487,12 @@ RUNS_ON_THE_SHEET = "UPDATE marathon_runs SET sheet_at = scheduled_at WHERE shee
 RUNS_END_ON_THE_SHEET = (
     "UPDATE marathon_runs SET sheet_ends_at = ends_at WHERE sheet_ends_at IS NULL"
 )
+PB_OPT_OUTS_KEEP_THEIR_DATE = (
+    "UPDATE pb_matches SET opted_out_at = updated_at WHERE state = 'opted_out'"
+)
+
 BACKFILLS: dict[tuple[str, str], str] = {
+    ("pb_matches", "opted_out_at"): PB_OPT_OUTS_KEEP_THEIR_DATE,
     ("marathon_runs", "sheet_at"): RUNS_ON_THE_SHEET,
     ("marathon_runs", "sheet_ends_at"): RUNS_END_ON_THE_SHEET,
     ("marathons", "event_mode"): CARRIED_EVENT_WISH,

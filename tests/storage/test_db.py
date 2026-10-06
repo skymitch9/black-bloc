@@ -3831,6 +3831,10 @@ PB_TABLES = {
         "look_error",
         "last_pb_at",
         "updated_at",
+        "opted_out_at",
+        "misses",
+        "gone_src_user_id",
+        "quiet",
     },
     "pb_runs": {
         "guild_id",
@@ -3984,5 +3988,42 @@ async def test_a_looks_table_from_before_the_notice_mark_gains_it_and_keeps_its_
         cur = await again.conn.execute("SELECT last_day, noticed_id FROM structure_looks")
         row = await cur.fetchone()
         assert (row["last_day"], row["noticed_id"]) == ("2026-10-05", None)
+    finally:
+        await again.close()
+
+
+PB_ADDED = ("opted_out_at", "misses", "gone_src_user_id", "quiet")
+
+
+async def test_a_pb_matches_table_from_the_first_build_gains_the_review_columns(tmp_path):
+    path = tmp_path / "pb-added.sqlite3"
+    db = Database(path)
+    await db.connect()
+    try:
+        for column in PB_ADDED:
+            await db.conn.execute(f"ALTER TABLE pb_matches DROP COLUMN {column}")
+        await db.conn.execute(
+            "INSERT INTO pb_matches(guild_id, user_id, state, state_by, updated_at) "
+            "VALUES (1, 2, 'opted_out', 'member', '2026-10-05T00:00:00+00:00'), "
+            "(1, 3, 'matched', 'auto', '2026-10-05T00:00:00+00:00')"
+        )
+        await db.conn.commit()
+    finally:
+        await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        from black_bloc.storage.db import ADDED_COLUMNS
+
+        assert SCHEMA_VERSION == 89
+        for column in PB_ADDED:
+            assert any(row[:2] == ("pb_matches", column) for row in ADDED_COLUMNS), column
+        assert (await pb_columns(again))["pb_matches"] == PB_TABLES["pb_matches"]
+        cur = await again.conn.execute(
+            "SELECT user_id, opted_out_at, misses FROM pb_matches ORDER BY user_id"
+        )
+        rows = [tuple(row) for row in await cur.fetchall()]
+        assert rows == [(2, "2026-10-05T00:00:00+00:00", 0), (3, None, 0)]
     finally:
         await again.close()

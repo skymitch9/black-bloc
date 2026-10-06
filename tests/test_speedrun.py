@@ -411,3 +411,176 @@ async def test_the_real_transport_refuses_only_an_answer_that_really_passes_the_
         finally:
             await client.close()
             await runner.cleanup()
+
+
+ODD = [
+    None,
+    True,
+    0,
+    -1,
+    3.5,
+    float("nan"),
+    float("inf"),
+    "",
+    "text",
+    "https://[bad",
+    [],
+    ["a"],
+    [[]],
+    {},
+    {"data": []},
+    {"data": None},
+    {"data": {"id": []}},
+    {"id": {"a": 1}},
+    {"uri": "https://[bad"},
+    {"values": ["a"]},
+    {"values": {"values": ["a"]}},
+    {"values": {"values": {"v1": "text"}}},
+]
+
+
+def shapes():
+    """A valid item with one field after another swapped for something speedrun.com never said."""
+    for odd in ODD:
+        yield odd
+        yield {"run": odd}
+        yield {"place": odd, "run": run_with()}
+        for key in ("id", "times", "values", "status", "game", "category", "level", "weblink"):
+            yield {"place": 1, "run": run_with(**{key: odd})}
+        yield {"place": 1, "run": run_with(times={"primary_t": odd})}
+        yield {"place": 1, "run": run_with(status={"status": odd, "verify-date": odd})}
+        for embed in ("game", "category", "level"):
+            yield {"place": 1, "run": run_with(), embed: odd}
+            yield {"place": 1, "run": run_with(), embed: {"data": odd}}
+        for variable in (
+            odd,
+            {"id": odd, "is-subcategory": True, "values": {"values": {"a": {"label": "A"}}}},
+            {"id": "v1", "is-subcategory": True, "values": odd},
+            {"id": "v1", "is-subcategory": True, "values": {"values": odd}},
+            {"id": "v1", "is-subcategory": True, "values": {"values": {"a": odd}}},
+        ):
+            yield {
+                "place": 1,
+                "run": run_with(values={"v1": "a"}),
+                "category": {"data": {"id": "c1", "variables": {"data": [variable]}}},
+            }
+            yield {
+                "place": 1,
+                "run": run_with(values={"v1": odd}),
+                "category": {"data": {"id": "c1", "variables": {"data": [variable]}}},
+            }
+
+
+def run_with(**changed):
+    return {
+        "id": "r1",
+        "weblink": "https://www.speedrun.com/x/runs/r1",
+        "game": "g1",
+        "category": "c1",
+        "level": None,
+        "times": {"primary_t": 61.5},
+        "values": {},
+        "status": {"status": "verified", "verify-date": "2026-10-01T00:00:00Z"},
+    } | changed
+
+
+def test_no_malformed_shape_ever_raises_out_of_the_parser():
+    count = 0
+    for shape in shapes():
+        count += 1
+        found = personal_best_from(shape)
+        assert found is None or (found.seconds > 0 and found.seconds != float("inf"))
+        runner_from(shape)
+        runner_from({"id": "u1", "names": shape, "twitch": shape, "weblink": shape})
+        runner_from({"id": "u1", "twitch": {"uri": shape}})
+        twitch_login_of(shape)
+    assert count > 500
+
+
+@pytest.mark.parametrize("seconds", [float("nan"), float("inf"), "fast", [], {}, None, True, -3])
+def test_a_time_that_is_not_a_real_number_of_seconds_is_no_personal_best(seconds):
+    assert personal_best_from({"place": 1, "run": run_with(times={"primary_t": seconds})}) is None
+
+
+def test_a_profile_address_that_cannot_be_parsed_names_no_login():
+    assert twitch_login_of("https://[bad") is None
+    assert runner_from({"id": "u1", "twitch": {"uri": "https://[bad"}}).twitch_login is None
+
+
+async def test_personal_bests_that_are_not_a_list_are_that_runners_trouble_not_an_outage():
+    client = SpeedrunClient(request=Site((200, {"data": {"oops": 1}})))
+
+    with pytest.raises(SpeedrunError) as caught:
+        await client.personal_bests("u1")
+
+    assert caught.value.kind == speedrun.MALFORMED and not caught.value.outage
+
+
+async def test_a_400_that_is_not_about_the_embed_flips_nothing():
+    site = Site((400, None), (400, None), (200, fixture("personal_bests.json")))
+    client = SpeedrunClient(request=site)
+
+    with pytest.raises(SpeedrunError) as caught:
+        await client.personal_bests("not a runner")
+    found = await client.personal_bests("u1")
+
+    assert caught.value.kind == REFUSED and not caught.value.outage
+    assert client.embed == EMBED_FULL and len(found) == 4
+    assert EMBED_FULL in site.asked[-1][0]
+
+
+async def test_the_nested_embed_is_asked_for_again_after_a_while():
+    clock = [1000.0]
+    site = Site((400, None), (200, fixture("personal_bests.json")))
+    client = SpeedrunClient(request=site, clock=lambda: clock[0])
+
+    await client.personal_bests("u1")
+    clock[0] += speedrun.EMBED_RETRY_SECONDS - 1
+    await client.personal_bests("u1")
+    still = client.embed
+    clock[0] += 2
+    await client.personal_bests("u1")
+
+    assert still == EMBED_PLAIN and client.embed == EMBED_FULL
+    assert [EMBED_FULL in url for url, _ in site.asked] == [True, False, False, True]
+
+
+def sub_item(run_id, value, seconds):
+    return {
+        "place": 1,
+        "run": run_with(id=run_id, values={"v1": value, "v2": "pc"}, times={"primary_t": seconds}),
+        "category": {
+            "data": {
+                "id": "c1",
+                "name": "Any%",
+                "variables": {
+                    "data": [
+                        {
+                            "id": "v1",
+                            "is-subcategory": True,
+                            "values": {
+                                "values": {"a": {"label": "Glitched"}, "b": {"label": "NMG"}}
+                            },
+                        },
+                        {"id": "v2", "is-subcategory": False, "values": {"values": {}}},
+                    ]
+                },
+            }
+        },
+    }
+
+
+def test_without_the_variables_two_sub_categories_are_never_one_slot():
+    fast, slow = sub_item("r1", "a", 100.0), sub_item("r2", "b", 200.0)
+    for item in (fast, slow):
+        item["category"] = {"data": {"id": "c1", "name": "Any%"}}
+
+    told = [
+        personal_best_from(sub_item("r1", "a", 100.0)),
+        personal_best_from(sub_item("r2", "b", 200.0)),
+    ]
+    untold = [personal_best_from(fast, nested=False), personal_best_from(slow, nested=False)]
+
+    assert told[0].slot == "g1|c1||v1=a" and told[1].slot == "g1|c1||v1=b"
+    assert untold[0].slot == "g1|c1||?v1=a,v2=pc" and untold[1].slot == "g1|c1||?v1=b,v2=pc"
+    assert personal_best_from({"place": 1, "run": run_with()}, nested=False).slot == "g1|c1||"

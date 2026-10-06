@@ -1,6 +1,7 @@
 # ruff: noqa: F401, F811
 from datetime import timedelta
 
+import discord
 import pytest
 
 from black_bloc import pb_moves, pb_store
@@ -218,7 +219,7 @@ async def test_a_staff_move_from_the_site_is_one_web_row(bot, guild, feed):
 
     await pb_moves.unmatch(bot, guild, ADA, staffer(guild), via=VIA_WEBSITE)
 
-    assert await kinds(bot.db) == ["web.pbfeed.unmatched"]
+    assert await kinds(bot.db) == ["web.pbfeed.unmatched", "pbfeed.would_dm"]
     assert (await details_of(bot.db, "web.pbfeed.unmatched"))["via"] == "website"
 
 
@@ -253,3 +254,220 @@ async def test_look_now_during_an_outage_answers_with_the_reason(bot, guild, fee
 
     assert (outcome.ok, outcome.status) == (False, 502)
     assert "fault of its own" in outcome.message
+
+
+async def asked_after(feed, guild, client, *days):
+    client.asked.clear()
+    for day in days:
+        await feed.tick(guild, NOW + timedelta(days=day))
+        await feed.tick(guild, NOW + timedelta(days=day, minutes=1))
+    return list(client.asked)
+
+
+async def test_an_opt_out_survives_a_block_and_an_unblock(bot, guild, feed, client):
+    await matched(bot)
+    client.by_twitch["zfg1"] = [ZFG]
+    client.bests[ZFG.id] = [best("r1")]
+    await pb_moves.opt_out(bot, guild, guild.get_member(ADA))
+
+    blocked = await pb_moves.block(bot, guild, ADA, staffer(guild))
+    unblocked = await pb_moves.unblock(bot, guild, ADA, staffer(guild))
+    asked = await asked_after(feed, guild, client, 1, 8, 30)
+
+    row = await pb_store.match(bot.db, GUILD, ADA)
+    assert blocked.ok and unblocked.ok
+    assert (row["state"], row["state_by"]) == ("opted_out", "member") and row["opted_out_at"]
+    assert asked == [] and sent(guild) == {}
+    assert "still stands" in unblocked.message
+    assert (await details_of(bot.db, "pbfeed.unblocked"))["still_opted_out"] is True
+
+
+async def test_staff_cannot_set_an_account_over_an_opt_out_hidden_under_a_block(
+    bot, guild, feed, client
+):
+    client.by_name["zfg"] = [ZFG]
+    await pb_moves.opt_out(bot, guild, guild.get_member(ADA))
+    await pb_moves.block(bot, guild, ADA, staffer(guild))
+
+    refused = await pb_moves.set_by_hand(bot, guild, ADA, "zfg", staffer(guild))
+
+    assert (refused.ok, refused.code) == (False, "opted_out") and client.asked == []
+    assert (await pb_store.match(bot.db, GUILD, ADA))["state"] == "blocked"
+
+
+@pytest.mark.parametrize("ender", ["member", "staff"])
+async def test_only_the_member_or_the_explicit_staff_move_ends_an_opt_out(
+    bot, guild, feed, client, ender
+):
+    await link(bot.db, ADA, "zfg1")
+    client.by_twitch["zfg1"] = [ZFG]
+    await pb_moves.opt_out(bot, guild, guild.get_member(ADA))
+    await pb_moves.block(bot, guild, ADA, staffer(guild))
+    await pb_moves.unblock(bot, guild, ADA, staffer(guild))
+
+    if ender == "member":
+        done = await pb_moves.opt_in(bot, guild, guild.get_member(ADA))
+    else:
+        done = await pb_moves.clear_opt_out(bot, guild, ADA, staffer(guild))
+    row = await pb_store.match(bot.db, GUILD, ADA)
+
+    assert done.ok and (row["state"], row["opted_out_at"]) == ("none", None)
+    assert (await asked_after(feed, guild, client, 1))[0] == ("twitch", "zfg1")
+
+
+async def staff_move(bot, guild, client, move, reason="wrong account"):
+    staff = staffer(guild)
+    if move == "set_by_hand":
+        client.by_name["zfg"] = [ZFG]
+        return await pb_moves.set_by_hand(bot, guild, ADA, "zfg", staff, reason=reason)
+    if move == "opt_out_cleared":
+        await pb_moves.opt_out(bot, guild, guild.get_member(ADA))
+        return await pb_moves.clear_opt_out(bot, guild, ADA, staff, reason=reason)
+    act = {"unmatched": pb_moves.unmatch, "blocked": pb_moves.block}[move]
+    return await act(bot, guild, ADA, staff, reason=reason)
+
+
+DM_MOVES = [
+    ("set_by_hand", "matched you to **zfg**"),
+    ("unmatched", "removed your match to **zfg**"),
+    ("blocked", "turned the personal best feed off for you"),
+    ("opt_out_cleared", "put you back in"),
+]
+
+
+@pytest.mark.parametrize(("move", "words"), DM_MOVES)
+async def test_a_staff_move_that_affects_a_member_dms_them_the_reason_once(
+    bot, guild, feed, client, move, words
+):
+    await bot.store.set(GUILD, "pb_feed_mode", "on")
+    if move != "set_by_hand":
+        await matched(bot)
+
+    outcome = await staff_move(bot, guild, client, move)
+
+    dms = guild.get_member(ADA).dms
+    assert outcome.ok and len(dms) == 1
+    text = dms[0]["content"]
+    assert words in text and "Their reason: wrong account" in text and "**Black Bloc**" in text
+    assert dms[0]["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()
+    assert "is posted" not in text
+    if move != "blocked":
+        assert "/pb" in text
+    logged = await kinds(bot.db)
+    assert "pbfeed.dm_failed" not in logged and "pbfeed.would_dm" not in logged
+    assert (await details_of(bot.db, f"pbfeed.{move}"))["reason"] == "wrong account"
+
+
+@pytest.mark.parametrize(("move", "words"), DM_MOVES)
+async def test_closed_dms_are_logged_in_words_and_never_block_the_move(
+    bot, guild, feed, client, move, words
+):
+    await bot.store.set(GUILD, "pb_feed_mode", "on")
+    if move != "set_by_hand":
+        await matched(bot)
+    guild.get_member(ADA).dms_closed = True
+
+    outcome = await staff_move(bot, guild, client, move, reason="")
+
+    found = await details_of(bot.db, "pbfeed.dm_failed")
+    assert outcome.ok and guild.get_member(ADA).dms == []
+    assert found["target_id"] == ADA and found["move"] == move
+    assert "Discord would not deliver the DM" in found["reason"]
+    assert "The move itself was made" in found["reason"]
+    assert words in found["text"] and "Their reason: none was given." in found["text"]
+
+
+@pytest.mark.parametrize("mode", ["shadow", "off"])
+async def test_while_the_feed_is_not_on_the_dm_is_logged_and_never_sent(
+    bot, guild, feed, client, mode
+):
+    await matched(bot)
+    await bot.store.set(GUILD, "pb_feed_mode", mode)
+
+    outcome = await pb_moves.block(bot, guild, ADA, staffer(guild), reason="spam runs")
+
+    found = await details_of(bot.db, "pbfeed.would_dm")
+    assert outcome.ok and guild.get_member(ADA).dms == []
+    assert found["target_id"] == ADA and "Their reason: spam runs" in found["text"]
+    assert f"pb_feed_mode is {mode}" in found["reason"]
+
+
+async def test_a_dm_never_carries_markdown_or_a_ping_from_the_reason(bot, guild, feed, client):
+    await bot.store.set(GUILD, "pb_feed_mode", "on")
+    await matched(bot)
+
+    loud = "**loud**\n\n@everyone " + "x" * 900
+    await pb_moves.block(bot, guild, ADA, staffer(guild), reason=loud)
+
+    text = guild.get_member(ADA).dms[0]["content"]
+    assert "**loud**" not in text and "\\*\\*loud" in text and len(text) < 1000
+
+
+async def test_look_now_has_a_cooldown_for_each_member(bot, guild, feed, client):
+    await matched(bot)
+    await matched(bot, BEA, OTHER, login="bea_tv")
+    client.bests[ZFG.id] = [best("r1")]
+    client.bests[OTHER.id] = [best("b1")]
+    staff = staffer(guild)
+
+    first = await pb_moves.look_now(bot, guild, ADA, staff, now=NOW)
+    presses = [
+        await pb_moves.look_now(bot, guild, ADA, staff, now=NOW + timedelta(seconds=at))
+        for at in range(1, 200)
+    ]
+    other = await pb_moves.look_now(bot, guild, BEA, staff, now=NOW + timedelta(minutes=1))
+    later = await pb_moves.look_now(bot, guild, ADA, staff, now=NOW + timedelta(minutes=5))
+
+    assert first.ok and other.ok and later.ok and client.requests == 3
+    assert {(one.ok, one.code, one.status) for one in presses} == {(False, "not_yet", 429)}
+    assert "looked at 0 minute(s) ago" in presses[0].message
+    assert "Try again in about 5 minute(s)" in presses[0].message
+    assert "Try again in about 2 minute(s)" in presses[-1].message
+
+
+async def test_look_now_respects_an_outage_backoff_and_starts_one(bot, guild, feed, client):
+    await matched(bot)
+    client.bests[ZFG.id] = SpeedrunError(SERVER, status=503)
+    staff = staffer(guild)
+
+    first = await pb_moves.look_now(bot, guild, ADA, staff, now=NOW)
+    presses = [
+        await pb_moves.look_now(bot, guild, ADA, staff, now=NOW + timedelta(seconds=at))
+        for at in range(1, 100)
+    ]
+
+    assert (first.ok, first.status) == (False, 502) and client.requests == 1
+    assert {(one.code, one.status) for one in presses} == {("not_yet", 429)}
+    assert "the network or their site, not a setting here" in presses[0].message
+    assert "Try again in about 5 minute(s)" in presses[0].message
+    assert await kinds(bot.db) == ["pbfeed.look_failed"]
+    assert await feed.tick(guild, NOW + timedelta(minutes=1)) == 0
+
+
+async def test_look_now_and_set_by_hand_stop_at_the_request_cap(bot, guild, feed, client):
+    await bot.store.set(GUILD, "pb_feed_cycle_requests", 2)
+    client.by_name["zfg"] = [ZFG]
+    client.bests[ZFG.id] = [best("r1")]
+    staff = staffer(guild)
+
+    done = await pb_moves.set_by_hand(bot, guild, ADA, "zfg", staff, now=NOW)
+    looked = await pb_moves.look_now(bot, guild, ADA, staff, now=NOW + timedelta(minutes=1))
+    soon = NOW + timedelta(minutes=2)
+    refused = await pb_moves.set_by_hand(bot, guild, BEA, "zfg", staff, now=soon)
+    again = await pb_moves.look_now(bot, guild, ADA, staff, now=NOW + timedelta(minutes=10))
+
+    assert done.ok and looked.ok and client.requests == 2
+    assert (refused.code, again.code) == ("not_yet", "not_yet")
+    assert "2 requests in the last 60 minutes" in again.message
+    assert "pb_feed_cycle_requests" in again.message and "about 50 minute(s)" in again.message
+
+
+async def test_set_by_hand_asks_speedrun_nothing_while_the_feed_is_off(bot, guild, feed, client):
+    await bot.store.set(GUILD, "pb_feed_mode", "off")
+    client.by_name["zfg"] = [ZFG]
+
+    outcome = await pb_moves.set_by_hand(bot, guild, ADA, "zfg", staffer(guild))
+
+    assert (outcome.ok, outcome.code, outcome.status) == (False, "pb_feed_off", 409)
+    assert "pb_feed_mode" in outcome.message and client.asked == []
+    assert await pb_store.match(bot.db, GUILD, ADA) is None

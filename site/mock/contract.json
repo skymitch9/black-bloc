@@ -17,6 +17,11 @@
       "pb_feed_blocked_said",
       "pb_feed_channel_id",
       "pb_feed_cycle_requests",
+      "pb_feed_dm_blocked",
+      "pb_feed_dm_no_reason",
+      "pb_feed_dm_opt_out_cleared",
+      "pb_feed_dm_set",
+      "pb_feed_dm_unmatched",
       "pb_feed_failed_said",
       "pb_feed_interval_minutes",
       "pb_feed_link_label",
@@ -40,10 +45,14 @@
       "pb_feed_place_text",
       "pb_feed_post_text",
       "pb_feed_post_title",
+      "pb_feed_posting_off",
+      "pb_feed_posting_on",
+      "pb_feed_posting_shadow",
       "pb_feed_rematch_days",
       "pb_feed_set_said",
       "pb_feed_shadow_channel_id",
       "pb_feed_taken_said",
+      "pb_feed_unblocked_opted_out_said",
       "pb_feed_unblocked_said",
       "pb_feed_unmatched_said",
       "pb_feed_you_blocked",
@@ -9636,7 +9645,8 @@
           "reason",
           "looked_at",
           "look_error",
-          "last_pb_at"
+          "last_pb_at",
+          "not_news"
         ],
         "posts": [
           "id",
@@ -9688,7 +9698,8 @@
           "reason",
           "looked_at",
           "look_error",
-          "last_pb_at"
+          "last_pb_at",
+          "not_news"
         ]
       }
     },
@@ -9716,7 +9727,8 @@
           "reason",
           "looked_at",
           "look_error",
-          "last_pb_at"
+          "last_pb_at",
+          "not_news"
         ]
       }
     },
@@ -9745,7 +9757,8 @@
           "reason",
           "looked_at",
           "look_error",
-          "last_pb_at"
+          "last_pb_at",
+          "not_news"
         ]
       }
     },
@@ -9774,7 +9787,8 @@
           "reason",
           "looked_at",
           "look_error",
-          "last_pb_at"
+          "last_pb_at",
+          "not_news"
         ]
       }
     },
@@ -9803,7 +9817,8 @@
           "reason",
           "looked_at",
           "look_error",
-          "last_pb_at"
+          "last_pb_at",
+          "not_news"
         ]
       }
     },
@@ -9832,7 +9847,8 @@
           "reason",
           "looked_at",
           "look_error",
-          "last_pb_at"
+          "last_pb_at",
+          "not_news"
         ]
       }
     }

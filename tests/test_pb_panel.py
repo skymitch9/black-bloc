@@ -221,15 +221,18 @@ async def test_staff_pick_a_member_and_get_only_the_moves_that_apply(bot, guild,
         (None, "shadow", ["set", "block"]),
         (pb_store.NONE, "shadow", ["set", "block"]),
         (pb_store.MATCHED, "shadow", ["set", "unmatch", "look", "block"]),
-        (pb_store.MATCHED, "off", ["set", "unmatch", "block"]),
+        (pb_store.MATCHED, "off", ["unmatch", "block"]),
+        (None, "off", ["block"]),
         (pb_store.OPTED_OUT, "on", ["clear", "block"]),
         (pb_store.BLOCKED, "on", ["set", "unblock"]),
     ],
 )
 def test_the_staff_moves_for_each_state(state, mode, moves):
-    row = None if state is None else {"state": state}
+    row = None if state is None else {"state": state, "opted_out_at": None}
 
     assert pb_panel.staff_moves(row, mode) == moves
+    hidden = {"state": pb_store.BLOCKED, "opted_out_at": NOW.isoformat()}
+    assert pb_panel.staff_moves(hidden, "on") == ["unblock"]
 
 
 async def test_block_then_unblock_from_the_card(bot, guild, feed):
@@ -237,9 +240,21 @@ async def test_block_then_unblock_from_the_card(bot, guild, feed):
     staff = FakeInteraction(bot, STAFFER)
     _, card = await pb_panel.build_member(bot, guild, ADA)
 
-    blocked = await press(card, "Block", staff)
+    await item(card, "Block").callback(staff)
+    modal = staff.response.modals[0]
+    assert (await pb_store.match(bot.db, GUILD, ADA))["state"] == "matched"
+    assert (modal.title, modal.reason.label, modal.reason.required) == (
+        "Block",
+        "Reason (the member is told)",
+        False,
+    )
+    modal.reason._value = "posting fakes"
+    submitted = FakeInteraction(bot, STAFFER)
+    await modal.on_submit(submitted)
+    blocked = submitted.rendered
 
     assert (await pb_store.match(bot.db, GUILD, ADA))["state"] == "blocked"
+    assert (await details_of(bot.db, "pbfeed.blocked"))["reason"] == "posting fakes"
     assert blocked["embed"].description.startswith(f"<@{ADA}> is blocked")
     assert labels(blocked["view"]) == ["Set by hand…", "Unblock", "Back"]
     assert field(blocked["embed"], pb_panel.MEMBER_FIELD) == "blocked by staff"
@@ -270,8 +285,10 @@ async def test_set_by_hand_opens_a_modal_and_the_name_becomes_the_match(bot, gui
     await item(card, "Set by hand…").callback(staff)
     modal = staff.response.modals[0]
     modal.runner._value = "zfg"
+    modal.reason._value = "they asked in chat"
     submitted = FakeInteraction(bot, STAFFER)
     await modal.on_submit(submitted)
+    assert (await details_of(bot.db, "pbfeed.set_by_hand"))["reason"] == "they asked in chat"
 
     row = await pb_store.match(bot.db, GUILD, ADA)
     assert (row["state"], row["source"], row["src_name"]) == ("matched", "staff", "zfg")
@@ -342,3 +359,69 @@ async def test_the_command_says_so_when_the_database_is_down(bot, guild, feed, m
     await pb_panel.open_panel(interaction)
 
     assert "database" in interaction.said[0] and interaction.response.messages[0]["ephemeral"]
+
+
+@pytest.mark.parametrize(
+    ("mode", "says", "never"),
+    [
+        ("on", "A personal best is posted once speedrun.com has verified it.", "trying this out"),
+        ("shadow", "Staff are still trying this out", "is posted once"),
+        ("off", "switched off", "is posted once"),
+    ],
+)
+@pytest.mark.parametrize("source", [pb_store.AUTO, pb_store.STAFF])
+async def test_a_matched_member_is_never_promised_a_post_the_mode_forbids(
+    bot, guild, feed, mode, says, never, source
+):
+    await bot.store.set(GUILD, "pb_feed_mode", mode)
+    await matched(bot, source=source)
+
+    embed, _ = await pb_panel.build_own(bot, guild, guild.get_member(ADA))
+
+    assert says in embed.description and never not in embed.description
+    assert embed.description.startswith("**speedrun.com** — [zfg](")
+
+
+async def test_opting_back_in_while_rehearsing_promises_no_post(bot, guild, feed):
+    await matched(bot)
+    interaction = FakeInteraction(bot)
+    _, view = await pb_panel.build_own(bot, guild, interaction.user)
+    out = await press(view, "Do not post my personal bests", interaction)
+
+    back = await press(out["view"], "Post my personal bests", FakeInteraction(bot))
+
+    said = back["embed"].description
+    assert said.startswith("Done — you are back in the personal best feed.")
+    assert "will be posted" not in said and "is posted once" not in said
+    assert "Staff are still trying this out" in said
+
+
+@pytest.mark.parametrize("move", ["Unmatch", "Clear the opt-out"])
+async def test_unmatch_and_clear_ask_for_a_reason_before_they_act(bot, guild, feed, move):
+    await matched(bot)
+    if move == "Clear the opt-out":
+        await pb_store.write_state(
+            bot.db, GUILD, ADA, pb_store.OPTED_OUT, state_by="member", keep_runner=True
+        )
+    staff = FakeInteraction(bot, STAFFER)
+    _, card = await pb_panel.build_member(bot, guild, ADA)
+
+    await item(card, move).callback(staff)
+    modal = staff.response.modals[0]
+    before = (await pb_store.match(bot.db, GUILD, ADA))["state"]
+    modal.reason._value = "asked for it"
+    await modal.on_submit(FakeInteraction(bot, STAFFER))
+
+    kind = "pbfeed.unmatched" if move == "Unmatch" else "pbfeed.opt_out_cleared"
+    assert before in ("matched", "opted_out") and modal.title == move
+    assert (await details_of(bot.db, kind))["reason"] == "asked for it"
+    assert (await pb_store.match(bot.db, GUILD, ADA))["state"] != before
+
+
+def test_the_name_limit_has_one_home():
+    from black_bloc import pb_moves
+
+    assert pb_panel.NAME_LIMIT is pb_moves.NAME_LIMIT
+    source = (pb_panel.__file__, pb_moves.__file__)
+    counts = [open(path, encoding="utf-8").read().count("NAME_LIMIT = ") for path in source]
+    assert counts == [0, 1]

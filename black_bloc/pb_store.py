@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime
 from typing import Any
@@ -24,7 +25,8 @@ DRY = "dry"
 HELD = "held"
 FAILED = "failed"
 CLAIMED = "claimed"
-SHOWN = (POSTED, REHEARSED, DRY, HELD, FAILED)
+UNCONFIRMED = "unconfirmed"
+SHOWN = (POSTED, REHEARSED, DRY, HELD, FAILED, UNCONFIRMED)
 
 POSTS_LIMIT = 50
 
@@ -102,8 +104,11 @@ async def write_match(
     if holder is not None and holder != int(user_id):
         raise RunnerTaken(holder)
     at = stamp(now)
+    before = await match(db, guild_id, user_id)
+    back = before is not None and before["gone_src_user_id"] == runner.id
     try:
-        await forget_runs(db, guild_id, user_id)
+        if not back:
+            await forget_runs(db, guild_id, user_id)
         await db.conn.execute(
             "INSERT INTO pb_matches(guild_id, user_id, twitch_login, src_user_id, src_name, "
             "src_weblink, source, state, state_by, set_by, reason, checked_at, matched_at, "
@@ -114,8 +119,9 @@ async def write_match(
             "src_weblink = excluded.src_weblink, source = excluded.source, "
             "state = excluded.state, state_by = excluded.state_by, set_by = excluded.set_by, "
             "reason = NULL, checked_at = excluded.checked_at, matched_at = excluded.matched_at, "
-            "baseline_at = NULL, looked_at = NULL, look_error = NULL, last_pb_at = NULL, "
-            "updated_at = excluded.updated_at",
+            "baseline_at = CASE WHEN ? THEN baseline_at ELSE NULL END, looked_at = NULL, "
+            "look_error = NULL, last_pb_at = NULL, misses = 0, gone_src_user_id = NULL, "
+            "quiet = NULL, updated_at = excluded.updated_at",
             (
                 guild_id,
                 user_id,
@@ -130,6 +136,7 @@ async def write_match(
                 at,
                 at,
                 at,
+                1 if back else 0,
             ),
         )
         await db.conn.commit()
@@ -160,36 +167,75 @@ async def write_state(
         await forget_runs(db, guild_id, user_id)
     await db.conn.execute(
         "INSERT INTO pb_matches(guild_id, user_id, twitch_login, state, state_by, set_by, "
-        "reason, checked_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "reason, checked_at, updated_at, opted_out_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(guild_id, user_id) DO UPDATE SET state = excluded.state, "
         "state_by = excluded.state_by, set_by = excluded.set_by, reason = excluded.reason, "
-        "checked_at = excluded.checked_at, updated_at = excluded.updated_at"
+        "checked_at = excluded.checked_at, updated_at = excluded.updated_at, "
+        "opted_out_at = COALESCE(excluded.opted_out_at, opted_out_at)"
         + (
             ""
             if kept
             else ", twitch_login = excluded.twitch_login, src_user_id = NULL, src_name = NULL, "
             "src_weblink = NULL, source = NULL, matched_at = NULL, baseline_at = NULL, "
-            "looked_at = NULL, look_error = NULL, last_pb_at = NULL"
+            "looked_at = NULL, look_error = NULL, last_pb_at = NULL, misses = 0, "
+            "gone_src_user_id = NULL, quiet = NULL"
         ),
-        (guild_id, user_id, twitch_login, state, state_by, set_by, reason, at, at),
+        (
+            guild_id,
+            user_id,
+            twitch_login,
+            state,
+            state_by,
+            set_by,
+            reason,
+            at,
+            at,
+            at if state == OPTED_OUT else None,
+        ),
+    )
+    await db.conn.commit()
+    return await match(db, guild_id, user_id)
+
+
+async def runner_gone(
+    db: Any, guild_id: int, user_id: int, reason: str, now: datetime | None = None
+) -> Any:
+    """An automatic match is undone; its baseline stays for the day the same runner is back."""
+    at = stamp(now)
+    await db.conn.execute(
+        "UPDATE pb_matches SET state = ?, state_by = ?, set_by = NULL, reason = ?, "
+        "checked_at = ?, updated_at = ?, gone_src_user_id = src_user_id, src_user_id = NULL, "
+        "src_name = NULL, src_weblink = NULL, source = NULL, matched_at = NULL, "
+        "looked_at = NULL, look_error = NULL, misses = 0 WHERE guild_id = ? AND user_id = ?",
+        (NONE, AUTO, reason, at, at, guild_id, user_id),
     )
     await db.conn.commit()
     return await match(db, guild_id, user_id)
 
 
 async def restore(
-    db: Any, guild_id: int, user_id: int, *, state_by: str, set_by: int | None = None
+    db: Any,
+    guild_id: int,
+    user_id: int,
+    *,
+    state_by: str,
+    set_by: int | None = None,
+    ends_opt_out: bool = False,
 ) -> Any:
-    """Out of `opted_out` or `blocked`: back to the kept runner, or to `none` to be looked up."""
+    """Out of a block or an opt-out. An opt-out outlives a block unless this move ends it."""
     before = await match(db, guild_id, user_id)
     if before is None:
         return None
-    state = MATCHED if before["src_user_id"] else NONE
+    if before["opted_out_at"] and not ends_opt_out:
+        state, state_by, set_by = OPTED_OUT, MEMBER, int(user_id)
+    else:
+        state = MATCHED if before["src_user_id"] else NONE
     await db.conn.execute(
         "UPDATE pb_matches SET state = ?, state_by = ?, set_by = ?, reason = NULL, "
-        "checked_at = CASE WHEN ? = 'none' THEN NULL ELSE checked_at END, updated_at = ? "
+        "checked_at = CASE WHEN ? = 'none' THEN NULL ELSE checked_at END, updated_at = ?, "
+        "opted_out_at = CASE WHEN ? THEN NULL ELSE opted_out_at END "
         "WHERE guild_id = ? AND user_id = ?",
-        (state, state_by, set_by, state, stamp(), guild_id, user_id),
+        (state, state_by, set_by, state, stamp(), 1 if ends_opt_out else 0, guild_id, user_id),
     )
     await db.conn.commit()
     return await match(db, guild_id, user_id)
@@ -210,6 +256,7 @@ async def record_look(
     *,
     first: bool,
     newest: bool = False,
+    quiet: dict[str, Any] | None = None,
     now: datetime | None = None,
 ) -> None:
     """Upserts only: a slot a look did not return stays, so a short answer cannot arm a replay."""
@@ -234,13 +281,69 @@ async def record_look(
             ),
         )
     await db.conn.execute(
-        "UPDATE pb_matches SET looked_at = ?, look_error = NULL, "
+        "UPDATE pb_matches SET looked_at = ?, look_error = NULL, misses = 0, "
         "baseline_at = CASE WHEN ? THEN ? ELSE baseline_at END, "
-        "last_pb_at = CASE WHEN ? THEN ? ELSE last_pb_at END "
+        "last_pb_at = CASE WHEN ? THEN ? ELSE last_pb_at END, "
+        "quiet = COALESCE(?, quiet) "
         "WHERE guild_id = ? AND user_id = ?",
-        (at, 1 if first else 0, at, 1 if newest else 0, at, guild_id, user_id),
+        (
+            at,
+            1 if first else 0,
+            at,
+            1 if newest else 0,
+            at,
+            json.dumps(quiet | {"at": at}) if quiet else None,
+            guild_id,
+            user_id,
+        ),
     )
     await db.conn.commit()
+
+
+def quiet_of(row: Any) -> dict[str, Any] | None:
+    """The last runs a look recorded without posting, by reason, or None."""
+    try:
+        found = json.loads(row["quiet"]) if row is not None and row["quiet"] else None
+    except (TypeError, ValueError):
+        return None
+    return found if isinstance(found, dict) else None
+
+
+async def record_miss(
+    db: Any, guild_id: int, user_id: int, reason: str, now: datetime | None = None
+) -> int:
+    """One more look in a row that speedrun.com answered with nothing; how many that makes."""
+    await db.conn.execute(
+        "UPDATE pb_matches SET looked_at = ?, look_error = ?, misses = misses + 1 "
+        "WHERE guild_id = ? AND user_id = ?",
+        (stamp(now), reason, guild_id, user_id),
+    )
+    await db.conn.commit()
+    row = await match(db, guild_id, user_id)
+    return int(row["misses"] or 0) if row is not None else 0
+
+
+async def record_lookup_error(
+    db: Any,
+    guild_id: int,
+    user_id: int,
+    login: str | None,
+    reason: str,
+    code: str,
+    now: datetime | None = None,
+) -> bool:
+    """A lookup that failed for this member alone; True the first time, so it is logged once."""
+    before = await match(db, guild_id, user_id)
+    fresh = before is None or not before["look_error"]
+    await write_state(
+        db, guild_id, user_id, NONE, state_by=AUTO, reason=code, twitch_login=login, now=now
+    )
+    await db.conn.execute(
+        "UPDATE pb_matches SET look_error = ? WHERE guild_id = ? AND user_id = ?",
+        (reason, guild_id, user_id),
+    )
+    await db.conn.commit()
+    return fresh
 
 
 async def record_look_error(
@@ -307,6 +410,22 @@ async def settle_post(
         (outcome, channel_id, aimed_at, message_id, reason, post_id),
     )
     await db.conn.commit()
+
+
+async def settle_stale_claims(db: Any, guild_id: int, reason: str) -> list[Any]:
+    """Claims no look ever settled become `unconfirmed`, in words; the rows that were."""
+    cur = await db.conn.execute(
+        "SELECT * FROM pb_posts WHERE guild_id = ? AND outcome = ? ORDER BY id",
+        (guild_id, CLAIMED),
+    )
+    rows = list(await cur.fetchall())
+    if rows:
+        await db.conn.execute(
+            "UPDATE pb_posts SET outcome = ?, reason = ? WHERE guild_id = ? AND outcome = ?",
+            (UNCONFIRMED, reason, guild_id, CLAIMED),
+        )
+        await db.conn.commit()
+    return rows
 
 
 async def posts(db: Any, guild_id: int, limit: int = POSTS_LIMIT) -> list[Any]:
@@ -390,6 +509,7 @@ __all__ = [
     "SHOWN",
     "STAFF",
     "STATES",
+    "UNCONFIRMED",
     "RunnerTaken",
     "baseline",
     "claim_post",
@@ -401,12 +521,17 @@ __all__ = [
     "matches",
     "parsed",
     "posts",
+    "quiet_of",
     "record_look",
     "record_look_error",
+    "record_lookup_error",
+    "record_miss",
     "record_ok",
     "record_outage",
     "restore",
+    "runner_gone",
     "settle_post",
+    "settle_stale_claims",
     "stamp",
     "take_summary",
     "write_match",

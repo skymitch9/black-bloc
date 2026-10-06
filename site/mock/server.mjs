@@ -1088,7 +1088,7 @@ const SETTING_SPECS = [
   ["pb_feed_ping_role_id", "role", null, null, "a role mentioned above each personal best post; blank \u2014 the default \u2014 pings nobody. A rehearsal copy never pings"],
   ["pb_feed_auto_match", "bool", true, true, "true \u2014 the default \u2014 finds a member's speedrun.com account from the Twitch channel they linked with /golive, when exactly one account lists that channel; false leaves matching to staff. A member who opted out, or whom staff blocked, is never matched automatically either way"],
   ["pb_feed_interval_minutes", "int", 60, 60, "how many minutes pass between two looks at one member's personal bests; 60 by default, 15 to 1440. The members are spread across the interval, a few a minute", null, 1440, 15],
-  ["pb_feed_cycle_requests", "int", 120, 120, "the most requests Black Bloc sends speedrun.com within one pb_feed_interval_minutes; 120 by default. At the cap it stops until the interval has passed and says so once in the log", null, 600, 1],
+  ["pb_feed_cycle_requests", "int", 400, 400, "the most requests Black Bloc sends speedrun.com within one pb_feed_interval_minutes; 400 by default, which covers 300 members looked at once an hour with room for lookups. At the cap it stops until the interval has passed and says so once in the log; Look now and Set by hand stop there too", null, 600, 1],
   ["pb_feed_rematch_days", "int", 7, 7, "how many days pass before Black Bloc looks again for the speedrun.com account of a member it found none for; 7 by default", null, 90, 1],
   ["pb_feed_max_age_days", "int", 7, 7, "a run verified more than this many days ago is recorded and not posted; 7 by default. It is what stops old runs being posted after a long outage or when a leaderboard is reorganised", null, 60, 1],
   ["pb_feed_max_posts", "int", 5, 5, "the most personal bests posted for one member from one look; 5 by default. The rest are recorded and never posted", null, 20, 1],
@@ -1100,8 +1100,11 @@ const SETTING_SPECS = [
   ["pb_feed_no_channel_words", "text", "nowhere yet \u2014 pb_feed_channel_id is blank", "nowhere yet \u2014 pb_feed_channel_id is blank", "what the rehearsal note names as the real channel while pb_feed_channel_id is blank"],
   ["pb_feed_panel_title", "text", "Personal bests", "Personal bests", "the heading of the /pb panel"],
   ["pb_feed_panel_footer", "text", "This panel has gone quiet \u2014 run /pb again", "This panel has gone quiet \u2014 run /pb again", "the footer the /pb panel gets when its buttons have timed out"],
-  ["pb_feed_you_matched", "text", "**speedrun.com** \u2014 [{runner}]({link}), found from twitch.tv/{login}. A personal best is posted once speedrun.com has verified it.", "**speedrun.com** \u2014 [{runner}]({link}), found from twitch.tv/{login}. A personal best is posted once speedrun.com has verified it.", "what /pb tells a member Black Bloc matched from their Twitch link"],
-  ["pb_feed_you_set", "text", "**speedrun.com** \u2014 [{runner}]({link}), set by staff. A personal best is posted once speedrun.com has verified it.", "**speedrun.com** \u2014 [{runner}]({link}), set by staff. A personal best is posted once speedrun.com has verified it.", "what /pb tells a member whose speedrun.com account staff set by hand"],
+  ["pb_feed_you_matched", "text", "**speedrun.com** \u2014 [{runner}]({link}), found from twitch.tv/{login}.", "**speedrun.com** \u2014 [{runner}]({link}), found from twitch.tv/{login}.", "what /pb tells a member Black Bloc matched from their Twitch link"],
+  ["pb_feed_you_set", "text", "**speedrun.com** \u2014 [{runner}]({link}), set by staff.", "**speedrun.com** \u2014 [{runner}]({link}), set by staff.", "what /pb tells a member whose speedrun.com account staff set by hand"],
+  ["pb_feed_posting_on", "text", "A personal best is posted once speedrun.com has verified it.", "A personal best is posted once speedrun.com has verified it.", "what /pb adds for a matched member while pb_feed_mode is on"],
+  ["pb_feed_posting_shadow", "text", "Staff are still trying this out: a new personal best is not posted in the server's personal best channel yet, only copied to where staff rehearse.", "Staff are still trying this out: a new personal best is not posted in the server's personal best channel yet, only copied to where staff rehearse.", "what /pb adds for a matched member while pb_feed_mode is shadow, in place of pb_feed_posting_on"],
+  ["pb_feed_posting_off", "text", "The personal best feed is switched off, so nothing is looked at and nothing is posted.", "The personal best feed is switched off, so nothing is looked at and nothing is posted.", "what /pb adds for a matched member while pb_feed_mode is off, in place of pb_feed_posting_on"],
   ["pb_feed_you_none", "text", "No speedrun.com account lists twitch.tv/{login} as its Twitch channel. Add your Twitch channel to your speedrun.com profile and Black Bloc finds it within {days} day(s), or ask staff to set it.", "No speedrun.com account lists twitch.tv/{login} as its Twitch channel. Add your Twitch channel to your speedrun.com profile and Black Bloc finds it within {days} day(s), or ask staff to set it.", "what /pb tells a member whose Twitch login matched no speedrun.com account"],
   ["pb_feed_you_waiting", "text", "Black Bloc has not looked for your speedrun.com account yet. It looks for a few members a minute.", "Black Bloc has not looked for your speedrun.com account yet. It looks for a few members a minute.", "what /pb tells a linked member Black Bloc has not looked up yet"],
   ["pb_feed_you_unlinked", "text", "You have not linked a Twitch channel, so Black Bloc cannot find your speedrun.com account. Link one with /golive, or ask staff to set it.", "You have not linked a Twitch channel, so Black Bloc cannot find your speedrun.com account. Link one with /golive, or ask staff to set it.", "what /pb tells a member with no Twitch link and no match"],
@@ -1110,18 +1113,24 @@ const SETTING_SPECS = [
   ["pb_feed_opt_out_label", "text", "Do not post my personal bests", "Do not post my personal bests", "the button a member presses on /pb to opt out"],
   ["pb_feed_opt_in_label", "text", "Post my personal bests", "Post my personal bests", "the button a member presses on /pb to opt back in"],
   ["pb_feed_opted_out_said", "text", "Done \u2014 Black Bloc will not post your personal bests and has stopped looking.", "Done \u2014 Black Bloc will not post your personal bests and has stopped looking.", "what a member is told after opting out of the personal best feed"],
-  ["pb_feed_opted_in_said", "text", "Done \u2014 your personal bests will be posted again. Runs verified before now are not posted.", "Done \u2014 your personal bests will be posted again. Runs verified before now are not posted.", "what a member is told after opting back in to the personal best feed"],
+  ["pb_feed_opted_in_said", "text", "Done \u2014 you are back in the personal best feed. Runs verified before now are never posted.", "Done \u2014 you are back in the personal best feed. Runs verified before now are never posted.", "what a member is told after opting back in to the personal best feed"],
   ["pb_feed_set_said", "text", "{member} is now matched to **{runner}** on speedrun.com. Their existing personal bests are recorded at the next look and not posted.", "{member} is now matched to **{runner}** on speedrun.com. Their existing personal bests are recorded at the next look and not posted.", "what staff are told after setting a member's speedrun.com account by hand"],
   ["pb_feed_unmatched_said", "text", "{member} is no longer matched. Black Bloc may find a match from their Twitch link again; press Block to stop that.", "{member} is no longer matched. Black Bloc may find a match from their Twitch link again; press Block to stop that.", "what staff are told after unmatching a member from the personal best feed"],
   ["pb_feed_blocked_said", "text", "{member} is blocked: no match is looked for and nothing of theirs is posted until staff unblock them or set an account by hand.", "{member} is blocked: no match is looked for and nothing of theirs is posted until staff unblock them or set an account by hand.", "what staff are told after blocking a member from the personal best feed"],
   ["pb_feed_unblocked_said", "text", "{member} is back in the personal best feed. Runs verified before now are not posted.", "{member} is back in the personal best feed. Runs verified before now are not posted.", "what staff are told after unblocking a member, or clearing their opt-out"],
+  ["pb_feed_unblocked_opted_out_said", "text", "{member} is unblocked. They had asked not to have personal bests posted, and that still stands: only they, or staff pressing Clear the opt-out, can end it.", "{member} is unblocked. They had asked not to have personal bests posted, and that still stands: only they, or staff pressing Clear the opt-out, can end it.", "what staff are told after unblocking a member who had opted out before the block"],
   ["pb_feed_no_runner_said", "text", "speedrun.com has no single account named exactly **{given}**, so nothing was changed. Copy the name from the end of their speedrun.com profile address and try again.", "speedrun.com has no single account named exactly **{given}**, so nothing was changed. Copy the name from the end of their speedrun.com profile address and try again.", "what staff are told when the speedrun.com name they typed matches no account"],
   ["pb_feed_taken_said", "text", "**{runner}** on speedrun.com is already matched to {holder}, so nothing was changed. Unmatch them first if this is the right person.", "**{runner}** on speedrun.com is already matched to {holder}, so nothing was changed. Unmatch them first if this is the right person.", "what staff are told when the speedrun.com account is already another member's"],
   ["pb_feed_not_now_said", "text", "{member} asked not to have personal bests posted, so nothing was changed. Clear the opt-out first if staff have decided otherwise.", "{member} asked not to have personal bests posted, so nothing was changed. Clear the opt-out first if staff have decided otherwise.", "what staff are told when they act on a member who opted out"],
   ["pb_feed_nothing_to_do_said", "text", "{member} has nothing to change there, so nothing was done.", "{member} has nothing to change there, so nothing was done.", "what staff are told when a personal best move does not apply to that member"],
   ["pb_feed_looked_said", "text", "Looked at **{runner}** \u2014 {found} new personal best(s), {seen} on record.", "Looked at **{runner}** \u2014 {found} new personal best(s), {seen} on record.", "what staff are told after Look now on a matched member"],
   ["pb_feed_failed_said", "text", "Nothing was changed \u2014 {reason}", "Nothing was changed \u2014 {reason}", "what staff are told when speedrun.com could not be read; {reason} says why and what to do"],
-  ["pb_feed_off_said", "text", "The personal best feed is **off**, so Black Bloc did not ask speedrun.com anything. Set pb_feed_mode to shadow or on \u2014 in /settings or on the Settings page \u2014 and try again.", "The personal best feed is **off**, so Black Bloc did not ask speedrun.com anything. Set pb_feed_mode to shadow or on \u2014 in /settings or on the Settings page \u2014 and try again.", "what staff are told when they ask for a look while pb_feed_mode is off"],
+  ["pb_feed_off_said", "text", "The personal best feed is **off**, so Black Bloc did not ask speedrun.com anything. Set pb_feed_mode to shadow or on \u2014 in /settings or on the Settings page \u2014 and try again.", "The personal best feed is **off**, so Black Bloc did not ask speedrun.com anything. Set pb_feed_mode to shadow or on \u2014 in /settings or on the Settings page \u2014 and try again.", "what staff are told when they ask for a look, or set an account by hand, while pb_feed_mode is off"],
+  ["pb_feed_dm_set", "text", "Staff in **{server}** matched you to **{runner}** on speedrun.com for the personal best feed. Their reason: {reason}\nRun /pb in the server to see it, or to opt out.", "Staff in **{server}** matched you to **{runner}** on speedrun.com for the personal best feed. Their reason: {reason}\nRun /pb in the server to see it, or to opt out.", "the DM a member gets when staff set their speedrun.com account by hand. {server} is the server's name, {runner} the account, {reason} what staff typed or pb_feed_dm_no_reason"],
+  ["pb_feed_dm_unmatched", "text", "Staff in **{server}** removed your match to **{runner}** on speedrun.com from the personal best feed. Their reason: {reason}\nBlack Bloc may find your account again from your Twitch link; run /pb in the server to see where it stands, or to opt out.", "Staff in **{server}** removed your match to **{runner}** on speedrun.com from the personal best feed. Their reason: {reason}\nBlack Bloc may find your account again from your Twitch link; run /pb in the server to see where it stands, or to opt out.", "the DM a member gets when staff unmatch them from the personal best feed"],
+  ["pb_feed_dm_blocked", "text", "Staff in **{server}** turned the personal best feed off for you: Black Bloc no longer looks at your speedrun.com runs. Their reason: {reason}\nAsk staff if you think that should change.", "Staff in **{server}** turned the personal best feed off for you: Black Bloc no longer looks at your speedrun.com runs. Their reason: {reason}\nAsk staff if you think that should change.", "the DM a member gets when staff block them from the personal best feed; {runner} is the account they were matched to, or nothing"],
+  ["pb_feed_dm_opt_out_cleared", "text", "You had asked Black Bloc in **{server}** to leave your personal bests alone. Staff have put you back in the personal best feed. Their reason: {reason}\nRun /pb in the server to opt out again.", "You had asked Black Bloc in **{server}** to leave your personal bests alone. Staff have put you back in the personal best feed. Their reason: {reason}\nRun /pb in the server to opt out again.", "the DM a member gets when staff clear their opt-out"],
+  ["pb_feed_dm_no_reason", "text", "none was given.", "none was given.", "what {reason} becomes in a personal best DM when staff typed no reason"],
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
@@ -2220,7 +2229,7 @@ function withRunEvents(seeded) {
 const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text', 'quiet_bot_pins'];
 const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour", "structure_backup_keep", "structure_backup_notify", "structure_backup_channel_id", "structure_backup_shadow_channel_id", "structure_backup_notice_lines", "structure_backup_panel_minutes", "structure_backup_notice_title", "structure_backup_notice_text", "structure_backup_notice_more", "structure_backup_panel_title", "structure_backup_panel_footer", "structure_backup_mode_label", "structure_backup_latest_label", "structure_backup_latest_line", "structure_backup_none_yet", "structure_backup_look_label", "structure_backup_look_saved", "structure_backup_look_unchanged", "structure_backup_look_failed", "structure_backup_take_label", "structure_backup_changes_label", "structure_backup_site_label", "structure_backup_saved_said", "structure_backup_unchanged_said", "structure_backup_failed_said", "structure_backup_off_said", "structure_backup_no_changes_said", "structure_backup_say_server_changed", "structure_backup_say_role_added", "structure_backup_say_role_removed", "structure_backup_say_role_renamed", "structure_backup_say_role_gained", "structure_backup_say_role_lost", "structure_backup_say_role_changed", "structure_backup_say_role_moved", "structure_backup_say_role_moved_top", "structure_backup_say_channel_added", "structure_backup_say_channel_removed", "structure_backup_say_channel_renamed", "structure_backup_say_channel_changed", "structure_backup_say_channel_recategorised", "structure_backup_say_channel_reordered", "structure_backup_say_tag_added", "structure_backup_say_tag_removed", "structure_backup_say_tag_renamed", "structure_backup_say_overwrite_added", "structure_backup_say_overwrite_removed", "structure_backup_say_overwrite_changed", "structure_backup_say_allow_gained", "structure_backup_say_allow_lost", "structure_backup_say_deny_gained", "structure_backup_say_deny_lost", "structure_backup_say_target_role", "structure_backup_say_target_member", "structure_backup_say_top_level", "structure_backup_say_nothing", "structure_backup_say_yes", "structure_backup_say_no", "structure_backup_say_f_name", "structure_backup_say_f_verification", "structure_backup_say_f_notifications", "structure_backup_say_f_system_channel", "structure_backup_say_f_rules_channel", "structure_backup_say_f_colour", "structure_backup_say_f_hoist", "structure_backup_say_f_mentionable", "structure_backup_say_f_managed", "structure_backup_say_f_type", "structure_backup_say_f_topic", "structure_backup_say_f_slowmode", "structure_backup_say_f_nsfw", "structure_backup_say_f_bitrate", "structure_backup_say_f_user_limit"];
 CORE_KEYS.push(...STRUCTURE_BACKUP_KEYS);
-const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_channel_id", "pb_feed_ping_role_id", "pb_feed_auto_match", "pb_feed_interval_minutes", "pb_feed_cycle_requests", "pb_feed_rematch_days", "pb_feed_max_age_days", "pb_feed_max_posts", "pb_feed_panel_minutes", "pb_feed_post_title", "pb_feed_post_text", "pb_feed_place_text", "pb_feed_link_label", "pb_feed_no_channel_words", "pb_feed_panel_title", "pb_feed_panel_footer", "pb_feed_you_matched", "pb_feed_you_set", "pb_feed_you_none", "pb_feed_you_waiting", "pb_feed_you_unlinked", "pb_feed_you_opted_out", "pb_feed_you_blocked", "pb_feed_opt_out_label", "pb_feed_opt_in_label", "pb_feed_opted_out_said", "pb_feed_opted_in_said", "pb_feed_set_said", "pb_feed_unmatched_said", "pb_feed_blocked_said", "pb_feed_unblocked_said", "pb_feed_no_runner_said", "pb_feed_taken_said", "pb_feed_not_now_said", "pb_feed_nothing_to_do_said", "pb_feed_looked_said", "pb_feed_failed_said", "pb_feed_off_said"];
+const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_channel_id", "pb_feed_ping_role_id", "pb_feed_auto_match", "pb_feed_interval_minutes", "pb_feed_cycle_requests", "pb_feed_rematch_days", "pb_feed_max_age_days", "pb_feed_max_posts", "pb_feed_panel_minutes", "pb_feed_post_title", "pb_feed_post_text", "pb_feed_place_text", "pb_feed_link_label", "pb_feed_no_channel_words", "pb_feed_panel_title", "pb_feed_panel_footer", "pb_feed_you_matched", "pb_feed_you_set", "pb_feed_posting_on", "pb_feed_posting_shadow", "pb_feed_posting_off", "pb_feed_you_none", "pb_feed_you_waiting", "pb_feed_you_unlinked", "pb_feed_you_opted_out", "pb_feed_you_blocked", "pb_feed_opt_out_label", "pb_feed_opt_in_label", "pb_feed_opted_out_said", "pb_feed_opted_in_said", "pb_feed_set_said", "pb_feed_unmatched_said", "pb_feed_blocked_said", "pb_feed_unblocked_said", "pb_feed_unblocked_opted_out_said", "pb_feed_no_runner_said", "pb_feed_taken_said", "pb_feed_not_now_said", "pb_feed_nothing_to_do_said", "pb_feed_looked_said", "pb_feed_failed_said", "pb_feed_off_said", "pb_feed_dm_set", "pb_feed_dm_unmatched", "pb_feed_dm_blocked", "pb_feed_dm_opt_out_cleared", "pb_feed_dm_no_reason"];
 CORE_KEYS.push(...PB_FEED_KEYS);
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
@@ -13731,6 +13740,9 @@ function pbPerson(user_id, twitch_login, state, extra = {}) {
     looked_at: null,
     look_error: null,
     last_pb_at: null,
+    misses: 0,
+    opted_out_at: null,
+    not_news: null,
     ...extra,
   };
 }
@@ -13751,17 +13763,18 @@ function pbMatched(user_id, twitch_login, runner, source, extra = {}) {
 
 function seedPbs() {
   return {
-    nextPost: 4,
+    nextPost: 5,
     last_look: { at: minutesAgo(1), ok_at: minutesAgo(1), outcome: 'ok', reason: null, asks_again_at: null },
     people: [
-      pbMatched(MEMBERS[1].id, 'caseyfast', PB_RUNNERS.caseyfast, 'auto', { last_pb_at: minutesAgo(60 * 5) }),
-      pbMatched(MEMBERS[3].id, null, PB_RUNNERS.mothlight, 'staff', { matched_from: null }),
+      pbMatched(MEMBERS[1].id, 'caseyfast', PB_RUNNERS.caseyfast, 'auto', { last_pb_at: minutesAgo(60 * 5), not_news: { at: minutesAgo(60 * 26), too_old: 2, undated: 1 } }),
+      pbMatched(MEMBERS[3].id, null, PB_RUNNERS.mothlight, 'staff', { matched_from: null, misses: 2, look_error: 'speedrun.com has had nothing at this account\u2019s address for 2 looks in a row (it answered 404). Staff set this match, so Black Bloc leaves it alone: press Unmatch, or Set by hand again, if the account is gone.' }),
       pbPerson(MEMBERS[2].id, 'rivet_exe', 'none', { reason: 'nobody' }),
-      pbPerson(MEMBERS[5].id, 'quietkid', 'opted_out', { state_by: 'member' }),
+      pbPerson(MEMBERS[5].id, 'quietkid', 'opted_out', { state_by: 'member', opted_out_at: minutesAgo(60 * 80) }),
       pbPerson(MEMBERS[6].id, 'daxthecat', 'blocked', { state_by: 'staff', checked_at: minutesAgo(60 * 50) }),
       pbPerson(MEMBERS[0].id, 'nbaslamking', null, { matched_from: null, state_by: null, checked_at: null }),
     ],
     posts: [
+      { id: 4, user_id: MEMBERS[3].id, run_id: 'pl9w3k7q', runner: 'mothlight', game: 'Hollow Knight', category: 'Any%', seconds: 2061, place: 310, link: 'https://www.speedrun.com/hollowknight/runs/pl9w3k7q', verified_at: minutesAgo(60 * 3), outcome: 'unconfirmed', reason: 'Black Bloc stopped between claiming this run and posting it, so it cannot say whether the post was made. It is not posted again; look in the channel if it matters.', channel_id: null, aimed_at: null, message_id: null, at: minutesAgo(60 * 2) },
       { id: 3, user_id: MEMBERS[1].id, run_id: 'yd4ol82m', runner: 'caseyfast', game: 'Celeste', category: 'Any%', seconds: 1643.218, place: 212, link: 'https://www.speedrun.com/celeste/runs/yd4ol82m', verified_at: minutesAgo(60 * 5 + 20), outcome: 'rehearsed', reason: null, channel_id: CHANNELS[2].id, aimed_at: null, message_id: '830000000000000301', at: minutesAgo(60 * 5) },
       { id: 2, user_id: MEMBERS[3].id, run_id: 'zq0k1d9y', runner: 'mothlight', game: 'Hollow Knight', category: 'Forgotten Crossroads: Any% (No Major Glitches)', seconds: 312, place: null, link: 'https://www.speedrun.com/hollowknight/runs/zq0k1d9y', verified_at: minutesAgo(60 * 49), outcome: 'held', reason: null, channel_id: null, aimed_at: null, message_id: null, at: minutesAgo(60 * 48) },
       { id: 1, user_id: MEMBERS[1].id, run_id: 'me3x7v4z', runner: 'caseyfast', game: 'Super Mario 64', category: '16 Star', seconds: 1012.5, place: 1480, link: 'https://www.speedrun.com/sm64/runs/me3x7v4z', verified_at: minutesAgo(60 * 73), outcome: 'failed', reason: 'pb_feed_channel_id is blank, so there is nowhere to post it. Pick a channel on the Personal bests page or in /settings; this run is recorded and will not be posted later.', channel_id: null, aimed_at: null, message_id: null, at: minutesAgo(60 * 72) },
@@ -13814,8 +13827,14 @@ function pbClear(person, state_by) {
     looked_at: null,
     look_error: null,
     last_pb_at: null,
+    misses: 0,
+    not_news: null,
     checked_at: now(),
   });
+}
+
+function pbReason(body) {
+  return String((body && body.reason) || '').replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
 route('GET', '/api/pbs', (context) => {
@@ -13837,8 +13856,11 @@ route('PUT', '/api/pbs/:user_id', async (context) => {
   const body = await context.body();
   const given = String(body.runner || '').trim().replace(/^@/, '').slice(0, 64);
   const wanted = String(context.params.user_id);
+  if ((state.settings.get('pb_feed_mode') ?? 'shadow') === 'off') {
+    throw new Refused(409, 'pb_feed_off', state.settings.get('pb_feed_off_said'));
+  }
   const before = pbOf(context);
-  if (before && before.state === 'opted_out') {
+  if (before && (before.state === 'opted_out' || before.opted_out_at)) {
     throw new Refused(409, 'opted_out', `<@${wanted}> asked not to have personal bests posted, so nothing was changed. Clear the opt-out first if staff have decided otherwise.`);
   }
   const runner = PB_RUNNERS[given.toLowerCase()];
@@ -13852,12 +13874,13 @@ route('PUT', '/api/pbs/:user_id', async (context) => {
   const person = pbOf(context, true);
   pbClear(person, 'staff');
   Object.assign(person, { state: 'matched', source: 'staff', runner: runner.name, runner_id: runner.id, runner_link: runner.weblink, matched_at: now() });
-  logAction('web.pbfeed.set_by_hand', { target_id: wanted, details: { via: 'website', runner: runner.name, runner_id: runner.id } });
+  logAction('web.pbfeed.set_by_hand', { target_id: wanted, details: { via: 'website', runner: runner.name, runner_id: runner.id, reason: pbReason(body) } });
   return { person: pbRow(person), message: `<@${wanted}> is now matched to **${runner.name}** on speedrun.com. Their existing personal bests are recorded at the next look and not posted.` };
 });
 
-route('DELETE', '/api/pbs/:user_id', (context) => {
+route('DELETE', '/api/pbs/:user_id', async (context) => {
   requireStaff(context.session);
+  const reason = pbReason(await context.body());
   const wanted = String(context.params.user_id);
   const person = pbOf(context);
   if (person && person.state === 'opted_out') {
@@ -13867,33 +13890,42 @@ route('DELETE', '/api/pbs/:user_id', (context) => {
   const runner = person.runner;
   pbClear(person, 'staff');
   person.state = 'none';
-  logAction('web.pbfeed.unmatched', { target_id: wanted, details: { via: 'website', runner } });
+  logAction('web.pbfeed.unmatched', { target_id: wanted, details: { via: 'website', runner, reason } });
   return { person: pbRow(person), message: `<@${wanted}> is no longer matched. Black Bloc may find a match from their Twitch link again; press Block to stop that.` };
 });
 
-route('POST', '/api/pbs/:user_id/block', (context) => {
+route('POST', '/api/pbs/:user_id/block', async (context) => {
   requireStaff(context.session);
+  const reason = pbReason(await context.body());
   const wanted = String(context.params.user_id);
   const person = pbOf(context, true);
   if (person.state === 'blocked') throw pbNothing(wanted);
   const runner = person.runner;
+  const optedOutAt = person.opted_out_at;
   pbClear(person, 'staff');
+  person.opted_out_at = optedOutAt;
   person.state = 'blocked';
-  logAction('web.pbfeed.blocked', { target_id: wanted, details: { via: 'website', runner } });
+  logAction('web.pbfeed.blocked', { target_id: wanted, details: { via: 'website', runner, reason } });
   return { person: pbRow(person), message: `<@${wanted}> is blocked: no match is looked for and nothing of theirs is posted until staff unblock them or set an account by hand.` };
 });
 
-function pbBackIn(context, was, kind) {
+async function pbBackIn(context, was, kind) {
   requireStaff(context.session);
+  const reason = pbReason(await context.body());
   const wanted = String(context.params.user_id);
   const person = pbOf(context);
   if (!person || person.state !== was) throw pbNothing(wanted);
-  person.state = person.runner_id ? 'matched' : 'none';
-  person.state_by = 'staff';
+  const stillOut = was === 'blocked' && Boolean(person.opted_out_at);
+  if (was === 'opted_out') person.opted_out_at = null;
+  person.state = stillOut ? 'opted_out' : (person.runner_id ? 'matched' : 'none');
+  person.state_by = stillOut ? 'member' : 'staff';
   person.baseline_at = null;
   person.looked_at = null;
   if (person.state === 'none') person.checked_at = null;
-  logAction(kind, { target_id: wanted, details: { via: 'website' } });
+  logAction(kind, { target_id: wanted, details: { via: 'website', reason } });
+  if (stillOut) {
+    return { person: pbRow(person), message: `<@${wanted}> is unblocked. They had asked not to have personal bests posted, and that still stands: only they, or staff pressing Clear the opt-out, can end it.` };
+  }
   return { person: pbRow(person), message: `<@${wanted}> is back in the personal best feed. Runs verified before now are not posted.` };
 }
 
@@ -13908,7 +13940,12 @@ route('POST', '/api/pbs/:user_id/look', (context) => {
   }
   const person = pbOf(context);
   if (!person || person.state !== 'matched') throw pbNothing(wanted);
+  const since = person.looked_at ? (Date.now() - new Date(person.looked_at).getTime()) / 60000 : null;
+  if (since !== null && since >= 0 && since < 5) {
+    throw new Refused(429, 'not_yet', `Nothing was changed \u2014 this member was looked at ${Math.floor(since)} minute(s) ago. Try again in about ${Math.max(1, Math.ceil(5 - since))} minute(s).`);
+  }
   person.looked_at = now();
+  person.misses = 0;
   person.baseline_at = person.baseline_at || now();
   person.look_error = null;
   pbState().last_look = { at: now(), ok_at: now(), outcome: 'ok', reason: null, asks_again_at: null };

@@ -758,3 +758,12 @@ async def test_an_old_body_is_brought_up_to_the_cookout_tone_on_the_next_sync(tm
         assert (await get_trope(db, "noir"))["voice"] == VOICES["noir"]
     finally:
         await db.close()
+
+
+def test_the_pb_line_never_promises_a_post_the_mode_may_forbid():
+    line = next(part for part in FEATURES.split("\n`/") if part.startswith("pb`"))
+    said = " ".join(line.split())
+
+    assert "is posted once" not in said and "will be posted" not in said
+    assert "whether new personal bests are being posted right now" in said
+    assert "never promise a post yourself" in said
