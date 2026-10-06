@@ -81,7 +81,6 @@ from .storage.db import Database
 from .structure import FEATURE as STRUCTURE_FEATURE
 from .structure import MODE_DEFAULT as STRUCTURE_MODE_DEFAULT
 from .structure import MODES as STRUCTURE_MODES
-from .structure_diff import WORDS as STRUCTURE_SAY_WORDS
 from .timezones import DEFAULT_TZ, is_known, suggest
 
 log = logging.getLogger(__name__)
@@ -3714,22 +3713,14 @@ STRUCTURE_BACKUP_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what What changed answers when the server matches the latest snapshot",
     ),
 }
-STRUCTURE_SAY_KEYS: dict[str, str] = {
-    name: f"structure_backup_say_{name}" for name in STRUCTURE_SAY_WORDS
-}
 STRUCTURE_BACKUP_DEFAULTS: dict[str, Any] = {
     STRUCTURE_BACKUP_MODE: STRUCTURE_MODE_DEFAULT,
     STRUCTURE_BACKUP_NOTIFY: True,
     **{key: default for key, (default, _, _) in STRUCTURE_BACKUP_NUMBERS.items()},
     **{key: default for key, (default, _, _) in STRUCTURE_BACKUP_WORDS.items()},
-    **{STRUCTURE_SAY_KEYS[name]: words for name, (words, _) in STRUCTURE_SAY_WORDS.items()},
 }
 STRUCTURE_BACKUP_FIELDS: dict[str, tuple[str, ...]] = {
-    **{key: fields for key, (_, fields, _) in STRUCTURE_BACKUP_WORDS.items()},
-    **{
-        STRUCTURE_SAY_KEYS[name]: tuple(re.findall(r"\{([^{}]*)\}", words))
-        for name, (words, _) in STRUCTURE_SAY_WORDS.items()
-    },
+    key: fields for key, (_, fields, _) in STRUCTURE_BACKUP_WORDS.items()
 }
 STRUCTURE_LABEL = "label"
 STRUCTURE_HINT = "hint"
@@ -3787,13 +3778,6 @@ def checked_structure_words(key: str) -> Any:
     return check
 
 
-def structure_say_help(what: str, fields: tuple[str, ...]) -> str:
-    said = f"how the structure change list words {what}"
-    if not fields:
-        return said
-    return said + "; it may stand in for " + ", ".join(f"{{{field}}}" for field in fields)
-
-
 STRUCTURE_BACKUP_KEYS: tuple[str, ...] = (
     STRUCTURE_BACKUP_MODE,
     STRUCTURE_BACKUP_HOUR,
@@ -3804,7 +3788,6 @@ STRUCTURE_BACKUP_KEYS: tuple[str, ...] = (
     STRUCTURE_BACKUP_NOTICE_LINES,
     STRUCTURE_BACKUP_PANEL_MINUTES,
     *STRUCTURE_BACKUP_WORDS,
-    *STRUCTURE_SAY_KEYS.values(),
 )
 KEY_TYPES.update(
     {
@@ -3860,13 +3843,6 @@ KEY_HELP.update(
             "10 by default"
         ),
         **{key: said for key, (_, _, said) in STRUCTURE_BACKUP_WORDS.items()},
-        **{
-            key: structure_say_help(what, STRUCTURE_BACKUP_FIELDS[key])
-            for key, what in (
-                (STRUCTURE_SAY_KEYS[name], what)
-                for name, (_, what) in STRUCTURE_SAY_WORDS.items()
-            )
-        },
     }
 )
 

@@ -1,10 +1,21 @@
 import copy
+import inspect
+import string
 
 import discord
+import pytest
 
+from black_bloc import structure_diff
+from black_bloc.structure import (
+    CHANNEL_FIELDS,
+    GUILD_FIELDS,
+    OVERWRITE_FIELDS,
+    ROLE_FIELDS,
+    TAG_FIELDS,
+    digest,
+)
 from black_bloc.structure_diff import (
     AREAS,
-    DEFAULTS,
     WORDS,
     changes,
     kept_in_order,
@@ -68,8 +79,8 @@ def base():
     }
 
 
-def texts(old, new, say=None):
-    return [one["text"] for one in changes(old, new, say)]
+def texts(old, new):
+    return [one["text"] for one in changes(old, new)]
 
 
 def edited(change):
@@ -326,23 +337,17 @@ def test_changes_come_grouped_server_roles_channels_permissions():
     assert tuple(dict.fromkeys(areas)) == AREAS
 
 
-def test_staff_wording_is_used_and_a_broken_template_falls_back():
-    def change(new):
-        new["roles"].append(role(14, "Streamers", VIEW, 4))
-
-    new = edited(change)
-
-    assert texts(base(), new, {"role_added": "New role: {role}"}) == ["New role: Streamers"]
-    assert texts(base(), new, {"role_added": "New role: {nope}"}) == [
-        "Role **Streamers** was added."
-    ]
-    assert texts(base(), new, {"role_added": "   "}) == ["Role **Streamers** was added."]
+def test_the_wording_is_fixed_in_code_and_the_diff_takes_none_from_anywhere():
+    assert list(inspect.signature(changes).parameters) == ["old", "new", "escape"]
+    assert "store" not in inspect.getsource(structure_diff)
 
 
 def test_every_sentence_fills_in_from_its_own_placeholders():
-    for name, (words, what) in WORDS.items():
-        assert what and DEFAULTS[name] == words
-    assert sentence(None, "target_member", id="900") == "member 900"
+    for name, words in WORDS.items():
+        fields = {field for _, field, _, _ in string.Formatter().parse(words) if field}
+        filled = sentence(name, **{field: "x" for field in fields})
+        assert filled and "{" not in filled, name
+    assert sentence("target_member", id="900") == "member 900"
 
 
 def test_the_kept_run_is_the_longest_one_still_in_order():
@@ -403,8 +408,7 @@ def test_names_and_free_text_are_escaped_when_the_reader_is_discord():
 
     new = edited(change)
     said = [
-        one["text"]
-        for one in changes(base(), new, None, escape=discord.utils.escape_markdown)
+        one["text"] for one in changes(base(), new, escape=discord.utils.escape_markdown)
     ]
 
     assert len(said) == 4
@@ -427,8 +431,142 @@ def test_an_overwrite_whose_target_changed_kind_is_a_change_that_is_said():
     ]
 
 
-def test_a_template_that_breaks_in_any_way_falls_back_to_the_shipped_wording():
-    for broken in ("{role.nope}", "{role[a]}", "{role!x}", "{0}", "{role:d}"):
-        assert sentence({"role_added": broken}, "role_added", role="Mods") == (
-            "Role **Mods** was added."
-        ), broken
+def with_a_tag(**tag):
+    found = base()
+    by_id(found["channels"], 43)["tags"] = [
+        {"id": "70", "name": "solved", "moderated": False, "emoji": "✅"} | tag
+    ]
+    return found
+
+
+def test_a_forum_tags_emoji_changing_is_said_with_both_values():
+    assert texts(with_a_tag(), with_a_tag(emoji="🎉")) == [
+        "Forum **links**'s tag **solved** changed its emoji from ✅ to 🎉."
+    ]
+    assert texts(with_a_tag(), with_a_tag(emoji=None)) == [
+        "Forum **links**'s tag **solved** changed its emoji from ✅ to nothing."
+    ]
+
+
+def test_a_forum_tag_becoming_moderators_only_is_said_and_so_is_the_way_back():
+    assert texts(with_a_tag(), with_a_tag(moderated=True)) == [
+        "Forum **links**'s tag **solved** changed moderators-only from off to on."
+    ]
+    assert texts(with_a_tag(moderated=True), with_a_tag()) == [
+        "Forum **links**'s tag **solved** changed moderators-only from on to off."
+    ]
+
+
+def test_a_tag_renamed_and_restyled_at_once_is_one_line_for_each():
+    assert texts(with_a_tag(), with_a_tag(name="done", emoji="🎉", moderated=True)) == [
+        "Forum **links**'s tag **done** changed its emoji from ✅ to 🎉.",
+        "Forum **links**'s tag **done** changed moderators-only from off to on.",
+        "Forum **links**'s tag **solved** was renamed **done**.",
+    ]
+
+
+def test_a_custom_emoji_is_escaped_when_the_reader_is_discord():
+    found = changes(with_a_tag(), with_a_tag(emoji="<:a_b:1>"), escape=lambda text: f"[{text}]")
+
+    assert [one["text"] for one in found] == [
+        "Forum **[links]**'s tag **[solved]** changed its emoji from [✅] to [<:a_b:1>]."
+    ]
+
+
+def full():
+    found = base()
+    found["guild"]["rules_channel_id"] = "42"
+    for one in found["roles"]:
+        one.update(color=0, hoist=False, mentionable=False, managed=False)
+    for one in found["channels"]:
+        one.update(topic="t", slowmode=0, nsfw=False, bitrate=64000, user_limit=0)
+    by_id(found["channels"], 41)["overwrites"] = [overwrite(11, allow=VIEW, deny=SEND)]
+    by_id(found["channels"], 43)["tags"] = [
+        {"id": "70", "name": "solved", "moderated": False, "emoji": "✅"}
+    ]
+    return found
+
+
+OTHER_VALUE = {
+    "id": "999",
+    "name": "another",
+    "verification_level": "high",
+    "default_notifications": "all_messages",
+    "system_channel_id": "42",
+    "rules_channel_id": "43",
+    "color": 255,
+    "permissions": KICK,
+    "position": 7,
+    "hoist": True,
+    "mentionable": True,
+    "managed": True,
+    "type": "voice",
+    "parent_id": "50",
+    "topic": "another topic",
+    "slowmode": 5,
+    "nsfw": True,
+    "bitrate": 96000,
+    "user_limit": 9,
+    "moderated": True,
+    "emoji": "🎉",
+    "target_id": "12",
+    "target_type": "member",
+    "allow": KICK,
+    "deny": MANAGE,
+}
+HOLDERS = {
+    "guild": (GUILD_FIELDS, lambda found: found["guild"]),
+    "role": (ROLE_FIELDS, lambda found: by_id(found["roles"], 12)),
+    "channel": (CHANNEL_FIELDS, lambda found: by_id(found["channels"], 42)),
+    "tag": (TAG_FIELDS, lambda found: by_id(found["channels"], 43)["tags"][0]),
+    "overwrite": (OVERWRITE_FIELDS, lambda found: by_id(found["channels"], 41)["overwrites"][0]),
+}
+NEVER_COMPARED = {("guild", "id")}
+EVERY_FIELD = [
+    (part, field)
+    for part, (fields, _) in HOLDERS.items()
+    for field in fields
+    if (part, field) not in NEVER_COMPARED
+]
+
+
+@pytest.mark.parametrize(("part", "field"), EVERY_FIELD)
+def test_every_field_a_snapshot_holds_moves_the_digest_and_has_something_to_say(part, field):
+    new = full()
+    HOLDERS[part][1](new)[field] = OTHER_VALUE[field]
+
+    assert digest(new) != digest(full()), (part, field)
+    assert changes(full(), new), (part, field)
+
+
+def test_the_field_table_covers_every_field_list_so_a_new_field_needs_a_sentence():
+    named = {*GUILD_FIELDS, *ROLE_FIELDS, *CHANNEL_FIELDS, *TAG_FIELDS, *OVERWRITE_FIELDS}
+
+    assert named == set(OTHER_VALUE)
+
+
+def renumbered(found):
+    for one in found["roles"]:
+        one["position"] = one["position"] * 10 + 3
+    for one in found["channels"]:
+        one["position"] = one["position"] * 7 + 2
+    return found
+
+
+def test_positions_renumbered_with_the_order_kept_are_the_same_digest_and_say_nothing():
+    assert digest(renumbered(full())) == digest(full())
+    assert changes(full(), renumbered(full())) == []
+
+
+def swapped(found, key, one, two):
+    first, second = by_id(found[key], one), by_id(found[key], two)
+    first["position"], second["position"] = second["position"], first["position"]
+    return found
+
+
+@pytest.mark.parametrize(("key", "one", "two"), [("roles", 11, 12), ("channels", 41, 42)])
+def test_an_order_that_changed_moves_the_digest_and_is_said(key, one, two):
+    new = swapped(full(), key, one, two)
+
+    assert digest(new) != digest(full())
+    assert changes(full(), new)

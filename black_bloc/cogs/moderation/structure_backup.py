@@ -31,7 +31,6 @@ from ...settings_store import (
     STRUCTURE_BACKUP_PANEL_MINUTES,
     STRUCTURE_EMBED_CHARS,
     STRUCTURE_LINE,
-    STRUCTURE_SAY_KEYS,
     STRUCTURE_SLOTS,
     require_staff,
 )
@@ -137,10 +136,6 @@ def said(store: Any, guild_id: int, key: str, **fields: Any) -> str:
                 type(exc).__name__,
             )
     return cut(str(STRUCTURE_BACKUP_DEFAULTS[key]).format(**fields), limit)
-
-
-def say_words(store: Any, guild_id: int) -> dict[str, str]:
-    return {name: store.get(guild_id, key) for name, key in STRUCTURE_SAY_KEYS.items()}
 
 
 def when_words(at: Any) -> str:
@@ -260,7 +255,7 @@ async def take_snapshot(
         )
     found: list[dict[str, str]] = []
     if stored.previous is not None:
-        found = changes_between(body_of(stored.previous), body, say_words(store, guild.id))
+        found = changes_between(body_of(stored.previous), body)
     details = snapshot_details(row, source) | {"via": via, "changes": len(found)}
     if stored.previous is not None:
         details["previous_id"] = stored.previous["id"]
@@ -323,7 +318,6 @@ async def changes_since(
     return changes_between(
         body_of(row),
         await read_structure(guild),
-        say_words(bot.store, guild.id),
         escape=escape,
     )
 
@@ -453,9 +447,7 @@ async def tell_staff(bot: Any, guild: Any, taken: Taken) -> bool:
         since = taken.previous
     found: list[dict[str, str]] = []
     if since is not None and since["id"] != row["id"]:
-        found = changes_between(
-            body_of(since), body_of(row), say_words(bot.store, guild.id), escape=safe
-        )
+        found = changes_between(body_of(since), body_of(row), escape=safe)
     wanted = bool(found) and bool(bot.store.get(guild.id, STRUCTURE_BACKUP_NOTIFY))
     posted = wanted and await post_notice(
         bot, guild, replace(taken, previous=since, changes=tuple(found))

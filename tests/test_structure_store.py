@@ -216,19 +216,31 @@ async def test_a_new_row_is_stored_exactly_when_the_change_list_has_something_to
     assert await structure_store.count(db, GUILD) == (2 if sayable else 1)
 
 
-def test_the_two_differences_a_person_would_act_on_are_ones_the_change_list_says():
-    assert changes(with_a_forum(), with_a_forum(a_renamed_tag))
-    assert changes(with_a_forum(), with_a_forum(a_flipped_overwrite))
+@pytest.mark.parametrize(
+    "change", [a_new_emoji, a_moderated_tag, a_renamed_tag, a_flipped_overwrite]
+)
+def test_a_difference_a_person_would_act_on_is_one_the_change_list_says(change):
+    assert changes(with_a_forum(), with_a_forum(change))
+    assert digest(with_a_forum()) != digest(with_a_forum(change))
 
 
-async def test_a_difference_nothing_can_say_refreshes_the_copy_already_held(db):
+@pytest.mark.parametrize("change", [a_new_emoji, a_moderated_tag])
+async def test_a_forum_tags_emoji_or_moderated_flag_changing_is_a_new_snapshot(db, change):
+    await keep(db, GUILD, with_a_forum())
+
+    stored = await keep(db, GUILD, with_a_forum(change))
+
+    assert stored.outcome == SAVED and await structure_store.count(db, GUILD) == 2
+
+
+async def test_positions_renumbered_refresh_the_copy_already_held(db):
     first = await keep(db, GUILD, with_a_forum())
 
-    again = await keep(db, GUILD, with_a_forum(a_new_emoji))
+    again = await keep(db, GUILD, with_a_forum(positions_renumbered))
 
     assert again.outcome == UNCHANGED and again.row["id"] == first.row["id"]
-    assert again.row["digest"] == digest(with_a_forum(a_new_emoji))
-    assert body_of(again.row)["channels"][2]["tags"][0]["emoji"] == "🎉"
+    assert again.row["digest"] == first.row["digest"] == digest(with_a_forum())
+    assert [one["position"] for one in body_of(again.row)["channels"][1:]] == [5, 9]
     assert again.row["taken_at"] == first.row["taken_at"] and again.row["checks"] == 1
 
 

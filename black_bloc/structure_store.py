@@ -6,8 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .structure import FAILED, SAVED, UNCHANGED, body_of, canonical, counts, digest
-from .structure_diff import changes
+from .structure import FAILED, SAVED, UNCHANGED, canonical, counts, digest
 
 LIST_COLUMNS = (
     "id, guild_id, taken_at, source, taken_by, digest, roles, categories, channels, "
@@ -74,11 +73,6 @@ async def prune(db: Any, guild_id: int, keep: int, protect: int | None = None) -
     return int(cur.rowcount or 0)
 
 
-def same(previous: Any, mark: str, body: Any) -> bool:
-    """One rule for unchanged: the change list has nothing to say."""
-    return previous["digest"] == mark or not changes(body_of(previous), body)
-
-
 async def store(
     db: Any,
     guild_id: int,
@@ -94,7 +88,7 @@ async def store(
     at = stamp(now)
     mark = digest(body)
     previous = await latest(db, guild_id)
-    if previous is not None and same(previous, mark, body):
+    if previous is not None and previous["digest"] == mark:
         await db.conn.execute(
             "UPDATE structure_snapshots SET checked_at = ?, checks = checks + 1, digest = ?, "
             "body = ? WHERE id = ?",
