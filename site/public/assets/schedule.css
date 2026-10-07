@@ -135,3 +135,4 @@ a.rs-also { border-style: solid; color: var(--et-muted); }
 @media (prefers-reduced-motion: reduce) {
   .rs-row[data-flash] { animation: none; outline: 2px solid var(--rs-flash, var(--et-warn)); outline-offset: -2px; }
 }
+.rs-game .badge { align-self: flex-start; margin-top: 2px; }

@@ -179,6 +179,9 @@ const OVERLAY_OFF_TAIL = ', but Event schedule is off, so GDQ’s sheet times an
 const OVERLAY_STALE = ' It could not be read just now ({why}), so the last copy is kept.';
 const OVERLAY_NONE = 'The schedule viewer links no event sheet that matches this marathon, so GDQ’s sheet times are used.';
 const ANNOUNCE_FIELD = 'BaF announcements';
+const BAF_EVENT_FIELD = 'BaF event';
+const BAF_EVENT_FOLLOW = 'Follow the schedule ({state})';
+const BAF_EVENT_TONES = { yes: 'ok', unsure: 'warn' };
 const SWITCH_FOLLOW = 'Follow the setting ({state})';
 const TWITCH_FIX_FIELD = 'Twitch name (optional)';
 const TWITCH_FIX_TITLE = 'Twitch name for {name}';
@@ -537,6 +540,33 @@ function switchPicker(state) {
   const node = segment(choices, now);
   node.now = now;
   return node;
+}
+
+/** The BaF event switch: follow what the bot worked out (said as state), yes, or no. */
+function bafEventPicker(state) {
+  const worked = (state && state.worked_out) || {};
+  const choices = [
+    { value: 'follow', label: said(BAF_EVENT_FOLLOW, { state: worked.answer_word || '—' }) },
+    { value: 'yes', label: 'Yes' },
+    { value: 'no', label: 'No' },
+  ];
+  const now = (state && state.choice) || 'follow';
+  const node = segment(choices, now);
+  node.now = now;
+  return node;
+}
+
+/** Under the BaF event switch: each show-day's state and what its one ping did or will do. */
+function bafEventLines(marathon) {
+  const found = marathon.baf_event || {};
+  const days = (found.days || []).filter((one) => (found.lines || []).includes(one.line));
+  if (!days.length) {
+    return (found.lines || []).map((line) => el('p', { class: 'field-help mx-line mx-baf-event', text: line }));
+  }
+  return days.map((one) => el('p', { class: 'field-help mx-line mx-baf-event', 'data-answer': one.answer, 'data-reason': one.reason }, [
+    badge(`${one.baf} of ${one.runs}`, BAF_EVENT_TONES[one.answer] || null),
+    el('span', { text: ` ${one.line}` }),
+  ]));
 }
 
 function switchWanted(value) {
@@ -933,6 +963,7 @@ async function settingsFold(marathon, say) {
   const highlightNow = marathon.public_highlight ? 'on' : 'off';
   const highlight = segment(PING_CHOICES, highlightNow);
   const announce = switchPicker(marathon.announcements);
+  const bafEvent = bafEventPicker(marathon.baf_event);
   const overlay = marathon.source === 'gdq_hotfix' && marathon.overlay ? switchPicker(marathon.overlay) : null;
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
@@ -955,6 +986,7 @@ async function settingsFold(marathon, say) {
     if (ping.readValue() !== pingNow) body.ping_role = ping.readValue() === 'on';
     if (highlight.readValue() !== highlightNow) body.public_highlight = highlight.readValue() === 'on';
     if (announce.readValue() !== announce.now) body.announcements = switchWanted(announce.readValue());
+    if (bafEvent.readValue() !== bafEvent.now) body.baf_event = bafEvent.readValue() === 'follow' ? null : bafEvent.readValue();
     if (overlay && overlay.readValue() !== overlay.now) body.overlay = switchWanted(overlay.readValue());
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
@@ -976,6 +1008,8 @@ async function settingsFold(marathon, say) {
     field('Airs on', picker, windowWords(marathon)),
     field(PING_FIELD, ping),
     rolePingLine(marathon),
+    field(BAF_EVENT_FIELD, bafEvent),
+    ...bafEventLines(marathon),
     field(HIGHLIGHT_FIELD, highlight),
     field(ANNOUNCE_FIELD, announce),
     overlay ? field(OVERLAY_FIELD, overlay) : null,

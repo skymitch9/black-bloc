@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
 from . import marathon as mt
@@ -13,6 +13,7 @@ from . import marathon_signals as sig
 from .golive import parse_ts
 from .marathon_role_ping import BAF_EVENT_DAY, BAF_EVENT_PINGED
 from .marathon_sources import GDQ_HOTFIX, RUNNER
+from .timezones import zone
 
 YES = "yes"
 NO = "no"
@@ -42,6 +43,7 @@ BAD_CHOICE = (
 )
 BAD_CHOICE_CODE = "bad_baf_event"
 FOLD = re.compile(r"[^a-z0-9]+")
+DAY_SPAN = timedelta(hours=24)
 
 
 class Judgement(NamedTuple):
@@ -204,8 +206,21 @@ def judge(marathon: Any, day: Any, *, names: Any, min_runs: int, ask_percent: in
 # --- show-days ----------------------------------------------------------------------------------
 
 
-def days_of(rows: Any) -> list[list[Any]]:
-    return overlay.chains(rows)
+def days_of(rows: Any, tz_name: Any = None) -> list[list[Any]]:
+    """The show-days: three hours with nothing on starts a new one, and a show that runs past
+    a day without stopping is one day per calendar date in the server's zone."""
+    where = zone(str(tz_name or "")) or UTC
+    found: list[list[Any]] = []
+    for chain in overlay.chains(rows):
+        starts, ends = span_of(chain)
+        if starts is None or ends is None or ends - starts <= DAY_SPAN:
+            found.append(chain)
+            continue
+        by_date: dict[Any, list[Any]] = {}
+        for row in chain:
+            by_date.setdefault(sig.sheet_start(row).astimezone(where).date(), []).append(row)
+        found.extend(by_date.values())
+    return found
 
 
 def day_of(row: Any, days: Any) -> list[Any] | None:
@@ -251,7 +266,7 @@ def covers(record: dict[str, Any], day: Any) -> bool:
     was_from, was_to = parse_ts(record.get("starts_at")), parse_ts(record.get("ends_at"))
     if None in (starts, ends, was_from, was_to):
         return False
-    return starts <= was_to and was_from <= ends
+    return starts < was_to and was_from < ends
 
 
 def pinged(records: Any, day: Any) -> dict[str, Any] | None:
@@ -349,10 +364,11 @@ def reading(
     names: Any,
     min_runs: int,
     ask_percent: int,
+    tz_name: Any = None,
 ) -> Reading:
     return Reading(
         marathon,
-        days_of(rows),
+        days_of(rows, tz_name),
         pings_of(marathon),
         tuple(sorted({int(one) for one in marks or ()}, reverse=True)),
         int(ping_mark),

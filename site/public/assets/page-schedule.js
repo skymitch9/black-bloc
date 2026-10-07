@@ -54,6 +54,9 @@ const UPDATED = 'Updated {ago}';
 const UPDATE_FAILED = 'Could not update just now — {why} The times below are as they stood at {time}. Trying again in {seconds} seconds.';
 const UPDATE_OUTAGE = 'Black Bloc did not answer.';
 const DAY_CHIP = '{day} · {runs}';
+const DAY_CHIP_EVENT = '{day} · {runs} · {event}';
+const BAF_EVENT = 'BaF event';
+const BAF_RUN = 'BaF run';
 const SHIFT_LABEL = 'Runs not yet started';
 const SHIFT_STEPS = [[5, 'Behind 5'], [10, 'Behind 10'], [-5, 'Ahead 5'], [-10, 'Ahead 10']];
 const SHIFT_FIELD = 'minutes';
@@ -285,6 +288,7 @@ function headCard(day) {
   return card(null, [
     el('div', { class: 'rs-head' }, [
       el('h2', { class: 'rs-title', text: said(HEAD, { marathon: marathon.name, day: day ? dayLabel(day.starts_at, viewer.zone) : '' }) }),
+      isBafEvent(day) ? badge(BAF_EVENT, 'ok') : null,
       day ? driftNode(day) : null,
     ]),
     el('p', { class: 'field-help rs-source' }, dot([
@@ -299,9 +303,13 @@ function headCard(day) {
   ]);
 }
 
+function isBafEvent(day) {
+  return Boolean(day && day.baf_event && day.baf_event.answer === 'yes');
+}
+
 function dayStrip() {
   if (sheet.days.length < 2) return null;
-  const choices = sheet.days.map((one) => [one.key, said(DAY_CHIP, { day: dayLabel(one.starts_at, viewer.zone), runs: one.runs })]);
+  const choices = sheet.days.map((one) => [one.key, said(isBafEvent(one) ? DAY_CHIP_EVENT : DAY_CHIP, { day: dayLabel(one.starts_at, viewer.zone), runs: one.runs, event: BAF_EVENT })]);
   return chipBar(choices, shown.day, (key) => {
     shown.day = key;
     shown.open = null;
@@ -464,6 +472,7 @@ function sheetRow(row) {
     el('div', { class: 'rs-game' }, [
       el('strong', { text: row.game }),
       row.category ? el('span', { class: 'cell-quiet', text: row.category }) : null,
+      row.baf_run ? badge(BAF_RUN, 'ok') : null,
     ]),
     el('div', { class: 'rs-est mono' }, [
       el('span', { text: length(row.estimate_seconds) }),
@@ -594,7 +603,7 @@ function paint() {
   settle(root, [
     part('head', signature(sheet.marathon, day, sheet.kind, sheet.editable, sheet.times_from_word, zone, nextRead), () => headCard(day)),
     statusLine(),
-    part('days', signature(sheet.days.map((one) => [one.key, one.starts_at, one.runs]), shown.day, zone), () => dayStrip()),
+    part('days', signature(sheet.days.map((one) => [one.key, one.starts_at, one.runs, isBafEvent(one)]), shown.day, zone), () => dayStrip()),
     day ? part('shift', signature(sheet.editable, day.key, day.can_shift, day.can_reset), () => shiftBar(day)) : null,
     saidBar(),
     day ? sheetCard(day) : part('sheet', signature('none'), () => card(null, [sayNothing(NO_RUNS)])),

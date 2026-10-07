@@ -313,3 +313,16 @@ def test_the_question_record_round_trips_and_a_broken_one_reads_as_none():
     assert baf.ask_of({"baf_event_ask": baf.dump_ask({"message_id": 5})}) == {"message_id": 5}
     assert baf.ask_of({"baf_event_ask": "["}) == {} and baf.dump_ask({}) is None
     assert baf.ask_of({}) == {}
+
+
+def test_a_show_that_never_stops_is_one_day_per_calendar_date_in_the_servers_zone():
+    rows = [run(index + 1, index * 360, length=360) for index in range(8)]
+    utc = baf.days_of(rows, "UTC")
+    assert [[one["id"] for one in day] for day in utc] == [[1], [2, 3, 4, 5], [6, 7, 8]]
+    phoenix = baf.days_of(rows, "America/Phoenix")
+    assert [[one["id"] for one in day] for day in phoenix] == [[1, 2, 3], [4, 5, 6, 7], [8]]
+    assert baf.days_of(rows[:4], "UTC") == [rows[:4]]
+    record = baf.record_for(utc[1], rows[1], 120, NOW)
+    assert baf.pinged([record], utc[1]) == record
+    assert baf.pinged([dict(record, runs=[])], utc[0]) is None
+    assert baf.pinged([dict(record, runs=[])], utc[2]) is None

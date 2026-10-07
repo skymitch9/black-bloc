@@ -108,6 +108,7 @@ def reading_for(bot: Any, guild_id: int, marathon: Any, rows: Any) -> baf.Readin
         names=baf.names_of(store.get(guild_id, MARATHON_BAF_EVENT_NAMES_KEY)),
         min_runs=int(store.get(guild_id, MARATHON_BAF_EVENT_MIN_RUNS_KEY)),
         ask_percent=int(store.get(guild_id, MARATHON_BAF_EVENT_ASK_PERCENT_KEY)),
+        tz_name=store.get(guild_id, DEFAULT_TIMEZONE_KEY),
     )
 
 
