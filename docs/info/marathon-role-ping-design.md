@@ -18,6 +18,18 @@
 > `marathon_public_reminders`; no browser rendered the drawer line or the Settings rows (the mock answered the payload;
 > nothing drew it); the bot was never run. Secret NAMES only.
 
+> ⚠️ **2026-10-06 — superseded in part by [`baf-event-ping-design.md`](baf-event-ping-design.md)** (branch
+> `baf-event-ping`, NOT merged when this note was written). What changes, and nothing else on this page:
+> - ~~The Marathon role rides the `marathon_ping_minutes` heads-up of every BaF run and BaF host block.~~ **On a
+>   BaF event day it rides ONE heads-up** — the `marathon_baf_event_ping_minutes` (120) one of the day's first BaF
+>   run, or the next one still to come — and no other that day, a host block's included. Every other day is as
+>   written below. Why: the owner, 2026-10-06 — one role ping per run on a show where every run is ours was noise.
+> - **Section A's table row *Any other mark (`1440`, `120`, …) — no Marathon role*** is true only off a BaF event day.
+> - **Two more reasons** join the verdict's list, set at the send: `baf_event_day` (another heads-up carries the
+>   day's ping) and `baf_event_pinged` (the day already had it).
+> - **`status_line` / `state_of`** take the runs: the per-run line is left out when every show-day shown has its
+>   one ping, and one line per show-day follows.
+
 ## The cause (measured 2026-10-03 on the live bot — `docs/TODO.md` ▸ 🔔 Chunk 4)
 
 GDQueer's ping switch went on at 12:35:26 (`marathon.ping_role_set`), 26 minutes before a BaF member's 15-minute

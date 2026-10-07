@@ -415,8 +415,8 @@ async def test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_
     assert button.label == OPT_OUT_LABEL
     assert len(controls_message.edits) > control_edits
     shown = [getattr(one, "item", one) for one in current_view(controls_message).children]
-    assert len(shown) == 8 and shown[-1].label == "Marathon tracker ↗"
-    shown = [one for one in shown if one.custom_id]
+    assert len(shown) == 11 and shown[7].label == "Marathon tracker ↗"
+    shown = [one for one in shown if one.custom_id and ":baf:" not in one.custom_id]
     assert [one.label for one in shown][-3:] == [
         "Ping the marathon role: off · turn on",
         "BaF announcements: on · turn off",

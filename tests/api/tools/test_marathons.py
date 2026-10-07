@@ -1243,3 +1243,81 @@ async def test_how_a_persons_name_is_written_is_shown_on_the_people_card_and_mov
         f"/api/marathons/{marathon_id}/people/424242/mention", json={"to": "plain"}
     )
     assert stranger.status_code == 404 and stranger.json()["error"] == "not_baf"
+
+
+async def test_the_drawer_reads_the_baf_event_switch_what_was_worked_out_and_why(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+
+    found = client.get(f"/api/marathons/{marathon_id}").json()["baf_event"]
+
+    assert (found["own"], found["choice"]) == (None, "follow")
+    assert (found["answer"], found["reason"]) == ("no", "mixed")
+    assert found["worked_out"]["answer"] == "no"
+    assert found["worked_out"]["reason_word"] == "1 of 3 runs have a BaF runner"
+    assert found["answer_word"] == "not a BaF event"
+    (day,) = found["days"]
+    assert (day["runs"], day["baf"], day["pinged"], day["carrier"]) == (3, 1, None, None)
+    assert found["lines"] == [day["line"]]
+    assert day["line"].endswith(": not a BaF event — 1 of 3 runs have a BaF runner.")
+    assert "<t:" not in day["line"] and "<@&" not in day["line"]
+
+
+async def test_patch_baf_event_takes_yes_no_and_follow_and_leaves_one_web_row_each(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+
+    yes = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": "yes"})
+
+    assert yes.status_code == 200, yes.text
+    assert "is a BaF event now" in yes.json()["message"]
+    assert (yes.json()["baf_event"]["own"], yes.json()["baf_event"]["choice"]) == (True, "yes")
+    assert (yes.json()["baf_event"]["answer"], yes.json()["baf_event"]["reason"]) == (
+        "yes",
+        "staff",
+    )
+    assert yes.json()["baf_event"]["worked_out"]["answer"] == "no"
+    said = await web_row(wf, web, "web.marathon.baf_event_set")
+    assert (said["from"], said["to"], said["via"]) == ("follow", "yes", "website")
+    cur = await web.db.conn.execute(
+        "SELECT kind FROM action_log WHERE kind LIKE '%baf_event_set' ORDER BY id"
+    )
+    assert [row["kind"] for row in await cur.fetchall()] == ["web.marathon.baf_event_set"]
+
+    no = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": False})
+    assert no.json()["baf_event"]["choice"] == "no"
+    follow = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": None})
+    assert follow.json()["baf_event"]["choice"] == "follow"
+    assert "worked out from the schedule now" in follow.json()["message"]
+
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": "maybe"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_baf_event"
+    assert "Say follow, yes or no" in bad.json()["message"]
+    assert client.get(f"/api/marathons/{marathon_id}").json()["baf_event"]["choice"] == "follow"
+
+
+async def test_a_baf_event_day_says_which_heads_up_carries_the_ping_in_the_drawer(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    track(client, marathon_id)
+    role = web.guild.roles[0]
+    role.mentionable = True
+    await web.store.set(wf.GUILD_ID, "marathon_role_id", role.id)
+    client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": True, "baf_event": "yes"})
+
+    body = client.get(f"/api/marathons/{marathon_id}").json()
+
+    (day,) = body["baf_event"]["days"]
+    assert day["carrier"]["game"] == "Super Metroid" and day["carrier"]["minutes"] == 120
+    assert (day["ask"], day["no_ping"], day["pinged"]) == (None, None, None)
+    assert day["line"].endswith(
+        f"a BaF event — the BaF event switch says so. @{role.name} is mentioned once, on the "
+        "heads-up 120 minutes before **Super Metroid**."
+    )
+    assert body["role_ping"]["mentions"] is True and body["role_ping"]["line"] == ""

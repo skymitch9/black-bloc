@@ -6,6 +6,7 @@ from typing import Any, NamedTuple
 
 from . import marathon_events as me
 from . import marathon_spotlight as ms
+from .marathon_baf_event import CHOICES, FOLLOW, NO, YES
 
 EVENT = "event"
 RUNS = "runs"
@@ -17,16 +18,19 @@ HOST_EVENTS = "hostevents"
 ANNOUNCE = "announce"
 HOST_ANNOUNCE = "hostannounce"
 OVERLAY = "overlay"
-ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, ANNOUNCE, HOST_ANNOUNCE, OVERLAY)
+BAF = "baf"
+ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, ANNOUNCE, HOST_ANNOUNCE, OVERLAY, BAF)
 RETIRED = (HOSTS, HOST_EVENTS)
 ON = "on"
 OFF = "off"
 CANCEL = "cancel"
+BAF_CHOICES = CHOICES
+BAF_ROW = 4
 TEMPLATE = (
     r"marathon:controls:(?P<marathon_id>[0-9]+)"
     r":(?P<action>event|runs|spotlight|highlight|ping|hosts|hostevents|announce|hostannounce"
-    r"|overlay)"
-    r":(?P<to>on|off|cancel)"
+    r"|overlay|baf)"
+    r":(?P<to>on|off|cancel|follow|yes|no)"
 )
 CUSTOM_ID = "marathon:controls:{marathon_id}:{action}:{to}"
 
@@ -56,6 +60,7 @@ class Control(NamedTuple):
     to: str
     word: str
     disabled: bool = False
+    row: int | None = None
 
 
 def custom_id(marathon_id: Any, action: str, to: str) -> str:
@@ -102,6 +107,16 @@ def switch(action: str, on: bool) -> Control:
     return Control(action, OFF if on else ON, ON if on else OFF)
 
 
+def baf_controls(choice: Any) -> tuple[Control, ...]:
+    """The BaF event switch: one button per answer in a row of its own, the one that stands
+    lit and not pressable."""
+    chosen = str(choice or FOLLOW)
+    return tuple(
+        Control(BAF, one, ON if one == chosen else OFF, disabled=one == chosen, row=BAF_ROW)
+        for one in BAF_CHOICES
+    )
+
+
 def controls(
     mode: Any,
     spot_state: Any,
@@ -141,8 +156,13 @@ def label(text: Any) -> str:
 
 __all__ = [
     "ACTIONS",
+    "BAF_CHOICES",
     "Control",
+    "FOLLOW",
+    "NO",
     "RETIRED",
+    "YES",
+    "baf_controls",
     "controls",
     "custom_id",
     "halves",

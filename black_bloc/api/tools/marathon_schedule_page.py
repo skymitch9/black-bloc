@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from ... import marathon as mt
+from ... import marathon_baf_event as baf
 from ... import marathon_inbox as mi
 from ... import marathon_schedule_page as page
 from ...cogs.content.golive import all_links as twitch_links
@@ -20,6 +21,7 @@ from ...cogs.content.marathon import (
 )
 from ...cogs.content.marathon_announce import announces
 from ...cogs.content.marathon_archive import archived_marathon, archived_runs
+from ...cogs.content.marathon_baf_event import reading_for, speaks_for
 from ...cogs.content.marathon_host_highlights import reminder_marks, role_for, speaking
 from ...cogs.content.marathon_host_highlights import wanted as host_posts_wanted
 from ...cogs.content.marathon_people import zone_of
@@ -103,8 +105,10 @@ def reading_of(bot: Any, guild: Any, row: Any, now: datetime) -> dict[str, Any]:
     }
 
 
-def posting_of(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
+def posting_of(bot: Any, guild: Any, row: Any, runs: Any) -> dict[str, Any]:
     """What the tick would post for this marathon, asked of the tick's own functions."""
+    days = reading_for(bot, guild.id, row, runs)
+    speaks = speaks_for(bot, guild, row)
     ping_mark = int(bot.store.get(guild.id, MARATHON_PING_MINUTES_KEY))
     verdict = verdict_for(bot, guild, row)
     following = bool(row["active"]) and mode_of(bot, guild.id) != MODE_OFF
@@ -113,7 +117,7 @@ def posting_of(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
         return verdict.mentions and bool(people_for(bot, guild, row, run))
 
     def block_role(block: Any) -> bool:
-        found = role_for(bot, guild, row, block, ping_mark)
+        found = role_for(bot, guild, row, block, ping_mark, days)
         return found is not None and found.mentions
 
     return {
@@ -129,7 +133,22 @@ def posting_of(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
         "run_role": run_role,
         "block_role": block_role,
         "block_speaks": lambda block: bool(speaking(bot, guild, row, block)),
+        "carries": lambda run, mark: baf.predicts(days, run, mark, speaks=speaks),
     }
+
+
+def baf_event_of(bot: Any, guild: Any, row: Any, runs: Any) -> Any:
+    """A page day's BaF event state: that of the show-day its first run is in."""
+    days = reading_for(bot, guild.id, row, runs)
+
+    def state(kept: Any) -> dict[str, Any] | None:
+        day = baf.day_of(kept[0], days.days) if kept else None
+        if day is None:
+            return None
+        found = baf.judgement_of(days, day)
+        return {"answer": found.answer, "reason": found.reason}
+
+    return state
 
 
 async def sheet(
@@ -161,7 +180,12 @@ async def sheet(
         actions=await recent_moves(db, guild.id, row["id"]),
         because_words=BECAUSE_WORDS,
         names=True,
-        **({} if archived else reading_of(bot, guild, row, now) | posting_of(bot, guild, row)),
+        baf_event=baf_event_of(bot, guild, row, runs),
+        **(
+            {}
+            if archived
+            else reading_of(bot, guild, row, now) | posting_of(bot, guild, row, runs)
+        ),
     )
 
 

@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import marathon as mt
+from . import marathon_baf_event as baf
 from . import marathon_host_highlights as mhh
 from . import marathon_overlay as overlay
 from . import marathon_viewer as mv
@@ -349,6 +350,7 @@ def sheet_row(
         "category": mt._cell(row, "category"),
         "people": people,
         "ours": has_baf(row),
+        "baf_run": baf.has_runner(row),
         "state": state,
         "state_word": STATE_WORDS.get(state, state),
         "start_at": None if dropped else _iso(start),
@@ -400,6 +402,7 @@ def run_posts(
     stale_minutes: int,
     now: datetime,
     run_role: Any,
+    carries: Any = None,
 ) -> list[dict[str, Any]]:
     """Each upcoming BaF run's marks still to fire, and a live one's shoutout that is up."""
     found: list[dict[str, Any]] = []
@@ -429,7 +432,9 @@ def run_posts(
         _due, stale = mt.due_marks(row, marks, now, stale_minutes=stale_minutes)
         for mark in pending(mt.marks_of(row), marks, stale):
             text = RUN_POST.format(names=names, game=game, lead=lead_words(mark))
-            role = mark == int(ping_mark) and bool(run_role(row))
+            decided = carries(row, mark) if carries is not None else None
+            at_mark = mark == int(ping_mark) if decided is None else bool(decided)
+            role = at_mark and bool(run_role(row))
             found.append(_post(POST_RUN, row, day, mark, now, text, role))
     return found
 
@@ -570,6 +575,8 @@ def payload(
     run_role: Any = None,
     block_role: Any = None,
     block_speaks: Any = None,
+    carries: Any = None,
+    baf_event: Any = None,
     setup_minutes: int = 0,
     refresh_seconds: int = 30,
     actions: Any = (),
@@ -614,6 +621,7 @@ def payload(
                 "starts_at": _iso(plan_of(block[0])),
                 "runs": len(kept),
                 "baf": len([one for one in kept if has_baf(one)]),
+                "baf_event": baf_event(kept) if baf_event is not None else None,
                 "upcoming": len([one for one in kept if mt._cell(one, "state") == mt.UPCOMING]),
                 "drift_minutes": minutes,
                 "drift_run_id": run_id,
@@ -632,7 +640,9 @@ def payload(
             "now": now,
         }
         if reminds_runs:
-            posts += run_posts(rows, day_of, run_role=run_role or _never, **common)
+            posts += run_posts(
+                rows, day_of, run_role=run_role or _never, carries=carries, **common
+            )
         if reminds_hosts:
             posts += host_posts(
                 marathon,

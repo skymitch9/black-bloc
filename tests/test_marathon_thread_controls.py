@@ -109,3 +109,27 @@ def test_the_tracker_link_is_the_schedule_page_at_the_marathons_hash():
     )
     assert mtc.tracker_url("", 9) is None
     assert mtc.tracker_url("blackbloc.heygabi.ai", 9) is None
+
+
+@pytest.mark.parametrize("choice", ["follow", "yes", "no", None])
+def test_the_baf_event_switch_is_three_buttons_in_their_own_row_with_the_standing_one_lit(choice):
+    found = mtc.baf_controls(choice)
+    standing = choice or "follow"
+    assert [(one.action, one.to, one.row) for one in found] == [
+        ("baf", "follow", 4),
+        ("baf", "yes", 4),
+        ("baf", "no", 4),
+    ]
+    assert [one.disabled for one in found] == [one.to == standing for one in found]
+    assert [one.word for one in found] == ["on" if one.to == standing else "off" for one in found]
+    for one in found:
+        hit = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, one.action, one.to))
+        assert hit and (hit["action"], hit["to"]) == ("baf", one.to)
+    assert len(mtc.controls("marathon", ms.DARK)) == 7
+
+
+def test_the_three_baf_event_answers_have_one_home():
+    from black_bloc import marathon_baf_event as baf
+
+    assert mtc.BAF_CHOICES is baf.CHOICES
+    assert (mtc.FOLLOW, mtc.YES, mtc.NO) == (baf.FOLLOW, baf.YES, baf.NO)

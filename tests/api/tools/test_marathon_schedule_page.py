@@ -175,3 +175,43 @@ async def test_the_refresh_key_rides_the_read(client, sign_in, web, cog, wf):
     marathon_id = add(client)
     await web.store.set(wf.GUILD_ID, "marathon_tracker_refresh_seconds", 45)
     assert client.get(f"/api/marathons/{marathon_id}/schedule").json()["refresh_seconds"] == 45
+
+
+async def test_the_tracker_marks_each_baf_run_and_a_baf_event_day(client, sign_in, web, cog, wf):
+    sign_in(client)
+    marathon_id = add(client)
+
+    body = client.get(f"/api/marathons/{marathon_id}/schedule").json()
+
+    assert [one["baf_run"] for one in body["rows"]] == [False, True, False]
+    assert [one["baf_event"] for one in body["days"]] == [{"answer": "no", "reason": "mixed"}]
+
+    client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": "yes"})
+    body = client.get(f"/api/marathons/{marathon_id}/schedule").json()
+    assert [one["baf_event"] for one in body["days"]] == [{"answer": "yes", "reason": "staff"}]
+
+
+async def test_on_a_baf_event_day_only_the_two_hour_heads_up_is_listed_with_the_role(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client)
+    assert client.post(f"/api/marathons/{marathon_id}/track", json={}).status_code == 200
+    await web.store.set(wf.GUILD_ID, "marathon_reminder_minutes", "120, 15")
+    role = web.guild.roles[0]
+    role.mentionable = True
+    await web.store.set(wf.GUILD_ID, "marathon_role_id", role.id)
+    client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": True})
+
+    before = client.get(f"/api/marathons/{marathon_id}/schedule").json()["next_posts"]
+    client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": "yes"})
+    after = client.get(f"/api/marathons/{marathon_id}/schedule").json()["next_posts"]
+
+    assert {one["minutes"]: one["role"] for one in before if one["kind"] == "run"} == {
+        120: False,
+        15: True,
+    }
+    assert {one["minutes"]: one["role"] for one in after if one["kind"] == "run"} == {
+        120: True,
+        15: False,
+    }

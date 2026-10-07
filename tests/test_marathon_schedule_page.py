@@ -539,3 +539,44 @@ def test_moves_are_capped():
 def test_the_move_kinds_asked_of_the_log_all_have_words():
     for kind in page.MOVE_KINDS:
         assert kind in page.MOVE_WORDS
+
+
+def test_each_run_with_a_baf_runner_is_marked_a_baf_run_and_a_host_is_not():
+    rows = [
+        run(1, 60, people=[person("Dax", user_id=DAX)]),
+        run(2, 120, people=[person("Casey", "host", user_id=CASEY)]),
+        run(3, 180, people=[person("Somebody")]),
+    ]
+    found = read(marathon(), rows)
+    assert [one["baf_run"] for one in found["rows"]] == [True, False, False]
+    assert [one["ours"] for one in found["rows"]] == [True, True, False]
+
+
+def test_a_day_carries_the_baf_event_state_it_is_given_and_none_when_nobody_asks():
+    rows = [run(1, 60, people=[person("Dax", user_id=DAX)]), run(2, 120)]
+    seen = []
+
+    def state(kept):
+        seen.append([one["id"] for one in kept])
+        return {"answer": "yes", "reason": "name"}
+
+    assert read(marathon(), rows)["days"][0]["baf_event"] is None
+    found = read(marathon(), rows, baf_event=state)
+    assert found["days"][0]["baf_event"] == {"answer": "yes", "reason": "name"}
+    assert seen == [[1, 2]]
+
+
+def test_the_role_follows_what_the_day_decides_and_the_ping_mark_where_it_decides_nothing():
+    rows = [run(1, 200, people=[person("Dax", user_id=DAX)])]
+    common = {"marks": MARKS, "ping_mark": 15, "stale_minutes": 30, "reminds_runs": True}
+    always = {"run_role": lambda row: True}
+
+    carried = read(marathon(), rows, carries=lambda row, mark: mark == 120, **common, **always)
+    per_run = read(marathon(), rows, carries=lambda row, mark: None, **common, **always)
+    silent = read(
+        marathon(), rows, carries=lambda row, mark: True, run_role=lambda row: False, **common
+    )
+
+    assert {one["minutes"]: one["role"] for one in carried["next_posts"]} == {120: True, 15: False}
+    assert {one["minutes"]: one["role"] for one in per_run["next_posts"]} == {120: False, 15: True}
+    assert {one["role"] for one in silent["next_posts"]} == {False}

@@ -376,13 +376,15 @@ async def test_the_thread_controls_carry_the_line_while_the_switch_is_on(bot, co
     marathon = await pinging(bot, cog)
 
     content, _controls, _labels = await controls.rendered(bot, bot.guild, marathon)
-    assert content.endswith(
-        f"\nThe public heads-up 15 minutes before a BaF run mentions <@&{MARATHON_ROLE}>."
+    lines = content.splitlines()
+    assert lines[-2] == (
+        f"The public heads-up 15 minutes before a BaF run mentions <@&{MARATHON_ROLE}>."
     )
+    assert lines[-1].endswith("not a BaF event — 1 of 5 runs have a BaF runner.")
 
     await bot.store.clear(GUILD, "marathon_role_id")
     content, _controls, _labels = await controls.rendered(bot, bot.guild, marathon)
-    assert content.endswith("no role is picked in marathon_role_id.")
+    assert content.splitlines()[-2].endswith("no role is picked in marathon_role_id.")
     assert await controls.refresh_controls(bot, bot.guild, marathon["id"]) == "edited"
     pinned = next(
         one for one in the_thread(bot).messages if one.id == marathon["controls_message_id"]

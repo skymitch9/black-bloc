@@ -139,6 +139,9 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         "BaF announcements: on · turn off",
         "Host announcements: off · turn on",
         "Marathon tracker ↗",
+        "BaF event: follow the schedule",
+        "BaF event: yes",
+        "BaF event: no",
     ]
     ids = [one.custom_id for one in buttons(message)]
     assert ids == [
@@ -150,7 +153,12 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         f"marathon:controls:{marathon['id']}:announce:off",
         f"marathon:controls:{marathon['id']}:hostannounce:on",
         None,
+        f"marathon:controls:{marathon['id']}:baf:follow",
+        f"marathon:controls:{marathon['id']}:baf:yes",
+        f"marathon:controls:{marathon['id']}:baf:no",
     ]
+    assert [one.row for one in buttons(message)] == [None] * 8 + [4] * 3
+    assert [one.disabled for one in buttons(message)][-3:] == [True, False, False]
     assert message.kwargs["allowed_mentions"].users is False
     posted = await details_of(bot.db, "marathon.controls_posted")
     assert posted["pinned"] is True and posted["message_id"] == message.id
@@ -207,7 +215,7 @@ async def test_the_help_line_and_labels_are_keys_and_an_edit_re_renders(bot, cog
 
     message = controls_in(the_thread(bot))[0]
     assert labels(message)[0] == "Whole-marathon event: off"
-    assert message.content == "Controls for AGDQ 2027."
+    assert message.content.splitlines()[0] == "Controls for AGDQ 2027."
 
 
 # --- the events buttons -------------------------------------------------------------------------
@@ -701,7 +709,7 @@ async def test_a_removed_host_button_answers_in_words_and_changes_nothing(
         before["host_events"],
         before["event_mode"],
     )
-    assert len(labels(message)) == 8
+    assert len(labels(message)) == 11
 
 
 async def test_a_removed_host_button_clicked_in_discord_answers_in_words(bot, cog):
@@ -757,7 +765,7 @@ async def test_the_controls_carry_one_link_to_the_marathons_tracker_page(bot, co
 
     assert [one.label for one in found] == ["Marathon tracker ↗"]
     assert found[0].url == f"{bot.settings.origin}/schedule.html#marathon-{marathon['id']}"
-    assert buttons(message)[-1] is found[0]
+    assert [one for one in buttons(message) if one.row is None][-1] is found[0]
     assert len(buttons(message)) <= 25 and not found[0].custom_id
 
 
