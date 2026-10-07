@@ -9598,6 +9598,13 @@ Supersedes the per-run section above for everything host. Keyed against `5a60c78
 
 | Where | Why |
 |---|---|
+| `black_bloc/marathon_announce.py` `decide` | The ONE decision every public marathon post asks (announce-overrides, 2026-10-06): master, then the marathon-wide opt-out unless the run says in, then the run's answer, then the part's default. Anchor by name — these rows were added after the 2026-08-31 re-key. |
+| `black_bloc/marathon_announce.py` `block_people` | A host is weighed AS A HOST on every run of their block, even one they also run: otherwise a host who runs one of their own runs would announce the block while hosts are off. |
+| `black_bloc/marathon_announce.py` `run_move` | Uses `standing()` (master forced on) so the button offers the move the defaults allow even while the marathon is off; the state line is what says it is off. |
+| `black_bloc/marathon_announce.py` `mention_stored` | Only an answer that differs from `marathon_mention_people` is stored, so flipping the server default moves everyone who never had their own. |
+| `black_bloc/cogs/content/marathon_announce.py` `people_for` / `speaking` | `standing=True` is a post already up: master forced on (checklist 38). `carried` retries with hosts on when that leaves nobody, so Host announcements going off never strands a host post; the opt writers pass `carried=False` so a per-person move is weighed with the real switch. |
+| `black_bloc/cogs/content/marathon_announce.py` `named` | Adds `plain` (the escaped server name) to whoever is written without an @; `marathon.mention_line` prints it in place of `<@id>`. |
+| `black_bloc/cogs/content/marathon_public.py` `view_of` | Row 0 is the whole-marathon button, then one row a person; `marathon_announce.laid_out` swaps to one menu past four people because Discord takes five rows. |
 | `black_bloc/marathon_announce.py:23` `announces` | NULL follows `marathon_announcements_default` (on) through `marathon_hosts.switch_on` — the same nullable-switch reader as Scan hosts. |
 | `black_bloc/marathon_announce.py:27` `opted_out` | A JSON list on the marathon row, not a table: a pairing may be *everywhere* and a host need not be paired on this marathon; it archives with the row. A bad value reads as nobody opted out. |
 | `black_bloc/marathon_announce.py:55` `run_people` | The names a runner's public post carries: `mt.ours` minus the opted-out — passed as `people=` so a run with two BaF runners, one out, still posts naming the other. |
