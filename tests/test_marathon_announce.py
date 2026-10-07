@@ -313,13 +313,125 @@ def test_four_people_fit_as_buttons_and_more_become_one_menu():
     assert ma.option_of("x:out") is None and ma.option_of("9100:shout") is None
 
 
-def test_a_menu_never_carries_more_than_discord_takes_and_a_long_name_is_cut():
-    many = a_run(3, crowd(20))
-    (pick,) = ma.laid_out(7, many, ma.moves(7, many, ma.Policy(), LABELS), "x" * 300)
-    assert len(pick.options) == 25 and len(pick.label) == 100
+def picked(count):
+    row = a_run(3, crowd(count))
+    made = ma.moves(7, row, ma.Policy(), LABELS)
+    return made, ma.laid_out(7, row, made, "x" * 300)
+
+
+@pytest.mark.parametrize(("count", "sizes"), [(12, [24]), (13, [24, 2]), (20, [24, 16])])
+def test_past_twelve_people_the_menu_splits_and_nobody_loses_a_move(count, sizes):
+    made, picks = picked(count)
+    assert [len(one.options) for one in picks] == sizes
+    assert all(len(one.options) <= ma.OPTION_LIMIT and len(one.label) == 100 for one in picks)
+    offered = [value for one in picks for value, _ in one.options]
+    assert offered == [f"{one.user_id}:{one.to}" for one in made]
+    assert len(offered) == 2 * count and len(set(offered)) == len(offered)
+    assert [one.custom_id for one in picks] == [
+        "marathon:announce:7:3:pick",
+        "marathon:announce:7:3:pick2",
+    ][: len(picks)]
+    assert [one.row for one in picks] == [1, 2][: len(picks)]
+    assert all(re.fullmatch(ma.PICK_TEMPLATE, one.custom_id) for one in picks)
+    for one in picks:
+        people = [value.split(":")[0] for value, _ in one.options]
+        assert all(people.count(member) == 2 for member in people)
+
+
+def test_a_long_name_is_cut_to_what_a_button_takes():
     long = a_run(3, [SKY | {"name": "S" * 200}])
     (move, _) = ma.moves(7, long, ma.Policy(), LABELS)
     assert len(move.label) == 80
+
+
+def test_a_runs_own_answer_where_the_host_runs_is_about_their_run_only():
+    runner = HOSTING | {"part": "runner"}
+    rows = [
+        a_run(1, [HOSTING]),
+        a_run(2, [HOSTING, runner], {8101: ma.IN}),
+        a_run(3, [HOSTING]),
+    ]
+    assert ma.runs_it(rows[1], 8101) and not ma.runs_it(rows[0], 8101)
+    assert ma.block_people(a_block(rows), out(8101)) == []
+    assert ma.block_people(a_block(rows), ma.Policy()) == []
+    assert ids(ma.run_people(rows[1], out(8101))) == [8101]
+    left_out = [a_run(1, [HOSTING]), a_run(2, [HOSTING, runner], {8101: ma.OUT})]
+    assert ids(ma.block_people(a_block(left_out), ma.Policy(hosts_on=True))) == [8101]
+    assert ma.run_people(left_out[1], ma.Policy(hosts_on=True)) == []
+
+
+def test_a_runs_own_answer_where_the_host_only_hosts_is_about_their_block():
+    rows = [a_run(1, [HOSTING]), a_run(2, [HOSTING], {8101: ma.IN}), a_run(3, [HOSTING])]
+    assert ids(ma.block_people(a_block(rows), out(8101))) == [8101]
+    assert ids(ma.block_people(a_block(rows), ma.Policy())) == [8101]
+
+
+def test_a_post_already_up_keeps_or_loses_names_and_gains_only_who_is_announced():
+    row = a_run(1, [SKY, HOSTING])
+    off = ma.Policy()
+    assert ids(ma.run_standing(row, off, [9001])) == [9001]
+    assert ids(ma.run_standing(row, off, [9001, 8101])) == [9001, 8101]
+    assert ids(ma.run_standing(row, off, None)) == [9001, 8101]
+    assert ids(ma.run_standing(row, off, [])) == [9001]
+    assert ids(ma.run_standing(row, ma.Policy(hosts_on=True), [9001])) == [9001, 8101]
+    assert ids(ma.run_standing(row, off._replace(master=False), [9001, 8101])) == [9001, 8101]
+    assert ma.run_standing(row, off._replace(master=False), []) == []
+    assert ids(ma.run_standing(row, off, [9001, 8101], moved=[8101])) == [9001]
+    left = a_run(1, [SKY, HOSTING], {9001: ma.OUT})
+    assert ids(ma.run_standing(left, off, [9001, 8101])) == [8101]
+    assert ma.run_standing(left, off, [9001]) == []
+    assert ids(ma.run_standing(row, out(9001), [9001, 8101])) == [8101]
+    gone = a_run(1, [HOSTING])
+    assert ma.run_standing(gone, off, [9001]) == []
+
+
+def test_a_block_post_already_up_weighs_only_the_host_a_move_was_aimed_at():
+    other = {"name": "bee", "user_id": 8103, "login": None, "part": "host"}
+    rows = [a_run(1, [HOSTING, other]), a_run(2, [HOSTING, other])]
+    block = SimpleNamespace(runs=rows, hosts=[dict(HOSTING), dict(other)])
+    off = ma.Policy()
+    assert ids(ma.block_standing(block, off, [8101, 8103])) == [8101, 8103]
+    assert ids(ma.block_standing(block, off, [8101, 8103], moved=[8101])) == [8103]
+    assert ids(ma.block_standing(block, off, [8103])) == [8103]
+    assert ma.block_standing(block, off, []) == []
+
+
+def test_the_record_of_who_a_post_names_reads_back_and_a_bad_one_reads_as_none():
+    kept = ma.named_of(ma.dump_named([SKY | {"plain": "Sky"}, HOSTING]))
+    assert [(one["user_id"], one["plain"]) for one in kept] == [(9001, True), (8101, False)]
+    assert ma.ids_of(kept) == [9001, 8101] and ma.ids_of(None) is None
+    for bad in (None, "", "{", '{"a": 1}', '[{"name": "x"}]'):
+        assert ma.named_of(bad) is None
+    assert ma.named_of("[]") == []
+
+
+def test_the_log_names_the_decision_that_emptied_a_post():
+    row = a_run(1, [SKY, HOSTING])
+    named = ma.as_named([SKY])
+    assert ma.run_because(row, out(9001), named) == "opted_out"
+    assert ma.run_because(a_run(1, [SKY], {9001: ma.OUT}), ma.Policy(), named) == "run_answer"
+    assert ma.run_because(a_run(1, [HOSTING]), ma.Policy(), named) == "not_on_run"
+    assert ma.run_because(row, ma.Policy(), ma.as_named([HOSTING]), [8101]) == "hosts_off"
+    assert ma.run_because(row, ma.Policy(master=False), []) == "marathon_off"
+    rows = [a_run(1, [HOSTING]), a_run(2, [HOSTING], {8101: ma.OUT})]
+    host = ma.as_named([HOSTING])
+    block = SimpleNamespace(runs=rows, hosts=[dict(HOSTING)])
+    assert ma.block_because(block, ma.Policy(), host) == "hosts_off"
+    assert ma.block_because(block, out(8101), host) == "opted_out"
+    every = SimpleNamespace(
+        runs=[a_run(one, [HOSTING], {8101: ma.OUT}) for one in (1, 2)], hosts=[dict(HOSTING)]
+    )
+    assert ma.block_because(every, ma.Policy(hosts_on=True), host) == "run_answer"
+    assert ma.block_because(every, ma.Policy(), ma.as_named([SKY])) == "not_on_run"
+
+
+def test_a_run_that_is_over_says_so_in_words():
+    assert ma.over(a_run(1, [SKY]) | {"game": "Alpha"}) is None
+    assert ma.over(a_run(1, [SKY], state="live") | {"game": "Alpha"}) is None
+    done = ma.over(a_run(1, [SKY], state="done") | {"game": "Alpha"})
+    assert done == "**Alpha** is over, so nothing was changed."
+    dropped = ma.over(a_run(1, [SKY], state="dropped") | {"game": "Alpha"})
+    assert dropped == "**Alpha** is off the schedule, so nothing was changed."
 
 
 def test_the_state_line_says_who_is_announced_and_why():

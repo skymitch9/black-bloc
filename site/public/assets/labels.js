@@ -112,7 +112,7 @@ export const LABELS = {
   marathon_announcements_on_said: "What staff are told when a marathon starts announcing its BaF people",
   marathon_announcements_off_said: "What staff are told when a marathon stops announcing its BaF people",
   marathon_host_highlights: "Whether each BaF host gets a runner’s public reminder and highlight for every run they host",
-  marathon_announcements_default: "Whether a marathon announces its BaF runners and hosts publicly",
+  marathon_announcements_default: "Whether a marathon announces its BaF people at all (hosts also need Host announcements)",
   marathon_host_announcements_default: "Whether a marathon announces its BaF hosts publicly",
   marathon_controls_host_announcements_on: "The thread controls’ Host announcements button while on",
   marathon_controls_host_announcements_off: "The thread controls’ Host announcements button while off",

@@ -12,6 +12,7 @@ from ... import marathon_announce as ma
 from ...actionlog import log_action
 from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import Outcome, refusal
+from ...pb_feed import plain as unlinked
 from ...settings_store import (
     MARATHON_ANNOUNCE_BUTTON_MENTION_KEY,
     MARATHON_ANNOUNCE_BUTTON_PLAIN_KEY,
@@ -84,14 +85,13 @@ def announces(bot: Any, guild_id: int, marathon: Any) -> bool:
     return ma.announces(marathon, bot.store.get(guild_id, MARATHON_ANNOUNCEMENTS_DEFAULT_KEY))
 
 
-def policy_of(bot: Any, guild_id: int, marathon: Any, *, standing: bool = False) -> ma.Policy:
-    found = ma.policy(
+def policy_of(bot: Any, guild_id: int, marathon: Any) -> ma.Policy:
+    return ma.policy(
         marathon,
         master_default=bot.store.get(guild_id, MARATHON_ANNOUNCEMENTS_DEFAULT_KEY),
         hosts_default=bot.store.get(guild_id, MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY),
         mention_default=bot.store.get(guild_id, MARATHON_MENTION_PEOPLE_KEY),
     )
-    return ma.standing(found) if standing else found
 
 
 def words(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
@@ -104,18 +104,45 @@ def display_name(guild: Any, user_id: int, fallback: str) -> str:
     return str(getattr(member, "display_name", "") or fallback)
 
 
-def plain_name(guild: Any, person: dict[str, Any]) -> str:
-    """A person's server name as plain text: no markdown, no mention."""
-    name = display_name(guild, person["user_id"], str(person.get("name") or person["user_id"]))
-    return discord.utils.escape_mentions(discord.utils.escape_markdown(name))
+def plain_name(person: dict[str, Any]) -> str:
+    """A person's name as plain text, the one a highlight's {runner} shows: no markdown, no
+    mention, no address that links."""
+    return discord.utils.escape_mentions(unlinked(person.get("name") or person["user_id"]))
 
 
-def named(guild: Any, found: ma.Policy, people: Any) -> list[dict[str, Any]]:
-    """The people as a public post writes them: `plain` on whoever is written without an @."""
-    return [
-        dict(one) | {"plain": plain_name(guild, one)} if found.plain(one["user_id"]) else dict(one)
-        for one in people or ()
-    ]
+def named(found: ma.Policy, people: Any, frozen: Any = None) -> list[dict[str, Any]]:
+    """The people as a public post writes them: `plain` on whoever is written without an @.
+    `frozen` is how a finished post already wrote each of them."""
+    kept = []
+    for one in people or ():
+        member = int(one["user_id"])
+        plain = (frozen or {}).get(member)
+        if plain is None:
+            plain = found.plain(member)
+        person = {key: value for key, value in dict(one).items() if key != "plain"}
+        kept.append(person | {"plain": plain_name(person)} if plain else person)
+    return kept
+
+
+def as_written(recorded: Any) -> list[dict[str, Any]]:
+    """A post's own record of who it names, as the post wrote them."""
+    return named(
+        ma.Policy(), recorded, {int(one["user_id"]): bool(one["plain"]) for one in recorded or ()}
+    )
+
+
+def frozen_of(recorded: Any, done: bool) -> dict[int, bool]:
+    if not done:
+        return {}
+    return {
+        int(one["user_id"]): bool(one["plain"]) for one in recorded or () if isinstance(one, dict)
+    }
+
+
+def recorded_ids(recorded: Any) -> list[int] | None:
+    if recorded is None:
+        return None
+    return [int(one["user_id"] if isinstance(one, dict) else one) for one in recorded]
 
 
 def people_for(
@@ -125,15 +152,16 @@ def people_for(
     row: Any,
     *,
     standing: bool = False,
-    carried: bool = True,
+    recorded: Any = None,
+    moved: Any = (),
 ) -> list[dict[str, Any]]:
-    """Everyone of ours a run's public post names. `standing` is a post already up: the master
-    going off never empties it, and (`carried`) neither does the host default going off."""
-    found = policy_of(bot, guild.id, marathon, standing=standing)
-    people = ma.run_people(row, found)
-    if standing and carried and not people:
-        people = ma.run_people(row, found._replace(hosts_on=True))
-    return named(guild, found, people)
+    """Everyone of ours a run's public post names. `standing` is a post already up, weighed
+    against its own record of who it names (`recorded`) and who a move was aimed at."""
+    found = policy_of(bot, guild.id, marathon)
+    if not standing:
+        return named(found, ma.run_people(row, found))
+    people = ma.run_standing(row, found, recorded_ids(recorded), moved)
+    return named(found, people, frozen_of(recorded, mt._cell(row, "state") == mt.DONE))
 
 
 def speaking(
@@ -143,14 +171,16 @@ def speaking(
     block: Any,
     *,
     standing: bool = False,
-    carried: bool = True,
+    recorded: Any = None,
+    moved: Any = (),
+    done: bool = False,
 ) -> list[dict[str, Any]]:
-    """The hosts a block's public posts name; `standing` and `carried` as for a run."""
-    found = policy_of(bot, guild.id, marathon, standing=standing)
-    people = ma.block_people(block, found)
-    if standing and carried and not people:
-        people = ma.block_people(block, found._replace(hosts_on=True))
-    return named(guild, found, people)
+    """The hosts a block's public posts name; `standing`, `recorded` and `moved` as for a run."""
+    found = policy_of(bot, guild.id, marathon)
+    if not standing:
+        return named(found, ma.block_people(block, found))
+    people = ma.block_standing(block, found, recorded_ids(recorded), moved)
+    return named(found, people, frozen_of(recorded, done))
 
 
 def labels_of(bot: Any, guild_id: int) -> dict[str, str]:
@@ -223,9 +253,11 @@ async def baf_people(bot: Any, guild: Any, marathon: Any) -> dict[int, str]:
 async def followed(cog: Any, guild: Any, marathon: Any, ids: Any, *, actor: Any, via: str) -> None:
     from .marathon_host_highlights import follow_opt as hosts_follow
     from .marathon_public import follow_opt as runners_follow
+    from .marathon_reminder_posts import follow_opt as reminders_follow
 
     await runners_follow(cog, guild, marathon, ids, actor=actor, via=via)
     await hosts_follow(cog, guild, marathon, ids, actor=actor, via=via)
+    await reminders_follow(cog, guild, marathon, ids)
 
 
 async def set_opt_out(
@@ -291,7 +323,8 @@ async def set_run_answer(
     via: str = VIA_DISCORD,
 ) -> Outcome:
     """The one writer of a run's own answer for a person: announce them for this run, do not,
-    or back to the default. It posts nothing; the highlights follow as for an opt-out."""
+    or back to the default. It posts nothing; the highlights follow as for an opt-out. A run
+    that is over takes no answer."""
     understood, wanted = ma.clean_run(to)
     if not understood:
         return refusal(ma.BAD_RUN, ma.BAD_RUN_CODE, 422)
@@ -308,6 +341,9 @@ async def set_run_answer(
         )
         if person is None:
             return refusal(ma.NOT_ON_RUN.format(game=row["game"]), ma.NOT_ON_RUN_CODE, 404)
+        over = ma.over(row)
+        if over is not None:
+            return refusal(over, ma.RUN_OVER_CODE, 409)
         member = int(person["user_id"])
         answers = ma.run_answers(row)
         was = answers.get(member)
@@ -427,7 +463,9 @@ async def press(
 
 __all__ = [
     "announces",
+    "as_written",
     "baf_people",
+    "named",
     "controls_of",
     "mention_state",
     "people_for",

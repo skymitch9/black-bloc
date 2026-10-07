@@ -138,12 +138,16 @@ def _marks(raw: Any) -> list[int]:
 
 
 def _pointer(one: dict[str, Any]) -> dict[str, Any]:
+    from . import marathon_announce as ma
+
     return {
         "hosts": [_host(host) for host in one.get("hosts") or ()],
         "message_id": int(one["message_id"]) if one.get("message_id") else None,
         "channel_id": int(one["channel_id"]) if one.get("channel_id") else None,
         "removed": bool(one.get("removed")),
         "tried": bool(one.get("tried")),
+        "named": ma.named_of(one.get("named")),
+        "skipped": bool(one.get("skipped")),
     }
 
 
@@ -221,6 +225,8 @@ def new_record(block: Block) -> dict[str, Any]:
         "channel_id": None,
         "removed": False,
         "tried": False,
+        "named": None,
+        "skipped": False,
         "marks": [],
         mrem.HOST_FIELD: {},
     }

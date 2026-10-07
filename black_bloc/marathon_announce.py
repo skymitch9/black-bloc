@@ -46,6 +46,9 @@ BAD_RUN = (
 BAD_RUN_CODE = "bad_announce"
 NOT_ON_RUN = "Nobody from BaF with that id is on **{game}**, so nothing was changed."
 NOT_ON_RUN_CODE = "not_on_run"
+RUN_OVER = "**{game}** is over, so nothing was changed."
+RUN_DROPPED = "**{game}** is off the schedule, so nothing was changed."
+RUN_OVER_CODE = "run_over"
 
 PLAIN = "plain"
 MENTION = "mention"
@@ -72,18 +75,29 @@ WHY_DEFAULT = "default"
 WHY_HOSTS_OFF = "hosts_off"
 WHYS = (WHY_OFF, WHY_MARATHON, WHY_RUN, WHY_DEFAULT, WHY_HOSTS_OFF)
 
+NAMED = "public_people"
+GONE = "not_on_run"
+BECAUSE = {
+    WHY_MARATHON: "opted_out",
+    WHY_HOSTS_OFF: "hosts_off",
+    WHY_RUN: "run_answer",
+    WHY_OFF: "marathon_off",
+}
+
 MOVES = (IN, OUT, DEFAULT, PLAIN, MENTION)
 MOVE_TEMPLATE = (
     r"marathon:announce:(?P<marathon_id>[0-9]+):(?P<run_id>[0-9]+)"
     r":(?P<user_id>[0-9]+):(?P<to>in|out|default|plain|mention)"
 )
 MOVE_ID = "marathon:announce:{marathon_id}:{run_id}:{user_id}:{to}"
-PICK_TEMPLATE = r"marathon:announce:(?P<marathon_id>[0-9]+):(?P<run_id>[0-9]+):pick"
-PICK_ID = "marathon:announce:{marathon_id}:{run_id}:pick"
+PICK_TEMPLATE = r"marathon:announce:(?P<marathon_id>[0-9]+):(?P<run_id>[0-9]+):pick(?P<page>[0-9]*)"
+PICK_ID = "marathon:announce:{marathon_id}:{run_id}:pick{page}"
 PICK = "pick"
 PREFIX = "marathon:announce:"
 BUTTON_PEOPLE = 4
 OPTION_LIMIT = 25
+PICK_PEOPLE = 12
+PICK_ROWS = 4
 LABEL_LIMIT = 80
 OPTION_LABEL_LIMIT = 100
 SHOWN_STATES = (mt.UPCOMING, mt.LIVE)
@@ -120,6 +134,7 @@ class Pick(NamedTuple):
     label: str
     options: tuple[tuple[str, str], ...]
     to: str = PICK
+    row: int = 1
 
 
 def announces(marathon: Any, default: Any) -> bool:
@@ -253,6 +268,26 @@ def verdict(found: Policy, row: Any, user_id: Any, role: str) -> Verdict:
     )
 
 
+def runs_it(row: Any, user_id: Any) -> bool:
+    return any(int(one["user_id"]) == int(user_id) and one["role"] == RUNNER for one in baf_on(row))
+
+
+def host_verdict(found: Policy, row: Any, user_id: Any) -> Verdict:
+    """A host weighed for one run of their block: the run's own answer is about their hosting
+    only where they do not also run it."""
+    return decide(
+        master=found.master,
+        opted_out=int(user_id) in found.opted,
+        answer=None if runs_it(row, user_id) else run_answers(row).get(int(user_id)),
+        role=HOST,
+        hosts_on=found.hosts_on,
+    )
+
+
+def block_yes(block: Any, found: Policy, user_id: Any) -> bool:
+    return any(host_verdict(found, row, user_id).yes for row in block.runs)
+
+
 def run_people(row: Any, found: Policy) -> list[dict[str, Any]]:
     """The BaF people a run's public post names: everyone of ours the decision announces."""
     return [
@@ -265,11 +300,118 @@ def run_people(row: Any, found: Policy) -> list[dict[str, Any]]:
 def block_people(block: Any, found: Policy) -> list[dict[str, Any]]:
     """The hosts a host block's public posts name: each host announced for at least one run of
     the block. A host is weighed as a host on every run of it, whatever else they do there."""
+    return [dict(one) for one in block.hosts if block_yes(block, found, one["user_id"])]
+
+
+def as_named(people: Any) -> list[dict[str, Any]]:
+    """Who a post names, as the post's own record keeps them."""
     return [
-        dict(one)
-        for one in block.hosts
-        if any(verdict(found, row, one["user_id"], HOST).yes for row in block.runs)
+        {
+            "user_id": int(one["user_id"]),
+            "name": str(one.get("name") or one["user_id"]),
+            "part": one.get("part"),
+            "login": one.get("login"),
+            "plain": bool(one.get("plain")),
+        }
+        for one in people or ()
     ]
+
+
+def named_of(raw: Any) -> list[dict[str, Any]] | None:
+    """The record of who a post names; None for a post from before names were recorded."""
+    if raw is None or raw == "":
+        return None
+    try:
+        found = json.loads(raw) if isinstance(raw, str) else raw
+        return as_named(found) if isinstance(found, list) else None
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+
+
+def dump_named(people: Any) -> str:
+    return json.dumps(as_named(people))
+
+
+def ids_of(people: Any) -> list[int] | None:
+    return None if people is None else [int(one["user_id"]) for one in people]
+
+
+def still_named(
+    people: Any, recorded: Any, found: Policy, yes: Any, moved: Any = ()
+) -> list[dict[str, Any]]:
+    """Who a post already up names now. Someone it names stays unless they are left out by
+    name; someone a move was aimed at is weighed by the real host switch; anyone it does not
+    name joins only when the decision announces them. No record reads as naming everyone."""
+    held = found._replace(master=True)
+    carried = held._replace(hosts_on=True)
+    was = None if recorded is None else {int(one) for one in recorded}
+    aimed = {int(one) for one in moved or ()}
+    kept = []
+    for one in people or ():
+        member = int(one["user_id"])
+        if was is not None and member not in was:
+            weighed = found
+        else:
+            weighed = held if member in aimed else carried
+        if yes(one, weighed):
+            kept.append(dict(one))
+    return kept
+
+
+def run_standing(row: Any, found: Policy, recorded: Any, moved: Any = ()) -> list[dict[str, Any]]:
+    return still_named(
+        mt.ours(mt.people_of(row)),
+        recorded,
+        found,
+        lambda one, how: verdict(how, row, one["user_id"], role_of(one)).yes,
+        moved,
+    )
+
+
+def block_standing(
+    block: Any, found: Policy, recorded: Any, moved: Any = ()
+) -> list[dict[str, Any]]:
+    return still_named(
+        block.hosts,
+        recorded,
+        found,
+        lambda one, how: block_yes(block, how, one["user_id"]),
+        moved,
+    )
+
+
+def _first(named: Any, moved: Any) -> list[dict[str, Any]]:
+    aimed = {int(one) for one in moved or ()}
+    return sorted(named or (), key=lambda one: int(one["user_id"]) not in aimed)
+
+
+def run_because(row: Any, found: Policy, named: Any, moved: Any = ()) -> str:
+    """Which decision left a run's post naming nobody: the person a move was aimed at first."""
+    held = found._replace(master=True)
+    on = {int(one["user_id"]): one for one in mt.ours(mt.people_of(row))}
+    for one in _first(named, moved):
+        here = on.get(int(one["user_id"]))
+        if here is None:
+            return GONE
+        said = verdict(held, row, here["user_id"], role_of(here))
+        if not said.yes:
+            return BECAUSE[said.why]
+    return BECAUSE[WHY_OFF] if not found.master else GONE
+
+
+def block_because(block: Any, found: Policy, named: Any, moved: Any = ()) -> str:
+    """Which decision left a block's post naming nobody."""
+    held = found._replace(master=True)
+    hosting = {int(one["user_id"]) for one in block.hosts}
+    for one in _first(named, moved):
+        member = int(one["user_id"])
+        if member not in hosting:
+            return GONE
+        whys = {said.why for said in (host_verdict(held, row, member) for row in block.runs)}
+        for why in (WHY_MARATHON, WHY_HOSTS_OFF, WHY_RUN):
+            if why in whys:
+                return BECAUSE[why]
+    return BECAUSE[WHY_OFF] if not found.master else GONE
 
 
 def all_out(user_ids: Any, opted: set[int]) -> bool:
@@ -341,6 +483,14 @@ def shown(row: Any) -> bool:
     return mt._cell(row, "state") in SHOWN_STATES
 
 
+def over(row: Any) -> str | None:
+    """The refusal for a run that takes no answer any more, in words."""
+    if shown(row):
+        return None
+    wanted = RUN_DROPPED if mt._cell(row, "state") == mt.DROPPED else RUN_OVER
+    return wanted.format(game=mt._cell(row, "game") or "")
+
+
 def moves(marathon_id: Any, row: Any, found: Policy, labels: dict[str, str]) -> tuple[Move, ...]:
     """Two buttons a person — their answer for this run and their @ — for a run still ahead."""
     if not shown(row):
@@ -366,19 +516,26 @@ def moves(marathon_id: Any, row: Any, found: Policy, labels: dict[str, str]) -> 
 
 
 def laid_out(marathon_id: Any, row: Any, made: tuple[Move, ...], placeholder: str) -> tuple:
-    """Buttons while they fit under the run's own button; one select once they do not."""
-    if len({one.user_id for one in made}) <= BUTTON_PEOPLE:
+    """Buttons while they fit under the run's own button; menus once they do not — twelve
+    people a menu, a person's two moves never split, a menu a row."""
+    people = list(dict.fromkeys(one.user_id for one in made))
+    if len(people) <= BUTTON_PEOPLE:
         return made
-    options = tuple(
-        (f"{one.user_id}:{one.to}", label(one.label, OPTION_LABEL_LIMIT))
-        for one in made[:OPTION_LIMIT]
-    )
-    return (
+    pages = [people[at : at + PICK_PEOPLE] for at in range(0, len(people), PICK_PEOPLE)]
+    return tuple(
         Pick(
-            PICK_ID.format(marathon_id=int(marathon_id), run_id=int(row["id"])),
+            PICK_ID.format(
+                marathon_id=int(marathon_id), run_id=int(row["id"]), page=page + 1 if page else ""
+            ),
             label(placeholder, OPTION_LABEL_LIMIT),
-            options,
-        ),
+            tuple(
+                (f"{one.user_id}:{one.to}", label(one.label, OPTION_LABEL_LIMIT))
+                for one in made
+                if one.user_id in here
+            ),
+            row=page + 1,
+        )
+        for page, here in enumerate(pages[:PICK_ROWS])
     )
 
 
@@ -436,6 +593,22 @@ __all__ = [
     "Policy",
     "RUNNER",
     "RUN_ANSWERS",
+    "RUN_OVER",
+    "RUN_OVER_CODE",
+    "NAMED",
+    "as_named",
+    "block_because",
+    "block_standing",
+    "block_yes",
+    "dump_named",
+    "host_verdict",
+    "ids_of",
+    "named_of",
+    "over",
+    "run_because",
+    "run_standing",
+    "runs_it",
+    "still_named",
     "SWITCH",
     "Verdict",
     "all_out",

@@ -5946,10 +5946,11 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_ANNOUNCEMENTS_DEFAULT_KEY: (
         "bool",
         True,
-        "whether a marathon announces its BaF runners and hosts publicly — the public "
-        "reminders and highlights — when its own BaF announcements switch follows "
-        "this setting. Off, nobody on that marathon gets a public post; anyone can still be "
-        "opted out one by one. on by default",
+        "whether a marathon announces its BaF people publicly at all — the master over "
+        "runners and hosts alike — when its own BaF announcements switch follows this "
+        "setting. Off, nobody on that marathon gets a public post. On, runners are announced "
+        "and hosts also need Host announcements; anyone can still be opted out one by one. "
+        "on by default",
     ),
     MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY: (
         "bool",
@@ -5963,8 +5964,9 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "bool",
         True,
         "whether a public marathon post writes a BaF person as an @ (drawn, never notified). "
-        "Off, every public post writes their server name as plain text instead; one person on "
-        "one marathon can be set the other way from a run's post. on by default",
+        "Off, every public post writes their name as the schedule has it, as plain text, "
+        "instead; one person on one marathon can be set the other way from a run's post. on "
+        "by default",
     ),
     MARATHON_MODE_KEY: (
         "enum",
@@ -6550,7 +6552,7 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "Announcements for a person on this run…",
         (),
         "the menu a BaF run's post carries instead of buttons once more people are on the run "
-        "than buttons fit",
+        "than buttons fit; past twelve people it is one menu for every twelve",
     ),
     MARATHON_ANNOUNCE_STATE_LINE_KEY: (
         "{name}: {state} — {why}{plain}",

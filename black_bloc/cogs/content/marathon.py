@@ -405,6 +405,7 @@ RUN_COLUMNS = {
     "public_message_id",
     "public_channel_id",
     "public_removed",
+    "public_people",
     "sheet_at",
     "sheet_ends_at",
     "actual_started_at",

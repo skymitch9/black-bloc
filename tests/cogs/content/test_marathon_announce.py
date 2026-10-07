@@ -5,6 +5,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import discord
+import pytest
 
 from black_bloc import marathon as mt
 from black_bloc import marathon_announce as ma
@@ -84,6 +85,7 @@ FOUR = [
 PAIR = [a_run(1, 60, game="Alpha", people=(SKY_RUNS, ("Mo", "moruns", "runner")), length=85)]
 FANCY = "Sky_*Aiva*"
 ESCAPED = "Sky\\_\\*Aiva\\*"
+WRITTEN = "Sky"
 WITH_MENTION = "{mention} {part} **{game}** on **{marathon}** · {state} · {url}"
 DONE_WITH_MENTION = "{mention} {part} **{game}** {day} on **{marathon}** · {url}"
 
@@ -333,7 +335,7 @@ async def test_a_plain_name_is_written_on_the_reminder_and_survives_a_move(bot, 
     said = await mention(bot, marathon, SKY, "plain")
     await walk(bot, cog, marathon, [45])
 
-    (heads,) = said_of(bot, f"{ESCAPED} runs **Alpha**")
+    (heads,) = said_of(bot, f"{WRITTEN} runs **Alpha**")
     assert said.ok and f"**{FANCY}** is written by name, with no @" in said.message
     assert f"<@{SKY}>" not in heads.content and no_pings(heads)
     assert json.loads((await fresh(bot, marathon))["mention_people"]) == {str(SKY): "plain"}
@@ -345,10 +347,10 @@ async def test_a_plain_name_is_written_on_the_reminder_and_survives_a_move(bot, 
     assert (await cog.refresh(bot.guild, await fresh(bot, marathon))).ok
     await tick_at(bot, cog, marathon, 46)
 
-    assert heads.content.startswith(f"{ESCAPED} runs **Alpha**")
+    assert heads.content.startswith(f"{WRITTEN} runs **Alpha**")
     assert mt.stamp_of(NOW + timedelta(minutes=75), "f") in heads.content
     assert (
-        len(said_of(bot, f"{ESCAPED} runs **Alpha**")) == 1 and runner_heads_ups(bot, "Alpha") == []
+        len(said_of(bot, f"{WRITTEN} runs **Alpha**")) == 1 and runner_heads_ups(bot, "Alpha") == []
     )
 
 
@@ -360,10 +362,10 @@ async def test_a_plain_name_is_written_on_the_highlight_and_on_the_finished_one(
     assert (await mention(bot, marathon, SKY, "plain")).ok
 
     await walk(bot, cog, marathon, [61])
-    (post,) = said_of(bot, f"{ESCAPED} runs **Alpha** on")
+    (post,) = said_of(bot, f"{WRITTEN} runs **Alpha** on")
     await walk(bot, cog, marathon, [146, 300])
 
-    assert post.content.startswith(f"{ESCAPED} ran **Alpha** today on **Hidden Heroes**")
+    assert post.content.startswith(f"{WRITTEN} ran **Alpha** today on **Hidden Heroes**")
     assert f"<@{SKY}>" not in post.content
 
 
@@ -380,10 +382,10 @@ async def test_changing_the_choice_rewrites_what_is_up_in_place_and_posts_nothin
     assert (await mention(bot, marathon, SKY, "plain")).ok
     assert (await mention(bot, marathon, ANARCHY, "plain")).ok
 
-    assert highlight.content.startswith(f"{ESCAPED} runs **Alpha** on")
-    assert heads.content.startswith(f"{ESCAPED} runs **Beta**")
+    assert highlight.content.startswith(f"{WRITTEN} runs **Alpha** on")
+    assert heads.content.startswith(f"{WRITTEN} runs **Beta**")
     assert host_heads.content.startswith(f"<@{ANARCHY}> hosts")
-    assert len(said_of(bot, f"{ESCAPED} hosts **Alpha** on")) == 1
+    assert len(said_of(bot, "anarchy hosts **Alpha** on")) == 1
     assert len(runner_heads_ups(bot, "Alpha")) == 1
     assert len(posts(bot)) == count
     assert heads.edits[-1]["allowed_mentions"].users is False
@@ -402,7 +404,7 @@ async def test_a_hosts_plain_name_is_written_on_their_blocks_posts(bot, cog):
 
     await walk(bot, cog, marathon, [45])
 
-    assert len(said_of(bot, f"{ESCAPED} hosts **Alpha**")) == 1 and heads_ups(bot) == []
+    assert len(said_of(bot, "anarchy hosts **Alpha**")) == 1 and heads_ups(bot) == []
 
 
 async def test_the_server_can_write_everyone_plain_and_one_person_can_still_be_an_at(bot, cog):
@@ -594,3 +596,469 @@ async def test_a_run_with_more_people_than_buttons_fit_carries_one_menu(bot, cog
     lead = FakeInteraction(bot, FakeActor(), bot.guild)
     await chosen.on_click(lead)
     assert "nothing was changed" in lead.sent
+
+
+# --- review fixes 2026-10-06: a post already up only keeps or loses names -----------------------
+
+BEE = 8103
+ZED_RUNS = ("Zed", "zedruns", "runner")
+CO_HOST = ("bee", "beehosts", "host")
+SHARED = [
+    a_run(1, 60, game="Alpha", people=(("clipboard", "cb", "runner"), HOST, CO_HOST), length=85),
+    a_run(2, 145, game="Beta", people=(("sorbet", "ts", "runner"), HOST, CO_HOST), length=35),
+]
+RUNS_ONE = [
+    a_run(1, 60, game="Alpha", people=(("clipboard", "cb", "runner"), HOST), length=85),
+    a_run(2, 145, game="Beta", people=(("anarchy", "anarchyasf", "runner"), HOST), length=35),
+    a_run(3, 180, game="Gamma", people=(("sorbet", "ts", "runner"), HOST), length=50),
+    a_run(4, 230, game="Delta", people=(("sy", "sy", "runner"), HOST), length=30),
+]
+
+
+async def counted(bot, cog, runs, **given):
+    await bot.store.set(GUILD, "marathon_hosts_count_as_ours", True)
+    return await show(bot, cog, runs, **given)
+
+
+def said_publicly(bot):
+    return "\n".join(one.content for one in posts(bot))
+
+
+def names_the_host(bot):
+    said = said_publicly(bot)
+    return "anarchy" in said or str(ANARCHY) in said
+
+
+async def because_of(bot, kind):
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id", (kind,)
+    )
+    return [json.loads(row["details"]).get("because") for row in await cur.fetchall()]
+
+
+async def reread(bot, cog, marathon, runs):
+    cog.client.runs_given = list(runs)
+    assert (await cog.refresh(bot.guild, await fresh(bot, marathon))).ok
+
+
+async def test_a_reminder_already_up_never_gains_a_host_who_is_not_announced(bot, cog):
+    marathon = await counted(bot, cog, FOUR, hosts=False)
+    await walk(bot, cog, marathon, [45])
+    (heads,) = runner_heads_ups(bot, "Alpha")
+    assert mt.is_ours(await run_named(bot, marathon, "Alpha")) and not names_the_host(bot)
+
+    assert (await answer(bot, marathon, "Alpha", SKY, "out")).ok
+    await walk(bot, cog, marathon, [46, 47])
+
+    assert heads.content.startswith(f"<@{SKY}> runs **Alpha**") and heads.edits == []
+    assert not names_the_host(bot)
+
+
+async def test_a_reminder_remembers_who_it_named(bot, cog):
+    marathon = await counted(bot, cog, FOUR, hosts=False)
+
+    await walk(bot, cog, marathon, [45])
+
+    row = await run_named(bot, marathon, "Alpha")
+    assert json.loads(row["reminder_posts"])["15"]["public"]["people"] == [SKY]
+
+
+async def test_a_moved_reminder_is_rewritten_without_the_host_who_is_not_announced(bot, cog):
+    marathon = await counted(bot, cog, FOUR, hosts=False)
+    await walk(bot, cog, marathon, [45])
+    (heads,) = runner_heads_ups(bot, "Alpha")
+
+    await reread(
+        bot,
+        cog,
+        marathon,
+        [a_run(1, 75, game="Alpha", people=(SKY_RUNS, HOST), length=70), *FOUR[1:]],
+    )
+    await tick_at(bot, cog, marathon, 46)
+
+    assert heads.content.startswith(f"<@{SKY}> runs **Alpha**") and len(heads.edits) == 1
+    assert mt.stamp_of(NOW + timedelta(minutes=75), "f") in heads.content
+    assert not names_the_host(bot)
+
+
+async def test_a_highlight_whose_runner_left_the_schedule_never_names_the_host_instead(bot, cog):
+    marathon = await counted(bot, cog, FOUR, auto=True, hosts=False)
+    await walk(bot, cog, marathon, [45, 61])
+    (post,) = runner_highlights(bot, "Alpha")
+
+    await reread(
+        bot,
+        cog,
+        marathon,
+        [a_run(1, 60, game="Alpha", people=(ZED_RUNS, HOST), length=85), *FOUR[1:]],
+    )
+    await walk(bot, cog, marathon, [62, 63])
+
+    assert post.content == "Staff took down the highlight for **Sky** on **Hidden Heroes**."
+    assert not names_the_host(bot)
+    assert await because_of(bot, "marathon.public_highlight_removed") == ["not_on_run"]
+
+
+async def test_the_taken_down_line_names_only_who_the_post_named(bot, cog):
+    marathon = await counted(bot, cog, FOUR, auto=True, hosts=False)
+    await walk(bot, cog, marathon, [45, 61])
+    (post,) = runner_highlights(bot, "Alpha")
+
+    assert (await answer(bot, marathon, "Alpha", SKY, "out")).ok
+
+    assert post.content == "Staff took down the highlight for **Sky** on **Hidden Heroes**."
+    assert not names_the_host(bot)
+    assert (await answer(bot, marathon, "Alpha", SKY, "default")).ok
+    assert post.content.startswith("**Sky** runs **Alpha**") and not names_the_host(bot)
+
+
+async def test_a_finished_highlight_never_names_a_host_who_is_not_announced(bot, cog):
+    marathon = await counted(bot, cog, FOUR, auto=True, hosts=False)
+
+    await walk(bot, cog, marathon, [45, 61, 130, 146, 181, 231, 400])
+
+    assert len(said_of(bot, "**Sky** ran **Alpha**")) == 1
+    assert len(said_of(bot, "**Sky** ran **Beta**")) == 1
+    assert heads_ups(bot) == [] and highlights(bot) == [] and not names_the_host(bot)
+
+
+async def test_a_host_block_stays_silent_while_hosts_count_as_ours_and_are_not_announced(bot, cog):
+    marathon = await counted(bot, cog, HIDDEN_HEROES, auto=True, hosts=False)
+
+    await walk(bot, cog, marathon, [45, 61, 130, 146, 181, 231, 400])
+
+    assert posts(bot) == []
+
+
+async def test_a_host_who_counts_as_ours_joins_a_post_only_once_announced(bot, cog):
+    marathon = await counted(bot, cog, FOUR, auto=True, hosts=False)
+    await walk(bot, cog, marathon, [45, 61])
+    (post,) = runner_highlights(bot, "Alpha")
+
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
+
+    assert post.content.startswith("**Sky, anarchy** runs **Alpha**")
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "default")).ok
+    assert post.content.startswith("**Sky** runs **Alpha**")
+
+
+async def test_a_highlight_remembers_who_it_named_and_one_from_before_keeps_its_names(bot, cog):
+    marathon = await counted(bot, cog, FOUR, auto=True, hosts=True)
+    await walk(bot, cog, marathon, [45, 61])
+    (post,) = said_of(bot, "**Sky, anarchy** runs **Alpha**")
+    row = await run_named(bot, marathon, "Alpha")
+    assert [one["user_id"] for one in json.loads(row["public_people"])] == [SKY, ANARCHY]
+    await bot.db.conn.execute(
+        "UPDATE marathon_runs SET public_people = NULL WHERE id = ?", (row["id"],)
+    )
+    await bot.db.conn.commit()
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.HOST_ANNOUNCE, False)
+
+    await walk(bot, cog, marathon, [62])
+
+    assert post.content.startswith("**Sky, anarchy** runs **Alpha**")
+    row = await run_named(bot, marathon, "Alpha")
+    assert [one["user_id"] for one in json.loads(row["public_people"])] == [SKY, ANARCHY]
+
+
+async def co_hosted(bot, cog):
+    marathon = await show(bot, cog, SHARED, auto=True, hosts=True)
+    paired = await pair_runner(bot, bot.guild, FakeActor(), marathon, "bee", BEE, everywhere=True)
+    assert paired.ok, paired.message
+    await walk(bot, cog, marathon, [45, 61])
+    (post,) = said_of(bot, "**anarchy, bee** hosts **Alpha**")
+    return marathon, post
+
+
+async def test_a_move_on_one_co_host_leaves_the_other_on_the_post(bot, cog):
+    marathon, post = await co_hosted(bot, cog)
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.HOST_ANNOUNCE, False)
+    await tick_at(bot, cog, marathon, 62)
+    assert post.content.startswith("**anarchy, bee** hosts **Alpha**")
+
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
+    assert post.content.startswith("**anarchy, bee** hosts **Alpha**")
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "default")).ok
+
+    assert post.content.startswith("**bee** hosts **Alpha**")
+    await tick_at(bot, cog, marathon, 63)
+    assert post.content.startswith("**bee** hosts **Alpha**")
+    assert "marathon.host_highlight_removed" not in await kinds(bot.db)
+
+
+async def test_a_co_host_left_out_of_every_run_leaves_the_other_and_the_line_names_who_was_up(
+    bot, cog
+):
+    marathon, post = await co_hosted(bot, cog)
+
+    for game in ("Alpha", "Beta"):
+        assert (await answer(bot, marathon, game, ANARCHY, "out")).ok
+    assert post.content.startswith("**bee** hosts **Alpha**")
+    for game in ("Alpha", "Beta"):
+        assert (await answer(bot, marathon, game, BEE, "out")).ok
+
+    assert post.content == "Staff took down the highlight for **bee** on **Hidden Heroes**."
+
+
+async def test_a_runs_own_yes_where_the_host_runs_never_announces_their_block(bot, cog):
+    marathon = await show(bot, cog, RUNS_ONE, auto=True, hosts=True)
+    out = await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [ANARCHY], True)
+    assert out.ok
+
+    assert (await answer(bot, marathon, "Beta", ANARCHY, "in")).ok
+    await walk(bot, cog, marathon, [45, 61, 130, 146, 165, 181, 215, 231])
+
+    assert heads_ups(bot) == [] and highlights(bot) == []
+    assert len(said_of(bot, f"<@{ANARCHY}> runs **Beta**")) == 2
+    assert len(said_of(bot, "**anarchy** ran **Beta**")) == 1
+    assert "hosts **" not in said_publicly(bot) and "hosted **" not in said_publicly(bot)
+
+
+async def test_a_runs_own_yes_where_the_host_only_hosts_announces_their_block(bot, cog):
+    marathon = await show(bot, cog, RUNS_ONE, auto=True, hosts=True)
+    out = await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [ANARCHY], True)
+    assert out.ok
+
+    assert (await answer(bot, marathon, "Gamma", ANARCHY, "in")).ok
+    await walk(bot, cog, marathon, [45, 61])
+
+    assert [game_of(one) for one in heads_ups(bot)] == ["Alpha"]
+    assert [game_of(one) for one in highlights(bot)] == ["Alpha"]
+
+
+async def test_a_run_that_is_over_refuses_its_own_answer_in_words_and_changes_nothing(bot, cog):
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=False)
+    await walk(bot, cog, marathon, [45, 61, 146])
+    (post,) = said_of(bot, "**Sky** ran **Alpha**")
+    row = await run_named(bot, marathon, "Alpha")
+    assert row["state"] == mt.DONE
+
+    said = await answer(bot, marathon, "Alpha", SKY, "out")
+
+    assert not said.ok and said.status == 409
+    assert said.message == "**Alpha** is over, so nothing was changed."
+    assert post.content.startswith("**Sky** ran **Alpha**")
+    assert ma.run_answers(await run_named(bot, marathon, "Alpha")) == {}
+    assert "marathon.announce_run_set" not in await kinds(bot.db)
+    assert "marathon.public_highlight_removed" not in await kinds(bot.db)
+
+    stale = await public.AnnounceButton.from_custom_id(
+        None,
+        None,
+        re.fullmatch(ma.MOVE_TEMPLATE, f"marathon:announce:{marathon['id']}:{row['id']}:{SKY}:out"),
+    )
+    lead = FakeInteraction(bot, FakeActor(), bot.guild)
+    await stale.on_click(lead)
+    assert "**Alpha** is over, so nothing was changed." in lead.sent
+    assert post.content.startswith("**Sky** ran **Alpha**")
+
+
+async def test_a_finished_highlight_keeps_how_its_names_were_written(bot, cog):
+    await bot.store.set(GUILD, "marathon_public_template", WITH_MENTION)
+    await bot.store.set(GUILD, "marathon_public_done_template", DONE_WITH_MENTION)
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=False)
+    await walk(bot, cog, marathon, [61, 146])
+    (done,) = said_of(bot, f"<@{SKY}> ran **Alpha**")
+    (live,) = said_of(bot, f"<@{SKY}> runs **Beta**")
+    edits = len(done.edits)
+
+    assert (await mention(bot, marathon, SKY, "plain")).ok
+    await tick_at(bot, cog, marathon, 147)
+
+    assert done.content.startswith(f"<@{SKY}> ran **Alpha**") and len(done.edits) == edits
+    assert live.content.startswith("Sky runs **Beta**")
+
+
+async def test_a_host_highlight_skipped_for_the_host_default_leaves_one_row_a_block(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True, hosts=False)
+
+    await walk(bot, cog, marathon, [45, 61, 62, 146, 147, 181, 182])
+
+    assert highlights(bot) == []
+    assert await because_of(bot, "marathon.host_highlight_skipped") == ["host_announcements_off"]
+    logged = await details_of(bot.db, "marathon.host_highlight_skipped")
+    assert logged["members"] == [ANARCHY] and logged["game"] == "Titanfall 2"
+
+
+async def test_a_skipped_host_highlight_still_goes_up_once_hosts_are_announced(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True, hosts=False)
+    await walk(bot, cog, marathon, [45, 61])
+    assert highlights(bot) == []
+
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.HOST_ANNOUNCE, True)
+    await walk(bot, cog, marathon, [146])
+
+    assert len(highlights(bot)) == 1
+
+
+async def test_the_log_says_which_decision_took_a_post_down(bot, cog):
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=True)
+    await walk(bot, cog, marathon, [45, 61])
+
+    await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [SKY], True)
+    await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [ANARCHY], True)
+
+    assert await because_of(bot, "marathon.public_highlight_removed") == ["opted_out"]
+    assert await because_of(bot, "marathon.host_highlight_removed") == ["opted_out"]
+
+
+async def test_a_runs_own_no_says_so_in_the_log(bot, cog):
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=True)
+    await walk(bot, cog, marathon, [45, 61])
+
+    assert (await answer(bot, marathon, "Alpha", SKY, "out")).ok
+    for game in ("Alpha", "Beta", "Gamma", "Delta"):
+        assert (await answer(bot, marathon, game, ANARCHY, "out")).ok
+
+    assert await because_of(bot, "marathon.public_highlight_removed") == ["run_answer"]
+    assert await because_of(bot, "marathon.host_highlight_removed") == ["run_answer"]
+
+
+async def test_back_to_the_default_with_hosts_off_says_so_in_the_log(bot, cog):
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=False)
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
+    await walk(bot, cog, marathon, [45, 61])
+    assert len(highlights(bot)) == 1
+
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "default")).ok
+
+    assert await because_of(bot, "marathon.host_highlight_removed") == ["hosts_off"]
+
+
+def test_a_plain_name_is_the_schedules_name_and_never_links():
+    found = ma.Policy(mentions={SKY: ma.PLAIN, MO: ma.PLAIN})
+    people = [
+        {"user_id": SKY, "name": "Sky_*Aiva*", "part": "runner"},
+        {"user_id": MO, "name": "see https://evil.example/x @everyone", "part": "runner"},
+        {"user_id": BEE, "name": "bee", "part": "runner"},
+    ]
+
+    first, second, third = announce.named(found, people)
+
+    assert first["plain"] == ESCAPED
+    assert "https://" not in second["plain"] and "evil.example/x" in second["plain"]
+    assert "@everyone" not in second["plain"]
+    assert "plain" not in third
+
+
+async def crowded(bot, cog, count):
+    runs = [
+        a_run(
+            1,
+            60,
+            game="Alpha",
+            people=tuple((f"Runner{one}", f"runner{one}", "runner") for one in range(count)),
+            length=85,
+        )
+    ]
+    marathon = await show(bot, cog, runs, hosts=False)
+    for one in range(count):
+        paired = await pair_runner(
+            bot, bot.guild, FakeActor(), marathon, f"Runner{one}", 9300 + one, everywhere=True
+        )
+        assert paired.ok, paired.message
+    await tick_at(bot, cog, marathon, 1)
+    thread = bot.guild.channels[SHOW_ROOM].threads[-1]
+    return marathon, next(one for one in thread.messages if one.content.startswith("**Runner0"))
+
+
+@pytest.mark.parametrize(("count", "sizes"), [(13, [24, 2]), (20, [24, 16])])
+async def test_past_twelve_people_a_runs_post_carries_a_menu_for_every_twelve(
+    bot, cog, count, sizes
+):
+    marathon, post = await crowded(bot, cog, count)
+    row = await run_named(bot, marathon, "Alpha")
+
+    whole, *picks = items_on(post)
+
+    assert whole.label == "Opt out of every run on this marathon"
+    assert [len(one.options) for one in picks] == sizes
+    assert [one.custom_id for one in picks] == [
+        f"marathon:announce:{marathon['id']}:{row['id']}:pick",
+        f"marathon:announce:{marathon['id']}:{row['id']}:pick2",
+    ]
+    offered = [option.value for one in picks for option in one.options]
+    for member in range(9300, 9300 + count):
+        assert f"{member}:out" in offered and f"{member}:plain" in offered
+    assert len(current_view(post).to_components()) == 3
+    edits = len(post.edits)
+    await walk(bot, cog, marathon, [2, 3])
+    assert len(post.edits) == edits
+
+    last = await public.AnnouncePick.from_custom_id(
+        None, None, re.fullmatch(ma.PICK_TEMPLATE, picks[1].custom_id)
+    )
+    assert last.item.custom_id == picks[1].custom_id
+    last.item._values = [f"{9300 + count - 1}:out"]
+    lead = FakeInteraction(bot, FakeActor(), bot.guild)
+    await last.on_click(lead)
+    assert f"**Runner{count - 1}** is not announced for **Alpha**" in lead.sent
+    assert ma.run_answers(await run_named(bot, marathon, "Alpha")) == {9300 + count - 1: "out"}
+
+
+async def test_a_move_on_one_co_host_leaves_the_other_on_the_blocks_reminder(bot, cog):
+    marathon = await show(bot, cog, SHARED, hosts=True)
+    paired = await pair_runner(bot, bot.guild, FakeActor(), marathon, "bee", BEE, everywhere=True)
+    assert paired.ok, paired.message
+    await walk(bot, cog, marathon, [45])
+    (heads,) = said_of(bot, f"<@{ANARCHY}>, <@{BEE}> hosts **Alpha**")
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.HOST_ANNOUNCE, False)
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "default")).ok
+
+    await reread(
+        bot,
+        cog,
+        marathon,
+        [
+            a_run(
+                1,
+                75,
+                game="Alpha",
+                people=(("clipboard", "cb", "runner"), HOST, CO_HOST),
+                length=70,
+            ),
+            SHARED[1],
+        ],
+    )
+    await tick_at(bot, cog, marathon, 46)
+
+    assert heads.content.startswith(f"<@{BEE}> hosts **Alpha**") and len(heads.edits) == 1
+    assert mt.stamp_of(NOW + timedelta(minutes=75), "f") in heads.content
+
+
+async def test_a_host_reminder_already_up_is_carried_when_host_announcements_go_off(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES, hosts=True)
+    await walk(bot, cog, marathon, [45])
+    (heads,) = heads_ups(bot)
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.HOST_ANNOUNCE, False)
+
+    moved = [
+        a_run(1, 75, game="Titanfall 2", people=(("clipboard", "cb", "runner"), HOST), length=70),
+        *HIDDEN_HEROES[1:],
+    ]
+    await reread(bot, cog, marathon, moved)
+    await tick_at(bot, cog, marathon, 46)
+
+    assert heads.content.startswith(f"<@{ANARCHY}> hosts **Titanfall 2**")
+    assert mt.stamp_of(NOW + timedelta(minutes=75), "f") in heads.content
+    assert len(posts(bot)) == 1
+
+
+async def test_a_finished_highlight_whose_runner_left_the_schedule_is_left_as_it_stands(bot, cog):
+    marathon = await counted(bot, cog, FOUR, auto=True, hosts=False)
+    await walk(bot, cog, marathon, [45, 61, 146])
+    (post,) = said_of(bot, "**Sky** ran **Alpha**")
+    edits = len(post.edits)
+    row = await run_named(bot, marathon, "Alpha")
+    people = [one for one in mt.people_of(row) if one.get("user_id") != SKY]
+    await bot.db.conn.execute(
+        "UPDATE marathon_runs SET people = ? WHERE id = ?", (json.dumps(people), row["id"])
+    )
+    await bot.db.conn.commit()
+
+    await walk(bot, cog, marathon, [147, 148])
+
+    assert post.content.startswith("**Sky** ran **Alpha**") and len(post.edits) == edits
+    assert not names_the_host(bot)
+    assert "marathon.public_highlight_removed" not in await kinds(bot.db)

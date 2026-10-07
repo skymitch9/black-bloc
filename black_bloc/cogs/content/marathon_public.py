@@ -67,6 +67,7 @@ from .marathon import (
 log = logging.getLogger(__name__)
 
 NOT_POSTABLE_CODE = "not_postable"
+NOBODY = "nobody_announced"
 
 
 def words(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
@@ -138,12 +139,36 @@ def people_for(
     row: Any,
     *,
     standing: bool = False,
-    carried: bool = True,
+    recorded: Any = None,
+    moved: Any = (),
 ) -> list[dict[str, Any]]:
     """Everyone of ours a public post about the run names, as it writes them."""
     from .marathon_announce import people_for as announced
 
-    return announced(bot, guild, marathon, row, standing=standing, carried=carried)
+    return announced(bot, guild, marathon, row, standing=standing, recorded=recorded, moved=moved)
+
+
+def named_on(row: Any) -> list[dict[str, Any]] | None:
+    """Who the run's highlight names, by its own record; None for one from before the record."""
+    return ma.named_of(mt._cell(row, ma.NAMED))
+
+
+def written(was: Any) -> list[dict[str, Any]] | None:
+    """Who a highlight named, as it wrote them: its record, else everyone of ours on the run."""
+    from .marathon_announce import as_written
+
+    return as_written(was) if was else None
+
+
+def policy_for(bot: Any, guild: Any, marathon: Any) -> ma.Policy:
+    from .marathon_announce import policy_of
+
+    return policy_of(bot, guild.id, marathon)
+
+
+def why_down(bot: Any, guild: Any, marathon: Any, row: Any, was: Any, moved: Any = ()) -> str:
+    named = was if was is not None else mt.ours(mt.people_of(row))
+    return ma.run_because(row, policy_for(bot, guild, marathon), named, moved)
 
 
 def view_of(buttons: Any, marathon_id: Any, run_id: Any) -> discord.ui.View | None:
@@ -154,7 +179,16 @@ def view_of(buttons: Any, marathon_id: Any, run_id: Any) -> discord.ui.View | No
     rows: dict[int, int] = {}
     for one in buttons:
         if isinstance(one, ma.Pick):
-            view.add_item(AnnouncePick(marathon_id, run_id, one.label, one.options))
+            view.add_item(
+                AnnouncePick(
+                    marathon_id,
+                    run_id,
+                    one.label,
+                    one.options,
+                    page=one.custom_id.rsplit(ma.PICK, 1)[-1],
+                    row=one.row,
+                )
+            )
         elif isinstance(one, ma.Move):
             row = rows.setdefault(one.user_id, len(rows) + 1)
             view.add_item(
@@ -335,11 +369,19 @@ async def post_highlight(
     """`(why, channel_id)`: a highlight staff took down comes back in place when it is still in
     the channel it would go to now; otherwise a new one is posted."""
     bot = cog.bot
-    text = await public_text(
-        bot, guild, marathon, row, people=people_for(bot, guild, marathon, row) or None
-    )
-    shadow = mode_of(bot, guild.id) != MODE_ON
+    people = people_for(bot, guild, marathon, row)
     base = details_of(marathon, row) | {"auto": auto, "via": via}
+    if not people and mt.is_ours(row):
+        await log_action(
+            bot,
+            guild,
+            kind_via("marathon.public_highlight_failed", via),
+            actor=actor,
+            details=base | {"step": "post", "reason": NOBODY},
+        )
+        return (NOBODY, None)
+    text = await public_text(bot, guild, marathon, row, people=people or None)
+    shadow = mode_of(bot, guild.id) != MODE_ON
     if mp.message_id(row) and mp.is_removed(row):
         wanted = (
             shadow_home.channel_id(bot, guild, feature=mp.SHADOW_FEATURE)
@@ -349,7 +391,9 @@ async def post_highlight(
         if wanted is not None and mp.channel_of(row) == int(wanted):
             message, _lost = await fetch_public(bot, guild, row)
             if message is not None and await edit_public(bot, guild, message, text) is None:
-                await update_run(bot.db, row["id"], public_removed=0)
+                await update_run(
+                    bot.db, row["id"], public_removed=0, **{ma.NAMED: ma.dump_named(people)}
+                )
                 public_cache(cog, marathon["id"])[int(row["id"])] = (int(wanted), text)
                 await log_action(
                     bot,
@@ -376,6 +420,7 @@ async def post_highlight(
         public_message_id=int(sent.id),
         public_channel_id=channel_id,
         public_removed=0,
+        **{ma.NAMED: ma.dump_named(people)},
     )
     public_cache(cog, marathon["id"])[int(row["id"])] = (int(channel_id), text)
     await log_action(
@@ -399,17 +444,31 @@ async def post_highlight(
 
 
 async def remove_highlight(
-    cog: Any, guild: Any, marathon: Any, row: Any, *, actor: Any = None, via: str = VIA_DISCORD
+    cog: Any,
+    guild: Any,
+    marathon: Any,
+    row: Any,
+    *,
+    actor: Any = None,
+    via: str = VIA_DISCORD,
+    because: str | None = None,
+    moved: Any = (),
 ) -> None:
-    """The decision is stored first; the edit to the key sentence is cosmetic and may fail."""
+    """The decision is stored first; the edit to the key sentence is cosmetic and may fail. The
+    line names who the post named."""
     bot = cog.bot
+    was = named_on(row)
+    because = because or why_down(bot, guild, marathon, row, was, moved)
     await update_run(bot.db, row["id"], public_removed=1)
     public_cache(cog, marathon["id"]).pop(int(row["id"]), None)
     message, _lost = await fetch_public(bot, guild, row)
     edited = False
     if message is not None:
         why = await edit_public(
-            bot, guild, message, await public_text(bot, guild, marathon, row, removed=True)
+            bot,
+            guild,
+            message,
+            await public_text(bot, guild, marathon, row, removed=True, people=written(was)),
         )
         edited = why is None
         if why is not None:
@@ -426,12 +485,18 @@ async def remove_highlight(
         kind_via("marathon.public_highlight_removed", via),
         actor=actor,
         details=details_of(marathon, row)
-        | {"message_id": str(mp.message_id(row)), "edited": edited, "via": via},
+        | {
+            "message_id": str(mp.message_id(row)),
+            "edited": edited,
+            "via": via,
+            "because": because,
+        },
     )
 
 
 async def sync_highlights(cog: Any, guild: Any, marathon: Any) -> None:
-    """Every highlight that is up follows its run; unchanged costs no Discord call."""
+    """Every highlight that is up follows its run; unchanged costs no Discord call. One that
+    names nobody any more is taken down while its run is not over, and left as it stands after."""
     bot = cog.bot
     if marathon is None:
         return
@@ -440,7 +505,14 @@ async def sync_highlights(cog: Any, guild: Any, marathon: Any) -> None:
     since(cog)
     for row in rows:
         key = int(row["id"])
-        people = people_for(bot, guild, marathon, row, standing=True) or None
+        was = named_on(row)
+        people = people_for(bot, guild, marathon, row, standing=True, recorded=was) or None
+        if people is None and (was or mt.is_ours(row)):
+            if not mp.is_done(row):
+                await remove_highlight(cog, guild, marathon, row)
+            continue
+        if people is not None and ma.as_named(people) != was:
+            await update_run(bot.db, key, **{ma.NAMED: ma.dump_named(people)})
         text = await public_text(bot, guild, marathon, row, people=people)
         if cache.get(key) == (mp.channel_of(row), text):
             continue
@@ -547,12 +619,13 @@ async def put_back(
     message, _lost = await fetch_public(bot, guild, row)
     if message is None:
         return False
-    text = await public_text(
-        bot, guild, marathon, row, people=people_for(bot, guild, marathon, row) or None
-    )
+    people = people_for(bot, guild, marathon, row)
+    if not people:
+        return False
+    text = await public_text(bot, guild, marathon, row, people=people)
     if await edit_public(bot, guild, message, text) is not None:
         return False
-    await update_run(bot.db, row["id"], public_removed=0)
+    await update_run(bot.db, row["id"], public_removed=0, **{ma.NAMED: ma.dump_named(people)})
     public_cache(cog, marathon["id"])[int(row["id"])] = (mp.channel_of(row), text)
     await log_action(
         bot,
@@ -571,17 +644,21 @@ async def follow_opt(
 ) -> None:
     """After an answer changed: a highlight that names nobody any more is taken down, one
     that still names someone is rewritten in place, and one that was taken down comes back in
-    place while its run is not over and the marathon still announces."""
+    place while its run is not over and the marathon still announces. Only the people the move
+    was aimed at are weighed afresh."""
     bot = cog.bot
     wanted = {int(one) for one in user_ids}
     changed = False
     for row in await runs_of(bot.db, marathon["id"]):
-        if not mp.message_id(row) or not wanted & set(mt.member_ids(row)):
+        was = named_on(row)
+        on = set(mt.member_ids(row)) | set(ma.ids_of(was) or ())
+        if not mp.message_id(row) or not wanted & on:
             continue
-        still = people_for(bot, guild, marathon, row, standing=True, carried=False)
+        still = people_for(bot, guild, marathon, row, standing=True, recorded=was, moved=wanted)
         if mp.is_up(row) and not still:
-            await remove_highlight(cog, guild, marathon, row, actor=actor, via=via)
+            await remove_highlight(cog, guild, marathon, row, actor=actor, via=via, moved=wanted)
         elif mp.is_up(row):
+            await update_run(bot.db, row["id"], **{ma.NAMED: ma.dump_named(still)})
             changed = True
         elif (
             mp.is_removed(row)
@@ -754,7 +831,13 @@ class AnnouncePick(
     SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Select], template=ma.PICK_TEMPLATE
 ):
     def __init__(
-        self, marathon_id: int, run_id: int, placeholder: str | None = None, options: Any = ()
+        self,
+        marathon_id: int,
+        run_id: int,
+        placeholder: str | None = None,
+        options: Any = (),
+        page: Any = "",
+        row: int = 1,
     ) -> None:
         self.marathon_id = int(marathon_id)
         self.run_id = int(run_id)
@@ -762,14 +845,16 @@ class AnnouncePick(
             discord.ui.Select(
                 placeholder=ma.label(placeholder, ma.OPTION_LABEL_LIMIT),
                 options=[discord.SelectOption(label=said, value=value) for value, said in options],
-                custom_id=ma.PICK_ID.format(marathon_id=int(marathon_id), run_id=int(run_id)),
-                row=1,
+                custom_id=ma.PICK_ID.format(
+                    marathon_id=int(marathon_id), run_id=int(run_id), page=page or ""
+                ),
+                row=row,
             )
         )
 
     @classmethod
     async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
-        return cls(int(match["marathon_id"]), int(match["run_id"]))
+        return cls(int(match["marathon_id"]), int(match["run_id"]), page=match["page"])
 
     async def on_click(self, interaction: discord.Interaction) -> None:
         from .marathon_announce import press as person_press
@@ -800,6 +885,7 @@ __all__ = [
     "button_of",
     "default_for_new",
     "follow_opt",
+    "named_on",
     "people_for",
     "post_highlight",
     "public_text",

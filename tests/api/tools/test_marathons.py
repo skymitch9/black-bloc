@@ -1169,6 +1169,38 @@ async def test_a_runs_own_answer_is_shown_on_the_run_and_moved_from_the_site(
     assert unmatched["announce"] is None
 
 
+async def test_a_run_that_is_over_refuses_its_own_answer_on_the_site_in_words(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    client.post(
+        f"/api/marathons/{marathon_id}/people",
+        json={"runner_name": "Interview Crew", "user_id": "77"},
+    )
+
+    def crew():
+        detail = client.get(f"/api/marathons/{marathon_id}").json()
+        run = next(one for one in detail["run_list"] if one["game"] == "Blaster Master")
+        person = next(one for one in run["people"] if one["name"] == "Interview Crew")
+        return run["id"], person["announce"]
+
+    run_id, _ = crew()
+    await web.db.conn.execute("UPDATE marathon_runs SET state = 'done' WHERE id = ?", (run_id,))
+    await web.db.conn.commit()
+    path = f"/api/marathons/{marathon_id}/runs/{run_id}/people/77/announce"
+
+    for to in ("in", "out", "default"):
+        said = client.post(path, json={"to": to})
+        assert said.status_code == 409 and said.json()["error"] == "run_over"
+        assert said.json()["message"] == "**Blaster Master** is over, so nothing was changed."
+
+    _, shown = crew()
+    assert shown["answer"] is None and shown["move"] is None
+    kinds = [seen for seen, _ in await wf.web_rows_in(web.db)]
+    assert "web.marathon.announce_run_set" not in kinds
+
+
 async def test_how_a_persons_name_is_written_is_shown_on_the_people_card_and_moved(
     client, sign_in, web, cog, wf
 ):

@@ -135,12 +135,19 @@ def shown_button(message: Any) -> tuple | bool:
             to = wanted.rsplit(":", 1)[-1]
             if wanted.startswith("marathon:highlight:"):
                 found.append(Button(wanted, str(getattr(child, "label", "") or ""), to))
-            elif wanted.startswith(ma.PREFIX) and to == ma.PICK:
+            elif wanted.startswith(ma.PREFIX) and to.startswith(ma.PICK):
                 options = tuple(
                     (str(getattr(option, "value", "")), str(getattr(option, "label", "")))
                     for option in getattr(child, "options", ()) or ()
                 )
-                found.append(ma.Pick(wanted, str(getattr(child, "placeholder", "") or ""), options))
+                found.append(
+                    ma.Pick(
+                        wanted,
+                        str(getattr(child, "placeholder", "") or ""),
+                        options,
+                        row=int(to[len(ma.PICK) :] or 1),
+                    )
+                )
             elif wanted.startswith(ma.PREFIX):
                 user_id = int(wanted.split(":")[-2])
                 found.append(ma.Move(wanted, str(getattr(child, "label", "") or ""), to, user_id))
