@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 from black_bloc.cogs.content.marathon import get_marathon, refresh_marathon, update_marathon
 from black_bloc.cogs.content.marathon_spotlight import (
@@ -162,9 +162,10 @@ async def test_the_expiry_sweep_gives_a_marathon_spotlight_back_and_purges_nothi
     bot.cogs["Spotlight"] = sweeper
     row = await quiet_row(bot)
     marathon = await added(bot, cog, channel=row)
-    gone = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    gone = (NOW + timedelta(minutes=266)).isoformat()
     await update_channel(bot.db, row["id"], expires_at=gone)
     cog.clock = lambda: NOW + timedelta(minutes=271)
+    sweeper._now = cog.clock
 
     await sweeper.sweep_expiries(bot.guild)
 
@@ -272,9 +273,10 @@ async def test_the_sweep_reads_the_current_span_and_extends_instead_of_lifting(b
     row = await quiet_row(bot)
     marathon = await added(bot, cog, channel=row)
     await update_marathon(bot.db, marathon["id"], ends_at=at(400))
-    gone = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    gone = (NOW + timedelta(minutes=275)).isoformat()
     await update_channel(bot.db, row["id"], expires_at=gone)
     cog.clock = lambda: NOW + timedelta(minutes=280)
+    sweeper._now = cog.clock
 
     await sweeper.sweep_expiries(bot.guild)
 
