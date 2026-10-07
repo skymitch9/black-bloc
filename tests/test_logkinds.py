@@ -49,6 +49,38 @@ ROOT = PACKAGE.parent
 # A call site the table does not cover fails `test_every_dynamic_kind_is_enumerated`
 # by name, which is what stops a new kind going quietly unclassified.
 KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
+    "black_bloc/brackets_moves.py::kind": tuple(
+        f"{head}brackets.{name}"
+        for head in ("", "web.")
+        for name in (
+            "created",
+            "edited",
+            "signups_opened",
+            "signups_closed",
+            "check_in_opened",
+            "check_in_closed",
+            "checked_in",
+            "checked_out",
+            "entrant_added",
+            "entrant_restored",
+            "dropped",
+            "seeded",
+            "started",
+            "completed",
+            "reopened",
+            "restored",
+            "set_called",
+            "set_reported",
+            "set_confirmed",
+            "dq",
+            "cancelled",
+            "unstarted",
+            "set_disputed",
+            "set_overridden",
+            "set_reset",
+            "entrant_removed",
+        )
+    ),
     "black_bloc/pb_looks.py::kind": (
         "pbfeed.posted",
         "pbfeed.would_post",
@@ -1254,6 +1286,8 @@ def test_like_patterns_cover_every_head_of_a_feature():
         "web.structure.%",
         "pbfeed.%",
         "web.pbfeed.%",
+        "brackets.%",
+        "web.brackets.%",
     )
 
 

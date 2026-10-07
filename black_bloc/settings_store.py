@@ -4285,6 +4285,508 @@ KEY_HELP.update(
 )
 
 
+# Tournament brackets (docs/info/brackets-design.md) — its own block so parallel branches merge
+# textually. Every key sits under `core`: `brackets_` would be a 26th setting group.
+BRACKETS_FEATURE = "brackets"
+BRACKETS_MODES = ("off", "shadow", "on")
+BRACKETS_FORMATS = ("single", "double", "round_robin", "swiss")
+BRACKETS_LENGTHS = ("1", "3", "5", "7", "9", "11", "13", "15")
+BRACKETS_MODE = "brackets_mode"
+BRACKETS_CHANNEL = "brackets_channel_id"
+BRACKETS_CHANNEL_ID = 1076005097617760296
+BRACKETS_SHADOW_CHANNEL = shadow_feature_key(BRACKETS_FEATURE)
+BRACKETS_TO_ROLE = "brackets_to_role_id"
+BRACKETS_FORMAT_DEFAULT = "brackets_format_default"
+BRACKETS_BEST_OF = "brackets_best_of"
+BRACKETS_BEST_OF_LATE = "brackets_best_of_late"
+BRACKETS_BEST_OF_FINALS = "brackets_best_of_finals"
+BRACKETS_GRAND_FINAL_RESET = "brackets_grand_final_reset_default"
+BRACKETS_THIRD_PLACE = "brackets_third_place_default"
+BRACKETS_CONFIRM_MINUTES = "brackets_confirm_minutes"
+BRACKETS_CHECK_IN_MINUTES = "brackets_check_in_minutes"
+BRACKETS_BEST_OF_FROM_ROUND = "brackets_best_of_from_round"
+BRACKETS_SWISS_ROUNDS = "brackets_swiss_rounds_default"
+BRACKETS_ENTRANT_CAP = "brackets_entrant_cap_default"
+BRACKETS_PANEL_MINUTES = "brackets_panel_minutes"
+BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
+    BRACKETS_CONFIRM_MINUTES: (12, 1, 1440),
+    BRACKETS_CHECK_IN_MINUTES: (30, 5, 1440),
+    BRACKETS_BEST_OF_FROM_ROUND: (None, 2, 1024),
+    BRACKETS_SWISS_ROUNDS: (None, 1, 20),
+    BRACKETS_ENTRANT_CAP: (None, 2, 1024),
+    BRACKETS_PANEL_MINUTES: (10, 1, 14),
+}
+BRACKETS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
+    BRACKETS_MODE: ("shadow", BRACKETS_MODES),
+    BRACKETS_FORMAT_DEFAULT: ("double", BRACKETS_FORMATS),
+    BRACKETS_BEST_OF: ("3", BRACKETS_LENGTHS),
+    BRACKETS_BEST_OF_LATE: ("5", BRACKETS_LENGTHS),
+    BRACKETS_BEST_OF_FINALS: ("5", BRACKETS_LENGTHS),
+}
+BRACKETS_BOOLS: dict[str, bool] = {
+    BRACKETS_GRAND_FINAL_RESET: True,
+    BRACKETS_THIRD_PLACE: False,
+}
+BRACKETS_NAMED = ("name",)
+BRACKETS_SET = ("set",)
+BRACKETS_ENTRANT = ("entrant", "name")
+BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "brackets_created_said": (
+        "Created **{name}**.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after creating a tournament",
+    ),
+    "brackets_edited_said": (
+        "Saved **{name}**.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after changing a tournament's options",
+    ),
+    "brackets_signups_opened_said": (
+        "Sign-ups for **{name}** are open.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after opening sign-ups",
+    ),
+    "brackets_signups_closed_said": (
+        "Sign-ups for **{name}** are closed.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after closing sign-ups",
+    ),
+    "brackets_check_in_opened_said": (
+        "Check-in for **{name}** is open until {closes}.",
+        ("name", "closes"),
+        "what a tournament organiser is told after opening check-in; {closes} is when it shuts",
+    ),
+    "brackets_check_in_closed_said": (
+        "Check-in for **{name}** is closed — {removed} no-show(s) taken out.",
+        ("name", "removed"),
+        "what a tournament organiser is told after closing check-in; {removed} counts the "
+        "entrants taken out for not checking in",
+    ),
+    "brackets_checked_in_said": (
+        "{entrant} is checked in for **{name}**.",
+        BRACKETS_ENTRANT,
+        "what is said after an entrant checks in, or is checked in by a tournament organiser",
+    ),
+    "brackets_checked_out_said": (
+        "{entrant} is no longer checked in for **{name}**.",
+        BRACKETS_ENTRANT,
+        "what a tournament organiser is told after taking back an entrant's check-in",
+    ),
+    "brackets_joined_said": (
+        "You are in **{name}**.",
+        BRACKETS_NAMED,
+        "what a member is told after signing themselves up",
+    ),
+    "brackets_entrant_added_said": (
+        "{entrant} is in **{name}**.",
+        BRACKETS_ENTRANT,
+        "what a tournament organiser is told after adding an entrant by hand",
+    ),
+    "brackets_entrant_removed_said": (
+        "{entrant} is out of **{name}**.",
+        BRACKETS_ENTRANT,
+        "what a tournament organiser is told after taking an entrant out before the start",
+    ),
+    "brackets_entrant_restored_said": (
+        "{entrant} is back in **{name}**.",
+        BRACKETS_ENTRANT,
+        "what a tournament organiser is told after putting an entrant back, or lifting a DQ",
+    ),
+    "brackets_left_said": (
+        "You have left **{name}**.",
+        BRACKETS_NAMED,
+        "what a member is told after taking themselves out before the start",
+    ),
+    "brackets_dropped_said": (
+        "{entrant} has dropped out of **{name}**; their remaining sets are forfeited.",
+        BRACKETS_ENTRANT,
+        "what is said after an entrant drops out of a running tournament",
+    ),
+    "brackets_dq_said": (
+        "{entrant} is disqualified from **{name}**; their remaining sets are forfeited.",
+        BRACKETS_ENTRANT,
+        "what a tournament organiser is told after a DQ",
+    ),
+    "brackets_seeded_said": (
+        "Seeding for **{name}** is saved.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after setting or shuffling the seeding",
+    ),
+    "brackets_started_said": (
+        "**{name}** has started — {sets} set(s) to play.",
+        ("name", "sets"),
+        "what a tournament organiser is told after starting; {sets} counts the sets that will "
+        "be played",
+    ),
+    "brackets_unstarted_said": (
+        "**{name}** is back to seeding; its sets and results are cleared.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after taking a running bracket back to seeding",
+    ),
+    "brackets_completed_said": (
+        "**{name}** is complete.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after completing a tournament",
+    ),
+    "brackets_reopened_said": (
+        "**{name}** is running again.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after reopening a completed tournament",
+    ),
+    "brackets_cancelled_said": (
+        "**{name}** is cancelled.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after cancelling a tournament",
+    ),
+    "brackets_restored_said": (
+        "**{name}** is back as it was before it was cancelled.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told after undoing a cancel",
+    ),
+    "brackets_set_called_said": (
+        "{set} is called: {a} v {b}.",
+        ("set", "a", "b"),
+        "what is said after a tournament organiser calls a set; {a} and {b} are its players",
+    ),
+    "brackets_set_reported_said": (
+        "{set} reported {score_a}–{score_b}. It stands in {minutes} minute(s) unless {opponent} "
+        "disputes it.",
+        ("set", "score_a", "score_b", "minutes", "opponent"),
+        "what a player is told after reporting a score; {opponent} is who confirms or disputes it",
+    ),
+    "brackets_set_final_said": (
+        "{set} is final: {winner} wins {result}.",
+        ("set", "winner", "result"),
+        "what is said after a set is confirmed, decided by a tournament organiser, or forfeited; "
+        "{result} is the score or brackets_forfeit_words",
+    ),
+    "brackets_forfeit_words": (
+        "by forfeit",
+        (),
+        "what {result} becomes in brackets_set_final_said when a set was forfeited",
+    ),
+    "brackets_set_disputed_said": (
+        "{set} is disputed; a tournament organiser decides it.",
+        BRACKETS_SET,
+        "what a player is told after disputing a reported score",
+    ),
+    "brackets_set_reset_said": (
+        "{set} is open again; every set it decided after it is cleared.",
+        BRACKETS_SET,
+        "what a tournament organiser is told after resetting a set",
+    ),
+    "brackets_off_said": (
+        "Tournament brackets are switched **off**, so nothing was done. Set brackets_mode to "
+        "shadow or on — in /settings or on the Settings page — and try again.",
+        (),
+        "what anyone is told when they try a tournament move while brackets_mode is off",
+    ),
+    "brackets_not_organiser_said": (
+        "Running a tournament is for staff and tournament organisers, so nothing was done. Ask "
+        "staff for {role}.",
+        ("role",),
+        "what a member is told when they try a tournament organiser's move; {role} names the "
+        "organiser role, or brackets_no_role_words when none is picked",
+    ),
+    "brackets_no_role_words": (
+        "the tournament organiser role (staff have not picked one yet — it is "
+        "brackets_to_role_id)",
+        (),
+        "what {role} becomes in brackets_not_organiser_said while brackets_to_role_id is blank",
+    ),
+    "brackets_no_tournament_said": (
+        "There is no tournament {id} here, so nothing was done.",
+        ("id",),
+        "what is said when a move names a tournament Black Bloc has no record of",
+    ),
+    "brackets_wrong_state_said": (
+        "**{name}** is {state}, so that cannot be done now.",
+        ("name", "state"),
+        "what is said when a move does not fit where the tournament is; {state} is one of the "
+        "brackets_state_* words",
+    ),
+    "brackets_state_draft": ("a draft", (), "what {state} says for a tournament being set up"),
+    "brackets_state_signups": (
+        "open for sign-ups",
+        (),
+        "what {state} says for a tournament taking sign-ups",
+    ),
+    "brackets_state_check_in": (
+        "in check-in",
+        (),
+        "what {state} says for a tournament whose check-in window is open",
+    ),
+    "brackets_state_seeding": (
+        "being seeded",
+        (),
+        "what {state} says for a tournament whose sign-ups have closed and has not started",
+    ),
+    "brackets_state_running": ("running", (), "what {state} says for a tournament under way"),
+    "brackets_state_complete": (
+        "complete",
+        (),
+        "what {state} says for a tournament whose placements are final",
+    ),
+    "brackets_state_cancelled": ("cancelled", (), "what {state} says for a cancelled tournament"),
+    "brackets_not_entrant_said": (
+        "You are not in **{name}**, so nothing was done.",
+        BRACKETS_NAMED,
+        "what a member is told when they act on a tournament they are not entered in",
+    ),
+    "brackets_not_yours_said": (
+        "Only {entrant} or a tournament organiser can do that, so nothing was done.",
+        ("entrant",),
+        "what a member is told when they check in, or drop, somebody else",
+    ),
+    "brackets_full_said": (
+        "**{name}** is full at {cap} entrants, so you were not added.",
+        ("name", "cap"),
+        "what a member is told when sign-ups have reached the entrant cap",
+    ),
+    "brackets_already_in_said": (
+        "{entrant} is already in **{name}**.",
+        BRACKETS_ENTRANT,
+        "what is said when someone signs up, or is added, twice",
+    ),
+    "brackets_removed_by_to_said": (
+        "A tournament organiser took you out of **{name}**, so you cannot sign yourself back "
+        "up. Ask them to put you back.",
+        BRACKETS_NAMED,
+        "what a member is told when they try to sign up again after an organiser removed them",
+    ),
+    "brackets_no_name_said": (
+        "An entrant needs a name of 1 to {limit} characters, so nothing was done.",
+        ("limit",),
+        "what a tournament organiser is told when a name is blank or too long",
+    ),
+    "brackets_bad_option_said": (
+        "{field} cannot be {given}, so nothing was saved. It takes {allowed}.",
+        ("field", "given", "allowed"),
+        "what a tournament organiser is told when an option is out of range; {allowed} says "
+        "what it takes",
+    ),
+    "brackets_check_in_open_said": (
+        "Check-in for **{name}** is still open. Close it first so no-shows are taken out.",
+        BRACKETS_NAMED,
+        "what a tournament organiser is told when they start while check-in is open",
+    ),
+    "brackets_too_few_said": (
+        "**{name}** needs at least 2 entrants to start; it has {count}.",
+        ("name", "count"),
+        "what a tournament organiser is told when they start with fewer than two entrants",
+    ),
+    "brackets_unfinished_said": (
+        "{open} set(s) in **{name}** are not final yet, so it cannot be completed.",
+        ("name", "open"),
+        "what a tournament organiser is told when they complete a tournament with sets left",
+    ),
+    "brackets_no_set_said": (
+        "There is no set {set} in **{name}**, so nothing was done.",
+        ("set", "name"),
+        "what is said when a move names a set that is not in the bracket",
+    ),
+    "brackets_not_in_set_said": (
+        "You are not playing in {set}, so nothing was done. Its two players and tournament "
+        "organisers can report it.",
+        BRACKETS_SET,
+        "what a member is told when they report, confirm or dispute a set they are not in",
+    ),
+    "brackets_not_ready_said": (
+        "{set} is waiting for a player, so it cannot be played yet.",
+        BRACKETS_SET,
+        "what is said about a set whose players are not both known yet",
+    ),
+    "brackets_not_playable_said": (
+        "{set} is a bye, so nothing is played there.",
+        BRACKETS_SET,
+        "what is said about a set nobody plays because one side is empty",
+    ),
+    "brackets_already_complete_said": (
+        "{set} is already final. A tournament organiser can correct it.",
+        BRACKETS_SET,
+        "what a player is told when they report a set that is already decided",
+    ),
+    "brackets_disputed_said": (
+        "{set} is disputed, so a tournament organiser decides it.",
+        BRACKETS_SET,
+        "what a player is told when they report a set that is under dispute",
+    ),
+    "brackets_already_called_said": (
+        "{set} is already called.",
+        BRACKETS_SET,
+        "what a tournament organiser is told when they call a set twice",
+    ),
+    "brackets_already_reported_said": (
+        "{set} already has a score reported.",
+        BRACKETS_SET,
+        "what a tournament organiser is told when they call a set that has been reported",
+    ),
+    "brackets_bad_score_said": (
+        "That score does not finish a best of {best_of}: the winner has {wins} game(s) and the "
+        "loser fewer.",
+        ("best_of", "wins"),
+        "what is said when a reported score does not fit the set's best-of",
+    ),
+    "brackets_reported_differently_said": (
+        "{set} was reported {score_a}–{score_b}. Confirm that, or dispute it.",
+        ("set", "score_a", "score_b"),
+        "what a player is told when they report a different score from their opponent's",
+    ),
+    "brackets_not_reported_said": (
+        "{set} has no reported score to confirm or dispute.",
+        BRACKETS_SET,
+        "what is said when a confirm or dispute names a set nobody has reported",
+    ),
+    "brackets_own_report_said": (
+        "You reported {set}, so your opponent confirms or disputes it.",
+        BRACKETS_SET,
+        "what a player is told when they confirm or dispute their own report",
+    ),
+    "brackets_not_resettable_said": (
+        "{set} is a bye, so there is nothing to reset.",
+        BRACKETS_SET,
+        "what a tournament organiser is told when they reset a bye",
+    ),
+    "brackets_nothing_to_reset_said": (
+        "{set} has no result to reset.",
+        BRACKETS_SET,
+        "what a tournament organiser is told when they reset a set nobody has played",
+    ),
+    "brackets_forfeit_needs_winner_said": (
+        "A forfeit needs the winner picked, so nothing was done.",
+        (),
+        "what a tournament organiser is told when they record a forfeit without a winner",
+    ),
+    "brackets_bad_order_said": (
+        "That order does not name every entrant exactly once, so nothing was changed.",
+        (),
+        "what a tournament organiser is told when a seeding or final order leaves someone out",
+    ),
+    "brackets_not_in_bracket_said": (
+        "{entrant} is not playing in **{name}**, so nothing was done.",
+        BRACKETS_ENTRANT,
+        "what a tournament organiser is told when they DQ someone the bracket does not hold",
+    ),
+    "brackets_already_out_said": (
+        "{entrant} is already out of **{name}**.",
+        BRACKETS_ENTRANT,
+        "what is said when an entrant is dropped or disqualified twice",
+    ),
+    "brackets_not_out_said": (
+        "{entrant} is not out of **{name}**, so there is nothing to put back.",
+        BRACKETS_ENTRANT,
+        "what a tournament organiser is told when they put back somebody who never left",
+    ),
+}
+BRACKETS_DEFAULTS: dict[str, Any] = {
+    BRACKETS_CHANNEL: BRACKETS_CHANNEL_ID,
+    **{key: default for key, (default, _) in BRACKETS_ENUMS.items()},
+    **BRACKETS_BOOLS,
+    **{key: default for key, (default, _, _) in BRACKETS_NUMBERS.items() if default is not None},
+    **{key: default for key, (default, _, _) in BRACKETS_WORDS.items()},
+}
+BRACKETS_KEYS: tuple[str, ...] = (
+    BRACKETS_MODE,
+    BRACKETS_CHANNEL,
+    BRACKETS_SHADOW_CHANNEL,
+    BRACKETS_TO_ROLE,
+    BRACKETS_FORMAT_DEFAULT,
+    BRACKETS_BEST_OF,
+    BRACKETS_BEST_OF_LATE,
+    BRACKETS_BEST_OF_FINALS,
+    *BRACKETS_BOOLS,
+    *BRACKETS_NUMBERS,
+    *BRACKETS_WORDS,
+)
+KEY_TYPES.update(
+    {
+        BRACKETS_CHANNEL: "channel",
+        BRACKETS_SHADOW_CHANNEL: "channel",
+        BRACKETS_TO_ROLE: "role",
+        **{key: "enum" for key in BRACKETS_ENUMS},
+        **{key: "bool" for key in BRACKETS_BOOLS},
+        **{key: "int" for key in BRACKETS_NUMBERS},
+        **{key: "text" for key in BRACKETS_WORDS},
+    }
+)
+KEY_CHOICES.update({key: choices for key, (_, choices) in BRACKETS_ENUMS.items()})
+KEY_MIN.update({key: low for key, (_, low, _) in BRACKETS_NUMBERS.items()})
+KEY_MAX.update({key: high for key, (_, _, high) in BRACKETS_NUMBERS.items()})
+KEY_HELP.update(
+    {
+        BRACKETS_MODE: (
+            "off, shadow or on. off refuses every tournament move; shadow — the default — runs "
+            "tournaments with each one's thread made in the rehearsal home instead of "
+            "brackets_channel_id; on makes the threads in brackets_channel_id"
+        ),
+        BRACKETS_CHANNEL: (
+            "the text channel each tournament's thread is made under while brackets_mode is "
+            "on; #knuck-up by default"
+        ),
+        BRACKETS_SHADOW_CHANNEL: (
+            "where tournament threads are made while brackets_mode is shadow; blank means "
+            "shadow_channel_id"
+        ),
+        BRACKETS_TO_ROLE: (
+            "the Tournament Organiser role: its holders may create and run tournaments as staff "
+            "can. Blank — the default — leaves tournaments to staff. Taking the role away takes "
+            "the right away, even for a tournament that person created"
+        ),
+        BRACKETS_FORMAT_DEFAULT: (
+            "the format a new tournament starts with: single, double — the default — "
+            "round_robin or swiss. The organiser can change it until the tournament starts"
+        ),
+        BRACKETS_BEST_OF: (
+            "the best-of every set plays unless a later rule says longer; 3 by default"
+        ),
+        BRACKETS_BEST_OF_LATE: (
+            "the best-of a set plays once brackets_best_of_from_round entrants or fewer are "
+            "left in an elimination bracket; 5 by default"
+        ),
+        BRACKETS_BEST_OF_FINALS: (
+            "the best-of of the last set of an elimination bracket — the grand final and its "
+            "reset, or a single elimination final; 5 by default"
+        ),
+        BRACKETS_GRAND_FINAL_RESET: (
+            "true — the default — plays a second grand final set when the player from the "
+            "losers side wins the first, so both have lost once; false lets the first grand "
+            "final decide. A new double elimination tournament starts with this and its "
+            "organiser can change it"
+        ),
+        BRACKETS_THIRD_PLACE: (
+            "true plays a set between the two semi-final losers of a single elimination "
+            "bracket for third place; false — the default — places both third"
+        ),
+        BRACKETS_CONFIRM_MINUTES: (
+            "minutes a reported score waits for the opponent to confirm or dispute it before it "
+            "stands on its own; 12 by default, as start.gg's verify timer"
+        ),
+        BRACKETS_CHECK_IN_MINUTES: (
+            "how many minutes a new tournament's check-in window stays open; 30 by default. "
+            "Whoever has not checked in when it closes is taken out and the bracket is made "
+            "without them"
+        ),
+        BRACKETS_BEST_OF_FROM_ROUND: (
+            "from how many entrants left an elimination set plays brackets_best_of_late — 8 "
+            "means top 8. Blank — the default — never lengthens sets before the final"
+        ),
+        BRACKETS_SWISS_ROUNDS: (
+            "how many rounds a new Swiss tournament plays. Blank — the default — plays enough "
+            "rounds to separate the field: log2 of the entrants, rounded up"
+        ),
+        BRACKETS_ENTRANT_CAP: (
+            "the most entrants a new tournament takes by sign-up. Blank — the default — takes "
+            "any number; an organiser can still add people by hand past it"
+        ),
+        BRACKETS_PANEL_MINUTES: (
+            "minutes a tournament panel stays live before its buttons disable themselves; 10 "
+            "by default"
+        ),
+        **{key: said for key, (_, _, said) in BRACKETS_WORDS.items()},
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -4315,6 +4817,7 @@ CORE_KEYS = (
     QUIET_BOT_PINS,
     *STRUCTURE_BACKUP_KEYS,
     *PB_FEED_KEYS,
+    *BRACKETS_KEYS,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -4893,6 +5396,9 @@ TEXT_CHECKS.update(
 TEXT_CHECKS.update({key: checked_structure_words(key) for key in STRUCTURE_BACKUP_FIELDS})
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in PB_FEED_WORDS.items()}
+)
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in BRACKETS_WORDS.items()}
 )
 
 VOICE_SHEET_CHARS = 4000
@@ -9319,6 +9825,8 @@ class SettingsStore:
             return STRUCTURE_BACKUP_DEFAULTS[key]
         if key in PB_FEED_DEFAULTS:
             return PB_FEED_DEFAULTS[key]
+        if key in BRACKETS_DEFAULTS:
+            return BRACKETS_DEFAULTS[key]
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

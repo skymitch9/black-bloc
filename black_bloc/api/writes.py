@@ -98,6 +98,11 @@ def _member_who(bot: Any):
     return state_of
 
 
+def member_gate(bot: Any):
+    """Signed in AND in the server, with no bucket spent; the caller picks its own."""
+    return _member_who(bot)
+
+
 def member_read_dependency(bot: Any):
     """`member_dependency`'s read-only twin: the same gate, the read bucket, no write spent."""
     signed_in = _member_who(bot)

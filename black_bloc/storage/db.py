@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 89
+SCHEMA_VERSION = 90
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1311,6 +1311,107 @@ CREATE TABLE IF NOT EXISTS pb_looks (
     summary_at    TEXT,
     looks         INTEGER NOT NULL DEFAULT 0,
     found         INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS tournaments (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id           INTEGER NOT NULL,
+    name               TEXT    NOT NULL,
+    game               TEXT,
+    format             TEXT    NOT NULL,
+    third_place        INTEGER NOT NULL DEFAULT 0,
+    grand_final_reset  INTEGER NOT NULL DEFAULT 1,
+    swiss_rounds       INTEGER,
+    best_of            INTEGER NOT NULL DEFAULT 3,
+    best_of_from_round INTEGER,
+    best_of_late       INTEGER NOT NULL DEFAULT 5,
+    best_of_finals     INTEGER NOT NULL DEFAULT 5,
+    entrant_cap        INTEGER,
+    check_in_minutes   INTEGER NOT NULL DEFAULT 0,
+    confirm_minutes    INTEGER NOT NULL DEFAULT 12,
+    rules_text         TEXT,
+    starts_at          TEXT,
+    state              TEXT    NOT NULL DEFAULT 'draft',
+    state_before       TEXT,
+    created_by         INTEGER NOT NULL,
+    to_user_id         INTEGER,
+    source             TEXT    NOT NULL DEFAULT 'own',
+    source_ref         TEXT,
+    channel_id         INTEGER,
+    thread_id          INTEGER,
+    message_id         INTEGER,
+    shadow             INTEGER,
+    check_in_opened_at TEXT,
+    check_in_closes_at TEXT,
+    started_at         TEXT,
+    completed_at       TEXT,
+    cancelled_at       TEXT,
+    created_at         TEXT    NOT NULL,
+    updated_at         TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS tournaments_by_guild ON tournaments(guild_id, state);
+
+CREATE TABLE IF NOT EXISTS tournament_entrants (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    user_id       INTEGER,
+    name          TEXT    NOT NULL,
+    seed          INTEGER,
+    checked_in    INTEGER NOT NULL DEFAULT 0,
+    checked_in_at TEXT,
+    dropped       INTEGER NOT NULL DEFAULT 0,
+    dropped_why   TEXT,
+    dropped_at    TEXT,
+    dq            INTEGER NOT NULL DEFAULT 0,
+    final_rank    INTEGER,
+    placement     INTEGER,
+    added_by      INTEGER,
+    added_at      TEXT    NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tournament_entrants_one_member
+    ON tournament_entrants(tournament_id, user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS tournament_entrants_by_tournament
+    ON tournament_entrants(tournament_id, seed);
+
+CREATE TABLE IF NOT EXISTS tournament_sets (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id    INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    key              TEXT    NOT NULL,
+    side             TEXT    NOT NULL,
+    round            INTEGER NOT NULL,
+    position         INTEGER NOT NULL,
+    best_of          INTEGER NOT NULL,
+    state            TEXT    NOT NULL,
+    slot_a           INTEGER,
+    slot_b           INTEGER,
+    winner_to        TEXT,
+    winner_slot      TEXT,
+    loser_to         TEXT,
+    loser_slot       TEXT,
+    reset_of         TEXT,
+    alive            INTEGER NOT NULL DEFAULT 0,
+    winner_place     INTEGER,
+    loser_place      INTEGER,
+    score_a          INTEGER,
+    score_b          INTEGER,
+    winner           INTEGER,
+    loser            INTEGER,
+    forfeit          TEXT,
+    called_at        TEXT,
+    called_by        INTEGER,
+    reported_by      INTEGER,
+    reported_side    TEXT,
+    reported_at      TEXT,
+    confirmed_by     INTEGER,
+    confirmed_at     TEXT,
+    confirmed_how    TEXT,
+    disputed_by      INTEGER,
+    disputed_at      TEXT,
+    dispute_note     TEXT,
+    completed_at     TEXT,
+    placement_winner INTEGER,
+    placement_loser  INTEGER,
+    UNIQUE (tournament_id, key)
 );
 """
 
