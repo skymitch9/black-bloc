@@ -1168,6 +1168,61 @@ const SETTING_SPECS = [
   ["pb_feed_dm_blocked", "text", "Staff in **{server}** turned the personal best feed off for you: Black Bloc no longer looks at your speedrun.com runs. Their reason: {reason}\nAsk staff if you think that should change.", "Staff in **{server}** turned the personal best feed off for you: Black Bloc no longer looks at your speedrun.com runs. Their reason: {reason}\nAsk staff if you think that should change.", "the DM a member gets when staff block them from the personal best feed; {runner} is the account they were matched to, or nothing"],
   ["pb_feed_dm_opt_out_cleared", "text", "You had asked Black Bloc in **{server}** to leave your personal bests alone. Staff have put you back in the personal best feed. Their reason: {reason}\nRun /pb in the server to opt out again.", "You had asked Black Bloc in **{server}** to leave your personal bests alone. Staff have put you back in the personal best feed. Their reason: {reason}\nRun /pb in the server to opt out again.", "the DM a member gets when staff clear their opt-out"],
   ["pb_feed_dm_no_reason", "text", "none was given.", "none was given.", "what {reason} becomes in a personal best DM when staff typed no reason"],
+  // Tournament brackets (docs/info/brackets-design.md); all of it sits under core.
+  ["brackets_mode", "enum", "shadow", "shadow", "off, shadow or on. off refuses every tournament move; shadow \u2014 the default \u2014 runs tournaments with each one's thread made in the rehearsal home instead of brackets_channel_id; on makes the threads in brackets_channel_id", ["off", "shadow", "on"]],
+  ["brackets_channel_id", "channel", 1076005097617760296, 1076005097617760296, "the text channel each tournament's thread is made under while brackets_mode is on; #knuck-up by default"],
+  ["brackets_shadow_channel_id", "channel", null, null, "where tournament threads are made while brackets_mode is shadow; blank means shadow_channel_id"],
+  ["brackets_to_role_id", "role", null, null, "the Tournament Organiser role: its holders may create and run tournaments as staff can. Blank \u2014 the default \u2014 leaves tournaments to staff. Taking the role away takes the right away, even for a tournament that person created"],
+  ["brackets_format_default", "enum", "double", "double", "the format a new tournament starts with: single, double \u2014 the default \u2014 round_robin or swiss. The organiser can change it until the tournament starts", ["single", "double", "round_robin", "swiss"]],
+  ["brackets_best_of", "enum", "3", "3", "the best-of every set plays unless a later rule says longer; 3 by default", ["1", "3", "5", "7", "9", "11", "13", "15"]],
+  ["brackets_best_of_late", "enum", "5", "5", "the best-of a set plays once brackets_best_of_from_round entrants or fewer are left in an elimination bracket; 5 by default", ["1", "3", "5", "7", "9", "11", "13", "15"]],
+  ["brackets_best_of_finals", "enum", "5", "5", "the best-of of the last set of an elimination bracket \u2014 the grand final and its reset, or a single elimination final; 5 by default", ["1", "3", "5", "7", "9", "11", "13", "15"]],
+  ["brackets_grand_final_reset_default", "bool", true, true, "true \u2014 the default \u2014 plays a second grand final set when the player from the losers side wins the first, so both have lost once; false lets the first grand final decide. A new double elimination tournament starts with this and its organiser can change it"],
+  ["brackets_third_place_default", "bool", false, false, "true plays a set between the two semi-final losers of a single elimination bracket for third place; false \u2014 the default \u2014 places both third"],
+  ["brackets_confirm_minutes", "int", 12, 12, "minutes a reported score waits for the opponent to confirm or dispute it before it stands on its own; 12 by default, as start.gg's verify timer", null, 1440, 1],
+  ["brackets_check_in_minutes", "int", 30, 30, "how many minutes a new tournament's check-in window stays open; 30 by default. Whoever has not checked in when it closes is taken out and the bracket is made without them", null, 1440, 5],
+  ["brackets_best_of_from_round", "int", null, null, "from how many entrants left an elimination set plays brackets_best_of_late \u2014 8 means top 8. Blank \u2014 the default \u2014 never lengthens sets before the final", null, 1024, 2],
+  ["brackets_swiss_rounds_default", "int", null, null, "how many rounds a new Swiss tournament plays. Blank \u2014 the default \u2014 plays enough rounds to separate the field: log2 of the entrants, rounded up", null, 20, 1],
+  ["brackets_entrant_cap_default", "int", null, null, "the most entrants a new tournament takes by sign-up. Blank \u2014 the default \u2014 takes any number; an organiser can still add people by hand past it", null, 1024, 2],
+  ["brackets_panel_minutes", "int", 10, 10, "minutes a tournament panel stays live before its buttons disable themselves; 10 by default", null, 14, 1],
+  ["brackets_checked_in_said", "text", "{entrant} is checked in for **{name}**.", "{entrant} is checked in for **{name}**.", "what is said after an entrant checks in, or is checked in by a tournament organiser"],
+  ["brackets_checked_out_said", "text", "{entrant} is no longer checked in for **{name}**.", "{entrant} is no longer checked in for **{name}**.", "what a tournament organiser is told after taking back an entrant's check-in"],
+  ["brackets_joined_said", "text", "You are in **{name}**.", "You are in **{name}**.", "what a member is told after signing themselves up"],
+  ["brackets_left_said", "text", "You have left **{name}**.", "You have left **{name}**.", "what a member is told after taking themselves out before the start"],
+  ["brackets_dropped_said", "text", "{entrant} has dropped out of **{name}**; their remaining sets are forfeited.", "{entrant} has dropped out of **{name}**; their remaining sets are forfeited.", "what is said after an entrant drops out of a running tournament"],
+  ["brackets_set_called_said", "text", "{set} is called: {a} v {b}.", "{set} is called: {a} v {b}.", "what is said after a tournament organiser calls a set; {a} and {b} are its players"],
+  ["brackets_set_reported_said", "text", "{set} reported {score_a}\u2013{score_b}. It stands in {minutes} minute(s) unless {opponent} disputes it.", "{set} reported {score_a}\u2013{score_b}. It stands in {minutes} minute(s) unless {opponent} disputes it.", "what a player is told after reporting a score; {opponent} is who confirms or disputes it"],
+  ["brackets_set_final_said", "text", "{set} is final: {winner} wins {result}.", "{set} is final: {winner} wins {result}.", "what is said after a set is confirmed, decided by a tournament organiser, or forfeited; {result} is the score or brackets_forfeit_words"],
+  ["brackets_forfeit_words", "text", "by forfeit", "by forfeit", "what {result} becomes in brackets_set_final_said when a set was forfeited"],
+  ["brackets_set_disputed_said", "text", "{set} is disputed; a tournament organiser decides it.", "{set} is disputed; a tournament organiser decides it.", "what a player is told after disputing a reported score"],
+  ["brackets_off_said", "text", "Tournament brackets are switched **off**, so nothing was done. Set brackets_mode to shadow or on \u2014 in /settings or on the Settings page \u2014 and try again.", "Tournament brackets are switched **off**, so nothing was done. Set brackets_mode to shadow or on \u2014 in /settings or on the Settings page \u2014 and try again.", "what anyone is told when they try a tournament move while brackets_mode is off"],
+  ["brackets_not_organiser_said", "text", "Running a tournament is for staff and tournament organisers, so nothing was done. Ask staff for {role}.", "Running a tournament is for staff and tournament organisers, so nothing was done. Ask staff for {role}.", "what a member is told when they try a tournament organiser's move; {role} names the organiser role, or brackets_no_role_words when none is picked"],
+  ["brackets_no_role_words", "text", "the tournament organiser role (staff have not picked one yet \u2014 it is brackets_to_role_id)", "the tournament organiser role (staff have not picked one yet \u2014 it is brackets_to_role_id)", "what {role} becomes in brackets_not_organiser_said while brackets_to_role_id is blank"],
+  ["brackets_no_tournament_said", "text", "There is no tournament {id} here, so nothing was done.", "There is no tournament {id} here, so nothing was done.", "what is said when a move names a tournament Black Bloc has no record of"],
+  ["brackets_wrong_state_said", "text", "**{name}** is {state}, so that cannot be done now.", "**{name}** is {state}, so that cannot be done now.", "what is said when a move does not fit where the tournament is; {state} is one of the brackets_state_* words"],
+  ["brackets_state_draft", "text", "a draft", "a draft", "what {state} says for a tournament being set up"],
+  ["brackets_state_signups", "text", "open for sign-ups", "open for sign-ups", "what {state} says for a tournament taking sign-ups"],
+  ["brackets_state_check_in", "text", "in check-in", "in check-in", "what {state} says for a tournament whose check-in window is open"],
+  ["brackets_state_seeding", "text", "being seeded", "being seeded", "what {state} says for a tournament whose sign-ups have closed and has not started"],
+  ["brackets_state_running", "text", "running", "running", "what {state} says for a tournament under way"],
+  ["brackets_state_complete", "text", "complete", "complete", "what {state} says for a tournament whose placements are final"],
+  ["brackets_state_cancelled", "text", "cancelled", "cancelled", "what {state} says for a cancelled tournament"],
+  ["brackets_not_yours_said", "text", "Only {entrant} or a tournament organiser can do that, so nothing was done.", "Only {entrant} or a tournament organiser can do that, so nothing was done.", "what a member is told when they check in, or drop, somebody else"],
+  ["brackets_full_said", "text", "**{name}** is full at {cap} entrants, so you were not added.", "**{name}** is full at {cap} entrants, so you were not added.", "what a member is told when sign-ups have reached the entrant cap"],
+  ["brackets_already_in_said", "text", "{entrant} is already in **{name}**.", "{entrant} is already in **{name}**.", "what is said when someone signs up, or is added, twice"],
+  ["brackets_removed_by_to_said", "text", "A tournament organiser took you out of **{name}**, so you cannot sign yourself back up. Ask them to put you back.", "A tournament organiser took you out of **{name}**, so you cannot sign yourself back up. Ask them to put you back.", "what a member is told when they try to sign up again after an organiser removed them"],
+  ["brackets_no_set_said", "text", "There is no set {set} in **{name}**, so nothing was done.", "There is no set {set} in **{name}**, so nothing was done.", "what is said when a move names a set that is not in the bracket"],
+  ["brackets_not_in_set_said", "text", "You are not playing in {set}, so nothing was done. Its two players and tournament organisers can report it.", "You are not playing in {set}, so nothing was done. Its two players and tournament organisers can report it.", "what a member is told when they report, confirm or dispute a set they are not in"],
+  ["brackets_not_ready_said", "text", "{set} is waiting for a player, so it cannot be played yet.", "{set} is waiting for a player, so it cannot be played yet.", "what is said about a set whose players are not both known yet"],
+  ["brackets_not_playable_said", "text", "{set} is a bye, so nothing is played there.", "{set} is a bye, so nothing is played there.", "what is said about a set nobody plays because one side is empty"],
+  ["brackets_already_complete_said", "text", "{set} is already final. A tournament organiser can correct it.", "{set} is already final. A tournament organiser can correct it.", "what a player is told when they report a set that is already decided"],
+  ["brackets_disputed_said", "text", "{set} is disputed, so a tournament organiser decides it.", "{set} is disputed, so a tournament organiser decides it.", "what a player is told when they report a set that is under dispute"],
+  ["brackets_bad_score_said", "text", "That score does not finish a best of {best_of}: the winner has {wins} game(s) and the loser fewer.", "That score does not finish a best of {best_of}: the winner has {wins} game(s) and the loser fewer.", "what is said when a reported score does not fit the set's best-of"],
+  ["brackets_reported_differently_said", "text", "{set} was reported {score_a}\u2013{score_b}. Confirm that, or dispute it.", "{set} was reported {score_a}\u2013{score_b}. Confirm that, or dispute it.", "what a player is told when they report a different score from their opponent's"],
+  ["brackets_not_reported_said", "text", "{set} has no reported score to confirm or dispute.", "{set} has no reported score to confirm or dispute.", "what is said when a confirm or dispute names a set nobody has reported"],
+  ["brackets_own_report_said", "text", "You reported {set}, so your opponent confirms or disputes it.", "You reported {set}, so your opponent confirms or disputes it.", "what a player is told when they confirm or dispute their own report"],
+  ["brackets_not_in_bracket_said", "text", "{entrant} is not playing in **{name}**, so nothing was done.", "{entrant} is not playing in **{name}**, so nothing was done.", "what a tournament organiser is told when they DQ someone the bracket does not hold"],
+  ["brackets_already_out_said", "text", "{entrant} is already out of **{name}**.", "{entrant} is already out of **{name}**.", "what is said when an entrant is dropped or disqualified twice"],
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
@@ -2268,6 +2323,8 @@ const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour",
 CORE_KEYS.push(...STRUCTURE_BACKUP_KEYS);
 const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_channel_id", "pb_feed_ping_role_id", "pb_feed_auto_match", "pb_feed_interval_minutes", "pb_feed_cycle_requests", "pb_feed_rematch_days", "pb_feed_max_age_days", "pb_feed_max_posts", "pb_feed_panel_minutes", "pb_feed_post_title", "pb_feed_post_text", "pb_feed_post_author", "pb_feed_place_text", "pb_feed_link_label", "pb_feed_no_channel_words", "pb_feed_panel_title", "pb_feed_panel_footer", "pb_feed_you_matched", "pb_feed_you_set", "pb_feed_posting_on", "pb_feed_posting_shadow", "pb_feed_posting_off", "pb_feed_you_none", "pb_feed_you_waiting", "pb_feed_you_unlinked", "pb_feed_you_opted_out", "pb_feed_you_blocked", "pb_feed_opt_out_label", "pb_feed_opt_in_label", "pb_feed_opted_out_said", "pb_feed_opted_in_said", "pb_feed_set_said", "pb_feed_unmatched_said", "pb_feed_blocked_said", "pb_feed_unblocked_said", "pb_feed_unblocked_opted_out_said", "pb_feed_no_runner_said", "pb_feed_taken_said", "pb_feed_not_now_said", "pb_feed_nothing_to_do_said", "pb_feed_looked_said", "pb_feed_failed_said", "pb_feed_off_said", "pb_feed_post_again_label", "pb_feed_post_again_pick", "pb_feed_posted_again_said", "pb_feed_rehearsed_again_said", "pb_feed_again_failed_said", "pb_feed_again_off_said", "pb_feed_no_post_said", "pb_feed_again_not_in_feed_said", "pb_feed_dm_set", "pb_feed_dm_unmatched", "pb_feed_dm_blocked", "pb_feed_dm_opt_out_cleared", "pb_feed_dm_no_reason"];
 CORE_KEYS.push(...PB_FEED_KEYS);
+const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_shadow_channel_id", "brackets_to_role_id", "brackets_format_default", "brackets_best_of", "brackets_best_of_late", "brackets_best_of_finals", "brackets_grand_final_reset_default", "brackets_third_place_default", "brackets_confirm_minutes", "brackets_check_in_minutes", "brackets_best_of_from_round", "brackets_swiss_rounds_default", "brackets_entrant_cap_default", "brackets_panel_minutes", "brackets_checked_in_said", "brackets_checked_out_said", "brackets_joined_said", "brackets_left_said", "brackets_dropped_said", "brackets_set_called_said", "brackets_set_reported_said", "brackets_set_final_said", "brackets_forfeit_words", "brackets_set_disputed_said", "brackets_off_said", "brackets_not_organiser_said", "brackets_no_role_words", "brackets_no_tournament_said", "brackets_wrong_state_said", "brackets_state_draft", "brackets_state_signups", "brackets_state_check_in", "brackets_state_seeding", "brackets_state_running", "brackets_state_complete", "brackets_state_cancelled", "brackets_not_yours_said", "brackets_full_said", "brackets_already_in_said", "brackets_removed_by_to_said", "brackets_no_set_said", "brackets_not_in_set_said", "brackets_not_ready_said", "brackets_not_playable_said", "brackets_already_complete_said", "brackets_disputed_said", "brackets_bad_score_said", "brackets_reported_differently_said", "brackets_not_reported_said", "brackets_own_report_said", "brackets_not_in_bracket_said", "brackets_already_out_said"];
+CORE_KEYS.push(...BRACKETS_KEYS);
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
@@ -14304,6 +14361,539 @@ route('POST', '/api/pbs/posts/:post_id/again', (context) => {
   logAction(rehearsing ? 'web.pbfeed.would_post_again' : 'web.pbfeed.posted_again', { target_id: source.user_id, details: { via: 'website', again_of: source.id, run_id: source.run_id, channel_id: String(channel), rehearsed: rehearsing } });
   const key = rehearsing ? 'pb_feed_rehearsed_again_said' : 'pb_feed_posted_again_said';
   return { post: { ...row, name: memberName(row.user_id) }, message: say(key, { member, game: source.game, channel: `<#${channel}>` }) + aside };
+});
+
+// Tournament brackets (docs/info/brackets-design.md): layer 1 is the API only, so the mock keeps
+// eight tournaments, one in each state a route is legal from, and walks state the simple way.
+// The engine (byes, drops, placements) is the bot's; the mock answers with the same shape.
+const BK_GUEST = null;
+
+function bkEntrant(id, user_id, name, extra = {}) {
+  return {
+    id, user_id, name, guest: user_id === null, seed: null, checked_in: false, dropped: false,
+    dropped_why: null, dq: false, placement: null, final_rank: null, ...extra,
+  };
+}
+
+function bkSet(key, side, round, position, slot_a, slot_b, state_, extra = {}) {
+  return {
+    key, side, round, position, best_of: 3, state: state_, slot_a, slot_b, score_a: null,
+    score_b: null, winner: null, loser: null, forfeit: null, winner_to: null, loser_to: null,
+    called_at: null, reported_by: null, reported_side: null, reported_at: null, confirms_at: null,
+    confirmed_by: null, confirmed_how: null, disputed_by: null, dispute_note: null,
+    placement_winner: null, placement_loser: null, rematch: false, message_id: null, card_at: null,
+    ...extra,
+  };
+}
+
+function bkTournament(id, name, state_, entrants, sets = [], extra = {}) {
+  return {
+    id, name, game: 'Tekken 8', format: 'single', state: state_, starts_at: daysAhead(3),
+    created_at: minutesAgo(60 * 24), updated_at: minutesAgo(30), rules_text: null,
+    check_in_opened_at: null, check_in_closes_at: null, started_at: null, completed_at: null,
+    cancelled_at: null, source: 'own', source_ref: null, created_by: STAFF.id, to_user_id: STAFF.id,
+    channel_id: null, thread_id: null, message_id: null, state_before: null,
+    options: {
+      format: 'single', third_place: false, grand_final_reset: true, swiss_rounds: null, best_of: 3,
+      best_of_from_round: null, best_of_late: 5, best_of_finals: 5, entrant_cap: null,
+      check_in_minutes: 30, confirm_minutes: 12,
+    },
+    entrants: entrants.map((one, at) => ({ ...one, seed: one.seed ?? at + 1 })),
+    sets,
+    ...extra,
+  };
+}
+
+function seedBrackets() {
+  const casey = MEMBERS[1].id;
+  const rivet = MEMBERS[2].id;
+  const moth = MEMBERS[3].id;
+  return [
+    bkTournament(1, 'Knuck Up 12', 'draft', []),
+    bkTournament(2, 'Knuck Up 13', 'signups', [
+      bkEntrant(11, casey, 'Casey'),
+      bkEntrant(12, BK_GUEST, 'Remy'),
+      bkEntrant(13, rivet, 'Rivet', { dropped: true, dropped_why: 'removed' }),
+    ]),
+    bkTournament(3, 'Knuck Up 14', 'check_in', [bkEntrant(21, moth, 'Moth')], [], {
+      check_in_opened_at: minutesAgo(10), check_in_closes_at: daysAhead(0.01),
+    }),
+    bkTournament(4, 'Knuck Up 15', 'seeding', [
+      bkEntrant(31, casey, 'Casey'), bkEntrant(32, rivet, 'Rivet'), bkEntrant(33, BK_GUEST, 'Remy'),
+    ]),
+    bkTournament(5, 'Knuck Up 16', 'running', [
+      bkEntrant(41, STAFF.id, 'Nick'), bkEntrant(42, casey, 'Casey'),
+      bkEntrant(43, rivet, 'Rivet'), bkEntrant(44, BK_GUEST, 'Remy'),
+    ], [
+      bkSet('W1-1', 'winners', 1, 1, 41, 44, 'reported', {
+        score_a: 0, score_b: 2, reported_side: 'b', reported_by: STAFF.id,
+        reported_at: minutesAgo(3), confirms_at: daysAhead(0.006), winner_to: 'W2-1',
+      }),
+      bkSet('W1-2', 'winners', 1, 2, 42, 43, 'ready', { winner_to: 'W2-1' }),
+      bkSet('W2-1', 'winners', 2, 1, null, null, 'waiting', { best_of: 5 }),
+    ], { started_at: minutesAgo(40) }),
+    bkTournament(6, 'Knuck Up 17', 'running', [
+      bkEntrant(51, BK_GUEST, 'P1'), bkEntrant(52, BK_GUEST, 'P2'),
+    ], [
+      bkSet('W1-1', 'winners', 1, 1, 51, 52, 'complete', {
+        best_of: 5, score_a: 3, score_b: 1, winner: 51, loser: 52, confirmed_how: 'to',
+        placement_winner: 1, placement_loser: 2,
+      }),
+    ], { started_at: minutesAgo(90) }),
+    bkTournament(7, 'Knuck Up 11', 'complete', [
+      bkEntrant(61, casey, 'Casey', { placement: 1 }), bkEntrant(62, rivet, 'Rivet', { placement: 2 }),
+    ], [
+      bkSet('W1-1', 'winners', 1, 1, 61, 62, 'complete', {
+        best_of: 5, score_a: 3, score_b: 0, winner: 61, loser: 62, placement_winner: 1, placement_loser: 2,
+      }),
+    ], { started_at: minutesAgo(60 * 30), completed_at: minutesAgo(60 * 28) }),
+    bkTournament(8, 'Knuck Up 10', 'cancelled', [], [], { state_before: 'signups', cancelled_at: minutesAgo(60 * 50) }),
+  ];
+}
+
+function bkState() {
+  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 9, nextEntrant: 100 };
+  return state.brackets;
+}
+
+const BK_TO_WORDS = {
+  created: "Created **{name}**.",
+  edited: "Saved **{name}**.",
+  signups_opened: "Sign-ups for **{name}** are open.",
+  signups_closed: "Sign-ups for **{name}** are closed.",
+  check_in_opened: "Check-in for **{name}** is open until {closes}.",
+  check_in_closed: "Check-in for **{name}** is closed — {removed} no-show(s) taken out.",
+  entrant_added: "{entrant} is in **{name}**.",
+  entrant_removed: "{entrant} is out of **{name}**.",
+  entrant_restored: "{entrant} is back in **{name}**.",
+  dq: "{entrant} is disqualified from **{name}**; their remaining sets are forfeited.",
+  seeded: "Seeding for **{name}** is saved.",
+  started: "**{name}** has started — {sets} set(s) to play.",
+  started_up_to: "**{name}** has started — up to {sets} set(s) to play.",
+  unstarted: "**{name}** is back to seeding; its sets and results are cleared.",
+  completed: "**{name}** is complete.",
+  reopened: "**{name}** is running again.",
+  cancelled: "**{name}** is cancelled.",
+  restored: "**{name}** is back as it was before it was cancelled.",
+  set_reset: "{set} is open again; every set it decided after it is cleared.",
+  no_name: "An entrant needs a name of 1 to {limit} characters, so nothing was done.",
+  bad_option: "{field} cannot be {given}, so nothing was saved. It takes {allowed}.",
+  check_in_open: "Check-in for **{name}** is still open. Close it first so no-shows are taken out.",
+  too_few: "**{name}** needs at least 2 entrants to start; it has {count}.",
+  too_many_rounds: "**{name}** has {count} entrants, so it can play at most {most} Swiss round(s) without a rematch; it is set to {rounds}. Lower swiss_rounds, or add entrants.",
+  unfinished: "{open} set(s) in **{name}** are not final yet, so it cannot be completed.",
+  reopen_first: "**{name}** is complete. Reopen it first, then change {set}.",
+  already_called: "{set} is already called.",
+  already_reported: "{set} already has a score reported.",
+  not_resettable: "{set} is a bye, so there is nothing to reset.",
+  nothing_to_reset: "{set} has no result to reset.",
+  forfeit_needs_winner: "A forfeit needs the winner picked, so nothing was done.",
+  bad_order: "That order does not name every entrant exactly once, so nothing was changed.",
+  not_out: "{entrant} is not out of **{name}**, so there is nothing to put back.",
+};
+
+function bkSay(key, fields = {}) {
+  return String(BK_TO_WORDS[key] ?? state.settings.get(key) ?? '').replace(/\{(\w+)\}/g, (all, name) => (name in fields ? String(fields[name]) : all));
+}
+
+const BK_STATE_WORDS = {
+  draft: 'brackets_state_draft', signups: 'brackets_state_signups', check_in: 'brackets_state_check_in',
+  seeding: 'brackets_state_seeding', running: 'brackets_state_running', complete: 'brackets_state_complete',
+  cancelled: 'brackets_state_cancelled',
+};
+
+function bkOff() {
+  if ((state.settings.get('brackets_mode') ?? 'shadow') === 'off') {
+    throw new Refused(409, 'brackets_off', bkSay('brackets_off_said'));
+  }
+}
+
+function bkOf(context) {
+  const wanted = String(context.params.tournament_id);
+  if (!/^\d+$/.test(wanted)) {
+    throw new Refused(400, 'bad_request', `**${wanted.slice(0, 40)}** is not an id Black Bloc can read, so nothing was done. Ids are the long numbers Discord shows under Copy ID.`);
+  }
+  const found = bkState().tournaments.find((one) => String(one.id) === wanted);
+  if (!found) throw new Refused(404, 'no_tournament', bkSay('brackets_no_tournament_said', { id: wanted }));
+  return found;
+}
+
+function bkRuns(context) {
+  if (context.session === 'member') {
+    throw new Refused(403, 'not_organiser', bkSay('brackets_not_organiser_said', { role: bkSay('brackets_no_role_words') }));
+  }
+}
+
+function bkIn(t, ...allowed) {
+  if (!allowed.includes(t.state)) {
+    throw new Refused(409, 'wrong_state', bkSay('brackets_wrong_state_said', { name: t.name, state: bkSay(BK_STATE_WORDS[t.state]) }));
+  }
+}
+
+function bkView(t, context) {
+  const names = Object.fromEntries(t.entrants.map((one) => [one.id, one.name]));
+  const me = actorOf(context.session);
+  const mine = t.entrants.find((one) => one.user_id === me);
+  const placed = t.entrants.filter((one) => !one.dropped || one.placement);
+  return {
+    ...t,
+    entrant_count: t.entrants.filter((one) => !one.dropped).length,
+    finished: t.sets.length > 0 && t.sets.every((one) => ['complete', 'bye', 'void'].includes(one.state)),
+    may_run: context.session !== 'member',
+    mine: mine ? mine.id : null,
+    sets: t.sets.map((one) => ({ ...one, a_name: names[one.slot_a] ?? null, b_name: names[one.slot_b] ?? null })),
+    standings: t.sets.length ? placed.map((one) => ({ entrant: one.id, name: one.name, place: one.placement })) : [],
+    waiting_on: t.sets.length ? placed.map((one) => {
+      const live = t.sets.find((set) => [set.slot_a, set.slot_b].includes(one.id) && ['ready', 'called', 'reported', 'disputed'].includes(set.state));
+      return { entrant: one.id, name: one.name, what: live ? 'play' : 'done', set: live ? live.key : null, opponent: null, open: live ? 1 : 0 };
+    }) : [],
+  };
+}
+
+function bkAnswer(context, t, event, key, fields = {}, details = {}) {
+  t.updated_at = now();
+  logAction(`web.brackets.${event}`, { actor_id: actorOf(context.session), details: { via: 'website', tournament: t.id, ...details } });
+  return { tournament: bkView(t, context), message: bkSay(key, { name: t.name, ...fields }) };
+}
+
+function bkEntrantOf(t, context) {
+  const wanted = String(context.params.entrant_id);
+  const found = t.entrants.find((one) => String(one.id) === wanted);
+  if (!found) throw new Refused(404, 'no_entrant', bkSay('brackets_not_in_bracket_said', { entrant: `#${wanted}`, name: t.name }));
+  return found;
+}
+
+function bkSetOf(t, context) {
+  const found = t.sets.find((one) => one.key === String(context.params.key));
+  if (!found) throw new Refused(404, 'no_set', bkSay('brackets_no_set_said', { set: String(context.params.key).slice(0, 20), name: t.name }));
+  return found;
+}
+
+route('GET', '/api/brackets', (context) => {
+  requireMember(context.session);
+  return {
+    mode: state.settings.get('brackets_mode') ?? 'shadow',
+    may_run: context.session !== 'member',
+    tournaments: bkState().tournaments.map((t) => ({
+      id: t.id, name: t.name, game: t.game, format: t.format, state: t.state, starts_at: t.starts_at,
+      created_at: t.created_at, updated_at: t.updated_at, to_user_id: t.to_user_id,
+      entrant_count: t.entrants.filter((one) => !one.dropped).length,
+    })).sort((a, b) => b.id - a.id),
+  };
+});
+
+route('GET', '/api/brackets/:tournament_id', (context) => {
+  requireMember(context.session);
+  return bkView(bkOf(context), context);
+});
+
+route('POST', '/api/brackets', async (context) => {
+  requireMember(context.session);
+  bkOff();
+  bkRuns(context);
+  const body = await context.body();
+  const name = String(body.name || '').replace(/\s+/g, ' ').trim();
+  if (!name || name.length > 100) throw new Refused(400, 'no_name', bkSay('no_name', { limit: 100 }));
+  const held = bkState();
+  const t = bkTournament(held.next++, name, 'draft', [], [], { game: body.game || null, starts_at: body.starts_at || null });
+  if (body.format) {
+    t.format = body.format;
+    t.options.format = body.format;
+  }
+  held.tournaments.push(t);
+  return bkAnswer(context, t, 'created', 'created');
+});
+
+route('PATCH', '/api/brackets/:tournament_id', async (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
+  const body = await context.body();
+  if (body.name) t.name = String(body.name).trim().slice(0, 100);
+  for (const field of Object.keys(t.options)) if (field in body) t.options[field] = body[field];
+  t.format = t.options.format;
+  return bkAnswer(context, t, 'edited', 'edited', {}, { changed: Object.keys(body).sort() });
+});
+
+function bkStateMove(path, from, to, event, key, extra = () => ({})) {
+  route('POST', `/api/brackets/:tournament_id/${path}`, (context) => {
+    requireMember(context.session);
+    bkOff();
+    const t = bkOf(context);
+    bkRuns(context);
+    bkIn(t, ...from);
+    const was = t.state;
+    Object.assign(t, { state: typeof to === 'function' ? to(t) : to }, extra(t));
+    const fields = t.check_in_closes_at && to === 'check_in' ? { closes: bkClock(t.check_in_closes_at) } : {};
+    return bkAnswer(context, t, event, key, fields, { was });
+  });
+}
+
+function bkClock(stamp) {
+  return new Date(stamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Phoenix', timeZoneName: 'short' }).toLowerCase().replace(' mst', ' MST');
+}
+
+bkStateMove('signups/open', ['draft', 'seeding'], 'signups', 'signups_opened', 'signups_opened');
+bkStateMove('signups/close', ['signups'], 'seeding', 'signups_closed', 'signups_closed');
+bkStateMove('checkin/open', ['signups', 'seeding'], 'check_in', 'check_in_opened', 'check_in_opened', () => ({ check_in_opened_at: now(), check_in_closes_at: daysAhead(30 / 1440) }));
+bkStateMove('unstart', ['running'], 'seeding', 'unstarted', 'unstarted', () => ({ sets: [], started_at: null }));
+bkStateMove('reopen', ['complete'], 'running', 'reopened', 'reopened', (t) => ({ completed_at: null, entrants: t.entrants.map((one) => ({ ...one, placement: null })) }));
+bkStateMove('cancel', ['draft', 'signups', 'check_in', 'seeding', 'running', 'complete'], 'cancelled', 'cancelled', 'cancelled', (t) => ({ state_before: t.state, cancelled_at: now() }));
+bkStateMove('restore', ['cancelled'], (t) => t.state_before || 'draft', 'restored', 'restored', () => ({ state_before: null, cancelled_at: null }));
+
+route('POST', '/api/brackets/:tournament_id/checkin/close', (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  bkIn(t, 'check_in');
+  const gone = t.entrants.filter((one) => !one.dropped && !one.checked_in);
+  for (const one of gone) Object.assign(one, { dropped: true, dropped_why: 'no_show' });
+  t.state = 'seeding';
+  return bkAnswer(context, t, 'check_in_closed', 'check_in_closed', { removed: gone.length }, { removed: gone.map((one) => one.id) });
+});
+
+route('POST', '/api/brackets/:tournament_id/join', (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkIn(t, 'signups');
+  const me = actorOf(context.session);
+  const found = t.entrants.find((one) => one.user_id === me);
+  if (found && !found.dropped) throw new Refused(409, 'already_in', bkSay('brackets_already_in_said', { entrant: found.name, name: t.name }));
+  if (found && found.dropped_why === 'removed') throw new Refused(403, 'removed', bkSay('brackets_removed_by_to_said', { name: t.name }));
+  if (found) Object.assign(found, { dropped: false, dropped_why: null });
+  else t.entrants.push(bkEntrant(bkState().nextEntrant++, me, memberName(me), { seed: t.entrants.length + 1 }));
+  return bkAnswer(context, t, 'entrant_added', 'brackets_joined_said', {}, { by_self: true });
+});
+
+route('POST', '/api/brackets/:tournament_id/entrants', async (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
+  const body = await context.body();
+  const user = body.user_id ? String(body.user_id) : null;
+  const name = String(body.name || (user ? memberName(user) : '') || '').trim();
+  if (!name || name.length > 100) throw new Refused(400, 'no_name', bkSay('no_name', { limit: 100 }));
+  t.entrants.push(bkEntrant(bkState().nextEntrant++, user, name, { seed: t.entrants.length + 1, checked_in: !user && t.state === 'check_in' }));
+  return bkAnswer(context, t, 'entrant_added', 'entrant_added', { entrant: name }, { guest: !user });
+});
+
+route('DELETE', '/api/brackets/:tournament_id/entrants/:entrant_id', (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
+  const one = bkEntrantOf(t, context);
+  if (one.dropped) throw new Refused(409, 'already_out', bkSay('brackets_already_out_said', { entrant: one.name, name: t.name }));
+  Object.assign(one, { dropped: true, dropped_why: 'removed' });
+  return bkAnswer(context, t, 'entrant_removed', 'entrant_removed', { entrant: one.name }, { entrant: one.id });
+});
+
+route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/restore', (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  const one = bkEntrantOf(t, context);
+  if (!one.dropped && !one.dq) throw new Refused(409, 'not_out', bkSay('not_out', { entrant: one.name, name: t.name }));
+  Object.assign(one, { dropped: false, dropped_why: null, dq: false });
+  return bkAnswer(context, t, 'entrant_restored', 'entrant_restored', { entrant: one.name }, { entrant: one.id });
+});
+
+route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/checkin', async (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkIn(t, 'check_in');
+  const one = bkEntrantOf(t, context);
+  const body = await context.body();
+  one.checked_in = body.checked_in !== false;
+  const event = one.checked_in ? 'checked_in' : 'checked_out';
+  return bkAnswer(context, t, event, `brackets_${event}_said`, { entrant: one.name }, { entrant: one.id });
+});
+
+route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/drop', (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkIn(t, 'draft', 'signups', 'check_in', 'seeding', 'running');
+  const one = bkEntrantOf(t, context);
+  if (one.dropped || one.dq) throw new Refused(409, 'already_out', bkSay('brackets_already_out_said', { entrant: one.name, name: t.name }));
+  Object.assign(one, { dropped: true, dropped_why: t.state === 'running' ? 'dropped' : 'left' });
+  return bkAnswer(context, t, 'dropped', t.state === 'running' ? 'brackets_dropped_said' : 'brackets_left_said', { entrant: one.name }, { entrant: one.id });
+});
+
+route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/dq', (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  bkIn(t, 'running');
+  const one = bkEntrantOf(t, context);
+  if (one.dropped || one.dq) throw new Refused(409, 'already_out', bkSay('brackets_already_out_said', { entrant: one.name, name: t.name }));
+  one.dq = true;
+  for (const set of t.sets) {
+    if ([set.slot_a, set.slot_b].includes(one.id) && ['ready', 'called', 'reported', 'disputed'].includes(set.state)) {
+      Object.assign(set, { state: 'complete', forfeit: 'dq', winner: set.slot_a === one.id ? set.slot_b : set.slot_a, loser: one.id, score_a: null, score_b: null });
+    }
+  }
+  return bkAnswer(context, t, 'dq', 'dq', { entrant: one.name }, { entrant: one.id });
+});
+
+route('POST', '/api/brackets/:tournament_id/seed', async (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
+  const body = await context.body();
+  const playing = t.entrants.filter((one) => !one.dropped && !one.dq).map((one) => one.id);
+  let order = playing.slice();
+  if (body.randomise === true) order.sort(() => Math.random() - 0.5);
+  else {
+    order = (body.order || []).map(Number);
+    if (order.length !== playing.length || [...order].sort().join() !== [...playing].sort().join()) {
+      throw new Refused(400, 'bad_order', bkSay('bad_order'));
+    }
+  }
+  order.forEach((id, at) => { t.entrants.find((one) => one.id === id).seed = at + 1; });
+  return bkAnswer(context, t, 'seeded', 'seeded', {}, { order, randomised: body.randomise === true });
+});
+
+route('POST', '/api/brackets/:tournament_id/start', (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  if (t.state === 'check_in') throw new Refused(409, 'check_in_open', bkSay('check_in_open', { name: t.name }));
+  bkIn(t, 'draft', 'signups', 'seeding');
+  const playing = t.entrants.filter((one) => !one.dropped && !one.dq).sort((a, b) => a.seed - b.seed);
+  if (playing.length < 2) throw new Refused(409, 'too_few', bkSay('too_few', { name: t.name, count: playing.length }));
+  t.sets = [];
+  for (let at = 0; at < playing.length; at += 2) {
+    const a = playing[at];
+    const b = playing[at + 1];
+    t.sets.push(bkSet(`W1-${at / 2 + 1}`, 'winners', 1, at / 2 + 1, a.id, b ? b.id : null, b ? 'ready' : 'bye', b ? {} : { winner: a.id }));
+  }
+  Object.assign(t, { state: 'running', started_at: now() });
+  return bkAnswer(context, t, 'started', 'started', { sets: t.sets.filter((one) => one.state === 'ready').length }, { entrants: playing.length });
+});
+
+route('POST', '/api/brackets/:tournament_id/complete', async (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  bkIn(t, 'running');
+  const open = t.sets.filter((one) => !['complete', 'bye', 'void'].includes(one.state)).length;
+  if (open || !t.sets.length) throw new Refused(409, 'unfinished', bkSay('unfinished', { name: t.name, open }));
+  for (const set of t.sets) {
+    if (set.placement_winner) t.entrants.find((one) => one.id === set.winner).placement = set.placement_winner;
+    if (set.placement_loser) t.entrants.find((one) => one.id === set.loser).placement = set.placement_loser;
+  }
+  Object.assign(t, { state: 'complete', completed_at: now() });
+  return bkAnswer(context, t, 'completed', 'completed');
+});
+
+function bkRunning(context) {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkIn(t, 'running');
+  return [t, bkSetOf(t, context)];
+}
+
+function bkFinal(t, set) {
+  const names = Object.fromEntries(t.entrants.map((one) => [one.id, one.name]));
+  const result = set.forfeit || set.score_a === null ? bkSay('brackets_forfeit_words') : `${Math.max(set.score_a, set.score_b)}–${Math.min(set.score_a, set.score_b)}`;
+  return bkSay('brackets_set_final_said', { set: set.key, winner: names[set.winner], result });
+}
+
+function bkDecide(set, score_a, score_b, how, forfeitSide = null) {
+  const side = forfeitSide || (score_a > score_b ? 'a' : 'b');
+  Object.assign(set, {
+    state: 'complete', score_a, score_b, confirmed_how: how, forfeit: forfeitSide ? 'to' : null,
+    winner: side === 'a' ? set.slot_a : set.slot_b, loser: side === 'a' ? set.slot_b : set.slot_a,
+  });
+}
+
+function bkFits(set, score_a, score_b) {
+  const need = Math.floor(set.best_of / 2) + 1;
+  if (![score_a, score_b].every((one) => Number.isInteger(one) && one >= 0) || Math.max(score_a, score_b) !== need || Math.min(score_a, score_b) >= need) {
+    throw new Refused(400, 'bad_score', bkSay('brackets_bad_score_said', { best_of: set.best_of, wins: need }));
+  }
+}
+
+function bkPlayable(set) {
+  if (set.state === 'waiting') throw new Refused(409, 'not_ready', bkSay('brackets_not_ready_said', { set: set.key }));
+  if (['bye', 'void'].includes(set.state)) throw new Refused(409, 'not_playable', bkSay('brackets_not_playable_said', { set: set.key }));
+}
+
+route('POST', '/api/brackets/:tournament_id/sets/:key/call', (context) => {
+  const [t, set] = bkRunning(context);
+  bkRuns(context);
+  if (set.state !== 'ready') throw new Refused(409, 'already_called', bkSay('already_called', { set: set.key }));
+  Object.assign(set, { state: 'called', called_at: now() });
+  const names = Object.fromEntries(t.entrants.map((one) => [one.id, one.name]));
+  return bkAnswer(context, t, 'set_called', 'brackets_set_called_said', { set: set.key, a: names[set.slot_a], b: names[set.slot_b] }, { set: set.key });
+});
+
+route('POST', '/api/brackets/:tournament_id/sets/:key/report', async (context) => {
+  const [t, set] = bkRunning(context);
+  bkPlayable(set);
+  const body = await context.body();
+  bkFits(set, body.score_a, body.score_b);
+  bkRuns(context);
+  bkDecide(set, body.score_a, body.score_b, 'to');
+  logAction('web.brackets.set_overridden', { details: { via: 'website', tournament: t.id, set: set.key } });
+  return { tournament: bkView(t, context), message: bkFinal(t, set) };
+});
+
+route('POST', '/api/brackets/:tournament_id/sets/:key/confirm', (context) => {
+  const [t, set] = bkRunning(context);
+  if (!['reported', 'disputed'].includes(set.state)) throw new Refused(409, 'not_reported', bkSay('brackets_not_reported_said', { set: set.key }));
+  bkDecide(set, set.score_a, set.score_b, context.session === 'member' ? 'opponent' : 'to');
+  logAction('web.brackets.set_confirmed', { details: { via: 'website', tournament: t.id, set: set.key } });
+  return { tournament: bkView(t, context), message: bkFinal(t, set) };
+});
+
+route('POST', '/api/brackets/:tournament_id/sets/:key/dispute', async (context) => {
+  const [t, set] = bkRunning(context);
+  if (set.state !== 'reported') throw new Refused(409, 'not_reported', bkSay('brackets_not_reported_said', { set: set.key }));
+  const body = await context.body();
+  Object.assign(set, { state: 'disputed', disputed_by: actorOf(context.session), dispute_note: String(body.note || '').trim().slice(0, 300) || null });
+  return bkAnswer(context, t, 'set_disputed', 'brackets_set_disputed_said', { set: set.key }, { set: set.key });
+});
+
+route('POST', '/api/brackets/:tournament_id/sets/:key/override', async (context) => {
+  const [t, set] = bkRunning(context);
+  bkRuns(context);
+  bkPlayable(set);
+  const body = await context.body();
+  if (body.forfeit === true) {
+    if (!['a', 'b'].includes(body.winner)) throw new Refused(400, 'forfeit_needs_winner', bkSay('forfeit_needs_winner'));
+    bkDecide(set, null, null, 'to', body.winner);
+  } else {
+    bkFits(set, body.score_a, body.score_b);
+    bkDecide(set, body.score_a, body.score_b, 'to');
+  }
+  logAction('web.brackets.set_overridden', { details: { via: 'website', tournament: t.id, set: set.key } });
+  return { tournament: bkView(t, context), message: bkFinal(t, set) };
+});
+
+route('POST', '/api/brackets/:tournament_id/sets/:key/reset', (context) => {
+  const [t, set] = bkRunning(context);
+  bkRuns(context);
+  if (['bye', 'void'].includes(set.state)) throw new Refused(409, 'not_resettable', bkSay('not_resettable', { set: set.key }));
+  if (['ready', 'waiting'].includes(set.state)) throw new Refused(409, 'nothing_to_reset', bkSay('nothing_to_reset', { set: set.key }));
+  Object.assign(set, bkSet(set.key, set.side, set.round, set.position, set.slot_a, set.slot_b, 'ready', { best_of: set.best_of, winner_to: set.winner_to, loser_to: set.loser_to }));
+  return bkAnswer(context, t, 'set_reset', 'set_reset', { set: set.key }, { set: set.key });
 });
 
 // Structure backup (docs/info/structure-backup-design.md): the snapshots, the compare and the

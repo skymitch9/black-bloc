@@ -1,6 +1,11 @@
 ﻿# Code notes — the comments the source no longer carries
 
+<<<<<<< HEAD
 > **2026-10-07 — four rows APPENDED under `tests/conftest.py`, nothing re-keyed**: *date-fuse guard* (branch `date-fuse-sweep`, off `main` `e8bf13d8`); `tests/conftest.py` rows below `fake_now` sit ~34 lower than keyed. Before that:
+=======
+> **2026-10-07 — one section APPENDED, nothing re-keyed**: *Tournament brackets, layer 1* (branch `brackets-engine`, off `main` `ecd43324`); keyed by NAME. Before that:
+
+>>>>>>> origin/brackets-engine
 > **2026-10-06 — one section APPENDED, nothing re-keyed**: *BaF event ping* (branch `baf-event-ping`, off `main` `2c2a256b`); keyed by NAME; its rows were amended the same day by the review-fix pass, and again by the whole-event change (branch `baf-event-whole`, off `47df98d7`: `worked_out` / `judge`, `asks_of`, `ask_if_unsure`, `set_answer`, the mock row, plus new rows for `judgement_of`, `question` / `answered`, `ping_state` and `state_of`), and a third time by the review fixes of the whole-event change (same branch, `c32f9988`: `judge` / `acted`, `judgement_of`, `question` / `cleared`, the `missed` row, `note_missed`, `set_answer`, `baf_controls`, the mock row, plus new rows for `clear_answer`, `note_questions` and `rendered`). It amends the *Marathon role ping* rows for `unsent` (keeps the verdict's day now), `role_for` (takes the day's reading) and `status_line` (takes the runs). Before that:
 > **2026-10-05 — one section APPENDED, nothing re-keyed**: *Sticky messages* (branch `sticky-messages`, off `main` `1cde5594`); keyed by NAME. Before that:
 > **2026-10-05 — one section APPENDED, nothing re-keyed**: *Tone settles* (branch `tone-settles`, off `main` `3335d929`); keyed by NAME. It amends the *Personality tones* rows for `heard_from`, `hears_now` and `window_turns` (`black_bloc/chat_voice.py`): the pool branch reads a STORED tone now. `path:line` rows in `chat_voice.py`, `chat_panel.py`, `chat_llm.py` below `mood_for`, `api/tools/chat.py` below `voice_entry`, `cogs/content/chat.py` and `page-chat.js` below `toneSelect` sit lower than keyed (not re-measured) — trust the anchor text.
@@ -10139,6 +10144,7 @@ Design: [`baf-event-ping-design.md`](baf-event-ping-design.md).
 | `black_bloc/cogs/content/marathon_host_highlights.py` `role_for` | `days` is read only at the ping mark (`day_reading`), the one mark a block could have carried the role on. |
 | `site/mock/server.mjs` `marathonBafEvent` | One show-day per marathon and no stored pings: enough for the drawer and the tracker, not a model of the carrier. It already judged the marathon as a whole; the whole-event change only re-shaped what it answers (`line`, `runs`, `baf`, `ask` at the top, `ping` per day). An answer to the question is the row's `baf_answer` (marathon 31 is seeded with a no) so the follow label and *Clear the answer* can be seen; with no ping records the mock never reads `acted`. |
 
+<<<<<<< HEAD
 ## CI mirror (branch `ci-mirror`, 2026-10-07) — keyed by NAME
 
 Runbook: [`../access/ci-mirror.md`](../access/ci-mirror.md).
@@ -10152,3 +10158,37 @@ Runbook: [`../access/ci-mirror.md`](../access/ci-mirror.md).
 | `…` the `tar` into `/work` | The bind mount is read at `/src` and copied into a tmpfs, `/tmp` is a tmpfs: the suite ran 390 s straight off the mount with `/tmp` on the overlay, 161 s in memory; `/tmp` alone as tmpfs gave 200 s (that SQLite writes under `tmp_path` are the cost is an inference, not profiled). |
 | `…` `-Ref` / `tar.exe` | `git archive` to a file, then `$env:SystemRoot\System32\tar.exe` by full path: under the hook, Git Bash's GNU `tar` is first on `PATH` and reads `C:\…` as `host:path` (*Cannot connect to C: resolve failed*). |
 | `scripts/githooks/pre-push` | Same filter as `ci.yml`'s `paths-ignore` (`docs/**`, `*.md` where `*` does not cross `/`). A remote sha the clone does not have makes `git log` fail → treated as code → the mirror runs. New branch (`0000…` remote sha): the commits not on any remote. |
+=======
+## Tournament brackets, layer 1 — keyed by NAME (branch `brackets-engine`, 2026-10-07; re-key after the merge)
+
+Design: [`brackets-design.md`](brackets-design.md).
+
+- `black_bloc/brackets/play.py` `settle` — the only place byes, voids, forfeits, deliveries and the next Swiss round happen; every move ends in it (through `moved`), so a move never has to know what its result unblocks. It loops until nothing changes.
+- `play.py` `slot_status` — a slot is DEAD when nothing feeds it, its source is `void`, or its source is a `bye` and the slot wanted that source's LOSER. A finished source that has a player to deliver is PENDING, not filled: `deliver` fills it on the same pass.
+- `play.py` `places_of` — G1-1 places nobody when the reset will be played (slot b won, not by forfeit); G2-1 then carries 1 and 2.
+- `play.py` `forfeit_out` — runs on OPEN sets only: a withdrawn player waiting on an unknown opponent sits until the set fills, then forfeits; facing a dead side they take the bye.
+- `play.py` `undo` — follows only the links a result actually used (`winner_to`/`loser_to` where that player still sits, plus a `reset_of`), so another branch is never touched. Swiss deletes every later round instead.
+- `play.py` `kept_winner` — an `override` of a finished set that keeps its winner reopens only that set (no `undo`), so what it fed stands in every format; a set that opens a grand-final reset always takes the full `undo`, because forfeit or not decides whether G2-1 is played (review fix 4).
+- `play.py` `rehearsed` / `pace` — `rehearsed` plays a copy to the end with slot a winning every set; which slots are filled or dead never depends on WHO wins, so the number of sets per round that eliminate someone (`loser_to` empty) is fixed by the field. `pace` turns that into each set's `alive` = entrants minus everyone eliminated in a round that plays earlier (`level`: `order_key`'s round part; a third-place set sits with the final, both grand-final sets together) and sets `best_of` from it (review fix 2).
+- `play.py` `sets_to_play` — Swiss and round robin are counted arithmetically (rehearsing a 1024-entrant Swiss took 50 s); elimination counts the rehearsal's completed sets and adds one for a grand-final reset (*up to*).
+- `play.py` `confirm_due` — a `reported` set whose `reported_at` cannot be read is due now (checklist 5); `parsed` reads a naive stamp as UTC so a comparison never raises.
+- `play.py` `report` — the state check runs before the score check, so a set that is not ready answers *not ready*, not *bad score*.
+- `black_bloc/brackets/elimination.py` `flipped` — the drop pattern; replacing it with the natural order fails `test_a_dropped_player_never_meets_anyone_they_have_already_played_on_arrival` for 16+.
+- ~~`elimination.py` `winners_alive` / `losers_alive`~~ — removed by review fix 2 (2026-10-07); `alive` is set by `play.pace`. The builders now leave `alive` 0 and `best_of` at the default; only `play.build` produces a finished bracket.
+- `swiss.py` `pair_round` — marks `rematch` on a pair the fallback was forced to repeat; `most_rounds` (n − 1) is what `play.build` refuses past (review fix 1).
+- `black_bloc/brackets/swiss.py` `pairings` — backtracking with a `SEARCH_BUDGET`; past it, the order is paired top-down (rematches allowed) rather than hanging a big field.
+- `black_bloc/brackets/model.py` `order_key` — losers round ℓ sorts after winners round ℓ//2+1 and before the next, a pure losers round after its drop round; display and `settle` order only.
+- `black_bloc/brackets_store.py` `bracket` — rebuilds the engine's `Bracket` from rows: entrants are those seated in a set (seed order), `withdrawn` from `dq`/`dropped` of seated entrants, the TO's tie order from `final_rank`.
+- `brackets_store.py` `save` — an upsert on `UNIQUE (tournament_id, key)` for the changed keys and a delete for the removed ones (Swiss rounds a reset took back). The upsert lists `SET_COLUMNS` (the `Match` fields) only, so `message_id` / `card_at` survive every save; it answers the removed sets' cards, which a move hands back as `Outcome.gone`.
+- `brackets_store.py` `match_of` — `rematch` comes back from SQLite as 0/1 and is turned into a bool, so a log row says `true`, not `1`.
+- `black_bloc/brackets_moves.py` `answered` / `Stop` — a refusal is raised as `Stop(Outcome)` anywhere inside a move and returned as the move's answer; `engine` turns a `BracketError` into one with the code's words.
+- `brackets_moves.py` `note` — the one `log_action` for every bracket kind (`KNOWN_DYNAMIC["black_bloc/brackets_moves.py::kind"]`); `brackets_people.py` and `brackets_sets.py` call it, never `log_action` themselves.
+- `brackets_moves.py` `lock_for` — one `asyncio.Lock` per tournament id, kept on the bot's `__dict__` so both doors share it.
+- `brackets_moves.py` `said` / `TO_WORDS` — the organiser-only lines are code constants (owner, 2026-10-07: only player-facing words are settings keys); `said` answers a `TO_WORDS` name first, then staff wording, and any exception filling staff wording falls back to the shipped one (checklist 17). `ENGINE_WORDS` maps an engine code to a `TO_WORDS` name or to a player key (`PLAYER_CODES`).
+- `brackets_moves.py` `touched` — puts the set keys a move changed or removed on `Outcome.changed`, and the removed sets' card ids on `Outcome.gone`, so layer 2 edits exactly those cards.
+- `brackets_people.py` `clock_words` — the check-in closing time is `<t:…:t>` in Discord and a plain `7:30 pm MST` in `default_timezone` on the site (review fix 7).
+- `brackets_sets.py` `correctable` — Reset and Override check the organiser first, then say *reopen it first* on a complete tournament instead of the generic wrong-state line (review fix 9).
+- `black_bloc/brackets_sets.py` `report` — a TO who is not a player in the set is sent to `overridden`: their report is final at once (`set_overridden`), as start.gg's admin report is.
+- `black_bloc/api/tools/brackets.py` `writer` — the member gate with the STAFF write bucket (60/min) so an organiser without a staff role can run a round.
+- `tests/api/test_contract.py` `seed_brackets` — one tournament per state a route is legal from; the staff session plays W1-1 of the running one against a guest whose side reported, which is what lets Confirm and Dispute be a player's own moves in the contract.
+>>>>>>> origin/brackets-engine

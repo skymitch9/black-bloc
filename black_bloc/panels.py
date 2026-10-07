@@ -31,6 +31,8 @@ class Outcome:
     code: str = ""
     status: int = 0
     value: Any = field(default=None)
+    changed: tuple[str, ...] = ()
+    gone: dict[str, int] = field(default_factory=dict)
 
 
 def refusal(message: str, code: str, status: int) -> Outcome:

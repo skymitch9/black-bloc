@@ -37,6 +37,21 @@ const IDS = {
   pb_opted_out_member_id: '700000000000000006',
   pb_blocked_member_id: '700000000000000007',
   pb_post_id: '3',
+  // Tournament brackets: one tournament in each state a route is legal from. 5 is running with
+  // Nick (the staff session) on W1-1 against a guest whose side reported, so Confirm and Dispute
+  // are his own moves; 6 is running with its only set final, so Complete and Reset reach it.
+  bracket_draft_id: '1',
+  bracket_signups_id: '2',
+  bracket_checkin_id: '3',
+  bracket_seeding_id: '4',
+  bracket_running_id: '5',
+  bracket_finished_id: '6',
+  bracket_complete_id: '7',
+  bracket_cancelled_id: '8',
+  bracket_entrant_id: '11',
+  bracket_removed_entrant_id: '13',
+  bracket_checkin_entrant_id: '21',
+  bracket_running_entrant_id: '42',
   structure_old_id: '1',
   structure_new_id: '2',
   test_channel_id: '800000000000000003',
