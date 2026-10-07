@@ -15,14 +15,28 @@ assert spec.loader is not None
 spec.loader.exec_module(ci_local)
 
 
-def test_every_step_of_ci_yml_is_read():
+def gate_job(text: str) -> str:
+    """The `gate` job's own lines; the mirror runs that job and no other."""
+    found = re.search(r"^  gate:\n(.*?)(?=^  \S|\Z)", text, re.MULTILINE | re.DOTALL)
+    assert found, "ci.yml has no gate job"
+    return found.group(1)
+
+
+def test_every_step_of_the_gate_job_is_read():
     text = WORKFLOW.read_text(encoding="utf-8")
     steps = ci_local.steps_of(text)
-    assert len(steps) == len(re.findall(r"^\s+- (name|uses):", text, re.MULTILINE))
+    gate = gate_job(text)
+    assert len(steps) == len(re.findall(r"^\s+- (name|uses):", gate, re.MULTILINE))
     runs = "\n".join(step.get("run", "") for step in steps)
     for line in re.findall(r"^\s+(?:run: )?(node [^\n&]+|ruff [^\n]+|python -m pytest[^\n]*)$",
-                           text, re.MULTILINE):
+                           gate, re.MULTILINE):
         assert line.strip() in runs
+
+
+def test_the_other_jobs_are_not_the_mirrors():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "clock-ahead:" in text
+    assert all("forty days" not in (step.get("name") or "") for step in ci_local.steps_of(text))
 
 
 def test_the_image_installs_with_the_command_ci_yml_runs(monkeypatch):
