@@ -55,7 +55,7 @@ move raises `BracketError(code, **fields)`; the caller turns the code into words
 | `roundrobin.py` | `schedule` (circle method, rounds), `match_count`, `build` |
 | `swiss.py` | `rounds_for` (default ceil(log2 n)), `pairings` (score groups, no rematch, backtracking), `pair_round` (bye to the lowest-ranked without one), `next_round_due`, `add_round`, `build` |
 | `tally.py` | `records` (sets, games, byes, opponents, who beat whom), `met` (every pair ever paired) |
-| `play.py` | `build`, `settle` (byes, voids, forfeits, deliveries, the next Swiss round), the moves `call` / `report` / `confirm` / `accept` / `confirm_due` / `dispute` / `override` / `reset` / `withdraw` / `reinstate`, `downstream`, `finished`, `confirms_at` |
+| `play.py` | `build`, `settle` (byes, voids, forfeits, deliveries, the next Swiss round), the moves `call` / `report` / `confirm_report` / `accept` / `confirm_due` / `dispute` / `override` / `reset` / `withdraw` / `reinstate`, `downstream`, `finished`, `confirms_at` |
 | `standings.py` | `placements`, `table` (round robin and Swiss), `ranked` (tiebreaks), `waiting_on` (what each entrant waits on) |
 | `checkin.py` | `closes_at`, `due`, `no_shows`, `present` |
 | `access.py` | `may_run(store, guild, person)` — the ONE write rule (staff, or a holder of `brackets_to_role_id`) |
@@ -257,7 +257,7 @@ The moves are the ONE implementation both doors call (layer 2's buttons and the 
 |---|---|
 | `brackets_moves.py` | the shared helpers (`lock_for`, `mode_of`, `said`, `note`, `require_*`, `engine`); `create`, `edit`, `open_signups`, `close_signups`, `seed`, `start`, `unstart`, `complete`, `reopen`, `cancel`, `restore` |
 | `brackets_people.py` | `join`, `add_entrant`, `remove_entrant`, `restore_entrant`, `drop`, `dq`, `open_check_in`, `close_check_in`, `set_check_in`, `close_due_check_ins` (sweep) |
-| `brackets_sets.py` | `call`, `report`, `confirm`, `dispute`, `override`, `reset`, `confirm_due` (sweep) |
+| `brackets_sets.py` | `call`, `report`, `confirm_report`, `dispute`, `override`, `reset`, `confirm_due` (sweep) |
 | `brackets_view.py` | `summary`, `full` — the tournament as both doors read it |
 
 **Who may do what.** `brackets.may_run(store, guild, person)` = staff OR a holder of `brackets_to_role_id`. **The role
@@ -411,6 +411,8 @@ report from any session as a TO's).
     of the database and Discord; `may_run` lives in the package (`brackets/access.py`) because it only reads a
     store and a member.
 19. **The drop pattern is the pair flip** (A3), chosen for its proved property rather than copied.
+20. **`brackets_panel_minutes` fills the `/settings` panel-minutes select to Discord's 25** (`tests/test_settings_panel.py` now asserts 25). ⚠️ The NEXT feature with a panel needs that select split or paged.
+21. **The engine's confirm is `play.confirm_report` and the move `brackets_sets.confirm_report`** — `confirm` is a reserved library-helper name (`tests/test_panels.py::test_no_cog_writes_its_own_copy_of_a_library_helper`).
 
 ## H. What is NOT built (and is not in L2/L3 either unless the owner asks)
 

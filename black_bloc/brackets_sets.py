@@ -244,7 +244,7 @@ async def overridden(
 
 
 @answered
-async def confirm(
+async def confirm_report(
     bot: Any, guild: Any, actor: Any, tournament_id: int, key: str, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """The opponent confirms; a TO who is not playing lets the reported score stand."""
@@ -266,7 +266,7 @@ async def confirm(
                 guild,
                 row,
                 names,
-                play.confirm,
+                play.confirm_report,
                 current,
                 match.key,
                 side,

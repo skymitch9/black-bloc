@@ -189,7 +189,7 @@ def build_router(bot: Any) -> APIRouter:
         router.add_api_route(path, route, methods=["POST"])
 
     set_move("/{tournament_id}/sets/{key}/call", sets.call)
-    set_move("/{tournament_id}/sets/{key}/confirm", sets.confirm)
+    set_move("/{tournament_id}/sets/{key}/confirm", sets.confirm_report)
     set_move("/{tournament_id}/sets/{key}/reset", sets.reset)
 
     @router.post("/{tournament_id}/sets/{key}/report")

@@ -257,14 +257,14 @@ def report(
             raise BracketError(
                 "reported_differently", set=key, score_a=match.score_a, score_b=match.score_b
             )
-        return confirm(bracket, key, side, by, now)
+        return confirm_report(bracket, key, side, by, now)
     match.score_a, match.score_b = score_a, score_b
     match.reported_by, match.reported_side, match.reported_at = by, side, now
     match.state = REPORTED
     return moved(work, bracket, now)
 
 
-def confirm(bracket: Bracket, key: str, side: str, by: int | None, now: str | None) -> Moved:
+def confirm_report(bracket: Bracket, key: str, side: str, by: int | None, now: str | None) -> Moved:
     side = side_checked(side)
     work = working(bracket)
     match = work.get(key)

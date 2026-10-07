@@ -80,7 +80,7 @@ def test_a_report_waits_for_the_opponent_then_completes_on_their_confirm():
     assert (match.state, match.score_a, match.score_b, match.reported_side) == (REPORTED, 2, 1, A)
     assert reported.changed == ["W1-1"]
 
-    confirmed = play.confirm(reported.bracket, "W1-1", B, 2, NOW).bracket.matches["W1-1"]
+    confirmed = play.confirm_report(reported.bracket, "W1-1", B, 2, NOW).bracket.matches["W1-1"]
     assert (confirmed.state, confirmed.winner, confirmed.loser) == (COMPLETE, 1, 2)
     assert (confirmed.confirmed_by, confirmed.confirmed_how) == (2, BY_OPPONENT)
     assert (confirmed.placement_winner, confirmed.placement_loser) == (1, 2)
@@ -89,7 +89,7 @@ def test_a_report_waits_for_the_opponent_then_completes_on_their_confirm():
 def test_the_reporter_cannot_confirm_their_own_report():
     bracket = play.report(built(2, format=SINGLE), "W1-1", A, 2, 0, 1, NOW).bracket
     with pytest.raises(BracketError) as raised:
-        play.confirm(bracket, "W1-1", A, 1, NOW)
+        play.confirm_report(bracket, "W1-1", A, 1, NOW)
     assert raised.value.code == "own_report"
 
 

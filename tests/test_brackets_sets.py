@@ -33,9 +33,9 @@ async def test_a_player_reports_and_the_opponent_confirms_and_nobody_else_may(bo
     assert reported.message == (
         "W1-1 reported 2–1. It stands in 12 minute(s) unless Bea disputes it."
     )
-    own = await sets.confirm(bot, guild, who(guild, ADA), tid, "W1-1")
+    own = await sets.confirm_report(bot, guild, who(guild, ADA), tid, "W1-1")
     assert own.code == "own_report"
-    final = await sets.confirm(bot, guild, who(guild, BEA), tid, "W1-1")
+    final = await sets.confirm_report(bot, guild, who(guild, BEA), tid, "W1-1")
     assert final.message == "W1-1 is final: Ada wins 2–1."
     match = await the_set(bot, tid, "W1-1")
     assert (match.state, match.confirmed_how, match.confirmed_by) == ("complete", "opponent", BEA)

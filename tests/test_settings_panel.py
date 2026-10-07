@@ -360,7 +360,7 @@ def test_every_log_level_fits_one_select_and_shows_the_level_it_is_on():
 def test_every_panel_minutes_key_fits_one_select_including_the_panels_own():
     found = panel_minutes_keys()
     assert "settings_panel_minutes" in found
-    assert len(found) == 24 <= SELECT_LIMIT
+    assert len(found) == 25 <= SELECT_LIMIT
 
     store = FakeStore(defaults=dict.fromkeys(found, 10))
     assert all(label.endswith("— 10 minute(s)") for _, label in panel_minutes_options(store, GUILD))
