@@ -736,8 +736,9 @@ class Spotlight(commands.Cog):
 
     async def sweep_expiries(self, guild: Any) -> None:
         """A row whose date has passed ends its open session first, then leaves the list."""
+        now = self._now()
         for row in await channels_for(self.bot.db, guild.id):
-            if not words.is_spotlit(row) or not words.is_expired(row):
+            if not words.is_spotlit(row) or not words.is_expired(row, now):
                 continue
             if held_by(row) is not None:
                 from .marathon_spotlight import settle_held
@@ -746,7 +747,7 @@ class Spotlight(commands.Cog):
                 continue
             async with self._lock(row["id"]):
                 fresh = await channel_by_id(self.bot.db, row["id"])
-                if fresh is None or not words.is_expired(fresh):
+                if fresh is None or not words.is_expired(fresh, now):
                     continue
                 await self._expire(guild, fresh, words.EXPIRED)
 

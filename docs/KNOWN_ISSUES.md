@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-10-04 18:3x** — the v202 docs ritual (v195 to v202): KI-41 was added 2026-10-04 (already in the file) and **KI-42 ADDED** (the 256 MB OOM kill, `WATCHING`; read from the TODO 💥 bullet, not re-measured). ⚠️ KI-10 and KI-40 were NOT re-read for these eight deploys; nothing else in this file was re-tested.
+> Last verified: **2026-10-07** — KI-33 only, by the `date-fuse-sweep` branch (not merged): the date-fuse sweep, seven tests (four fuses) pinned, the `BB_FAKE_NOW` guard and CI's `clock-ahead` job; measured by running the suite under moved clocks. ⚠️ Nothing else in this file was re-read.
+> Before that, **2026-10-04 18:3x** — the v202 docs ritual (v195 to v202): KI-41 was added 2026-10-04 (already in the file) and **KI-42 ADDED** (the 256 MB OOM kill, `WATCHING`; read from the TODO 💥 bullet, not re-measured). ⚠️ KI-10 and KI-40 were NOT re-read for these eight deploys; nothing else in this file was re-tested.
 > Before that, **2026-09-25 19:3x** — KI-10 only, at the v166 docs ritual: a KI-10 line for the v166 swap (the line itself NOT read — `flyctl logs --no-tail` at 19:3x starts at 02:32:34Z, after the boot). ⚠️ Nothing else re-read.
 > Before that, **2026-09-25 16:2x** — KI-10 and KI-26 only, at the v165 docs ritual: a KI-10 line for the v165 swap (the line itself NOT read — Fly's log buffer starts at the new machine); KI-26: the fix shipped inside v165, CI green (`gh run list`). ⚠️ Nothing else re-read.
 > Before that, **2026-09-25 14:2x** — KI-10 only, at the v164 docs ritual: one sighting line (21:15:49Z, the v164 swap, from `deploys.log`). ⚠️ Nothing else re-read.
@@ -349,6 +350,18 @@ button that was pressed, the way the sweep report now does — taken as a ride-a
 from `WATCHING` to a build of its own; a sixth notice on the shared node promotes it too.
 
 ## KI-33 — A node fixture with a DATE written into it goes red the next day, on unchanged code — `WATCHING`
+
+> **2026-10-07 (branch `date-fuse-sweep`, off `main` `e8bf13d8`; not merged) — the sweep this entry asked for, and the
+> guard.** The fixture is pinned: `discordmock.js` `timeWords` / `embedTree` / `messageTree` take `now`, and the test asserts
+> *Today at* / *Yesterday at* / a date against a fixed `NOW` (the three-shape widening from `59716fe` is gone). The whole
+> suite was run under a moved clock (time-machine, 18 instants from 2026-10-08 to 2035-01-01, plus a node `Date` shim for every
+> `site/mock/*.test.mjs`) and **six more python tests (three fuses)** were found and pinned, none in node: both *Look now* tests (would
+> have tripped **2026-10-12 18:01 / 18:05 UTC**), the two marathon-feed API tests (**2026-10-24 ~17:00 UTC**) and the two
+> marathon-spotlight sweep tests (**2027-01-04 22:36 / 2027-01-05 01:45 UTC**). The guard: `BB_FAKE_NOW=+40d` (or an ISO
+> instant) moves the clock for `tests/conftest.py` and `site/mock/fakeclock.mjs`, and CI's parallel `clock-ahead` job runs the
+> whole suite and every node fixture forty days ahead, so a fuse goes red there about forty days before the calendar trips
+> it. **What would close it:** the first green `clock-ahead` run on `main`. A fuse whose window is shorter than forty days
+> and sits between the samples can still slip past both runs — the job catches the far side of a window, not every day of it.
 
 **Symptom.** `site/mock/discordmock.test.mjs` asserted the embed stamp read *Today at …*, against a fixture timestamp
 hard-coded as **2026-09-20**. On **2026-09-21** the same unchanged test read *Yesterday at …* and went red — and it went

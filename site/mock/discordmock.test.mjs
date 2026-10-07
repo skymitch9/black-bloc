@@ -59,6 +59,13 @@ is('timeWords of nothing', timeWords(null), '');
 is('timeWords of a bad stamp', timeWords('not a date'), '');
 ok('timeWords of now', 'says Today', timeWords(new Date()).startsWith('Today at '));
 
+const STAMP = '2026-09-20T20:03:00.000Z';
+const NOW = new Date('2026-09-20T20:04:00Z');
+const DAY = 86400000;
+ok('timeWords a minute later', 'says Today', timeWords(STAMP, NOW).startsWith('Today at '));
+ok('timeWords a day later', 'says Yesterday', timeWords(STAMP, new Date(NOW.getTime() + DAY)).startsWith('Yesterday at '));
+ok('timeWords three days later', 'says a date', !/^(Today|Yesterday) at /.test(timeWords(STAMP, new Date(NOW.getTime() + 3 * DAY))));
+
 // --- fixture 1: a plain message that mentions a role ----------------------------------------
 {
   const where = 'a plain message with a role mention';
@@ -67,13 +74,13 @@ ok('timeWords of now', 'says Today', timeWords(new Date()).startsWith('Today at 
     embeds: [],
     components: [],
     mentions: { roles: [{ id: '4242', name: 'Stream pings' }], channels: [] },
-  }, { when: new Date('2026-09-20T20:03:00Z') });
+  }, { when: new Date(STAMP), now: NOW });
 
   is('the caption', oneWithClass(tree, 'dcmock-cap').text, CAPTION);
   is('the BOT tag', oneWithClass(tree, 'dcmock-tag').text, BOT_TAG);
   is('the bot name', oneWithClass(tree, 'dcmock-name').text, 'Black Bloc');
   is('the avatar letter', oneWithClass(tree, 'dcmock-avatar').text, 'B');
-  ok(where, 'has no time on the head', oneWithClass(tree, 'dcmock-when').text.length > 0);
+  ok(where, 'has no Today time on the head', oneWithClass(tree, 'dcmock-when').text.startsWith('Today at '));
 
   const html = allHtml(tree);
   ok(where, `draws the role as a raw id — got ${html}`, html.includes('@Stream pings'));
@@ -103,9 +110,9 @@ ok('timeWords of now', 'says Today', timeWords(new Date()).startsWith('Today at 
     image: { url: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_caseyfast-1280x720.jpg' },
     thumbnail: { url: 'https://example.com/box-art.png' },
     footer: { text: 'Black Bloc · via Twitch' },
-    timestamp: '2026-09-20T20:03:00.000Z',
+    timestamp: STAMP,
   };
-  const tree = embedTree(embed, { roles: [], channels: [], members: [] });
+  const tree = embedTree(embed, { roles: [], channels: [], members: [] }, NOW);
 
   is('the colour bar', oneWithClass(tree, 'dcmock-embed-bar').style, 'background: #9146ff');
   is('the author line', oneWithClass(tree, 'dcmock-embed-author').children[0].text, 'Casey is now live on Twitch!');
@@ -119,7 +126,7 @@ ok('timeWords of now', 'says Today', timeWords(new Date()).startsWith('Today at 
   is('the image placeholder names the file', media[0].children[1].text, 'live_user_caseyfast-1280x720.jpg');
   is('the thumbnail is marked as one', media[1]['data-kind'], 'thumbnail');
   ok(where, 'drops the footer', allText(tree).includes('Black Bloc · via Twitch'));
-  ok(where, 'drops the embed stamp', /(Today|Yesterday) at |\//.test(allText(tree)));
+  ok(where, 'drops the embed stamp', allText(tree).includes('• Today at '));
 
   // An embed description renders no `#` headers, the way Discord does not.
   const headed = embedTree({ description: '# not a header', color: null }, { roles: [], channels: [] });
