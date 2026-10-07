@@ -656,6 +656,19 @@ by playing it out, they are still 9 — the one W1 loser meets a bye in L1 and i
 playing Bo3 under "top 8" was correct, and L3/W3 on Bo5 is what the old and the new rule both give. The pin asserts
 that, and the property test (`…_is_who_is_still_unplaced…`) is what catches the real defect, 2(b), at every size.
 
+## Gate — layer 2 (2026-10-07, branch `brackets-discord`, measured on the final code)
+
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **12502 passed, 1 skipped** (main at `aba3b1ee`: 12326 passed).
+  New: `tests/test_brackets_thread.py`, `tests/test_brackets_cards.py`, `tests/test_brackets_buttons.py`,
+  `tests/test_brackets_panel.py`, `tests/cogs/community/test_brackets.py`, one test in
+  `tests/api/tools/test_brackets.py`; counts moved in `test_settings_store`, `test_settings_panel`,
+  `test_command_visibility`, `test_bot`, and `test_logkinds` enumerates the thread module's kinds.
+- `python -m ruff check .`: all checks passed.
+- `MOCK_PORT=8813 node site/mock/check.mjs` against the branch's own mock: *ok - 25 pages, 344 routes, 235 core
+  settings, all keys present*.
+- Every `site/mock/*.test.mjs` (13): exit 0 (`schedule.test.mjs` with the mock up on 8813).
+- `scripts/ci-local.ps1` (the Docker CI mirror): **CI MIRROR GREEN: 15 step(s) passed in 134s**.
+
 ## Gate (2026-10-07, branch `brackets-engine`, measured on the final code)
 
 **Review-fix pass (2026-10-07, on `7d95ccb7` code):** `pytest tests -q -p no:cacheprovider -n 8`: **12315 passed** (no
@@ -670,6 +683,18 @@ site/mock/check.mjs`: *ok - 25 pages, 344 routes, 171 core settings, all keys pr
 - Every `site/mock/*.test.mjs` (13): exit 0.
 
 ## What was NOT verified
+
+**Layer 2:**
+
+- Nothing met the real Discord. Threads, messages, pins, history, interactions and forms are fakes
+  (`tests/test_brackets_thread.py`, `tests/test_brackets_buttons.py`); the real library's behaviour for an edit in an
+  archived thread, a pin in a thread, `history(oldest_first=True)` and a 429 during a start's burst of cards is assumed
+  from the library source and docs, not observed.
+- No restart was performed: "a restart between the post and the store" is simulated by clearing the stored id and the
+  in-memory state.
+- A forum channel as the thread's parent is coded, not tested.
+- The `/settings` page and the dashboard Settings page were not opened in a browser to see the 64 new keys render.
+- Layer 1's caveats below still stand.
 
 - Nothing met Discord — layer 1 has no Discord code; the thread, cards and panel above are a specification.
 - No browser rendered anything — there is no page; the mock answers the shapes only and its player paths are
