@@ -2,9 +2,10 @@
 
 > **Audience:** the conductor, reviewers, and the agents that build layers 2 and 3 from this page alone.
 > **Status:** TRACKED · 🔨 **LAYER 1 BUILT on branch `brackets-engine`** (off `main` `ecd43324`), **NOT merged, NOT
-> deployed**; schema **89 → 90**; registry keys **946 → 1031**. **Last verified: 2026-10-07** — by the hermetic test
-> suite, `ruff`, `site/mock/check.mjs` against the branch's own mock on port 8809 and every `site/mock/*.test.mjs`
-> (figures under *Gate*). ⚠️ **NOT checked:** nothing here has met Discord (layer 1 has no Discord code), no browser has
+> deployed**; schema **89 → 90**; registry keys ~~**946 → 1031**~~ **946 → 1000** after the review fold (*Review fixes
+> 2026-10-07*, 13). **Last verified: 2026-10-07** (review-fix pass) — by the hermetic test suite, `ruff`,
+> `site/mock/check.mjs` against the branch's own mock on port 8812 and every `site/mock/*.test.mjs` (figures under
+> *Gate*). ⚠️ **NOT checked:** nothing here has met Discord (layer 1 has no Discord code), no browser has
 > rendered anything (there is no page), and the schema change has not run on the live database. Secret NAMES only (none
 > here).
 
@@ -51,11 +52,11 @@ move raises `BracketError(code, **fields)`; the caller turns the code into words
 | `model.py` | Constants (formats, sides, states, slots), `Options`, `Match` (a set: structure + result), `Bracket`, `BracketError`, `order_key` (play order), `key_of` (`W2-3`, `L1-1`, `G1-1`, `T1-1`, `R3-2`, `S1-4`) |
 | `seeding.py` | `bracket_size`, `standard_order` (1 v N, then the halves split), `first_round` (byes to the top seeds), `randomised`, `reordered` (the TO's order) |
 | `bestof.py` | `wins_needed`, `fits` (a score finishes the best-of), `checked`, `valid_length` (odd, 1–15), `length_for` (default / late / finals) |
-| `elimination.py` | `single`, `double`: every set and its explicit links (`winner_to`/`winner_slot`, `loser_to`/`loser_slot`, `reset_of`), `alive`, structural places, the drop pattern (`drop_target`, `flipped`) |
+| `elimination.py` | `single`, `double`: every set and its explicit links (`winner_to`/`winner_slot`, `loser_to`/`loser_slot`, `reset_of`), structural places, the drop pattern (`drop_target`, `flipped`); `alive` and the best-of are set by `play.pace` |
 | `roundrobin.py` | `schedule` (circle method, rounds), `match_count`, `build` |
-| `swiss.py` | `rounds_for` (default ceil(log2 n)), `pairings` (score groups, no rematch, backtracking), `pair_round` (bye to the lowest-ranked without one), `next_round_due`, `add_round`, `build` |
+| `swiss.py` | `rounds_for` (default ceil(log2 n)), `most_rounds` (n − 1), `pairings` (score groups, no rematch, backtracking), `pair_round` (bye to the lowest-ranked without one), `next_round_due`, `add_round`, `build` |
 | `tally.py` | `records` (sets, games, byes, opponents, who beat whom), `met` (every pair ever paired) |
-| `play.py` | `build`, `settle` (byes, voids, forfeits, deliveries, the next Swiss round), the moves `call` / `report` / `confirm_report` / `accept` / `confirm_due` / `dispute` / `override` / `reset` / `withdraw` / `reinstate`, `downstream`, `finished`, `confirms_at` |
+| `play.py` | `build`, `settle` (byes, voids, forfeits, deliveries, the next Swiss round), `rehearsed` / `pace` / `sets_to_play`, the moves `call` / `report` / `confirm_report` / `accept` / `confirm_due` / `dispute` / `override` / `reset` / `withdraw` / `reinstate`, `downstream`, `finished`, `confirms_at` |
 | `standings.py` | `placements`, `table` (round robin and Swiss), `ranked` (tiebreaks), `waiting_on` (what each entrant waits on) |
 | `checkin.py` | `closes_at`, `due`, `no_shows`, `present` |
 | `access.py` | `may_run(store, guild, person)` — the ONE write rule (staff, or a holder of `brackets_to_role_id`) |
@@ -99,7 +100,8 @@ document its drop order (research §3); "the convention start.gg uses" could not
 choice above is justified by the no-rematch property, not by imitation.
 
 **8 entrants** (who feeds each losers set; *alive* is the count still in when it is played; *loser place* is where
-its loser finishes):
+its loser finishes). These losers-side numbers are unchanged by review fix 2; the winners side now reads W1 8, W2 6,
+W3 3 (it was 8, 8, 4):
 
 | Set | Slot a | Slot b | Alive | Loser place |
 |---|---|---|---|---|
@@ -151,10 +153,18 @@ player) winning and not by forfeit; otherwise it becomes `void`. Off: G2-1 is no
 
 Each set stores its `best_of` at build. `length_for`: the last set of an elimination bracket (single elimination's
 final, the grand final and its reset) plays `best_of_finals`; a set played with `best_of_from_round` or fewer
-entrants still **alive** plays `best_of_late`; everything else `best_of`. *Alive* (stored per set): winners round 1
+entrants still **alive** plays `best_of_late`; everything else `best_of`. ~~*Alive* (stored per set): winners round 1
 = the bracket size; winners round r ≥ 2 = 4 × its sets; an odd losers round = 4 × its sets; a drop round = 3 × its
 sets; the grand final = 2; a single-elimination round = 2 × its sets; the third-place set = 4. So "8" means top 8:
-in a 16 bracket, W3, L3 and later. Round robin and Swiss play `best_of` throughout. A score fits only when one side
+in a 16 bracket, W3, L3 and later.~~ *(Superseded by review fix 2, 2026-10-07: it was the bracket's size, not who
+was left, so W2 of a full 8 read 8 while L2 beside it read 6.)* **Alive** (stored per set, `play.pace`) = the
+entrants not yet placed when the set's round is played: n minus everyone eliminated in a round that plays earlier.
+Rounds play in `order_key` order (W1, L1, W2, L2, L3, W3, L4, L5, W4, …); the third-place set plays with the final
+and both grand-final sets together. Which sets eliminate someone never depends on who wins, so `pace` reads the
+count per round off a rehearsal (`rehearsed`: a copy played out with slot a winning). For a full 16: W1 16, L1 16,
+W2 12, L2 12, L3 8, W3 6, L4 6, L5 4, W4 3, L6 3, G 2 — the losers side as before; "8" (top 8) now starts at L3 and
+W3. A field with byes counts only real sets: 9 entrants in double elimination stay 9 through W2 and L2 (the W1 loser
+takes a bye in L1), so top 8 starts at L3/W3; in single elimination it starts at W2. Round robin and Swiss play `best_of` throughout. A score fits only when one side
 reached `best_of // 2 + 1` wins and the other has fewer (`bestof.fits`); anything else is refused in words.
 
 ### A5. Round robin
@@ -171,7 +181,11 @@ Rounds: `swiss_rounds`, else ceil(log2 n). Round 1 pairs the top half against th
 Each later round is paired when the round before is all final (`settle` makes it): entrants ordered by points (set
 wins, a bye counting as one) then seed; the partner tried first for the top unpaired player is halfway down their
 own score group, then outward, then lower groups; a pairing that would be a rematch is skipped and the search
-backtracks; if no rematch-free pairing exists within a search budget the order is paired top-down. An odd field
+backtracks; if no rematch-free pairing exists within a search budget the order is paired top-down, and every set
+that repeats a pair carries **`rematch`** (stored, in the view and on every `set_*` log row) so layers 2 and 3 can
+show it. **Start refuses `swiss_rounds` past n − 1** in words (`too_many_rounds`) — more rounds than that cannot
+avoid a rematch; at the default rounds no rematch was found for n = 4…100 (review). The fallback can still fire
+with fewer active players after drops and DQs, which is what the flag is for. An odd field
 gives a bye (a `bye` set, a set win) to the lowest-ranked entrant who has not had one. A withdrawn entrant is never
 paired again. Standings: points, then opponents' win rate (the mean of each opponent's set wins ÷ sets played, byes
 counted for the opponent, the entrant's own byes excluded), then head to head, then the TO's order; places when the
@@ -211,7 +225,15 @@ the next set. `reinstate` lifts the flag only: forfeits already recorded stand u
 - Swiss: every set in every later round (their pairings came from the standings), which are deleted; a reset round
   is re-paired once it is final again.
 A reset of a `reported`/`called`/`disputed` set just puts it back to `ready`. A bye cannot be reset; a set with no
-result answers *nothing to reset*. An override of a `complete` set is a reset plus the new result.
+result answers *nothing to reset*. ~~An override of a `complete` set is a reset plus the new result.~~ *(Superseded
+by review fix 4, 2026-10-07.)* An override of a `complete` set that **keeps the winner** (a score correction)
+changes that set only — in every format, what it fed stands, Swiss later rounds included, since pairing reads only
+set wins and seed. An override that **flips the winner** is a reset plus the new result (Swiss later rounds are
+deleted and re-paired). Round robin has nothing to re-pair either way. One exception: a grand final that opens a
+reset set always takes the full reset, because forfeit-or-not decides whether G2-1 is played.
+
+A reporter **re-reporting restarts the confirm clock** (`reported_at` is the latest report) — decided, review fix 12:
+the opponent gets the full confirm time to answer the score that now stands.
 
 ### A8. Check-in (start.gg's "remove and rebalance")
 
@@ -242,8 +264,11 @@ tables_and_loses_nothing`). `black_bloc/brackets_store.py` is the only module th
   `slot_a`/`slot_b` (entrant ids), the explicit links `winner_to`/`winner_slot`/`loser_to`/`loser_slot`/`reset_of`,
   `alive`, `winner_place`/`loser_place` (structural), and the result: `score_a`/`score_b`, `winner`, `loser`,
   `forfeit`, `called_at`/`called_by`, `reported_by`/`reported_side`/`reported_at`, `confirmed_by`/`confirmed_at`/
-  `confirmed_how`, `disputed_by`/`disputed_at`/`dispute_note`, `completed_at`, `placement_winner`/`placement_loser`.
-  UNIQUE `(tournament_id, key)`; a save is an upsert on it.
+  `confirmed_how`, `disputed_by`/`disputed_at`/`dispute_note`, `completed_at`, `placement_winner`/`placement_loser`,
+  `rematch` (0/1, review fix 1); and for layer 2 (review fix 3, not `Match` fields so a save never touches them)
+  nullable `message_id` (the set's card in the thread) and `card_at` (when it was posted). UNIQUE
+  `(tournament_id, key)`; a save is an upsert on it. `brackets_store.cards` / `set_card` read and write the card;
+  a save answers the removed sets' cards and `clear_sets` every card it dropped.
 
 Every write runs under `brackets_moves.lock_for(bot, tournament_id)` (one `asyncio.Lock` per tournament, kept on the
 bot) with the unique indexes behind it (checklist 6; `test_two_sign_ups_at_once_leave_one_entrant`).
@@ -251,7 +276,11 @@ bot) with the unique indexes behind it (checklist 6; `test_two_sign_ups_at_once_
 ## C. The moves and the API
 
 The moves are the ONE implementation both doors call (layer 2's buttons and the site's routes); each takes
-`via` (default `VIA_DISCORD`), logs ONE row and returns an `Outcome` whose message is a settings key's words.
+`via` (default `VIA_DISCORD`), logs ONE row and returns an `Outcome` whose message is ~~a settings key's words~~ a
+player-facing settings key's words or an organiser line from `brackets_moves.TO_WORDS` (review fix 13). Every
+`Outcome` carries **`changed`** — the set keys the move changed or removed, in play order (empty for a move that
+touches no set) — and **`gone`** — `{key: message_id}` for removed sets that had a card (a Swiss correction, Back
+to seeding), so layer 2 edits exactly those cards without diffing the view (review fix 3).
 
 | Module | Moves |
 |---|---|
@@ -311,7 +340,7 @@ sign-up, `guest`), `entrant_removed`, `entrant_restored`, `dropped` (`before_sta
 `set_reset`; the rest ROUTINE. The two sweeps log `set_confirmed` (`how = time`, no actor) and `check_in_closed`
 (no actor).
 
-## D. Settings (85 keys, all under `core` — `brackets_` would be a 26th `/settings` group)
+## D. Settings (~~85~~ 54 keys after the review fold, all under `core` — `brackets_` would be a 26th `/settings` group)
 
 | Key | Type | Default |
 |---|---|---|
@@ -330,10 +359,18 @@ sign-up, `guest`), `entrant_removed`, `entrant_restored`, `dropped` (`before_sta
 | `brackets_entrant_cap_default` | int 2–1024 | blank = no cap |
 | `brackets_panel_minutes` | int 1–14 | 10 |
 
-Plus **69 word keys** (`BRACKETS_WORDS`): every success line (`brackets_<move>_said`), every refusal
+~~Plus **69 word keys** (`BRACKETS_WORDS`): every success line (`brackets_<move>_said`), every refusal
 (`brackets_<code>_said`), the state words (`brackets_state_<state>`), `brackets_forfeit_words`,
-`brackets_no_role_words`. Each is checked for its `{fields}` (`TEXT_CHECKS`) and falls back to the shipped wording if a
-staff edit cannot be filled. Labels in `site/public/assets/labels.js`; mock rows in `site/mock/server.mjs`.
+`brackets_no_role_words`.~~ *(Superseded by the owner's decision "bb", 2026-10-07: only player-facing words are
+settings keys.)* Plus **38 word keys** (`BRACKETS_WORDS`), the words a player can see: the three posted in the thread
+(`set_called`, `set_final`, `forfeit_words`) and every line or refusal a member who is not an organiser can receive —
+`joined`, `left`, `checked_in`, `checked_out`, `dropped`, `set_reported`, `set_disputed`, `off`, `not_organiser`,
+`no_role_words`, `no_tournament`, `wrong_state` and the seven `state_*`, `not_yours`, `full`, `already_in`,
+`removed_by_to`, `no_set`, `not_in_set`, `not_ready`, `not_playable`, `already_complete`, `disputed`, `bad_score`,
+`reported_differently`, `not_reported`, `own_report`, `not_in_bracket`, `already_out`. The 30 organiser-only lines
+are constants in `brackets_moves.TO_WORDS`, like other features' refusals. A staff edit that cannot be filled — any
+exception — falls back to the shipped wording (checklist 17). Labels in `site/public/assets/labels.js`; mock rows
+in `site/mock/server.mjs` (the mock's `BK_TO_WORDS` mirrors `TO_WORDS`).
 
 ## E. Layer 2 — Discord (build from this)
 
@@ -348,7 +385,11 @@ staff edit cannot be filled. Labels in `site/public/assets/labels.js`; mock rows
   state, entrants (count and names), the bracket as text (current round's sets with names and scores), and the
   player buttons that are legal now: **Sign up** / **Leave** (signups), **Check in** (check-in), and nothing else.
 - **A set card** per set when it becomes `ready` (or `called`), posted in the thread, pinging only its two players
-  (members; guests are named): **Report** (a modal with two score fields, the set's best-of in the title) for the two
+  (members; guests are named). ⚠️ **Idempotent by `message_id`** (review fix 3, checklist 37): under the
+  `Reconciler` lock, re-read the set's `message_id`; post only when it is empty, then `set_card(…, message_id,
+  card_at)` at once; otherwise edit that message. After any move, edit or post the cards for `Outcome.changed`, and
+  edit the cards in `Outcome.gone` to a *re-paired* / *cleared* line (their rows are gone). A set with `rematch` says
+  so on its card: **Report** (a modal with two score fields, the set's best-of in the title) for the two
   players; **Confirm** / **Dispute** (a modal with the note) for the opponent once reported, with the
   `confirms_at` time as `<t:…:R>`; the card is edited to the final line on completion. TO-only buttons on the same
   card render only for `may_run`: **Decide** (scores or forfeit), **Reset**, **Call**.
@@ -361,20 +402,22 @@ staff edit cannot be filled. Labels in `site/public/assets/labels.js`; mock rows
 - **The sweeps** (one `tasks.loop`, a tick a minute, with `@loop.error` and `last_ok_at`, checklist 28):
   `brackets_sets.confirm_due(bot, guild)` and `brackets_people.close_due_check_ins(bot, guild)`; post the results in
   the thread. Both are no-ops while the mode is off.
-- **Reconcile on boot and on the loop** (4, 25): a tournament whose thread is gone is re-made; a set card missing
-  for a `ready` set is posted.
+- **Reconcile on boot and on the loop** (4, 25): a tournament whose thread is gone is re-made; a `ready`/`called`
+  set whose `message_id` is empty gets its card posted (and recorded); one whose `message_id` names a message that is
+  gone (404 twice, checklist 32) is posted again and the new id recorded. "Missing" is decided by the stored id,
+  never by searching the thread.
 
 ## F. Layer 3 — the site page (build from this)
 
 `site/public/brackets.html` + `assets/page-brackets.js`, reading only the routes above. A list (`GET /api/brackets`)
 with Create (only when `may_run`); a tournament view drawing the bracket by `side`/`round`/`position` (winners above
 losers, grand final at the end; round robin as a table; Swiss as rounds plus the standings table), each set showing
-`a_name`/`b_name`, scores, `state` and `confirms_at`; the entrants list with seeds (drag to reorder + Shuffle while
+`a_name`/`b_name`, scores, `state`, `confirms_at` and a rematch mark when `rematch`; the entrants list with seeds (drag to reorder + Shuffle while
 seeding, check-in ticks during check-in), and the moves as buttons that render only when legal for this viewer
 (`may_run`, `mine`, and the set's slots). The words the page draws for `waiting_on.what` (`play`, `called`,
-`confirm`, `opponent_confirms`, `to_decides`, `waits`, `next_round`, `done`, `out`) and every button label become
-settings keys in L3 (the every-word-editable rule). No explaining blurbs. The settings drawer on the page holds the
-85 keys. Add `brackets.html` to `contract.json` `pages` and extend the mock's player paths (the L1 mock answers a
+`confirm`, `opponent_confirms`, `to_decides`, `waits`, `next_round`, `done`, `out`) and every button label a
+player sees become settings keys in L3 (the every-word-editable rule, as narrowed by the owner's "bb": organiser-only
+words are code constants). No explaining blurbs. The settings drawer on the page holds the ~~85~~ 54 keys. Add `brackets.html` to `contract.json` `pages` and extend the mock's player paths (the L1 mock answers a
 report from any session as a TO's).
 
 ## G. Decisions beyond the brief
@@ -383,12 +426,13 @@ report from any session as a TO's).
    onward → 5" needs the 5 somewhere, and `best_of_finals` is the grand final's.
 2. **`brackets_best_of_from_round` means "top N"** — the entrants still alive when the set is played (A4) — not a
    round number, because round numbers differ between the two sides of a double elimination; it applies to
-   elimination only.
+   elimination only. ~~(alive computed from the bracket size)~~ *Amended by review fix 2:* alive is who is still
+   unplaced when the set's round is played, from n and the sets that eliminate someone, not from the bracket size.
 3. **The finals best-of covers single elimination's final too**, not only a grand final.
 4. **`brackets_format_default`** is a key: every default is a key, and a create without a format needs one.
 5. **Best-of keys are enums of odd numbers** ("1"…"15"), so an even best-of cannot be stored.
 6. **`confirmed` is not a resting state** (A7); the opponent reporting the same score is their confirm, a different
-   score is refused with the reported one.
+   score is refused with the reported one. A reporter's re-report restarts the confirm clock (review fix 12).
 7. **`accept`**: a TO who is not playing confirms a reported or disputed score as it stands (`confirmed_how = to`).
 8. **Disputes only from `reported`**, by the opponent, never by the TO (who decides instead).
 9. **No auto-complete:** when the last set is final the tournament stays `running` until a TO presses Complete
@@ -413,6 +457,19 @@ report from any session as a TO's).
 19. **The drop pattern is the pair flip** (A3), chosen for its proved property rather than copied.
 20. **`brackets_panel_minutes` fills the `/settings` panel-minutes select to Discord's 25** (`tests/test_settings_panel.py` now asserts 25). ⚠️ The NEXT feature with a panel needs that select split or paged.
 21. **The engine's confirm is `play.confirm_report` and the move `brackets_sets.confirm_report`** — `confirm` is a reserved library-helper name (`tests/test_panels.py::test_no_cog_writes_its_own_copy_of_a_library_helper`).
+22. **Only player-facing words are settings keys** (owner, 2026-10-07, verbatim "bb"); organiser lines are
+    `TO_WORDS` constants. Three of the reviewer's 33 "TO-only" strings were kept as keys because a plain member can
+    receive them: `checked_out` (a member may check themselves out), `no_set` (a member reporting, confirming or
+    disputing a set key that does not exist, through the site), `not_in_bracket` (a member dropping or checking in an
+    entrant id that does not exist, through the site).
+23. **`Outcome` gained `changed` and `gone`** (`panels.Outcome`, defaulted, so no other feature changes) rather than a
+    brackets-only subclass — one answer type both doors read.
+24. **A correction that keeps the winner keeps what it fed in elimination too**, not only Swiss (review fix 4 named
+    Swiss and round robin): the same bug shape — a corrected W1 score wiped an already-played W2 — and the same fix.
+25. **The Swiss round limit is n − 1 for odd fields too**, as the review asked, though an odd field with byes could
+    in principle carry n rounds; the simpler, stricter rule refuses fewer real cases than it would complicate.
+26. **An unreadable stamp is logged once by acting on it at once**: the sweep that finds it closes the check-in or
+    lets the report stand in the same tick, so the warning cannot repeat.
 
 ## H. What is NOT built (and is not in L2/L3 either unless the owner asks)
 
@@ -420,6 +477,33 @@ Pools into a bracket (phases, progressions), teams and crews, stations and strea
 or circuit points, ladders and matchmaking, the start.gg mirror (only the `source` column exists), DE's optional
 5th-place set, per-game reporting (characters, stages), the DQ timer (auto-DQ when a player does not check in to a
 called set), conflicts and waves, printing.
+
+## Review fixes 2026-10-07
+
+An independent review of layer 1 found no blocker. Each finding, what changed, and the test that pins it ("seen
+failing" = run against the code before the fix and watched fail).
+
+| # | Finding | What changed | Pinned by (seen failing first?) |
+|---|---|---|---|
+| 1 | Swiss silently pairs rematches when `swiss_rounds` > n − 1 | `play.build` refuses `too_many_rounds` in words; `swiss.pair_round` sets `rematch` on a forced repeat; `rematch` column, view field, every `set_*` log row | `tests/brackets/test_swiss.py::test_more_rounds_than_the_field_can_carry_without_a_rematch_is_refused`, `::test_a_forced_rematch_is_flagged_on_the_set`, `tests/test_brackets_moves.py::test_a_swiss_start_with_more_rounds_than_the_field_can_carry_is_refused`, `tests/test_brackets_sets.py::test_a_forced_swiss_rematch_shows_in_the_view_and_on_every_set_row` (all yes) |
+| 2 | "Top N" was structural; W2's alive disagreed with L2's | `alive` = who is still unplaced when the round is played (`play.pace` over a rehearsal); `winners_alive`/`losers_alive` removed; the losers side of a full bracket unchanged | `tests/brackets/test_elimination.py::test_alive_is_who_is_still_unplaced_when_the_round_is_played` (n = 2…33, 48, 64, single and double; yes), `::test_top_six_of_eight_plays_winners_round_two_long_like_the_losers_round_beside_it` (b; yes), `::test_a_full_bracket_keeps_the_losers_side_numbers_of_the_design_tables` (passes before and after), `::test_top_eight_of_nine_starts_once_nine_are_down_to_eight` (a; **passed before** — see note), the locked-in `W2-1 == 16` assertion changed to 12 |
+| 3 | No idempotent id for the per-set card | `tournament_sets.message_id`, `card_at` (schema-90 hunk); `brackets_store.cards`/`set_card`; view fields; `Outcome.changed`/`gone` on every move; §E rewritten | `tests/test_brackets_store.py::test_a_set_card_is_kept_across_saves_until_the_set_is_removed`, `tests/test_brackets_view.py::test_each_set_shows_its_card_and_whether_it_is_a_rematch`, `tests/test_brackets_moves.py::test_start_and_back_to_seeding_say_which_sets_changed` (yes) |
+| 4 | A Swiss score correction that kept the winner wiped every later round | `play.kept_winner`: same winner → only that set changes (every format); a flip still re-pairs | `tests/brackets/test_swiss.py::test_correcting_a_score_without_changing_the_winner_keeps_the_later_rounds` (yes), `::test_flipping_the_winner_still_re_pairs_every_later_round` (passes before and after), `tests/brackets/test_play.py::test_correcting_an_elimination_score_without_changing_the_winner_keeps_what_it_fed` (yes), `::test_a_round_robin_correction_touches_that_set_either_way` |
+| 5 | `restore_entrant` while running made a ghost | refused in words (`not_in_bracket`) unless the entrant is in the bracket | `tests/test_brackets_people.py::test_someone_out_before_the_start_cannot_be_put_back_into_a_running_bracket` (yes) |
+| 6 | Dead `brackets_not_entrant_said`, `brackets_store.in_bracket` | both removed | the key count (registry, contract, labels, mock) |
+| 7 | A Discord `<t:…>` token reached the site | `clock_words`: Discord gets `<t:…:t>`, the site a plain time in `default_timezone` (the mock too) | `tests/test_brackets_people.py::test_check_in_opening_tells_the_website_a_plain_time_and_discord_a_timestamp` (yes) |
+| 8 | `started` over-counted (void G2-1, waiting sets) | `play.sets_to_play`: the sets certain to be played, *up to* N with a reset | `tests/brackets/test_play.py::test_the_sets_to_play_counts_only_sets_that_are_played`, `tests/test_brackets_moves.py::test_started_counts_only_the_sets_that_will_be_played` (yes) |
+| 9 | After Complete, Reset/Override gave the generic wrong-state line | `brackets_sets.correctable`: *is complete. Reopen it first, then change {set}.* (organiser checked first) | `tests/test_brackets_sets.py::test_after_complete_a_correction_says_to_reopen_first` (yes) |
+| 10 | Unparseable `reported_at` / `check_in_closes_at` never came due (checklist 5) | due now, logged (once, because it is acted on in the same tick); a naive stamp reads as UTC | `tests/brackets/test_play.py::test_a_report_with_an_unreadable_time_stands_at_the_next_sweep`, `tests/test_brackets_people.py::test_a_check_in_with_an_unreadable_closing_time_closes_at_the_next_sweep` (yes) |
+| 11 | `said()` caught three exception types (checklist 17) | catches `Exception`, logs, falls back | `tests/test_brackets_moves.py::test_a_staff_wording_that_breaks_in_any_way_falls_back` (yes) |
+| 12 | Re-report and the confirm clock (doc); stale seeds after Back to seeding | §A7 and decision 6 say re-reporting restarts the clock; `start` writes seeds for the players then everyone else, so no two rows share a seed | `tests/test_brackets_moves.py::test_back_to_seeding_leaves_every_entrant_a_seed_of_their_own` (yes) |
+| 13 | Wording fold (owner: "bb") | 31 keys out of the registry, mock rows, `labels.js`, `contract.json` (30 folded into `TO_WORDS` + the dead one); 3 reclassified as player-facing (decision 22) | `site/mock/check.mjs` (*171 core settings, all keys present*), `tests/api/test_contract.py`, the moves tests that read the folded lines |
+| 14 | Missing tests: simultaneous different reports; a differing second report through the moves and the API | added (they pass on the existing lock and decision 6 — no code change) | `tests/test_brackets_sets.py::test_two_different_reports_at_once_leave_one_and_refuse_the_other`, `::test_a_second_report_that_differs_is_refused_and_the_same_one_confirms`, `tests/api/tools/test_brackets.py::test_a_differing_second_report_is_refused_with_the_score_already_reported` |
+
+⚠️ **Finding 2(a) did not reproduce as stated.** The review said 9 entrants are down to 8 after W1 and L1; measured
+by playing it out, they are still 9 — the one W1 loser meets a bye in L1 and is first eliminated in L2. So W2 and L2
+playing Bo3 under "top 8" was correct, and L3/W3 on Bo5 is what the old and the new rule both give. The pin asserts
+that, and the property test (`…_is_who_is_still_unplaced…`) is what catches the real defect, 2(b), at every size.
 
 ## Gate (2026-10-07, branch `brackets-engine`, measured on the final code)
 
@@ -436,5 +520,7 @@ called set), conflicts and waves, printing.
 - The schema change has not run on the live database (only on fixtures: a fresh file and an 89 file).
 - start.gg's own drop order and placement numbers are not confirmed from a source (research §3); the engine's are
   derived and tested by hand-worked brackets and by simulation.
-- Concurrency was tested for two simultaneous sign-ups only; two simultaneous reports on one set rely on the same
-  per-tournament lock, not a separate test.
+- Concurrency is tested for two simultaneous sign-ups and two simultaneous different reports on one set, both
+  through `asyncio.gather` in one process — not across two processes (there is only one bot process).
+- The card id columns (`message_id`, `card_at`) have no writer yet — layer 2 writes them; only the store round-trip
+  is tested.
