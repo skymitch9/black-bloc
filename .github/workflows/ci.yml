@@ -68,3 +68,34 @@ jobs:
         run: node site/mock/fieldaids.test.mjs
       - name: Posts page hashes
         run: node site/mock/posts-hash.test.mjs
+
+  clock-ahead:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BB_FAKE_NOW: "+40d"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Tests, forty days ahead
+        run: python -m pytest -q -n auto -rfE --timeout-method=signal
+
+      - name: Node fixtures, forty days ahead
+        run: |
+          status=0
+          for one in site/mock/*.test.mjs; do
+            node --import ./site/mock/fakeclock.mjs "$one" || { echo "::error::$one"; status=1; }
+          done
+          exit $status

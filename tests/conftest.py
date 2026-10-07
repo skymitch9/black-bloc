@@ -19,6 +19,7 @@ from black_bloc.settings_store import member_is_staff
 from black_bloc.storage.db import Database
 
 REVERSE = "BB_REVERSE"
+FAKE_NOW = "BB_FAKE_NOW"
 SHELL_NAMES = {"DEV_GUILD_ID", "TEST_MODE", "TEST_CHANNEL_ID"}
 
 
@@ -39,6 +40,37 @@ def the_shell_environment_never_reaches_a_test():
     finally:
         Settings.model_config["env_file"] = env_file
         os.environ.update(kept)
+
+
+def fake_now(text: str, real: datetime) -> datetime:
+    """`BB_FAKE_NOW` as `+40d` (days from the real clock) or an ISO instant."""
+    text = text.strip()
+    if text.startswith("+") and text.endswith("d"):
+        return real + timedelta(days=int(text[1:-1]))
+    found = datetime.fromisoformat(text)
+    return found if found.tzinfo else found.replace(tzinfo=UTC)
+
+
+def pytest_configure(config):
+    raw = os.environ.get(FAKE_NOW, "").strip()
+    if not raw:
+        return
+    import time_machine
+
+    config.bb_fake_now = time_machine.travel(fake_now(raw, datetime.now(UTC)), tick=True)
+    config.bb_fake_now.start()
+
+
+def pytest_unconfigure(config):
+    traveller = getattr(config, "bb_fake_now", None)
+    if traveller is not None:
+        traveller.stop()
+
+
+def pytest_report_header(config):
+    if getattr(config, "bb_fake_now", None) is not None:
+        return f"{FAKE_NOW}: the clock reads {datetime.now(UTC).isoformat(timespec='seconds')}"
+    return None
 
 
 def pytest_collection_modifyitems(items):
