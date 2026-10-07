@@ -83,7 +83,8 @@ def role_word(verdict: mrp.Verdict, *, mention: bool) -> str:
 def status_line(
     bot: Any, guild: Any, marathon: Any, *, mention: bool = True, rows: Any = None
 ) -> str:
-    """The ping switch's line, then one line per show-day when the runs are given."""
+    """The ping switch's line, then the BaF event's line and each show-day's ping when the runs
+    are given."""
     own = switch_line(bot, guild, marathon, mention=mention)
     if rows is None:
         return own
@@ -118,7 +119,7 @@ def switch_line(bot: Any, guild: Any, marathon: Any, *, mention: bool = True) ->
 
 def state_of(bot: Any, guild: Any, marathon: Any, rows: Any = None) -> dict[str, Any]:
     """What the dashboard draws under the ping switch; with the runs, the per-run line gives
-    way to the BaF event lines when every day shown has its one ping."""
+    way to the BaF event's lines when every day shown has its one ping."""
     verdict = verdict_for(bot, guild, marathon)
     line = switch_line(bot, guild, marathon, mention=False)
     if rows is not None and verdict.mentions:
