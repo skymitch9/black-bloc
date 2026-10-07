@@ -59,6 +59,7 @@ COGS: tuple[str, ...] = (
     "black_bloc.cogs.moderation.sticky",
     "black_bloc.cogs.moderation.structure_backup",
     "black_bloc.cogs.content.pb_feed",
+    "black_bloc.cogs.community.brackets",
 )
 
 

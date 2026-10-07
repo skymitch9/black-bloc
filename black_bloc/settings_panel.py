@@ -114,6 +114,7 @@ EXTRA_MODES: tuple[FeatureMode, ...] = (
 
 
 MODE_LABELS: dict[str, str] = {
+    "brackets": "Tournament brackets",
     "frontdoor": "The front door",
     "pb_feed": "Personal bests",
     "sticky": "Sticky messages",

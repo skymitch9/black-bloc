@@ -4520,6 +4520,222 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what is said when an entrant is dropped or disqualified twice",
     ),
 }
+BRACKETS_PING_ROLE = "brackets_ping_role_id"
+BRACKETS_CARD_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "brackets_format_single_words": (
+        "Single elimination",
+        (),
+        "what {format} says on a tournament card for single elimination",
+    ),
+    "brackets_format_double_words": (
+        "Double elimination",
+        (),
+        "what {format} says on a tournament card for double elimination",
+    ),
+    "brackets_format_round_robin_words": (
+        "Round robin",
+        (),
+        "what {format} says on a tournament card for round robin",
+    ),
+    "brackets_format_swiss_words": (
+        "Swiss",
+        (),
+        "what {format} says on a tournament card for Swiss",
+    ),
+    "brackets_card_format_line": (
+        "{format} · best of {best_of}",
+        ("format", "best_of"),
+        "the tournament card's format line; the option words follow it, separated by ·",
+    ),
+    "brackets_card_reset_words": (
+        "grand-final reset",
+        (),
+        "the option word on a double elimination card whose grand final has a reset",
+    ),
+    "brackets_card_third_words": (
+        "third-place set",
+        (),
+        "the option word on a single elimination card that plays for third place",
+    ),
+    "brackets_card_rounds_words": (
+        "{rounds} rounds",
+        ("rounds",),
+        "the option word on a Swiss card that names its rounds",
+    ),
+    "brackets_card_late_words": (
+        "best of {best_of} from top {top}",
+        ("best_of", "top"),
+        "the option word on an elimination card whose late sets are longer",
+    ),
+    "brackets_card_finals_words": (
+        "finals best of {best_of}",
+        ("best_of",),
+        "the option word on an elimination card naming the last set's best-of",
+    ),
+    "brackets_card_state_line": (
+        "**{state}**",
+        ("state",),
+        "the tournament card's state line; {state} is a brackets_state_* word",
+    ),
+    "brackets_card_entrants_line": (
+        "{count} entrant(s)",
+        ("count",),
+        "the tournament card's entrant count when it has no cap",
+    ),
+    "brackets_card_entrants_cap_line": (
+        "{count} of {cap} entrants",
+        ("count", "cap"),
+        "the tournament card's entrant count when it has a cap",
+    ),
+    "brackets_card_starts_line": (
+        "Starts {when}",
+        ("when",),
+        "the tournament card's start time line",
+    ),
+    "brackets_card_check_in_line": (
+        "Check-in closes {when}",
+        ("when",),
+        "the tournament card's line while check-in is open",
+    ),
+    "brackets_card_to_line": (
+        "Organiser: {to}",
+        ("to",),
+        "the tournament card's line naming who runs it",
+    ),
+    "brackets_card_place_line": (
+        "{place}. {name}",
+        ("place", "name"),
+        "one placing on a complete tournament's card",
+    ),
+    "brackets_card_link_label": (
+        "Open the bracket",
+        (),
+        "the tournament card's button to the bracket on the site",
+    ),
+    "brackets_sign_up_label": ("Sign up", (), "the tournament card's sign-up button"),
+    "brackets_leave_label": ("Leave", (), "the tournament card's button to leave before the start"),
+    "brackets_check_in_label": ("Check in", (), "the tournament card's check-in button"),
+    "brackets_not_entered_said": (
+        "You are not signed up for **{name}**, so nothing was done.",
+        BRACKETS_NAMED,
+        "what a member is told when they press Leave or Check in on a tournament they are not in",
+    ),
+    "brackets_set_card_players": (
+        "{a} v {b}",
+        ("a", "b"),
+        "the first line of a set's card; {a} and {b} mention the two players",
+    ),
+    "brackets_round_winners": ("Winners round {round}", ("round",), "a winners-side set's round"),
+    "brackets_round_losers": ("Losers round {round}", ("round",), "a losers-side set's round"),
+    "brackets_round_grand": ("Grand final", (), "the grand final set's round"),
+    "brackets_round_reset": ("Grand final reset", (), "the grand final reset set's round"),
+    "brackets_round_third": ("Third place", (), "the third-place set's round"),
+    "brackets_round_plain": ("Round {round}", ("round",), "a round robin or Swiss set's round"),
+    "brackets_set_card_title": ("{set} · {round}", ("set", "round"), "a set card's title"),
+    "brackets_set_card_best_of": ("Best of {best_of}", ("best_of",), "a set card's best-of line"),
+    "brackets_set_card_rematch": ("Rematch", (), "a set card's mark when the pair met before"),
+    "brackets_set_card_ready": ("Ready to play", (), "a set card's line once both players are in"),
+    "brackets_set_card_called": ("Called — play now", (), "a set card's line once it is called"),
+    "brackets_set_card_reported": (
+        "{reporter} reported {score} — waiting on {opponent}, stands {when}",
+        ("reporter", "score", "opponent", "when"),
+        "a set card's line while a report waits; {when} is when it stands on its own",
+    ),
+    "brackets_set_card_disputed": (
+        "Disputed by {who} — an organiser decides",
+        ("who",),
+        "a set card's line while a report is disputed",
+    ),
+    "brackets_set_card_note": ("“{note}”", ("note",), "a disputed set card's note line"),
+    "brackets_set_card_cleared": (
+        "{set} was cleared",
+        ("set",),
+        "a set card's line once its result or players were taken back",
+    ),
+    "brackets_report_label": ("Report", (), "a set card's report button"),
+    "brackets_confirm_label": ("Confirm", (), "a set card's confirm button"),
+    "brackets_dispute_label": ("Dispute", (), "a set card's dispute button"),
+    "brackets_report_title": (
+        "Report {set} · best of {best_of}",
+        ("set", "best_of"),
+        "the report form's title; Discord cuts a form title at 45 characters",
+    ),
+    "brackets_score_label": (
+        "{name} — games won",
+        ("name",),
+        "a report form's score box; Discord cuts a form label at 45 characters",
+    ),
+    "brackets_dispute_title": ("Dispute {set}", ("set",), "the dispute form's title"),
+    "brackets_dispute_note_label": ("What is wrong", (), "the dispute form's note box"),
+    "brackets_score_not_number_said": (
+        "A score is a whole number of games, so nothing was reported.",
+        (),
+        "what is said when a report form's score is not a whole number",
+    ),
+    "brackets_panel_title": ("Tournaments", (), "the /bracket panel's title"),
+    "brackets_panel_line": (
+        "**{name}** · {state} · {count} entrant(s)",
+        ("name", "state", "count"),
+        "one tournament on the /bracket panel",
+    ),
+    "brackets_panel_empty": ("No tournaments right now.", (), "the /bracket panel with none"),
+    "brackets_pick_placeholder": ("Pick a tournament…", (), "the /bracket tournament picker"),
+    "brackets_pick_set_placeholder": ("Pick a set…", (), "the /bracket set picker"),
+    "brackets_back_label": ("Back", (), "the /bracket panel's back button"),
+    "brackets_your_sets_title": ("Your sets", (), "the heading over a member's own sets"),
+    "brackets_drop_label": (
+        "Drop out",
+        (),
+        "the /bracket button a player presses to leave a running tournament",
+    ),
+    "brackets_drop_confirm": (
+        "Drop out of **{name}**? Your remaining sets are forfeited.",
+        BRACKETS_NAMED,
+        "the question before a player drops out of a running tournament",
+    ),
+    "brackets_panel_footer": (
+        "This panel has gone quiet — run /bracket again.",
+        (),
+        "the footer a /bracket panel wears once its buttons stop",
+    ),
+    "brackets_dm_removed": (
+        "A tournament organiser took you out of **{name}**.",
+        BRACKETS_NAMED,
+        "the DM a member gets when an organiser removes them before the start",
+    ),
+    "brackets_dm_dq": (
+        "A tournament organiser disqualified you from **{name}**; your remaining sets are "
+        "forfeited.",
+        BRACKETS_NAMED,
+        "the DM a player gets when an organiser disqualifies them",
+    ),
+    "brackets_dm_dropped": (
+        "A tournament organiser dropped you from **{name}**; your remaining sets are forfeited.",
+        BRACKETS_NAMED,
+        "the DM a player gets when an organiser drops them from a running tournament",
+    ),
+    "brackets_dm_decided": (
+        "A tournament organiser decided {set} in **{name}**: {result}",
+        ("set", "name", "result"),
+        "the DM both players get when an organiser decides or corrects their set",
+    ),
+    "brackets_dm_reset": (
+        "A tournament organiser reset {set} in **{name}**.",
+        ("set", "name"),
+        "the DM both players get when an organiser resets their set",
+    ),
+    "brackets_dm_reason": (
+        "Reason: {reason}",
+        ("reason",),
+        "the line under an organiser's DM when they gave a reason",
+    ),
+    "brackets_start_ping": (
+        "{role} **{name}** has started.",
+        ("role", "name"),
+        "posted in a tournament's thread at the start when brackets_ping_role_id is picked",
+    ),
+}
+BRACKETS_WORDS.update(BRACKETS_CARD_WORDS)
 BRACKETS_DEFAULTS: dict[str, Any] = {
     BRACKETS_CHANNEL: BRACKETS_CHANNEL_ID,
     **{key: default for key, (default, _) in BRACKETS_ENUMS.items()},
@@ -4532,6 +4748,7 @@ BRACKETS_KEYS: tuple[str, ...] = (
     BRACKETS_CHANNEL,
     BRACKETS_SHADOW_CHANNEL,
     BRACKETS_TO_ROLE,
+    BRACKETS_PING_ROLE,
     BRACKETS_FORMAT_DEFAULT,
     BRACKETS_BEST_OF,
     BRACKETS_BEST_OF_LATE,
@@ -4545,6 +4762,7 @@ KEY_TYPES.update(
         BRACKETS_CHANNEL: "channel",
         BRACKETS_SHADOW_CHANNEL: "channel",
         BRACKETS_TO_ROLE: "role",
+        BRACKETS_PING_ROLE: "role",
         **{key: "enum" for key in BRACKETS_ENUMS},
         **{key: "bool" for key in BRACKETS_BOOLS},
         **{key: "int" for key in BRACKETS_NUMBERS},
@@ -4573,6 +4791,10 @@ KEY_HELP.update(
             "the Tournament Organiser role: its holders may create and run tournaments as staff "
             "can. Blank — the default — leaves tournaments to staff. Taking the role away takes "
             "the right away, even for a tournament that person created"
+        ),
+        BRACKETS_PING_ROLE: (
+            "a role @-mentioned in a tournament's thread when it starts. Blank — the default — "
+            "pings nobody; the set cards still mention their two players"
         ),
         BRACKETS_FORMAT_DEFAULT: (
             "the format a new tournament starts with: single, double — the default — "

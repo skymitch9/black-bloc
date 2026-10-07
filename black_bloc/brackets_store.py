@@ -290,6 +290,18 @@ async def cards(db: Any, tournament_id: int) -> dict[str, tuple[int, str | None]
     return {row["key"]: (int(row["message_id"]), row["card_at"]) for row in await cur.fetchall()}
 
 
+async def card_rows(db: Any, tournament_id: int) -> dict[str, tuple[int | None, str | None]]:
+    """Every set's card id and stamp, the half-posted ones (a stamp and no id) included."""
+    cur = await db.conn.execute(
+        "SELECT key, message_id, card_at FROM tournament_sets WHERE tournament_id = ?",
+        (tournament_id,),
+    )
+    return {
+        row["key"]: (int(row["message_id"]) if row["message_id"] else None, row["card_at"])
+        for row in await cur.fetchall()
+    }
+
+
 async def set_card(
     db: Any, tournament_id: int, key: str, message_id: int | None, card_at: str | None
 ) -> None:

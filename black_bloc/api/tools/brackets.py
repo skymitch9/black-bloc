@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, Request
 from ... import brackets_moves as moves
 from ... import brackets_people as people
 from ... import brackets_sets as sets
-from ... import brackets_store, brackets_view
+from ... import brackets_store, brackets_thread, brackets_view
 from ...brackets import access
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused
@@ -69,6 +69,9 @@ def build_router(bot: Any) -> APIRouter:
         outcome = await move(bot, guild, actor, *given, *args, via=VIA_WEBSITE, **words)
         if not outcome.ok:
             raise Refused(outcome.status or 400, outcome.code, outcome.message)
+        await brackets_thread.follow(
+            bot, guild, outcome.value, outcome, move=getattr(move, "__name__", None)
+        )
         return {
             "tournament": await shown(guild, int(outcome.value), who),
             "message": outcome.message,
