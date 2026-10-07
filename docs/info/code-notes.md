@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-06 — one section APPENDED, nothing re-keyed**: *BaF event ping* (branch `baf-event-ping`, off `main` `2c2a256b`); keyed by NAME. It amends the *Marathon role ping* rows for `unsent` (keeps the verdict's day now), `role_for` (takes the day's reading) and `status_line` (takes the runs). Before that:
 > **2026-10-05 — one section APPENDED, nothing re-keyed**: *Sticky messages* (branch `sticky-messages`, off `main` `1cde5594`); keyed by NAME. Before that:
 > **2026-10-05 — one section APPENDED, nothing re-keyed**: *Tone settles* (branch `tone-settles`, off `main` `3335d929`); keyed by NAME. It amends the *Personality tones* rows for `heard_from`, `hears_now` and `window_turns` (`black_bloc/chat_voice.py`): the pool branch reads a STORED tone now. `path:line` rows in `chat_voice.py`, `chat_panel.py`, `chat_llm.py` below `mood_for`, `api/tools/chat.py` below `voice_entry`, `cogs/content/chat.py` and `page-chat.js` below `toneSelect` sit lower than keyed (not re-measured) — trust the anchor text.
 > **2026-10-04 — one section APPENDED, nothing re-keyed**: *Run identity* (branch `run-identity`, off `main` `c31878a5`); keyed by NAME. It amends the `diff` row (`black_bloc/marathon.py`) and adds `same_slot`, `renames`, `rekeys`, `rekey_runs`; `path:line` rows in `marathon.py` below `moved_by` and in `cogs/content/marathon.py` below `update_run` sit lower than keyed (not re-measured) — trust the names.
@@ -10073,3 +10074,28 @@ Design: [`pb-feed-design.md`](pb-feed-design.md).
 - `pb_looks.py` `Feed.post` — under a TEST_MODE guard a refused channel is a dry run (`pbfeed.would_post`, reason `test mode…`), the same as sticky messages; a blank or missing channel in `on` is `pbfeed.post_failed`.
 - `pb_looks.py` `Feed.lock` — one lock for every look and every move. `pb_moves.look_now` must NOT hold it when it calls `Feed.look` (an `asyncio.Lock` is not re-entrant).
 - `tests/conftest.py` `refuse_speedrun` — an autouse guard: a test that reaches `SpeedrunClient._open` without a session it supplied fails by name. `tests/api/test_contract.py` `arm_pbs` puts a stub feed back after every rewind because `reset_bot` empties the bot.
+
+## BaF event ping (branch `baf-event-ping`, 2026-10-06) — keyed by NAME
+
+Design: [`baf-event-ping-design.md`](baf-event-ping-design.md).
+
+| Where | Note |
+|---|---|
+| `black_bloc/marathon_baf_event.py` `worked_out` / `judge` | The five rules in the brief's order. `judge` runs `worked_out` first only to keep the day's counts on a staff answer; the staff answer still wins. The share is compared as `baf * 100 >= percent * runs`, so no rounding decides a 75 % day. |
+| `…` `has_runner` | Part `runner`, matched, and not marked `counts: False`. Deliberately NOT `mt.is_ours`: a BaF host never makes a run a BaF run for this judgement, whatever `marathon_hosts_count_as_ours` says. The CARRIER, though, is any run that gets a heads-up (`mt.is_ours`). |
+| `…` `show_names` | The marathon's name plus, for `gdq_hotfix`, the show part of `source_ref` — a staff rename must not lose the name rule. |
+| `…` `days_of` | `marathon_overlay.chains` (the early-start guard's show-day), then a chain longer than 24 h is cut by calendar date in the server's zone. |
+| `…` `covers` | A stored ping is a day's when it names one of its runs OR the planned hours overlap (strictly, so two back-to-back calendar pieces do not claim each other). Ids alone fail when a source re-makes its rows; a date key fails when the first run is dropped past midnight. |
+| `…` `carrier` | First run in planned order that is upcoming, ours, speaks publicly and has an unsent mark at or under the limit. `this` / `this_mark` exist because `remind` writes the mark into `reminders_sent` BEFORE `_post_reminder` runs, so the run in hand would otherwise look spent. |
+| `…` `plan` | The order matters: a stored ping first (so a flip to *no* never brings the per-run ping back), then the judgement, then the carrier. |
+| `…` `predicts` | The tracker's forecast: only the carrier's NEXT mark, where `plan` would say yes to any of its marks at or under the limit. |
+| `…` `missed` records | Written so `marathon.baf_event_no_ping` is logged once; `pinged` skips them, so they never close a day. |
+| `black_bloc/cogs/content/marathon_baf_event.py` `heads_up_role` | Re-reads the marathon and its runs: `remind` reads the runs once per tick and an earlier run's marks may have been spent in the same loop. Writes the claim before returning the verdict. |
+| `…` `settle` | Called before `_post_reminder` pops `copy`. `marathon_role` is None in `public` whenever the copy did not carry the role (`post_public_reminder` answers the `unsent` verdict on every path that sends nothing). |
+| `…` `ask_if_unsure` | Claim → post → record, all under the marathon's lock (the tick holds it). A claim with no message and no `failed_at` is a crash mid-post and reads as asked. The role is mentioned only while `marathon_mode` is `on`. |
+| `…` `note_missed` | Gated on the role-ping verdict mentioning, and on `now` having reached the first planned start minus the limit — a name-rule day whose runners are not matched yet must not log days ahead. |
+| `…` `set_baf_event` | Takes the marathon's lock itself: never call it from inside the tick. |
+| `black_bloc/marathon_thread_controls.py` `baf_controls` | `row=4` pins the three buttons to the last row whatever the other switches do; `view_of` adds them after the tracker link. `mtc.controls` is unchanged (six or seven). |
+| `black_bloc/cogs/content/marathon_role_ping.py` `status_line` | With `rows`, the BaF lines follow the switch's line; the switch's line is dropped only when the role WOULD be mentioned and every day shown is governed. |
+| `black_bloc/cogs/content/marathon_host_highlights.py` `role_for` | `days` is read only at the ping mark (`day_reading`), the one mark a block could have carried the role on. |
+| `site/mock/server.mjs` `marathonBafEvent` | One show-day per marathon and no stored pings: enough for the drawer and the tracker, not a model of the carrier. |
