@@ -1,5 +1,5 @@
 # ruff: noqa: F401, F811
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import discord
@@ -310,7 +310,7 @@ async def test_a_refused_name_is_said_on_the_card_and_the_card_is_unchanged(
 async def test_look_now_from_the_card_rehearses_the_news(bot, guild, feed, client):
     await matched(bot)
     await seen(feed, client, [best("r1")])
-    client.bests[ZFG.id] = [best("r9", seconds=1.5, verified_at=NOW + timedelta(minutes=1))]
+    client.bests[ZFG.id] = [best("r9", seconds=1.5, verified_at=datetime.now(UTC))]
     staff = FakeInteraction(bot, STAFFER)
     _, card = await pb_panel.build_member(bot, guild, ADA)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+from datetime import UTC, datetime
 
 import pytest
 
@@ -12,6 +13,7 @@ from black_bloc.cogs.content.spotlight import add_channel
 from black_bloc.marathon_sources import ScheduleError
 from black_bloc.settings_store import MARATHON_FEED_ACTION_KEY, MARATHON_FEED_HOURS_KEY
 
+NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
 FIXTURES = pathlib.Path(__file__).parents[2] / "fixtures" / "marathon"
 GDQ_BASE = "https://tracker.gamesdonequick.com/tracker"
 HOTFIX_PAGE = "https://gamesdonequick.com/hotfix/schedule"
@@ -71,6 +73,7 @@ async def cog(web, wf):
     await web.store.set(wf.GUILD_ID, "marathon_event_mode_default", "none")
     made = Marathons(web)
     made.client = FeedClient()
+    made.clock = lambda: NOW
     web.cogs["Marathons"] = made
     return made
 

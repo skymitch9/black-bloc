@@ -232,7 +232,9 @@ async def test_look_now_looks_at_once_and_says_what_it_found(bot, guild, feed, c
     later = NOW + timedelta(minutes=5)
     client.bests[ZFG.id] = [best("r9", seconds=90.0, verified_at=later)]
 
-    outcome = await pb_moves.look_now(bot, guild, ADA, staffer(guild))
+    outcome = await pb_moves.look_now(
+        bot, guild, ADA, staffer(guild), now=later + timedelta(minutes=1)
+    )
 
     assert outcome.ok and "1 new personal best(s), 1 on record" in outcome.message
     assert len(guild.get_channel(REHEARSAL).sent) == 1
