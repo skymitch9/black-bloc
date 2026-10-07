@@ -177,18 +177,19 @@ async def test_the_refresh_key_rides_the_read(client, sign_in, web, cog, wf):
     assert client.get(f"/api/marathons/{marathon_id}/schedule").json()["refresh_seconds"] == 45
 
 
-async def test_the_tracker_marks_each_baf_run_and_a_baf_event_day(client, sign_in, web, cog, wf):
+async def test_the_tracker_marks_each_baf_run_and_a_baf_event_once(client, sign_in, web, cog, wf):
     sign_in(client)
     marathon_id = add(client)
 
     body = client.get(f"/api/marathons/{marathon_id}/schedule").json()
 
     assert [one["baf_run"] for one in body["rows"]] == [False, True, False]
-    assert [one["baf_event"] for one in body["days"]] == [{"answer": "no", "reason": "mixed"}]
+    assert body["baf_event"] == {"answer": "no", "reason": "mixed"}
+    assert not any("baf_event" in one for one in body["days"])
 
     client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": "yes"})
     body = client.get(f"/api/marathons/{marathon_id}/schedule").json()
-    assert [one["baf_event"] for one in body["days"]] == [{"answer": "yes", "reason": "staff"}]
+    assert body["baf_event"] == {"answer": "yes", "reason": "staff"}
 
 
 async def test_on_a_baf_event_day_only_the_two_hour_heads_up_is_listed_with_the_role(

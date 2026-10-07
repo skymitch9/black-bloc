@@ -137,18 +137,10 @@ def posting_of(bot: Any, guild: Any, row: Any, runs: Any) -> dict[str, Any]:
     }
 
 
-def baf_event_of(bot: Any, guild: Any, row: Any, runs: Any) -> Any:
-    """A page day's BaF event state: that of the show-day its first run is in."""
-    days = reading_for(bot, guild.id, row, runs)
-
-    def state(kept: Any) -> dict[str, Any] | None:
-        day = baf.day_of(kept[0], days.days) if kept else None
-        if day is None:
-            return None
-        found = baf.judgement_of(days, day)
-        return {"answer": found.answer, "reason": found.reason}
-
-    return state
+def baf_event_of(bot: Any, guild: Any, row: Any, runs: Any) -> dict[str, Any]:
+    """The marathon's BaF event answer; every page day takes it."""
+    found = baf.judgement_of(reading_for(bot, guild.id, row, runs))
+    return {"answer": found.answer, "reason": found.reason}
 
 
 async def sheet(

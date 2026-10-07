@@ -552,18 +552,13 @@ def test_each_run_with_a_baf_runner_is_marked_a_baf_run_and_a_host_is_not():
     assert [one["ours"] for one in found["rows"]] == [True, True, False]
 
 
-def test_a_day_carries_the_baf_event_state_it_is_given_and_none_when_nobody_asks():
+def test_the_sheet_carries_the_events_baf_state_once_and_none_when_nobody_gives_it():
     rows = [run(1, 60, people=[person("Dax", user_id=DAX)]), run(2, 120)]
-    seen = []
 
-    def state(kept):
-        seen.append([one["id"] for one in kept])
-        return {"answer": "yes", "reason": "name"}
-
-    assert read(marathon(), rows)["days"][0]["baf_event"] is None
-    found = read(marathon(), rows, baf_event=state)
-    assert found["days"][0]["baf_event"] == {"answer": "yes", "reason": "name"}
-    assert seen == [[1, 2]]
+    assert read(marathon(), rows)["baf_event"] is None
+    found = read(marathon(), rows, baf_event={"answer": "yes", "reason": "name"})
+    assert found["baf_event"] == {"answer": "yes", "reason": "name"}
+    assert "baf_event" not in found["days"][0]
 
 
 def test_the_role_follows_what_the_day_decides_and_the_ping_mark_where_it_decides_nothing():

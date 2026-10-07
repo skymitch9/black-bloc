@@ -1258,11 +1258,13 @@ async def test_the_drawer_reads_the_baf_event_switch_what_was_worked_out_and_why
     assert found["worked_out"]["answer"] == "no"
     assert found["worked_out"]["reason_word"] == "1 of 3 runs have a BaF runner"
     assert found["answer_word"] == "not a BaF event"
+    assert (found["runs"], found["baf"], found["ask"], found["asked"]) == (3, 1, None, False)
+    assert found["line"] == "**AGDQ 2027** is not a BaF event — 1 of 3 runs have a BaF runner."
     (day,) = found["days"]
     assert (day["runs"], day["baf"], day["pinged"], day["carrier"]) == (3, 1, None, None)
-    assert found["lines"] == [day["line"]]
-    assert day["line"].endswith(": not a BaF event — 1 of 3 runs have a BaF runner.")
-    assert "<t:" not in day["line"] and "<@&" not in day["line"]
+    assert (day["ping"], day["line"], day["governed"]) == ("per_run", "", False)
+    assert "answer" not in day and "reason" not in day and "ask" not in day
+    assert found["lines"] == [found["line"]]
 
 
 async def test_patch_baf_event_takes_yes_no_and_follow_and_leaves_one_web_row_each(
@@ -1315,9 +1317,13 @@ async def test_a_baf_event_day_says_which_heads_up_carries_the_ping_in_the_drawe
 
     (day,) = body["baf_event"]["days"]
     assert day["carrier"]["game"] == "Super Metroid" and day["carrier"]["minutes"] == 120
-    assert (day["ask"], day["no_ping"], day["pinged"]) == (None, None, None)
+    assert (day["ping"], day["no_ping"], day["pinged"]) == ("will", None, None)
     assert day["line"].endswith(
-        f"a BaF event — the BaF event switch says so. @{role.name} is mentioned once, on the "
-        "heads-up 120 minutes before **Super Metroid**."
+        f": @{role.name} is mentioned once, on the heads-up 120 minutes before **Super Metroid**."
     )
+    assert "<t:" not in day["line"] and "<@&" not in day["line"]
+    assert body["baf_event"]["lines"] == [
+        "**AGDQ 2027** is a BaF event — the BaF event switch says so.",
+        day["line"],
+    ]
     assert body["role_ping"]["mentions"] is True and body["role_ping"]["line"] == ""

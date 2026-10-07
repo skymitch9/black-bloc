@@ -1,4 +1,5 @@
-"""Whether a show-day is a BaF event, and which heads-up carries its one Marathon-role ping."""
+"""Whether a marathon is a BaF event, and which heads-up carries each show-day's one
+Marathon-role ping."""
 
 from __future__ import annotations
 
@@ -35,6 +36,11 @@ COLUMN = "baf_event"
 ASK_COLUMN = "baf_event_ask"
 PINGS_COLUMN = "baf_event_pings"
 PER_RUN = "per_run"
+EVENT = "event"
+PING_WILL = "will"
+PING_DONE = "done"
+PING_UNCONFIRMED = "unconfirmed"
+PING_OFF = "off"
 CARRY = "carry"
 QUIET = "quiet"
 NOBODY_TO_NAME = "nobody_to_name"
@@ -59,6 +65,7 @@ FOLD = re.compile(r"[^a-z0-9]+")
 GAP = "[^a-z0-9]*"
 NOTHING = timedelta(0)
 DAY_SPAN = timedelta(hours=24)
+FIRST = datetime.min.replace(tzinfo=UTC)
 
 
 class Judgement(NamedTuple):
@@ -86,6 +93,10 @@ class Reading(NamedTuple):
     asks: tuple[dict[str, Any], ...] = ()
 
     @property
+    def rows(self) -> list[Any]:
+        return [row for day in self.days for row in day]
+
+    @property
     def limit(self) -> int:
         return event_mark(self.marks, self.wanted_mark)[0]
 
@@ -111,7 +122,6 @@ class DayState(NamedTuple):
     carrier: Any
     carrier_mark: int | None
     over: bool
-    ask: dict[str, Any] | None = None
     cause: str | None = None
 
     @property
@@ -201,12 +211,16 @@ def kept(rows: Any) -> list[Any]:
     return [row for row in rows or () if mt._cell(row, "state") != mt.DROPPED]
 
 
+def counts(rows: Any) -> tuple[int, int]:
+    """`(runs, runs with a BaF runner)`, dropped runs left out."""
+    found = kept(rows)
+    return (len(found), len([row for row in found if has_runner(row)]))
+
+
 def worked_out(
-    marathon: Any, day: Any, *, names: Any, min_runs: int, ask_percent: int
+    marathon: Any, rows: Any, *, names: Any, min_runs: int, ask_percent: int
 ) -> Judgement:
-    rows = kept(day)
-    runs = len(rows)
-    baf = len([row for row in rows if has_runner(row)])
+    runs, baf = counts(rows)
     hit = name_hit(names, show_names(marathon))
     if hit:
         return Judgement(YES, BY_NAME, runs, baf, hit)
@@ -222,10 +236,11 @@ def worked_out(
 
 
 def judge(
-    marathon: Any, day: Any, *, names: Any, min_runs: int, ask_percent: int, said: Any = None
+    marathon: Any, rows: Any, *, names: Any, min_runs: int, ask_percent: int, said: Any = None
 ) -> Judgement:
-    """The marathon's switch first, then the day's own answer, then the name and the runs."""
-    found = worked_out(marathon, day, names=names, min_runs=min_runs, ask_percent=ask_percent)
+    """The marathon's switch first, then the answer to its question, then the name and the
+    runs."""
+    found = worked_out(marathon, rows, names=names, min_runs=min_runs, ask_percent=ask_percent)
     own = stored(marathon)
     if own is not None:
         return Judgement(YES if own else NO, BY_STAFF, found.runs, found.baf)
@@ -469,11 +484,12 @@ def reading(
     )
 
 
-def judgement_of(found: Reading, day: Any, *, own: bool = True) -> Judgement:
+def judgement_of(found: Reading, *, own: bool = True) -> Judgement:
+    """The whole event's answer, over every run on a show-day; each show-day takes it."""
     rules = {"names": found.names, "min_runs": found.min_runs, "ask_percent": found.ask_percent}
     if not own:
-        return worked_out(found.marathon, day, **rules)
-    return judge(found.marathon, day, said=answer_of(found.asks, day, found.days), **rules)
+        return worked_out(found.marathon, found.rows, **rules)
+    return judge(found.marathon, found.rows, said=answer_of(found.asks), **rules)
 
 
 def closed(found: Reading, day: Any, judgement: Judgement) -> dict[str, Any] | None:
@@ -486,7 +502,7 @@ def plan(found: Reading, row: Any, mark: int, *, speaks: Any = None) -> Plan:
     day = day_of(row, found.days)
     if day is None:
         return Plan(PER_RUN)
-    judgement = judgement_of(found, day)
+    judgement = judgement_of(found)
     record = closed(found, day, judgement)
     if record is not None:
         return Plan(QUIET, BAF_EVENT_PINGED, judgement, day, record)
@@ -503,7 +519,7 @@ def quiet_reason(found: Reading, row: Any) -> str | None:
     day = day_of(row, found.days)
     if day is None:
         return None
-    judgement = judgement_of(found, day)
+    judgement = judgement_of(found)
     if closed(found, day, judgement) is not None:
         return BAF_EVENT_PINGED
     return BAF_EVENT_DAY if judgement.yes else None
@@ -515,7 +531,7 @@ def predicts(found: Reading, row: Any, mark: int, *, speaks: Any = None) -> bool
     day = day_of(row, found.days)
     if day is None:
         return None
-    judgement = judgement_of(found, day)
+    judgement = judgement_of(found)
     if closed(found, day, judgement) is not None:
         return False
     if not judgement.yes:
@@ -526,8 +542,9 @@ def predicts(found: Reading, row: Any, mark: int, *, speaks: Any = None) -> bool
 
 def day_states(found: Reading, *, speaks: Any = None) -> list[DayState]:
     states: list[DayState] = []
+    judgement = judgement_of(found)
+    worked = judgement_of(found, own=False)
     for day in found.days:
-        judgement = judgement_of(found, day)
         record = closed(found, day, judgement)
         chosen, mark, cause = (None, None, None)
         if judgement.yes and record is None:
@@ -539,38 +556,42 @@ def day_states(found: Reading, *, speaks: Any = None) -> list[DayState]:
                 list(day),
                 span_of(day)[0],
                 judgement,
-                judgement_of(found, day, own=False),
+                worked,
                 record,
                 chosen,
                 mark,
                 all(mt._cell(row, "state") == mt.DONE for row in kept(day)),
-                asked(found.asks, day, found.days),
                 cause,
             )
         )
     return states
 
 
-def current(states: Any) -> DayState | None:
-    """The day staff are asking about: the first not over, else the last."""
-    found = list(states or ())
-    return next((one for one in found if not one.over), found[-1] if found else None)
+def ping_state(state: DayState, mentions: bool) -> str:
+    """What becomes of one show-day's Marathon-role ping."""
+    if state.record is not None:
+        return PING_DONE if state.record.get("sent") else PING_UNCONFIRMED
+    if not state.judgement.yes:
+        return PER_RUN
+    if not mentions:
+        return PING_OFF
+    if state.carrier is None:
+        return state.cause or MARKS_SPENT
+    return PING_WILL
 
 
-def unsure(states: Any) -> list[DayState]:
-    """Every day still to come that the bot is not sure about."""
-    return [one for one in states or () if not one.over and one.judgement.answer == UNSURE]
-
-
-def asks(states: Any) -> DayState | None:
-    return next(iter(unsure(states)), None)
+def asks(found: Reading, states: Any) -> bool:
+    """Whether the event's question is open: nothing decided it and a show-day is still to
+    come."""
+    return judgement_of(found).answer == UNSURE and any(not one.over for one in states or ())
 
 
 # --- the question -------------------------------------------------------------------------------
 
 
 def asks_of(marathon: Any) -> list[dict[str, Any]]:
-    """One record per show-day asked about; a lone record from before reads as a list of one."""
+    """The event's question records; one from when each show-day had its own is kept and read
+    as the event's."""
     raw = mt._cell(marathon, ASK_COLUMN)
     try:
         found = json.loads(raw or "[]") if isinstance(raw, str) or raw is None else raw
@@ -586,20 +607,30 @@ def dump_asks(records: Any) -> str | None:
     return json.dumps(found) if found else None
 
 
-def asked(asks: Any, day: Any, days: Any = None) -> dict[str, Any] | None:
-    """The day's own question: the one with an answer, else the one that was posted."""
-    found = [one for one in asks or () if covers(one, day, days)]
-    for key in ("answer", "message_id"):
-        hit = next((one for one in found if one.get(key)), None)
-        if hit is not None:
-            return hit
-    return found[0] if found else None
+def answered(asks: Any) -> dict[str, Any] | None:
+    """The answer that stands: the latest one given, whichever question it was given on."""
+    found = [one for one in asks or () if one.get("answer") in (YES, NO)]
+    if not found:
+        return None
+    return max(
+        enumerate(found),
+        key=lambda pair: (parse_ts(pair[1].get("answered_at")) or FIRST, pair[0]),
+    )[1]
 
 
-def answer_of(asks: Any, day: Any, days: Any = None) -> str | None:
-    record = asked(asks, day, days)
-    said = record.get("answer") if record else None
-    return said if said in (YES, NO) else None
+def question(asks: Any) -> dict[str, Any] | None:
+    """The event's question: the answer that stands, else the event's own record, the posted
+    one first. An unanswered record of a per-day question is not it."""
+    said = answered(asks)
+    if said is not None:
+        return said
+    own = [one for one in asks or () if one.get(EVENT)]
+    return next((one for one in own if one.get("message_id")), own[-1] if own else None)
+
+
+def answer_of(asks: Any) -> str | None:
+    said = answered(asks)
+    return said.get("answer") if said else None
 
 
 def ask_state(record: Any) -> str | None:
@@ -614,8 +645,8 @@ def ask_state(record: Any) -> str | None:
     return ASK_FAILED if record.get("failed_at") or record.get("gave_up") else None
 
 
-def same_schedule(record: dict[str, Any], day: Any, judgement: Judgement) -> bool:
-    return named(record) == set(ids_of(day)) and record.get("baf") == judgement.baf
+def same_schedule(record: dict[str, Any], rows: Any, judgement: Judgement) -> bool:
+    return named(record) == set(ids_of(rows)) and record.get("baf") == judgement.baf
 
 
 __all__ = [
@@ -640,6 +671,7 @@ __all__ = [
     "CHOICES",
     "COLUMN",
     "DayState",
+    "EVENT",
     "FOLLOW",
     "GIVE_BACK",
     "Judgement",
@@ -649,6 +681,10 @@ __all__ = [
     "NO_BAF_RUN",
     "PER_RUN",
     "PINGS_COLUMN",
+    "PING_DONE",
+    "PING_OFF",
+    "PING_UNCONFIRMED",
+    "PING_WILL",
     "Plan",
     "QUIET",
     "REASONS",
@@ -658,8 +694,8 @@ __all__ = [
     "UNSURE",
     "YES",
     "answer_of",
+    "answered",
     "ask_state",
-    "asked",
     "asks",
     "asks_of",
     "carrier",
@@ -667,8 +703,8 @@ __all__ = [
     "clean",
     "closed",
     "proof_of",
+    "counts",
     "covers",
-    "current",
     "day_of",
     "day_states",
     "days_of",
@@ -689,9 +725,11 @@ __all__ = [
     "opens_with",
     "overlap",
     "pinged",
+    "ping_state",
     "pings_of",
     "plan",
     "predicts",
+    "question",
     "quiet_reason",
     "reading",
     "record_for",
@@ -701,7 +739,6 @@ __all__ = [
     "span_of",
     "stored",
     "unsent",
-    "unsure",
     "without",
     "worked_out",
 ]

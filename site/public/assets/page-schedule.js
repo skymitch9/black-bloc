@@ -54,7 +54,6 @@ const UPDATED = 'Updated {ago}';
 const UPDATE_FAILED = 'Could not update just now — {why} The times below are as they stood at {time}. Trying again in {seconds} seconds.';
 const UPDATE_OUTAGE = 'Black Bloc did not answer.';
 const DAY_CHIP = '{day} · {runs}';
-const DAY_CHIP_EVENT = '{day} · {runs} · {event}';
 const BAF_EVENT = 'BaF event';
 const BAF_RUN = 'BaF run';
 const SHIFT_LABEL = 'Runs not yet started';
@@ -288,7 +287,7 @@ function headCard(day) {
   return card(null, [
     el('div', { class: 'rs-head' }, [
       el('h2', { class: 'rs-title', text: said(HEAD, { marathon: marathon.name, day: day ? dayLabel(day.starts_at, viewer.zone) : '' }) }),
-      isBafEvent(day) ? badge(BAF_EVENT, 'ok') : null,
+      isBafEvent() ? badge(BAF_EVENT, 'ok') : null,
       day ? driftNode(day) : null,
     ]),
     el('p', { class: 'field-help rs-source' }, dot([
@@ -303,13 +302,13 @@ function headCard(day) {
   ]);
 }
 
-function isBafEvent(day) {
-  return Boolean(day && day.baf_event && day.baf_event.answer === 'yes');
+function isBafEvent() {
+  return Boolean(sheet.baf_event && sheet.baf_event.answer === 'yes');
 }
 
 function dayStrip() {
   if (sheet.days.length < 2) return null;
-  const choices = sheet.days.map((one) => [one.key, said(isBafEvent(one) ? DAY_CHIP_EVENT : DAY_CHIP, { day: dayLabel(one.starts_at, viewer.zone), runs: one.runs, event: BAF_EVENT })]);
+  const choices = sheet.days.map((one) => [one.key, said(DAY_CHIP, { day: dayLabel(one.starts_at, viewer.zone), runs: one.runs })]);
   return chipBar(choices, shown.day, (key) => {
     shown.day = key;
     shown.open = null;

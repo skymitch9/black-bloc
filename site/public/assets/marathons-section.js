@@ -557,17 +557,18 @@ function bafEventPicker(state) {
   return node;
 }
 
-/** Under the BaF event switch: each show-day's state and what its one ping did or will do. */
+/** Under the BaF event switch: the event's answer and why, once, then what each show-day's one ping did or will do. */
 function bafEventLines(marathon) {
   const found = marathon.baf_event || {};
-  const days = (found.days || []).filter((one) => (found.lines || []).includes(one.line));
-  if (!days.length) {
-    return (found.lines || []).map((line) => el('p', { class: 'field-help mx-line mx-baf-event', text: line }));
-  }
-  return days.map((one) => el('p', { class: 'field-help mx-line mx-baf-event', 'data-answer': one.answer, 'data-reason': one.reason }, [
-    badge(`${one.baf} of ${one.runs}`, BAF_EVENT_TONES[one.answer] || null),
-    el('span', { text: ` ${one.line}` }),
-  ]));
+  const [own, ...days] = found.lines || [];
+  if (!own) return [];
+  return [
+    el('p', { class: 'field-help mx-line mx-baf-event', 'data-answer': found.answer, 'data-reason': found.reason }, [
+      found.runs ? badge(`${found.baf} of ${found.runs}`, BAF_EVENT_TONES[found.answer] || null) : null,
+      el('span', { text: found.runs ? ` ${own}` : own }),
+    ]),
+    ...days.map((line) => el('p', { class: 'field-help mx-line mx-baf-event-day', text: line })),
+  ];
 }
 
 function switchWanted(value) {
