@@ -6,6 +6,8 @@ from typing import Any
 from fastapi import APIRouter, Body, Request
 
 from ... import brackets_moves as moves
+from ... import brackets_people as people
+from ... import brackets_sets as sets
 from ... import brackets_store, brackets_view
 from ...brackets import access
 from ...logkinds import VIA_WEBSITE
@@ -110,9 +112,9 @@ def build_router(bot: Any) -> APIRouter:
 
     plain("/{tournament_id}/signups/open", moves.open_signups)
     plain("/{tournament_id}/signups/close", moves.close_signups)
-    plain("/{tournament_id}/checkin/open", moves.open_check_in)
-    plain("/{tournament_id}/checkin/close", moves.close_check_in)
-    plain("/{tournament_id}/join", moves.join)
+    plain("/{tournament_id}/checkin/open", people.open_check_in)
+    plain("/{tournament_id}/checkin/close", people.close_check_in)
+    plain("/{tournament_id}/join", people.join)
     plain("/{tournament_id}/start", moves.start)
     plain("/{tournament_id}/unstart", moves.unstart)
     plain("/{tournament_id}/reopen", moves.reopen)
@@ -148,7 +150,7 @@ def build_router(bot: Any) -> APIRouter:
         return await answered(
             request,
             tournament_id,
-            moves.add_entrant,
+            people.add_entrant,
             name=given.get("name"),
             user_id=wanted_id(user) if user not in (None, "") else None,
         )
@@ -157,7 +159,7 @@ def build_router(bot: Any) -> APIRouter:
     async def brackets_remove(
         request: Request, tournament_id: str, entrant_id: str
     ) -> dict[str, Any]:
-        return await answered(request, tournament_id, moves.remove_entrant, wanted_id(entrant_id))
+        return await answered(request, tournament_id, people.remove_entrant, wanted_id(entrant_id))
 
     def entrant_move(path: str, move: Any) -> None:
         async def route(request: Request, tournament_id: str, entrant_id: str) -> dict[str, Any]:
@@ -166,9 +168,9 @@ def build_router(bot: Any) -> APIRouter:
         route.__name__ = f"brackets_{move.__name__}"
         router.add_api_route(path, route, methods=["POST"])
 
-    entrant_move("/{tournament_id}/entrants/{entrant_id}/restore", moves.restore_entrant)
-    entrant_move("/{tournament_id}/entrants/{entrant_id}/drop", moves.drop)
-    entrant_move("/{tournament_id}/entrants/{entrant_id}/dq", moves.dq)
+    entrant_move("/{tournament_id}/entrants/{entrant_id}/restore", people.restore_entrant)
+    entrant_move("/{tournament_id}/entrants/{entrant_id}/drop", people.drop)
+    entrant_move("/{tournament_id}/entrants/{entrant_id}/dq", people.dq)
 
     @router.post("/{tournament_id}/entrants/{entrant_id}/checkin")
     async def brackets_check_in(
@@ -176,7 +178,7 @@ def build_router(bot: Any) -> APIRouter:
     ) -> dict[str, Any]:
         wanted = body_of(payload).get("checked_in", True) is not False
         return await answered(
-            request, tournament_id, moves.set_check_in, wanted_id(entrant_id), wanted
+            request, tournament_id, people.set_check_in, wanted_id(entrant_id), wanted
         )
 
     def set_move(path: str, move: Any) -> None:
@@ -186,9 +188,9 @@ def build_router(bot: Any) -> APIRouter:
         route.__name__ = f"brackets_set_{move.__name__}"
         router.add_api_route(path, route, methods=["POST"])
 
-    set_move("/{tournament_id}/sets/{key}/call", moves.call)
-    set_move("/{tournament_id}/sets/{key}/confirm", moves.confirm)
-    set_move("/{tournament_id}/sets/{key}/reset", moves.reset)
+    set_move("/{tournament_id}/sets/{key}/call", sets.call)
+    set_move("/{tournament_id}/sets/{key}/confirm", sets.confirm)
+    set_move("/{tournament_id}/sets/{key}/reset", sets.reset)
 
     @router.post("/{tournament_id}/sets/{key}/report")
     async def brackets_report(
@@ -196,7 +198,7 @@ def build_router(bot: Any) -> APIRouter:
     ) -> dict[str, Any]:
         given = body_of(payload)
         return await answered(
-            request, tournament_id, moves.report, key, given.get("score_a"), given.get("score_b")
+            request, tournament_id, sets.report, key, given.get("score_a"), given.get("score_b")
         )
 
     @router.post("/{tournament_id}/sets/{key}/dispute")
@@ -204,7 +206,7 @@ def build_router(bot: Any) -> APIRouter:
         request: Request, tournament_id: str, key: str, payload: Any = OPTIONAL
     ) -> dict[str, Any]:
         return await answered(
-            request, tournament_id, moves.dispute, key, body_of(payload).get("note")
+            request, tournament_id, sets.dispute, key, body_of(payload).get("note")
         )
 
     @router.post("/{tournament_id}/sets/{key}/override")
@@ -215,7 +217,7 @@ def build_router(bot: Any) -> APIRouter:
         return await answered(
             request,
             tournament_id,
-            moves.override,
+            sets.override,
             key,
             score_a=given.get("score_a"),
             score_b=given.get("score_b"),

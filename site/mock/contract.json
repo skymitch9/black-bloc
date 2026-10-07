@@ -10141,6 +10141,922 @@
           "again_of"
         ]
       }
+    },
+    {
+      "method": "GET",
+      "path": "/api/brackets",
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md)"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "may_run",
+        "tournaments"
+      ],
+      "rows": {
+        "tournaments": [
+          "id",
+          "name",
+          "game",
+          "format",
+          "state",
+          "entrant_count",
+          "starts_at",
+          "to_user_id"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/brackets/{bracket_running_id}",
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "game",
+        "format",
+        "state",
+        "starts_at",
+        "options",
+        "entrant_count",
+        "finished",
+        "may_run",
+        "mine",
+        "entrants",
+        "sets",
+        "standings",
+        "waiting_on",
+        "to_user_id",
+        "thread_id",
+        "channel_id",
+        "message_id",
+        "check_in_closes_at"
+      ],
+      "rows": {
+        "entrants": [
+          "id",
+          "user_id",
+          "name",
+          "guest",
+          "seed",
+          "checked_in",
+          "dropped",
+          "dropped_why",
+          "dq",
+          "placement"
+        ],
+        "sets": [
+          "key",
+          "side",
+          "round",
+          "position",
+          "best_of",
+          "state",
+          "slot_a",
+          "slot_b",
+          "a_name",
+          "b_name",
+          "score_a",
+          "score_b",
+          "winner",
+          "forfeit",
+          "reported_side",
+          "confirms_at",
+          "confirmed_how",
+          "dispute_note",
+          "placement_winner",
+          "placement_loser"
+        ],
+        "standings": [
+          "entrant",
+          "name",
+          "place"
+        ],
+        "waiting_on": [
+          "entrant",
+          "name",
+          "what",
+          "set",
+          "opponent",
+          "open"
+        ]
+      },
+      "nested": {
+        "options": [
+          "format",
+          "third_place",
+          "grand_final_reset",
+          "swiss_rounds",
+          "best_of",
+          "best_of_from_round",
+          "best_of_late",
+          "best_of_finals",
+          "entrant_cap",
+          "check_in_minutes",
+          "confirm_minutes"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets",
+      "body": {
+        "name": "Contract Cup",
+        "format": "single"
+      },
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Create"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/brackets/{bracket_draft_id}",
+      "body": {
+        "name": "Contract Cup 2",
+        "best_of": 5
+      },
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Options"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_draft_id}/signups/open",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Open sign-ups"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_signups_id}/signups/close",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Close sign-ups"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_signups_id}/checkin/open",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Open check-in"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_checkin_id}/checkin/close",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Close check-in"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_signups_id}/join",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Sign me up"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_draft_id}/entrants",
+      "body": {
+        "name": "Remy"
+      },
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Add an entrant"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/brackets/{bracket_signups_id}/entrants/{bracket_entrant_id}",
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Remove"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_signups_id}/entrants/{bracket_removed_entrant_id}/restore",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Put back"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_checkin_id}/entrants/{bracket_checkin_entrant_id}/checkin",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Check in"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_signups_id}/entrants/{bracket_entrant_id}/drop",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Drop"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_running_id}/entrants/{bracket_running_entrant_id}/dq",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — DQ"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_seeding_id}/seed",
+      "body": {
+        "randomise": true
+      },
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Seed / Shuffle"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_seeding_id}/start",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Start"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_running_id}/unstart",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Back to seeding"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_finished_id}/complete",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Complete"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_complete_id}/reopen",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Reopen"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_draft_id}/cancel",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Cancel"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_cancelled_id}/restore",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Restore"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_running_id}/sets/W1-2/call",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Call"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_running_id}/sets/W1-2/report",
+      "body": {
+        "score_a": 2,
+        "score_b": 0
+      },
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Report"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_running_id}/sets/W1-1/confirm",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Confirm"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_running_id}/sets/W1-1/dispute",
+      "body": {
+        "note": "wrong stage"
+      },
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Dispute"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_running_id}/sets/W1-2/override",
+      "body": {
+        "score_a": 0,
+        "score_b": 2
+      },
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Decide"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_finished_id}/sets/W1-1/reset",
+      "body": {},
+      "read_by": [
+        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Reset"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count"
+        ]
+      }
     }
   ],
   "pages": [
@@ -10420,6 +11336,32 @@
     "web.pbfeed.looked",
     "web.pbfeed.would_post_again",
     "web.pbfeed.posted_again",
-    "web.pbfeed.post_failed"
+    "web.pbfeed.post_failed",
+    "web.brackets.created",
+    "web.brackets.edited",
+    "web.brackets.signups_opened",
+    "web.brackets.signups_closed",
+    "web.brackets.check_in_opened",
+    "web.brackets.check_in_closed",
+    "web.brackets.checked_in",
+    "web.brackets.checked_out",
+    "web.brackets.entrant_added",
+    "web.brackets.entrant_removed",
+    "web.brackets.entrant_restored",
+    "web.brackets.dropped",
+    "web.brackets.dq",
+    "web.brackets.seeded",
+    "web.brackets.started",
+    "web.brackets.unstarted",
+    "web.brackets.completed",
+    "web.brackets.reopened",
+    "web.brackets.cancelled",
+    "web.brackets.restored",
+    "web.brackets.set_called",
+    "web.brackets.set_reported",
+    "web.brackets.set_confirmed",
+    "web.brackets.set_disputed",
+    "web.brackets.set_overridden",
+    "web.brackets.set_reset"
   ]
 }

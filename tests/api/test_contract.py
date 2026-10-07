@@ -985,7 +985,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         await sticky.write_words(db, guild_id, channel_id, "How to submit a run.", 7)
         await sticky.write_paused(db, guild_id, channel_id, paused, 7)
     structure_old, structure_new = await seed_structure(db, guild_id)
-    return await seed_pbs(web, guild_id, wf.TEST_CHANNEL_ID) | {
+    brackets = await seed_brackets(db, guild_id)
+    return await seed_pbs(web, guild_id, wf.TEST_CHANNEL_ID) | brackets | {
         "sticky_channel_id": str(wf.OTHER_CHANNEL_ID),
         "sticky_paused_channel_id": str(wf.TEST_CHANNEL_ID),
         "structure_old_id": str(structure_old),
@@ -1197,6 +1198,69 @@ async def seed_pbs(web, guild_id: int, rehearsal_id: int) -> dict:
         "pb_opted_out_member_id": str(PB_OPTED_OUT),
         "pb_blocked_member_id": str(PB_BLOCKED),
     }
+
+
+async def seed_brackets(db, guild_id: int) -> dict:
+    """One tournament in every state a bracket route is legal from; the staff session (7) plays
+    W1-1 of the running one against a guest whose side has reported, so confirm and dispute
+    are a player's own moves."""
+    from black_bloc import brackets_store as store_
+    from black_bloc.brackets import play
+    from black_bloc.brackets.model import Options
+
+    async def made(state: str, fmt: str, people: list, **extra) -> tuple[int, list[int]]:
+        tid = await store_.create(db, guild_id, {"name": f"Contract {state}", "format": fmt}, 7)
+        ids = [
+            await store_.add_entrant(db, tid, name, user_id=user, added_by=7)
+            for user, name in people
+        ]
+        await store_.update(db, tid, {"state": state, **extra})
+        return tid, ids
+
+    draft, _ = await made("draft", "single", [])
+    signups, (entrant, _, removed) = await made(
+        "signups", "single", [(MEMBER_ID, "ada"), (None, "Remy"), (PING_MEMBER_ID, "namu")]
+    )
+    await store_.update_entrant(db, removed, {"dropped": 1, "dropped_why": store_.REMOVED})
+    checkin, (checking,) = await made("check_in", "single", [(MEMBER_ID, "ada")])
+    seeding, _ = await made(
+        "seeding", "double", [(MEMBER_ID, "ada"), (PING_MEMBER_ID, "namu"), (None, "Remy")]
+    )
+    running, (_, playing, *_) = await made(
+        "running",
+        "single",
+        [(7, "lead"), (MEMBER_ID, "ada"), (PING_MEMBER_ID, "namu"), (None, "Remy")],
+    )
+    row = await store_.tournament(db, guild_id, running)
+    built = play.build(await order_of(db, running), store_.options_of(row))
+    reported = play.report(built.bracket, "W1-1", "b", 0, 2, 7, None)
+    await store_.save(db, running, reported.bracket, list(reported.bracket.matches), [])
+    finished, pair = await made("running", "single", [(None, "P1"), (None, "P2")])
+    built = play.build(pair, Options(format="single"))
+    done = play.override(built.bracket, "W1-1", 7, None, score_a=3, score_b=1)
+    await store_.save(db, finished, done.bracket, list(done.bracket.matches), [])
+    complete, _ = await made("complete", "single", [(MEMBER_ID, "ada")])
+    cancelled, _ = await made("cancelled", "single", [], state_before="signups")
+    return {
+        "bracket_draft_id": str(draft),
+        "bracket_signups_id": str(signups),
+        "bracket_checkin_id": str(checkin),
+        "bracket_seeding_id": str(seeding),
+        "bracket_running_id": str(running),
+        "bracket_finished_id": str(finished),
+        "bracket_complete_id": str(complete),
+        "bracket_cancelled_id": str(cancelled),
+        "bracket_entrant_id": str(entrant),
+        "bracket_removed_entrant_id": str(removed),
+        "bracket_checkin_entrant_id": str(checking),
+        "bracket_running_entrant_id": str(playing),
+    }
+
+
+async def order_of(db, tournament_id: int) -> list[int]:
+    from black_bloc import brackets_store as store_
+
+    return [one["id"] for one in await store_.entrants(db, tournament_id)]
 
 
 async def seed_structure(db, guild_id: int) -> tuple[int, int]:
