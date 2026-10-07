@@ -942,10 +942,36 @@ const SETTING_SPECS = [
   ["marathon_public_day_today", "text", "today", "today", "{day} on a finished run's public highlight while it is still the day the run ended, by the server's time zone (default_timezone)"],
   ["marathon_public_day_earlier", "text", "on {date}", "on {date}", "{day} on a finished run's public highlight once the day the run ended has passed, by the server's time zone. It takes {date}, the day the run ended, drawn by Discord in each reader's own language"],
   ["marathon_public_removed", "text", "Staff took down the highlight for **{runner}** on **{marathon}**.", "Staff took down the highlight for **{runner}** on **{marathon}**.", "what a public highlight is edited to when everyone it names is opted out; it is not updated after unless they opt back in. It takes the same words as marathon_public_template"],
-  ["marathon_public_button_opt_out", "text", "Opt out of highlight", "Opt out of highlight", "the button on a BaF run's post in the staff thread, and on a BaF person in the People slot view, that opts the person out of this marathon's public posts. It posts nothing"],
-  ["marathon_public_button_opt_in", "text", "Opt back in", "Opt back in", "the same button once the person is opted out; they are announced again from the next reminder mark"],
+  ["marathon_public_button_opt_out", "text", "Opt out of every run on this marathon", "Opt out of every run on this marathon", "the button on a BaF run's post in the staff thread, and on a BaF person in the People slot view, that opts the person out of this marathon's public posts — every run of theirs on it. It posts nothing"],
+  ["marathon_public_button_opt_in", "text", "Opt back in to this marathon", "Opt back in to this marathon", "the same button once the person is opted out of the whole marathon; they are announced again from the next reminder mark"],
   ["marathon_announce_opted_out_said", "text", "**{name}** is opted out of **{marathon}**'s public posts: no reminders and no highlight. A highlight of theirs that was up is taken down.", "**{name}** is opted out of **{marathon}**'s public posts: no reminders and no highlight. A highlight of theirs that was up is taken down.", "what staff are told once a person is opted out of a marathon's public posts. It takes {name} {marathon}"],
   ["marathon_announce_opted_in_said", "text", "**{name}** is back in **{marathon}**'s public posts from the next reminder mark.", "**{name}** is back in **{marathon}**'s public posts from the next reminder mark.", "what staff are told once a person is opted back in to a marathon's public posts. It takes {name} {marathon}"],
+  ["marathon_host_announcements_default", "bool", false, false, "whether a marathon announces its BaF HOSTS publicly — a host block's reminders and highlight — when its own Host announcements switch follows this setting. Runners are announced either way; a host can still be announced for one run from that run's post. The marathon's BaF announcements switch is the master over both. off by default"],
+  ["marathon_mention_people", "bool", true, true, "whether a public marathon post writes a BaF person as an @ (drawn, never notified). Off, every public post writes their server name as plain text instead; one person on one marathon can be set the other way from a run's post. on by default"],
+  ["marathon_controls_host_announcements_on", "text", "Host announcements: on · turn off", "Host announcements: on · turn off", "the thread controls' host announcements button while the marathon's BaF hosts are announced publicly"],
+  ["marathon_controls_host_announcements_off", "text", "Host announcements: off · turn on", "Host announcements: off · turn on", "the thread controls' host announcements button while the marathon's BaF hosts are not announced publicly"],
+  ["marathon_host_announcements_on_said", "text", "**{marathon}** announces its BaF hosts publicly now, once per stretch of runs they host. A host can still be left out of one run from that run's post.", "**{marathon}** announces its BaF hosts publicly now, once per stretch of runs they host. A host can still be left out of one run from that run's post.", "what staff are told once a marathon's Host announcements switch is on. It takes {marathon}"],
+  ["marathon_host_announcements_off_said", "text", "**{marathon}** no longer announces its BaF hosts publicly. A host can still be announced for one run from that run's post; a host highlight already up follows its runs to the end.", "**{marathon}** no longer announces its BaF hosts publicly. A host can still be announced for one run from that run's post; a host highlight already up follows its runs to the end.", "what staff are told once a marathon's Host announcements switch is off. It takes {marathon}"],
+  ["marathon_announce_button_run_out", "text", "Do not announce {name} for this run", "Do not announce {name} for this run", "the button on a BaF run's post in the staff thread (and in the People slot view) for a person who would be announced for that run: it leaves them out of that run's public posts only. It takes {name}"],
+  ["marathon_announce_button_run_in", "text", "Announce {name} for this run", "Announce {name} for this run", "the same button for a person who would not be announced for that run (a host while Host announcements are off, or someone opted out of the whole marathon): it announces them for that run. It takes {name}"],
+  ["marathon_announce_button_run_default", "text", "{name}: back to the default for this run", "{name}: back to the default for this run", "the same button once the person has their own answer for that run: it clears it. It takes {name}"],
+  ["marathon_announce_button_plain", "text", "No @ for {name}", "No @ for {name}", "the button beside it while the person is written as an @ in this marathon's public posts: their name is written as plain text instead. It takes {name}"],
+  ["marathon_announce_button_mention", "text", "@ {name} again", "@ {name} again", "the same button while the person's name is written as plain text. It takes {name}"],
+  ["marathon_announce_pick", "text", "Announcements for a person on this run…", "Announcements for a person on this run…", "the menu a BaF run's post carries instead of buttons once more people are on the run than buttons fit"],
+  ["marathon_announce_state_line", "text", "{name}: {state} — {why}{plain}", "{name}: {state} — {why}{plain}", "one line a BaF person under a run's post in the staff thread: whether they are announced for that run and why. It takes {name} {state} {why} {plain}"],
+  ["marathon_announce_state_yes", "text", "announced for this run", "announced for this run", "{state} of that line while the person is announced for the run"],
+  ["marathon_announce_state_no", "text", "not announced for this run", "not announced for this run", "{state} of that line while the person is not announced for the run"],
+  ["marathon_announce_why_default", "text", "the default", "the default", "{why} of that line while nothing but the defaults decides"],
+  ["marathon_announce_why_run", "text", "set for this run", "set for this run", "{why} of that line while the run has its own answer for the person"],
+  ["marathon_announce_why_marathon", "text", "opted out of every run on this marathon", "opted out of every run on this marathon", "{why} of that line while the person is opted out of the whole marathon"],
+  ["marathon_announce_why_off", "text", "BaF announcements are off for this marathon", "BaF announcements are off for this marathon", "{why} of that line while the marathon's BaF announcements switch is off"],
+  ["marathon_announce_why_hosts_off", "text", "host announcements are off for this marathon", "host announcements are off for this marathon", "{why} of that line for a host while the marathon's Host announcements switch is off"],
+  ["marathon_announce_state_plain", "text", " · written without an @", " · written without an @", "{plain} of that line while the person's name is written as plain text"],
+  ["marathon_announce_run_in_said", "text", "**{name}** is announced for **{game}** on **{marathon}** from the next reminder mark.", "**{name}** is announced for **{game}** on **{marathon}** from the next reminder mark.", "what staff are told once a person is announced for one run. It takes {name} {game} {marathon}"],
+  ["marathon_announce_run_out_said", "text", "**{name}** is not announced for **{game}** on **{marathon}**. Their other runs are unchanged.", "**{name}** is not announced for **{game}** on **{marathon}**. Their other runs are unchanged.", "what staff are told once a person is left out of one run's public posts. It takes {name} {game} {marathon}"],
+  ["marathon_announce_run_default_said", "text", "**{name}** follows the defaults again for **{game}** on **{marathon}**.", "**{name}** follows the defaults again for **{game}** on **{marathon}**.", "what staff are told once a person's own answer for one run is cleared. It takes {name} {game} {marathon}"],
+  ["marathon_mention_plain_said", "text", "**{name}** is written by name, with no @, in **{marathon}**'s public posts. Posts already up are rewritten in place.", "**{name}** is written by name, with no @, in **{marathon}**'s public posts. Posts already up are rewritten in place.", "what staff are told once a person's name is written as plain text on a marathon. It takes {name} {marathon}"],
+  ["marathon_mention_on_said", "text", "**{name}** is written as an @ again in **{marathon}**'s public posts. Posts already up are rewritten in place.", "**{name}** is written as an @ again in **{marathon}**'s public posts. Posts already up are rewritten in place.", "what staff are told once a person is written as an @ again on a marathon. It takes {name} {marathon}"],
   ["marathon_public_not_postable", "text", "**{game}** is off the schedule or nobody from BaF is on it any more, so it was not highlighted.", "**{game}** is off the schedule or nobody from BaF is on it any more, so it was not highlighted.", "the refusal when Highlight is pressed on a run that was dropped or unlinked. It takes {runner} {game}"],
   ["marathon_public_auto_on_said", "text", "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.", "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.", "what staff are told once a marathon's auto-highlight is turned on. It takes {marathon} {channel}"],
   ["marathon_public_auto_off_said", "text", "**{marathon}** no longer highlights BaF runs by itself. Highlights already up stay up.", "**{marathon}** no longer highlights BaF runs by itself. Highlights already up stay up.", "what staff are told once a marathon's auto-highlight is turned off. It takes {marathon}"],
@@ -6988,10 +7014,15 @@ function marathonSyncWindow(row) {
   logAction('marathon.window_set', { actor_id: null, details: { marathon_id: row.id, window_id: id } });
 }
 
-function marathonPersonRow(one) {
+function marathonPersonRow(one, run) {
   const rest = { ...one };
   delete rest.counts;
-  return { ...rest, member_name: one.user_id ? memberName(one.user_id) : null };
+  const row = run && one.user_id ? state.marathons.find((found) => found.id === run.marathon_id) : null;
+  return {
+    ...rest,
+    member_name: one.user_id ? memberName(one.user_id) : null,
+    announce: row ? marathonAnnounceState(row, run, one.user_id, one.name) : null,
+  };
 }
 
 function marathonRunRow(run) {
@@ -7003,7 +7034,7 @@ function marathonRunRow(run) {
     game: run.game,
     category: run.category,
     runners_text: run.runners_text,
-    people: run.people.map(marathonPersonRow),
+    people: run.people.map((one) => marathonPersonRow(one, run)),
     scheduled_at: run.scheduled_at,
     ends_at: run.ends_at,
     previous_scheduled_at: run.previous_scheduled_at,
@@ -7128,6 +7159,7 @@ function marathonRow(row) {
     role_ping: marathonRolePing(row),
     public_highlight: Boolean(row.public_highlight),
     announcements: marathonSwitch(row, 'announcements'),
+    host_announcements: marathonSwitch(row, 'host_announcements'),
     overlay: { ...marathonSwitch(row, 'overlay'), sheet: row.overlay_sheet || null },
     ...marathonTracking(row),
   };
@@ -7268,10 +7300,11 @@ function marathonSetPingRole(row, given) {
 // The bot's cogs/content/marathon_hosts: BaF announcements, on, off or following its setting.
 // Scan hosts and BaF host events are retired (people-unify): hosts are always found, and host
 // blocks get events under the one BaF run/host events switch (the runs half of event_mode).
-const MARATHON_SWITCH_DEFAULTS = { announcements: 'marathon_announcements_default', overlay: 'marathon_hotfix_overlay_default' };
-const MARATHON_SWITCH_WHAT = { announcements: 'BaF announcements', overlay: 'Event schedule' };
+const MARATHON_SWITCH_DEFAULTS = { announcements: 'marathon_announcements_default', host_announcements: 'marathon_host_announcements_default', overlay: 'marathon_hotfix_overlay_default' };
+const MARATHON_SWITCH_WHAT = { announcements: 'BaF announcements', host_announcements: 'Host announcements', overlay: 'Event schedule' };
 const MARATHON_SWITCH_SAID = {
   announcements: ['marathon_announcements_on_said', 'marathon_announcements_off_said'],
+  host_announcements: ['marathon_host_announcements_on_said', 'marathon_host_announcements_off_said'],
   overlay: ['marathon_overlay_on_said', 'marathon_overlay_off_said'],
 };
 const MARATHON_SCAN_GONE = 'The Scan hosts switch is gone — hosts are always found now, like runners, so nothing was changed.';
@@ -8575,6 +8608,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   if ('scan_hosts' in body) said.push(MARATHON_SCAN_GONE);
   if ('host_events' in body) said.push(MARATHON_HOST_EVENTS_GONE);
   if ('announcements' in body) said.push(marathonSetSwitch(row, 'announcements', body.announcements));
+  if ('host_announcements' in body) said.push(marathonSetSwitch(row, 'host_announcements', body.host_announcements));
   if ('overlay' in body) said.push(marathonSetSwitch(row, 'overlay', body.overlay));
   if ('public_highlight' in body) said.push(marathonSetPublicHighlight(row, body.public_highlight));
   if ('dismiss_next' in body) {
@@ -8809,6 +8843,7 @@ function marathonBoardRow(row, entry) {
     spotlight_until: spotlit ? channel.expires_at : null,
     looks_like: marathonLooksLike(entry),
     opted_out: entry.user_id ? marathonOptedOut(row).has(String(entry.user_id)) : null,
+    mention: entry.user_id ? marathonMentionState(row, entry.user_id, entry.name) : null,
     part_tag: marathonPartTag(entry.parts),
   };
 }
@@ -8865,6 +8900,130 @@ function marathonOptMove(context, row, out) {
   const said = marathonSaid(out ? 'marathon_announce_opted_out_said' : 'marathon_announce_opted_in_said', { name: memberName(userId) || entry.name, marathon: row.name });
   return { ...marathonBoard(row), message: said };
 }
+
+// Announce overrides (black_bloc/marathon_announce.py): one decision for one person on one run —
+// the marathon's switch is the master, then the marathon-wide opt-out (a run's own yes gets past
+// it), then the run's own answer, then the default for their part (runner yes, host the
+// marathon's Host announcements).
+const MARATHON_ANNOUNCE_LABELS = {
+  in: 'marathon_announce_button_run_in',
+  out: 'marathon_announce_button_run_out',
+  default: 'marathon_announce_button_run_default',
+  plain: 'marathon_announce_button_plain',
+  mention: 'marathon_announce_button_mention',
+};
+const MARATHON_ANNOUNCE_WHY = {
+  default: 'marathon_announce_why_default',
+  run: 'marathon_announce_why_run',
+  opted_out: 'marathon_announce_why_marathon',
+  marathon_off: 'marathon_announce_why_off',
+  hosts_off: 'marathon_announce_why_hosts_off',
+};
+const MARATHON_RUN_SAID = { in: 'marathon_announce_run_in_said', out: 'marathon_announce_run_out_said', default: 'marathon_announce_run_default_said' };
+const MARATHON_RUN_WORDS = { in: 'in', on: 'in', yes: 'in', announce: 'in', out: 'out', off: 'out', no: 'out', default: 'default', follow: 'default', clear: 'default' };
+const MARATHON_MENTION_WORDS = { plain: 'plain', name: 'plain', off: 'plain', no: 'plain', mention: 'mention', '@': 'mention', on: 'mention', yes: 'mention' };
+
+function marathonWord(key) {
+  return String(state.settings.get(key) ?? '');
+}
+
+function marathonPlain(row, userId) {
+  const own = (row.mention_people || {})[String(userId)];
+  return own ? own === 'plain' : !state.settings.get('marathon_mention_people');
+}
+
+function marathonRoleOn(run, userId) {
+  const mine = run.people.filter((one) => one.user_id && String(one.user_id) === String(userId));
+  if (!mine.some((one) => one.counts !== false || one.part === 'host')) return null;
+  return mine.some((one) => one.part !== 'host' && one.counts !== false) ? 'runner' : 'host';
+}
+
+function marathonDecide(row, run, userId, role, master) {
+  const answer = (run.announce_people || {})[String(userId)] || null;
+  if (!master) return { yes: false, why: 'marathon_off' };
+  if (marathonOptedOut(row).has(String(userId)) && answer !== 'in') return { yes: false, why: 'opted_out' };
+  if (answer) return { yes: answer === 'in', why: 'run' };
+  if (role !== 'host') return { yes: true, why: 'default' };
+  const on = marathonSwitch(row, 'host_announcements').on;
+  return { yes: on, why: on ? 'default' : 'hosts_off' };
+}
+
+function marathonAnnounceState(row, run, userId, name) {
+  const role = marathonRoleOn(run, userId);
+  if (!role) return null;
+  const said = marathonDecide(row, run, userId, role, marathonSwitch(row, 'announcements').on);
+  const answer = (run.announce_people || {})[String(userId)] || null;
+  const shown = ['upcoming', 'live'].includes(run.state);
+  const move = answer ? 'default' : (marathonDecide(row, run, userId, role, true).yes ? 'out' : 'in');
+  return {
+    role,
+    answer,
+    announced: said.yes,
+    why: said.why,
+    said: shown ? marathonSaid('marathon_announce_state_line', {
+      name,
+      state: marathonWord(said.yes ? 'marathon_announce_state_yes' : 'marathon_announce_state_no'),
+      why: marathonWord(MARATHON_ANNOUNCE_WHY[said.why]),
+      plain: marathonPlain(row, userId) ? marathonWord('marathon_announce_state_plain') : '',
+    }) : null,
+    move: shown ? move : null,
+    move_label: marathonSaid(MARATHON_ANNOUNCE_LABELS[move], { name }),
+  };
+}
+
+function marathonMentionState(row, userId, name) {
+  const plain = marathonPlain(row, userId);
+  const move = plain ? 'mention' : 'plain';
+  return {
+    plain,
+    own: (row.mention_people || {})[String(userId)] || null,
+    move,
+    move_label: marathonSaid(MARATHON_ANNOUNCE_LABELS[move], { name }),
+  };
+}
+
+route('POST', '/api/marathons/:marathon_id/people/:user_id/mention', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const body = await context.body();
+  const wanted = MARATHON_MENTION_WORDS[String(body.to ?? '').trim().toLowerCase()];
+  if (!wanted) throw new Refused(422, 'bad_mention', "Say plain or mention for how a person's name is written, so nothing was changed.");
+  const userId = String(decodeURIComponent(context.params.user_id));
+  const entry = marathonPeopleOf(row).find((one) => one.user_id && String(one.user_id) === userId);
+  if (!entry) throw new Refused(404, 'not_baf', `Nobody from BaF with that id is on **${row.name}**, so nothing was changed.`);
+  const was = marathonPlain(row, userId) ? 'plain' : 'mention';
+  const kept = { ...(row.mention_people || {}) };
+  if ((wanted === 'mention') === Boolean(state.settings.get('marathon_mention_people'))) delete kept[userId];
+  else kept[userId] = wanted;
+  row.mention_people = kept;
+  if (was !== wanted) {
+    logAction('web.marathon.mention_set', { target_id: userId, details: { marathon_id: row.id, name: row.name, member: userId, from: was, to: wanted, via: 'website' } });
+  }
+  const said = marathonSaid(wanted === 'plain' ? 'marathon_mention_plain_said' : 'marathon_mention_on_said', { name: memberName(userId) || entry.name, marathon: row.name });
+  return { ...marathonBoard(row), message: said };
+});
+
+route('POST', '/api/marathons/:marathon_id/runs/:run_id/people/:user_id/announce', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const body = await context.body();
+  const wanted = 'to' in body ? MARATHON_RUN_WORDS[String(body.to ?? 'default').trim().toLowerCase()] : null;
+  if (!wanted) throw new Refused(422, 'bad_announce', 'Say in, out or default for whether a person is announced for a run, so nothing was changed.');
+  const run = marathonRunOf(row, context.params.run_id);
+  const userId = String(decodeURIComponent(context.params.user_id));
+  const person = run.people.find((one) => one.user_id && String(one.user_id) === userId);
+  if (!person || !marathonRoleOn(run, userId)) throw new Refused(404, 'not_on_run', `Nobody from BaF with that id is on **${run.game}**, so nothing was changed.`);
+  const kept = { ...(run.announce_people || {}) };
+  const was = kept[userId] || 'default';
+  if (wanted === 'default') delete kept[userId];
+  else kept[userId] = wanted;
+  run.announce_people = kept;
+  if (was !== wanted) {
+    logAction('web.marathon.announce_run_set', { target_id: userId, details: { marathon_id: row.id, name: row.name, run_id: run.id, game: run.game, member: userId, from: was, to: wanted, via: 'website' } });
+  }
+  const said = marathonSaid(MARATHON_RUN_SAID[wanted], { name: memberName(userId) || person.name, game: run.game, marathon: row.name });
+  return { ...marathonBoard(row), message: said };
+});
 
 route('POST', '/api/marathons/:marathon_id/people/:user_id/opt-out', (context) => {
   requireStaff(context.session);

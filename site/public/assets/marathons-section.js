@@ -179,6 +179,7 @@ const OVERLAY_OFF_TAIL = ', but Event schedule is off, so GDQ’s sheet times an
 const OVERLAY_STALE = ' It could not be read just now ({why}), so the last copy is kept.';
 const OVERLAY_NONE = 'The schedule viewer links no event sheet that matches this marathon, so GDQ’s sheet times are used.';
 const ANNOUNCE_FIELD = 'BaF announcements';
+const HOST_ANNOUNCE_FIELD = 'Host announcements';
 const SWITCH_FOLLOW = 'Follow the setting ({state})';
 const TWITCH_FIX_FIELD = 'Twitch name (optional)';
 const TWITCH_FIX_TITLE = 'Twitch name for {name}';
@@ -186,8 +187,8 @@ const TWITCH_FIX_NOTE = 'The schedule says **{sheet}**.';
 const TWITCH_FIX_BLANK = 'blank keeps the schedule’s';
 const TWITCH_FIX_BUTTON = 'Twitch name…';
 const OPTED_OUT = 'Opted out of public posts';
-const OPT_OUT = 'Opt out of highlight';
-const OPT_IN = 'Opt back in';
+const OPT_OUT = 'Opt out of every run';
+const OPT_IN = 'Opt back in to every run';
 const OPT_OUT_TITLE = 'Opt {name} out of this marathon’s public posts?';
 const OPT_OUT_BODY = 'No reminders and no highlight for them on this marathon. A highlight of theirs that is up is edited to say it was taken down. Opt back in undoes it from the next reminder mark.';
 const FIXED_FROM = ' (fixed from twitch.tv/{sheet})';
@@ -659,6 +660,34 @@ function optBits(marathon, say, entry, runId) {
   return [button(OPT_OUT, () => optMove(marathon, say, entry, runId, true), { tone: 'quiet' })];
 }
 
+async function mentionMove(marathon, say, entry, runId) {
+  shown.focus = runId;
+  const path = `/api/marathons/${marathon.id}/people/${encodeURIComponent(entry.user_id)}/mention`;
+  const done = await run(say, () => send(path, 'POST', { to: entry.mention.move }), (found) => found?.message);
+  await after(marathon, done);
+}
+
+function mentionBits(marathon, say, entry, runId) {
+  if (shown.archived || !entry || !entry.user_id || !entry.mention) return [];
+  return [button(entry.mention.move_label, () => mentionMove(marathon, say, entry, runId), { tone: 'quiet' })];
+}
+
+async function announceMove(marathon, say, slot, person) {
+  shown.focus = slot.id;
+  const path = `/api/marathons/${marathon.id}/runs/${slot.id}/people/${encodeURIComponent(person.user_id)}/announce`;
+  const done = await run(say, () => send(path, 'POST', { to: person.announce.move }), (found) => found?.message);
+  await after(marathon, done);
+}
+
+function announceBits(marathon, say, slot, person) {
+  const state = person.announce;
+  if (shown.archived || !person.user_id || !state) return [];
+  return [
+    state.said ? el('span', { class: 'cell-quiet', 'data-tone': state.announced ? undefined : 'warn', text: state.said }) : null,
+    state.move ? button(state.move_label, () => announceMove(marathon, say, slot, person), { tone: 'quiet' }) : null,
+  ].filter(Boolean);
+}
+
 function spotlightBits(marathon, say, entry, runId) {
   if (shown.archived || !entry || !entry.login) return [];
   if (entry.spotlight_id) {
@@ -726,6 +755,7 @@ function bafLine(marathon, say, entry, timeZone) {
       ...matchBits(marathon, say, entry, entry, null),
       ...spotlightBits(marathon, say, entry, null),
       ...optBits(marathon, say, entry, null),
+      ...mentionBits(marathon, say, entry, null),
     ]),
   ]);
   node.addEventListener('toggle', () => {
@@ -758,6 +788,7 @@ function slotPersonLine(marathon, say, board, run, person) {
       ...matchBits(marathon, say, entry, person, run.id, { inSlot: true }),
       ...spotlightBits(marathon, say, entry, run.id),
       ...(person.user_id ? optBits(marathon, say, entry, run.id) : []),
+      ...announceBits(marathon, say, run, person),
     ]),
   ]);
 }
@@ -933,6 +964,7 @@ async function settingsFold(marathon, say) {
   const highlightNow = marathon.public_highlight ? 'on' : 'off';
   const highlight = segment(PING_CHOICES, highlightNow);
   const announce = switchPicker(marathon.announcements);
+  const hostAnnounce = marathon.host_announcements ? switchPicker(marathon.host_announcements) : null;
   const overlay = marathon.source === 'gdq_hotfix' && marathon.overlay ? switchPicker(marathon.overlay) : null;
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
@@ -955,6 +987,7 @@ async function settingsFold(marathon, say) {
     if (ping.readValue() !== pingNow) body.ping_role = ping.readValue() === 'on';
     if (highlight.readValue() !== highlightNow) body.public_highlight = highlight.readValue() === 'on';
     if (announce.readValue() !== announce.now) body.announcements = switchWanted(announce.readValue());
+    if (hostAnnounce && hostAnnounce.readValue() !== hostAnnounce.now) body.host_announcements = switchWanted(hostAnnounce.readValue());
     if (overlay && overlay.readValue() !== overlay.now) body.overlay = switchWanted(overlay.readValue());
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
@@ -978,6 +1011,7 @@ async function settingsFold(marathon, say) {
     rolePingLine(marathon),
     field(HIGHLIGHT_FIELD, highlight),
     field(ANNOUNCE_FIELD, announce),
+    hostAnnounce ? field(HOST_ANNOUNCE_FIELD, hostAnnounce) : null,
     overlay ? field(OVERLAY_FIELD, overlay) : null,
     field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), pollRefusal),
     bar([save]),

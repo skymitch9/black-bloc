@@ -806,6 +806,9 @@ async def seed_world(client, web, guild, wf) -> dict:
     marathon_done_run_id = next(
         row["id"] for row in await runs_of(db, marathon_id) if row["game"] == "Celeste"
     )
+    marathon_host_run_id = next(
+        row["id"] for row in await runs_of(db, marathon_id) if row["game"] == "Blaster Master"
+    )
     await db.conn.execute(
         "UPDATE marathon_runs SET state = 'done', done_at = ?, actual_started_at = ? WHERE id = ?",
         (datetime.now(UTC).isoformat(), datetime.now(UTC).isoformat(), marathon_done_run_id),
@@ -1050,6 +1053,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_person": "somebody_runs",
         "marathon_spotlit_person": "contractrunner",
         "marathon_host": str(HOST_MEMBER_ID),
+        "marathon_host_run_id": str(marathon_host_run_id),
         "feed_id": str(feed_id),
         "feed_suggest_id": str(feed_suggest_id),
         "feed_horaro_events_id": str(feed_horaro_events_id),
