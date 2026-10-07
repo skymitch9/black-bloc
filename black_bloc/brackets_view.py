@@ -78,8 +78,11 @@ def entrant_row(row: Any) -> dict[str, Any]:
     }
 
 
-def set_row(match: Any, names: dict[int, str], confirm_minutes: int) -> dict[str, Any]:
+def set_row(
+    match: Any, names: dict[int, str], confirm_minutes: int, card: tuple | None = None
+) -> dict[str, Any]:
     due = play.confirms_at(match, confirm_minutes)
+    message_id, card_at = card or (None, None)
     return {
         "key": match.key,
         "side": match.side,
@@ -109,6 +112,9 @@ def set_row(match: Any, names: dict[int, str], confirm_minutes: int) -> dict[str
         "dispute_note": match.dispute_note,
         "placement_winner": match.placement_winner,
         "placement_loser": match.placement_loser,
+        "rematch": bool(match.rematch),
+        "message_id": as_id(message_id),
+        "card_at": card_at,
     }
 
 
@@ -151,6 +157,7 @@ def waiting_rows(bracket: Any, names: dict[int, str]) -> list[dict[str, Any]]:
 async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = False) -> dict:
     people = await store_.entrants(db, row["id"])
     bracket = await store_.bracket(db, row)
+    held = await store_.cards(db, row["id"]) if bracket is not None else {}
     names = {one["id"]: one["name"] for one in people}
     mine = next((one["id"] for one in people if viewer and one["user_id"] == viewer), None)
     found = {
@@ -165,7 +172,7 @@ async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = Fal
         "mine": mine,
         "entrants": [entrant_row(one) for one in people],
         "sets": [
-            set_row(match, names, row["confirm_minutes"])
+            set_row(match, names, row["confirm_minutes"], held.get(match.key))
             for match in (bracket.ordered() if bracket else [])
         ],
         "standings": standing_rows(bracket, names),

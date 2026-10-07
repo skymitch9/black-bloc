@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from black_bloc import brackets_people as people
 from black_bloc import brackets_store as store_
+from black_bloc.logkinds import VIA_WEBSITE
 from tests.test_brackets_moves import (
     ADA,
     BEA,
@@ -143,3 +145,48 @@ async def test_a_player_dropping_mid_bracket_forfeits_their_sets(bot, guild):
     entrant = await store_.entrant(bot.db, tid, ada)
     assert (entrant["dropped"], entrant["dropped_why"]) == (1, "dropped")
     assert (await the_set(bot, tid, "R1-1")).forfeit == "drop"
+
+
+async def test_someone_out_before_the_start_cannot_be_put_back_into_a_running_bracket(bot, guild):
+    tid = await signed_up(bot, guild, ADA, BEA, CY)
+    cy = await entrant_id(bot, tid, CY)
+    assert (await people.remove_entrant(bot, guild, who(guild, TO), tid, cy)).ok
+    await moves.close_signups(bot, guild, who(guild, TO), tid)
+    assert (await moves.start(bot, guild, who(guild, TO), tid)).ok
+    outcome = await people.restore_entrant(bot, guild, who(guild, TO), tid, cy)
+    assert (outcome.ok, outcome.code, outcome.status) == (False, "not_in_bracket", 409)
+    assert outcome.message == "Cy is not playing in **Knuck Up 12**, so nothing was done."
+    assert (await store_.entrant(bot.db, tid, cy))["dropped"] == 1
+    listed = {row["id"]: row for row in await store_.tournaments(bot.db, GUILD)}
+    assert listed[tid]["entrant_count"] == 2
+
+
+async def test_check_in_opening_tells_the_website_a_plain_time_and_discord_a_timestamp(
+    bot, guild
+):
+    await bot.store.set(GUILD, "default_timezone", "America/Phoenix")
+    tid = await signed_up(bot, guild, ADA, BEA)
+    site = await people.open_check_in(bot, guild, who(guild, TO), tid, via=VIA_WEBSITE)
+    assert "<t:" not in site.message
+    row = await store_.tournament(bot.db, GUILD, tid)
+    closes = datetime.fromisoformat(row["check_in_closes_at"])
+    local = closes.astimezone(ZoneInfo("America/Phoenix"))
+    hour = local.hour % 12 or 12
+    noon = "am" if local.hour < 12 else "pm"
+    assert site.message == (
+        f"Check-in for **Knuck Up 12** is open until {hour}:{local.minute:02d} {noon} MST."
+    )
+    await people.close_check_in(bot, guild, who(guild, TO), tid)
+    discord = await people.open_check_in(bot, guild, who(guild, TO), tid)
+    assert "<t:" in discord.message
+
+
+async def test_a_check_in_with_an_unreadable_closing_time_closes_at_the_next_sweep(
+    bot, guild, caplog
+):
+    tid = await signed_up(bot, guild, ADA, BEA)
+    await people.open_check_in(bot, guild, who(guild, TO), tid)
+    await store_.update(bot.db, tid, {"check_in_closes_at": "soon"})
+    assert await people.close_due_check_ins(bot, guild) == [tid]
+    assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "seeding"
+    assert sum("could not be read" in one.getMessage() for one in caplog.records) == 1

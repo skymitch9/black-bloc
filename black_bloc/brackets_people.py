@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -29,9 +30,24 @@ from .brackets_moves import (
     require_runner,
     require_state,
     stop,
+    touched,
 )
-from .logkinds import VIA_DISCORD
+from .logkinds import VIA_DISCORD, VIA_WEBSITE
 from .panels import Outcome
+from .settings_store import DEFAULT_TIMEZONE_KEY
+from .timezones import DEFAULT_TZ, zone
+
+log = logging.getLogger(__name__)
+
+
+def clock_words(bot: Any, guild: Any, when: datetime, via: str) -> str:
+    """A Discord timestamp in Discord; on the site, a plain time in the server's zone."""
+    if via != VIA_WEBSITE:
+        return f"<t:{int(when.timestamp())}:t>"
+    name = bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY) or DEFAULT_TZ
+    local = when.astimezone(zone(name) or zone(DEFAULT_TZ) or UTC)
+    hour = local.hour % 12 or 12
+    return f"{hour}:{local.minute:02d} {'am' if local.hour < 12 else 'pm'} {local.tzname()}"
 
 
 @answered
@@ -63,10 +79,10 @@ async def open_check_in(
         return done(
             bot,
             guild,
-            "brackets_check_in_opened_said",
+            "check_in_opened",
             row["id"],
             name=row["name"],
-            closes=f"<t:{int(closes.timestamp())}:t>",
+            closes=clock_words(bot, guild, closes, via),
         )
 
 
@@ -81,9 +97,7 @@ async def finish_check_in(bot: Any, guild: Any, actor: Any, row: Any, via: str) 
         )
     await store_.update(bot.db, row["id"], {"state": store_.SEEDING})
     await note(bot, guild, "check_in_closed", actor, row["id"], via, removed=gone)
-    return done(
-        bot, guild, "brackets_check_in_closed_said", row["id"], name=row["name"], removed=len(gone)
-    )
+    return done(bot, guild, "check_in_closed", row["id"], name=row["name"], removed=len(gone))
 
 
 @answered
@@ -111,12 +125,17 @@ async def close_due_check_ins(
             continue
         async with lock_for(bot, row["id"]):
             fresh = await store_.tournament(bot.db, guild.id, row["id"])
-            closes = play.parsed(fresh["check_in_closes_at"]) if fresh else None
-            if (
-                fresh is None
-                or fresh["state"] != store_.CHECK_IN
-                or not checkin.due(closes, moment)
-            ):
+            if fresh is None or fresh["state"] != store_.CHECK_IN:
+                continue
+            closes = play.parsed(fresh["check_in_closes_at"])
+            if closes is None:
+                log.warning(
+                    "brackets: tournament %s check-in closing time %r could not be read; "
+                    "closing it now",
+                    fresh["id"],
+                    fresh["check_in_closes_at"],
+                )
+            elif not checkin.due(closes, moment):
                 continue
             await finish_check_in(bot, guild, None, fresh, via)
             closed.append(int(fresh["id"]))
@@ -251,7 +270,7 @@ async def add_entrant(
         member = guild.get_member(int(user_id)) if user_id is not None else None
         wanted = clean_text(name or getattr(member, "display_name", None), NAME_LIMIT + 1)
         if not wanted or len(wanted) > NAME_LIMIT:
-            raise stop(bot, guild, "brackets_no_name_said", "no_name", 400, limit=NAME_LIMIT)
+            raise stop(bot, guild, "no_name", "no_name", 400, limit=NAME_LIMIT)
         found = (
             await store_.entrant_of(bot.db, row["id"], int(user_id))
             if user_id is not None
@@ -291,9 +310,7 @@ async def add_entrant(
             entrant=entrant_id,
             guest=user_id is None,
         )
-        return done(
-            bot, guild, "brackets_entrant_added_said", row["id"], entrant=wanted, name=row["name"]
-        )
+        return done(bot, guild, "entrant_added", row["id"], entrant=wanted, name=row["name"])
 
 
 @answered
@@ -339,12 +356,7 @@ async def remove_entrant(
             entrant=found["id"],
         )
         return done(
-            bot,
-            guild,
-            "brackets_entrant_removed_said",
-            row["id"],
-            entrant=found["name"],
-            name=row["name"],
+            bot, guild, "entrant_removed", row["id"], entrant=found["name"], name=row["name"]
         )
 
 
@@ -367,12 +379,16 @@ async def restore_entrant(
         found = await person(bot, guild, row, entrant_id)
         names = {"entrant": found["name"], "name": row["name"]}
         if not found["dropped"] and not found["dq"]:
-            raise stop(bot, guild, "brackets_not_out_said", "not_out", 409, **names)
+            raise stop(bot, guild, "not_out", "not_out", 409, **names)
+        moved = None
         if row["state"] == store_.RUNNING:
             current = await store_.bracket(bot.db, row)
-            if current is not None and found["id"] in current.entrants:
-                moved = engine(bot, guild, row, names, play.reinstate, current, found["id"], None)
-                await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
+            if current is None or found["id"] not in current.entrants:
+                raise stop(
+                    bot, guild, "brackets_not_in_bracket_said", "not_in_bracket", 409, **names
+                )
+            moved = engine(bot, guild, row, names, play.reinstate, current, found["id"], None)
+            await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
         await store_.update_entrant(bot.db, found["id"], back_in())
         await note(
             bot,
@@ -384,7 +400,8 @@ async def restore_entrant(
             target=found["user_id"],
             entrant=found["id"],
         )
-        return done(bot, guild, "brackets_entrant_restored_said", row["id"], **names)
+        outcome = done(bot, guild, "entrant_restored", row["id"], **names)
+        return touched(outcome, moved) if moved is not None else outcome
 
 
 async def withdrawn(
@@ -399,8 +416,9 @@ async def withdrawn(
     moved = engine(bot, guild, row, names, play.withdraw, current, found["id"], why, now_stamp())
     flags = {"dq": 1} if why == DQ else {"dropped": 1, "dropped_why": store_.DROPPED}
     await store_.update_entrant(bot.db, found["id"], flags | {"dropped_at": now_stamp()})
-    await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
+    gone = await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
     event = "dq" if why == DQ else "dropped"
+    key = "dq" if why == DQ else "brackets_dropped_said"
     await note(
         bot,
         guild,
@@ -412,7 +430,7 @@ async def withdrawn(
         entrant=found["id"],
         forfeited=moved.changed,
     )
-    return done(bot, guild, f"brackets_{event}_said", row["id"], **names)
+    return touched(done(bot, guild, key, row["id"], **names), moved, gone)
 
 
 @answered
@@ -485,10 +503,5 @@ async def drop(
         if found["user_id"] == actor_id(actor):
             return done(bot, guild, "brackets_left_said", row["id"], name=row["name"])
         return done(
-            bot,
-            guild,
-            "brackets_entrant_removed_said",
-            row["id"],
-            entrant=found["name"],
-            name=row["name"],
+            bot, guild, "entrant_removed", row["id"], entrant=found["name"], name=row["name"]
         )

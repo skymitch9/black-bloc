@@ -4331,37 +4331,6 @@ BRACKETS_NAMED = ("name",)
 BRACKETS_SET = ("set",)
 BRACKETS_ENTRANT = ("entrant", "name")
 BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
-    "brackets_created_said": (
-        "Created **{name}**.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after creating a tournament",
-    ),
-    "brackets_edited_said": (
-        "Saved **{name}**.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after changing a tournament's options",
-    ),
-    "brackets_signups_opened_said": (
-        "Sign-ups for **{name}** are open.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after opening sign-ups",
-    ),
-    "brackets_signups_closed_said": (
-        "Sign-ups for **{name}** are closed.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after closing sign-ups",
-    ),
-    "brackets_check_in_opened_said": (
-        "Check-in for **{name}** is open until {closes}.",
-        ("name", "closes"),
-        "what a tournament organiser is told after opening check-in; {closes} is when it shuts",
-    ),
-    "brackets_check_in_closed_said": (
-        "Check-in for **{name}** is closed — {removed} no-show(s) taken out.",
-        ("name", "removed"),
-        "what a tournament organiser is told after closing check-in; {removed} counts the "
-        "entrants taken out for not checking in",
-    ),
     "brackets_checked_in_said": (
         "{entrant} is checked in for **{name}**.",
         BRACKETS_ENTRANT,
@@ -4377,21 +4346,6 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         BRACKETS_NAMED,
         "what a member is told after signing themselves up",
     ),
-    "brackets_entrant_added_said": (
-        "{entrant} is in **{name}**.",
-        BRACKETS_ENTRANT,
-        "what a tournament organiser is told after adding an entrant by hand",
-    ),
-    "brackets_entrant_removed_said": (
-        "{entrant} is out of **{name}**.",
-        BRACKETS_ENTRANT,
-        "what a tournament organiser is told after taking an entrant out before the start",
-    ),
-    "brackets_entrant_restored_said": (
-        "{entrant} is back in **{name}**.",
-        BRACKETS_ENTRANT,
-        "what a tournament organiser is told after putting an entrant back, or lifting a DQ",
-    ),
     "brackets_left_said": (
         "You have left **{name}**.",
         BRACKETS_NAMED,
@@ -4401,47 +4355,6 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{entrant} has dropped out of **{name}**; their remaining sets are forfeited.",
         BRACKETS_ENTRANT,
         "what is said after an entrant drops out of a running tournament",
-    ),
-    "brackets_dq_said": (
-        "{entrant} is disqualified from **{name}**; their remaining sets are forfeited.",
-        BRACKETS_ENTRANT,
-        "what a tournament organiser is told after a DQ",
-    ),
-    "brackets_seeded_said": (
-        "Seeding for **{name}** is saved.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after setting or shuffling the seeding",
-    ),
-    "brackets_started_said": (
-        "**{name}** has started — {sets} set(s) to play.",
-        ("name", "sets"),
-        "what a tournament organiser is told after starting; {sets} counts the sets that will "
-        "be played",
-    ),
-    "brackets_unstarted_said": (
-        "**{name}** is back to seeding; its sets and results are cleared.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after taking a running bracket back to seeding",
-    ),
-    "brackets_completed_said": (
-        "**{name}** is complete.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after completing a tournament",
-    ),
-    "brackets_reopened_said": (
-        "**{name}** is running again.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after reopening a completed tournament",
-    ),
-    "brackets_cancelled_said": (
-        "**{name}** is cancelled.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after cancelling a tournament",
-    ),
-    "brackets_restored_said": (
-        "**{name}** is back as it was before it was cancelled.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told after undoing a cancel",
     ),
     "brackets_set_called_said": (
         "{set} is called: {a} v {b}.",
@@ -4469,11 +4382,6 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{set} is disputed; a tournament organiser decides it.",
         BRACKETS_SET,
         "what a player is told after disputing a reported score",
-    ),
-    "brackets_set_reset_said": (
-        "{set} is open again; every set it decided after it is cleared.",
-        BRACKETS_SET,
-        "what a tournament organiser is told after resetting a set",
     ),
     "brackets_off_said": (
         "Tournament brackets are switched **off**, so nothing was done. Set brackets_mode to "
@@ -4528,11 +4436,6 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what {state} says for a tournament whose placements are final",
     ),
     "brackets_state_cancelled": ("cancelled", (), "what {state} says for a cancelled tournament"),
-    "brackets_not_entrant_said": (
-        "You are not in **{name}**, so nothing was done.",
-        BRACKETS_NAMED,
-        "what a member is told when they act on a tournament they are not entered in",
-    ),
     "brackets_not_yours_said": (
         "Only {entrant} or a tournament organiser can do that, so nothing was done.",
         ("entrant",),
@@ -4553,32 +4456,6 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "up. Ask them to put you back.",
         BRACKETS_NAMED,
         "what a member is told when they try to sign up again after an organiser removed them",
-    ),
-    "brackets_no_name_said": (
-        "An entrant needs a name of 1 to {limit} characters, so nothing was done.",
-        ("limit",),
-        "what a tournament organiser is told when a name is blank or too long",
-    ),
-    "brackets_bad_option_said": (
-        "{field} cannot be {given}, so nothing was saved. It takes {allowed}.",
-        ("field", "given", "allowed"),
-        "what a tournament organiser is told when an option is out of range; {allowed} says "
-        "what it takes",
-    ),
-    "brackets_check_in_open_said": (
-        "Check-in for **{name}** is still open. Close it first so no-shows are taken out.",
-        BRACKETS_NAMED,
-        "what a tournament organiser is told when they start while check-in is open",
-    ),
-    "brackets_too_few_said": (
-        "**{name}** needs at least 2 entrants to start; it has {count}.",
-        ("name", "count"),
-        "what a tournament organiser is told when they start with fewer than two entrants",
-    ),
-    "brackets_unfinished_said": (
-        "{open} set(s) in **{name}** are not final yet, so it cannot be completed.",
-        ("name", "open"),
-        "what a tournament organiser is told when they complete a tournament with sets left",
     ),
     "brackets_no_set_said": (
         "There is no set {set} in **{name}**, so nothing was done.",
@@ -4611,16 +4488,6 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         BRACKETS_SET,
         "what a player is told when they report a set that is under dispute",
     ),
-    "brackets_already_called_said": (
-        "{set} is already called.",
-        BRACKETS_SET,
-        "what a tournament organiser is told when they call a set twice",
-    ),
-    "brackets_already_reported_said": (
-        "{set} already has a score reported.",
-        BRACKETS_SET,
-        "what a tournament organiser is told when they call a set that has been reported",
-    ),
     "brackets_bad_score_said": (
         "That score does not finish a best of {best_of}: the winner has {wins} game(s) and the "
         "loser fewer.",
@@ -4642,26 +4509,6 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         BRACKETS_SET,
         "what a player is told when they confirm or dispute their own report",
     ),
-    "brackets_not_resettable_said": (
-        "{set} is a bye, so there is nothing to reset.",
-        BRACKETS_SET,
-        "what a tournament organiser is told when they reset a bye",
-    ),
-    "brackets_nothing_to_reset_said": (
-        "{set} has no result to reset.",
-        BRACKETS_SET,
-        "what a tournament organiser is told when they reset a set nobody has played",
-    ),
-    "brackets_forfeit_needs_winner_said": (
-        "A forfeit needs the winner picked, so nothing was done.",
-        (),
-        "what a tournament organiser is told when they record a forfeit without a winner",
-    ),
-    "brackets_bad_order_said": (
-        "That order does not name every entrant exactly once, so nothing was changed.",
-        (),
-        "what a tournament organiser is told when a seeding or final order leaves someone out",
-    ),
     "brackets_not_in_bracket_said": (
         "{entrant} is not playing in **{name}**, so nothing was done.",
         BRACKETS_ENTRANT,
@@ -4671,11 +4518,6 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{entrant} is already out of **{name}**.",
         BRACKETS_ENTRANT,
         "what is said when an entrant is dropped or disqualified twice",
-    ),
-    "brackets_not_out_said": (
-        "{entrant} is not out of **{name}**, so there is nothing to put back.",
-        BRACKETS_ENTRANT,
-        "what a tournament organiser is told when they put back somebody who never left",
     ),
 }
 BRACKETS_DEFAULTS: dict[str, Any] = {

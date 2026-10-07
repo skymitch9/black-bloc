@@ -95,3 +95,20 @@ async def test_the_list_counts_the_entrants_still_in(db):
     assert [(row["id"], row["entrant_count"]) for row in await store_.tournaments(db, GUILD)] == [
         (tid, 1)
     ]
+
+
+async def test_a_set_card_is_kept_across_saves_until_the_set_is_removed(db):
+    tid = await tournament(db)
+    ids = [
+        await store_.add_entrant(db, tid, f"P{n}", user_id=100 + n, added_by=7) for n in range(4)
+    ]
+    built = play.build(ids, Options(format=DOUBLE), "2026-10-07T00:00:00+00:00")
+    await store_.save(db, tid, built.bracket, built.changed, [])
+    await store_.set_card(db, tid, "W1-1", 9001, "2026-10-07T00:00:30+00:00")
+    after = play.override(
+        built.bracket, "W1-1", 7, "2026-10-07T00:01:00+00:00", score_a=2, score_b=1
+    )
+    assert await store_.save(db, tid, after.bracket, after.changed, after.removed) == {}
+    assert await store_.cards(db, tid) == {"W1-1": (9001, "2026-10-07T00:00:30+00:00")}
+    assert await store_.save(db, tid, after.bracket, [], ["W1-1"]) == {"W1-1": 9001}
+    assert await store_.cards(db, tid) == {}

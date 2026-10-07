@@ -310,12 +310,14 @@ async def test_a_tournament_from_another_server_is_not_found(bot, guild):
 
 
 async def test_staff_wording_is_used_and_a_broken_one_falls_back(bot, guild):
-    await bot.store.set(GUILD, "brackets_created_said", "Made {name}!")
-    assert (await moves.create(bot, guild, who(guild, TO), {"name": "A"})).message == "Made A!"
-    bot.store._cache[(GUILD, "brackets_created_said")] = "Made {nope}!"
+    tid = await made(bot, guild)
+    await moves.open_signups(bot, guild, who(guild, TO), tid)
+    await bot.store.set(GUILD, "brackets_joined_said", "In {name}!")
+    assert (await people.join(bot, guild, who(guild, ADA), tid)).message == "In Knuck Up 12!"
+    bot.store._cache[(GUILD, "brackets_joined_said")] = "In {nope}!"
     assert (
-        await moves.create(bot, guild, who(guild, TO), {"name": "B"})
-    ).message == "Created **B**."
+        await people.join(bot, guild, who(guild, BEA), tid)
+    ).message == "You are in **Knuck Up 12**."
 
 
 def test_the_lock_is_one_per_tournament():
@@ -326,3 +328,63 @@ def test_the_lock_is_one_per_tournament():
 
 async def test_now_is_utc():
     assert datetime.fromisoformat(moves.now_stamp()).tzinfo == UTC
+
+
+async def test_a_swiss_start_with_more_rounds_than_the_field_can_carry_is_refused(bot, guild):
+    tid = await signed_up(bot, guild, ADA, BEA, CY, STAFF, format="swiss", swiss_rounds=4)
+    await moves.close_signups(bot, guild, who(guild, TO), tid)
+    outcome = await moves.start(bot, guild, who(guild, TO), tid)
+    assert (outcome.ok, outcome.code, outcome.status) == (False, "too_many_rounds", 409)
+    assert outcome.message == (
+        "**Knuck Up 12** has 4 entrants, so it can play at most 3 Swiss round(s) without a "
+        "rematch; it is set to 4. Lower swiss_rounds, or add entrants."
+    )
+    assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "seeding"
+    assert (await moves.edit(bot, guild, who(guild, TO), tid, {"swiss_rounds": 3})).ok
+    assert (await moves.start(bot, guild, who(guild, TO), tid)).ok
+
+
+@pytest.mark.parametrize(
+    ("players", "given", "said"),
+    [
+        (4, {}, "**Knuck Up 12** has started — up to 7 set(s) to play."),
+        (4, {"grand_final_reset": False}, "**Knuck Up 12** has started — 6 set(s) to play."),
+        (3, {"format": "single"}, "**Knuck Up 12** has started — 2 set(s) to play."),
+    ],
+)
+async def test_started_counts_only_the_sets_that_will_be_played(bot, guild, players, given, said):
+    everyone = (ADA, BEA, CY, STAFF)[:players]
+    tid = await signed_up(bot, guild, *everyone, **given)
+    await moves.close_signups(bot, guild, who(guild, TO), tid)
+    assert (await moves.start(bot, guild, who(guild, TO), tid)).message == said
+
+
+async def test_back_to_seeding_leaves_every_entrant_a_seed_of_their_own(bot, guild):
+    tid = await signed_up(bot, guild, ADA, BEA, CY, STAFF)
+    bea = await entrant_id(bot, tid, BEA)
+    assert (await people.drop(bot, guild, who(guild, BEA), tid, bea)).ok
+    await moves.close_signups(bot, guild, who(guild, TO), tid)
+    assert (await moves.start(bot, guild, who(guild, TO), tid)).ok
+    assert (await moves.unstart(bot, guild, who(guild, TO), tid)).ok
+    seeds = [one["seed"] for one in await store_.entrants(bot.db, tid)]
+    assert sorted(seeds) == [1, 2, 3, 4]
+    assert (await store_.entrant(bot.db, tid, bea))["seed"] == 4
+
+
+async def test_a_staff_wording_that_breaks_in_any_way_falls_back(bot, guild):
+    tid = await made(bot, guild)
+    await moves.open_signups(bot, guild, who(guild, TO), tid)
+    bot.store._cache[(GUILD, "brackets_joined_said")] = "In {name.nothing}!"
+    joined = await people.join(bot, guild, who(guild, ADA), tid)
+    assert (joined.ok, joined.message) == (True, "You are in **Knuck Up 12**.")
+
+
+async def test_start_and_back_to_seeding_say_which_sets_changed(bot, guild):
+    tid = await signed_up(bot, guild, ADA, BEA, CY, format="single")
+    await moves.close_signups(bot, guild, who(guild, TO), tid)
+    started_ = await moves.start(bot, guild, who(guild, TO), tid)
+    assert started_.changed == ("W1-1", "W1-2", "W2-1")
+    await store_.set_card(bot.db, tid, "W1-2", 9001, "2026-10-07T12:00:00+00:00")
+    back = await moves.unstart(bot, guild, who(guild, TO), tid)
+    assert (back.changed, back.gone) == (("W1-1", "W1-2", "W2-1"), {"W1-2": 9001})
+    assert (await moves.open_signups(bot, guild, who(guild, TO), tid)).changed == ()

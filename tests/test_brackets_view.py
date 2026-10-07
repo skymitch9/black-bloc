@@ -49,3 +49,12 @@ async def test_before_the_start_the_view_has_no_sets(db):
     found = await brackets_view.full(db, await store_.tournament(db, GUILD, tid))
     assert (found["sets"], found["standings"], found["waiting_on"]) == ([], [], [])
     assert brackets_view.summary(await store_.tournament(db, GUILD, tid))["entrant_count"] is None
+
+async def test_each_set_shows_its_card_and_whether_it_is_a_rematch(db):
+    tid, ids, bracket = await seeded(db, SINGLE, 2)
+    row = await store_.tournament(db, GUILD, tid)
+    (only,) = (await brackets_view.full(db, row))["sets"]
+    assert (only["message_id"], only["card_at"], only["rematch"]) == (None, None, False)
+    await store_.set_card(db, tid, "W1-1", 12345678901234567, NOW)
+    (only,) = (await brackets_view.full(db, row))["sets"]
+    assert (only["message_id"], only["card_at"]) == ("12345678901234567", NOW)

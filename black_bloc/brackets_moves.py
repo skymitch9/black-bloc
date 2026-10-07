@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,10 +13,8 @@ from . import brackets_store as store_
 from .actionlog import log_action
 from .brackets import access, bestof, play, seeding, standings
 from .brackets.model import (
-    BYE,
     DONE,
     FORMATS,
-    VOID,
     BracketError,
 )
 from .logkinds import VIA_DISCORD, kind_via
@@ -57,30 +56,65 @@ LOCKS_ATTR = "_brackets_locks"
 
 ENGINE_STATUS = {"bad_score": 400, "bad_order": 400, "forfeit_needs_winner": 400, "no_set": 404}
 
+TO_WORDS = {
+    "created": "Created **{name}**.",
+    "edited": "Saved **{name}**.",
+    "signups_opened": "Sign-ups for **{name}** are open.",
+    "signups_closed": "Sign-ups for **{name}** are closed.",
+    "check_in_opened": "Check-in for **{name}** is open until {closes}.",
+    "check_in_closed": "Check-in for **{name}** is closed — {removed} no-show(s) taken out.",
+    "entrant_added": "{entrant} is in **{name}**.",
+    "entrant_removed": "{entrant} is out of **{name}**.",
+    "entrant_restored": "{entrant} is back in **{name}**.",
+    "dq": "{entrant} is disqualified from **{name}**; their remaining sets are forfeited.",
+    "seeded": "Seeding for **{name}** is saved.",
+    "started": "**{name}** has started — {sets} set(s) to play.",
+    "started_up_to": "**{name}** has started — up to {sets} set(s) to play.",
+    "unstarted": "**{name}** is back to seeding; its sets and results are cleared.",
+    "completed": "**{name}** is complete.",
+    "reopened": "**{name}** is running again.",
+    "cancelled": "**{name}** is cancelled.",
+    "restored": "**{name}** is back as it was before it was cancelled.",
+    "set_reset": "{set} is open again; every set it decided after it is cleared.",
+    "no_name": "An entrant needs a name of 1 to {limit} characters, so nothing was done.",
+    "bad_option": "{field} cannot be {given}, so nothing was saved. It takes {allowed}.",
+    "check_in_open": (
+        "Check-in for **{name}** is still open. Close it first so no-shows are taken out."
+    ),
+    "too_few": "**{name}** needs at least 2 entrants to start; it has {count}.",
+    "too_many_rounds": (
+        "**{name}** has {count} entrants, so it can play at most {most} Swiss round(s) without a "
+        "rematch; it is set to {rounds}. Lower swiss_rounds, or add entrants."
+    ),
+    "unfinished": "{open} set(s) in **{name}** are not final yet, so it cannot be completed.",
+    "reopen_first": "**{name}** is complete. Reopen it first, then change {set}.",
+    "already_called": "{set} is already called.",
+    "already_reported": "{set} already has a score reported.",
+    "not_resettable": "{set} is a bye, so there is nothing to reset.",
+    "nothing_to_reset": "{set} has no result to reset.",
+    "forfeit_needs_winner": "A forfeit needs the winner picked, so nothing was done.",
+    "bad_order": "That order does not name every entrant exactly once, so nothing was changed.",
+    "not_out": "{entrant} is not out of **{name}**, so there is nothing to put back.",
+}
+
+PLAYER_CODES = (
+    "no_set",
+    "not_ready",
+    "not_playable",
+    "already_complete",
+    "disputed",
+    "bad_score",
+    "reported_differently",
+    "not_reported",
+    "own_report",
+    "not_in_set",
+    "not_in_bracket",
+    "already_out",
+)
+
 ENGINE_WORDS = {
-    code: f"brackets_{code}_said"
-    for code in (
-        "too_few",
-        "bad_order",
-        "no_set",
-        "not_ready",
-        "not_playable",
-        "already_complete",
-        "disputed",
-        "already_called",
-        "already_reported",
-        "bad_score",
-        "reported_differently",
-        "not_reported",
-        "own_report",
-        "not_resettable",
-        "nothing_to_reset",
-        "forfeit_needs_winner",
-        "not_in_set",
-        "not_in_bracket",
-        "already_out",
-        "not_out",
-    )
+    **{code: code for code in TO_WORDS},
+    **{code: f"brackets_{code}_said" for code in PLAYER_CODES},
 }
 
 WRONG_STATE = "brackets_wrong_state_said"
@@ -133,13 +167,15 @@ def mode_of(store: Any, guild_id: int) -> str:
 
 
 def said(store: Any, guild_id: int, key: str, **fields: Any) -> str:
-    """Staff wording first; a template that cannot be filled falls back to the shipped one."""
+    """An organiser's line from TO_WORDS; a player's from staff wording, else the shipped one."""
+    if key in TO_WORDS:
+        return TO_WORDS[key].format(**fields)
     wording = str(store.get(guild_id, key) or "").strip()
     if wording:
         try:
             return wording.format(**fields)
-        except (IndexError, KeyError, ValueError):
-            log.warning("brackets: %s could not be filled in; the shipped wording was used", key)
+        except Exception as exc:
+            log.warning("brackets: %s could not be filled in (%s); shipped wording used", key, exc)
     return str(BRACKETS_DEFAULTS[key]).format(**fields)
 
 
@@ -149,6 +185,12 @@ def stop(bot: Any, guild: Any, key: str, code: str, status: int, **fields: Any) 
 
 def done(bot: Any, guild: Any, key: str, value: Any = None, **fields: Any) -> Outcome:
     return Outcome(True, said(bot.store, guild.id, key, **fields), value=value)
+
+
+def touched(outcome: Outcome, moved: Any, gone: dict[str, int] | None = None) -> Outcome:
+    """The outcome with the set keys the move changed or removed, and the removed sets' cards."""
+    keys = tuple(dict.fromkeys([*moved.changed, *moved.removed]))
+    return replace(outcome, changed=keys, gone=dict(gone or {}))
 
 
 def now_stamp() -> str:
@@ -299,7 +341,7 @@ def option_values(bot: Any, guild: Any, given: dict[str, Any], *, creating: bool
         return stop(
             bot,
             guild,
-            "brackets_bad_option_said",
+            "bad_option",
             "bad_option",
             400,
             field=field,
@@ -310,7 +352,7 @@ def option_values(bot: Any, guild: Any, given: dict[str, Any], *, creating: bool
     if "name" in given or creating:
         name = clean_text(given.get("name"), NAME_LIMIT + 1)
         if not name or len(name) > NAME_LIMIT:
-            raise stop(bot, guild, "brackets_no_name_said", "no_name", 400, limit=NAME_LIMIT)
+            raise stop(bot, guild, "no_name", "no_name", 400, limit=NAME_LIMIT)
         found["name"] = name
     if "game" in given:
         found["game"] = clean_text(given.get("game"), GAME_LIMIT) or None
@@ -371,7 +413,7 @@ async def create(
     values.setdefault("to_user_id", actor_id(actor))
     tournament_id = await store_.create(bot.db, guild.id, values, actor_id(actor) or 0)
     await note(bot, guild, "created", actor, tournament_id, via, name=values["name"])
-    return done(bot, guild, "brackets_created_said", tournament_id, name=values["name"])
+    return done(bot, guild, "created", tournament_id, name=values["name"])
 
 
 @answered
@@ -393,7 +435,7 @@ async def edit(
         await store_.update(bot.db, row["id"], values)
         name = values.get("name", row["name"])
         await note(bot, guild, "edited", actor, row["id"], via, changed=sorted(values))
-        return done(bot, guild, "brackets_edited_said", row["id"], name=name)
+        return done(bot, guild, "edited", row["id"], name=name)
 
 
 async def moved_state(
@@ -432,7 +474,7 @@ async def open_signups(
         allowed=(store_.DRAFT, store_.SEEDING),
         to=store_.SIGNUPS,
         event="signups_opened",
-        key="brackets_signups_opened_said",
+        key="signups_opened",
     )
 
 
@@ -449,7 +491,7 @@ async def close_signups(
         allowed=(store_.SIGNUPS,),
         to=store_.SEEDING,
         event="signups_closed",
-        key="brackets_signups_closed_said",
+        key="signups_closed",
     )
 
 
@@ -487,7 +529,7 @@ async def seed(
         rest = [one["id"] for one in people if one["id"] not in wanted]
         await store_.write_seeds(bot.db, row["id"], wanted + rest)
         await note(bot, guild, "seeded", actor, row["id"], via, order=wanted, randomised=randomise)
-        return done(bot, guild, "brackets_seeded_said", row["id"], **names)
+        return done(bot, guild, "seeded", row["id"], **names)
 
 
 @answered
@@ -499,12 +541,11 @@ async def start(
         row = await loaded(bot, guild, tournament_id)
         require_runner(bot, guild, actor)
         if row["state"] == store_.CHECK_IN:
-            raise stop(
-                bot, guild, "brackets_check_in_open_said", "check_in_open", 409, name=row["name"]
-            )
+            raise stop(bot, guild, "check_in_open", "check_in_open", 409, name=row["name"])
         require_state(bot, guild, row, *store_.BEFORE_START)
-        people = active(await store_.entrants(bot.db, row["id"]))
-        names = {"name": row["name"]}
+        everyone = await store_.entrants(bot.db, row["id"])
+        people = active(everyone)
+        names = {"name": row["name"], "count": len(people)}
         stamp = now_stamp()
         built = engine(
             bot,
@@ -516,13 +557,17 @@ async def start(
             store_.options_of(row),
             stamp,
         )
-        await store_.write_seeds(bot.db, row["id"], [one["id"] for one in people])
-        await store_.clear_sets(bot.db, row["id"])
+        playing = [one["id"] for one in people]
+        rest = [one["id"] for one in everyone if one["id"] not in playing]
+        await store_.write_seeds(bot.db, row["id"], playing + rest)
+        gone = await store_.clear_sets(bot.db, row["id"])
         await store_.save(bot.db, row["id"], built.bracket, built.changed, [])
         await store_.update(bot.db, row["id"], {"state": store_.RUNNING, "started_at": stamp})
-        played = sum(1 for one in built.bracket.matches.values() if one.state not in (BYE, VOID))
+        certain, most = play.sets_to_play(built.bracket)
         await note(bot, guild, "started", actor, row["id"], via, entrants=len(people))
-        return done(bot, guild, "brackets_started_said", row["id"], name=row["name"], sets=played)
+        key = "started" if certain == most else "started_up_to"
+        outcome = done(bot, guild, key, row["id"], name=row["name"], sets=most)
+        return touched(outcome, built, gone)
 
 
 @answered
@@ -535,11 +580,13 @@ async def unstart(
         row = await loaded(bot, guild, tournament_id)
         require_runner(bot, guild, actor)
         require_state(bot, guild, row, store_.RUNNING)
-        await store_.clear_sets(bot.db, row["id"])
+        keys = [one["key"] for one in await store_.sets(bot.db, row["id"])]
+        gone = await store_.clear_sets(bot.db, row["id"])
         await store_.write_placements(bot.db, row["id"], {})
         await store_.update(bot.db, row["id"], {"state": store_.SEEDING, "started_at": None})
         await note(bot, guild, "unstarted", actor, row["id"], via)
-        return done(bot, guild, "brackets_unstarted_said", row["id"], name=row["name"])
+        outcome = done(bot, guild, "unstarted", row["id"], name=row["name"])
+        return replace(outcome, changed=tuple(keys), gone=gone)
 
 
 @answered
@@ -564,16 +611,14 @@ async def complete(
             left = sum(
                 1 for one in (current.matches.values() if current else ()) if one.state not in DONE
             )
-            raise stop(
-                bot, guild, "brackets_unfinished_said", "unfinished", 409, open=left, **names
-            )
+            raise stop(bot, guild, "unfinished", "unfinished", 409, open=left, **names)
         if order is not None:
             try:
                 wanted = [int(one) for one in order]
             except (TypeError, ValueError):
                 wanted = [0]
             if len(set(wanted)) != len(wanted) or not set(wanted) <= set(current.entrants):
-                raise stop(bot, guild, "brackets_bad_order_said", "bad_order", 400)
+                raise stop(bot, guild, "bad_order", "bad_order", 400)
             await store_.write_final_order(bot.db, row["id"], wanted)
             current.final_order = wanted
         placed = standings.placements(current)
@@ -582,7 +627,7 @@ async def complete(
             bot.db, row["id"], {"state": store_.COMPLETE, "completed_at": now_stamp()}
         )
         await note(bot, guild, "completed", actor, row["id"], via, placements=placed)
-        return done(bot, guild, "brackets_completed_said", row["id"], **names)
+        return done(bot, guild, "completed", row["id"], **names)
 
 
 @answered
@@ -597,7 +642,7 @@ async def reopen(
         await store_.write_placements(bot.db, row["id"], {})
         await store_.update(bot.db, row["id"], {"state": store_.RUNNING, "completed_at": None})
         await note(bot, guild, "reopened", actor, row["id"], via)
-        return done(bot, guild, "brackets_reopened_said", row["id"], name=row["name"])
+        return done(bot, guild, "reopened", row["id"], name=row["name"])
 
 
 @answered
@@ -615,7 +660,7 @@ async def cancel(
             {"state": store_.CANCELLED, "state_before": row["state"], "cancelled_at": now_stamp()},
         )
         await note(bot, guild, "cancelled", actor, row["id"], via, was=row["state"])
-        return done(bot, guild, "brackets_cancelled_said", row["id"], name=row["name"])
+        return done(bot, guild, "cancelled", row["id"], name=row["name"])
 
 
 @answered
@@ -632,4 +677,4 @@ async def restore(
             bot.db, row["id"], {"state": back, "state_before": None, "cancelled_at": None}
         )
         await note(bot, guild, "restored", actor, row["id"], via, to=back)
-        return done(bot, guild, "brackets_restored_said", row["id"], name=row["name"])
+        return done(bot, guild, "restored", row["id"], name=row["name"])

@@ -221,11 +221,7 @@ def options_of(row: Any) -> Options:
 
 
 def match_of(row: Any) -> Match:
-    return Match(**{name: row[name] for name in SET_COLUMNS})
-
-
-def in_bracket(rows: list[Any]) -> list[Any]:
-    return [row for row in rows if row["seed"] is not None and row["dropped_why"] != REMOVED]
+    return Match(**{name: row[name] for name in SET_COLUMNS} | {"rematch": bool(row["rematch"])})
 
 
 async def bracket(db: Any, row: Any) -> Bracket | None:
@@ -255,7 +251,10 @@ async def bracket(db: Any, row: Any) -> Bracket | None:
 
 async def save(
     db: Any, tournament_id: int, found: Bracket, changed: list[str], removed: list[str]
-) -> None:
+) -> dict[str, int]:
+    """Upserts the changed sets and deletes the removed ones, answering the removed sets' cards."""
+    held = await cards(db, tournament_id) if removed else {}
+    gone = {key: held[key][0] for key in removed if key in held}
     for key in removed:
         await db.conn.execute(
             "DELETE FROM tournament_sets WHERE tournament_id = ? AND key = ?", (tournament_id, key)
@@ -271,8 +270,32 @@ async def save(
             (tournament_id, *(getattr(match, name) for name in SET_COLUMNS)),
         )
     await db.conn.commit()
+    return gone
 
 
-async def clear_sets(db: Any, tournament_id: int) -> None:
+async def clear_sets(db: Any, tournament_id: int) -> dict[str, int]:
+    gone = {key: found[0] for key, found in (await cards(db, tournament_id)).items()}
     await db.conn.execute("DELETE FROM tournament_sets WHERE tournament_id = ?", (tournament_id,))
+    await db.conn.commit()
+    return gone
+
+
+async def cards(db: Any, tournament_id: int) -> dict[str, tuple[int, str | None]]:
+    """Each set's card in the tournament thread: its message id and when it was posted."""
+    cur = await db.conn.execute(
+        "SELECT key, message_id, card_at FROM tournament_sets WHERE tournament_id = ? "
+        "AND message_id IS NOT NULL",
+        (tournament_id,),
+    )
+    return {row["key"]: (int(row["message_id"]), row["card_at"]) for row in await cur.fetchall()}
+
+
+async def set_card(
+    db: Any, tournament_id: int, key: str, message_id: int | None, card_at: str | None
+) -> None:
+    await db.conn.execute(
+        "UPDATE tournament_sets SET message_id = ?, card_at = ? "
+        "WHERE tournament_id = ? AND key = ?",
+        (message_id, card_at, tournament_id, key),
+    )
     await db.conn.commit()

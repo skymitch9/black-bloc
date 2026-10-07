@@ -181,3 +181,26 @@ async def test_staff_override_a_finished_set_and_take_it_back(client, sign_in, w
         f"/api/brackets/{tid}/sets/W1-1/override", json={"winner": "a", "forfeit": True}
     )
     assert forfeit.json()["message"] == "W1-1 is final: P1 wins by forfeit."
+
+
+async def test_a_differing_second_report_is_refused_with_the_score_already_reported(
+    client, sign_in, wf, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser, format="single", best_of_finals=3)["id"]
+    organiser.post(f"/api/brackets/{tid}/signups/open", json={})
+    for player in (ADA, BEA):
+        as_(client, sign_in, wf, player).post(f"/api/brackets/{tid}/join", json={})
+    as_(client, sign_in, wf, TO).post(f"/api/brackets/{tid}/start", json={})
+    ada = as_(client, sign_in, wf, ADA)
+    ada.post(f"/api/brackets/{tid}/sets/W1-1/report", json={"score_a": 2, "score_b": 1})
+    bea = as_(client, sign_in, wf, BEA)
+    differs = bea.post(f"/api/brackets/{tid}/sets/W1-1/report", json={"score_a": 1, "score_b": 2})
+    assert differs.status_code == 409
+    assert differs.json() == {
+        "error": "reported_differently",
+        "message": "W1-1 was reported 2–1. Confirm that, or dispute it.",
+    }
+    view = bea.get(f"/api/brackets/{tid}").json()
+    (only,) = view["sets"]
+    assert (only["state"], only["score_a"], only["score_b"]) == ("reported", 2, 1)

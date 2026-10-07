@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -29,9 +30,12 @@ from .brackets_moves import (
     require_state,
     said,
     stop,
+    touched,
 )
 from .logkinds import VIA_DISCORD
 from .panels import Outcome
+
+log = logging.getLogger(__name__)
 
 
 async def running(bot: Any, guild: Any, tournament_id: int) -> tuple[Any, Any, dict, dict]:
@@ -82,9 +86,20 @@ def final_words(bot: Any, guild: Any, people: dict, match: Any) -> str:
     )
 
 
-async def kept(bot: Any, row: Any, moved: Any) -> Any:
-    await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
-    return moved.bracket.matches
+async def kept(bot: Any, row: Any, moved: Any) -> tuple[Any, dict[str, int]]:
+    gone = await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
+    return moved.bracket.matches, gone
+
+
+async def correctable(bot: Any, guild: Any, actor: Any, tournament_id: int, key: str) -> Any:
+    """A TO's correction: once the tournament is complete it says to reopen it first."""
+    row = await loaded(bot, guild, tournament_id)
+    require_runner(bot, guild, actor)
+    if row["state"] == store_.COMPLETE:
+        raise stop(
+            bot, guild, "reopen_first", "reopen_first", 409, name=row["name"], set=str(key)[:20]
+        )
+    return await running(bot, guild, tournament_id)
 
 
 def score_of(value: Any) -> Any:
@@ -103,9 +118,12 @@ async def call(
         moved = engine(
             bot, guild, row, names, play.call, current, match.key, actor_id(actor), now_stamp()
         )
-        after = (await kept(bot, row, moved))[match.key]
-        await note(bot, guild, "set_called", actor, row["id"], via, set=match.key)
-        return done(
+        matches, gone = await kept(bot, row, moved)
+        after = matches[match.key]
+        await note(
+            bot, guild, "set_called", actor, row["id"], via, set=match.key, rematch=after.rematch
+        )
+        outcome = done(
             bot,
             guild,
             "brackets_set_called_said",
@@ -114,6 +132,7 @@ async def call(
             a=entrant_name(people, after.slot_a),
             b=entrant_name(people, after.slot_b),
         )
+        return touched(outcome, moved, gone)
 
 
 @answered
@@ -164,7 +183,8 @@ async def report(
             actor_id(actor),
             stamp,
         )
-        after = (await kept(bot, row, moved))[match.key]
+        matches, gone = await kept(bot, row, moved)
+        after = matches[match.key]
         if after.state == COMPLETE:
             await note(
                 bot,
@@ -176,8 +196,10 @@ async def report(
                 set=match.key,
                 how=after.confirmed_how,
                 winner=after.winner,
+                rematch=after.rematch,
             )
-            return Outcome(True, final_words(bot, guild, people, after), value=row["id"])
+            outcome = Outcome(True, final_words(bot, guild, people, after), value=row["id"])
+            return touched(outcome, moved, gone)
         await note(
             bot,
             guild,
@@ -188,8 +210,9 @@ async def report(
             set=match.key,
             score_a=after.score_a,
             score_b=after.score_b,
+            rematch=after.rematch,
         )
-        return done(
+        outcome = done(
             bot,
             guild,
             "brackets_set_reported_said",
@@ -200,6 +223,7 @@ async def report(
             minutes=row["confirm_minutes"],
             opponent=entrant_name(people, after.slot("b" if side == "a" else "a")),
         )
+        return touched(outcome, moved, gone)
 
 
 async def overridden(
@@ -225,7 +249,8 @@ async def overridden(
         now_stamp(),
         **result,
     )
-    after = (await kept(bot, row, moved))[match.key]
+    matches, gone = await kept(bot, row, moved)
+    after = matches[match.key]
     await note(
         bot,
         guild,
@@ -239,8 +264,11 @@ async def overridden(
         winner=after.winner,
         forfeit=after.forfeit,
         cleared=[one for one in moved.changed if one != match.key],
+        removed=moved.removed,
+        rematch=after.rematch,
     )
-    return Outcome(True, final_words(bot, guild, people, after), value=row["id"])
+    outcome = Outcome(True, final_words(bot, guild, people, after), value=row["id"])
+    return touched(outcome, moved, gone)
 
 
 @answered
@@ -273,7 +301,8 @@ async def confirm_report(
                 actor_id(actor),
                 stamp,
             )
-        after = (await kept(bot, row, moved))[match.key]
+        matches, gone = await kept(bot, row, moved)
+        after = matches[match.key]
         await note(
             bot,
             guild,
@@ -284,8 +313,10 @@ async def confirm_report(
             set=match.key,
             how=after.confirmed_how,
             winner=after.winner,
+            rematch=after.rematch,
         )
-        return Outcome(True, final_words(bot, guild, people, after), value=row["id"])
+        outcome = Outcome(True, final_words(bot, guild, people, after), value=row["id"])
+        return touched(outcome, moved, gone)
 
 
 @answered
@@ -320,9 +351,19 @@ async def dispute(
             words,
             now_stamp(),
         )
-        await kept(bot, row, moved)
-        await note(bot, guild, "set_disputed", actor, row["id"], via, set=match.key)
-        return done(bot, guild, "brackets_set_disputed_said", row["id"], set=match.key)
+        matches, gone = await kept(bot, row, moved)
+        await note(
+            bot,
+            guild,
+            "set_disputed",
+            actor,
+            row["id"],
+            via,
+            set=match.key,
+            rematch=matches[match.key].rematch,
+        )
+        outcome = done(bot, guild, "brackets_set_disputed_said", row["id"], set=match.key)
+        return touched(outcome, moved, gone)
 
 
 @answered
@@ -342,8 +383,7 @@ async def override(
     """The TO decides a set from any state, or corrects a final one; what it fed is replayed."""
     require_on(bot, guild)
     async with lock_for(bot, tournament_id):
-        row, current, people, _ = await running(bot, guild, tournament_id)
-        require_runner(bot, guild, actor)
+        row, current, people, _ = await correctable(bot, guild, actor, tournament_id, key)
         match = the_set(bot, guild, row, current, key)
         side = winner if winner in ("a", "b") else match.side_of(score_of(winner))
         return await overridden(
@@ -368,13 +408,12 @@ async def reset(
 ) -> Outcome:
     require_on(bot, guild)
     async with lock_for(bot, tournament_id):
-        row, current, people, names = await running(bot, guild, tournament_id)
-        require_runner(bot, guild, actor)
+        row, current, people, names = await correctable(bot, guild, actor, tournament_id, key)
         match = the_set(bot, guild, row, current, key)
         moved = engine(
             bot, guild, row, names, play.reset, current, match.key, actor_id(actor), now_stamp()
         )
-        await kept(bot, row, moved)
+        matches, gone = await kept(bot, row, moved)
         await note(
             bot,
             guild,
@@ -385,8 +424,9 @@ async def reset(
             set=match.key,
             cleared=[one for one in moved.changed if one != match.key],
             removed=moved.removed,
+            rematch=matches[match.key].rematch,
         )
-        return done(bot, guild, "brackets_set_reset_said", row["id"], set=match.key)
+        return touched(done(bot, guild, "set_reset", row["id"], set=match.key), moved, gone)
 
 
 async def confirm_due(
@@ -408,10 +448,19 @@ async def confirm_due(
             waiting = [one.key for one in current.matches.values() if one.state == REPORTED]
             if not waiting:
                 continue
+            for key in waiting:
+                if play.parsed(current.matches[key].reported_at) is None:
+                    log.warning(
+                        "brackets: tournament %s set %s report time %r could not be read; "
+                        "it stands now",
+                        fresh["id"],
+                        key,
+                        current.matches[key].reported_at,
+                    )
             moved = play.confirm_due(current, moment, int(fresh["confirm_minutes"]))
             if not moved.changed:
                 continue
-            after = await kept(bot, fresh, moved)
+            after, _ = await kept(bot, fresh, moved)
             for key in waiting:
                 if after[key].state == COMPLETE:
                     confirmed.append((int(fresh["id"]), key))
@@ -425,5 +474,6 @@ async def confirm_due(
                         set=key,
                         how=after[key].confirmed_how,
                         winner=after[key].winner,
+                        rematch=after[key].rematch,
                     )
     return confirmed
