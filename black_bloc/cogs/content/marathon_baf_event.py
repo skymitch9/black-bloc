@@ -1,4 +1,5 @@
-"""A BaF event day: the staff answer, the question to Leads, and the one Marathon-role ping."""
+"""A BaF event: the staff answer, the one question to Leads, and each show-day's one
+Marathon-role ping."""
 
 from __future__ import annotations
 
@@ -32,11 +33,13 @@ from ...settings_store import (
     MARATHON_BAF_EVENT_ASK_ROLE_KEY,
     MARATHON_BAF_EVENT_ASK_TEXT_KEY,
     MARATHON_BAF_EVENT_ASK_YES_KEY,
-    MARATHON_BAF_EVENT_DAY_SAME_SAID_KEY,
-    MARATHON_BAF_EVENT_DAY_SET_SAID_KEY,
+    MARATHON_BAF_EVENT_CLEARED_KEY,
+    MARATHON_BAF_EVENT_CLEARED_SAID_KEY,
+    MARATHON_BAF_EVENT_DAY_LINE_KEY,
     MARATHON_BAF_EVENT_LINE_KEY,
     MARATHON_BAF_EVENT_MIN_RUNS_KEY,
     MARATHON_BAF_EVENT_NAMES_KEY,
+    MARATHON_BAF_EVENT_NO_ANSWER_SAID_KEY,
     MARATHON_BAF_EVENT_PING_DONE_KEY,
     MARATHON_BAF_EVENT_PING_FALLBACK_KEY,
     MARATHON_BAF_EVENT_PING_MINUTES_KEY,
@@ -45,6 +48,7 @@ from ...settings_store import (
     MARATHON_BAF_EVENT_PING_NONE_KEY,
     MARATHON_BAF_EVENT_PING_UNCONFIRMED_KEY,
     MARATHON_BAF_EVENT_PING_WILL_KEY,
+    MARATHON_BAF_EVENT_REASON_ACTED_KEY,
     MARATHON_BAF_EVENT_REASON_ALL_RUNS_KEY,
     MARATHON_BAF_EVENT_REASON_FEW_RUNS_KEY,
     MARATHON_BAF_EVENT_REASON_LEADS_KEY,
@@ -92,6 +96,11 @@ NO_QUESTION = (
     "Use the BaF event switch on the thread's controls instead."
 )
 NO_QUESTION_CODE = "no_baf_question"
+BAD_ANSWER = (
+    "Say clear to take back the answer to the BaF event question of **{marathon}**, so "
+    "nothing was changed."
+)
+BAD_ANSWER_CODE = "bad_baf_event_answer"
 ANSWER_KEYS = {
     baf.YES: MARATHON_BAF_EVENT_WORD_YES_KEY,
     baf.NO: MARATHON_BAF_EVENT_WORD_NO_KEY,
@@ -107,8 +116,12 @@ REASON_KEYS = {
     baf.BY_FEW: MARATHON_BAF_EVENT_REASON_FEW_RUNS_KEY,
     baf.BY_MIXED: MARATHON_BAF_EVENT_REASON_MIXED_KEY,
     baf.BY_NO_RUNS: MARATHON_BAF_EVENT_REASON_NO_RUNS_KEY,
+    baf.BY_ACTED: MARATHON_BAF_EVENT_REASON_ACTED_KEY,
 }
-CAUSE_KEYS = {
+PING_KEYS = {
+    baf.PING_WILL: MARATHON_BAF_EVENT_PING_WILL_KEY,
+    baf.PING_DONE: MARATHON_BAF_EVENT_PING_DONE_KEY,
+    baf.PING_UNCONFIRMED: MARATHON_BAF_EVENT_PING_UNCONFIRMED_KEY,
     baf.NOBODY_TO_NAME: MARATHON_BAF_EVENT_PING_NOBODY_KEY,
     baf.NO_BAF_RUN: MARATHON_BAF_EVENT_PING_NO_RUN_KEY,
     baf.MARKS_SPENT: MARATHON_BAF_EVENT_PING_NONE_KEY,
@@ -251,39 +264,24 @@ def answer_word(bot: Any, guild_id: int, answer_is: str) -> str:
 
 
 def ping_words(
-    bot: Any, guild: Any, found: baf.Reading, state: baf.DayState, verdict: mrp.Verdict, role: str
+    bot: Any, guild: Any, found: baf.Reading, state: baf.DayState, ping: str, role: str
 ) -> str:
-    """What the day's one ping did, may have done or will do; empty when the day is not
-    governed by it or the role would not be mentioned anyway."""
-    if not state.governed:
+    """What the day's one ping did, may have done or will do; empty where the per-run rule
+    decides or the role would not be mentioned anyway."""
+    key = PING_KEYS.get(ping)
+    if key is None:
         return ""
-    record = state.record
-    if record is not None:
-        return words(
-            bot,
-            guild.id,
-            (
-                MARATHON_BAF_EVENT_PING_DONE_KEY
-                if record.get("sent")
-                else MARATHON_BAF_EVENT_PING_UNCONFIRMED_KEY
-            ),
-            role=role,
-            minutes=record.get("mark"),
-            game=record.get("game") or "",
-        )
-    if not verdict.mentions:
-        return ""
-    if state.carrier is None:
-        return words(bot, guild.id, CAUSE_KEYS[state.cause or baf.MARKS_SPENT], role=role)
+    record, row = state.record, state.carrier
+    game = record.get("game") if record is not None else row["game"] if row is not None else ""
     said = words(
         bot,
         guild.id,
-        MARATHON_BAF_EVENT_PING_WILL_KEY,
+        key,
         role=role,
-        minutes=state.carrier_mark,
-        game=state.carrier["game"],
+        minutes=record.get("mark") if record is not None else state.carrier_mark,
+        game=game or "",
     )
-    if found.fell_back:
+    if ping == baf.PING_WILL and found.fell_back:
         said += " " + words(
             bot,
             guild.id,
@@ -294,11 +292,11 @@ def ping_words(
     return said
 
 
-def ask_words(bot: Any, guild: Any, state: baf.DayState) -> str:
-    """What became of the question on a day the bot is still not sure about."""
-    if state.judgement.answer != baf.UNSURE:
+def ask_words(bot: Any, guild: Any, judged: baf.Judgement, ask: str | None) -> str:
+    """What became of the question while nothing staff said has decided the event."""
+    if not baf.undecided(judged):
         return ""
-    key = ASK_LINE_KEYS.get(baf.ask_state(state.ask))
+    key = ASK_LINE_KEYS.get(ask)
     return words(bot, guild.id, key) if key else ""
 
 
@@ -310,38 +308,44 @@ def shown(states: list[baf.DayState]) -> list[baf.DayState]:
 def state_of(
     bot: Any, guild: Any, marathon: Any, rows: Any, *, mention: bool = False
 ) -> dict[str, Any]:
-    """The tri-state, what the bot worked out and why, and each show-day in words."""
+    """The tri-state, the event's answer and why in one line, then what becomes of each
+    show-day's ping."""
     found = reading_for(bot, guild.id, marathon, rows)
     states = baf.day_states(found, speaks=speaks_for(bot, guild, marathon))
     verdict = verdict_for(bot, guild, marathon)
     role = role_word(verdict, mention=mention)
     own = baf.stored(marathon)
-    now = baf.current(states)
-    judged = now.judgement if now is not None else baf.judgement_of(found, [])
-    worked = now.worked if now is not None else baf.judgement_of(found, [], own=False)
+    judged = baf.judgement_of(found)
+    worked = baf.judgement_of(found, own=False)
+    ask = baf.ask_state(baf.question(found.asks))
+    line = " ".join(
+        one
+        for one in (
+            words(
+                bot,
+                guild.id,
+                MARATHON_BAF_EVENT_LINE_KEY,
+                marathon=marathon["name"],
+                answer=answer_word(bot, guild.id, judged.answer),
+                reason=reason_words(bot, guild.id, judged),
+            ),
+            ask_words(bot, guild, judged, ask),
+        )
+        if one
+    )
     days = []
     for state in states:
-        line = words(
-            bot,
-            guild.id,
-            MARATHON_BAF_EVENT_LINE_KEY,
-            day=day_word(bot, guild, marathon, state.starts_at, mention=mention),
-            answer=answer_word(bot, guild.id, state.judgement.answer),
-            reason=reason_words(bot, guild.id, state.judgement),
-            marathon=marathon["name"],
-        )
-        ping = ping_words(bot, guild, found, state, verdict, role)
-        asked = ask_words(bot, guild, state)
+        ping = baf.ping_state(state, verdict.mentions)
+        said = ping_words(bot, guild, found, state, ping, role)
+        runs, ours = baf.counts(state.day)
         days.append(
             {
                 "starts_at": state.starts_at.isoformat() if state.starts_at else None,
-                "answer": state.judgement.answer,
-                "reason": state.judgement.reason,
-                "runs": state.judgement.runs,
-                "baf": state.judgement.baf,
+                "runs": runs,
+                "baf": ours,
                 "over": state.over,
                 "governed": state.governed,
-                "ask": baf.ask_state(state.ask),
+                "ping": ping,
                 "no_ping": state.cause,
                 "pinged": pinged_row(state.record),
                 "carrier": (
@@ -353,29 +357,25 @@ def state_of(
                         "minutes": state.carrier_mark,
                     }
                 ),
-                "line": " ".join(one for one in (line, asked, ping) if one),
+                "line": said
+                and words(
+                    bot,
+                    guild.id,
+                    MARATHON_BAF_EVENT_DAY_LINE_KEY,
+                    day=day_word(bot, guild, marathon, state.starts_at, mention=mention),
+                    ping=said,
+                ),
             }
         )
     listed = shown(states)
     kept = {id(one) for one in listed}
-    lines = [one["line"] for one, state in zip(days, states, strict=True) if id(state) in kept]
-    if not states:
-        lines = [
-            words(
-                bot,
-                guild.id,
-                MARATHON_BAF_EVENT_LINE_KEY,
-                day=marathon["name"],
-                answer=answer_word(bot, guild.id, judged.answer),
-                reason=reason_words(bot, guild.id, judged),
-                marathon=marathon["name"],
-            )
-        ]
     return {
         "own": own,
         "choice": baf.choice_of(own),
         "answer": judged.answer,
         "reason": judged.reason,
+        "runs": judged.runs,
+        "baf": judged.baf,
         "answer_word": answer_word(bot, guild.id, judged.answer),
         "reason_word": reason_words(bot, guild.id, judged),
         "worked_out": {
@@ -385,10 +385,19 @@ def state_of(
             "reason_word": reason_words(bot, guild.id, worked),
         },
         "asked": any(one.get("message_id") for one in found.asks),
+        "ask": ask,
+        "line": line,
         "ping_minutes": found.limit,
         "ping_fell_back": found.fell_back,
         "days": days,
-        "lines": lines,
+        "lines": [
+            line,
+            *[
+                one["line"]
+                for one, state in zip(days, states, strict=True)
+                if id(state) in kept and one["line"]
+            ],
+        ],
         "all_governed": bool(listed) and all(one.governed for one in listed),
     }
 
@@ -419,7 +428,7 @@ async def set_baf_event(
     via: str = VIA_DISCORD,
     by: str | None = None,
 ) -> Outcome:
-    """The whole marathon's switch: yes, no, or None to follow each day's own answer and then
+    """The marathon's switch: yes, no, or None to follow the answer to its question and then
     what the bot works out. The thread controls and the site come here."""
     from .marathon_thread_controls import controls_changed
 
@@ -483,7 +492,7 @@ def question_of(asks: Any, message_id: Any) -> dict[str, Any] | None:
     return next((one for one in posted if int(one["message_id"]) == int(message_id)), None)
 
 
-async def set_day_answer(
+async def set_answer(
     bot: Any,
     guild: Any,
     actor: Any,
@@ -493,8 +502,8 @@ async def set_day_answer(
     *,
     via: str = VIA_DISCORD,
 ) -> Outcome:
-    """One show-day's own answer, from that day's question; the marathon's switch is left as
-    it stands and still beats it."""
+    """The answer to the event's question, for every show-day; the marathon's switch is left
+    as it stands and still beats it."""
     from .marathon_thread_controls import controls_changed
 
     cog = cog_of(bot)
@@ -507,23 +516,15 @@ async def set_day_answer(
         record = question_of(asks, message_id)
         if record is None:
             return refusal(NO_QUESTION.format(marathon=fresh["name"]), NO_QUESTION_CODE, 404)
-        was = record.get("answer")
-        fields = {
-            "day": day_word(bot, guild, fresh, parse_ts(record.get("starts_at")), mention=True),
-            "marathon": fresh["name"],
-            "answer": answer_word(bot, guild.id, wanted),
-        }
+        was = baf.answer_of(asks)
+        fields = {"marathon": fresh["name"], "answer": answer_word(bot, guild.id, wanted)}
         if was == wanted:
             return Outcome(
                 True,
-                words(bot, guild.id, MARATHON_BAF_EVENT_DAY_SAME_SAID_KEY, **fields),
+                words(bot, guild.id, MARATHON_BAF_EVENT_SAME_SAID_KEY, **fields),
                 value=fresh,
             )
-        said = record | {
-            "answer": wanted,
-            "answered_by": actor_id(actor),
-            "answered_at": cog.clock().isoformat(),
-        }
+        said = baf.with_answer(record, wanted, actor_id(actor), cog.clock().isoformat())
         await update_marathon(
             bot.db,
             fresh["id"],
@@ -537,57 +538,140 @@ async def set_day_answer(
         details={
             "marathon_id": fresh["id"],
             "name": fresh["name"],
-            "day": record.get("starts_at"),
             "from": was or baf.FOLLOW,
             "to": wanted,
             "by": BY_QUESTION,
             "via": via,
         },
     )
-    await note_answer(bot, guild, fresh, said, actor, fields["answer"])
+    fresh = await get_marathon(bot.db, guild.id, fresh["id"])
+    await note_questions(bot, guild, fresh)
     await controls_changed(bot, guild, fresh["id"])
     return Outcome(
-        True,
-        words(bot, guild.id, MARATHON_BAF_EVENT_DAY_SET_SAID_KEY, **fields),
-        value=await get_marathon(bot.db, guild.id, fresh["id"]),
+        True, words(bot, guild.id, MARATHON_BAF_EVENT_SET_SAID_KEY, **fields), value=fresh
     )
 
 
-async def note_answer(
-    bot: Any, guild: Any, marathon: Any, ask: dict[str, Any], actor: Any, said: str
-) -> None:
-    """The day's question says who answered what; the answer is stored already, so a failed
-    edit changes nothing."""
+async def clear_answer(
+    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The answer to the event's question taken back: the switch, then the show's name and the
+    runs, decide again. The thread controls and the site come here."""
+    from .marathon_thread_controls import controls_changed
+
+    cog = cog_of(bot)
+    async with cog.lock(marathon["id"]):
+        fresh = await get_marathon(bot.db, guild.id, marathon["id"])
+        if fresh is None:
+            return refusal(mt.NO_SUCH_MARATHON.format(given=marathon["id"]), NO_SUCH, 404)
+        asks = baf.asks_of(fresh)
+        was = baf.answer_of(asks)
+        if was is None:
+            return Outcome(
+                True,
+                words(
+                    bot, guild.id, MARATHON_BAF_EVENT_NO_ANSWER_SAID_KEY, marathon=fresh["name"]
+                ),
+                value=fresh,
+            )
+        left = baf.without_answers(asks, actor_id(actor), cog.clock().isoformat())
+        await update_marathon(bot.db, fresh["id"], **{baf.ASK_COLUMN: baf.dump_asks(left)})
+        fresh = await get_marathon(bot.db, guild.id, fresh["id"])
+    await log_action(
+        bot,
+        guild,
+        kind_via("marathon.baf_event_set", via),
+        actor=actor,
+        details={
+            "marathon_id": fresh["id"],
+            "name": fresh["name"],
+            "from": was,
+            "to": baf.FOLLOW,
+            "by": BY_QUESTION,
+            "cleared": True,
+            "via": via,
+        },
+    )
+    await note_questions(bot, guild, fresh)
+    await controls_changed(bot, guild, fresh["id"])
+    judged = baf.judgement_of(await reading_now(bot, guild, fresh))
+    return Outcome(
+        True,
+        words(
+            bot,
+            guild.id,
+            MARATHON_BAF_EVENT_CLEARED_SAID_KEY,
+            marathon=fresh["name"],
+            answer=answer_word(bot, guild.id, judged.answer),
+        ),
+        value=fresh,
+    )
+
+
+async def set_question_answer(
+    bot: Any, guild: Any, actor: Any, marathon: Any, given: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The site's move on the stored answer: `clear` is the only one."""
+    if str(given or "").strip().lower() != baf.CLEAR:
+        return refusal(BAD_ANSWER.format(marathon=marathon["name"]), BAD_ANSWER_CODE, 422)
+    return await clear_answer(bot, guild, actor, marathon, via=via)
+
+
+def who_of(user_id: Any) -> str:
+    return f"<@{int(user_id)}>" if user_id else "Staff"
+
+
+def standing_line(bot: Any, guild: Any, marathon: Any, asks: Any) -> str:
+    """What every question of the marathon says under its words: who gave the answer that
+    stands, or who cleared it."""
+    said, gone = baf.answered(asks), baf.cleared(asks)
+    if said is not None:
+        return words(
+            bot,
+            guild.id,
+            MARATHON_BAF_EVENT_ANSWERED_KEY,
+            who=who_of(said.get("answered_by")),
+            answer=answer_word(bot, guild.id, said["answer"]),
+            marathon=marathon["name"],
+        )
+    if gone is not None:
+        return words(
+            bot,
+            guild.id,
+            MARATHON_BAF_EVENT_CLEARED_KEY,
+            who=who_of(gone.get("cleared_by")),
+            marathon=marathon["name"],
+        )
+    return ""
+
+
+async def note_questions(bot: Any, guild: Any, marathon: Any) -> None:
+    """Every question message the marathon still holds is edited to the one thing that
+    stands; the answer is stored already, so a failed edit changes nothing."""
     from .marathon_inbox import find_channel, reopened
 
-    if not ask.get("message_id") or not ask.get("channel_id"):
-        return
-    who = f"<@{actor_id(actor)}>" if actor_id(actor) else "Staff"
-    line = words(
-        bot,
-        guild.id,
-        MARATHON_BAF_EVENT_ANSWERED_KEY,
-        who=who,
-        answer=said,
-        marathon=marathon["name"],
-    )
-    try:
-        thread, _lost = await find_channel(bot, guild, ask["channel_id"])
-        if thread is None:
-            return
-        await reopened(thread)
-        partial = getattr(thread, "get_partial_message", None)
-        message = (
-            partial(int(ask["message_id"]))
-            if callable(partial)
-            else await thread.fetch_message(int(ask["message_id"]))
-        )
-        await message.edit(
-            content=f"{ask.get('text') or ''}\n{line}".strip(),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-    except Exception as exc:
-        log.warning("marathon: the BaF event question could not be edited — %s", reason_of(exc))
+    asks = baf.asks_of(marathon)
+    line = standing_line(bot, guild, marathon, asks)
+    for ask in asks if line else ():
+        if not ask.get("message_id") or not ask.get("channel_id"):
+            continue
+        try:
+            thread, _lost = await find_channel(bot, guild, ask["channel_id"])
+            if thread is None:
+                continue
+            await reopened(thread)
+            partial = getattr(thread, "get_partial_message", None)
+            message = (
+                partial(int(ask["message_id"]))
+                if callable(partial)
+                else await thread.fetch_message(int(ask["message_id"]))
+            )
+            await message.edit(
+                content=f"{ask.get('text') or ''}\n{line}".strip(),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except Exception as exc:
+            log.warning("marathon: the BaF event question could not be edited — %s", reason_of(exc))
 
 
 # --- the question -------------------------------------------------------------------------------
@@ -613,15 +697,15 @@ def ask_role(bot: Any, guild: Any) -> Any:
     return getter(role_id) if role_id is not None and callable(getter) else None
 
 
-def may_ask(record: Any, state: baf.DayState, now: datetime) -> bool:
-    """Once per show-day: never again once posted or answered; a post that failed, or a claim
+def may_ask(record: Any, same: bool, now: datetime) -> bool:
+    """Once per marathon: never again once posted or answered; a post that failed, or a claim
     nothing followed, waits twice as long each time and stops after ASK_TRIES, until the
-    day's runs change."""
+    event's runs change."""
     if not record or record.get("blocked"):
         return True
     if record.get("message_id") or record.get("answer"):
         return False
-    if not baf.same_schedule(record, state.day, state.judgement):
+    if not same:
         return True
     if record.get("gave_up"):
         return False
@@ -650,43 +734,50 @@ async def ask_thread(bot: Any, guild: Any, marathon: Any) -> Any:
 
 
 async def ask_if_unsure(
-    cog: Any, guild: Any, marathon: Any, states: list[baf.DayState], now: datetime
+    cog: Any, guild: Any, marathon: Any, found: baf.Reading, states: list[baf.DayState], now: Any
 ) -> bool:
-    """One question a tick: the first unsure day still to come that may be asked about."""
-    if baf.stored(marathon) is not None:
+    """The event's one question, while nothing has decided it and a show-day is still to
+    come."""
+    if not baf.asks(found, states):
         return False
-    for state in baf.unsure(states):
-        if may_ask(state.ask, state, now) and await ask_about(cog, guild, marathon, state, now):
-            return True
-    return False
+    judged = baf.judgement_of(found)
+    record = baf.question(found.asks)
+    same = bool(record) and baf.same_schedule(record, found.rows, judged)
+    if not may_ask(record, same, now):
+        return False
+    return await ask_about(cog, guild, marathon, found, judged, record, now)
 
 
 async def ask_about(
-    cog: Any, guild: Any, marathon: Any, state: baf.DayState, now: datetime
+    cog: Any,
+    guild: Any,
+    marathon: Any,
+    found: baf.Reading,
+    judged: baf.Judgement,
+    record: Any,
+    now: datetime,
 ) -> bool:
     from .marathon_inbox import reopened
 
     bot = cog.bot
-    record = state.ask
-    day = {
+    event = {
         key: value
-        for key, value in baf.record_for(state.day, None, None, now).items()
+        for key, value in baf.record_for(found.rows, None, None, now).items()
         if key in ("runs", "starts_at", "ends_at")
-    } | {"baf": state.judgement.baf}
+    } | {baf.EVENT: True, "baf": judged.baf}
     thread = await ask_thread(bot, guild, marathon)
     if thread is None:
         if not (record or {}).get("blocked"):
-            await put_ask(bot, guild, marathon, record, day | {"blocked": True})
+            await put_ask(bot, guild, marathon, record, event | {"blocked": True})
         return False
-    counted = bool(record) and baf.same_schedule(record, state.day, state.judgement)
+    counted = bool(record) and baf.same_schedule(record, found.rows, judged)
     tries = (int(record.get("tries") or 0) if counted else 0) + 1
     base = {
         "marathon_id": marathon["id"],
         "name": marathon["name"],
         "thread_id": int(thread.id),
-        "day": day["starts_at"],
-        "runs": state.judgement.runs,
-        "baf": state.judgement.baf,
+        "runs": judged.runs,
+        "baf": judged.baf,
     }
 
     async def failed(reason: str, old: Any, tried: int) -> bool:
@@ -696,7 +787,7 @@ async def ask_about(
             guild,
             marathon,
             old,
-            day
+            event
             | {
                 "failed_at": now.isoformat(),
                 "reason": reason,
@@ -720,11 +811,10 @@ async def ask_about(
         guild.id,
         MARATHON_BAF_EVENT_ASK_TEXT_KEY,
         marathon=marathon["name"],
-        baf=state.judgement.baf,
-        runs=state.judgement.runs,
-        day=day_word(bot, guild, marathon, state.starts_at, mention=True),
+        baf=judged.baf,
+        runs=judged.runs,
     )
-    claim = day | {"asked_at": now.isoformat(), "claimed": True, "tries": tries}
+    claim = event | {"asked_at": now.isoformat(), "claimed": True, "tries": tries}
     await put_ask(bot, guild, marathon, record, claim)
     try:
         message = await (await reopened(thread)).send(
@@ -740,7 +830,7 @@ async def ask_about(
         )
     except Exception as exc:
         return await failed(reason_of(exc), claim, tries)
-    asked = day | {
+    asked = event | {
         "asked_at": now.isoformat(),
         "channel_id": int(thread.id),
         "message_id": int(message.id),
@@ -807,12 +897,11 @@ async def reconcile(
 
 def closes(found: baf.Reading, record: dict[str, Any]) -> bool:
     """Whether the record closes a day as things stand: any day's own ping does, a per-run
-    mention only on a day that is a BaF event."""
+    mention only while the marathon is a BaF event."""
     if not record.get(baf.PER_RUN):
         return True
-    return any(
-        baf.covers(record, day, found.days) and baf.judgement_of(found, day).yes
-        for day in found.days
+    return baf.judgement_of(found).yes and any(
+        baf.covers(record, day, found.days) for day in found.days
     )
 
 
@@ -856,8 +945,9 @@ async def note_host_pings(
 async def note_missed(
     cog: Any, guild: Any, marathon: Any, found: baf.Reading, states: Any, now: datetime
 ) -> None:
-    """One row for a BaF event day whose ping has nothing left to ride, saying which of the
-    three causes it was."""
+    """One row, once, for a BaF event day whose ping has nothing to ride, whenever the tick
+    first sees it: routine when the day has no BaF run, important for the two causes staff can
+    fix."""
     bot = cog.bot
     if not verdict_for(bot, guild, marathon).mentions:
         return
@@ -866,7 +956,7 @@ async def note_missed(
     for state in states:
         if not state.judgement.yes or state.record is not None or state.carrier is not None:
             continue
-        if state.over or state.starts_at is None:
+        if state.starts_at is None:
             continue
         if baf.missed(records, state.day, found.days) is not None:
             continue
@@ -894,7 +984,11 @@ async def note_missed(
         await log_action(
             bot,
             guild,
-            "marathon.baf_event_no_ping",
+            (
+                "marathon.baf_event_no_baf_run"
+                if one["because"] == baf.NO_BAF_RUN
+                else "marathon.baf_event_no_ping"
+            ),
             details={
                 "marathon_id": marathon["id"],
                 "name": marathon["name"],
@@ -908,8 +1002,8 @@ async def note_missed(
 
 async def sync(cog: Any, guild: Any, marathon: Any, now: datetime) -> None:
     """The minute tick, with the marathon's lock held: settle what a stopped tick left, ask
-    about one unsure day, and say so once when a BaF event day has nothing left to carry its
-    ping."""
+    the event's question once, and say so once when a BaF event day has nothing left to carry
+    its ping."""
     bot = cog.bot
     if marathon is None or not mi.is_tracked(marathon) or mode_of(bot, guild.id) == MODE_OFF:
         return
@@ -922,7 +1016,7 @@ async def sync(cog: Any, guild: Any, marathon: Any, now: datetime) -> None:
         found = await reconcile(cog, guild, fresh, found, rows)
         found = await note_host_pings(cog, guild, fresh, found, rows)
         states = baf.day_states(found, speaks=speaks_for(cog.bot, guild, fresh))
-        if await ask_if_unsure(cog, guild, fresh, states, now):
+        if await ask_if_unsure(cog, guild, fresh, found, states, now):
             return
         await note_missed(cog, guild, fresh, found, states, now)
     except Exception as exc:
@@ -977,11 +1071,11 @@ class AskButton(SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], temp
 async def answered(
     bot: Any, guild: Any, actor: Any, marathon_id: Any, to: str, message_id: Any = None
 ) -> Outcome:
-    """A press on one day's question; with no message given, the marathon's only question."""
+    """A press on the event's question; with no message given, the marathon's only one."""
     marathon = await get_marathon(bot.db, guild.id, marathon_id)
     if marathon is None:
         return refusal(mt.NO_SUCH_MARATHON.format(given=marathon_id), NO_SUCH, 404)
-    return await set_day_answer(bot, guild, actor, marathon, message_id, to == baf.YES)
+    return await set_answer(bot, guild, actor, marathon, message_id, to == baf.YES)
 
 
 __all__ = [
@@ -989,16 +1083,18 @@ __all__ = [
     "answered",
     "ask_about",
     "ask_if_unsure",
+    "clear_answer",
     "heads_up_role",
-    "note_answer",
     "note_host_pings",
     "note_missed",
+    "note_questions",
     "quiet_for",
     "reading_for",
     "reading_now",
     "reconcile",
     "set_baf_event",
-    "set_day_answer",
+    "set_answer",
+    "set_question_answer",
     "settle",
     "speaks_for",
     "state_of",

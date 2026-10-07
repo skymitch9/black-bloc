@@ -997,45 +997,50 @@ const SETTING_SPECS = [
   ["marathon_hotfix_overlay_default", "bool", true, true, "whether a Hotfix marathon takes its start times, hosts and commentators from the event's own schedule sheet when the viewer page links one that matches it — while the marathon's own Event schedule switch follows this setting. Off, such a marathon keeps GDQ's sheet times (the show's start plus the estimates) and its host column. on by default"],
   ["marathon_controls_overlay_on", "text", "Event schedule: on · turn off", "Event schedule: on · turn off", "the thread controls' event-schedule button while a Hotfix marathon takes its times, hosts and commentators from the event's own schedule sheet. The button is there only when the viewer page links a sheet that matches the marathon"],
   ["marathon_controls_overlay_off", "text", "Event schedule: off · turn on", "Event schedule: off · turn on", "the thread controls' event-schedule button while a Hotfix marathon keeps GDQ's sheet times although the event has a schedule sheet of its own"],
-  ["marathon_baf_event_names", "text", "Black in a Flash", "Black in a Flash", "the show names that make a marathon a BaF event, separated by commas. A marathon whose name, or whose GDQ Hotfix show, starts with one of them on whole words is a BaF event whatever its runs say — capitals, spaces and punctuation do not matter, so Black in a Flash: Soul Train matches Black in a Flash, and Black in a Flashback does not. `Black in a Flash` by default; the marathon's own BaF event switch and a day's own answer still win"],
-  ["marathon_baf_event_min_runs", "int", 2, 2, "how many runs a show-day needs before every run having a BaF runner makes it a BaF event. 2 by default — one run is not an event", null, 50, 1],
-  ["marathon_baf_event_ask_percent", "int", 75, 75, "the share of a show-day's runs with a BaF runner, in percent, from which the bot asks in the marathon's thread whether it is a BaF event instead of deciding by itself. Under it the day is not one; at 100 percent it is. 75 by default; 100 never asks", null, 100, 1],
-  ["marathon_baf_event_ping_minutes", "int", 120, 120, "on a BaF event day the Marathon role is mentioned once, on the heads-up this many minutes before the day's first BaF run, and on no other heads-up that day. It should be one of marathon_reminder_minutes; when it is not, the largest mark at or under it carries the mention. 120 by default", null, 1440, 1],
+  ["marathon_baf_event_names", "text", "Black in a Flash", "Black in a Flash", "the show names that make a marathon a BaF event, separated by commas. A marathon whose name, or whose GDQ Hotfix show, starts with one of them on whole words is a BaF event whatever its runs say — capitals, spaces and punctuation do not matter, so Black in a Flash: Soul Train matches Black in a Flash, and Black in a Flashback does not. `Black in a Flash` by default; the marathon's own BaF event switch and an answer staff gave to the bot's question still win"],
+  ["marathon_baf_event_min_runs", "int", 2, 2, "how many runs a marathon needs, over all of its days, before every run having a BaF runner makes it a BaF event. 2 by default — one run is not an event", null, 50, 1],
+  ["marathon_baf_event_ask_percent", "int", 75, 75, "the share of a marathon's runs with a BaF runner, in percent and over all of its days, from which the bot asks once in the marathon's thread whether it is a BaF event instead of deciding by itself. Under it the marathon is not one; at 100 percent it is. 75 by default; 100 never asks", null, 100, 1],
+  ["marathon_baf_event_ping_minutes", "int", 120, 120, "on each day of a BaF event the Marathon role is mentioned once, on the heads-up this many minutes before the day's first BaF run, and on no other heads-up that day. It should be one of marathon_reminder_minutes; when it is not, the largest mark at or under it carries the mention. 120 by default", null, 1440, 1],
   ["marathon_baf_event_ask_role_id", "role", null, null, "the role mentioned on the question the bot posts in a marathon's thread when it is not sure the show is a BaF event. Blank posts the question with no mention"],
-  ["marathon_baf_event_ask_text", "text", "Is {day} of **{marathon}** a BaF event? {baf} of that day's {runs} runs have a BaF runner.", "Is {day} of **{marathon}** a BaF event? {baf} of that day's {runs} runs have a BaF runner.", "the question posted once for each show-day the bot is not sure about, in the marathon's thread; its answer is that day's alone. It takes {marathon} {baf} {runs} {day}; the role in marathon_baf_event_ask_role_id is mentioned in front of it when the day's Marathon-role mention could go out"],
+  ["marathon_baf_event_question", "text", "Is **{marathon}** a BaF event? {baf} of its {runs} runs have a BaF runner.", "Is **{marathon}** a BaF event? {baf} of its {runs} runs have a BaF runner.", "the question posted once in a marathon's thread when the bot is not sure the marathon is a BaF event; its answer covers every day of the marathon. It takes {marathon} {baf} {runs}, counted over the whole marathon; the role in marathon_baf_event_ask_role_id is mentioned in front of it when the Marathon-role mention could go out"],
   ["marathon_baf_event_ask_yes", "text", "Yes, a BaF event", "Yes, a BaF event", "the question's button that answers yes"],
   ["marathon_baf_event_ask_no", "text", "No, not a BaF event", "No, not a BaF event", "the question's button that answers no"],
-  ["marathon_baf_event_answered", "text", "{who} answered: {answer}.", "{who} answered: {answer}.", "the line added under a show-day's question once staff answer it with its buttons. It takes {who} {answer} {marathon}"],
+  ["marathon_baf_event_answered", "text", "{who} answered: {answer}.", "{who} answered: {answer}.", "the line added under the BaF event question once staff answer it with its buttons. It takes {who} {answer} {marathon}"],
   ["marathon_baf_event_word_yes", "text", "a BaF event", "a BaF event", "how a BaF event is named wherever its state is written"],
   ["marathon_baf_event_word_no", "text", "not a BaF event", "not a BaF event", "how a show that is not a BaF event is named wherever its state is written"],
   ["marathon_baf_event_word_unsure", "text", "not decided", "not decided", "how a show the bot is not sure about is named wherever its state is written"],
   ["marathon_baf_event_word_follow", "text", "worked out from the schedule", "worked out from the schedule", "how a marathon whose BaF event switch follows the schedule is named in the answers staff get"],
   ["marathon_baf_event_set_said", "text", "**{marathon}** is {answer} now.", "**{marathon}** is {answer} now.", "what staff are told once a marathon's BaF event switch changes. It takes {marathon} {answer}"],
   ["marathon_baf_event_same_said", "text", "**{marathon}** is already {answer}, so nothing was changed.", "**{marathon}** is already {answer}, so nothing was changed.", "what staff are told when a marathon's BaF event switch already says that. It takes {marathon} {answer}"],
-  ["marathon_controls_baf_follow", "text", "BaF event: follow the schedule", "BaF event: follow the schedule", "the thread controls' button that lets the bot work out whether the marathon is a BaF event"],
+  ["marathon_controls_baf_follow", "text", "BaF event: follow the schedule ({answer})", "BaF event: follow the schedule ({answer})", "the thread controls' button that lets the bot work out whether the marathon is a BaF event, while staff have not answered the bot's question. It takes {answer}: what following gives right now"],
+  ["marathon_controls_baf_follow_answer", "text", "BaF event: follow the answer ({answer})", "BaF event: follow the answer ({answer})", "the same button while an answer staff gave to the bot's question stands: following gives that answer, not what the schedule says. It takes {answer}"],
+  ["marathon_controls_baf_clear", "text", "Clear the answer", "Clear the answer", "the thread controls' button that takes back the answer staff gave to the bot's question, so the show's name and its runs decide again. It is there only while an answer is stored"],
   ["marathon_controls_baf_yes", "text", "BaF event: yes", "BaF event: yes", "the thread controls' button that says the marathon is a BaF event"],
   ["marathon_controls_baf_no", "text", "BaF event: no", "BaF event: no", "the thread controls' button that says the marathon is not a BaF event"],
-  ["marathon_baf_event_line", "text", "{day}: {answer} — {reason}.", "{day}: {answer} — {reason}.", "the line the thread controls and the marathon drawer carry for each show-day. It takes {day} {answer} {reason} {marathon}"],
-  ["marathon_baf_event_reason_staff", "text", "the BaF event switch says so", "the BaF event switch says so", "the reason on a show-day's line when the marathon's BaF event switch decided it"],
-  ["marathon_baf_event_reason_name", "text", "the show is named {name}", "the show is named {name}", "the reason on a show-day's line when the show's name is in marathon_baf_event_names. It takes {name}"],
-  ["marathon_baf_event_reason_all_runs", "text", "all {runs} runs have a BaF runner", "all {runs} runs have a BaF runner", "the reason on a show-day's line when every run has a BaF runner. It takes {runs}"],
-  ["marathon_baf_event_reason_share", "text", "{baf} of {runs} runs have a BaF runner, too few to be sure", "{baf} of {runs} runs have a BaF runner, too few to be sure", "the reason on a show-day's line while the bot is not sure and nobody has answered for that day. It takes {baf} {runs}"],
-  ["marathon_baf_event_reason_few_runs", "text", "it has {runs} run(s), fewer than {min}", "it has {runs} run(s), fewer than {min}", "the reason on a show-day's line when every run has a BaF runner but the day is shorter than marathon_baf_event_min_runs. It takes {runs} {min}"],
-  ["marathon_baf_event_reason_mixed", "text", "{baf} of {runs} runs have a BaF runner", "{baf} of {runs} runs have a BaF runner", "the reason on a show-day's line when too few runs have a BaF runner. It takes {baf} {runs}"],
-  ["marathon_baf_event_reason_no_runs", "text", "no run is on the schedule", "no run is on the schedule", "the reason on a show-day's line when the day has no run left"],
+  ["marathon_baf_event_answer_line", "text", "**{marathon}** is {answer} — {reason}.", "**{marathon}** is {answer} — {reason}.", "the one line the thread controls and the marathon drawer carry for whether the marathon is a BaF event and why. It takes {marathon} {answer} {reason}"],
+  ["marathon_baf_event_reason_staff", "text", "the BaF event switch says so", "the BaF event switch says so", "the reason on the BaF event line when the marathon's BaF event switch decided it"],
+  ["marathon_baf_event_reason_name", "text", "the show is named {name}", "the show is named {name}", "the reason on the BaF event line when the show's name is in marathon_baf_event_names. It takes {name}"],
+  ["marathon_baf_event_reason_all_runs", "text", "all {runs} runs have a BaF runner", "all {runs} runs have a BaF runner", "the reason on the BaF event line when every run of the marathon has a BaF runner. It takes {runs}"],
+  ["marathon_baf_event_reason_share", "text", "{baf} of {runs} runs have a BaF runner, too few to be sure", "{baf} of {runs} runs have a BaF runner, too few to be sure", "the reason on the BaF event line while the bot is not sure and nobody has answered. It takes {baf} {runs}, counted over the whole marathon"],
+  ["marathon_baf_event_reason_few_runs", "text", "it has {runs} run(s), fewer than {min}", "it has {runs} run(s), fewer than {min}", "the reason on the BaF event line when every run has a BaF runner but the marathon has fewer runs than marathon_baf_event_min_runs. It takes {runs} {min}"],
+  ["marathon_baf_event_reason_mixed", "text", "{baf} of {runs} runs have a BaF runner", "{baf} of {runs} runs have a BaF runner", "the reason on the BaF event line when too few of the marathon's runs have a BaF runner. It takes {baf} {runs}"],
+  ["marathon_baf_event_reason_no_runs", "text", "no run is on the schedule", "no run is on the schedule", "the reason on the BaF event line when the marathon has no run on its schedule"],
   ["marathon_baf_event_ping_will", "text", "{role} is mentioned once, on the heads-up {minutes} minutes before **{game}**.", "{role} is mentioned once, on the heads-up {minutes} minutes before **{game}**.", "what a BaF event day's line says while its one Marathon-role mention is still to come. It takes {role} {minutes} {game}"],
   ["marathon_baf_event_ping_done", "text", "{role} was mentioned once, on the heads-up {minutes} minutes before **{game}**.", "{role} was mentioned once, on the heads-up {minutes} minutes before **{game}**.", "what a show-day's line says once its one Marathon-role mention went out. It takes {role} {minutes} {game}"],
   ["marathon_baf_event_ping_none", "text", "Every heads-up of that day's BaF runs has gone, so {role} is not mentioned.", "Every heads-up of that day's BaF runs has gone, so {role} is not mentioned.", "what a BaF event day's line says when every heads-up that could carry the Marathon role has been posted or its run has started. It takes {role}"],
   ["marathon_baf_event_ping_fallback", "text", "marathon_baf_event_ping_minutes is {wanted}, which is not one of marathon_reminder_minutes, so the {minutes}-minute heads-up carries it.", "marathon_baf_event_ping_minutes is {wanted}, which is not one of marathon_reminder_minutes, so the {minutes}-minute heads-up carries it.", "what a BaF event day's line adds while marathon_baf_event_ping_minutes is not a reminder mark. It takes {wanted} {minutes}"],
-  ["marathon_baf_event_reason_leads", "text", "staff answered for this day", "staff answered for this day", "the reason on a show-day's line when staff answered that day's own question"],
+  ["marathon_baf_event_reason_answered", "text", "staff answered the question in the thread ({baf} of {runs} runs have a BaF runner); the answer stands until the BaF event switch changes it", "staff answered the question in the thread ({baf} of {runs} runs have a BaF runner); the answer stands until the BaF event switch changes it", "the reason on the BaF event line when staff answered the bot's question. The answer stands whatever the schedule becomes afterwards. It takes {baf} {runs}, counted now"],
   ["marathon_baf_event_ping_unconfirmed", "text", "{role} may have been mentioned on the heads-up {minutes} minutes before **{game}**: the bot stopped before it could confirm it, so nothing else mentions {role} that day.", "{role} may have been mentioned on the heads-up {minutes} minutes before **{game}**: the bot stopped before it could confirm it, so nothing else mentions {role} that day.", "what a show-day's line says when the bot stopped between claiming the day's one Marathon-role mention and confirming it went out. It takes {role} {minutes} {game}"],
-  ["marathon_baf_event_ping_no_run", "text", "No BaF run is left that day, so {role} is not mentioned.", "No BaF run is left that day, so {role} is not mentioned.", "what a BaF event day's line says when none of its runs has a BaF member to post a heads-up for. It takes {role}"],
+  ["marathon_baf_event_ping_no_baf_run", "text", "No BaF run is on that day, so {role} is not mentioned.", "No BaF run is on that day, so {role} is not mentioned.", "what a BaF event day's line says when none of that day's runs has a BaF member to post a heads-up for. It takes {role}"],
   ["marathon_baf_event_ping_nobody", "text", "Nobody on that day's BaF runs can be named publicly, so {role} is not mentioned.", "Nobody on that day's BaF runs can be named publicly, so {role} is not mentioned.", "what a BaF event day's line says when every BaF run still to come has only people who opted out of public posts. It takes {role}"],
-  ["marathon_baf_event_ask_pending", "text", "Staff were asked in the thread and have not answered.", "Staff were asked in the thread and have not answered.", "what a show-day's line adds while its question is up and unanswered"],
-  ["marathon_baf_event_ask_failed", "text", "The question could not be posted in the thread, so answer with the BaF event switch.", "The question could not be posted in the thread, so answer with the BaF event switch.", "what a show-day's line adds when its question could not be posted"],
-  ["marathon_baf_event_ask_nowhere", "text", "There is no thread to ask in, so answer with the BaF event switch.", "There is no thread to ask in, so answer with the BaF event switch.", "what a show-day's line adds when the marathon has no thread the bot may post its question in"],
-  ["marathon_baf_event_day_set_said", "text", "{day} of **{marathon}** is {answer} now.", "{day} of **{marathon}** is {answer} now.", "what staff are told once they answer one show-day's question. It takes {day} {marathon} {answer}"],
-  ["marathon_baf_event_day_same_said", "text", "{day} of **{marathon}** is already {answer}, so nothing was changed.", "{day} of **{marathon}** is already {answer}, so nothing was changed.", "what staff are told when a show-day's question already has that answer. It takes {day} {marathon} {answer}"],
+  ["marathon_baf_event_ask_pending", "text", "Staff were asked in the thread and have not answered.", "Staff were asked in the thread and have not answered.", "what the BaF event line adds while the bot's question is up and unanswered"],
+  ["marathon_baf_event_ask_failed", "text", "The question could not be posted in the thread, so answer with the BaF event switch.", "The question could not be posted in the thread, so answer with the BaF event switch.", "what the BaF event line adds when the bot's question could not be posted"],
+  ["marathon_baf_event_ask_nowhere", "text", "There is no thread to ask in, so answer with the BaF event switch.", "There is no thread to ask in, so answer with the BaF event switch.", "what the BaF event line adds when the marathon has no thread the bot may post its question in"],
+  ["marathon_baf_event_reason_acted", "text", "{baf} of {runs} runs have a BaF runner now; it was a BaF event when a day's one mention went out, so it stays one until staff answer", "{baf} of {runs} runs have a BaF runner now; it was a BaF event when a day's one mention went out, so it stays one until staff answer", "the reason on the BaF event line when a schedule change left the bot unsure after it had already mentioned the Marathon role once for a day of the marathon as a BaF event. It takes {baf} {runs}, counted now"],
+  ["marathon_baf_event_cleared", "text", "{who} cleared the answer.", "{who} cleared the answer.", "the line under every BaF event question of a marathon once staff clear the answer. It takes {who} {marathon}"],
+  ["marathon_baf_event_cleared_said", "text", "The answer was cleared, so **{marathon}** is {answer} now.", "The answer was cleared, so **{marathon}** is {answer} now.", "what staff are told once the answer to a marathon's BaF event question is cleared. It takes {marathon} {answer}"],
+  ["marathon_baf_event_no_answer_said", "text", "**{marathon}** has no answer to clear, so nothing was changed.", "**{marathon}** has no answer to clear, so nothing was changed.", "what staff are told when they clear the answer to a marathon's BaF event question and none is stored. It takes {marathon}"],
+  ["marathon_baf_event_day_line", "text", "{day}: {ping}", "{day}: {ping}", "the line the thread controls and the marathon drawer carry for one show-day of a BaF event, under the event's own line: the day, then what its one Marathon-role mention did or will do. It takes {day} {ping}"],
   ["marathon_controls_tracker", "text", "Marathon tracker ↗", "Marathon tracker ↗", "the link button on a tracked marathon's thread controls that opens its Marathon tracker page on the site — the runs in order with the times the bot is working from"],
   ["marathon_overlay_on_said", "text", "**{marathon}** takes its start times, hosts and commentators from the event's own schedule sheet now, when the viewer links one that matches. The schedule is being read again.", "**{marathon}** takes its start times, hosts and commentators from the event's own schedule sheet now, when the viewer links one that matches. The schedule is being read again.", "what staff are told once a marathon's Event schedule switch is on. It takes {marathon}"],
   ["marathon_overlay_off_said", "text", "**{marathon}** keeps GDQ's sheet times and host column now — the event's own schedule sheet is not laid over it. The schedule is being read again.", "**{marathon}** keeps GDQ's sheet times and host column now — the event's own schedule sheet is not laid over it. The schedule is being read again.", "what staff are told once a marathon's Event schedule switch is off. It takes {marathon}"],
@@ -6911,7 +6916,7 @@ function seedMarathons() {
     { id: 50, name: 'GDQueer', schedule_url: 'https://gamesdonequick.com/hotfix/schedule#gdqueer/2026-10-03', source: 'gdq_hotfix', source_ref: 'gdqueer/2026-10-03', spotlight_id: 1, feed_id: 40, starts_at: '2026-10-03T17:00:00+00:00', ends_at: '2026-10-05T03:09:00+00:00', active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(25), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(25), overlay: null, overlay_sheet: { label: 'Games Done Queer \u{1F4C5} Oct 3-4', url: MARATHON_OVERLAY_SHEET, runs: 24, matched: 24, by_order: 0, applied: true, stale: null } },
     trackerSeed(MEMBERS, STAFF.id).marathon,
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
-  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, baf_event: row.id === 60 ? true : null, public_highlight: false, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
+  ].map((row) => ({ baf_answer: row.id === 31 ? 'no' : null, suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, baf_event: row.id === 60 ? true : null, public_highlight: false, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
 }
 
 // The inbox (marathon-inbox-design.md §B): AGDQ 2027 is tracked with its own thread (and its
@@ -7368,9 +7373,11 @@ function marathonRolePing(row) {
   return { mentions: true, reason: null, line: word('marathon_role_ping_line_on', { role: `@${role.name}`, minutes: state.settings.get('marathon_ping_minutes') }) };
 }
 
-// The bot's cogs/content/marathon_baf_event.state_of, for one show-day (the mock's marathons are
-// read as one): the staff answer first, then the show's name, then the share of BaF runners.
-const MARATHON_BAF_REASON_KEYS = { staff: 'marathon_baf_event_reason_staff', leads: 'marathon_baf_event_reason_leads', name: 'marathon_baf_event_reason_name', all_runs: 'marathon_baf_event_reason_all_runs', share: 'marathon_baf_event_reason_share', few_runs: 'marathon_baf_event_reason_few_runs', mixed: 'marathon_baf_event_reason_mixed', no_runs: 'marathon_baf_event_reason_no_runs' };
+// The bot's cogs/content/marathon_baf_event.state_of: the event's answer once, over every run of the
+// marathon (the staff answer first, then the show's name, then the share of BaF runners), then what
+// becomes of the ping. The mock reads a marathon as one show-day, and holds an answer to the
+// question as `baf_answer` (marathon 31 is seeded with a no).
+const MARATHON_BAF_REASON_KEYS = { staff: 'marathon_baf_event_reason_staff', leads: 'marathon_baf_event_reason_answered', name: 'marathon_baf_event_reason_name', all_runs: 'marathon_baf_event_reason_all_runs', share: 'marathon_baf_event_reason_share', few_runs: 'marathon_baf_event_reason_few_runs', mixed: 'marathon_baf_event_reason_mixed', no_runs: 'marathon_baf_event_reason_no_runs', acted: 'marathon_baf_event_reason_acted' };
 const MARATHON_BAF_WORD_KEYS = { yes: 'marathon_baf_event_word_yes', no: 'marathon_baf_event_word_no', unsure: 'marathon_baf_event_word_unsure', follow: 'marathon_baf_event_word_follow' };
 
 function marathonBafFold(text) {
@@ -7405,7 +7412,9 @@ function marathonBafEvent(row) {
   const runs = marathonRunsOf(row.id);
   const worked = marathonBafWorkedOut(row, runs);
   const own = row.baf_event === null || row.baf_event === undefined ? null : Boolean(row.baf_event);
-  const judged = own === null ? worked : { ...worked, answer: own ? 'yes' : 'no', reason: 'staff' };
+  const said = ['yes', 'no'].includes(row.baf_answer) ? row.baf_answer : null;
+  const followed = said ? { ...worked, answer: said, reason: 'leads' } : worked;
+  const judged = own === null ? followed : { ...worked, answer: own ? 'yes' : 'no', reason: 'staff' };
   const reasonWord = (one) => marathonSaid(MARATHON_BAF_REASON_KEYS[one.reason], { name: one.name, runs: one.runs, baf: one.baf, min: state.settings.get('marathon_baf_event_min_runs') });
   const answerWord = (one) => marathonSaid(MARATHON_BAF_WORD_KEYS[one.answer], {});
   const first = runs.find((one) => one.state !== 'dropped' && one.scheduled_at) || null;
@@ -7424,41 +7433,42 @@ function marathonBafEvent(row) {
   const noPing = judged.answer === 'yes' && !carrier
     ? (runs.some((one) => one.state !== 'dropped' && marathonOurs(one)) ? 'marks_spent' : 'no_baf_run')
     : null;
-  let line = marathonSaid('marathon_baf_event_line', { day, answer: answerWord(judged), reason: reasonWord(judged), marathon: row.name });
-  if (judged.answer === 'yes' && ping.mentions) {
-    line += ' ' + (carrier
-      ? marathonSaid('marathon_baf_event_ping_will', { role: `@${role.name}`, minutes, game: carrier.game })
-      : marathonSaid(noPing === 'no_baf_run' ? 'marathon_baf_event_ping_no_run' : 'marathon_baf_event_ping_none', { role: `@${role.name}` }));
-    if (carrier && minutes !== wanted) line += ' ' + marathonSaid('marathon_baf_event_ping_fallback', { wanted, minutes });
-  }
+  const line = marathonSaid('marathon_baf_event_answer_line', { answer: answerWord(judged), reason: reasonWord(judged), marathon: row.name });
+  const pingState = judged.answer !== 'yes' ? 'per_run' : (!ping.mentions ? 'off' : (carrier ? 'will' : noPing));
+  const pingKeys = { will: 'marathon_baf_event_ping_will', no_baf_run: 'marathon_baf_event_ping_no_baf_run', marks_spent: 'marathon_baf_event_ping_none' };
+  let pingSaid = pingKeys[pingState] ? marathonSaid(pingKeys[pingState], { role: `@${role.name}`, minutes, game: carrier ? carrier.game : '' }) : '';
+  if (pingState === 'will' && minutes !== wanted) pingSaid += ' ' + marathonSaid('marathon_baf_event_ping_fallback', { wanted, minutes });
+  const dayLine = pingSaid ? marathonSaid('marathon_baf_event_day_line', { day, ping: pingSaid }) : '';
   const days = first ? [{
     starts_at: first.scheduled_at,
-    answer: judged.answer,
-    reason: judged.reason,
     runs: judged.runs,
     baf: judged.baf,
     over: runs.filter((one) => one.state !== 'dropped').every((one) => one.state === 'done'),
     governed: judged.answer === 'yes',
-    ask: null,
+    ping: pingState,
     no_ping: noPing,
     pinged: null,
     carrier: carrier ? { run_id: carrier.id, game: carrier.game, minutes } : null,
-    line,
+    line: dayLine,
   }] : [];
   return {
     own,
     choice: own === null ? 'follow' : (own ? 'yes' : 'no'),
     answer: judged.answer,
     reason: judged.reason,
+    runs: judged.runs,
+    baf: judged.baf,
     answer_word: answerWord(judged),
     reason_word: reasonWord(judged),
-    worked_out: { answer: worked.answer, reason: worked.reason, answer_word: answerWord(worked), reason_word: reasonWord(worked) },
-    asked: false,
+    worked_out: { answer: followed.answer, reason: followed.reason, answer_word: answerWord(followed), reason_word: reasonWord(followed) },
+    asked: Boolean(said),
+    ask: said ? 'answered' : null,
+    line,
     ping_minutes: minutes,
     ping_fell_back: minutes !== wanted,
     days,
-    lines: [line],
-    all_governed: judged.answer === 'yes',
+    lines: [line, dayLine].filter(Boolean),
+    all_governed: Boolean(first) && judged.answer === 'yes',
   };
 }
 
@@ -7474,6 +7484,17 @@ function marathonSetBafEvent(row, given) {
   row.baf_event = wanted;
   logAction('web.marathon.baf_event_set', { details: { marathon_id: row.id, name: row.name, from: choice(was), to: choice(wanted), by: null, via: 'website' } });
   return marathonSaid('marathon_baf_event_set_said', { marathon: row.name, answer });
+}
+
+// The bot's cogs/content/marathon_baf_event.set_question_answer: `clear` takes the answer back,
+// so the switch, then the show's name and the runs, decide again.
+function marathonSetBafAnswer(row, given) {
+  if (String(given || '').trim().toLowerCase() !== 'clear') throw new Refused(422, 'bad_baf_event_answer', `Say clear to take back the answer to the BaF event question of **${row.name}**, so nothing was changed.`);
+  const was = ['yes', 'no'].includes(row.baf_answer) ? row.baf_answer : null;
+  if (!was) return marathonSaid('marathon_baf_event_no_answer_said', { marathon: row.name });
+  row.baf_answer = null;
+  logAction('web.marathon.baf_event_set', { details: { marathon_id: row.id, name: row.name, from: was, to: 'follow', by: 'question', cleared: true, via: 'website' } });
+  return marathonSaid('marathon_baf_event_cleared_said', { marathon: row.name, answer: marathonSaid(MARATHON_BAF_WORD_KEYS[marathonBafEvent(row).answer], {}) });
 }
 
 // The bot's marathon_role_ping.state_of with the runs: on a BaF event day the per-run line
@@ -8760,6 +8781,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   if ('event_mode' in body) said.push(marathonSetMode(row, body.event_mode));
   if ('spotlight_mode' in body) said.push(marathonSetSpotlightMode(row, body.spotlight_mode));
   if ('ping_role' in body) said.push(marathonSetPingRole(row, body.ping_role));
+  if ('baf_event_answer' in body) said.push(marathonSetBafAnswer(row, body.baf_event_answer));
   if ('baf_event' in body) said.push(marathonSetBafEvent(row, body.baf_event));
   if ('scan_hosts' in body) said.push(MARATHON_SCAN_GONE);
   if ('host_events' in body) said.push(MARATHON_HOST_EVENTS_GONE);

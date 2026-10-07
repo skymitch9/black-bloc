@@ -1258,11 +1258,13 @@ async def test_the_drawer_reads_the_baf_event_switch_what_was_worked_out_and_why
     assert found["worked_out"]["answer"] == "no"
     assert found["worked_out"]["reason_word"] == "1 of 3 runs have a BaF runner"
     assert found["answer_word"] == "not a BaF event"
+    assert (found["runs"], found["baf"], found["ask"], found["asked"]) == (3, 1, None, False)
+    assert found["line"] == "**AGDQ 2027** is not a BaF event — 1 of 3 runs have a BaF runner."
     (day,) = found["days"]
     assert (day["runs"], day["baf"], day["pinged"], day["carrier"]) == (3, 1, None, None)
-    assert found["lines"] == [day["line"]]
-    assert day["line"].endswith(": not a BaF event — 1 of 3 runs have a BaF runner.")
-    assert "<t:" not in day["line"] and "<@&" not in day["line"]
+    assert (day["ping"], day["line"], day["governed"]) == ("per_run", "", False)
+    assert "answer" not in day and "reason" not in day and "ask" not in day
+    assert found["lines"] == [found["line"]]
 
 
 async def test_patch_baf_event_takes_yes_no_and_follow_and_leaves_one_web_row_each(
@@ -1300,6 +1302,57 @@ async def test_patch_baf_event_takes_yes_no_and_follow_and_leaves_one_web_row_ea
     assert client.get(f"/api/marathons/{marathon_id}").json()["baf_event"]["choice"] == "follow"
 
 
+async def test_patch_clears_the_questions_answer_and_follow_says_what_following_gives(
+    client, sign_in, web, cog, wf
+):
+    import json
+
+    from black_bloc import marathon_baf_event as baf
+
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    said = {"event": True, "message_id": 5, "answer": "yes", "answered_by": 7}
+    await web.db.conn.execute(
+        "UPDATE marathons SET baf_event_ask = ? WHERE id = ?", (json.dumps([said]), marathon_id)
+    )
+    await web.db.conn.commit()
+
+    switched = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": "no"}).json()
+    found = switched["baf_event"]
+    assert (found["answer"], found["reason"], found["ask"]) == ("no", "staff", "answered")
+    assert (found["worked_out"]["answer"], found["worked_out"]["reason"]) == ("yes", "leads")
+    assert found["worked_out"]["answer_word"] == "a BaF event"
+    followed = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": None}).json()
+    assert followed["baf_event"]["answer"] == found["worked_out"]["answer"]
+    assert followed["baf_event"]["reason"] == found["worked_out"]["reason"]
+
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event_answer": "maybe"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_baf_event_answer"
+    assert "Say clear" in bad.json()["message"]
+    cleared = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event_answer": "clear"})
+
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["message"] == (
+        "The answer was cleared, so **AGDQ 2027** is not a BaF event now."
+    )
+    after = cleared.json()["baf_event"]
+    assert (after["answer"], after["reason"], after["ask"]) == ("no", "mixed", None)
+    assert after["worked_out"]["reason"] == "mixed"
+    rows = [details for kind, details in await wf.web_rows_in(web.db) if kind.endswith("event_set")]
+    assert [(one["from"], one["to"], one.get("cleared"), one["via"]) for one in rows] == [
+        ("follow", "no", None, "website"),
+        ("no", "follow", None, "website"),
+        ("yes", "follow", True, "website"),
+    ]
+    cur = await web.db.conn.execute(
+        "SELECT baf_event_ask FROM marathons WHERE id = ?", (marathon_id,)
+    )
+    (left,) = baf.asks_of({"baf_event_ask": (await cur.fetchone())["baf_event_ask"]})
+    assert "answer" not in left and left["cleared"] is True and left["cleared_by"]
+    again = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event_answer": "clear"})
+    assert again.status_code == 200 and "has no answer to clear" in again.json()["message"]
+
+
 async def test_a_baf_event_day_says_which_heads_up_carries_the_ping_in_the_drawer(
     client, sign_in, web, cog, wf
 ):
@@ -1315,9 +1368,13 @@ async def test_a_baf_event_day_says_which_heads_up_carries_the_ping_in_the_drawe
 
     (day,) = body["baf_event"]["days"]
     assert day["carrier"]["game"] == "Super Metroid" and day["carrier"]["minutes"] == 120
-    assert (day["ask"], day["no_ping"], day["pinged"]) == (None, None, None)
+    assert (day["ping"], day["no_ping"], day["pinged"]) == ("will", None, None)
     assert day["line"].endswith(
-        f"a BaF event — the BaF event switch says so. @{role.name} is mentioned once, on the "
-        "heads-up 120 minutes before **Super Metroid**."
+        f": @{role.name} is mentioned once, on the heads-up 120 minutes before **Super Metroid**."
     )
+    assert "<t:" not in day["line"] and "<@&" not in day["line"]
+    assert body["baf_event"]["lines"] == [
+        "**AGDQ 2027** is a BaF event — the BaF event switch says so.",
+        day["line"],
+    ]
     assert body["role_ping"]["mentions"] is True and body["role_ping"]["line"] == ""

@@ -31,6 +31,8 @@ from ...settings_store import (
     MARATHON_CONTROLS_ALREADY_ON_KEY,
     MARATHON_CONTROLS_ANNOUNCE_OFF_KEY,
     MARATHON_CONTROLS_ANNOUNCE_ON_KEY,
+    MARATHON_CONTROLS_BAF_CLEAR_KEY,
+    MARATHON_CONTROLS_BAF_FOLLOW_ANSWER_KEY,
     MARATHON_CONTROLS_BAF_FOLLOW_KEY,
     MARATHON_CONTROLS_BAF_NO_KEY,
     MARATHON_CONTROLS_BAF_YES_KEY,
@@ -121,6 +123,8 @@ LABEL_KEYS = {
 }
 BAF_LABEL_KEYS = {
     mtc.FOLLOW: MARATHON_CONTROLS_BAF_FOLLOW_KEY,
+    mtc.FOLLOW_ANSWER: MARATHON_CONTROLS_BAF_FOLLOW_ANSWER_KEY,
+    mtc.CLEAR: MARATHON_CONTROLS_BAF_CLEAR_KEY,
     mtc.YES: MARATHON_CONTROLS_BAF_YES_KEY,
     mtc.NO: MARATHON_CONTROLS_BAF_NO_KEY,
 }
@@ -154,7 +158,11 @@ def shown_cache(cog: Any) -> dict[int, Any]:
 
 async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tuple[str, ...]]:
     """`(content, controls, labels)` from the row, the channel row and the keys."""
+    from .marathon_baf_event import answer_word, reading_for
+
     _row, state = await state_for(bot, guild, marathon)
+    rows = await runs_of(bot.db, marathon["id"])
+    followed = baf.judgement_of(reading_for(bot, guild.id, marathon, rows), own=False)
     controls = mtc.controls(
         me.mode_of(marathon),
         state["state"],
@@ -163,17 +171,28 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         announces(bot, guild.id, marathon),
         overlay_switch(bot, guild.id, marathon),
         host_announce=policy_of(bot, guild.id, marathon).hosts_on,
-    ) + mtc.baf_controls(baf.choice_of(baf.stored(marathon)))
+    ) + mtc.baf_controls(
+        baf.choice_of(baf.stored(marathon)), baf.answer_of(baf.asks_of(marathon)) is not None
+    )
     starts = label_moment(state.get("starts"), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY))
     labels = tuple(
-        mtc.label(words(bot, guild.id, label_key(one), starts=starts)) for one in controls
+        mtc.label(
+            words(
+                bot,
+                guild.id,
+                label_key(one),
+                starts=starts,
+                answer=answer_word(bot, guild.id, followed.answer),
+            )
+        )
+        for one in controls
     )
     content = words(bot, guild.id, MARATHON_CONTROLS_HELP_KEY, marathon=marathon["name"])
     if state["state"] == ms.NO_CHANNEL:
         content += "\n" + words(
             bot, guild.id, MARATHON_CONTROLS_NO_CHANNEL_KEY, marathon=marathon["name"]
         )
-    role_line = role_ping_line(bot, guild, marathon, rows=await runs_of(bot.db, marathon["id"]))
+    role_line = role_ping_line(bot, guild, marathon, rows=rows)
     if role_line:
         content += "\n" + role_line
     return (content, controls, labels)
@@ -181,7 +200,7 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
 
 def label_key(control: Any) -> str:
     if control.action == mtc.BAF:
-        return BAF_LABEL_KEYS[control.to]
+        return BAF_LABEL_KEYS[control.label or control.to]
     return LABEL_KEYS[(control.action, control.word)]
 
 
@@ -581,9 +600,12 @@ async def press(
     elif action == mtc.OVERLAY:
         outcome = await set_switch(bot, guild, actor, marathon, mh.OVERLAY, to == mtc.ON, via=via)
     elif action == mtc.BAF:
-        from .marathon_baf_event import set_baf_event
+        from .marathon_baf_event import clear_answer, set_baf_event
 
-        outcome = await set_baf_event(bot, guild, actor, marathon, to, via=via)
+        if to == mtc.CLEAR:
+            outcome = await clear_answer(bot, guild, actor, marathon, via=via)
+        else:
+            outcome = await set_baf_event(bot, guild, actor, marathon, to, via=via)
     elif to == mtc.ON:
         outcome = await start_spotlight(bot, guild, actor, marathon, via=via)
     elif to == mtc.CANCEL:

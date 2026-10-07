@@ -5723,6 +5723,25 @@
           "held_by_this",
           "follows",
           "tail_minutes"
+        ],
+        "baf_event": [
+          "own",
+          "choice",
+          "answer",
+          "reason",
+          "runs",
+          "baf",
+          "answer_word",
+          "reason_word",
+          "worked_out",
+          "asked",
+          "ask",
+          "line",
+          "ping_minutes",
+          "ping_fell_back",
+          "days",
+          "lines",
+          "all_governed"
         ]
       }
     },
@@ -6913,6 +6932,7 @@
         "setup_minutes",
         "heads_up_minutes",
         "today",
+        "baf_event",
         "days",
         "rows",
         "next_posts",
@@ -6946,7 +6966,6 @@
           "runs",
           "baf",
           "drift_minutes",
-          "baf_event",
           "staff_times",
           "staff_estimates",
           "can_shift",

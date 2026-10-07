@@ -235,12 +235,16 @@ async def test_a_word_that_is_not_follow_yes_or_no_is_refused_in_words(bot, cog)
 # --- asking Leads --------------------------------------------------------------------------------
 
 
-async def unsure(bot, cog):
+async def asking(bot, cog, runs):
     role = FakeRole(LEADS, "Leads")
     role.mentionable = True
     bot.guild.roles.append(role)
     await bot.store.set(GUILD, "marathon_baf_event_ask_role_id", LEADS)
-    return await event_marathon(bot, cog, day_of_runs(SKY_RUNS, SKY_RUNS, OTHER, SKY_RUNS))
+    return await event_marathon(bot, cog, runs)
+
+
+async def unsure(bot, cog):
+    return await asking(bot, cog, day_of_runs(SKY_RUNS, SKY_RUNS, OTHER, SKY_RUNS))
 
 
 async def test_a_day_at_the_share_asks_leads_once_in_the_thread_and_really_mentions_them(
@@ -253,8 +257,7 @@ async def test_a_day_at_the_share_asks_leads_once_in_the_thread_and_really_menti
 
     (asked,) = questions(bot)
     assert asked.content == (
-        f"<@&{LEADS}> Is <t:{int((NOW + timedelta(minutes=180)).timestamp())}:D> of **SS4C** "
-        "a BaF event? 3 of that day's 4 runs have a BaF runner."
+        f"<@&{LEADS}> Is **SS4C** a BaF event? 3 of its 4 runs have a BaF runner."
     )
     mentions = asked.kwargs["allowed_mentions"]
     assert [one.id for one in mentions.roles] == [LEADS]
@@ -278,7 +281,7 @@ async def test_no_ask_role_still_posts_the_question_and_mentions_nobody(bot, cog
     await at(bot, cog, marathon, 0)
 
     (asked,) = questions(bot)
-    assert asked.content.startswith("Is <t:") and "of **SS4C** a BaF event?" in asked.content
+    assert asked.content.startswith("Is **SS4C** a BaF event?")
     assert not asked.kwargs["allowed_mentions"].roles
     assert (await details_of(bot.db, "marathon.baf_event_asked"))["role"] is None
 
@@ -320,7 +323,7 @@ async def test_yes_inside_the_last_two_hours_pings_once_at_the_next_heads_up(bot
     assert (await fresh(bot, marathon))["baf_event"] is None
     assert baf.asks_of(await fresh(bot, marathon))[0]["answer"] == "yes"
     assert asked.content.endswith(f"<@{FakeActor().id}> answered: a BaF event.")
-    assert asked.content.startswith(f"<@&{LEADS}> Is <t:")
+    assert asked.content.startswith(f"<@&{LEADS}> Is **SS4C** a BaF event?")
     assert asked.edits[-1]["allowed_mentions"].roles in (None, [], False) or not asked.edits[-1][
         "allowed_mentions"
     ].roles
@@ -656,7 +659,7 @@ async def test_the_thread_controls_carry_the_line_and_the_three_way_switch(bot, 
 
     assert "a BaF event — all 4 runs have a BaF runner." in message.content
     assert switch() == [
-        ("BaF event: follow the schedule", True),
+        ("BaF event: follow the schedule (a BaF event)", True),
         ("BaF event: yes", False),
         ("BaF event: no", False),
     ]
@@ -667,7 +670,7 @@ async def test_the_thread_controls_carry_the_line_and_the_three_way_switch(bot, 
     assert (await fresh(bot, marathon))["baf_event"] == 0
     assert "not a BaF event — the BaF event switch says so." in message.content
     assert switch() == [
-        ("BaF event: follow the schedule", False),
+        ("BaF event: follow the schedule (a BaF event)", False),
         ("BaF event: yes", False),
         ("BaF event: no", True),
     ]
@@ -705,6 +708,9 @@ async def roles_posted(bot):
 
 def day_stamp(minutes):
     return f"<t:{int((NOW + timedelta(minutes=minutes)).timestamp())}:D>"
+
+
+STANDS = "the answer stands until the BaF event switch changes it."
 
 
 async def test_leads_answering_yes_after_a_per_run_ping_brings_no_second_ping(bot, cog):
@@ -823,11 +829,7 @@ async def test_a_day_that_is_not_a_baf_event_posts_what_main_posts(bot, cog, mon
 
 
 async def two_day_marathon(bot, cog):
-    role = FakeRole(LEADS, "Leads")
-    role.mentionable = True
-    bot.guild.roles.append(role)
-    await bot.store.set(GUILD, "marathon_baf_event_ask_role_id", LEADS)
-    return await event_marathon(
+    return await asking(
         bot,
         cog,
         [
@@ -837,57 +839,69 @@ async def two_day_marathon(bot, cog):
     )
 
 
-async def test_a_no_for_one_day_leaves_every_other_day_alone(bot, cog):
+async def test_a_no_to_the_question_is_the_answer_for_every_day_of_the_event(bot, cog):
     marathon = await two_day_marathon(bot, cog)
-    await at(bot, cog, marathon, 0)
+    await through(bot, cog, marathon, 0, 1, 2)
     (asked,) = questions(bot)
     assert asked.content == (
-        f"<@&{LEADS}> Is {day_stamp(180 + DAY)} of **SS4C** a BaF event? "
-        "4 of that day's 5 runs have a BaF runner."
+        f"<@&{LEADS}> Is **SS4C** a BaF event? 6 of its 7 runs have a BaF runner."
     )
 
     lead = await press(bot, marathon, "no")
     await through(bot, cog, marathon, 60, 120, 165)
 
-    assert lead.sent == f"{day_stamp(180 + DAY)} of **SS4C** is not a BaF event now."
+    assert lead.sent == "**SS4C** is not a BaF event now."
     assert (await fresh(bot, marathon))["baf_event"] is None
-    one, two = (await line_of(bot, marathon)).split("\n")[-2:]
-    assert "a BaF event — all 2 runs have a BaF runner." in one
-    assert "not a BaF event — staff answered for this day." in two
-    assert (await roles_posted(bot))[0] == ("Game 1", 120, MARATHON_ROLE)
-    assert len(carrying(bot)) == 1
+    switch, said = (await line_of(bot, marathon)).split("\n")
+    assert "15 minutes before a BaF run" in switch
+    assert said == (
+        "**SS4C** is not a BaF event — staff answered the question in the thread "
+        f"(6 of 7 runs have a BaF runner); {STANDS}"
+    )
+    assert (await roles_posted(bot))[:3] == [
+        ("Game 1", 120, None),
+        ("Game 2", 120, None),
+        ("Game 1", 15, MARATHON_ROLE),
+    ]
     assert asked.content.endswith(f"<@{FakeActor().id}> answered: not a BaF event.")
     logged = await details_of(bot.db, "marathon.baf_event_set")
     assert (logged["from"], logged["to"], logged["by"]) == ("follow", "no", "question")
-    assert logged["day"] == (NOW + timedelta(minutes=180 + DAY)).isoformat()
+    assert "day" not in logged
     (said,) = baf.asks_of(await fresh(bot, marathon))
-    assert said["answer"] == "no" and len(said["runs"]) == 5
+    assert (said["event"], said["answer"], len(said["runs"])) == (True, "no", 7)
 
 
-async def test_each_unsure_day_gets_its_own_question_once_and_its_own_answer(bot, cog):
-    marathon = await unsure(bot, cog)
-    cog.client.runs_given = [
-        *day_of_runs(SKY_RUNS, SKY_RUNS, OTHER, SKY_RUNS),
-        *day_of_runs(SKY_RUNS, SKY_RUNS, SKY_RUNS, OTHER, first=180 + DAY, ident=5),
-    ]
-    await cog.refresh(bot.guild, await fresh(bot, marathon))
+async def test_two_days_at_the_share_get_one_question_and_one_answer_between_them(bot, cog):
+    marathon = await asking(
+        bot,
+        cog,
+        [
+            *day_of_runs(SKY_RUNS, SKY_RUNS, OTHER, SKY_RUNS),
+            *day_of_runs(SKY_RUNS, SKY_RUNS, SKY_RUNS, OTHER, first=180 + DAY, ident=5),
+        ],
+    )
 
     await through(bot, cog, marathon, 0, 1, 2, 3)
 
-    first, second = questions(bot)
-    assert day_stamp(180) in first.content and day_stamp(180 + DAY) in second.content
-    await press(bot, marathon, "yes", second)
+    (asked,) = questions(bot)
+    assert "6 of its 8 runs have a BaF runner" in asked.content
+    waiting = await line_of(bot, marathon)
+    assert "**SS4C** is not decided — 6 of 8 runs have a BaF runner, too few to be sure." in (
+        waiting
+    )
+    assert "Staff were asked in the thread and have not answered." in waiting
+    await press(bot, marathon, "yes")
     await through(bot, cog, marathon, 4, 5)
-    assert len(questions(bot)) == 2
-    today, tomorrow = (await line_of(bot, marathon)).split("\n")[-2:]
-    assert "not decided — 3 of 4 runs have a BaF runner" in today
-    assert "Staff were asked in the thread and have not answered." in today
-    assert "a BaF event — staff answered for this day." in tomorrow
-    assert second.content.endswith("answered: a BaF event.")
-    assert "answered" not in first.content
+    assert len(questions(bot)) == 1
+    event_line, today, tomorrow = (await line_of(bot, marathon)).split("\n")
+    assert event_line.startswith("**SS4C** is a BaF event — staff answered the question")
+    assert today.startswith(f"{day_stamp(180)}: <@&{MARATHON_ROLE}> is mentioned once")
+    assert "**Game 1**" in today and "**Game 5**" in tomorrow
+    assert tomorrow.startswith(f"{day_stamp(180 + DAY)}: <@&{MARATHON_ROLE}> is mentioned once")
+    assert asked.content.endswith("answered: a BaF event.")
 
 
-async def test_the_switch_beats_a_days_answer_and_follow_gives_it_back(bot, cog):
+async def test_the_switch_beats_the_answer_and_follow_gives_it_back(bot, cog):
     marathon = await two_day_marathon(bot, cog)
     await at(bot, cog, marathon, 0)
     await press(bot, marathon, "yes")
@@ -897,26 +911,284 @@ async def test_the_switch_beats_a_days_answer_and_follow_gives_it_back(bot, cog)
     await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "follow")
     followed = (await line_of(bot, marathon)).split("\n")
 
-    assert [one for one in switched if "the BaF event switch says so" in one] == switched[-2:]
-    assert "all 2 runs have a BaF runner" in followed[-2]
-    assert "a BaF event — staff answered for this day." in followed[-1]
-    assert len(questions(bot)) == 1
+    assert switched[-1] == "**SS4C** is not a BaF event — the BaF event switch says so."
+    assert "15 minutes before a BaF run" in switched[0] and len(switched) == 2
+    assert followed[0].startswith("**SS4C** is a BaF event — staff answered the question")
+    assert len(followed) == 3 and len(questions(bot)) == 1
 
 
-async def test_a_days_answer_survives_the_day_being_re_timed(bot, cog):
+async def test_the_answer_survives_the_event_being_re_timed_and_re_counted(bot, cog):
     marathon = await two_day_marathon(bot, cog)
     await at(bot, cog, marathon, 0)
     await press(bot, marathon, "yes")
     cog.client.runs_given = [
         *day_of_runs(SKY_RUNS, SKY_RUNS),
-        *day_of_runs(SKY_RUNS, SKY_RUNS, SKY_RUNS, SKY_RUNS, OTHER, first=240 + DAY, ident=3),
+        *day_of_runs(SKY_RUNS, OTHER, OTHER, OTHER, OTHER, first=240 + DAY, ident=3),
     ]
 
     await cog.refresh(bot.guild, await fresh(bot, marathon))
     await through(bot, cog, marathon, 1, 2)
 
     assert len(questions(bot)) == 1
-    assert "a BaF event — staff answered for this day." in await line_of(bot, marathon)
+    assert (
+        "**SS4C** is a BaF event — staff answered the question in the thread "
+        f"(3 of 7 runs have a BaF runner); {STANDS}"
+    ) in await line_of(bot, marathon)
+
+
+async def test_a_no_stands_when_the_schedule_later_becomes_all_ours(bot, cog):
+    marathon = await unsure(bot, cog)
+    await at(bot, cog, marathon, 0)
+    await press(bot, marathon, "no")
+    cog.client.runs_given = day_of_runs(*[SKY_RUNS] * 4)
+
+    await cog.refresh(bot.guild, await fresh(bot, marathon))
+    await through(bot, cog, marathon, 1, 60, 165)
+
+    assert len(questions(bot)) == 1
+    assert (
+        "**SS4C** is not a BaF event — staff answered the question in the thread "
+        f"(4 of 4 runs have a BaF runner); {STANDS}"
+    ) in await line_of(bot, marathon)
+    assert await roles_posted(bot) == [("Game 1", 120, None), ("Game 1", 15, MARATHON_ROLE)]
+
+
+# --- measured by the whole event 2026-10-06 ------------------------------------------------------
+
+
+def event_runs(*shape):
+    """One show-day per `(runs with a BaF runner, runs)`, a day apart."""
+    found = []
+    for index, (ours, runs) in enumerate(shape):
+        found += day_of_runs(
+            *[SKY_RUNS] * ours,
+            *[OTHER] * (runs - ours),
+            first=180 + index * DAY,
+            ident=len(found) + 1,
+        )
+    return found
+
+
+async def carried(bot):
+    posted = await rows(bot, "marathon.public_reminded")
+    return [(one["game"], one["mark"]) for one in posted if one.get("marathon_role")]
+
+
+async def state_now(bot, marathon):
+    return event.state_of(
+        bot,
+        bot.guild,
+        await fresh(bot, marathon),
+        await runs_of(bot.db, marathon["id"]),
+        mention=True,
+    )
+
+
+async def test_twelve_of_fifteen_over_three_days_asks_once_about_the_event_then_pings_each_day(
+    bot, cog
+):
+    marathon = await asking(bot, cog, event_runs((5, 5), (5, 5), (2, 5)))
+
+    await through(bot, cog, marathon, 0, 1, 2, 3)
+
+    (asked,) = questions(bot)
+    assert asked.content == (
+        f"<@&{LEADS}> Is **SS4C** a BaF event? 12 of its 15 runs have a BaF runner."
+    )
+    (logged,) = await rows(bot, "marathon.baf_event_asked")
+    assert (logged["baf"], logged["runs"]) == (12, 15) and "day" not in logged
+    assert await carried(bot) == []
+
+    lead = await press(bot, marathon, "yes")
+    await through(
+        bot, cog, marathon, 60, 165, 225, DAY + 60, DAY + 165, 2 * DAY + 60, 2 * DAY + 165,
+        2 * DAY + 225,
+    )  # fmt: skip
+
+    assert lead.sent == "**SS4C** is a BaF event now."
+    assert await carried(bot) == [("Game 1", 120), ("Game 6", 120), ("Game 11", 120)]
+    assert len(carrying(bot)) == 3 and len(questions(bot)) == 1
+    (said,) = baf.asks_of(await fresh(bot, marathon))
+    assert (said["event"], said["answer"], len(said["runs"])) == (True, "yes", 15)
+
+
+async def test_fifteen_of_fifteen_over_three_days_asks_nothing_and_pings_once_a_day(bot, cog):
+    marathon = await asking(bot, cog, event_runs((5, 5), (5, 5), (5, 5)))
+
+    await through(
+        bot, cog, marathon, 0, 60, 165, 225, DAY + 60, DAY + 165, 2 * DAY + 60, 2 * DAY + 165
+    )
+
+    assert questions(bot) == [] and "marathon.baf_event_asked" not in await kinds(bot.db)
+    assert await carried(bot) == [("Game 1", 120), ("Game 6", 120), ("Game 11", 120)]
+    found = await state_now(bot, marathon)
+    assert (found["answer"], found["reason"], found["baf"], found["runs"]) == (
+        "yes",
+        "all_runs",
+        15,
+        15,
+    )
+    assert found["line"] == "**SS4C** is a BaF event — all 15 runs have a BaF runner."
+
+
+OUTSIDE_ROWS = [
+    ("Game 1", 120, None),
+    ("Game 2", 120, None),
+    ("Game 1", 15, MARATHON_ROLE),
+    ("Game 3", 120, None),
+    ("Game 2", 15, MARATHON_ROLE),
+    ("Game 4", 120, None),
+    ("Game 3", 15, MARATHON_ROLE),
+    ("Game 5", 120, None),
+    ("Game 4", 15, MARATHON_ROLE),
+    ("Game 5", 15, MARATHON_ROLE),
+]
+
+
+@pytest.mark.parametrize("built", ["as_main", "branch"])
+async def test_an_all_ours_day_of_an_event_that_is_not_baf_posts_what_a_mixed_day_posts(
+    bot, cog, monkeypatch, built
+):
+    if built == "as_main":
+        ping_mark = int(bot.store.get(GUILD, "marathon_ping_minutes"))
+
+        async def per_run(cog, guild, marathon, row, mark):
+            return (
+                role_ping.verdict_for(cog.bot, guild, marathon) if mark == ping_mark else None,
+                None,
+            )
+
+        async def nothing(*_given, **_named):
+            return None
+
+        monkeypatch.setattr(event, "heads_up_role", per_run)
+        monkeypatch.setattr(event, "settle", nothing)
+        monkeypatch.setattr(event, "sync", nothing)
+    marathon = await asking(bot, cog, event_runs((5, 5), (0, 13), (1, 11)))
+
+    await through(bot, cog, marathon, 0, 60, 120, 165, 180, 225, 240, 285, 300, 345, 405)
+
+    said = [(one.content, allowed(one)) for one in bot.guild.channels[CHANNEL].messages]
+    logged = await rows(bot, "marathon.public_reminded")
+    assert [(one["game"], one["mark"], one.get("marathon_role")) for one in logged] == (
+        OUTSIDE_ROWS
+    )
+    assert [(roles, text.count("<@&")) for text, roles in said] == [
+        ([5001, MARATHON_ROLE], 2) if role else ([], 0) for _game, _mark, role in OUTSIDE_ROWS
+    ]
+    assert [sorted(one) for one in logged] == [
+        PINGED_FIELDS if role else QUIET_FIELDS for _game, _mark, role in OUTSIDE_ROWS
+    ]
+    assert not any(":bafevent:" in str(one.kwargs) for one in the_thread(bot).messages)
+    if built == "branch":
+        found = await state_now(bot, marathon)
+        assert (found["answer"], found["reason"], found["baf"], found["runs"]) == (
+            "no",
+            "mixed",
+            6,
+            29,
+        )
+        assert found["lines"] == ["**SS4C** is not a BaF event — 6 of 29 runs have a BaF runner."]
+        assert [one["ping"] for one in found["days"]] == ["per_run"] * 3
+
+
+async def test_a_day_of_a_baf_event_with_no_baf_run_gets_no_ping_and_its_line_says_so(bot, cog):
+    marathon = await asking(bot, cog, event_runs((4, 4), (4, 4), (0, 2)))
+    await at(bot, cog, marathon, 0)
+    assert "8 of its 10 runs have a BaF runner" in questions(bot)[0].content
+    await press(bot, marathon, "yes")
+
+    found = await state_now(bot, marathon)
+    await through(bot, cog, marathon, 60, DAY + 60, 2 * DAY + 60, 2 * DAY + 165, 2 * DAY + 170)
+
+    assert [one["ping"] for one in found["days"]] == ["will", "will", "no_baf_run"]
+    assert [(one["baf"], one["runs"]) for one in found["days"]] == [(4, 4), (4, 4), (0, 2)]
+    assert found["lines"][0].startswith("**SS4C** is a BaF event — staff answered the question")
+    assert found["lines"][3] == (
+        f"{day_stamp(180 + 2 * DAY)}: No BaF run is on that day, so <@&{MARATHON_ROLE}> is not "
+        "mentioned."
+    )
+    assert await carried(bot) == [("Game 1", 120), ("Game 5", 120)]
+    assert "marathon.baf_event_no_baf_run" not in await kinds(bot.db)
+    await through(bot, cog, marathon, 2 * DAY + 241, 2 * DAY + 242)
+    (missed,) = await rows(bot, "marathon.baf_event_no_baf_run")
+    assert "marathon.baf_event_no_ping" not in await kinds(bot.db)
+    assert (missed["because"], missed["runs"]) == (baf.NO_BAF_RUN, 2)
+    assert len(carrying(bot)) == 2
+
+
+def old_day_answer(bot, said, **fields):
+    return {
+        "runs": [991, 992],
+        "starts_at": (NOW - timedelta(days=2)).isoformat(),
+        "ends_at": (NOW - timedelta(days=2, hours=-4)).isoformat(),
+        "baf": 3,
+        "asked_at": (NOW - timedelta(days=3)).isoformat(),
+        "tries": 1,
+        "message_id": 7700,
+        "channel_id": the_thread(bot).id,
+        "text": "Is Sat 2 Jan of **SS4C** a BaF event? 3 of that day's 4 runs have a BaF runner.",
+    } | ({"answer": said, "answered_by": 5, "answered_at": NOW.isoformat()} if said else {}) | (
+        fields
+    )
+
+
+async def test_a_per_day_answer_stored_before_is_the_events_answer_and_is_never_asked_again(
+    bot, cog
+):
+    marathon = await unsure(bot, cog)
+    old = old_day_answer(bot, "yes")
+    await update_marathon(bot.db, marathon["id"], baf_event_ask=baf.dump_asks([old]))
+
+    await through(bot, cog, marathon, 0, 1, 2, 60, 165)
+
+    assert questions(bot) == [] and "marathon.baf_event_asked" not in await kinds(bot.db)
+    assert baf.asks_of(await fresh(bot, marathon)) == [old]
+    assert await carried(bot) == [("Game 1", 120)]
+    found = await state_now(bot, marathon)
+    assert (found["answer"], found["reason"], found["ask"]) == ("yes", "leads", "answered")
+    assert found["line"].startswith("**SS4C** is a BaF event — staff answered the question")
+
+
+async def test_per_day_answers_that_disagree_read_as_the_latest_one_given(bot, cog):
+    marathon = await unsure(bot, cog)
+    early = old_day_answer(bot, "yes", answered_at=(NOW - timedelta(hours=5)).isoformat())
+    late = old_day_answer(bot, "no", message_id=7701, runs=[993])
+    await update_marathon(bot.db, marathon["id"], baf_event_ask=baf.dump_asks([late, early]))
+
+    await through(bot, cog, marathon, 0, 1, 60, 165)
+
+    assert questions(bot) == []
+    assert (await state_now(bot, marathon))["answer"] == "no"
+    assert await carried(bot) == [("Game 1", 15)]
+    assert len(baf.asks_of(await fresh(bot, marathon))) == 2
+
+
+async def test_an_unanswered_per_day_question_is_kept_and_the_event_is_still_asked_once(bot, cog):
+    marathon = await unsure(bot, cog)
+    old = old_day_answer(bot, None)
+    await update_marathon(bot.db, marathon["id"], baf_event_ask=baf.dump_asks([old]))
+
+    await through(bot, cog, marathon, 0, 1, 2)
+
+    (asked,) = questions(bot)
+    kept, new = baf.asks_of(await fresh(bot, marathon))
+    assert kept == old and (new["event"], new["message_id"]) == (True, asked.id)
+    await press(bot, marathon, "yes", asked)
+    assert (await state_now(bot, marathon))["answer"] == "yes"
+
+
+async def test_a_marathon_with_no_schedule_yet_is_not_an_event_and_asks_and_logs_nothing(bot, cog):
+    marathon = await asking(bot, cog, [])
+
+    await through(bot, cog, marathon, 0, 1, 500)
+
+    found = await state_now(bot, marathon)
+    assert (found["answer"], found["reason"], found["days"]) == ("no", "no_runs", [])
+    assert found["lines"] == ["**SS4C** is not a BaF event — no run is on the schedule."]
+    assert questions(bot) == []
+    logged = await kinds(bot.db)
+    assert not [one for one in logged if "baf_event" in one]
 
 
 async def stranded(bot, cog, posts):
@@ -1039,11 +1311,12 @@ async def test_a_day_whose_runners_are_not_matched_yet_writes_no_missed_row(bot,
     await through(bot, cog, marathon, 0, 61, 100, 170)
 
     assert "marathon.baf_event_no_ping" not in await kinds(bot.db)
-    assert "No BaF run is left that day" in await line_of(bot, marathon)
+    assert "No BaF run is on that day" in await line_of(bot, marathon)
 
     await through(bot, cog, marathon, 301)
-    (logged,) = await rows(bot, "marathon.baf_event_no_ping")
+    (logged,) = await rows(bot, "marathon.baf_event_no_baf_run")
     assert logged["because"] == baf.NO_BAF_RUN
+    assert "marathon.baf_event_no_ping" not in await kinds(bot.db)
 
 
 async def test_an_unsure_day_with_no_thread_to_ask_in_says_so(bot, cog):
@@ -1067,7 +1340,8 @@ async def test_leads_are_not_mentioned_when_the_marathon_role_could_not_be(bot, 
     await at(bot, cog, marathon, 0)
 
     (asked,) = questions(bot)
-    assert asked.content.startswith("Is <t:") and not asked.kwargs["allowed_mentions"].roles
+    assert asked.content.startswith("Is **SS4C**")
+    assert not asked.kwargs["allowed_mentions"].roles
     logged = await details_of(bot.db, "marathon.baf_event_asked")
     assert (logged["role"], logged["notifies"]) == (None, False)
 
@@ -1108,3 +1382,313 @@ async def test_a_host_blocks_role_mention_counts_once_the_day_is_a_baf_event(
         (stored,) = [one for one in await pings_of(bot, marathon) if one.get("host")]
         assert (stored["per_run"], stored["sent"], stored["mark"]) == (True, True, 15)
         assert stored["message_id"] == mentioned[0].id
+async def test_words_staff_stored_for_the_per_day_question_fall_back_to_the_shipped_ones(bot, cog):
+    marathon = await unsure(bot, cog)
+    bot.store._cache[(GUILD, "marathon_baf_event_question")] = "Is {day} of {marathon} ours?"
+    bot.store._cache[(GUILD, "marathon_baf_event_answer_line")] = "{day}: {answer} — {reason}."
+
+    await at(bot, cog, marathon, 0)
+
+    (asked,) = questions(bot)
+    assert asked.content == (
+        f"<@&{LEADS}> Is **SS4C** a BaF event? 3 of its 4 runs have a BaF runner."
+    )
+    assert "**SS4C** is not decided — 3 of 4 runs have a BaF runner" in await line_of(bot, marathon)
+
+
+# --- review fixes (whole event) 2026-10-06 -------------------------------------------------------
+
+
+def baf_buttons(bot, marathon):
+    message = next(
+        one for one in the_thread(bot).messages if one.id == marathon["controls_message_id"]
+    )
+    view = next(
+        (edit["view"] for edit in reversed(message.edits) if "view" in edit),
+        message.kwargs.get("view"),
+    )
+    found = [getattr(one, "item", one) for one in view.children]
+    return [one for one in found if ":baf:" in str(getattr(one, "custom_id", "") or "")]
+
+
+async def announced_then_unsure(bot, cog):
+    """Fifteen of fifteen, day 1 pinged at two hours, then an outside run joins day 2."""
+    marathon = await asking(bot, cog, event_runs((5, 5), (5, 5), (5, 5)))
+    await through(bot, cog, marathon, 0, 60)
+    assert await carried(bot) == [("Game 1", 120)]
+    cog.client.runs_given = [
+        *event_runs((5, 5), (5, 5), (5, 5)),
+        a_run(16, 180 + DAY + 300, game="Game 16", people=OTHER),
+    ]
+    await cog.refresh(bot.guild, await fresh(bot, marathon))
+    await through(bot, cog, marathon, 61, 62)
+    return marathon
+
+
+async def test_an_event_already_announced_as_baf_keeps_one_ping_a_day_while_leads_are_asked(
+    bot, cog
+):
+    marathon = await announced_then_unsure(bot, cog)
+    (asked,) = questions(bot)
+    assert "15 of its 16 runs have a BaF runner" in asked.content
+
+    await through(bot, cog, marathon, DAY + 60, DAY + 120, DAY + 165, DAY + 225)
+
+    assert await carried(bot) == [("Game 1", 120), ("Game 6", 120)]
+    assert len(carrying(bot)) == 2 and len(questions(bot)) == 1
+    found = await state_now(bot, marathon)
+    assert (found["answer"], found["reason"], found["ask"]) == ("yes", "acted", "pending")
+    assert found["line"] == (
+        "**SS4C** is a BaF event — 15 of 16 runs have a BaF runner now; it was a BaF event "
+        "when a day's one mention went out, so it stays one until staff answer. Staff were "
+        "asked in the thread and have not answered."
+    )
+
+
+async def test_a_no_after_the_days_ping_leaves_that_day_closed_and_later_days_per_run(bot, cog):
+    marathon = await announced_then_unsure(bot, cog)
+    await at(bot, cog, marathon, DAY + 60)
+    assert await carried(bot) == [("Game 1", 120), ("Game 6", 120)]
+
+    await press(bot, marathon, "no")
+    await through(
+        bot, cog, marathon, DAY + 120, DAY + 165, DAY + 225, 2 * DAY + 60, 2 * DAY + 165,
+        2 * DAY + 225,
+    )  # fmt: skip
+
+    assert await carried(bot) == [
+        ("Game 1", 120),
+        ("Game 6", 120),
+        ("Game 11", 15),
+        ("Game 12", 15),
+    ]
+    assert (await state_now(bot, marathon))["reason"] == "leads"
+
+
+async def test_an_announced_event_that_drops_under_the_ask_percent_reads_no_at_once(bot, cog):
+    marathon = await asking(bot, cog, event_runs((5, 5), (5, 5), (5, 5)))
+    await through(bot, cog, marathon, 0, 60)
+    cog.client.runs_given = [
+        *event_runs((5, 5), (5, 5), (5, 5)),
+        *[
+            a_run(16 + index, 180 + DAY + 300 + index * 60, game=f"Game {16 + index}", people=OTHER)
+            for index in range(6)
+        ],
+    ]
+
+    await cog.refresh(bot.guild, await fresh(bot, marathon))
+    await through(bot, cog, marathon, 61, DAY + 60, DAY + 165)
+
+    found = await state_now(bot, marathon)
+    assert (found["answer"], found["reason"], found["baf"], found["runs"]) == (
+        "no",
+        "mixed",
+        15,
+        21,
+    )
+    assert questions(bot) == []
+    assert await carried(bot) == [("Game 1", 120), ("Game 6", 15)]
+
+
+async def test_the_follow_choice_says_what_following_gives_and_that_it_is_the_answer(bot, cog):
+    marathon = await unsure(bot, cog)
+    await at(bot, cog, marathon, 0)
+    before = await state_now(bot, marathon)
+    await press(bot, marathon, "yes")
+    await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "no")
+
+    switched = await state_now(bot, marathon)
+    label = baf_buttons(bot, marathon)[0].label
+    await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "follow")
+    followed = await state_now(bot, marathon)
+
+    assert (before["worked_out"]["answer"], before["worked_out"]["reason"]) == ("unsure", "share")
+    assert (switched["answer"], switched["reason"]) == ("no", "staff")
+    assert (switched["worked_out"]["answer"], switched["worked_out"]["reason"]) == ("yes", "leads")
+    assert switched["worked_out"]["answer_word"] == "a BaF event"
+    assert switched["worked_out"]["reason_word"].startswith("staff answered the question")
+    assert label == "BaF event: follow the answer (a BaF event)"
+    assert (followed["answer"], followed["reason"]) == (
+        switched["worked_out"]["answer"],
+        switched["worked_out"]["reason"],
+    )
+    assert followed["answer_word"] == switched["worked_out"]["answer_word"]
+
+
+async def test_staff_clear_the_answer_from_the_thread_and_the_question_is_asked_once_more(
+    bot, cog
+):
+    marathon = await unsure(bot, cog)
+    await at(bot, cog, marathon, 0)
+    (asked,) = questions(bot)
+    assert [one.custom_id.rsplit(":", 1)[1] for one in baf_buttons(bot, marathon)] == [
+        "follow",
+        "yes",
+        "no",
+    ]
+    await press(bot, marathon, "yes")
+    shown = baf_buttons(bot, marathon)
+    assert [(one.label, one.row, one.disabled) for one in shown] == [
+        ("BaF event: follow the answer (a BaF event)", 4, True),
+        ("BaF event: yes", 4, False),
+        ("BaF event: no", 4, False),
+        ("Clear the answer", 4, False),
+    ]
+    assert shown[-1].custom_id == f"marathon:controls:{marathon['id']}:baf:clear"
+
+    said = await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "clear")
+
+    assert said.ok and said.message == "The answer was cleared, so **SS4C** is not decided now."
+    (record,) = baf.asks_of(await fresh(bot, marathon))
+    assert "answer" not in record and "answered_by" not in record
+    assert (record["cleared"], record["cleared_by"]) == (True, FakeActor().id)
+    logged = (await rows(bot, "marathon.baf_event_set"))[-1]
+    assert (logged["from"], logged["to"], logged["by"], logged["cleared"], logged["via"]) == (
+        "yes",
+        "follow",
+        "question",
+        True,
+        "discord",
+    )
+    assert asked.content.endswith(f"<@{FakeActor().id}> cleared the answer.")
+    assert "answered:" not in asked.content
+    assert [one.label for one in baf_buttons(bot, marathon)] == [
+        "BaF event: follow the schedule (not decided)",
+        "BaF event: yes",
+        "BaF event: no",
+    ]
+    found = await state_now(bot, marathon)
+    assert (found["answer"], found["reason"], found["ask"]) == ("unsure", "share", None)
+
+    await through(bot, cog, marathon, 1, 2, 3)
+
+    again = questions(bot)
+    assert len(again) == 2 and again[0] is asked
+    assert (await kinds(bot.db)).count("marathon.baf_event_asked") == 2
+    old, new = baf.asks_of(await fresh(bot, marathon))
+    assert old["cleared"] and (new["event"], new["message_id"]) == (True, again[1].id)
+    assert (await state_now(bot, marathon))["ask"] == "pending"
+    nothing = await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "clear")
+    assert nothing.ok and nothing.message == (
+        "**SS4C** has no answer to clear, so nothing was changed."
+    )
+    assert (await kinds(bot.db)).count("marathon.baf_event_set") == 2
+
+
+async def test_a_cleared_answer_gives_the_name_and_the_runs_back_the_say(bot, cog):
+    marathon = await unsure(bot, cog)
+    await at(bot, cog, marathon, 0)
+    await press(bot, marathon, "no")
+    cog.client.runs_given = day_of_runs(*[SKY_RUNS] * 4)
+    await cog.refresh(bot.guild, await fresh(bot, marathon))
+    await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "yes")
+
+    said = await event.clear_answer(bot, bot.guild, FakeActor(), await fresh(bot, marathon))
+    await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "follow")
+    await through(bot, cog, marathon, 1, 2)
+
+    assert said.message == "The answer was cleared, so **SS4C** is a BaF event now."
+    found = await state_now(bot, marathon)
+    assert (found["answer"], found["reason"]) == ("yes", "all_runs")
+    assert len(questions(bot)) == 1
+
+
+async def test_every_question_the_marathon_holds_says_the_one_answer_that_stands(bot, cog):
+    marathon = await unsure(bot, cog)
+    words = "Is Sat 2 Jan of **SS4C** a BaF event? 3 of that day's 4 runs have a BaF runner."
+    earlier = await the_thread(bot).send(words)
+    old = old_day_answer(bot, None, message_id=earlier.id, text=words)
+    await update_marathon(bot.db, marathon["id"], baf_event_ask=baf.dump_asks([old]))
+    await through(bot, cog, marathon, 0, 1)
+    asked = questions(bot)[-1]
+    assert asked is not earlier
+    who = f"<@{FakeActor().id}>"
+
+    await press(bot, marathon, "yes", asked)
+    assert asked.content.endswith(f"{who} answered: a BaF event.")
+    assert earlier.content == f"{words}\n{who} answered: a BaF event."
+
+    await press(bot, marathon, "no", earlier)
+    assert earlier.content == f"{words}\n{who} answered: not a BaF event."
+    assert asked.content.endswith(f"{who} answered: not a BaF event.")
+    assert asked.content.count("answered:") == 1
+
+    await event.clear_answer(bot, bot.guild, FakeActor(), await fresh(bot, marathon))
+    assert earlier.content == f"{words}\n{who} cleared the answer."
+    assert asked.content.endswith(f"{who} cleared the answer.")
+
+
+async def test_a_question_message_that_is_gone_does_not_stop_the_others_being_edited(bot, cog):
+    marathon = await unsure(bot, cog)
+    gone = old_day_answer(bot, None)
+    await update_marathon(bot.db, marathon["id"], baf_event_ask=baf.dump_asks([gone]))
+    await through(bot, cog, marathon, 0, 1)
+    (asked,) = questions(bot)
+    assert [one.get("message_id") for one in baf.asks_of(await fresh(bot, marathon))] == [
+        7700,
+        asked.id,
+    ]
+
+    await press(bot, marathon, "yes", asked)
+
+    assert asked.content.endswith("answered: a BaF event.")
+
+
+async def test_a_day_with_no_baf_run_is_a_routine_row_written_once_even_after_the_day_is_over(
+    bot, cog
+):
+    from black_bloc import logkinds
+
+    marathon = await event_marathon(
+        bot, cog, day_of_runs(OTHER, OTHER, OTHER), name="Black in a Flash"
+    )
+    await at(bot, cog, marathon, 0)
+    await bot.db.conn.execute(
+        "UPDATE marathon_runs SET state = 'done' WHERE marathon_id = ?", (marathon["id"],)
+    )
+    await bot.db.conn.commit()
+    cog.clock = lambda: NOW + timedelta(minutes=900)
+
+    for _tick in range(3):
+        await event.sync(cog, bot.guild, await fresh(bot, marathon), cog.clock())
+
+    (logged,) = await rows(bot, "marathon.baf_event_no_baf_run")
+    assert (logged["because"], logged["runs"], logged["reason"]) == (baf.NO_BAF_RUN, 3, "name")
+    assert "marathon.baf_event_no_ping" not in await kinds(bot.db)
+    assert not logkinds.is_important("marathon.baf_event_no_baf_run")
+    assert "marathon.baf_event_no_baf_run" in logkinds.ROUTINE
+    assert logkinds.is_important("marathon.baf_event_no_ping")
+
+
+async def test_a_value_stored_under_a_re_worded_keys_old_name_is_not_read(bot, cog):
+    from black_bloc import settings_store
+
+    stale = {
+        "marathon_baf_event_reason_leads": "staff answered for this day",
+        "marathon_baf_event_ask_text": "Is that day ours?",
+        "marathon_baf_event_line": "That day is {answer} — {reason}.",
+        "marathon_baf_event_ping_no_run": "No BaF run is left that day.",
+    }
+    for key, value in stale.items():
+        await bot.db.conn.execute(
+            "INSERT OR REPLACE INTO settings (guild_id, key, value, updated_at) "
+            "VALUES (?, ?, ?, ?)",
+            (GUILD, key, json.dumps(value), NOW.isoformat()),
+        )
+    await bot.db.conn.commit()
+    await bot.store.load()
+    await bot.store.set(GUILD, "marathon_reminder_minutes", "1440, 120, 15")
+    marathon = await unsure(bot, cog)
+
+    await at(bot, cog, marathon, 0)
+    (asked,) = questions(bot)
+    await press(bot, marathon, "yes")
+
+    assert asked.content.startswith(
+        f"<@&{LEADS}> Is **SS4C** a BaF event? 3 of its 4 runs have a BaF runner."
+    )
+    assert (await line_of(bot, marathon)).split("\n")[-2] == (
+        "**SS4C** is a BaF event — staff answered the question in the thread "
+        f"(3 of 4 runs have a BaF runner); {STANDS}"
+    )
+    assert not set(stale) & set(settings_store.KEY_TYPES)

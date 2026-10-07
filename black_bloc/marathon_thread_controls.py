@@ -6,7 +6,7 @@ from typing import Any, NamedTuple
 
 from . import marathon_events as me
 from . import marathon_spotlight as ms
-from .marathon_baf_event import CHOICES, FOLLOW, NO, YES
+from .marathon_baf_event import CHOICES, CLEAR, FOLLOW, NO, YES
 
 EVENT = "event"
 RUNS = "runs"
@@ -26,11 +26,12 @@ OFF = "off"
 CANCEL = "cancel"
 BAF_CHOICES = CHOICES
 BAF_ROW = 4
+FOLLOW_ANSWER = "follow_answer"
 TEMPLATE = (
     r"marathon:controls:(?P<marathon_id>[0-9]+)"
     r":(?P<action>event|runs|spotlight|highlight|ping|hosts|hostevents|announce|hostannounce"
     r"|overlay|baf)"
-    r":(?P<to>on|off|cancel|follow|yes|no)"
+    r":(?P<to>on|off|cancel|follow|yes|no|clear)"
 )
 CUSTOM_ID = "marathon:controls:{marathon_id}:{action}:{to}"
 
@@ -61,6 +62,7 @@ class Control(NamedTuple):
     word: str
     disabled: bool = False
     row: int | None = None
+    label: str | None = None
 
 
 def custom_id(marathon_id: Any, action: str, to: str) -> str:
@@ -107,14 +109,23 @@ def switch(action: str, on: bool) -> Control:
     return Control(action, OFF if on else ON, ON if on else OFF)
 
 
-def baf_controls(choice: Any) -> tuple[Control, ...]:
+def baf_controls(choice: Any, answered: bool = False) -> tuple[Control, ...]:
     """The BaF event switch: one button per answer in a row of its own, the one that stands
-    lit and not pressable."""
+    lit and not pressable; while an answer to the question is stored, follow says it follows
+    that answer and a fourth button clears it."""
     chosen = str(choice or FOLLOW)
-    return tuple(
-        Control(BAF, one, ON if one == chosen else OFF, disabled=one == chosen, row=BAF_ROW)
+    switch = tuple(
+        Control(
+            BAF,
+            one,
+            ON if one == chosen else OFF,
+            disabled=one == chosen,
+            row=BAF_ROW,
+            label=FOLLOW_ANSWER if answered and one == FOLLOW else None,
+        )
         for one in BAF_CHOICES
     )
+    return switch + ((Control(BAF, CLEAR, OFF, row=BAF_ROW),) if answered else ())
 
 
 def controls(
@@ -157,8 +168,10 @@ def label(text: Any) -> str:
 __all__ = [
     "ACTIONS",
     "BAF_CHOICES",
+    "CLEAR",
     "Control",
     "FOLLOW",
+    "FOLLOW_ANSWER",
     "NO",
     "RETIRED",
     "YES",
