@@ -1,5 +1,5 @@
 # ruff: noqa: F401, F811
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import discord
 import pytest
@@ -170,12 +170,12 @@ async def test_unmatch_lets_the_automatic_match_come_back_and_block_does_not(
         None,
         "staff",
     )
-    await feed.tick(guild, NOW + timedelta(days=8))
+    await feed.tick(guild, datetime.now(UTC) + timedelta(days=8))
     assert (await pb_store.match(bot.db, GUILD, ADA))["state"] == "matched"
 
     blocked = await pb_moves.block(bot, guild, ADA, staffer(guild))
     client.asked.clear()
-    await feed.tick(guild, NOW + timedelta(days=30))
+    await feed.tick(guild, datetime.now(UTC) + timedelta(days=30))
 
     row = await pb_store.match(bot.db, GUILD, ADA)
     assert blocked.ok and (row["state"], row["src_user_id"]) == ("blocked", None)
