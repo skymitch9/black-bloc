@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
 > **2026-10-07 — four rows APPENDED under `tests/conftest.py`, nothing re-keyed**: *date-fuse guard* (branch `date-fuse-sweep`, off `main` `e8bf13d8`); `tests/conftest.py` rows below `fake_now` sit ~34 lower than keyed. Before that:
+> **2026-10-07 — one section APPENDED, nothing re-keyed**: *Tournament brackets, layer 2 — Discord* (branch `brackets-discord`, off `main` `aba3b1ee`); keyed by NAME. Before that:
 > **2026-10-07 — one section APPENDED, nothing re-keyed**: *Tournament brackets, layer 1* (branch `brackets-engine`, off `main` `ecd43324`); keyed by NAME. Before that:
 
 > **2026-10-06 — one section APPENDED, nothing re-keyed**: *BaF event ping* (branch `baf-event-ping`, off `main` `2c2a256b`); keyed by NAME; its rows were amended the same day by the review-fix pass, and again by the whole-event change (branch `baf-event-whole`, off `47df98d7`: `worked_out` / `judge`, `asks_of`, `ask_if_unsure`, `set_answer`, the mock row, plus new rows for `judgement_of`, `question` / `answered`, `ping_state` and `state_of`), and a third time by the review fixes of the whole-event change (same branch, `c32f9988`: `judge` / `acted`, `judgement_of`, `question` / `cleared`, the `missed` row, `note_missed`, `set_answer`, `baf_controls`, the mock row, plus new rows for `clear_answer`, `note_questions` and `rendered`). It amends the *Marathon role ping* rows for `unsent` (keeps the verdict's day now), `role_for` (takes the day's reading) and `status_line` (takes the runs). Before that:
@@ -10186,3 +10187,24 @@ Design: [`brackets-design.md`](brackets-design.md).
 - `black_bloc/brackets_sets.py` `report` — a TO who is not a player in the set is sent to `overridden`: their report is final at once (`set_overridden`), as start.gg's admin report is.
 - `black_bloc/api/tools/brackets.py` `writer` — the member gate with the STAFF write bucket (60/min) so an organiser without a staff role can run a round.
 - `tests/api/test_contract.py` `seed_brackets` — one tournament per state a route is legal from; the staff session plays W1-1 of the running one against a guest whose side reported, which is what lets Confirm and Dispute be a player's own moves in the contract.
+
+## Tournament brackets, layer 2 — Discord — keyed by NAME (branch `brackets-discord`, 2026-10-07; re-key after the merge)
+
+Design: [`brackets-design.md`](brackets-design.md) §E (as built) and §G 27–48.
+
+- `black_bloc/brackets_thread.py` `card_lock` — one `asyncio.Lock` per tournament, kept on the bot, separate from the moves' `lock_for`: a move never waits on Discord, and every post re-reads the stored ids INSIDE this lock (checklist 37). The cog's `Reconciler` wraps the whole boot reconcile and each sweep tick on top.
+- `brackets_thread.py` `post_card` — writes `card_at` with NO `message_id` before the send and the id straight after it. A row holding a stamp and no id means "may have been posted" (a restart landed between the two writes): `adopt` looks for the card by its buttons' custom-id prefix in the thread's last 100 messages before posting again. The ONLY search of the thread; every other "is it there" question is answered by the stored id.
+- `brackets_thread.py` `sync` / `follow` — a move's follow EDITS only (the starter card and `Outcome.changed`), clears `Outcome.gone`, and posts a card only for an open set that has none; a NotFound on an edit puts `(tournament, key)` in `missing` and the NEXT tick (`reconcile`, `repost=True` for that key) posts it again. The brief's rule: "re-posted by the reconcile only when the stored id no longer resolves".
+- `brackets_thread.py` `follow` — `move` in `EVERY_CARD` (complete, reopen, cancel, restore) re-renders every card, because the buttons depend on the TOURNAMENT state and those moves change no set. `start` also posts the role ping. It never raises: it is the cosmetic step after the move.
+- `brackets_thread.py` `sync_card` — a carded set that falls back to `waiting`/`bye`/`void` has its card edited to the cleared line AND its id dropped, so when it is ready again a NEW card is posted and the two players are pinged again.
+- `brackets_thread.py` `ensured` — the thread is re-made only after `LOST_TWICE` NotFounds running (checklist 32); a network error is not a loss. Re-making clears every stored card id, so the new thread gets a fresh starter and fresh cards.
+- `brackets_thread.py` `rehearsing` — mentions and DMs read the ROW's `shadow`, not the mode now: a thread made in the rehearsal home never pings or DMs anybody, even after the mode goes `on` (checklist 3).
+- `brackets_thread.py` `failed` — every failure is a log line; the action-log row is written once per tournament, card and reason a run (`told_once`), so a misconfigured home does not write a row per move. Shadow with no rehearsal home AND no log channel writes no row at all (there is nowhere to rehearse).
+- `brackets_thread.py` `Budget` — at most `POSTS_PER_PASS` (5) NEW set cards per pass; edits are not budgeted. The minute sweep's reconcile posts the rest.
+- `black_bloc/brackets_cards.py` `StarterButton` / `SetButton` — persistent `DynamicItem`s; `on_click` imports `brackets_buttons` inside the call because the buttons module needs the thread module, which needs these views.
+- `brackets_cards.py` `set_moves` — what a CARD shows depends on the set's and tournament's state only (a posted message is the same for everyone); who may press is decided on the press. The panel (`brackets_panel.set_moves_for`) is per viewer and hides Confirm from the reporter.
+- `black_bloc/brackets_buttons.py` `set_move` — Report, Dispute, Decide and Reset open a form, so the identity check runs BEFORE the form (a stranger never gets one); Confirm and Call go straight to the move, which refuses in words. Both doors pass a landing (`CardLanding` / `brackets_panel.PanelLanding`): where the answer goes, then the cards catch up.
+- `brackets_buttons.py` `member_move` — Leave is refused while a tournament runs, because `brackets_people.drop` on a running bracket forfeits: a stale Leave button must never do that.
+- `black_bloc/brackets_panel.py` `seed_order` — each line is read by its `#id` tag first, then by a unique name; the move itself refuses an order that does not name every entrant once.
+- `black_bloc/api/tools/brackets.py` `answered` — a successful website write awaits `brackets_thread.follow` (named by the move function's `__name__`) before answering, so the thread catches up from either door; follow never raises.
+

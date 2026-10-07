@@ -1,13 +1,14 @@
-# Tournament brackets — the engine, the storage and the API (layer 1), and what layers 2 and 3 build
+# Tournament brackets — the engine, the storage and the API (layer 1), the Discord side (layer 2), and what layer 3 builds
 
-> **Audience:** the conductor, reviewers, and the agents that build layers 2 and 3 from this page alone.
-> **Status:** TRACKED · 🔨 **LAYER 1 BUILT on branch `brackets-engine`** (off `main` `ecd43324`), **NOT merged, NOT
-> deployed**; schema **89 → 90**; registry keys ~~**946 → 1031**~~ **946 → 1000** after the review fold (*Review fixes
-> 2026-10-07*, 13). **Last verified: 2026-10-07** (review-fix pass) — by the hermetic test suite, `ruff`,
-> `site/mock/check.mjs` against the branch's own mock on port 8812 and every `site/mock/*.test.mjs` (figures under
-> *Gate*). ⚠️ **NOT checked:** nothing here has met Discord (layer 1 has no Discord code), no browser has
-> rendered anything (there is no page), and the schema change has not run on the live database. Secret NAMES only (none
-> here).
+> **Audience:** the conductor, reviewers, and the agents that build layer 3 from this page alone.
+> **Status:** TRACKED · ✅ **LAYER 1 MERGED** on `main` (`b78e91cc`, fixed `aba3b1ee`), NOT deployed; schema **89 → 90**;
+> registry keys **946 → 1000**. 🔨 **LAYER 2 BUILT on branch `brackets-discord`** (off `main` `aba3b1ee`), **NOT merged,
+> NOT deployed**; no schema change; registry keys **1000 → 1064**; §E is now *as built*, its decisions are §G 27–48.
+> **Last verified: 2026-10-07** (layer 2 build) — by the hermetic test suite, `ruff`, `site/mock/check.mjs` against the
+> branch's own mock on port 8813, every `site/mock/*.test.mjs` and the Docker CI mirror (figures under *Gate*).
+> ⚠️ **NOT checked:** nothing here has met the REAL Discord — layer 2 is tested against fakes of threads, messages and
+> interactions only; no browser has rendered anything (there is no page); the schema change has not run on the live
+> database. Secret NAMES only (none here).
 
 ## The ask and the owner's decisions (verbatim, 2026-10-07)
 
@@ -37,8 +38,8 @@ Research input: [`brackets-research-2026-10-07.md`](brackets-research-2026-10-07
 
 | Layer | What | State |
 |---|---|---|
-| **L1** | Pure engine `black_bloc/brackets/`, storage (schema 90), the moves both doors call, the API `/api/brackets`, settings keys, log kinds, contract + mock | 🔨 this branch |
-| **L2** | Discord: the tournament thread under `#knuck-up` (or the shadow home), the players' buttons, the TO panel, the two sweeps | not built — spec below |
+| **L1** | Pure engine `black_bloc/brackets/`, storage (schema 90), the moves both doors call, the API `/api/brackets`, settings keys, log kinds, contract + mock | ✅ merged (`b78e91cc`, `aba3b1ee`) |
+| **L2** | Discord: the tournament thread under `#knuck-up` (or the shadow home), the players' buttons, the TO panel, the two sweeps | 🔨 branch `brackets-discord` — §E as built |
 | **L3** | The site page `brackets.html`: the bracket drawn, the TO's moves, the player's moves | not built — spec below |
 
 ## A. The engine (`black_bloc/brackets/`, pure — no database, no Discord)
@@ -372,40 +373,116 @@ are constants in `brackets_moves.TO_WORDS`, like other features' refusals. A sta
 exception — falls back to the shipped wording (checklist 17). Labels in `site/public/assets/labels.js`; mock rows
 in `site/mock/server.mjs` (the mock's `BK_TO_WORDS` mirrors `TO_WORDS`).
 
-## E. Layer 2 — Discord (build from this)
+**Layer 2 adds 64 keys (1000 → 1064, all under `core`):** `brackets_ping_role_id` (role, blank — a role @-mentioned
+in the thread at the start) and **63 word keys** (`BRACKETS_CARD_WORDS`, merged into `BRACKETS_WORDS`, so each has
+named fields checked on a staff edit): the four format words, the starter card's lines and option words, the three
+starter buttons and `brackets_card_link_label`, `brackets_not_entered_said`, the set card's players line, six round
+words, title, best-of, rematch mark and five state lines, the three player buttons, the report and dispute forms'
+titles and labels, `brackets_score_not_number_said`, the panel's title, line, empty line, two placeholders, Back,
+*Your sets*, Drop out and its question, footer, the six DM texts and the start ping. Organiser-only words (the panel's
+moves, the organiser buttons on a card, the organiser forms) are constants in `brackets_panel.py`,
+`brackets_cards.TO_LABELS` and `brackets_buttons.py` (the owner's "bb"). Labels in `labels.js`, rows in the mock
+(`BRACKETS_KEYS` regenerated from the registry), `contract.json` `core_keys` 171 → 235. The `/settings` panel-minutes
+select stays at 25: layer 2 adds no `*_panel_minutes` key.
 
-- **Shadow routing.** On the first move that opens sign-ups (or a TO's **Post it** on a draft), the cog makes ONE
-  thread per tournament: `brackets_mode = on` → a public thread under `brackets_channel_id`; `shadow` →
-  `shadow.channel_id(bot, guild, feature="brackets")` (so `brackets_shadow_channel_id`, then `shadow_channel_id`,
-  then the log channel), with `rehearsal_note` naming `#knuck-up`; record `channel_id`, `thread_id`, `message_id`
-  (the thread's starter card) and `shadow` (1 when made in the rehearsal home). A mode flip does not move an existing
-  thread; staff get a **Move to #knuck-up** button. ⚠️ Anything that posts runs under a `Reconciler` lock and re-reads
-  `thread_id` inside it (checklist 37); every send carries `allowed_mentions` (11).
-- **The starter card** (edited in place on every move that changes the tournament): name, game, format and options,
-  state, entrants (count and names), the bracket as text (current round's sets with names and scores), and the
-  player buttons that are legal now: **Sign up** / **Leave** (signups), **Check in** (check-in), and nothing else.
-- **A set card** per set when it becomes `ready` (or `called`), posted in the thread, pinging only its two players
-  (members; guests are named). ⚠️ **Idempotent by `message_id`** (review fix 3, checklist 37): under the
-  `Reconciler` lock, re-read the set's `message_id`; post only when it is empty, then `set_card(…, message_id,
-  card_at)` at once; otherwise edit that message. After any move, edit or post the cards for `Outcome.changed`, and
-  edit the cards in `Outcome.gone` to a *re-paired* / *cleared* line (their rows are gone). A set with `rematch` says
-  so on its card: **Report** (a modal with two score fields, the set's best-of in the title) for the two
-  players; **Confirm** / **Dispute** (a modal with the note) for the opponent once reported, with the
-  `confirms_at` time as `<t:…:R>`; the card is edited to the final line on completion. TO-only buttons on the same
-  card render only for `may_run`: **Decide** (scores or forfeit), **Reset**, **Call**.
-- **The TO panel** (`/bracket`, one command, ephemeral, `brackets_panel_minutes`): pick a tournament → its moves as
-  buttons that render only when legal (Open/Close sign-ups, Open/Close check-in, Seed (select order / Shuffle),
-  Start, Back to seeding, Complete (with a tie order select for RR/Swiss when `standings` has a shared place),
-  Reopen, Cancel, Restore), plus Add entrant (modal: member picker or guest name), Remove / Restore / DQ (entrant
-  select), and per-set Decide / Reset. Every refusal answers the move's own words; `render_again` on every panel
-  (checklist 36).
-- **The sweeps** (one `tasks.loop`, a tick a minute, with `@loop.error` and `last_ok_at`, checklist 28):
-  `brackets_sets.confirm_due(bot, guild)` and `brackets_people.close_due_check_ins(bot, guild)`; post the results in
-  the thread. Both are no-ops while the mode is off.
-- **Reconcile on boot and on the loop** (4, 25): a tournament whose thread is gone is re-made; a `ready`/`called`
-  set whose `message_id` is empty gets its card posted (and recorded); one whose `message_id` names a message that is
-  gone (404 twice, checklist 32) is posted again and the new id recorded. "Missing" is decided by the stored id,
-  never by searching the thread.
+## E. Layer 2 — Discord (as built, branch `brackets-discord`)
+
+*Rewritten 2026-10-07 from the spec to what runs. Where the build brief differed from the old spec the brief won; each
+difference is a §G decision. The old spec's **Move to #knuck-up** button and the **Complete** tie-order select are not
+built (§H).*
+
+| Module | Does |
+|---|---|
+| `black_bloc/cogs/community/brackets.py` | The cog (registered in `bot.py:COGS`): `/bracket`, the persistent card buttons (`add_dynamic_items` in `cog_load`), the one-minute `_sweep` loop (`@loop.error` restarts it, `last_ok_at`/`last_error` for the health tab), the boot reconcile on `on_ready` — both under one `loops.Reconciler`. |
+| `black_bloc/brackets_thread.py` | The thread and every card in it: where a thread goes, making it, the starter card, one card per set, `follow` (after any move, from either door), `reconcile`, `sweep`, the start ping, `tell` (the DMs). |
+| `black_bloc/brackets_cards.py` | What the thread shows, as plain functions: the starter embed and view, a set's embed, players line and view, which buttons are legal (`starter_moves`, `set_moves`), the persistent `StarterButton` / `SetButton` (`SafeDynamicItem`). |
+| `black_bloc/brackets_buttons.py` | What a press does: `starter_pressed`, `set_pressed` / `set_move`, the forms (`ReportModal`, `DisputeModal`, `DecideModal`, `ResetModal`, `ForfeitModal`), and where an answer lands (`CardLanding`; the panel's `PanelLanding`). |
+| `black_bloc/brackets_panel.py` | The `/bracket` panel. |
+
+**Where the thread goes.** `brackets_mode = on` → a public thread under `brackets_channel_id` (#knuck-up); `shadow` →
+under `shadow.channel_id(bot, guild, feature="brackets")` (`brackets_shadow_channel_id`, then `shadow_channel_id`, then
+the guard's channel, then the log channel); `off` → none, and nothing posts. It is made when the tournament is
+**created** (the brief: *on create*), or by the first follow or tick that finds none. The row records `channel_id`,
+`thread_id`, `shadow` (1 in the rehearsal home) and `message_id` (the starter card). A mode flip never moves a thread.
+A forum parent takes the starter card with the thread (supported, not exercised — §H).
+
+**The starter card** (pinned; the rehearsal note naming `#knuck-up` above it in shadow): the name; the game; the format
+line with its options (`grand-final reset`, `third-place set`, Swiss rounds, the late best-of, the finals best-of); the
+state; the entrant count (with the cap when there is one); the start time before the start; when check-in closes while
+it is open; the organiser; the top 8 placings once complete. Buttons: **Sign up** and **Leave** during sign-ups,
+**Check in** and **Leave** during check-in, nothing else — plus **Open the bracket** (`/brackets.html#<id>`, layer 3)
+when the site has an origin. It is EDITED in place by every follow; it is posted again only by a reconcile, and only when
+its stored id no longer resolves.
+
+**A set card** — one per set, posted when the set is open (`ready`, `called`, `reported`, `disputed`) and has no card:
+the players line `{a} v {b}` (an @-mention for a member, the plain name for a guest), the title `{set} · {round}`
+(Winners round 2, Losers round 3, Grand final, Grand final reset, Third place, Round 4), `Best of 3` (`· Rematch` when
+the set carries `rematch`), and the state line: *Ready to play* · *Called — play now* · *Ada reported 2–1 — waiting on
+Bea, stands in 12 minutes* · *Disputed by Bea — an organiser decides* (and the note) · the final line (*W1-1 is final:
+Ada wins 2–1* / *by forfeit*) · *W1-1 was cleared*. Buttons by the set's state, only while the tournament runs:
+
+| Set | Row 0 (players) | Row 1 (organisers — constants, refused in words to anyone else) |
+|---|---|---|
+| ready | Report | Call · Decide… |
+| called | Report | Decide… · Reset… |
+| reported | Confirm · Dispute | Decide… · Reset… |
+| disputed | — | Decide… · Reset… |
+| complete | — | Decide… · Reset… |
+
+Who presses is checked on the press: a stranger's Report or Dispute is refused in words and opens no form; the
+reporter's Confirm answers *own report*; Decide, Reset and Call re-ask `may_run` every press. A TO's Report on a set
+they are not in is final at once (layer 1). Mentions: `AllowedMentions(users=[the two])` when the THREAD is not a
+rehearsal (`shadow` 0), `AllowedMentions.none()` in a rehearsal thread; every edit is `none()`.
+
+**Card lifecycle.** Idempotent by stored id, under `brackets_thread.card_lock(bot, tournament)` (re-read inside it):
+before the send the set gets `card_at` with no `message_id`, after it the id. A follow EDITS the starter card and every
+card in `Outcome.changed`, edits the cards in `Outcome.gone` to the cleared line (no buttons, ids dropped), and posts a
+card for an open set that has none. A card whose set falls back to `waiting`/`bye`/`void` is cleared and its id dropped,
+so a fresh card (and ping) comes when it is ready again. Complete, Reopen, Cancel and Restore re-render every card (the
+buttons depend on the tournament's state). An edit that finds the message gone marks it; the next tick posts it again.
+A set holding a stamp and no id ("may have been posted": a restart between the send and the store) is looked for by its
+buttons' custom-id prefix in the thread's last 100 messages and adopted before anything is posted.
+
+**The sweep** — every minute, per available guild, skipped while `off`: `brackets_sets.confirm_due` and
+`brackets_people.close_due_check_ins`, then the cards for what they changed (the confirmed set's card, the starter card
+of a closed check-in), then a reconcile pass. At most **5 new set cards per pass**; the rest come next tick.
+
+**Reconcile** — on boot (`on_ready`, `skip_if_recent`) every live tournament (draft … running) gets a FULL pass: the
+thread (re-made after two NotFounds running), the starter card and every stored card edited (a NotFound posts it
+again, `brackets.card_reposted`), a card for each open set without one. The minute tick runs the cheap pass: missing
+threads, starter cards and cards, and anything a follow marked gone. "Missing" is decided by the stored id; the only
+search is the adoption above.
+
+**Pings and DMs.** The set card's mention is the only ping by default. `brackets_ping_role_id` (blank) is @-mentioned
+in the thread at the start (`brackets_start_ping`); in a rehearsal it is named, pings nobody, and `brackets.would_ping`
+is logged. A member is DM'd (`brackets_thread.tell`) when an organiser removes them (`brackets_dm_removed`), DQs them
+(`_dq`), drops them (`_dropped`), decides or corrects their set — Decide, a forfeit, an organiser's report
+(`_decided`, both players) — or resets it (`_reset`, both players); the organiser's optional reason follows as
+`brackets_dm_reason`. Sent only when the mode is `on` AND the tournament's thread is not a rehearsal; otherwise
+`brackets.would_dm` is logged and nothing is sent; a DM that cannot land is `brackets.dm_failed`.
+
+**The panel** — `/bracket` (one command, ephemeral, `brackets_panel_minutes`, hidden while `brackets_mode` is `off`,
+every view with `render_again`):
+
+| View | A member sees | An organiser (staff or `brackets_to_role_id`) also sees |
+|---|---|---|
+| Home | the tournaments in sign-ups, check-in, seeding or running (one line each, a picker) | every tournament; **Create…** (form: name, game, format, best of, entrant cap) |
+| A tournament | the starter card; *Your sets*; **Sign up** (sign-ups, not in) · **Leave** (in, before the start) · **Check in** (check-in, not yet) · **Drop out** (running, asks first); a picker of their sets | *Open sets*; the moves legal now — draft: Open sign-ups, Add entrant…, Cancel · sign-ups: Close sign-ups, Open check-in, Add entrant…, Cancel · check-in: Close check-in, Add entrant…, Cancel · seeding: Open sign-ups, Open check-in, Seed…, Shuffle, Start, Add entrant…, Cancel · running: Call ready sets (when one is ready), Complete (when finished), Back to seeding, Cancel · complete: Reopen, Cancel · cancelled: Restore; an entrant picker; a picker of every set |
+| An entrant | — | before the start: Remove… or Restore (check-in: Check in / Check out first) · running: DQ… and Drop…, or Restore |
+| A set | Report (ready/called) · Confirm and Dispute (reported, and not the reporter) | Report (not playing) · Call (ready) · Let it stand (reported/disputed) · Decide… · *{a} by forfeit…* · *{b} by forfeit…* · Reset… |
+| Add entrant | — | a member picker, **Add a guest…** (form: name) |
+
+Cancel, Back to seeding and Drop out ask first (Keep it / yes). Remove, DQ, Drop, Decide, Reset and a forfeit open a
+form with an optional reason, which is what the member is DM'd — the form is the confirmation. Seed… is a form listing
+`Name #id` one per line, top seed first (lines are read by the tag, then by a unique name). Every move goes through
+the layer-1 move with `via=VIA_DISCORD`, the panel re-renders with the move's own words, then the cards catch up.
+
+**The website's writes** (`api/tools/brackets.py` `answered`) await `brackets_thread.follow` after every successful
+move, so a change made on the site reaches the thread too.
+
+**Log kinds** added (head `brackets`, under `core`): `thread_made`, `card_reposted` (ROUTINE); `thread_lost`
+(IMPORTANT); `thread_failed`, `card_failed`, `dm_failed` (IMPORTANT by suffix; written once per tournament, card and
+reason a run); `would_dm`, `would_ping` (shadow, ROUTINE by rule).
 
 ## F. Layer 3 — the site page (build from this)
 
@@ -419,6 +496,15 @@ seeding, check-in ticks during check-in), and the moves as buttons that render o
 player sees become settings keys in L3 (the every-word-editable rule, as narrowed by the owner's "bb": organiser-only
 words are code constants). No explaining blurbs. The settings drawer on the page holds the ~~85~~ 54 keys. Add `brackets.html` to `contract.json` `pages` and extend the mock's player paths (the L1 mock answers a
 report from any session as a TO's).
+
+**From layer 2, for layer 3:** the thread already follows every site write (§E, *The website's writes*) — nothing to
+add for the cards. The starter card links to `brackets.html#<id>`, so the page opens the tournament named by the hash.
+The standing staff-move rule wants the DQ / drop / remove / override / reset routes to take an optional `reason` and,
+on success, call `brackets_thread.tell(bot, guild, row, user_id, key, reason)` with `brackets_dm_dq` / `_dropped` /
+`_removed` / `_decided` (with `set=` and `result=`, both players) / `_reset` (with `set=`, both players)
+ — it already logs `would_dm` while
+the tournament is a rehearsal. A set's `message_id` in the view is the Discord card; the page can link to it
+(`https://discord.com/channels/<guild>/<thread_id>/<message_id>`).
 
 ## G. Decisions beyond the brief
 
@@ -471,12 +557,77 @@ report from any session as a TO's).
 26. **An unreadable stamp is logged once by acting on it at once**: the sweep that finds it closes the check-in or
     lets the report stand in the same tick, so the warning cannot repeat.
 
+**Layer 2 (branch `brackets-discord`, 2026-10-07):**
+
+27. **The thread is made when the tournament is created** (the brief), not at the first Open sign-ups (the old §E): the
+    draft's starter card is where its options can be read before anyone signs up. In shadow that is the rehearsal home.
+28. **A card's buttons depend on state only** — a posted message is the same for every viewer — and who may press is
+    decided on the press, in words. The organiser buttons on a card (Call, Decide…, Reset…) therefore show to
+    everyone and refuse a player; the panel, which IS per viewer, hides what the viewer cannot do (Confirm from the
+    reporter, every organiser move from a member).
+29. **Only player-facing words are keys** (decision 22 carried into layer 2): 63 word keys; organiser words are
+    constants.
+30. **The website's writes follow too** (`api/tools/brackets.py` `answered` awaits `brackets_thread.follow`), so the
+    thread never lags the site; layer 1's routes and refusals are unchanged.
+31. **The starter card carries the game, the option words and the top 8 placings when complete**, and not the old
+    §E's "bracket as text" — the set cards are the bracket in the thread, and the page is the drawing.
+32. **A follow edits, a reconcile re-posts** (the brief): a follow that finds a card gone marks it, the next tick posts
+    it again.
+33. **A half-posted card is adopted, not doubled.** `card_at` is written with no id before the send; a restart in that
+    gap leaves "may have been posted", and the card is looked for by its custom-id prefix before posting. This is the
+    one search of the thread; the old §E's "never by searching" holds for everything else.
+34. **The boot reconcile is full, the minute tick is cheap.** Boot edits every live starter card and stored card (that
+    edit IS the check that the id resolves); the tick only acts on what is missing or marked, so a running bracket costs
+    no Discord call a minute when nothing changed.
+35. **Two NotFounds re-make a thread; one NotFound re-posts a message.** A message 404 in a channel the bot can read is
+    definitive; a thread that cannot be found might be a cache or permission blip, and re-making it is the visible,
+    expensive act (checklist 32).
+36. **At most 5 new set cards a pass** (`brackets_thread.POSTS_PER_PASS`, a constant — it is a rate-limit detail, not
+    an owner decision): Discord allows about 5 messages per 5 seconds in a channel, so a 64-entrant start posts its 32
+    first-round cards over about seven minutes. Edits are not budgeted.
+37. **Rehearsal is a property of the thread, not of the mode now** (checklist 3): a tournament whose thread was made in
+    shadow never pings or DMs anyone, even after `brackets_mode` goes `on`. A DM is sent only when the mode is `on`
+    AND the thread is not a rehearsal.
+38. **What is DM'd:** remove, DQ, an organiser's drop, Decide / a forfeit / an organiser's report on someone else's
+    set (both players), and Reset (both players), each with the organiser's optional reason. Not DM'd: a check-in
+    no-show (the starter card says check-in closed), *Let it stand* (the score the player saw stands), Call (the card
+    says it).
+39. **Leave is refused while a tournament runs** — `brackets_people.drop` on a running bracket forfeits the rest, and a
+    stale Leave button must never do that; a player leaves a running bracket with **Drop out** on the panel, which asks
+    first.
+40. **Complete, Reopen, Cancel and Restore re-render every card**, so a finished or cancelled tournament's cards lose
+    their buttons and a restored one gets them back.
+41. **A carded set that falls back to waiting loses its card id**, so when it is ready again a new card pings the two
+    players again (the old card says it was cleared).
+42. **Failure rows are written once per tournament, card and reason a run**; the log line is every time. Shadow with
+    no rehearsal home and no log channel writes no row (nowhere to rehearse, nowhere to post the row).
+43. **`/bracket` hides while `brackets_mode` is `off`** (`HIDDEN_WHEN_OFF`); the `/settings` mode block reads
+    *Tournament brackets*. `test_settings_panel`'s counts (24 modes, 20 hideable) and `test_command_visibility`'s table
+    moved with it.
+44. **Seeding from Discord is a form**: every active entrant on a line as `Name #id`, top seed first; the move refuses
+    an order that is not everyone exactly once. Shuffle is a button.
+45. **Call ready sets calls every ready set** (one `set_called` row each), the way a TO calls a round.
+46. **The forms double as the confirmation** for Remove, DQ, Drop, Decide, Reset and a forfeit (dismissing the form is
+    *Keep it*); Cancel, Back to seeding and Drop out — no form to hang it on — ask first.
+47. **The card buttons' custom ids** are `brackets:<id>:<action>` and `brackets:<id>:<set>:<action>` (fullmatched
+    templates, at most 100 characters).
+48. **The chat model's command block names `/bracket`** (`personas.py`), as `test_personas` requires of every member
+    command.
+
+
 ## H. What is NOT built (and is not in L2/L3 either unless the owner asks)
 
 Pools into a bracket (phases, progressions), teams and crews, stations and streams, entry fees and payouts, series
 or circuit points, ladders and matchmaking, the start.gg mirror (only the `source` column exists), DE's optional
 5th-place set, per-game reporting (characters, stages), the DQ timer (auto-DQ when a player does not check in to a
 called set), conflicts and waves, printing.
+
+**Not built in layer 2** (the old §E or the brief named them; each is a small follow-up): the staff **Move to
+#knuck-up** button for a thread made in shadow; the **Complete** tie-order select for a round robin or Swiss tie
+(Complete places a tie as shared); editing a tournament's options from Discord (the site's `PATCH` does it); archiving
+or locking the thread when a tournament completes or is cancelled; a per-tournament ping role (one global
+`brackets_ping_role_id`); a DM to a check-in no-show; the reason field on the website's DQ / drop / remove / override /
+reset (layer 3 — §F). A forum channel as the parent is coded but no test exercises it.
 
 ## Review fixes 2026-10-07
 
