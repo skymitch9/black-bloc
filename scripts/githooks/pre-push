@@ -1,0 +1,39 @@
+#!/bin/sh
+# Runs the local CI mirror before a push to main that GitHub's ci.yml would run on.
+zero=0000000000000000000000000000000000000000
+root=$(git rev-parse --show-toplevel)
+target=""
+while read -r lref lsha rref rsha; do
+    [ "$rref" = "refs/heads/main" ] || continue
+    [ "$lsha" = "$zero" ] && continue
+    if [ "$rsha" = "$zero" ]; then
+        files=$(git log --format= --name-only "$lsha" --not --remotes 2>/dev/null) || files="?"
+    else
+        files=$(git log --format= --name-only "$rsha..$lsha" 2>/dev/null) || files="?"
+    fi
+    code=$(printf '%s\n' "$files" | grep -v -E '^(docs/|[^/]*\.md$)' | grep -c .)
+    if [ "$code" -gt 0 ]; then
+        target=$lsha
+    fi
+done
+
+if [ -z "$target" ]; then
+    echo "pre-push: docs-only (or not main) - CI mirror skipped"
+    exit 0
+fi
+if [ "$BB_SKIP_CI_MIRROR" = "1" ]; then
+    echo "pre-push: CI MIRROR SKIPPED by BB_SKIP_CI_MIRROR=1 for $target - GitHub's run is the only check"
+    exit 0
+fi
+
+echo "pre-push: running the CI mirror on $target before it reaches main"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/ci-local.ps1" -Ref "$target"
+status=$?
+if [ "$status" -ne 0 ]; then
+    echo ""
+    echo "PUSH REFUSED: the local CI mirror is not green for $target (exit $status; the failing step is named above)."
+    echo "Run it by hand:  powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci-local.ps1"
+    echo "Emergency only:  BB_SKIP_CI_MIRROR=1 git push"
+    exit 1
+fi
+echo "pre-push: CI mirror green for $target"

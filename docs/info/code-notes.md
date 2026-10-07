@@ -10133,3 +10133,17 @@ Design: [`baf-event-ping-design.md`](baf-event-ping-design.md).
 | `black_bloc/cogs/content/marathon_role_ping.py` `status_line` | With `rows`, the BaF lines follow the switch's line; the switch's line is dropped only when the role WOULD be mentioned and every day shown is governed. |
 | `black_bloc/cogs/content/marathon_host_highlights.py` `role_for` | `days` is read only at the ping mark (`day_reading`), the one mark a block could have carried the role on. |
 | `site/mock/server.mjs` `marathonBafEvent` | One show-day per marathon and no stored pings: enough for the drawer and the tracker, not a model of the carrier. It already judged the marathon as a whole; the whole-event change only re-shaped what it answers (`line`, `runs`, `baf`, `ask` at the top, `ping` per day). An answer to the question is the row's `baf_answer` (marathon 31 is seeded with a no) so the follow label and *Clear the answer* can be seen; with no ping records the mock never reads `acted`. |
+
+## CI mirror (branch `ci-mirror`, 2026-10-07) — keyed by NAME
+
+Runbook: [`../access/ci-mirror.md`](../access/ci-mirror.md).
+
+| Where | Note |
+|---|---|
+| `scripts/ci_local.py` `steps_of` | A line parser, not YAML (PyYAML is not a declared dependency). It reads only the indentation under `steps:`: a `- ` at the list's indent starts a step, keys two deeper are the step's, `run: \|` takes every following line indented deeper (blank lines kept). Keys under `with:` are skipped; any step key outside `name`/`run`/`uses`/`with` RAISES, because a silently ignored `env:` or `if:` would make the mirror run something GitHub does not. A quoted scalar loses its quotes only when wholly quoted (stripping quote characters off the ends ate the `"` of `".[dev]"` on the first run). |
+| `…` `main` / `install_line` | The `pip install` step is not run (the mount is read-only and the image already did it); its command must equal the one in `Dockerfile.ci` or the run is red. `uses:` steps print *provided by the image*. Each `run:` goes to `bash --noprofile --norc -eo pipefail -c`, GitHub's own shell flags; stdout is inherited, never captured, so the contract step's background `node server.mjs &` cannot hold the pipe open. |
+| `scripts/ci-local.ps1` `$ErrorActionPreference = "Continue"` | Windows PowerShell 5.1 turns any native stderr line into a terminating error under `Stop` — `docker image inspect` of a missing tag killed the script before it could build. Exit codes are checked by hand instead. |
+| `…` `-e NAME` for `BB_*` | Passed by NAME so docker reads the value from the environment; `NAME=value` with a space in the value made PS 5.1 hand docker a broken argument (`invalid reference format`). |
+| `…` the `tar` into `/work` | The bind mount is read at `/src` and copied into a tmpfs, `/tmp` is a tmpfs: the suite ran 390 s straight off the mount with `/tmp` on the overlay, 161 s in memory; `/tmp` alone as tmpfs gave 200 s (that SQLite writes under `tmp_path` are the cost is an inference, not profiled). |
+| `…` `-Ref` / `tar.exe` | `git archive` to a file, then `$env:SystemRoot\System32\tar.exe` by full path: under the hook, Git Bash's GNU `tar` is first on `PATH` and reads `C:\…` as `host:path` (*Cannot connect to C: resolve failed*). |
+| `scripts/githooks/pre-push` | Same filter as `ci.yml`'s `paths-ignore` (`docs/**`, `*.md` where `*` does not cross `/`). A remote sha the clone does not have makes `git log` fail → treated as code → the mirror runs. New branch (`0000…` remote sha): the commits not on any remote. |

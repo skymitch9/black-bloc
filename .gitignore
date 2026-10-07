@@ -31,3 +31,6 @@ scripts/scan/
 # Gate logs written by a build run, never committed (only bot code goes in)
 /gate.log
 /gate-reverse.log
+
+# A Windows cache tree that was committed by accident once (removed 2026-10-07)
+%SystemDrive%/

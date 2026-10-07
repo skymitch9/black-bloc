@@ -135,6 +135,8 @@ never run `fly launch` — it rewrites the file.
 
 ## Every later deploy — `scripts/deploy.ps1`, nothing else
 
+Before pushing to `main`, [`ci-mirror.md`](ci-mirror.md) runs GitHub's `ci.yml` in a Linux container (the deploy gate below stays the native one).
+
 ```powershell
 # From the repo root, tree committed-clean (the script REFUSES a dirty tree, and a
 # Dockerfile build ships what is on disk). It runs ruff -> the full test suite (-n 16, -rfE,
