@@ -204,3 +204,23 @@ async def test_a_differing_second_report_is_refused_with_the_score_already_repor
     view = bea.get(f"/api/brackets/{tid}").json()
     (only,) = view["sets"]
     assert (only["state"], only["score_a"], only["score_b"]) == ("reported", 2, 1)
+
+
+async def test_every_website_write_lets_the_thread_catch_up_and_a_refusal_does_not(
+    client, sign_in, wf, people, monkeypatch
+):
+    from black_bloc import brackets_thread
+
+    followed = []
+
+    async def follow(bot, guild, tournament_id, outcome, *, move=None):
+        followed.append((tournament_id, move, outcome.ok))
+
+    monkeypatch.setattr(brackets_thread, "follow", follow)
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser)["id"]
+    organiser.post(f"/api/brackets/{tid}/signups/open", json={})
+    refused = as_(client, sign_in, wf, ADA).post(f"/api/brackets/{tid}/start", json={})
+
+    assert refused.status_code == 403
+    assert followed == [(tid, "create", True), (tid, "open_signups", True)]

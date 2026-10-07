@@ -181,6 +181,9 @@ and event pings everybody can have, and **Start my own ping role** if you stream
 pings* and *Notifications* panels do the same.
 `/birthday` — one panel: **Set my birthday** stores one, **Opt out** takes it back off.
 `/poll` — one panel: **Create** puts a question to the room.
+`/bracket` — the server's tournaments. It opens one window: pick a tournament to **Sign up**,
+**Leave** or **Check in**, and your own sets to **Report** a score, **Confirm** your opponent's or
+**Dispute** it. Each tournament also has its own thread with the same buttons.
 `/raidtrain` — the raid trains. It opens one window listing what is coming up: pick a train to
 see the whole lineup and which hours are free, **Take an hour…** claims one (link Twitch on
 `/golive` first), **Give back slot #N** hands it back, and **My slots…** says what you hold.

@@ -137,6 +137,11 @@ class FakeChannel:
         self.bot = bot
         self.type = discord.ChannelType.text
         self.threads: list[FakeThread] = []
+        self.posted: list[object] = []
+
+    async def send(self, content=None, **kwargs):
+        self.posted.append((content, kwargs))
+        return FakeMessage(self, content, **kwargs)
 
     async def create_thread(self, *, name, type=None, auto_archive_duration=None, reason=None):
         made = FakeThread(self, name)
@@ -422,7 +427,6 @@ async def test_a_stored_card_that_no_longer_resolves_is_posted_again_once(bot, g
     assert (await card_ids(bot, tid))["W1-1"] == again.id
     reposted = [d for kind, _, _, d in await rows(bot.db) if kind == "brackets.card_reposted"]
     assert [(one["tournament"], one["card"]) for one in reposted] == [(tid, "W1-1")]
-
 
 
 async def test_a_card_a_move_finds_gone_is_reposted_by_the_next_tick_not_by_the_move(bot, guild):

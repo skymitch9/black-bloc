@@ -409,7 +409,8 @@ async def build_set(
     row, match, people = seat.row, seat.match, seat.people
     embed = cards.set_embed(bot.store, guild.id, match, people, row["confirm_minutes"])
     players = cards.players_line(bot.store, guild.id, match, people)
-    embed.description = with_note(note, f"{players}\n{embed.description or ''}")
+    body = f"{players}\n{embed.description or ''}"
+    embed.description = with_note("" if note in body.split("\n") else note, body)
     view = BracketPanel(bot, guild.id, (SET, row["id"], match.key))
     for move in set_moves_for(row, seat, organiser(bot, guild, user)):
         view.add_item(SetMoveButton(row["id"], match.key, move, seat_label(bot, guild, seat, move)))
