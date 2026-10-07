@@ -139,7 +139,7 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         "BaF announcements: on · turn off",
         "Host announcements: off · turn on",
         "Marathon tracker ↗",
-        "BaF event: follow the schedule",
+        "BaF event: follow the schedule (not a BaF event)",
         "BaF event: yes",
         "BaF event: no",
     ]

@@ -1302,6 +1302,57 @@ async def test_patch_baf_event_takes_yes_no_and_follow_and_leaves_one_web_row_ea
     assert client.get(f"/api/marathons/{marathon_id}").json()["baf_event"]["choice"] == "follow"
 
 
+async def test_patch_clears_the_questions_answer_and_follow_says_what_following_gives(
+    client, sign_in, web, cog, wf
+):
+    import json
+
+    from black_bloc import marathon_baf_event as baf
+
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    said = {"event": True, "message_id": 5, "answer": "yes", "answered_by": 7}
+    await web.db.conn.execute(
+        "UPDATE marathons SET baf_event_ask = ? WHERE id = ?", (json.dumps([said]), marathon_id)
+    )
+    await web.db.conn.commit()
+
+    switched = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": "no"}).json()
+    found = switched["baf_event"]
+    assert (found["answer"], found["reason"], found["ask"]) == ("no", "staff", "answered")
+    assert (found["worked_out"]["answer"], found["worked_out"]["reason"]) == ("yes", "leads")
+    assert found["worked_out"]["answer_word"] == "a BaF event"
+    followed = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event": None}).json()
+    assert followed["baf_event"]["answer"] == found["worked_out"]["answer"]
+    assert followed["baf_event"]["reason"] == found["worked_out"]["reason"]
+
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event_answer": "maybe"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_baf_event_answer"
+    assert "Say clear" in bad.json()["message"]
+    cleared = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event_answer": "clear"})
+
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["message"] == (
+        "The answer was cleared, so **AGDQ 2027** is not a BaF event now."
+    )
+    after = cleared.json()["baf_event"]
+    assert (after["answer"], after["reason"], after["ask"]) == ("no", "mixed", None)
+    assert after["worked_out"]["reason"] == "mixed"
+    rows = [details for kind, details in await wf.web_rows_in(web.db) if kind.endswith("event_set")]
+    assert [(one["from"], one["to"], one.get("cleared"), one["via"]) for one in rows] == [
+        ("follow", "no", None, "website"),
+        ("no", "follow", None, "website"),
+        ("yes", "follow", True, "website"),
+    ]
+    cur = await web.db.conn.execute(
+        "SELECT baf_event_ask FROM marathons WHERE id = ?", (marathon_id,)
+    )
+    (left,) = baf.asks_of({"baf_event_ask": (await cur.fetchone())["baf_event_ask"]})
+    assert "answer" not in left and left["cleared"] is True and left["cleared_by"]
+    again = client.patch(f"/api/marathons/{marathon_id}", json={"baf_event_answer": "clear"})
+    assert again.status_code == 200 and "has no answer to clear" in again.json()["message"]
+
+
 async def test_a_baf_event_day_says_which_heads_up_carries_the_ping_in_the_drawer(
     client, sign_in, web, cog, wf
 ):

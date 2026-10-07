@@ -5869,7 +5869,7 @@ MARATHON_BAF_EVENT_MIN_RUNS_KEY = "marathon_baf_event_min_runs"
 MARATHON_BAF_EVENT_ASK_PERCENT_KEY = "marathon_baf_event_ask_percent"
 MARATHON_BAF_EVENT_PING_MINUTES_KEY = "marathon_baf_event_ping_minutes"
 MARATHON_BAF_EVENT_ASK_ROLE_KEY = "marathon_baf_event_ask_role_id"
-MARATHON_BAF_EVENT_ASK_TEXT_KEY = "marathon_baf_event_ask_text"
+MARATHON_BAF_EVENT_ASK_TEXT_KEY = "marathon_baf_event_question"
 MARATHON_BAF_EVENT_ASK_YES_KEY = "marathon_baf_event_ask_yes"
 MARATHON_BAF_EVENT_ASK_NO_KEY = "marathon_baf_event_ask_no"
 MARATHON_BAF_EVENT_ANSWERED_KEY = "marathon_baf_event_answered"
@@ -5882,7 +5882,7 @@ MARATHON_BAF_EVENT_SAME_SAID_KEY = "marathon_baf_event_same_said"
 MARATHON_CONTROLS_BAF_FOLLOW_KEY = "marathon_controls_baf_follow"
 MARATHON_CONTROLS_BAF_YES_KEY = "marathon_controls_baf_yes"
 MARATHON_CONTROLS_BAF_NO_KEY = "marathon_controls_baf_no"
-MARATHON_BAF_EVENT_LINE_KEY = "marathon_baf_event_line"
+MARATHON_BAF_EVENT_LINE_KEY = "marathon_baf_event_answer_line"
 MARATHON_BAF_EVENT_REASON_STAFF_KEY = "marathon_baf_event_reason_staff"
 MARATHON_BAF_EVENT_REASON_NAME_KEY = "marathon_baf_event_reason_name"
 MARATHON_BAF_EVENT_REASON_ALL_RUNS_KEY = "marathon_baf_event_reason_all_runs"
@@ -5894,14 +5894,20 @@ MARATHON_BAF_EVENT_PING_WILL_KEY = "marathon_baf_event_ping_will"
 MARATHON_BAF_EVENT_PING_DONE_KEY = "marathon_baf_event_ping_done"
 MARATHON_BAF_EVENT_PING_NONE_KEY = "marathon_baf_event_ping_none"
 MARATHON_BAF_EVENT_PING_FALLBACK_KEY = "marathon_baf_event_ping_fallback"
-MARATHON_BAF_EVENT_REASON_LEADS_KEY = "marathon_baf_event_reason_leads"
+MARATHON_BAF_EVENT_REASON_LEADS_KEY = "marathon_baf_event_reason_answered"
 MARATHON_BAF_EVENT_PING_UNCONFIRMED_KEY = "marathon_baf_event_ping_unconfirmed"
-MARATHON_BAF_EVENT_PING_NO_RUN_KEY = "marathon_baf_event_ping_no_run"
+MARATHON_BAF_EVENT_PING_NO_RUN_KEY = "marathon_baf_event_ping_no_baf_run"
 MARATHON_BAF_EVENT_PING_NOBODY_KEY = "marathon_baf_event_ping_nobody"
 MARATHON_BAF_EVENT_ASK_PENDING_KEY = "marathon_baf_event_ask_pending"
 MARATHON_BAF_EVENT_ASK_FAILED_KEY = "marathon_baf_event_ask_failed"
 MARATHON_BAF_EVENT_ASK_NOWHERE_KEY = "marathon_baf_event_ask_nowhere"
 MARATHON_BAF_EVENT_DAY_LINE_KEY = "marathon_baf_event_day_line"
+MARATHON_BAF_EVENT_REASON_ACTED_KEY = "marathon_baf_event_reason_acted"
+MARATHON_BAF_EVENT_CLEARED_KEY = "marathon_baf_event_cleared"
+MARATHON_BAF_EVENT_CLEARED_SAID_KEY = "marathon_baf_event_cleared_said"
+MARATHON_BAF_EVENT_NO_ANSWER_SAID_KEY = "marathon_baf_event_no_answer_said"
+MARATHON_CONTROLS_BAF_FOLLOW_ANSWER_KEY = "marathon_controls_baf_follow_answer"
+MARATHON_CONTROLS_BAF_CLEAR_KEY = "marathon_controls_baf_clear"
 MARATHON_BAF_EVENT_NAMES_MAX = 20
 MARATHON_BAF_EVENT_NAME_LENGTH = 60
 MARATHON_BAD_BAF_NAMES = (
@@ -6583,10 +6589,24 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{marathon} {answer}",
     ),
     MARATHON_CONTROLS_BAF_FOLLOW_KEY: (
-        "BaF event: follow the schedule",
-        (),
+        "BaF event: follow the schedule ({answer})",
+        ("answer",),
         "the thread controls' button that lets the bot work out whether the marathon is a BaF "
-        "event",
+        "event, while staff have not answered the bot's question. It takes {answer}: what "
+        "following gives right now",
+    ),
+    MARATHON_CONTROLS_BAF_FOLLOW_ANSWER_KEY: (
+        "BaF event: follow the answer ({answer})",
+        ("answer",),
+        "the same button while an answer staff gave to the bot's question stands: following "
+        "gives that answer, not what the schedule says. It takes {answer}",
+    ),
+    MARATHON_CONTROLS_BAF_CLEAR_KEY: (
+        "Clear the answer",
+        (),
+        "the thread controls' button that takes back the answer staff gave to the bot's "
+        "question, so the show's name and its runs decide again. It is there only while an "
+        "answer is stored",
     ),
     MARATHON_CONTROLS_BAF_YES_KEY: (
         "BaF event: yes",
@@ -6710,6 +6730,32 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "what the BaF event line adds when the marathon has no thread the bot may post its "
         "question in",
+    ),
+    MARATHON_BAF_EVENT_REASON_ACTED_KEY: (
+        "{baf} of {runs} runs have a BaF runner now; it was a BaF event when a day's one "
+        "mention went out, so it stays one until staff answer",
+        ("baf", "runs"),
+        "the reason on the BaF event line when a schedule change left the bot unsure after it "
+        "had already mentioned the Marathon role once for a day of the marathon as a BaF "
+        "event. It takes {baf} {runs}, counted now",
+    ),
+    MARATHON_BAF_EVENT_CLEARED_KEY: (
+        "{who} cleared the answer.",
+        ("who", "marathon"),
+        "the line under every BaF event question of a marathon once staff clear the answer. It "
+        "takes {who} {marathon}",
+    ),
+    MARATHON_BAF_EVENT_CLEARED_SAID_KEY: (
+        "The answer was cleared, so **{marathon}** is {answer} now.",
+        ("marathon", "answer"),
+        "what staff are told once the answer to a marathon's BaF event question is cleared. It "
+        "takes {marathon} {answer}",
+    ),
+    MARATHON_BAF_EVENT_NO_ANSWER_SAID_KEY: (
+        "**{marathon}** has no answer to clear, so nothing was changed.",
+        ("marathon",),
+        "what staff are told when they clear the answer to a marathon's BaF event question and "
+        "none is stored. It takes {marathon}",
     ),
     MARATHON_BAF_EVENT_DAY_LINE_KEY: (
         "{day}: {ping}",

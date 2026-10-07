@@ -21,6 +21,10 @@ YES = "yes"
 NO = "no"
 UNSURE = "unsure"
 FOLLOW = "follow"
+CLEAR = "clear"
+CLEARED = "cleared"
+ANSWER_FIELDS = ("answer", "answered_by", "answered_at")
+CLEAR_FIELDS = (CLEARED, "cleared_by", "cleared_at")
 ANSWERS = (YES, NO, UNSURE)
 CHOICES = (FOLLOW, YES, NO)
 BY_STAFF = "staff"
@@ -31,7 +35,20 @@ BY_SHARE = "share"
 BY_FEW = "few_runs"
 BY_MIXED = "mixed"
 BY_NO_RUNS = "no_runs"
-REASONS = (BY_STAFF, BY_LEADS, BY_NAME, BY_RUNS, BY_SHARE, BY_FEW, BY_MIXED, BY_NO_RUNS)
+BY_ACTED = "acted"
+REASONS = (
+    BY_STAFF,
+    BY_LEADS,
+    BY_NAME,
+    BY_RUNS,
+    BY_SHARE,
+    BY_FEW,
+    BY_MIXED,
+    BY_NO_RUNS,
+    BY_ACTED,
+)
+RULE_REASONS = (BY_NAME, BY_RUNS, BY_ACTED)
+OPEN_REASONS = (BY_SHARE, BY_ACTED)
 COLUMN = "baf_event"
 ASK_COLUMN = "baf_event_ask"
 PINGS_COLUMN = "baf_event_pings"
@@ -236,17 +253,38 @@ def worked_out(
 
 
 def judge(
-    marathon: Any, rows: Any, *, names: Any, min_runs: int, ask_percent: int, said: Any = None
+    marathon: Any,
+    rows: Any,
+    *,
+    names: Any,
+    min_runs: int,
+    ask_percent: int,
+    said: Any = None,
+    follow: bool = False,
+    acted: bool = False,
 ) -> Judgement:
-    """The marathon's switch first, then the answer to its question, then the name and the
-    runs."""
+    """The marathon's switch first (set aside with `follow`), then the answer to its question,
+    then the name and the runs; an unsure reading stays yes once the bot acted on a yes."""
     found = worked_out(marathon, rows, names=names, min_runs=min_runs, ask_percent=ask_percent)
-    own = stored(marathon)
+    own = None if follow else stored(marathon)
     if own is not None:
         return Judgement(YES if own else NO, BY_STAFF, found.runs, found.baf)
     if said in (YES, NO):
         return Judgement(str(said), BY_LEADS, found.runs, found.baf)
+    if found.answer == UNSURE and acted:
+        return Judgement(YES, BY_ACTED, found.runs, found.baf)
     return found
+
+
+def acted(records: Any) -> bool:
+    """The bot already gave a show-day its own one ping because a rule said yes."""
+    return any(
+        not one.get(PER_RUN)
+        and not one.get("missed")
+        and (one.get("sent") or one.get("unconfirmed"))
+        and one.get("reason") in RULE_REASONS
+        for one in records or ()
+    )
 
 
 # --- show-days ----------------------------------------------------------------------------------
@@ -485,11 +523,23 @@ def reading(
 
 
 def judgement_of(found: Reading, *, own: bool = True) -> Judgement:
-    """The whole event's answer, over every run on a show-day; each show-day takes it."""
-    rules = {"names": found.names, "min_runs": found.min_runs, "ask_percent": found.ask_percent}
-    if not own:
-        return worked_out(found.marathon, found.rows, **rules)
-    return judge(found.marathon, found.rows, said=answer_of(found.asks), **rules)
+    """The whole event's answer, over every run on a show-day; each show-day takes it. With
+    `own` off the switch is set aside: what following would give."""
+    return judge(
+        found.marathon,
+        found.rows,
+        names=found.names,
+        min_runs=found.min_runs,
+        ask_percent=found.ask_percent,
+        said=answer_of(found.asks),
+        follow=not own,
+        acted=acted(found.records),
+    )
+
+
+def undecided(judgement: Judgement) -> bool:
+    """Nothing staff said decides it and the runs alone cannot."""
+    return judgement.reason in OPEN_REASONS
 
 
 def closed(found: Reading, day: Any, judgement: Judgement) -> dict[str, Any] | None:
@@ -583,7 +633,7 @@ def ping_state(state: DayState, mentions: bool) -> str:
 def asks(found: Reading, states: Any) -> bool:
     """Whether the event's question is open: nothing decided it and a show-day is still to
     come."""
-    return judgement_of(found).answer == UNSURE and any(not one.over for one in states or ())
+    return undecided(judgement_of(found)) and any(not one.over for one in states or ())
 
 
 # --- the question -------------------------------------------------------------------------------
@@ -620,12 +670,43 @@ def answered(asks: Any) -> dict[str, Any] | None:
 
 def question(asks: Any) -> dict[str, Any] | None:
     """The event's question: the answer that stands, else the event's own record, the posted
-    one first. An unanswered record of a per-day question is not it."""
+    one first. An unanswered record of a per-day question is not it, nor is one whose answer
+    was cleared."""
     said = answered(asks)
     if said is not None:
         return said
-    own = [one for one in asks or () if one.get(EVENT)]
+    own = [one for one in asks or () if one.get(EVENT) and not one.get(CLEARED)]
     return next((one for one in own if one.get("message_id")), own[-1] if own else None)
+
+
+def cleared(asks: Any) -> dict[str, Any] | None:
+    """The latest record whose answer staff cleared, while no answer stands."""
+    if answered(asks) is not None:
+        return None
+    found = [one for one in asks or () if one.get(CLEARED)]
+    if not found:
+        return None
+    return max(
+        enumerate(found),
+        key=lambda pair: (parse_ts(pair[1].get("cleared_at")) or FIRST, pair[0]),
+    )[1]
+
+
+def with_answer(record: dict[str, Any], answer: str, by: Any, at: str) -> dict[str, Any]:
+    kept = {key: value for key, value in record.items() if key not in CLEAR_FIELDS}
+    return kept | {"answer": answer, "answered_by": by, "answered_at": at}
+
+
+def without_answers(asks: Any, by: Any, at: str) -> list[dict[str, Any]]:
+    """Every answer taken off its record; the record stays, flagged, and is not asked on
+    again."""
+    return [
+        {key: value for key, value in one.items() if key not in ANSWER_FIELDS}
+        | {CLEARED: True, "cleared_by": by, "cleared_at": at}
+        if one.get("answer") in (YES, NO)
+        else dict(one)
+        for one in asks or ()
+    ]
 
 
 def answer_of(asks: Any) -> str | None:
@@ -658,6 +739,7 @@ __all__ = [
     "ASK_PENDING",
     "BAD_CHOICE",
     "BAD_CHOICE_CODE",
+    "BY_ACTED",
     "BY_FEW",
     "BY_LEADS",
     "BY_MIXED",
@@ -669,6 +751,8 @@ __all__ = [
     "CARRY",
     "CAUSES",
     "CHOICES",
+    "CLEAR",
+    "CLEARED",
     "COLUMN",
     "DayState",
     "EVENT",
@@ -679,6 +763,7 @@ __all__ = [
     "NO",
     "NOBODY_TO_NAME",
     "NO_BAF_RUN",
+    "OPEN_REASONS",
     "PER_RUN",
     "PINGS_COLUMN",
     "PING_DONE",
@@ -688,11 +773,13 @@ __all__ = [
     "Plan",
     "QUIET",
     "REASONS",
+    "RULE_REASONS",
     "Reading",
     "SENT",
     "UNKNOWN",
     "UNSURE",
     "YES",
+    "acted",
     "answer_of",
     "answered",
     "ask_state",
@@ -701,8 +788,8 @@ __all__ = [
     "carrier",
     "choice_of",
     "clean",
+    "cleared",
     "closed",
-    "proof_of",
     "counts",
     "covers",
     "day_of",
@@ -724,11 +811,12 @@ __all__ = [
     "no_carrier",
     "opens_with",
     "overlap",
-    "pinged",
     "ping_state",
+    "pinged",
     "pings_of",
     "plan",
     "predicts",
+    "proof_of",
     "question",
     "quiet_reason",
     "reading",
@@ -738,7 +826,10 @@ __all__ = [
     "show_names",
     "span_of",
     "stored",
+    "undecided",
     "unsent",
+    "with_answer",
     "without",
+    "without_answers",
     "worked_out",
 ]

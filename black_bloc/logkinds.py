@@ -399,6 +399,7 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.announcements_set",
         "marathon.baf_event_set",
         "marathon.baf_event_asked",
+        "marathon.baf_event_no_baf_run",
         "marathon.announce_opted_out",
         "marathon.announce_opted_in",
         "marathon.host_announcements_set",

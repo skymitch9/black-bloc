@@ -182,6 +182,8 @@ const ANNOUNCE_FIELD = 'BaF announcements';
 const HOST_ANNOUNCE_FIELD = 'Host announcements';
 const BAF_EVENT_FIELD = 'BaF event';
 const BAF_EVENT_FOLLOW = 'Follow the schedule ({state})';
+const BAF_EVENT_FOLLOW_ANSWER = 'Follow the answer ({state})';
+const BAF_EVENT_CLEAR = 'Clear the answer';
 const BAF_EVENT_TONES = { yes: 'ok', unsure: 'warn' };
 const SWITCH_FOLLOW = 'Follow the setting ({state})';
 const TWITCH_FIX_FIELD = 'Twitch name (optional)';
@@ -543,11 +545,11 @@ function switchPicker(state) {
   return node;
 }
 
-/** The BaF event switch: follow what the bot worked out (said as state), yes, or no. */
+/** The BaF event switch: follow (said as what following gives, and whether that is staff's answer to the question), yes, or no. */
 function bafEventPicker(state) {
   const worked = (state && state.worked_out) || {};
   const choices = [
-    { value: 'follow', label: said(BAF_EVENT_FOLLOW, { state: worked.answer_word || '—' }) },
+    { value: 'follow', label: said(worked.reason === 'leads' ? BAF_EVENT_FOLLOW_ANSWER : BAF_EVENT_FOLLOW, { state: worked.answer_word || '—' }) },
     { value: 'yes', label: 'Yes' },
     { value: 'no', label: 'No' },
   ];
@@ -558,16 +560,20 @@ function bafEventPicker(state) {
 }
 
 /** Under the BaF event switch: the event's answer and why, once, then what each show-day's one ping did or will do. */
-function bafEventLines(marathon) {
+function bafEventLines(marathon, say) {
   const found = marathon.baf_event || {};
   const [own, ...days] = found.lines || [];
   if (!own) return [];
+  const clear = found.ask === 'answered'
+    ? step(marathon, say, BAF_EVENT_CLEAR, () => send(`/api/marathons/${marathon.id}`, 'PATCH', { baf_event_answer: 'clear' }))
+    : null;
   return [
     el('p', { class: 'field-help mx-line mx-baf-event', 'data-answer': found.answer, 'data-reason': found.reason }, [
       found.runs ? badge(`${found.baf} of ${found.runs}`, BAF_EVENT_TONES[found.answer] || null) : null,
       el('span', { text: found.runs ? ` ${own}` : own }),
     ]),
     ...days.map((line) => el('p', { class: 'field-help mx-line mx-baf-event-day', text: line })),
+    clear ? bar([clear]) : null,
   ];
 }
 
@@ -1043,7 +1049,7 @@ async function settingsFold(marathon, say) {
     field(PING_FIELD, ping),
     rolePingLine(marathon),
     field(BAF_EVENT_FIELD, bafEvent),
-    ...bafEventLines(marathon),
+    ...bafEventLines(marathon, say),
     field(HIGHLIGHT_FIELD, highlight),
     field(ANNOUNCE_FIELD, announce),
     hostAnnounce ? field(HOST_ANNOUNCE_FIELD, hostAnnounce) : null,

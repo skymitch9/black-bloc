@@ -133,3 +133,20 @@ def test_the_three_baf_event_answers_have_one_home():
 
     assert mtc.BAF_CHOICES is baf.CHOICES
     assert (mtc.FOLLOW, mtc.YES, mtc.NO) == (baf.FOLLOW, baf.YES, baf.NO)
+
+
+@pytest.mark.parametrize("choice", ["follow", "yes", "no"])
+def test_a_stored_answer_adds_a_clear_button_and_follow_says_it_follows_the_answer(choice):
+    found = mtc.baf_controls(choice, True)
+    assert [(one.action, one.to, one.row) for one in found] == [
+        ("baf", "follow", 4),
+        ("baf", "yes", 4),
+        ("baf", "no", 4),
+        ("baf", "clear", 4),
+    ]
+    assert [one.label for one in found] == [mtc.FOLLOW_ANSWER, None, None, None]
+    assert [one.disabled for one in found] == [one.to == choice for one in found]
+    assert len(found) <= 5 and found[-1].word == "off"
+    hit = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, "baf", "clear"))
+    assert hit and (hit["action"], hit["to"]) == ("baf", "clear")
+    assert [one.label for one in mtc.baf_controls(choice)] == [None, None, None]

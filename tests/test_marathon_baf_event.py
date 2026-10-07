@@ -391,10 +391,12 @@ def test_the_events_answer_decides_every_day_and_the_switch_beats_it():
     assert {(each.judgement.answer, each.judgement.reason) for each in (one, two)} == {
         (baf.NO, baf.BY_LEADS)
     }
-    assert (one.worked.answer, one.worked.baf, one.worked.runs) == (baf.UNSURE, 6, 7)
+    assert (one.worked.answer, one.worked.reason) == (baf.NO, baf.BY_LEADS)
+    assert (one.worked.baf, one.worked.runs) == (6, 7)
     assert baf.question(baf.asks_of({"baf_event_ask": asked})) == said
     switched = baf.day_states(reading(rows, baf_event=1, baf_event_ask=asked))
     assert [each.judgement.reason for each in switched] == [baf.BY_STAFF, baf.BY_STAFF]
+    assert {each.worked.reason for each in switched} == {baf.BY_LEADS}
     assert {each.judgement.answer for each in baf.day_states(reading(rows))} == {baf.UNSURE}
 
 
@@ -634,3 +636,99 @@ def test_the_switch_beats_the_answer_the_name_and_the_runs_for_every_day():
 def test_the_name_rule_covers_every_day_of_the_show_whatever_its_runs():
     found = reading(event((0, 3), (1, 3)), name="Black in a Flash: Soul Train")
     assert answers(found) == [(baf.YES, baf.BY_NAME)] * 2
+
+
+# --- review fixes (whole event) 2026-10-06 -------------------------------------------------------
+
+
+def three_of_four():
+    return [*day((RUNNER,), (RUNNER,), (RUNNER,)), run(4, 360, (STRANGER,))]
+
+
+def own_ping(rows, **fields):
+    return baf.record_for(rows[:1], rows[0], 120, NOW, sent=True, reason=baf.BY_RUNS) | fields
+
+
+@pytest.mark.parametrize(
+    ("fields", "kept"),
+    [
+        ({}, True),
+        ({"reason": baf.BY_NAME}, True),
+        ({"reason": "acted"}, True),
+        ({"sent": False, "unconfirmed": True}, True),
+        ({"per_run": True}, False),
+        ({"reason": baf.BY_LEADS}, False),
+        ({"reason": baf.BY_STAFF}, False),
+        ({"sent": False}, False),
+        ({"missed": True}, False),
+    ],
+)
+def test_an_unsure_reading_stays_yes_only_once_a_rule_made_the_bot_ping_a_day(fields, kept):
+    rows = three_of_four()
+    found = reading(rows, baf_event_pings=json.dumps([own_ping(rows, **fields)]))
+
+    judgement = baf.judgement_of(found)
+
+    assert (judgement.answer, judgement.reason) == (
+        (baf.YES, "acted") if kept else (baf.UNSURE, baf.BY_SHARE)
+    )
+    assert (judgement.baf, judgement.runs) == (3, 4)
+    assert baf.asks(found, baf.day_states(found))
+
+
+def test_an_event_the_bot_acted_on_still_reads_no_under_the_ask_percent_and_takes_a_leads_no():
+    rows = three_of_four()
+    pings = json.dumps([own_ping(rows)])
+    under = [*rows, run(5, 420, (STRANGER,)), run(6, 480, (STRANGER,))]
+    dropped = baf.judgement_of(reading(under, baf_event_pings=pings))
+    assert (dropped.answer, dropped.reason) == (baf.NO, baf.BY_MIXED)
+    asked = json.dumps([{"event": True, "message_id": 5, "answer": baf.NO}])
+    answered = baf.judgement_of(reading(rows, baf_event_pings=pings, baf_event_ask=asked))
+    assert (answered.answer, answered.reason) == (baf.NO, baf.BY_LEADS)
+    switched = reading(rows, baf_event_pings=pings, baf_event=0)
+    assert (baf.judgement_of(switched).answer, baf.judgement_of(switched).reason) == (
+        baf.NO,
+        baf.BY_STAFF,
+    )
+    assert baf.judgement_of(switched, own=False).answer == baf.YES
+
+
+def test_following_is_the_judgement_with_only_the_switch_set_aside():
+    rows = three_of_four()
+    asked = json.dumps([{"event": True, "message_id": 5, "answer": baf.YES}])
+    switched = reading(rows, baf_event=0, baf_event_ask=asked)
+
+    assert baf.judgement_of(switched).reason == baf.BY_STAFF
+    followed = baf.judgement_of(switched, own=False)
+    assert (followed.answer, followed.reason) == (baf.YES, baf.BY_LEADS)
+    assert followed == baf.judgement_of(reading(rows, baf_event_ask=asked))
+    assert baf.judgement_of(reading(rows, baf_event=1), own=False).answer == baf.UNSURE
+
+
+def test_a_leads_no_stands_whatever_the_show_is_renamed_to():
+    rows = three_of_four()
+    asked = json.dumps([{"event": True, "message_id": 5, "answer": baf.NO}])
+    renamed = baf.judgement_of(
+        reading(rows, name="Black in a Flash: Soul Train", baf_event_ask=asked)
+    )
+    assert (renamed.answer, renamed.reason) == (baf.NO, baf.BY_LEADS)
+
+
+def test_clearing_takes_every_answer_off_and_the_cleared_record_is_not_the_question():
+    old = {"message_id": 4, "answer": baf.YES, "answered_by": 9, "answered_at": at(1)}
+    own = {"event": True, "message_id": 5, "answer": baf.NO, "answered_by": 9, "answered_at": at(2)}
+    waiting = {"event": True, "message_id": 6}
+
+    left = baf.without_answers([old, own, waiting], 7, at(3))
+
+    assert baf.answer_of(left) is None and baf.answered(left) is None
+    assert [one.get("cleared") for one in left] == [True, True, None]
+    assert all("answer" not in one and "answered_by" not in one for one in left)
+    assert [one["message_id"] for one in left] == [4, 5, 6]
+    assert baf.question(left) == waiting
+    assert baf.question(left[:2]) is None
+    assert baf.cleared(left)["cleared_by"] == 7
+    again = baf.with_answer(left[1], baf.YES, 8, at(4))
+    assert "cleared" not in again and "cleared_by" not in again and again["answer"] == baf.YES
+    assert baf.cleared([left[0], again]) is None
+    assert baf.question([left[0], again]) == again

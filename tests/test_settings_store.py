@@ -2340,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 931
+    assert len(settings_store.KEY_TYPES) == 937
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2737,12 +2737,12 @@ def test_every_word_the_baf_event_posts_is_a_marathon_text_key_with_its_fields(s
         for key in settings_store.MARATHON_WORDS
         if key.startswith(("marathon_baf_event_", "marathon_controls_baf_"))
     ]
-    assert len(words) == 33
+    assert len(words) == 39
     for key in words:
         assert settings_store.KEY_TYPES[key] == "text"
         assert settings_store.namespace_of(key) == "marathon"
         assert store.default(key) == settings_store.MARATHON_WORDS[key][0]
-    ask = settings_store.TEXT_CHECKS["marathon_baf_event_ask_text"]
+    ask = settings_store.TEXT_CHECKS["marathon_baf_event_question"]
     assert ask("{marathon}: {baf}/{runs}?") == "{marathon}: {baf}/{runs}?"
     for stale in ("Is {show} ours?", "Is {day} of {marathon} ours?"):
         with pytest.raises(settings_store.SettingError):
@@ -2750,7 +2750,7 @@ def test_every_word_the_baf_event_posts_is_a_marathon_text_key_with_its_fields(s
     assert not {"marathon_baf_event_day_set_said", "marathon_baf_event_day_same_said"} & set(
         settings_store.KEY_TYPES
     )
-    line = settings_store.TEXT_CHECKS["marathon_baf_event_line"]
+    line = settings_store.TEXT_CHECKS["marathon_baf_event_answer_line"]
     assert line("{marathon}: {answer} ({reason})") == "{marathon}: {answer} ({reason})"
     with pytest.raises(settings_store.SettingError):
         line("{day}: {answer} — {reason}.")

@@ -62,7 +62,7 @@ from ...cogs.content.marathon_archive import (
     list_archived,
     restore_marathon,
 )
-from ...cogs.content.marathon_baf_event import set_baf_event
+from ...cogs.content.marathon_baf_event import set_baf_event, set_question_answer
 from ...cogs.content.marathon_baf_event import state_of as baf_event_state
 from ...cogs.content.marathon_events import (
     default_mode,
@@ -721,6 +721,18 @@ def build_router(bot: Any) -> APIRouter:
                     actor,
                     await wanted(guild, marathon_id),
                     payload["ping_role"],
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
+        if "baf_event_answer" in payload:
+            done = answered(
+                await set_question_answer(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    payload["baf_event_answer"],
                     via=VIA_WEBSITE,
                 )
             )

@@ -33,10 +33,13 @@ from ...settings_store import (
     MARATHON_BAF_EVENT_ASK_ROLE_KEY,
     MARATHON_BAF_EVENT_ASK_TEXT_KEY,
     MARATHON_BAF_EVENT_ASK_YES_KEY,
+    MARATHON_BAF_EVENT_CLEARED_KEY,
+    MARATHON_BAF_EVENT_CLEARED_SAID_KEY,
     MARATHON_BAF_EVENT_DAY_LINE_KEY,
     MARATHON_BAF_EVENT_LINE_KEY,
     MARATHON_BAF_EVENT_MIN_RUNS_KEY,
     MARATHON_BAF_EVENT_NAMES_KEY,
+    MARATHON_BAF_EVENT_NO_ANSWER_SAID_KEY,
     MARATHON_BAF_EVENT_PING_DONE_KEY,
     MARATHON_BAF_EVENT_PING_FALLBACK_KEY,
     MARATHON_BAF_EVENT_PING_MINUTES_KEY,
@@ -45,6 +48,7 @@ from ...settings_store import (
     MARATHON_BAF_EVENT_PING_NONE_KEY,
     MARATHON_BAF_EVENT_PING_UNCONFIRMED_KEY,
     MARATHON_BAF_EVENT_PING_WILL_KEY,
+    MARATHON_BAF_EVENT_REASON_ACTED_KEY,
     MARATHON_BAF_EVENT_REASON_ALL_RUNS_KEY,
     MARATHON_BAF_EVENT_REASON_FEW_RUNS_KEY,
     MARATHON_BAF_EVENT_REASON_LEADS_KEY,
@@ -92,6 +96,11 @@ NO_QUESTION = (
     "Use the BaF event switch on the thread's controls instead."
 )
 NO_QUESTION_CODE = "no_baf_question"
+BAD_ANSWER = (
+    "Say clear to take back the answer to the BaF event question of **{marathon}**, so "
+    "nothing was changed."
+)
+BAD_ANSWER_CODE = "bad_baf_event_answer"
 ANSWER_KEYS = {
     baf.YES: MARATHON_BAF_EVENT_WORD_YES_KEY,
     baf.NO: MARATHON_BAF_EVENT_WORD_NO_KEY,
@@ -107,6 +116,7 @@ REASON_KEYS = {
     baf.BY_FEW: MARATHON_BAF_EVENT_REASON_FEW_RUNS_KEY,
     baf.BY_MIXED: MARATHON_BAF_EVENT_REASON_MIXED_KEY,
     baf.BY_NO_RUNS: MARATHON_BAF_EVENT_REASON_NO_RUNS_KEY,
+    baf.BY_ACTED: MARATHON_BAF_EVENT_REASON_ACTED_KEY,
 }
 PING_KEYS = {
     baf.PING_WILL: MARATHON_BAF_EVENT_PING_WILL_KEY,
@@ -283,8 +293,8 @@ def ping_words(
 
 
 def ask_words(bot: Any, guild: Any, judged: baf.Judgement, ask: str | None) -> str:
-    """What became of the question while the bot is still not sure about the event."""
-    if judged.answer != baf.UNSURE:
+    """What became of the question while nothing staff said has decided the event."""
+    if not baf.undecided(judged):
         return ""
     key = ASK_LINE_KEYS.get(ask)
     return words(bot, guild.id, key) if key else ""
@@ -514,11 +524,7 @@ async def set_answer(
                 words(bot, guild.id, MARATHON_BAF_EVENT_SAME_SAID_KEY, **fields),
                 value=fresh,
             )
-        said = record | {
-            "answer": wanted,
-            "answered_by": actor_id(actor),
-            "answered_at": cog.clock().isoformat(),
-        }
+        said = baf.with_answer(record, wanted, actor_id(actor), cog.clock().isoformat())
         await update_marathon(
             bot.db,
             fresh["id"],
@@ -538,50 +544,134 @@ async def set_answer(
             "via": via,
         },
     )
-    await note_answer(bot, guild, fresh, said, actor, fields["answer"])
+    fresh = await get_marathon(bot.db, guild.id, fresh["id"])
+    await note_questions(bot, guild, fresh)
     await controls_changed(bot, guild, fresh["id"])
     return Outcome(
-        True,
-        words(bot, guild.id, MARATHON_BAF_EVENT_SET_SAID_KEY, **fields),
-        value=await get_marathon(bot.db, guild.id, fresh["id"]),
+        True, words(bot, guild.id, MARATHON_BAF_EVENT_SET_SAID_KEY, **fields), value=fresh
     )
 
 
-async def note_answer(
-    bot: Any, guild: Any, marathon: Any, ask: dict[str, Any], actor: Any, said: str
-) -> None:
-    """The question says who answered what; the answer is stored already, so a failed edit
-    changes nothing."""
+async def clear_answer(
+    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The answer to the event's question taken back: the switch, then the show's name and the
+    runs, decide again. The thread controls and the site come here."""
+    from .marathon_thread_controls import controls_changed
+
+    cog = cog_of(bot)
+    async with cog.lock(marathon["id"]):
+        fresh = await get_marathon(bot.db, guild.id, marathon["id"])
+        if fresh is None:
+            return refusal(mt.NO_SUCH_MARATHON.format(given=marathon["id"]), NO_SUCH, 404)
+        asks = baf.asks_of(fresh)
+        was = baf.answer_of(asks)
+        if was is None:
+            return Outcome(
+                True,
+                words(
+                    bot, guild.id, MARATHON_BAF_EVENT_NO_ANSWER_SAID_KEY, marathon=fresh["name"]
+                ),
+                value=fresh,
+            )
+        left = baf.without_answers(asks, actor_id(actor), cog.clock().isoformat())
+        await update_marathon(bot.db, fresh["id"], **{baf.ASK_COLUMN: baf.dump_asks(left)})
+        fresh = await get_marathon(bot.db, guild.id, fresh["id"])
+    await log_action(
+        bot,
+        guild,
+        kind_via("marathon.baf_event_set", via),
+        actor=actor,
+        details={
+            "marathon_id": fresh["id"],
+            "name": fresh["name"],
+            "from": was,
+            "to": baf.FOLLOW,
+            "by": BY_QUESTION,
+            "cleared": True,
+            "via": via,
+        },
+    )
+    await note_questions(bot, guild, fresh)
+    await controls_changed(bot, guild, fresh["id"])
+    judged = baf.judgement_of(await reading_now(bot, guild, fresh))
+    return Outcome(
+        True,
+        words(
+            bot,
+            guild.id,
+            MARATHON_BAF_EVENT_CLEARED_SAID_KEY,
+            marathon=fresh["name"],
+            answer=answer_word(bot, guild.id, judged.answer),
+        ),
+        value=fresh,
+    )
+
+
+async def set_question_answer(
+    bot: Any, guild: Any, actor: Any, marathon: Any, given: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The site's move on the stored answer: `clear` is the only one."""
+    if str(given or "").strip().lower() != baf.CLEAR:
+        return refusal(BAD_ANSWER.format(marathon=marathon["name"]), BAD_ANSWER_CODE, 422)
+    return await clear_answer(bot, guild, actor, marathon, via=via)
+
+
+def who_of(user_id: Any) -> str:
+    return f"<@{int(user_id)}>" if user_id else "Staff"
+
+
+def standing_line(bot: Any, guild: Any, marathon: Any, asks: Any) -> str:
+    """What every question of the marathon says under its words: who gave the answer that
+    stands, or who cleared it."""
+    said, gone = baf.answered(asks), baf.cleared(asks)
+    if said is not None:
+        return words(
+            bot,
+            guild.id,
+            MARATHON_BAF_EVENT_ANSWERED_KEY,
+            who=who_of(said.get("answered_by")),
+            answer=answer_word(bot, guild.id, said["answer"]),
+            marathon=marathon["name"],
+        )
+    if gone is not None:
+        return words(
+            bot,
+            guild.id,
+            MARATHON_BAF_EVENT_CLEARED_KEY,
+            who=who_of(gone.get("cleared_by")),
+            marathon=marathon["name"],
+        )
+    return ""
+
+
+async def note_questions(bot: Any, guild: Any, marathon: Any) -> None:
+    """Every question message the marathon still holds is edited to the one thing that
+    stands; the answer is stored already, so a failed edit changes nothing."""
     from .marathon_inbox import find_channel, reopened
 
-    if not ask.get("message_id") or not ask.get("channel_id"):
-        return
-    who = f"<@{actor_id(actor)}>" if actor_id(actor) else "Staff"
-    line = words(
-        bot,
-        guild.id,
-        MARATHON_BAF_EVENT_ANSWERED_KEY,
-        who=who,
-        answer=said,
-        marathon=marathon["name"],
-    )
-    try:
-        thread, _lost = await find_channel(bot, guild, ask["channel_id"])
-        if thread is None:
-            return
-        await reopened(thread)
-        partial = getattr(thread, "get_partial_message", None)
-        message = (
-            partial(int(ask["message_id"]))
-            if callable(partial)
-            else await thread.fetch_message(int(ask["message_id"]))
-        )
-        await message.edit(
-            content=f"{ask.get('text') or ''}\n{line}".strip(),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-    except Exception as exc:
-        log.warning("marathon: the BaF event question could not be edited — %s", reason_of(exc))
+    asks = baf.asks_of(marathon)
+    line = standing_line(bot, guild, marathon, asks)
+    for ask in asks if line else ():
+        if not ask.get("message_id") or not ask.get("channel_id"):
+            continue
+        try:
+            thread, _lost = await find_channel(bot, guild, ask["channel_id"])
+            if thread is None:
+                continue
+            await reopened(thread)
+            partial = getattr(thread, "get_partial_message", None)
+            message = (
+                partial(int(ask["message_id"]))
+                if callable(partial)
+                else await thread.fetch_message(int(ask["message_id"]))
+            )
+            await message.edit(
+                content=f"{ask.get('text') or ''}\n{line}".strip(),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except Exception as exc:
+            log.warning("marathon: the BaF event question could not be edited — %s", reason_of(exc))
 
 
 # --- the question -------------------------------------------------------------------------------
@@ -855,8 +945,9 @@ async def note_host_pings(
 async def note_missed(
     cog: Any, guild: Any, marathon: Any, found: baf.Reading, states: Any, now: datetime
 ) -> None:
-    """One row for a BaF event day whose ping has nothing left to ride, saying which of the
-    three causes it was."""
+    """One row, once, for a BaF event day whose ping has nothing to ride, whenever the tick
+    first sees it: routine when the day has no BaF run, important for the two causes staff can
+    fix."""
     bot = cog.bot
     if not verdict_for(bot, guild, marathon).mentions:
         return
@@ -865,7 +956,7 @@ async def note_missed(
     for state in states:
         if not state.judgement.yes or state.record is not None or state.carrier is not None:
             continue
-        if state.over or state.starts_at is None:
+        if state.starts_at is None:
             continue
         if baf.missed(records, state.day, found.days) is not None:
             continue
@@ -893,7 +984,11 @@ async def note_missed(
         await log_action(
             bot,
             guild,
-            "marathon.baf_event_no_ping",
+            (
+                "marathon.baf_event_no_baf_run"
+                if one["because"] == baf.NO_BAF_RUN
+                else "marathon.baf_event_no_ping"
+            ),
             details={
                 "marathon_id": marathon["id"],
                 "name": marathon["name"],
@@ -988,16 +1083,18 @@ __all__ = [
     "answered",
     "ask_about",
     "ask_if_unsure",
+    "clear_answer",
     "heads_up_role",
-    "note_answer",
     "note_host_pings",
     "note_missed",
+    "note_questions",
     "quiet_for",
     "reading_for",
     "reading_now",
     "reconcile",
     "set_baf_event",
     "set_answer",
+    "set_question_answer",
     "settle",
     "speaks_for",
     "state_of",
