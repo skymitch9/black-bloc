@@ -44,7 +44,13 @@ from ...cogs.content.marathon import (
     unpair_runner,
     words_for,
 )
-from ...cogs.content.marathon_announce import set_opt_out
+from ...cogs.content.marathon_announce import (
+    mention_state,
+    person_state,
+    set_mention,
+    set_opt_out,
+    set_run_answer,
+)
 from ...cogs.content.marathon_archive import (
     archive_marathon,
     archived_marathon,
@@ -153,9 +159,10 @@ def answered(outcome: Any) -> Any:
     return outcome
 
 
-def person_row(guild: Any, person: dict[str, Any]) -> dict[str, Any]:
+def person_row(guild: Any, person: dict[str, Any], announce: Any = None) -> dict[str, Any]:
     user_id = person.get("user_id")
     return {
+        "announce": announce(user_id) if announce is not None and user_id else None,
         "name": person.get("name"),
         "login": person.get("login"),
         "sheet_login": person.get("sheet_login"),
@@ -165,8 +172,12 @@ def person_row(guild: Any, person: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_row(guild: Any, row: Any, statuses: dict[int, str] | None = None) -> dict[str, Any]:
+def run_row(
+    guild: Any, row: Any, statuses: dict[int, str] | None = None, announce: Any = None
+) -> dict[str, Any]:
+    """`announce(row, user_id)` answers a BaF person's announcement on this run, when asked."""
     ours = mt.is_ours(row)
+    said = (lambda user_id: announce(row, user_id)) if announce is not None else None
     state = str(row["state"])
     event_id = row["event_id"]
     return {
@@ -179,7 +190,7 @@ def run_row(guild: Any, row: Any, statuses: dict[int, str] | None = None) -> dic
         "game": row["game"],
         "category": row["category"],
         "runners_text": row["runners_text"],
-        "people": [person_row(guild, one) for one in mt.people_of(row)],
+        "people": [person_row(guild, one, said) for one in mt.people_of(row)],
         "scheduled_at": row["scheduled_at"],
         "ends_at": row["ends_at"],
         "previous_scheduled_at": row["previous_scheduled_at"],
@@ -211,6 +222,7 @@ def entry_row(
     entry: dict[str, Any],
     opted: set[int] | None = None,
     words: dict[str, str] | None = None,
+    mention: Any = None,
 ) -> dict[str, Any]:
     """One person on the People card: who they are here, how they matched, their Go-live row,
     and — for a BaF person — whether they are opted out of the marathon's public posts."""
@@ -247,6 +259,11 @@ def entry_row(
             {"username": near["username"], "user_id": _id(near["user_id"])} if near else None
         ),
         "opted_out": (int(user_id) in opted) if user_id and opted is not None else None,
+        "mention": (
+            mention(int(user_id), str(entry.get("name") or user_id))
+            if user_id and mention is not None
+            else None
+        ),
     }
 
 
@@ -401,6 +418,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "role_ping": role_ping_state(bot, guild, row),
         "public_highlight": highlights(row),
         "announcements": host_switch(bot, guild, row, mh.ANNOUNCE),
+        "host_announcements": host_switch(bot, guild, row, mh.HOST_ANNOUNCE),
         "overlay": host_switch(bot, guild, row, mh.OVERLAY) | {"sheet": mo.state_of(row)},
         "archived": False,
     } | await tracking_of(bot, guild, row)
@@ -507,10 +525,14 @@ def build_router(bot: Any) -> APIRouter:
             if one["marathon_id"] in (None, row["id"])
         ]
         statuses = await event_statuses(bot, runs)
+
+        def announce(run: Any, user_id: Any) -> Any:
+            return person_state(bot, guild, row, run, user_id)
+
         return (
             await marathon_row(bot, guild, row, runs)
             | {
-                "run_list": [run_row(guild, one, statuses) for one in runs],
+                "run_list": [run_row(guild, one, statuses, announce) for one in runs],
                 "pairings": pairings,
                 "unmatched": mt.unmatched_names(runs),
                 "retimed_runs": sig.retimed_count(runs),
@@ -530,11 +552,15 @@ def build_router(bot: Any) -> APIRouter:
         state = await people_state(bot, guild, marathon)
         opted = ma.opted_out(marathon)
         words = words_for(bot, guild.id)
+
+        def mention(user_id: int, name: str) -> Any:
+            return mention_state(bot, guild, marathon, user_id, name)
+
         return {
             "marathon_id": marathon["id"],
             "timezone": zone_of(bot, guild),
             "pairings": await people(guild, marathon),
-            "baf": [entry_row(guild, one, opted, words) for one in state["baf"]],
+            "baf": [entry_row(guild, one, opted, words, mention) for one in state["baf"]],
             "others": [entry_row(guild, one, None, words) for one in state["others"]],
         }
 
@@ -709,6 +735,19 @@ def build_router(bot: Any) -> APIRouter:
                     await wanted(guild, marathon_id),
                     mh.ANNOUNCE,
                     payload[mh.ANNOUNCE],
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
+        if mh.HOST_ANNOUNCE in payload:
+            done = answered(
+                await set_switch(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    mh.HOST_ANNOUNCE,
+                    payload[mh.HOST_ANNOUNCE],
                     via=VIA_WEBSITE,
                 )
             )
@@ -996,6 +1035,51 @@ def build_router(bot: Any) -> APIRouter:
     @router.delete("/{marathon_id}/people/{user_id}/opt-out")
     async def marathon_opt_in(request: Request, marathon_id: int, user_id: str) -> dict[str, Any]:
         return await opt_move(request, marathon_id, user_id, False)
+
+    @router.post("/{marathon_id}/people/{user_id}/mention")
+    async def marathon_mention(
+        request: Request, marathon_id: int, user_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        done = answered(
+            await set_mention(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                row,
+                wanted_id(user_id),
+                payload.get("to"),
+                via=VIA_WEBSITE,
+            )
+        )
+        return await board(guild, await wanted(guild, marathon_id)) | {"message": done.message}
+
+    @router.post("/{marathon_id}/runs/{run_id}/people/{user_id}/announce")
+    async def marathon_run_announce(
+        request: Request, marathon_id: int, run_id: int, user_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        done = answered(
+            await set_run_answer(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                row,
+                run_id,
+                wanted_id(user_id),
+                payload.get("to", "missing"),
+                via=VIA_WEBSITE,
+            )
+        )
+        return await board(guild, await wanted(guild, marathon_id)) | {"message": done.message}
 
     @router.post("/{marathon_id}/people")
     async def marathon_pair(

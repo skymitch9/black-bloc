@@ -253,3 +253,30 @@ def test_a_block_is_dropped_only_when_every_run_of_it_is_off_the_schedule():
     assert not mhh.is_dropped(block)
     rows[1]["state"] = mt.DROPPED
     assert mhh.is_dropped(block) and mhh.dropped_row(block)["state"] == mt.DROPPED
+
+
+def test_a_record_remembers_who_its_post_names_and_that_its_skip_was_said():
+    block = mhh.blocks(runs_for_named_record())[0]
+    record = mhh.new_record(block)
+    assert record["named"] is None and record["skipped"] is False
+    (back,) = mhh.records({mhh.COLUMN: mhh.dump([record])})
+    assert back["named"] is None and back["skipped"] is False
+
+    record |= {"named": [{"user_id": 8101, "name": "anarchy", "plain": True}], "skipped": True}
+    (back,) = mhh.records({mhh.COLUMN: mhh.dump([record])})
+    assert back["skipped"] is True
+    assert [(one["user_id"], one["name"], one["plain"]) for one in back["named"]] == [
+        (8101, "anarchy", True)
+    ]
+
+
+def runs_for_named_record():
+    host = {"name": "anarchy", "user_id": 8101, "login": "anarchyasf", "part": "host"}
+    return [
+        {
+            "id": 1,
+            "state": "upcoming",
+            "scheduled_at": "2027-01-04T19:00:00+00:00",
+            "people": json.dumps([host]),
+        }
+    ]

@@ -5641,6 +5641,7 @@
         "role_ping",
         "public_highlight",
         "announcements",
+        "host_announcements",
         "overlay",
         "tracked_state",
         "tracked",
@@ -5801,6 +5802,22 @@
       "keys": [
         "id",
         "announcements",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_bare_id}",
+      "body": {
+        "host_announcements": "follow"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Settings foldout — Host announcements"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "host_announcements",
         "message"
       ]
     },
@@ -6178,7 +6195,8 @@
           "spotlight_until",
           "looks_like",
           "sheet_login",
-          "opted_out"
+          "opted_out",
+          "mention"
         ],
         "others": [
           "key",
@@ -6248,7 +6266,8 @@
           "spotlight_id",
           "spotlight_until",
           "looks_like",
-          "opted_out"
+          "opted_out",
+          "mention"
         ],
         "others": [
           "key",
@@ -6317,7 +6336,8 @@
           "spotlight_id",
           "spotlight_until",
           "looks_like",
-          "opted_out"
+          "opted_out",
+          "mention"
         ],
         "others": [
           "key",
@@ -6350,7 +6370,7 @@
       "method": "POST",
       "path": "/api/marathons/{marathon_id}/people/{marathon_host}/opt-out",
       "read_by": [
-        "marathons-section.js (events.html) People card — Opt out of highlight"
+        "marathons-section.js (events.html) People card — Opt out of every run"
       ],
       "shape": "object",
       "keys": [
@@ -6386,7 +6406,8 @@
           "spotlight_id",
           "spotlight_until",
           "looks_like",
-          "opted_out"
+          "opted_out",
+          "mention"
         ],
         "others": [
           "key",
@@ -6419,7 +6440,7 @@
       "method": "DELETE",
       "path": "/api/marathons/{marathon_id}/people/{marathon_host}/opt-out",
       "read_by": [
-        "marathons-section.js (events.html) People card — Opt back in"
+        "marathons-section.js (events.html) People card — Opt back in to every run"
       ],
       "shape": "object",
       "keys": [
@@ -6455,7 +6476,154 @@
           "spotlight_id",
           "spotlight_until",
           "looks_like",
-          "opted_out"
+          "opted_out",
+          "mention"
+        ],
+        "others": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "username",
+          "avatar_url",
+          "parts",
+          "part_tag",
+          "runs",
+          "done",
+          "live",
+          "next_at",
+          "first_at",
+          "last_end",
+          "matched_by",
+          "matched_word",
+          "pairing_id",
+          "channel_id",
+          "spotlight_id",
+          "spotlight_until",
+          "looks_like"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/people/{marathon_host}/mention",
+      "body": {
+        "to": "plain"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) People card — No @ / @ again"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon_id",
+        "timezone",
+        "pairings",
+        "baf",
+        "others",
+        "message"
+      ],
+      "rows": {
+        "baf": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "username",
+          "avatar_url",
+          "parts",
+          "part_tag",
+          "runs",
+          "done",
+          "live",
+          "next_at",
+          "first_at",
+          "last_end",
+          "matched_by",
+          "matched_word",
+          "pairing_id",
+          "channel_id",
+          "spotlight_id",
+          "spotlight_until",
+          "looks_like",
+          "opted_out",
+          "mention"
+        ],
+        "others": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "username",
+          "avatar_url",
+          "parts",
+          "part_tag",
+          "runs",
+          "done",
+          "live",
+          "next_at",
+          "first_at",
+          "last_end",
+          "matched_by",
+          "matched_word",
+          "pairing_id",
+          "channel_id",
+          "spotlight_id",
+          "spotlight_until",
+          "looks_like"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/runs/{marathon_host_run_id}/people/{marathon_host}/announce",
+      "body": {
+        "to": "in"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) People card, a slot's person — this run's announcement"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon_id",
+        "timezone",
+        "pairings",
+        "baf",
+        "others",
+        "message"
+      ],
+      "rows": {
+        "baf": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "username",
+          "avatar_url",
+          "parts",
+          "part_tag",
+          "runs",
+          "done",
+          "live",
+          "next_at",
+          "first_at",
+          "last_end",
+          "matched_by",
+          "matched_word",
+          "pairing_id",
+          "channel_id",
+          "spotlight_id",
+          "spotlight_until",
+          "looks_like",
+          "opted_out",
+          "mention"
         ],
         "others": [
           "key",
@@ -10041,6 +10209,9 @@
     "web.marathon.announce_opted_out",
     "web.marathon.announce_opted_in",
     "web.marathon.announcements_set",
+    "web.marathon.host_announcements_set",
+    "web.marathon.announce_run_set",
+    "web.marathon.mention_set",
     "web.marathon.board_posted",
     "web.marathon.board_refreshed",
     "web.marathon.board_failed",

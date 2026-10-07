@@ -15,6 +15,7 @@ STAFF = "staff"
 PUBLIC = "public"
 COPIES = (PUBLIC, STAFF)
 POSTED = "posted"
+PEOPLE = "people"
 EDIT = "edit"
 REPOST = "repost"
 MODES = (EDIT, REPOST)
@@ -27,13 +28,25 @@ GONE_PERMISSION = "no_permission"
 def _copy(one: Any) -> dict[str, Any] | None:
     if not isinstance(one, dict) or not one.get("message_id") or not one.get("channel_id"):
         return None
-    return {
+    kept = {
         "channel_id": int(one["channel_id"]),
         "message_id": int(one["message_id"]),
         "text": str(one.get("text") or ""),
         "head": str(one.get("head") or ""),
         "at": one.get("at"),
     }
+    named = _people(one.get(PEOPLE))
+    return kept if named is None else kept | {PEOPLE: named}
+
+
+def _people(raw: Any) -> list[int] | None:
+    """Who a copy names, by its own record; None for a copy from before the record."""
+    if not isinstance(raw, list):
+        return None
+    try:
+        return [int(one) for one in raw]
+    except (TypeError, ValueError):
+        return None
 
 
 def _entry(one: Any) -> dict[str, Any]:
@@ -72,20 +85,25 @@ def dump(found: dict[int, dict[str, Any]]) -> str:
     return json.dumps({str(mark): found[mark] for mark in sorted(found)}, sort_keys=True)
 
 
-def copy_of(message: Any, channel_id: Any, text: str, at: Any) -> dict[str, Any] | None:
+def copy_of(
+    message: Any, channel_id: Any, text: str, at: Any, *, people: Any = None
+) -> dict[str, Any] | None:
     """What one sent message is remembered as; `head` is whatever stood before the words (a
-    role mention, a rehearsal note), kept so an edit leaves it as it was."""
+    role mention, a rehearsal note), kept so an edit leaves it as it was. `people` is who a
+    public copy names."""
     if message is None or not channel_id or not getattr(message, "id", None):
         return None
     body = str(getattr(message, "content", None) or "")
     head = body[: len(body) - len(text)] if text and body.endswith(text) else ""
-    return {
+    kept = {
         "channel_id": int(channel_id),
         "message_id": int(message.id),
         "text": text,
         "head": head,
         "at": at,
     }
+    named = _people(list(people) if people is not None else None)
+    return kept if named is None else kept | {PEOPLE: named}
 
 
 def entry_of(**copies: Any) -> dict[str, Any]:
@@ -138,8 +156,20 @@ def body(copy: dict[str, Any], text: str) -> str:
     return f"{copy.get('head') or ''}{text}"[: mt.MESSAGE_LIMIT]
 
 
-def shown(found: dict[int, dict[str, Any]], mark: int, name: str, text: str, at: Any) -> None:
+def shown(
+    found: dict[int, dict[str, Any]], mark: int, name: str, text: str, at: Any, people: Any = None
+) -> None:
     found[mark][name] = found[mark][name] | {"text": text, "at": at}
+    names(found, mark, name, people)
+
+
+def names(found: dict[int, dict[str, Any]], mark: int, name: str, people: Any) -> bool:
+    """Who a copy names is remembered with it; True when that changed."""
+    named = _people(list(people) if people is not None else None)
+    if named is None or found[mark][name].get(PEOPLE) == named:
+        return False
+    found[mark][name] = found[mark][name] | {PEOPLE: named}
+    return True
 
 
 def forget(found: dict[int, dict[str, Any]], mark: int, name: str) -> None:
@@ -173,6 +203,7 @@ __all__ = [
     "HOST_FIELD",
     "MODES",
     "POSTED",
+    "PEOPLE",
     "PUBLIC",
     "REPOST",
     "STAFF",
@@ -183,6 +214,7 @@ __all__ = [
     "entry_of",
     "forget",
     "held",
+    "names",
     "of_run",
     "posts_of",
     "rearmed",

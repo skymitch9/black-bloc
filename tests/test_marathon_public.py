@@ -70,10 +70,10 @@ def test_the_switch_takes_on_and_off_in_any_spelling(given, wanted):
 def test_a_fetched_message_says_which_button_it_carries():
     button = SimpleNamespace(custom_id="marathon:highlight:7:3:remove", label="Remove")
     message = SimpleNamespace(components=[SimpleNamespace(children=[button])])
-    assert mp.shown_button(message) == mp.Button(
-        "marathon:highlight:7:3:remove", "Remove", "remove"
+    assert mp.shown_button(message) == (
+        mp.Button("marathon:highlight:7:3:remove", "Remove", "remove"),
     )
-    assert mp.shown_button(SimpleNamespace(components=[])) is None
+    assert mp.shown_button(SimpleNamespace(components=[])) == ()
     assert mp.shown_button(SimpleNamespace()) is False
 
 

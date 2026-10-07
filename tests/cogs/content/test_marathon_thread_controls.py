@@ -137,6 +137,7 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         "Auto-highlight BaF runners when live: off · turn on",
         "Ping the marathon role: off · turn on",
         "BaF announcements: on · turn off",
+        "Host announcements: off · turn on",
         "Marathon tracker ↗",
     ]
     ids = [one.custom_id for one in buttons(message)]
@@ -147,6 +148,7 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         f"marathon:controls:{marathon['id']}:highlight:on",
         f"marathon:controls:{marathon['id']}:ping:on",
         f"marathon:controls:{marathon['id']}:announce:off",
+        f"marathon:controls:{marathon['id']}:hostannounce:on",
         None,
     ]
     assert message.kwargs["allowed_mentions"].users is False
@@ -699,7 +701,7 @@ async def test_a_removed_host_button_answers_in_words_and_changes_nothing(
         before["host_events"],
         before["event_mode"],
     )
-    assert len(labels(message)) == 7
+    assert len(labels(message)) == 8
 
 
 async def test_a_removed_host_button_clicked_in_discord_answers_in_words(bot, cog):
@@ -789,3 +791,24 @@ async def test_controls_posted_before_the_link_existed_gain_it_on_the_next_tick(
     await cog.tick_once()
 
     assert [one.label for one in link_of(message)] == ["Marathon tracker ↗"]
+
+
+async def test_the_host_announcements_button_moves_the_marathons_own_switch(bot, cog):
+    marathon = await tracked_marathon(bot, cog, channel=await quiet_row(bot))
+    message = the_thread(bot).messages[1]
+    assert "Host announcements: off · turn on" in labels(message)
+
+    on = await pressed(bot, marathon, mtc.HOST_ANNOUNCE, mtc.ON)
+
+    assert on.ok and "announces its BaF hosts publicly now" in on.message
+    assert (await fresh(bot, marathon))["host_announcements"] == 1
+    assert "Host announcements: on · turn off" in labels(message)
+    assert f"marathon:controls:{marathon['id']}:hostannounce:off" in [
+        one.custom_id for one in buttons(message)
+    ]
+    logged = await details_of(bot.db, "marathon.host_announcements_set")
+    assert (logged["from"], logged["to"], logged["via"]) == (None, True, "discord")
+    off = await pressed(bot, marathon, mtc.HOST_ANNOUNCE, mtc.OFF)
+    assert off.ok and "no longer announces its BaF hosts" in off.message
+    assert (await fresh(bot, marathon))["host_announcements"] == 0
+    assert (await fresh(bot, marathon))["announcements"] is None

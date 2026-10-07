@@ -1,5 +1,7 @@
 # Marathon Runner/Host announcements — one switch per marathon, an opt-out per person, hosts posted per host block
 
+> ⚠️ **2026-10-06 — announce-overrides (branch `announce-overrides`, 🔨 BUILT, NOT MERGED):** **§1's *On: every BaF runner and every BaF host is announced* is REVERSED for hosts** — a host is announced only while the marathon's new **Host announcements** switch is on (default **off**, `marathon_host_announcements_default`) or a run says so; the BaF announcements switch stays the master over both. **§2's *opted out = no public post at all on that marathon* now yields to a run's own yes**, and the runner post carries per-person buttons beside the whole-marathon one, whose default labels are reworded (*Opt out of every run on this marathon*). **§3's `{member}` renders `<@id>`** unless the person is written without an @. See [`announce-overrides-design.md`](announce-overrides-design.md).
+
 > ⚠️ **2026-09-28 — people-unify (branch `people-unify`, 🔨 BUILT, NOT MERGED):** the switch is now called **BaF announcements** (label defaults reworded; behaviour unchanged); **Scan hosts is gone** (§4 and the table row below are superseded — hosts are always found); the thread controls carry SIX buttons, not eight (Scan hosts and BaF host events removed; their old ids answer in words). See [`people-unify-design.md`](people-unify-design.md).
 
 > 🔨 **BUILT 2026-09-28 on branch `marathon-announcements` (worktree `C:/lcw/bb-marathon-announcements`, off `main`
@@ -38,7 +40,7 @@ re-sent (§ 5).
 - **`marathons.announcements INTEGER`** — NULL follows the new guild key **`marathon_announcements_default`** (bool,
   **on**, so today's everyone-is-announced behaviour continues); 1 / 0 is this marathon's own answer. Pure reader
   `marathon_announce.announces`, cog reader `cogs/content/marathon_announce.announces`.
-- **On:** every BaF runner and every BaF host of the marathon is announced publicly. **Off:** nobody on that marathon
+- **On:** ~~every BaF runner and every BaF host of the marathon is announced publicly.~~ *(reversed for hosts 2026-10-06, `announce-overrides`: every BaF runner; a BaF host only while Host announcements is on or a run says so — the owner's "host pings out by default".)* **Off:** nobody on that marathon
   gets a public reminder or a highlight. The staff thread is untouched either way (its reminders, runner posts,
   shoutouts still post).
 - **How it sits with the other switches:**

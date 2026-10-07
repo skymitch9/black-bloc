@@ -57,6 +57,7 @@ mark:
 | `text` | the template's words as the post shows them — what the next render is compared against, so an unchanged run costs no Discord call |
 | `head` | whatever stood in front of the words when it was sent: the role mentions (`<@&…> `) and, in a rehearsal, the note line. An edit writes `head + new words`, so the post reads the same |
 | `at` | the `scheduled_at` the post shows — the *from* of the action row |
+| `people` | on a `public` copy only, since 2026-10-06 (announce overrides, review fixes): the ids the post names. An edit can keep or lose a name and adds one only when the decision announces them; a copy with no `people` is from before the record and reads as naming everyone of ours not left out by name. The rule is `announce-overrides-design.md` ▸ *A post already up* |
 
 The mark and its entry are written **in one UPDATE** for a skipped mark and by the re-arm (`mrem.run_fields`), so the
 two never disagree. For a posted mark the mark is stored before the send (the older restart rule) and the entry right

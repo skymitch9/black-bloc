@@ -37,6 +37,8 @@ from ...settings_store import (
     MARATHON_CONTROLS_HELP_KEY,
     MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY,
     MARATHON_CONTROLS_HIGHLIGHT_ON_KEY,
+    MARATHON_CONTROLS_HOST_ANNOUNCE_OFF_KEY,
+    MARATHON_CONTROLS_HOST_ANNOUNCE_ON_KEY,
     MARATHON_CONTROLS_KEPT_REFUSED_KEY,
     MARATHON_CONTROLS_NO_CHANNEL_KEY,
     MARATHON_CONTROLS_NO_END_KEY,
@@ -67,7 +69,7 @@ from .marathon import (
     update_marathon,
 )
 from .marathon import mode_of as posts_mode_of
-from .marathon_announce import announces
+from .marathon_announce import announces, policy_of
 from .marathon_channels import locked, marathons_on_channel
 from .marathon_events import set_event_mode
 from .marathon_hosts import set_switch
@@ -107,6 +109,8 @@ LABEL_KEYS = {
     (mtc.PING, mtc.OFF): MARATHON_CONTROLS_PING_OFF_KEY,
     (mtc.ANNOUNCE, mtc.ON): MARATHON_CONTROLS_ANNOUNCE_ON_KEY,
     (mtc.ANNOUNCE, mtc.OFF): MARATHON_CONTROLS_ANNOUNCE_OFF_KEY,
+    (mtc.HOST_ANNOUNCE, mtc.ON): MARATHON_CONTROLS_HOST_ANNOUNCE_ON_KEY,
+    (mtc.HOST_ANNOUNCE, mtc.OFF): MARATHON_CONTROLS_HOST_ANNOUNCE_OFF_KEY,
     (mtc.OVERLAY, mtc.ON): MARATHON_CONTROLS_OVERLAY_ON_KEY,
     (mtc.OVERLAY, mtc.OFF): MARATHON_CONTROLS_OVERLAY_OFF_KEY,
 }
@@ -148,6 +152,7 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         mping.pings_role(marathon),
         announces(bot, guild.id, marathon),
         overlay_switch(bot, guild.id, marathon),
+        host_announce=policy_of(bot, guild.id, marathon).hosts_on,
     )
     starts = label_moment(state.get("starts"), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY))
     labels = tuple(
@@ -543,6 +548,10 @@ async def press(
         outcome = refusal(mh.HOST_EVENTS_GONE, GONE_CODE, 410)
     elif action == mtc.ANNOUNCE:
         outcome = await set_switch(bot, guild, actor, marathon, mh.ANNOUNCE, to == mtc.ON, via=via)
+    elif action == mtc.HOST_ANNOUNCE:
+        outcome = await set_switch(
+            bot, guild, actor, marathon, mh.HOST_ANNOUNCE, to == mtc.ON, via=via
+        )
     elif action == mtc.OVERLAY:
         outcome = await set_switch(bot, guild, actor, marathon, mh.OVERLAY, to == mtc.ON, via=via)
     elif to == mtc.ON:

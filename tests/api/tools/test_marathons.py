@@ -1080,3 +1080,166 @@ async def test_a_baf_persons_opt_out_is_shown_on_the_people_card_and_moved_both_
     assert crew["opted_out"] is False
     stranger = client.post(f"/api/marathons/{marathon_id}/people/424242/opt-out")
     assert stranger.status_code == 404 and stranger.json()["error"] == "not_baf"
+
+
+async def test_patch_the_host_announcements_switch_off_by_default_and_logged(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    first = client.get(f"/api/marathons/{marathon_id}").json()
+    assert first["host_announcements"] == {"own": None, "on": False, "default": False}
+
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"host_announcements": "loud"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_switch"
+    assert "Host announcements" in bad.json()["message"]
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"host_announcements": "on"}).json()
+    assert body["host_announcements"] == {"own": True, "on": True, "default": False}
+    assert "announces its BaF hosts publicly now" in body["message"]
+    said = await web_row(wf, web, "web.marathon.host_announcements_set")
+    assert (said["from"], said["to"], said["on"], said["via"]) == (None, True, True, "website")
+    body = client.patch(
+        f"/api/marathons/{marathon_id}", json={"host_announcements": "follow"}
+    ).json()
+    assert body["host_announcements"]["own"] is None and body["host_announcements"]["on"] is False
+
+
+async def test_a_runs_own_answer_is_shown_on_the_run_and_moved_from_the_site(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    client.post(
+        f"/api/marathons/{marathon_id}/people",
+        json={"runner_name": "Interview Crew", "user_id": "77"},
+    )
+
+    def crew():
+        detail = client.get(f"/api/marathons/{marathon_id}").json()
+        run = next(one for one in detail["run_list"] if one["game"] == "Blaster Master")
+        person = next(one for one in run["people"] if one["name"] == "Interview Crew")
+        return run["id"], person["announce"]
+
+    run_id, shown = crew()
+    assert (shown["role"], shown["answer"], shown["announced"], shown["why"]) == (
+        "host",
+        None,
+        False,
+        "hosts_off",
+    )
+    assert shown["move"] == "in" and shown["move_label"] == "Announce Interview Crew for this run"
+    assert shown["said"].startswith("Interview Crew: not announced for this run — host")
+    path = f"/api/marathons/{marathon_id}/runs/{run_id}/people/77/announce"
+
+    done = client.post(path, json={"to": "in"})
+    assert done.status_code == 200
+    assert "is announced for **Blaster Master**" in done.json()["message"]
+    assert {"baf", "others", "pairings"} <= set(done.json())
+    _, shown = crew()
+    assert (shown["answer"], shown["announced"], shown["why"], shown["move"]) == (
+        "in",
+        True,
+        "run",
+        "default",
+    )
+    said = await web_row(wf, web, "web.marathon.announce_run_set")
+    assert (said["member"], said["from"], said["to"], said["via"]) == (
+        77,
+        "default",
+        "in",
+        "website",
+    )
+
+    back = client.post(path, json={"to": "default"})
+    assert back.status_code == 200 and "follows the defaults again" in back.json()["message"]
+    assert crew()[1]["answer"] is None
+    bad = client.post(path, json={"to": "maybe"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_announce"
+    missing = client.post(path, json={})
+    assert missing.status_code == 422 and "nothing was changed" in missing.json()["message"]
+    stranger = client.post(
+        f"/api/marathons/{marathon_id}/runs/{run_id}/people/424242/announce", json={"to": "in"}
+    )
+    assert stranger.status_code == 404 and stranger.json()["error"] == "not_on_run"
+    gone = client.post(
+        f"/api/marathons/{marathon_id}/runs/999999/people/77/announce", json={"to": "in"}
+    )
+    assert gone.status_code == 404
+    unmatched = client.get(f"/api/marathons/{marathon_id}").json()["run_list"][0]["people"][0]
+    assert unmatched["announce"] is None
+
+
+async def test_a_run_that_is_over_refuses_its_own_answer_on_the_site_in_words(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    client.post(
+        f"/api/marathons/{marathon_id}/people",
+        json={"runner_name": "Interview Crew", "user_id": "77"},
+    )
+
+    def crew():
+        detail = client.get(f"/api/marathons/{marathon_id}").json()
+        run = next(one for one in detail["run_list"] if one["game"] == "Blaster Master")
+        person = next(one for one in run["people"] if one["name"] == "Interview Crew")
+        return run["id"], person["announce"]
+
+    run_id, _ = crew()
+    await web.db.conn.execute("UPDATE marathon_runs SET state = 'done' WHERE id = ?", (run_id,))
+    await web.db.conn.commit()
+    path = f"/api/marathons/{marathon_id}/runs/{run_id}/people/77/announce"
+
+    for to in ("in", "out", "default"):
+        said = client.post(path, json={"to": to})
+        assert said.status_code == 409 and said.json()["error"] == "run_over"
+        assert said.json()["message"] == "**Blaster Master** is over, so nothing was changed."
+
+    _, shown = crew()
+    assert shown["answer"] is None and shown["move"] is None
+    kinds = [seen for seen, _ in await wf.web_rows_in(web.db)]
+    assert "web.marathon.announce_run_set" not in kinds
+
+
+async def test_how_a_persons_name_is_written_is_shown_on_the_people_card_and_moved(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    client.post(
+        f"/api/marathons/{marathon_id}/people",
+        json={"runner_name": "Interview Crew", "user_id": "77"},
+    )
+    board = client.get(f"/api/marathons/{marathon_id}/people").json()
+    crew = next(one for one in board["baf"] if one["name"] == "Interview Crew")
+    assert crew["mention"] == {
+        "plain": False,
+        "own": None,
+        "move": "plain",
+        "move_label": "No @ for Interview Crew",
+    }
+    assert all(one["mention"] is None for one in board["others"])
+
+    done = client.post(f"/api/marathons/{marathon_id}/people/77/mention", json={"to": "plain"})
+    assert done.status_code == 200 and "with no @" in done.json()["message"]
+    crew = next(one for one in done.json()["baf"] if one["name"] == "Interview Crew")
+    assert (crew["mention"]["plain"], crew["mention"]["own"], crew["mention"]["move"]) == (
+        True,
+        "plain",
+        "mention",
+    )
+    said = await web_row(wf, web, "web.marathon.mention_set")
+    assert (said["member"], said["from"], said["to"], said["via"]) == (
+        77,
+        "mention",
+        "plain",
+        "website",
+    )
+    back = client.post(f"/api/marathons/{marathon_id}/people/77/mention", json={"to": "mention"})
+    assert back.status_code == 200 and "as an @ again" in back.json()["message"]
+    bad = client.post(f"/api/marathons/{marathon_id}/people/77/mention", json={"to": "loud"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_mention"
+    stranger = client.post(
+        f"/api/marathons/{marathon_id}/people/424242/mention", json={"to": "plain"}
+    )
+    assert stranger.status_code == 404 and stranger.json()["error"] == "not_baf"

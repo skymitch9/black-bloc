@@ -124,6 +124,8 @@ const IDS = {
   // Opt-out: AGDQ 2027 scans its hosts and Rivet (a BaF host) hosts Kirby Air Riders, so both
   // opt-out moves reach a BaF person on it.
   marathon_host: '700000000000000003',
+  // …and run 7 is Kirby Air Riders, the run Rivet hosts, so a run's own answer reaches them.
+  marathon_host_run_id: '7',
   // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
   // reach it without ending a stream the other entries expect to still be live.
   spotlight_id: '3',

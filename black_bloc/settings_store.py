@@ -5735,6 +5735,32 @@ MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY = "marathon_public_button_opt_out"
 MARATHON_PUBLIC_BUTTON_OPT_IN_KEY = "marathon_public_button_opt_in"
 MARATHON_ANNOUNCE_OPTED_OUT_SAID_KEY = "marathon_announce_opted_out_said"
 MARATHON_ANNOUNCE_OPTED_IN_SAID_KEY = "marathon_announce_opted_in_said"
+MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY = "marathon_host_announcements_default"
+MARATHON_CONTROLS_HOST_ANNOUNCE_ON_KEY = "marathon_controls_host_announcements_on"
+MARATHON_CONTROLS_HOST_ANNOUNCE_OFF_KEY = "marathon_controls_host_announcements_off"
+MARATHON_HOST_ANNOUNCEMENTS_ON_SAID_KEY = "marathon_host_announcements_on_said"
+MARATHON_HOST_ANNOUNCEMENTS_OFF_SAID_KEY = "marathon_host_announcements_off_said"
+MARATHON_MENTION_PEOPLE_KEY = "marathon_mention_people"
+MARATHON_ANNOUNCE_BUTTON_RUN_OUT_KEY = "marathon_announce_button_run_out"
+MARATHON_ANNOUNCE_BUTTON_RUN_IN_KEY = "marathon_announce_button_run_in"
+MARATHON_ANNOUNCE_BUTTON_RUN_DEFAULT_KEY = "marathon_announce_button_run_default"
+MARATHON_ANNOUNCE_BUTTON_PLAIN_KEY = "marathon_announce_button_plain"
+MARATHON_ANNOUNCE_BUTTON_MENTION_KEY = "marathon_announce_button_mention"
+MARATHON_ANNOUNCE_PICK_KEY = "marathon_announce_pick"
+MARATHON_ANNOUNCE_STATE_LINE_KEY = "marathon_announce_state_line"
+MARATHON_ANNOUNCE_STATE_YES_KEY = "marathon_announce_state_yes"
+MARATHON_ANNOUNCE_STATE_NO_KEY = "marathon_announce_state_no"
+MARATHON_ANNOUNCE_WHY_DEFAULT_KEY = "marathon_announce_why_default"
+MARATHON_ANNOUNCE_WHY_RUN_KEY = "marathon_announce_why_run"
+MARATHON_ANNOUNCE_WHY_MARATHON_KEY = "marathon_announce_why_marathon"
+MARATHON_ANNOUNCE_WHY_OFF_KEY = "marathon_announce_why_off"
+MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY = "marathon_announce_why_hosts_off"
+MARATHON_ANNOUNCE_STATE_PLAIN_KEY = "marathon_announce_state_plain"
+MARATHON_ANNOUNCE_RUN_IN_SAID_KEY = "marathon_announce_run_in_said"
+MARATHON_ANNOUNCE_RUN_OUT_SAID_KEY = "marathon_announce_run_out_said"
+MARATHON_ANNOUNCE_RUN_DEFAULT_SAID_KEY = "marathon_announce_run_default_said"
+MARATHON_MENTION_PLAIN_SAID_KEY = "marathon_mention_plain_said"
+MARATHON_MENTION_ON_SAID_KEY = "marathon_mention_on_said"
 MARATHON_SPOTLIGHT_HOST_NOTE_KEY = "marathon_spotlight_host_note_template"
 MARATHON_REMINDER_CHANNEL_KEY = "marathon_reminder_channel_id"
 MARATHON_PUBLIC_REMINDERS_KEY = "marathon_public_reminders"
@@ -5920,10 +5946,27 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_ANNOUNCEMENTS_DEFAULT_KEY: (
         "bool",
         True,
-        "whether a marathon announces its BaF runners and hosts publicly — the public "
-        "reminders and highlights — when its own BaF announcements switch follows "
-        "this setting. Off, nobody on that marathon gets a public post; anyone can still be "
-        "opted out one by one. on by default",
+        "whether a marathon announces its BaF people publicly at all — the master over "
+        "runners and hosts alike — when its own BaF announcements switch follows this "
+        "setting. Off, nobody on that marathon gets a public post. On, runners are announced "
+        "and hosts also need Host announcements; anyone can still be opted out one by one. "
+        "on by default",
+    ),
+    MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY: (
+        "bool",
+        False,
+        "whether a marathon announces its BaF HOSTS publicly — a host block's reminders and "
+        "highlight — when its own Host announcements switch follows this setting. Runners are "
+        "announced either way; a host can still be announced for one run from that run's post. "
+        "The marathon's BaF announcements switch is the master over both. off by default",
+    ),
+    MARATHON_MENTION_PEOPLE_KEY: (
+        "bool",
+        True,
+        "whether a public marathon post writes a BaF person as an @ (drawn, never notified). "
+        "Off, every public post writes their name as the schedule has it, as plain text, "
+        "instead; one person on one marathon can be set the other way from a run's post. on "
+        "by default",
     ),
     MARATHON_MODE_KEY: (
         "enum",
@@ -6447,17 +6490,161 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what staff are told once a marathon's BaF announcements switch is off. It takes "
         "{marathon}",
     ),
+    MARATHON_CONTROLS_HOST_ANNOUNCE_ON_KEY: (
+        "Host announcements: on · turn off",
+        (),
+        "the thread controls' host announcements button while the marathon's BaF hosts are "
+        "announced publicly",
+    ),
+    MARATHON_CONTROLS_HOST_ANNOUNCE_OFF_KEY: (
+        "Host announcements: off · turn on",
+        (),
+        "the thread controls' host announcements button while the marathon's BaF hosts are not "
+        "announced publicly",
+    ),
+    MARATHON_HOST_ANNOUNCEMENTS_ON_SAID_KEY: (
+        "**{marathon}** announces its BaF hosts publicly now, once per stretch of runs they "
+        "host. A host can still be left out of one run from that run's post.",
+        ("marathon",),
+        "what staff are told once a marathon's Host announcements switch is on. It takes "
+        "{marathon}",
+    ),
+    MARATHON_HOST_ANNOUNCEMENTS_OFF_SAID_KEY: (
+        "**{marathon}** no longer announces its BaF hosts publicly. A host can still be "
+        "announced for one run from that run's post; a host highlight already up follows its "
+        "runs to the end.",
+        ("marathon",),
+        "what staff are told once a marathon's Host announcements switch is off. It takes "
+        "{marathon}",
+    ),
+    MARATHON_ANNOUNCE_BUTTON_RUN_OUT_KEY: (
+        "Do not announce {name} for this run",
+        ("name",),
+        "the button on a BaF run's post in the staff thread (and in the People slot view) for a "
+        "person who would be announced for that run: it leaves them out of that run's public "
+        "posts only. It takes {name}",
+    ),
+    MARATHON_ANNOUNCE_BUTTON_RUN_IN_KEY: (
+        "Announce {name} for this run",
+        ("name",),
+        "the same button for a person who would not be announced for that run (a host while "
+        "Host announcements are off, or someone opted out of the whole marathon): it announces "
+        "them for that run. It takes {name}",
+    ),
+    MARATHON_ANNOUNCE_BUTTON_RUN_DEFAULT_KEY: (
+        "{name}: back to the default for this run",
+        ("name",),
+        "the same button once the person has their own answer for that run: it clears it. It "
+        "takes {name}",
+    ),
+    MARATHON_ANNOUNCE_BUTTON_PLAIN_KEY: (
+        "No @ for {name}",
+        ("name",),
+        "the button beside it while the person is written as an @ in this marathon's public "
+        "posts: their name is written as plain text instead. It takes {name}",
+    ),
+    MARATHON_ANNOUNCE_BUTTON_MENTION_KEY: (
+        "@ {name} again",
+        ("name",),
+        "the same button while the person's name is written as plain text. It takes {name}",
+    ),
+    MARATHON_ANNOUNCE_PICK_KEY: (
+        "Announcements for a person on this run…",
+        (),
+        "the menu a BaF run's post carries instead of buttons once more people are on the run "
+        "than buttons fit; past twelve people it is one menu for every twelve",
+    ),
+    MARATHON_ANNOUNCE_STATE_LINE_KEY: (
+        "{name}: {state} — {why}{plain}",
+        ("name", "state", "why", "plain"),
+        "one line a BaF person under a run's post in the staff thread: whether they are "
+        "announced for that run and why. It takes {name} {state} {why} {plain}",
+    ),
+    MARATHON_ANNOUNCE_STATE_YES_KEY: (
+        "announced for this run",
+        (),
+        "{state} of that line while the person is announced for the run",
+    ),
+    MARATHON_ANNOUNCE_STATE_NO_KEY: (
+        "not announced for this run",
+        (),
+        "{state} of that line while the person is not announced for the run",
+    ),
+    MARATHON_ANNOUNCE_WHY_DEFAULT_KEY: (
+        "the default",
+        (),
+        "{why} of that line while nothing but the defaults decides",
+    ),
+    MARATHON_ANNOUNCE_WHY_RUN_KEY: (
+        "set for this run",
+        (),
+        "{why} of that line while the run has its own answer for the person",
+    ),
+    MARATHON_ANNOUNCE_WHY_MARATHON_KEY: (
+        "opted out of every run on this marathon",
+        (),
+        "{why} of that line while the person is opted out of the whole marathon",
+    ),
+    MARATHON_ANNOUNCE_WHY_OFF_KEY: (
+        "BaF announcements are off for this marathon",
+        (),
+        "{why} of that line while the marathon's BaF announcements switch is off",
+    ),
+    MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY: (
+        "host announcements are off for this marathon",
+        (),
+        "{why} of that line for a host while the marathon's Host announcements switch is off",
+    ),
+    MARATHON_ANNOUNCE_STATE_PLAIN_KEY: (
+        " · written without an @",
+        (),
+        "{plain} of that line while the person's name is written as plain text",
+    ),
+    MARATHON_ANNOUNCE_RUN_IN_SAID_KEY: (
+        "**{name}** is announced for **{game}** on **{marathon}** from the next reminder mark.",
+        ("name", "game", "marathon"),
+        "what staff are told once a person is announced for one run. It takes {name} {game} "
+        "{marathon}",
+    ),
+    MARATHON_ANNOUNCE_RUN_OUT_SAID_KEY: (
+        "**{name}** is not announced for **{game}** on **{marathon}**. Their other runs are "
+        "unchanged.",
+        ("name", "game", "marathon"),
+        "what staff are told once a person is left out of one run's public posts. It takes "
+        "{name} {game} {marathon}",
+    ),
+    MARATHON_ANNOUNCE_RUN_DEFAULT_SAID_KEY: (
+        "**{name}** follows the defaults again for **{game}** on **{marathon}**.",
+        ("name", "game", "marathon"),
+        "what staff are told once a person's own answer for one run is cleared. It takes "
+        "{name} {game} {marathon}",
+    ),
+    MARATHON_MENTION_PLAIN_SAID_KEY: (
+        "**{name}** is written by name, with no @, in **{marathon}**'s public posts. Posts "
+        "already up are rewritten in place.",
+        ("name", "marathon"),
+        "what staff are told once a person's name is written as plain text on a marathon. It "
+        "takes {name} {marathon}",
+    ),
+    MARATHON_MENTION_ON_SAID_KEY: (
+        "**{name}** is written as an @ again in **{marathon}**'s public posts. Posts already "
+        "up are rewritten in place.",
+        ("name", "marathon"),
+        "what staff are told once a person is written as an @ again on a marathon. It takes "
+        "{name} {marathon}",
+    ),
     MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY: (
-        "Opt out of highlight",
+        "Opt out of every run on this marathon",
         (),
         "the button on a BaF run's post in the staff thread, and on a BaF person in the People "
-        "slot view, that opts the person out of this marathon's public posts. It posts nothing",
+        "slot view, that opts the person out of this marathon's public posts — every run of "
+        "theirs on it. It posts nothing",
     ),
     MARATHON_PUBLIC_BUTTON_OPT_IN_KEY: (
-        "Opt back in",
+        "Opt back in to this marathon",
         (),
-        "the same button once the person is opted out; they are announced again from the next "
-        "reminder mark",
+        "the same button once the person is opted out of the whole marathon; they are "
+        "announced again from the next reminder mark",
     ),
     MARATHON_ANNOUNCE_OPTED_OUT_SAID_KEY: (
         "**{name}** is opted out of **{marathon}**'s public posts: no reminders and no "

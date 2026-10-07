@@ -122,19 +122,36 @@ def button_for(
     return Button(custom_id(marathon_id, row["id"], OPT_OUT), label(out_label), OPT_OUT)
 
 
-def shown_button(message: Any) -> Button | None | bool:
-    """What a fetched message carries: a Button, None for no button, or False when the
-    message cannot say (it was never read with its components)."""
+def shown_button(message: Any) -> tuple | bool:
+    """What a fetched message carries, in order: its buttons and its menu as `button_of` makes
+    them, or False when the message cannot say (it was never read with its components)."""
     rows = getattr(message, "components", None)
     if rows is None:
         return False
+    found: list[Any] = []
     for one in rows:
         for child in getattr(one, "children", ()) or ():
             wanted = str(getattr(child, "custom_id", "") or "")
+            to = wanted.rsplit(":", 1)[-1]
             if wanted.startswith("marathon:highlight:"):
-                to = wanted.rsplit(":", 1)[-1]
-                return Button(wanted, str(getattr(child, "label", "") or ""), to)
-    return None
+                found.append(Button(wanted, str(getattr(child, "label", "") or ""), to))
+            elif wanted.startswith(ma.PREFIX) and to.startswith(ma.PICK):
+                options = tuple(
+                    (str(getattr(option, "value", "")), str(getattr(option, "label", "")))
+                    for option in getattr(child, "options", ()) or ()
+                )
+                found.append(
+                    ma.Pick(
+                        wanted,
+                        str(getattr(child, "placeholder", "") or ""),
+                        options,
+                        row=int(to[len(ma.PICK) :] or 1),
+                    )
+                )
+            elif wanted.startswith(ma.PREFIX):
+                user_id = int(wanted.split(":")[-2])
+                found.append(ma.Move(wanted, str(getattr(child, "label", "") or ""), to, user_id))
+    return tuple(found)
 
 
 def text_of(
@@ -178,9 +195,7 @@ def day_word(
     ended = mrp.over_at(row)
     if ended is None or ended.astimezone(zone).date() >= now.astimezone(zone).date():
         return today
-    return mt.render(
-        earlier, earlier_default, date=DATE_STAMP.format(unix=mt.unix(ended))
-    ).text
+    return mt.render(earlier, earlier_default, date=DATE_STAMP.format(unix=mt.unix(ended))).text
 
 
 def done_text(

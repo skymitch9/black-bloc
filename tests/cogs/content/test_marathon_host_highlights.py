@@ -71,8 +71,9 @@ LIVE_MARKS = "1440, 120, 15"
 HOSTED = "**anarchy** hosted **Titanfall 2** — Any% today on **Hidden Heroes** · "
 
 
-async def show(bot, cog, runs, *, clock=0, auto=False):
+async def show(bot, cog, runs, *, clock=0, auto=False, hosts=True):
     threading(bot, SHOW_ROOM)
+    await bot.store.set(GUILD, "marathon_host_announcements_default", hosts)
     await bot.store.set(GUILD, "events_announce_channel_id", SHOW_ROOM)
     await bot.store.set(GUILD, "marathon_track_makes_thread", True)
     cog.client.runs_given = list(runs)
@@ -360,6 +361,7 @@ async def test_shadow_mode_rehearses_both_in_the_public_rehearsal_home(bot, cog)
 async def test_the_sgdq_tracker_posts_one_set_for_thekingsprides_block(bot, cog):
     runs = parse_gdq(json.loads(FIXTURE.read_text("utf-8")))
     cog.client.runs_given = runs
+    await bot.store.set(GUILD, "marathon_host_announcements_default", True)
     made = await create_marathon(bot, bot.guild, FakeActor(), name="SGDQ 2026", url=URL)
     assert made.ok, made.message
     paired = await pair_runner(

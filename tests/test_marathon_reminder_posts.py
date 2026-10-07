@@ -122,3 +122,21 @@ def test_a_budget_counts_what_it_let_through_and_what_waits():
     assert [budget.take() for _ in range(4)] == [True, True, False, False]
     assert (budget.left, budget.waiting) == (0, 2)
     assert mrem.Budget(-3).take() is False
+
+
+def test_a_public_copy_remembers_who_it_names_and_one_from_before_names_nobody_in_particular():
+    message = SimpleNamespace(id=77, content="Sky runs Game")
+    found = mrem.copy_of(message, 9, "Sky runs Game", iso(30), people=[9001])
+    assert found["people"] == [9001]
+    assert "people" not in mrem.copy_of(message, 9, "Sky runs Game", iso(30))
+    posts = mrem.posts_of(mrem.dump({15: mrem.entry_of(public=found, staff=a_copy())}))
+    assert posts[15]["public"]["people"] == [9001] and "people" not in posts[15]["staff"]
+    bad = mrem.posts_of({"15": {"public": a_copy() | {"people": "x"}}})
+    assert "people" not in bad[15]["public"]
+
+    mrem.shown(posts, 15, "public", "Sky, Mo run Game", iso(45), [9001, 9002])
+    assert posts[15]["public"]["people"] == [9001, 9002]
+    mrem.shown(posts, 15, "staff", "words later", iso(45))
+    assert "people" not in posts[15]["staff"]
+    assert mrem.names(posts, 15, "public", []) and posts[15]["public"]["people"] == []
+    assert not mrem.names(posts, 15, "public", []) and not mrem.names(posts, 15, "public", None)

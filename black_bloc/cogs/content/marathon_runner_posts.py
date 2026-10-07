@@ -63,6 +63,7 @@ async def sync_posts(cog: Any, guild: Any, marathon: Any) -> None:
     target, _why = await cog._place(guild, marathon)
     if target is None:
         return
+    from .marathon_announce import state_lines
     from .marathon_public import button_of
 
     words = words_for(bot, guild.id)
@@ -77,6 +78,8 @@ async def sync_posts(cog: Any, guild: Any, marathon: Any) -> None:
             url=mt.run_url(row, login, marathon["schedule_url"]),
             unlisted=words[MARATHON_RUNNER_POST_UNLISTED_KEY],
         ).text
+        said = "\n".join([text, *state_lines(bot, guild, marathon, row)])
+        text = said[: mt.MESSAGE_LIMIT]
         button = button_of(bot, guild, marathon, row)
         await sync_one(
             cog, guild, marathon, row, int(target), text, shadow=mode != MODE_ON, button=button

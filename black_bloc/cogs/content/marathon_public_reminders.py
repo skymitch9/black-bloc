@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from ... import marathon as mt
+from ... import marathon_announce as ma
 from ... import marathon_reminder_posts as mrem
 from ... import marathon_role_ping as mrp
 from ... import shadow as shadow_home
@@ -65,7 +66,7 @@ def reminder_text(
 
 async def public_url(bot: Any, marathon: Any, row: Any, people: Any, url: str | None) -> str | None:
     """The staff copy's link, unless an opt-out changed whose stream stands for the run."""
-    if url and people != mt.ours(mt.people_of(row)):
+    if url and [int(one["user_id"]) for one in people] != mt.member_ids(row):
         return mt.run_url(
             row, await channel_login(bot, marathon), marathon["schedule_url"], people=people
         )
@@ -122,7 +123,7 @@ async def post_public_reminder(
                 details=base | {"because": "same_channel", "channel_id": home},
             )
             return unsent
-        people = people_for(marathon, row)
+        people = people_for(bot, guild, marathon, row)
         because = (
             "announcements_off"
             if not announces(bot, guild.id, marathon)
@@ -163,7 +164,11 @@ async def post_public_reminder(
         return (
             {"public_roles": roles}
             | mrp.row_fields(marathon_role)
-            | {"copy": mrem.copy_of(message, channel_id, text, row["scheduled_at"])}
+            | {
+                "copy": mrem.copy_of(
+                    message, channel_id, text, row["scheduled_at"], people=ma.ids_of(people)
+                )
+            }
         )
     except Exception as exc:
         log.warning("marathon: the public reminder failed — %s", reason_of(exc))

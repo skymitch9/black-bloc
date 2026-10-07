@@ -11,6 +11,7 @@ from typing import Any, NamedTuple
 import discord
 
 from ... import marathon as mt
+from ... import marathon_announce as ma
 from ... import marathon_host_highlights as mhh
 from ... import marathon_inbox as mi
 from ... import marathon_reminder_posts as mrem
@@ -127,14 +128,15 @@ async def follow_copies(
     guild: Any,
     posts: dict[int, dict[str, Any]],
     budget: mrem.Budget,
-    text_for: Callable[[str], Awaitable[str | None]],
+    text_for: Callable[[str, dict[str, Any]], Awaitable[tuple[str | None, Any]]],
     at: Any,
 ) -> list[Change]:
     """Every remembered copy whose words changed, edited once; `posts` is brought up to date
-    and what happened comes back for its rows. A failure that was already logged is left out."""
+    and what happened comes back for its rows. A failure that was already logged is left out.
+    `text_for` answers the words and who they name."""
     found: list[Change] = []
     for mark, name, copy in mrem.standing(posts):
-        text = await text_for(name)
+        text, people = await text_for(name, copy)
         if text is None or text == copy["text"] or waits(cog, copy, text):
             continue
         if not budget.take():
@@ -146,7 +148,7 @@ async def follow_copies(
             continue
         tried(cog).pop(copy["message_id"], None)
         if outcome == EDITED:
-            mrem.shown(posts, mark, name, text, at)
+            mrem.shown(posts, mark, name, text, at, people)
         else:
             mrem.forget(posts, mark, name)
         found.append(Change(outcome, mark, name, copy, text, why))
@@ -164,8 +166,11 @@ def followed(row: Any) -> bool:
     return bool(mt._cell(row, mrem.COLUMN)) and mt.is_ours(row) and row["state"] in FOLLOWED
 
 
-async def run_text(cog: Any, guild: Any, marathon: Any, row: Any, name: str) -> str | None:
-    """What this copy should say now; None leaves it alone (nobody of ours left to name)."""
+async def run_text(
+    cog: Any, guild: Any, marathon: Any, row: Any, name: str, copy: dict[str, Any]
+) -> tuple[str | None, Any]:
+    """What this copy should say now and who it names; None leaves it alone (nobody of ours
+    left to name)."""
     dropped = row["state"] == mt.DROPPED
     staff, url = await cog.reminder_words(
         guild,
@@ -174,11 +179,13 @@ async def run_text(cog: Any, guild: Any, marathon: Any, row: Any, name: str) -> 
         key=MARATHON_REMINDER_DROPPED_TEMPLATE_KEY if dropped else MARATHON_REMINDER_TEMPLATE_KEY,
     )
     if name == mrem.STAFF:
-        return staff
-    people = people_for(marathon, row)
+        return (staff, None)
+    people = people_for(
+        cog.bot, guild, marathon, row, standing=True, recorded=copy.get(mrem.PEOPLE)
+    )
     if not people:
-        return None
-    return reminder_text(
+        return (None, None)
+    text = reminder_text(
         cog.bot,
         guild,
         marathon,
@@ -189,14 +196,15 @@ async def run_text(cog: Any, guild: Any, marathon: Any, row: Any, name: str) -> 
         if dropped
         else MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY,
     )
+    return (text, ma.ids_of(people))
 
 
 async def follow_run(cog: Any, guild: Any, marathon: Any, row: Any, budget: mrem.Budget) -> None:
     bot = cog.bot
     posts = mrem.of_run(row)
 
-    async def text_for(name: str) -> str | None:
-        return await run_text(cog, guild, marathon, row, name)
+    async def text_for(name: str, copy: dict[str, Any]) -> tuple[str | None, Any]:
+        return await run_text(cog, guild, marathon, row, name, copy)
 
     changes = await follow_copies(cog, guild, posts, budget, text_for, row["scheduled_at"])
     if stored(changes):
@@ -264,13 +272,16 @@ async def follow_block(
 ) -> bool:
     bot = cog.bot
     at = mt._cell(block.first, "scheduled_at")
-    people = speaking(marathon, block)
     login = await channel_login(bot, marathon)
 
-    async def text_for(name: str) -> str | None:
+    async def text_for(name: str, copy: dict[str, Any]) -> tuple[str | None, Any]:
+        people = speaking(
+            bot, guild, marathon, block, standing=True, recorded=copy.get(mrem.PEOPLE)
+        )
         if not people:
-            return None
-        return block_text(bot, guild, marathon, block, people, login, dropped=dropped)
+            return (None, None)
+        text = block_text(bot, guild, marathon, block, people, login, dropped=dropped)
+        return (text, ma.ids_of(people))
 
     changes = await follow_copies(cog, guild, record[mrem.HOST_FIELD], budget, text_for, at)
     for one in changes:
@@ -304,6 +315,55 @@ async def sync_blocks(cog: Any, guild: Any, marathon: Any, budget: mrem.Budget) 
             await save_blocks(bot, marathon, found)
 
 
+def aimed(
+    posts: dict[int, dict[str, Any]], named_now: Callable[[Any], list[dict[str, Any]]]
+) -> bool:
+    """Each public copy's record of who it names, weighed afresh after a move; True: changed."""
+    changed = False
+    for mark, name, copy in mrem.standing(posts):
+        if name == mrem.PUBLIC:
+            people = named_now(copy.get(mrem.PEOPLE))
+            changed = mrem.names(posts, mark, name, ma.ids_of(people)) or changed
+    return changed
+
+
+async def follow_opt(cog: Any, guild: Any, marathon: Any, user_ids: Any) -> None:
+    """After an answer changed: whoever the move was aimed at is weighed afresh on every
+    reminder still followed. Nothing is edited here; the next pass rewrites what changed."""
+    bot = cog.bot
+    wanted = {int(one) for one in user_ids}
+    fresh = await get_marathon(bot.db, guild.id, marathon["id"]) if marathon else None
+    if not edits(bot, guild, fresh):
+        return
+    runs = await runs_of(bot.db, fresh["id"])
+    for row in runs:
+        if not followed(row) or not wanted & set(mt.member_ids(row)):
+            continue
+        posts = mrem.of_run(row)
+
+        def on_run(recorded: Any, row: Any = row) -> list[dict[str, Any]]:
+            return people_for(
+                bot, guild, fresh, row, standing=True, recorded=recorded, moved=wanted
+            )
+
+        if aimed(posts, on_run):
+            await update_run(bot.db, row["id"], **{mrem.COLUMN: mrem.dump(posts)})
+    found = mhh.records(fresh)
+    changed = False
+    for block, record, _dropped in blocks_followed(found, runs):
+        if not wanted & set(block.user_ids):
+            continue
+
+        def on_block(recorded: Any, block: mhh.Block = block) -> list[dict[str, Any]]:
+            return speaking(
+                bot, guild, fresh, block, standing=True, recorded=recorded, moved=wanted
+            )
+
+        changed = aimed(record[mrem.HOST_FIELD], on_block) or changed
+    if changed:
+        await save_blocks(bot, fresh, found)
+
+
 async def sync_reminders(cog: Any, guild: Any, marathon: Any) -> mrem.Budget | None:
     """Every posted reminder says its run's time; unchanged costs no Discord call, and one pass
     makes at most marathon_reminder_edit_limit edits — runs first, then host blocks."""
@@ -325,6 +385,7 @@ __all__ = [
     "edits",
     "follow_block",
     "follow_copies",
+    "follow_opt",
     "follow_run",
     "on_move",
     "rewrite",

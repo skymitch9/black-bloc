@@ -4027,3 +4027,46 @@ async def test_a_pb_matches_table_from_the_first_build_gains_the_review_columns(
         assert rows == [(2, "2026-10-05T00:00:00+00:00", 0), (3, None, 0)]
     finally:
         await again.close()
+
+
+async def test_a_file_from_before_the_announce_overrides_gains_their_four_columns(tmp_path):
+    """No schema step: the Host announcements switch (NULL follows
+    marathon_host_announcements_default, off), who is written without an @, each run's own
+    answers and who a run's highlight names arrive through ADDED_COLUMNS, NULL for what was
+    there."""
+    path = tmp_path / "before_overrides.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for table in ("marathons", "marathons_archive"):
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN host_announcements")
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN mention_people")
+    for table in ("marathon_runs", "marathon_runs_archive"):
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN announce_people")
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN public_people")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at, "
+        "announcements, announce_opt_out) VALUES (1, 'Hidden Heroes', 'https://x', 'hotfix', "
+        "'hh', 'x', 1, '[8101]')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT name, announcements, announce_opt_out, host_announcements, mention_people "
+            "FROM marathons"
+        )
+        assert tuple(await cur.fetchone()) == ("Hidden Heroes", 1, "[8101]", None, None)
+        for table, wanted in (
+            ("marathons_archive", {"host_announcements", "mention_people"}),
+            ("marathon_runs", {"announce_people", "public_people"}),
+            ("marathon_runs_archive", {"announce_people", "public_people"}),
+        ):
+            cur = await again.conn.execute(f"PRAGMA table_info({table})")
+            assert wanted <= {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()

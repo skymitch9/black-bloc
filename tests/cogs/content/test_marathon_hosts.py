@@ -337,6 +337,7 @@ SKY_SLOT = a_run(4, 210, game="Super Metroid", people=(("Sky", "skyruns", "runne
 
 async def hosted_show(bot, cog, runs, *, count):  # noqa: F811
     await bot.store.set(GUILD, "marathon_hosts_count_as_ours", count)
+    await bot.store.set(GUILD, "marathon_host_announcements_default", True)
     threading(bot, SHOW_ROOM)
     await bot.store.set(GUILD, "events_announce_channel_id", SHOW_ROOM)
     await bot.store.set(GUILD, "marathon_track_makes_thread", True)
