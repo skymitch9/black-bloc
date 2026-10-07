@@ -20,6 +20,7 @@ ROUTES = [
     ("POST", "/api/pbs/900/unblock", None),
     ("POST", "/api/pbs/900/optin", None),
     ("POST", "/api/pbs/900/look", None),
+    ("POST", "/api/pbs/posts/1/again", None),
 ]
 
 
@@ -348,3 +349,70 @@ async def test_set_by_hand_is_refused_in_words_while_the_feed_is_off(
 
     assert response.status_code == 409 and "pb_feed_mode" in response.text
     assert speedrun.asked == []
+
+
+async def a_stored_post(web, wf, outcome=pb_store.REHEARSED):
+    claimed = await pb_store.claim_post(
+        web.db, wf.GUILD_ID, ADA, best("r9", seconds=90.0), "zfg", now=NOW
+    )
+    await pb_store.settle_post(web.db, claimed, outcome, channel_id=wf.TEST_CHANNEL_ID)
+    return claimed
+
+
+async def test_post_again_rehearses_the_stored_post_and_lists_the_repeat(
+    client, sign_in, web, guild, wf, people, speedrun
+):
+    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.TEST_CHANNEL_ID)
+    await match(web, wf)
+    source = await a_stored_post(web, wf)
+    sign_in(client)
+
+    response = client.post(f"/api/pbs/posts/{source}/again")
+
+    assert response.status_code == 200, response.text
+    found = response.json()
+    assert "Rehearsed" in found["message"] and found["post"]["again_of"] == source
+    assert (found["post"]["outcome"], found["post"]["run_id"]) == ("rehearsed", "r9")
+    copy = guild.get_channel(wf.TEST_CHANNEL_ID).messages[-1]
+    assert "Rehearsal" in copy.content
+    posts = client.get("/api/pbs").json()["posts"]
+    assert [(one["id"], one["again_of"]) for one in posts] == [
+        (found["post"]["id"], source),
+        (source, None),
+    ]
+    assert await wf.kinds_in(web.db) == ["web.pbfeed.would_post_again"]
+
+
+async def test_post_again_for_a_member_out_of_the_feed_still_posts_and_says_so(
+    client, sign_in, web, wf, people, speedrun
+):
+    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.TEST_CHANNEL_ID)
+    source = await a_stored_post(web, wf, pb_store.FAILED)
+    sign_in(client)
+
+    response = client.post(f"/api/pbs/posts/{source}/again")
+
+    assert response.status_code == 200 and "not matched" in response.json()["message"]
+
+
+async def test_post_again_on_an_unknown_post_is_a_404_in_words(
+    client, sign_in, web, wf, people, speedrun
+):
+    sign_in(client)
+
+    response = client.post("/api/pbs/posts/4242/again")
+
+    assert response.status_code == 404 and "nothing was posted" in response.text
+
+
+async def test_post_again_while_the_feed_is_off_is_a_409_naming_the_modes(
+    client, sign_in, web, wf, people, speedrun
+):
+    source = await a_stored_post(web, wf)
+    await web.store.set(wf.GUILD_ID, "pb_feed_mode", "off")
+    sign_in(client)
+
+    response = client.post(f"/api/pbs/posts/{source}/again")
+
+    assert response.status_code == 409 and "shadow or on" in response.text
+    assert await wf.kinds_in(web.db) == []

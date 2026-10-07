@@ -1294,6 +1294,7 @@ CREATE TABLE IF NOT EXISTS pb_posts (
     aimed_at    INTEGER,
     message_id  INTEGER,
     at          TEXT    NOT NULL,
+    again_of    INTEGER,
     UNIQUE (guild_id, run_id)
 );
 CREATE INDEX IF NOT EXISTS pb_posts_by_guild ON pb_posts(guild_id, id);
@@ -1318,6 +1319,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("pb_matches", "misses", "INTEGER NOT NULL DEFAULT 0"),
     ("pb_matches", "gone_src_user_id", "TEXT"),
     ("pb_matches", "quiet", "TEXT"),
+    ("pb_posts", "again_of", "INTEGER"),
     ("structure_looks", "noticed_id", "INTEGER"),
     ("role_menus", "approval", "INTEGER NOT NULL DEFAULT 0"),
     ("role_menus", "expires_days", "INTEGER"),

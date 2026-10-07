@@ -273,6 +273,7 @@ ROUTINE: frozenset[str] = frozenset(
         "pbfeed.matched",
         "pbfeed.baseline",
         "pbfeed.posted",
+        "pbfeed.posted_again",
         "pbfeed.nothing_new",
         "pbfeed.recovered",
         "pbfeed.held_back",

@@ -56,7 +56,8 @@ def post_row(guild: Any, row: Any) -> dict[str, Any]:
         "id": row["id"],
         "user_id": str(row["user_id"]),
         "name": resolve_one(guild, row["user_id"])["display_name"],
-        "run_id": row["run_id"],
+        "run_id": pb_store.run_of(row["run_id"]),
+        "again_of": row["again_of"],
         "runner": row["src_name"],
         "game": row["game"],
         "category": row["category"],
@@ -175,5 +176,17 @@ def build_router(bot: Any) -> APIRouter:
     @router.post("/{user_id}/look")
     async def pbs_look(request: Request, user_id: str) -> dict[str, Any]:
         return await moved(request, user_id, pb_moves.look_now)
+
+    @router.post("/posts/{post_id}/again")
+    async def pbs_post_again(request: Request, post_id: str) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await pb_moves.post_again(
+            bot, guild, wanted_id(post_id), actor_for(bot, who, guild), via=VIA_WEBSITE
+        )
+        if not outcome.ok:
+            raise Refused(outcome.status or 400, outcome.code, outcome.message)
+        return {"post": post_row(guild, outcome.value), "message": outcome.message}
 
     return router

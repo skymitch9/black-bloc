@@ -12,7 +12,19 @@ from . import pb_match, pb_store
 from .actionlog import entity_id, log_action
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
-from .pb_feed import JUST_LOOKED, LOOK_NOW_COOLDOWN_MINUTES, OFF, ON, minutes_until, mode_of, said
+from .pb_feed import (
+    CHANNEL_GONE,
+    JUST_LOOKED,
+    LOOK_NOW_COOLDOWN_MINUTES,
+    NO_CHANNEL,
+    NO_SHADOW_HOME,
+    OFF,
+    ON,
+    TEST_MODE_REFUSED,
+    minutes_until,
+    mode_of,
+    said,
+)
 from .pb_looks import feed_of, safely
 from .speedrun import SpeedrunError
 
@@ -466,6 +478,73 @@ async def look_now(
     )
 
 
+OUT_OF_FEED = {
+    None: "not matched",
+    pb_store.NONE: "not matched",
+    pb_store.OPTED_OUT: "opted out",
+    pb_store.BLOCKED: "blocked",
+}
+NOWHERE = (NO_CHANNEL, CHANNEL_GONE, NO_SHADOW_HOME, TEST_MODE_REFUSED)
+
+
+async def post_again(
+    bot: Any,
+    guild: Any,
+    post_id: int,
+    actor: Any,
+    *,
+    via: str = VIA_DISCORD,
+    now: datetime | None = None,
+) -> Outcome:
+    """A stored post sent again where the mode sends one now, as a new row; staff's test."""
+    store = bot.store
+    feed = feed_of(bot)
+    async with feed.lock:
+        source = await pb_store.post(bot.db, guild.id, post_id)
+        if source is None:
+            return refusal(
+                said(store, guild.id, "pb_feed_no_post_said", post=post_id), "no_such_post", 404
+            )
+        if mode_of(store, guild.id) == OFF:
+            return refusal(said(store, guild.id, "pb_feed_again_off_said"), "pb_feed_off", 409)
+        sent = await feed.repost(guild, source, actor=actor, via=via, now=now)
+        row = await pb_store.post(bot.db, guild.id, sent.post_id)
+    user_id = int(source["user_id"])
+    who = mention(guild, user_id)
+    match = await pb_store.match(bot.db, guild.id, user_id)
+    state = match["state"] if match is not None else None
+    aside = (
+        ""
+        if state == pb_store.MATCHED
+        else " "
+        + said(
+            store,
+            guild.id,
+            "pb_feed_again_not_in_feed_said",
+            member=who,
+            state=OUT_OF_FEED.get(state, str(state)),
+        )
+    )
+    if sent.outcome not in (pb_store.POSTED, pb_store.REHEARSED):
+        status = 409 if sent.reason in NOWHERE else 502
+        words = said(store, guild.id, "pb_feed_again_failed_said", reason=sent.reason or "")
+        return refusal(words + aside, "not_posted", status)
+    key = (
+        "pb_feed_rehearsed_again_said"
+        if sent.outcome == pb_store.REHEARSED
+        else "pb_feed_posted_again_said"
+    )
+    words = said(
+        store,
+        guild.id,
+        key,
+        member=who,
+        game=discord.utils.escape_markdown(str(source["game"] or "")),
+        channel=f"<#{sent.channel_id}>",
+    )
+    return Outcome(True, words + aside, value=row)
+
+
 def just_looked(row: Any, now: datetime) -> str | None:
     """Why this member cannot be looked at by hand again yet, in words, or None."""
     looked = pb_store.parsed(row["looked_at"])
@@ -484,6 +563,7 @@ __all__ = [
     "look_now",
     "opt_in",
     "opt_out",
+    "post_again",
     "set_by_hand",
     "unblock",
     "unmatch",

@@ -36,6 +36,7 @@ const IDS = {
   pb_free_member_id: '700000000000000003',
   pb_opted_out_member_id: '700000000000000006',
   pb_blocked_member_id: '700000000000000007',
+  pb_post_id: '3',
   structure_old_id: '1',
   structure_new_id: '2',
   test_channel_id: '800000000000000003',
@@ -417,6 +418,7 @@ async function checkActionKinds() {
   await post(`/api/pbs/${IDS.pb_matched_member_id}/block`, {});
   await post(`/api/pbs/${IDS.pb_blocked_member_id}/unblock`, {});
   await post(`/api/pbs/${IDS.pb_opted_out_member_id}/optin`, {});
+  await post(`/api/pbs/posts/${IDS.pb_post_id}/again`, {});
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post(`/api/rolemenus/requests/${IDS.request_id}/deny`, { reason: 'contract check' });
   await send('DELETE', `/api/roles/grants/${IDS.grant_id}`, undefined);
