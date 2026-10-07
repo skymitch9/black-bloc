@@ -425,3 +425,81 @@ def test_the_name_limit_has_one_home():
     source = (pb_panel.__file__, pb_moves.__file__)
     counts = [open(path, encoding="utf-8").read().count("NAME_LIMIT = ") for path in source]
     assert counts == [0, 1]
+
+
+async def stored_posts(bot, count):
+    found = []
+    for n in range(count):
+        claimed = await pb_store.claim_post(
+            bot.db, GUILD, ADA, best(f"r{n}", seconds=95.5 + n), "zfg", now=NOW
+        )
+        await pb_store.settle_post(bot.db, claimed, pb_store.REHEARSED, channel_id=REHEARSAL)
+        found.append(claimed)
+    return found
+
+
+def again_pick(view):
+    return next(
+        (one for one in view.children if isinstance(one, discord.ui.Select)
+         and not isinstance(one, discord.ui.UserSelect)),
+        None,
+    )
+
+
+async def test_manage_offers_the_latest_posts_to_post_again(bot, guild, feed):
+    await matched(bot)
+    ids = await stored_posts(bot, pb_panel.AGAIN_CHOICES + 2)
+
+    _, view = await pb_panel.build_manage(bot, guild)
+
+    pick = again_pick(view)
+    assert pick is not None and pick.placeholder == "Post one again…"
+    assert [option.value for option in pick.options] == [
+        str(one) for one in reversed(ids[-pb_panel.AGAIN_CHOICES:])
+    ]
+    newest = pick.options[0]
+    assert newest.label.startswith("Ada — Ocarina of Time")
+    assert "rehearsed" in newest.description
+
+
+@pytest.mark.parametrize("why", ["off", "nothing posted"])
+async def test_manage_draws_no_post_again_when_it_cannot_be_used(bot, guild, feed, why):
+    await matched(bot)
+    if why == "off":
+        await stored_posts(bot, 1)
+        await bot.store.set(GUILD, "pb_feed_mode", "off")
+
+    _, view = await pb_panel.build_manage(bot, guild)
+
+    assert again_pick(view) is None
+
+
+async def test_picking_a_post_posts_it_again_and_says_where(bot, guild, feed):
+    await matched(bot)
+    [source] = await stored_posts(bot, 1)
+    staff = FakeInteraction(bot, STAFFER)
+    _, view = await pb_panel.build_manage(bot, guild)
+    pick = again_pick(view)
+    pick._values = [str(source)]
+
+    await pick.callback(staff)
+
+    card = staff.rendered
+    assert card["embed"].description.startswith("Rehearsed <@900>")
+    assert again_pick(card["view"]) is not None
+    assert len(guild.get_channel(REHEARSAL).sent) == 1
+    found = await details_of(bot.db, "pbfeed.would_post_again")
+    assert (found["actor_id"], found["via"], found["again_of"]) == (STAFFER, "discord", source)
+
+
+async def test_a_member_cannot_post_again_from_a_stale_panel(bot, guild, feed):
+    await matched(bot)
+    [source] = await stored_posts(bot, 1)
+    _, view = await pb_panel.build_manage(bot, guild)
+    pick = again_pick(view)
+    pick._values = [str(source)]
+    member = FakeInteraction(bot, ADA)
+
+    await pick.callback(member)
+
+    assert member.edits == [] and guild.get_channel(REHEARSAL).sent == []

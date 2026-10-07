@@ -10,12 +10,14 @@ import {
   field,
   foldout,
   idsIn,
+  keepSaying,
   listFilter,
   memberPicker,
   modeSwitch,
   nameNode,
   notice,
   run,
+  sayAgain,
   sayNothing,
   section,
   settingsPanel,
@@ -25,6 +27,8 @@ import {
 
 const KEY_PREFIX = 'pb_feed_';
 const MODE_KEY = 'pb_feed_mode';
+const AGAIN_KEY = 'pb_feed_post_again_label';
+const AGAIN_SAID = 'pbs.again';
 const OPERATIONAL = [
   'pb_feed_channel_id',
   'pb_feed_shadow_channel_id',
@@ -83,6 +87,7 @@ const NEED_A_MEMBER = 'Pick the member first.';
 const NEED_A_NAME = 'Type their speedrun.com name, then save again.';
 const REASON_LABEL = 'Reason (the member is told)';
 const LOG_ROWS = 20;
+const AGAIN_NOTE = 'again';
 
 const kept = { query: '', filter: 'all', mode: 'shadow' };
 let refresh = () => {};
@@ -323,10 +328,29 @@ function peopleSection(payload, modeSpec) {
   return one.node;
 }
 
-function postsSection(payload) {
+function postAgain(row, label, say) {
+  return askForm({
+    title: `${label}: ${row.name} · ${row.game || ''} · ${timeWords(row.seconds)}?`,
+    body: [],
+    confirmLabel: label,
+    tone: 'warn',
+    onConfirm: async () => {
+      const found = await send(`/api/pbs/posts/${encodeURIComponent(row.id)}/again`, 'POST', {});
+      say.say(found.message, 'ok');
+      keepSaying(AGAIN_SAID, say);
+      refresh();
+      return null;
+    },
+  });
+}
+
+function postsSection(payload, specs) {
   const rows = listOf(payload, 'posts');
+  const spec = specs.find((found) => found.key === AGAIN_KEY);
+  const label = String((spec && (spec.value ?? spec.default)) || 'Post again');
+  const say = sayAgain(AGAIN_SAID, notice());
   const one = section('Recent posts', null, { count: rows.length, open: rows.length > 0 });
-  one.body.append(table([
+  one.body.append(say, table([
     { label: 'When', cell: (row) => when(row.at), className: 'mono' },
     { label: 'Member', cell: (row) => nameNode(row.user_id, row.name) },
     { label: 'Game', key: 'game' },
@@ -337,12 +361,19 @@ function postsSection(payload) {
       label: '',
       cell: (row) => el('span', { class: 'bar' }, [
         badge(OUTCOME_WORDS[row.outcome] || row.outcome, OUTCOME_TONES[row.outcome] || null),
+        row.again_of ? el('span', { class: 'rowlist-note', text: AGAIN_NOTE }) : null,
         row.reason && row.outcome !== 'rehearsed' && row.outcome !== 'posted'
           ? el('span', { class: 'rowlist-note', text: row.reason })
           : null,
       ]),
     },
     { label: '', cell: (row) => outLink('Run', row.link) },
+    {
+      label: '',
+      cell: (row) => (kept.mode === 'off'
+        ? null
+        : button(label, () => postAgain(row, label, say), { tone: 'warn' })),
+    },
   ], rows, { empty: NO_POSTS }));
   return one.node;
 }
@@ -378,7 +409,7 @@ async function load() {
 
   document.getElementById('dash').replaceChildren(
     peopleSection(payload, modeSpec),
-    postsSection(payload),
+    postsSection(payload, specs),
     await settingsSection(specs),
     await logsSectionNode(),
   );

@@ -4111,6 +4111,52 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what staff are told when they ask for a look, or set an account by hand, while "
         "pb_feed_mode is off",
     ),
+    "pb_feed_post_again_label": (
+        "Post again",
+        (),
+        "the button staff press on the Personal bests page to send a stored personal best post "
+        "again",
+    ),
+    "pb_feed_post_again_pick": (
+        "Post one again…",
+        (),
+        "the placeholder of the list of recent personal best posts staff pick from on /pb to send "
+        "one again",
+    ),
+    "pb_feed_posted_again_said": (
+        "Posted {member}’s **{game}** personal best again in {channel}.",
+        ("member", "game", "channel"),
+        "what staff are told after Post again while pb_feed_mode is on; {channel} is where it went",
+    ),
+    "pb_feed_rehearsed_again_said": (
+        "Rehearsed {member}’s **{game}** personal best again in {channel}.",
+        ("member", "game", "channel"),
+        "what staff are told after Post again while pb_feed_mode is shadow; {channel} is the "
+        "rehearsal home it went to",
+    ),
+    "pb_feed_again_failed_said": (
+        "Nothing was posted — {reason}",
+        ("reason",),
+        "what staff are told when Post again could not send the post; {reason} says why and what "
+        "to do",
+    ),
+    "pb_feed_again_off_said": (
+        "The personal best feed is **off**, so nothing was posted. Set pb_feed_mode to shadow or "
+        "on — in /settings or on the Settings page — and try again.",
+        (),
+        "what staff are told when they press Post again while pb_feed_mode is off",
+    ),
+    "pb_feed_no_post_said": (
+        "There is no personal best post {post} on record, so nothing was posted.",
+        ("post",),
+        "what staff are told when Post again names a post Black Bloc has no record of",
+    ),
+    "pb_feed_again_not_in_feed_said": (
+        "{member} is {state} in the feed, so only Post again posts for them.",
+        ("member", "state"),
+        "what Post again adds when the member is no longer matched, opted out or blocked; {state} "
+        "says which",
+    ),
     "pb_feed_dm_set": (
         "Staff in **{server}** matched you to **{runner}** on speedrun.com for the personal best "
         "feed. Their reason: {reason}\nRun /pb in the server to see it, or to opt out.",

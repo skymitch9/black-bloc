@@ -1,5 +1,6 @@
 # ruff: noqa: F401, F811
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import discord
 import pytest
@@ -13,6 +14,8 @@ from tests.test_pb_looks import (
     GUILD,
     NOW,
     OTHER,
+    PBS,
+    PING,
     REHEARSAL,
     STAFFER,
     ZFG,
@@ -471,3 +474,165 @@ async def test_set_by_hand_asks_speedrun_nothing_while_the_feed_is_off(bot, guil
     assert (outcome.ok, outcome.code, outcome.status) == (False, "pb_feed_off", 409)
     assert "pb_feed_mode" in outcome.message and client.asked == []
     assert await pb_store.match(bot.db, GUILD, ADA) is None
+
+
+async def a_post(bot, guild, feed, client):
+    """One personal best that went out as a rehearsal, the way the feed posts one."""
+    await bot.store.set(GUILD, "pb_feed_channel_id", PBS)
+    await matched(bot)
+    await seen(feed, client, [best("r1", seconds=100.0)])
+    later = NOW + timedelta(hours=2)
+    client.bests[ZFG.id] = [best("r9", seconds=95.5, place=2, verified_at=later)]
+    await feed.look(guild, ADA, now=later)
+    return (await pb_store.posts(bot.db, GUILD))[0]
+
+
+async def test_post_again_rehearses_a_stored_post_exactly_as_a_fresh_one_in_shadow(
+    bot, guild, feed, client
+):
+    source = await a_post(bot, guild, feed, client)
+    fresh = guild.get_channel(REHEARSAL).sent[0]
+    asked = list(client.asked)
+    baseline = await pb_store.baseline(bot.db, GUILD, ADA)
+    before = dict(await pb_store.match(bot.db, GUILD, ADA))
+
+    outcome = await pb_moves.post_again(bot, guild, source["id"], staffer(guild))
+
+    assert outcome.ok and f"<#{REHEARSAL}>" in outcome.message and "<@900>" in outcome.message
+    copies = guild.get_channel(REHEARSAL).sent
+    assert len(copies) == 2 and guild.get_channel(PBS).sent == []
+    again = copies[1]
+    assert again["content"] == fresh["content"]
+    assert again["embed"].to_dict() == fresh["embed"].to_dict()
+    assert again["allowed_mentions"].to_dict() == fresh["allowed_mentions"].to_dict()
+    assert [one.url for one in again["view"].children] == [
+        one.url for one in fresh["view"].children
+    ]
+    rows = await pb_store.posts(bot.db, GUILD)
+    assert [(row["outcome"], row["again_of"]) for row in rows] == [
+        (pb_store.REHEARSED, source["id"]),
+        (pb_store.REHEARSED, None),
+    ]
+    assert dict(rows[1]) == dict(source)
+    assert rows[0]["message_id"] == 1002 and rows[0]["channel_id"] == REHEARSAL
+    assert outcome.value["id"] == rows[0]["id"]
+    found = await details_of(bot.db, "pbfeed.would_post_again")
+    assert (found["actor_id"], found["target_id"], found["via"]) == (STAFFER, ADA, "discord")
+    assert (found["again_of"], found["run_id"], found["rehearsed"]) == (source["id"], "r9", True)
+    assert (await kinds(bot.db)).count("pbfeed.would_post_again") == 1
+    assert client.asked == asked
+    assert await pb_store.baseline(bot.db, GUILD, ADA) == baseline
+    assert dict(await pb_store.match(bot.db, GUILD, ADA)) == before
+
+
+async def test_post_again_goes_to_the_feed_channel_with_the_ping_while_on(
+    bot, guild, feed, client
+):
+    source = await a_post(bot, guild, feed, client)
+    await bot.store.set(GUILD, "pb_feed_mode", "on")
+    await bot.store.set(GUILD, "pb_feed_ping_role_id", PING)
+
+    outcome = await pb_moves.post_again(
+        bot, guild, source["id"], staffer(guild), via=VIA_WEBSITE
+    )
+
+    post = guild.get_channel(PBS).sent[0]
+    assert outcome.ok and f"<#{PBS}>" in outcome.message
+    assert post["content"] == f"<@&{PING}>"
+    assert [role.id for role in post["allowed_mentions"].roles] == [PING]
+    assert post["allowed_mentions"].users is False
+    assert post["embed"].description == (
+        "**Ada** ran **Ocarina of Time** — Any% in **1:35.500** — #2 on the leaderboard."
+    )
+    assert (await pb_store.posts(bot.db, GUILD))[0]["outcome"] == pb_store.POSTED
+    found = await details_of(bot.db, "web.pbfeed.posted_again")
+    wanted = (STAFFER, "website", source["id"])
+    assert (found["actor_id"], found["via"], found["again_of"]) == wanted
+
+
+async def test_post_again_uses_the_wording_and_the_name_of_now(bot, guild, feed, client):
+    source = await a_post(bot, guild, feed, client)
+    await bot.store.set(GUILD, "pb_feed_post_text", "{name} did {game} in {time}")
+    await bot.store.set(GUILD, "pb_feed_link_label", "See it")
+    guild.get_member(ADA).display_name = "Ada Lovelace"
+
+    await pb_moves.post_again(bot, guild, source["id"], staffer(guild))
+
+    again = guild.get_channel(REHEARSAL).sent[-1]
+    assert again["embed"].description == "Ada Lovelace did Ocarina of Time in 1:35.500"
+    assert again["embed"].author.name == "Ada Lovelace"
+    assert [one.label for one in again["view"].children] == ["See it"]
+
+
+async def test_post_again_is_refused_in_words_while_the_feed_is_off(bot, guild, feed, client):
+    source = await a_post(bot, guild, feed, client)
+    await bot.store.set(GUILD, "pb_feed_mode", "off")
+    logged = await kinds(bot.db)
+
+    outcome = await pb_moves.post_again(bot, guild, source["id"], staffer(guild))
+
+    assert (outcome.ok, outcome.code, outcome.status) == (False, "pb_feed_off", 409)
+    assert "shadow or on" in outcome.message and "nothing was posted" in outcome.message
+    assert len(guild.get_channel(REHEARSAL).sent) == 1
+    assert len(await pb_store.posts(bot.db, GUILD)) == 1 and await kinds(bot.db) == logged
+
+
+async def test_post_again_on_a_post_that_does_not_exist_is_a_404_in_words(bot, guild, feed):
+    outcome = await pb_moves.post_again(bot, guild, 4242, staffer(guild))
+
+    assert (outcome.ok, outcome.code, outcome.status) == (False, "no_such_post", 404)
+    assert "4242" in outcome.message and "nothing was posted" in outcome.message
+    assert await kinds(bot.db) == []
+
+
+@pytest.mark.parametrize(
+    ("move", "words"),
+    [("unmatch", "not matched"), ("opt_out", "opted out"), ("block", "blocked")],
+)
+async def test_post_again_still_posts_for_a_member_out_of_the_feed_and_says_so(
+    bot, guild, feed, client, move, words
+):
+    source = await a_post(bot, guild, feed, client)
+    if move == "opt_out":
+        await pb_moves.opt_out(bot, guild, guild.get_member(ADA))
+    else:
+        await getattr(pb_moves, move)(bot, guild, ADA, staffer(guild))
+    before = dict(await pb_store.match(bot.db, GUILD, ADA))
+
+    outcome = await pb_moves.post_again(bot, guild, source["id"], staffer(guild))
+
+    assert outcome.ok and words in outcome.message
+    assert len(guild.get_channel(REHEARSAL).sent) == 2
+    assert dict(await pb_store.match(bot.db, GUILD, ADA)) == before
+
+
+async def test_post_again_with_nowhere_to_go_is_a_new_failed_row_and_a_refusal_in_words(
+    bot, guild, feed, client
+):
+    source = await a_post(bot, guild, feed, client)
+    await bot.store.set(GUILD, "pb_feed_mode", "on")
+    await bot.store.clear(GUILD, "pb_feed_channel_id")
+
+    outcome = await pb_moves.post_again(bot, guild, source["id"], staffer(guild))
+
+    assert (outcome.ok, outcome.status) == (False, 409)
+    assert "pb_feed_channel_id is blank" in outcome.message
+    rows = await pb_store.posts(bot.db, GUILD)
+    assert [(row["outcome"], row["again_of"]) for row in rows] == [
+        (pb_store.FAILED, source["id"]),
+        (pb_store.REHEARSED, None),
+    ]
+    found = await details_of(bot.db, "pbfeed.post_failed")
+    assert (found["again_of"], found["actor_id"]) == (source["id"], STAFFER)
+
+
+async def test_post_again_that_discord_refuses_is_a_502_in_words(bot, guild, feed, client):
+    source = await a_post(bot, guild, feed, client)
+    guild.get_channel(REHEARSAL).send_raises = discord.HTTPException(
+        SimpleNamespace(status=500, reason="boom"), "Internal Server Error"
+    )
+
+    outcome = await pb_moves.post_again(bot, guild, source["id"], staffer(guild))
+
+    assert (outcome.ok, outcome.status) == (False, 502) and "Nothing was posted" in outcome.message
+    assert (await pb_store.posts(bot.db, GUILD))[0]["outcome"] == pb_store.FAILED

@@ -10,7 +10,7 @@ import discord
 from . import pb_moves, pb_store
 from .command_errors import AnswersErrors
 from .panels import Panel, db_up, opened, retire, still_staff
-from .pb_feed import OFF, PAGE, mode_of, said
+from .pb_feed import OFF, PAGE, mode_of, said, time_words
 from .pb_moves import NAME_LIMIT, REASON_LIMIT
 from .settings_store import PB_FEED_PANEL_MINUTES, PB_FEED_REMATCH_DAYS
 from .timezones import unix
@@ -67,6 +67,10 @@ STATE_WORDS = {
 LOOKED_LINE = "last looked {when}"
 LAST_PB_LINE = "last new personal best {when}"
 REASONED = (UNMATCH, BLOCK, CLEAR)
+AGAIN_CHOICES = 10
+AGAIN_LINE = "{name} — {game} · {time}"
+AGAIN_NOTE = "{outcome} · post {id}"
+AGAIN_MARK = " · again"
 
 
 class PbPanel(Panel):
@@ -228,8 +232,29 @@ async def build_manage(bot: Any, guild: Any, *, note: str = "") -> tuple[discord
     )
     view = PbPanel(bot, guild.id)
     view.add_item(MemberPick())
+    if mode_of(bot.store, guild.id) != OFF:
+        posts = await pb_store.posts(bot.db, guild.id, AGAIN_CHOICES)
+        if posts:
+            view.add_item(
+                AgainPick(
+                    [again_option(guild, row) for row in posts],
+                    said(bot.store, guild.id, "pb_feed_post_again_pick"),
+                )
+            )
     view.add_item(BackButton(None))
     return (embed, view)
+
+
+def again_option(guild: Any, row: Any) -> discord.SelectOption:
+    member = guild.get_member(int(row["user_id"]))
+    name = getattr(member, "display_name", None) or row["src_name"] or str(row["user_id"])
+    line = AGAIN_LINE.format(name=name, game=row["game"] or "", time=time_words(row["seconds"]))
+    note = AGAIN_NOTE.format(outcome=row["outcome"], id=row["id"])
+    return discord.SelectOption(
+        label=line[:100],
+        value=str(row["id"]),
+        description=(note + (AGAIN_MARK if row["again_of"] else ""))[:100],
+    )
 
 
 async def build_member(
@@ -324,6 +349,15 @@ async def run_set(
     await render_member(interaction, user_id, previous, note=outcome.message)
 
 
+async def run_again(interaction: discord.Interaction, post_id: int, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await pb_moves.post_again(
+        interaction.client, interaction.guild, post_id, interaction.user
+    )
+    await render_manage(interaction, previous, note=outcome.message)
+
+
 async def open_modal(interaction: discord.Interaction, modal: discord.ui.Modal) -> None:
     """A modal has to be the first answer, so staff and the database are asked without a defer."""
     if not await still_staff(interaction):
@@ -374,6 +408,16 @@ class MemberPick(discord.ui.UserSelect):
         if not await opened(interaction):
             return
         await render_member(interaction, int(self.values[0].id), self.view)
+
+
+class AgainPick(discord.ui.Select):
+    def __init__(self, options: list[discord.SelectOption], placeholder: str) -> None:
+        super().__init__(
+            placeholder=placeholder[:150], min_values=1, max_values=1, options=options, row=2
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_again(interaction, int(self.values[0]), self.view)
 
 
 class StaffButton(discord.ui.Button):
@@ -446,6 +490,8 @@ async def open_panel(interaction: discord.Interaction) -> None:
 
 
 __all__ = [
+    "AGAIN_CHOICES",
+    "AgainPick",
     "BackButton",
     "ManageButton",
     "MemberPick",

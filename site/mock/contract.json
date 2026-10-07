@@ -13,6 +13,9 @@
       "log_channel_id",
       "operator_read_log",
       "panel_expired_text",
+      "pb_feed_again_failed_said",
+      "pb_feed_again_not_in_feed_said",
+      "pb_feed_again_off_said",
       "pb_feed_auto_match",
       "pb_feed_blocked_said",
       "pb_feed_channel_id",
@@ -30,6 +33,7 @@
       "pb_feed_max_posts",
       "pb_feed_mode",
       "pb_feed_no_channel_words",
+      "pb_feed_no_post_said",
       "pb_feed_no_runner_said",
       "pb_feed_not_now_said",
       "pb_feed_nothing_to_do_said",
@@ -43,12 +47,16 @@
       "pb_feed_panel_title",
       "pb_feed_ping_role_id",
       "pb_feed_place_text",
+      "pb_feed_post_again_label",
+      "pb_feed_post_again_pick",
       "pb_feed_post_author",
       "pb_feed_post_text",
       "pb_feed_post_title",
+      "pb_feed_posted_again_said",
       "pb_feed_posting_off",
       "pb_feed_posting_on",
       "pb_feed_posting_shadow",
+      "pb_feed_rehearsed_again_said",
       "pb_feed_rematch_days",
       "pb_feed_set_said",
       "pb_feed_shadow_channel_id",
@@ -9814,7 +9822,8 @@
           "link",
           "outcome",
           "reason",
-          "at"
+          "at",
+          "again_of"
         ]
       },
       "nested": {
@@ -10004,6 +10013,35 @@
           "look_error",
           "last_pb_at",
           "not_news"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/pbs/posts/{pb_post_id}/again",
+      "body": {},
+      "read_by": [
+        "page-pbs.js Post again"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "message"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "user_id",
+          "name",
+          "game",
+          "category",
+          "seconds",
+          "place",
+          "link",
+          "outcome",
+          "reason",
+          "at",
+          "again_of"
         ]
       }
     }
@@ -10282,6 +10320,9 @@
     "web.pbfeed.blocked",
     "web.pbfeed.unblocked",
     "web.pbfeed.opt_out_cleared",
-    "web.pbfeed.looked"
+    "web.pbfeed.looked",
+    "web.pbfeed.would_post_again",
+    "web.pbfeed.posted_again",
+    "web.pbfeed.post_failed"
   ]
 }

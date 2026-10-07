@@ -13,6 +13,7 @@ import discord
 
 from . import pb_match, pb_news, pb_store, shadow
 from .actionlog import log_action
+from .logkinds import VIA_DISCORD, kind_via
 from .pb_feed import (
     AT_THE_CAP,
     BACKING_OFF,
@@ -60,6 +61,30 @@ RUNNER_GONE = "runner_gone"
 LINK_MOVED = "link_moved"
 TROUBLE = "trouble"
 NOT_NEWS = (pb_news.TOO_OLD, pb_news.BEFORE_BASELINE, pb_news.UNDATED)
+
+
+@dataclass(frozen=True)
+class Kinds:
+    """The log kinds one way of posting writes: sent, rehearsed or dry, and failed."""
+
+    posted: str
+    rehearsed: str
+    failed: str
+
+
+FRESH = Kinds("pbfeed.posted", "pbfeed.would_post", "pbfeed.post_failed")
+AGAIN = Kinds("pbfeed.posted_again", "pbfeed.would_post_again", "pbfeed.post_failed")
+
+
+@dataclass(frozen=True)
+class Sent:
+    """Where one send went: its row, the outcome, the channel, and why not, in words."""
+
+    post_id: int
+    outcome: str
+    channel_id: int | None
+    reason: str | None = None
+    refused: bool = False
 
 
 @dataclass(frozen=True)
@@ -558,10 +583,10 @@ class Feed:
             )
         return Looked(trouble=reason)
 
-    def details(self, row: Any, best: PersonalBest, mode: str) -> dict[str, Any]:
+    def details(self, runner: Any, best: PersonalBest, mode: str) -> dict[str, Any]:
         return {
             "mode": mode,
-            "runner": row["src_name"],
+            "runner": runner,
             "run_id": best.run_id,
             "game": best.game,
             "category": best.category,
@@ -572,27 +597,89 @@ class Feed:
 
     async def post(self, guild: Any, row: Any, best: PersonalBest, now: datetime) -> str:
         """Claimed before it is sent, so one run can never be posted twice."""
-        bot, db, store = self.bot, self.bot.db, self.bot.store
+        db, store = self.bot.db, self.bot.store
         user_id = int(row["user_id"])
         post_id = await pb_store.claim_post(db, guild.id, user_id, best, row["src_name"], now=now)
         if post_id is None:
             return pb_store.CLAIMED
-        mode = mode_of(store, guild.id)
-        aimed = aimed_at(store, guild.id)
-        details = self.details(row, best, mode) | {"aimed_at": aimed}
-        if mode == OFF:
+        if mode_of(store, guild.id) == OFF:
+            aimed = aimed_at(store, guild.id)
             await pb_store.settle_post(db, post_id, pb_store.DRY, aimed_at=aimed, reason=OFF)
             return pb_store.DRY
+        sent = await self.deliver(guild, post_id, user_id, row["src_name"], best)
+        return sent.outcome
+
+    async def repost(
+        self, guild: Any, source: Any, *, actor: Any, via: str, now: datetime | None = None
+    ) -> Sent:
+        """A stored post sent again as a new row; the caller holds the lock, the mode is not off."""
+        post_id = await pb_store.claim_again(self.bot.db, source, now=now)
+        return await self.deliver(
+            guild,
+            post_id,
+            int(source["user_id"]),
+            source["src_name"],
+            pb_store.best_of(source),
+            kinds=AGAIN,
+            actor=actor,
+            via=via,
+            extra={"via": via, "again_of": int(source["id"])},
+        )
+
+    async def logged(
+        self,
+        guild: Any,
+        kind: str,
+        user_id: int,
+        details: dict[str, Any],
+        *,
+        actor: Any = None,
+        via: str = VIA_DISCORD,
+    ) -> None:
+        await safely(
+            log_action(
+                self.bot,
+                guild,
+                kind_via(kind, via),
+                actor=actor,
+                target=user_id,
+                details=details,
+            ),
+            "the log row",
+        )
+
+    async def deliver(
+        self,
+        guild: Any,
+        post_id: int,
+        user_id: int,
+        runner: Any,
+        best: PersonalBest,
+        *,
+        kinds: Kinds | None = None,
+        actor: Any = None,
+        via: str = VIA_DISCORD,
+        extra: dict[str, Any] | None = None,
+    ) -> Sent:
+        """Where the mode sends it right now, settled on its row and logged once."""
+        bot, db, store = self.bot, self.bot.db, self.bot.store
+        kinds = kinds or FRESH
+        mode = mode_of(store, guild.id)
+        aimed = aimed_at(store, guild.id)
+        details = self.details(runner, best, mode) | {"aimed_at": aimed} | (extra or {})
         rehearsing = mode == SHADOW
         home = shadow.channel_id(bot, guild, feature=FEATURE) if rehearsing else aimed
         channel = shadow.channel_of(bot, guild, home)
+        who: dict[str, Any] = {"actor": actor, "via": via}
         if channel is None:
             reason = NO_SHADOW_HOME if rehearsing else NO_CHANNEL if aimed is None else CHANNEL_GONE
-            return await self.not_posted(guild, post_id, user_id, details, home, reason, rehearsing)
+            return await self.not_posted(
+                guild, post_id, user_id, details, home, reason, rehearsing, kinds, who
+            )
         guard = getattr(bot, "guard", None)
         if guard is not None and not guard.allows_channel(channel.id):
             return await self.not_posted(
-                guild, post_id, user_id, details, home, TEST_MODE_REFUSED, True
+                guild, post_id, user_id, details, home, TEST_MODE_REFUSED, True, kinds, who
             )
         try:
             role = None if rehearsing else ping_role(store, guild.id)
@@ -606,7 +693,7 @@ class Feed:
             )
             sending: dict[str, Any] = {
                 "embed": post_embed(
-                    store, guild.id, guild.get_member(user_id), user_id, row["src_name"], best
+                    store, guild.id, guild.get_member(user_id), user_id, runner, best
                 ),
                 "allowed_mentions": allowed,
             }
@@ -620,17 +707,14 @@ class Feed:
             await pb_store.settle_post(
                 db, post_id, pb_store.FAILED, channel_id=home, aimed_at=aimed, reason=reason
             )
-            await safely(
-                log_action(
-                    bot,
-                    guild,
-                    "pbfeed.post_failed",
-                    target=user_id,
-                    details=details | {"channel_id": home, "reason": reason},
-                ),
-                "the log row",
+            await self.logged(
+                guild,
+                kinds.failed,
+                user_id,
+                details | {"channel_id": home, "reason": reason},
+                **who,
             )
-            return pb_store.FAILED
+            return Sent(post_id, pb_store.FAILED, home, reason, refused=True)
         message_id = getattr(message, "id", None)
         outcome = pb_store.REHEARSED if rehearsing else pb_store.POSTED
         await pb_store.settle_post(
@@ -639,17 +723,10 @@ class Feed:
         placed = details | {"channel_id": home, "message_id": message_id}
         if rehearsing:
             placed |= {"rehearsed": True, "shadow_home": home}
-        await safely(
-            log_action(
-                bot,
-                guild,
-                "pbfeed.would_post" if rehearsing else "pbfeed.posted",
-                target=user_id,
-                details=placed,
-            ),
-            "the log row",
+        await self.logged(
+            guild, kinds.rehearsed if rehearsing else kinds.posted, user_id, placed, **who
         )
-        return outcome
+        return Sent(post_id, outcome, home)
 
     async def not_posted(
         self,
@@ -660,7 +737,9 @@ class Feed:
         home: Any,
         reason: str,
         dry: bool,
-    ) -> str:
+        kinds: Kinds,
+        who: dict[str, Any],
+    ) -> Sent:
         """A rehearsal with nowhere to go is a dry run; a real post with nowhere to go failed."""
         outcome = pb_store.DRY if dry else pb_store.FAILED
         await pb_store.settle_post(
@@ -671,19 +750,15 @@ class Feed:
             aimed_at=details.get("aimed_at"),
             reason=reason,
         )
-        kind = "pbfeed.would_post" if dry else "pbfeed.post_failed"
         extra = {"rehearsed": False} if dry else {}
-        await safely(
-            log_action(
-                self.bot,
-                guild,
-                kind,
-                target=user_id,
-                details=details | extra | {"channel_id": home, "reason": reason},
-            ),
-            "the log row",
+        await self.logged(
+            guild,
+            kinds.rehearsed if dry else kinds.failed,
+            user_id,
+            details | extra | {"channel_id": home, "reason": reason},
+            **who,
         )
-        return outcome
+        return Sent(post_id, outcome, home, reason)
 
 
 def feed_of(bot: Any) -> Feed:
@@ -694,4 +769,14 @@ def feed_of(bot: Any) -> Feed:
     return found
 
 
-__all__ = ["FEED_ATTR", "Feed", "Looked", "feed_of", "safely"]
+__all__ = [
+    "AGAIN",
+    "FEED_ATTR",
+    "FRESH",
+    "Feed",
+    "Kinds",
+    "Looked",
+    "Sent",
+    "feed_of",
+    "safely",
+]

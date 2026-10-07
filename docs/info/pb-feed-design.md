@@ -349,6 +349,42 @@ user, mobile especially). Mentions render reliably only in message content. Fixe
 
 A post already made is not touched: no re-render, no new post.
 
+## Post again 2026-10-07
+
+Owner, 2026-10-07 ~7:3x AM, verbatim: *"Repost that same Pb again as a test"*. There was no move
+for it; built on branch `pb-post-again`, verified by the suite, `ruff` and the local mock only.
+
+- **The move** — `pb_moves.post_again(bot, guild, post_id, actor, via=…)`, one writer for every
+  door, under the feed's lock. It reads the stored `pb_posts` row (any outcome), rebuilds the
+  personal best from it (`pb_store.best_of`) and sends it through `Feed.deliver`, the same code a
+  fresh post uses: the CURRENT `pb_feed_post_*` wording, display name, avatar and link button,
+  the same `allowed_mentions` and ping role, and the mode's destination now (the rehearsal home
+  in `shadow`, `pb_feed_channel_id` in `on`). `off` is refused in words (409,
+  `pb_feed_again_off_said`); an unknown post is a 404 (`pb_feed_no_post_said`); nowhere to send
+  is a 409 and a send Discord refused a 502 (`pb_feed_again_failed_said` with the reason). A
+  member no longer matched, opted out or blocked is still posted — it is staff's test — and the
+  answer says so (`pb_feed_again_not_in_feed_said`). The member's match and baseline are not
+  touched and speedrun.com is not asked.
+- **The row** — always a NEW `pb_posts` row, outcome as the send went; the source row is never
+  edited. New nullable column `pb_posts.again_of` (the source row's id), in `SCHEMA` and
+  `ADDED_COLUMNS`; `SCHEMA_VERSION` stays **89**. Because `UNIQUE (guild_id, run_id)` cannot be
+  dropped without a table rebuild, a repeat's `run_id` is `<run>#againN`; `pb_store.run_of`
+  strips it and the API's `run_id` is always the speedrun.com run.
+- **The log** — one row: `pbfeed.posted_again` (routine) in `on`, `pbfeed.would_post_again`
+  (shadow) in `shadow` (also when there is no rehearsal home, with `rehearsed: false`), or
+  `pbfeed.post_failed` when it failed; each with the actor, `via`, `again_of` and the member as
+  target. From the site they carry the `web.` head.
+- **Doors** — `POST /api/pbs/posts/{post_id}/again` (staff, writer session; answers
+  `{"post": <post row>, "message": …}`, the post row now carries `again_of`); a **Post again**
+  button on every row of the page's Recent posts (not drawn while the mode is `off`; it asks
+  once, then answers in the section's notice; a repeat row reads *again*); on `/pb` → Manage…, a
+  select of the last 10 posts (`AGAIN_CHOICES`), drawn only while the mode is not `off` and a
+  post exists, which re-renders Manage… with the answer.
+- **Keys** — 8 wording keys filed with `pb_feed_*` (registry **938 → 946**, core 109 → 117):
+  `pb_feed_post_again_label`, `pb_feed_post_again_pick`, `pb_feed_posted_again_said`,
+  `pb_feed_rehearsed_again_said`, `pb_feed_again_failed_said`, `pb_feed_again_off_said`,
+  `pb_feed_no_post_said`, `pb_feed_again_not_in_feed_said`.
+
 ## Gate
 
 Measured 2026-10-05 on branch `pb-feed`, before its docs commit:

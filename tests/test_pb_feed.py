@@ -59,7 +59,7 @@ def test_the_feature_ships_in_shadow_with_no_channel_and_no_ping(bot):
 
 
 def test_every_key_is_under_core_typed_explained_and_reachable_from_settings():
-    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 50
+    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 58
     for key in PB_FEED_KEYS:
         assert key in CORE_KEYS and namespace_of(key) == "core", key
         assert KEY_TYPES.get(key) and KEY_HELP.get(key), key

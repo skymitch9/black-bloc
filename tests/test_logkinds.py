@@ -49,7 +49,17 @@ ROOT = PACKAGE.parent
 # A call site the table does not cover fails `test_every_dynamic_kind_is_enumerated`
 # by name, which is what stops a new kind going quietly unclassified.
 KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
-    "black_bloc/pb_looks.py::kind": ("pbfeed.would_post", "pbfeed.post_failed"),
+    "black_bloc/pb_looks.py::kind": (
+        "pbfeed.posted",
+        "pbfeed.would_post",
+        "pbfeed.post_failed",
+        *(
+            f"{head}pbfeed.{name}"
+            for head in ("", "web.")
+            for name in ("posted_again", "would_post_again")
+        ),
+        "web.pbfeed.post_failed",
+    ),
     "black_bloc/pb_moves.py::kind": tuple(
         f"{head}pbfeed.{name}"
         for head in ("", "web.")

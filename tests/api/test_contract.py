@@ -985,7 +985,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         await sticky.write_words(db, guild_id, channel_id, "How to submit a run.", 7)
         await sticky.write_paused(db, guild_id, channel_id, paused, 7)
     structure_old, structure_new = await seed_structure(db, guild_id)
-    return await seed_pbs(web, guild_id) | {
+    return await seed_pbs(web, guild_id, wf.TEST_CHANNEL_ID) | {
         "sticky_channel_id": str(wf.OTHER_CHANNEL_ID),
         "sticky_paused_channel_id": str(wf.TEST_CHANNEL_ID),
         "structure_old_id": str(structure_old),
@@ -1148,8 +1148,8 @@ def arm_pbs(web) -> None:
     web._pb_feed = Feed(web, ContractSpeedrun())
 
 
-async def seed_pbs(web, guild_id: int) -> dict:
-    """One member in each state a staff move is legal from."""
+async def seed_pbs(web, guild_id: int, rehearsal_id: int) -> dict:
+    """One member in each state a staff move is legal from, and one post to send again."""
     from black_bloc import pb_store
     from black_bloc.speedrun import PersonalBest, Runner
 
@@ -1189,7 +1189,9 @@ async def seed_pbs(web, guild_id: int) -> dict:
     )
     await pb_store.settle_post(web.db, claimed, pb_store.REHEARSED, channel_id=1, message_id=2)
     await pb_store.record_ok(web.db, guild_id, found=1)
+    await web.store.set(guild_id, "pb_feed_shadow_channel_id", rehearsal_id, by=7)
     return {
+        "pb_post_id": str(claimed),
         "pb_matched_member_id": str(PB_MATCHED),
         "pb_free_member_id": str(PB_FREE),
         "pb_opted_out_member_id": str(PB_OPTED_OUT),

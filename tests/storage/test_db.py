@@ -3867,6 +3867,7 @@ PB_TABLES = {
         "aimed_at",
         "message_id",
         "at",
+        "again_of",
     },
     "pb_looks": {
         "guild_id",
@@ -4025,6 +4026,33 @@ async def test_a_pb_matches_table_from_the_first_build_gains_the_review_columns(
         )
         rows = [tuple(row) for row in await cur.fetchall()]
         assert rows == [(2, "2026-10-05T00:00:00+00:00", 0), (3, None, 0)]
+    finally:
+        await again.close()
+
+
+async def test_a_pb_posts_table_from_before_post_again_gains_again_of_and_keeps_its_rows(
+    tmp_path,
+):
+    path = tmp_path / "pb-again.sqlite3"
+    db = Database(path)
+    await db.connect()
+    try:
+        await db.conn.execute("ALTER TABLE pb_posts DROP COLUMN again_of")
+        await db.conn.execute(
+            "INSERT INTO pb_posts(guild_id, user_id, run_id, seconds, outcome, at) "
+            "VALUES (1, 2, 'r1', 10.0, 'rehearsed', '2026-10-07T00:00:00+00:00')"
+        )
+        await db.conn.commit()
+    finally:
+        await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        assert SCHEMA_VERSION == 89
+        assert (await pb_columns(again))["pb_posts"] == PB_TABLES["pb_posts"]
+        cur = await again.conn.execute("SELECT run_id, outcome, again_of FROM pb_posts")
+        assert [tuple(row) for row in await cur.fetchall()] == [("r1", "rehearsed", None)]
     finally:
         await again.close()
 

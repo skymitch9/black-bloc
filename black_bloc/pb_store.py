@@ -7,7 +7,7 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
-from .speedrun import PersonalBest, Runner
+from .speedrun import VERIFIED, PersonalBest, Runner
 
 MATCHED = "matched"
 NONE = "none"
@@ -29,6 +29,7 @@ UNCONFIRMED = "unconfirmed"
 SHOWN = (POSTED, REHEARSED, DRY, HELD, FAILED, UNCONFIRMED)
 
 POSTS_LIMIT = 50
+AGAIN_MARK = "#again"
 
 
 class RunnerTaken(Exception):
@@ -394,6 +395,67 @@ async def claim_post(
     return int(cur.lastrowid) if cur.rowcount else None
 
 
+def run_of(run_id: Any) -> str:
+    """The speedrun.com run a post row is about; a repeat's own key carries a suffix."""
+    return str(run_id or "").split(AGAIN_MARK, 1)[0]
+
+
+def best_of(row: Any) -> PersonalBest:
+    return PersonalBest(
+        run_id=run_of(row["run_id"]),
+        slot="",
+        game=str(row["game"] or ""),
+        category=str(row["category"] or ""),
+        seconds=float(row["seconds"] or 0),
+        place=row["place"],
+        weblink=str(row["weblink"] or ""),
+        status=VERIFIED,
+        verified_at=parsed(row["verified_at"]) if row["verified_at"] else None,
+    )
+
+
+async def post(db: Any, guild_id: int, post_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM pb_posts WHERE guild_id = ? AND id = ?", (guild_id, int(post_id))
+    )
+    return await cur.fetchone()
+
+
+async def claim_again(db: Any, source: Any, *, now: datetime | None = None) -> int:
+    """A new row for a repeat of `source`; the run's own row and its claim stay as they were."""
+    base = run_of(source["run_id"])
+    cur = await db.conn.execute(
+        "SELECT run_id FROM pb_posts WHERE guild_id = ? AND again_of IS NOT NULL",
+        (source["guild_id"],),
+    )
+    taken = {str(row["run_id"]) for row in await cur.fetchall()}
+    count = sum(1 for one in taken if run_of(one) == base) + 1
+    while f"{base}{AGAIN_MARK}{count}" in taken:
+        count += 1
+    cur = await db.conn.execute(
+        "INSERT INTO pb_posts(guild_id, user_id, run_id, src_name, game, category, seconds, "
+        "place, weblink, verified_at, outcome, at, again_of) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            source["guild_id"],
+            source["user_id"],
+            f"{base}{AGAIN_MARK}{count}",
+            source["src_name"],
+            source["game"],
+            source["category"],
+            source["seconds"],
+            source["place"],
+            source["weblink"],
+            source["verified_at"],
+            CLAIMED,
+            stamp(now),
+            int(source["id"]),
+        ),
+    )
+    await db.conn.commit()
+    return int(cur.lastrowid)
+
+
 async def settle_post(
     db: Any,
     post_id: int,
@@ -493,6 +555,7 @@ async def take_summary(db: Any, guild_id: int, now: datetime | None = None) -> t
 
 
 __all__ = [
+    "AGAIN_MARK",
     "AUTO",
     "BLOCKED",
     "CLAIMED",
@@ -512,6 +575,8 @@ __all__ = [
     "UNCONFIRMED",
     "RunnerTaken",
     "baseline",
+    "best_of",
+    "claim_again",
     "claim_post",
     "forget_runs",
     "holder_of",
@@ -520,6 +585,7 @@ __all__ = [
     "match",
     "matches",
     "parsed",
+    "post",
     "posts",
     "quiet_of",
     "record_look",
@@ -529,6 +595,7 @@ __all__ = [
     "record_ok",
     "record_outage",
     "restore",
+    "run_of",
     "runner_gone",
     "settle_post",
     "settle_stale_claims",

@@ -252,3 +252,52 @@ async def test_stale_claims_become_unconfirmed_once_and_are_listed(db):
         row["run_id"]: (row["outcome"], row["reason"]) for row in await pb_store.posts(db, GUILD)
     }
     assert shown == {"r1": ("unconfirmed", "never confirmed"), "r2": ("posted", None)}
+
+
+async def test_a_stored_post_reads_back_as_the_personal_best_it_was(db):
+    from black_bloc import pb_feed
+    from black_bloc.settings_store import PB_FEED_DEFAULTS
+
+    class Words:
+        def get(self, guild_id, key):
+            return PB_FEED_DEFAULTS[key]
+
+    original = best("r9", seconds=95.5, place=2)
+    claimed = await pb_store.claim_post(db, GUILD, ADA, original, "zfg", now=NOW)
+
+    again = pb_store.best_of(await pb_store.post(db, GUILD, claimed))
+
+    assert (again.run_id, again.game, again.category, again.seconds, again.place) == (
+        "r9",
+        original.game,
+        original.category,
+        95.5,
+        2,
+    )
+    assert (again.weblink, again.verified_at) == (original.weblink, original.verified_at)
+    fresh = pb_feed.post_embed(Words(), GUILD, None, ADA, "zfg", original).to_dict()
+    assert pb_feed.post_embed(Words(), GUILD, None, ADA, "zfg", again).to_dict() == fresh
+
+
+async def test_a_repeat_is_a_new_row_that_points_at_its_source_and_leaves_it_alone(db):
+    first = await pb_store.claim_post(db, GUILD, ADA, best("r9"), "zfg", now=NOW)
+    await pb_store.settle_post(db, first, pb_store.REHEARSED, channel_id=5, message_id=6)
+    source = await pb_store.post(db, GUILD, first)
+
+    one = await pb_store.claim_again(db, source, now=NOW)
+    two = await pb_store.claim_again(db, await pb_store.post(db, GUILD, one), now=NOW)
+
+    assert dict(await pb_store.post(db, GUILD, first)) == dict(source)
+    assert source["again_of"] is None
+    again = await pb_store.post(db, GUILD, one)
+    assert (again["again_of"], again["outcome"], again["user_id"]) == (first, "claimed", ADA)
+    assert (again["game"], again["seconds"], again["weblink"]) == (
+        source["game"],
+        source["seconds"],
+        source["weblink"],
+    )
+    assert again["run_id"] != "r9" and pb_store.run_of(again["run_id"]) == "r9"
+    assert (await pb_store.post(db, GUILD, two))["again_of"] == one
+    assert pb_store.run_of((await pb_store.post(db, GUILD, two))["run_id"]) == "r9"
+    assert await pb_store.post(db, GUILD + 1, first) is None
+    assert await pb_store.claim_post(db, GUILD, ADA, best("r9"), "zfg", now=NOW) is None
