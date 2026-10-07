@@ -38,10 +38,9 @@ export function fileName(url) {
   return last || text;
 }
 
-export function timeWords(when) {
+export function timeWords(when, now = new Date()) {
   const at = when instanceof Date ? when : new Date(when);
   if (!when || Number.isNaN(at.getTime())) return '';
-  const now = new Date();
   const clock = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const day = new Date(at.getFullYear(), at.getMonth(), at.getDate());
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -102,10 +101,10 @@ function authorTree(author) {
   };
 }
 
-function footerTree(embed) {
+function footerTree(embed, now) {
   const footer = embed.footer || {};
   const text = words(footer.text);
-  const stamp = timeWords(embed.timestamp);
+  const stamp = timeWords(embed.timestamp, now);
   if (!text && !stamp) return null;
   return {
     tag: 'div',
@@ -118,7 +117,7 @@ function footerTree(embed) {
 }
 
 /** One embed as Discord draws it: the bar, the author line, the title, the body, the grid. */
-export function embedTree(embed, refs) {
+export function embedTree(embed, refs, now = new Date()) {
   const bar = colourOf(embed.color);
   const fields = embed.fields || [];
   const title = words(embed.title);
@@ -155,7 +154,7 @@ export function embedTree(embed, refs) {
         children: [
           { tag: 'div', class: 'dcmock-embed-main', children: main },
           thumb,
-          footerTree(embed),
+          footerTree(embed, now),
         ].filter(Boolean),
       },
     ],
@@ -182,7 +181,7 @@ function buttonTree(one) {
  * The whole message: avatar, name, BOT tag, time, the text, every embed, every button row.
  * `rendered` is the `/api/preview/message` payload and nothing else is consulted.
  */
-export function messageTree(rendered = {}, { bot = {}, when = null, caption = CAPTION } = {}) {
+export function messageTree(rendered = {}, { bot = {}, when = null, caption = CAPTION, now = new Date() } = {}) {
   const refs = refsOf(rendered);
   const content = words(rendered.content);
   const embeds = (rendered.embeds || []).slice(0, EMBED_LIMIT);
@@ -196,11 +195,11 @@ export function messageTree(rendered = {}, { bot = {}, when = null, caption = CA
       children: [
         { tag: 'span', class: 'dcmock-name', style: `color: ${colour}`, text: name },
         { tag: 'span', class: 'dcmock-tag', text: BOT_TAG },
-        { tag: 'span', class: 'dcmock-when', text: timeWords(when || new Date()) },
+        { tag: 'span', class: 'dcmock-when', text: timeWords(when || now, now) },
       ],
     },
     content ? { tag: 'div', class: 'dcmock-content', html: markdown(content, refs, 'plain') } : null,
-    ...embeds.map((one) => embedTree(one, refs)),
+    ...embeds.map((one) => embedTree(one, refs, now)),
     rows.length
       ? {
         tag: 'div',
