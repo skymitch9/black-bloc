@@ -185,13 +185,13 @@ class Bracket:
 SIDE_ORDER = {WINNERS: 0, LOSERS: 1, THIRD: 2, GRAND: 3, RR: 0, SWISS_SIDE: 0}
 
 
-def order_key(match: Match) -> tuple[int, int, int]:
+def order_key(match: Match) -> tuple[int, int, int, int]:
     """Play order: winners round r, then losers, third place and the grand final last."""
     if match.side == LOSERS:
-        return (match.round // 2 + 1, 1, match.position)
+        return (match.round // 2 + 1, 1, match.round, match.position)
     if match.side in (GRAND, THIRD):
-        return (10_000 + match.round, SIDE_ORDER[match.side], match.position)
-    return (match.round, SIDE_ORDER[match.side], match.position)
+        return (10_000 + match.round, SIDE_ORDER[match.side], match.round, match.position)
+    return (match.round, SIDE_ORDER[match.side], match.round, match.position)
 
 
 def key_of(side: str, round_: int, position: int) -> str:

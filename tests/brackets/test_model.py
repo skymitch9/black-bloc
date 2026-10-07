@@ -51,3 +51,11 @@ def test_a_set_knows_its_sides():
     )
     assert (match.other(4), match.other(5), match.other(6)) == (5, 4, None)
     assert match.holds(5) and not match.holds(None)
+
+
+def test_a_pure_losers_round_comes_after_the_drop_round_it_follows():
+    sets = [
+        Match(key_of(LOSERS, round_, position), LOSERS, round_, position, 3)
+        for round_, position in ((3, 1), (2, 2), (2, 1))
+    ]
+    assert [one.key for one in sorted(sets, key=order_key)] == ["L2-1", "L2-2", "L3-1"]
