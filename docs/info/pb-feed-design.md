@@ -3,7 +3,8 @@
 > **Audience:** the build agent, reviewers and future Claude sessions. **Status:** TRACKED ·
 > ✅ **MERGED to `main` at `c16deab1`** (merge commit `603b7d52`), **NOT deployed.** The review
 > fixes of 2026-10-05 are on branch `pb-fixes` (off `c16deab1`) — see *Review fixes 2026-10-05*;
-> that branch is NOT merged and NOT deployed.
+> that branch is NOT merged and NOT deployed. *Review fix 2026-10-07* (the post names the member) is
+> on branch `pb-post-name`, verified 2026-10-07 by the suite, `ruff` and the local mock only.
 > **Last verified: 2026-10-05** — by the hermetic test suite, `ruff`, the node tests and the local
 > mock (figures at the foot under *Gate*); the speedrun.com facts in §A by reading the official
 > API docs and by three real read-only GETs that day. ⚠️ **NOT checked:** nothing here has met
@@ -128,9 +129,11 @@ user id, name and link, **how it was made** (`source`: `auto` | `staff`), its **
 
 ## D. The post
 
-One embed per new PB: title `pb_feed_post_title`, description `pb_feed_post_text`, the embed's
-link is the run. Fields the templates may use: `{member}` (a mention — it does not ping, see
-below), `{name}` (display name), `{runner}` (speedrun.com name), `{game}`, `{category}` (level,
+One embed per new PB: author line `pb_feed_post_author` (default `{name}`) beside the member's
+avatar, title `pb_feed_post_title`, description `pb_feed_post_text` (default
+`**{name}** ran **{game}** — …`), the embed's link is the run. *(Amended 2026-10-07 — see
+Review fix 2026-10-07.)* Fields the templates may use: `{member}` (a mention — it does not ping,
+see below; ⚠️ inside an embed Discord may show it as a raw id), `{name}` (display name), `{runner}` (speedrun.com name), `{game}`, `{category}` (level,
 category and sub-category values joined), `{time}`, `{place}`, `{place_line}`
 (`pb_feed_place_text` filled, or nothing when the API gave no place), `{link}`. A template that
 cannot be filled falls back to the shipped one with a log line (checklist 17).
@@ -326,6 +329,25 @@ in a throwaway worktree and seen to fail there, except where the line says other
    cooldown is a constant. No new key.
 8. *A stale claim is settled as a new outcome, `unconfirmed`,* rather than `failed`: Black Bloc
    does not know whether the message went out.
+
+## Review fix 2026-10-07 — the post names the member
+
+Owner, 2026-10-07 ~7:1x AM, verbatim: *"A pb was posted but it didn't say who it belonged to
+just a discord user id"*. The feed's first real post (a rehearsal copy in the shadow home) was for
+the right member, still in the server. **Cause:** the shipped `pb_feed_post_text` opened with
+`{member}`, an @ (`<@id>`) placed inside the embed description; Discord does not reliably resolve a
+user mention inside an embed (raw `<@…>` or *@unknown-user* for clients that have not cached the
+user, mobile especially). Mentions render reliably only in message content. Fixed on branch
+`pb-post-name`:
+
+| What changed | Pinned by |
+|---|---|
+| Shipped `pb_feed_post_text` = `**{name}** ran **{game}** — {category} in **{time}**{place_line}.` — `{name}` is the server display name escaped by `plain`, the speedrun.com name once they have left. `{member}` stays a field; its help says Discord may show it as a raw id in this post and to use `{name}` | `tests/test_pb_feed.py::test_the_shipped_post_names_the_member_in_words_never_by_an_at`; `tests/test_pb_looks.py` (the rehearsal and `on` posts now read `**Ada** ran …`) |
+| New key `pb_feed_post_author` (default `{name}`, fields `{name}` `{runner}`), filed with the other `pb_feed_*` words, because go-live's author line is a key (`golive_live_author`): the embed's author line with `display_avatar.url` when the member is in the server, the speedrun.com name and no icon when not. A blank rendering draws no author line. Registry keys **937 → 938**, core keys 108 → 109 | `::test_the_post_carries_the_members_name_and_avatar_as_its_author`, `::test_a_member_who_left_is_authored_by_their_speedrun_name_with_no_avatar`, `::test_the_author_line_follows_its_own_wording` |
+| Markdown in a display name is only ever words: escaped in the body; in the author line it is the name as typed, because Discord renders an author name as literal text (no bold, no masked link, no auto-link) — escaping there would print the backslashes | `::test_markdown_in_a_display_name_is_only_ever_words` (`[free nitro](https://evil.example)`, `**x**`) |
+| A staff-stored template using `{member}` keeps working as stored (none was stored live, measured 2026-10-07, so the new default takes effect at deploy) | `::test_a_stored_template_with_member_still_renders_the_mention` (passes before and after — it pins, it was not a failing test) |
+
+A post already made is not touched: no re-render, no new post.
 
 ## Gate
 
