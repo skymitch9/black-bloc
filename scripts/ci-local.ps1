@@ -36,8 +36,10 @@ if ($Ref) {
     $scratch = Join-Path ([IO.Path]::GetTempPath()) "black-bloc-ci-$($sha.Substring(0, 12))-$PID"
     New-Item -ItemType Directory -Force -Path $scratch | Out-Null
     git archive -o "$scratch.tar" $sha
-    tar -xf "$scratch.tar" -C $scratch
+    & "$env:SystemRoot\System32\tar.exe" -xf "$scratch.tar" -C $scratch
+    $unpacked = $LASTEXITCODE
     Remove-Item -LiteralPath "$scratch.tar" -Force
+    if ($unpacked -ne 0) { Write-Host "CI MIRROR NOT RUN: could not unpack $sha into $scratch."; exit 3 }
     $source = $scratch
     Write-Host "== Mirroring commit $($sha.Substring(0, 12)) (exported, not the working tree)"
 }
