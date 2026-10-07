@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from black_bloc.brackets import play, standings, swiss
-from black_bloc.brackets.model import BYE, DQ, SWISS
+from black_bloc.brackets.model import BYE, DQ, SWISS, BracketError, Options
 from tests.brackets.test_play import NOW, built, play_out, seeds, win
 
 
@@ -91,3 +91,46 @@ def test_the_pairing_falls_back_to_top_down_when_every_pairing_is_a_rematch():
 def test_a_set_number_of_rounds_is_kept():
     bracket = play_out(built(4, format=SWISS, swiss_rounds=3))
     assert swiss.current_round(bracket) == 3
+
+
+@pytest.mark.parametrize(("count", "rounds"), [(4, 4), (6, 6), (8, 8), (2, 2)])
+def test_more_rounds_than_the_field_can_carry_without_a_rematch_is_refused(count, rounds):
+    with pytest.raises(BracketError) as raised:
+        play.build(seeds(count), Options(format=SWISS, swiss_rounds=rounds), NOW)
+    assert (raised.value.code, raised.value.fields) == (
+        "too_many_rounds",
+        {"rounds": rounds, "most": count - 1},
+    )
+    assert play.build(seeds(count), Options(format=SWISS, swiss_rounds=count - 1), NOW)
+
+
+def test_a_forced_rematch_is_flagged_on_the_set():
+    bracket = built(4, format=SWISS, swiss_rounds=3)
+    assert round_of(bracket, 1) == [(1, 3), (2, 4)]
+    bracket = win(win(bracket, "S1-1", "a"), "S1-2", "a")
+    assert not any(match.rematch for match in bracket.matches.values())
+    bracket = play.withdraw(bracket, 2, DQ, NOW).bracket
+    bracket = play.withdraw(bracket, 4, DQ, NOW).bracket
+    assert round_of(bracket, 3) == [(1, 3)]
+    assert bracket.matches["S3-1"].rematch
+    assert not any(match.rematch for match in bracket.matches.values() if match.round < 3)
+
+
+def test_correcting_a_score_without_changing_the_winner_keeps_the_later_rounds():
+    bracket = built(8, format=SWISS)
+    bracket = play_out(bracket)
+    before = {key: match for key, match in bracket.matches.items() if match.round > 1}
+    corrected = play.override(bracket, "S1-1", 99, NOW, score_a=2, score_b=1)
+    assert corrected.removed == []
+    assert corrected.changed == ["S1-1"]
+    after = corrected.bracket.matches
+    assert (after["S1-1"].score_a, after["S1-1"].score_b, after["S1-1"].winner) == (2, 1, 1)
+    assert {key: after[key] for key in before} == before
+
+
+def test_flipping_the_winner_still_re_pairs_every_later_round():
+    bracket = play_out(built(8, format=SWISS))
+    flipped = play.override(bracket, "S1-1", 99, NOW, score_a=0, score_b=2)
+    assert sorted(flipped.removed) == [f"S3-{p}" for p in range(1, 5)]
+    assert {match.round for match in flipped.bracket.matches.values()} == {1, 2}
+    assert flipped.bracket.matches["S1-1"].winner == 5

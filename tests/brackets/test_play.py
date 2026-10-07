@@ -374,3 +374,44 @@ def test_any_field_plays_to_the_end_with_random_results(fmt, count):
     assert sorted(placed) == seeds(count)
     assert sorted(placed.values())[0] == 1
     assert all(match.state in (COMPLETE, BYE, VOID) for match in bracket.matches.values())
+
+
+def test_correcting_an_elimination_score_without_changing_the_winner_keeps_what_it_fed():
+    bracket = built(4, format=SINGLE)
+    bracket = win(win(bracket, "W1-1", A), "W1-2", A)
+    bracket = win(bracket, "W2-1", A)
+    corrected = play.override(bracket, "W1-1", TO, NOW, score_a=2, score_b=1)
+    assert corrected.changed == ["W1-1"]
+    assert corrected.bracket.matches["W2-1"] == bracket.matches["W2-1"]
+    assert corrected.bracket.matches["W1-1"].score_b == 1
+
+
+def test_a_round_robin_correction_touches_that_set_either_way():
+    bracket = play_out(built(4, format=ROUND_ROBIN))
+    for score in ((2, 1), (0, 2)):
+        moved = play.override(bracket, "R1-1", TO, NOW, score_a=score[0], score_b=score[1])
+        assert (moved.changed, moved.removed) == (["R1-1"], [])
+
+
+@pytest.mark.parametrize("stamp", ["not a time", None, ""])
+def test_a_report_with_an_unreadable_time_stands_at_the_next_sweep(stamp):
+    bracket = play.report(built(2, format=SINGLE), "W1-1", B, 0, 2, 2, NOW).bracket
+    bracket.matches["W1-1"].reported_at = stamp
+    late = play.confirm_due(bracket, datetime(2026, 10, 7, 12, 0, tzinfo=UTC), 12)
+    assert (late.bracket.matches["W1-1"].state, late.changed) == (COMPLETE, ["W1-1"])
+
+
+@pytest.mark.parametrize(
+    ("count", "options", "sets"),
+    [
+        (9, {"format": DOUBLE}, (16, 17)),
+        (9, {"format": DOUBLE, "grand_final_reset": False}, (16, 16)),
+        (8, {"format": SINGLE}, (7, 7)),
+        (8, {"format": SINGLE, "third_place": True}, (8, 8)),
+        (5, {"format": ROUND_ROBIN}, (10, 10)),
+        (8, {"format": SWISS}, (12, 12)),
+        (5, {"format": SWISS}, (6, 6)),
+    ],
+)
+def test_the_sets_to_play_counts_only_sets_that_are_played(count, options, sets):
+    assert play.sets_to_play(built(count, **options)) == sets

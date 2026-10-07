@@ -10,6 +10,10 @@ from .tally import met, records
 SEARCH_BUDGET = 20_000
 
 
+def most_rounds(entrants: int) -> int:
+    return max(1, entrants - 1)
+
+
 def rounds_for(entrants: int, wanted: int | None = None) -> int:
     if wanted:
         return int(wanted)
@@ -73,7 +77,8 @@ def pair_round(bracket: Bracket, round_: int) -> list[Match]:
         bye = bye_for(order, bracket)
         order = [entrant for entrant in order if entrant != bye]
     points = {entrant: records(bracket)[entrant].set_wins for entrant in order}
-    pairs = pairings(order, points, met(bracket))
+    played = met(bracket)
+    pairs = pairings(order, points, played)
     made = [
         Match(
             key=key_of(SWISS_SIDE, round_, position),
@@ -83,6 +88,7 @@ def pair_round(bracket: Bracket, round_: int) -> list[Match]:
             best_of=bracket.options.best_of,
             slot_a=slot_a,
             slot_b=slot_b,
+            rematch=frozenset((slot_a, slot_b)) in played,
         )
         for position, (slot_a, slot_b) in enumerate(pairs, start=1)
     ]

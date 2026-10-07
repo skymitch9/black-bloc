@@ -203,8 +203,9 @@ def test_best_of_rises_from_top_eight_and_for_the_grand_final():
         ("grand", 2): 7,
     }
     alive = {match.key: match.alive for match in bracket.matches.values()}
-    assert (alive["W1-1"], alive["W2-1"], alive["L1-1"], alive["L2-1"]) == (16, 16, 16, 12)
-    assert (alive["W3-1"], alive["L3-1"], alive["L4-1"], alive["L6-1"]) == (8, 8, 6, 3)
+    assert (alive["W1-1"], alive["W2-1"], alive["L1-1"], alive["L2-1"]) == (16, 12, 16, 12)
+    assert (alive["W3-1"], alive["L3-1"], alive["L4-1"], alive["L6-1"]) == (6, 8, 6, 3)
+    assert (alive["W4-1"], alive["L5-1"], alive["G1-1"]) == (3, 4, 2)
 
 
 def test_single_elimination_best_of_from_top_eight():
@@ -225,3 +226,61 @@ def test_building_twice_from_the_same_seeds_gives_the_same_bracket():
     first = play.build(seeds(12), Options(format=DOUBLE), NOW).bracket
     again = play.build(seeds(12), Options(format=DOUBLE), NOW).bracket
     assert first == again
+
+
+def levels_alive(bracket) -> dict[str, int]:
+    """Who is still unplaced when each round's first set is played, in play order."""
+    count = len(bracket.entrants)
+    seen: dict[tuple, int] = {}
+    found: dict[str, int] = {}
+    while True:
+        ready = [match for match in bracket.ordered() if match.state in (READY, "called")]
+        if not ready:
+            return found
+        match = ready[0]
+        placed = sum(
+            1
+            for one in bracket.matches.values()
+            if one.state == COMPLETE and one.loser_to is None and one.side != "grand"
+        )
+        level = (match.side, match.round)
+        seen.setdefault(level, count - placed)
+        found[match.key] = seen[level]
+        bracket = win(bracket, match.key, A if match.slot_a < match.slot_b else B)
+
+
+@pytest.mark.parametrize("fmt", [SINGLE, DOUBLE])
+@pytest.mark.parametrize("count", [*range(2, 34), 48, 64])
+def test_alive_is_who_is_still_unplaced_when_the_round_is_played(fmt, count):
+    bracket = built(count, format=fmt)
+    for key, alive in levels_alive(bracket).items():
+        if key.startswith(("G", "T")):
+            continue
+        assert bracket.matches[key].alive == alive, (key, alive)
+
+
+def test_top_six_of_eight_plays_winners_round_two_long_like_the_losers_round_beside_it():
+    bracket = built(8, format=DOUBLE, best_of_from_round=6, best_of_late=5)
+    for key in ("W2-1", "W2-2", "L2-1", "L2-2"):
+        assert (bracket.matches[key].alive, bracket.matches[key].best_of) == (6, 5), key
+    assert bracket.matches["L1-1"].best_of == 3
+
+
+def test_top_eight_of_nine_starts_once_nine_are_down_to_eight():
+    bracket = built(9, format=DOUBLE, best_of_from_round=8, best_of_late=5)
+    lengths = {key: match.best_of for key, match in bracket.matches.items()}
+    assert {lengths[f"W2-{p}"] for p in range(1, 5)} == {3}
+    assert {lengths[f"L2-{p}"] for p in range(1, 5)} == {3}
+    assert {lengths["L3-1"], lengths["L3-2"], lengths["W3-1"], lengths["W3-2"]} == {5}
+    single = built(9, format=SINGLE, best_of_from_round=8, best_of_late=5)
+    assert {single.matches[f"W2-{p}"].best_of for p in range(1, 5)} == {5}
+
+
+@pytest.mark.parametrize(
+    ("count", "losers"),
+    [(8, [8, 8, 6, 6, 4, 3]), (16, [16, 16, 16, 16, 12, 12, 12, 12, 8, 8, 6, 6, 4, 3])],
+)
+def test_a_full_bracket_keeps_the_losers_side_numbers_of_the_design_tables(count, losers):
+    bracket = built(count, format=DOUBLE)
+    assert [match.alive for match in bracket.ordered() if match.side == LOSERS] == losers
+    assert {m.alive for m in bracket.matches.values() if m.side == "grand"} == {2}

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .bestof import length_for
 from .model import (
     GRAND,
     LOSERS,
@@ -55,15 +54,6 @@ def drop_target(size: int, round_: int, position: int) -> tuple[str, str]:
     return key_of(LOSERS, target, flipped(position, losers_matches(size, target))), B
 
 
-def winners_alive(size: int, round_: int) -> int:
-    return size if round_ == 1 else 4 * winners_matches(size, round_)
-
-
-def losers_alive(size: int, round_: int) -> int:
-    count = losers_matches(size, round_)
-    return 4 * count if round_ % 2 == 1 else 3 * count
-
-
 def losers_place(size: int, round_: int) -> int:
     return 3 + sum(
         losers_matches(size, later) for later in range(round_ + 1, losers_rounds(size) + 1)
@@ -85,14 +75,12 @@ def single(entrants: list[int], options: Options) -> Bracket:
         count = winners_matches(size, round_)
         for position in range(1, count + 1):
             final = round_ == last
-            alive = 2 * count
             found = Match(
                 key=key_of(WINNERS, round_, position),
                 side=WINNERS,
                 round=round_,
                 position=position,
-                best_of=length_for(options, alive, final=final),
-                alive=alive,
+                best_of=options.best_of,
                 loser_place=2 if final else (None if third and round_ == last - 1 else count + 1),
                 winner_place=1 if final else None,
             )
@@ -108,8 +96,7 @@ def single(entrants: list[int], options: Options) -> Bracket:
             side=THIRD,
             round=1,
             position=1,
-            best_of=length_for(options, 4, final=False),
-            alive=4,
+            best_of=options.best_of,
             winner_place=3,
             loser_place=4,
         )
@@ -125,14 +112,12 @@ def double(entrants: list[int], options: Options) -> Bracket:
     for round_ in range(1, last + 1):
         count = winners_matches(size, round_)
         for position in range(1, count + 1):
-            alive = winners_alive(size, round_)
             found = Match(
                 key=key_of(WINNERS, round_, position),
                 side=WINNERS,
                 round=round_,
                 position=position,
-                best_of=length_for(options, alive, final=False),
-                alive=alive,
+                best_of=options.best_of,
             )
             if round_ == last:
                 found.winner_to, found.winner_slot = key_of(GRAND, 1, 1), A
@@ -144,14 +129,12 @@ def double(entrants: list[int], options: Options) -> Bracket:
     for round_ in range(1, lower + 1):
         count = losers_matches(size, round_)
         for position in range(1, count + 1):
-            alive = losers_alive(size, round_)
             found = Match(
                 key=key_of(LOSERS, round_, position),
                 side=LOSERS,
                 round=round_,
                 position=position,
-                best_of=length_for(options, alive, final=False),
-                alive=alive,
+                best_of=options.best_of,
                 loser_place=losers_place(size, round_),
             )
             if round_ == lower:
@@ -167,8 +150,7 @@ def double(entrants: list[int], options: Options) -> Bracket:
         side=GRAND,
         round=1,
         position=1,
-        best_of=length_for(options, 2, final=True),
-        alive=2,
+        best_of=options.best_of_finals,
         winner_place=1,
         loser_place=2,
     )
@@ -179,8 +161,7 @@ def double(entrants: list[int], options: Options) -> Bracket:
             side=GRAND,
             round=2,
             position=1,
-            best_of=length_for(options, 2, final=True),
-            alive=2,
+            best_of=options.best_of_finals,
             reset_of=grand.key,
             winner_place=1,
             loser_place=2,

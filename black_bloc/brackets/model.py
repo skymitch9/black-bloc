@@ -109,6 +109,7 @@ class Match:
     completed_at: str | None = None
     placement_winner: int | None = None
     placement_loser: int | None = None
+    rematch: bool = False
 
     def slot(self, which: str) -> int | None:
         return self.slot_a if which == A else self.slot_b

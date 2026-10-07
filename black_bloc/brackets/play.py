@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from . import elimination, roundrobin, swiss
-from .bestof import checked
+from .bestof import checked, length_for
 from .model import (
     BY_OPPONENT,
     BY_TIME,
@@ -18,6 +18,7 @@ from .model import (
     DISPUTED,
     DONE,
     DOUBLE,
+    ELIMINATION,
     FORFEITS,
     GRAND,
     LOSER,
@@ -29,9 +30,11 @@ from .model import (
     SINGLE,
     SLOTS,
     SWISS,
+    THIRD,
     VOID,
     WAITING,
     WINNER,
+    WINNERS,
     A,
     B,
     Bracket,
@@ -39,6 +42,7 @@ from .model import (
     Match,
     Options,
     cleared,
+    order_key,
 )
 
 FILLED = "filled"
@@ -64,9 +68,62 @@ def build(entrants: list[int], options: Options, now: str | None = None) -> Move
         raise BracketError("too_few", count=len(entrants))
     if len(set(entrants)) != len(entrants):
         raise BracketError("bad_order")
+    most = swiss.most_rounds(len(entrants))
+    if options.format == SWISS and options.swiss_rounds and options.swiss_rounds > most:
+        raise BracketError("too_many_rounds", rounds=options.swiss_rounds, most=most)
     bracket = BUILDERS[options.format](list(entrants), options)
     settle(bracket, now)
+    if options.format in ELIMINATION:
+        pace(bracket)
     return Moved(bracket, [match.key for match in bracket.ordered()])
+
+
+def rehearsed(bracket: Bracket) -> Bracket:
+    """A copy played to the end with slot a winning every set, for counts no result changes."""
+    work = working(bracket)
+    while True:
+        ready = [match for match in work.matches.values() if match.state in OPEN]
+        if not ready:
+            return work
+        for match in ready:
+            finish(match, A, None)
+        settle(work)
+
+
+def level(match: Match, last: int) -> tuple[int, int, int]:
+    if match.side == GRAND:
+        return (10_000, 0, 0)
+    if match.side == THIRD:
+        return (last, 0, last)
+    return order_key(match)[:3]
+
+
+def pace(bracket: Bracket) -> None:
+    """Each set's `alive` (who is still unplaced when its round is played) and its best-of."""
+    last = max((one.round for one in bracket.matches.values() if one.side == WINNERS), default=1)
+    out: dict[tuple[int, int, int], int] = {}
+    for match in rehearsed(bracket).matches.values():
+        if match.state == COMPLETE and match.loser_to is None:
+            here = level(match, last)
+            out[here] = out.get(here, 0) + 1
+    for match in bracket.matches.values():
+        here = level(match, last)
+        match.alive = len(bracket.entrants) - sum(n for at, n in out.items() if at < here)
+        match.best_of = length_for(bracket.options, match.alive, final=match.winner_place == 1)
+
+
+def sets_to_play(bracket: Bracket) -> tuple[int, int]:
+    """The sets certain to be played, and the most there can be (a grand-final reset)."""
+    if bracket.format == SWISS:
+        active = len([one for one in bracket.entrants if one not in bracket.withdrawn])
+        certain = swiss.total_rounds(bracket) * (active // 2)
+        return certain, certain
+    if bracket.format == ROUND_ROBIN:
+        certain = sum(1 for match in bracket.matches.values() if match.state not in (BYE, VOID))
+        return certain, certain
+    played = rehearsed(bracket).matches.values()
+    certain = sum(1 for match in played if match.state == COMPLETE)
+    return certain, certain + sum(1 for match in bracket.matches.values() if match.reset_of)
 
 
 def feeds(bracket: Bracket) -> dict[tuple[str, str], tuple[str, str]]:
@@ -297,9 +354,10 @@ def agree(match: Match, by: int | None, now: str | None, how: str) -> None:
 
 def parsed(value: str | None) -> datetime | None:
     try:
-        return datetime.fromisoformat(str(value))
+        found = datetime.fromisoformat(str(value))
     except (TypeError, ValueError):
         return None
+    return found if found.tzinfo else found.replace(tzinfo=UTC)
 
 
 def confirms_at(match: Match, minutes: int) -> datetime | None:
@@ -308,12 +366,12 @@ def confirms_at(match: Match, minutes: int) -> datetime | None:
 
 
 def confirm_due(bracket: Bracket, now: datetime, minutes: int) -> Moved:
-    """Every report nobody answered within the confirm time stands."""
+    """Every report nobody answered within the confirm time stands; an unreadable time is due."""
     work = working(bracket)
     stamp = now.isoformat()
     for match in work.ordered():
         due = confirms_at(match, minutes)
-        if due is not None and due <= now:
+        if match.state == REPORTED and (due is None or due <= now):
             agree(match, None, stamp, BY_TIME)
     return moved(work, bracket, stamp)
 
@@ -422,7 +480,7 @@ def override(
     else:
         scored = checked(match.best_of, score_a, score_b)
         side = A if scored[0] > scored[1] else B
-    if match.state == COMPLETE:
+    if match.state == COMPLETE and not kept_winner(work, match, side):
         undo(work, match)
     else:
         reopen(match)
@@ -431,6 +489,13 @@ def override(
     match.confirmed_by, match.confirmed_at, match.confirmed_how = by, now, BY_TO
     finish(match, side, now, forfeit="to" if forfeit else None)
     return moved(work, bracket, now)
+
+
+def kept_winner(bracket: Bracket, match: Match, side: str) -> bool:
+    """A correction that keeps the winner leaves what the set fed, unless it opens a reset."""
+    if match.winner != match.slot(side):
+        return False
+    return not any(one.reset_of == match.key for one in bracket.matches.values())
 
 
 def withdraw(bracket: Bracket, entrant: int, why: str, now: str | None) -> Moved:

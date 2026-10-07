@@ -1411,6 +1411,9 @@ CREATE TABLE IF NOT EXISTS tournament_sets (
     completed_at     TEXT,
     placement_winner INTEGER,
     placement_loser  INTEGER,
+    rematch          INTEGER NOT NULL DEFAULT 0,
+    message_id       INTEGER,
+    card_at          TEXT,
     UNIQUE (tournament_id, key)
 );
 """
