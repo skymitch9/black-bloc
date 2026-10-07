@@ -79,7 +79,7 @@ LABEL_KEYS = {
     CONFIRM: "brackets_confirm_label",
     DISPUTE: "brackets_dispute_label",
 }
-TO_LABELS = {CALL: "Call", DECIDE: "Decideâ€¦", RESET: "Resetâ€¦"}
+TO_LABELS = {CALL: "Call", DECIDE: "Decide…", RESET: "Reset…"}
 STYLES = {
     JOIN: discord.ButtonStyle.success,
     LEAVE: discord.ButtonStyle.secondary,
@@ -134,7 +134,7 @@ def set_moves(tournament_state: str, set_state: str) -> tuple[str, ...]:
 
 def mention(person: Any) -> str:
     if person is None:
-        return "â€”"
+        return "—"
     if person["user_id"] is not None:
         return f"<@{int(person['user_id'])}>"
     return str(person["name"])
@@ -142,7 +142,7 @@ def mention(person: Any) -> str:
 
 def name_of(people: dict[int, Any], entrant: int | None) -> str:
     found = people.get(entrant) if entrant is not None else None
-    return str(found["name"]) if found is not None else "â€”"
+    return str(found["name"]) if found is not None else "—"
 
 
 def site_url(origin: Any, tournament_id: int) -> str | None:
@@ -192,7 +192,7 @@ def format_line(store: Any, guild_id: int, row: Any) -> str:
             found.append(
                 words(store, gid, "brackets_card_finals_words", best_of=row["best_of_finals"])
             )
-    return " Â· ".join(part for part in found if part)
+    return " · ".join(part for part in found if part)
 
 
 def when_words(stamp: Any, style: str = "f") -> str | None:
@@ -266,7 +266,7 @@ def result_words(store: Any, guild_id: int, match: Any, people: dict[int, Any]) 
     if match.score_a is None or match.forfeit:
         result = words(store, guild_id, "brackets_forfeit_words")
     else:
-        result = f"{max(match.score_a, match.score_b)}â€“{min(match.score_a, match.score_b)}"
+        result = f"{max(match.score_a, match.score_b)}–{min(match.score_a, match.score_b)}"
     return words(
         store,
         guild_id,
@@ -294,7 +294,7 @@ def status_line(
                 gid,
                 "brackets_set_card_reported",
                 reporter=name_of(people, match.slot(side)),
-                score=f"{match.score_a}â€“{match.score_b}",
+                score=f"{match.score_a}–{match.score_b}",
                 opponent=name_of(people, match.slot("b" if side == "a" else "a")),
                 when=f"<t:{int(due.timestamp())}:R>" if due else "",
             )
@@ -306,7 +306,7 @@ def status_line(
                 for one in people.values()
                 if one["user_id"] is not None and one["user_id"] == match.disputed_by
             ),
-            "â€”",
+            "—",
         )
         found = [words(store, gid, "brackets_set_card_disputed", who=who)]
         if match.dispute_note:
@@ -324,7 +324,7 @@ def set_embed(
     head = [words(store, gid, "brackets_set_card_best_of", best_of=match.best_of)]
     if match.rematch:
         head.append(words(store, gid, "brackets_set_card_rematch"))
-    lines = [" Â· ".join(head), *status_line(store, gid, match, people, confirm_minutes)]
+    lines = [" · ".join(head), *status_line(store, gid, match, people, confirm_minutes)]
     return discord.Embed(
         title=words(
             store,
