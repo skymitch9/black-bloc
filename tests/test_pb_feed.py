@@ -59,7 +59,7 @@ def test_the_feature_ships_in_shadow_with_no_channel_and_no_ping(bot):
 
 
 def test_every_key_is_under_core_typed_explained_and_reachable_from_settings():
-    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 49
+    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 50
     for key in PB_FEED_KEYS:
         assert key in CORE_KEYS and namespace_of(key) == "core", key
         assert KEY_TYPES.get(key) and KEY_HELP.get(key), key
@@ -292,3 +292,60 @@ def test_an_opted_out_member_staff_unblocked_is_never_looked_up():
     found = row(pb_store.NONE) | {"opted_out_at": NOW.isoformat()}
 
     assert pb_feed.wants_lookup(found, "zfg1", auto=True, now=NOW, rematch_days=7) is False
+
+
+AVATAR = "https://cdn.discordapp.com/avatars/1/a.png"
+
+
+def a_member(name, user_id=ADA):
+    return SimpleNamespace(
+        mention=f"<@{user_id}>", display_name=name, display_avatar=SimpleNamespace(url=AVATAR)
+    )
+
+
+def test_the_shipped_post_names_the_member_in_words_never_by_an_at():
+    embed = pb_feed.post_embed(Store(), GUILD, a_member("Riekelt"), ADA, "riekelt", a_best("r1"))
+
+    assert "<@" not in embed.description
+    assert embed.description.startswith("**Riekelt** ran **")
+    assert PB_FEED_DEFAULTS["pb_feed_post_text"].startswith("**{name}** ran ")
+
+
+def test_the_post_carries_the_members_name_and_avatar_as_its_author():
+    embed = pb_feed.post_embed(Store(), GUILD, a_member("Riekelt"), ADA, "riekelt", a_best("r1"))
+
+    assert (embed.author.name, embed.author.icon_url) == ("Riekelt", AVATAR)
+    assert PB_FEED_DEFAULTS["pb_feed_post_author"] == "{name}"
+
+
+def test_a_member_who_left_is_authored_by_their_speedrun_name_with_no_avatar():
+    embed = pb_feed.post_embed(Store(), GUILD, None, CAL, "cal_runs", a_best("r1"))
+
+    assert (embed.author.name, embed.author.icon_url) == ("cal_runs", None)
+    assert embed.description.startswith("**cal\\_runs** ran ")
+    assert "<@" not in embed.description
+
+
+def test_the_author_line_follows_its_own_wording():
+    store = Store(pb_feed_post_author="{name} ({runner}) set a PB")
+
+    embed = pb_feed.post_embed(store, GUILD, a_member("Ada"), ADA, "zfg", a_best("r1"))
+
+    assert embed.author.name == "Ada (zfg) set a PB"
+
+
+@pytest.mark.parametrize("name", ["[free nitro](https://evil.example)", "**x**"])
+def test_markdown_in_a_display_name_is_only_ever_words(name):
+    embed = pb_feed.post_embed(Store(), GUILD, a_member(name), ADA, "zfg", a_best("r1"))
+
+    assert embed.description.startswith(f"**{pb_feed.plain(name)}** ran ")
+    assert "[free nitro](" not in embed.description and "://" not in embed.description
+    assert embed.author.name == name
+
+
+async def test_a_stored_template_with_member_still_renders_the_mention(bot):
+    await bot.store.set(GUILD, "pb_feed_post_text", "{member} ran **{game}**")
+
+    embed = pb_feed.post_embed(bot.store, GUILD, a_member("Ada"), ADA, "zfg", a_best("r1"))
+
+    assert embed.description == f"<@{ADA}> ran **Ocarina of Time**"

@@ -127,6 +127,7 @@ class FakeMember:
         self.display_name = name
         self.name = name.lower()
         self.mention = f"<@{user_id}>"
+        self.display_avatar = SimpleNamespace(url=f"https://cdn.discordapp.com/avatars/{user_id}.png")
         self.guild = guild
         self.roles = [SimpleNamespace(id=LEADS)] if staff else []
         self.guild_permissions = SimpleNamespace(manage_guild=staff)
@@ -293,8 +294,10 @@ async def test_a_faster_verified_run_after_the_baseline_is_rehearsed_once_in_sha
     embed = copy[0]["embed"]
     assert embed.title == "New personal best"
     assert embed.description == (
-        f"<@{ADA}> ran **Ocarina of Time** — Any% in **1:35.500** — #2 on the leaderboard."
+        "**Ada** ran **Ocarina of Time** — Any% in **1:35.500** — #2 on the leaderboard."
     )
+    assert embed.author.name == "Ada"
+    assert embed.author.icon_url == f"https://cdn.discordapp.com/avatars/{ADA}.png"
     assert embed.url == "https://www.speedrun.com/oot/runs/r9"
     assert copy[0]["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()
     found = await details_of(bot.db, "pbfeed.would_post")
@@ -318,7 +321,7 @@ async def test_on_posts_in_the_channel_with_no_ping_by_default(bot, guild, feed,
     post = guild.get_channel(PBS).sent[0]
     assert list(sent(guild)) == ["speed-and-pbs"]
     assert post["content"] is None
-    assert post["embed"].description == f"<@{ADA}> ran **Ocarina of Time** — Any% in **1:40**."
+    assert post["embed"].description == "**Ada** ran **Ocarina of Time** — Any% in **1:40**."
     assert post["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()
     assert [item.url for item in post["view"].children] == ["https://www.speedrun.com/oot/runs/r1"]
     assert "pbfeed.posted" in await kinds(bot.db)

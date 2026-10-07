@@ -471,6 +471,7 @@ export const LABELS = {
   pb_feed_panel_minutes: "How long the /pb panel stays live",
   pb_feed_post_title: "The heading of a personal best post",
   pb_feed_post_text: "The body of a personal best post",
+  pb_feed_post_author: "The line above a personal best post",
   pb_feed_place_text: "How a personal best post says the leaderboard place",
   pb_feed_link_label: "What the link to the run is called",
   pb_feed_no_channel_words: "What a rehearsal says while no channel is picked",
