@@ -6,6 +6,7 @@ from typing import Any, NamedTuple
 
 from . import marathon_events as me
 from . import marathon_spotlight as ms
+from .marathon_baf_event import CHOICES, FOLLOW, NO, YES
 
 EVENT = "event"
 RUNS = "runs"
@@ -22,10 +23,7 @@ RETIRED = (HOSTS, HOST_EVENTS)
 ON = "on"
 OFF = "off"
 CANCEL = "cancel"
-FOLLOW = "follow"
-YES = "yes"
-NO = "no"
-BAF_CHOICES = (FOLLOW, YES, NO)
+BAF_CHOICES = CHOICES
 BAF_ROW = 4
 TEMPLATE = (
     r"marathon:controls:(?P<marathon_id>[0-9]+)"
@@ -155,7 +153,10 @@ __all__ = [
     "ACTIONS",
     "BAF_CHOICES",
     "Control",
+    "FOLLOW",
+    "NO",
     "RETIRED",
+    "YES",
     "baf_controls",
     "controls",
     "custom_id",

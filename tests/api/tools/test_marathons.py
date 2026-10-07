@@ -1152,8 +1152,9 @@ async def test_a_baf_event_day_says_which_heads_up_carries_the_ping_in_the_drawe
 
     (day,) = body["baf_event"]["days"]
     assert day["carrier"]["game"] == "Super Metroid" and day["carrier"]["minutes"] == 120
+    assert (day["ask"], day["no_ping"], day["pinged"]) == (None, None, None)
     assert day["line"].endswith(
-        f"a BaF event — staff said so. @{role.name} is mentioned once, on the heads-up 120 "
-        "minutes before **Super Metroid**."
+        f"a BaF event — the BaF event switch says so. @{role.name} is mentioned once, on the "
+        "heads-up 120 minutes before **Super Metroid**."
     )
     assert body["role_ping"]["mentions"] is True and body["role_ping"]["line"] == ""

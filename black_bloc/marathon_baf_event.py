@@ -9,6 +9,7 @@ from typing import Any, NamedTuple
 
 from . import marathon as mt
 from . import marathon_overlay as overlay
+from . import marathon_reminder_posts as mrem
 from . import marathon_signals as sig
 from .golive import parse_ts
 from .marathon_role_ping import BAF_EVENT_DAY, BAF_EVENT_PINGED
@@ -22,19 +23,31 @@ FOLLOW = "follow"
 ANSWERS = (YES, NO, UNSURE)
 CHOICES = (FOLLOW, YES, NO)
 BY_STAFF = "staff"
+BY_LEADS = "leads"
 BY_NAME = "name"
 BY_RUNS = "all_runs"
 BY_SHARE = "share"
 BY_FEW = "few_runs"
 BY_MIXED = "mixed"
 BY_NO_RUNS = "no_runs"
-REASONS = (BY_STAFF, BY_NAME, BY_RUNS, BY_SHARE, BY_FEW, BY_MIXED, BY_NO_RUNS)
+REASONS = (BY_STAFF, BY_LEADS, BY_NAME, BY_RUNS, BY_SHARE, BY_FEW, BY_MIXED, BY_NO_RUNS)
 COLUMN = "baf_event"
 ASK_COLUMN = "baf_event_ask"
 PINGS_COLUMN = "baf_event_pings"
 PER_RUN = "per_run"
 CARRY = "carry"
 QUIET = "quiet"
+NOBODY_TO_NAME = "nobody_to_name"
+NO_BAF_RUN = "no_baf_run"
+MARKS_SPENT = "marks_spent"
+CAUSES = (NOBODY_TO_NAME, NO_BAF_RUN, MARKS_SPENT)
+SENT = "sent"
+GIVE_BACK = "give_back"
+UNKNOWN = "unknown"
+ASK_PENDING = "pending"
+ASK_FAILED = "failed"
+ASK_NOWHERE = "nowhere"
+ASK_ANSWERED = "answered"
 YES_WORDS = ("yes", "on", "true", "1")
 NO_WORDS = ("no", "off", "false", "0")
 FOLLOW_WORDS = ("", "follow", "default", "auto", "null", "none")
@@ -43,6 +56,8 @@ BAD_CHOICE = (
 )
 BAD_CHOICE_CODE = "bad_baf_event"
 FOLD = re.compile(r"[^a-z0-9]+")
+GAP = "[^a-z0-9]*"
+NOTHING = timedelta(0)
 DAY_SPAN = timedelta(hours=24)
 
 
@@ -68,6 +83,7 @@ class Reading(NamedTuple):
     names: tuple[str, ...]
     min_runs: int
     ask_percent: int
+    asks: tuple[dict[str, Any], ...] = ()
 
     @property
     def limit(self) -> int:
@@ -95,6 +111,8 @@ class DayState(NamedTuple):
     carrier: Any
     carrier_mark: int | None
     over: bool
+    ask: dict[str, Any] | None = None
+    cause: str | None = None
 
     @property
     def governed(self) -> bool:
@@ -153,11 +171,20 @@ def show_names(marathon: Any) -> tuple[str, ...]:
     return tuple(one for one in found if one)
 
 
+def opens_with(show: Any, name: Any) -> bool:
+    """The show's name starts with the listed name on whole words, spacing and punctuation
+    set aside."""
+    wanted = name_key(name)
+    if not wanted:
+        return False
+    pattern = GAP + GAP.join(re.escape(one) for one in wanted) + "(?![a-z0-9])"
+    return re.match(pattern, str(show or "").lower()) is not None
+
+
 def name_hit(names: Any, candidates: Any) -> str:
-    keys = [name_key(one) for one in candidates or ()]
+    shows = list(candidates or ())
     for name in names or ():
-        wanted = name_key(name)
-        if wanted and any(wanted in one for one in keys):
+        if any(opens_with(one, name) for one in shows):
             return str(name)
     return ""
 
@@ -194,13 +221,17 @@ def worked_out(
     return Judgement(NO, BY_MIXED, runs, baf)
 
 
-def judge(marathon: Any, day: Any, *, names: Any, min_runs: int, ask_percent: int) -> Judgement:
-    """Staff first, then the show's name, then the day's runs."""
+def judge(
+    marathon: Any, day: Any, *, names: Any, min_runs: int, ask_percent: int, said: Any = None
+) -> Judgement:
+    """The marathon's switch first, then the day's own answer, then the name and the runs."""
     found = worked_out(marathon, day, names=names, min_runs=min_runs, ask_percent=ask_percent)
     own = stored(marathon)
-    if own is None:
-        return found
-    return Judgement(YES if own else NO, BY_STAFF, found.runs, found.baf)
+    if own is not None:
+        return Judgement(YES if own else NO, BY_STAFF, found.runs, found.baf)
+    if said in (YES, NO):
+        return Judgement(str(said), BY_LEADS, found.runs, found.baf)
+    return found
 
 
 # --- show-days ----------------------------------------------------------------------------------
@@ -258,29 +289,61 @@ def dump_pings(records: Any) -> str | None:
     return json.dumps(found) if found else None
 
 
-def covers(record: dict[str, Any], day: Any) -> bool:
-    """The record is this day's: it names one of its runs, or their planned hours overlap."""
-    if set(ids_of(day)) & {int(one) for one in record.get("runs") or () if str(one).isdigit()}:
-        return True
+def named(record: dict[str, Any]) -> set[int]:
+    return {int(one) for one in record.get("runs") or () if str(one).isdigit()}
+
+
+def overlap(record: dict[str, Any], day: Any) -> timedelta:
     starts, ends = span_of(day)
     was_from, was_to = parse_ts(record.get("starts_at")), parse_ts(record.get("ends_at"))
     if None in (starts, ends, was_from, was_to):
+        return NOTHING
+    return max(min(ends, was_to) - max(starts, was_from), NOTHING)
+
+
+def covers(record: dict[str, Any], day: Any, days: Any = None) -> bool:
+    """The record is this day's: it names one of its runs; or none of its runs is on any day
+    any more and this is the one day whose planned hours it overlaps most."""
+    wanted = named(record)
+    if wanted & set(ids_of(day)):
+        return True
+    every = [list(one) for one in days or ()] or [list(day)]
+    if any(wanted & set(ids_of(one)) for one in every):
         return False
-    return starts < was_to and was_from < ends
+    best = max(every, key=lambda one: overlap(record, one))
+    return overlap(record, best) > NOTHING and ids_of(best) == ids_of(day)
 
 
-def pinged(records: Any, day: Any) -> dict[str, Any] | None:
+def pinged(records: Any, day: Any, days: Any = None, *, yes: bool = True) -> dict[str, Any] | None:
+    """The record that closes the day: its own one ping whatever the judgement says now, or a
+    per-run mention once the day is a BaF event."""
+    found = [one for one in records or () if not one.get("missed") and covers(one, day, days)]
+    own = [one for one in found if not one.get(PER_RUN)]
+    kept = own or (found if yes else [])
+    return next((one for one in kept if one.get("sent")), kept[0] if kept else None)
+
+
+def missed(records: Any, day: Any, days: Any = None) -> dict[str, Any] | None:
     for record in records or ():
-        if not record.get("missed") and covers(record, day):
+        if record.get("missed") and covers(record, day, days):
             return record
     return None
 
 
-def missed(records: Any, day: Any) -> dict[str, Any] | None:
-    for record in records or ():
-        if record.get("missed") and covers(record, day):
-            return record
-    return None
+def proof_of(record: dict[str, Any], rows: Any, role_id: Any) -> tuple[str, Any, Any]:
+    """`(SENT | GIVE_BACK | UNKNOWN, message, channel)` for a claim never marked sent, from
+    what its run remembers posting at that mark."""
+    row = next((one for one in rows or () if mt._cell(one, "id") == record.get("run_id")), None)
+    mark = record.get("mark")
+    entry = mrem.of_run(row).get(int(mark)) if row is not None and mark is not None else None
+    if entry is None:
+        return (UNKNOWN, None, None)
+    copy = entry.get(mrem.PUBLIC)
+    if not copy:
+        return (GIVE_BACK, None, None)
+    if role_id and f"<@&{int(role_id)}>" in str(copy.get("head") or ""):
+        return (SENT, copy.get("message_id"), copy.get("channel_id"))
+    return (UNKNOWN, None, None)
 
 
 def record_for(day: Any, row: Any, mark: Any, now: datetime, **extra: Any) -> dict[str, Any]:
@@ -354,6 +417,32 @@ def carrier(
     return (None, None)
 
 
+def no_carrier(day: Any, marks: Any, limit: int, *, speaks: Any = None) -> str:
+    """Why nothing carries a BaF event day's ping."""
+    speaks = speaks or _always
+    ours = [row for row in kept(day) if mt.is_ours(row)]
+    if not ours:
+        return NO_BAF_RUN
+    left = [
+        row for row in ours if mt._cell(row, "state") == mt.UPCOMING and unsent(row, marks, limit)
+    ]
+    if left and not any(speaks(row) for row in left):
+        return NOBODY_TO_NAME
+    return MARKS_SPENT
+
+
+def may_be_matched(day: Any, now: datetime) -> bool:
+    """A run nobody of ours is on yet that has not started: a match could still bring a
+    heads-up."""
+    return any(
+        mt._cell(row, "state") == mt.UPCOMING
+        and not mt.is_ours(row)
+        and sig.sheet_start(row) is not None
+        and now < sig.sheet_start(row)
+        for row in kept(day)
+    )
+
+
 def reading(
     marathon: Any,
     rows: Any,
@@ -376,18 +465,19 @@ def reading(
         tuple(names or ()),
         int(min_runs),
         int(ask_percent),
+        tuple(asks_of(marathon)),
     )
 
 
 def judgement_of(found: Reading, day: Any, *, own: bool = True) -> Judgement:
-    rule = judge if own else worked_out
-    return rule(
-        found.marathon,
-        day,
-        names=found.names,
-        min_runs=found.min_runs,
-        ask_percent=found.ask_percent,
-    )
+    rules = {"names": found.names, "min_runs": found.min_runs, "ask_percent": found.ask_percent}
+    if not own:
+        return worked_out(found.marathon, day, **rules)
+    return judge(found.marathon, day, said=answer_of(found.asks, day, found.days), **rules)
+
+
+def closed(found: Reading, day: Any, judgement: Judgement) -> dict[str, Any] | None:
+    return pinged(found.records, day, found.days, yes=judgement.yes)
 
 
 def plan(found: Reading, row: Any, mark: int, *, speaks: Any = None) -> Plan:
@@ -396,15 +486,13 @@ def plan(found: Reading, row: Any, mark: int, *, speaks: Any = None) -> Plan:
     day = day_of(row, found.days)
     if day is None:
         return Plan(PER_RUN)
-    record = pinged(found.records, day)
     judgement = judgement_of(found, day)
+    record = closed(found, day, judgement)
     if record is not None:
         return Plan(QUIET, BAF_EVENT_PINGED, judgement, day, record)
     if not judgement.yes:
         return Plan(PER_RUN, None, judgement, day)
-    chosen, _next = carrier(
-        day, found.marks, found.limit, this=row, this_mark=mark, speaks=speaks
-    )
+    chosen, _next = carrier(day, found.marks, found.limit, this=row, this_mark=mark, speaks=speaks)
     if chosen is not None and sig.same(chosen, row) and int(mark) <= found.limit:
         return Plan(CARRY, None, judgement, day)
     return Plan(QUIET, BAF_EVENT_DAY, judgement, day)
@@ -415,9 +503,10 @@ def quiet_reason(found: Reading, row: Any) -> str | None:
     day = day_of(row, found.days)
     if day is None:
         return None
-    if pinged(found.records, day) is not None:
+    judgement = judgement_of(found, day)
+    if closed(found, day, judgement) is not None:
         return BAF_EVENT_PINGED
-    return BAF_EVENT_DAY if judgement_of(found, day).yes else None
+    return BAF_EVENT_DAY if judgement.yes else None
 
 
 def predicts(found: Reading, row: Any, mark: int, *, speaks: Any = None) -> bool | None:
@@ -426,9 +515,10 @@ def predicts(found: Reading, row: Any, mark: int, *, speaks: Any = None) -> bool
     day = day_of(row, found.days)
     if day is None:
         return None
-    if pinged(found.records, day) is not None:
+    judgement = judgement_of(found, day)
+    if closed(found, day, judgement) is not None:
         return False
-    if not judgement_of(found, day).yes:
+    if not judgement.yes:
         return None
     chosen, next_mark = carrier(day, found.marks, found.limit, speaks=speaks)
     return chosen is not None and sig.same(chosen, row) and int(mark) == next_mark
@@ -438,10 +528,12 @@ def day_states(found: Reading, *, speaks: Any = None) -> list[DayState]:
     states: list[DayState] = []
     for day in found.days:
         judgement = judgement_of(found, day)
-        record = pinged(found.records, day)
-        chosen, mark = (None, None)
+        record = closed(found, day, judgement)
+        chosen, mark, cause = (None, None, None)
         if judgement.yes and record is None:
             chosen, mark = carrier(day, found.marks, found.limit, speaks=speaks)
+            if chosen is None:
+                cause = no_carrier(day, found.marks, found.limit, speaks=speaks)
         states.append(
             DayState(
                 list(day),
@@ -452,6 +544,8 @@ def day_states(found: Reading, *, speaks: Any = None) -> list[DayState]:
                 chosen,
                 mark,
                 all(mt._cell(row, "state") == mt.DONE for row in kept(day)),
+                asked(found.asks, day, found.days),
+                cause,
             )
         )
     return states
@@ -463,35 +557,78 @@ def current(states: Any) -> DayState | None:
     return next((one for one in found if not one.over), found[-1] if found else None)
 
 
+def unsure(states: Any) -> list[DayState]:
+    """Every day still to come that the bot is not sure about."""
+    return [one for one in states or () if not one.over and one.judgement.answer == UNSURE]
+
+
 def asks(states: Any) -> DayState | None:
-    """The first day still to come that the bot is not sure about."""
-    return next(
-        (one for one in states or () if not one.over and one.judgement.answer == UNSURE), None
-    )
+    return next(iter(unsure(states)), None)
 
 
 # --- the question -------------------------------------------------------------------------------
 
 
-def ask_of(marathon: Any) -> dict[str, Any]:
+def asks_of(marathon: Any) -> list[dict[str, Any]]:
+    """One record per show-day asked about; a lone record from before reads as a list of one."""
     raw = mt._cell(marathon, ASK_COLUMN)
     try:
-        found = json.loads(raw or "{}") if not isinstance(raw, dict) else raw
+        found = json.loads(raw or "[]") if isinstance(raw, str) or raw is None else raw
     except (TypeError, ValueError):
-        return {}
-    return dict(found) if isinstance(found, dict) else {}
+        return []
+    if isinstance(found, dict):
+        found = [found] if found else []
+    return [dict(one) for one in found if isinstance(one, dict)] if isinstance(found, list) else []
 
 
-def dump_ask(record: Any) -> str | None:
-    return json.dumps(dict(record)) if record else None
+def dump_asks(records: Any) -> str | None:
+    found = [dict(one) for one in records or ()]
+    return json.dumps(found) if found else None
+
+
+def asked(asks: Any, day: Any, days: Any = None) -> dict[str, Any] | None:
+    """The day's own question: the one with an answer, else the one that was posted."""
+    found = [one for one in asks or () if covers(one, day, days)]
+    for key in ("answer", "message_id"):
+        hit = next((one for one in found if one.get(key)), None)
+        if hit is not None:
+            return hit
+    return found[0] if found else None
+
+
+def answer_of(asks: Any, day: Any, days: Any = None) -> str | None:
+    record = asked(asks, day, days)
+    said = record.get("answer") if record else None
+    return said if said in (YES, NO) else None
+
+
+def ask_state(record: Any) -> str | None:
+    if not record:
+        return None
+    if record.get("answer") in (YES, NO):
+        return ASK_ANSWERED
+    if record.get("message_id"):
+        return ASK_PENDING
+    if record.get("blocked"):
+        return ASK_NOWHERE
+    return ASK_FAILED if record.get("failed_at") or record.get("gave_up") else None
+
+
+def same_schedule(record: dict[str, Any], day: Any, judgement: Judgement) -> bool:
+    return named(record) == set(ids_of(day)) and record.get("baf") == judgement.baf
 
 
 __all__ = [
     "ANSWERS",
+    "ASK_ANSWERED",
     "ASK_COLUMN",
+    "ASK_FAILED",
+    "ASK_NOWHERE",
+    "ASK_PENDING",
     "BAD_CHOICE",
     "BAD_CHOICE_CODE",
     "BY_FEW",
+    "BY_LEADS",
     "BY_MIXED",
     "BY_NAME",
     "BY_NO_RUNS",
@@ -499,41 +636,58 @@ __all__ = [
     "BY_SHARE",
     "BY_STAFF",
     "CARRY",
+    "CAUSES",
     "CHOICES",
     "COLUMN",
+    "DayState",
     "FOLLOW",
+    "GIVE_BACK",
+    "Judgement",
+    "MARKS_SPENT",
     "NO",
+    "NOBODY_TO_NAME",
+    "NO_BAF_RUN",
     "PER_RUN",
     "PINGS_COLUMN",
+    "Plan",
     "QUIET",
     "REASONS",
+    "Reading",
+    "SENT",
+    "UNKNOWN",
     "UNSURE",
     "YES",
-    "DayState",
-    "Judgement",
-    "Plan",
-    "Reading",
-    "ask_of",
+    "answer_of",
+    "ask_state",
+    "asked",
     "asks",
+    "asks_of",
     "carrier",
     "choice_of",
     "clean",
+    "closed",
+    "proof_of",
     "covers",
     "current",
     "day_of",
     "day_states",
     "days_of",
-    "dump_ask",
+    "dump_asks",
     "dump_pings",
     "event_mark",
     "has_runner",
     "judge",
     "judgement_of",
     "kept",
+    "may_be_matched",
     "missed",
     "name_hit",
     "name_key",
+    "named",
     "names_of",
+    "no_carrier",
+    "opens_with",
+    "overlap",
     "pinged",
     "pings_of",
     "plan",
@@ -541,11 +695,13 @@ __all__ = [
     "quiet_reason",
     "reading",
     "record_for",
+    "same_schedule",
     "sent",
     "show_names",
     "span_of",
     "stored",
     "unsent",
+    "unsure",
     "without",
     "worked_out",
 ]

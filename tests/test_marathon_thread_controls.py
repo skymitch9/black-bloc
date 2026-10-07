@@ -123,3 +123,10 @@ def test_the_baf_event_switch_is_three_buttons_in_their_own_row_with_the_standin
         hit = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, one.action, one.to))
         assert hit and (hit["action"], hit["to"]) == ("baf", one.to)
     assert len(mtc.controls("marathon", ms.DARK)) == 6
+
+
+def test_the_three_baf_event_answers_have_one_home():
+    from black_bloc import marathon_baf_event as baf
+
+    assert mtc.BAF_CHOICES is baf.CHOICES
+    assert (mtc.FOLLOW, mtc.YES, mtc.NO) == (baf.FOLLOW, baf.YES, baf.NO)

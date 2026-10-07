@@ -5868,6 +5868,15 @@ MARATHON_BAF_EVENT_PING_WILL_KEY = "marathon_baf_event_ping_will"
 MARATHON_BAF_EVENT_PING_DONE_KEY = "marathon_baf_event_ping_done"
 MARATHON_BAF_EVENT_PING_NONE_KEY = "marathon_baf_event_ping_none"
 MARATHON_BAF_EVENT_PING_FALLBACK_KEY = "marathon_baf_event_ping_fallback"
+MARATHON_BAF_EVENT_REASON_LEADS_KEY = "marathon_baf_event_reason_leads"
+MARATHON_BAF_EVENT_PING_UNCONFIRMED_KEY = "marathon_baf_event_ping_unconfirmed"
+MARATHON_BAF_EVENT_PING_NO_RUN_KEY = "marathon_baf_event_ping_no_run"
+MARATHON_BAF_EVENT_PING_NOBODY_KEY = "marathon_baf_event_ping_nobody"
+MARATHON_BAF_EVENT_ASK_PENDING_KEY = "marathon_baf_event_ask_pending"
+MARATHON_BAF_EVENT_ASK_FAILED_KEY = "marathon_baf_event_ask_failed"
+MARATHON_BAF_EVENT_ASK_NOWHERE_KEY = "marathon_baf_event_ask_nowhere"
+MARATHON_BAF_EVENT_DAY_SET_SAID_KEY = "marathon_baf_event_day_set_said"
+MARATHON_BAF_EVENT_DAY_SAME_SAID_KEY = "marathon_baf_event_day_same_said"
 MARATHON_BAF_EVENT_NAMES_MAX = 20
 MARATHON_BAF_EVENT_NAME_LENGTH = 60
 MARATHON_BAD_BAF_NAMES = (
@@ -6339,10 +6348,11 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "text",
         'Black in a Flash',
         "the show names that make a marathon a BaF event, separated by commas. A marathon whose "
-        "name, or whose GDQ Hotfix show, contains one of them is a BaF event whatever its runs "
-        "say — capitals, spaces and punctuation do not matter, so Black in a Flash: Soul Train "
-        "matches Black in a Flash. `Black in a Flash` by default; the marathon's own BaF event "
-        "switch still wins",
+        "name, or whose GDQ Hotfix show, starts with one of them on whole words is a BaF event "
+        "whatever its runs say — capitals, spaces and punctuation do not matter, so Black in a "
+        "Flash: Soul Train matches Black in a Flash, and Black in a Flashback does not. `Black "
+        "in a Flash` by default; the marathon's own BaF event switch and a day's own answer "
+        "still win",
     ),
     MARATHON_BAF_EVENT_MIN_RUNS_KEY: (
         "int",
@@ -6473,11 +6483,13 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "times although the event has a schedule sheet of its own",
     ),
     MARATHON_BAF_EVENT_ASK_TEXT_KEY: (
-        "Is **{marathon}** a BaF event? {baf} of the {runs} runs on {day} have a BaF runner.",
+        "Is {day} of **{marathon}** a BaF event? {baf} of that day's {runs} runs have a BaF "
+        "runner.",
         ("marathon", "baf", "runs", "day"),
-        "the question posted once in a marathon's thread when the bot is not sure the show is a "
-        "BaF event. It takes {marathon} {baf} {runs} {day}; the role in "
-        "marathon_baf_event_ask_role_id is mentioned in front of it",
+        "the question posted once for each show-day the bot is not sure about, in the "
+        "marathon's thread; its answer is that day's alone. It takes {marathon} {baf} {runs} "
+        "{day}; the role in marathon_baf_event_ask_role_id is mentioned in front of it when "
+        "the day's Marathon-role mention could go out",
     ),
     MARATHON_BAF_EVENT_ASK_YES_KEY: (
         "Yes, a BaF event",
@@ -6492,8 +6504,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_BAF_EVENT_ANSWERED_KEY: (
         "{who} answered: {answer}.",
         ("who", "answer", "marathon"),
-        "the line added under the question once staff answer, from the button, the thread "
-        "controls or the site. It takes {who} {answer} {marathon}",
+        "the line added under a show-day's question once staff answer it with its buttons. It "
+        "takes {who} {answer} {marathon}",
     ),
     MARATHON_BAF_EVENT_WORD_YES_KEY: (
         "a BaF event",
@@ -6551,7 +6563,7 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{day} {answer} {reason} {marathon}",
     ),
     MARATHON_BAF_EVENT_REASON_STAFF_KEY: (
-        "staff said so",
+        "the BaF event switch says so",
         (),
         "the reason on a show-day's line when the marathon's BaF event switch decided it",
     ),
@@ -6567,9 +6579,10 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the reason on a show-day's line when every run has a BaF runner. It takes {runs}",
     ),
     MARATHON_BAF_EVENT_REASON_SHARE_KEY: (
-        "{baf} of {runs} runs have a BaF runner and staff have not answered",
+        "{baf} of {runs} runs have a BaF runner, too few to be sure",
         ("baf", "runs"),
-        "the reason on a show-day's line while the bot waits for an answer. It takes {baf} {runs}",
+        "the reason on a show-day's line while the bot is not sure and nobody has answered for "
+        "that day. It takes {baf} {runs}",
     ),
     MARATHON_BAF_EVENT_REASON_FEW_RUNS_KEY: (
         "it has {runs} run(s), fewer than {min}",
@@ -6601,10 +6614,10 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{minutes} {game}",
     ),
     MARATHON_BAF_EVENT_PING_NONE_KEY: (
-        "No heads-up is left that day, so {role} is not mentioned.",
+        "Every heads-up of that day's BaF runs has gone, so {role} is not mentioned.",
         ("role",),
-        "what a BaF event day's line says when no heads-up is left to carry the Marathon role. It "
-        "takes {role}",
+        "what a BaF event day's line says when every heads-up that could carry the Marathon "
+        "role has been posted or its run has started. It takes {role}",
     ),
     MARATHON_BAF_EVENT_PING_FALLBACK_KEY: (
         "marathon_baf_event_ping_minutes is {wanted}, which is not one of "
@@ -6612,6 +6625,58 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("wanted", "minutes"),
         "what a BaF event day's line adds while marathon_baf_event_ping_minutes is not a reminder "
         "mark. It takes {wanted} {minutes}",
+    ),
+    MARATHON_BAF_EVENT_REASON_LEADS_KEY: (
+        "staff answered for this day",
+        (),
+        "the reason on a show-day's line when staff answered that day's own question",
+    ),
+    MARATHON_BAF_EVENT_PING_UNCONFIRMED_KEY: (
+        "{role} may have been mentioned on the heads-up {minutes} minutes before **{game}**: "
+        "the bot stopped before it could confirm it, so nothing else mentions {role} that day.",
+        ("role", "minutes", "game"),
+        "what a show-day's line says when the bot stopped between claiming the day's one "
+        "Marathon-role mention and confirming it went out. It takes {role} {minutes} {game}",
+    ),
+    MARATHON_BAF_EVENT_PING_NO_RUN_KEY: (
+        "No BaF run is left that day, so {role} is not mentioned.",
+        ("role",),
+        "what a BaF event day's line says when none of its runs has a BaF member to post a "
+        "heads-up for. It takes {role}",
+    ),
+    MARATHON_BAF_EVENT_PING_NOBODY_KEY: (
+        "Nobody on that day's BaF runs can be named publicly, so {role} is not mentioned.",
+        ("role",),
+        "what a BaF event day's line says when every BaF run still to come has only people "
+        "who opted out of public posts. It takes {role}",
+    ),
+    MARATHON_BAF_EVENT_ASK_PENDING_KEY: (
+        "Staff were asked in the thread and have not answered.",
+        (),
+        "what a show-day's line adds while its question is up and unanswered",
+    ),
+    MARATHON_BAF_EVENT_ASK_FAILED_KEY: (
+        "The question could not be posted in the thread, so answer with the BaF event switch.",
+        (),
+        "what a show-day's line adds when its question could not be posted",
+    ),
+    MARATHON_BAF_EVENT_ASK_NOWHERE_KEY: (
+        "There is no thread to ask in, so answer with the BaF event switch.",
+        (),
+        "what a show-day's line adds when the marathon has no thread the bot may post its "
+        "question in",
+    ),
+    MARATHON_BAF_EVENT_DAY_SET_SAID_KEY: (
+        "{day} of **{marathon}** is {answer} now.",
+        ("day", "marathon", "answer"),
+        "what staff are told once they answer one show-day's question. It takes {day} "
+        "{marathon} {answer}",
+    ),
+    MARATHON_BAF_EVENT_DAY_SAME_SAID_KEY: (
+        "{day} of **{marathon}** is already {answer}, so nothing was changed.",
+        ("day", "marathon", "answer"),
+        "what staff are told when a show-day's question already has that answer. It takes "
+        "{day} {marathon} {answer}",
     ),
     MARATHON_CONTROLS_TRACKER_KEY: (
         "Marathon tracker ↗",
