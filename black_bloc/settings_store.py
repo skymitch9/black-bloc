@@ -3920,12 +3920,21 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the heading of a personal best post",
     ),
     "pb_feed_post_text": (
-        "{member} ran **{game}** — {category} in **{time}**{place_line}.",
+        "**{name}** ran **{game}** — {category} in **{time}**{place_line}.",
         PB_FEED_POST_FIELDS,
-        "the body of a personal best post. {member} mentions the member without pinging them, "
-        "{name} is their display name, {runner} their speedrun.com name, {category} carries "
-        "the level and sub-category where the run has them, {place_line} is "
-        "pb_feed_place_text or nothing when speedrun.com gave no place, {link} is the run",
+        "the body of a personal best post. {name} is the member's server display name (their "
+        "speedrun.com name once they have left), {runner} their speedrun.com name, {member} an "
+        "@ of the member that Discord may show as a raw id inside a post like this one, so use "
+        "{name} to name them; {category} carries the level and sub-category where the run has "
+        "them, {place_line} is pb_feed_place_text or nothing when speedrun.com gave no place, "
+        "{link} is the run",
+    ),
+    "pb_feed_post_author": (
+        "{name}",
+        ("name", "runner"),
+        "the line above a personal best post, beside the member's avatar. {name} is their "
+        "server display name (their speedrun.com name once they have left), {runner} their "
+        "speedrun.com name",
     ),
     "pb_feed_place_text": (
         "— #{place} on the leaderboard",

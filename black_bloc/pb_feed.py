@@ -39,6 +39,7 @@ MISSES_BEFORE_GONE = 2
 EMBED_COLOUR = 0xF4C430
 DESCRIPTION_LIMIT = 4000
 TITLE_LIMIT = 256
+AUTHOR_LIMIT = 256
 BRACKETS = re.compile(r"([\[\]])")
 ZERO_WIDTH = "\u200b"
 
@@ -186,6 +187,11 @@ def post_embed(
         description=said(store, guild_id, "pb_feed_post_text", **fields)[:DESCRIPTION_LIMIT],
         colour=EMBED_COLOUR,
     )
+    named = str(getattr(member, "display_name", None) or runner or "")
+    author = said(store, guild_id, "pb_feed_post_author", name=named, runner=str(runner or ""))
+    avatar = getattr(getattr(member, "display_avatar", None), "url", None)
+    if author.strip():
+        embed.set_author(name=author[:AUTHOR_LIMIT], icon_url=avatar or None)
     if fields["link"].startswith("https://"):
         embed.url = fields["link"]
     return embed
