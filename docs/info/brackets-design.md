@@ -507,6 +507,12 @@ that, and the property test (`…_is_who_is_still_unplaced…`) is what catches 
 
 ## Gate (2026-10-07, branch `brackets-engine`, measured on the final code)
 
+**Review-fix pass (2026-10-07, on `7d95ccb7` code):** `pytest tests -q -p no:cacheprovider -n 8`: **12315 passed** (no
+skips reported this run; the build's run had 3 skipped); `ruff check .`: all checks passed; `MOCK_PORT=8812 node
+site/mock/check.mjs`: *ok - 25 pages, 344 routes, 171 core settings, all keys present*; every `site/mock/*.test.mjs`
+(13): exit 0. The figures below are the build's, kept for history.
+
+
 - `python -m pytest tests -q -p no:cacheprovider -n 8`: **12235 passed, 3 skipped** (main before the branch: 11896 passed, 3 skipped; +339 tests).
 - `python -m ruff check .`: all checks passed.
 - `MOCK_PORT=8809 node site/mock/check.mjs` against the branch's own mock: *ok - 25 pages, 344 routes, 202 core settings, all keys present*.
