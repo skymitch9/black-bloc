@@ -421,12 +421,12 @@ or circuit points, ladders and matchmaking, the start.gg mirror (only the `sourc
 5th-place set, per-game reporting (characters, stages), the DQ timer (auto-DQ when a player does not check in to a
 called set), conflicts and waves, printing.
 
-## Gate (2026-10-07, branch `brackets-engine`)
+## Gate (2026-10-07, branch `brackets-engine`, measured on the final code)
 
-See the build report for the exact figures at the final commit; recorded here at the docs commit:
-full suite `python -m pytest tests -q -p no:cacheprovider -n 8`, `python -m ruff check .`,
-`MOCK_PORT=8809 node site/mock/check.mjs` (*25 pages, 344 routes, 202 core settings, all keys present*), and every
-`site/mock/*.test.mjs` — results in *Deviations / gate* below once the last run is in.
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **12235 passed, 3 skipped** (main before the branch: 11896 passed, 3 skipped; +339 tests).
+- `python -m ruff check .`: all checks passed.
+- `MOCK_PORT=8809 node site/mock/check.mjs` against the branch's own mock: *ok - 25 pages, 344 routes, 202 core settings, all keys present*.
+- Every `site/mock/*.test.mjs` (13): exit 0.
 
 ## What was NOT verified
 
