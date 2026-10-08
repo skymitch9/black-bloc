@@ -8467,11 +8467,10 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "role: it is not set mentionable and the bot lacks Mention Everyone. It takes {role}",
     ),
     MARATHON_CHANNEL_PING_HELP_KEY: (
-        "On a marathon channel, During events pings only while one of its marathons is running "
-        "— the marathon sets that window from its schedule, and the channel is spotlit for it.",
+        "Ping windows: its marathons' schedules.",
         (),
-        "the help line under the Pings choice on a marathon channel's Go-live drawer, saying what "
-        "During events means there",
+        "the state line under the Pings choice on a marathon channel's Go-live drawer and the "
+        "marathon drawer: where During events takes its windows from",
     ),
     MARATHON_REMINDER_TEMPLATE_KEY: (
         "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}",

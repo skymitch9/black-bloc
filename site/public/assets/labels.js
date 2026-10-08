@@ -310,7 +310,7 @@ export const LABELS = {
   marathon_mention_plain_said: "What staff hear once a person’s name is written without an @",
   marathon_mention_on_said: "What staff hear once a person is written as an @ again",
   marathon_channel_ping_mode_default: 'When a new marathon channel pings',
-  marathon_channel_ping_help: 'The Pings help line on a marathon channel',
+  marathon_channel_ping_help: 'The Pings state line on a marathon channel',
   marathon_run_event_title_template: 'What an event made for one BaF run is called',
   marathon_run_event_description_template: 'What an event made for one BaF run says',
   marathon_run_events_reviewed: 'Whether a BaF run goes through the events review',
