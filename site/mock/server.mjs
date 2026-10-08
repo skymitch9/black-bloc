@@ -9,6 +9,8 @@ import * as mockBrackets from './brackets.mjs';
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = resolve(HERE, '..', 'public');
 const PORT = Number(process.env.MOCK_PORT || 8788);
+const NONCE = process.env.MOCK_NONCE || '';
+const STARTED_AT = new Date().toISOString();
 let testMode = process.env.MOCK_TEST_MODE !== '0';
 
 const TYPES = {
@@ -15660,6 +15662,12 @@ route('POST', '/api/structure/snapshots/:id/download', (context) => {
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   const path = url.pathname;
+  if (NONCE) response.setHeader('x-mock-nonce', NONCE);
+
+  if (path === '/api/mock/whoami') {
+    send(response, 200, { nonce: NONCE, pid: process.pid, started_at: STARTED_AT });
+    return;
+  }
 
   if (!path.startsWith('/api/')) {
     await serveStatic(request, response, path, url.searchParams.get('as'));
@@ -15698,7 +15706,12 @@ const server = createServer(async (request, response) => {
   send(response, 404, { error: 'no_route', message: `${UNKNOWN_ROUTE} (${request.method} ${path})` });
 });
 
+server.on('error', (error) => {
+  process.stderr.write(`mock: could not listen on ${PORT}: ${error.code || error.message}\n`);
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
-  process.stdout.write(`mock: http://127.0.0.1:${PORT} serving ${PUBLIC}\n`);
+  process.stdout.write(`mock: http://127.0.0.1:${PORT} serving ${PUBLIC} (pid ${process.pid})\n`);
   process.stdout.write(`mock: TEST_MODE ${testMode ? 'on (destructive writes refuse with 409)' : 'off'}\n`);
 });

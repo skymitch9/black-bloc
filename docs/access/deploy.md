@@ -143,7 +143,8 @@ Before pushing to `main`, [`ci-mirror.md`](ci-mirror.md) runs GitHub's `ci.yml` 
 # a junit file; a red run prints FAILED TESTS: one nodeid per line - 2026-09-22)
 # -> an ES-module parse of every site/public/assets/*.js (the labels.js incident: plain
 # `node --check` parses a .js file as CommonJS and PASSED the file that blanked every
-# dashboard page) -> node site/mock/check.mjs -> the five node fixture files, each its own
+# dashboard page) -> scripts/site-gate.ps1 (its own mock, nonce-proved, then
+# node site/mock/check.mjs - see the stale-mock gotcha below) -> the five node fixture files, each its own
 # REFUSED line: site/mock/discordmd.test.mjs (the preview renderer), labels.test.mjs (what a
 # key and a channel are CALLED), clipmd.test.mjs (the post editor's paste converter),
 # golive-join.test.mjs (the go-live streamers join) and layout.test.mjs (which dashboard
@@ -152,9 +153,15 @@ Before pushing to `main`, [`ci-mirror.md`](ci-mirror.md) runs GitHub's `ci.yml` 
 # SKELETON line to docs/deploys.log that you must EDIT (what shipped; verified: what
 # was checked) and commit. Escape hatch BLACKBLOC_SKIP_GATE=1 - emergencies only.
 .\scripts\deploy.ps1
+.\scripts\deploy.ps1 -GateOnly                 # every gate, then stop: no release.json, no push, no flyctl
+.\scripts\site-gate.ps1                        # only the mock + check.mjs section
 flyctl logs --app black-bloc --no-tail        # boot log: cogs loaded, "commands synced"
 flyctl releases --app black-bloc              # a NEW version number = it landed
 ```
+
+### ⚠️ "The gate's site check fails on a tree the mirror passed" — a stale mock on 8788 (incident 2026-10-07 22:36, fixed on branch `deploy-gate-mock`)
+
+v213's gate failed `check.mjs` with 32 *row is missing pools_format* on a tree whose Docker mirror was green: six old `node site/mock/server.mjs` processes (Oct 3 to Oct 7) were still running, one held 8788, `Get-NetTCPConnection` did not list it, the gate's own mock died on EADDRINUSE into an unread log, and `check.mjs` tested the stale one. `scripts/site-gate.ps1` now finds holders with `netstat -ano` (IPv4 + IPv6) as well, stops them **by name** (pid, start time, command line), WARNS about any other `site/mock/server.mjs` it sees without stopping it, starts its mock with a fresh `MOCK_NONCE`, and runs `check.mjs` only after `/api/mock/whoami` answers with that nonce. Otherwise it REFUSES in words: *port 8788 is answered by a process that is not this gate's mock — pid … started …* plus the mock's log tail (EADDRINUSE). `-LeaveHolders` refuses instead of stopping a holder. No KNOWN_ISSUES entry: the gate now refuses by name. The Docker mirror is immune — its mock runs inside the container (no `-p` publish), where a host process cannot answer.
 
 ### ⚠️ A pre-deploy snapshot needs a UNIQUE name — `backup_db.ps1` can log "ok" and keep the old file (measured 2026-10-03 21:31)
 
