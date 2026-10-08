@@ -1376,14 +1376,16 @@ async def test_the_drawer_reads_the_threads_switches_in_order_with_their_words_a
     sign_in(client)
     marathon_id = add(client).json()["id"]
 
-    found = client.get(f"/api/marathons/{marathon_id}").json()["controls"]
+    body = client.get(f"/api/marathons/{marathon_id}").json()
+    found = body["controls"]
 
+    assert body["event_mode"] in ("none", "runs")
     assert [one["action"] for one in found] == ["announce", "hostannounce", "ping", "event", "baf"]
     assert [one["label"] for one in found] == [
         "Runner announcements: on · turn off",
         "Host announcements: off · turn on",
         "Ping the marathon role: off · turn on",
-        found[3]["label"],
+        "Marathon event: off · turn on",
         "BaF event: no (1 of 3 runs) · say yes",
     ]
     assert (found[0]["to"], found[0]["on"], found[0]["state"]) == ("off", True, "announcements")
