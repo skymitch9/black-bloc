@@ -1125,6 +1125,24 @@ watched fail).
 decision 55); log kinds +2 (`brackets.thread_moved`, `web.brackets.thread_moved`, IMPORTANT); `would_dm`/`dm_failed`
 gained `text`, `reason` (and `why`); `thread_failed` can carry `error`.
 
+## Gate — pools review fixes (2026-10-07, branch `brackets-pools`, code at `15a28f36`, `main` merged in at `774a4281`)
+
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **12637 passed, 1 skipped** (12623 after the main merge, before
+  the fixes).
+- `python -m ruff check .`: all checks passed.
+- `MOCK_PORT=8822 node site/mock/check.mjs` against the branch's own mock: *ok - 26 pages, 347 routes, 261 core settings,
+  all keys present*.
+- Every `site/mock/*.test.mjs` (14): exit 0.
+- `scripts/ci-local.ps1`: **CI MIRROR GREEN: 16 step(s) passed in 155s**.
+- Browser: headless Chrome over CDP with device emulation, the mock on 8822, a fresh load per look. #17 with A1 DQ'd:
+  A1 not through, A2 through, B1 through with the cut line under it, at 1280 (scrollWidth 1280) and 375 (375). #15
+  mid-pools at 1280 and 375: no row marked *tied*, no ↑, the top two of each pool drawn through (the old code marked the
+  provisional ties). A 6-player single with two round-robin pools, advance 1, a three-way cycle in A: *tied* on the three
+  rows and two ↑ titled *Move up* (from the key; 32 px at 1280, 40 px at 375); after a DQ of one of them the DQ'd row
+  loses *tied*, Advance to the final pressed in the page → asks → *running*, A's winner the first of the order shown.
+  #18 with a final-set advancer DQ'd: the DQ'd one and the pool's next both drawn not through, **Back to pools**
+  offered and answering 200. No console errors or exceptions.
+
 ## Gate — pools into a bracket (2026-10-07, branch `brackets-pools`)
 
 - `python -m pytest tests -q -p no:cacheprovider -n 8`: **12614 passed, 1 skipped** (main at `3a18e678`: 12556). New:
@@ -1217,6 +1235,18 @@ site/mock/check.mjs`: *ok - 25 pages, 344 routes, 171 core settings, all keys pr
 - Every `site/mock/*.test.mjs` (13): exit 0.
 
 ## What was NOT verified
+
+**Pools review fixes:**
+
+- The browser pass ran against the mock only; the engine's side of fixes 1 and 2 is pinned in Python, not seen on a
+  page backed by the real API.
+- Fix 5's 0-of-140 is one plan (16 in 4 pools, top 3, 3rds to losers) over 35 random play-outs, plus 194 random
+  play-outs across plans that only checked the final finishes and places everyone; other shapes were not measured for
+  same-pool first sets. The winners side after a winners bye is not covered.
+- The mock has no `first_apart`: a mock seed with losers-side byes would seat differently from the engine.
+- The Discord side of fixes 3 and 10 (the starter card's pool line, the create / edit replies) ran against the fakes only;
+  the panel's Create form from `main` was not pressed with pool fields (it has none — pools are set on the page).
+- The `/settings` and Settings pages were not opened to look at the two new keys.
 
 **Pools into a bracket:**
 
