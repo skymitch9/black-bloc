@@ -2340,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1089
+    assert len(settings_store.KEY_TYPES) == 1090
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2732,7 +2732,7 @@ def test_every_word_the_baf_event_posts_is_a_marathon_text_key_with_its_fields(s
         for key in settings_store.MARATHON_WORDS
         if key.startswith(("marathon_baf_event_", "marathon_controls_baf_"))
     ]
-    assert len(words) == 43
+    assert len(words) == 44
     for key in words:
         assert settings_store.KEY_TYPES[key] == "text"
         assert settings_store.namespace_of(key) == "marathon"

@@ -337,6 +337,7 @@ export const LABELS = {
   marathon_baf_event_ask_yes: "The question's yes button",
   marathon_baf_event_ask_no: "The question's no button",
   marathon_baf_event_answered: "The line under an answered question",
+  marathon_baf_event_staff_set_line: "The line under an open question once staff set the switch",
   marathon_baf_event_word_yes: "How a BaF event is named",
   marathon_baf_event_word_no: "How a show that is not a BaF event is named",
   marathon_baf_event_word_unsure: "How an undecided show is named",

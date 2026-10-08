@@ -6614,6 +6614,7 @@ MARATHON_CONTROLS_SPOTLIGHT_NONE_LINE_KEY = "marathon_controls_spotlight_none_li
 MARATHON_CONTROLS_SPOTLIGHT_RUNNING_LINE_KEY = "marathon_controls_spotlight_running_line"
 MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY = "marathon_controls_follow_off_running_said"
 MARATHON_HOST_EVENTS_GONE_KEY = "marathon_host_events_gone_said"
+MARATHON_BAF_EVENT_STAFF_SET_KEY = "marathon_baf_event_staff_set_line"
 MARATHON_CONTROLS_ARCHIVE_KEY = "marathon_controls_archive"
 MARATHON_BAF_EVENT_NAMES_KEY = "marathon_baf_event_names"
 MARATHON_BAF_EVENT_MIN_RUNS_KEY = "marathon_baf_event_min_runs"
@@ -7288,6 +7289,13 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("who", "answer", "marathon"),
         "the line added under the BaF event question once staff answer it with its buttons. It "
         "takes {who} {answer} {marathon}",
+    ),
+    MARATHON_BAF_EVENT_STAFF_SET_KEY: (
+        "{who} set it on the BaF event switch: {answer}.",
+        ("who", "answer", "marathon"),
+        "the line that replaces the Yes/No buttons under a BaF event question nobody has "
+        "answered once staff set the marathon's BaF event switch; following again brings the "
+        "buttons back. It takes {who} {answer} {marathon}",
     ),
     MARATHON_BAF_EVENT_WORD_YES_KEY: (
         "a BaF event",

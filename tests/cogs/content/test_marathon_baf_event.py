@@ -1688,3 +1688,30 @@ async def test_a_value_stored_under_a_re_worded_keys_old_name_is_not_read(bot, c
         f"(3 of 4 runs have a BaF runner); {STANDS}"
     )
     assert not set(stale) & set(settings_store.KEY_TYPES)
+
+
+def question_buttons(message):
+    view = message.edits[-1]["view"] if message.edits and "view" in message.edits[-1] else (
+        message.kwargs.get("view")
+    )
+    return [getattr(one, "item", one).label for one in view.children] if view else []
+
+
+async def test_staff_setting_the_switch_closes_an_open_question_and_follow_reopens_it(bot, cog):
+    marathon = await unsure(bot, cog)
+    await at(bot, cog, marathon, 0)
+    (asked,) = questions(bot)
+    opening = asked.content
+    assert question_buttons(asked) == ["Yes, a BaF event", "No, not a BaF event"]
+
+    await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "yes")
+
+    assert asked.content == f"{opening}\n<@900> set it on the BaF event switch: a BaF event."
+    assert question_buttons(asked) == []
+    assert asked.edits[-1]["allowed_mentions"].roles is False
+    assert "answer" not in baf.asks_of(await fresh(bot, marathon))[0]
+
+    await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "follow")
+
+    assert asked.content == opening
+    assert question_buttons(asked) == ["Yes, a BaF event", "No, not a BaF event"]

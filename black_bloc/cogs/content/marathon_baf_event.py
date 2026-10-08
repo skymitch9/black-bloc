@@ -59,6 +59,7 @@ from ...settings_store import (
     MARATHON_BAF_EVENT_REASON_STAFF_KEY,
     MARATHON_BAF_EVENT_SAME_SAID_KEY,
     MARATHON_BAF_EVENT_SET_SAID_KEY,
+    MARATHON_BAF_EVENT_STAFF_SET_KEY,
     MARATHON_BAF_EVENT_WORD_FOLLOW_KEY,
     MARATHON_BAF_EVENT_WORD_NO_KEY,
     MARATHON_BAF_EVENT_WORD_UNSURE_KEY,
@@ -477,6 +478,7 @@ async def set_baf_event(
             "via": via,
         },
     )
+    await note_switch(bot, guild, fresh, actor)
     await controls_changed(bot, guild, fresh["id"])
     return Outcome(
         True,
@@ -643,6 +645,52 @@ def standing_line(bot: Any, guild: Any, marathon: Any, asks: Any) -> str:
             marathon=marathon["name"],
         )
     return ""
+
+
+async def question_message(bot: Any, guild: Any, ask: Any) -> Any:
+    from .marathon_inbox import find_channel, reopened
+
+    thread, _lost = await find_channel(bot, guild, ask["channel_id"])
+    if thread is None:
+        return None
+    await reopened(thread)
+    partial = getattr(thread, "get_partial_message", None)
+    if callable(partial):
+        return partial(int(ask["message_id"]))
+    return await thread.fetch_message(int(ask["message_id"]))
+
+
+async def note_switch(bot: Any, guild: Any, marathon: Any, actor: Any) -> None:
+    """An open question loses its buttons while staff's switch decides, and gets them back
+    when the switch follows again."""
+    asks = baf.asks_of(marathon)
+    if baf.answered(asks) is not None or baf.cleared(asks) is not None:
+        return
+    own = baf.stored(marathon)
+    for ask in asks:
+        if not ask.get("message_id") or not ask.get("channel_id") or ask.get("answer"):
+            continue
+        text = str(ask.get("text") or "")
+        if own is None:
+            content, view = text, ask_view(bot, guild.id, marathon["id"])
+        else:
+            line = words(
+                bot,
+                guild.id,
+                MARATHON_BAF_EVENT_STAFF_SET_KEY,
+                who=who_of(actor_id(actor)),
+                answer=answer_word(bot, guild.id, baf.choice_of(own)),
+                marathon=marathon["name"],
+            )
+            content, view = f"{text}\n{line}".strip(), None
+        try:
+            message = await question_message(bot, guild, ask)
+            if message is not None:
+                await message.edit(
+                    content=content, view=view, allowed_mentions=discord.AllowedMentions.none()
+                )
+        except Exception as exc:
+            log.warning("marathon: the BaF event question could not be edited — %s", reason_of(exc))
 
 
 async def note_questions(bot: Any, guild: Any, marathon: Any) -> None:
