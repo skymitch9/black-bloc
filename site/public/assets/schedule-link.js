@@ -1,3 +1,4 @@
+import { trackerRunHash } from './marathon-words.js';
 import { el } from './ui.js';
 
 const TRACKER = 'Marathon tracker';
@@ -5,6 +6,10 @@ const TRACKER_HELP = 'The runs in order with the times the bot is working from a
 
 export function trackerHref(marathonId) {
   return `/schedule.html#marathon-${marathonId}`;
+}
+
+export function trackerRunHref(marathonId, runId) {
+  return `/schedule.html${trackerRunHash(marathonId, runId)}`;
 }
 
 export function trackerLink(marathonId) {

@@ -33,7 +33,7 @@ const at = (minutes) => new Date(NOW + minutes * 60000).toISOString();
 const CADENCE = { near: 30, far: 24 };
 
 test('the drawer draws its parts in order, header first and the moves last', () => {
-  assert.deepEqual(drawerParts(), ['the header', 'Spotlight', 'Pings', 'People', 'Settings for this marathon', 'the posts line', 'the moves']);
+  assert.deepEqual(drawerParts(), ['the header', 'Spotlight', 'Pings', 'People', 'Settings for this marathon', 'the posts line', 'the moves', 'More…']);
 });
 
 test('the header reads short: when it was read, when next, and the counts', () => {
@@ -203,4 +203,57 @@ test('a horaro.net events feed draws an Owner and a Search words field; other fe
   assert.deepEqual(blank.map((one) => [one.value, one.placeholder]), [['', 'Fast Pace'], ['', 'only events naming this channel']]);
   assert.deepEqual(feedSearchFields({ source: 'gdq', owner: null, words: null }), []);
   assert.deepEqual(feedSearchFields(null), []);
+});
+
+test('the bar is the tracking move, Read it now while active, Archive it and More…', async () => {
+  const { barMoves, moreMoves } = await import('../public/assets/marathon-words.js');
+  assert.deepEqual(barMoves({ tracked_state: 'tracked', active: true }), ['untrack', 'read', 'archive', 'more']);
+  assert.deepEqual(barMoves({ tracked_state: 'found', active: false }), ['track', 'ignore', 'archive', 'more']);
+  assert.deepEqual(barMoves({ tracked_state: 'ignored', active: true }), ['anyway', 'read', 'archive', 'more']);
+  assert.deepEqual(moreMoves({ active: true, inbox_message_url: null, retimed_runs: 2 }), ['rename', 'pause', 'inbox', 'sheet_times']);
+  assert.deepEqual(moreMoves({ active: false, inbox_message_url: 'https://x', retimed_runs: 0 }), ['rename', 'resume']);
+  assert.ok(!barMoves({ tracked_state: 'tracked', active: true }).includes('remove'));
+});
+
+test('a slot draws the People view’s set in its order, and the tracker and Shout under it', async () => {
+  const { slotMoves, runMoves } = await import('../public/assets/marathon-words.js');
+  const baf = {
+    user_id: '21', login: 'skyruns', member: true, matched_by: 'pairing', pairing_id: 4, opted_out: false,
+    mention: { move: 'plain' },
+  };
+  const person = { user_id: '21', announce: { move: 'out' } };
+  assert.deepEqual(slotMoves(baf, person), ['link', 'unlink', 'twitch', 'spotlight', 'opt_out', 'mention', 'run_answer']);
+  assert.deepEqual(
+    slotMoves({ ...baf, spotlight_id: 9, channel_id: 9, opted_out: true }, { ...person, announce: { move: null } }),
+    ['link', 'unlink', 'twitch', 'unspotlight', 'opt_in', 'mention'],
+  );
+  assert.deepEqual(slotMoves({ login: 'x', channel_id: 3, looks_like: { user_id: '7', username: 'x' } }, { name: 'X' }), ['link', 'link_near', 'on_golive']);
+  assert.deepEqual(slotMoves({}, { name: 'Nobody' }), ['link']);
+  assert.deepEqual(slotMoves(baf, person, { archived: true }), []);
+  assert.deepEqual(runMoves({ shoutable: true }, { tracked: true }), ['tracker', 'shout']);
+  assert.deepEqual(runMoves({ shoutable: true, can_mark_done: true, can_mark_live: true, can_mark_upcoming: true, ours: true }, { tracked: false }), ['tracker']);
+  assert.deepEqual(runMoves({ event_id: 5 }, { tracked: true }), ['tracker', 'event']);
+});
+
+test('the tracker link for one run opens its row', async () => {
+  const { trackerRunHash, trackerRunOf } = await import('../public/assets/marathon-words.js');
+  assert.equal(trackerRunHash(4, 12), '#marathon-4-run-12');
+  assert.deepEqual(trackerRunOf('#marathon-4-run-12'), { marathon: '4', run: '12' });
+  assert.deepEqual(trackerRunOf('#marathon-4'), { marathon: '4', run: null });
+  assert.equal(trackerRunOf('#nope'), null);
+});
+
+test('a switch with a server default says so, and offers the way back only when it has its own', async () => {
+  const { switchDefault } = await import('../public/assets/marathon-words.js');
+  assert.equal(switchDefault({ own: null, on: true, default: true }), 'default');
+  assert.equal(switchDefault({ own: false, on: false, default: true }), 'own');
+  assert.equal(switchDefault(null), null);
+});
+
+test('BaF run/host events moves only its half of the event mode', async () => {
+  const { runsMode } = await import('../public/assets/marathon-words.js');
+  assert.equal(runsMode('none', true), 'runs');
+  assert.equal(runsMode('marathon', true), 'both');
+  assert.equal(runsMode('both', false), 'marathon');
+  assert.equal(runsMode('runs', false), 'none');
 });
