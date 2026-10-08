@@ -42,7 +42,7 @@ log = logging.getLogger(__name__)
 
 HEAD = "brackets"
 
-OFF = "off"
+OFF, SHADOW, ON = BRACKETS_MODES
 
 NAME_LIMIT = 100
 

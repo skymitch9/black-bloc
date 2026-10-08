@@ -147,7 +147,7 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_four_hand_added_rows():
     `rolemenu_mode` left them 2026-09-25 (owner, "B") when it went back to hiding `/rolemenu`."""
     from black_bloc.settings_panel import FEATURE_MODES
 
-    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 23
+    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 24
     assert len(EXTRA_MODES) == 4
     assert "marathon_mode" in {row.key for row in EXTRA_MODES}
     assert "structure_backup_mode" in {row.key for row in EXTRA_MODES}
@@ -164,7 +164,7 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     lines = mode_lines(store, GUILD)
     said = "\n".join(lines)
 
-    assert len(lines) == 23
+    assert len(lines) == 24
     assert "**Personal bests** — None · `/pb` to change" in lines
     assert "**Sticky messages** — None · `/sticky` to change" in lines
     assert "**Structure backup** — None · `/structure` to change" in lines
@@ -319,7 +319,7 @@ def test_row_two_never_grows_past_the_five_controls_discord_allows():
 
 @pytest.mark.parametrize(
     "hidden,expected",
-    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 19)],
+    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 20)],
 )
 def test_turn_a_feature_back_on_lists_exactly_what_is_hidden_and_never_more(hidden, expected):
     values = {HIDE_COMMANDS_WHEN_OFF: True}

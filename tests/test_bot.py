@@ -38,6 +38,7 @@ MEMBER_COMMANDS = {
     "apply",
     "ask",
     "birthday",
+    "bracket",
     "event",
     "golive",
     "help",

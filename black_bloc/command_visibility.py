@@ -18,6 +18,7 @@ HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "applications_mode": ("apply",),
     "automod_mode": ("automod",),
     "birthday_mode": ("birthday",),
+    "brackets_mode": ("bracket",),
     "chat_mode": ("chat",),
     "events_mode": ("event",),
     "frontdoor_mode": ("ask",),

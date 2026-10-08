@@ -1173,6 +1173,7 @@ const SETTING_SPECS = [
   ["brackets_channel_id", "channel", 1076005097617760296, 1076005097617760296, "the text channel each tournament's thread is made under while brackets_mode is on; #knuck-up by default"],
   ["brackets_shadow_channel_id", "channel", null, null, "where tournament threads are made while brackets_mode is shadow; blank means shadow_channel_id"],
   ["brackets_to_role_id", "role", null, null, "the Tournament Organiser role: its holders may create and run tournaments as staff can. Blank \u2014 the default \u2014 leaves tournaments to staff. Taking the role away takes the right away, even for a tournament that person created"],
+  ["brackets_ping_role_id", "role", null, null, "a role @-mentioned in a tournament's thread when it starts. Blank \u2014 the default \u2014 pings nobody; the set cards still mention their two players"],
   ["brackets_format_default", "enum", "double", "double", "the format a new tournament starts with: single, double \u2014 the default \u2014 round_robin or swiss. The organiser can change it until the tournament starts", ["single", "double", "round_robin", "swiss"]],
   ["brackets_best_of", "enum", "3", "3", "the best-of every set plays unless a later rule says longer; 3 by default", ["1", "3", "5", "7", "9", "11", "13", "15"]],
   ["brackets_best_of_late", "enum", "5", "5", "the best-of a set plays once brackets_best_of_from_round entrants or fewer are left in an elimination bracket; 5 by default", ["1", "3", "5", "7", "9", "11", "13", "15"]],
@@ -1223,6 +1224,70 @@ const SETTING_SPECS = [
   ["brackets_own_report_said", "text", "You reported {set}, so your opponent confirms or disputes it.", "You reported {set}, so your opponent confirms or disputes it.", "what a player is told when they confirm or dispute their own report"],
   ["brackets_not_in_bracket_said", "text", "{entrant} is not playing in **{name}**, so nothing was done.", "{entrant} is not playing in **{name}**, so nothing was done.", "what a tournament organiser is told when they DQ someone the bracket does not hold"],
   ["brackets_already_out_said", "text", "{entrant} is already out of **{name}**.", "{entrant} is already out of **{name}**.", "what is said when an entrant is dropped or disqualified twice"],
+  ["brackets_format_single_words", "text", "Single elimination", "Single elimination", "what {format} says on a tournament card for single elimination"],
+  ["brackets_format_double_words", "text", "Double elimination", "Double elimination", "what {format} says on a tournament card for double elimination"],
+  ["brackets_format_round_robin_words", "text", "Round robin", "Round robin", "what {format} says on a tournament card for round robin"],
+  ["brackets_format_swiss_words", "text", "Swiss", "Swiss", "what {format} says on a tournament card for Swiss"],
+  ["brackets_card_format_line", "text", "{format} \u00b7 best of {best_of}", "{format} \u00b7 best of {best_of}", "the tournament card's format line; the option words follow it, separated by \u00b7"],
+  ["brackets_card_reset_words", "text", "grand-final reset", "grand-final reset", "the option word on a double elimination card whose grand final has a reset"],
+  ["brackets_card_third_words", "text", "third-place set", "third-place set", "the option word on a single elimination card that plays for third place"],
+  ["brackets_card_rounds_words", "text", "{rounds} rounds", "{rounds} rounds", "the option word on a Swiss card that names its rounds"],
+  ["brackets_card_late_words", "text", "best of {best_of} from top {top}", "best of {best_of} from top {top}", "the option word on an elimination card whose late sets are longer"],
+  ["brackets_card_finals_words", "text", "finals best of {best_of}", "finals best of {best_of}", "the option word on an elimination card naming the last set's best-of"],
+  ["brackets_card_state_line", "text", "**{state}**", "**{state}**", "the tournament card's state line; {state} is a brackets_state_* word"],
+  ["brackets_card_entrants_line", "text", "{count} entrant(s)", "{count} entrant(s)", "the tournament card's entrant count when it has no cap"],
+  ["brackets_card_entrants_cap_line", "text", "{count} of {cap} entrants", "{count} of {cap} entrants", "the tournament card's entrant count when it has a cap"],
+  ["brackets_card_starts_line", "text", "Starts {when}", "Starts {when}", "the tournament card's start time line"],
+  ["brackets_card_check_in_line", "text", "Check-in closes {when}", "Check-in closes {when}", "the tournament card's line while check-in is open"],
+  ["brackets_card_to_line", "text", "Organiser: {to}", "Organiser: {to}", "the tournament card's line naming who runs it"],
+  ["brackets_card_place_line", "text", "{place}. {name}", "{place}. {name}", "one placing on a complete tournament's card"],
+  ["brackets_card_link_label", "text", "Open the bracket", "Open the bracket", "the tournament card's button to the bracket on the site"],
+  ["brackets_sign_up_label", "text", "Sign up", "Sign up", "the tournament card's sign-up button"],
+  ["brackets_leave_label", "text", "Leave", "Leave", "the tournament card's button to leave before the start"],
+  ["brackets_check_in_label", "text", "Check in", "Check in", "the tournament card's check-in button"],
+  ["brackets_not_entered_said", "text", "You are not signed up for **{name}**, so nothing was done.", "You are not signed up for **{name}**, so nothing was done.", "what a member is told when they press Leave or Check in on a tournament they are not in"],
+  ["brackets_set_card_players", "text", "{a} v {b}", "{a} v {b}", "the first line of a set's card; {a} and {b} mention the two players"],
+  ["brackets_round_winners", "text", "Winners round {round}", "Winners round {round}", "a winners-side set's round"],
+  ["brackets_round_losers", "text", "Losers round {round}", "Losers round {round}", "a losers-side set's round"],
+  ["brackets_round_grand", "text", "Grand final", "Grand final", "the grand final set's round"],
+  ["brackets_round_reset", "text", "Grand final reset", "Grand final reset", "the grand final reset set's round"],
+  ["brackets_round_third", "text", "Third place", "Third place", "the third-place set's round"],
+  ["brackets_round_plain", "text", "Round {round}", "Round {round}", "a round robin or Swiss set's round"],
+  ["brackets_set_card_title", "text", "{set} \u00b7 {round}", "{set} \u00b7 {round}", "a set card's title"],
+  ["brackets_set_card_best_of", "text", "Best of {best_of}", "Best of {best_of}", "a set card's best-of line"],
+  ["brackets_set_card_rematch", "text", "Rematch", "Rematch", "a set card's mark when the pair met before"],
+  ["brackets_set_card_ready", "text", "Ready to play", "Ready to play", "a set card's line once both players are in"],
+  ["brackets_set_card_called", "text", "Called \u2014 play now", "Called \u2014 play now", "a set card's line once it is called"],
+  ["brackets_set_card_reported", "text", "{reporter} reported {score} \u2014 waiting on {opponent}, stands {when}", "{reporter} reported {score} \u2014 waiting on {opponent}, stands {when}", "a set card's line while a report waits; {when} is when it stands on its own"],
+  ["brackets_set_card_disputed", "text", "Disputed by {who} \u2014 an organiser decides", "Disputed by {who} \u2014 an organiser decides", "a set card's line while a report is disputed"],
+  ["brackets_set_card_note", "text", "\u201c{note}\u201d", "\u201c{note}\u201d", "a disputed set card's note line"],
+  ["brackets_set_card_cleared", "text", "{set} was cleared", "{set} was cleared", "a set card's line once its result or players were taken back"],
+  ["brackets_report_label", "text", "Report", "Report", "a set card's report button"],
+  ["brackets_confirm_label", "text", "Confirm", "Confirm", "a set card's confirm button"],
+  ["brackets_dispute_label", "text", "Dispute", "Dispute", "a set card's dispute button"],
+  ["brackets_report_title", "text", "Report {set} \u00b7 best of {best_of}", "Report {set} \u00b7 best of {best_of}", "the report form's title; Discord cuts a form title at 45 characters"],
+  ["brackets_score_label", "text", "{name} \u2014 games won", "{name} \u2014 games won", "a report form's score box; Discord cuts a form label at 45 characters"],
+  ["brackets_dispute_title", "text", "Dispute {set}", "Dispute {set}", "the dispute form's title"],
+  ["brackets_dispute_note_label", "text", "What is wrong", "What is wrong", "the dispute form's note box"],
+  ["brackets_score_not_number_said", "text", "A score is a whole number of games, so nothing was reported.", "A score is a whole number of games, so nothing was reported.", "what is said when a report form's score is not a whole number"],
+  ["brackets_panel_title", "text", "Tournaments", "Tournaments", "the /bracket panel's title"],
+  ["brackets_panel_line", "text", "**{name}** \u00b7 {state} \u00b7 {count} entrant(s)", "**{name}** \u00b7 {state} \u00b7 {count} entrant(s)", "one tournament on the /bracket panel"],
+  ["brackets_panel_empty", "text", "No tournaments right now.", "No tournaments right now.", "the /bracket panel with none"],
+  ["brackets_pick_placeholder", "text", "Pick a tournament\u2026", "Pick a tournament\u2026", "the /bracket tournament picker"],
+  ["brackets_pick_set_placeholder", "text", "Pick a set\u2026", "Pick a set\u2026", "the /bracket set picker"],
+  ["brackets_back_label", "text", "Back", "Back", "the /bracket panel's back button"],
+  ["brackets_your_sets_title", "text", "Your sets", "Your sets", "the heading over a member's own sets"],
+  ["brackets_drop_label", "text", "Drop out", "Drop out", "the /bracket button a player presses to leave a running tournament"],
+  ["brackets_drop_confirm", "text", "Drop out of **{name}**? Your remaining sets are forfeited.", "Drop out of **{name}**? Your remaining sets are forfeited.", "the question before a player drops out of a running tournament"],
+  ["brackets_panel_footer", "text", "This panel has gone quiet \u2014 run /bracket again.", "This panel has gone quiet \u2014 run /bracket again.", "the footer a /bracket panel wears once its buttons stop"],
+  ["brackets_dm_removed", "text", "A tournament organiser took you out of **{name}**.", "A tournament organiser took you out of **{name}**.", "the DM a member gets when an organiser removes them before the start"],
+  ["brackets_dm_dq", "text", "A tournament organiser disqualified you from **{name}**; your remaining sets are forfeited.", "A tournament organiser disqualified you from **{name}**; your remaining sets are forfeited.", "the DM a player gets when an organiser disqualifies them"],
+  ["brackets_dm_dropped", "text", "A tournament organiser dropped you from **{name}**; your remaining sets are forfeited.", "A tournament organiser dropped you from **{name}**; your remaining sets are forfeited.", "the DM a player gets when an organiser drops them from a running tournament"],
+  ["brackets_dm_decided", "text", "A tournament organiser decided {set} in **{name}**: {result}", "A tournament organiser decided {set} in **{name}**: {result}", "the DM both players get when an organiser decides or corrects their set"],
+  ["brackets_dm_reset", "text", "A tournament organiser reset {set} in **{name}**.", "A tournament organiser reset {set} in **{name}**.", "the DM both players get when an organiser resets their set"],
+  ["brackets_dm_reason", "text", "Reason: {reason}", "Reason: {reason}", "the line under an organiser's DM when they gave a reason"],
+  ["brackets_start_ping", "text", "{role} **{name}** has started.", "{role} **{name}** has started.", "posted in a tournament's thread at the start when brackets_ping_role_id is picked"],
+  ["brackets_moved_line", "text", "This tournament moved to {thread}.", "This tournament moved to {thread}.", "the line a rehearsal thread keeps once staff move its tournament into #knuck-up"],
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
@@ -2323,7 +2388,7 @@ const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour",
 CORE_KEYS.push(...STRUCTURE_BACKUP_KEYS);
 const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_channel_id", "pb_feed_ping_role_id", "pb_feed_auto_match", "pb_feed_interval_minutes", "pb_feed_cycle_requests", "pb_feed_rematch_days", "pb_feed_max_age_days", "pb_feed_max_posts", "pb_feed_panel_minutes", "pb_feed_post_title", "pb_feed_post_text", "pb_feed_post_author", "pb_feed_place_text", "pb_feed_link_label", "pb_feed_no_channel_words", "pb_feed_panel_title", "pb_feed_panel_footer", "pb_feed_you_matched", "pb_feed_you_set", "pb_feed_posting_on", "pb_feed_posting_shadow", "pb_feed_posting_off", "pb_feed_you_none", "pb_feed_you_waiting", "pb_feed_you_unlinked", "pb_feed_you_opted_out", "pb_feed_you_blocked", "pb_feed_opt_out_label", "pb_feed_opt_in_label", "pb_feed_opted_out_said", "pb_feed_opted_in_said", "pb_feed_set_said", "pb_feed_unmatched_said", "pb_feed_blocked_said", "pb_feed_unblocked_said", "pb_feed_unblocked_opted_out_said", "pb_feed_no_runner_said", "pb_feed_taken_said", "pb_feed_not_now_said", "pb_feed_nothing_to_do_said", "pb_feed_looked_said", "pb_feed_failed_said", "pb_feed_off_said", "pb_feed_post_again_label", "pb_feed_post_again_pick", "pb_feed_posted_again_said", "pb_feed_rehearsed_again_said", "pb_feed_again_failed_said", "pb_feed_again_off_said", "pb_feed_no_post_said", "pb_feed_again_not_in_feed_said", "pb_feed_dm_set", "pb_feed_dm_unmatched", "pb_feed_dm_blocked", "pb_feed_dm_opt_out_cleared", "pb_feed_dm_no_reason"];
 CORE_KEYS.push(...PB_FEED_KEYS);
-const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_shadow_channel_id", "brackets_to_role_id", "brackets_format_default", "brackets_best_of", "brackets_best_of_late", "brackets_best_of_finals", "brackets_grand_final_reset_default", "brackets_third_place_default", "brackets_confirm_minutes", "brackets_check_in_minutes", "brackets_best_of_from_round", "brackets_swiss_rounds_default", "brackets_entrant_cap_default", "brackets_panel_minutes", "brackets_checked_in_said", "brackets_checked_out_said", "brackets_joined_said", "brackets_left_said", "brackets_dropped_said", "brackets_set_called_said", "brackets_set_reported_said", "brackets_set_final_said", "brackets_forfeit_words", "brackets_set_disputed_said", "brackets_off_said", "brackets_not_organiser_said", "brackets_no_role_words", "brackets_no_tournament_said", "brackets_wrong_state_said", "brackets_state_draft", "brackets_state_signups", "brackets_state_check_in", "brackets_state_seeding", "brackets_state_running", "brackets_state_complete", "brackets_state_cancelled", "brackets_not_yours_said", "brackets_full_said", "brackets_already_in_said", "brackets_removed_by_to_said", "brackets_no_set_said", "brackets_not_in_set_said", "brackets_not_ready_said", "brackets_not_playable_said", "brackets_already_complete_said", "brackets_disputed_said", "brackets_bad_score_said", "brackets_reported_differently_said", "brackets_not_reported_said", "brackets_own_report_said", "brackets_not_in_bracket_said", "brackets_already_out_said"];
+const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_shadow_channel_id", "brackets_to_role_id", "brackets_ping_role_id", "brackets_format_default", "brackets_best_of", "brackets_best_of_late", "brackets_best_of_finals", "brackets_grand_final_reset_default", "brackets_third_place_default", "brackets_confirm_minutes", "brackets_check_in_minutes", "brackets_best_of_from_round", "brackets_swiss_rounds_default", "brackets_entrant_cap_default", "brackets_panel_minutes", "brackets_checked_in_said", "brackets_checked_out_said", "brackets_joined_said", "brackets_left_said", "brackets_dropped_said", "brackets_set_called_said", "brackets_set_reported_said", "brackets_set_final_said", "brackets_forfeit_words", "brackets_set_disputed_said", "brackets_off_said", "brackets_not_organiser_said", "brackets_no_role_words", "brackets_no_tournament_said", "brackets_wrong_state_said", "brackets_state_draft", "brackets_state_signups", "brackets_state_check_in", "brackets_state_seeding", "brackets_state_running", "brackets_state_complete", "brackets_state_cancelled", "brackets_not_yours_said", "brackets_full_said", "brackets_already_in_said", "brackets_removed_by_to_said", "brackets_no_set_said", "brackets_not_in_set_said", "brackets_not_ready_said", "brackets_not_playable_said", "brackets_already_complete_said", "brackets_disputed_said", "brackets_bad_score_said", "brackets_reported_differently_said", "brackets_not_reported_said", "brackets_own_report_said", "brackets_not_in_bracket_said", "brackets_already_out_said", "brackets_format_single_words", "brackets_format_double_words", "brackets_format_round_robin_words", "brackets_format_swiss_words", "brackets_card_format_line", "brackets_card_reset_words", "brackets_card_third_words", "brackets_card_rounds_words", "brackets_card_late_words", "brackets_card_finals_words", "brackets_card_state_line", "brackets_card_entrants_line", "brackets_card_entrants_cap_line", "brackets_card_starts_line", "brackets_card_check_in_line", "brackets_card_to_line", "brackets_card_place_line", "brackets_card_link_label", "brackets_sign_up_label", "brackets_leave_label", "brackets_check_in_label", "brackets_not_entered_said", "brackets_set_card_players", "brackets_round_winners", "brackets_round_losers", "brackets_round_grand", "brackets_round_reset", "brackets_round_third", "brackets_round_plain", "brackets_set_card_title", "brackets_set_card_best_of", "brackets_set_card_rematch", "brackets_set_card_ready", "brackets_set_card_called", "brackets_set_card_reported", "brackets_set_card_disputed", "brackets_set_card_note", "brackets_set_card_cleared", "brackets_report_label", "brackets_confirm_label", "brackets_dispute_label", "brackets_report_title", "brackets_score_label", "brackets_dispute_title", "brackets_dispute_note_label", "brackets_score_not_number_said", "brackets_panel_title", "brackets_panel_line", "brackets_panel_empty", "brackets_pick_placeholder", "brackets_pick_set_placeholder", "brackets_back_label", "brackets_your_sets_title", "brackets_drop_label", "brackets_drop_confirm", "brackets_panel_footer", "brackets_dm_removed", "brackets_dm_dq", "brackets_dm_dropped", "brackets_dm_decided", "brackets_dm_reset", "brackets_dm_reason", "brackets_start_ping", "brackets_moved_line"];
 CORE_KEYS.push(...BRACKETS_KEYS);
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
@@ -14642,6 +14707,21 @@ bkStateMove('unstart', ['running'], 'seeding', 'unstarted', 'unstarted', () => (
 bkStateMove('reopen', ['complete'], 'running', 'reopened', 'reopened', (t) => ({ completed_at: null, entrants: t.entrants.map((one) => ({ ...one, placement: null })) }));
 bkStateMove('cancel', ['draft', 'signups', 'check_in', 'seeding', 'running', 'complete'], 'cancelled', 'cancelled', 'cancelled', (t) => ({ state_before: t.state, cancelled_at: now() }));
 bkStateMove('restore', ['cancelled'], (t) => t.state_before || 'draft', 'restored', 'restored', () => ({ state_before: null, cancelled_at: null }));
+
+route('POST', '/api/brackets/:tournament_id/move', (context) => {
+  requireMember(context.session);
+  const t = bkOf(context);
+  const channel = `<#${state.settings.get('brackets_channel_id') ?? 'brackets_channel_id'}>`;
+  if (context.session === 'member') throw new Refused(403, 'not_staff', `Moving a tournament into ${channel} is for staff, so nothing moved.`);
+  const mode = state.settings.get('brackets_mode') ?? 'shadow';
+  if (mode !== 'on') throw new Refused(409, 'not_on', `brackets_mode is ${mode}, so **${t.name}** stays where it is. Set brackets_mode to on first.`);
+  if (!t.shadow) throw new Refused(409, 'not_rehearsal', `**${t.name}** is already in ${channel}, so nothing moved.`);
+  const from = t.thread_id ?? null;
+  Object.assign(t, { shadow: 0, thread_id: Date.now(), channel_id: state.settings.get('brackets_channel_id') ?? null });
+  t.updated_at = now();
+  logAction('web.brackets.thread_moved', { actor_id: actorOf(context.session), details: { via: 'website', tournament: t.id, from_thread: from, to_thread: t.thread_id } });
+  return { tournament: bkView(t, context), message: `**${t.name}** is now in <#${t.thread_id}>.` };
+});
 
 route('POST', '/api/brackets/:tournament_id/checkin/close', (context) => {
   requireMember(context.session);

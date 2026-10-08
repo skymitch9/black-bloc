@@ -49,6 +49,14 @@ ROOT = PACKAGE.parent
 # A call site the table does not cover fails `test_every_dynamic_kind_is_enumerated`
 # by name, which is what stops a new kind going quietly unclassified.
 KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
+    "black_bloc/brackets_thread.py::kind": (
+        "brackets.thread_made",
+        "brackets.thread_failed",
+        "brackets.thread_lost",
+        "brackets.card_failed",
+        "brackets.card_reposted",
+        "brackets.would_ping",
+    ),
     "black_bloc/brackets_moves.py::kind": tuple(
         f"{head}brackets.{name}"
         for head in ("", "web.")
@@ -79,6 +87,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
             "set_overridden",
             "set_reset",
             "entrant_removed",
+            "thread_moved",
         )
     ),
     "black_bloc/pb_looks.py::kind": (

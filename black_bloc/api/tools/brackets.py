@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -8,7 +9,7 @@ from fastapi import APIRouter, Body, Request
 from ... import brackets_moves as moves
 from ... import brackets_people as people
 from ... import brackets_sets as sets
-from ... import brackets_store, brackets_view
+from ... import brackets_store, brackets_thread, brackets_view
 from ...brackets import access
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused
@@ -26,6 +27,8 @@ from ..writes import (
 log = logging.getLogger(__name__)
 
 OPTIONAL = Body(default=None)
+
+FOLLOW_GRACE_SECONDS = 1.5
 
 
 def body_of(payload: Any) -> dict[str, Any]:
@@ -69,6 +72,11 @@ def build_router(bot: Any) -> APIRouter:
         outcome = await move(bot, guild, actor, *given, *args, via=VIA_WEBSITE, **words)
         if not outcome.ok:
             raise Refused(outcome.status or 400, outcome.code, outcome.message)
+        following = brackets_thread.follow_later(
+            bot, guild, outcome.value, outcome, move=getattr(move, "__name__", None)
+        )
+        if following is not None:
+            await asyncio.wait({following}, timeout=FOLLOW_GRACE_SECONDS)
         return {
             "tournament": await shown(guild, int(outcome.value), who),
             "message": outcome.message,
@@ -120,6 +128,7 @@ def build_router(bot: Any) -> APIRouter:
     plain("/{tournament_id}/reopen", moves.reopen)
     plain("/{tournament_id}/cancel", moves.cancel)
     plain("/{tournament_id}/restore", moves.restore)
+    plain("/{tournament_id}/move", brackets_thread.move_home)
 
     @router.post("/{tournament_id}/complete")
     async def brackets_complete(
