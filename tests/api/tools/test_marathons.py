@@ -1559,8 +1559,26 @@ async def test_the_drawer_reads_the_threads_tracker_and_archive_words_from_their
     await web.store.set(wf.GUILD_ID, "marathon_controls_archive", "Put it away")
 
     labels = client.get(f"/api/marathons/{marathon_id}").json()["labels"]
-    assert labels == {"tracker": "Marathon tracker ↗", "archive": "Put it away"}
+    assert labels == {
+        "tracker": "Marathon tracker ↗",
+        "archive": "Put it away",
+        "unlink_event": "Unlink the event",
+    }
 
     client.post(f"/api/marathons/{marathon_id}/archive")
     gone = client.get(f"/api/marathons/{marathon_id}").json()
     assert gone["archived"] is True and gone["labels"]["tracker"] == "Marathon tracker ↗"
+
+
+async def test_a_runs_event_unlink_has_its_own_words_beside_the_persons_unlink(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    await web.store.set(wf.GUILD_ID, "marathon_run_event_unlink", "Drop the run's event")
+
+    labels = client.get(f"/api/marathons/{marathon_id}").json()["labels"]
+    people = client.get(f"/api/marathons/{marathon_id}/people").json()["labels"]
+
+    assert labels["unlink_event"] == "Drop the run's event"
+    assert people["unlink"] == "Unlink" and labels["unlink_event"] != people["unlink"]

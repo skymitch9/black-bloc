@@ -386,6 +386,7 @@ export const LABELS = {
   marathon_controls_spotlight_none_line: "The thread controls’ spotlight line while there is no channel",
   marathon_controls_spotlight_running_line: "The thread controls’ spotlight line while a spotlight it does not follow is up",
   marathon_controls_archive: "The thread controls’ Archive it button after the show",
+  marathon_run_event_unlink: 'The marathon drawer’s Unlink the event button under a run',
   marathon_overlay_on_said: 'What staff are told when a marathon starts using the event’s own schedule sheet',
   marathon_overlay_off_said: 'What staff are told when a marathon goes back to GDQ’s sheet times',
   marathon_hotfix_hosts_template: 'The notice line when a Hotfix show was taken for its BaF host',

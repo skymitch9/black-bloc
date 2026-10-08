@@ -113,6 +113,7 @@ from ...settings_store import (
     MARATHON_POLL_MINUTES_KEY,
     MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
     MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
+    MARATHON_RUN_EVENT_UNLINK_KEY,
 )
 from ..auth import Refused, staff_dependency
 from ..names import member_row, resolve_one
@@ -134,6 +135,7 @@ PEOPLE_LABELS = {
 DRAWER_LABELS = {
     "tracker": MARATHON_CONTROLS_TRACKER_KEY,
     "archive": MARATHON_CONTROLS_ARCHIVE_KEY,
+    "unlink_event": MARATHON_RUN_EVENT_UNLINK_KEY,
 }
 
 COG = "Marathons"

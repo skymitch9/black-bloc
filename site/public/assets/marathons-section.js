@@ -430,7 +430,7 @@ function runTools(marathon, row, say) {
         closeDrawer();
         showEvent(row.event_id);
       }),
-      step(marathon, say, 'Unlink', () => send(`${base}/event`, 'DELETE')),
+      step(marathon, say, (marathon.labels || {}).unlink_event, () => send(`${base}/event`, 'DELETE')),
     ];
   });
   return tools.length ? el('div', { class: 'bar mx-run-moves' }, tools) : null;

@@ -1045,6 +1045,7 @@ const SETTING_SPECS = [
   ["marathon_controls_spotlight_none_line", "text", "Spotlight: no channel to spotlight", "Spotlight: no channel to spotlight", "the state line on the thread controls while the marathon has no channel; no spotlight button is drawn then"],
   ["marathon_controls_spotlight_running_line", "text", "Spotlight: on until {until} · not following the schedule · stop it on Go-live", "Spotlight: on until {until} · not following the schedule · stop it on Go-live", "the state line on the thread controls while a spotlight staff (or another marathon) set is up and this marathon does not follow the schedule. It takes {until}, read in each viewer's own clock"],
   ["marathon_controls_archive", "text", "Archive it", "Archive it", "the thread controls' button once the show is over: it moves the marathon to the archive, and Restore on the site puts it back"],
+  ["marathon_run_event_unlink", "text", "Unlink the event", "Unlink the event", "the marathon drawer's button under a run's event link that unlinks that event from the run; it sits beside the person's own Unlink"],
   ["marathon_overlay_on_said", "text", "**{marathon}** takes its start times, hosts and commentators from the event's own schedule sheet now, when the viewer links one that matches. The schedule is being read again.", "**{marathon}** takes its start times, hosts and commentators from the event's own schedule sheet now, when the viewer links one that matches. The schedule is being read again.", "what staff are told once a marathon's Event schedule switch is on. It takes {marathon}"],
   ["marathon_overlay_off_said", "text", "**{marathon}** keeps GDQ's sheet times and host column now — the event's own schedule sheet is not laid over it. The schedule is being read again.", "**{marathon}** keeps GDQ's sheet times and host column now — the event's own schedule sheet is not laid over it. The schedule is being read again.", "what staff are told once a marathon's Event schedule switch is off. It takes {marathon}"],
   ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the line above a feed-found marathon's message in the marathon inbox thread, where Track and Ignore are. It takes {feed} {event} {when} {relative} {url} {channel}"],
@@ -9365,6 +9366,7 @@ const MARATHON_PEOPLE_LABELS = {
 const MARATHON_DRAWER_LABELS = {
   tracker: 'marathon_controls_tracker',
   archive: 'marathon_controls_archive',
+  unlink_event: 'marathon_run_event_unlink',
 };
 
 // The bot's api/tools/marathons.stored_labels.
