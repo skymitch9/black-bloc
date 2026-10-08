@@ -8,7 +8,8 @@ import pytest
 
 from black_bloc import brackets_cards as cards
 from black_bloc import brackets_store as store_
-from black_bloc.brackets.model import Match
+from black_bloc.brackets import pools
+from black_bloc.brackets.model import Match, Options, Plan
 from tests.test_brackets_moves import GUILD, bot, guild
 
 
@@ -31,6 +32,12 @@ def row(**given):
         "check_in_closes_at": None,
         "to_user_id": 8,
         "shadow": 0,
+        "pools_format": "none",
+        "pool_count": 2,
+        "advance_per_pool": 2,
+        "advance_losers_from": None,
+        "pools_swiss_rounds": None,
+        "pools_best_of": 3,
     }
     found.update(given)
     return found
@@ -227,3 +234,75 @@ def test_a_card_is_recognised_by_its_buttons():
     message = type("M", (), {"components": [type("R", (), {"children": view.children})()]})()
     assert cards.carries(message, cards.set_prefix(7, "W1-1"))
     assert not cards.carries(message, cards.set_prefix(7, "W1-2"))
+
+
+def test_a_pool_set_key_fits_the_custom_id_template():
+    one = cards.set_custom_id(123456, "B.R3-2", "report")
+    found = re.fullmatch(cards.SET_TEMPLATE, one)
+    assert found is not None and found["key"] == "B.R3-2"
+    assert not re.fullmatch(cards.SET_TEMPLATE, cards.set_custom_id(1, "BB.R1-1", "report"))
+
+
+def test_a_pool_set_card_goes_quiet_once_the_final_is_built():
+    assert cards.set_moves("pools", "ready", 1) == ("report", "call", "decide")
+    assert cards.set_moves("running", "complete", 1) == ()
+    assert cards.set_moves("running", "complete", None) == ("decide", "reset")
+
+
+async def test_a_pool_set_card_names_its_pool_and_round(bot):
+    one = Match(
+        key="B.R2-1",
+        side="rr",
+        round=2,
+        position=1,
+        best_of=3,
+        slot_a=1,
+        slot_b=2,
+        state="ready",
+        phase="pools",
+        pool=2,
+    )
+    embed = cards.set_embed(bot.store, GUILD, one, PEOPLE, 12)
+    assert embed.title == "B.R2-1 · Pool B · round 2"
+
+
+async def test_the_format_line_names_the_pools_and_the_losers_entry(bot):
+    found = row(
+        best_of_finals=3, pools_format="round_robin", pool_count=4, advance_losers_from=2
+    )
+    assert cards.format_line(bot.store, GUILD, found) == (
+        "Double elimination · best of 3 · grand-final reset · 4 pools of Round robin, top 2 "
+        "through · place 2 and below start in losers"
+    )
+    single = row(format="single", pools_format="swiss", advance_losers_from=2)
+    assert "losers" not in cards.format_line(bot.store, GUILD, single)
+
+
+async def test_the_starter_card_shows_each_pools_leaders_while_the_pools_play(bot):
+    people = [person(n, f"P{n}", None) for n in range(1, 9)]
+    bracket = pools.build(
+        list(range(1, 9)), Options(format="double"), Plan("round_robin", 2, 2), "2026-10-07"
+    ).bracket
+    bracket = pools.override(bracket, "A.R1-1", 7, "2026-10-07", score_a=0, score_b=2).bracket
+    pooled = row(state="pools", pools_format="round_robin")
+    lines = cards.starter_lines(bot.store, GUILD, pooled, people, bracket)
+    assert lines[-2:] == ["Pool A · P8, P1", "Pool B · P2, P3"]
+    assert lines[2] == "**In pools**"
+    running = cards.starter_lines(bot.store, GUILD, row(state="running"), people, bracket)
+    assert not any(line.startswith("Pool ") for line in running)
+
+
+async def test_the_starter_cards_pool_line_never_lists_a_withdrawn_leader(bot):
+    people = [person(n, f"P{n}", None) for n in range(1, 9)]
+    bracket = pools.build(
+        list(range(1, 9)), Options(format="double"), Plan("round_robin", 2, 2), "2026-10-07"
+    ).bracket
+    for key in [key for key in bracket.matches if key.startswith("A.")]:
+        match = bracket.matches[key]
+        a_wins = match.slot_a < match.slot_b
+        score = {"score_a": 2, "score_b": 0} if a_wins else {"score_a": 0, "score_b": 2}
+        bracket = pools.override(bracket, key, 7, "2026-10-07", **score).bracket
+    bracket = pools.withdraw(bracket, 1, "dq", "2026-10-07").bracket
+    pooled = row(state="pools", pools_format="round_robin")
+    lines = cards.starter_lines(bot.store, GUILD, pooled, people, bracket)
+    assert "Pool A · P4, P5" in lines

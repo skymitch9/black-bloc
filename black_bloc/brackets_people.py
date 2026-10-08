@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from . import brackets_store as store_
-from .brackets import access, checkin, play
+from .brackets import access, checkin, play, pools
 from .brackets.model import (
     DQ,
     DROP,
@@ -375,19 +375,19 @@ async def restore_entrant(
     async with lock_for(bot, tournament_id):
         row = await loaded(bot, guild, tournament_id)
         require_runner(bot, guild, actor)
-        require_state(bot, guild, row, *store_.BEFORE_START, store_.RUNNING)
+        require_state(bot, guild, row, *store_.BEFORE_START, *store_.PLAYING)
         found = await person(bot, guild, row, entrant_id)
         names = {"entrant": found["name"], "name": row["name"]}
         if not found["dropped"] and not found["dq"]:
             raise stop(bot, guild, "not_out", "not_out", 409, **names)
         moved = None
-        if row["state"] == store_.RUNNING:
+        if row["state"] in store_.PLAYING:
             current = await store_.bracket(bot.db, row)
             if current is None or found["id"] not in current.entrants:
                 raise stop(
                     bot, guild, "brackets_not_in_bracket_said", "not_in_bracket", 409, **names
                 )
-            moved = engine(bot, guild, row, names, play.reinstate, current, found["id"], None)
+            moved = engine(bot, guild, row, names, pools.reinstate, current, found["id"], None)
             await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
         await store_.update_entrant(bot.db, found["id"], back_in())
         await note(
@@ -413,7 +413,7 @@ async def withdrawn(
     current = await store_.bracket(bot.db, row)
     if current is None:
         raise stop(bot, guild, "brackets_not_in_bracket_said", "not_in_bracket", 409, **names)
-    moved = engine(bot, guild, row, names, play.withdraw, current, found["id"], why, now_stamp())
+    moved = engine(bot, guild, row, names, pools.withdraw, current, found["id"], why, now_stamp())
     flags = {"dq": 1} if why == DQ else {"dropped": 1, "dropped_why": store_.DROPPED}
     await store_.update_entrant(bot.db, found["id"], flags | {"dropped_at": now_stamp()})
     gone = await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
@@ -447,7 +447,7 @@ async def dq(
     async with lock_for(bot, tournament_id):
         row = await loaded(bot, guild, tournament_id)
         require_runner(bot, guild, actor)
-        require_state(bot, guild, row, store_.RUNNING)
+        require_state(bot, guild, row, *store_.PLAYING)
         found = await person(bot, guild, row, entrant_id)
         return await withdrawn(bot, guild, actor, row, found, DQ, via)
 
@@ -471,8 +471,8 @@ async def drop(
             raise stop(
                 bot, guild, "brackets_not_yours_said", "not_yours", 403, entrant=found["name"]
             )
-        require_state(bot, guild, row, *store_.BEFORE_START, store_.RUNNING)
-        if row["state"] == store_.RUNNING:
+        require_state(bot, guild, row, *store_.BEFORE_START, *store_.PLAYING)
+        if row["state"] in store_.PLAYING:
             return await withdrawn(bot, guild, actor, row, found, DROP, via)
         if found["dropped"]:
             raise stop(

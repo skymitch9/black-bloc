@@ -4308,6 +4308,13 @@ BRACKETS_BEST_OF_FROM_ROUND = "brackets_best_of_from_round"
 BRACKETS_SWISS_ROUNDS = "brackets_swiss_rounds_default"
 BRACKETS_ENTRANT_CAP = "brackets_entrant_cap_default"
 BRACKETS_PANEL_MINUTES = "brackets_panel_minutes"
+BRACKETS_POOLS_FORMATS = ("none", "round_robin", "swiss")
+BRACKETS_POOLS_FORMAT = "brackets_pools_format_default"
+BRACKETS_POOL_COUNT = "brackets_pool_count_default"
+BRACKETS_ADVANCE_PER_POOL = "brackets_advance_per_pool_default"
+BRACKETS_ADVANCE_LOSERS_FROM = "brackets_advance_losers_from_default"
+BRACKETS_POOLS_SWISS_ROUNDS = "brackets_pools_swiss_rounds_default"
+BRACKETS_POOLS_BEST_OF = "brackets_pools_best_of_default"
 BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_CONFIRM_MINUTES: (12, 1, 1440),
     BRACKETS_CHECK_IN_MINUTES: (30, 5, 1440),
@@ -4315,6 +4322,10 @@ BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_SWISS_ROUNDS: (None, 1, 20),
     BRACKETS_ENTRANT_CAP: (None, 2, 1024),
     BRACKETS_PANEL_MINUTES: (10, 1, 14),
+    BRACKETS_POOL_COUNT: (2, 1, 16),
+    BRACKETS_ADVANCE_PER_POOL: (2, 1, 16),
+    BRACKETS_ADVANCE_LOSERS_FROM: (None, 2, 16),
+    BRACKETS_POOLS_SWISS_ROUNDS: (None, 1, 20),
 }
 BRACKETS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
     BRACKETS_MODE: ("shadow", BRACKETS_MODES),
@@ -4322,6 +4333,8 @@ BRACKETS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
     BRACKETS_BEST_OF: ("3", BRACKETS_LENGTHS),
     BRACKETS_BEST_OF_LATE: ("5", BRACKETS_LENGTHS),
     BRACKETS_BEST_OF_FINALS: ("5", BRACKETS_LENGTHS),
+    BRACKETS_POOLS_FORMAT: ("none", BRACKETS_POOLS_FORMATS),
+    BRACKETS_POOLS_BEST_OF: ("3", BRACKETS_LENGTHS),
 }
 BRACKETS_BOOLS: dict[str, bool] = {
     BRACKETS_GRAND_FINAL_RESET: True,
@@ -4793,8 +4806,52 @@ BRACKETS_PAGE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the bracket page's link from a set to its card in the tournament thread",
     ),
 }
+BRACKETS_POOL_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "brackets_state_pools": (
+        "in pools",
+        (),
+        "what {state} says for a tournament playing its pools",
+    ),
+    "brackets_round_pool": (
+        "Pool {pool} · round {round}",
+        ("pool", "round"),
+        "a pool set's round; {pool} is the pool's letter",
+    ),
+    "brackets_pool_title": ("Pool {pool}", ("pool",), "a pool's name; {pool} is its letter"),
+    "brackets_card_pools_words": (
+        "{count} pools of {format}, top {advance} through",
+        ("count", "format", "advance"),
+        "the tournament card's pools option; {format} is a brackets_format_* word",
+    ),
+    "brackets_card_losers_words": (
+        "place {place} and below start in losers",
+        ("place",),
+        "the tournament card's option for pool finishers who enter the final's losers side",
+    ),
+    "brackets_card_pool_line": (
+        "Pool {pool} · {top}",
+        ("pool", "top"),
+        "a pool's line on the tournament card while the pools play; {top} is its leaders",
+    ),
+    "brackets_waiting_final": (
+        "Waiting for the final",
+        BRACKETS_WAITING,
+        "the bracket page's line for a player whose pool is done and the final is not built",
+    ),
+    "brackets_pool_tied": (
+        "tied",
+        (),
+        "the bracket page's mark on a finished pool's row tied across the cut line",
+    ),
+    "brackets_pool_raise_label": (
+        "Move up",
+        (),
+        "the bracket page's button that moves a tied player up a finished pool's order",
+    ),
+}
 BRACKETS_WORDS.update(BRACKETS_CARD_WORDS)
 BRACKETS_WORDS.update(BRACKETS_PAGE_WORDS)
+BRACKETS_WORDS.update(BRACKETS_POOL_WORDS)
 BRACKETS_DEFAULTS: dict[str, Any] = {
     BRACKETS_CHANNEL: BRACKETS_CHANNEL_ID,
     **{key: default for key, (default, _) in BRACKETS_ENUMS.items()},
@@ -4812,6 +4869,8 @@ BRACKETS_KEYS: tuple[str, ...] = (
     BRACKETS_BEST_OF,
     BRACKETS_BEST_OF_LATE,
     BRACKETS_BEST_OF_FINALS,
+    BRACKETS_POOLS_FORMAT,
+    BRACKETS_POOLS_BEST_OF,
     *BRACKETS_BOOLS,
     *BRACKETS_NUMBERS,
     *BRACKETS_WORDS,
@@ -4905,6 +4964,24 @@ KEY_HELP.update(
             "minutes a tournament panel stays live before its buttons disable themselves; 10 "
             "by default"
         ),
+        BRACKETS_POOLS_FORMAT: (
+            "whether a new tournament plays pools before its bracket: none — the default — "
+            "round_robin or swiss. The organiser can change it until the tournament starts"
+        ),
+        BRACKETS_POOL_COUNT: "how many pools a new tournament with pools splits into; 2 by default",
+        BRACKETS_ADVANCE_PER_POOL: (
+            "how many from the top of each pool go through to the bracket; 2 by default"
+        ),
+        BRACKETS_ADVANCE_LOSERS_FROM: (
+            "the pool place from which those going through start on the losers side of a double "
+            "elimination bracket — 2 sends every pool's 2nd there. Blank — the default — puts "
+            "everyone on the winners side"
+        ),
+        BRACKETS_POOLS_SWISS_ROUNDS: (
+            "how many rounds Swiss pools play. Blank — the default — plays log2 of the pool, "
+            "rounded up"
+        ),
+        BRACKETS_POOLS_BEST_OF: "the best-of every pool set plays; 3 by default",
         **{key: said for key, (_, _, said) in BRACKETS_WORDS.items()},
     }
 )

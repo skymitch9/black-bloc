@@ -415,6 +415,9 @@ async def test_the_list_carries_the_registry_defaults_a_new_tournament_starts_wi
         ("brackets_check_in_minutes", 45),
         ("brackets_entrant_cap_default", 24),
         ("brackets_swiss_rounds_default", 4),
+        ("brackets_pool_count_default", 3),
+        ("brackets_advance_per_pool_default", 1),
+        ("brackets_pools_best_of_default", "5"),
     ):
         await web.store.set(wf.GUILD_ID, key, value)
     defaults = as_(client, sign_in, wf, TO).get("/api/brackets").json()["defaults"]
@@ -430,6 +433,12 @@ async def test_the_list_carries_the_registry_defaults_a_new_tournament_starts_wi
         "entrant_cap": 24,
         "check_in_minutes": 45,
         "confirm_minutes": 12,
+        "pools_format": "none",
+        "pool_count": 3,
+        "advance_per_pool": 1,
+        "advance_losers_from": None,
+        "pools_swiss_rounds": None,
+        "pools_best_of": 5,
     }
     made_now = made(as_(client, sign_in, wf, TO))["options"]
     assert {name: made_now[name] for name in defaults} == defaults
@@ -463,3 +472,34 @@ async def test_a_channel_in_a_bracket_sentence_reads_as_its_name_on_the_site(
     refused = staffer.post(f"/api/brackets/{tid}/move", json={})
     assert refused.status_code == 409
     assert refused.json()["message"] == "**Knuck Up 12** is already in #knuck-up, so nothing moved."
+
+
+async def test_pools_then_the_final_through_the_website(client, sign_in, wf, web, people):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser, format="single", pools_format="round_robin", best_of_finals=3)["id"]
+    for name in ("A1", "B1", "B2", "A2"):
+        organiser.post(f"/api/brackets/{tid}/entrants", json={"name": name})
+    started = organiser.post(f"/api/brackets/{tid}/start", json={}).json()
+    view = started["tournament"]
+    assert (view["state"], view["phase"], view["sets"]) == ("pools", "pools", [])
+    assert [pool["letter"] for pool in view["pools"]] == ["A", "B"]
+    early = organiser.post(f"/api/brackets/{tid}/advance", json={})
+    assert (early.status_code, early.json()["error"]) == (409, "pools_unfinished")
+    for pool in view["pools"]:
+        (only,) = pool["sets"]
+        organiser.post(
+            f"/api/brackets/{tid}/sets/{only['key']}/report", json={"score_a": 2, "score_b": 0}
+        )
+    member = as_(client, sign_in, wf, ADA).post(f"/api/brackets/{tid}/advance", json={})
+    assert (member.status_code, member.json()["error"]) == (403, "not_organiser")
+    organiser = as_(client, sign_in, wf, TO)
+    advanced = organiser.post(f"/api/brackets/{tid}/advance", json={"order": None}).json()
+    assert advanced["message"].startswith("**Knuck Up 12**'s final is built")
+    final = advanced["tournament"]
+    assert (final["state"], final["phase"]) == ("running", "final")
+    assert {one["key"] for one in final["sets"]} == {"W1-1", "W1-2", "W2-1"}
+    closed = organiser.post(f"/api/brackets/{tid}/sets/A.R1-1/reset", json={})
+    assert (closed.status_code, closed.json()["error"]) == (409, "pools_closed")
+    back = organiser.post(f"/api/brackets/{tid}/unadvance", json={}).json()
+    assert back["message"] == "**Knuck Up 12** is back in its pools; the final's sets are cleared."
+    assert (back["tournament"]["state"], back["tournament"]["sets"]) == ("pools", [])

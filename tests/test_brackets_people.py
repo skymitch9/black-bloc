@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from black_bloc import brackets_people as people
+from black_bloc import brackets_sets as sets
 from black_bloc import brackets_store as store_
 from black_bloc.logkinds import VIA_WEBSITE
 from tests.test_brackets_moves import (
@@ -190,3 +191,26 @@ async def test_a_check_in_with_an_unreadable_closing_time_closes_at_the_next_swe
     assert await people.close_due_check_ins(bot, guild) == [tid]
     assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "seeding"
     assert sum("could not be read" in one.getMessage() for one in caplog.records) == 1
+
+
+async def test_a_dq_in_pools_forfeits_their_pool_sets_and_keeps_them_out_of_the_final(bot, guild):
+    tid = await started(
+        bot, guild, ADA, BEA, CY, STAFF, format="double", pools_format="round_robin",
+        advance_per_pool=1,
+    )
+    ada = await entrant_id(bot, tid, ADA)
+    outcome = await people.dq(bot, guild, who(guild, TO), tid, ada)
+    assert outcome.ok and outcome.changed == ("A.R1-1",)
+    match = await the_set(bot, tid, "A.R1-1")
+    assert (match.state, match.forfeit, match.loser) == ("complete", "dq", ada)
+    await sets.report(bot, guild, who(guild, TO), tid, "B.R1-1", 2, 0)
+    assert (await moves.advance(bot, guild, who(guild, TO), tid)).ok
+    seated = {
+        e
+        for one in await store_.sets(bot.db, tid)
+        if one["phase"] == "final"
+        for e in (one["slot_a"], one["slot_b"])
+        if e
+    }
+    assert ada not in seated and len(seated) == 2
+    assert (await people.restore_entrant(bot, guild, who(guild, TO), tid, ada)).ok

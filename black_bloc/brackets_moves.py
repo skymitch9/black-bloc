@@ -11,15 +11,19 @@ from typing import Any
 
 from . import brackets_store as store_
 from .actionlog import log_action
-from .brackets import access, bestof, play, seeding, standings
+from .brackets import access, bestof, play, pools, seeding
 from .brackets.model import (
     DONE,
+    DOUBLE,
+    ELIMINATION,
     FORMATS,
     BracketError,
 )
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import Outcome
 from .settings_store import (
+    BRACKETS_ADVANCE_LOSERS_FROM,
+    BRACKETS_ADVANCE_PER_POOL,
     BRACKETS_BEST_OF,
     BRACKETS_BEST_OF_FINALS,
     BRACKETS_BEST_OF_FROM_ROUND,
@@ -33,6 +37,11 @@ from .settings_store import (
     BRACKETS_MODE,
     BRACKETS_MODES,
     BRACKETS_NUMBERS,
+    BRACKETS_POOL_COUNT,
+    BRACKETS_POOLS_BEST_OF,
+    BRACKETS_POOLS_FORMAT,
+    BRACKETS_POOLS_FORMATS,
+    BRACKETS_POOLS_SWISS_ROUNDS,
     BRACKETS_SWISS_ROUNDS,
     BRACKETS_THIRD_PLACE,
     BRACKETS_TO_ROLE,
@@ -59,6 +68,14 @@ ENGINE_STATUS = {"bad_score": 400, "bad_order": 400, "forfeit_needs_winner": 400
 TO_WORDS = {
     "created": "Created **{name}**.",
     "edited": "Saved **{name}**.",
+    "created_losers_blank": (
+        "Created **{name}**. Losers-side entry is only for a double elimination final, so it "
+        "was left blank."
+    ),
+    "edited_losers_blank": (
+        "Saved **{name}**. Losers-side entry is only for a double elimination final, so it "
+        "is blank."
+    ),
     "signups_opened": "Sign-ups for **{name}** are open.",
     "signups_closed": "Sign-ups for **{name}** are closed.",
     "check_in_opened": "Check-in for **{name}** is open until {closes}.",
@@ -95,6 +112,38 @@ TO_WORDS = {
     "forfeit_needs_winner": "A forfeit needs the winner picked, so nothing was done.",
     "bad_order": "That order does not name every entrant exactly once, so nothing was changed.",
     "not_out": "{entrant} is not out of **{name}**, so there is nothing to put back.",
+    "advanced": "**{name}**'s final is built — {sets} set(s) to play.",
+    "advanced_up_to": "**{name}**'s final is built — up to {sets} set(s) to play.",
+    "unadvanced": "**{name}** is back in its pools; the final's sets are cleared.",
+    "pools_closed": "{set} is a pool set and the final is built. Go back to pools first.",
+    "pools_unfinished": "{open} pool set(s) in **{name}** are not final yet, so it cannot advance.",
+    "pool_tie": "Pool {pool} is tied across the top {place}: {tied}. Order them, then advance.",
+    "already_advanced": "**{name}**'s final is already built.",
+    "not_advanced": "**{name}** has no final built yet.",
+    "no_pools": "**{name}** plays no pools.",
+    "final_played": (
+        "{count} set(s) of **{name}**'s final have a result, {set} first. Reset them before "
+        "going back to pools."
+    ),
+    "bad_pools": "**{name}**'s pools cannot be played as set, so nothing was started.",
+    "pools_need_elimination": (
+        "Pools feed a single or double elimination bracket, so **{name}**'s format must be one."
+    ),
+    "too_few_for_pools": (
+        "**{name}** has {count} entrants, too few for {pools} pools of at least 2 each."
+    ),
+    "advance_too_many": (
+        "{advance} cannot go through from each pool of **{name}**: the smallest pool has "
+        "{smallest}, and at least 2 must reach the final."
+    ),
+    "bad_losers_from": (
+        "Losers-side entry starts at place {place}, but only {advance} go through from each "
+        "pool. Pick a place from 2 to {advance}, or leave it blank."
+    ),
+    "too_many_pool_rounds": (
+        "**{name}**'s smallest pool can play at most {most} Swiss round(s) without a rematch; "
+        "it is set to {rounds}."
+    ),
 }
 
 PLAYER_CODES = (
@@ -125,11 +174,15 @@ NUMBER_RANGES = {
     "entrant_cap": BRACKETS_NUMBERS[BRACKETS_ENTRANT_CAP][1:],
     "check_in_minutes": BRACKETS_NUMBERS[BRACKETS_CHECK_IN_MINUTES][1:],
     "confirm_minutes": BRACKETS_NUMBERS[BRACKETS_CONFIRM_MINUTES][1:],
+    "pool_count": BRACKETS_NUMBERS[BRACKETS_POOL_COUNT][1:],
+    "advance_per_pool": BRACKETS_NUMBERS[BRACKETS_ADVANCE_PER_POOL][1:],
+    "advance_losers_from": BRACKETS_NUMBERS[BRACKETS_ADVANCE_LOSERS_FROM][1:],
+    "pools_swiss_rounds": BRACKETS_NUMBERS[BRACKETS_POOLS_SWISS_ROUNDS][1:],
 }
 
-REQUIRED_NUMBERS = ("check_in_minutes", "confirm_minutes")
+REQUIRED_NUMBERS = ("check_in_minutes", "confirm_minutes", "pool_count", "advance_per_pool")
 
-LENGTHS = ("best_of", "best_of_late", "best_of_finals")
+LENGTHS = ("best_of", "best_of_late", "best_of_finals", "pools_best_of")
 
 FLAGS = ("third_place", "grand_final_reset")
 
@@ -332,6 +385,12 @@ def option_defaults(store: Any, guild_id: int) -> dict[str, Any]:
         "entrant_cap": store.get(guild_id, BRACKETS_ENTRANT_CAP),
         "check_in_minutes": int(store.get(guild_id, BRACKETS_CHECK_IN_MINUTES)),
         "confirm_minutes": int(store.get(guild_id, BRACKETS_CONFIRM_MINUTES)),
+        "pools_format": store.get(guild_id, BRACKETS_POOLS_FORMAT),
+        "pool_count": int(store.get(guild_id, BRACKETS_POOL_COUNT)),
+        "advance_per_pool": int(store.get(guild_id, BRACKETS_ADVANCE_PER_POOL)),
+        "advance_losers_from": store.get(guild_id, BRACKETS_ADVANCE_LOSERS_FROM),
+        "pools_swiss_rounds": store.get(guild_id, BRACKETS_POOLS_SWISS_ROUNDS),
+        "pools_best_of": int(store.get(guild_id, BRACKETS_POOLS_BEST_OF)),
     }
 
 
@@ -364,6 +423,10 @@ def option_values(bot: Any, guild: Any, given: dict[str, Any], *, creating: bool
         if given["format"] not in FORMATS:
             raise bad("format", ", ".join(FORMATS))
         found["format"] = given["format"]
+    if "pools_format" in given:
+        if given["pools_format"] not in BRACKETS_POOLS_FORMATS:
+            raise bad("pools_format", ", ".join(BRACKETS_POOLS_FORMATS))
+        found["pools_format"] = given["pools_format"]
     for field in FLAGS:
         if field in given:
             if not isinstance(given[field], bool):
@@ -395,6 +458,29 @@ def option_values(bot: Any, guild: Any, given: dict[str, Any], *, creating: bool
     return found
 
 
+def pools_fit(bot: Any, guild: Any, row: Any, values: dict[str, Any]) -> None:
+    """Pools feed only an elimination bracket; anything else is refused in words."""
+    merged = {
+        name: values.get(name, row[name] if row is not None else None)
+        for name in ("format", "pools_format")
+    }
+    if merged["pools_format"] in pools.POOL_FORMATS and merged["format"] not in ELIMINATION:
+        name = values.get("name") or (row["name"] if row is not None else "")
+        raise stop(
+            bot, guild, "pools_need_elimination", "pools_need_elimination", 400, name=name
+        )
+
+
+def losers_blanked(row: Any, values: dict[str, Any], given: dict[str, Any]) -> bool:
+    """Losers-side entry is stored only for a double final; True when a value the TO set went."""
+    final = values.get("format", row["format"] if row is not None else None)
+    stored = row["advance_losers_from"] if row is not None else None
+    if final == DOUBLE or values.get("advance_losers_from", stored) is None:
+        return False
+    values["advance_losers_from"] = None
+    return given.get("advance_losers_from") is not None or stored is not None
+
+
 def when(bot: Any, guild: Any, value: Any, bad: Any) -> str | None:
     if value in (None, ""):
         return None
@@ -412,10 +498,15 @@ async def create(
     require_on(bot, guild)
     require_runner(bot, guild, actor)
     values = option_values(bot, guild, given, creating=True)
+    if "pools_format" not in given and values.get("format") not in ELIMINATION:
+        values["pools_format"] = store_.NO_POOLS
+    pools_fit(bot, guild, None, values)
+    blanked = losers_blanked(None, values, given)
     values.setdefault("to_user_id", actor_id(actor))
     tournament_id = await store_.create(bot.db, guild.id, values, actor_id(actor) or 0)
     await note(bot, guild, "created", actor, tournament_id, via, name=values["name"])
-    return done(bot, guild, "created", tournament_id, name=values["name"])
+    key = "created_losers_blank" if blanked else "created"
+    return done(bot, guild, key, tournament_id, name=values["name"])
 
 
 @answered
@@ -434,10 +525,13 @@ async def edit(
         require_runner(bot, guild, actor)
         require_state(bot, guild, row, *store_.BEFORE_START)
         values = option_values(bot, guild, given, creating=False)
+        pools_fit(bot, guild, row, values)
+        blanked = losers_blanked(row, values, given)
         await store_.update(bot.db, row["id"], values)
         name = values.get("name", row["name"])
         await note(bot, guild, "edited", actor, row["id"], via, changed=sorted(values))
-        return done(bot, guild, "edited", row["id"], name=name)
+        key = "edited_losers_blank" if blanked else "edited"
+        return done(bot, guild, key, row["id"], name=name)
 
 
 async def moved_state(
@@ -549,23 +643,21 @@ async def start(
         people = active(everyone)
         names = {"name": row["name"], "count": len(people)}
         stamp = now_stamp()
-        built = engine(
-            bot,
-            guild,
-            row,
-            names,
-            play.build,
-            [one["id"] for one in people],
-            store_.options_of(row),
-            stamp,
-        )
+        plan = store_.plan_of(row)
+        ids = [one["id"] for one in people]
+        options = store_.options_of(row)
+        if plan is None:
+            built = engine(bot, guild, row, names, play.build, ids, options, stamp)
+        else:
+            built = engine(bot, guild, row, names, pools.build, ids, options, plan, stamp)
         playing = [one["id"] for one in people]
         rest = [one["id"] for one in everyone if one["id"] not in playing]
         await store_.write_seeds(bot.db, row["id"], playing + rest)
         gone = await store_.clear_sets(bot.db, row["id"])
         await store_.save(bot.db, row["id"], built.bracket, built.changed, [])
-        await store_.update(bot.db, row["id"], {"state": store_.RUNNING, "started_at": stamp})
-        certain, most = play.sets_to_play(built.bracket)
+        state = store_.RUNNING if plan is None else store_.POOLS
+        await store_.update(bot.db, row["id"], {"state": state, "started_at": stamp})
+        certain, most = pools.sets_to_play(built.bracket)
         await note(bot, guild, "started", actor, row["id"], via, entrants=len(people))
         key = "started" if certain == most else "started_up_to"
         outcome = done(bot, guild, key, row["id"], name=row["name"], sets=most)
@@ -581,7 +673,7 @@ async def unstart(
     async with lock_for(bot, tournament_id):
         row = await loaded(bot, guild, tournament_id)
         require_runner(bot, guild, actor)
-        require_state(bot, guild, row, store_.RUNNING)
+        require_state(bot, guild, row, *store_.PLAYING)
         keys = [one["key"] for one in await store_.sets(bot.db, row["id"])]
         gone = await store_.clear_sets(bot.db, row["id"])
         await store_.write_placements(bot.db, row["id"], {})
@@ -589,6 +681,92 @@ async def unstart(
         await note(bot, guild, "unstarted", actor, row["id"], via)
         outcome = done(bot, guild, "unstarted", row["id"], name=row["name"])
         return replace(outcome, changed=tuple(keys), gone=gone)
+
+
+def tied_names(people: list[Any], tied: list[int]) -> str:
+    named = {one["id"]: one["name"] for one in people}
+    return ", ".join(named.get(one, f"#{one}") for one in tied)
+
+
+def told_order(bot: Any, guild: Any, current: Any, order: list[Any]) -> list[int]:
+    try:
+        wanted = [int(one) for one in order]
+    except (TypeError, ValueError):
+        wanted = [0]
+    if len(set(wanted)) != len(wanted) or not set(wanted) <= set(current.entrants):
+        raise stop(bot, guild, "bad_order", "bad_order", 400)
+    return wanted
+
+
+@answered
+async def advance(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    tournament_id: int,
+    *,
+    order: list[int] | None = None,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """The pools' top N into the final; the order, when given, settles a tie on the cut line."""
+    require_on(bot, guild)
+    async with lock_for(bot, tournament_id):
+        row = await loaded(bot, guild, tournament_id)
+        require_runner(bot, guild, actor)
+        require_state(bot, guild, row, store_.POOLS)
+        current = await store_.bracket(bot.db, row)
+        names = {"name": row["name"]}
+        if current is None or current.plan is None:
+            raise stop(bot, guild, "no_pools", "no_pools", 409, **names)
+        stored = list(current.final_order)
+        if order is not None:
+            current.final_order = told_order(bot, guild, current, order)
+        try:
+            moved = pools.advance(current, now_stamp())
+        except BracketError as error:
+            if error.code == "pool_tie":
+                people = await store_.entrants(bot.db, row["id"])
+                error.fields["tied"] = tied_names(people, error.fields.get("tied") or [])
+            raise engine_stop(bot, guild, row, error, names) from None
+        if moved.bracket.final_order != stored:
+            await store_.write_final_order(bot.db, row["id"], moved.bracket.final_order)
+        await store_.save(bot.db, row["id"], moved.bracket, moved.changed, [])
+        await store_.update(bot.db, row["id"], {"state": store_.RUNNING})
+        certain, most = pools.sets_to_play(moved.bracket)
+        final = pools.final_part(moved.bracket)
+        await note(
+            bot,
+            guild,
+            "advanced",
+            actor,
+            row["id"],
+            via,
+            entrants=list(final.entrants) if final else [],
+            order=order,
+        )
+        key = "advanced" if certain == most else "advanced_up_to"
+        return touched(done(bot, guild, key, row["id"], sets=most, **names), moved)
+
+
+@answered
+async def unadvance(
+    bot: Any, guild: Any, actor: Any, tournament_id: int, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Back to pools: the final's sets go while none has a result; the pools stand as played."""
+    require_on(bot, guild)
+    async with lock_for(bot, tournament_id):
+        row = await loaded(bot, guild, tournament_id)
+        require_runner(bot, guild, actor)
+        require_state(bot, guild, row, store_.RUNNING)
+        current = await store_.bracket(bot.db, row)
+        names = {"name": row["name"]}
+        if current is None or current.plan is None:
+            raise stop(bot, guild, "no_pools", "no_pools", 409, **names)
+        moved = engine(bot, guild, row, names, pools.unadvance, current)
+        gone = await store_.save(bot.db, row["id"], moved.bracket, [], moved.removed)
+        await store_.update(bot.db, row["id"], {"state": store_.POOLS})
+        await note(bot, guild, "unadvanced", actor, row["id"], via, cleared=moved.removed)
+        return touched(done(bot, guild, "unadvanced", row["id"], **names), moved, gone)
 
 
 @answered
@@ -609,21 +787,16 @@ async def complete(
         require_state(bot, guild, row, store_.RUNNING)
         current = await store_.bracket(bot.db, row)
         names = {"name": row["name"]}
-        if current is None or not play.finished(current):
+        if current is None or not pools.finished(current):
             left = sum(
                 1 for one in (current.matches.values() if current else ()) if one.state not in DONE
             )
             raise stop(bot, guild, "unfinished", "unfinished", 409, open=left, **names)
         if order is not None:
-            try:
-                wanted = [int(one) for one in order]
-            except (TypeError, ValueError):
-                wanted = [0]
-            if len(set(wanted)) != len(wanted) or not set(wanted) <= set(current.entrants):
-                raise stop(bot, guild, "bad_order", "bad_order", 400)
+            wanted = told_order(bot, guild, current, order)
             await store_.write_final_order(bot.db, row["id"], wanted)
             current.final_order = wanted
-        placed = standings.placements(current)
+        placed = pools.placements(current)
         await store_.write_placements(bot.db, row["id"], placed)
         await store_.update(
             bot.db, row["id"], {"state": store_.COMPLETE, "completed_at": now_stamp()}

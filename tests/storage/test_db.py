@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 90
+        assert SCHEMA_VERSION == 91
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3624,7 +3624,7 @@ async def test_a_schema_86_file_gains_the_stored_tone_and_keeps_what_each_member
         cur = await again.conn.execute("PRAGMA table_info(chat_voice)")
         assert set(TONE_COLUMNS) <= {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "90"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "91"
     finally:
         await again.close()
 
@@ -3960,7 +3960,7 @@ async def test_a_schema_88_file_gains_the_pb_feed_tables_and_loses_nothing(tmp_p
         cur = await again.conn.execute("SELECT outcome FROM structure_looks")
         assert [row["outcome"] for row in await cur.fetchall()] == ["saved"]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "90"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "91"
     finally:
         await again.close()
 
@@ -4017,7 +4017,7 @@ async def test_a_pb_matches_table_from_the_first_build_gains_the_review_columns(
     try:
         from black_bloc.storage.db import ADDED_COLUMNS
 
-        assert SCHEMA_VERSION == 90
+        assert SCHEMA_VERSION == 91
         for column in PB_ADDED:
             assert any(row[:2] == ("pb_matches", column) for row in ADDED_COLUMNS), column
         assert (await pb_columns(again))["pb_matches"] == PB_TABLES["pb_matches"]
@@ -4049,7 +4049,7 @@ async def test_a_pb_posts_table_from_before_post_again_gains_again_of_and_keeps_
     again = Database(path)
     await again.connect()
     try:
-        assert SCHEMA_VERSION == 90
+        assert SCHEMA_VERSION == 91
         assert (await pb_columns(again))["pb_posts"] == PB_TABLES["pb_posts"]
         cur = await again.conn.execute("SELECT run_id, outcome, again_of FROM pb_posts")
         assert [tuple(row) for row in await cur.fetchall()] == [("r1", "rehearsed", None)]
@@ -4189,7 +4189,68 @@ async def test_a_schema_89_file_gains_the_bracket_tables_and_loses_nothing(tmp_p
             "message_id",
         } <= columns
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "90"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "91"
+    finally:
+        await again.close()
+
+
+POOL_COLUMNS = {
+    "tournaments": (
+        "pools_format",
+        "pool_count",
+        "advance_per_pool",
+        "advance_losers_from",
+        "pools_swiss_rounds",
+        "pools_best_of",
+    ),
+    "tournament_sets": ("phase", "pool"),
+}
+
+
+async def test_a_schema_90_file_gains_the_pool_columns_and_loses_nothing(tmp_path):
+    path = tmp_path / "before-pools.sqlite3"
+    db = Database(path)
+    await db.connect()
+    try:
+        for table, columns in POOL_COLUMNS.items():
+            for column in columns:
+                await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+        await db.conn.execute(
+            "INSERT INTO tournaments(guild_id, name, format, created_by, created_at, updated_at) "
+            "VALUES (7, 'Knuck Up', 'double', 1, '2026-10-07', '2026-10-07')"
+        )
+        await db.conn.execute(
+            "INSERT INTO tournament_sets(tournament_id, key, side, round, position, best_of, "
+            "state, slot_a, slot_b) VALUES (1, 'W1-1', 'winners', 1, 1, 3, 'ready', 4, 5)"
+        )
+        await db.conn.execute("UPDATE schema_meta SET value = '90' WHERE key = 'schema_version'")
+        await db.conn.commit()
+        cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        before = {row["name"] for row in await cur.fetchall()}
+    finally:
+        await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        assert {row["name"] for row in await cur.fetchall()} == before
+        for table, columns in POOL_COLUMNS.items():
+            cur = await again.conn.execute(f"PRAGMA table_info({table})")
+            assert set(columns) <= {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute(
+            "SELECT name, format, pools_format, pool_count, advance_per_pool, "
+            "advance_losers_from, pools_best_of FROM tournaments"
+        )
+        assert [tuple(row) for row in await cur.fetchall()] == [
+            ("Knuck Up", "double", "none", 2, 2, None, 3)
+        ]
+        cur = await again.conn.execute(
+            "SELECT key, slot_a, slot_b, phase, pool FROM tournament_sets"
+        )
+        assert [tuple(row) for row in await cur.fetchall()] == [("W1-1", 4, 5, None, None)]
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "91"
     finally:
         await again.close()
 

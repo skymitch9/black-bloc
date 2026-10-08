@@ -1,11 +1,13 @@
 {
-  "_": "The Phase 8b contract in machine-readable form: for every route, the keys the pages actually read. Derived from site/public/assets/*.js by grepping each page's property accesses. tests/api/test_contract.py checks the real routers against it; site/mock/check.mjs checks the mock. Both read THIS file, so the two halves cannot drift apart. shape: object | list | map. keys = required on the object, or on every row of a list. rows = {field: [keys required on every row of that list-valued field]}. nested = {field: [keys required on that object-valued field]}. settings = {key: value} written to the registry before the request (placeholders filled), for a route whose 200 needs a mode the rest of the seed must not run under; the seed puts it back.",
+  "_": "The Phase 8b contract in machine-readable form: for every route, the keys the pages actually read. Derived from site/public/assets/*.js by grepping each page's property accesses. tests/api/test_contract.py checks the real routers against it; site/mock/check.mjs checks the mock. Both read THIS file, so the two halves cannot drift apart. shape: object | list | map. keys = required on the object, or on every row of a list. rows = {field: [keys required on every row of that list-valued field]}. nested = {field: [keys required on that object-valued field]}. settings = {key: value} written to the registry before the request (placeholders filled), for a route whose 200 needs a mode the rest of the seed must not run under; the seed puts it back. then = {method, path} sent after the check and required to answer 200: the inverse move that puts a single-use seed back (Advance on {bracket_pooled_id} is undone by Back to pools; Back to pools on {bracket_final_id} by Advance), so each route keeps its own seed and running it again finds it as seeded.",
   "settings": {
     "_": "The registry IS the truth (black_bloc/settings_store.py). This block is the one table both halves read: tests/api/test_contract.py asserts it equals CORE_KEYS / KEY_MIN / KEY_MAX, and site/mock/check.mjs asserts the mock's own /api/settings matches it. A bound invented in the mock, or one added to the registry and not mirrored, fails one half or the other by name. The `help` map is the same guard for the WORDS a settings row carries, scoped to the golive / pings / youtube namespaces the Go-live page draws (owner, 2026-09-21: \"what each of the settings does isnt clear\"). KEY_HELP is the one home; this is the table both halves read. It is namespace-scoped because 59 of the registry's other keys still disagree with the mock — measured 2026-09-21 — and widening it is a follow-up, not a licence to keep two copies.",
     "core_keys": [
       "boot_status_mode",
       "boot_status_text",
       "bot_bio",
+      "brackets_advance_losers_from_default",
+      "brackets_advance_per_pool_default",
       "brackets_already_complete_said",
       "brackets_already_in_said",
       "brackets_already_out_said",
@@ -22,7 +24,10 @@
       "brackets_card_format_line",
       "brackets_card_late_words",
       "brackets_card_link_label",
+      "brackets_card_losers_words",
       "brackets_card_place_line",
+      "brackets_card_pool_line",
+      "brackets_card_pools_words",
       "brackets_card_reset_words",
       "brackets_card_rounds_words",
       "brackets_card_starts_line",
@@ -85,6 +90,13 @@
       "brackets_pick_placeholder",
       "brackets_pick_set_placeholder",
       "brackets_ping_role_id",
+      "brackets_pool_count_default",
+      "brackets_pool_raise_label",
+      "brackets_pool_tied",
+      "brackets_pool_title",
+      "brackets_pools_best_of_default",
+      "brackets_pools_format_default",
+      "brackets_pools_swiss_rounds_default",
       "brackets_removed_by_to_said",
       "brackets_report_label",
       "brackets_report_title",
@@ -92,6 +104,7 @@
       "brackets_round_grand",
       "brackets_round_losers",
       "brackets_round_plain",
+      "brackets_round_pool",
       "brackets_round_reset",
       "brackets_round_third",
       "brackets_round_winners",
@@ -118,6 +131,7 @@
       "brackets_state_check_in",
       "brackets_state_complete",
       "brackets_state_draft",
+      "brackets_state_pools",
       "brackets_state_running",
       "brackets_state_seeding",
       "brackets_state_signups",
@@ -127,6 +141,7 @@
       "brackets_waiting_called",
       "brackets_waiting_confirm",
       "brackets_waiting_done",
+      "brackets_waiting_final",
       "brackets_waiting_next_round",
       "brackets_waiting_opponent_confirms",
       "brackets_waiting_out",
@@ -251,11 +266,15 @@
       "structure_backup_unchanged_said"
     ],
     "min": {
+      "brackets_advance_losers_from_default": 2,
+      "brackets_advance_per_pool_default": 1,
       "brackets_best_of_from_round": 2,
       "brackets_check_in_minutes": 5,
       "brackets_confirm_minutes": 1,
       "brackets_entrant_cap_default": 2,
       "brackets_panel_minutes": 1,
+      "brackets_pool_count_default": 1,
+      "brackets_pools_swiss_rounds_default": 1,
       "brackets_swiss_rounds_default": 1,
       "chat_cooldown_seconds": 5,
       "chat_memory_min_turns": 1,
@@ -341,11 +360,15 @@
     "max": {
       "applications_retry_days": 3650,
       "automod_warn_threshold": 100,
+      "brackets_advance_losers_from_default": 16,
+      "brackets_advance_per_pool_default": 16,
       "brackets_best_of_from_round": 1024,
       "brackets_check_in_minutes": 1440,
       "brackets_confirm_minutes": 1440,
       "brackets_entrant_cap_default": 1024,
       "brackets_panel_minutes": 14,
+      "brackets_pool_count_default": 16,
+      "brackets_pools_swiss_rounds_default": 20,
       "brackets_swiss_rounds_default": 20,
       "chat_cooldown_seconds": 600,
       "chat_daily_turns": 10000,
@@ -10211,7 +10234,8 @@
           "entrant_cap",
           "starts_at",
           "to_user_id",
-          "to_name"
+          "to_name",
+          "pools_format"
         ]
       },
       "nested": {
@@ -10223,7 +10247,13 @@
           "brackets_round_winners",
           "brackets_waiting_play",
           "brackets_discord_label",
-          "brackets_card_rounds_words"
+          "brackets_card_rounds_words",
+          "brackets_state_pools",
+          "brackets_round_pool",
+          "brackets_pool_title",
+          "brackets_waiting_final",
+          "brackets_pool_tied",
+          "brackets_pool_raise_label"
         ],
         "defaults": [
           "format",
@@ -10235,7 +10265,13 @@
           "third_place",
           "check_in_minutes",
           "entrant_cap",
-          "swiss_rounds"
+          "swiss_rounds",
+          "pools_format",
+          "pool_count",
+          "advance_per_pool",
+          "advance_losers_from",
+          "pools_swiss_rounds",
+          "pools_best_of"
         ]
       }
     },
@@ -10272,7 +10308,10 @@
         "started_at",
         "completed_at",
         "rules_text",
-        "rounds_to_play"
+        "rounds_to_play",
+        "phase",
+        "pools",
+        "pools_finished"
       ],
       "rows": {
         "entrants": [
@@ -10311,7 +10350,9 @@
           "placement_winner",
           "placement_loser",
           "rematch",
-          "message_id"
+          "message_id",
+          "phase",
+          "pool"
         ],
         "standings": [
           "entrant",
@@ -10339,7 +10380,13 @@
           "best_of_finals",
           "entrant_cap",
           "check_in_minutes",
-          "confirm_minutes"
+          "confirm_minutes",
+          "pools_format",
+          "pool_count",
+          "advance_per_pool",
+          "advance_losers_from",
+          "pools_swiss_rounds",
+          "pools_best_of"
         ]
       }
     },
@@ -10868,6 +10915,84 @@
           "entrant_count",
           "shadow",
           "to_name"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_pooled_id}/advance",
+      "body": {},
+      "then": {
+        "method": "POST",
+        "path": "/api/brackets/{bracket_pooled_id}/unadvance"
+      },
+      "read_by": [
+        "page-brackets.js Advance to the final"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "phase",
+          "pools",
+          "pools_finished"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_final_id}/unadvance",
+      "body": {},
+      "then": {
+        "method": "POST",
+        "path": "/api/brackets/{bracket_final_id}/advance"
+      },
+      "read_by": [
+        "page-brackets.js Back to pools"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "phase",
+          "pools",
+          "pools_finished"
         ]
       }
     },

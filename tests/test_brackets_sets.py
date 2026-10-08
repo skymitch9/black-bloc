@@ -186,3 +186,23 @@ async def test_a_forced_swiss_rematch_shows_in_the_view_and_on_every_set_row(bot
     await sets.report(bot, guild, who(guild, TO), tid, "S3-1", 2, 0)
     kind, _, _, details = (await rows(bot.db))[-1]
     assert (kind, details["rematch"]) == ("brackets.set_overridden", True)
+
+
+async def test_a_pool_set_is_reported_confirmed_and_swept_like_any_other(bot, guild):
+    tid = await started(
+        bot, guild, ADA, BEA, CY, STAFF, format="double", pools_format="round_robin"
+    )
+    assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "pools"
+    reported = await sets.report(bot, guild, who(guild, ADA), tid, "A.R1-1", 2, 1)
+    assert reported.ok and reported.changed == ("A.R1-1",)
+    assert reported.message.startswith("A.R1-1 reported 2–1.")
+    confirmed = await sets.confirm_report(bot, guild, who(guild, STAFF), tid, "A.R1-1")
+    assert confirmed.message == "A.R1-1 is final: Ada wins 2–1."
+    await sets.report(bot, guild, who(guild, BEA), tid, "B.R1-1", 2, 0)
+    reported_at = datetime.fromisoformat((await the_set(bot, tid, "B.R1-1")).reported_at)
+    swept = await sets.confirm_due(bot, guild, reported_at + timedelta(minutes=12))
+    assert swept == [(tid, "B.R1-1")]
+    stranger = await sets.report(bot, guild, who(guild, CY), tid, "A.R1-1", 2, 0)
+    assert stranger.code == "not_in_set"
+    missing = await sets.call(bot, guild, who(guild, TO), tid, "C.R1-1")
+    assert (missing.code, missing.status) == ("no_set", 404)

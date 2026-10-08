@@ -5,7 +5,12 @@
 
 import {
   TREE,
+  allSets,
   drawnInTree,
+  finalUntouched,
+  poolTable,
+  reorderedRows,
+  tieOrder,
   eliminationLayout,
   memberMoves,
   moved,
@@ -20,7 +25,7 @@ import {
   treeSize,
   unplayedSets,
 } from '../public/assets/bracket-layout.js';
-import { build, decide, playOut, settle, standardOrder, standings, tableRows } from './brackets.mjs';
+import { advance, build, buildPools, decide, playOut, poolPlacements, poolTableRows, settle, snake, standardOrder, standings, tableRows } from './brackets.mjs';
 
 const failures = [];
 const is = (where, found, wanted) => {
@@ -185,9 +190,73 @@ is('an organiser outside the set lets it stand, decides or resets', setMoves({ s
 is('a stranger gets nothing', setMoves({ state: 'running', mine: 9, may_run: false }, set), []);
 is('nothing once the tournament is complete', setMoves({ state: 'complete', mine: 5, may_run: true }, set), []);
 
+// Pools into a bracket: the mock's stand-in agrees with black_bloc/brackets/pools.py on the
+// worked examples, and the page's helpers draw the cut and order a tie.
+is('seeds are dealt in snake order', snake(ids(16), 4), [[1, 8, 9, 16], [2, 7, 10, 15], [3, 6, 11, 14], [4, 5, 12, 13]]);
+const pooledT = (count, pools, options = {}) => {
+  const t = { id: 1, format: options.format || 'double', options: { pools_format: 'round_robin', pool_count: pools, advance_per_pool: 2, best_of: 3, best_of_finals: 3, ...options }, entrants: ids(count).map((id) => ({ id, name: `P${id}`, seed: id, dropped: false, dq: false })), sets: [] };
+  buildPools(t, ids(count));
+  for (const part of t.pools) playOut(part, { scores: (one) => (one.slot_a < one.slot_b ? [2, 0] : [0, 2]) });
+  return t;
+};
+const higher = { scores: (one) => (one.slot_a < one.slot_b ? [2, 0] : [0, 2]) };
+const sixteen = pooledT(16, 4, { advance_losers_from: 2 });
+advance(sixteen);
+const seat = (t, key) => { const one = t.sets.find((set) => set.key === key); return [one.slot_a, one.slot_b]; };
+is('16 in 4 pools: the firsts start in winners round 2', [seat(sixteen, 'W2-1'), seat(sixteen, 'W2-2')], [[1, 4], [2, 3]]);
+is('16 in 4 pools: the seconds start in losers round 1', [seat(sixteen, 'L1-1'), seat(sixteen, 'L1-2')], [[8, 5], [7, 6]]);
+playOut(sixteen, higher);
+is('16 in 4 pools: everyone is placed', [...poolPlacements(sixteen).values()].sort((a, b) => a - b), [1, 2, 3, 4, 5, 5, 7, 7, 9, 9, 9, 9, 13, 13, 13, 13]);
+const twelve = pooledT(12, 3);
+advance(twelve);
+is('12 in 3 pools: no pool meets itself in the first round', [seat(twelve, 'W1-2'), seat(twelve, 'W1-4')], [[6, 4], [3, 5]]);
+const eightPooled = pooledT(8, 2);
+advance(eightPooled);
+is('8 in 2 pools into a 4-player double', [seat(eightPooled, 'W1-1'), seat(eightPooled, 'W1-2')], [[1, 3], [2, 4]]);
+
+const cycled = { id: 2, format: 'single', options: { pools_format: 'round_robin', pool_count: 2, advance_per_pool: 1, best_of: 3 }, entrants: ids(6).map((id) => ({ id, name: `P${id}`, seed: id, dropped: false, dq: false, final_rank: null })), sets: [] };
+buildPools(cycled, ids(6));
+const beats = new Set(['1>4', '4>5', '5>1']);
+playOut(cycled.pools[0], { scores: (one) => (beats.has(`${one.slot_a}>${one.slot_b}`) ? [2, 0] : [0, 2]) });
+is('a tie in the mock table shares a rank before Advance', poolTableRows(cycled, cycled.pools[0]).map((one) => one.rank), [1, 1, 1]);
+[5, 1, 4].forEach((id, at) => { cycled.entrants.find((one) => one.id === id).final_rank = at + 1; });
+is('the stored order splits the tie as the engine does', poolTableRows(cycled, cycled.pools[0]).map((one) => [one.entrant, one.rank]), [[5, 1], [1, 2], [4, 3]]);
+cycled.entrants.find((one) => one.id === 4).dq = true;
+is('a pool row says who is out', poolTableRows(cycled, cycled.pools[0]).map((one) => one.withdrawn), [false, false, true]);
+
+const onePool = { pool: 1, letter: 'A', cut: 2, tied: [], standings: [{ entrant: 3, rank: 2, set_wins: 2 }, { entrant: 1, rank: 1, set_wins: 3 }, { entrant: 2, rank: 3, set_wins: 1 }] };
+is('a pool table is in rank order with the line under the cut', poolTable(onePool).rows.map((one) => [one.entrant, one.through]), [[1, true], [3, true], [2, false]]);
+is('the line falls after the cut', poolTable(onePool).line, 2);
+const tiedPool = { ...onePool, finished: true, cut: 1, tied: [1, 3], standings: [{ entrant: 1, rank: 1 }, { entrant: 3, rank: 1 }, { entrant: 2, rank: 3 }] };
+is('a tie across the cut is marked', poolTable(tiedPool).rows.map((one) => one.tied), [true, true, false]);
+is('the tie keeps the table order until the organiser picks one', tieOrder(tiedPool), [1, 3]);
+is('a picked order that is not the tie is ignored', tieOrder(tiedPool, [3, 2]), [1, 3]);
+is('the picked order moves the tied rows only', poolTable(tiedPool, [3, 1]).rows.map((one) => [one.entrant, one.through]), [[3, true], [1, false], [2, false]]);
+is('a tie while the pool still plays is not marked', poolTable({ ...tiedPool, finished: false }).rows.map((one) => one.tied), [false, false, false]);
+const dqLeader = { pool: 1, letter: 'A', cut: 2, finished: true, tied: [], advancing: [4, 5], standings: [{ entrant: 1, rank: 1, withdrawn: true }, { entrant: 4, rank: 2 }, { entrant: 5, rank: 3 }, { entrant: 8, rank: 4 }] };
+is('a disqualified leader is not through: the advancing are', poolTable(dqLeader).rows.map((one) => [one.entrant, one.through]), [[1, false], [4, true], [5, true], [8, false]]);
+is('the line falls under the last one through', poolTable(dqLeader).line, 3);
+is('without advancing the cut skips the withdrawn', poolTable({ ...dqLeader, advancing: undefined }).rows.map((one) => one.through), [false, true, true, false]);
+is('an empty advancing means nobody is drawn through', poolTable({ ...dqLeader, advancing: [] }).rows.map((one) => one.through), [false, false, false, false]);
+is('a finished tie is drawn in the order shown', poolTable({ ...dqLeader, cut: 1, advancing: [], tied: [4, 5], standings: [{ entrant: 4, rank: 1 }, { entrant: 5, rank: 1 }, { entrant: 8, rank: 3 }] }, [5, 4]).rows.map((one) => [one.entrant, one.through]), [[5, true], [4, false], [8, false]]);
+is('reordering leaves rows outside the order alone', reorderedRows([{ entrant: 1 }, { entrant: 2 }, { entrant: 3 }], [3, 1]).map((one) => one.entrant), [3, 2, 1]);
+is('every set: the pools then the final', allSets({ pools: [{ sets: [{ key: 'A.R1-1' }] }, { sets: [{ key: 'B.R1-1' }] }], sets: [{ key: 'W1-1' }] }).map((one) => one.key), ['A.R1-1', 'B.R1-1', 'W1-1']);
+const inPools = { state: 'pools', phase: 'pools', may_run: true, finished: false, pools_finished: false, pools: [{ sets: [{ state: 'ready' }] }], sets: [] };
+is('pools: call, back to seeding, cancel', organiserMoves(inPools, { mode: 'shadow' }), ['call_ready', 'unstart', 'cancel']);
+is('pools finished: advance', organiserMoves({ ...inPools, pools_finished: true, pools: [{ sets: [{ state: 'complete' }] }] }, { mode: 'shadow' }), ['advance', 'unstart', 'cancel']);
+const inFinal = { state: 'running', phase: 'final', may_run: true, finished: false, pools: [{ sets: [{ state: 'complete', pool: 1 }] }], sets: [{ state: 'ready' }, { state: 'waiting' }] };
+is('a final with nothing played: back to pools', organiserMoves(inFinal, { mode: 'shadow' }), ['call_ready', 'unadvance', 'unstart', 'cancel']);
+is('a final with a result: no back to pools', [finalUntouched({ ...inFinal, sets: [{ state: 'reported' }] }), finalUntouched({ ...inFinal, phase: null })], [false, false]);
+const dqForfeit = { ...inFinal, entrants: [{ id: 3, dq: true }, { id: 1, dq: false }], sets: [{ state: 'complete', forfeit: 'dq', winner: 1, loser: 3 }, { state: 'ready' }] };
+is('a final whose only result is a DQ forfeit: back to pools', finalUntouched(dqForfeit), true);
+is('a forfeit the organiser gave still counts', finalUntouched({ ...dqForfeit, sets: [{ state: 'complete', forfeit: 'to', winner: 1, loser: 3 }] }), false);
+is('a forfeit of a player put back counts', finalUntouched({ ...dqForfeit, entrants: [{ id: 3, dq: false }] }), false);
+is('a pool set goes quiet once the final is built', [setMoves({ ...inFinal, mine: null }, { pool: 1, state: 'complete' }), setMoves({ ...inPools, mine: null }, { pool: 1, state: 'complete', slot_a: 1, slot_b: 2 })], [[], ['decide', 'forfeit', 'reset']]);
+is('a player in pools may drop out', memberMoves({ ...inPools, mine: 5, entrants: [{ id: 5, dropped: false, dq: false }], pools: [{ sets: [{ slot_a: 5, slot_b: 6, state: 'ready' }] }] }, 'shadow'), ['drop_out']);
+
 if (failures.length) {
   console.error('brackets: not ok');
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log('brackets: ok - layout for single and double elimination at 4, 8 and 16, byes and void sets at 5, 6, 7 and 12, the reset, round robin, Swiss, standings, scores, seeding, the tree size and the moves');
+console.log('brackets: ok - layout for single and double elimination at 4, 8 and 16, byes and void sets at 5, 6, 7 and 12, the reset, round robin, Swiss, standings, scores, seeding, the tree size, the moves, and pools into a bracket');

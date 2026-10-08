@@ -10,6 +10,7 @@ from black_bloc import brackets_moves as moves
 from black_bloc import brackets_people as people
 from black_bloc import brackets_sets as sets
 from black_bloc import brackets_store as store_
+from black_bloc.brackets import pools
 from black_bloc.config import load_settings
 from black_bloc.logkinds import VIA_WEBSITE
 from black_bloc.settings_store import SettingsStore
@@ -388,3 +389,225 @@ async def test_start_and_back_to_seeding_say_which_sets_changed(bot, guild):
     back = await moves.unstart(bot, guild, who(guild, TO), tid)
     assert (back.changed, back.gone) == (("W1-1", "W1-2", "W2-1"), {"W1-2": 9001})
     assert (await moves.open_signups(bot, guild, who(guild, TO), tid)).changed == ()
+
+
+async def pooled(bot, guild, count=8, **given):
+    given = {"format": "double", "pools_format": "round_robin", "best_of_finals": 3, **given}
+    tid = await made(bot, guild, **given)
+    for at in range(count):
+        outcome = await people.add_entrant(bot, guild, who(guild, TO), tid, name=f"P{at + 1}")
+        assert outcome.ok, outcome.message
+    return tid
+
+
+async def play_pools(bot, guild, tid, decide=None):
+    row = await store_.tournament(bot.db, GUILD, tid)
+    for match in (await store_.bracket(bot.db, row)).ordered():
+        if match.state != "ready":
+            continue
+        a_wins = match.slot_a < match.slot_b if decide is None else decide(match)
+        score = (2, 0) if a_wins else (0, 2)
+        outcome = await sets.report(bot, guild, who(guild, TO), tid, match.key, *score)
+        assert outcome.ok, outcome.message
+
+
+async def test_a_pools_tournament_starts_in_pools_and_says_so(bot, guild):
+    tid = await pooled(bot, guild)
+    outcome = await moves.start(bot, guild, who(guild, TO), tid)
+    assert outcome.ok and outcome.message == "**Knuck Up 12** has started — 12 set(s) to play."
+    assert outcome.changed[:2] == ("A.R1-1", "A.R1-2")
+    row = await store_.tournament(bot.db, GUILD, tid)
+    assert row["state"] == "pools"
+    stored = await store_.sets(bot.db, tid)
+    assert {(one["phase"], one["pool"]) for one in stored} == {("pools", 1), ("pools", 2)}
+
+
+async def test_advance_builds_the_final_and_back_to_pools_takes_it_away(bot, guild):
+    tid = await pooled(bot, guild)
+    await moves.start(bot, guild, who(guild, TO), tid)
+    early = await moves.advance(bot, guild, who(guild, TO), tid)
+    assert (early.code, early.message) == (
+        "pools_unfinished",
+        "12 pool set(s) in **Knuck Up 12** are not final yet, so it cannot advance.",
+    )
+    await play_pools(bot, guild, tid)
+    member = await moves.advance(bot, guild, who(guild, ADA), tid)
+    assert member.code == "not_organiser"
+    outcome = await moves.advance(bot, guild, who(guild, TO), tid)
+    assert outcome.ok, outcome.message
+    assert outcome.message.startswith("**Knuck Up 12**'s final is built")
+    assert "W1-1" in outcome.changed and not any("." in key for key in outcome.changed)
+    row = await store_.tournament(bot.db, GUILD, tid)
+    assert row["state"] == "running"
+    final = {one["key"]: one for one in await store_.sets(bot.db, tid) if one["phase"] == "final"}
+    assert {"W1-1", "W1-2", "G1-1"} <= set(final)
+    reset = await sets.reset(bot, guild, who(guild, TO), tid, "A.R1-1")
+    assert (reset.code, reset.status) == ("pools_closed", 409)
+    assert "A.R1-1" in reset.message
+    back = await moves.unadvance(bot, guild, who(guild, TO), tid)
+    assert back.ok and set(back.changed) == set(final)
+    assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "pools"
+    assert all(one["phase"] == "pools" for one in await store_.sets(bot.db, tid))
+    assert (await sets.reset(bot, guild, who(guild, TO), tid, "A.R1-1")).ok
+    kinds = [kind for kind, *_ in await rows(bot.db)]
+    assert "brackets.advanced" in kinds and "brackets.unadvanced" in kinds
+
+
+async def test_back_to_pools_is_refused_once_the_final_has_a_result(bot, guild):
+    tid = await pooled(bot, guild)
+    await moves.start(bot, guild, who(guild, TO), tid)
+    await play_pools(bot, guild, tid)
+    await moves.advance(bot, guild, who(guild, TO), tid)
+    assert (await sets.report(bot, guild, who(guild, TO), tid, "W1-1", 2, 0)).ok
+    back = await moves.unadvance(bot, guild, who(guild, TO), tid)
+    assert (back.code, back.status) == ("final_played", 409)
+    assert "W1-1" in back.message
+
+
+async def test_a_tie_on_the_cut_names_the_players_and_the_order_settles_it(bot, guild):
+    tid = await pooled(bot, guild, count=6, advance_per_pool=1)
+    await moves.start(bot, guild, who(guild, TO), tid)
+    row = await store_.tournament(bot.db, GUILD, tid)
+    bracket = await store_.bracket(bot.db, row)
+    pool_a = sorted(
+        {e for m in bracket.matches.values() if m.pool == 1 for e in (m.slot_a, m.slot_b)}
+    )
+    x, y, z = pool_a
+    beats = {frozenset((x, y)): x, frozenset((y, z)): y, frozenset((x, z)): z}
+    await play_pools(
+        bot,
+        guild,
+        tid,
+        decide=lambda m: beats.get(frozenset((m.slot_a, m.slot_b)), min(m.slot_a, m.slot_b))
+        == m.slot_a,
+    )
+    tied = await moves.advance(bot, guild, who(guild, TO), tid)
+    assert tied.code == "pool_tie"
+    named = {one["id"]: one["name"] for one in await store_.entrants(bot.db, tid)}
+    assert tied.message.startswith("Pool A is tied across the top 1: ")
+    assert all(named[one] in tied.message for one in pool_a)
+    bad = await moves.advance(bot, guild, who(guild, TO), tid, order=[999])
+    assert bad.code == "bad_order"
+    outcome = await moves.advance(bot, guild, who(guild, TO), tid, order=[z, x, y])
+    assert outcome.ok, outcome.message
+    seated = {e for one in await store_.sets(bot.db, tid) if one["phase"] == "final"
+              for e in (one["slot_a"], one["slot_b"]) if e}
+    assert z in seated and x not in seated
+
+
+async def test_the_pages_order_of_a_tie_goes_through_when_a_tied_player_was_dqd(bot, guild):
+    tid = await pooled(bot, guild)
+    await moves.start(bot, guild, who(guild, TO), tid)
+    row = await store_.tournament(bot.db, GUILD, tid)
+    pool_a = pools.split((await store_.bracket(bot.db, row)).entrants, 2)[0]
+    first, x, y, z = pool_a
+    beats = {frozenset((x, y)): x, frozenset((y, z)): y, frozenset((x, z)): z}
+    await play_pools(
+        bot,
+        guild,
+        tid,
+        decide=lambda m: beats.get(frozenset((m.slot_a, m.slot_b)), min(m.slot_a, m.slot_b))
+        == m.slot_a,
+    )
+    assert (await people.dq(bot, guild, who(guild, TO), tid, z)).ok
+    tied = await moves.advance(bot, guild, who(guild, TO), tid)
+    assert tied.code == "pool_tie"
+    outcome = await moves.advance(bot, guild, who(guild, TO), tid, order=[y, x])
+    assert outcome.ok, outcome.message
+    seated = {e for one in await store_.sets(bot.db, tid) if one["phase"] == "final"
+              for e in (one["slot_a"], one["slot_b"]) if e}
+    assert {first, y} <= seated and x not in seated and z not in seated
+    stored = await store_.bracket(bot.db, await store_.tournament(bot.db, GUILD, tid))
+    assert stored.final_order[:2] == [y, x] and z in stored.final_order
+
+
+async def test_back_to_pools_takes_a_final_whose_only_results_are_a_dqs_forfeits(bot, guild):
+    tid = await pooled(bot, guild)
+    await moves.start(bot, guild, who(guild, TO), tid)
+    await play_pools(bot, guild, tid)
+    await moves.advance(bot, guild, who(guild, TO), tid)
+    final = {one["key"]: one for one in await store_.sets(bot.db, tid) if one["phase"] == "final"}
+    out = final["W1-1"]["slot_b"]
+    assert (await people.dq(bot, guild, who(guild, TO), tid, out)).ok
+    back = await moves.unadvance(bot, guild, who(guild, TO), tid)
+    assert back.ok, back.message
+    assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "pools"
+
+
+async def test_losers_side_entry_is_stored_blank_for_a_single_final_and_the_reply_says_so(
+    bot, guild
+):
+    made_ = await moves.create(
+        bot,
+        guild,
+        who(guild, TO),
+        {"name": "One", "format": "single", "pools_format": "round_robin",
+         "advance_losers_from": 9},
+    )
+    assert made_.ok and "only for a double elimination final" in made_.message
+    assert (await store_.tournament(bot.db, GUILD, made_.value))["advance_losers_from"] is None
+    double = await made(bot, guild, format="double", pools_format="round_robin",
+                        advance_losers_from=2)
+    assert (await store_.tournament(bot.db, GUILD, double))["advance_losers_from"] == 2
+    switched = await moves.edit(bot, guild, who(guild, TO), double, {"format": "single"})
+    assert switched.ok and switched.message == (
+        "Saved **Knuck Up 12**. Losers-side entry is only for a double elimination final, so "
+        "it is blank."
+    )
+    assert (await store_.tournament(bot.db, GUILD, double))["advance_losers_from"] is None
+    plain = await moves.edit(bot, guild, who(guild, TO), double, {"game": "Tekken"})
+    assert plain.message == "Saved **Knuck Up 12**."
+    again = await moves.edit(bot, guild, who(guild, TO), double, {"advance_losers_from": 3})
+    assert "only for a double" in again.message
+    assert (await store_.tournament(bot.db, GUILD, double))["advance_losers_from"] is None
+
+
+async def test_completing_a_pools_tournament_places_everyone(bot, guild):
+    tid = await pooled(bot, guild)
+    await moves.start(bot, guild, who(guild, TO), tid)
+    await play_pools(bot, guild, tid)
+    await moves.advance(bot, guild, who(guild, TO), tid)
+    early = await moves.complete(bot, guild, who(guild, TO), tid)
+    assert early.code == "unfinished"
+    await play_pools(bot, guild, tid)
+    await play_pools(bot, guild, tid)
+    await play_pools(bot, guild, tid)
+    await play_pools(bot, guild, tid)
+    assert (await moves.complete(bot, guild, who(guild, TO), tid)).ok
+    placed = sorted(one["placement"] for one in await store_.entrants(bot.db, tid))
+    assert placed == [1, 2, 3, 4, 5, 5, 7, 7]
+
+
+async def test_pools_need_an_elimination_bracket_and_a_round_robin_drops_the_default(bot, guild):
+    bad = await moves.create(
+        bot, guild, who(guild, TO), {"name": "x", "format": "swiss", "pools_format": "swiss"}
+    )
+    assert (bad.code, bad.status) == ("pools_need_elimination", 400)
+    await bot.store.set(GUILD, "brackets_pools_format_default", "round_robin")
+    plain = await made(bot, guild, format="round_robin")
+    assert (await store_.tournament(bot.db, GUILD, plain))["pools_format"] == "none"
+    pooled_default = await made(bot, guild)
+    assert (await store_.tournament(bot.db, GUILD, pooled_default))["pools_format"] == (
+        "round_robin"
+    )
+    edit = await moves.edit(bot, guild, who(guild, TO), pooled_default, {"format": "swiss"})
+    assert edit.code == "pools_need_elimination"
+    wrong = await moves.edit(bot, guild, who(guild, TO), plain, {"pools_format": "ladder"})
+    assert wrong.code == "bad_option"
+
+
+async def test_a_field_too_small_for_its_pools_is_refused_at_the_start(bot, guild):
+    tid = await pooled(bot, guild, count=5, pool_count=3)
+    outcome = await moves.start(bot, guild, who(guild, TO), tid)
+    assert (outcome.code, outcome.message) == (
+        "too_few_for_pools",
+        "**Knuck Up 12** has 5 entrants, too few for 3 pools of at least 2 each.",
+    )
+
+
+async def test_back_to_seeding_from_pools_clears_every_set(bot, guild):
+    tid = await pooled(bot, guild)
+    await moves.start(bot, guild, who(guild, TO), tid)
+    outcome = await moves.unstart(bot, guild, who(guild, TO), tid)
+    assert outcome.ok and len(outcome.changed) == 12
+    assert await store_.sets(bot.db, tid) == []

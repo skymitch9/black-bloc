@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from . import brackets_store as store_
-from .brackets import access, play
+from .brackets import access, play, pools
 from .brackets.model import (
     COMPLETE,
     REPORTED,
@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 
 async def running(bot: Any, guild: Any, tournament_id: int) -> tuple[Any, Any, dict, dict]:
     row = await loaded(bot, guild, tournament_id)
-    require_state(bot, guild, row, store_.RUNNING)
+    require_state(bot, guild, row, *store_.PLAYING)
     current = await store_.bracket(bot.db, row)
     people = {one["id"]: one for one in await store_.entrants(bot.db, row["id"])}
     return row, current, people, {"name": row["name"]}
@@ -116,7 +116,7 @@ async def call(
         require_runner(bot, guild, actor)
         match = the_set(bot, guild, row, current, key)
         moved = engine(
-            bot, guild, row, names, play.call, current, match.key, actor_id(actor), now_stamp()
+            bot, guild, row, names, pools.call, current, match.key, actor_id(actor), now_stamp()
         )
         matches, gone = await kept(bot, row, moved)
         after = matches[match.key]
@@ -174,7 +174,7 @@ async def report(
             guild,
             row,
             names,
-            play.report,
+            pools.report,
             current,
             match.key,
             side,
@@ -242,7 +242,7 @@ async def overridden(
         guild,
         row,
         {"name": row["name"]},
-        play.override,
+        pools.override,
         current,
         match.key,
         actor_id(actor),
@@ -286,7 +286,7 @@ async def confirm_report(
             if not access.may_run(bot.store, guild, actor):
                 raise stop(bot, guild, "brackets_not_in_set_said", "not_in_set", 403, set=match.key)
             moved = engine(
-                bot, guild, row, names, play.accept, current, match.key, actor_id(actor), stamp
+                bot, guild, row, names, pools.accept, current, match.key, actor_id(actor), stamp
             )
         else:
             moved = engine(
@@ -294,7 +294,7 @@ async def confirm_report(
                 guild,
                 row,
                 names,
-                play.confirm_report,
+                pools.confirm_report,
                 current,
                 match.key,
                 side,
@@ -343,7 +343,7 @@ async def dispute(
             guild,
             row,
             names,
-            play.dispute,
+            pools.dispute,
             current,
             match.key,
             side,
@@ -411,7 +411,7 @@ async def reset(
         row, current, people, names = await correctable(bot, guild, actor, tournament_id, key)
         match = the_set(bot, guild, row, current, key)
         moved = engine(
-            bot, guild, row, names, play.reset, current, match.key, actor_id(actor), now_stamp()
+            bot, guild, row, names, pools.reset, current, match.key, actor_id(actor), now_stamp()
         )
         matches, gone = await kept(bot, row, moved)
         await note(
@@ -438,12 +438,12 @@ async def confirm_due(
     moment = now or datetime.now(UTC)
     confirmed: list[tuple[int, str]] = []
     for row in await store_.tournaments(bot.db, guild.id):
-        if row["state"] != store_.RUNNING:
+        if row["state"] not in store_.PLAYING:
             continue
         async with lock_for(bot, row["id"]):
             fresh = await store_.tournament(bot.db, guild.id, row["id"])
             current = await store_.bracket(bot.db, fresh) if fresh else None
-            if current is None or fresh["state"] != store_.RUNNING:
+            if current is None or fresh["state"] not in store_.PLAYING:
                 continue
             waiting = [one.key for one in current.matches.values() if one.state == REPORTED]
             if not waiting:
@@ -457,7 +457,7 @@ async def confirm_due(
                         key,
                         current.matches[key].reported_at,
                     )
-            moved = play.confirm_due(current, moment, int(fresh["confirm_minutes"]))
+            moved = pools.confirm_due(current, moment, int(fresh["confirm_minutes"]))
             if not moved.changed:
                 continue
             after, _ = await kept(bot, fresh, moved)

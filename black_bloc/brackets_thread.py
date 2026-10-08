@@ -35,11 +35,11 @@ THREAD_NAME_LIMIT = 100
 POSTS_PER_PASS = 5
 SCAN_LIMIT = 100
 LOST_TWICE = 2
-LIVE = (*store_.BEFORE_START, store_.RUNNING)
+LIVE = (*store_.BEFORE_START, *store_.PLAYING)
 REASON = "Black Bloc tournament {id}"
 START = "start"
 MOVE = "move_home"
-EVERY_CARD = ("complete", "reopen", "cancel", "restore", MOVE)
+EVERY_CARD = ("complete", "reopen", "cancel", "restore", MOVE, "advance", "unadvance")
 NO_HOME = "no rehearsal home or log channel"
 NO_CHANNEL = "brackets_channel_id is blank"
 CANNOT_SEE = "the bot lacks permission to see thread {id}"
@@ -180,10 +180,12 @@ async def find_thread(bot: Any, guild: Any, thread_id: Any) -> tuple[Any, bool, 
     return (found, False, "", "")
 
 
-def starter_payload(bot: Any, guild: Any, row: Any, people: list[Any]) -> dict[str, Any]:
+def starter_payload(
+    bot: Any, guild: Any, row: Any, people: list[Any], bracket: Any = None
+) -> dict[str, Any]:
     return {
         "content": cards.rehearsal_line(bot, guild, row),
-        "embed": cards.starter_embed(bot.store, guild.id, row, people),
+        "embed": cards.starter_embed(bot.store, guild.id, row, people, bracket),
         "view": cards.starter_view(bot.store, guild.id, row, origin_of(bot), people),
         "allowed_mentions": discord.AllowedMentions.none(),
     }
@@ -319,6 +321,11 @@ async def adopt_starter(bot: Any, row: Any, thread: Any) -> Any:
     return None
 
 
+async def pooled(bot: Any, row: Any) -> Any:
+    """The bracket while the pools play, for the starter card's pool lines."""
+    return await store_.bracket(bot.db, row) if row["state"] == store_.POOLS else None
+
+
 async def post_starter(bot: Any, guild: Any, row: Any, thread: Any, people: list[Any]) -> None:
     adopted = None if row["message_id"] else await adopt_starter(bot, row, thread)
     if adopted is not None:
@@ -326,7 +333,9 @@ async def post_starter(bot: Any, guild: Any, row: Any, thread: Any, people: list
         await edit_starter(bot, guild, await fresh(bot, guild, row["id"]), thread, people)
         return
     try:
-        message = await thread.send(**starter_payload(bot, guild, row, people))
+        message = await thread.send(
+            **starter_payload(bot, guild, row, people, await pooled(bot, row))
+        )
     except Exception as exc:
         await failed(bot, guild, row, STARTER, reason_of(exc))
         return
@@ -343,7 +352,7 @@ async def edit_starter(bot: Any, guild: Any, row: Any, thread: Any, people: list
     key = (int(row["id"]), STARTER)
     try:
         await thread.get_partial_message(int(row["message_id"])).edit(
-            **starter_payload(bot, guild, row, people)
+            **starter_payload(bot, guild, row, people, await pooled(bot, row))
         )
     except discord.NotFound:
         stale(bot).discard(key)

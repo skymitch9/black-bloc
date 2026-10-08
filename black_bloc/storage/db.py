@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 90
+SCHEMA_VERSION = 91
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1329,6 +1329,12 @@ CREATE TABLE IF NOT EXISTS tournaments (
     entrant_cap        INTEGER,
     check_in_minutes   INTEGER NOT NULL DEFAULT 0,
     confirm_minutes    INTEGER NOT NULL DEFAULT 12,
+    pools_format       TEXT    NOT NULL DEFAULT 'none',
+    pool_count         INTEGER NOT NULL DEFAULT 2,
+    advance_per_pool   INTEGER NOT NULL DEFAULT 2,
+    advance_losers_from INTEGER,
+    pools_swiss_rounds INTEGER,
+    pools_best_of      INTEGER NOT NULL DEFAULT 3,
     rules_text         TEXT,
     starts_at          TEXT,
     state              TEXT    NOT NULL DEFAULT 'draft',
@@ -1412,6 +1418,8 @@ CREATE TABLE IF NOT EXISTS tournament_sets (
     placement_winner INTEGER,
     placement_loser  INTEGER,
     rematch          INTEGER NOT NULL DEFAULT 0,
+    phase            TEXT,
+    pool             INTEGER,
     message_id       INTEGER,
     card_at          TEXT,
     UNIQUE (tournament_id, key)
@@ -1565,6 +1573,14 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("chat_voice", "fed_since", "TEXT"),
     ("chat_voice", "avoid", "TEXT"),
     ("chat_voice", "avoid_left", "INTEGER NOT NULL DEFAULT 0"),
+    ("tournaments", "pools_format", "TEXT NOT NULL DEFAULT 'none'"),
+    ("tournaments", "pool_count", "INTEGER NOT NULL DEFAULT 2"),
+    ("tournaments", "advance_per_pool", "INTEGER NOT NULL DEFAULT 2"),
+    ("tournaments", "advance_losers_from", "INTEGER"),
+    ("tournaments", "pools_swiss_rounds", "INTEGER"),
+    ("tournaments", "pools_best_of", "INTEGER NOT NULL DEFAULT 3"),
+    ("tournament_sets", "phase", "TEXT"),
+    ("tournament_sets", "pool", "INTEGER"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

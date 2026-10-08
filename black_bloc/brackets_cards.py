@@ -8,7 +8,7 @@ from typing import Any
 import discord
 
 from . import brackets_store as store_
-from .brackets import play
+from .brackets import play, pools
 from .brackets.model import (
     BYE,
     CALLED,
@@ -48,7 +48,7 @@ TO_ACTIONS = (CALL, DECIDE, RESET)
 SET_ACTIONS = (*PLAYER_ACTIONS, *TO_ACTIONS)
 
 PREFIX = "brackets"
-KEY_PATTERN = r"[A-Z][0-9]+-[0-9]+"
+KEY_PATTERN = r"(?:[A-Z]\.)?[A-Z][0-9]+-[0-9]+"
 STARTER_TEMPLATE = rf"{PREFIX}:(?P<tid>[0-9]+):(?P<action>{'|'.join(STARTER_ACTIONS)})"
 SET_TEMPLATE = (
     rf"{PREFIX}:(?P<tid>[0-9]+):(?P<key>{KEY_PATTERN}):(?P<action>{'|'.join(SET_ACTIONS)})"
@@ -156,8 +156,11 @@ def embeds_of(message: Any) -> list[Any]:
     return list(found)
 
 
-def set_moves(tournament_state: str, set_state: str) -> tuple[str, ...]:
-    if tournament_state != store_.RUNNING:
+def set_moves(tournament_state: str, set_state: str, pool: int | None = None) -> tuple[str, ...]:
+    """A pool set's card goes quiet once the final is built; Back to pools wakes it."""
+    if tournament_state not in store_.PLAYING:
+        return ()
+    if pool and tournament_state == store_.RUNNING:
         return ()
     return SET_MOVES.get(set_state, ())
 
@@ -207,6 +210,21 @@ def format_line(store: Any, guild_id: int, row: Any) -> str:
         found.append(words(store, gid, "brackets_card_third_words"))
     if row["format"] == SWISS and row["swiss_rounds"]:
         found.append(words(store, gid, "brackets_card_rounds_words", rounds=row["swiss_rounds"]))
+    if row["pools_format"] in pools.POOL_FORMATS:
+        found.append(
+            words(
+                store,
+                gid,
+                "brackets_card_pools_words",
+                count=row["pool_count"],
+                format=words(store, gid, FORMAT_KEYS[row["pools_format"]]),
+                advance=row["advance_per_pool"],
+            )
+        )
+        if row["format"] == DOUBLE and row["advance_losers_from"]:
+            found.append(
+                words(store, gid, "brackets_card_losers_words", place=row["advance_losers_from"])
+            )
     if row["format"] in ELIMINATION:
         if row["best_of_from_round"]:
             found.append(
@@ -230,7 +248,29 @@ def when_words(stamp: Any, style: str = "f") -> str | None:
     return f"<t:{int(found.timestamp())}:{style}>" if found is not None else None
 
 
-def starter_lines(store: Any, guild_id: int, row: Any, people: list[Any]) -> list[str]:
+def pool_lines(store: Any, guild_id: int, bracket: Any, people: list[Any]) -> list[str]:
+    """Each pool's leaders while the pools play: as many names as go through."""
+    if bracket is None or bracket.plan is None:
+        return []
+    named = {one["id"]: one["name"] for one in people}
+    found = []
+    for number, one in enumerate(pools.pool_parts(bracket), start=1):
+        top = [named.get(entrant, "—") for entrant in pools.leaders(one, bracket.plan.advance)]
+        found.append(
+            words(
+                store,
+                guild_id,
+                "brackets_card_pool_line",
+                pool=pools.letter(number),
+                top=", ".join(top),
+            )
+        )
+    return found
+
+
+def starter_lines(
+    store: Any, guild_id: int, row: Any, people: list[Any], bracket: Any = None
+) -> list[str]:
     gid = guild_id
     count = sum(1 for one in people if not one["dropped"])
     lines = [str(row["game"])] if row["game"] else []
@@ -253,6 +293,8 @@ def starter_lines(store: Any, guild_id: int, row: Any, people: list[Any]) -> lis
         lines.append(words(store, gid, "brackets_card_check_in_line", when=closes))
     if row["to_user_id"]:
         lines.append(words(store, gid, "brackets_card_to_line", to=f"<@{int(row['to_user_id'])}>"))
+    if row["state"] == store_.POOLS:
+        lines.extend(pool_lines(store, gid, bracket, people))
     if row["state"] == store_.COMPLETE:
         placed = sorted(
             (one for one in people if one["placement"] is not None),
@@ -265,10 +307,12 @@ def starter_lines(store: Any, guild_id: int, row: Any, people: list[Any]) -> lis
     return lines
 
 
-def starter_embed(store: Any, guild_id: int, row: Any, people: list[Any]) -> discord.Embed:
+def starter_embed(
+    store: Any, guild_id: int, row: Any, people: list[Any], bracket: Any = None
+) -> discord.Embed:
     return discord.Embed(
         title=str(row["name"])[:TITLE_LIMIT],
-        description="\n".join(starter_lines(store, guild_id, row, people))[:4000],
+        description="\n".join(starter_lines(store, guild_id, row, people, bracket))[:4000],
     )
 
 
@@ -280,6 +324,14 @@ def rehearsal_line(bot: Any, guild: Any, row: Any) -> str | None:
 
 
 def round_words(store: Any, guild_id: int, match: Any) -> str:
+    if match.pool:
+        return words(
+            store,
+            guild_id,
+            "brackets_round_pool",
+            pool=pools.letter(match.pool),
+            round=match.round,
+        )
     if match.side == WINNERS:
         return words(store, guild_id, "brackets_round_winners", round=match.round)
     if match.side == LOSERS:
@@ -476,7 +528,7 @@ def starter_view(
 
 def set_view(store: Any, guild_id: int, row: Any, match: Any) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
-    for action in set_moves(row["state"], match.state):
+    for action in set_moves(row["state"], match.state, match.pool):
         view.add_item(SetButton(row["id"], match.key, action, label(store, guild_id, action)))
     return view
 

@@ -8,7 +8,11 @@
 > are under *Review fixes (layer 2) 2026-10-07*.
 > 🔨 **LAYER 3 BUILT on branch `brackets-site`** (off `main` `7850359b`), **NOT merged, NOT deployed**; no schema change; registry
 > keys **1065 → 1075**; contract routes **344 → 345**, pages 25 → 26; §F is now *as built*, decisions §G 56–72.
-> **Last verified: 2026-10-07** (layer 3 build; layer 2 before it) — by the hermetic test suite, `ruff`, `site/mock/check.mjs` against the
+> 🔨 **POOLS INTO A BRACKET BUILT on branch `brackets-pools`** (off `main` `3a18e678`), **NOT merged, NOT deployed**; schema
+> **90 → 91**; registry keys **1075 → ~~1088~~ 1090** (the pools review fixes added `brackets_pool_tied` and
+> `brackets_pool_raise_label`); contract routes **345 → 347**; its design is §P, decisions §P8 (83–94); the review's
+> findings and their pins are under *Review fixes (pools) 2026-10-07*.
+> **Last verified: 2026-10-07** (pools build; layer 3 before it) — by the hermetic test suite, `ruff`, `site/mock/check.mjs` against the
 > branch's own mock on port 8813, every `site/mock/*.test.mjs` and the Docker CI mirror (figures under *Gate*).
 > ⚠️ **NOT checked:** nothing here has met the REAL Discord — layer 2 is tested against fakes of threads, messages and
 > interactions only; no browser has rendered anything (there is no page); the schema change has not run on the live
@@ -44,7 +48,8 @@ Research input: [`brackets-research-2026-10-07.md`](brackets-research-2026-10-07
 |---|---|---|
 | **L1** | Pure engine `black_bloc/brackets/`, storage (schema 90), the moves both doors call, the API `/api/brackets`, settings keys, log kinds, contract + mock | ✅ merged (`b78e91cc`, `aba3b1ee`) |
 | **L2** | Discord: the tournament thread under `#knuck-up` (or the shadow home), the players' buttons, the TO panel, the two sweeps | 🔨 branch `brackets-discord` — §E as built |
-| **L3** | The site page `brackets.html`: the bracket drawn, the TO's moves, the player's moves | 🔨 branch `brackets-site` — §F as built |
+| **L3** | The site page `brackets.html`: the bracket drawn, the TO's moves, the player's moves | ✅ merged (`3a18e678`) — §F as built |
+| **Pools** | Pools into a bracket: the pools phase, the progression, Advance / Back to pools on every door | 🔨 branch `brackets-pools` — §P |
 
 ## A. The engine (`black_bloc/brackets/`, pure — no database, no Discord)
 
@@ -65,6 +70,7 @@ move raises `BracketError(code, **fields)`; the caller turns the code into words
 | `standings.py` | `placements`, `table` (round robin and Swiss), `ranked` (tiebreaks), `waiting_on` (what each entrant waits on) |
 | `checkin.py` | `closes_at`, `due`, `no_shows`, `present` |
 | `access.py` | `may_run(store, guild, person)` — the ONE write rule (staff, or a holder of `brackets_to_role_id`) |
+| `pools.py` | *(pools, §P)* the snake split, a bracket per pool, `advance` (the cut, reseeding, `apart`, losers-side entry), `unadvance`, the whole tournament's `placements` / `waiting_on`, and the dispatch every set move goes through (`call` … `withdraw`), which is `play` itself when there is no plan |
 
 ### A1. Seeding and byes
 
@@ -248,7 +254,7 @@ anyone in or out. When it closes — by the TO, or by the layer-2 sweep once `ch
 still in and not checked in is taken out (`dropped_why = no_show`), and the bracket is built later from who is left.
 Start is refused while check-in is open.
 
-## B. Storage (schema 90)
+## B. Storage (schema 90; schema 91 adds the pool columns — §P4)
 
 `black_bloc/storage/db.py` gains three tables (no column migration; `test_a_schema_89_file_gains_the_bracket_
 tables_and_loses_nothing`). `black_bloc/brackets_store.py` is the only module that reads or writes them.
@@ -259,7 +265,9 @@ tables_and_loses_nothing`). `black_bloc/brackets_store.py` is the only module th
   running / complete / cancelled), `state_before` (what a cancel restores); `created_by`, `to_user_id`; `source`
   (`own` | `startgg`), `source_ref`; for layer 2, nullable `channel_id`, `thread_id`, `message_id`, `shadow`;
   `check_in_opened_at`, `check_in_closes_at`, `started_at`, `completed_at`, `cancelled_at`, `created_at`,
-  `updated_at`.
+  `updated_at`. *(Schema 91, §P4:)* `pools_format`, `pool_count`, `advance_per_pool`, `advance_losers_from`,
+  `pools_swiss_rounds`, `pools_best_of`; ~~`state` (draft / signups / check_in / seeding / running / complete /
+  cancelled)~~ `state` gains `pools` between seeding and running.
 - **`tournament_entrants`** — `tournament_id`, `user_id` (NULL = a guest), `name`, `seed`, `checked_in`,
   `checked_in_at`, `dropped`, `dropped_why` (`removed` by a TO / `left` themselves / `no_show` / `dropped` mid-bracket),
   `dropped_at`, `dq`, `final_rank` (the TO's tie order), `placement` (written at completion), `added_by`, `added_at`.
@@ -271,7 +279,8 @@ tables_and_loses_nothing`). `black_bloc/brackets_store.py` is the only module th
   `forfeit`, `called_at`/`called_by`, `reported_by`/`reported_side`/`reported_at`, `confirmed_by`/`confirmed_at`/
   `confirmed_how`, `disputed_by`/`disputed_at`/`dispute_note`, `completed_at`, `placement_winner`/`placement_loser`,
   `rematch` (0/1, review fix 1); and for layer 2 (review fix 3, not `Match` fields so a save never touches them)
-  nullable `message_id` (the set's card in the thread) and `card_at` (when it was posted). UNIQUE
+  nullable `message_id` (the set's card in the thread) and `card_at` (when it was posted); *(schema 91, §P4)* `phase`
+  (`pools` | `final`) and `pool` (the pool's number). UNIQUE
   `(tournament_id, key)`; a save is an upsert on it. `brackets_store.cards` / `set_card` read and write the card;
   a save answers the removed sets' cards and `clear_sets` every card it dropped.
 
@@ -289,7 +298,7 @@ to seeding), so layer 2 edits exactly those cards without diffing the view (revi
 
 | Module | Moves |
 |---|---|
-| `brackets_moves.py` | the shared helpers (`lock_for`, `mode_of`, `said`, `note`, `require_*`, `engine`); `create`, `edit`, `open_signups`, `close_signups`, `seed`, `start`, `unstart`, `complete`, `reopen`, `cancel`, `restore` |
+| `brackets_moves.py` | the shared helpers (`lock_for`, `mode_of`, `said`, `note`, `require_*`, `engine`); `create`, `edit`, `open_signups`, `close_signups`, `seed`, `start`, `unstart`, `complete`, `reopen`, `cancel`, `restore`; *(§P)* `advance`, `unadvance`, `pools_fit` |
 | `brackets_people.py` | `join`, `add_entrant`, `remove_entrant`, `restore_entrant`, `drop`, `dq`, `open_check_in`, `close_check_in`, `set_check_in`, `close_due_check_ins` (sweep) |
 | `brackets_sets.py` | `call`, `report`, `confirm_report`, `dispute`, `override`, `reset`, `confirm_due` (sweep) |
 | `brackets_view.py` | `summary`, `full` — the tournament as both doors read it |
@@ -322,7 +331,8 @@ not hit the member bucket's 10), then the move decides. Every write answers `{to
 | `POST …/{id}/entrants/{eid}/drop` | leave before the start; forfeit the rest after it | self or TO |
 | `POST …/{id}/entrants/{eid}/dq` | DQ, running only | TO |
 | `POST …/{id}/seed` `{order: [eid…]}` or `{randomise: true}` | seeding | TO |
-| `POST …/{id}/start` · `/unstart` | build the bracket · back to seeding, sets cleared | TO |
+| `POST …/{id}/start` · `/unstart` | build the bracket (or the pools, §P) · back to seeding, sets cleared (from pools too) | TO |
+| `POST …/{id}/advance` `{order?}` · `/unadvance` | *(§P5)* the final from the pools · back to pools | TO |
 | `POST …/{id}/complete` `{order?: [eid…]}` · `/reopen` | placements written (the order splits a table tie) · back to running | TO |
 | `POST …/{id}/cancel` · `/restore` | cancel · back to the state before | TO |
 | `POST …/{id}/sets/{key}/call` | call | TO |
@@ -332,14 +342,14 @@ not hit the member bucket's 10), then the move decides. Every write answers `{to
 | `POST …/{id}/sets/{key}/override` `{score_a, score_b}` or `{winner: "a"\|"b"\|eid, forfeit: true}` | decide / correct | TO |
 | `POST …/{id}/sets/{key}/reset` | take back, with what it decided | TO |
 
-All 28 routes are in `site/mock/contract.json` (the real router answers them in `tests/api/test_contract.py`
+All 28 routes (30 with §P's two) are in `site/mock/contract.json` (the real router answers them in `tests/api/test_contract.py`
 against `seed_brackets`; the mock in `site/mock/server.mjs` against eight seeded tournaments, one per state).
 
 **Log kinds** — one head, `brackets.` (filed under `core`, as `pbfeed` is), each with `via`, `tournament` and, for a
 set, `set`; the `web.` twin via `kind_via` when the site is the door: `created`, `edited`, `signups_opened`,
 `signups_closed`, `check_in_opened`, `check_in_closed`, `checked_in`, `checked_out`, `entrant_added` (`by_self` for a
 sign-up, `guest`), `entrant_removed`, `entrant_restored`, `dropped` (`before_start` when it is a leave), `dq`,
-`seeded`, `started`, `unstarted`, `completed`, `reopened`, `cancelled`, `restored`, `set_called`, `set_reported`,
+`seeded`, `started`, `unstarted`, `advanced` and `unadvanced` (§P5), `completed`, `reopened`, `cancelled`, `restored`, `set_called`, `set_reported`,
 `set_confirmed` (`how`), `set_disputed`, `set_overridden` (`cleared`: the sets it reset), `set_reset` (`cleared`,
 `removed`). IMPORTANT: `dq`, `entrant_removed`, `cancelled`, `unstarted`, `set_disputed`, `set_overridden`,
 `set_reset`; the rest ROUTINE. The two sweeps log `set_confirmed` (`how = time`, no actor) and `check_in_closed`
@@ -391,6 +401,8 @@ moves, the organiser buttons on a card, the organiser forms) are constants in `b
 select stays at 25: layer 2 adds no `*_panel_minutes` key.
 
 ## E. Layer 2 — Discord (as built, branch `brackets-discord`)
+
+*(Pools, 2026-10-07: a pool set card's round reads* Pool B · round 2*, the starter card carries the pools option and each pool's leaders while in pools, and the panel gains Advance to the final and Back to pools — §P6. Every table below holds for the final.)*
 
 *Rewritten 2026-10-07 from the spec to what runs. Where the build brief differed from the old spec the brief won; each
 difference is a §G decision. ~~The old spec's **Move to #knuck-up** button and the **Complete** tie-order select are not
@@ -500,7 +512,7 @@ every view with `render_again`):
 | View | A member sees | An organiser (staff or `brackets_to_role_id`) also sees |
 |---|---|---|
 | Home | the tournaments in sign-ups, check-in, seeding or running (one line each, a picker) | every tournament; ~~**Create…** (form: name, game, format, best of, entrant cap)~~ *(owner 2026-10-07: "elimination types should be a drop down")* a **Create…** dropdown of the four formats (the page's `brackets_format_*_words`, a one-line description each), which opens that format's form — see *The Create form* below |
-| A tournament | the starter card; *Your sets* (the players line is `brackets_set_card_players`, review fix 15); **Sign up** (sign-ups, not in) · **Leave** (in, before the start — draft and seeding too, review fix 11) · **Check in** (check-in, not yet) · **Drop out** (running, asks first); a picker of their sets | *Open sets*; the moves legal now — draft: Open sign-ups, Add entrant…, Cancel · sign-ups: Close sign-ups, Open check-in, Add entrant…, Cancel · check-in: Close check-in, Add entrant…, Cancel · seeding: Open sign-ups, Open check-in, Seed…, Shuffle, Start, Add entrant…, Cancel · running: Call ready sets (when one is ready), Complete (when finished), Back to seeding, Cancel · complete: Reopen, Cancel · cancelled: Restore; **staff only**, while the thread is a rehearsal and the mode is `on`: Move to #knuck-up; an entrant picker; a picker of every set |
+| A tournament | the starter card; *Your sets* (the players line is `brackets_set_card_players`, review fix 15); **Sign up** (sign-ups, not in) · **Leave** (in, before the start — draft and seeding too, review fix 11) · **Check in** (check-in, not yet) · **Drop out** (running, asks first); a picker of their sets | *Open sets*; the moves legal now — draft: Open sign-ups, Add entrant…, Cancel · sign-ups: Close sign-ups, Open check-in, Add entrant…, Cancel · check-in: Close check-in, Add entrant…, Cancel · seeding: Open sign-ups, Open check-in, Seed…, Shuffle, Start, Add entrant…, Cancel · ~~running: Call ready sets (when one is ready), Complete (when finished), Back to seeding, Cancel~~ *(§P6)* pools: Call ready sets, Advance to the final (every pool final), Back to seeding, Cancel · running: Call ready sets (when one is ready), Complete (when finished), Back to pools (a pools tournament whose final is unplayed), Back to seeding, Cancel · complete: Reopen, Cancel · cancelled: Restore; **staff only**, while the thread is a rehearsal and the mode is `on`: Move to #knuck-up; an entrant picker; a picker of every set |
 | An entrant | — | before the start: Remove… or Restore (check-in: Check in / Check out first) · running: DQ… and Drop…, or Restore |
 | A set | Report (ready/called) · Confirm and Dispute (reported, and not the reporter) | Report (not playing) · Call (ready) · Let it stand (reported/disputed) · Decide… · *{a} by forfeit…* · *{b} by forfeit…* · Reset… |
 | Add entrant | — | a member picker, **Add a guest…** (form: name) |
@@ -532,6 +544,8 @@ suffix; written once per tournament, card and reason a run); `would_dm`, `would_
 
 ## F. Layer 3 — the site page (as built, branch `brackets-site`)
 
+*(Pools, 2026-10-07: a pools tournament draws a **Pools** section above the bracket, which is titled **Final**; the drawer takes the pool options; Advance / Back to pools join the organiser moves — §P7.)*
+
 *Rewritten 2026-10-07 from the spec to what runs. Differences from the old spec are §G 56–72; the layer-3 review fixes amended it in place the same day (§G 73–82, "Review fixes (layer 3)" below).*
 
 | File | Does |
@@ -558,6 +572,229 @@ suffix; written once per tournament, card and reason a run); `would_dm`, `would_
 **API glue (this layer):** `GET /api/brackets` adds `words` (the player-facing templates the page draws, `brackets_view.PAGE_WORDS`), `defaults` (*review fix 4:* a new tournament's options from the registry, `brackets_moves.option_defaults` — what `create` applies — so the form shows a TO who is not staff the same defaults) and per row `entrant_cap` and `to_name`; `GET /api/brackets/{id}` adds `shadow`, `to_name` and `rounds_to_play` (*review fix 9:* Swiss only — the stored rounds, else `swiss.rounds_for` of the field). Every answer and refusal of a bracket write goes through `api/names.site_words` (*review fix 11:* `<#id>` reads `#name`, a thread too). The DQ / drop / remove / override / reset routes take an optional `reason` (whitespace folded, 300 characters) and, on success, call `brackets_thread.tell` — `brackets_dm_dq` / `_dropped` / `_removed` for the entrant, `brackets_dm_decided` (`set`, `result` = the move's words) and `brackets_dm_reset` (`set`) for both players, read before the move — always with `actor=` so an organiser is never told about their own move. `POST /api/brackets/{id}/move` is in `contract.json` (a contract entry may now carry `settings`, written before the request: mode `on`, `brackets_channel_id` = a forum the fixture has).
 
 **Keys:** *(review fixes: no key added; `PAGE_WORDS` gained the five existing `brackets_card_*_words` keys the head meta now reads.)* 10 new player-facing word keys (`BRACKETS_PAGE_WORDS`): `brackets_waiting_play`, `_called`, `_confirm`, `_opponent_confirms`, `_to_decides`, `_waits`, `_next_round`, `_done`, `_out` (each takes `{set}` and `{opponent}`) and `brackets_discord_label`. Every other player-facing word on the page is an existing layer-1/2 key (states, formats, the button labels, round words, set-card lines, the report and dispute words), so Discord and the site share one wording.
+
+## P. Pools into a bracket 2026-10-07 (branch `brackets-pools`, off `main` `3a18e678`)
+
+The owner, 2026-10-07, choosing from the follow-up list, verbatim: *"do 1, lets dump the rest"* — item 1 being *"Pools
+into a bracket. Round-robin or small pools, then the top N into double elimination … the missing piece is the
+progression between phases."* Research input: [`brackets-research-2026-10-07.md`](brackets-research-2026-10-07.md) §3
+(start.gg phases, pools as phase groups, progressions into winners or losers).
+
+### P1. The two phases
+
+A tournament may play **pools → final**: a POOLS phase (round robin or Swiss, `pool_count` pools) feeding a FINAL phase
+(single or double elimination — `format`). `pools_format = none` is the old one-bracket tournament, unchanged.
+
+- **The split** (`pools.split`): the active entrants in seed order are dealt in snake order — A B C D D C B A A B … — so
+  every pool gets a fair share of the top. 8 into 2: A = 1 4 5 8, B = 2 3 6 7. 9 into 2: A = 1 4 5 8 9 (5), B = 2 3 6 7 (4).
+  12 into 3: A = 1 6 7 12, B = 2 5 8 11, C = 3 4 9 10. 16 into 4: A = 1 8 9 16, B = 2 7 10 15, C = 3 6 11 14, D = 4 5 12 13.
+  *(Review fix 7.)* An uneven field puts its extra players where the snake runs out: a last pass that runs forward
+  fills the FIRST pools (9 into 2 → 5, 4; 7 into 3 → 3, 2, 2), one that runs backward fills the LAST pools (13 into 4 →
+  3, 3, 3, 4; 11 into 3 → 3, 4, 4; 14 into 4 → 3, 3, 4, 4) — measured with `pools.split`. The cut is bounded by the
+  SMALLEST pool (`count // pool_count`): an `advance_per_pool` above it is refused at Start (`advance_too_many`).
+- **A pool** is a round robin or Swiss over its members, built by `play.build` exactly as a whole tournament of that
+  format is (A5, A6 untouched), at `pools_best_of` (and `pools_swiss_rounds`). Its keys carry the pool letter:
+  `A.R1-1`, `B.S2-3`. The final's keys are the plain ones (`W1-1`, `L2-1`, `G1-1`).
+- **Pool standings** are `standings.table` of the pool (A5/A6's tiebreaks), the TO's `final_order` included.
+
+### P2. The progression (`pools.advance`)
+
+1. Refused while any pool set is not final (`pools_unfinished`, with the count).
+2. **The cut** (`pools.cut`): each pool's top `advance_per_pool` among those still in (a DQ'd or dropped entrant never
+   advances; the next one up does). A tie whose places straddle the line — the Nth and (N+1)th still-in rows share a
+   place — is **refused in words** (`pool_tie`: *Pool B is tied across the top 2: Ada, Bea, Cy. Order them, then
+   advance.*) until the TO's order names everyone in it; Advance takes `{order: [eid…]}` (the same TO-finalised order
+   `complete` takes, written to `final_rank`) and `ranked` applies it. *(Review fix 1.)* The tie the refusal names
+   leaves the withdrawn out, but `ranked` needs the order to name the whole tie group, a DQ'd member included — so
+   Advance appends every withdrawn entrant the order did not name AFTER it (`pools.told_with_withdrawn`; they are
+   placed last anyway) and stores that extended order. The page's order of the still-in tied players goes through.
+3. **Reseeding**: by pool place, then pool number — 1st of A, 1st of B, … then the 2nds, … Seed 1 is A's winner, seed 2
+   B's. The elimination seeding rule (A1) places them; then **`apart`** undoes any first-round set between two from one
+   pool by swapping the lower seed with the nearest entrant of the same pool place from another set (decision 84).
+   *(Review fix 5.)* ~~`apart` clears the first set~~ — `apart` only sees the entry round; a losers-side entrant whose
+   losers round 1 is a bye first plays in losers round 2 against the LOSER of a winners set. So `pools.first_apart`
+   then swaps losers-side entrants within their pool place so the players their first played set can bring (the one
+   seated, else the feeding set's two) are not from their own pool, wherever such a swap exists (a seated opponent
+   counts before a possible one; a seat's opponents do not move when its occupant does, so the bracket stays the one
+   `entered` builds). 16 in 4 pools, top 3, 3rds to losers, random pool and final results: same-pool first played sets
+   of the losers-side entrants **76 of 140 → 0 of 140** (35 full play-outs; the reviewer measured 111 of 240 L2 sets
+   before). The winners side after a winners bye is not covered (not reported; `apart` handles the sets it sees).
+4. **Losers-side entry** (`advance_losers_from = p`, double elimination only): pool places 1 … p−1 go to the winners side,
+   places p … N start in **losers round 1**. Built as a double elimination of size 2K (K = the larger of the two sides'
+   bracket sizes) with winners round 1 deleted: the winners-side advancers sit in winners round 2, the losers-side in
+   losers round 1, each by the standard order (`pools.entered`). Single elimination ignores the option (every
+   advancer is in the one bracket).
+5. **Places** (`pools.placements`): the final's places for the advancers (A2/A3), then everyone else grouped by pool
+   place — all non-advancing 3rds share the place under the final's last, the 4ths the next free place, … — and a
+   withdrawn non-advancer after every finisher. Standard competition ranking, so the whole tournament is a valid
+   partition (1, 2, 3, 4, 5, 5, 7, 7, 9×4, 13×4 for 16).
+
+**Worked: 16 entrants, 4 pools of round robin, top 2, 2nds to losers, the higher seed always winning.** Pools A = 1 8 9
+16, B = 2 7 10 15, C = 3 6 11 14, D = 4 5 12 13. Through: 1sts 1 2 3 4, 2nds 8 7 6 5. Winners side (4 → K = 4, a
+double elimination of 8 with W1 deleted): W2-1 = **1 v 4**, W2-2 = **2 v 3**. Losers side, seeds 8 7 6 5 in standard
+order: L1-1 = **8 v 5**, L1-2 = **7 v 6**. L1 losers 7th, L2 (L1 winners against the W2 losers, pair-flipped as A3) 5th,
+L3 4th, L4 3rd, the grand final 2nd. Non-advancers: the 3rds 9 10 11 12 share **9th**, the 4ths 13 14 15 16 share
+**13th**. Whole: 1, 2, 3, 4, 5, 5, 7, 7, 9×4, 13×4 (`tests/brackets/test_pools.py::test_sixteen_in_four_pools_send_the_seconds_into_the_losers_bracket`,
+and ~~the mock agrees~~ *(review fix 6)* the mock reaches the same seats and places for this case in
+`site/mock/brackets.test.mjs` — on these worked examples only: it has no head-to-head tiebreak, no `first_apart`, and
+structural losers-side places (decision 93)).
+
+Other worked cases (all in `tests/brackets/test_pools.py`): 8 in 2 pools of 4, top 2 → a 4-player double: W1-1 = 1 v 3,
+W1-2 = 2 v 4, places 1 2 3 4 5 5 7 7. 12 in 3 pools, top 2 → 6 in an 8-bracket with byes to 1 and 2; standard order
+would open C1 v C2 (3 v 4), `apart` makes it W1-2 = 6 v 4 and W1-4 = 3 v 5; places 1 2 3 4 5 5 7×3 10×3. The same
+with 2nds to losers: W2-1 = 1 v bye, W2-2 = 2 v 3, L1-1 = 6 v bye, L1-2 = 5 v 4; places 1 … 6 then 7×3 10×3. 9 in 2
+pools (5 and 4) → single elimination of 4: 1 v 3, 2 v 4; places 1 2 3 3 5 5 7 7 9. Swiss pools of 8 (3 rounds each) →
+a 4-player bracket. A three-way cycle across the line of `advance_per_pool = 1` is refused naming all three, and the
+TO's order `[z, x, y]` sends z through.
+
+### P3. The state machine
+
+| State | Means | Reached by | Left by |
+|---|---|---|---|
+| `seeding` (and before) | as before | — | **Start** → `pools` when `pools_format` is set, else `running` |
+| **`pools`** | the pools are playing | Start; **Back to pools** | **Advance** → `running` (every pool final, no tie on the line); Back to seeding (every set cleared); Cancel |
+| `running` | the final is playing (or the one bracket) | Advance; Start without pools; Reopen | Complete; **Back to pools** (no final set reported, disputed or complete); Back to seeding; Cancel |
+| `complete` / `cancelled` | as before | | Reopen / Restore (back to the state before, `pools` included) |
+
+- Set moves (call, report, confirm, dispute, override, reset), DQ, Drop out and the entrant Restore are legal in `pools`
+  and `running`; the confirm sweep runs over both.
+- **Reset or override of a pool set once the final is built is refused** (`pools_closed`: *A.R1-1 is a pool set and the
+  final is built. Go back to pools first.*). Back to pools, change it, Advance again — every stored decision stays
+  reversible, staff keep the final say.
+- **Back to pools** is refused in words (`final_played`, naming the count and the first set) once a final set has a
+  result; reset those sets first. *(Review fix 2.)* A set settled by a withdrawal — `forfeit` `dq` / `drop` and its
+  loser still withdrawn (`pools.forfeited_out`) — is NOT a result: it carries no player's word, and a reset would only
+  forfeit it again. So a DQ'd advancer no longer pins the final: Back to pools, Advance again, and the next one up goes
+  through. A forfeit the organiser gave (`to`), or one whose loser was put back, still counts. It deletes the final's sets (their cards say *cleared*), the pools stand as played.
+- **A DQ or drop in pools** forfeits that entrant's open pool sets now and every pool set they reach later (A7's
+  withdrawal, inside the pool), and the cut skips them. After Advance a DQ forfeits their final sets only.
+- **A check-in no-show** is taken out before the start, so Start builds the pools from who is left — the same as the
+  single bracket (A8); nothing new.
+
+### P4. The columns (schema 90 → 91)
+
+`tournaments` gains `pools_format` (TEXT, `none` | `round_robin` | `swiss`, default `none`), `pool_count` (2),
+`advance_per_pool` (2), `advance_losers_from` (nullable), `pools_swiss_rounds` (nullable), `pools_best_of` (3).
+`tournament_sets` gains `phase` (`pools` | `final`, NULL for a one-bracket tournament's sets) and `pool` (the pool's
+number, NULL in the final) — both `Match` fields, so every save carries them. The live database is at 90 with these
+tables, so they are `ADDED_COLUMNS` (and in the `CREATE TABLE` for a fresh file):
+`tests/storage/test_db.py::test_a_schema_90_file_gains_the_pool_columns_and_loses_nothing`. No entrant column: pool
+membership is read off the pool sets, the final's entrants off the final's seats.
+
+Defaults are registry keys (configurable both ways — the Settings page and `/settings set-value`):
+`brackets_pools_format_default` (none), `brackets_pool_count_default` (2, 1–16), `brackets_advance_per_pool_default`
+(2, 1–16), `brackets_advance_losers_from_default` (blank, 2–16), `brackets_pools_swiss_rounds_default` (blank, 1–20),
+`brackets_pools_best_of_default` (3). `create` / `edit` take the six columns by name; a plan the field cannot fill is
+refused at Start in words: `too_few_for_pools` (under 2 per pool), `advance_too_many` (more than the smallest pool, or
+fewer than 2 in all), `bad_losers_from` (outside 2 … advance), `too_many_pool_rounds` (Swiss rounds past the smallest
+pool − 1), `pools_need_elimination` (on create and edit too — pools feed single or double elimination only).
+*(Review fix 10.)* `advance_losers_from` is stored only for a double elimination final: on a single — created as one,
+or edited into one — it is stored blank, and when the organiser gave a value (or one was stored) the reply says so:
+*Saved **X**. Losers-side entry is only for a double elimination final, so it is blank.* (`TO_WORDS`
+`created_losers_blank` / `edited_losers_blank`, `brackets_moves.losers_blanked`). One rule: never refused, never kept.
+
+### P5. The moves and routes
+
+| Route | Move | Who |
+|---|---|---|
+| `POST /api/brackets/{id}/advance` `{order?: [eid…]}` | `brackets_moves.advance` — the final built; the order settles a tie on the line | TO |
+| `POST /api/brackets/{id}/unadvance` | `brackets_moves.unadvance` — Back to pools | TO |
+
+Both in `contract.json` (seeds `bracket_pooled_id` / `bracket_final_id` on both halves). *(Review fix 9.)* Each entry
+carries `then` — the inverse move (Back to pools after Advance on `bracket_pooled_id`, Advance after Back to pools on
+`bracket_final_id`), sent after the check and required to answer 200 on both halves — so each route keeps its own seed
+and finds it as seeded every time (`tests/api/test_contract.py::test_a_single_use_seed_is_put_back_so_its_route_answers_twice`). Every set move goes through
+the `pools` dispatch (`pools.call` / `report` / … / `withdraw`), which is `play` itself when there is no plan. `GET
+/api/brackets/{id}` adds `phase` (`pools` | `final` | null), `pools_finished`, and `pools[]` — each `{pool, letter,
+entrants, sets, standings, finished, cut, advancing, tied, rounds_to_play}` (*review fixes 3 and 4:* each standings
+row carries `withdrawn`; `tied` is reported only once the pool is finished — a mid-pool tie is provisional); `sets` is the FINAL's sets only (as
+today for a one-bracket tournament), each set row gains `phase` and `pool`; `standings` is the whole tournament's
+places once the final exists. `GET /api/brackets` adds `pools_format` per row, the six pool `defaults` and the page
+words. Log kinds: `brackets.advanced` (ROUTINE; `entrants`, `order`) and `brackets.unadvanced` (IMPORTANT; `cleared`),
+each with its `web.` twin.
+
+### P6. Discord
+
+- A pool set card's round reads `brackets_round_pool` — *Pool B · round 2* (title `B.R2-1 · Pool B · round 2`); its
+  custom id carries the dotted key (`brackets:7:B.R2-1:report`; `KEY_PATTERN` takes an optional `X.` prefix).
+- The starter card's state line reads *In pools* (`brackets_state_pools`); its format line adds `brackets_card_pools_words`
+  (*4 pools of Round robin, top 2 through*) and, for a double with losers-side entry, `brackets_card_losers_words`
+  (*place 2 and below start in losers*); while in pools it carries one `brackets_card_pool_line` per pool — *Pool A ·
+  Ada, Bea*, the current top N ~~of the table~~ *(review fix 3)* of those still in (`pools.leaders`): a DQ'd leader is
+  never listed.
+- The panel: in `pools` — Call ready sets (when one is ready), **Advance to the final** (only when every pool is final,
+  asks first), Back to seeding, Cancel; in `running` with pools — Call ready sets, Complete, **Back to pools** (only
+  while no final set has a result, asks first), Back to seeding, Cancel. A tie on the line is refused in words (the
+  Discord panel has no order picker — the site has; §H).
+- Advance's `Outcome.changed` carries the final's keys, so the follow posts the final's cards; Advance and Back to pools
+  re-render every card (`EVERY_CARD`), so the pool cards go quiet once the final is built (no buttons —
+  `cards.set_moves(pool=)`) and wake again on Back to pools; the removed final cards read *cleared*.
+
+### P7. The page
+
+- **Pools** section (full width, the count of pools): one block per pool — its name (`brackets_pool_title`), a round
+  robin's results grid or a Swiss pool's round columns, then its table: place, name, games in the note, sets W–L, the
+  ones through in weight, a dashed **cut line** under the last one through, a tie across the line marked *tied*.
+  *(Review fix 3.)* ~~Through is the first `cut` rows~~ — through is `pool.advancing` (mid-pool the leaders still in,
+  even across a provisional tie; once finished the cut; after Advance only those in the final, so a DQ'd advancer is
+  not replaced on the page), except on a finished pool with a tie, where the first `cut` rows not `withdrawn` in the
+  order shown go through; the line falls under the last one through. *(Review fix 4.)* *tied* and ↑ show only
+  on a finished pool. *(Review fix 8.)* *tied* and ↑'s label are the keys `brackets_pool_tied` /
+  `brackets_pool_raise_label`.
+  An organiser orders a tie with **↑** on the tied rows (40 px on a phone); Advance sends every tied pool's shown order,
+  so what the organiser sees going through is what goes through.
+- **Final** section under it (the existing tree, unchanged); Standings once complete (the whole tournament's places).
+- Head: *In pools* pill, the pools option words in the meta, *your line* for a pool set too; organiser moves Advance to
+  the final / Back to pools, both asking first; members get Drop out in pools.
+- New tournament / Edit drawer: **Pools** (None / Round robin / Swiss) when the format is single or double; when one is
+  chosen, *How many pools*, *Through from each*, *Pool best of*, and *Losers from place* (double only) and *Pool Swiss
+  rounds* (Swiss only).
+- Pure helpers in `bracket-layout.js` (`allSets`, `poolLetter`, `poolTable`, `tieOrder`, `reorderedRows`,
+  `finalUntouched`, and the pools rows of `memberMoves` / `organiserMoves` / `setMoves`), pinned in
+  `site/mock/brackets.test.mjs`. The mock plays pools: seeds **15** *Pool Party* (16 players, 4 round-robin pools, 2nds to
+  losers, mid-pools with a reported set), **16** *Pools to Top 4* (8 players, Swiss pools, advanced, W1-1 played),
+  **17** / **18** the contract fixtures (pools finished; a final built and unplayed).
+
+### P8. Decisions beyond the brief
+
+83. **One flat bracket, cut into parts** — the tournament keeps one sets table and one key space; `pools.pool_parts` /
+    `final_part` hand `play`, `roundrobin`, `swiss` and `standings` plain brackets, so none of them changed. The
+    callers switched from `play.*` to the `pools.*` dispatch, which is `play` when there is no plan.
+84. **No same-pool rematch in the final's first round** (`apart`) — start.gg's "avoid previous matchups" in its plainest
+    form: a swap only within one pool place, only when it lowers the clash count. The brief asked for the standard
+    seeding; 12 in 3 pools would otherwise open with C1 v C2.
+85. **Losers-side entrants start in losers round 1 of a double elimination whose winners round 1 is gone**; the winners
+    side's first round is therefore *Winners round 2* on the cards (keys keep the engine's numbering, so the drop
+    pattern of A3 holds unchanged). The page drops the empty column.
+86. **Places in that bracket count who is left** (`placed_by_alive`) rather than the structural formula, which assumed a
+    full winners round 1 (6 advancers would have placed a 7th).
+87. **A withdrawn non-advancer is placed after every finisher**, whatever their pool place; a DQ'd pool winner is not
+    placed above the 3rds who played their pools out.
+88. **The pool tie order rides on Advance** (`{order}`, written to `final_rank`), not a separate move — it is what
+    `complete` already does for a table tie; the page always sends the shown order of a tied pool.
+89. **`advancing` is provisional while a pool plays** (the current top N), final once the pool is; the page draws the cut
+    line from it either way. *(Review fix 4.)* `tied` is not provisional: it stays empty until the pool is finished.
+90. **Pool columns sit on the tournament row, not a phases table** — one pools phase and one final is all the owner
+    asked for; start.gg's arbitrary phase chains are §H.
+91. **A pools default the format cannot take is dropped, not refused**: creating a round robin or Swiss while
+    `brackets_pools_format_default` is set makes it with `pools_format = none`; asking for pools on one explicitly is
+    refused (`pools_need_elimination`).
+92. **Back to pools needs every final set unplayed** (no reported, disputed or complete set), not just "no result": a
+    pending report is a player's word on a set that would vanish. *(Review fix 2.)* A withdrawal's forfeit is no
+    player's word, so it does not count.
+93. **The mock's losers-side places stay structural** (only full fields — its seeds — place like the engine); the mock is
+    the stand-in, `pools.py` is the truth. *(Review fix 6.)* The mock's pool table orders a tie by the stored
+    `final_rank` once every member of it has one (`poolTableRows`), as `ranked` does — without head to head; its
+    Advance appends the withdrawn after the order as the engine does; it has no `first_apart`.
+94. **Organiser words are `TO_WORDS` / panel constants; the ~~seven~~ nine player-facing pieces are keys** (the owner's
+    "bb"): `brackets_state_pools`, `_round_pool`, `_pool_title`, `_card_pools_words`, `_card_losers_words`,
+    `_card_pool_line`, `_waiting_final`, and *(review fix 8)* `brackets_pool_tied`, `brackets_pool_raise_label`. Section titles on the page (*Pools*, *Final*) are constants, as layer 3's are.
+
+**Not built for pools** (each a small follow-up): a tie-order picker on the Discord panel (a tie on the line is refused
+there in words; the site orders it); more than two phases, or pools feeding pools (start.gg's phase chains); pools
+by region or by hand (only the snake split); a "keep previous matchups" option (pools always avoid a same-pool first
+set); moving one pool's entrant to another after the start; ~~a DQ'd advancer's slot refilled from the pool~~ *(review
+fix 2: Back to pools then Advance refills it, by rebuilding the final)*.
 
 ## G. Decisions beyond the brief
 
@@ -762,7 +999,7 @@ suffix; written once per tournament, card and reason a run); `would_dm`, `would_
 
 ## H. What is NOT built (and is not in L2/L3 either unless the owner asks)
 
-Pools into a bracket (phases, progressions), teams and crews, stations and streams, entry fees and payouts, series
+~~Pools into a bracket (phases, progressions),~~ *(built — §P)* teams and crews, stations and streams, entry fees and payouts, series
 or circuit points, ladders and matchmaking, the start.gg mirror (only the `source` column exists), DE's optional
 5th-place set, per-game reporting (characters, stages), the DQ timer (auto-DQ when a player does not check in to a
 called set), conflicts and waves, printing.
@@ -807,6 +1044,30 @@ failing" = run against the code before the fix and watched fail).
 by playing it out, they are still 9 — the one W1 loser meets a bye in L1 and is first eliminated in L2. So W2 and L2
 playing Bo3 under "top 8" was correct, and L3/W3 on Bo5 is what the old and the new rule both give. The pin asserts
 that, and the property test (`…_is_who_is_still_unplaced…`) is what catches the real defect, 2(b), at every size.
+
+## Review fixes (pools) 2026-10-07
+
+An independent review of branch `brackets-pools` (after `main`'s v212 was merged in: the format dropdown and the
+per-format Create form in `brackets_panel.py`, the add-entrant row CSS) found no blocker; 404 random play-outs held every
+invariant. Each finding was reproduced first; every pin below failed on the code before its fix unless it says so.
+
+| # | Finding | What changed | Pinned by |
+|---|---|---|---|
+| 1 | A DQ'd player inside a cut-line tie made Advance unreachable from the page: `cut` leaves the withdrawn out of `tied`, `ranked` needs the order to name the whole group, so the page's order of the rest was refused again | `pools.advance` extends the TO's order with every withdrawn entrant it did not name, after it (`told_with_withdrawn`), and the move stores the extended order | `tests/brackets/test_pools.py::test_a_withdrawn_player_inside_the_cut_line_tie_does_not_block_the_order_given`; `tests/test_brackets_moves.py::test_the_pages_order_of_a_tie_goes_through_when_a_tied_player_was_dqd` |
+| 2 | A DQ'd advancer made Back to pools refuse with words that could not be followed (a reset re-forfeits) | a set settled by a withdrawal whose loser is still withdrawn is not "played" (`pools.forfeited_out`); a real result, a TO's forfeit and the forfeit of someone put back still block; the page's `finalUntouched` and the mock's `finalPlayed` agree | `test_pools.py::test_back_to_pools_passes_a_forfeit_of_a_withdrawn_player_and_stops_at_a_real_result`; `test_brackets_moves.py::test_back_to_pools_takes_a_final_whose_only_results_are_a_dqs_forfeits` (passes on the old move — the engine is what changed); `site/mock/brackets.test.mjs` *a final whose only result is a DQ forfeit* and two more |
+| 3 | The page drew *through* and the cut line by row position, and the starter card's pool line listed a DQ'd leader | standings rows carry `withdrawn`; `poolTable` takes *through* from `pool.advancing` (a finished tie excepted) and puts the line under the last one through; `brackets_cards.pool_lines` lists `pools.leaders` (top N still in) | `tests/test_brackets_view.py::test_a_dqd_pool_leader_is_marked_and_not_through`, `::test_once_the_final_is_built_a_dqd_advancer_is_not_replaced_on_the_page`; `tests/test_brackets_cards.py::test_the_starter_cards_pool_line_never_lists_a_withdrawn_leader`; `brackets.test.mjs` *a disqualified leader is not through*, *the line falls under the last one through*, *an empty advancing means nobody is drawn through* |
+| 4 | Provisional ties mid-pool showed *tied* and ↑ on every tied row | `brackets_view.pool_rows` reports `tied` only for a finished pool (and `advancing` is the leaders still in across a provisional tie); the page marks and offers ↑ only on a finished pool | `test_brackets_view.py::test_a_pool_still_playing_reports_no_tie`; `brackets.test.mjs` *a tie while the pool still plays is not marked* |
+| 5 (nit) | `apart` cleared only the entry round: a losers-side entrant on a losers round 1 bye met their own pool's player in losers round 2 | `pools.first_apart` swaps losers-side entrants within their pool place so their first PLAYED set's possible opponents are from other pools where a swap allows; measured 76 of 140 → 0 of 140 (§P2 step 3) | `test_pools.py::test_a_losers_side_entrant_on_a_bye_does_not_meet_their_own_pool_in_their_first_set` (4 same-pool pairings before, 0 after) |
+| 6 (nit) | The mock's pool table ignored `final_rank` after Advance | `brackets.mjs` `poolTableRows` orders a tie by the stored rank once every member has one; the mock's Advance appends the withdrawn after the order as the engine does; §P2's "the mock agrees" narrowed to the worked examples | `brackets.test.mjs` *the stored order splits the tie as the engine does* (the function is new) |
+| 7 (nit) | §P1 did not say where an uneven split's extra players go | §P1: the first pools on a forward last pass, the last pools on a backward one (measured), and the cut is bounded by the smallest pool | doc only |
+| 8 (nit) | *tied* and *Move up* were page constants read by members | keys `brackets_pool_tied`, `brackets_pool_raise_label` (registry, mock row, label, index words) — **1088 → 1090**, core 259 → 261 | `tests/test_settings_store.py` counts; `contract.json` index words, checked by both halves |
+| 9 (nit) | contract seeds 17 / 18 were single-use and state-dependent | each entry carries `then`, the inverse move, sent after the check on both halves and required to answer 200 | `tests/api/test_contract.py::test_a_single_use_seed_is_put_back_so_its_route_answers_twice` (new mechanism — nothing to fail before) |
+| 10 (nit) | Single elimination took an out-of-range `advance_losers_from` silently | stored blank whenever the final is not double; the create / edit reply says so when a value was given or stored (`created_losers_blank`, `edited_losers_blank`) | `test_brackets_moves.py::test_losers_side_entry_is_stored_blank_for_a_single_final_and_the_reply_says_so`; mock mirrored |
+
+Deltas: registry keys **1088 → 1090** (core 259 → 261); routes stay **347**; schema stays **91**; no new log kind.
+Found while checking in the browser (not a review finding): an empty `advancing` after Advance (a DQ'd advancer)
+fell back to row position and drew the next one up as through; the page now treats `advancing` as the answer whenever
+the pool has no finished tie.
 
 ## Review fixes (layer 3) 2026-10-07
 
@@ -863,6 +1124,48 @@ watched fail).
 `BRACKETS_KEYS`, `labels.js`); routes +1 (`POST /api/brackets/{id}/move`, real and mock; not in `contract.json`,
 decision 55); log kinds +2 (`brackets.thread_moved`, `web.brackets.thread_moved`, IMPORTANT); `would_dm`/`dm_failed`
 gained `text`, `reason` (and `why`); `thread_failed` can carry `error`.
+
+## Gate — pools review fixes (2026-10-07, branch `brackets-pools`, code at `15a28f36`, `main` merged in at `774a4281`)
+
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **12637 passed, 1 skipped** (12623 after the main merge, before
+  the fixes).
+- `python -m ruff check .`: all checks passed.
+- `MOCK_PORT=8822 node site/mock/check.mjs` against the branch's own mock: *ok - 26 pages, 347 routes, 261 core settings,
+  all keys present*.
+- Every `site/mock/*.test.mjs` (14): exit 0.
+- `scripts/ci-local.ps1`: **CI MIRROR GREEN: 16 step(s) passed in 155s**.
+- Browser: headless Chrome over CDP with device emulation, the mock on 8822, a fresh load per look. #17 with A1 DQ'd:
+  A1 not through, A2 through, B1 through with the cut line under it, at 1280 (scrollWidth 1280) and 375 (375). #15
+  mid-pools at 1280 and 375: no row marked *tied*, no ↑, the top two of each pool drawn through (the old code marked the
+  provisional ties). A 6-player single with two round-robin pools, advance 1, a three-way cycle in A: *tied* on the three
+  rows and two ↑ titled *Move up* (from the key; 32 px at 1280, 40 px at 375); after a DQ of one of them the DQ'd row
+  loses *tied*, Advance to the final pressed in the page → asks → *running*, A's winner the first of the order shown.
+  #18 with a final-set advancer DQ'd: the DQ'd one and the pool's next both drawn not through, **Back to pools**
+  offered and answering 200. No console errors or exceptions.
+
+## Gate — pools into a bracket (2026-10-07, branch `brackets-pools`)
+
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **12614 passed, 1 skipped** (main at `3a18e678`: 12556). New:
+  `tests/brackets/test_pools.py` (23), pools tests in `test_brackets_moves.py`, `_sets`, `_people`, `_view`, `_cards`,
+  `_panel`, `tests/api/tools/test_brackets.py`, `tests/storage/test_db.py` (the 90-file migration); counts moved in
+  `test_settings_store` (keys 1075 → 1088, core 246 → 259), `test_logkinds`, the schema asserts.
+- `python -m ruff check .`: all checks passed.
+- `MOCK_PORT=8819 node site/mock/check.mjs` against the branch's own mock: *ok - 26 pages, 347 routes, 259 core settings,
+  all keys present*.
+- Every `site/mock/*.test.mjs` (14): exit 0 (`brackets.test.mjs` adds the pools cases and the mock's worked examples).
+- `scripts/ci-local.ps1`: **CI MIRROR GREEN: 16 step(s) passed in 186s**.
+- Browser: headless Chrome over CDP with device emulation, the mock on 8819. At 1280: #15 *Pool Party* draws four pool
+  grids side by side in two rows (460 px each), each table with the cut line under 2nd, scrollWidth = 1280; #16 *Pools to
+  Top 4* draws two Swiss pools (round columns scroll inside each pool) and the Final tree. At 375: both pages
+  scrollWidth 375 (no sideways scroll), pools one per row (309 px); no bracket control under 40 px (the only sub-40 px
+  controls measured are the shared Settings panel's mode and reset buttons, not this change). Flows pressed in the
+  page: #17 Advance to the final → asks → *running* with W1-1 drawn → Back to pools → asks → *in pools*; #18 Back to
+  pools; #15 a pool cell opens *A.R3-1 · Pool A · round 3* with Report / Call / Decide / forfeits, a 2–0 report lands
+  and *your line* reads *Waiting on Remy to confirm A.R3-1*; a 6-player tie made through the API (a three-way cycle in
+  pool A, advance 1) is refused *Pool A is tied across the top 1: T1, T4, T5*, the page marks the three rows *tied*
+  with two 40×40 ↑ buttons, ↑ reorders them, Advance builds the final; the New tournament drawer shows the pool fields
+  only when a pools format is chosen (losers-from for double only, Swiss rounds for Swiss only) and creates a double
+  with Swiss pools ×3. No console errors or exceptions in any run.
 
 ## Gate — layer 3 review fixes (2026-10-07, branch `brackets-site`, code at `ac950d33`)
 
@@ -932,6 +1235,30 @@ site/mock/check.mjs`: *ok - 25 pages, 344 routes, 171 core settings, all keys pr
 - Every `site/mock/*.test.mjs` (13): exit 0.
 
 ## What was NOT verified
+
+**Pools review fixes:**
+
+- The browser pass ran against the mock only; the engine's side of fixes 1 and 2 is pinned in Python, not seen on a
+  page backed by the real API.
+- Fix 5's 0-of-140 is one plan (16 in 4 pools, top 3, 3rds to losers) over 35 random play-outs, plus 194 random
+  play-outs across plans that only checked the final finishes and places everyone; other shapes were not measured for
+  same-pool first sets. The winners side after a winners bye is not covered.
+- The mock has no `first_apart`: a mock seed with losers-side byes would seat differently from the engine.
+- The Discord side of fixes 3 and 10 (the starter card's pool line, the create / edit replies) ran against the fakes only;
+  the panel's Create form from `main` was not pressed with pool fields (it has none — pools are set on the page).
+- The `/settings` and Settings pages were not opened to look at the two new keys.
+
+**Pools into a bracket:**
+
+- Nothing met the real Discord: the pool set cards, the starter card's pool lines, Advance from the panel and the cards
+  going quiet are exercised against the fakes in `tests/test_brackets_thread.py` / `test_brackets_panel.py` only.
+- The schema 91 migration ran on fixtures (a fresh file and a 90 file with a tournament and a set), not on the live
+  database (which is at 90 with v211's brackets in shadow).
+- start.gg's own progression seeding, its "avoid previous matchups" algorithm and its losers-side entry layout are not
+  confirmed from a source; the engine's are derived and pinned by the hand-worked cases in §P2.
+- The Discord panel offers no tie order (§P, not built); a tie on the line can only be ordered from the site or the API.
+- Phone checks are Chrome's device emulation (no Safari, no real touch); the ↑ buttons were pressed by `click()`.
+- The `/settings` and Settings pages were not opened to look at the 13 new keys.
 
 **Layer 3 review fixes:**
 
