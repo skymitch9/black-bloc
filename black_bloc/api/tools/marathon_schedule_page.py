@@ -19,7 +19,7 @@ from ...cogs.content.marathon import (
     mode_of,
     runs_of,
 )
-from ...cogs.content.marathon_announce import announces
+from ...cogs.content.marathon_announce import policy_of
 from ...cogs.content.marathon_archive import archived_marathon, archived_runs
 from ...cogs.content.marathon_baf_event import reading_for, speaks_for
 from ...cogs.content.marathon_host_highlights import reminder_marks, role_for, speaking
@@ -128,7 +128,7 @@ def posting_of(bot: Any, guild: Any, row: Any, runs: Any) -> dict[str, Any]:
         "reminds_hosts": following
         and host_posts_wanted(bot, guild, row)
         and public_reminders_wanted(bot, guild.id)
-        and announces(bot, guild.id, row)
+        and policy_of(bot, guild.id, row).hosts_on
         and reminder_channel(bot, guild.id) is not None,
         "run_role": run_role,
         "block_role": block_role,

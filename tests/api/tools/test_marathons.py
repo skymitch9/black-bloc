@@ -760,7 +760,7 @@ async def test_patch_the_announcements_switch_and_the_retired_host_switches_answ
     assert bad.status_code == 422 and bad.json()["error"] == "bad_switch"
     body = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "off"}).json()
     assert body["announcements"] == {"own": False, "on": False, "default": True}
-    assert "announces nobody publicly" in body["message"]
+    assert "no longer announces its BaF runners publicly" in body["message"]
     said = await web_row(wf, web, "web.marathon.announcements_set")
     assert (said["to"], said["on"], said["via"]) == (False, False, "website")
     body = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "follow"}).json()
@@ -1127,7 +1127,8 @@ async def test_a_runs_own_answer_is_shown_on_the_run_and_moved_from_the_site(
         False,
         "hosts_off",
     )
-    assert shown["move"] == "in" and shown["move_label"] == "Announce Interview Crew for this run"
+    assert shown["move"] == "out"
+    assert shown["move_label"] == "Do not announce Interview Crew for this run"
     assert shown["said"].startswith("Interview Crew: not announced for this run — host")
     path = f"/api/marathons/{marathon_id}/runs/{run_id}/people/77/announce"
 
@@ -1138,10 +1139,13 @@ async def test_a_runs_own_answer_is_shown_on_the_run_and_moved_from_the_site(
     _, shown = crew()
     assert (shown["answer"], shown["announced"], shown["why"], shown["move"]) == (
         "in",
-        True,
-        "run",
+        False,
+        "hosts_off",
         "default",
     )
+    client.patch(f"/api/marathons/{marathon_id}", json={"host_announcements": "on"})
+    _, shown = crew()
+    assert (shown["answer"], shown["announced"], shown["why"]) == ("in", True, "run")
     said = await web_row(wf, web, "web.marathon.announce_run_set")
     assert (said["member"], said["from"], said["to"], said["via"]) == (
         77,

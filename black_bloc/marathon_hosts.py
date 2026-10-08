@@ -18,7 +18,7 @@ FOLLOWS = ("", "follow", "default", "setting", "null", "none")
 BAD_SWITCH = "Say on, off or follow for **{what}**, so nothing was changed."
 BAD_SWITCH_CODE = "bad_switch"
 WHAT = {
-    ANNOUNCE: "BaF announcements",
+    ANNOUNCE: "Runner announcements",
     HOST_ANNOUNCE: "Host announcements",
     OVERLAY: "Event schedule",
 }

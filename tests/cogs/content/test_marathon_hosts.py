@@ -122,7 +122,7 @@ async def test_a_switch_word_that_is_not_one_is_refused_in_words(bot, cog):  # n
     marathon = await hidden_heroes(bot)
     outcome = await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, "maybe")
     assert not outcome.ok and outcome.message == (
-        "Say on, off or follow for **BaF announcements**, so nothing was changed."
+        "Say on, off or follow for **Runner announcements**, so nothing was changed."
     )
 
 

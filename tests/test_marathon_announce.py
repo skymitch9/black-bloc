@@ -81,71 +81,73 @@ STATE_WORDS = {
     ma.WHY_DEFAULT: "the default",
     ma.WHY_RUN: "set for this run",
     ma.WHY_MARATHON: "opted out of the marathon",
-    ma.WHY_OFF: "the marathon is off",
+    ma.WHY_RUNNERS_OFF: "runners are off",
     ma.WHY_HOSTS_OFF: "hosts are off",
 }
 
-# master, opted out of the marathon, the run's answer, the part, Host announcements -> (yes, why)
+# the part, Runner announcements, Host announcements, opted out, the run's answer -> (yes, why)
 TRUTH = [
-    (False, False, None, ma.RUNNER, False, (False, ma.WHY_OFF)),
-    (False, False, None, ma.RUNNER, True, (False, ma.WHY_OFF)),
-    (False, False, ma.IN, ma.RUNNER, False, (False, ma.WHY_OFF)),
-    (False, False, ma.IN, ma.RUNNER, True, (False, ma.WHY_OFF)),
-    (False, False, ma.OUT, ma.RUNNER, False, (False, ma.WHY_OFF)),
-    (False, False, ma.OUT, ma.RUNNER, True, (False, ma.WHY_OFF)),
-    (False, True, None, ma.RUNNER, False, (False, ma.WHY_OFF)),
-    (False, True, None, ma.RUNNER, True, (False, ma.WHY_OFF)),
-    (False, True, ma.IN, ma.RUNNER, False, (False, ma.WHY_OFF)),
-    (False, True, ma.IN, ma.RUNNER, True, (False, ma.WHY_OFF)),
-    (False, True, ma.OUT, ma.RUNNER, False, (False, ma.WHY_OFF)),
-    (False, True, ma.OUT, ma.RUNNER, True, (False, ma.WHY_OFF)),
-    (False, False, None, ma.HOST, False, (False, ma.WHY_OFF)),
-    (False, False, None, ma.HOST, True, (False, ma.WHY_OFF)),
-    (False, False, ma.IN, ma.HOST, False, (False, ma.WHY_OFF)),
-    (False, False, ma.IN, ma.HOST, True, (False, ma.WHY_OFF)),
-    (False, False, ma.OUT, ma.HOST, False, (False, ma.WHY_OFF)),
-    (False, False, ma.OUT, ma.HOST, True, (False, ma.WHY_OFF)),
-    (False, True, None, ma.HOST, False, (False, ma.WHY_OFF)),
-    (False, True, None, ma.HOST, True, (False, ma.WHY_OFF)),
-    (False, True, ma.IN, ma.HOST, False, (False, ma.WHY_OFF)),
-    (False, True, ma.IN, ma.HOST, True, (False, ma.WHY_OFF)),
-    (False, True, ma.OUT, ma.HOST, False, (False, ma.WHY_OFF)),
-    (False, True, ma.OUT, ma.HOST, True, (False, ma.WHY_OFF)),
-    (True, False, None, ma.RUNNER, False, (True, ma.WHY_DEFAULT)),
-    (True, False, None, ma.RUNNER, True, (True, ma.WHY_DEFAULT)),
-    (True, False, ma.IN, ma.RUNNER, False, (True, ma.WHY_RUN)),
-    (True, False, ma.IN, ma.RUNNER, True, (True, ma.WHY_RUN)),
-    (True, False, ma.OUT, ma.RUNNER, False, (False, ma.WHY_RUN)),
-    (True, False, ma.OUT, ma.RUNNER, True, (False, ma.WHY_RUN)),
-    (True, True, None, ma.RUNNER, False, (False, ma.WHY_MARATHON)),
-    (True, True, None, ma.RUNNER, True, (False, ma.WHY_MARATHON)),
-    (True, True, ma.IN, ma.RUNNER, False, (True, ma.WHY_RUN)),
-    (True, True, ma.IN, ma.RUNNER, True, (True, ma.WHY_RUN)),
-    (True, True, ma.OUT, ma.RUNNER, False, (False, ma.WHY_MARATHON)),
-    (True, True, ma.OUT, ma.RUNNER, True, (False, ma.WHY_MARATHON)),
-    (True, False, None, ma.HOST, False, (False, ma.WHY_HOSTS_OFF)),
-    (True, False, None, ma.HOST, True, (True, ma.WHY_DEFAULT)),
-    (True, False, ma.IN, ma.HOST, False, (True, ma.WHY_RUN)),
-    (True, False, ma.IN, ma.HOST, True, (True, ma.WHY_RUN)),
-    (True, False, ma.OUT, ma.HOST, False, (False, ma.WHY_RUN)),
-    (True, False, ma.OUT, ma.HOST, True, (False, ma.WHY_RUN)),
-    (True, True, None, ma.HOST, False, (False, ma.WHY_MARATHON)),
-    (True, True, None, ma.HOST, True, (False, ma.WHY_MARATHON)),
-    (True, True, ma.IN, ma.HOST, False, (True, ma.WHY_RUN)),
-    (True, True, ma.IN, ma.HOST, True, (True, ma.WHY_RUN)),
-    (True, True, ma.OUT, ma.HOST, False, (False, ma.WHY_MARATHON)),
-    (True, True, ma.OUT, ma.HOST, True, (False, ma.WHY_MARATHON)),
+    (ma.RUNNER, False, False, False, None, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, False, False, ma.IN, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, False, False, ma.OUT, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, False, True, None, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, False, True, ma.IN, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, False, True, ma.OUT, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, True, False, None, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, True, False, ma.IN, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, True, False, ma.OUT, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, True, True, None, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, True, True, ma.IN, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, False, True, True, ma.OUT, (False, ma.WHY_RUNNERS_OFF)),
+    (ma.RUNNER, True, False, False, None, (True, ma.WHY_DEFAULT)),
+    (ma.RUNNER, True, False, False, ma.IN, (True, ma.WHY_RUN)),
+    (ma.RUNNER, True, False, False, ma.OUT, (False, ma.WHY_RUN)),
+    (ma.RUNNER, True, False, True, None, (False, ma.WHY_MARATHON)),
+    (ma.RUNNER, True, False, True, ma.IN, (True, ma.WHY_RUN)),
+    (ma.RUNNER, True, False, True, ma.OUT, (False, ma.WHY_MARATHON)),
+    (ma.RUNNER, True, True, False, None, (True, ma.WHY_DEFAULT)),
+    (ma.RUNNER, True, True, False, ma.IN, (True, ma.WHY_RUN)),
+    (ma.RUNNER, True, True, False, ma.OUT, (False, ma.WHY_RUN)),
+    (ma.RUNNER, True, True, True, None, (False, ma.WHY_MARATHON)),
+    (ma.RUNNER, True, True, True, ma.IN, (True, ma.WHY_RUN)),
+    (ma.RUNNER, True, True, True, ma.OUT, (False, ma.WHY_MARATHON)),
+    (ma.HOST, False, False, False, None, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, False, False, False, ma.IN, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, False, False, False, ma.OUT, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, False, False, True, None, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, False, False, True, ma.IN, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, False, False, True, ma.OUT, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, False, True, False, None, (True, ma.WHY_DEFAULT)),
+    (ma.HOST, False, True, False, ma.IN, (True, ma.WHY_RUN)),
+    (ma.HOST, False, True, False, ma.OUT, (False, ma.WHY_RUN)),
+    (ma.HOST, False, True, True, None, (False, ma.WHY_MARATHON)),
+    (ma.HOST, False, True, True, ma.IN, (True, ma.WHY_RUN)),
+    (ma.HOST, False, True, True, ma.OUT, (False, ma.WHY_MARATHON)),
+    (ma.HOST, True, False, False, None, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, True, False, False, ma.IN, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, True, False, False, ma.OUT, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, True, False, True, None, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, True, False, True, ma.IN, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, True, False, True, ma.OUT, (False, ma.WHY_HOSTS_OFF)),
+    (ma.HOST, True, True, False, None, (True, ma.WHY_DEFAULT)),
+    (ma.HOST, True, True, False, ma.IN, (True, ma.WHY_RUN)),
+    (ma.HOST, True, True, False, ma.OUT, (False, ma.WHY_RUN)),
+    (ma.HOST, True, True, True, None, (False, ma.WHY_MARATHON)),
+    (ma.HOST, True, True, True, ma.IN, (True, ma.WHY_RUN)),
+    (ma.HOST, True, True, True, ma.OUT, (False, ma.WHY_MARATHON)),
 ]
 
 
-@pytest.mark.parametrize(("master", "opted", "answer", "role", "hosts_on", "wanted"), TRUTH)
-def test_every_row_of_the_truth_table(master, opted, answer, role, hosts_on, wanted):
-    said = ma.decide(master=master, opted_out=opted, answer=answer, role=role, hosts_on=hosts_on)
+@pytest.mark.parametrize(("role", "runners_on", "hosts_on", "opted", "answer", "wanted"), TRUTH)
+def test_every_row_of_the_truth_table(role, runners_on, hosts_on, opted, answer, wanted):
+    said = ma.decide(
+        runners_on=runners_on, opted_out=opted, answer=answer, role=role, hosts_on=hosts_on
+    )
     assert (said.yes, said.why) == wanted
 
 
 def test_the_truth_table_is_every_combination_once():
-    assert len(TRUTH) == 2 * 2 * 3 * 2 * 2 == len({one[:5] for one in TRUTH})
+    assert len(TRUTH) == 2 * 2 * 2 * 2 * 3 == len({one[:5] for one in TRUTH})
 
 
 def a_run(ident, people, answers=None, state="upcoming"):
@@ -165,8 +167,9 @@ def test_a_host_is_not_named_by_default_and_a_runner_is():
     row = a_run(1, [SKY, HOSTING])
     assert ids(ma.run_people(row, ma.Policy())) == [9001]
     assert ids(ma.run_people(row, ma.Policy(hosts_on=True))) == [9001, 8101]
-    assert ids(ma.run_people(a_run(1, [SKY, HOSTING], {8101: ma.IN}), ma.Policy())) == [9001, 8101]
-    assert ma.run_people(row, ma.Policy(master=False, hosts_on=True)) == []
+    assert ids(ma.run_people(a_run(1, [SKY, HOSTING], {8101: ma.IN}), ma.Policy())) == [9001]
+    assert ids(ma.run_people(row, ma.Policy(runners_on=False, hosts_on=True))) == [8101]
+    assert ma.run_people(row, ma.Policy(runners_on=False)) == []
 
 
 def test_someone_who_runs_and_hosts_a_run_is_a_runner_for_it():
@@ -194,8 +197,9 @@ def test_a_block_is_announced_when_its_host_is_announced_for_any_run_of_it():
     assert ma.block_people(a_block(four), ma.Policy()) == []
     assert ids(ma.block_people(a_block(four), ma.Policy(hosts_on=True))) == [8101]
     third = [a_run(one, [HOSTING], {8101: ma.IN} if one == 3 else None) for one in (1, 2, 3, 4)]
-    assert ids(ma.block_people(a_block(third), ma.Policy())) == [8101]
-    assert ma.block_people(a_block(third), ma.Policy(master=False)) == []
+    assert ma.block_people(a_block(third), ma.Policy()) == []
+    hosts_only = ma.Policy(runners_on=False, hosts_on=True)
+    assert ids(ma.block_people(a_block(third), hosts_only)) == [8101]
     most = [a_run(one, [HOSTING], {8101: ma.OUT} if one != 2 else None) for one in (1, 2, 3, 4)]
     assert ids(ma.block_people(a_block(most), ma.Policy(hosts_on=True))) == [8101]
     every = [a_run(one, [HOSTING], {8101: ma.OUT}) for one in (1, 2, 3, 4)]
@@ -208,11 +212,16 @@ def test_a_host_who_also_runs_one_run_of_their_block_does_not_announce_the_block
     assert ids(ma.run_people(rows[1], ma.Policy())) == [8101]
 
 
-def test_a_run_s_own_yes_gets_past_the_marathon_wide_opt_out_and_nothing_gets_past_the_master():
+def test_a_run_s_own_yes_gets_past_the_marathon_wide_opt_out_and_never_past_a_switch_that_is_off():
     row = a_run(1, [SKY, RIVET], {9001: ma.IN})
     assert ids(ma.run_people(row, out(9001, 9002))) == [9001]
-    assert ma.run_people(row, out(9001, 9002)._replace(master=False)) == []
-    assert ids(ma.run_people(row, ma.standing(out(9001, 9002)._replace(master=False)))) == [9001]
+    assert ma.run_people(row, out(9001, 9002)._replace(runners_on=False, hosts_on=True)) == []
+    runners_off = out(9001, 9002)._replace(runners_on=False)
+    assert ids(ma.run_people(row, ma.standing(runners_off))) == [9001]
+    hosted = a_run(1, [HOSTING], {8101: ma.IN})
+    assert ma.run_people(hosted, out(8101)) == []
+    assert ids(ma.run_people(hosted, out(8101)._replace(hosts_on=True))) == [8101]
+    assert ids(ma.run_people(hosted, ma.standing(ma.Policy()))) == [8101]
 
 
 def test_the_answers_read_back_and_a_bad_column_reads_as_no_answer():
@@ -266,7 +275,7 @@ def test_each_person_gets_the_one_move_their_state_allows_and_the_one_for_their_
     assert moves_of(row) == [
         (9001, ma.OUT, "Do not announce Sky for this run"),
         (9001, ma.PLAIN, "No @ for Sky"),
-        (8101, ma.IN, "Announce anarchy for this run"),
+        (8101, ma.OUT, "Do not announce anarchy for this run"),
         (8101, ma.PLAIN, "No @ for anarchy"),
     ]
     answered = a_run(3, [SKY, QUIET_HOST], {9001: ma.OUT, 8101: ma.IN})
@@ -278,7 +287,7 @@ def test_each_person_gets_the_one_move_their_state_allows_and_the_one_for_their_
         (8101, ma.PLAIN, "No @ for anarchy"),
     ]
     assert moves_of(row, out(9001))[0] == (9001, ma.IN, "Announce Sky for this run")
-    assert moves_of(row, ma.Policy(master=False))[0][1] == ma.OUT
+    assert moves_of(row, ma.Policy(runners_on=False))[0][1] == ma.OUT
     made = ma.moves(7, row, ma.Policy(), LABELS)
     assert made[0].custom_id == "marathon:announce:7:3:9001:out"
     assert re.fullmatch(ma.MOVE_TEMPLATE, made[0].custom_id)["to"] == "out"
@@ -362,8 +371,10 @@ def test_a_runs_own_answer_where_the_host_runs_is_about_their_run_only():
 
 def test_a_runs_own_answer_where_the_host_only_hosts_is_about_their_block():
     rows = [a_run(1, [HOSTING]), a_run(2, [HOSTING], {8101: ma.IN}), a_run(3, [HOSTING])]
-    assert ids(ma.block_people(a_block(rows), out(8101))) == [8101]
-    assert ids(ma.block_people(a_block(rows), ma.Policy())) == [8101]
+    hosts = ma.Policy(hosts_on=True)
+    assert ids(ma.block_people(a_block(rows), out(8101)._replace(hosts_on=True))) == [8101]
+    assert ids(ma.block_people(a_block(rows), hosts)) == [8101]
+    assert ma.block_people(a_block(rows), ma.Policy()) == []
 
 
 def test_a_post_already_up_keeps_or_loses_names_and_gains_only_who_is_announced():
@@ -374,8 +385,8 @@ def test_a_post_already_up_keeps_or_loses_names_and_gains_only_who_is_announced(
     assert ids(ma.run_standing(row, off, None)) == [9001, 8101]
     assert ids(ma.run_standing(row, off, [])) == [9001]
     assert ids(ma.run_standing(row, ma.Policy(hosts_on=True), [9001])) == [9001, 8101]
-    assert ids(ma.run_standing(row, off._replace(master=False), [9001, 8101])) == [9001, 8101]
-    assert ma.run_standing(row, off._replace(master=False), []) == []
+    assert ids(ma.run_standing(row, off._replace(runners_on=False), [9001, 8101])) == [9001, 8101]
+    assert ma.run_standing(row, off._replace(runners_on=False), []) == []
     assert ids(ma.run_standing(row, off, [9001, 8101], moved=[8101])) == [9001]
     left = a_run(1, [SKY, HOSTING], {9001: ma.OUT})
     assert ids(ma.run_standing(left, off, [9001, 8101])) == [8101]
@@ -412,12 +423,14 @@ def test_the_log_names_the_decision_that_emptied_a_post():
     assert ma.run_because(a_run(1, [SKY], {9001: ma.OUT}), ma.Policy(), named) == "run_answer"
     assert ma.run_because(a_run(1, [HOSTING]), ma.Policy(), named) == "not_on_run"
     assert ma.run_because(row, ma.Policy(), ma.as_named([HOSTING]), [8101]) == "hosts_off"
-    assert ma.run_because(row, ma.Policy(master=False), []) == "marathon_off"
+    assert ma.run_because(row, ma.Policy(runners_on=False), []) == "runners_off"
     rows = [a_run(1, [HOSTING]), a_run(2, [HOSTING], {8101: ma.OUT})]
     host = ma.as_named([HOSTING])
     block = SimpleNamespace(runs=rows, hosts=[dict(HOSTING)])
     assert ma.block_because(block, ma.Policy(), host) == "hosts_off"
-    assert ma.block_because(block, out(8101), host) == "opted_out"
+    assert ma.block_because(block, out(8101), host) == "hosts_off"
+    assert ma.block_because(block, out(8101)._replace(hosts_on=True), host) == "opted_out"
+    assert ma.block_because(block, ma.Policy(runners_on=False, hosts_on=True), []) == "not_on_run"
     every = SimpleNamespace(
         runs=[a_run(one, [HOSTING], {8101: ma.OUT}) for one in (1, 2)], hosts=[dict(HOSTING)]
     )
@@ -445,8 +458,8 @@ def test_the_state_line_says_who_is_announced_and_why():
     assert ma.state_lines(row, ma.Policy(hosts_on=True), STATE_WORDS, only=8101) == [
         "anarchy: announced — the default"
     ]
-    assert ma.state_lines(a_run(3, [SKY]), ma.Policy(master=False), STATE_WORDS) == [
-        "Sky: not announced — the marathon is off"
+    assert ma.state_lines(a_run(3, [SKY]), ma.Policy(runners_on=False), STATE_WORDS) == [
+        "Sky: not announced — runners are off"
     ]
     assert ma.state_lines(a_run(3, [SKY], {9001: ma.IN}), out(9001), STATE_WORDS) == [
         "Sky: announced — set for this run"
@@ -459,9 +472,9 @@ def test_host_announcements_follow_their_own_setting():
     assert ma.announces_hosts({ma.HOSTS: 1}, False) and not ma.announces_hosts({ma.HOSTS: 0}, True)
     found = ma.policy(
         {ma.HOSTS: 1, ma.OPTED: "[9001]", ma.MENTIONS: '{"9002": "plain"}'},
-        master_default=True,
+        runners_default=True,
         hosts_default=False,
         mention_default=True,
     )
-    assert (found.master, found.hosts_on, found.opted) == (True, True, frozenset({9001}))
+    assert (found.runners_on, found.hosts_on, found.opted) == (True, True, frozenset({9001}))
     assert found.plain(9002) and not found.plain(9001)

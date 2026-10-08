@@ -23,7 +23,7 @@ from ...settings_store import (
     MARATHON_ROLE_PINGS_KEY,
 )
 from .marathon import MODE_ON, mode_of, said_default
-from .marathon_announce import announces
+from .marathon_announce import anyone_announced
 
 REASON_KEYS = (
     (mrp.ROLE_PINGS_OFF, MARATHON_ROLE_PINGS_KEY),
@@ -64,7 +64,7 @@ def verdict_for(bot: Any, guild: Any, marathon: Any) -> mrp.Verdict:
     return mrp.decide(
         switch_on=mp.pings_role(marathon),
         off=tuple((reason, bool(bot.store.get(guild.id, key))) for reason, key in REASON_KEYS),
-        announces=announces(bot, guild.id, marathon),
+        announces=anyone_announced(bot, guild.id, marathon),
         rehearsing=mode_of(bot, guild.id) != MODE_ON,
         configured=configured,
         role=role,

@@ -35,7 +35,6 @@ from .marathon import (
     runs_of,
     update_marathon,
 )
-from .marathon_announce import announces
 from .marathon_public import (
     edit_public,
     fetch_public,
@@ -387,11 +386,11 @@ async def sync_host_highlights(cog: Any, guild: Any, marathon: Any) -> None:
 
 async def went_live(cog: Any, guild: Any, marathon: Any, run_id: Any) -> None:
     """A run of a host block goes live: the block's highlight is posted when the marathon's
-    Auto-highlight and BaF announcements are on, once per block."""
+    Auto-highlight is on and a host of it is announced, once per block."""
     bot = cog.bot
     try:
         fresh = await get_marathon(bot.db, guild.id, marathon["id"]) if marathon else None
-        if fresh is None or not wanted(bot, guild, fresh) or not announces(bot, guild.id, fresh):
+        if fresh is None or not wanted(bot, guild, fresh):
             return
         if public_channel(bot, guild.id) is None:
             return
@@ -510,8 +509,6 @@ async def heads_up(
     because = (
         "public_reminders_off"
         if not public_reminders_wanted(bot, guild.id)
-        else "announcements_off"
-        if not announces(bot, guild.id, marathon)
         else quiet_because(bot, guild, marathon, block)
         if not people
         else None
@@ -657,7 +654,7 @@ async def follow_opt(
 ) -> None:
     """After an answer changed a block's post that names nobody any more is taken down, one
     that still names someone is rewritten in place, and one taken down comes back in place
-    while its block is not over and the marathon still announces. Only the hosts the move was
+    while its block is not over and Host announcements is on. Only the hosts the move was
     aimed at are weighed afresh."""
     bot = cog.bot
     wanted_ids = {int(one) for one in user_ids}

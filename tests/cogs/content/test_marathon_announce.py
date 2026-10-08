@@ -164,7 +164,7 @@ async def test_host_announcements_on_for_the_marathon_brings_the_hosts_posts_bac
     assert not bad.ok and "Host announcements" in bad.message
 
 
-async def test_the_master_off_beats_a_runs_own_yes(bot, cog):
+async def test_both_switches_off_is_everyone_off_and_a_runs_own_yes_gets_past_neither(bot, cog):
     marathon = await show(bot, cog, FOUR, auto=True, hosts=False)
     assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
     assert (await answer(bot, marathon, "Alpha", SKY, "in")).ok
@@ -174,11 +174,33 @@ async def test_the_master_off_beats_a_runs_own_yes(bot, cog):
 
     assert heads_ups(bot) == [] and highlights(bot) == []
     assert runner_heads_ups(bot, "Alpha") == [] and runner_highlights(bot, "Alpha") == []
-    assert "announcements_off" in await skipped_because(bot)
+    assert "host_announcements_off" in await skipped_because(bot)
+
+
+async def test_runner_announcements_off_still_announces_hosts_and_host_off_still_runners(bot, cog):
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=True)
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
+    assert (await answer(bot, marathon, "Alpha", SKY, "in")).ok
+
+    await walk(bot, cog, marathon, [45, 61])
+
+    assert [game_of(one) for one in heads_ups(bot)] == ["Alpha"] and len(highlights(bot)) == 1
+    assert runner_heads_ups(bot, "Alpha") == [] and runner_highlights(bot, "Alpha") == []
+
+
+async def test_a_runs_own_yes_for_a_host_never_gets_past_host_announcements_off(bot, cog):
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=False)
+
+    said = await answer(bot, marathon, "Gamma", ANARCHY, "in")
+    await walk(bot, cog, marathon, [45, 61, 130, 146, 165, 181, 215, 231])
+
+    assert said.ok and heads_ups(bot) == [] and highlights(bot) == []
+    assert len(runner_heads_ups(bot, "Alpha")) == 1
 
 
 async def test_a_host_announced_for_one_run_of_a_four_run_block_gets_the_block_once(bot, cog):
-    marathon = await show(bot, cog, FOUR, auto=True, hosts=False)
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=True)
+    await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [ANARCHY], True)
 
     said = await answer(bot, marathon, "Gamma", ANARCHY, "in")
     await walk(bot, cog, marathon, [45, 61, 130, 146, 165, 181, 215, 231])
@@ -288,7 +310,8 @@ async def test_a_highlight_follows_a_runs_answer_in_place_and_is_never_posted_an
 
 
 async def test_a_hosts_highlight_follows_a_runs_answer_in_place(bot, cog):
-    marathon = await show(bot, cog, FOUR, auto=True, hosts=False)
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=True)
+    await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [ANARCHY], True)
     assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
     await walk(bot, cog, marathon, [45, 61])
     (post,) = highlights(bot)
@@ -302,7 +325,9 @@ async def test_a_hosts_highlight_follows_a_runs_answer_in_place(bot, cog):
     assert len(heads_ups(bot)) == 1
 
 
-async def test_a_taken_down_highlight_does_not_come_back_while_the_master_is_off(bot, cog):
+async def test_a_taken_down_highlight_does_not_come_back_while_runner_announcements_are_off(
+    bot, cog
+):
     marathon = await show(bot, cog, FOUR, auto=True, hosts=False)
     await walk(bot, cog, marathon, [45, 61])
     (post,) = runner_highlights(bot, "Alpha")
@@ -454,16 +479,15 @@ async def test_a_runs_post_carries_each_persons_moves_and_says_who_is_announced(
     row = await run_named(bot, marathon, "Alpha")
 
     assert labels_on(post) == [
-        "Opt out of every run on this marathon",
         "Do not announce Sky for this run",
         "No @ for Sky",
-        "Announce anarchy for this run",
+        "Do not announce anarchy for this run",
         "No @ for anarchy",
     ]
-    assert [one.custom_id for one in items_on(post)][1:] == [
+    assert [one.custom_id for one in items_on(post)] == [
         f"marathon:announce:{marathon['id']}:{row['id']}:{SKY}:out",
         f"marathon:announce:{marathon['id']}:{row['id']}:{SKY}:plain",
-        f"marathon:announce:{marathon['id']}:{row['id']}:{ANARCHY}:in",
+        f"marathon:announce:{marathon['id']}:{row['id']}:{ANARCHY}:out",
         f"marathon:announce:{marathon['id']}:{row['id']}:{ANARCHY}:plain",
     ]
     assert post.content.endswith(
@@ -475,7 +499,7 @@ async def test_a_runs_post_carries_each_persons_moves_and_says_who_is_announced(
     assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
     assert (await mention(bot, marathon, SKY, "plain")).ok
 
-    assert labels_on(post)[1:] == [
+    assert labels_on(post) == [
         "Do not announce Sky for this run",
         "@ Sky again",
         "anarchy: back to the default for this run",
@@ -483,30 +507,51 @@ async def test_a_runs_post_carries_each_persons_moves_and_says_who_is_announced(
     ]
     assert post.content.endswith(
         "\nSky: announced for this run — the default · written without an @"
-        "\nanarchy: announced for this run — set for this run"
+        "\nanarchy: not announced for this run — host announcements are off for this marathon"
     )
     assert len(bot.guild.channels[SHOW_ROOM].threads[-1].messages) == count
     assert post.edits[-1]["allowed_mentions"].users is False
-    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.HOST_ANNOUNCE, True)
     await tick_at(bot, cog, marathon, 1)
-    assert "anarchy: not announced for this run — BaF announcements are off" in post.content
+    assert "anarchy: announced for this run — set for this run" in post.content
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
+    await tick_at(bot, cog, marathon, 2)
+    assert "Sky: not announced for this run — runner announcements are off" in post.content
+    assert "anarchy: announced for this run — set for this run" in post.content
 
 
-async def test_the_whole_marathon_opt_out_and_the_runs_own_move_read_differently(bot, cog):
+async def test_a_runs_post_never_carries_the_whole_marathon_opt_out(bot, cog):
     marathon = await show(bot, cog, FOUR, hosts=False)
     post = staff_post(bot, "Alpha")
-    assert labels_on(post)[:2] == [
-        "Opt out of every run on this marathon",
-        "Do not announce Sky for this run",
-    ]
+    assert not any(one.startswith("Opt ") for one in labels_on(post))
+    assert not any(one.custom_id.startswith("marathon:highlight:") for one in items_on(post))
 
     await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [SKY], True)
 
-    assert labels_on(post)[:2] == ["Opt back in to this marathon", "Announce Sky for this run"]
+    assert labels_on(post)[0] == "Announce Sky for this run"
+    assert not any(one.startswith("Opt ") for one in labels_on(post))
     assert (
         "Sky: not announced for this run — opted out of every run on this marathon" in post.content
     )
-    assert len(set(labels_on(post))) == len(labels_on(post))
+
+
+@pytest.mark.parametrize("to", ["optout", "optin", "post", "remove"])
+async def test_the_retired_whole_marathon_button_answers_in_words_and_changes_nothing(
+    bot, cog, to
+):
+    marathon = await show(bot, cog, FOUR, hosts=False)
+    row = await run_named(bot, marathon, "Alpha")
+    custom = f"marathon:highlight:{marathon['id']}:{row['id']}:{to}"
+    button = await public.HighlightButton.from_custom_id(
+        None, None, re.fullmatch(public.mp.TEMPLATE, custom)
+    )
+    lead = FakeInteraction(bot, FakeActor(), bot.guild)
+
+    await button.on_click(lead)
+
+    assert public.WHOLE_MARATHON_GONE in lead.sent
+    assert ma.opted_out(await fresh(bot, marathon)) == set()
+    assert "marathon.announce_opted_out" not in await kinds(bot.db)
 
 
 async def test_a_persons_button_works_after_a_restart_and_refuses_a_stranger_in_words(bot, cog):
@@ -571,8 +616,7 @@ async def test_a_run_with_more_people_than_buttons_fit_carries_one_menu(bot, cog
     post = next(one for one in thread.messages if one.content.startswith("**Runner0"))
     row = await run_named(bot, marathon, "Alpha")
 
-    whole, pick = items_on(post)
-    assert whole.label == "Opt out of every run on this marathon"
+    (pick,) = items_on(post)
     assert isinstance(pick, discord.ui.Select)
     assert pick.custom_id == f"marathon:announce:{marathon['id']}:{row['id']}:pick"
     assert pick.placeholder == "Announcements for a person on this run…"
@@ -581,7 +625,7 @@ async def test_a_run_with_more_people_than_buttons_fit_carries_one_menu(bot, cog
         "9300:out",
         "Do not announce Runner0 for this run",
     )
-    assert len(current_view(post).to_components()) == 2
+    assert len(current_view(post).to_components()) == 1
 
     chosen = await public.AnnouncePick.from_custom_id(
         None, None, re.fullmatch(ma.PICK_TEMPLATE, pick.custom_id)
@@ -591,7 +635,7 @@ async def test_a_run_with_more_people_than_buttons_fit_carries_one_menu(bot, cog
     await chosen.on_click(lead)
     assert "**Runner3** is not announced for **Alpha**" in lead.sent
     assert ma.run_answers(await run_named(bot, marathon, "Alpha")) == {9303: "out"}
-    assert items_on(post)[1].options[6].label == "Runner3: back to the default for this run"
+    assert items_on(post)[0].options[6].label == "Runner3: back to the default for this run"
     chosen.item._values = ["nonsense"]
     lead = FakeInteraction(bot, FakeActor(), bot.guild)
     await chosen.on_click(lead)
@@ -736,9 +780,12 @@ async def test_a_host_who_counts_as_ours_joins_a_post_only_once_announced(bot, c
     (post,) = runner_highlights(bot, "Alpha")
 
     assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
+    assert post.content.startswith("**Sky** runs **Alpha**")
 
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.HOST_ANNOUNCE, True)
+    await tick_at(bot, cog, marathon, 62)
     assert post.content.startswith("**Sky, anarchy** runs **Alpha**")
-    assert (await answer(bot, marathon, "Alpha", ANARCHY, "default")).ok
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "out")).ok
     assert post.content.startswith("**Sky** runs **Alpha**")
 
 
@@ -777,9 +824,9 @@ async def test_a_move_on_one_co_host_leaves_the_other_on_the_post(bot, cog):
     assert post.content.startswith("**anarchy, bee** hosts **Alpha**")
 
     assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
-    assert post.content.startswith("**anarchy, bee** hosts **Alpha**")
-    assert (await answer(bot, marathon, "Alpha", ANARCHY, "default")).ok
 
+    assert post.content.startswith("**bee** hosts **Alpha**")
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "default")).ok
     assert post.content.startswith("**bee** hosts **Alpha**")
     await tick_at(bot, cog, marathon, 63)
     assert post.content.startswith("**bee** hosts **Alpha**")
@@ -914,13 +961,13 @@ async def test_a_runs_own_no_says_so_in_the_log(bot, cog):
     assert await because_of(bot, "marathon.host_highlight_removed") == ["run_answer"]
 
 
-async def test_back_to_the_default_with_hosts_off_says_so_in_the_log(bot, cog):
-    marathon = await show(bot, cog, FOUR, auto=True, hosts=False)
-    assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
+async def test_a_move_on_a_host_while_hosts_are_off_says_so_in_the_log(bot, cog):
+    marathon = await show(bot, cog, FOUR, auto=True, hosts=True)
     await walk(bot, cog, marathon, [45, 61])
     assert len(highlights(bot)) == 1
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.HOST_ANNOUNCE, False)
 
-    assert (await answer(bot, marathon, "Alpha", ANARCHY, "default")).ok
+    assert (await answer(bot, marathon, "Alpha", ANARCHY, "out")).ok
 
     assert await because_of(bot, "marathon.host_highlight_removed") == ["hosts_off"]
 
@@ -969,9 +1016,8 @@ async def test_past_twelve_people_a_runs_post_carries_a_menu_for_every_twelve(
     marathon, post = await crowded(bot, cog, count)
     row = await run_named(bot, marathon, "Alpha")
 
-    whole, *picks = items_on(post)
+    picks = items_on(post)
 
-    assert whole.label == "Opt out of every run on this marathon"
     assert [len(one.options) for one in picks] == sizes
     assert [one.custom_id for one in picks] == [
         f"marathon:announce:{marathon['id']}:{row['id']}:pick",
@@ -980,7 +1026,7 @@ async def test_past_twelve_people_a_runs_post_carries_a_menu_for_every_twelve(
     offered = [option.value for one in picks for option in one.options]
     for member in range(9300, 9300 + count):
         assert f"{member}:out" in offered and f"{member}:plain" in offered
-    assert len(current_view(post).to_components()) == 3
+    assert len(current_view(post).to_components()) == 2
     edits = len(post.edits)
     await walk(bot, cog, marathon, [2, 3])
     assert len(post.edits) == edits

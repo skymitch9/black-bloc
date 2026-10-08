@@ -502,17 +502,17 @@ async def test_a_baf_persons_slot_offers_this_runs_answer_and_their_at(bot, cog)
         return embed.description, {one.action: one for one in moves}
 
     words, moves = await slot()
-    assert moves[people.RUN_ANSWER].label == "Announce anarchy for this run"
-    assert (moves[people.RUN_ANSWER].to, moves[people.RUN_ANSWER].row) == ("in", 3)
+    assert moves[people.RUN_ANSWER].label == "Do not announce anarchy for this run"
+    assert (moves[people.RUN_ANSWER].to, moves[people.RUN_ANSWER].row) == ("out", 3)
     assert moves[people.MENTION].label == "No @ for anarchy" and moves[people.MENTION].to == "plain"
     assert "anarchy: not announced for this run — host announcements are off" in words
     move = moves[people.RUN_ANSWER]
     said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id, move.to)(
         bot, bot.guild, FakeActor(), marathon
     )
-    assert said.ok and "is announced for" in said.message
+    assert said.ok and "is not announced for" in said.message
     rows = await runs_of(bot.db, marathon["id"])
-    assert ma.run_answers(rows[1]) == {ANARCHY: "in"} and ma.run_answers(rows[0]) == {}
+    assert ma.run_answers(rows[1]) == {ANARCHY: "out"} and ma.run_answers(rows[0]) == {}
     move = moves[people.MENTION]
     said = await people.doing_for(move.action, "anarchy", run["id"], move.user_id, move.to)(
         bot, bot.guild, FakeActor(), marathon
@@ -522,6 +522,9 @@ async def test_a_baf_persons_slot_offers_this_runs_answer_and_their_at(bot, cog)
     words, moves = await slot()
     assert moves[people.RUN_ANSWER].label == "anarchy: back to the default for this run"
     assert moves[people.MENTION].label == "@ anarchy again"
-    assert "anarchy: announced for this run — set for this run · written without an @" in words
+    assert (
+        "anarchy: not announced for this run — host announcements are off for this marathon"
+        " · written without an @"
+    ) in words
     _, others = await slot("Vee")
     assert people.RUN_ANSWER not in others and people.MENTION not in others

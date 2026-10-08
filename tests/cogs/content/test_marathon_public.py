@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from black_bloc import marathon as mt
 from black_bloc import marathon_hosts as mh
 from black_bloc import marathon_public as mp
 from black_bloc import marathon_thread_controls as mtc
@@ -70,7 +71,7 @@ def current_view(message):
     return message.kwargs.get("view")
 
 
-OPT_OUT_LABEL = "Opt out of every run on this marathon"
+RUN_MOVE_LABEL = "Do not announce Sky for this run"
 
 
 def button_on(message):
@@ -92,7 +93,12 @@ async def ready(bot, cog):
 
 
 async def pressed(bot, marathon, row, to, actor=None):
-    return await public.press(bot, bot.guild, actor or FakeActor(), marathon["id"], row["id"], to)
+    from black_bloc.cogs.content.marathon_announce import set_opt_out
+
+    out = to == mp.OPT_OUT
+    return await set_opt_out(
+        bot, bot.guild, actor or FakeActor(), marathon, mt.member_ids(row), out
+    )
 
 
 async def highlighted(bot, cog, marathon, game="Super Metroid"):
@@ -107,21 +113,21 @@ async def opted(bot, marathon):
     return json.loads((await fresh(bot, marathon))["announce_opt_out"] or "[]")
 
 
-# --- the button on the runner post: opt out / opt back in ---------------------------------------
+# --- the whole-marathon opt-out: the People view's move, never a button on the runner post -----
 
 
-async def test_each_runner_post_carries_opt_out_and_it_posts_nothing(bot, cog):
+async def test_each_runner_post_carries_the_runs_own_move_first_and_it_posts_nothing(bot, cog):
     marathon = await ready(bot, cog)
     post = runner_posts(the_thread(bot))[0]
     row = await run_of(bot, marathon, "Super Metroid")
 
     button = button_on(post)
-    assert button.label == OPT_OUT_LABEL
-    assert button.custom_id == f"marathon:highlight:{marathon['id']}:{row['id']}:optout"
+    assert button.label == RUN_MOVE_LABEL
+    assert button.custom_id == f"marathon:announce:{marathon['id']}:{row['id']}:{SKY}:out"
     assert public_posts(bot) == []
 
 
-async def test_opt_out_answers_in_words_flips_the_button_and_opt_back_in_undoes_it(bot, cog):
+async def test_opt_out_answers_in_words_moves_the_runs_button_and_opt_back_in_undoes_it(bot, cog):
     marathon = await ready(bot, cog)
     row = await run_of(bot, marathon, "Super Metroid")
 
@@ -130,7 +136,7 @@ async def test_opt_out_answers_in_words_flips_the_button_and_opt_back_in_undoes_
     assert said.ok and "is opted out of **SS4C**" in said.message
     assert await opted(bot, marathon) == [SKY] and public_posts(bot) == []
     button = button_on(runner_posts(the_thread(bot))[0])
-    assert button.label == "Opt back in to this marathon" and button.custom_id.endswith(":optin")
+    assert button.label == "Announce Sky for this run" and button.custom_id.endswith(":in")
     logged = await details_of(bot.db, "marathon.announce_opted_out")
     assert logged["members"] == [SKY] and logged["via"] == "discord"
 
@@ -139,7 +145,7 @@ async def test_opt_out_answers_in_words_flips_the_button_and_opt_back_in_undoes_
 
     back = await pressed(bot, marathon, row, mp.OPT_IN)
     assert back.ok and "is back in" in back.message and await opted(bot, marathon) == []
-    assert button_on(runner_posts(the_thread(bot))[0]).label == OPT_OUT_LABEL
+    assert button_on(runner_posts(the_thread(bot))[0]).label == RUN_MOVE_LABEL
     assert public_posts(bot) == []
 
 
@@ -185,25 +191,20 @@ async def test_the_highlight_follows_the_run_as_its_slot_moves_and_it_goes_live(
     assert "marathon.public_highlight_edited" in await kinds(bot.db)
 
 
-async def test_a_button_posted_before_the_opt_out_still_answers_as_the_toggle(bot, cog):
+async def test_every_old_whole_marathon_button_answers_in_words_and_changes_nothing(bot, cog):
     marathon = await ready(bot, cog)
     row = await run_of(bot, marathon, "Super Metroid")
-    for old, word in ((mp.REMOVE, "opted out"), (mp.POST, "is back in")):
+    for old in (mp.REMOVE, mp.POST, mp.OPT_OUT, mp.OPT_IN):
         custom = mp.custom_id(marathon["id"], row["id"], old)
         button = await public.HighlightButton.from_custom_id(
             None, None, re.fullmatch(mp.TEMPLATE, custom)
         )
         lead = FakeInteraction(bot, FakeActor(), bot.guild)
         await button.on_click(lead)
-        assert word in lead.sent
+        assert "People…" in lead.sent and "nothing was changed" in lead.sent
+    said = await public.press(bot, bot.guild, FakeActor(), marathon["id"], row["id"], mp.OPT_OUT)
+    assert (said.ok, said.status, said.code) == (False, 410, "gone")
     assert await opted(bot, marathon) == [] and public_posts(bot) == []
-
-
-async def test_a_run_nobody_from_baf_is_on_is_refused_in_words(bot, cog):
-    marathon = await ready(bot, cog)
-    row = await run_of(bot, marathon, "Kirby Air Riders")
-    said = await pressed(bot, marathon, row, mp.OPT_OUT)
-    assert not said.ok and said.code == public.NOT_POSTABLE_CODE
 
 
 # --- the auto switch ----------------------------------------------------------------------------
@@ -314,7 +315,7 @@ async def test_changing_the_channel_key_sends_the_next_highlight_there(bot, cog)
     await follow(bot, cog, marathon)
     await highlighted(bot, cog, marathon)
 
-    assert button_on(runner_posts(the_thread(bot))[0]).label == OPT_OUT_LABEL
+    assert button_on(runner_posts(the_thread(bot))[0]).label == RUN_MOVE_LABEL
     assert public_posts(bot) == [] and len(public_posts(bot, HIGHLIGHTS)) == 1
     assert (await run_of(bot, marathon, "Super Metroid"))["public_channel_id"] == HIGHLIGHTS
 
@@ -327,7 +328,7 @@ async def test_no_public_channel_posts_nothing_and_the_opt_out_still_works(bot, 
     await follow(bot, cog, marathon)
 
     assert public_posts(bot) == []
-    assert button_on(runner_posts(the_thread(bot))[0]).label == OPT_OUT_LABEL
+    assert button_on(runner_posts(the_thread(bot))[0]).label == RUN_MOVE_LABEL
     said = await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.OPT_OUT)
     assert said.ok
 
@@ -348,10 +349,10 @@ async def test_shadow_sends_the_highlight_to_its_own_rehearsal_home_with_the_not
     assert logged["shadow_home"] == LOG_CHANNEL
 
 
-# --- the button itself --------------------------------------------------------------------------
+# --- the retired button itself ------------------------------------------------------------------
 
 
-async def test_the_button_is_staff_only_and_rebuilds_from_its_custom_id(bot, cog):
+async def test_the_retired_button_is_staff_only_and_rebuilds_from_its_custom_id(bot, cog):
     marathon = await ready(bot, cog)
     row = await run_of(bot, marathon, "Super Metroid")
     custom = mp.custom_id(marathon["id"], row["id"], mp.OPT_OUT)
@@ -368,7 +369,7 @@ async def test_the_button_is_staff_only_and_rebuilds_from_its_custom_id(bot, cog
     bot.store.is_staff = lambda member: True
     lead = FakeInteraction(bot, FakeActor(), bot.guild)
     await button.on_click(lead)
-    assert "is opted out" in lead.sent and await opted(bot, marathon) == [SKY]
+    assert public.WHOLE_MARATHON_GONE in lead.sent and await opted(bot, marathon) == []
     assert public_posts(bot) == []
 
 
@@ -383,7 +384,7 @@ async def test_after_a_restart_a_highlight_is_read_once_and_kept_up_to_date(bot,
     await restarted.tick_once()
 
     assert "on now" in post.content and len(public_posts(bot)) == 1
-    assert button_on(runner_posts(the_thread(bot))[0]).label == OPT_OUT_LABEL
+    assert button_on(runner_posts(the_thread(bot))[0]).label == RUN_MOVE_LABEL
 
 
 async def test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_not_resent(
@@ -411,15 +412,15 @@ async def test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_
     assert len(thread.messages) == count and runner_posts(thread) == [post]
     assert len(post.edits) > post_edits
     button = button_on(post)
-    assert button.custom_id.endswith(":optout")
-    assert button.label == OPT_OUT_LABEL
+    assert button.custom_id.endswith(f":{SKY}:out")
+    assert button.label == RUN_MOVE_LABEL
     assert len(controls_message.edits) > control_edits
     shown = [getattr(one, "item", one) for one in current_view(controls_message).children]
     assert len(shown) == 11 and shown[7].label == "Marathon tracker ↗"
     shown = [one for one in shown if one.custom_id and ":baf:" not in one.custom_id]
     assert [one.label for one in shown][-3:] == [
         "Ping the marathon role: off · turn on",
-        "BaF announcements: on · turn off",
+        "Runner announcements: on · turn off",
         "Host announcements: off · turn on",
     ]
     assert not any(":hosts:" in one.custom_id or ":hostevents:" in one.custom_id for one in shown)
