@@ -50,6 +50,11 @@ FORFEITS = (DQ, DROP)
 WINNER = "winner"
 LOSER = "loser"
 
+POOLS = "pools"
+FINAL = "final"
+PHASES = (POOLS, FINAL)
+POOL_FORMATS = (ROUND_ROBIN, SWISS)
+
 
 class BracketError(Exception):
     """A move the bracket refuses; `code` picks the worded answer, `fields` fill it."""
@@ -110,6 +115,8 @@ class Match:
     placement_winner: int | None = None
     placement_loser: int | None = None
     rematch: bool = False
+    phase: str | None = None
+    pool: int | None = None
 
     def slot(self, which: str) -> int | None:
         return self.slot_a if which == A else self.slot_b
@@ -161,6 +168,16 @@ def cleared(match: Match) -> Match:
     return replace(match, **{name: None for name in RESULT_FIELDS})
 
 
+@dataclass(frozen=True)
+class Plan:
+    format: str
+    count: int
+    advance: int
+    losers_from: int | None = None
+    best_of: int = 3
+    swiss_rounds: int | None = None
+
+
 @dataclass
 class Bracket:
     options: Options
@@ -168,13 +185,14 @@ class Bracket:
     matches: dict[str, Match] = field(default_factory=dict)
     withdrawn: dict[int, str] = field(default_factory=dict)
     final_order: list[int] = field(default_factory=list)
+    plan: Plan | None = None
 
     @property
     def format(self) -> str:
         return self.options.format
 
     def ordered(self) -> list[Match]:
-        return sorted(self.matches.values(), key=order_key)
+        return sorted(self.matches.values(), key=play_order)
 
     def get(self, key: str) -> Match:
         found = self.matches.get(key)
@@ -193,6 +211,11 @@ def order_key(match: Match) -> tuple[int, int, int, int]:
     if match.side in (GRAND, THIRD):
         return (10_000 + match.round, SIDE_ORDER[match.side], match.round, match.position)
     return (match.round, SIDE_ORDER[match.side], match.round, match.position)
+
+
+def play_order(match: Match) -> tuple[int, ...]:
+    """Pools first, pool by pool, then the final; inside each, `order_key`."""
+    return (int(match.phase == FINAL), match.pool or 0, *order_key(match))
 
 
 def key_of(side: str, round_: int, position: int) -> str:
