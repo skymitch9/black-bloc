@@ -1466,6 +1466,10 @@ async def test_every_route_answers_with_the_keys_the_pages_read(
     response = module_client.request(spec["method"], path, json=body)
     assert response.status_code == 200, f"{where} answered {response.status_code}: {response.text}"
     check(where, response.json(), spec)
+    if spec.get("then"):
+        back = spec["then"]
+        undone = module_client.request(back["method"], fill(back["path"], seeded), json={})
+        assert undone.status_code == 200, f"{where}: putting the seed back answered {undone.text}"
     if reading:
         after = await snapshot(module_web.db)
         dirtied = sorted(name for name, digest in after.items() if before.get(name) != digest)
@@ -1473,6 +1477,22 @@ async def test_every_route_answers_with_the_keys_the_pages_read(
             f"{where} is a read, but it changed {dirtied} — the seed the rest of the file "
             "shares is now dirty, so scope it back or make the route stop writing"
         )
+
+
+UNDONE = [one for one in ROUTES if one.get("then")]
+
+
+@pytest.mark.parametrize("spec", UNDONE, ids=lambda one: one["path"])
+async def test_a_single_use_seed_is_put_back_so_its_route_answers_twice(
+    module_client, seeded, spec
+):
+    path = fill(spec["path"], seeded)
+    back = spec["then"]
+    for _ in range(2):
+        response = module_client.request(spec["method"], path, json={})
+        assert response.status_code == 200, response.text
+        undone = module_client.request(back["method"], fill(back["path"], seeded), json={})
+        assert undone.status_code == 200, undone.text
 
 
 def test_the_contracts_settings_block_is_the_registry_and_not_a_second_copy():

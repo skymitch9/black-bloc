@@ -1,5 +1,5 @@
 {
-  "_": "The Phase 8b contract in machine-readable form: for every route, the keys the pages actually read. Derived from site/public/assets/*.js by grepping each page's property accesses. tests/api/test_contract.py checks the real routers against it; site/mock/check.mjs checks the mock. Both read THIS file, so the two halves cannot drift apart. shape: object | list | map. keys = required on the object, or on every row of a list. rows = {field: [keys required on every row of that list-valued field]}. nested = {field: [keys required on that object-valued field]}. settings = {key: value} written to the registry before the request (placeholders filled), for a route whose 200 needs a mode the rest of the seed must not run under; the seed puts it back.",
+  "_": "The Phase 8b contract in machine-readable form: for every route, the keys the pages actually read. Derived from site/public/assets/*.js by grepping each page's property accesses. tests/api/test_contract.py checks the real routers against it; site/mock/check.mjs checks the mock. Both read THIS file, so the two halves cannot drift apart. shape: object | list | map. keys = required on the object, or on every row of a list. rows = {field: [keys required on every row of that list-valued field]}. nested = {field: [keys required on that object-valued field]}. settings = {key: value} written to the registry before the request (placeholders filled), for a route whose 200 needs a mode the rest of the seed must not run under; the seed puts it back. then = {method, path} sent after the check and required to answer 200: the inverse move that puts a single-use seed back (Advance on {bracket_pooled_id} is undone by Back to pools; Back to pools on {bracket_final_id} by Advance), so each route keeps its own seed and running it again finds it as seeded.",
   "settings": {
     "_": "The registry IS the truth (black_bloc/settings_store.py). This block is the one table both halves read: tests/api/test_contract.py asserts it equals CORE_KEYS / KEY_MIN / KEY_MAX, and site/mock/check.mjs asserts the mock's own /api/settings matches it. A bound invented in the mock, or one added to the registry and not mirrored, fails one half or the other by name. The `help` map is the same guard for the WORDS a settings row carries, scoped to the golive / pings / youtube namespaces the Go-live page draws (owner, 2026-09-21: \"what each of the settings does isnt clear\"). KEY_HELP is the one home; this is the table both halves read. It is namespace-scoped because 59 of the registry's other keys still disagree with the mock — measured 2026-09-21 — and widening it is a follow-up, not a licence to keep two copies.",
     "core_keys": [
@@ -91,6 +91,8 @@
       "brackets_pick_set_placeholder",
       "brackets_ping_role_id",
       "brackets_pool_count_default",
+      "brackets_pool_raise_label",
+      "brackets_pool_tied",
       "brackets_pool_title",
       "brackets_pools_best_of_default",
       "brackets_pools_format_default",
@@ -10249,7 +10251,9 @@
           "brackets_state_pools",
           "brackets_round_pool",
           "brackets_pool_title",
-          "brackets_waiting_final"
+          "brackets_waiting_final",
+          "brackets_pool_tied",
+          "brackets_pool_raise_label"
         ],
         "defaults": [
           "format",
@@ -10918,6 +10922,10 @@
       "method": "POST",
       "path": "/api/brackets/{bracket_pooled_id}/advance",
       "body": {},
+      "then": {
+        "method": "POST",
+        "path": "/api/brackets/{bracket_pooled_id}/unadvance"
+      },
       "read_by": [
         "page-brackets.js Advance to the final"
       ],
@@ -10953,6 +10961,10 @@
       "method": "POST",
       "path": "/api/brackets/{bracket_final_id}/unadvance",
       "body": {},
+      "then": {
+        "method": "POST",
+        "path": "/api/brackets/{bracket_final_id}/advance"
+      },
       "read_by": [
         "page-brackets.js Back to pools"
       ],

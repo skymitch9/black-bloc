@@ -8,7 +8,7 @@ from typing import Any
 import discord
 
 from . import brackets_store as store_
-from .brackets import play, pools, standings
+from .brackets import play, pools
 from .brackets.model import (
     BYE,
     CALLED,
@@ -255,14 +255,14 @@ def pool_lines(store: Any, guild_id: int, bracket: Any, people: list[Any]) -> li
     named = {one["id"]: one["name"] for one in people}
     found = []
     for number, one in enumerate(pools.pool_parts(bracket), start=1):
-        top = [named.get(row.entrant, "—") for row in standings.table(one)]
+        top = [named.get(entrant, "—") for entrant in pools.leaders(one, bracket.plan.advance)]
         found.append(
             words(
                 store,
                 guild_id,
                 "brackets_card_pool_line",
                 pool=pools.letter(number),
-                top=", ".join(top[: bracket.plan.advance]),
+                top=", ".join(top),
             )
         )
     return found

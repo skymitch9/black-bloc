@@ -290,3 +290,19 @@ async def test_the_starter_card_shows_each_pools_leaders_while_the_pools_play(bo
     assert lines[2] == "**In pools**"
     running = cards.starter_lines(bot.store, GUILD, row(state="running"), people, bracket)
     assert not any(line.startswith("Pool ") for line in running)
+
+
+async def test_the_starter_cards_pool_line_never_lists_a_withdrawn_leader(bot):
+    people = [person(n, f"P{n}", None) for n in range(1, 9)]
+    bracket = pools.build(
+        list(range(1, 9)), Options(format="double"), Plan("round_robin", 2, 2), "2026-10-07"
+    ).bracket
+    for key in [key for key in bracket.matches if key.startswith("A.")]:
+        match = bracket.matches[key]
+        a_wins = match.slot_a < match.slot_b
+        score = {"score_a": 2, "score_b": 0} if a_wins else {"score_a": 0, "score_b": 2}
+        bracket = pools.override(bracket, key, 7, "2026-10-07", **score).bracket
+    bracket = pools.withdraw(bracket, 1, "dq", "2026-10-07").bracket
+    pooled = row(state="pools", pools_format="round_robin")
+    lines = cards.starter_lines(bot.store, GUILD, pooled, people, bracket)
+    assert "Pool A · P4, P5" in lines

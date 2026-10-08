@@ -25,7 +25,7 @@ import {
   treeSize,
   unplayedSets,
 } from '../public/assets/bracket-layout.js';
-import { advance, build, buildPools, decide, playOut, poolPlacements, settle, snake, standardOrder, standings, tableRows } from './brackets.mjs';
+import { advance, build, buildPools, decide, playOut, poolPlacements, poolTableRows, settle, snake, standardOrder, standings, tableRows } from './brackets.mjs';
 
 const failures = [];
 const is = (where, found, wanted) => {
@@ -214,14 +214,29 @@ const eightPooled = pooledT(8, 2);
 advance(eightPooled);
 is('8 in 2 pools into a 4-player double', [seat(eightPooled, 'W1-1'), seat(eightPooled, 'W1-2')], [[1, 3], [2, 4]]);
 
+const cycled = { id: 2, format: 'single', options: { pools_format: 'round_robin', pool_count: 2, advance_per_pool: 1, best_of: 3 }, entrants: ids(6).map((id) => ({ id, name: `P${id}`, seed: id, dropped: false, dq: false, final_rank: null })), sets: [] };
+buildPools(cycled, ids(6));
+const beats = new Set(['1>4', '4>5', '5>1']);
+playOut(cycled.pools[0], { scores: (one) => (beats.has(`${one.slot_a}>${one.slot_b}`) ? [2, 0] : [0, 2]) });
+is('a tie in the mock table shares a rank before Advance', poolTableRows(cycled, cycled.pools[0]).map((one) => one.rank), [1, 1, 1]);
+[5, 1, 4].forEach((id, at) => { cycled.entrants.find((one) => one.id === id).final_rank = at + 1; });
+is('the stored order splits the tie as the engine does', poolTableRows(cycled, cycled.pools[0]).map((one) => [one.entrant, one.rank]), [[5, 1], [1, 2], [4, 3]]);
+cycled.entrants.find((one) => one.id === 4).dq = true;
+is('a pool row says who is out', poolTableRows(cycled, cycled.pools[0]).map((one) => one.withdrawn), [false, false, true]);
+
 const onePool = { pool: 1, letter: 'A', cut: 2, tied: [], standings: [{ entrant: 3, rank: 2, set_wins: 2 }, { entrant: 1, rank: 1, set_wins: 3 }, { entrant: 2, rank: 3, set_wins: 1 }] };
 is('a pool table is in rank order with the line under the cut', poolTable(onePool).rows.map((one) => [one.entrant, one.through]), [[1, true], [3, true], [2, false]]);
 is('the line falls after the cut', poolTable(onePool).line, 2);
-const tiedPool = { ...onePool, cut: 1, tied: [1, 3], standings: [{ entrant: 1, rank: 1 }, { entrant: 3, rank: 1 }, { entrant: 2, rank: 3 }] };
+const tiedPool = { ...onePool, finished: true, cut: 1, tied: [1, 3], standings: [{ entrant: 1, rank: 1 }, { entrant: 3, rank: 1 }, { entrant: 2, rank: 3 }] };
 is('a tie across the cut is marked', poolTable(tiedPool).rows.map((one) => one.tied), [true, true, false]);
 is('the tie keeps the table order until the organiser picks one', tieOrder(tiedPool), [1, 3]);
 is('a picked order that is not the tie is ignored', tieOrder(tiedPool, [3, 2]), [1, 3]);
 is('the picked order moves the tied rows only', poolTable(tiedPool, [3, 1]).rows.map((one) => [one.entrant, one.through]), [[3, true], [1, false], [2, false]]);
+is('a tie while the pool still plays is not marked', poolTable({ ...tiedPool, finished: false }).rows.map((one) => one.tied), [false, false, false]);
+const dqLeader = { pool: 1, letter: 'A', cut: 2, finished: true, tied: [], advancing: [4, 5], standings: [{ entrant: 1, rank: 1, withdrawn: true }, { entrant: 4, rank: 2 }, { entrant: 5, rank: 3 }, { entrant: 8, rank: 4 }] };
+is('a disqualified leader is not through: the advancing are', poolTable(dqLeader).rows.map((one) => [one.entrant, one.through]), [[1, false], [4, true], [5, true], [8, false]]);
+is('the line falls under the last one through', poolTable(dqLeader).line, 3);
+is('without advancing the cut skips the withdrawn', poolTable({ ...dqLeader, advancing: [] }).rows.map((one) => one.through), [false, true, true, false]);
 is('reordering leaves rows outside the order alone', reorderedRows([{ entrant: 1 }, { entrant: 2 }, { entrant: 3 }], [3, 1]).map((one) => one.entrant), [3, 2, 1]);
 is('every set: the pools then the final', allSets({ pools: [{ sets: [{ key: 'A.R1-1' }] }, { sets: [{ key: 'B.R1-1' }] }], sets: [{ key: 'W1-1' }] }).map((one) => one.key), ['A.R1-1', 'B.R1-1', 'W1-1']);
 const inPools = { state: 'pools', phase: 'pools', may_run: true, finished: false, pools_finished: false, pools: [{ sets: [{ state: 'ready' }] }], sets: [] };
@@ -230,6 +245,10 @@ is('pools finished: advance', organiserMoves({ ...inPools, pools_finished: true,
 const inFinal = { state: 'running', phase: 'final', may_run: true, finished: false, pools: [{ sets: [{ state: 'complete', pool: 1 }] }], sets: [{ state: 'ready' }, { state: 'waiting' }] };
 is('a final with nothing played: back to pools', organiserMoves(inFinal, { mode: 'shadow' }), ['call_ready', 'unadvance', 'unstart', 'cancel']);
 is('a final with a result: no back to pools', [finalUntouched({ ...inFinal, sets: [{ state: 'reported' }] }), finalUntouched({ ...inFinal, phase: null })], [false, false]);
+const dqForfeit = { ...inFinal, entrants: [{ id: 3, dq: true }, { id: 1, dq: false }], sets: [{ state: 'complete', forfeit: 'dq', winner: 1, loser: 3 }, { state: 'ready' }] };
+is('a final whose only result is a DQ forfeit: back to pools', finalUntouched(dqForfeit), true);
+is('a forfeit the organiser gave still counts', finalUntouched({ ...dqForfeit, sets: [{ state: 'complete', forfeit: 'to', winner: 1, loser: 3 }] }), false);
+is('a forfeit of a player put back counts', finalUntouched({ ...dqForfeit, entrants: [{ id: 3, dq: false }] }), false);
 is('a pool set goes quiet once the final is built', [setMoves({ ...inFinal, mine: null }, { pool: 1, state: 'complete' }), setMoves({ ...inPools, mine: null }, { pool: 1, state: 'complete', slot_a: 1, slot_b: 2 })], [[], ['decide', 'forfeit', 'reset']]);
 is('a player in pools may drop out', memberMoves({ ...inPools, mine: 5, entrants: [{ id: 5, dropped: false, dq: false }], pools: [{ sets: [{ slot_a: 5, slot_b: 6, state: 'ready' }] }] }, 'shadow'), ['drop_out']);
 

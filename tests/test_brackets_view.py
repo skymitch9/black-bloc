@@ -100,6 +100,34 @@ async def test_a_pools_view_carries_each_pool_its_table_and_who_goes_through(db)
     assert {one["what"] for one in found["waiting_on"]} == {"final"}
 
 
+async def test_a_dqd_pool_leader_is_marked_and_not_through(db):
+    row, ids = await pooled_view(db)
+    leader = ids[0]
+    await store_.update_entrant(db, leader, {"dq": 1})
+    first = (await brackets_view.full(db, row))["pools"][0]
+    assert first["advancing"] == [ids[3], ids[4]]
+    marks = {one["entrant"]: one["withdrawn"] for one in first["standings"]}
+    assert marks[leader] is True and not any(marks[one] for one in ids[3:5])
+
+
+async def test_a_pool_still_playing_reports_no_tie(db):
+    tid = await store_.create(
+        db,
+        GUILD,
+        {"name": "Early", "format": DOUBLE, "pools_format": ROUND_ROBIN, "pool_count": 2},
+        created_by=7,
+    )
+    ids = [await store_.add_entrant(db, tid, f"E{n}", user_id=None, added_by=7) for n in range(8)]
+    built = pools.build(ids, Options(format=DOUBLE), Plan(ROUND_ROBIN, 2, 2), NOW).bracket
+    await store_.save(db, tid, built, list(built.matches), [])
+    await store_.update(db, tid, {"state": "pools"})
+    row = await store_.tournament(db, GUILD, tid)
+    first = (await brackets_view.full(db, row))["pools"][0]
+    assert first["finished"] is False
+    assert pools.tie_of(pools.pool_parts(built)[0], 2, 1) != []
+    assert first["tied"] == []
+
+
 async def test_once_advanced_the_view_draws_the_final_as_its_sets(db):
     row, ids = await pooled_view(db, advanced=True)
     found = await brackets_view.full(db, row)

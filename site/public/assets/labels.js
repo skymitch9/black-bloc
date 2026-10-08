@@ -658,6 +658,8 @@ export const LABELS = {
   brackets_card_losers_words: "The tournament card's option for pool finishers who start in losers",
   brackets_card_pool_line: "A pool's line on the tournament card while the pools play",
   brackets_waiting_final: "The bracket page's line for a player whose pool is done and the final is not built",
+  brackets_pool_tied: "The bracket page's mark on a pool row tied across the cut line",
+  brackets_pool_raise_label: "The bracket page's button that moves a tied player up",
   structure_backup_mode: "Whether the server's structure is saved, and which channel its notice uses",
   structure_backup_hour: "What hour the daily structure snapshot is taken",
   structure_backup_keep: "How many structure snapshots are kept",

@@ -4838,6 +4838,16 @@ BRACKETS_POOL_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         BRACKETS_WAITING,
         "the bracket page's line for a player whose pool is done and the final is not built",
     ),
+    "brackets_pool_tied": (
+        "tied",
+        (),
+        "the bracket page's mark on a finished pool's row tied across the cut line",
+    ),
+    "brackets_pool_raise_label": (
+        "Move up",
+        (),
+        "the bracket page's button that moves a tied player up a finished pool's order",
+    ),
 }
 BRACKETS_WORDS.update(BRACKETS_CARD_WORDS)
 BRACKETS_WORDS.update(BRACKETS_PAGE_WORDS)

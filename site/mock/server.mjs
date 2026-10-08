@@ -1312,6 +1312,8 @@ const SETTING_SPECS = [
   ["brackets_card_losers_words", "text", "place {place} and below start in losers", "place {place} and below start in losers", "the tournament card's option for pool finishers who enter the final's losers side"],
   ["brackets_card_pool_line", "text", "Pool {pool} \u00b7 {top}", "Pool {pool} \u00b7 {top}", "a pool's line on the tournament card while the pools play; {top} is its leaders"],
   ["brackets_waiting_final", "text", "Waiting for the final", "Waiting for the final", "the bracket page's line for a player whose pool is done and the final is not built"],
+  ["brackets_pool_tied", "text", "tied", "tied", "the bracket page's mark on a finished pool's row tied across the cut line"],
+  ["brackets_pool_raise_label", "text", "Move up", "Move up", "the bracket page's button that moves a tied player up a finished pool's order"],
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
@@ -2412,7 +2414,7 @@ const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour",
 CORE_KEYS.push(...STRUCTURE_BACKUP_KEYS);
 const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_channel_id", "pb_feed_ping_role_id", "pb_feed_auto_match", "pb_feed_interval_minutes", "pb_feed_cycle_requests", "pb_feed_rematch_days", "pb_feed_max_age_days", "pb_feed_max_posts", "pb_feed_panel_minutes", "pb_feed_post_title", "pb_feed_post_text", "pb_feed_post_author", "pb_feed_place_text", "pb_feed_link_label", "pb_feed_no_channel_words", "pb_feed_panel_title", "pb_feed_panel_footer", "pb_feed_you_matched", "pb_feed_you_set", "pb_feed_posting_on", "pb_feed_posting_shadow", "pb_feed_posting_off", "pb_feed_you_none", "pb_feed_you_waiting", "pb_feed_you_unlinked", "pb_feed_you_opted_out", "pb_feed_you_blocked", "pb_feed_opt_out_label", "pb_feed_opt_in_label", "pb_feed_opted_out_said", "pb_feed_opted_in_said", "pb_feed_set_said", "pb_feed_unmatched_said", "pb_feed_blocked_said", "pb_feed_unblocked_said", "pb_feed_unblocked_opted_out_said", "pb_feed_no_runner_said", "pb_feed_taken_said", "pb_feed_not_now_said", "pb_feed_nothing_to_do_said", "pb_feed_looked_said", "pb_feed_failed_said", "pb_feed_off_said", "pb_feed_post_again_label", "pb_feed_post_again_pick", "pb_feed_posted_again_said", "pb_feed_rehearsed_again_said", "pb_feed_again_failed_said", "pb_feed_again_off_said", "pb_feed_no_post_said", "pb_feed_again_not_in_feed_said", "pb_feed_dm_set", "pb_feed_dm_unmatched", "pb_feed_dm_blocked", "pb_feed_dm_opt_out_cleared", "pb_feed_dm_no_reason"];
 CORE_KEYS.push(...PB_FEED_KEYS);
-const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_shadow_channel_id", "brackets_to_role_id", "brackets_ping_role_id", "brackets_format_default", "brackets_best_of", "brackets_best_of_late", "brackets_best_of_finals", "brackets_pools_format_default", "brackets_pools_best_of_default", "brackets_grand_final_reset_default", "brackets_third_place_default", "brackets_confirm_minutes", "brackets_check_in_minutes", "brackets_best_of_from_round", "brackets_swiss_rounds_default", "brackets_entrant_cap_default", "brackets_panel_minutes", "brackets_pool_count_default", "brackets_advance_per_pool_default", "brackets_advance_losers_from_default", "brackets_pools_swiss_rounds_default", "brackets_checked_in_said", "brackets_checked_out_said", "brackets_joined_said", "brackets_left_said", "brackets_dropped_said", "brackets_set_called_said", "brackets_set_reported_said", "brackets_set_final_said", "brackets_forfeit_words", "brackets_set_disputed_said", "brackets_off_said", "brackets_not_organiser_said", "brackets_no_role_words", "brackets_no_tournament_said", "brackets_wrong_state_said", "brackets_state_draft", "brackets_state_signups", "brackets_state_check_in", "brackets_state_seeding", "brackets_state_running", "brackets_state_complete", "brackets_state_cancelled", "brackets_not_yours_said", "brackets_full_said", "brackets_already_in_said", "brackets_removed_by_to_said", "brackets_no_set_said", "brackets_not_in_set_said", "brackets_not_ready_said", "brackets_not_playable_said", "brackets_already_complete_said", "brackets_disputed_said", "brackets_bad_score_said", "brackets_reported_differently_said", "brackets_not_reported_said", "brackets_own_report_said", "brackets_not_in_bracket_said", "brackets_already_out_said", "brackets_format_single_words", "brackets_format_double_words", "brackets_format_round_robin_words", "brackets_format_swiss_words", "brackets_card_format_line", "brackets_card_reset_words", "brackets_card_third_words", "brackets_card_rounds_words", "brackets_card_late_words", "brackets_card_finals_words", "brackets_card_state_line", "brackets_card_entrants_line", "brackets_card_entrants_cap_line", "brackets_card_starts_line", "brackets_card_check_in_line", "brackets_card_to_line", "brackets_card_place_line", "brackets_card_link_label", "brackets_sign_up_label", "brackets_leave_label", "brackets_check_in_label", "brackets_not_entered_said", "brackets_set_card_players", "brackets_round_winners", "brackets_round_losers", "brackets_round_grand", "brackets_round_reset", "brackets_round_third", "brackets_round_plain", "brackets_set_card_title", "brackets_set_card_best_of", "brackets_set_card_rematch", "brackets_set_card_ready", "brackets_set_card_called", "brackets_set_card_reported", "brackets_set_card_disputed", "brackets_set_card_note", "brackets_set_card_cleared", "brackets_report_label", "brackets_confirm_label", "brackets_dispute_label", "brackets_report_title", "brackets_score_label", "brackets_dispute_title", "brackets_dispute_note_label", "brackets_score_not_number_said", "brackets_panel_title", "brackets_panel_line", "brackets_panel_empty", "brackets_pick_placeholder", "brackets_pick_set_placeholder", "brackets_back_label", "brackets_your_sets_title", "brackets_drop_label", "brackets_drop_confirm", "brackets_panel_footer", "brackets_dm_removed", "brackets_dm_dq", "brackets_dm_dropped", "brackets_dm_decided", "brackets_dm_reset", "brackets_dm_reason", "brackets_start_ping", "brackets_moved_line", "brackets_waiting_play", "brackets_waiting_called", "brackets_waiting_confirm", "brackets_waiting_opponent_confirms", "brackets_waiting_to_decides", "brackets_waiting_waits", "brackets_waiting_next_round", "brackets_waiting_done", "brackets_waiting_out", "brackets_discord_label", "brackets_state_pools", "brackets_round_pool", "brackets_pool_title", "brackets_card_pools_words", "brackets_card_losers_words", "brackets_card_pool_line", "brackets_waiting_final"];
+const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_shadow_channel_id", "brackets_to_role_id", "brackets_ping_role_id", "brackets_format_default", "brackets_best_of", "brackets_best_of_late", "brackets_best_of_finals", "brackets_pools_format_default", "brackets_pools_best_of_default", "brackets_grand_final_reset_default", "brackets_third_place_default", "brackets_confirm_minutes", "brackets_check_in_minutes", "brackets_best_of_from_round", "brackets_swiss_rounds_default", "brackets_entrant_cap_default", "brackets_panel_minutes", "brackets_pool_count_default", "brackets_advance_per_pool_default", "brackets_advance_losers_from_default", "brackets_pools_swiss_rounds_default", "brackets_checked_in_said", "brackets_checked_out_said", "brackets_joined_said", "brackets_left_said", "brackets_dropped_said", "brackets_set_called_said", "brackets_set_reported_said", "brackets_set_final_said", "brackets_forfeit_words", "brackets_set_disputed_said", "brackets_off_said", "brackets_not_organiser_said", "brackets_no_role_words", "brackets_no_tournament_said", "brackets_wrong_state_said", "brackets_state_draft", "brackets_state_signups", "brackets_state_check_in", "brackets_state_seeding", "brackets_state_running", "brackets_state_complete", "brackets_state_cancelled", "brackets_not_yours_said", "brackets_full_said", "brackets_already_in_said", "brackets_removed_by_to_said", "brackets_no_set_said", "brackets_not_in_set_said", "brackets_not_ready_said", "brackets_not_playable_said", "brackets_already_complete_said", "brackets_disputed_said", "brackets_bad_score_said", "brackets_reported_differently_said", "brackets_not_reported_said", "brackets_own_report_said", "brackets_not_in_bracket_said", "brackets_already_out_said", "brackets_format_single_words", "brackets_format_double_words", "brackets_format_round_robin_words", "brackets_format_swiss_words", "brackets_card_format_line", "brackets_card_reset_words", "brackets_card_third_words", "brackets_card_rounds_words", "brackets_card_late_words", "brackets_card_finals_words", "brackets_card_state_line", "brackets_card_entrants_line", "brackets_card_entrants_cap_line", "brackets_card_starts_line", "brackets_card_check_in_line", "brackets_card_to_line", "brackets_card_place_line", "brackets_card_link_label", "brackets_sign_up_label", "brackets_leave_label", "brackets_check_in_label", "brackets_not_entered_said", "brackets_set_card_players", "brackets_round_winners", "brackets_round_losers", "brackets_round_grand", "brackets_round_reset", "brackets_round_third", "brackets_round_plain", "brackets_set_card_title", "brackets_set_card_best_of", "brackets_set_card_rematch", "brackets_set_card_ready", "brackets_set_card_called", "brackets_set_card_reported", "brackets_set_card_disputed", "brackets_set_card_note", "brackets_set_card_cleared", "brackets_report_label", "brackets_confirm_label", "brackets_dispute_label", "brackets_report_title", "brackets_score_label", "brackets_dispute_title", "brackets_dispute_note_label", "brackets_score_not_number_said", "brackets_panel_title", "brackets_panel_line", "brackets_panel_empty", "brackets_pick_placeholder", "brackets_pick_set_placeholder", "brackets_back_label", "brackets_your_sets_title", "brackets_drop_label", "brackets_drop_confirm", "brackets_panel_footer", "brackets_dm_removed", "brackets_dm_dq", "brackets_dm_dropped", "brackets_dm_decided", "brackets_dm_reset", "brackets_dm_reason", "brackets_start_ping", "brackets_moved_line", "brackets_waiting_play", "brackets_waiting_called", "brackets_waiting_confirm", "brackets_waiting_opponent_confirms", "brackets_waiting_to_decides", "brackets_waiting_waits", "brackets_waiting_next_round", "brackets_waiting_done", "brackets_waiting_out", "brackets_discord_label", "brackets_state_pools", "brackets_round_pool", "brackets_pool_title", "brackets_card_pools_words", "brackets_card_losers_words", "brackets_card_pool_line", "brackets_waiting_final", "brackets_pool_tied", "brackets_pool_raise_label"];
 CORE_KEYS.push(...BRACKETS_KEYS);
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
@@ -14474,6 +14476,7 @@ const BK_PAGE_WORDS = [
   'brackets_card_reset_words', 'brackets_card_third_words', 'brackets_card_rounds_words', 'brackets_card_late_words',
   'brackets_card_finals_words', 'brackets_state_pools', 'brackets_round_pool', 'brackets_pool_title',
   'brackets_card_pools_words', 'brackets_card_losers_words', 'brackets_waiting_final',
+  'brackets_pool_tied', 'brackets_pool_raise_label',
 ];
 
 function bkEntrant(id, user_id, name, extra = {}) {
@@ -14691,6 +14694,8 @@ function bkState() {
 const BK_TO_WORDS = {
   created: "Created **{name}**.",
   edited: "Saved **{name}**.",
+  created_losers_blank: "Created **{name}**. Losers-side entry is only for a double elimination final, so it was left blank.",
+  edited_losers_blank: "Saved **{name}**. Losers-side entry is only for a double elimination final, so it is blank.",
   signups_opened: "Sign-ups for **{name}** are open.",
   signups_closed: "Sign-ups for **{name}** are closed.",
   check_in_opened: "Check-in for **{name}** is open until {closes}.",
@@ -14829,11 +14834,11 @@ function bkPoolRows(t, names) {
       letter: mockBrackets.letter(at + 1),
       entrants: part.entrants.map((one) => one.id),
       sets: part.sets.map((one) => bkSetRow(one, names)),
-      standings: mockBrackets.tableRows(part),
+      standings: mockBrackets.poolTableRows(t, part),
       finished: done,
       cut: Number(t.options.advance_per_pool),
       advancing: t.sets.length ? going.filter((id) => through.has(id)) : going,
-      tied,
+      tied: done ? tied : [],
       rounds_to_play: part.format === 'swiss' ? mockBrackets.swissRounds(part.entrants.length, part.options) : null,
     };
   });
@@ -14942,10 +14947,18 @@ function bkPoolsFit(t, body) {
 
 function bkOptions(t, body) {
   bkPoolsFit(t, body);
+  const stored = t.options.advance_losers_from ?? null;
   for (const field of BK_OPTION_FIELDS) if (field in body) t.options[field] = body[field];
+  if (t.options.format === 'double' || t.options.advance_losers_from === null || t.options.advance_losers_from === undefined) return bkRest(t, body, false);
+  t.options.advance_losers_from = null;
+  return bkRest(t, body, (body.advance_losers_from ?? null) !== null || stored !== null);
+}
+
+function bkRest(t, body, blanked) {
   t.format = t.options.format;
   for (const field of ['game', 'rules_text', 'starts_at']) if (field in body) t[field] = body[field] || null;
   if (body.name) t.name = String(body.name).replace(/\s+/g, ' ').trim().slice(0, 100);
+  return blanked;
 }
 
 route('POST', '/api/brackets', async (context) => {
@@ -14959,9 +14972,9 @@ route('POST', '/api/brackets', async (context) => {
   const format = body.format || state.settings.get('brackets_format_default') || 'double';
   const t = bkTournament(held.next++, name, 'draft', [], { format, starts_at: null, to_user_id: actorOf(context.session), created_by: actorOf(context.session) });
   const pools = body.pools_format ?? (['single', 'double'].includes(format) ? bkDefaults().pools_format : 'none');
-  bkOptions(t, { ...bkDefaults(), ...body, format, pools_format: pools });
+  const blanked = bkOptions(t, { ...bkDefaults(), ...body, format, pools_format: pools }) && (body.advance_losers_from ?? null) !== null;
   held.tournaments.push(t);
-  return bkAnswer(context, t, 'created', 'created');
+  return bkAnswer(context, t, 'created', blanked ? 'created_losers_blank' : 'created');
 });
 
 route('PATCH', '/api/brackets/:tournament_id', async (context) => {
@@ -14971,8 +14984,8 @@ route('PATCH', '/api/brackets/:tournament_id', async (context) => {
   bkRuns(context);
   bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
   const body = await context.body();
-  bkOptions(t, body);
-  return bkAnswer(context, t, 'edited', 'edited', {}, { changed: Object.keys(body).sort() });
+  const blanked = bkOptions(t, body);
+  return bkAnswer(context, t, 'edited', blanked ? 'edited_losers_blank' : 'edited', {}, { changed: Object.keys(body).sort() });
 });
 
 function bkStateMove(path, from, to, event, key, extra = () => ({})) {
@@ -15228,6 +15241,8 @@ route('POST', '/api/brackets/:tournament_id/advance', async (context) => {
     const order = body.order.map(Number);
     if (new Set(order).size !== order.length || !order.every((id) => t.entrants.some((one) => one.id === id))) throw new Refused(400, 'bad_order', bkSay('bad_order'));
     for (const one of t.entrants) one.final_rank = order.includes(one.id) ? order.indexOf(one.id) + 1 : null;
+    let next = order.length;
+    if (order.length) for (const one of t.entrants) if (one.final_rank === null && (one.dq || one.dropped)) one.final_rank = ++next;
   }
   const result = mockBrackets.advance(t);
   if (result.tied.length) {

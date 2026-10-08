@@ -14,6 +14,7 @@ from .actionlog import log_action
 from .brackets import access, bestof, play, pools, seeding
 from .brackets.model import (
     DONE,
+    DOUBLE,
     ELIMINATION,
     FORMATS,
     BracketError,
@@ -67,6 +68,14 @@ ENGINE_STATUS = {"bad_score": 400, "bad_order": 400, "forfeit_needs_winner": 400
 TO_WORDS = {
     "created": "Created **{name}**.",
     "edited": "Saved **{name}**.",
+    "created_losers_blank": (
+        "Created **{name}**. Losers-side entry is only for a double elimination final, so it "
+        "was left blank."
+    ),
+    "edited_losers_blank": (
+        "Saved **{name}**. Losers-side entry is only for a double elimination final, so it "
+        "is blank."
+    ),
     "signups_opened": "Sign-ups for **{name}** are open.",
     "signups_closed": "Sign-ups for **{name}** are closed.",
     "check_in_opened": "Check-in for **{name}** is open until {closes}.",
@@ -462,6 +471,16 @@ def pools_fit(bot: Any, guild: Any, row: Any, values: dict[str, Any]) -> None:
         )
 
 
+def losers_blanked(row: Any, values: dict[str, Any], given: dict[str, Any]) -> bool:
+    """Losers-side entry is stored only for a double final; True when a value the TO set went."""
+    final = values.get("format", row["format"] if row is not None else None)
+    stored = row["advance_losers_from"] if row is not None else None
+    if final == DOUBLE or values.get("advance_losers_from", stored) is None:
+        return False
+    values["advance_losers_from"] = None
+    return given.get("advance_losers_from") is not None or stored is not None
+
+
 def when(bot: Any, guild: Any, value: Any, bad: Any) -> str | None:
     if value in (None, ""):
         return None
@@ -482,10 +501,12 @@ async def create(
     if "pools_format" not in given and values.get("format") not in ELIMINATION:
         values["pools_format"] = store_.NO_POOLS
     pools_fit(bot, guild, None, values)
+    blanked = losers_blanked(None, values, given)
     values.setdefault("to_user_id", actor_id(actor))
     tournament_id = await store_.create(bot.db, guild.id, values, actor_id(actor) or 0)
     await note(bot, guild, "created", actor, tournament_id, via, name=values["name"])
-    return done(bot, guild, "created", tournament_id, name=values["name"])
+    key = "created_losers_blank" if blanked else "created"
+    return done(bot, guild, key, tournament_id, name=values["name"])
 
 
 @answered
@@ -505,10 +526,12 @@ async def edit(
         require_state(bot, guild, row, *store_.BEFORE_START)
         values = option_values(bot, guild, given, creating=False)
         pools_fit(bot, guild, row, values)
+        blanked = losers_blanked(row, values, given)
         await store_.update(bot.db, row["id"], values)
         name = values.get("name", row["name"])
         await note(bot, guild, "edited", actor, row["id"], via, changed=sorted(values))
-        return done(bot, guild, "edited", row["id"], name=name)
+        key = "edited_losers_blank" if blanked else "edited"
+        return done(bot, guild, key, row["id"], name=name)
 
 
 async def moved_state(
@@ -695,6 +718,7 @@ async def advance(
         names = {"name": row["name"]}
         if current is None or current.plan is None:
             raise stop(bot, guild, "no_pools", "no_pools", 409, **names)
+        stored = list(current.final_order)
         if order is not None:
             current.final_order = told_order(bot, guild, current, order)
         try:
@@ -704,8 +728,8 @@ async def advance(
                 people = await store_.entrants(bot.db, row["id"])
                 error.fields["tied"] = tied_names(people, error.fields.get("tied") or [])
             raise engine_stop(bot, guild, row, error, names) from None
-        if order is not None:
-            await store_.write_final_order(bot.db, row["id"], current.final_order)
+        if moved.bracket.final_order != stored:
+            await store_.write_final_order(bot.db, row["id"], moved.bracket.final_order)
         await store_.save(bot.db, row["id"], moved.bracket, moved.changed, [])
         await store_.update(bot.db, row["id"], {"state": store_.RUNNING})
         certain, most = pools.sets_to_play(moved.bracket)

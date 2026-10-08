@@ -620,8 +620,27 @@ export function advance(t) {
   return { tied: [], entrants: [...winners, ...losers] };
 }
 
+function forfeitedOut(t, one) {
+  return ['dq', 'drop'].includes(one.forfeit) && outOf(t, one.loser);
+}
+
 export function finalPlayed(t) {
-  return t.sets.filter((one) => PLAYED.includes(one.state)).map((one) => one.key);
+  return t.sets.filter((one) => PLAYED.includes(one.state) && !forfeitedOut(t, one)).map((one) => one.key);
+}
+
+export function poolTableRows(t, part) {
+  const ranks = new Map(t.entrants.map((one) => [one.id, one.final_rank]));
+  const rows = tableRows(part).map((one) => ({ ...one, withdrawn: outOf(t, one.entrant) }));
+  const found = [];
+  for (let at = 0; at < rows.length;) {
+    const group = rows.filter((one) => one.rank === rows[at].rank);
+    if (group.length > 1 && group.every((one) => ranks.get(one.entrant))) {
+      group.sort((a, b) => ranks.get(a.entrant) - ranks.get(b.entrant));
+      group.forEach((one, offset) => found.push({ ...one, rank: one.rank + offset, place: one.place === null ? null : one.place + offset }));
+    } else found.push(...group);
+    at += group.length;
+  }
+  return found;
 }
 
 export function inFinal(t) {

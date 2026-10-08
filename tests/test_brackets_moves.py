@@ -10,6 +10,7 @@ from black_bloc import brackets_moves as moves
 from black_bloc import brackets_people as people
 from black_bloc import brackets_sets as sets
 from black_bloc import brackets_store as store_
+from black_bloc.brackets import pools
 from black_bloc.config import load_settings
 from black_bloc.logkinds import VIA_WEBSITE
 from black_bloc.settings_store import SettingsStore
@@ -492,6 +493,73 @@ async def test_a_tie_on_the_cut_names_the_players_and_the_order_settles_it(bot, 
     seated = {e for one in await store_.sets(bot.db, tid) if one["phase"] == "final"
               for e in (one["slot_a"], one["slot_b"]) if e}
     assert z in seated and x not in seated
+
+
+async def test_the_pages_order_of_a_tie_goes_through_when_a_tied_player_was_dqd(bot, guild):
+    tid = await pooled(bot, guild)
+    await moves.start(bot, guild, who(guild, TO), tid)
+    row = await store_.tournament(bot.db, GUILD, tid)
+    pool_a = pools.split((await store_.bracket(bot.db, row)).entrants, 2)[0]
+    first, x, y, z = pool_a
+    beats = {frozenset((x, y)): x, frozenset((y, z)): y, frozenset((x, z)): z}
+    await play_pools(
+        bot,
+        guild,
+        tid,
+        decide=lambda m: beats.get(frozenset((m.slot_a, m.slot_b)), min(m.slot_a, m.slot_b))
+        == m.slot_a,
+    )
+    assert (await people.dq(bot, guild, who(guild, TO), tid, z)).ok
+    tied = await moves.advance(bot, guild, who(guild, TO), tid)
+    assert tied.code == "pool_tie"
+    outcome = await moves.advance(bot, guild, who(guild, TO), tid, order=[y, x])
+    assert outcome.ok, outcome.message
+    seated = {e for one in await store_.sets(bot.db, tid) if one["phase"] == "final"
+              for e in (one["slot_a"], one["slot_b"]) if e}
+    assert {first, y} <= seated and x not in seated and z not in seated
+    stored = await store_.bracket(bot.db, await store_.tournament(bot.db, GUILD, tid))
+    assert stored.final_order[:2] == [y, x] and z in stored.final_order
+
+
+async def test_back_to_pools_takes_a_final_whose_only_results_are_a_dqs_forfeits(bot, guild):
+    tid = await pooled(bot, guild)
+    await moves.start(bot, guild, who(guild, TO), tid)
+    await play_pools(bot, guild, tid)
+    await moves.advance(bot, guild, who(guild, TO), tid)
+    final = {one["key"]: one for one in await store_.sets(bot.db, tid) if one["phase"] == "final"}
+    out = final["W1-1"]["slot_b"]
+    assert (await people.dq(bot, guild, who(guild, TO), tid, out)).ok
+    back = await moves.unadvance(bot, guild, who(guild, TO), tid)
+    assert back.ok, back.message
+    assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "pools"
+
+
+async def test_losers_side_entry_is_stored_blank_for_a_single_final_and_the_reply_says_so(
+    bot, guild
+):
+    made_ = await moves.create(
+        bot,
+        guild,
+        who(guild, TO),
+        {"name": "One", "format": "single", "pools_format": "round_robin",
+         "advance_losers_from": 9},
+    )
+    assert made_.ok and "only for a double elimination final" in made_.message
+    assert (await store_.tournament(bot.db, GUILD, made_.value))["advance_losers_from"] is None
+    double = await made(bot, guild, format="double", pools_format="round_robin",
+                        advance_losers_from=2)
+    assert (await store_.tournament(bot.db, GUILD, double))["advance_losers_from"] == 2
+    switched = await moves.edit(bot, guild, who(guild, TO), double, {"format": "single"})
+    assert switched.ok and switched.message == (
+        "Saved **Knuck Up 12**. Losers-side entry is only for a double elimination final, so "
+        "it is blank."
+    )
+    assert (await store_.tournament(bot.db, GUILD, double))["advance_losers_from"] is None
+    plain = await moves.edit(bot, guild, who(guild, TO), double, {"game": "Tekken"})
+    assert plain.message == "Saved **Knuck Up 12**."
+    again = await moves.edit(bot, guild, who(guild, TO), double, {"advance_losers_from": 3})
+    assert "only for a double" in again.message
+    assert (await store_.tournament(bot.db, GUILD, double))["advance_losers_from"] is None
 
 
 async def test_completing_a_pools_tournament_places_everyone(bot, guild):

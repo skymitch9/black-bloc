@@ -312,3 +312,55 @@ def test_a_bracket_without_pools_goes_straight_through_to_play():
     assert pools.report(single, "W1-1", A, 2, 0, 1, NOW).changed == ["W1-1"]
     assert pools.placements(single) == {}
     assert pools.finished(single) is False
+
+
+def cut_line_cycle_with_eight_out():
+    bracket = made(8)
+    bracket = cycle(bracket, 1, [(1, 4), (1, 5), (1, 8), (4, 5), (5, 8), (8, 4)])
+    bracket = play_out(bracket)
+    return pools.withdraw(bracket, 8, DQ, NOW).bracket
+
+
+def test_a_withdrawn_player_inside_the_cut_line_tie_does_not_block_the_order_given():
+    bracket = cut_line_cycle_with_eight_out()
+    a_pool = pools.pool_parts(bracket)[0]
+    assert pools.tie_of(a_pool, 2, 1) == [4, 5]
+    bracket.final_order = [5, 4]
+    after = pools.advance(bracket, NOW).bracket
+    final = pools.final_part(after)
+    assert 5 in final.entrants and 4 not in final.entrants and 8 not in final.entrants
+    assert after.final_order == [5, 4, 8]
+    assert pools.tie_of(pools.pool_parts(after)[0], 2, 1) == []
+
+
+def test_back_to_pools_passes_a_forfeit_of_a_withdrawn_player_and_stops_at_a_real_result():
+    after = pools.advance(play_out(made(8)), NOW).bracket
+    dq = pools.withdraw(after, 3, DQ, NOW).bracket
+    assert dq.matches["W1-1"].forfeit == DQ and dq.matches["W1-1"].state == COMPLETE
+    back = pools.unadvance(dq)
+    assert pools.final_part(back.bracket) is None and "W1-1" in back.removed
+    reported = pools.report(dq, "W1-2", A, 2, 0, 2, NOW).bracket
+    with pytest.raises(BracketError) as raised:
+        pools.unadvance(reported)
+    assert raised.value.code == "final_played" and raised.value.fields["set"] == "W1-2"
+    put_back = pools.reinstate(dq, 3, NOW).bracket
+    with pytest.raises(BracketError) as raised:
+        pools.unadvance(put_back)
+    assert raised.value.code == "final_played" and raised.value.fields["set"] == "W1-1"
+
+
+def test_a_losers_side_entrant_on_a_bye_does_not_meet_their_own_pool_in_their_first_set():
+    bracket = play_out(made(16, pools_=4, advance=3, losers_from=3))
+    after = pools.advance(bracket, NOW).bracket
+    home = {one: place[0] for one, place in pools.pool_places(after).items()}
+    final = pools.final_part(after)
+    met = 0
+    for key, match in final.matches.items():
+        if match.side != "losers" or match.round != 2:
+            continue
+        seated = [one for one in (match.slot_a, match.slot_b) if one is not None]
+        feeders = [m for m in final.matches.values() if m.loser_to == key]
+        could = [one for m in feeders for one in (m.slot_a, m.slot_b) if one is not None]
+        for one in seated:
+            met += sum(1 for other in could if home[other] == home[one])
+    assert met == 0

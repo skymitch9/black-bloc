@@ -10,6 +10,7 @@ from typing import Any
 
 from . import elimination, play, standings
 from .model import (
+    CALLED,
     COMPLETE,
     DISPUTED,
     DONE,
@@ -20,9 +21,13 @@ from .model import (
     LOSERS,
     POOL_FORMATS,
     POOLS,
+    READY,
     REPORTED,
     SWISS,
+    WAITING,
     WINNERS,
+    A,
+    B,
     Bracket,
     BracketError,
     Match,
@@ -292,13 +297,30 @@ def sets_to_play(bracket: Bracket) -> tuple[int, int]:
     return sum(one[0] for one in counts), sum(one[1] for one in counts)
 
 
+def still_in(pool: Bracket) -> list[standings.Row]:
+    return [row for row in standings.table(pool) if row.entrant not in pool.withdrawn]
+
+
+def leaders(pool: Bracket, advance: int) -> list[int]:
+    """The pool's top `advance` still in, by the table as it stands."""
+    return [row.entrant for row in still_in(pool)[:advance]]
+
+
 def cut(pool: Bracket, advance: int, number: int) -> list[int]:
     """The pool's top `advance` still in; a tie across the line is refused until ordered."""
-    rows = [row for row in standings.table(pool) if row.entrant not in pool.withdrawn]
+    rows = still_in(pool)
     if len(rows) > advance > 0 and rows[advance - 1].place == rows[advance].place:
         tied = [row.entrant for row in rows if row.place == rows[advance].place]
         raise BracketError("pool_tie", pool=letter(number), place=advance, tied=tied)
     return [row.entrant for row in rows[:advance]]
+
+
+def told_with_withdrawn(whole: Bracket) -> list[int]:
+    """The organiser's order, then everyone withdrawn they did not name: the out are placed last."""
+    if not whole.final_order:
+        return list(whole.final_order)
+    rest = [one for one in whole.withdrawn if one not in whole.final_order]
+    return [*whole.final_order, *rest]
 
 
 def tie_of(pool: Bracket, advance: int, number: int) -> list[int]:
@@ -379,6 +401,81 @@ def entered(winners: list[int], losers: list[int], options: Options, now: str | 
     return bracket
 
 
+def first_met(bracket: Bracket, entrant: int) -> tuple[bool, list[int]]:
+    """Who an entrant can meet in their first played set: the one seated (True), or the two
+    the feeding set holds (False)."""
+    live = next(
+        (m for m in bracket.ordered() if m.holds(entrant) and m.state in (READY, CALLED, WAITING)),
+        None,
+    )
+    if live is None:
+        return True, []
+    other = live.other(entrant)
+    if other is not None:
+        return True, [other]
+    open_slot = B if live.slot_a == entrant else A
+    feeder = next(
+        (
+            m for m in bracket.matches.values()
+            if (m.winner_to, m.winner_slot) == (live.key, open_slot)
+            or (m.loser_to, m.loser_slot) == (live.key, open_slot)
+        ),
+        None,
+    )
+    if feeder is None:
+        return True, []
+    return False, [one for one in (feeder.slot_a, feeder.slot_b) if one is not None]
+
+
+def first_apart(winners: list[int], losers: list[int], options: Options, home: dict[int, int],
+                tier: dict[int, int], now: str | None) -> Bracket:
+    """Losers-side entrants swap within their pool place so their first played set avoids
+    their own pool where it can; a seat's opponents stay put when its occupant moves."""
+    built = entered(winners, losers, options, now)
+    seat = {one: at for at, one in enumerate(losers)}
+    sure: list[bool] = []
+    faces: list[list[tuple[bool, int]]] = []
+    for one in losers:
+        seated_, them = first_met(built, one)
+        sure.append(seated_)
+        faces.append([(other in seat, seat.get(other, other)) for other in them])
+    watchers: list[set[int]] = [{at} for at in range(len(losers))]
+    for at, found in enumerate(faces):
+        for is_seat, ref in found:
+            if is_seat:
+                watchers[ref].add(at)
+
+    def term(order: list[int], at: int) -> tuple[int, int]:
+        same = sum(
+            1 for is_seat, ref in faces[at]
+            if home[order[ref] if is_seat else ref] == home[order[at]]
+        )
+        return (same, 0) if sure[at] else (0, same)
+
+    def total(order: list[int], seats: set[int]) -> tuple[int, int]:
+        found = [term(order, at) for at in seats]
+        return sum(one[0] for one in found), sum(one[1] for one in found)
+
+    order = list(losers)
+    better = True
+    while better:
+        better = False
+        for at in range(len(order)):
+            if total(order, {at}) == (0, 0):
+                continue
+            for there in range(len(order)):
+                if there == at or tier[order[at]] != tier[order[there]]:
+                    continue
+                touched = watchers[at] | watchers[there]
+                before = total(order, touched)
+                trial = list(order)
+                trial[at], trial[there] = trial[there], trial[at]
+                if total(trial, touched) < before:
+                    order, better = trial, True
+                    break
+    return built if order == losers else entered(winners, order, options, now)
+
+
 def placed_by_alive(bracket: Bracket) -> None:
     """A set that knocks someone out places them below everyone still in when it is played."""
     last = max((one.round for one in bracket.matches.values() if one.side == WINNERS), default=1)
@@ -406,8 +503,8 @@ def final_of(whole: Bracket, now: str | None) -> Bracket:
         order = apart(winners, bracket_size(len(winners)), home, tier)
         return play.build(order, whole.options, now).bracket
     size = max(bracket_size(len(winners)), bracket_size(len(losers)))
-    return entered(apart(winners, size, home, tier), apart(losers, size, home, tier),
-                   whole.options, now)
+    return first_apart(apart(winners, size, home, tier), apart(losers, size, home, tier),
+                       whole.options, home, tier, now)
 
 
 def advance(whole: Bracket, now: str | None) -> Moved:
@@ -422,10 +519,16 @@ def advance(whole: Bracket, now: str | None) -> Moved:
     )
     if not pools_finished(whole):
         raise BracketError("pools_unfinished", open=left)
+    whole = replace(whole, final_order=told_with_withdrawn(whole))
     final = final_of(whole, now)
     after = joined(whole, pool_parts(whole), final)
     changed = [match.key for match in after.ordered() if match.phase == FINAL]
     return Moved(after, changed, [])
+
+
+def forfeited_out(whole: Bracket, match: Match) -> bool:
+    """A set settled by a withdrawal carries no player's word."""
+    return match.forfeit in FORFEITS and match.loser in whole.withdrawn
 
 
 def unadvance(whole: Bracket) -> Moved:
@@ -433,7 +536,7 @@ def unadvance(whole: Bracket) -> Moved:
     final = final_part(whole)
     if whole.plan is None or final is None:
         raise BracketError("not_advanced")
-    played = [m.key for m in final.ordered() if m.state in PLAYED]
+    played = [m.key for m in final.ordered() if m.state in PLAYED and not forfeited_out(whole, m)]
     if played:
         raise BracketError("final_played", count=len(played), set=played[0])
     after = joined(whole, pool_parts(whole), None)

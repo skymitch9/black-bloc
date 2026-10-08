@@ -191,8 +191,6 @@ const WORDS = {
   losersFrom: 'Losers from place',
   poolsBestOf: 'Pool best of',
   poolRounds: 'Pool Swiss rounds',
-  tied: 'tied',
-  raise: 'Move up',
 };
 
 const view = {
@@ -906,7 +904,7 @@ function raiseTied(pool, id) {
 
 function poolTableNode(t, pool) {
   const runs = t.may_run && mode() !== 'off' && t.phase === 'pools';
-  const order = pool.tied && pool.tied.length ? tieOrder(pool, view.ties[pool.pool]) : null;
+  const order = pool.finished && pool.tied && pool.tied.length ? tieOrder(pool, view.ties[pool.pool]) : null;
   const { rows, line } = poolTable(pool, order);
   return el('div', { class: 'rowlist bk-pool-table' }, rows.map((row, at) => el('div', {
     class: 'rowlist-row bk-standing',
@@ -918,11 +916,11 @@ function poolTableNode(t, pool) {
     el('span', { class: 'bk-seed mono', 'data-place': 'true', text: placeWords(row.place ?? row.rank) || '—' }),
     el('span', { class: 'rowlist-main' }, [
       el('span', { class: 'rowlist-name', text: row.name || '' }),
-      el('span', { class: 'rowlist-note', text: [said(WORDS.gamesNote, { games: `${row.game_wins}–${row.game_losses}` }), row.tied ? WORDS.tied : null].filter(Boolean).join(' · ') }),
+      el('span', { class: 'rowlist-note', text: [said(WORDS.gamesNote, { games: `${row.game_wins}–${row.game_losses}` }), row.tied ? w('brackets_pool_tied') : null].filter(Boolean).join(' · ') }),
     ]),
     el('span', { class: 'mono bk-record', text: `${row.set_wins}–${row.set_losses}` }),
     runs && row.tied && order.indexOf(row.entrant) > 0
-      ? el('button', { class: 'bk-raise', type: 'button', title: WORDS.raise, 'aria-label': `${WORDS.raise}: ${row.name}`, text: '↑', on: { click: () => raiseTied(pool, row.entrant) } })
+      ? el('button', { class: 'bk-raise', type: 'button', title: w('brackets_pool_raise_label'), 'aria-label': `${w('brackets_pool_raise_label')}: ${row.name}`, text: '↑', on: { click: () => raiseTied(pool, row.entrant) } })
       : null,
   ])));
 }

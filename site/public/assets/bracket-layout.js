@@ -225,10 +225,17 @@ export function reorderedRows(rows, order) {
 
 /** A pool's table with its cut: who is through, who is tied across the line, and where the line falls. */
 export function poolTable(pool, order = null) {
-  const tied = new Set(pool.tied || []);
+  const tied = new Set(pool.finished ? pool.tied || [] : []);
   const rows = reorderedRows(sortedStandings(pool.standings || []), order);
-  const line = Math.min(Number(pool.cut) || 0, rows.length);
-  return { rows: rows.map((row, at) => ({ ...row, through: at < line, tied: tied.has(row.entrant) })), line };
+  const cut = Number(pool.cut) || 0;
+  const advancing = pool.advancing && pool.advancing.length ? new Set(pool.advancing) : null;
+  let still = 0;
+  const marked = rows.map((row) => {
+    const through = advancing ? advancing.has(row.entrant) : !row.withdrawn && still++ < cut;
+    return { ...row, through, tied: tied.has(row.entrant) };
+  });
+  const last = marked.reduce((found, row, at) => (row.through ? at : found), -1);
+  return { rows: marked, line: last + 1 };
 }
 
 /** The organiser's order for a pool's tie: what they set, else the table's own order. */
@@ -238,9 +245,15 @@ export function tieOrder(pool, chosen = null) {
   return sortedStandings(pool.standings || []).map((row) => row.entrant).filter((id) => tied.includes(id));
 }
 
-/** Back to pools is legal while no set of the final has a result. */
+export function forfeitedOut(t, set) {
+  if (!['dq', 'drop'].includes(set.forfeit)) return false;
+  const loser = (t.entrants || []).find((one) => one.id === set.loser);
+  return Boolean(loser && (loser.dq || loser.dropped));
+}
+
+/** Back to pools is legal while no set of the final has a result a player gave. */
 export function finalUntouched(t) {
-  return t.phase === 'final' && !(t.sets || []).some((one) => PLAYED.includes(one.state));
+  return t.phase === 'final' && !(t.sets || []).some((one) => PLAYED.includes(one.state) && !forfeitedOut(t, one));
 }
 
 function entrantOf(t, id) {

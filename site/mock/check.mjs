@@ -439,6 +439,10 @@ async function checkRoutes() {
       continue;
     }
     check(where, payload, spec);
+    if (spec.then) {
+      const back = await send(spec.then.method, fill(spec.then.path), {});
+      if (!back.ok) fail(where, `putting the seed back answered ${back.status}`);
+    }
   }
 }
 

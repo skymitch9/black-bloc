@@ -67,6 +67,8 @@ PAGE_WORDS = (
     "brackets_card_pools_words",
     "brackets_card_losers_words",
     "brackets_waiting_final",
+    "brackets_pool_tied",
+    "brackets_pool_raise_label",
 )
 
 SUMMARY_FIELDS = (
@@ -238,6 +240,7 @@ def standing_rows(bracket: Any, names: dict[int, str]) -> list[dict[str, Any]]:
             "game_losses": row.record.game_losses,
             "byes": row.record.byes,
             "opponents_rate": row.opponents_rate,
+            "withdrawn": row.entrant in bracket.withdrawn,
         }
         for row in standings.table(bracket)
     ]
@@ -269,8 +272,9 @@ def pool_rows(
     through = set(final.entrants) if final is not None else set()
     found = []
     for number, one in enumerate(pools.pool_parts(bracket), start=1):
-        tied = pools.tie_of(one, plan.advance, number)
-        going = [] if tied else pools.cut(one, plan.advance, number)
+        finished = play.finished(one)
+        tie = pools.tie_of(one, plan.advance, number)
+        going = [] if tie else pools.cut(one, plan.advance, number)
         sets = [
             set_row(match, names, confirm_minutes, held.get(pools.prefixed(number, match.key)))
             | {"key": pools.prefixed(number, match.key), "phase": POOLS, "pool": number}
@@ -283,10 +287,10 @@ def pool_rows(
                 "entrants": list(one.entrants),
                 "sets": sets,
                 "standings": standing_rows(one, names),
-                "finished": play.finished(one),
+                "finished": finished,
                 "cut": plan.advance,
                 "advancing": [e for e in going if not through or e in through],
-                "tied": tied,
+                "tied": tie if finished else [],
                 "rounds_to_play": (
                     swiss.rounds_for(len(one.entrants), plan.swiss_rounds)
                     if plan.format == SWISS
