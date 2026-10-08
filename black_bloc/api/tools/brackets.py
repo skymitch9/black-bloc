@@ -6,10 +6,10 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Request
 
+from ... import brackets_cards, brackets_store, brackets_thread, brackets_view
 from ... import brackets_moves as moves
 from ... import brackets_people as people
 from ... import brackets_sets as sets
-from ... import brackets_store, brackets_thread, brackets_view
 from ...brackets import access
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused
@@ -29,10 +29,27 @@ log = logging.getLogger(__name__)
 OPTIONAL = Body(default=None)
 
 FOLLOW_GRACE_SECONDS = 1.5
+REASON_LIMIT = 300
+ENTRANT_DMS = {
+    "remove_entrant": "brackets_dm_removed",
+    "dq": "brackets_dm_dq",
+    "drop": "brackets_dm_dropped",
+}
 
 
 def body_of(payload: Any) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
+
+
+def reason_of(payload: Any) -> str:
+    return " ".join(str(body_of(payload).get("reason") or "").split())[:REASON_LIMIT]
+
+
+def name_of(guild: Any, user_id: Any) -> str | None:
+    if user_id is None:
+        return None
+    member = guild.get_member(int(user_id)) if hasattr(guild, "get_member") else None
+    return str(getattr(member, "display_name", None) or getattr(member, "name", "")) or None
 
 
 def build_router(bot: Any) -> APIRouter:
@@ -58,10 +75,59 @@ def build_router(bot: Any) -> APIRouter:
                 "no_tournament",
                 moves.said(bot.store, guild.id, "brackets_no_tournament_said", id=tournament_id),
             )
-        return await brackets_view.full(bot.db, row, viewer=int(who["id"]), runs=runs(guild, who))
+        found = await brackets_view.full(bot.db, row, viewer=int(who["id"]), runs=runs(guild, who))
+        return found | {"to_name": name_of(guild, row["to_user_id"])}
+
+    async def players(guild: Any, tournament_id: Any, key: str) -> list[int]:
+        row = await brackets_store.tournament(bot.db, guild.id, wanted_id(tournament_id))
+        current = await brackets_store.bracket(bot.db, row) if row is not None else None
+        match = current.matches.get(str(key)) if current is not None else None
+        if match is None:
+            return []
+        people = {one["id"]: one for one in await brackets_store.entrants(bot.db, row["id"])}
+        return brackets_cards.player_ids(match, people)
+
+    def told_entrant(tournament_id: Any, entrant_id: int, move: Any, reason: str) -> Any:
+        async def after(guild: Any, actor: Any, outcome: Any, held: Any) -> None:
+            wanted = wanted_id(tournament_id)
+            person = await brackets_store.entrant(bot.db, wanted, entrant_id)
+            row = await brackets_store.tournament(bot.db, guild.id, wanted)
+            if person is None or row is None:
+                return
+            await brackets_thread.tell(
+                bot,
+                guild,
+                row,
+                person["user_id"],
+                ENTRANT_DMS[move.__name__],
+                reason,
+                actor=actor,
+            )
+
+        return after
+
+    def told_players(tournament_id: Any, key: str, dm: str, reason: str) -> tuple[Any, Any]:
+        async def before(guild: Any) -> list[int]:
+            return await players(guild, tournament_id, key)
+
+        async def after(guild: Any, actor: Any, outcome: Any, held: Any) -> None:
+            row = await brackets_store.tournament(bot.db, guild.id, wanted_id(tournament_id))
+            fields = {"result": outcome.message} if dm == "brackets_dm_decided" else {}
+            for user_id in held or []:
+                await brackets_thread.tell(
+                    bot, guild, row, user_id, dm, reason, actor=actor, set=key, **fields
+                )
+
+        return before, after
 
     async def answered(
-        request: Request, tournament_id: Any, move: Any, *args: Any, **words: Any
+        request: Request,
+        tournament_id: Any,
+        move: Any,
+        *args: Any,
+        before: Any = None,
+        after: Any = None,
+        **words: Any,
     ) -> dict[str, Any]:
         who = await writer(request)
         guild = require_guild(bot)
@@ -69,9 +135,12 @@ def build_router(bot: Any) -> APIRouter:
         wanted = wanted_id(tournament_id) if tournament_id is not None else None
         actor = actor_for(bot, who, guild)
         given = (wanted,) if wanted is not None else ()
+        held = await before(guild) if before is not None else None
         outcome = await move(bot, guild, actor, *given, *args, via=VIA_WEBSITE, **words)
         if not outcome.ok:
             raise Refused(outcome.status or 400, outcome.code, outcome.message)
+        if after is not None:
+            await after(guild, actor, outcome, held)
         following = brackets_thread.follow_later(
             bot, guild, outcome.value, outcome, move=getattr(move, "__name__", None)
         )
@@ -91,7 +160,11 @@ def build_router(bot: Any) -> APIRouter:
         return {
             "mode": moves.mode_of(bot.store, guild.id),
             "may_run": runs(guild, who),
-            "tournaments": [brackets_view.summary(row) for row in rows],
+            "words": brackets_view.page_words(bot.store, guild.id),
+            "tournaments": [
+                brackets_view.summary(row) | {"to_name": name_of(guild, row["to_user_id"])}
+                for row in rows
+            ],
         }
 
     @router.get("/{tournament_id}")
@@ -166,20 +239,32 @@ def build_router(bot: Any) -> APIRouter:
 
     @router.delete("/{tournament_id}/entrants/{entrant_id}")
     async def brackets_remove(
-        request: Request, tournament_id: str, entrant_id: str
+        request: Request, tournament_id: str, entrant_id: str, payload: Any = OPTIONAL
     ) -> dict[str, Any]:
-        return await answered(request, tournament_id, people.remove_entrant, wanted_id(entrant_id))
+        entrant = wanted_id(entrant_id)
+        return await answered(
+            request,
+            tournament_id,
+            people.remove_entrant,
+            entrant,
+            after=told_entrant(tournament_id, entrant, people.remove_entrant, reason_of(payload)),
+        )
 
-    def entrant_move(path: str, move: Any) -> None:
-        async def route(request: Request, tournament_id: str, entrant_id: str) -> dict[str, Any]:
-            return await answered(request, tournament_id, move, wanted_id(entrant_id))
+    def entrant_move(path: str, move: Any, *, tells: bool = False) -> None:
+        async def route(
+            request: Request, tournament_id: str, entrant_id: str, payload: Any = OPTIONAL
+        ) -> dict[str, Any]:
+            entrant = wanted_id(entrant_id)
+            reason = reason_of(payload)
+            after = told_entrant(tournament_id, entrant, move, reason) if tells else None
+            return await answered(request, tournament_id, move, entrant, after=after)
 
         route.__name__ = f"brackets_{move.__name__}"
         router.add_api_route(path, route, methods=["POST"])
 
     entrant_move("/{tournament_id}/entrants/{entrant_id}/restore", people.restore_entrant)
-    entrant_move("/{tournament_id}/entrants/{entrant_id}/drop", people.drop)
-    entrant_move("/{tournament_id}/entrants/{entrant_id}/dq", people.dq)
+    entrant_move("/{tournament_id}/entrants/{entrant_id}/drop", people.drop, tells=True)
+    entrant_move("/{tournament_id}/entrants/{entrant_id}/dq", people.dq, tells=True)
 
     @router.post("/{tournament_id}/entrants/{entrant_id}/checkin")
     async def brackets_check_in(
@@ -199,7 +284,13 @@ def build_router(bot: Any) -> APIRouter:
 
     set_move("/{tournament_id}/sets/{key}/call", sets.call)
     set_move("/{tournament_id}/sets/{key}/confirm", sets.confirm_report)
-    set_move("/{tournament_id}/sets/{key}/reset", sets.reset)
+
+    @router.post("/{tournament_id}/sets/{key}/reset")
+    async def brackets_set_reset(
+        request: Request, tournament_id: str, key: str, payload: Any = OPTIONAL
+    ) -> dict[str, Any]:
+        before, after = told_players(tournament_id, key, "brackets_dm_reset", reason_of(payload))
+        return await answered(request, tournament_id, sets.reset, key, before=before, after=after)
 
     @router.post("/{tournament_id}/sets/{key}/report")
     async def brackets_report(
@@ -223,11 +314,14 @@ def build_router(bot: Any) -> APIRouter:
         request: Request, tournament_id: str, key: str, payload: Any = OPTIONAL
     ) -> dict[str, Any]:
         given = body_of(payload)
+        before, after = told_players(tournament_id, key, "brackets_dm_decided", reason_of(payload))
         return await answered(
             request,
             tournament_id,
             sets.override,
             key,
+            before=before,
+            after=after,
             score_a=given.get("score_a"),
             score_b=given.get("score_b"),
             winner=given.get("winner"),

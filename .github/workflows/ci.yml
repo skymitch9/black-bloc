@@ -68,6 +68,8 @@ jobs:
         run: node site/mock/fieldaids.test.mjs
       - name: Posts page hashes
         run: node site/mock/posts-hash.test.mjs
+      - name: Brackets drawing
+        run: node site/mock/brackets.test.mjs
 
   clock-ahead:
     runs-on: ubuntu-latest

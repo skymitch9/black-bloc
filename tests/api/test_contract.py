@@ -1241,6 +1241,7 @@ async def seed_brackets(db, guild_id: int) -> dict:
     await store_.save(db, finished, done.bracket, list(done.bracket.matches), [])
     complete, _ = await made("complete", "single", [(MEMBER_ID, "ada")])
     cancelled, _ = await made("cancelled", "single", [], state_before="signups")
+    rehearsal, _ = await made("signups", "single", [(MEMBER_ID, "ada")], shadow=1)
     return {
         "bracket_draft_id": str(draft),
         "bracket_signups_id": str(signups),
@@ -1254,6 +1255,8 @@ async def seed_brackets(db, guild_id: int) -> dict:
         "bracket_removed_entrant_id": str(removed),
         "bracket_checkin_entrant_id": str(checking),
         "bracket_running_entrant_id": str(playing),
+        "bracket_rehearsal_id": str(rehearsal),
+        "bracket_forum_id": str(INBOX_FORUM_ID),
     }
 
 
@@ -1413,12 +1416,15 @@ def fill(text: str, ids: dict) -> str:
 
 @pytest.mark.parametrize("spec", ROUTES, ids=IDS)
 async def test_every_route_answers_with_the_keys_the_pages_read(
-    module_client, module_web, seeded, spec
+    module_client, module_web, seeded, spec, wf
 ):
     path = fill(spec["path"], seeded)
     body = spec.get("body")
     if isinstance(body, dict):
         body = json.loads(fill(json.dumps(body), seeded))
+    for key, value in json.loads(fill(json.dumps(spec.get("settings") or {}), seeded)).items():
+        wanted = int(value) if isinstance(value, str) and value.isdigit() else value
+        await module_web.store.set(wf.GUILD_ID, key, wanted, by=7)
     where = f"{spec['method']} {path}"
     reading = spec["method"] == READ_ONLY
     before = await snapshot(module_web.db) if reading else {}

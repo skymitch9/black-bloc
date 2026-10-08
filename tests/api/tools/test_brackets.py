@@ -292,3 +292,112 @@ async def test_the_move_into_knuck_up_is_staff_only_and_refused_in_words_while_s
     assert shadowed.status_code == 409
     assert shadowed.json()["error"] == "not_on"
     assert "brackets_mode is shadow" in shadowed.json()["message"]
+
+
+async def told(web, kind="brackets.would_dm"):
+    import json
+
+    cur = await web.db.conn.execute(
+        "SELECT target_id, details FROM action_log WHERE kind = ? ORDER BY id", (kind,)
+    )
+    return [(row[0], json.loads(row[1])) for row in await cur.fetchall()]
+
+
+async def test_the_list_carries_the_page_words_the_cap_and_the_organisers_name(
+    client, sign_in, wf, web, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser, format="single", entrant_cap=8)["id"]
+    await web.store.set(wf.GUILD_ID, "brackets_waiting_play", "Go play {opponent}")
+    listed = as_(client, sign_in, wf, ADA).get("/api/brackets").json()
+    (row,) = listed["tournaments"]
+    assert (row["id"], row["entrant_cap"], row["to_name"]) == (tid, 8, "Tess")
+    assert listed["words"]["brackets_waiting_play"] == "Go play {opponent}"
+    assert listed["words"]["brackets_sign_up_label"] == "Sign up"
+    one = as_(client, sign_in, wf, ADA).get(f"/api/brackets/{tid}").json()
+    assert (one["to_name"], one["shadow"]) == ("Tess", False)
+
+
+async def test_a_dq_and_a_drop_from_the_site_tell_the_player_with_the_reason(
+    client, sign_in, wf, web, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser, format="single", best_of_finals=3)["id"]
+    organiser.post(f"/api/brackets/{tid}/signups/open", json={})
+    for player in (ADA, BEA, NOBODY):
+        as_(client, sign_in, wf, player).post(f"/api/brackets/{tid}/join", json={})
+    organiser = as_(client, sign_in, wf, TO)
+    started = organiser.post(f"/api/brackets/{tid}/start", json={}).json()["tournament"]
+    ids = {one["name"]: one["id"] for one in started["entrants"]}
+    dq = organiser.post(
+        f"/api/brackets/{tid}/entrants/{ids['Ada']}/dq", json={"reason": "  no   show "}
+    )
+    assert dq.status_code == 200, dq.text
+    organiser.post(f"/api/brackets/{tid}/entrants/{ids['Bea']}/drop", json={})
+    rows = await told(web)
+    assert [(target, details["dm"], details["reason"]) for target, details in rows] == [
+        (ADA, "brackets_dm_dq", "no show"),
+        (BEA, "brackets_dm_dropped", ""),
+    ]
+    assert rows[0][1]["text"].endswith("Reason: no show")
+
+
+async def test_a_player_dropping_themselves_is_not_told(client, sign_in, wf, web, people):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser)["id"]
+    organiser.post(f"/api/brackets/{tid}/signups/open", json={})
+    ada = as_(client, sign_in, wf, ADA)
+    mine = ada.post(f"/api/brackets/{tid}/join", json={}).json()["tournament"]["mine"]
+    left = ada.post(f"/api/brackets/{tid}/entrants/{mine}/drop", json={"reason": "busy"})
+    assert left.status_code == 200, left.text
+    assert await told(web) == []
+
+
+async def test_a_removal_from_the_site_tells_the_member_and_never_a_guest(
+    client, sign_in, wf, web, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser)["id"]
+    organiser.post(f"/api/brackets/{tid}/signups/open", json={})
+    as_(client, sign_in, wf, ADA).post(f"/api/brackets/{tid}/join", json={})
+    organiser = as_(client, sign_in, wf, TO)
+    view = organiser.post(f"/api/brackets/{tid}/entrants", json={"name": "Remy"}).json()
+    ids = {one["name"]: one["id"] for one in view["tournament"]["entrants"]}
+    for name in ("Ada", "Remy"):
+        gone = organiser.request(
+            "DELETE", f"/api/brackets/{tid}/entrants/{ids[name]}", json={"reason": "late"}
+        )
+        assert gone.status_code == 200, gone.text
+    assert [(target, details["dm"]) for target, details in await told(web)] == [
+        (ADA, "brackets_dm_removed")
+    ]
+
+
+async def test_a_decision_and_a_reset_from_the_site_tell_both_players(
+    client, sign_in, wf, web, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser, format="single", best_of_finals=3)["id"]
+    organiser.post(f"/api/brackets/{tid}/signups/open", json={})
+    for player in (ADA, BEA):
+        as_(client, sign_in, wf, player).post(f"/api/brackets/{tid}/join", json={})
+    organiser = as_(client, sign_in, wf, TO)
+    organiser.post(f"/api/brackets/{tid}/start", json={})
+    decided = organiser.post(
+        f"/api/brackets/{tid}/sets/W1-1/override",
+        json={"score_a": 2, "score_b": 0, "reason": "stream VOD"},
+    )
+    assert decided.status_code == 200, decided.text
+    organiser.post(f"/api/brackets/{tid}/sets/W1-1/reset", json={"reason": "replay"})
+    refused = organiser.post(f"/api/brackets/{tid}/sets/W1-1/reset", json={"reason": "again"})
+    assert refused.status_code == 409
+    found = [
+        (target, details["dm"], details["reason"]) for target, details in await told(web)
+    ]
+    assert found == [
+        (ADA, "brackets_dm_decided", "stream VOD"),
+        (BEA, "brackets_dm_decided", "stream VOD"),
+        (ADA, "brackets_dm_reset", "replay"),
+        (BEA, "brackets_dm_reset", "replay"),
+    ]
+    assert "W1-1 is final: Ada wins 2–0." in (await told(web))[0][1]["text"]

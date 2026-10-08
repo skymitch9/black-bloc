@@ -4740,7 +4740,61 @@ BRACKETS_CARD_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the line a rehearsal thread keeps once staff move its tournament into #knuck-up",
     ),
 }
+BRACKETS_WAITING = ("set", "opponent")
+BRACKETS_PAGE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "brackets_waiting_play": (
+        "Play {opponent} · {set}",
+        BRACKETS_WAITING,
+        "the bracket page's line for a player whose set is ready",
+    ),
+    "brackets_waiting_called": (
+        "Called — play {opponent} now · {set}",
+        BRACKETS_WAITING,
+        "the bracket page's line for a player whose set an organiser called",
+    ),
+    "brackets_waiting_confirm": (
+        "{opponent} reported {set} — confirm or dispute",
+        BRACKETS_WAITING,
+        "the bracket page's line for a player whose opponent reported a score",
+    ),
+    "brackets_waiting_opponent_confirms": (
+        "Waiting on {opponent} to confirm {set}",
+        BRACKETS_WAITING,
+        "the bracket page's line for a player who reported and waits on the opponent",
+    ),
+    "brackets_waiting_to_decides": (
+        "{set} is disputed — an organiser decides",
+        BRACKETS_WAITING,
+        "the bracket page's line for a player whose set is disputed",
+    ),
+    "brackets_waiting_waits": (
+        "Next: {set}",
+        BRACKETS_WAITING,
+        "the bracket page's line for a player waiting on another set to finish",
+    ),
+    "brackets_waiting_next_round": (
+        "Waiting for the next round",
+        BRACKETS_WAITING,
+        "the bracket page's line for a Swiss player waiting on the next round",
+    ),
+    "brackets_waiting_done": (
+        "Finished",
+        BRACKETS_WAITING,
+        "the bracket page's line for a player with nothing left to play",
+    ),
+    "brackets_waiting_out": (
+        "Out",
+        BRACKETS_WAITING,
+        "the bracket page's line for a player who dropped or was disqualified",
+    ),
+    "brackets_discord_label": (
+        "In Discord",
+        (),
+        "the bracket page's link from a set to its card in the tournament thread",
+    ),
+}
 BRACKETS_WORDS.update(BRACKETS_CARD_WORDS)
+BRACKETS_WORDS.update(BRACKETS_PAGE_WORDS)
 BRACKETS_DEFAULTS: dict[str, Any] = {
     BRACKETS_CHANNEL: BRACKETS_CHANNEL_ID,
     **{key: default for key, (default, _) in BRACKETS_ENUMS.items()},

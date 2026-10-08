@@ -7,6 +7,51 @@ from typing import Any
 from . import brackets_store as store_
 from .brackets import play, standings
 from .brackets.model import ELIMINATION
+from .settings_store import BRACKETS_DEFAULTS
+
+PAGE_WORDS = (
+    "brackets_state_draft",
+    "brackets_state_signups",
+    "brackets_state_check_in",
+    "brackets_state_seeding",
+    "brackets_state_running",
+    "brackets_state_complete",
+    "brackets_state_cancelled",
+    "brackets_format_single_words",
+    "brackets_format_double_words",
+    "brackets_format_round_robin_words",
+    "brackets_format_swiss_words",
+    "brackets_sign_up_label",
+    "brackets_leave_label",
+    "brackets_check_in_label",
+    "brackets_drop_label",
+    "brackets_drop_confirm",
+    "brackets_report_label",
+    "brackets_confirm_label",
+    "brackets_dispute_label",
+    "brackets_report_title",
+    "brackets_dispute_title",
+    "brackets_dispute_note_label",
+    "brackets_round_winners",
+    "brackets_round_losers",
+    "brackets_round_grand",
+    "brackets_round_reset",
+    "brackets_round_third",
+    "brackets_round_plain",
+    "brackets_set_card_best_of",
+    "brackets_set_card_rematch",
+    "brackets_your_sets_title",
+    "brackets_waiting_play",
+    "brackets_waiting_called",
+    "brackets_waiting_confirm",
+    "brackets_waiting_opponent_confirms",
+    "brackets_waiting_to_decides",
+    "brackets_waiting_waits",
+    "brackets_waiting_next_round",
+    "brackets_waiting_done",
+    "brackets_waiting_out",
+    "brackets_discord_label",
+)
 
 SUMMARY_FIELDS = (
     "name",
@@ -16,6 +61,7 @@ SUMMARY_FIELDS = (
     "starts_at",
     "created_at",
     "updated_at",
+    "entrant_cap",
 )
 OPTION_FIELDS = (
     "format",
@@ -46,6 +92,14 @@ ID_FIELDS = ("created_by", "to_user_id", "channel_id", "thread_id", "message_id"
 
 def as_id(value: Any) -> str | None:
     return str(value) if value is not None else None
+
+
+def page_words(store: Any, guild_id: int) -> dict[str, str]:
+    """The player-facing words the site page draws, as staff wrote them or as shipped."""
+    return {
+        key: str(store.get(guild_id, key) or "").strip() or str(BRACKETS_DEFAULTS[key])
+        for key in PAGE_WORDS
+    }
 
 
 def summary(row: Any) -> dict[str, Any]:
@@ -165,6 +219,7 @@ async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = Fal
         **{name: row[name] for name in SUMMARY_FIELDS},
         **{name: row[name] for name in TIME_FIELDS},
         **{name: as_id(row[name]) for name in ID_FIELDS},
+        "shadow": bool(row["shadow"]),
         "options": options(row),
         "entrant_count": sum(1 for one in people if not one["dropped"]),
         "finished": bool(bracket is not None and play.finished(bracket)),
