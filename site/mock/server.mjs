@@ -768,9 +768,9 @@ const SETTING_SPECS = [
   ["marathon_host_event_description_template", "text", "{member} hosts {runs} run(s) on {marathon}: {games}. Read from the schedule; times follow it.", "{member} hosts {runs} run(s) on {marathon}: {games}. Read from the schedule; times follow it.", "the description of the event made for one BaF host block of a marathon. It takes {member} {marathon} {games} {runs}"],
   ["marathon_controls_announcements_on", "text", "Runner announcements: on · turn off", "Runner announcements: on · turn off", "the thread controls' runner announcements button while the marathon's BaF runners are announced publicly"],
   ["marathon_controls_announcements_off", "text", "Runner announcements: off · turn on", "Runner announcements: off · turn on", "the thread controls' runner announcements button while the marathon's BaF runners are not announced publicly"],
-  ["marathon_runner_announcements_on_said", "text", "**{marathon}** announces its BaF runners publicly now — reminders at every mark, and highlights while Auto-highlight is on. A runner can still be left out of one run.", "**{marathon}** announces its BaF runners publicly now — reminders at every mark, and highlights while Auto-highlight is on. A runner can still be left out of one run.", "what staff are told once a marathon's Runner announcements switch is on. It takes {marathon}"],
+  ["marathon_runner_announcements_on_said", "text", "**{marathon}** announces its BaF runners publicly now — reminders at every mark, and a highlight as each run goes live. A runner can still be left out of one run.", "**{marathon}** announces its BaF runners publicly now — reminders at every mark, and a highlight as each run goes live. A runner can still be left out of one run.", "what staff are told once a marathon's Runner announcements switch is on. It takes {marathon}"],
   ["marathon_runner_announcements_off_said", "text", "**{marathon}** no longer announces its BaF runners publicly. A runner can still be announced for one run from that run's post; posts already up follow their runs to the end.", "**{marathon}** no longer announces its BaF runners publicly. A runner can still be announced for one run from that run's post; posts already up follow their runs to the end.", "what staff are told once a marathon's Runner announcements switch is off. It takes {marathon}"],
-  ["marathon_host_highlights", "bool", true, true, "whether each BaF host of a marathon is posted like a BaF runner, once per host block (the runs they host in a row, through runs with no host listed): the public reminder (marathon_public_reminder_template, with marathon_part_host) at every marathon_reminder_minutes mark before the block's first run in marathon_reminder_channel_id while marathon_public_reminders is on, and the public highlight (marathon_public_template) when the block goes live and the marathon's Auto-highlight is on. Both follow the marathon's Host announcements switch and each host's opt-out. A host still never makes a run a BaF run. on by default"],
+  ["marathon_host_highlights", "bool", true, true, "whether each BaF host of a marathon is posted like a BaF runner, once per host block (the runs they host in a row, through runs with no host listed): the public reminder (marathon_public_reminder_template, with marathon_part_host) at every marathon_reminder_minutes mark before the block's first run in marathon_reminder_channel_id while marathon_public_reminders is on, and the public highlight (marathon_public_template) when the block goes live. Both follow the marathon's Host announcements switch and each host's opt-out. A host still never makes a run a BaF run. on by default"],
   ["marathon_announcements_default", "bool", true, true, "whether a marathon announces its BaF RUNNERS publicly — each run's reminders and highlight — when its own Runner announcements switch follows this setting. Hosts follow Host announcements; neither switch is over the other. A run's own answer for a runner beats this switch either way. on by default"],
   ["marathon_reminder_minutes", "text", "120, 15", "120, 15", "minutes before a BaF run that a reminder is posted, separated by commas; `120, 15` by default. marathon_ping_minutes is always one of them"],
   ["marathon_ping_minutes", "int", 15, 15, "the one reminder that pings: this many minutes before a BaF run, the member's own ping role and the marathon channel's ping role are mentioned, and the public copy mentions the Marathon role (marathon_role_pings). 15 by default; 0 pings at the scheduled start", null, 240, 0],
@@ -821,7 +821,6 @@ const SETTING_SPECS = [
   ["marathon_spotlight_tail_minutes", "int", 60, 60, "minutes after a marathon's last run ends that the spotlight it follows stays on. 60 by default, so a schedule that runs over is still spotlit; 0 ends it with the last run. When the schedule is extended the end moves with it", null, 720, 0],
   ["marathon_ping_role_default", "bool", false, false, "whether a NEW marathon pings roles — its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel gets a ping window. off by default; each marathon's own Ping the role switch changes it after, and marathons already on the list keep their own"],
   ["marathon_public_channel_id", "channel", null, null, "where a BaF run's public highlight goes — the post members see, since a marathon's own thread is for staff. Blank uses the go-live channel. Changing it moves the next highlight; one already up stays where it is and keeps being updated"],
-  ["marathon_public_highlight_default", "bool", false, false, "whether a NEW marathon highlights each BaF run publicly the moment it goes live. off by default; each marathon's own Auto-highlight switch changes it after, and marathons already on the list keep their own"],
   ["marathon_reminder_channel_id", "channel", null, null, "where the public copy of a tracked marathon's reminders goes (the *is up in 15 minutes* posts members see; marathon_thread_reminders adds a copy in the marathon's own thread). Blank uses the go-live channel. Its own row: it never moves the go-live spotlight post or the public highlights"],
   ["marathon_near_miss_posts", "bool", true, true, "whether a tracked marathon's thread gets one post per runner whose Twitch login or schedule name is exactly a member's Discord username, with Link (this marathon), Link everywhere and Not them buttons for staff. Nobody is linked until staff press. on by default"],
   ["marathon_public_reminders", "bool", true, true, "whether every reminder of a tracked marathon also posts publicly, in marathon_reminder_channel_id — the switch over every marathon's runner and host announcements, for reminders. on by default; off keeps reminders in the staff thread only"],
@@ -965,9 +964,6 @@ const SETTING_SPECS = [
   ["marathon_announce_run_default_said", "text", "**{name}** follows the defaults again for **{game}** on **{marathon}**.", "**{name}** follows the defaults again for **{game}** on **{marathon}**.", "what staff are told once a person's own answer for one run is cleared. It takes {name} {game} {marathon}"],
   ["marathon_mention_plain_said", "text", "**{name}** is written by name, with no @, in **{marathon}**'s public posts. Posts already up are rewritten in place.", "**{name}** is written by name, with no @, in **{marathon}**'s public posts. Posts already up are rewritten in place.", "what staff are told once a person's name is written as plain text on a marathon. It takes {name} {marathon}"],
   ["marathon_mention_on_said", "text", "**{name}** is written as an @ again in **{marathon}**'s public posts. Posts already up are rewritten in place.", "**{name}** is written as an @ again in **{marathon}**'s public posts. Posts already up are rewritten in place.", "what staff are told once a person is written as an @ again on a marathon. It takes {name} {marathon}"],
-  ["marathon_public_auto_on_said", "text", "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.", "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.", "what staff are told once a marathon's auto-highlight is turned on. It takes {marathon} {channel}"],
-  ["marathon_public_auto_off_said", "text", "**{marathon}** no longer highlights BaF runs by itself. Highlights already up stay up.", "**{marathon}** no longer highlights BaF runs by itself. Highlights already up stay up.", "what staff are told once a marathon's auto-highlight is turned off. It takes {marathon}"],
-  ["marathon_public_auto_same_said", "text", "**{marathon}** already works that way, so nothing was changed.", "**{marathon}** already works that way, so nothing was changed.", "the answer when the auto-highlight switch is set to what it already is. It takes {marathon}"],
   ["marathon_channel_ping_mode_default", "enum", "events", "events", "the pings a NEW channel row gets when it is a marathon channel (one a marathon feed is seeded for) that takes marathons: events — the default — mentions roles only inside a ping window, which its marathons set from their schedules; always and never as on the Go-live page. Every other new row follows spotlight_ping_mode_default, and no existing row is changed", ["always", "never", "events"]],
   ["marathon_channel_ping_help", "text", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "the help line under the Pings choice on a marathon channel's Go-live drawer, saying what During events means there"],
   ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a BaF run goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
@@ -7073,7 +7069,7 @@ function seedMarathons() {
     { id: 50, name: 'GDQueer', schedule_url: 'https://gamesdonequick.com/hotfix/schedule#gdqueer/2026-10-03', source: 'gdq_hotfix', source_ref: 'gdqueer/2026-10-03', spotlight_id: 1, feed_id: 40, starts_at: '2026-10-03T17:00:00+00:00', ends_at: '2026-10-05T03:09:00+00:00', active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(25), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(25), overlay: null, overlay_sheet: { label: 'Games Done Queer \u{1F4C5} Oct 3-4', url: MARATHON_OVERLAY_SHEET, runs: 24, matched: 24, by_order: 0, applied: true, stale: null } },
     trackerSeed(MEMBERS, STAFF.id).marathon,
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
-  ].map((row) => ({ baf_answer: row.id === 31 ? 'no' : null, suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, baf_event: row.id === 60 ? true : null, public_highlight: false, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
+  ].map((row) => ({ baf_answer: row.id === 31 ? 'no' : null, suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, baf_event: row.id === 60 ? true : null, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
 }
 
 // The inbox (marathon-inbox-design.md §B): AGDQ 2027 is tracked with its own thread (and its
@@ -7359,7 +7355,6 @@ function marathonRow(row) {
     ping_role: Boolean(row.ping_role),
     role_ping: marathonRolePingShown(row),
     baf_event: marathonBafEvent(row),
-    public_highlight: Boolean(row.public_highlight),
     announcements: marathonSwitch(row, 'announcements'),
     host_announcements: marathonSwitch(row, 'host_announcements'),
     overlay: { ...marathonSwitch(row, 'overlay'), sheet: row.overlay_sheet || null },
@@ -7803,18 +7798,9 @@ function marathonSyncHostEvents(row) {
   return { made, cancelled };
 }
 
-// The bot's cogs/content/marathon_public.set_public_highlight: the marathon's auto-highlight switch.
-function marathonSetPublicHighlight(row, given) {
-  const word = typeof given === 'boolean' ? String(given) : String(given ?? '').trim().toLowerCase();
-  const wanted = ['true', 'on', 'yes', '1'].includes(word) ? true : (['false', 'off', 'no', '0'].includes(word) ? false : null);
-  if (wanted === null) throw new Refused(422, 'bad_public_highlight', 'Say on or off for whether the marathon highlights BaF runs by itself, so nothing was changed.');
-  const was = Boolean(row.public_highlight);
-  if (wanted === was) return marathonSaid('marathon_public_auto_same_said', { marathon: row.name });
-  row.public_highlight = wanted;
-  logAction('web.marathon.public_highlight_set', { details: { marathon_id: row.id, name: row.name, from: was, to: wanted, via: 'website' } });
-  const channel = state.settings.get('marathon_public_channel_id') || state.settings.get('golive_channel_id');
-  return marathonSaid(wanted ? 'marathon_public_auto_on_said' : 'marathon_public_auto_off_said', { marathon: row.name, channel: channel ? `<#${channel}>` : '#?' });
-}
+// Auto-highlight folded into Runner announcements (marathon controls 2026-10-08): the bot's
+// marathon_thread_controls.HIGHLIGHT_GONE.
+const MARATHON_HIGHLIGHT_GONE = "Auto-highlight is part of Runner announcements now: a run's highlight follows that switch and each run's own answer. Nothing was changed.";
 
 const MARATHON_MODES = ['none', 'marathon', 'runs', 'both'];
 const MARATHON_MODE_WORDS = { none: 'No event', marathon: 'One event for the marathon', runs: 'An event per BaF run and host block', both: 'Both' };
@@ -8732,7 +8718,7 @@ function marathonCreate(name, scheduleUrl, spotlight) {
   refuseOptedOutChannel(spotlightId);
   const id = [...state.marathons, ...state.marathonArchive].reduce((top, one) => Math.max(top, one.id), 0) + 1;
   const starts = new Date(Date.now() + 3 * 86400000);
-  const row = { id, name, schedule_url: url, source: read.source, source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null, ping_role: state.settings.get('marathon_ping_role_default') === true, public_highlight: state.settings.get('marathon_public_highlight_default') === true };
+  const row = { id, name, schedule_url: url, source: read.source, source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null, ping_role: state.settings.get('marathon_ping_role_default') === true };
   state.marathons.push(row);
   const top = state.marathonRuns.reduce((most, one) => Math.max(most, one.id), 0);
   [['Celeste', 'Any%', 'Flyingludicolo', 'flyingludicolo'], ['Super Metroid', 'Any%', 'Casey', 'caseyfast'], ['Blaster Master', 'Any%', 'Interview Crew', null]].forEach(([game, category, runner, login], index) => {
@@ -8946,7 +8932,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   if ('announcements' in body) said.push(marathonSetSwitch(row, 'announcements', body.announcements));
   if ('host_announcements' in body) said.push(marathonSetSwitch(row, 'host_announcements', body.host_announcements));
   if ('overlay' in body) said.push(marathonSetSwitch(row, 'overlay', body.overlay));
-  if ('public_highlight' in body) said.push(marathonSetPublicHighlight(row, body.public_highlight));
+  if ('public_highlight' in body) said.push(MARATHON_HIGHLIGHT_GONE);
   if ('dismiss_next' in body) {
     if (body.dismiss_next !== true) throw new Refused(422, 'bad_dismiss', 'Say true to dismiss the suggested next event, so nothing was changed.');
     const record = marathonOpenSuggestion(row, body.event_id);

@@ -13,6 +13,7 @@ from ... import marathon_inbox as mi
 from ... import marathon_overlay as mo
 from ... import marathon_people as mt_people
 from ... import marathon_signals as sig
+from ... import marathon_thread_controls as mtc
 from ...cogs.content.marathon import (
     add_next,
     change_link,
@@ -83,7 +84,6 @@ from ...cogs.content.marathon_people import (
     zone_of,
 )
 from ...cogs.content.marathon_ping import set_ping_role
-from ...cogs.content.marathon_public import set_public_highlight
 from ...cogs.content.marathon_role_ping import state_of as role_ping_state
 from ...cogs.content.marathon_signals import sheet_times
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
@@ -96,7 +96,6 @@ from ...marathon_archive import STAFF, WHY_WORDS, page_of
 from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_ping import pings_role
-from ...marathon_public import highlights
 from ...marathon_sources import SOURCE_WORDS, retimes_itself, schedule_page
 from ...marathon_spotlight import mode_of as spotlight_mode_of
 from ...settings_store import (
@@ -419,7 +418,6 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "ping_role": pings_role(row),
         "role_ping": role_ping_state(bot, guild, row, rows),
         "baf_event": baf_event_state(bot, guild, row, rows),
-        "public_highlight": highlights(row),
         "announcements": host_switch(bot, guild, row, mh.ANNOUNCE),
         "host_announcements": host_switch(bot, guild, row, mh.HOST_ANNOUNCE),
         "overlay": host_switch(bot, guild, row, mh.OVERLAY) | {"sheet": mo.state_of(row)},
@@ -793,17 +791,7 @@ def build_router(bot: Any) -> APIRouter:
             )
             said.append(done.message)
         if "public_highlight" in payload:
-            done = answered(
-                await set_public_highlight(
-                    bot,
-                    guild,
-                    actor,
-                    await wanted(guild, marathon_id),
-                    payload["public_highlight"],
-                    via=VIA_WEBSITE,
-                )
-            )
-            said.append(done.message)
+            said.append(mtc.HIGHLIGHT_GONE)
         if "dismiss_next" in payload:
             if payload["dismiss_next"] is not True:
                 raise Refused(422, "bad_dismiss", BAD_DISMISS)

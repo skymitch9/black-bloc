@@ -810,7 +810,7 @@ async def test_a_day_that_is_not_a_baf_event_posts_what_main_posts(bot, cog, mon
 
     await through(bot, cog, marathon, 0, 60, 165, 181, 240, 345, 361)
 
-    said = [(one.content, allowed(one)) for one in bot.guild.channels[CHANNEL].messages]
+    said = [(one.content, allowed(one)) for one in await reminder_posts(bot)]
     logged = await rows(bot, "marathon.public_reminded")
     assert [(roles, text.count("<@&")) for text, roles in said] == MIXED_SAID
     assert [text for text, _roles in said] == MIXED_TEXT
@@ -1061,7 +1061,7 @@ async def test_an_all_ours_day_of_an_event_that_is_not_baf_posts_what_a_mixed_da
 
     await through(bot, cog, marathon, 0, 60, 120, 165, 180, 225, 240, 285, 300, 345, 405)
 
-    said = [(one.content, allowed(one)) for one in bot.guild.channels[CHANNEL].messages]
+    said = [(one.content, allowed(one)) for one in await reminder_posts(bot)]
     logged = await rows(bot, "marathon.public_reminded")
     assert [(one["game"], one["mark"], one.get("marathon_role")) for one in logged] == (
         OUTSIDE_ROWS
@@ -1390,6 +1390,12 @@ async def test_words_staff_stored_for_the_per_day_question_fall_back_to_the_ship
 
 
 # --- review fixes (whole event) 2026-10-06 -------------------------------------------------------
+
+
+async def reminder_posts(bot):
+    """The public channel without the run highlights going live puts up beside the reminders."""
+    up = {str(one["message_id"]) for one in await rows(bot, "marathon.public_highlight_posted")}
+    return [one for one in bot.guild.channels[CHANNEL].messages if str(one.id) not in up]
 
 
 UNSURE_LABEL = "BaF event: not decided (3 of 4 runs) · say yes"

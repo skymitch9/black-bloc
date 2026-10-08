@@ -649,6 +649,7 @@ async def test_marathons_rehearse_in_their_own_home_over_the_global_one(bot, cog
     """Owner, 2026-09-25: only the front door rehearses in #welcome-test."""
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     await bot.store.set(GUILD, "marathon_shadow_channel_id", LOG_CHANNEL)
+    await bot.store.set(GUILD, "marathon_public_shadow_channel_id", LOG_CHANNEL)
     marathon = await added(bot, cog)
     cog.clock = lambda: NOW + timedelta(minutes=31)
     await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))

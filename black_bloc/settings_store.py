@@ -6518,7 +6518,6 @@ MARATHON_PUBLIC_REMINDERS_KEY = "marathon_public_reminders"
 MARATHON_THREAD_REMINDERS_KEY = "marathon_thread_reminders"
 MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY = "marathon_public_reminder_template"
 MARATHON_PUBLIC_CHANNEL_KEY = "marathon_public_channel_id"
-MARATHON_PUBLIC_DEFAULT_KEY = "marathon_public_highlight_default"
 MARATHON_PUBLIC_TEMPLATE_KEY = "marathon_public_template"
 MARATHON_NEAR_MISS_POSTS_KEY = "marathon_near_miss_posts"
 MARATHON_NEAR_MISS_POST_KEY = "marathon_near_miss_post"
@@ -6534,9 +6533,6 @@ MARATHON_NEAR_MISS_ANSWERED_KEY = "marathon_near_miss_answered"
 MARATHON_NEAR_MISS_FIELDS = ("runner", "member", "username", "display_name", "marathon")
 MARATHON_NEAR_MISS_DONE_FIELDS = (*MARATHON_NEAR_MISS_FIELDS, "staff")
 MARATHON_PUBLIC_REMOVED_KEY = "marathon_public_removed"
-MARATHON_PUBLIC_AUTO_ON_SAID_KEY = "marathon_public_auto_on_said"
-MARATHON_PUBLIC_AUTO_OFF_SAID_KEY = "marathon_public_auto_off_said"
-MARATHON_PUBLIC_AUTO_SAME_KEY = "marathon_public_auto_same_said"
 MARATHON_PUBLIC_FIELDS = (
     "runner",
     "mention",
@@ -6748,9 +6744,9 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "the public reminder (marathon_public_reminder_template, with marathon_part_host) at "
         "every marathon_reminder_minutes mark before the block's first run in "
         "marathon_reminder_channel_id while marathon_public_reminders is on, and the public "
-        "highlight (marathon_public_template) when the block goes live and the marathon's "
-        "Auto-highlight is on. Both follow the marathon's Host announcements switch and "
-        "each host's opt-out. A host still never makes a run a BaF run. on by default",
+        "highlight (marathon_public_template) when the block goes live. Both follow the "
+        "marathon's Host announcements switch and each host's opt-out. A host still never "
+        "makes a run a BaF run. on by default",
     ),
     MARATHON_ANNOUNCEMENTS_DEFAULT_KEY: (
         "bool",
@@ -7117,13 +7113,6 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "where a BaF run's public highlight goes — the post members see, since a marathon's "
         "own thread is for staff. Blank uses the go-live channel. Changing it moves the next "
         "highlight; one already up stays where it is and keeps being updated",
-    ),
-    MARATHON_PUBLIC_DEFAULT_KEY: (
-        "bool",
-        False,
-        "whether a NEW marathon highlights each BaF run publicly the moment it goes live. off "
-        "by default; each marathon's own Auto-highlight switch changes it after, and "
-        "marathons already on the list keep their own",
     ),
     MARATHON_REMINDER_CHANNEL_KEY: (
         "channel",
@@ -7611,7 +7600,7 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     MARATHON_ANNOUNCEMENTS_ON_SAID_KEY: (
         "**{marathon}** announces its BaF runners publicly now — reminders at every mark, and "
-        "highlights while Auto-highlight is on. A runner can still be left out of one run.",
+        "a highlight as each run goes live. A runner can still be left out of one run.",
         ("marathon",),
         "what staff are told once a marathon's Runner announcements switch is on. It takes "
         "{marathon}",
@@ -8314,24 +8303,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what a public highlight is edited to when everyone it names is opted out; it is not "
         "updated after unless they opt back in. It takes the same words as "
         "marathon_public_template",
-    ),
-    MARATHON_PUBLIC_AUTO_ON_SAID_KEY: (
-        "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.",
-        ("marathon", "channel"),
-        "what staff are told once a marathon's auto-highlight is turned on. It takes {marathon} "
-        "{channel}",
-    ),
-    MARATHON_PUBLIC_AUTO_OFF_SAID_KEY: (
-        "**{marathon}** no longer highlights BaF runs by itself. Highlights already up stay "
-        "up.",
-        ("marathon",),
-        "what staff are told once a marathon's auto-highlight is turned off. It takes {marathon}",
-    ),
-    MARATHON_PUBLIC_AUTO_SAME_KEY: (
-        "**{marathon}** already works that way, so nothing was changed.",
-        ("marathon",),
-        "the answer when the auto-highlight switch is set to what it already is. It takes "
-        "{marathon}",
     ),
     MARATHON_UNIGNORED_SAID_KEY: (
         "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing "

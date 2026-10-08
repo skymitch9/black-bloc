@@ -298,13 +298,12 @@ async def insert_marathon(
     event_mode: str = "none",
     noticed: bool = True,
     ping_role: int = 0,
-    public_highlight: int = 0,
 ) -> int:
     stamp = now_iso()
     cur = await db.conn.execute(
         "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
-        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at, ping_role, "
-        "public_highlight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at, ping_role) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             int(guild_id),
             name,
@@ -320,7 +319,6 @@ async def insert_marathon(
             event_mode,
             stamp if noticed else None,
             1 if ping_role else 0,
-            1 if public_highlight else 0,
         ),
     )
     await db.conn.commit()
@@ -630,7 +628,6 @@ async def create_marathon(
     from ...marathon_events import BAD_MODE, makes_marathon_event
     from .marathon_events import BAD_MODE_CODE, mode_for_new
     from .marathon_ping import default_for_new
-    from .marathon_public import default_for_new as public_default_for_new
 
     feed = None
     if feed_id is not None:
@@ -686,7 +683,6 @@ async def create_marathon(
         feed_id=feed_id,
         noticed=noticed,
         ping_role=default_for_new(bot, guild.id),
-        public_highlight=public_default_for_new(bot, guild.id),
     )
     await log_action(
         bot,
@@ -703,7 +699,6 @@ async def create_marathon(
             "feed_id": feed_id,
             "event_mode": wanted_mode,
             "ping_role": bool(default_for_new(bot, guild.id)),
-            "public_highlight": bool(public_default_for_new(bot, guild.id)),
             "via": via,
         },
     )

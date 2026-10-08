@@ -833,23 +833,19 @@ async def test_the_drawer_reads_whether_the_heads_up_mentions_the_marathon_role_
     assert off["line"] == "The Marathon role is not mentioned: marathon_role_pings is off."
 
 
-async def test_patch_public_highlight_turns_the_auto_switch_on_and_off_and_refuses_a_bad_word(
+async def test_the_retired_auto_highlight_field_is_gone_and_a_patch_answers_in_words(
     client, sign_in, web, cog, wf
 ):
     sign_in(client)
     marathon_id = add(client).json()["id"]
-    assert client.get(f"/api/marathons/{marathon_id}").json()["public_highlight"] is False
+    assert "public_highlight" not in client.get(f"/api/marathons/{marathon_id}").json()
 
-    body = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": True}).json()
-
-    assert body["public_highlight"] is True
-    assert "the moment it goes live" in body["message"]
-    said = await web_row(wf, web, "web.marathon.public_highlight_set")
-    assert (said["from"], said["to"], said["via"]) == (False, True, "website")
-    body = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": False}).json()
-    assert body["public_highlight"] is False
-    bad = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": "loud"})
-    assert bad.status_code == 422 and bad.json()["error"] == "bad_public_highlight"
+    for given in (True, False, "loud"):
+        answer = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": given})
+        assert answer.status_code == 200
+        assert "part of Runner announcements now" in answer.json()["message"]
+    seen = [kind for kind, _details in await wf.web_rows_in(web.db)]
+    assert "web.marathon.public_highlight_set" not in seen
 
 
 async def test_following_again_spotlights_a_channel_whose_marathon_is_in_reach(

@@ -28,30 +28,11 @@ def test_a_button_posted_before_the_opt_out_maps_to_the_toggle():
     assert mp.move_of(mp.OPT_OUT) == mp.OPT_OUT and mp.move_of(mp.OPT_IN) == mp.OPT_IN
 
 
-def test_auto_wants_a_switched_on_marathon_and_a_run_never_highlighted():
-    on, off = {"public_highlight": 1}, {"public_highlight": 0}
-    assert mp.auto_wanted(on, a_row(state="live"))
-    assert not mp.auto_wanted(off, a_row(state="live"))
-    assert not mp.auto_wanted({}, a_row(state="live"))
+def test_auto_wants_any_postable_run_never_highlighted_whatever_the_old_column_says():
+    assert mp.auto_wanted(a_row(state="live"))
     removed = a_row(state="live", public_message_id=55, public_removed=1)
-    assert not mp.auto_wanted(on, removed)
-
-
-@pytest.mark.parametrize(
-    ("given", "wanted"),
-    [
-        (True, True),
-        (False, False),
-        ("on", True),
-        ("Off", False),
-        (1, True),
-        (0, False),
-        ("loud", None),
-        (2, None),
-    ],
-)
-def test_the_switch_takes_on_and_off_in_any_spelling(given, wanted):
-    assert mp.clean_switch(given) is wanted
+    assert not mp.auto_wanted(removed)
+    assert not hasattr(mp, "highlights") and not hasattr(mp, "clean_switch")
 
 
 def test_a_fetched_message_says_which_button_it_carries():

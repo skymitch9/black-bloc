@@ -102,10 +102,11 @@ async def pressed(bot, marathon, row, to, actor=None):
 
 
 async def highlighted(bot, cog, marathon, game="Super Metroid"):
-    why, _channel = await public.post_highlight(
-        cog, bot.guild, await fresh(bot, marathon), await run_of(bot, marathon, game)
-    )
-    assert why is None, why
+    """The run's highlight: the one going live already put up, else one posted now."""
+    row = await run_of(bot, marathon, game)
+    if not mp.message_id(row):
+        why, _channel = await public.post_highlight(cog, bot.guild, await fresh(bot, marathon), row)
+        assert why is None, why
     return public_posts(bot) or None
 
 
@@ -207,24 +208,13 @@ async def test_every_old_whole_marathon_button_answers_in_words_and_changes_noth
     assert await opted(bot, marathon) == [] and public_posts(bot) == []
 
 
-# --- the auto switch ----------------------------------------------------------------------------
+# --- the live highlight follows Runner announcements (marathon controls D4, 2026-10-08) --------
 
 
-async def test_with_the_switch_off_going_live_posts_nothing_public(bot, cog):
+async def test_going_live_posts_the_highlight_at_the_shoutout_while_runner_announcements_is_on(
+    bot, cog
+):
     marathon = await ready(bot, cog)
-    assert marathon["public_highlight"] == 0
-
-    cog.clock = lambda: NOW + timedelta(minutes=31)
-    await follow(bot, cog, marathon)
-
-    assert (await run_of(bot, marathon, "Super Metroid"))["state"] == "live"
-    assert public_posts(bot) == []
-
-
-async def test_with_the_switch_on_going_live_posts_the_highlight_at_the_shoutout(bot, cog):
-    marathon = await ready(bot, cog)
-    done = await public.set_public_highlight(bot, bot.guild, FakeActor(), marathon, True)
-    assert done.ok and "the moment it goes live" in done.message
 
     cog.clock = lambda: NOW + timedelta(minutes=31)
     await follow(bot, cog, marathon)
@@ -234,10 +224,19 @@ async def test_with_the_switch_on_going_live_posts_the_highlight_at_the_shoutout
     assert (await details_of(bot.db, "marathon.public_highlight_posted"))["auto"] is True
 
 
+async def test_the_old_per_marathon_column_is_never_read(bot, cog):
+    marathon = await ready(bot, cog)
+    await update_marathon(bot.db, marathon["id"], public_highlight=0)
+
+    cog.clock = lambda: NOW + timedelta(minutes=31)
+    await follow(bot, cog, marathon)
+
+    assert len(public_posts(bot)) == 1
+
+
 @pytest.mark.parametrize("why", ["opted_out", "announcements_off"])
 async def test_an_opted_out_runner_or_announcements_off_is_never_auto_highlighted(bot, cog, why):
     marathon = await ready(bot, cog)
-    await public.set_public_highlight(bot, bot.guild, FakeActor(), marathon, True)
     if why == "opted_out":
         await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.OPT_OUT)
     else:
@@ -250,11 +249,40 @@ async def test_an_opted_out_runner_or_announcements_off_is_never_auto_highlighte
     assert public_posts(bot) == []
 
 
-async def test_the_switch_never_puts_back_a_highlight_taken_down(bot, cog):
+async def test_announce_for_one_run_brings_its_highlight_with_runner_announcements_off(bot, cog):
+    from black_bloc.cogs.content.marathon_announce import set_run_answer
+
+    marathon = await ready(bot, cog)
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
+    row = await run_of(bot, marathon, "Super Metroid")
+    said = await set_run_answer(
+        bot, bot.guild, FakeActor(), marathon, row["id"], mt.member_ids(row)[0], "in"
+    )
+    assert said.ok
+
+    cog.clock = lambda: NOW + timedelta(minutes=31)
+    await follow(bot, cog, marathon)
+
+    assert len(public_posts(bot)) == 1
+
+
+async def test_a_highlight_up_follows_its_run_to_the_end_after_the_switch_goes_off(bot, cog):
+    marathon = await ready(bot, cog)
+    cog.clock = lambda: NOW + timedelta(minutes=31)
+    await follow(bot, cog, marathon)
+    (post,) = public_posts(bot)
+
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
+    cog.clock = lambda: NOW + timedelta(minutes=200)
+    await follow(bot, cog, marathon)
+
+    assert public_posts(bot) == [post] and post.edits
+
+
+async def test_going_live_never_puts_back_a_highlight_taken_down(bot, cog):
     marathon = await ready(bot, cog)
     await highlighted(bot, cog, marathon)
     await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.OPT_OUT)
-    await public.set_public_highlight(bot, bot.guild, FakeActor(), marathon, True)
 
     await public.auto_highlight(
         cog, bot.guild, await fresh(bot, marathon), await run_of(bot, marathon, "Super Metroid")
@@ -263,32 +291,12 @@ async def test_the_switch_never_puts_back_a_highlight_taken_down(bot, cog):
     assert len(public_posts(bot)) == 1 and "took down" in public_posts(bot)[0].content
 
 
-async def test_a_new_marathon_copies_the_default_and_the_switch_writes_both_ways(bot, cog):
-    await bot.store.set(GUILD, "marathon_public_highlight_default", True)
+async def test_a_new_marathon_carries_no_highlight_default_and_the_retired_key_is_gone(bot, cog):
     made = await create_marathon(bot, bot.guild, FakeActor(), name="SS4C", url=URL)
-    assert made.value["public_highlight"] == 1
-
-    off = await public.set_public_highlight(bot, bot.guild, FakeActor(), made.value, "off")
-    same = await public.set_public_highlight(bot, bot.guild, FakeActor(), made.value, False)
-    bad = await public.set_public_highlight(bot, bot.guild, FakeActor(), made.value, "loud")
-
-    assert off.ok and (await fresh(bot, made.value))["public_highlight"] == 0
-    assert "already works that way" in same.message
-    assert not bad.ok and bad.code == "bad_public_highlight"
-    logged = await details_of(bot.db, "marathon.public_highlight_set")
-    assert (logged["from"], logged["to"]) == (True, False)
-
-
-async def test_the_retired_auto_highlight_button_answers_in_words(bot, cog):
-    marathon = await ready(bot, cog)
-
-    said = await controls.press(bot, bot.guild, FakeActor(), marathon["id"], mtc.HIGHLIGHT, "on")
-
-    assert not said.ok and said.code == "gone" and "Runner announcements" in said.message
-    assert (await fresh(bot, marathon))["public_highlight"] == 0
-    message = the_thread(bot).messages[1]
-    labels = [getattr(one, "item", one).label for one in current_view(message).children]
-    assert not any(one.startswith("Auto-highlight") for one in labels)
+    assert made.value["public_highlight"] == 0
+    with pytest.raises(SettingError):
+        await bot.store.set(GUILD, "marathon_public_highlight_default", True)
+    assert not hasattr(public, "set_public_highlight")
 
 
 # --- pings, channel, shadow ---------------------------------------------------------------------
@@ -324,7 +332,6 @@ async def test_changing_the_channel_key_sends_the_next_highlight_there(bot, cog)
 async def test_no_public_channel_posts_nothing_and_the_opt_out_still_works(bot, cog, monkeypatch):
     monkeypatch.setattr(public, "public_channel", lambda bot, guild_id: None)
     marathon = await ready(bot, cog)
-    await public.set_public_highlight(bot, bot.guild, FakeActor(), marathon, True)
     cog.clock = lambda: NOW + timedelta(minutes=31)
     await follow(bot, cog, marathon)
 
