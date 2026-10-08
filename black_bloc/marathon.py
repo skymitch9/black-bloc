@@ -99,8 +99,6 @@ NO_MARATHONS = (
     "Black Bloc follows no marathon schedule yet. Staff add one with **Add a marathon…**."
 )
 PICK_MARATHON = "Pick a marathon to manage…"
-PICK_UNMATCHED = "Pick a name from this schedule…"
-PICK_MEMBER = "…then the member it is"
 ADD_TITLE = "Add a marathon"
 ADD_NAME = "Name"
 ADD_URL = "Schedule link (GDQ)"
@@ -179,18 +177,10 @@ NOT_LIVEABLE = (
     "**{game}** is {state}, so nothing was changed. Only a run coming up or done can be marked "
     "live."
 )
-RENAME_TITLE = "Rename the marathon"
-RENAME_LABEL = "Name"
 RENAME_SAID = (
     "**{old}** is now called **{name}**. The pinned controls, the board and the inbox post take "
     "the new name on the next check; a linked event and the thread's title keep the old one."
 )
-RENAME_SAME = "**{name}** already has that name, so nothing was changed."
-POLL_TITLE = "Re-read every…"
-POLL_LABEL = "Minutes between reads — blank for the default"
-POLL_HINT = "30"
-POLL_SAVED = "**{name}** is re-read every {minutes} minutes while it is near."
-POLL_CLEARED = "**{name}** is re-read on the marathon_poll_minutes gap again."
 PICK_RUN = "Pick a run to move…"
 NEXT_BUTTON_ADD = "Add it"
 NEXT_BUTTON_DISMISS = "Not this one"
@@ -266,26 +256,12 @@ MINE_MOVE = MarathonMove(MINE, "My runs", row=2)
 REFRESH_ROOT_MOVE = MarathonMove(REFRESH, "Refresh", row=2)
 LOGS_MOVE = MarathonMove(LOGS, "Logs", row=2)
 READ_MOVE = MarathonMove(REFRESH, "Read it now", "primary", 2)
-PAUSE_MOVE = MarathonMove(PAUSE, "Pause", row=2)
-RESUME_MOVE = MarathonMove(RESUME, "Resume", row=2)
-BOARD_POST_MOVE = MarathonMove(BOARD, "Post the board", row=2)
-BOARD_REFRESH_MOVE = MarathonMove(BOARD, "Refresh the board", row=2)
-PAIR_MOVE = MarathonMove(PAIR, "Pair a runner…", row=3)
 BACK_MOVE = MarathonMove(BACK, "Back", row=4)
 EVENTS_MOVE = MarathonMove(EVENTS, "Back", row=4)
-NEXT_MOVE = MarathonMove(NEXT, "Next up…", row=3)
-POLL_MOVE = MarathonMove(POLL, POLL_TITLE, row=3)
-RENAME_MOVE = MarathonMove(RENAME, "Rename…", row=2)
-SCHEDULE_MOVE = MarathonMove(SCHEDULE, "Schedule…", row=3)
-ADD_NEXT_MOVE = MarathonMove(ADD_NEXT, NEXT_BUTTON_ADD, "primary", 2)
-DISMISS_NEXT_MOVE = MarathonMove(DISMISS_NEXT, NEXT_BUTTON_DISMISS, row=2)
-LOOK_AGAIN_MOVE = MarathonMove(LOOK_AGAIN, NEXT_BUTTON_LOOK, row=2)
 SHOUT_MOVE = MarathonMove(SHOUT, "Shout it now", "primary", 2)
 MARK_DONE_MOVE = MarathonMove(MARK_DONE, "Mark done", row=2)
 MARK_UPCOMING_MOVE = MarathonMove(MARK_UPCOMING, "Mark it upcoming", row=2)
 MARK_LIVE_MOVE = MarathonMove(MARK_LIVE, "Mark it live", row=2)
-MAKE_EVENT_MOVE = MarathonMove(MAKE_EVENT, "Make an event now", row=3)
-UNLINK_EVENT_MOVE = MarathonMove(UNLINK_EVENT, "Unlink the event", row=3)
 FEEDS_MOVE = MarathonMove(FEEDS, "Feeds…", row=3)
 PEOPLE_MOVE = MarathonMove(PEOPLE, "People…", "primary", 2)
 
@@ -309,13 +285,6 @@ def wants_its_event(marathon: Any) -> bool:
     return str(_cell(marathon, "event_mode") or "none") in EVENT_MODES_WITH_ONE
 
 
-def event_move(marathon: Any) -> MarathonMove:
-    """Staff final say both ways: a linked or waiting marathon unlinks, a bare one makes one."""
-    if _cell(marathon, "event_id") or wants_its_event(marathon):
-        return UNLINK_EVENT_MOVE
-    return MAKE_EVENT_MOVE
-
-
 def event_line(marathon: Any, status: Any) -> str:
     event_id = _cell(marathon, "event_id")
     if event_id:
@@ -323,16 +292,6 @@ def event_line(marathon: Any, status: Any) -> str:
     if wants_its_event(marathon):
         return EVENT_WAITING_LINE
     return EVENT_NONE_LINE
-
-
-def next_moves(record: Any, *, over: bool) -> tuple[MarathonMove, ...]:
-    found: list[MarathonMove] = []
-    if next_state(record) == NEXT_OPEN:
-        found += [ADD_NEXT_MOVE, DISMISS_NEXT_MOVE]
-    if over:
-        found.append(LOOK_AGAIN_MOVE)
-    found.append(BACK_MOVE)
-    return tuple(found)
 
 
 def run_moves(row: Any) -> tuple[MarathonMove, ...]:

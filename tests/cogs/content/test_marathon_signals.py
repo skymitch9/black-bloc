@@ -24,6 +24,7 @@ from black_bloc.cogs.content.spotlight import (
     start_session,
 )
 from black_bloc.golive import StreamInfo
+from black_bloc.marathon_signals import retimed_count
 from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream
 from tests.cogs.content.test_marathon import (
     GUILD,
@@ -494,27 +495,19 @@ async def test_a_run_of_ours_seen_by_its_category_is_shouted_without_a_ping(bot,
     assert (await details_of(bot.db, "marathon.run_live"))["because"] == mt.BY_CATEGORY
 
 
-async def test_the_discord_schedule_view_says_the_clock_and_puts_it_back_on_the_sheet(
-    bot, cog, helix
-):
+async def test_back_to_the_sheets_times_puts_the_runs_back_on_the_sheet(bot, cog, helix):
     channel, marathon = await gdqueer(bot, cog)
-    embed, view = await cogmod.build_schedule(bot, bot.guild, marathon["id"])
-    assert "Back to the sheet's times" not in [getattr(one, "label", None) for one in view.children]
     await tick(cog)
     await stream(bot, channel, game=SPYRO, game_id="1")
     at_show(cog, 20)
     await tick(cog)
+    assert retimed_count(await runs_of(bot.db, marathon["id"])) == 13
 
-    embed, view = await cogmod.build_schedule(bot, bot.guild, marathon["id"])
-    assert "13 run(s) re-timed from the stream" in embed.description
-    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
-    button = next(
-        one for one in view.children if getattr(one, "label", None) == "Back to the sheet's times"
-    )
-    await button.callback(interaction)
-    assert interaction.view.where == cogmod.SCHEDULE_VIEW
-    assert "re-timed" not in interaction.words
-    assert "web.marathon.sheet_times" not in await kinds(bot.db)
+    row = await get_marathon(bot.db, GUILD, marathon["id"])
+    done = await signals.sheet_times(bot, bot.guild, FakeActor(), row)
+
+    assert done.ok
+    assert retimed_count(await runs_of(bot.db, marathon["id"])) == 0
     assert "marathon.sheet_times" in await kinds(bot.db)
     assert (await times(bot, marathon))[HAMTARO]["scheduled_at"] == z(68)
 

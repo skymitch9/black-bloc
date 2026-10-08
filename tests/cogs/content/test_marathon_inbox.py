@@ -656,29 +656,6 @@ async def test_post_it_now_refuses_in_words_twice_while_off_and_with_nowhere_to_
     assert (await fresh(bot, other))["inbox_message_id"] is None
 
 
-async def test_the_schedule_view_offers_post_it_now_only_until_the_message_is_up(bot, cog):
-    from black_bloc.cogs.content import marathon as cogmod
-
-    marathon = await unpublished(bot, cog)
-    _, view = await cogmod.build_schedule(bot, bot.guild, marathon["id"])
-    assert labels_of(view) == [
-        "Change the schedule link…",
-        "Re-read every…",
-        "Rename…",
-        "Post it to the inbox now",
-        "Back",
-    ]
-
-    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
-    button = next(one for one in view.children if one.label == "Post it to the inbox now")
-    await button.callback(interaction)
-
-    assert len(inbox_messages(bot, EVENTS)) == 1 and "inbox message is up" in interaction.sent
-    assert interaction.view.where == cogmod.SCHEDULE_VIEW
-    assert "Post it to the inbox now" not in interaction.labels()
-    assert "[posted](https://discord.com/channels/" in interaction.words
-
-
 # --- marathon-thread-move: a changed parent moves the threads ---------------------------------
 
 

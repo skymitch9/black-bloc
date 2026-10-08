@@ -925,19 +925,6 @@ def test_every_next_word_fills_and_the_date_is_a_discord_stamp():
     )
 
 
-def test_the_next_moves_offer_add_and_dismiss_only_while_the_suggestion_is_open():
-    record = mt.suggestion_record(EVENT, NOW)
-    assert mt.next_moves(record, over=True) == (
-        mt.ADD_NEXT_MOVE,
-        mt.DISMISS_NEXT_MOVE,
-        mt.LOOK_AGAIN_MOVE,
-        mt.BACK_MOVE,
-    )
-    dismissed = record | {"dismissed_at": iso(0)}
-    assert mt.next_moves(dismissed, over=True) == (mt.LOOK_AGAIN_MOVE, mt.BACK_MOVE)
-    assert mt.next_moves(None, over=False) == (mt.BACK_MOVE,)
-
-
 def test_a_login_lent_by_the_viewer_never_costs_a_name_match_and_a_staff_login_beats_it():
     host = {"name": "anarchy", "login": "anarchyasf", "part": "host", "login_from": "viewer"}
     by_name = mt.match_people([host], {}, [], usernames={"anarchy": 7})
