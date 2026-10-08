@@ -54,8 +54,13 @@
 .bk-handle:focus-visible { outline: var(--et-focus-ring); }
 .bk-acts { margin-left: auto; flex-wrap: wrap; }
 .bk-reason { width: min(220px, 100%); }
-.bk-add { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
-.bk-add > .field, .bk-add > .picker { flex: 1 1 220px; }
+.bk-add { display: grid; grid-template-columns: minmax(0, 26ch) auto; justify-content: start; align-items: center; gap: 4px 12px; }
+.bk-add + .bk-add { margin-top: 12px; }
+.bk-add > .picker, .bk-add .field { display: contents; }
+.bk-add .field-label { grid-column: 1; grid-row: 1; }
+.bk-add .field-control { grid-column: 1; grid-row: 2; }
+.bk-add > .btn { grid-column: 2; grid-row: 2; }
+.bk-add > .picker > :not(.field) { grid-column: 1 / -1; }
 
 /* the bracket */
 .bk-scroll { overflow-x: auto; overflow-y: hidden; max-width: 100%; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
@@ -217,6 +222,9 @@ button.bk-set:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px
   .bk-entrant .rowlist-note { overflow-wrap: anywhere; }
   .bk-acts { flex: 1 0 100%; margin-left: 0; justify-content: flex-start; }
   .bk-acts .bk-reason { flex: 1 1 140px; width: auto; min-height: 40px; }
+  .bk-add { grid-template-columns: minmax(0, 1fr); row-gap: 8px; }
+  .bk-add .field-label { margin-bottom: -4px; }
+  .bk-add > .btn { grid-column: 1; grid-row: auto; justify-self: start; min-height: 40px; }
 
   #dash .btn, .drawer .btn, .ask .btn { min-height: 40px; }
   .bk-score { height: 40px; min-width: 56px; }
