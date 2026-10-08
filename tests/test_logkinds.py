@@ -83,6 +83,8 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
             "dq",
             "cancelled",
             "unstarted",
+            "advanced",
+            "unadvanced",
             "set_disputed",
             "set_overridden",
             "set_reset",

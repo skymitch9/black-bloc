@@ -14,8 +14,8 @@ from . import brackets_people as people_
 from . import brackets_sets as sets_
 from . import brackets_store as store_
 from . import brackets_thread as thread_
-from .brackets import access, play
-from .brackets.model import CALLED, COMPLETE, DISPUTED, READY, REPORTED
+from .brackets import access, pools
+from .brackets.model import CALLED, COMPLETE, DISPUTED, READY, REPORTED, BracketError
 from .brackets_moves import said
 from .command_errors import AnswersErrors
 from .panels import (
@@ -62,6 +62,8 @@ ADD_ENTRANT = "add"
 DROP_OUT = "drop_out"
 MOVE = thread_.MOVE
 RESTORE_ENTRANT = "restore_entrant"
+ADVANCE = "advance"
+UNADVANCE = "unadvance"
 
 TO_LABELS = {
     OPEN_SIGNUPS: "Open sign-ups",
@@ -79,8 +81,12 @@ TO_LABELS = {
     RESTORE: "Restore",
     ADD_ENTRANT: "Add entrant…",
     MOVE: "Move to #knuck-up",
+    ADVANCE: "Advance to the final",
+    UNADVANCE: "Back to pools",
 }
 TO_STYLES = {
+    ADVANCE: discord.ButtonStyle.success,
+    UNADVANCE: discord.ButtonStyle.danger,
     START: discord.ButtonStyle.success,
     COMPLETE_MOVE: discord.ButtonStyle.success,
     CANCEL: discord.ButtonStyle.danger,
@@ -91,7 +97,8 @@ TO_MOVES: dict[str, tuple[str, ...]] = {
     store_.SIGNUPS: (CLOSE_SIGNUPS, OPEN_CHECK_IN, ADD_ENTRANT, CANCEL),
     store_.CHECK_IN: (CLOSE_CHECK_IN, ADD_ENTRANT, CANCEL),
     store_.SEEDING: (OPEN_SIGNUPS, OPEN_CHECK_IN, SEED, SHUFFLE, START, ADD_ENTRANT, CANCEL),
-    store_.RUNNING: (CALL_READY, COMPLETE_MOVE, UNSTART, CANCEL),
+    store_.POOLS: (CALL_READY, ADVANCE, UNSTART, CANCEL),
+    store_.RUNNING: (CALL_READY, COMPLETE_MOVE, UNADVANCE, UNSTART, CANCEL),
     store_.COMPLETE: (REOPEN, CANCEL),
     store_.CANCELLED: (RESTORE,),
 }
@@ -99,8 +106,10 @@ CONFIRMED = {
     CANCEL: "Cancel **{name}**? Every result stays and Restore brings it back.",
     UNSTART: "Send **{name}** back to seeding? Every set and result is cleared.",
     MOVE: "Move **{name}** into #knuck-up? Its players are pinged there.",
+    ADVANCE: "Build **{name}**'s final from the pools?",
+    UNADVANCE: "Send **{name}** back to its pools? The final's sets are cleared.",
 }
-MEMBER_LISTED = (store_.SIGNUPS, store_.CHECK_IN, store_.SEEDING, store_.RUNNING)
+MEMBER_LISTED = (store_.SIGNUPS, store_.CHECK_IN, store_.SEEDING, *store_.PLAYING)
 
 CREATE_LABEL = "Create…"
 CREATE_TITLE = "A new tournament"
@@ -230,12 +239,27 @@ async def build_home(
 
 def legal_to_moves(row: Any, current: Any) -> list[str]:
     found = list(TO_MOVES.get(row["state"], ()))
-    if row["state"] == store_.RUNNING:
+    if row["state"] in store_.PLAYING:
         if current is None or not any(one.state == READY for one in current.matches.values()):
             found.remove(CALL_READY)
-        if current is None or not play.finished(current):
+    if row["state"] == store_.RUNNING:
+        if current is None or not pools.finished(current):
             found.remove(COMPLETE_MOVE)
+        if not may_unadvance(current):
+            found.remove(UNADVANCE)
+    if row["state"] == store_.POOLS and (current is None or not pools.pools_finished(current)):
+        found.remove(ADVANCE)
     return found
+
+
+def may_unadvance(current: Any) -> bool:
+    if current is None or current.plan is None:
+        return False
+    try:
+        pools.unadvance(current)
+    except BracketError:
+        return False
+    return True
 
 
 def member_moves(row: Any, mine: Any) -> list[str]:
@@ -248,7 +272,7 @@ def member_moves(row: Any, mine: Any) -> list[str]:
         return [cards.CHECK_IN, cards.LEAVE]
     if state in store_.BEFORE_START and inside:
         return [cards.LEAVE]
-    if state == store_.RUNNING and inside:
+    if state in store_.PLAYING and inside:
         return [DROP_OUT]
     return []
 
@@ -308,7 +332,7 @@ async def build_tournament(
     people = {one["id"]: one for one in everyone}
     mine = next((one for one in everyone if one["user_id"] == getattr(user, "id", None)), None)
     current = await store_.bracket(bot.db, row)
-    embed = cards.starter_embed(bot.store, guild.id, row, everyone)
+    embed = cards.starter_embed(bot.store, guild.id, row, everyone, current)
     embed.description = with_note(note, embed.description or "")
     playing = [
         one for one in (current.ordered() if current else []) if one.state not in cards.CLEARED
@@ -359,7 +383,7 @@ def entrant_moves(row: Any, person: Any) -> list[str]:
         if state == store_.CHECK_IN and not out:
             found.insert(0, "check_out" if person["checked_in"] else "check_in")
         return found
-    if state == store_.RUNNING:
+    if state in store_.PLAYING:
         return ["restore"] if out else ["dq", "drop"]
     return []
 
@@ -402,7 +426,9 @@ async def build_entrant(
 def set_moves_for(row: Any, seat: Any, runs: bool) -> list[str]:
     state = seat.match.state
     found: list[str] = []
-    if row["state"] != store_.RUNNING:
+    if row["state"] not in store_.PLAYING:
+        return found
+    if row["state"] == store_.RUNNING and seat.match.pool:
         return found
     if seat.side is not None and state in (READY, CALLED):
         found.append(cards.REPORT)
@@ -718,6 +744,8 @@ async def run_to_move(interaction: discord.Interaction, tournament_id: int, move
         CANCEL: moves_.cancel,
         RESTORE: moves_.restore,
         MOVE: thread_.move_home,
+        ADVANCE: moves_.advance,
+        UNADVANCE: moves_.unadvance,
     }
     if move == SHUFFLE:
         return await moves_.seed(bot, guild, user, tournament_id, randomise=True)

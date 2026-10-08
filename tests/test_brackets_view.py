@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from black_bloc import brackets_store as store_
 from black_bloc import brackets_view
-from black_bloc.brackets import play
-from black_bloc.brackets.model import ROUND_ROBIN, SINGLE, Options
+from black_bloc.brackets import play, pools
+from black_bloc.brackets.model import DOUBLE, ROUND_ROBIN, SINGLE, Options, Plan
 
 GUILD = 4242
 NOW = "2026-10-07T12:00:00+00:00"
@@ -58,3 +58,54 @@ async def test_each_set_shows_its_card_and_whether_it_is_a_rematch(db):
     await store_.set_card(db, tid, "W1-1", 12345678901234567, NOW)
     (only,) = (await brackets_view.full(db, row))["sets"]
     assert (only["message_id"], only["card_at"]) == ("12345678901234567", NOW)
+
+
+async def pooled_view(db, advanced=False):
+    tid = await store_.create(
+        db,
+        GUILD,
+        {"name": "Pools", "format": DOUBLE, "pools_format": ROUND_ROBIN, "pool_count": 2},
+        created_by=7,
+    )
+    ids = [
+        await store_.add_entrant(db, tid, f"P{n}", user_id=100 + n, added_by=7) for n in range(8)
+    ]
+    plan = Plan(ROUND_ROBIN, 2, 2)
+    built = pools.build(ids, Options(format=DOUBLE, best_of_finals=3), plan, NOW).bracket
+    while True:
+        ready = [one for one in built.ordered() if one.state == "ready"]
+        if not ready:
+            break
+        a_wins = ready[0].slot_a < ready[0].slot_b
+        score = {"score_a": 2, "score_b": 0} if a_wins else {"score_a": 0, "score_b": 2}
+        built = pools.override(built, ready[0].key, 7, NOW, **score).bracket
+    if advanced:
+        built = pools.advance(built, NOW).bracket
+    await store_.save(db, tid, built, list(built.matches), [])
+    await store_.update(db, tid, {"state": "running" if advanced else "pools"})
+    return await store_.tournament(db, GUILD, tid), ids
+
+
+async def test_a_pools_view_carries_each_pool_its_table_and_who_goes_through(db):
+    row, ids = await pooled_view(db)
+    found = await brackets_view.full(db, row)
+    assert (found["phase"], found["pools_finished"], found["sets"]) == ("pools", True, [])
+    first, second = found["pools"]
+    assert (first["letter"], first["cut"], len(first["sets"])) == ("A", 2, 6)
+    assert first["entrants"] == [ids[0], ids[3], ids[4], ids[7]]
+    assert first["sets"][0]["key"] == "A.R1-1" and first["sets"][0]["pool"] == 1
+    assert len(first["advancing"]) == 2 and first["tied"] == []
+    assert [one["rank"] for one in first["standings"]] == [1, 2, 3, 4]
+    assert found["options"]["pools_format"] == "round_robin"
+    assert {one["what"] for one in found["waiting_on"]} == {"final"}
+
+
+async def test_once_advanced_the_view_draws_the_final_as_its_sets(db):
+    row, ids = await pooled_view(db, advanced=True)
+    found = await brackets_view.full(db, row)
+    assert found["phase"] == "final"
+    assert {one["phase"] for one in found["sets"]} == {"final"}
+    assert all("." not in one["key"] for one in found["sets"])
+    assert len(found["pools"]) == 2
+    placed = {one["entrant"]: one["place"] for one in found["standings"]}
+    assert len(placed) == 8

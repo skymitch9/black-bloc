@@ -509,3 +509,48 @@ async def test_a_form_never_opens_while_the_mode_is_off(bot, guild):
 
     assert interaction.modal is None
     assert interaction.said == [moves.said(bot.store, GUILD, "brackets_off_said")]
+
+
+async def test_pools_advance_after_asking_and_go_back_the_same_way(bot, guild):
+    tid = await running(
+        bot, guild, ADA, BEA, CY, STAFF, format="single", pools_format="round_robin"
+    )
+    assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "pools"
+    thread = the_thread(bot)
+    titles = sorted(card.embed.title for card in thread.cards)
+    assert titles == ["A.R1-1 · Pool A · round 1", "B.R1-1 · Pool B · round 1"]
+    starter = thread.messages[0].embed.description.split("\n")
+    assert "**In pools**" in starter and starter[-2].startswith("Pool A · Ada")
+
+    _, view = await tournament(bot, guild, TO, tid)
+    assert "Advance to the final" not in labels(view)
+    await moved(bot, guild, tid, sets.report, "A.R1-1", 2, 0, actor=TO)
+    await moved(bot, guild, tid, sets.report, "B.R1-1", 2, 0, actor=TO)
+    _, view = await tournament(bot, guild, TO, tid)
+    assert labels(view)[:4] == ["Back", "Advance to the final", "Back to seeding", "Cancel"]
+
+    asked = await press(view, "Advance to the final", pressing(bot, TO))
+    assert "Build **Knuck Up 12**'s final from the pools?" in [
+        one.value for one in asked["embed"].fields
+    ]
+    assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "pools"
+    done = await press(asked["view"], "Advance to the final", pressing(bot, TO))
+    assert done["embed"].description.startswith("**Knuck Up 12**'s final is built")
+    assert labels(done["view"])[:5] == [
+        "Back",
+        "Call ready sets",
+        "Back to pools",
+        "Back to seeding",
+        "Cancel",
+    ]
+    finals = [card for card in thread.cards if card.embed.title.startswith("W")]
+    assert sorted(card.embed.title.split(" · ")[0] for card in finals) == ["W1-1", "W1-2"]
+    pool_cards = [card for card in thread.cards if card.embed.title[1] == "."]
+    assert all(card.custom_ids == [] for card in pool_cards)
+
+    asked = await press(done["view"], "Back to pools", pressing(bot, TO))
+    back = await press(asked["view"], "Back to pools", pressing(bot, TO))
+    assert back["embed"].description.startswith("**Knuck Up 12** is back in its pools")
+    assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "pools"
+    assert all("cleared" in (card.embed.description or "") for card in finals)
+    assert all(card.custom_ids for card in pool_cards)

@@ -6,17 +6,20 @@ from dataclasses import fields
 from datetime import UTC, datetime
 from typing import Any
 
-from .brackets.model import Bracket, Match, Options
+from .brackets.model import POOL_FORMATS, Bracket, Match, Options, Plan
 
 DRAFT = "draft"
 SIGNUPS = "signups"
 CHECK_IN = "check_in"
 SEEDING = "seeding"
+POOLS = "pools"
 RUNNING = "running"
 COMPLETE = "complete"
 CANCELLED = "cancelled"
-STATES = (DRAFT, SIGNUPS, CHECK_IN, SEEDING, RUNNING, COMPLETE, CANCELLED)
+STATES = (DRAFT, SIGNUPS, CHECK_IN, SEEDING, POOLS, RUNNING, COMPLETE, CANCELLED)
 BEFORE_START = (DRAFT, SIGNUPS, CHECK_IN, SEEDING)
+PLAYING = (POOLS, RUNNING)
+NO_POOLS = "none"
 
 OWN = "own"
 STARTGG = "startgg"
@@ -38,10 +41,19 @@ OPTION_COLUMNS = (
     "best_of_late",
     "best_of_finals",
 )
+POOL_COLUMNS = (
+    "pools_format",
+    "pool_count",
+    "advance_per_pool",
+    "advance_losers_from",
+    "pools_swiss_rounds",
+    "pools_best_of",
+)
 EDITABLE = (
     "name",
     "game",
     *OPTION_COLUMNS,
+    *POOL_COLUMNS,
     "entrant_cap",
     "check_in_minutes",
     "confirm_minutes",
@@ -220,6 +232,20 @@ def options_of(row: Any) -> Options:
     )
 
 
+def plan_of(row: Any) -> Plan | None:
+    """The tournament's pools, or None when it plays one bracket."""
+    if row["pools_format"] not in POOL_FORMATS:
+        return None
+    return Plan(
+        format=row["pools_format"],
+        count=int(row["pool_count"]),
+        advance=int(row["advance_per_pool"]),
+        losers_from=row["advance_losers_from"],
+        best_of=int(row["pools_best_of"]),
+        swiss_rounds=row["pools_swiss_rounds"],
+    )
+
+
 def match_of(row: Any) -> Match:
     return Match(**{name: row[name] for name in SET_COLUMNS} | {"rematch": bool(row["rematch"])})
 
@@ -246,6 +272,7 @@ async def bracket(db: Any, row: Any) -> Bracket | None:
         matches={one["key"]: match_of(one) for one in stored},
         withdrawn=withdrawn,
         final_order=[one["id"] for one in told],
+        plan=plan_of(row),
     )
 
 

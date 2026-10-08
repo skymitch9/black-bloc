@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from . import brackets_store as store_
-from .brackets import play, standings, swiss
-from .brackets.model import ELIMINATION, SWISS
+from .brackets import play, pools, standings, swiss
+from .brackets.model import ELIMINATION, FINAL, POOLS, SWISS
 from .settings_store import BRACKETS_DEFAULTS
 
 PAGE_WORDS = (
@@ -61,6 +61,12 @@ PAGE_WORDS = (
     "brackets_card_rounds_words",
     "brackets_card_late_words",
     "brackets_card_finals_words",
+    "brackets_state_pools",
+    "brackets_round_pool",
+    "brackets_pool_title",
+    "brackets_card_pools_words",
+    "brackets_card_losers_words",
+    "brackets_waiting_final",
 )
 
 SUMMARY_FIELDS = (
@@ -72,6 +78,7 @@ SUMMARY_FIELDS = (
     "created_at",
     "updated_at",
     "entrant_cap",
+    "pools_format",
 )
 OPTION_FIELDS = (
     "format",
@@ -85,6 +92,7 @@ OPTION_FIELDS = (
     "entrant_cap",
     "check_in_minutes",
     "confirm_minutes",
+    *store_.POOL_COLUMNS,
 )
 FLAG_FIELDS = ("third_place", "grand_final_reset")
 TIME_FIELDS = (
@@ -192,14 +200,25 @@ def set_row(
         "placement_winner": match.placement_winner,
         "placement_loser": match.placement_loser,
         "rematch": bool(match.rematch),
+        "phase": match.phase,
+        "pool": match.pool,
         "message_id": as_id(message_id),
         "card_at": card_at,
     }
 
 
+def placed_rows(placed: dict[int, int], entrants: list[int], names: dict) -> list[dict]:
+    return [
+        {"entrant": entrant, "name": names.get(entrant), "place": placed.get(entrant)}
+        for entrant in sorted(entrants, key=lambda one: placed.get(one) or 10**6)
+    ]
+
+
 def standing_rows(bracket: Any, names: dict[int, str]) -> list[dict[str, Any]]:
     if bracket is None:
         return []
+    if bracket.plan is not None:
+        return placed_rows(pools.placements(bracket), bracket.entrants, names)
     if bracket.format in ELIMINATION:
         placed = standings.placements(bracket)
         return [
@@ -229,8 +248,53 @@ def waiting_rows(bracket: Any, names: dict[int, str]) -> list[dict[str, Any]]:
         return []
     return [
         {"entrant": entrant, "name": names.get(entrant), **found}
-        for entrant, found in standings.waiting_on(bracket).items()
+        for entrant, found in pools.waiting_on(bracket).items()
     ]
+
+
+def phase_of(bracket: Any) -> str | None:
+    if bracket is None or bracket.plan is None:
+        return None
+    return FINAL if pools.final_part(bracket) is not None else POOLS
+
+
+def pool_rows(
+    bracket: Any, names: dict[int, str], confirm_minutes: int, held: dict
+) -> list[dict[str, Any]]:
+    """Each pool: who is in it, its sets, its table, where the line falls and who goes through."""
+    if bracket is None or bracket.plan is None:
+        return []
+    plan = bracket.plan
+    final = pools.final_part(bracket)
+    through = set(final.entrants) if final is not None else set()
+    found = []
+    for number, one in enumerate(pools.pool_parts(bracket), start=1):
+        tied = pools.tie_of(one, plan.advance, number)
+        going = [] if tied else pools.cut(one, plan.advance, number)
+        sets = [
+            set_row(match, names, confirm_minutes, held.get(pools.prefixed(number, match.key)))
+            | {"key": pools.prefixed(number, match.key), "phase": POOLS, "pool": number}
+            for match in one.ordered()
+        ]
+        found.append(
+            {
+                "pool": number,
+                "letter": pools.letter(number),
+                "entrants": list(one.entrants),
+                "sets": sets,
+                "standings": standing_rows(one, names),
+                "finished": play.finished(one),
+                "cut": plan.advance,
+                "advancing": [e for e in going if not through or e in through],
+                "tied": tied,
+                "rounds_to_play": (
+                    swiss.rounds_for(len(one.entrants), plan.swiss_rounds)
+                    if plan.format == SWISS
+                    else None
+                ),
+            }
+        )
+    return found
 
 
 async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = False) -> dict:
@@ -247,7 +311,9 @@ async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = Fal
         "shadow": bool(row["shadow"]),
         "options": options(row),
         "entrant_count": sum(1 for one in people if not one["dropped"]),
-        "finished": bool(bracket is not None and play.finished(bracket)),
+        "finished": bool(bracket is not None and pools.finished(bracket)),
+        "phase": phase_of(bracket),
+        "pools_finished": bool(bracket is not None and pools.pools_finished(bracket)),
         "rounds_to_play": rounds_to_play(row, bracket, people),
         "may_run": runs,
         "mine": mine,
@@ -255,7 +321,9 @@ async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = Fal
         "sets": [
             set_row(match, names, row["confirm_minutes"], held.get(match.key))
             for match in (bracket.ordered() if bracket else [])
+            if match.phase != POOLS
         ],
+        "pools": pool_rows(bracket, names, row["confirm_minutes"], held),
         "standings": standing_rows(bracket, names),
         "waiting_on": waiting_rows(bracket, names),
     }

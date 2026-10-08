@@ -204,6 +204,14 @@ def build_router(bot: Any) -> APIRouter:
     plain("/{tournament_id}/cancel", moves.cancel)
     plain("/{tournament_id}/restore", moves.restore)
     plain("/{tournament_id}/move", brackets_thread.move_home)
+    plain("/{tournament_id}/unadvance", moves.unadvance)
+
+    @router.post("/{tournament_id}/advance")
+    async def brackets_advance(
+        request: Request, tournament_id: str, payload: Any = OPTIONAL
+    ) -> dict[str, Any]:
+        order = body_of(payload).get("order")
+        return await answered(request, tournament_id, moves.advance, order=order)
 
     @router.post("/{tournament_id}/complete")
     async def brackets_complete(
