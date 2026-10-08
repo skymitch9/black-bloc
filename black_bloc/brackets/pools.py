@@ -14,6 +14,7 @@ from .model import (
     DISPUTED,
     DONE,
     DOUBLE,
+    ELIMINATION,
     FINAL,
     FORFEITS,
     LOSERS,
@@ -73,6 +74,8 @@ def checked(count: int, plan: Plan, final_format: str) -> None:
     """Refuses a plan the field cannot fill, in the engine's words."""
     if plan.format not in POOL_FORMATS or not 1 <= plan.count <= MOST_POOLS:
         raise BracketError("bad_pools")
+    if final_format not in ELIMINATION:
+        raise BracketError("pools_need_elimination")
     if count < 2 * plan.count:
         raise BracketError("too_few_for_pools", count=count, pools=plan.count)
     smallest = count // plan.count

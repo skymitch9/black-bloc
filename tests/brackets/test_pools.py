@@ -274,6 +274,7 @@ def test_the_plan_is_checked_against_the_field():
         (dict(losers_from=3), 8, "bad_losers_from"),
         (dict(losers_from=1), 8, "bad_losers_from"),
         (dict(fmt=SWISS, swiss_rounds=4), 8, "too_many_pool_rounds"),
+        (dict(final=SWISS), 8, "pools_need_elimination"),
     ]
     for plan, count, code in cases:
         with pytest.raises(BracketError) as raised:
