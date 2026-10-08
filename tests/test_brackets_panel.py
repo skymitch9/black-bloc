@@ -63,7 +63,7 @@ async def test_an_organiser_sees_every_tournament_and_create(bot, guild):
     await created(bot, guild)
     embed, view = await panel.build_home(bot, guild, guild.get_member(TO))
     assert "**Knuck Up 12** · a draft · 0 entrant(s)" in embed.description
-    assert labels(view) == ["TournamentPick", "Create…"]
+    assert labels(view) == ["TournamentPick", "FormatPick"]
 
 
 async def test_nobody_with_nothing_to_show_gets_one_line(bot, guild):
@@ -269,12 +269,59 @@ async def test_seeding_through_the_form_saves_the_order(bot, guild):
     assert seeds == {"Bea": 1, "Ada": 2}
 
 
-async def test_create_through_the_form_makes_the_tournament_and_its_thread(bot, guild):
+def format_pick(view):
+    return next(one for one in view.children if type(one).__name__ == "FormatPick")
+
+
+def fields(modal):
+    return [one.component.custom_id.removeprefix("bk-create-") for one in modal.children]
+
+
+async def picked(bot, guild, user_id, chosen):
     _, view = await panel.build_home(bot, guild, guild.get_member(TO))
-    interaction = pressing(bot, TO)
-    await item(view, "Create…").callback(interaction)
+    interaction = pressing(bot, user_id)
+    pick = format_pick(view)
+    pick._values = [chosen]
+    await pick.callback(interaction)
+    return interaction
+
+
+async def test_the_create_dropdown_lists_the_four_formats_in_the_pages_words(bot, guild):
+    _, view = await panel.build_home(bot, guild, guild.get_member(TO))
+    pick = format_pick(view)
+    assert [(one.value, one.label) for one in pick.options] == [
+        ("single", "Single elimination"),
+        ("double", "Double elimination"),
+        ("round_robin", "Round robin"),
+        ("swiss", "Swiss"),
+    ]
+    assert all(one.description for one in pick.options)
+    assert "Create…" not in labels(view)
+
+
+@pytest.mark.parametrize(
+    ("chosen", "wanted"),
+    [
+        ("single", ["name", "game", "best_of", "cap", "third_place"]),
+        ("double", ["name", "game", "best_of", "cap", "grand_final_reset"]),
+        ("round_robin", ["name", "game", "best_of", "cap"]),
+        ("swiss", ["name", "game", "best_of", "cap", "rounds"]),
+    ],
+)
+async def test_each_formats_form_asks_only_for_what_it_needs(bot, guild, chosen, wanted):
+    interaction = await picked(bot, guild, TO, chosen)
+    assert fields(interaction.modal) == wanted
+    assert not any("format" in one for one in fields(interaction.modal))
+    payload = interaction.modal.to_dict()
+    assert len(payload["components"]) <= 5
+    assert all(one["type"] == 18 for one in payload["components"])
+
+
+async def test_create_through_the_form_makes_the_tournament_and_its_thread(bot, guild):
+    interaction = await picked(bot, guild, TO, "single")
     modal = interaction.modal
-    fill(modal, name="Friday Fights", game="Tekken 8", format="single", best_of="", cap="16")
+    fill(modal, name="Friday Fights", game="Tekken 8", cap="16", third_place=True)
+    modal.best_of._values = ["5"]
 
     await modal.on_submit(interaction)
 
@@ -283,25 +330,56 @@ async def test_create_through_the_form_makes_the_tournament_and_its_thread(bot, 
     assert the_thread(bot).name == "Friday Fights"
     row = (await store_.tournaments(bot.db, GUILD))[0]
     assert (row["format"], row["game"], row["entrant_cap"]) == ("single", "Tekken 8", 16)
+    assert (row["best_of"], row["third_place"]) == (5, 1)
 
 
-async def test_a_bad_option_in_the_create_form_is_refused_in_words(bot, guild):
-    _, view = await panel.build_home(bot, guild, guild.get_member(TO))
-    interaction = pressing(bot, TO)
-    await item(view, "Create…").callback(interaction)
-    fill(interaction.modal, name="X", game="", format="ladder", best_of="", cap="")
+@pytest.mark.parametrize(
+    ("chosen", "filled", "wanted"),
+    [
+        ("double", {"grand_final_reset": False}, {"grand_final_reset": 0}),
+        ("swiss", {"rounds": "4"}, {"swiss_rounds": 4}),
+        ("round_robin", {}, {"entrant_cap": None}),
+    ],
+)
+async def test_a_submit_creates_with_the_chosen_format_and_its_options(
+    bot, guild, chosen, filled, wanted
+):
+    interaction = await picked(bot, guild, TO, chosen)
+    fill(interaction.modal, name="Knuck Up", game="", cap="", **filled)
 
     await interaction.modal.on_submit(interaction)
 
-    assert shown(interaction)["embed"].description.startswith("format cannot be ladder")
+    row = (await store_.tournaments(bot.db, GUILD))[0]
+    assert row["format"] == chosen
+    assert {field: row[field] for field in wanted} == wanted
+
+
+async def test_a_bad_option_in_the_create_form_is_refused_in_words(bot, guild):
+    interaction = await picked(bot, guild, TO, "swiss")
+    fill(interaction.modal, name="X", game="", cap="", rounds="lots")
+
+    await interaction.modal.on_submit(interaction)
+
+    assert shown(interaction)["embed"].description.startswith("swiss_rounds cannot be lots")
     assert await store_.tournaments(bot.db, GUILD) == []
 
 
-async def test_a_member_never_gets_the_create_form(bot, guild):
-    interaction = pressing(bot, ADA)
-    await panel.CreateButton().callback(interaction)
+async def test_a_member_never_gets_the_create_form_from_the_dropdown(bot, guild):
+    interaction = await picked(bot, guild, ADA, "single")
     assert interaction.modal is None
     assert interaction.said[0].startswith("Running a tournament is for staff")
+
+
+async def test_a_create_submitted_by_someone_no_longer_an_organiser_is_refused(bot, guild):
+    interaction = await picked(bot, guild, TO, "single")
+    modal = interaction.modal
+    fill(modal, name="Friday Fights", game="", cap="")
+    stranger = pressing(bot, ADA)
+
+    await modal.on_submit(stranger)
+
+    assert shown(stranger)["embed"].description.startswith("Running a tournament is for staff")
+    assert await store_.tournaments(bot.db, GUILD) == []
 
 
 @pytest.mark.parametrize(
