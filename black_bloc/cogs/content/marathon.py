@@ -18,7 +18,6 @@ from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
 from ... import marathon_ping as mp
 from ... import marathon_reminder_posts as mrem
-from ... import marathon_signals as sig
 from ... import marathon_spotlight as ms
 from ... import pings
 from ... import shadow as shadow_home
@@ -60,13 +59,10 @@ from ...marathon_sources import (
     schedule_page,
 )
 from ...panels import (
-    KEEP_IT,
     Outcome,
     Panel,
     answer,
     clamped,
-    confirm,
-    confirm_items,
     opened,
     panel_minutes,
     refusal,
@@ -111,7 +107,6 @@ from ...settings_store import (
     MARATHON_REMINDER_PINGS_KEY,
     MARATHON_REMINDER_STALE_KEY,
     MARATHON_REMINDER_TEMPLATE_KEY,
-    MARATHON_REMOVE_QUESTION_KEY,
     MARATHON_RUNNER_POSTS_KEY,
     MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY,
     MARATHON_SUGGEST_NEXT_KEY,
@@ -298,13 +293,12 @@ async def insert_marathon(
     event_mode: str = "none",
     noticed: bool = True,
     ping_role: int = 0,
-    public_highlight: int = 0,
 ) -> int:
     stamp = now_iso()
     cur = await db.conn.execute(
         "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
-        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at, ping_role, "
-        "public_highlight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at, ping_role) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             int(guild_id),
             name,
@@ -320,7 +314,6 @@ async def insert_marathon(
             event_mode,
             stamp if noticed else None,
             1 if ping_role else 0,
-            1 if public_highlight else 0,
         ),
     )
     await db.conn.commit()
@@ -630,7 +623,6 @@ async def create_marathon(
     from ...marathon_events import BAD_MODE, makes_marathon_event
     from .marathon_events import BAD_MODE_CODE, mode_for_new
     from .marathon_ping import default_for_new
-    from .marathon_public import default_for_new as public_default_for_new
 
     feed = None
     if feed_id is not None:
@@ -686,7 +678,6 @@ async def create_marathon(
         feed_id=feed_id,
         noticed=noticed,
         ping_role=default_for_new(bot, guild.id),
-        public_highlight=public_default_for_new(bot, guild.id),
     )
     await log_action(
         bot,
@@ -703,7 +694,6 @@ async def create_marathon(
             "feed_id": feed_id,
             "event_mode": wanted_mode,
             "ping_role": bool(default_for_new(bot, guild.id)),
-            "public_highlight": bool(public_default_for_new(bot, guild.id)),
             "via": via,
         },
     )
@@ -947,15 +937,6 @@ async def rename_marathon(
         if "name" in changes:
             await controls_changed(bot, guild, marathon["id"])
     return Outcome(True, said, value=await get_marathon(bot.db, guild.id, marathon["id"]))
-
-
-async def remove_marathon(
-    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
-) -> Outcome:
-    """Nothing about a marathon is deleted any more: Remove archives it as `removed`."""
-    from .marathon_archive import archive_marathon
-
-    return await archive_marathon(bot, guild, actor, marathon, why=ma.REMOVED, via=via)
 
 
 async def pair_runner(
@@ -3190,11 +3171,7 @@ ROOT = "root"
 CARD = "card"
 MINE_VIEW = "mine"
 ARCHIVE_VIEW = "archive"
-PAIR_VIEW = "pair"
-NEXT_VIEW = "next"
 RUN_VIEW = "run"
-SPOT_VIEW = "spot"
-SCHEDULE_VIEW = "schedule"
 STYLES = {
     "primary": discord.ButtonStyle.primary,
     "secondary": discord.ButtonStyle.secondary,
@@ -3350,12 +3327,6 @@ def ping_card_line(bot: Any, guild_id: int, row: Any) -> str:
     return card_line(bot, guild_id, row)
 
 
-def ping_card_move(bot: Any, guild_id: int, row: Any) -> Any:
-    from .marathon_ping import card_move
-
-    return card_move(bot, guild_id, row)
-
-
 async def inbox_line(bot: Any, guild: Any, row: Any) -> str:
     """The card's state, as the inbox message says it, with the thread's link when tracked."""
     from .marathon_inbox import feed_of, state_words
@@ -3418,7 +3389,7 @@ async def build_mine(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, M
 
 
 async def build_card(
-    bot: Any, guild: Any, marathon_id: Any, *, pairing: bool = False, runner: Any = None
+    bot: Any, guild: Any, marathon_id: Any
 ) -> tuple[discord.Embed | None, MarathonPanel | None]:
     row = await get_marathon(bot.db, guild.id, marathon_id)
     if row is None:
@@ -3445,28 +3416,38 @@ async def build_card(
         else mt.CARD_BOARD_NONE
     )
     lines += ["", mt.CARD_POSTS.format(board=board)]
-    unmatched = mt.unmatched_names(runs)
     embed = discord.Embed(title=row["name"], description=clamped(lines))
-    view = MarathonPanel(minutes_for(bot, guild.id), PAIR_VIEW if pairing else CARD, row["id"])
-    if pairing:
-        view.runner = runner
-        view.add_item(NamePick(unmatched, runner))
-        view.add_item(WhoPick())
-        add_moves(view, (mt.BACK_MOVE,))
-        return (embed, view)
+    view = MarathonPanel(minutes_for(bot, guild.id), CARD, row["id"])
     movable = movable_runs(runs, now_for(bot))
     if movable:
         view.add_item(RunPick(movable, words))
     view.add_item(EventModePick(me.mode_of(row)))
-    add_moves(
-        view,
-        mt.card_moves(row, has_unmatched=bool(unmatched), has_next=has_next)
-        + ms.card_moves(row)
-        + (ping_card_move(bot, guild.id, row),)
-        + (ma.ARCHIVE_MOVE,)
-        + mi.panel_moves(row),
-    )
+    tracking = tuple(one._replace(row=2) for one in mi.panel_moves(row) if one != mi.IGNORE_MOVE)
+    add_moves(view, mt.card_moves(row, tracking))
+    add_card_links(view, bot, guild, row)
+    add_moves(view, (mt.BACK_MOVE._replace(row=3),))
     return (embed, view)
+
+
+def add_card_links(view: Any, bot: Any, guild: Any, row: Any) -> None:
+    from ...settings_store import MARATHON_INBOX_BUTTON_SITE_KEY, MARATHON_INBOX_BUTTON_THREAD_KEY
+    from .marathon_inbox import site_link
+    from .marathon_inbox import words as inbox_words
+
+    links = (
+        (MARATHON_INBOX_BUTTON_THREAD_KEY, mi.channel_url(guild.id, _cell(row, "thread_id"))),
+        (MARATHON_INBOX_BUTTON_SITE_KEY, site_link(bot, row["id"])),
+    )
+    for key, url in links:
+        if url:
+            view.add_item(
+                discord.ui.Button(
+                    style=discord.ButtonStyle.link,
+                    label=inbox_words(bot, guild.id, key)[:80],
+                    url=url,
+                    row=2,
+                )
+            )
 
 
 def next_line_of(bot: Any, guild: Any, row: Any) -> str:
@@ -3503,28 +3484,6 @@ def movable_runs(runs: list[Any], now: datetime) -> list[Any]:
     kept = found[:SELECT_CAP]
     kept.sort(key=lambda one: (str(one["scheduled_at"] or "9999"), one["id"]))
     return kept
-
-
-async def build_next(bot: Any, guild: Any, marathon_id: Any) -> tuple[Any, Any]:
-    row = await get_marathon(bot.db, guild.id, marathon_id)
-    if row is None:
-        return (None, None)
-    embed = discord.Embed(title=row["name"], description=clamped([next_line_of(bot, guild, row)]))
-    view = MarathonPanel(minutes_for(bot, guild.id), NEXT_VIEW, row["id"])
-    over = mt.suggests(row) and mt.is_over(row, now_for(bot))
-    add_moves(view, mt.next_moves(mt.suggestion_of(row), over=over))
-    return (embed, view)
-
-
-async def build_spot(bot: Any, guild: Any, marathon_id: Any) -> tuple[Any, Any]:
-    row = await get_marathon(bot.db, guild.id, marathon_id)
-    if row is None or not row["spotlight_id"]:
-        return (None, None)
-    lines = [await spotlight_line(bot, guild, row), ms.mode_line(row), ms.SPOT_SHARED]
-    embed = discord.Embed(title=row["name"], description=clamped(lines))
-    view = MarathonPanel(minutes_for(bot, guild.id), SPOT_VIEW, row["id"])
-    add_moves(view, ms.spot_moves(row) + (mt.BACK_MOVE,))
-    return (embed, view)
 
 
 async def build_run(bot: Any, guild: Any, marathon_id: Any, run_id: Any) -> tuple[Any, Any]:
@@ -3571,113 +3530,16 @@ async def open_mine(interaction: discord.Interaction, previous: Any = None) -> N
 
 
 async def open_card(
-    interaction: discord.Interaction,
-    marathon_id: Any,
-    previous: Any = None,
-    *,
-    pairing: bool = False,
-    runner: Any = None,
+    interaction: discord.Interaction, marathon_id: Any, previous: Any = None
 ) -> None:
     if not await opened(interaction):
         return
-    embed, view = await build_card(
-        interaction.client, interaction.guild, marathon_id, pairing=pairing, runner=runner
-    )
+    embed, view = await build_card(interaction.client, interaction.guild, marathon_id)
     if view is None:
         await open_root(interaction, previous)
         await answer(interaction, mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
         return
     await render(interaction, embed, view, previous)
-
-
-async def open_next(interaction: discord.Interaction, marathon_id: Any, previous: Any) -> None:
-    if not await opened(interaction):
-        return
-    embed, view = await build_next(interaction.client, interaction.guild, marathon_id)
-    if view is None:
-        await open_root(interaction, previous)
-        return
-    await render(interaction, embed, view, previous)
-
-
-async def open_spot(interaction: discord.Interaction, marathon_id: Any, previous: Any) -> None:
-    if not await opened(interaction):
-        return
-    embed, view = await build_spot(interaction.client, interaction.guild, marathon_id)
-    if view is None:
-        await open_card(interaction, marathon_id, previous)
-        return
-    await render(interaction, embed, view, previous)
-
-
-async def schedule_lines(bot: Any, guild: Any, row: Any) -> list[str]:
-    from .marathon_inbox import home_now, inbox_message_url
-
-    lines = [mi.SCHEDULE_LINE.format(url=row["schedule_url"])]
-    url = await inbox_message_url(bot, guild, row)
-    if url and _cell(row, "inbox_home") == home_now(bot, guild):
-        lines.append(mi.INBOX_UP.format(url=url))
-    elif home_now(bot, guild) is None:
-        lines.append(mi.INBOX_NOT_HERE)
-    else:
-        lines.append(mi.INBOX_WAITING)
-    return lines
-
-
-async def build_schedule(bot: Any, guild: Any, marathon_id: Any) -> tuple[Any, Any]:
-    row = await get_marathon(bot.db, guild.id, marathon_id)
-    if row is None:
-        return (None, None)
-    embed = discord.Embed(
-        title=row["name"], description=clamped(await schedule_lines(bot, guild, row))
-    )
-    view = MarathonPanel(minutes_for(bot, guild.id), SCHEDULE_VIEW, row["id"])
-    moved = sig.retimed_count(await runs_of(bot.db, row["id"]))
-    if moved:
-        embed.description = clamped(
-            [embed.description or "", sig.RETIMED_LINE.format(count=moved)]
-        )
-    add_moves(view, ((sig.SHEET_TIMES_MOVE,) if moved else ()) + mi.schedule_moves(row))
-    return (embed, view)
-
-
-async def open_schedule(interaction: discord.Interaction, marathon_id: Any, previous: Any) -> None:
-    if not await opened(interaction):
-        return
-    embed, view = await build_schedule(interaction.client, interaction.guild, marathon_id)
-    if view is None:
-        await open_card(interaction, marathon_id, previous)
-        return
-    await render(interaction, embed, view, previous)
-
-
-async def back_to_schedule(interaction: discord.Interaction, view: Any) -> None:
-    embed, fresh = await build_schedule(interaction.client, interaction.guild, view.marathon_id)
-    if fresh is None:
-        await open_card(interaction, view.marathon_id, view)
-        return
-    await render(interaction, embed, fresh, view)
-
-
-async def back_to_spot(interaction: discord.Interaction, view: Any) -> None:
-    embed, fresh = await build_spot(interaction.client, interaction.guild, view.marathon_id)
-    if fresh is None:
-        await open_card(interaction, view.marathon_id, view)
-        return
-    await render(interaction, embed, fresh, view)
-
-
-async def open_channel_spotlight(interaction: discord.Interaction, view: Any) -> None:
-    """The Go-live Channels card itself, picked on this marathon's channel: one component."""
-    from .spotlight import render_spotlight
-
-    if not await opened(interaction):
-        return
-    row = await get_marathon(interaction.client.db, interaction.guild.id, view.marathon_id)
-    if row is None or not row["spotlight_id"]:
-        await open_card(interaction, view.marathon_id, view)
-        return
-    await render_spotlight(interaction, int(row["spotlight_id"]), view)
 
 
 async def open_run(
@@ -3699,15 +3561,9 @@ async def reopen(interaction: discord.Interaction, previous: Any) -> None:
     where = getattr(previous, "where", ROOT)
     if where in FEED_VIEWS:
         await reopen_feeds(interaction, previous)
-    elif where == NEXT_VIEW and getattr(previous, "marathon_id", None):
-        await open_next(interaction, previous.marathon_id, previous)
-    elif where == SPOT_VIEW and getattr(previous, "marathon_id", None):
-        await open_spot(interaction, previous.marathon_id, previous)
-    elif where == SCHEDULE_VIEW and getattr(previous, "marathon_id", None):
-        await open_schedule(interaction, previous.marathon_id, previous)
     elif where == RUN_VIEW and getattr(previous, "run_id", None):
         await open_run(interaction, previous.marathon_id, previous.run_id, previous)
-    elif where in (CARD, PAIR_VIEW) and getattr(previous, "marathon_id", None):
+    elif where == CARD and getattr(previous, "marathon_id", None):
         await open_card(interaction, previous.marathon_id, previous)
     elif where == MINE_VIEW:
         await open_mine(interaction, previous)
@@ -3759,19 +3615,6 @@ def run_event_doing(action: str, run_id: Any) -> Any:
     return lambda bot, guild, actor, row: shared(bot, guild, actor, row, {"id": run_id})
 
 
-def next_doing(action: str) -> Any:
-    shared = {mt.ADD_NEXT: add_next, mt.DISMISS_NEXT: dismiss_next, mt.LOOK_AGAIN: look_again}
-    return shared[action]
-
-
-async def back_to_next(interaction: discord.Interaction, view: Any) -> None:
-    embed, fresh = await build_next(interaction.client, interaction.guild, view.marathon_id)
-    if fresh is None:
-        await open_card(interaction, view.marathon_id, view)
-        return
-    await render(interaction, embed, fresh, view)
-
-
 async def back_to_run(interaction: discord.Interaction, view: Any) -> None:
     embed, fresh = await build_run(
         interaction.client, interaction.guild, view.marathon_id, view.run_id
@@ -3780,40 +3623,6 @@ async def back_to_run(interaction: discord.Interaction, view: Any) -> None:
         await open_card(interaction, view.marathon_id, view)
         return
     await render(interaction, embed, fresh, view)
-
-
-async def ask_remove(interaction: discord.Interaction, view: Any) -> None:
-    if not await opened(interaction):
-        return
-    row = await get_marathon(interaction.client.db, interaction.guild.id, view.marathon_id)
-    if row is None:
-        await open_root(interaction, view)
-        return
-    embed, fresh = await build_card(interaction.client, interaction.guild, row["id"])
-    fresh.clear_items()
-
-    async def yes(one: discord.Interaction, card: Any) -> None:
-        await run_move(
-            one,
-            card,
-            lambda bot, guild, actor, marathon: remove_marathon(bot, guild, actor, marathon),
-        )
-
-    async def no(one: discord.Interaction, card: Any) -> None:
-        await open_card(one, row["id"], card)
-
-    await confirm(
-        interaction,
-        fresh,
-        embed,
-        confirm_items(yes=mt.REMOVE_MOVE.label, no=KEEP_IT, on_yes=yes, on_no=no),
-        view,
-        question=mt.render(
-            interaction.client.store.get(interaction.guild.id, MARATHON_REMOVE_QUESTION_KEY),
-            said_default(MARATHON_REMOVE_QUESTION_KEY),
-            name=row["name"],
-        ).text,
-    )
 
 
 class MarathonMoveButton(discord.ui.Button):
@@ -3837,43 +3646,10 @@ class MarathonMoveButton(discord.ui.Button):
         elif action == mt.MINE:
             await open_mine(interaction, view)
         elif action == mt.BACK:
-            if view.where in (PAIR_VIEW, NEXT_VIEW, RUN_VIEW, SPOT_VIEW, SCHEDULE_VIEW):
+            if view.where == RUN_VIEW:
                 await open_card(interaction, view.marathon_id, view)
             else:
                 await open_root(interaction, view)
-        elif action == mt.NEXT:
-            await open_next(interaction, view.marathon_id, view)
-        elif action == mt.SCHEDULE:
-            await open_schedule(interaction, view.marathon_id, view)
-        elif action == sig.SHEET_TIMES:
-            await run_move(interaction, view, signals.sheet_times, back=back_to_schedule)
-        elif action == mi.POST_NOW:
-            from .marathon_inbox import post_now
-
-            await run_move(interaction, view, post_now, back=back_to_schedule)
-        elif action == mi.LINK:
-            if await still_staff(interaction):
-                row = await get_marathon(
-                    interaction.client.db, interaction.guild.id, view.marathon_id
-                )
-                current = row["schedule_url"] if row is not None else None
-                await interaction.response.send_modal(LinkModal(view, current))
-        elif action == mt.RENAME:
-            if await still_staff(interaction):
-                row = await get_marathon(
-                    interaction.client.db, interaction.guild.id, view.marathon_id
-                )
-                current = row["name"] if row is not None else None
-                await interaction.response.send_modal(RenameModal(view, current))
-        elif action == mt.POLL:
-            if await still_staff(interaction):
-                row = await get_marathon(
-                    interaction.client.db, interaction.guild.id, view.marathon_id
-                )
-                current = row["poll_minutes"] if row is not None else None
-                await interaction.response.send_modal(PollModal(view, current))
-        elif action in (mt.ADD_NEXT, mt.DISMISS_NEXT, mt.LOOK_AGAIN):
-            await run_move(interaction, view, next_doing(action), back=back_to_next)
         elif action in (mt.SHOUT, mt.MARK_DONE, mt.MARK_UPCOMING, mt.MARK_LIVE):
             await run_move(interaction, view, run_doing(action, view.run_id), back=back_to_run)
         elif action in (me.MAKE_RUN_EVENT, me.UNLINK_RUN_EVENT):
@@ -3886,33 +3662,6 @@ class MarathonMoveButton(discord.ui.Button):
 
                 wanted = default_mode(interaction.client, interaction.guild.id)
                 await interaction.response.send_modal(AddMarathonModal(view, wanted))
-        elif action in mp.MOVE_WANTS:
-            from .marathon_ping import set_ping_role
-
-            wanted_ping = mp.MOVE_WANTS[action]
-            await run_move(
-                interaction,
-                view,
-                lambda bot, guild, actor, row: set_ping_role(bot, guild, actor, row, wanted_ping),
-            )
-        elif action == ms.CARD_ACTION:
-            await open_spot(interaction, view.marathon_id, view)
-        elif action == ms.CHANNEL_ACTION:
-            await open_channel_spotlight(interaction, view)
-        elif action in ms.MOVE_MODES:
-            from .marathon_spotlight import set_spotlight_mode
-
-            wanted = ms.MOVE_MODES[action]
-            await run_move(
-                interaction,
-                view,
-                lambda bot, guild, actor, row: set_spotlight_mode(bot, guild, actor, row, wanted),
-                back=back_to_spot if view.where == SPOT_VIEW else None,
-            )
-        elif action == mt.MAKE_EVENT:
-            await run_move(interaction, view, make_event_now)
-        elif action == mt.UNLINK_EVENT:
-            await run_move(interaction, view, unlink_the_event)
         elif action == mt.REFRESH and view.where == ROOT:
             await open_root(interaction, view)
         elif action == mt.REFRESH:
@@ -3921,18 +3670,6 @@ class MarathonMoveButton(discord.ui.Button):
                 view,
                 lambda bot, guild, actor, row: refresh_marathon(bot, guild, row),
             )
-        elif action in (mt.PAUSE, mt.RESUME):
-            await run_move(
-                interaction,
-                view,
-                lambda bot, guild, actor, row: set_active(
-                    bot, guild, actor, row, action == mt.RESUME
-                ),
-            )
-        elif action == mt.BOARD:
-            await run_move(interaction, view, post_board)
-        elif action == mt.REMOVE:
-            await ask_remove(interaction, view)
         elif action == ma.ARCHIVE_ACTION:
             from .marathon_archive import ask_archive
 
@@ -3949,8 +3686,6 @@ class MarathonMoveButton(discord.ui.Button):
                 view,
                 lambda bot, guild, actor, row: run_action(bot, guild, actor, row, action),
             )
-        elif action == mt.PAIR:
-            await open_card(interaction, view.marathon_id, view, pairing=True)
         elif action == mt.PEOPLE:
             from .marathon_people import open_people
 
@@ -3987,40 +3722,6 @@ class RunPick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_run(interaction, self.view.marathon_id, self.values[0], self.view)
-
-
-class NamePick(discord.ui.Select):
-    def __init__(self, names: list[str], chosen: Any = None) -> None:
-        options = [
-            discord.SelectOption(label=name[:100], value=name[:100], default=name == chosen)
-            for name in names[:SELECT_CAP]
-        ] or [discord.SelectOption(label="—", value="")]
-        super().__init__(placeholder=mt.PICK_UNMATCHED, options=options, row=0, disabled=not names)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await open_card(
-            interaction, self.view.marathon_id, self.view, pairing=True, runner=self.values[0]
-        )
-
-
-class WhoPick(discord.ui.UserSelect):
-    def __init__(self) -> None:
-        super().__init__(placeholder=mt.PICK_MEMBER, row=1)
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        view = self.view
-        if not view.runner:
-            if await still_staff(interaction):
-                await answer(interaction, mt.NO_RUNNER)
-            return
-        member_id = int(self.values[0].id)
-        await run_move(
-            interaction,
-            view,
-            lambda bot, guild, actor, row: pair_runner(
-                bot, guild, actor, row, view.runner, member_id
-            ),
-        )
 
 
 class AddMarathonModal(AnswersErrors, discord.ui.Modal, title=mt.ADD_TITLE):
@@ -4092,93 +3793,6 @@ class EventModePick(discord.ui.Select):
         )
 
 
-class LinkModal(AnswersErrors, discord.ui.Modal, title=mi.LINK_TITLE):
-    link = discord.ui.TextInput(label=mi.LINK_LABEL, placeholder=mi.LINK_HINT, max_length=300)
-
-    def __init__(self, previous: Any = None, current: Any = None) -> None:
-        super().__init__()
-        self.previous = previous
-        self.link.default = str(current) if current else None
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        if not await opened(interaction):
-            return
-        bot, guild = interaction.client, interaction.guild
-        marathon_id = getattr(self.previous, "marathon_id", None)
-        row = await get_marathon(bot.db, guild.id, marathon_id)
-        if row is None:
-            await open_root(interaction, self.previous)
-            await answer(interaction, mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
-            return
-        outcome = await change_link(bot, guild, interaction.user, row, str(self.link))
-        if getattr(self.previous, "where", None) == SCHEDULE_VIEW:
-            await back_to_schedule(interaction, self.previous)
-        else:
-            await open_card(interaction, row["id"], self.previous)
-        await answer(interaction, outcome.message)
-
-
-class RenameModal(AnswersErrors, discord.ui.Modal, title=mt.RENAME_TITLE):
-    wanted = discord.ui.TextInput(label=mt.RENAME_LABEL, max_length=100)
-
-    def __init__(self, previous: Any = None, current: Any = None) -> None:
-        super().__init__()
-        self.previous = previous
-        self.wanted.default = str(current) if current else None
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        if not await opened(interaction):
-            return
-        bot, guild = interaction.client, interaction.guild
-        marathon_id = getattr(self.previous, "marathon_id", None)
-        row = await get_marathon(bot.db, guild.id, marathon_id)
-        if row is None:
-            await open_root(interaction, self.previous)
-            await answer(interaction, mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
-            return
-        outcome = await rename_marathon(bot, guild, interaction.user, row, str(self.wanted), None)
-        if getattr(self.previous, "where", None) == SCHEDULE_VIEW:
-            await back_to_schedule(interaction, self.previous)
-        else:
-            await open_card(interaction, row["id"], self.previous)
-        await answer(interaction, outcome.message or mt.RENAME_SAME.format(name=row["name"]))
-
-
-class PollModal(AnswersErrors, discord.ui.Modal, title=mt.POLL_TITLE):
-    minutes = discord.ui.TextInput(
-        label=mt.POLL_LABEL, placeholder=mt.POLL_HINT, required=False, max_length=4
-    )
-
-    def __init__(self, previous: Any = None, current: Any = None) -> None:
-        super().__init__()
-        self.previous = previous
-        self.minutes.default = str(current) if current else None
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        if not await opened(interaction):
-            return
-        bot, guild = interaction.client, interaction.guild
-        marathon_id = getattr(self.previous, "marathon_id", None)
-        row = await get_marathon(bot.db, guild.id, marathon_id)
-        if row is None:
-            await open_root(interaction, self.previous)
-            await answer(interaction, mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
-            return
-        given = str(self.minutes).strip()
-        wanted: Any = "" if not given else (int(given) if given.isdigit() else given)
-        outcome = await rename_marathon(bot, guild, interaction.user, row, None, wanted)
-        if getattr(self.previous, "where", None) == SCHEDULE_VIEW:
-            await back_to_schedule(interaction, self.previous)
-        else:
-            await open_card(interaction, row["id"], self.previous)
-        if not outcome.ok:
-            await answer(interaction, outcome.message)
-        elif wanted == "":
-            await answer(interaction, mt.POLL_CLEARED.format(name=row["name"]))
-        else:
-            await answer(interaction, mt.POLL_SAVED.format(name=row["name"], minutes=wanted))
-
-
 async def viewer_decorated(bot: Any, guild: Any, marathon: Any, runs: list[Any]) -> list[Any]:
     from .marathon_viewer import decorated
 
@@ -4234,7 +3848,6 @@ __all__ = [
     "pairings_of",
     "post_board",
     "refresh_marathon",
-    "remove_marathon",
     "rename_marathon",
     "run_by_id",
     "runs_of",

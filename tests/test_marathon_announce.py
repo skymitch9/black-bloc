@@ -67,9 +67,9 @@ def test_a_move_word_is_out_or_in(given, wanted):
 HOSTING = {"name": "anarchy", "user_id": 8101, "login": "anarchyasf", "part": "host"}
 QUIET_HOST = HOSTING | {"counts": False}
 LABELS = {
-    ma.IN: "Announce {name} for this run",
-    ma.OUT: "Do not announce {name} for this run",
-    ma.DEFAULT: "{name}: back to the default for this run",
+    ma.IN: "Announce {name}",
+    ma.OUT: "Don't announce {name}",
+    ma.DEFAULT: "{name}: back to the default",
     ma.PLAIN: "No @ for {name}",
     ma.MENTION: "@ {name} again",
 }
@@ -270,28 +270,24 @@ def moves_of(row, found=None):
     ]
 
 
-def test_each_person_gets_the_one_move_their_state_allows_and_the_one_for_their_at():
+def test_each_person_gets_one_button_the_move_their_state_allows():
     row = a_run(3, [SKY, QUIET_HOST])
     assert moves_of(row) == [
-        (9001, ma.OUT, "Do not announce Sky for this run"),
-        (9001, ma.PLAIN, "No @ for Sky"),
-        (8101, ma.IN, "Announce anarchy for this run"),
-        (8101, ma.PLAIN, "No @ for anarchy"),
+        (9001, ma.OUT, "Don't announce Sky"),
+        (8101, ma.IN, "Announce anarchy"),
     ]
     answered = a_run(3, [SKY, QUIET_HOST], {9001: ma.OUT, 8101: ma.IN})
     found = ma.Policy(mentions={9001: ma.PLAIN})
     assert moves_of(answered, found) == [
-        (9001, ma.DEFAULT, "Sky: back to the default for this run"),
-        (9001, ma.MENTION, "@ Sky again"),
-        (8101, ma.DEFAULT, "anarchy: back to the default for this run"),
-        (8101, ma.PLAIN, "No @ for anarchy"),
+        (9001, ma.DEFAULT, "Sky: back to the default"),
+        (8101, ma.DEFAULT, "anarchy: back to the default"),
     ]
-    assert moves_of(row, out(9001))[0] == (9001, ma.IN, "Announce Sky for this run")
+    assert moves_of(row, out(9001))[0] == (9001, ma.IN, "Announce Sky")
     assert moves_of(row, ma.Policy(runners_on=False))[0][1] == ma.IN
     made = ma.moves(7, row, ma.Policy(), LABELS)
     assert made[0].custom_id == "marathon:announce:7:3:9001:out"
     assert re.fullmatch(ma.MOVE_TEMPLATE, made[0].custom_id)["to"] == "out"
-    assert len({one.custom_id for one in made}) == len(made)
+    assert not {one.to for one in made} & {ma.PLAIN, ma.MENTION}
 
 
 def test_a_run_that_is_over_carries_no_moves_and_no_state():
@@ -308,17 +304,17 @@ def crowd(count):
     ]
 
 
-def test_four_people_fit_as_buttons_and_more_become_one_menu():
-    four = a_run(3, crowd(4))
-    made = ma.laid_out(7, four, ma.moves(7, four, ma.Policy(), LABELS), "Pick…")
-    assert len(made) == 8 and all(isinstance(one, ma.Move) for one in made)
+def test_five_people_fit_as_one_row_of_buttons_and_more_become_one_menu():
     five = a_run(3, crowd(5))
-    (pick,) = ma.laid_out(7, five, ma.moves(7, five, ma.Policy(), LABELS), "Pick…")
+    made = ma.laid_out(7, five, ma.moves(7, five, ma.Policy(), LABELS), "Pick…")
+    assert len(made) == 5 and all(isinstance(one, ma.Move) for one in made)
+    six = a_run(3, crowd(6))
+    (pick,) = ma.laid_out(7, six, ma.moves(7, six, ma.Policy(), LABELS), "Pick…")
     assert isinstance(pick, ma.Pick) and pick.custom_id == "marathon:announce:7:3:pick"
     assert re.fullmatch(ma.PICK_TEMPLATE, pick.custom_id) and pick.label == "Pick…"
-    assert len(pick.options) == 10
-    assert pick.options[0] == ("9100:out", "Do not announce Runner 0 for this run")
-    assert ma.option_of(pick.options[1][0]) == (9100, ma.PLAIN)
+    assert len(pick.options) == 6
+    assert pick.options[0] == ("9100:out", "Don't announce Runner 0")
+    assert ma.option_of(pick.options[1][0]) == (9101, ma.OUT)
     assert ma.option_of("x:out") is None and ma.option_of("9100:shout") is None
 
 
@@ -328,28 +324,25 @@ def picked(count):
     return made, ma.laid_out(7, row, made, "x" * 300)
 
 
-@pytest.mark.parametrize(("count", "sizes"), [(12, [24]), (13, [24, 2]), (20, [24, 16])])
+@pytest.mark.parametrize(("count", "sizes"), [(12, [12]), (13, [12, 1]), (20, [12, 8])])
 def test_past_twelve_people_the_menu_splits_and_nobody_loses_a_move(count, sizes):
     made, picks = picked(count)
     assert [len(one.options) for one in picks] == sizes
     assert all(len(one.options) <= ma.OPTION_LIMIT and len(one.label) == 100 for one in picks)
     offered = [value for one in picks for value, _ in one.options]
     assert offered == [f"{one.user_id}:{one.to}" for one in made]
-    assert len(offered) == 2 * count and len(set(offered)) == len(offered)
+    assert len(offered) == count and len(set(offered)) == len(offered)
     assert [one.custom_id for one in picks] == [
         "marathon:announce:7:3:pick",
         "marathon:announce:7:3:pick2",
     ][: len(picks)]
     assert [one.row for one in picks] == [1, 2][: len(picks)]
     assert all(re.fullmatch(ma.PICK_TEMPLATE, one.custom_id) for one in picks)
-    for one in picks:
-        people = [value.split(":")[0] for value, _ in one.options]
-        assert all(people.count(member) == 2 for member in people)
 
 
 def test_a_long_name_is_cut_to_what_a_button_takes():
     long = a_run(3, [SKY | {"name": "S" * 200}])
-    (move, _) = ma.moves(7, long, ma.Policy(), LABELS)
+    (move,) = ma.moves(7, long, ma.Policy(), LABELS)
     assert len(move.label) == 80
 
 
@@ -444,7 +437,12 @@ def test_a_run_that_is_over_says_so_in_words():
     assert dropped == "**Alpha** is off the schedule, so nothing was changed."
 
 
-def test_the_state_line_says_who_is_announced_and_why():
+def test_the_state_lines_name_only_the_exceptions_and_why():
+    usual = a_run(3, [SKY, RIVET])
+    assert ma.state_lines(usual, ma.Policy(), STATE_WORDS) == []
+    assert ma.state_lines(usual, ma.Policy(), STATE_WORDS, only=9001) == [
+        "Sky: announced — the default"
+    ]
     row = a_run(3, [SKY, RIVET, QUIET_HOST], {9002: ma.OUT})
     found = ma.Policy(opted=frozenset({9001}), mentions={9002: ma.PLAIN})
     assert ma.state_lines(row, found, STATE_WORDS) == [
@@ -475,3 +473,15 @@ def test_host_announcements_follow_their_own_setting():
     )
     assert (found.runners_on, found.hosts_on, found.opted) == (True, True, frozenset({9001}))
     assert found.plain(9002) and not found.plain(9001)
+
+
+def test_a_long_name_is_shortened_in_a_button_label_and_the_move_word_is_kept():
+    name = "Somebody With A Very Long Display Name That Goes On And On For Ages XY"
+    assert len(name) == 70
+
+    said = ma.named_label("Don't announce {name}", name)
+
+    assert len(said) == 80 and said.startswith("Don't announce Somebody") and said.endswith("…")
+    assert ma.named_label("{name}: back to the default", name).endswith("…: back to the default")
+    assert ma.named_label("Announce {name}", "Sky") == "Announce Sky"
+    assert ma.named_label("Announce {name}", name) == f"Announce {name}"

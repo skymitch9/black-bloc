@@ -149,15 +149,14 @@ def test_a_block_that_moved_later_forgets_the_marks_ahead_again():
     assert mhh.rearmed(record, block, NOW + timedelta(minutes=100)) and record["marks"] == [1440]
 
 
-def test_auto_follows_the_marathons_switch_once_per_block():
+def test_auto_wants_a_live_block_once():
     rows = [a_row(1, 0, [ANARCHY], state=mt.LIVE), a_row(2, 60, [ANARCHY])]
     (block,) = mhh.blocks(rows)
-    assert mhh.auto_wanted({"public_highlight": 1}, block, None)
-    assert not mhh.auto_wanted({"public_highlight": 0}, block, None)
-    assert not mhh.auto_wanted({"public_highlight": 1}, block, {"tried": True})
-    assert not mhh.auto_wanted({"public_highlight": 1}, block, {"message_id": 5, "removed": True})
+    assert mhh.auto_wanted(block, None)
+    assert not mhh.auto_wanted(block, {"tried": True})
+    assert not mhh.auto_wanted(block, {"message_id": 5, "removed": True})
     rows[0]["state"] = mt.UPCOMING
-    assert not mhh.auto_wanted({"public_highlight": 1}, mhh.blocks(rows)[0], None)
+    assert not mhh.auto_wanted(mhh.blocks(rows)[0], None)
 
 
 def test_records_survive_a_round_trip_keyed_by_the_blocks_first_run():

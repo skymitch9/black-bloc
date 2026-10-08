@@ -13,9 +13,7 @@ from ... import marathon_baf_event as baf
 from ... import marathon_events as me
 from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
-from ... import marathon_overlay as mo
 from ... import marathon_ping as mping
-from ... import marathon_public as mp
 from ... import marathon_spotlight as ms
 from ... import marathon_thread_controls as mtc
 from ... import spotlight as spot
@@ -27,44 +25,44 @@ from ...marathon_channels import takes_marathons
 from ...panels import Outcome, answer, refusal, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
-    DEFAULT_TIMEZONE_KEY,
     MARATHON_CONTROLS_ALREADY_ON_KEY,
     MARATHON_CONTROLS_ANNOUNCE_OFF_KEY,
     MARATHON_CONTROLS_ANNOUNCE_ON_KEY,
-    MARATHON_CONTROLS_BAF_CLEAR_KEY,
-    MARATHON_CONTROLS_BAF_FOLLOW_ANSWER_KEY,
-    MARATHON_CONTROLS_BAF_FOLLOW_KEY,
-    MARATHON_CONTROLS_BAF_NO_KEY,
-    MARATHON_CONTROLS_BAF_YES_KEY,
+    MARATHON_CONTROLS_ARCHIVE_KEY,
+    MARATHON_CONTROLS_BAF_ANSWERED_NO_KEY,
+    MARATHON_CONTROLS_BAF_ANSWERED_YES_KEY,
+    MARATHON_CONTROLS_BAF_NAMED_KEY,
+    MARATHON_CONTROLS_BAF_RUNS_KEY,
+    MARATHON_CONTROLS_BAF_SAID_NO_KEY,
+    MARATHON_CONTROLS_BAF_SAID_UNSURE_KEY,
+    MARATHON_CONTROLS_BAF_SAID_YES_KEY,
+    MARATHON_CONTROLS_BAF_STAFF_NO_KEY,
+    MARATHON_CONTROLS_BAF_STAFF_YES_KEY,
     MARATHON_CONTROLS_CANCELLED_KEY,
     MARATHON_CONTROLS_CANNOT_WAIT_KEY,
     MARATHON_CONTROLS_EVENT_OFF_KEY,
     MARATHON_CONTROLS_EVENT_ON_KEY,
-    MARATHON_CONTROLS_HELP_KEY,
-    MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY,
-    MARATHON_CONTROLS_HIGHLIGHT_ON_KEY,
+    MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY,
     MARATHON_CONTROLS_HOST_ANNOUNCE_OFF_KEY,
     MARATHON_CONTROLS_HOST_ANNOUNCE_ON_KEY,
     MARATHON_CONTROLS_KEPT_REFUSED_KEY,
     MARATHON_CONTROLS_NO_CHANNEL_KEY,
     MARATHON_CONTROLS_NO_END_KEY,
-    MARATHON_CONTROLS_OVERLAY_OFF_KEY,
-    MARATHON_CONTROLS_OVERLAY_ON_KEY,
     MARATHON_CONTROLS_PING_OFF_KEY,
     MARATHON_CONTROLS_PING_ON_KEY,
-    MARATHON_CONTROLS_RUNS_OFF_KEY,
-    MARATHON_CONTROLS_RUNS_ON_KEY,
-    MARATHON_CONTROLS_SPOTLIGHT_KEPT_KEY,
-    MARATHON_CONTROLS_SPOTLIGHT_NONE_KEY,
-    MARATHON_CONTROLS_SPOTLIGHT_OFF_KEY,
-    MARATHON_CONTROLS_SPOTLIGHT_ON_KEY,
-    MARATHON_CONTROLS_SPOTLIGHT_WAITING_KEY,
+    MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_OFF_KEY,
+    MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_ON_KEY,
+    MARATHON_CONTROLS_SPOTLIGHT_KEPT_LINE_KEY,
+    MARATHON_CONTROLS_SPOTLIGHT_NONE_LINE_KEY,
+    MARATHON_CONTROLS_SPOTLIGHT_RUNNING_LINE_KEY,
+    MARATHON_CONTROLS_SPOTLIGHT_STARTS_LINE_KEY,
+    MARATHON_CONTROLS_SPOTLIGHT_UNTIL_LINE_KEY,
     MARATHON_CONTROLS_STARTED_KEY,
     MARATHON_CONTROLS_TRACKER_KEY,
     MARATHON_CONTROLS_WAITS_KEY,
+    MARATHON_HOST_EVENTS_GONE_KEY,
 )
-from ...spotlight import reason_of, window_when
-from ...timezones import DEFAULT_TZ, zone
+from ...spotlight import reason_of
 from .marathon import (
     MODE_OFF,
     NO_SUCH,
@@ -84,14 +82,13 @@ from .marathon_inbox import find_channel, home_now, reopened, words
 from .marathon_role_ping import status_line as role_ping_line
 from .marathon_spotlight import (
     _row_of,
-    after_staff_dim,
     enabled,
     lead_of,
     set_spotlight_mode,
     state_for,
     tail_of,
 )
-from .spotlight import changed_spotlight, set_spotlight, update_channel
+from .spotlight import changed_spotlight, update_channel
 
 log = logging.getLogger(__name__)
 
@@ -103,44 +100,44 @@ GONE_CODE = "gone"
 LABEL_KEYS = {
     (mtc.EVENT, mtc.ON): MARATHON_CONTROLS_EVENT_ON_KEY,
     (mtc.EVENT, mtc.OFF): MARATHON_CONTROLS_EVENT_OFF_KEY,
-    (mtc.RUNS, mtc.ON): MARATHON_CONTROLS_RUNS_ON_KEY,
-    (mtc.RUNS, mtc.OFF): MARATHON_CONTROLS_RUNS_OFF_KEY,
-    (mtc.SPOTLIGHT, mtc.SPOT_ON): MARATHON_CONTROLS_SPOTLIGHT_ON_KEY,
-    (mtc.SPOTLIGHT, mtc.SPOT_OFF): MARATHON_CONTROLS_SPOTLIGHT_OFF_KEY,
-    (mtc.SPOTLIGHT, mtc.SPOT_KEPT): MARATHON_CONTROLS_SPOTLIGHT_KEPT_KEY,
-    (mtc.SPOTLIGHT, mtc.SPOT_NONE): MARATHON_CONTROLS_SPOTLIGHT_NONE_KEY,
-    (mtc.SPOTLIGHT, mtc.SPOT_WAITING): MARATHON_CONTROLS_SPOTLIGHT_WAITING_KEY,
-    (mtc.HIGHLIGHT, mtc.ON): MARATHON_CONTROLS_HIGHLIGHT_ON_KEY,
-    (mtc.HIGHLIGHT, mtc.OFF): MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY,
+    (mtc.SPOTLIGHT, mtc.ON): MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_ON_KEY,
+    (mtc.SPOTLIGHT, mtc.OFF): MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_OFF_KEY,
     (mtc.PING, mtc.ON): MARATHON_CONTROLS_PING_ON_KEY,
     (mtc.PING, mtc.OFF): MARATHON_CONTROLS_PING_OFF_KEY,
     (mtc.ANNOUNCE, mtc.ON): MARATHON_CONTROLS_ANNOUNCE_ON_KEY,
     (mtc.ANNOUNCE, mtc.OFF): MARATHON_CONTROLS_ANNOUNCE_OFF_KEY,
     (mtc.HOST_ANNOUNCE, mtc.ON): MARATHON_CONTROLS_HOST_ANNOUNCE_ON_KEY,
     (mtc.HOST_ANNOUNCE, mtc.OFF): MARATHON_CONTROLS_HOST_ANNOUNCE_OFF_KEY,
-    (mtc.OVERLAY, mtc.ON): MARATHON_CONTROLS_OVERLAY_ON_KEY,
-    (mtc.OVERLAY, mtc.OFF): MARATHON_CONTROLS_OVERLAY_OFF_KEY,
+    (mtc.ARCHIVE, mtc.ARCHIVE): MARATHON_CONTROLS_ARCHIVE_KEY,
+    (mtc.LINK, ""): MARATHON_CONTROLS_TRACKER_KEY,
 }
 BAF_LABEL_KEYS = {
-    mtc.FOLLOW: MARATHON_CONTROLS_BAF_FOLLOW_KEY,
-    mtc.FOLLOW_ANSWER: MARATHON_CONTROLS_BAF_FOLLOW_ANSWER_KEY,
-    mtc.CLEAR: MARATHON_CONTROLS_BAF_CLEAR_KEY,
-    mtc.YES: MARATHON_CONTROLS_BAF_YES_KEY,
-    mtc.NO: MARATHON_CONTROLS_BAF_NO_KEY,
+    mtc.BAF_SAID_YES: MARATHON_CONTROLS_BAF_SAID_YES_KEY,
+    mtc.BAF_SAID_NO: MARATHON_CONTROLS_BAF_SAID_NO_KEY,
+    mtc.BAF_SAID_UNSURE: MARATHON_CONTROLS_BAF_SAID_UNSURE_KEY,
+    mtc.BAF_STAFF_YES: MARATHON_CONTROLS_BAF_STAFF_YES_KEY,
+    mtc.BAF_STAFF_NO: MARATHON_CONTROLS_BAF_STAFF_NO_KEY,
+    mtc.BAF_ANSWERED_YES: MARATHON_CONTROLS_BAF_ANSWERED_YES_KEY,
+    mtc.BAF_ANSWERED_NO: MARATHON_CONTROLS_BAF_ANSWERED_NO_KEY,
+}
+SPOT_LINE_KEYS = {
+    mtc.LINE_UNTIL: MARATHON_CONTROLS_SPOTLIGHT_UNTIL_LINE_KEY,
+    mtc.LINE_STARTS: MARATHON_CONTROLS_SPOTLIGHT_STARTS_LINE_KEY,
+    mtc.LINE_KEPT: MARATHON_CONTROLS_SPOTLIGHT_KEPT_LINE_KEY,
+    mtc.LINE_NONE: MARATHON_CONTROLS_SPOTLIGHT_NONE_LINE_KEY,
+    mtc.LINE_RUNNING: MARATHON_CONTROLS_SPOTLIGHT_RUNNING_LINE_KEY,
+}
+RETIRED_SAID = {
+    mtc.HOSTS: mh.SCAN_GONE,
+    mtc.RUNS: mtc.RUNS_GONE,
+    mtc.OVERLAY: mtc.OVERLAY_GONE,
+    mtc.HIGHLIGHT: mtc.HIGHLIGHT_GONE,
 }
 STYLES = {
     mtc.ON: discord.ButtonStyle.success,
     mtc.OFF: discord.ButtonStyle.secondary,
+    mtc.ARCHIVE: discord.ButtonStyle.secondary,
 }
-
-
-def overlay_switch(bot: Any, guild_id: int, marathon: Any) -> bool | None:
-    """The Event schedule button's state — None (no button) unless a sheet matches."""
-    from .marathon_hosts import switch_state
-
-    if mo.state_of(marathon) is None:
-        return None
-    return bool(switch_state(bot, guild_id, marathon, mh.OVERLAY)["on"])
 
 
 def shown_lock(cog: Any, marathon_id: Any) -> asyncio.Lock:
@@ -156,89 +153,86 @@ def shown_cache(cog: Any) -> dict[int, Any]:
     return cog.__dict__.setdefault("controls_shown", {})
 
 
+def baf_button(bot: Any, guild: Any, marathon: Any, rows: Any) -> tuple[Any, dict[str, Any]]:
+    """The BaF event button and the words its label takes."""
+    from .marathon_baf_event import reading_for, reason_words
+
+    followed = baf.judgement_of(reading_for(bot, guild.id, marathon, rows), own=False)
+    reason = mtc.baf_reason(followed)
+    if reason == mtc.REASON_NAMED:
+        said = words(bot, guild.id, MARATHON_CONTROLS_BAF_NAMED_KEY, name=followed.name)
+    elif reason == mtc.REASON_NO_RUNS:
+        said = reason_words(bot, guild.id, followed)
+    else:
+        said = words(
+            bot, guild.id, MARATHON_CONTROLS_BAF_RUNS_KEY, baf=followed.baf, runs=followed.runs
+        )
+    return (mtc.baf_control(baf.stored(marathon), followed), {"reason": said})
+
+
+def stamp(value: Any) -> str:
+    when = parse_ts(value)
+    return f"<t:{int(when.timestamp())}:f>" if when else "—"
+
+
+def spot_words(bot: Any, guild: Any, state: dict[str, Any], follows: bool = True) -> str:
+    line = mtc.spot_line(state["state"], follows)
+    if line is None:
+        return ""
+    return words(
+        bot,
+        guild.id,
+        SPOT_LINE_KEYS[line],
+        until=stamp(state.get("until")),
+        starts=stamp(state.get("starts")),
+    )
+
+
 async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tuple[str, ...]]:
     """`(content, controls, labels)` from the row, the channel row and the keys."""
-    from .marathon_baf_event import answer_word, reading_for
-
     _row, state = await state_for(bot, guild, marathon)
     rows = await runs_of(bot.db, marathon["id"])
-    followed = baf.judgement_of(reading_for(bot, guild.id, marathon, rows), own=False)
+    over = mtc.after_show(marathon, now_for(bot))
+    follows = ms.mode_of(marathon) == ms.FOLLOW
+    shown_baf, fields = (None, {}) if over else baf_button(bot, guild, marathon, rows)
     controls = mtc.controls(
         me.mode_of(marathon),
         state["state"],
-        mp.highlights(marathon),
-        mping.pings_role(marathon),
-        announces(bot, guild.id, marathon),
-        overlay_switch(bot, guild.id, marathon),
+        follows=follows,
+        ping=mping.pings_role(marathon),
+        announce=announces(bot, guild.id, marathon),
         host_announce=policy_of(bot, guild.id, marathon).hosts_on,
-    ) + mtc.baf_controls(
-        baf.choice_of(baf.stored(marathon)), baf.answer_of(baf.asks_of(marathon)) is not None
+        baf=shown_baf,
+        over=over,
     )
-    starts = label_moment(state.get("starts"), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY))
-    labels = tuple(
-        mtc.label(
-            words(
-                bot,
-                guild.id,
-                label_key(one),
-                starts=starts,
-                answer=answer_word(bot, guild.id, followed.answer),
-            )
-        )
-        for one in controls
-    )
-    content = words(bot, guild.id, MARATHON_CONTROLS_HELP_KEY, marathon=marathon["name"])
-    if state["state"] == ms.NO_CHANNEL:
-        content += "\n" + words(
-            bot, guild.id, MARATHON_CONTROLS_NO_CHANNEL_KEY, marathon=marathon["name"]
-        )
-    role_line = role_ping_line(bot, guild, marathon, rows=rows)
-    if role_line:
-        content += "\n" + role_line
-    return (content, controls, labels)
+    labels = tuple(mtc.label(words(bot, guild.id, label_key(one), **fields)) for one in controls)
+    lines = [
+        spot_words(bot, guild, state, follows),
+        role_ping_line(bot, guild, marathon, rows=rows),
+    ]
+    return ("\n".join(one for one in lines if one), controls, labels)
 
 
 def label_key(control: Any) -> str:
     if control.action == mtc.BAF:
-        return BAF_LABEL_KEYS[control.label or control.to]
+        return BAF_LABEL_KEYS[control.label]
     return LABEL_KEYS[(control.action, control.word)]
 
 
-def label_moment(value: Any, tz_name: Any) -> str:
-    """A button cannot carry a Discord timestamp, so the date is written in the server's zone."""
-    when = parse_ts(value)
-    if when is None:
-        return "—"
-    local = when.astimezone(zone(tz_name) or zone(DEFAULT_TZ))
-    return f"{window_when(value, tz_name)} {local.tzname() or ''}".strip()
-
-
-def tracker_link(bot: Any, guild: Any, marathon: Any) -> tuple[str, str] | None:
-    """`(label, url)` for the link button to the marathon's page on the site."""
-    url = mtc.tracker_url(getattr(getattr(bot, "settings", None), "origin", ""), marathon["id"])
-    if url is None:
-        return None
-    return (mtc.label(words(bot, guild.id, MARATHON_CONTROLS_TRACKER_KEY)), url)
+def tracker_url(bot: Any, marathon: Any) -> str | None:
+    return mtc.tracker_url(getattr(getattr(bot, "settings", None), "origin", ""), marathon["id"])
 
 
 def view_of(
     marathon_id: Any, controls: tuple, labels: tuple[str, ...], link: Any = None
 ) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
-    paired = list(zip(controls, labels, strict=True))
-    for one, text in paired:
-        if one.row is None:
+    for one, text in zip(controls, labels, strict=True):
+        if one.action != mtc.LINK:
+            view.add_item(ControlButton(marathon_id, one.action, one.to, text, one.word, one.row))
+        elif link:
             view.add_item(
-                ControlButton(marathon_id, one.action, one.to, text, one.disabled, one.word)
-            )
-    if link is not None:
-        view.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=link[0], url=link[1]))
-    for one, text in paired:
-        if one.row is not None:
-            view.add_item(
-                ControlButton(
-                    marathon_id, one.action, one.to, text, one.disabled, one.word, one.row
-                )
+                discord.ui.Button(style=discord.ButtonStyle.link, label=text, url=link, row=one.row)
             )
     return view
 
@@ -249,11 +243,11 @@ async def post_controls(bot: Any, guild: Any, marathon: Any, thread: Any) -> Any
     if guard is not None and not guard.allows_channel(thread.id):
         return None
     content, controls, labels = await rendered(bot, guild, marathon)
-    link = tracker_link(bot, guild, marathon)
+    link = tracker_url(bot, marathon)
     base = {"marathon_id": marathon["id"], "name": marathon["name"], "thread_id": int(thread.id)}
     try:
         message = await thread.send(
-            content,
+            content or None,
             view=view_of(marathon["id"], controls, labels, link),
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -323,7 +317,7 @@ async def refresh_controls(bot: Any, guild: Any, marathon_id: Any) -> str:
         if not has_home(bot, guild, fresh) or not _cell(fresh, "controls_message_id"):
             return "skipped"
         thread_id, message_id = int(fresh["thread_id"]), int(fresh["controls_message_id"])
-        shown = (*await rendered(bot, guild, fresh), tracker_link(bot, guild, fresh))
+        shown = (*await rendered(bot, guild, fresh), tracker_url(bot, fresh))
         if shown_cache(cog).get(key) == (thread_id, message_id, shown):
             return "same"
         thread, _lost = await find_channel(bot, guild, thread_id)
@@ -334,7 +328,7 @@ async def refresh_controls(bot: Any, guild: Any, marathon_id: Any) -> str:
         try:
             message = await message_in(thread, message_id)
             await message.edit(
-                content=content,
+                content=content or None,
                 view=view_of(key, controls, labels, link),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
@@ -390,7 +384,24 @@ async def row_changed(bot: Any, guild: Any, spotlight_id: Any) -> None:
         await controls_changed(bot, guild, one["id"])
 
 
-# --- the three moves ---------------------------------------------------------------------------
+async def archived_controls(bot: Any, guild: Any, marathon: Any) -> None:
+    """An archived marathon's controls keep their state line and lose every button."""
+    cog = cog_of(bot)
+    thread_id, message_id = _cell(marathon, "thread_id"), _cell(marathon, "controls_message_id")
+    if cog is None or not thread_id or not message_id:
+        return
+    shown_cache(cog).pop(int(marathon["id"]), None)
+    thread, _lost = await find_channel(bot, guild, int(thread_id))
+    if thread is None:
+        return
+    try:
+        message = await message_in(await reopened(thread), int(message_id))
+        await message.edit(view=None)
+    except Exception as exc:
+        log.info("marathon: could not clear the archived controls — %s", reason_of(exc))
+
+
+# --- the moves -----------------------------------------------------------------------------------
 
 
 def login_of(row: Any) -> str:
@@ -421,12 +432,16 @@ async def start_spotlight(
     row = await _row_of(bot, guild, marathon)
     if row is None:
         return no_channel(bot, guild, marathon)
-    if spot.is_spotlit(row):
-        return Outcome(
-            True, words(bot, guild.id, MARATHON_CONTROLS_ALREADY_ON_KEY, channel=login_of(row))
-        )
     tail = tail_of(bot, guild.id)
     span = ms.span_of(marathon)
+    if spot.is_spotlit(row):
+        said = []
+        if ms.mode_of(marathon) == ms.OFF:
+            said.append(
+                (await set_spotlight_mode(bot, guild, actor, marathon, ms.FOLLOW, via=via)).message
+            )
+        said.append(words(bot, guild.id, MARATHON_CONTROLS_ALREADY_ON_KEY, channel=login_of(row)))
+        return Outcome(True, " ".join(one for one in said if one))
     if span is None or ms.reach_end(span, tail) <= now_for(bot):
         return no_end(bot, guild, marathon)
     if not ms.in_reach(span, now_for(bot), lead_of(bot, guild.id), tail):
@@ -521,27 +536,26 @@ async def cancel_spotlight(
     row = await _row_of(bot, guild, marathon)
     if row is None:
         return no_channel(bot, guild, marathon)
+    held = spot.is_spotlit(row) and ms.held_by(row) == int(marathon["id"])
     if ms.mode_of(marathon) != ms.OFF:
         moved = await set_spotlight_mode(bot, guild, actor, marathon, ms.OFF, via=via)
         if not moved.ok:
             return moved
+        if held:
+            return moved
+    key = MARATHON_CONTROLS_CANCELLED_KEY
+    if spot.is_spotlit(row) and not held:
+        key = MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY
     return Outcome(
-        True,
-        words(
-            bot,
-            guild.id,
-            MARATHON_CONTROLS_CANCELLED_KEY,
-            marathon=marathon["name"],
-            channel=login_of(row),
-        ),
+        True, words(bot, guild.id, key, marathon=marathon["name"], channel=login_of(row))
     )
 
 
-async def stop_spotlight(
+async def turn_off_spotlight(
     bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    """Off exactly as a staff Off on Go-live, and this marathon stops following; a kept
-    spotlight is refused in words."""
+    """The switch's off stops following the schedule and nothing more; a kept spotlight is
+    refused in words."""
     row = await _row_of(bot, guild, marathon)
     if row is None:
         return no_channel(bot, guild, marathon)
@@ -551,16 +565,16 @@ async def stop_spotlight(
             KEPT_CODE,
             409,
         )
-    said: list[str] = []
-    if spot.is_spotlit(row):
-        fresh_row, settled = await set_spotlight(bot, guild, actor, int(row["id"]), False, via=via)
-        said.append(spot.spotlight_said(fresh_row, settled))
-        said.append(await after_staff_dim(bot, guild, actor, row, fresh_row, via=via))
-    again = await get_marathon(bot.db, guild.id, marathon["id"])
-    if again is not None and ms.mode_of(again) != ms.OFF:
-        moved = await set_spotlight_mode(bot, guild, actor, again, ms.OFF, via=via)
-        said.append(moved.message)
-    return Outcome(True, " ".join(one for one in said if one))
+    return await cancel_spotlight(bot, guild, actor, marathon, via=via)
+
+
+async def archive_from_thread(
+    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    from ... import marathon_archive as ma
+    from .marathon_archive import archive_marathon
+
+    return await archive_marathon(bot, guild, actor, marathon, why=ma.STAFF, via=via)
 
 
 async def press(
@@ -576,29 +590,25 @@ async def press(
     marathon = await get_marathon(bot.db, guild.id, marathon_id)
     if marathon is None:
         return refusal(mt.NO_SUCH_MARATHON.format(given=marathon_id), NO_SUCH, 404)
-    if action in (mtc.EVENT, mtc.RUNS):
+    if action == mtc.HOST_EVENTS:
+        return refusal(words(bot, guild.id, MARATHON_HOST_EVENTS_GONE_KEY), GONE_CODE, 410)
+    if action in RETIRED_SAID:
+        return refusal(RETIRED_SAID[action], GONE_CODE, 410)
+    if action == mtc.ARCHIVE:
+        return await archive_from_thread(bot, guild, actor, marathon, via=via)
+    if action == mtc.EVENT:
         wanted = mtc.wanted_mode(me.mode_of(marathon), action, to)
         outcome = await set_event_mode(bot, guild, actor, marathon, wanted, via=via)
-    elif action == mtc.HIGHLIGHT:
-        from .marathon_public import set_public_highlight
-
-        outcome = await set_public_highlight(bot, guild, actor, marathon, to == mtc.ON, via=via)
     elif action == mtc.PING:
         from .marathon_ping import set_ping_role
 
         outcome = await set_ping_role(bot, guild, actor, marathon, to == mtc.ON, via=via)
-    elif action == mtc.HOSTS:
-        outcome = refusal(mh.SCAN_GONE, GONE_CODE, 410)
-    elif action == mtc.HOST_EVENTS:
-        outcome = refusal(mh.HOST_EVENTS_GONE, GONE_CODE, 410)
     elif action == mtc.ANNOUNCE:
         outcome = await set_switch(bot, guild, actor, marathon, mh.ANNOUNCE, to == mtc.ON, via=via)
     elif action == mtc.HOST_ANNOUNCE:
         outcome = await set_switch(
             bot, guild, actor, marathon, mh.HOST_ANNOUNCE, to == mtc.ON, via=via
         )
-    elif action == mtc.OVERLAY:
-        outcome = await set_switch(bot, guild, actor, marathon, mh.OVERLAY, to == mtc.ON, via=via)
     elif action == mtc.BAF:
         from .marathon_baf_event import clear_answer, set_baf_event
 
@@ -611,7 +621,7 @@ async def press(
     elif to == mtc.CANCEL:
         outcome = await cancel_spotlight(bot, guild, actor, marathon, via=via)
     else:
-        outcome = await stop_spotlight(bot, guild, actor, marathon, via=via)
+        outcome = await turn_off_spotlight(bot, guild, actor, marathon, via=via)
     await controls_changed(bot, guild, marathon_id)
     return outcome
 
@@ -625,7 +635,6 @@ class ControlButton(
         action: str,
         to: str,
         label: str | None = None,
-        disabled: bool = False,
         word: str | None = None,
         row: int | None = None,
     ) -> None:
@@ -637,7 +646,6 @@ class ControlButton(
                 label=mtc.label(label or action),
                 style=STYLES.get(word or "", discord.ButtonStyle.primary),
                 custom_id=mtc.custom_id(marathon_id, action, to),
-                disabled=disabled,
                 row=row,
             )
         )
@@ -666,6 +674,7 @@ class ControlButton(
 
 __all__ = [
     "ControlButton",
+    "archived_controls",
     "cancel_spotlight",
     "controls_changed",
     "post_controls",
@@ -673,6 +682,6 @@ __all__ = [
     "refresh_controls",
     "row_changed",
     "start_spotlight",
-    "stop_spotlight",
     "sync_controls",
+    "turn_off_spotlight",
 ]

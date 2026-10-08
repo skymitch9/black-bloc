@@ -1,5 +1,7 @@
 # Marathons are archived, never deleted — an archive table for ended marathons, and an expiry that keeps marathon channels
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** Remove is retired on every door (D11): Archive it is the one move, DELETE and an old feed-notice Remove answer in words, and the thread controls offer Archive it after the show (D5). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > 🔨 **2026-09-26 — Deviation 8 closed by `marathon-inbox`** (BUILT, NOT merged): at the move the marathon's inbox message reads `marathon_archived_word` with only *Open on the site*, and its thread is archived on Discord; Restore re-renders the message. [`marathon-inbox-design.md`](marathon-inbox-design.md).
 
 > ✅ **2026-09-26 16:36 — LIVE as v175** (merge `2ad8e43d`, release `35fa7de7`; boot clean; `GET /api/marathons/archive` answers). ⚠️ Design gap found at review: §B's three signals do not hold a marathon channel that has no feed or marathon yet (RGL row 7) — it was kept by hand; a follow-up could add `marathons = 1 AND a marathon feed seed login` as a fourth signal.
@@ -118,13 +120,13 @@ the code's pattern won for shape and the spec for behaviour.
    the linked event and every run event); **Archive it** does the same, so an early archive never strands an approved
    event on the calendar. Ping windows, `marathon_spotlights` rows and a channel spotlight this marathon holds go at
    every archive (the held spotlight is lifted with `because: marathon_archived`).
-5. **Remove still logs `marathon.removed`** (one write, one row — checklist 34), with `archived_why: removed` and the
-   counts; `marathon.archived` is the sweep's and Archive it's row.
-6. **The feed dedupe leaves REMOVED archive rows to the ignore list.** `marathons_by_ref` reads live + archive in one
+5. ~~**Remove still logs `marathon.removed`** (one write, one row — checklist 34), with `archived_why: removed` and the
+   counts; `marathon.archived` is the sweep's and Archive it's row.~~ *(superseded 2026-10-08 — D11: Remove is retired; DELETE answers 410 in words; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
+6. ~~**The feed dedupe leaves REMOVED archive rows to the ignore list.** `marathons_by_ref` reads live + archive in one
    UNION but skips `archived_why = 'removed'`: those refs are already on the feed's `ignored` list, and **Forget
    ignored** is the staff override that must still let the feed add them again (the existing behaviour, and
    `tests/cogs/content/test_marathon_feeds.py::test_a_removed_feed_marathon_is_ignored_and_forget_ignored_adds_it_again`).
-   A known ref that is archived is never *adopted* by a feed.
+   A known ref that is archived is never *adopted* by a feed.~~ *(superseded 2026-10-08 — D11: no removed rows are written any more and an archived marathon is never re-added by a feed; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 7. **The next-event suggestion.** There was no separate "newest ended marathon of a source" read to redirect: the
    suggestion is written on the live marathon the day after it ends and travels into the archive with the row (a week
    later). What now reads the archive is `marathon_by_ref`, the "already on the list" check, so an event followed
@@ -145,9 +147,9 @@ the code's pattern won for shape and the spec for behaviour.
 11. **Tests mirror the new modules**: `tests/test_marathon_archive.py` and `tests/cogs/content/test_marathon_archive.py`
     carry the tick, the move, Restore and the dedupe (the design listed `test_marathon.py`; the repo rule is one test
     file per source file).
-12. **The `/event` panel.** *Archive it* sits on the card's row 4 (row 3 already holds up to five buttons); the root
+12. ~~**The `/event` panel.** *Archive it* sits on the card's row 4 (row 3 already holds up to five buttons); the root
     gains **Archive…** (row 3): the 25 newest archived, a pick, a Restore confirm, then the restored card — Restore
-    from Discord too, so the decision is reachable both ways (checklist 33).
+    from Discord too, so the decision is reachable both ways (checklist 33).~~ *(superseded 2026-10-08 — D12: Archive it left the card (People… · Untrack · Read it now · the links · Back); the root's Archive… and its Restore stay; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 13. **The tick archives in every `marathon_mode`, `off` included** — archiving posts nothing — one marathon per guild
     per tick, the one that ended longest ago.
 14. **The archived People card** reads its own archived pairings plus the live every-schedule ones and fills no Go-live

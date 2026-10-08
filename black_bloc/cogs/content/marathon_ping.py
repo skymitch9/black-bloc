@@ -7,8 +7,6 @@ from ... import marathon_ping as mp
 from ...actionlog import log_action
 from ...logkinds import VIA_DISCORD, kind_via
 from ...settings_store import (
-    MARATHON_PING_ROLE_BUTTON_OFF_KEY,
-    MARATHON_PING_ROLE_BUTTON_ON_KEY,
     MARATHON_PING_ROLE_DEFAULT_KEY,
     MARATHON_PING_ROLE_LINE_OFF_KEY,
     MARATHON_PING_ROLE_LINE_ON_KEY,
@@ -39,14 +37,6 @@ def card_line(bot: Any, guild_id: int, marathon: Any) -> str:
     if mp.pings_role(marathon):
         return words(bot, guild_id, MARATHON_PING_ROLE_LINE_ON_KEY)
     return words(bot, guild_id, MARATHON_PING_ROLE_LINE_OFF_KEY)
-
-
-def card_move(bot: Any, guild_id: int, marathon: Any) -> Any:
-    return mp.card_move(
-        marathon,
-        words(bot, guild_id, MARATHON_PING_ROLE_BUTTON_ON_KEY),
-        words(bot, guild_id, MARATHON_PING_ROLE_BUTTON_OFF_KEY),
-    )
 
 
 async def set_ping_role(
@@ -94,4 +84,4 @@ async def set_ping_role(
     )
 
 
-__all__ = ["card_line", "card_move", "default_for_new", "set_ping_role", "words"]
+__all__ = ["card_line", "default_for_new", "set_ping_role", "words"]

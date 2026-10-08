@@ -1,5 +1,7 @@
 # Marathon thread controls — one pinned message in each tracked marathon's thread for its events and its spotlight
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the thread controls change shape by phase (D5); BaF run/host events, Event schedule, Auto-highlight and the help line leave the message (D1, D13, D4, D6); the spotlight is one *follows the schedule* switch with its dates in a state line (D3); the BaF event row is one button (D2). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > **Audience:** the conductor, reviewers, and the next session touching marathon threads, event modes or the marathon
 > spotlight. **Status:** TRACKED · 🔨 **BUILT on branch `marathon-thread-controls` (off `main` `28ad1e1c`), NOT merged,
 > NOT deployed** — it ships with the merged, undeployed `marathon-thread-move` as v177. Schema **72 → 73**, registry keys
@@ -42,8 +44,8 @@ that has not caught up yet can never do the opposite (Deviation 3):
 | Button | Labels (keys) | A press |
 |---|---|---|
 | **Marathon event** | *Marathon event: on · turn off* / *…: off · turn on* | moves the marathon half of `event_mode` and writes the result through `cogs/content/marathon_events.py:set_event_mode` — the drawer's and the `/event` select's writer — so the event is made or called off exactly as from there |
-| **BaF run events** | *BaF run events: on · turn off* / *…: off · turn on* | the runs half, the same way (off+off = none, on+off = marathon, off+on = runs, on+on = both — `black_bloc/marathon_thread_controls.py:wanted_mode`) |
-| **Spotlight** | *Spotlight: on · stop* / *Spotlight: off · start* / *Spotlight: kept (permanent)* / *Spotlight: no channel* (greyed out) | below |
+| ~~**BaF run events**~~ | ~~*BaF run events: on · turn off* / *…: off · turn on*~~ | ~~the runs half, the same way (off+off = none, on+off = marathon, off+on = runs, on+on = both — `black_bloc/marathon_thread_controls.py:wanted_mode`)~~ *(superseded 2026-10-08 — D1: the runs half left the thread; the drawer and /event set it; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))* |
+| ~~**Spotlight**~~ | ~~*Spotlight: on · stop* / *Spotlight: off · start* / *Spotlight: kept (permanent)* / *Spotlight: no channel* (greyed out)~~ | ~~below~~ *(superseded 2026-10-08 — D3: one *Spotlight follows the schedule* switch, dates on a state line; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))* |
 
 **Spotlight: start** (`start_spotlight`): refused in words when the marathon has no channel row, or no span still ahead
 (`marathon_controls_no_end` — there is no end to hold it until); answers *already spotlit* when the row is on. Otherwise:
@@ -54,11 +56,11 @@ both reach — with `spotlight = 1`, `expires_at` = span end + `marathon_spotlig
 `spotlit_by_marathon` = this marathon. From then on it is a held spotlight like any the follow sets: the expiry sweep's
 `settle_held` extends it if the schedule grows and lifts it at span end + tail.
 
-**Spotlight: stop** (`stop_spotlight`): a **kept** row (spotlit, no end — GDQ) is refused in words
+~~**Spotlight: stop** (`stop_spotlight`): a **kept** row (spotlit, no end — GDQ) is refused in words
 (`marathon_controls_kept_refused`) and never turned off here. Otherwise the row goes off through `set_spotlight` +
 `after_staff_dim` — the exact pair `run_spotlight_move` (`/golive` ▸ Channels… *Spotlight off*) calls — so a following
 marathon in reach gets `spotlight_mode = off` (v174), and then this marathon's `spotlight_mode` is set **off** through
-`set_spotlight_mode` if it is not already (Deviation 4).
+`set_spotlight_mode` if it is not already (Deviation 4).~~ *(superseded 2026-10-08 — D3 and the fix round: the switch's off only stops following; stop_spotlight is deleted; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 
 **Every press** is staff-gated by `still_staff` (the standing worded refusal), defers, answers ephemerally in the
 writer's own sentence, and re-renders the message.
@@ -72,13 +74,13 @@ The minute tick runs the same compare, which also catches the writers that are n
 `stop_waiting`, the expiry sweep's purge) within a minute, and a staff edit to a label key (the every-word rule: a posted
 copy re-renders when its words change).
 
-**The line** under the message is `marathon_controls_help` (*Staff: these buttons set **{marathon}**'s events and its
+~~**The line** under the message is `marathon_controls_help` (*Staff: these buttons set **{marathon}**'s events and its
 channel's spotlight at once. Each one says what is on now and what a press does.*), plus
-`marathon_controls_no_channel` when the marathon has no channel row.
+`marathon_controls_no_channel` when the marathon has no channel row.~~ *(superseded 2026-10-08 — D6: marathon_controls_help is retired; state lines only; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 
-**Keys (fourteen, Marathons group, registry + mock row + label):** `marathon_controls_help`,
+~~**Keys (fourteen, Marathons group, registry + mock row + label):** `marathon_controls_help`,
 `_event_on` / `_event_off`, `_runs_on` / `_runs_off`, `_spotlight_on` / `_spotlight_off` / `_spotlight_kept` /
-`_spotlight_none`, `_no_channel`, `_kept_refused`, `_no_end`, `_started_said`, `_already_on`.
+`_spotlight_none`, `_no_channel`, `_kept_refused`, `_no_end`, `_started_said`, `_already_on`.~~ *(superseded 2026-10-08 — D1, D3, D6: the runs, spotlight and help keys are retired; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 
 **Log kinds:** routine `marathon.controls_posted` (`marathon_id`, `name`, `thread_id`, `message_id`, `pinned`),
 routine `marathon.controls_lost`, `marathon.controls_failed` (IMPORTANT by suffix; `step: post | pin`). A start logs
@@ -162,10 +164,10 @@ hand and left Fall Fest on `spotlight_mode = follow`.
 - **Cancel** (`cancel_spotlight`, a new custom-id target `…:spotlight:cancel`): `spotlight_mode` off through
   `set_spotlight_mode`, which lifts the row ONLY if this marathon holds it; any other spotlight (staff, kept, another
   marathon's) is left as it is. Answer: key `marathon_controls_cancelled_said`.
-- **The button reads the three states** (keys): *Spotlight: on now · stop* (`marathon_controls_spotlight_on`, default
+- ~~**The button reads the three states** (keys): *Spotlight: on now · stop* (`marathon_controls_spotlight_on`, default
   changed from *on · stop*), *Spotlight: starts {starts} · cancel* (`marathon_controls_spotlight_waiting`, new — shown
   in `marathon_spotlight.state_of`'s `WAITING` state), *Spotlight: off · start* (unchanged). *Kept (permanent)* and
-  *no channel* are unchanged, and Stop on a kept row is still refused in words.
+  *no channel* are unchanged, and Stop on a kept row is still refused in words.~~ *(superseded 2026-10-08 — D3: the switch reads on · turn off / off · turn on; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 - **Four keys, Marathons group** (registry + mock row + label): `marathon_controls_spotlight_waiting`,
   `marathon_controls_waits_said`, `marathon_controls_cancelled_said`, `marathon_controls_cannot_wait`. Registry
   **626 → 630**. No schema change, no route change, no new log kind.
@@ -185,9 +187,9 @@ hand and left Fall Fest on `spotlight_mode = follow`.
    the lead window, when the guild's `marathon_spotlight` switch is off, `marathon_mode` is off, or the channel row is
    off for marathons, the follow would never turn it on — so nothing is changed and the answer says so and says to press
    again inside the lead window or use Go-live. Pressed inside the window it starts now as before, whatever those say.
-4. **Cancel is its own target** (`…:spotlight:cancel`, the template's `to` group widened to `on|off|cancel`) rather than
+4. ~~**Cancel is its own target** (`…:spotlight:cancel`, the template's `to` group widened to `on|off|cancel`) rather than
    re-using `off`: a stale *cancel* label pressed after staff spotlit the row by hand must not turn their spotlight off,
-   and `off` (Stop) does. Old messages' `on`/`off` ids still match.
+   and `off` (Stop) does. Old messages' `on`/`off` ids still match.~~ *(superseded 2026-10-08 — fix round: off is cancel-only now, so a stale off never stops a spotlight either; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 5. **Start on a following marathon before the window writes nothing and logs nothing** — the mode is already follow, so
    the press only answers when it will start. The label already read *starts … · cancel* in that state, so such a press
    comes from a stale label.

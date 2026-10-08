@@ -367,6 +367,23 @@ const UNGUARDED = [
   ['POST', '/api/raidtrains', { title: 'Guard check', start: '2099-09-14 19:30', tz: 'UTC', slot_minutes: 60, slot_count: 2 }],
 ];
 
+// Retired routes: they answer in words with their status and change nothing; no page calls them.
+const RETIRED = [
+  ['DELETE', '/api/marathons/{marathon_id}', 410, 'remove_gone', 'Remove is retired'],
+];
+
+async function checkRetired() {
+  await setGuard(false);
+  for (const [method, path, status, error, words] of RETIRED) {
+    await seed();
+    const response = await send(method, fill(path), undefined);
+    const body = await response.json().catch(() => ({}));
+    if (response.status !== status || body.error !== error || !String(body.message || '').includes(words)) {
+      fail(`${method} ${fill(path)}`, `answered ${response.status} ${JSON.stringify(body).slice(0, 200)}, not ${status} ${error} in words`);
+    }
+  }
+}
+
 async function setGuard(on) {
   await post('/api/mock/guard', { on });
 }
@@ -777,6 +794,7 @@ await fetch(`${BASE}/api/mock/whoami`).catch(die);
 process.stdout.write(`check: ${BASE} against ${HERE}contract.json\n`);
 await checkPages();
 await checkGuard();
+await checkRetired();
 await checkPostsModes();
 await checkEventsMove();
 await checkRoutes();

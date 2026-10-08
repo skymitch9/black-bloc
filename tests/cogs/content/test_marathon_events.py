@@ -11,11 +11,11 @@ from black_bloc.cogs.content.marathon import (
     create_marathon,
     get_marathon,
     pair_runner,
-    remove_marathon,
     runs_of,
     shout_now,
     unpair_runner,
 )
+from black_bloc.cogs.content.marathon_archive import archive_marathon
 from black_bloc.events import get_event, set_status
 from tests.cogs.content.test_marathon import (  # noqa: F401
     NOW,
@@ -177,7 +177,7 @@ async def test_a_moved_run_re_dates_its_event_and_a_dropped_one_calls_it_off(
 async def test_removing_the_marathon_calls_its_run_events_off(bot, cog, proposals):  # noqa: F811
     marathon = await made(bot, "runs")
     event_id = (await runs(bot, marathon))["Super Metroid"]["event_id"]
-    await remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    await archive_marathon(bot, bot.guild, FakeActor(), marathon)
     assert (await get_event(bot.db, event_id))["status"] == "cancelled"
     assert (await details_of(bot.db, "marathon.run_event_cancelled"))["reason"] == (
         "marathon_removed"

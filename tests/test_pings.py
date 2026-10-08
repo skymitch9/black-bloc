@@ -1641,3 +1641,7 @@ def test_the_ping_block_says_its_shipped_words_until_staff_change_them():
     assert shipped.label == BUTTON_BLOCK_DEFAULTS[PINGS_BLOCK_LABEL]
     assert changed.label == "Press me" and changed.stamp() != shipped.stamp()
     assert pings.BLOCK_HEAD == "pingsblock:open"
+
+
+def test_the_streamer_list_answer_carries_no_how_to_sentence():
+    assert "is how" not in pings.HIDDEN_SELF

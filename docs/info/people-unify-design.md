@@ -1,5 +1,7 @@
 # People unify — hosts always found, one BaF run/host events switch, one set of moves per person
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the People view's labels are settings keys, Unlink shows only when linked, and the No-@ pair sits beside the opt-out (D7, D15). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > ⚠️ **2026-10-06 — announce-overrides (branch `announce-overrides`, 🔨 BUILT, NOT MERGED):** **§6's six thread-control buttons are seven** (a **Host announcements** switch sits after BaF announcements), and **§4's one set of moves per person gains two** — this run's own answer and the @ — the same for a runner and a host. Hosts are still always found; what changed is that a host is **not announced by default**. See [`announce-overrides-design.md`](announce-overrides-design.md).
 
 > 🔨 **BUILT 2026-09-28 on branch `people-unify` (worktree `C:/lcw/bb-people-unify`, off `main` `d3916a42`; v193
@@ -98,9 +100,9 @@ announcements***) and every help text say *BaF announcements*. Behaviour unchang
 
 ### 6. Thread controls — six buttons, the old ids answer in words
 
-- The controls are: Marathon event · **BaF run/host events** · Spotlight · Auto-highlight · Ping the marathon role · **BaF
+- ~~The controls are: Marathon event · **BaF run/host events** · Spotlight · Auto-highlight · Ping the marathon role · **BaF
   announcements**. `marathon_controls_runs_on/_off` defaults reword to **BaF run/host events: on · turn off** /
-  **off · turn on**.
+  **off · turn on**.~~ *(superseded 2026-10-08 — D1, D3, D4, D2, D5: the controls are Runner announcements · Host announcements · Ping the marathon role · Spotlight follows the schedule · Marathon event, then the tracker link and one BaF event button; after the show the link and Archive it; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 - **Already-posted messages are EDITED on the first tick after boot** (`sync_controls` → `refresh_controls`: the render
   cache is empty after a boot, so the pinned message is edited once to six buttons; never re-sent). Tested:
   `test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_not_resent` now asserts six buttons and no

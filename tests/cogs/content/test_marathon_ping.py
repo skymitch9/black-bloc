@@ -78,15 +78,12 @@ async def test_the_same_state_changes_nothing_and_a_bad_word_is_refused(bot, cog
 
 async def test_the_answers_and_the_card_words_are_keys(bot, cog):  # noqa: F811
     await bot.store.set(GUILD, "marathon_ping_role_on_said", "{marathon} rings.")
-    await bot.store.set(GUILD, "marathon_ping_role_button_on", "Ring it")
     await bot.store.set(GUILD, "marathon_ping_role_line_off", "Silent")
     marathon = await added(bot, cog, channel=await gdq_row(bot))
 
     embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
-    labels = [getattr(one, "label", None) for one in view.children]
-    assert "Ring it" in labels and "Silent" in embed.description
+    assert "Silent" in embed.description
     done = await set_ping_role(bot, bot.guild, FakeActor(), marathon, True)
     assert done.message == "AGDQ 2027 rings."
     _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
-    assert "Stop pinging" in [getattr(one, "label", None) for one in view.children]
     assert all(len([one for one in view.children if one.row == row]) <= 5 for row in range(5))

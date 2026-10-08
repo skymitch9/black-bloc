@@ -2340,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1089
+    assert len(settings_store.KEY_TYPES) == 1090
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2635,14 +2635,9 @@ def test_the_hotfix_viewer_link_is_one_public_https_page_or_blank_for_off():
             settings_store.coerce_value(key, bad)
 
 
-def test_the_event_schedule_default_is_on_and_its_button_and_answers_are_words():
+def test_the_event_schedule_default_is_on_and_its_answers_are_words():
     key = settings_store.MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY
     assert (settings_store.KEY_TYPES[key], settings_store.MARATHON_DEFAULTS[key]) == ("bool", True)
-    for key, said in (
-        (settings_store.MARATHON_CONTROLS_OVERLAY_ON_KEY, "Event schedule: on · turn off"),
-        (settings_store.MARATHON_CONTROLS_OVERLAY_OFF_KEY, "Event schedule: off · turn on"),
-    ):
-        assert settings_store.MARATHON_DEFAULTS[key] == said and len(said) <= 80
     for key in (
         settings_store.MARATHON_OVERLAY_ON_SAID_KEY,
         settings_store.MARATHON_OVERLAY_OFF_SAID_KEY,
@@ -2737,7 +2732,7 @@ def test_every_word_the_baf_event_posts_is_a_marathon_text_key_with_its_fields(s
         for key in settings_store.MARATHON_WORDS
         if key.startswith(("marathon_baf_event_", "marathon_controls_baf_"))
     ]
-    assert len(words) == 39
+    assert len(words) == 44
     for key in words:
         assert settings_store.KEY_TYPES[key] == "text"
         assert settings_store.namespace_of(key) == "marathon"
@@ -2755,3 +2750,45 @@ def test_every_word_the_baf_event_posts_is_a_marathon_text_key_with_its_fields(s
     with pytest.raises(settings_store.SettingError):
         line("{day}: {answer} — {reason}.")
     assert settings_store.MARATHON_WORDS["marathon_baf_event_day_line"][1] == ("day", "ping")
+
+
+RETIRED_CONTROLS = (
+    "marathon_controls_help",
+    "marathon_controls_runs_on",
+    "marathon_controls_runs_off",
+    "marathon_controls_spotlight_on",
+    "marathon_controls_spotlight_off",
+    "marathon_controls_spotlight_kept",
+    "marathon_controls_spotlight_none",
+    "marathon_controls_spotlight_waiting",
+    "marathon_controls_highlight_on",
+    "marathon_controls_highlight_off",
+    "marathon_controls_overlay_on",
+    "marathon_controls_overlay_off",
+    "marathon_controls_baf_follow",
+    "marathon_controls_baf_follow_answer",
+    "marathon_controls_baf_clear",
+    "marathon_controls_baf_yes",
+    "marathon_controls_baf_no",
+)
+
+
+async def test_the_retired_thread_controls_keys_are_gone_and_a_stored_value_is_ignored(store):
+    assert not set(RETIRED_CONTROLS) & set(settings_store.KEY_TYPES)
+    for key in RETIRED_CONTROLS:
+        await store.db.conn.execute(
+            "INSERT INTO settings(guild_id, key, value, updated_at) VALUES (?, ?, ?, ?)",
+            (1, key, '"old"', "2026-10-08T00:00:00+00:00"),
+        )
+    await store.db.conn.commit()
+    await store.load()
+    assert not any(key in RETIRED_CONTROLS for _guild, key in store._cache)
+
+
+def test_every_thread_controls_button_label_fits_a_button():
+    from black_bloc.cogs.content import marathon_thread_controls as controls
+
+    keys = [*controls.LABEL_KEYS.values(), *controls.BAF_LABEL_KEYS.values()]
+    assert len(keys) == 19
+    for key in keys:
+        assert len(settings_store.MARATHON_WORDS[key][0]) <= 80, key

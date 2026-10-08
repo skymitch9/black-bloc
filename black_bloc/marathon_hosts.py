@@ -26,10 +26,6 @@ SCAN_GONE = (
     "The Scan hosts switch is gone — hosts are always found now, like runners, so nothing was "
     "changed."
 )
-HOST_EVENTS_GONE = (
-    "The BaF host events switch is gone — events now follow the one **BaF run/host events** "
-    "switch, so nothing was changed."
-)
 RETIRED = ("scan_hosts", "host_events")
 BAD_TWITCH = (
     "**{given}** is not a Twitch channel name (letters, digits and _, up to 25, or the "
@@ -200,7 +196,6 @@ __all__ = [
     "BAD_TWITCH",
     "FOLLOW",
     "HOST_ANNOUNCE",
-    "HOST_EVENTS_GONE",
     "OVERLAY",
     "RETIRED",
     "SCAN_GONE",

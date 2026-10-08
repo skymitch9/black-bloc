@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .golive import parse_ts
-from .marathon import BACK_MOVE, POLL_MOVE, RENAME_MOVE, MarathonMove
+from .marathon import MarathonMove
 
 FOUND = "found"
 TRACKED = "tracked"
@@ -76,18 +76,6 @@ PANEL_ACTIONS = tuple(f"inbox_{one}" for one in ACTIONS)
 
 LINK = "change_link"
 POST_NOW = "inbox_now"
-LINK_MOVE = MarathonMove(LINK, "Change the schedule link…", "primary", 2)
-POST_NOW_MOVE = MarathonMove(POST_NOW, "Post it to the inbox now", row=2)
-LINK_TITLE = "Change the schedule link"
-LINK_LABEL = "The new schedule link"
-LINK_HINT = "https://oengus.io/marathon/…"
-SCHEDULE_LINE = "**Schedule:** {url}"
-INBOX_UP = "**Inbox message:** [posted]({url})"
-INBOX_WAITING = (
-    "**Inbox message:** not posted yet — it posts on the first read that finds runs. **Post it "
-    "to the inbox now** posts it early; its Schedule line says it is not out yet until then."
-)
-INBOX_NOT_HERE = "**Inbox message:** not posted yet."
 
 FEED_AUTO_ON = "feed_auto_on"
 FEED_AUTO_OFF = "feed_auto_off"
@@ -138,13 +126,6 @@ def panel_moves(row: Any) -> tuple[MarathonMove, ...]:
 
 def has_message(row: Any) -> bool:
     return bool(_cell(row, "inbox_message_id"))
-
-
-def schedule_moves(row: Any) -> tuple[MarathonMove, ...]:
-    """The Schedule view: the link, the read gap, the name, and the early post (no message up)."""
-    early = () if has_message(row) or state_of(row) == ARCHIVED else (POST_NOW_MOVE,)
-    poll = POLL_MOVE._replace(row=2)
-    return (LINK_MOVE, poll, RENAME_MOVE, *early, BACK_MOVE)
 
 
 def custom_id(marathon_id: Any, action: str) -> str:

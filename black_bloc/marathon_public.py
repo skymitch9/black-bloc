@@ -29,12 +29,6 @@ TEMPLATE = (
 CUSTOM_ID = "marathon:highlight:{marathon_id}:{run_id}:{to}"
 SHADOW_FEATURE = "marathon_public"
 LABEL_LIMIT = 80
-YES = ("on", "true", "yes", "1")
-NO = ("off", "false", "no", "0")
-BAD_SWITCH = (
-    "Say on or off for whether the marathon highlights BaF runs by itself, so nothing was changed."
-)
-BAD_SWITCH_CODE = "bad_public_highlight"
 DONE_PARTS = {
     MARATHON_PART_RUNNER_KEY: MARATHON_PART_RUNNER_DONE_KEY,
     MARATHON_PART_HOST_KEY: MARATHON_PART_HOST_DONE_KEY,
@@ -76,27 +70,9 @@ def postable(row: Any) -> bool:
     return mt.is_ours(row) and mt._cell(row, "state") in mrp.POSTABLE
 
 
-def highlights(marathon: Any) -> bool:
-    """NULL or a missing column reads as off, the owner's default."""
-    return bool(mt._cell(marathon, "public_highlight", 0))
-
-
-def auto_wanted(marathon: Any, row: Any) -> bool:
+def auto_wanted(row: Any) -> bool:
     """Staff removed it: the switch never puts it back."""
-    return highlights(marathon) and postable(row) and not message_id(row)
-
-
-def clean_switch(given: Any) -> bool | None:
-    if isinstance(given, bool):
-        return given
-    if isinstance(given, int):
-        return {0: False, 1: True}.get(given)
-    word = str(given if given is not None else "").strip().lower()
-    if word in YES:
-        return True
-    if word in NO:
-        return False
-    return None
+    return postable(row) and not message_id(row)
 
 
 def label(text: Any) -> str:
@@ -219,8 +195,6 @@ __all__ = [
     "done_words",
     "is_done",
     "says",
-    "BAD_SWITCH",
-    "BAD_SWITCH_CODE",
     "Button",
     "LEGACY",
     "OPT_IN",
@@ -231,9 +205,7 @@ __all__ = [
     "TEMPLATE",
     "auto_wanted",
     "channel_of",
-    "clean_switch",
     "custom_id",
-    "highlights",
     "is_removed",
     "is_up",
     "label",

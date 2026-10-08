@@ -298,6 +298,7 @@
 | [`mock-direction-a/`](mock-direction-a/) | The **Direction A** design-canvas artboards (`Main`, `AModeration`, `ASettings` as `.dc.html`) the dashboard restyle was drawn from. Not Markdown — open them in a browser or the canvas editor |
 | [`brackets-research-2026-10-07.md`](brackets-research-2026-10-07.md) | **Tournament brackets — start.gg option catalogue** (research 2026-10-07, read-only; the input to `brackets-design.md`, which does not exist yet) |
 | [`marathon-controls-review-2026-10-08.md`](marathon-controls-review-2026-10-08.md) | **Marathon controls — streamlining review** (2026-10-08, a Fable review with live press counts; fifteen decisions for the owner, put to him one at a time; nothing built from it yet) |
+| [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md) | **Marathon controls, Layer A (Discord)** (2026-10-08, built on `marathon-controls-a`, not merged): the thread controls by phase, one BaF event button, one spotlight switch, Auto-highlight folded into Runner announcements, Remove into Archive it, the shrunk `/event` card, one button a person on a run post, the People view keys, the blurb sweep, what Layer B must do |
 
 Design docs for individual features go here too, one file each
 (`<feature>-design.md`), written BEFORE the cog when the feature has a

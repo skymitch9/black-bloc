@@ -21,6 +21,11 @@ ARCHIVE_LIST_ACTION = "archive_list"
 ARCHIVE_MOVE = MarathonMove(ARCHIVE_ACTION, "Archive it", row=4)
 ARCHIVE_LIST_MOVE = MarathonMove(ARCHIVE_LIST_ACTION, "Archive…", row=3)
 ARCHIVE_TITLE = "Archive · {count}"
+REMOVE_GONE = (
+    "Remove is retired: Archive it is the one move now, Restore on the site's archive puts it "
+    "back, and Ignore in the inbox keeps a feed from adding it again. Nothing was changed."
+)
+REMOVE_GONE_CODE = "remove_gone"
 ARCHIVE_EMPTY = "Nothing is archived yet. A marathon moves here {days} day(s) after its last run."
 ARCHIVE_LINE = "**{name}** · {source} · {dates} · {runs} run(s), {ours} BaF · {why} {when}"
 PICK_ARCHIVED = "Pick an archived marathon to restore…"

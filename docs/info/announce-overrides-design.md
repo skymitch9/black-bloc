@@ -1,5 +1,7 @@
 # Announce overrides — hosts off by default, a per-run answer for each person, and a no-@ choice
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the run post's per-person moves are one button each and the No-@ pair moved to the People view (D7); Runner announcements now also gates each run's live highlight (D4). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > 🔁 **SUPERSEDED IN PART 2026-10-08 — see [Runner announcements 2026-10-08](#runner-announcements-2026-10-08) at the
 > foot** (branch `marathon-controls-tidy`, NOT MERGED, NOT DEPLOYED). *BaF announcements* is now **Runner
 > announcements** and is **no longer a master**: it is the runners' DEFAULT, Host announcements the hosts', and a
@@ -182,23 +184,23 @@ The record is written whenever who is named changes, before the edit. What follo
 
 ### The doors
 
-- **Each scanned run's post in the staff thread.** While the run is upcoming or live the post carries, ~~under the
-  whole-marathon button,~~ **two buttons a person** — never two spellings of one move (2026-10-08: the
+- ~~**Each scanned run's post in the staff thread.** While the run is upcoming or live the post carries, under the
+  whole-marathon button, **two buttons a person** — never two spellings of one move (2026-10-08: the
   whole-marathon button is gone from the run's post; it lives in the People view only):
   - the run's answer: **Do not announce {name} for this run** (they would be announced), **Announce {name} for this
     run** (they would not), or **{name}: back to the default for this run** (the run has an answer);
   - their @: **No @ for {name}** / **@ {name} again**.
   Custom ids `marathon:announce:{marathon_id}:{run_id}:{user_id}:{in|out|default|plain|mention}`
-  (`AnnounceButton`, persistent, staff re-checked on press).
-- **More than four people** on a run (Discord takes five rows): the buttons become a menu
+  (`AnnounceButton`, persistent, staff re-checked on press).~~ *(superseded 2026-10-08 — D7: one button a person (Don't announce {name} / Announce {name} / {name}: back to the default), no-@ in the People view; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
+- ~~**More than four people** on a run (Discord takes five rows): the buttons become a menu
   (`marathon:announce:{marathon_id}:{run_id}:pick`, `AnnouncePick`, placeholder `marathon_announce_pick`) holding the
   same moves. **Past twelve people it is one menu for every twelve** — `…:pick`, `…:pick2`, `…:pick3`, `…:pick4`, a
   menu a row, a person's two moves always in the same menu — so nobody loses a move up to 48 people on one run. Past
-  48 the rest are reached from the site (the post has no rows left).
-- **The state in words**, one line a person under the post's own text (`marathon_announce_state_line`):
+  48 the rest are reached from the site (the post has no rows left).~~ *(superseded 2026-10-08 — D7: one row of five buttons, then menus of twelve; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
+- ~~**The state in words**, one line a person under the post's own text (`marathon_announce_state_line`):
   *Sky: announced for this run — the default* · *anarchy: not announced for this run — host announcements are off for
-  this marathon* · *… — set for this run* · *… — opted out of every run on this marathon* · *… — ~~BaF announcements are
-  off for this marathon~~ runner announcements are off for this marathon* (2026-10-08), with *· written without an @* when that applies. The post is edited in place.
+  this marathon* · *… — set for this run* · *… — opted out of every run on this marathon* · *… — BaF announcements are
+  off for this marathon (now: runner announcements are off for this marathon)* (2026-10-08), with *· written without an @* when that applies. The post is edited in place.~~ *(superseded 2026-10-08 — D7: state lines name only the exceptions and why; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 - **The People slot view** (`/event` ▸ a marathon ▸ People… ▸ a slot ▸ a BaF person): the same two moves on their own
   row and the same state line. This is the Discord door for a run that has no post of its own (a run only a BaF host is
   on).
@@ -417,7 +419,7 @@ first cut of this branch (`a96c777c`, where an off switch beat a run's yes) and 
 
 | Door | Shows |
 |---|---|
-| A scanned run's post (staff thread) | per person: the run's answer (*Do not announce / Announce / back to the default*) and the no-@ move; past four people the menus; the state lines. **No** whole-marathon button. |
+| ~~A scanned run's post (staff thread)~~ | ~~per person: the run's answer (*Do not announce / Announce / back to the default*) and the no-@ move; past four people the menus; the state lines. **No** whole-marathon button.~~ *(superseded 2026-10-08 — D7: one button a person, one row of five before menus, state lines for exceptions only; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))* |
 | Old run-post button `marathon:highlight:{m}:{r}:{optout\|optin\|post\|remove}` | still registered; staff press answers `WHOLE_MARATHON_GONE` in words (410 `gone`), changes nothing. The next sync edits the post to drop it. |
 | People slot view (`/event` ▸ marathon ▸ People… ▸ slot ▸ BaF person) | *Opt out of every run on this marathon* / *Opt back in to this marathon* (unchanged, one place per person), the run's answer, the no-@ move, the state line. |
 | Thread controls | **Runner announcements: on · turn off** / *off · turn on*, then Host announcements (ids unchanged: `announce`, `hostannounce`). |

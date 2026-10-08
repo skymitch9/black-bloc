@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .golive import parse_ts
-from .marathon import MarathonMove
 from .marathon_channels import takes_marathons
 from .marathon_feeds import SEEDS
 from .settings_store import PING_MODES
@@ -17,10 +16,7 @@ MODE_WORDS = {FOLLOW: "on", OFF: "off"}
 YES = ("follow", "on", "true", "yes", "1")
 NO = ("off", "false", "no", "0")
 
-SPOTLIGHT_LINE = "Spotlight the channel while it runs: **{state}**"
 SPOTLIGHT_FIELD = "Spotlight the channel while it runs"
-SPOTLIGHT_ON_BUTTON = "Spotlight while it runs"
-SPOTLIGHT_OFF_BUTTON = "Stop spotlighting it"
 MODE_SAID = {
     FOLLOW: (
         "**{name}** spotlights its channel while it runs again — from "
@@ -261,51 +257,9 @@ def discord_line(state: dict[str, Any]) -> str:
     return line
 
 
-FOLLOW_ACTION = "spotlight_follow"
-OFF_ACTION = "spotlight_off"
-CARD_ACTION = "spotlight_card"
-CHANNEL_ACTION = "spotlight_channel"
-FOLLOW_MOVE = MarathonMove(FOLLOW_ACTION, SPOTLIGHT_ON_BUTTON, row=2)
-OFF_MOVE = MarathonMove(OFF_ACTION, SPOTLIGHT_OFF_BUTTON, row=2)
-CARD_MOVE = MarathonMove(CARD_ACTION, "Spotlight…", row=2)
-CHANNEL_MOVE = MarathonMove(CHANNEL_ACTION, "The channel's spotlight…", "primary", 3)
-MOVE_MODES = {FOLLOW_ACTION: FOLLOW, OFF_ACTION: OFF}
-SPOT_SHARED = (
-    "**The channel's spotlight…** opens the channel's own controls — on/off, dates, pin, bump, "
-    "announcements and pings — the same card as `/golive` ▸ Channels…, so a change there shows "
-    "on the Go-live page too."
-)
-
-
-def follow_move(marathon: Any) -> MarathonMove:
-    return OFF_MOVE if mode_of(marathon) == FOLLOW else FOLLOW_MOVE
-
-
-def card_moves(marathon: Any) -> tuple[MarathonMove, ...]:
-    """The Spotlight… door, and only on a marathon with a channel."""
-    if not _cell(marathon, "spotlight_id"):
-        return ()
-    return (CARD_MOVE,)
-
-
-def spot_moves(marathon: Any) -> tuple[MarathonMove, ...]:
-    """The Spotlight view: the follow switch and the channel's own card."""
-    if not _cell(marathon, "spotlight_id"):
-        return ()
-    return (follow_move(marathon), CHANNEL_MOVE)
-
-
-def mode_line(marathon: Any) -> str:
-    return SPOTLIGHT_LINE.format(state=MODE_WORDS[mode_of(marathon)])
-
-
 __all__ = [
     "BAD_MODE",
-    "MOVE_MODES",
-    "card_moves",
     "discord_line",
-    "follow_move",
-    "spot_moves",
     "FOLLOW",
     "MODES",
     "OFF",
@@ -317,7 +271,6 @@ __all__ = [
     "is_marathon_channel",
     "is_marathon_login",
     "lifted_fields",
-    "mode_line",
     "mode_of",
     "new_row_ping_mode",
     "plan",

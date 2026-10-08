@@ -179,7 +179,6 @@ SUGGESTION_GONE = "**{event}** is not waiting on **{name}** any more, so nothing
 SUGGESTION_DISMISSED = "**{event}** is dismissed — **{name}** will not suggest it again."
 SUGGESTION_ALREADY = "**{event}** is already on the list as **{marathon}**, so nothing was added."
 NOTICE_PAUSED = "Paused by {who}."
-NOTICE_REMOVED = "Removed by {who} — the feed will not add it again."
 NOTICE_ADDED = "Added by {who}."
 NOTICE_DISMISSED = "Dismissed by {who}."
 NOTICE_GONE = "That marathon is not on the list any more, so nothing was done."

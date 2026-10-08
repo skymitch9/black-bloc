@@ -15,7 +15,6 @@ from .marathon import (
     LIVE,
     NAME_FLOOR,
     TITLE_REACH,
-    MarathonMove,
     _cell,
     normalise,
 )
@@ -26,11 +25,6 @@ CHAIN_REACH = timedelta(minutes=MARATHON_SETUP_MAX)
 LOOK_AGAIN = timedelta(minutes=30)
 
 SHEET_TIMES = "sheet_times"
-SHEET_TIMES_MOVE = MarathonMove(SHEET_TIMES, "Back to the sheet's times", row=2)
-RETIMED_LINE = (
-    "**Times:** {count} run(s) re-timed from the stream — this schedule does not move itself, "
-    "so Black Bloc keeps the clock."
-)
 SHEET_TIMES_DONE = "**{name}** is back on the sheet's times ({count} run(s))."
 SHEET_TIMES_NONE = "**{name}** is on the sheet's times already, so nothing was changed."
 SHEET_TIMES_CODE = "not_retimed"

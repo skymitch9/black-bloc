@@ -25,7 +25,7 @@ TOOK_OVER = "pings.onboarding_took_over"
 NO_COMMUNITY = (
     "This server is not a Community server yet, so Discord has no onboarding screen to put "
     "anything on and nothing was changed. Turn Community on in **Server Settings ▸ Enable "
-    "Community** first; until then the *Notifications* role menu is how members opt in."
+    "Community** first."
 )
 NOT_MANAGED = (
     "Black Bloc is not managing this server's onboarding, so nothing was changed. **Manage "

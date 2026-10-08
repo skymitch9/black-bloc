@@ -5556,9 +5556,7 @@ CHANNEL_NOTE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the heading of the channel notes card on /chat",
     ),
     CHANNEL_NOTES_INTRO_KEY: (
-        "Pick a channel and say what it is for in one sentence. Black Bloc reads that note in "
-        "place of the channel's Discord topic whenever it points somebody somewhere. "
-        "**{count}** channel(s) have a note so far.",
+        "**{count}** channel(s) have a note.",
         ("count",),
         "the first lines of the channel notes card on /chat. It takes {count}, how many "
         "channels have a note",
@@ -5809,9 +5807,7 @@ VOICE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the heading of the card on /chat that lists which tone each member hears",
     ),
     VOICE_INTRO_KEY: (
-        "Every member hears the cookout voice; the tone is what sits on top of it. The server's "
-        "setting is **{setting}**, and a pin beats it until staff clear it. **{count}** "
-        "member(s) listed.",
+        "The server's setting is **{setting}**. **{count}** member(s) listed.",
         ("setting", "count"),
         "the first lines of that card. It takes {setting}, the chat_personality value, and "
         "{count}, how many members are listed",
@@ -6184,8 +6180,7 @@ REVIEW_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the heading of the review queue card on /chat",
     ),
     REVIEW_INTRO_KEY: (
-        "**{count}** answer(s) may have missed. Pick one to approve what the cheap model "
-        "suggests, change it, or dismiss it.",
+        "**{count}** answer(s) may have missed.",
         ("count",),
         "the first line of the review queue card on /chat. It takes {count}, how many wait",
     ),
@@ -6383,8 +6378,6 @@ MARATHON_PING_ROLE_DEFAULT_KEY = "marathon_ping_role_default"
 MARATHON_PING_ROLE_ON_SAID_KEY = "marathon_ping_role_on_said"
 MARATHON_PING_ROLE_OFF_SAID_KEY = "marathon_ping_role_off_said"
 MARATHON_PING_ROLE_SAME_KEY = "marathon_ping_role_same_said"
-MARATHON_PING_ROLE_BUTTON_ON_KEY = "marathon_ping_role_button_on"
-MARATHON_PING_ROLE_BUTTON_OFF_KEY = "marathon_ping_role_button_off"
 MARATHON_PING_ROLE_LINE_ON_KEY = "marathon_ping_role_line_on"
 MARATHON_PING_ROLE_LINE_OFF_KEY = "marathon_ping_role_line_off"
 MARATHON_ROLE_PINGS_KEY = "marathon_role_pings"
@@ -6399,8 +6392,6 @@ MARATHON_ARCHIVE_AFTER_DAYS_KEY = "marathon_archive_after_days"
 MARATHON_ARCHIVED_WORD_KEY = "marathon_archived_word"
 MARATHON_ARCHIVE_QUESTION_KEY = "marathon_archive_question"
 MARATHON_ARCHIVED_SAID_KEY = "marathon_archived_said"
-MARATHON_REMOVE_QUESTION_KEY = "marathon_remove_question"
-MARATHON_REMOVED_SAID_KEY = "marathon_removed_said"
 MARATHON_RESTORE_QUESTION_KEY = "marathon_restore_question"
 MARATHON_RESTORED_SAID_KEY = "marathon_restored_said"
 MARATHON_RESTORE_TAKEN_KEY = "marathon_restore_taken"
@@ -6461,26 +6452,16 @@ MARATHON_INBOX_POSTED_SAID_KEY = "marathon_inbox_posted_said"
 MARATHON_INBOX_ALREADY_KEY = "marathon_inbox_already"
 MARATHON_INBOX_POST_OFF_KEY = "marathon_inbox_post_off"
 MARATHON_INBOX_POST_FAILED_KEY = "marathon_inbox_post_failed"
-MARATHON_CONTROLS_HELP_KEY = "marathon_controls_help"
 MARATHON_CONTROLS_EVENT_ON_KEY = "marathon_controls_event_on"
 MARATHON_CONTROLS_EVENT_OFF_KEY = "marathon_controls_event_off"
-MARATHON_CONTROLS_RUNS_ON_KEY = "marathon_controls_runs_on"
-MARATHON_CONTROLS_RUNS_OFF_KEY = "marathon_controls_runs_off"
-MARATHON_CONTROLS_SPOTLIGHT_ON_KEY = "marathon_controls_spotlight_on"
-MARATHON_CONTROLS_SPOTLIGHT_OFF_KEY = "marathon_controls_spotlight_off"
-MARATHON_CONTROLS_SPOTLIGHT_KEPT_KEY = "marathon_controls_spotlight_kept"
-MARATHON_CONTROLS_SPOTLIGHT_NONE_KEY = "marathon_controls_spotlight_none"
 MARATHON_CONTROLS_NO_CHANNEL_KEY = "marathon_controls_no_channel"
 MARATHON_CONTROLS_KEPT_REFUSED_KEY = "marathon_controls_kept_refused"
 MARATHON_CONTROLS_NO_END_KEY = "marathon_controls_no_end"
 MARATHON_CONTROLS_STARTED_KEY = "marathon_controls_started_said"
 MARATHON_CONTROLS_ALREADY_ON_KEY = "marathon_controls_already_on"
-MARATHON_CONTROLS_SPOTLIGHT_WAITING_KEY = "marathon_controls_spotlight_waiting"
 MARATHON_CONTROLS_WAITS_KEY = "marathon_controls_waits_said"
 MARATHON_CONTROLS_CANCELLED_KEY = "marathon_controls_cancelled_said"
 MARATHON_CONTROLS_CANNOT_WAIT_KEY = "marathon_controls_cannot_wait"
-MARATHON_CONTROLS_HIGHLIGHT_ON_KEY = "marathon_controls_highlight_on"
-MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY = "marathon_controls_highlight_off"
 MARATHON_CONTROLS_PING_ON_KEY = "marathon_controls_ping_on"
 MARATHON_CONTROLS_PING_OFF_KEY = "marathon_controls_ping_off"
 MARATHON_HOST_EVENT_TITLE_KEY = "marathon_host_event_title_template"
@@ -6508,6 +6489,12 @@ MARATHON_ANNOUNCE_BUTTON_RUN_DEFAULT_KEY = "marathon_announce_button_run_default
 MARATHON_ANNOUNCE_BUTTON_PLAIN_KEY = "marathon_announce_button_plain"
 MARATHON_ANNOUNCE_BUTTON_MENTION_KEY = "marathon_announce_button_mention"
 MARATHON_ANNOUNCE_PICK_KEY = "marathon_announce_pick"
+MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY = "marathon_people_button_spotlight"
+MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY = "marathon_people_button_unspotlight"
+MARATHON_PEOPLE_BUTTON_UNLINK_KEY = "marathon_people_button_unlink"
+MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY = "marathon_people_button_link_near"
+MARATHON_PEOPLE_BUTTON_TWITCH_KEY = "marathon_people_button_twitch"
+MARATHON_PEOPLE_BUTTON_BACK_KEY = "marathon_people_button_back"
 MARATHON_ANNOUNCE_STATE_LINE_KEY = "marathon_announce_state_line"
 MARATHON_ANNOUNCE_STATE_YES_KEY = "marathon_announce_state_yes"
 MARATHON_ANNOUNCE_STATE_NO_KEY = "marathon_announce_state_no"
@@ -6528,7 +6515,6 @@ MARATHON_PUBLIC_REMINDERS_KEY = "marathon_public_reminders"
 MARATHON_THREAD_REMINDERS_KEY = "marathon_thread_reminders"
 MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY = "marathon_public_reminder_template"
 MARATHON_PUBLIC_CHANNEL_KEY = "marathon_public_channel_id"
-MARATHON_PUBLIC_DEFAULT_KEY = "marathon_public_highlight_default"
 MARATHON_PUBLIC_TEMPLATE_KEY = "marathon_public_template"
 MARATHON_NEAR_MISS_POSTS_KEY = "marathon_near_miss_posts"
 MARATHON_NEAR_MISS_POST_KEY = "marathon_near_miss_post"
@@ -6544,9 +6530,6 @@ MARATHON_NEAR_MISS_ANSWERED_KEY = "marathon_near_miss_answered"
 MARATHON_NEAR_MISS_FIELDS = ("runner", "member", "username", "display_name", "marathon")
 MARATHON_NEAR_MISS_DONE_FIELDS = (*MARATHON_NEAR_MISS_FIELDS, "staff")
 MARATHON_PUBLIC_REMOVED_KEY = "marathon_public_removed"
-MARATHON_PUBLIC_AUTO_ON_SAID_KEY = "marathon_public_auto_on_said"
-MARATHON_PUBLIC_AUTO_OFF_SAID_KEY = "marathon_public_auto_off_said"
-MARATHON_PUBLIC_AUTO_SAME_KEY = "marathon_public_auto_same_said"
 MARATHON_PUBLIC_FIELDS = (
     "runner",
     "mention",
@@ -6621,9 +6604,18 @@ MARATHON_HOTFIX_VIEWER_URL = "https://ogndrahcir.github.io/ScheduleViewer/"
 MARATHON_HOTFIX_VIEWER_URL_LENGTH = 300
 MARATHON_HOTFIX_VIEWER_INNER = (".internal", ".local", ".localhost", ".lan", ".home", ".corp")
 MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY = "marathon_hotfix_overlay_default"
-MARATHON_CONTROLS_OVERLAY_ON_KEY = "marathon_controls_overlay_on"
-MARATHON_CONTROLS_OVERLAY_OFF_KEY = "marathon_controls_overlay_off"
 MARATHON_CONTROLS_TRACKER_KEY = "marathon_controls_tracker"
+MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_ON_KEY = "marathon_controls_spotlight_follow_on"
+MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_OFF_KEY = "marathon_controls_spotlight_follow_off"
+MARATHON_CONTROLS_SPOTLIGHT_UNTIL_LINE_KEY = "marathon_controls_spotlight_until_line"
+MARATHON_CONTROLS_SPOTLIGHT_STARTS_LINE_KEY = "marathon_controls_spotlight_starts_line"
+MARATHON_CONTROLS_SPOTLIGHT_KEPT_LINE_KEY = "marathon_controls_spotlight_kept_line"
+MARATHON_CONTROLS_SPOTLIGHT_NONE_LINE_KEY = "marathon_controls_spotlight_none_line"
+MARATHON_CONTROLS_SPOTLIGHT_RUNNING_LINE_KEY = "marathon_controls_spotlight_running_line"
+MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY = "marathon_controls_follow_off_running_said"
+MARATHON_HOST_EVENTS_GONE_KEY = "marathon_host_events_gone_said"
+MARATHON_BAF_EVENT_STAFF_SET_KEY = "marathon_baf_event_staff_set_line"
+MARATHON_CONTROLS_ARCHIVE_KEY = "marathon_controls_archive"
 MARATHON_BAF_EVENT_NAMES_KEY = "marathon_baf_event_names"
 MARATHON_BAF_EVENT_MIN_RUNS_KEY = "marathon_baf_event_min_runs"
 MARATHON_BAF_EVENT_ASK_PERCENT_KEY = "marathon_baf_event_ask_percent"
@@ -6639,9 +6631,6 @@ MARATHON_BAF_EVENT_WORD_UNSURE_KEY = "marathon_baf_event_word_unsure"
 MARATHON_BAF_EVENT_WORD_FOLLOW_KEY = "marathon_baf_event_word_follow"
 MARATHON_BAF_EVENT_SET_SAID_KEY = "marathon_baf_event_set_said"
 MARATHON_BAF_EVENT_SAME_SAID_KEY = "marathon_baf_event_same_said"
-MARATHON_CONTROLS_BAF_FOLLOW_KEY = "marathon_controls_baf_follow"
-MARATHON_CONTROLS_BAF_YES_KEY = "marathon_controls_baf_yes"
-MARATHON_CONTROLS_BAF_NO_KEY = "marathon_controls_baf_no"
 MARATHON_BAF_EVENT_LINE_KEY = "marathon_baf_event_answer_line"
 MARATHON_BAF_EVENT_REASON_STAFF_KEY = "marathon_baf_event_reason_staff"
 MARATHON_BAF_EVENT_REASON_NAME_KEY = "marathon_baf_event_reason_name"
@@ -6666,8 +6655,15 @@ MARATHON_BAF_EVENT_REASON_ACTED_KEY = "marathon_baf_event_reason_acted"
 MARATHON_BAF_EVENT_CLEARED_KEY = "marathon_baf_event_cleared"
 MARATHON_BAF_EVENT_CLEARED_SAID_KEY = "marathon_baf_event_cleared_said"
 MARATHON_BAF_EVENT_NO_ANSWER_SAID_KEY = "marathon_baf_event_no_answer_said"
-MARATHON_CONTROLS_BAF_FOLLOW_ANSWER_KEY = "marathon_controls_baf_follow_answer"
-MARATHON_CONTROLS_BAF_CLEAR_KEY = "marathon_controls_baf_clear"
+MARATHON_CONTROLS_BAF_SAID_YES_KEY = "marathon_controls_baf_said_yes"
+MARATHON_CONTROLS_BAF_SAID_NO_KEY = "marathon_controls_baf_said_no"
+MARATHON_CONTROLS_BAF_SAID_UNSURE_KEY = "marathon_controls_baf_said_unsure"
+MARATHON_CONTROLS_BAF_STAFF_YES_KEY = "marathon_controls_baf_staff_yes"
+MARATHON_CONTROLS_BAF_STAFF_NO_KEY = "marathon_controls_baf_staff_no"
+MARATHON_CONTROLS_BAF_ANSWERED_YES_KEY = "marathon_controls_baf_answered_yes"
+MARATHON_CONTROLS_BAF_ANSWERED_NO_KEY = "marathon_controls_baf_answered_no"
+MARATHON_CONTROLS_BAF_NAMED_KEY = "marathon_controls_baf_named"
+MARATHON_CONTROLS_BAF_RUNS_KEY = "marathon_controls_baf_runs"
 MARATHON_BAF_EVENT_NAMES_MAX = 20
 MARATHON_BAF_EVENT_NAME_LENGTH = 60
 MARATHON_BAD_BAF_NAMES = (
@@ -6749,9 +6745,9 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "the public reminder (marathon_public_reminder_template, with marathon_part_host) at "
         "every marathon_reminder_minutes mark before the block's first run in "
         "marathon_reminder_channel_id while marathon_public_reminders is on, and the public "
-        "highlight (marathon_public_template) when the block goes live and the marathon's "
-        "Auto-highlight is on. Both follow the marathon's Host announcements switch and "
-        "each host's opt-out. A host still never makes a run a BaF run. on by default",
+        "highlight (marathon_public_template) when the block goes live. Both follow the "
+        "marathon's Host announcements switch and each host's opt-out. A host still never "
+        "makes a run a BaF run. on by default",
     ),
     MARATHON_ANNOUNCEMENTS_DEFAULT_KEY: (
         "bool",
@@ -7119,13 +7115,6 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "own thread is for staff. Blank uses the go-live channel. Changing it moves the next "
         "highlight; one already up stays where it is and keeps being updated",
     ),
-    MARATHON_PUBLIC_DEFAULT_KEY: (
-        "bool",
-        False,
-        "whether a NEW marathon highlights each BaF run publicly the moment it goes live. off "
-        "by default; each marathon's own Auto-highlight switch changes it after, and "
-        "marathons already on the list keep their own",
-    ),
     MARATHON_REMINDER_CHANNEL_KEY: (
         "channel",
         None,
@@ -7277,19 +7266,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{member} "
         "{marathon} {games} {runs}",
     ),
-    MARATHON_CONTROLS_OVERLAY_ON_KEY: (
-        "Event schedule: on · turn off",
-        (),
-        "the thread controls' event-schedule button while a Hotfix marathon takes its times, "
-        "hosts and commentators from the event's own schedule sheet. The button is there only "
-        "when the viewer page links a sheet that matches the marathon",
-    ),
-    MARATHON_CONTROLS_OVERLAY_OFF_KEY: (
-        "Event schedule: off · turn on",
-        (),
-        "the thread controls' event-schedule button while a Hotfix marathon keeps GDQ's sheet "
-        "times although the event has a schedule sheet of its own",
-    ),
     MARATHON_BAF_EVENT_ASK_TEXT_KEY: (
         "Is **{marathon}** a BaF event? {baf} of its {runs} runs have a BaF runner.",
         ("marathon", "baf", "runs"),
@@ -7313,6 +7289,13 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("who", "answer", "marathon"),
         "the line added under the BaF event question once staff answer it with its buttons. It "
         "takes {who} {answer} {marathon}",
+    ),
+    MARATHON_BAF_EVENT_STAFF_SET_KEY: (
+        "{who} set it on the BaF event switch: {answer}.",
+        ("who", "answer", "marathon"),
+        "the line that replaces the Yes/No buttons under a BaF event question nobody has "
+        "answered once staff set the marathon's BaF event switch; following again brings the "
+        "buttons back. It takes {who} {answer} {marathon}",
     ),
     MARATHON_BAF_EVENT_WORD_YES_KEY: (
         "a BaF event",
@@ -7346,36 +7329,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("marathon", "answer"),
         "what staff are told when a marathon's BaF event switch already says that. It takes "
         "{marathon} {answer}",
-    ),
-    MARATHON_CONTROLS_BAF_FOLLOW_KEY: (
-        "BaF event: follow the schedule ({answer})",
-        ("answer",),
-        "the thread controls' button that lets the bot work out whether the marathon is a BaF "
-        "event, while staff have not answered the bot's question. It takes {answer}: what "
-        "following gives right now",
-    ),
-    MARATHON_CONTROLS_BAF_FOLLOW_ANSWER_KEY: (
-        "BaF event: follow the answer ({answer})",
-        ("answer",),
-        "the same button while an answer staff gave to the bot's question stands: following "
-        "gives that answer, not what the schedule says. It takes {answer}",
-    ),
-    MARATHON_CONTROLS_BAF_CLEAR_KEY: (
-        "Clear the answer",
-        (),
-        "the thread controls' button that takes back the answer staff gave to the bot's "
-        "question, so the show's name and its runs decide again. It is there only while an "
-        "answer is stored",
-    ),
-    MARATHON_CONTROLS_BAF_YES_KEY: (
-        "BaF event: yes",
-        (),
-        "the thread controls' button that says the marathon is a BaF event",
-    ),
-    MARATHON_CONTROLS_BAF_NO_KEY: (
-        "BaF event: no",
-        (),
-        "the thread controls' button that says the marathon is not a BaF event",
     ),
     MARATHON_BAF_EVENT_LINE_KEY: (
         "**{marathon}** is {answer} — {reason}.",
@@ -7516,6 +7469,60 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what staff are told when they clear the answer to a marathon's BaF event question and "
         "none is stored. It takes {marathon}",
     ),
+    MARATHON_CONTROLS_BAF_SAID_YES_KEY: (
+        "BaF event: yes ({reason}) · say no",
+        ("reason",),
+        "the thread controls' BaF event button while the bot worked out the marathon is a "
+        "BaF event; a press says no. It takes {reason}",
+    ),
+    MARATHON_CONTROLS_BAF_SAID_NO_KEY: (
+        "BaF event: no ({reason}) · say yes",
+        ("reason",),
+        "the thread controls' BaF event button while the bot worked out the marathon is not "
+        "a BaF event; a press says yes. It takes {reason}",
+    ),
+    MARATHON_CONTROLS_BAF_SAID_UNSURE_KEY: (
+        "BaF event: not decided ({reason}) · say yes",
+        ("reason",),
+        "the thread controls' BaF event button while the bot is not sure and nobody has "
+        "answered its question; a press says yes. It takes {reason}",
+    ),
+    MARATHON_CONTROLS_BAF_STAFF_YES_KEY: (
+        "BaF event: yes (staff) · clear",
+        (),
+        "the thread controls' BaF event button while the marathon's BaF event switch says "
+        "yes; a press lets the bot work it out again",
+    ),
+    MARATHON_CONTROLS_BAF_STAFF_NO_KEY: (
+        "BaF event: no (staff) · clear",
+        (),
+        "the thread controls' BaF event button while the marathon's BaF event switch says "
+        "no; a press lets the bot work it out again",
+    ),
+    MARATHON_CONTROLS_BAF_ANSWERED_YES_KEY: (
+        "BaF event: yes (answered) · clear",
+        (),
+        "the thread controls' BaF event button while staff answered the bot's question yes; "
+        "a press takes the answer back",
+    ),
+    MARATHON_CONTROLS_BAF_ANSWERED_NO_KEY: (
+        "BaF event: no (answered) · clear",
+        (),
+        "the thread controls' BaF event button while staff answered the bot's question no; a "
+        "press takes the answer back",
+    ),
+    MARATHON_CONTROLS_BAF_NAMED_KEY: (
+        "named {name}",
+        ("name",),
+        "the reason inside the thread controls' BaF event button when the show's name is in "
+        "marathon_baf_event_names. It takes {name}",
+    ),
+    MARATHON_CONTROLS_BAF_RUNS_KEY: (
+        "{baf} of {runs} runs",
+        ("baf", "runs"),
+        "the reason inside the thread controls' BaF event button when the runs decide it. It "
+        "takes {baf} {runs}, counted over the whole marathon",
+    ),
     MARATHON_BAF_EVENT_DAY_LINE_KEY: (
         "{day}: {ping}",
         ("day", "ping"),
@@ -7528,6 +7535,56 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the link button on a tracked marathon's thread controls that opens its Marathon "
         "tracker page on the site — the runs in order with the times the bot is working from",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_ON_KEY: (
+        "Spotlight follows the schedule: on · turn off",
+        (),
+        "the thread controls' spotlight switch while the marathon spotlights its channel "
+        "from the lead before its first run to the tail after its last; a press cancels it "
+        "before the show and stops it during",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_OFF_KEY: (
+        "Spotlight follows the schedule: off · turn on",
+        (),
+        "the thread controls' spotlight switch while the marathon does not spotlight its "
+        "channel on its own; a press turns it on, and on now when the show is near",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_UNTIL_LINE_KEY: (
+        "Spotlight: on now until {until}",
+        ("until",),
+        "the state line on the thread controls while the marathon's channel is spotlit. It "
+        "takes {until}, read in each viewer's own clock",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_STARTS_LINE_KEY: (
+        "Spotlight: starts {starts}",
+        ("starts",),
+        "the state line on the thread controls while the channel's spotlight is set to start "
+        "later. It takes {starts}, read in each viewer's own clock",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_KEPT_LINE_KEY: (
+        "Spotlight: kept on Go-live",
+        (),
+        "the state line on the thread controls while the channel's spotlight is kept for "
+        "ever on Go-live; no spotlight button is drawn then",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_RUNNING_LINE_KEY: (
+        "Spotlight: on until {until} · not following the schedule · stop it on Go-live",
+        ("until",),
+        "the state line on the thread controls while a spotlight staff (or another marathon) "
+        "set is up and this marathon does not follow the schedule. It takes {until}, read in "
+        "each viewer's own clock",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_NONE_LINE_KEY: (
+        "Spotlight: no channel to spotlight",
+        (),
+        "the state line on the thread controls while the marathon has no channel; no "
+        "spotlight button is drawn then",
+    ),
+    MARATHON_CONTROLS_ARCHIVE_KEY: (
+        "Archive it",
+        (),
+        "the thread controls' button once the show is over: it moves the marathon to the "
+        "archive, and Restore on the site puts it back",
     ),
     MARATHON_OVERLAY_ON_SAID_KEY: (
         "**{marathon}** takes its start times, hosts and commentators from the event's own "
@@ -7558,7 +7615,7 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     MARATHON_ANNOUNCEMENTS_ON_SAID_KEY: (
         "**{marathon}** announces its BaF runners publicly now — reminders at every mark, and "
-        "highlights while Auto-highlight is on. A runner can still be left out of one run.",
+        "a highlight as each run goes live. A runner can still be left out of one run.",
         ("marathon",),
         "what staff are told once a marathon's Runner announcements switch is on. It takes "
         "{marathon}",
@@ -7599,21 +7656,21 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{marathon}",
     ),
     MARATHON_ANNOUNCE_BUTTON_RUN_OUT_KEY: (
-        "Do not announce {name} for this run",
+        "Don't announce {name}",
         ("name",),
         "the button on a BaF run's post in the staff thread (and in the People slot view) for a "
         "person who would be announced for that run: it leaves them out of that run's public "
         "posts only. It takes {name}",
     ),
     MARATHON_ANNOUNCE_BUTTON_RUN_IN_KEY: (
-        "Announce {name} for this run",
+        "Announce {name}",
         ("name",),
         "the same button for a person who would not be announced for that run (the switch for "
         "their part is off, or they are opted out of the whole marathon): it announces them for "
         "that run. It takes {name}",
     ),
     MARATHON_ANNOUNCE_BUTTON_RUN_DEFAULT_KEY: (
-        "{name}: back to the default for this run",
+        "{name}: back to the default",
         ("name",),
         "the same button once the person has their own answer for that run: it clears it. It "
         "takes {name}",
@@ -7634,6 +7691,41 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the menu a BaF run's post carries instead of buttons once more people are on the run "
         "than buttons fit; past twelve people it is one menu for every twelve",
+    ),
+    MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY: (
+        "Spotlight their channel…",
+        (),
+        "the People view's button that spotlights the person's own channel on Go-live while "
+        "their runs are on",
+    ),
+    MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY: (
+        "Stop spotlighting their channel",
+        (),
+        "the People view's button that stops spotlighting the person's own channel for this "
+        "marathon",
+    ),
+    MARATHON_PEOPLE_BUTTON_UNLINK_KEY: (
+        "Unlink",
+        (),
+        "the People view's button that takes back a link staff made; it is there only while "
+        "the person is linked",
+    ),
+    MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY: (
+        "Link @{username}",
+        ("username",),
+        "the People view's button that links a schedule name to the member it nearly "
+        "matched. It takes {username}",
+    ),
+    MARATHON_PEOPLE_BUTTON_TWITCH_KEY: (
+        "Twitch name…",
+        (),
+        "the People view's button that fixes the Twitch name of a person linked by staff; it "
+        "is there only while they are linked",
+    ),
+    MARATHON_PEOPLE_BUTTON_BACK_KEY: (
+        "Back",
+        (),
+        "the People view's button back to the schedule, the card or the panel",
     ),
     MARATHON_ANNOUNCE_STATE_LINE_KEY: (
         "{name}: {state} — {why}{plain}",
@@ -7758,20 +7850,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "it back, paused.",
         ("name",),
         "what staff are told once Archive it has moved a marathon to the archive. It takes {name}",
-    ),
-    MARATHON_REMOVE_QUESTION_KEY: (
-        "Remove **{name}**? It moves to the archive with its runs and pairings, its ping window "
-        "closes and its events are called off; a feed will not add it again. Posts already made "
-        "stay where they are.",
-        ("name",),
-        "what staff are asked before Remove takes a marathon off the list — nothing is deleted, "
-        "it is archived. It takes {name}",
-    ),
-    MARATHON_REMOVED_SAID_KEY: (
-        "**{name}** is off the list and in the archive, with its runs and pairings; a feed will "
-        "not add it again.",
-        ("name",),
-        "what staff are told once Remove has archived a marathon. It takes {name}",
     ),
     MARATHON_RESTORE_QUESTION_KEY: (
         "Restore **{name}**? It comes back to the list paused — nothing is read or posted until "
@@ -8078,13 +8156,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the refusal when Post it to the inbox now could not reach the inbox thread. It takes "
         "{marathon}",
     ),
-    MARATHON_CONTROLS_HELP_KEY: (
-        "Staff: these buttons set **{marathon}**'s events and its channel's spotlight at once. "
-        "Each one says what is on now and what a press does.",
-        ("marathon",),
-        "the line on the control message pinned in a tracked marathon's thread. It takes "
-        "{marathon}",
-    ),
     MARATHON_CONTROLS_EVENT_ON_KEY: (
         "Marathon event: on · turn off",
         (),
@@ -8094,38 +8165,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "Marathon event: off · turn on",
         (),
         "the thread controls' marathon-event button while the marathon makes no event of its own",
-    ),
-    MARATHON_CONTROLS_RUNS_ON_KEY: (
-        "BaF run/host events: on · turn off",
-        (),
-        "the thread controls' BaF run/host events button while each BaF run and each BaF host "
-        "block gets its own event",
-    ),
-    MARATHON_CONTROLS_RUNS_OFF_KEY: (
-        "BaF run/host events: off · turn on",
-        (),
-        "the thread controls' BaF run/host events button while BaF runs and host blocks get no "
-        "event of their own",
-    ),
-    MARATHON_CONTROLS_SPOTLIGHT_ON_KEY: (
-        "Spotlight: on now · stop",
-        (),
-        "the thread controls' spotlight button while the marathon's channel is spotlit",
-    ),
-    MARATHON_CONTROLS_SPOTLIGHT_OFF_KEY: (
-        "Spotlight: off · start",
-        (),
-        "the thread controls' spotlight button while the marathon's channel is not spotlit",
-    ),
-    MARATHON_CONTROLS_SPOTLIGHT_KEPT_KEY: (
-        "Spotlight: kept (permanent)",
-        (),
-        "the thread controls' spotlight button while the channel's spotlight is kept for ever",
-    ),
-    MARATHON_CONTROLS_SPOTLIGHT_NONE_KEY: (
-        "Spotlight: no channel",
-        (),
-        "the thread controls' spotlight button, greyed out, while the marathon has no channel",
     ),
     MARATHON_CONTROLS_NO_CHANNEL_KEY: (
         "**{marathon}** has no channel yet, so there is no spotlight to start — pick the channel "
@@ -8162,13 +8201,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the answer when Spotlight start is pressed on a channel that is already spotlit. It "
         "takes {channel}",
     ),
-    MARATHON_CONTROLS_SPOTLIGHT_WAITING_KEY: (
-        "Spotlight: starts {starts} · cancel",
-        ("starts",),
-        "the thread controls' spotlight button while the marathon will spotlight its channel "
-        "once its first run is near. It takes {starts}, a plain date and time in the server's "
-        "zone",
-    ),
     MARATHON_CONTROLS_WAITS_KEY: (
         "Spotlight is set to start {lead} minutes before the first run — {when} — and end "
         "{tail} minutes after the last.",
@@ -8177,9 +8209,23 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "spotlit yet, the marathon's follow turns it on in time. It takes {lead} {when} {tail} "
         "{channel} {marathon}",
     ),
+    MARATHON_HOST_EVENTS_GONE_KEY: (
+        "BaF host events left this switch: they follow BaF run/host events in the marathon's "
+        "drawer on the site. Nothing was changed.",
+        (),
+        "the answer when an old BaF host events button or field is used; host events follow the "
+        "one BaF run/host events setting in the marathon's drawer",
+    ),
+    MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY: (
+        "**{marathon}** no longer follows the schedule. twitch.tv/{channel} stays spotlit — "
+        "stop it on Go-live.",
+        ("marathon", "channel"),
+        "the answer when the thread controls' Spotlight switch is turned off while a spotlight "
+        "staff (or another marathon) set is running; it is left on. It takes {marathon} {channel}",
+    ),
     MARATHON_CONTROLS_CANCELLED_KEY: (
         "**{marathon}** will not spotlight twitch.tv/{channel} after all — the start that was "
-        "set is cancelled. Press Spotlight: start to set it again.",
+        "set is cancelled.",
         ("marathon", "channel"),
         "the answer when the thread controls' Spotlight cancel is pressed before the marathon "
         "has started its spotlight. It takes {marathon} {channel}",
@@ -8187,23 +8233,11 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_CONTROLS_CANNOT_WAIT_KEY: (
         "**{marathon}** is not near yet, and its spotlight cannot start itself — the marathon "
         "spotlight is off in Settings, or twitch.tv/{channel} is off for marathons. Nothing was "
-        "changed; press Spotlight: start again within {lead} minutes of the first run, or set "
+        "changed; turn the spotlight on again within {lead} minutes of the first run, or set "
         "dates on the Go-live page.",
         ("marathon", "channel", "lead"),
         "the refusal when Spotlight start is pressed before the marathon is near while nothing "
         "would turn the spotlight on in time. It takes {marathon} {channel} {lead}",
-    ),
-    MARATHON_CONTROLS_HIGHLIGHT_ON_KEY: (
-        "Auto-highlight BaF runners when live: on · turn off",
-        (),
-        "the thread controls' auto-highlight button while each BaF run is highlighted publicly "
-        "the moment it goes live",
-    ),
-    MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY: (
-        "Auto-highlight BaF runners when live: off · turn on",
-        (),
-        "the thread controls' auto-highlight button while BaF runs are highlighted only when "
-        "staff press Highlight",
     ),
     MARATHON_CONTROLS_PING_ON_KEY: (
         "Ping the marathon role: on · turn off",
@@ -8320,24 +8354,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "updated after unless they opt back in. It takes the same words as "
         "marathon_public_template",
     ),
-    MARATHON_PUBLIC_AUTO_ON_SAID_KEY: (
-        "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.",
-        ("marathon", "channel"),
-        "what staff are told once a marathon's auto-highlight is turned on. It takes {marathon} "
-        "{channel}",
-    ),
-    MARATHON_PUBLIC_AUTO_OFF_SAID_KEY: (
-        "**{marathon}** no longer highlights BaF runs by itself. Highlights already up stay "
-        "up.",
-        ("marathon",),
-        "what staff are told once a marathon's auto-highlight is turned off. It takes {marathon}",
-    ),
-    MARATHON_PUBLIC_AUTO_SAME_KEY: (
-        "**{marathon}** already works that way, so nothing was changed.",
-        ("marathon",),
-        "the answer when the auto-highlight switch is set to what it already is. It takes "
-        "{marathon}",
-    ),
     MARATHON_UNIGNORED_SAID_KEY: (
         "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing "
         "until someone presses **Track**.",
@@ -8395,16 +8411,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("marathon",),
         "what staff are told when the Ping the role switch is already where they asked. It "
         "takes {marathon}",
-    ),
-    MARATHON_PING_ROLE_BUTTON_ON_KEY: (
-        "Ping the role",
-        (),
-        "the /event marathon card's button that turns a marathon's role pings on",
-    ),
-    MARATHON_PING_ROLE_BUTTON_OFF_KEY: (
-        "Stop pinging",
-        (),
-        "the /event marathon card's button that turns a marathon's role pings off",
     ),
     MARATHON_PING_ROLE_LINE_ON_KEY: (
         "Pings the role",

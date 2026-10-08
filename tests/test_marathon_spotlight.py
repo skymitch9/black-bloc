@@ -135,15 +135,6 @@ def test_a_marathon_channel_is_a_seeded_login_or_a_row_with_a_marathon_window():
     assert ms.is_marathon_channel(streamer, [{"source": "marathon"}])
 
 
-def test_the_card_draws_the_spotlight_door_and_its_view_the_one_switch_that_changes_something():
-    assert ms.card_moves(a_marathon()) == (ms.CARD_MOVE,)
-    assert ms.card_moves(a_marathon(spotlight_id=None)) == ()
-    assert ms.spot_moves(a_marathon()) == (ms.OFF_MOVE, ms.CHANNEL_MOVE)
-    assert ms.spot_moves(a_marathon(spotlight_mode="off")) == (ms.FOLLOW_MOVE, ms.CHANNEL_MOVE)
-    assert ms.spot_moves(a_marathon(spotlight_id=None)) == ()
-    assert ms.mode_line(a_marathon(spotlight_mode="off")).endswith("**off**")
-
-
 def test_the_tail_carries_the_spotlight_past_the_last_run_and_zero_is_the_old_end():
     tailed = ms.plan(a_row(), a_marathon(), NOW, enabled=True, lead_minutes=15, tail_minutes=60)
     assert tailed["expires_at"] == at(300)

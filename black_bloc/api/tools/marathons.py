@@ -13,6 +13,7 @@ from ... import marathon_inbox as mi
 from ... import marathon_overlay as mo
 from ... import marathon_people as mt_people
 from ... import marathon_signals as sig
+from ... import marathon_thread_controls as mtc
 from ...cogs.content.marathon import (
     add_next,
     change_link,
@@ -32,7 +33,6 @@ from ...cogs.content.marathon import (
     pairings_of,
     post_board,
     refresh_marathon,
-    remove_marathon,
     rename_marathon,
     run_by_id,
     runs_of,
@@ -73,7 +73,7 @@ from ...cogs.content.marathon_events import (
 from ...cogs.content.marathon_feeds import get_feed
 from ...cogs.content.marathon_hosts import set_switch, switch_state
 from ...cogs.content.marathon_inbox import ignore as ignore_marathon
-from ...cogs.content.marathon_inbox import inbox_message_url, post_now
+from ...cogs.content.marathon_inbox import inbox_message_url, post_now, words
 from ...cogs.content.marathon_inbox import track as track_marathon
 from ...cogs.content.marathon_inbox import untrack as untrack_marathon
 from ...cogs.content.marathon_people import (
@@ -83,7 +83,6 @@ from ...cogs.content.marathon_people import (
     zone_of,
 )
 from ...cogs.content.marathon_ping import set_ping_role
-from ...cogs.content.marathon_public import set_public_highlight
 from ...cogs.content.marathon_role_ping import state_of as role_ping_state
 from ...cogs.content.marathon_signals import sheet_times
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
@@ -92,15 +91,15 @@ from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...golive_replay import BECAUSE_REPLAY
 from ...logkinds import VIA_WEBSITE
-from ...marathon_archive import STAFF, WHY_WORDS, page_of
+from ...marathon_archive import REMOVE_GONE, REMOVE_GONE_CODE, STAFF, WHY_WORDS, page_of
 from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_ping import pings_role
-from ...marathon_public import highlights
 from ...marathon_sources import SOURCE_WORDS, retimes_itself, schedule_page
 from ...marathon_spotlight import mode_of as spotlight_mode_of
 from ...settings_store import (
     MARATHON_FAR_POLL_HOURS_KEY,
+    MARATHON_HOST_EVENTS_GONE_KEY,
     MARATHON_LEAD_DAYS_KEY,
     MARATHON_MODE_KEY,
     MARATHON_POLL_MINUTES_KEY,
@@ -419,7 +418,6 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "ping_role": pings_role(row),
         "role_ping": role_ping_state(bot, guild, row, rows),
         "baf_event": baf_event_state(bot, guild, row, rows),
-        "public_highlight": highlights(row),
         "announcements": host_switch(bot, guild, row, mh.ANNOUNCE),
         "host_announcements": host_switch(bot, guild, row, mh.HOST_ANNOUNCE),
         "overlay": host_switch(bot, guild, row, mh.OVERLAY) | {"sheet": mo.state_of(row)},
@@ -752,7 +750,7 @@ def build_router(bot: Any) -> APIRouter:
         if "scan_hosts" in payload:
             said.append(mh.SCAN_GONE)
         if "host_events" in payload:
-            said.append(mh.HOST_EVENTS_GONE)
+            said.append(words(bot, guild.id, MARATHON_HOST_EVENTS_GONE_KEY))
         if mh.ANNOUNCE in payload:
             done = answered(
                 await set_switch(
@@ -793,17 +791,7 @@ def build_router(bot: Any) -> APIRouter:
             )
             said.append(done.message)
         if "public_highlight" in payload:
-            done = answered(
-                await set_public_highlight(
-                    bot,
-                    guild,
-                    actor,
-                    await wanted(guild, marathon_id),
-                    payload["public_highlight"],
-                    via=VIA_WEBSITE,
-                )
-            )
-            said.append(done.message)
+            said.append(mtc.HIGHLIGHT_GONE)
         if "dismiss_next" in payload:
             if payload["dismiss_next"] is not True:
                 raise Refused(422, "bad_dismiss", BAD_DISMISS)
@@ -822,15 +810,12 @@ def build_router(bot: Any) -> APIRouter:
 
     @router.delete("/{marathon_id}")
     async def marathon_delete(request: Request, marathon_id: int) -> dict[str, Any]:
-        who = await writer(request)
+        await writer(request)
         guild = require_guild(bot)
         require_db(bot)
         require_cog(bot, COG, FEATURE)
-        row = await wanted(guild, marathon_id)
-        done = answered(
-            await remove_marathon(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
-        )
-        return {"removed": True, "archived": True, "id": marathon_id, "message": done.message}
+        await wanted(guild, marathon_id)
+        raise Refused(410, REMOVE_GONE_CODE, REMOVE_GONE)
 
     @router.post("/{marathon_id}/archive")
     async def marathon_archive_one(request: Request, marathon_id: int) -> dict[str, Any]:

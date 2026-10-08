@@ -1603,7 +1603,7 @@ ALREADY_HIDDEN = (
 ALREADY_LISTED = "**{name}** is already on the streamer list, so nothing was changed."
 HIDDEN_SELF = (
     "Done — you are off the streamer list, so nobody new can follow you and going live does not "
-    "put you back. **Put me back on the list** is how you come back."
+    "put you back."
 )
 HIDDEN_SELF_ROLE_GONE = " Nobody was following you, so your ping role **{role}** is gone too."
 HIDDEN_STAFF = (

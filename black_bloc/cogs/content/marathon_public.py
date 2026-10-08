@@ -24,13 +24,9 @@ from ...panels import Outcome, answer, refusal, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
     DEFAULT_TIMEZONE_KEY,
-    MARATHON_PUBLIC_AUTO_OFF_SAID_KEY,
-    MARATHON_PUBLIC_AUTO_ON_SAID_KEY,
-    MARATHON_PUBLIC_AUTO_SAME_KEY,
     MARATHON_PUBLIC_CHANNEL_KEY,
     MARATHON_PUBLIC_DAY_EARLIER_KEY,
     MARATHON_PUBLIC_DAY_TODAY_KEY,
-    MARATHON_PUBLIC_DEFAULT_KEY,
     MARATHON_PUBLIC_DONE_TEMPLATE_KEY,
     MARATHON_PUBLIC_REMOVED_KEY,
     MARATHON_PUBLIC_TEMPLATE_KEY,
@@ -44,17 +40,13 @@ from .marathon import (
     MODE_OFF,
     MODE_ON,
     NO_CHANNEL,
-    NO_SUCH,
     NOT_VISIBLE,
     TEST_MODE,
     channel_login,
-    cog_of,
-    get_marathon,
     mode_of,
     now_for,
     runs_of,
     said_default,
-    update_marathon,
     update_run,
     words_for,
 )
@@ -71,10 +63,6 @@ GONE_CODE = "gone"
 
 def words(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
     return mt.render(bot.store.get(guild_id, key), said_default(key), **fields).text
-
-
-def default_for_new(bot: Any, guild_id: int) -> int:
-    return 1 if bot.store.get(guild_id, MARATHON_PUBLIC_DEFAULT_KEY) else 0
 
 
 def public_channel(bot: Any, guild_id: int) -> int | None:
@@ -164,11 +152,10 @@ def why_down(bot: Any, guild: Any, marathon: Any, row: Any, was: Any, moved: Any
 
 
 def view_of(buttons: Any, marathon_id: Any, run_id: Any) -> discord.ui.View | None:
-    """A row a person, or the menus."""
+    """One row of buttons, a button a person, or the menus."""
     if not buttons:
         return None
     view = discord.ui.View(timeout=None)
-    rows: dict[int, int] = {}
     for one in buttons:
         if isinstance(one, ma.Pick):
             view.add_item(
@@ -182,9 +169,8 @@ def view_of(buttons: Any, marathon_id: Any, run_id: Any) -> discord.ui.View | No
                 )
             )
         elif isinstance(one, ma.Move):
-            row = rows.setdefault(one.user_id, len(rows) + 1)
             view.add_item(
-                AnnounceButton(marathon_id, run_id, one.user_id, one.to, one.label, row=row)
+                AnnounceButton(marathon_id, run_id, one.user_id, one.to, one.label, row=1)
             )
         else:
             view.add_item(HighlightButton(marathon_id, run_id, one.to, one.label))
@@ -550,7 +536,7 @@ async def auto_highlight(cog: Any, guild: Any, marathon: Any, row: Any) -> None:
     """The moment a run's shoutout fires: posted when someone on the run is announced, never
     again once staff took it down. A failure here never breaks the shoutout."""
     try:
-        if not mi.is_tracked(marathon) or not mp.auto_wanted(marathon, row):
+        if not mi.is_tracked(marathon) or not mp.auto_wanted(row):
             return
         if mode_of(cog.bot, guild.id) == MODE_OFF or public_channel(cog.bot, guild.id) is None:
             return
@@ -623,56 +609,6 @@ async def follow_opt(
             await put_back(cog, guild, marathon, row, actor=actor, via=via)
     if changed:
         await sync_highlights(cog, guild, marathon)
-
-
-async def set_public_highlight(
-    bot: Any, guild: Any, actor: Any, marathon: Any, given: Any, *, via: str = VIA_DISCORD
-) -> Outcome:
-    """The one writer of `marathons.public_highlight`: the thread controls, the drawer and the
-    PATCH all come here, and the controls re-render after."""
-    from .marathon_thread_controls import controls_changed
-
-    wanted = mp.clean_switch(given)
-    if wanted is None:
-        return refusal(mp.BAD_SWITCH, mp.BAD_SWITCH_CODE, 422)
-    cog = cog_of(bot)
-    async with cog.lock(marathon["id"]):
-        fresh = await get_marathon(bot.db, guild.id, marathon["id"])
-        if fresh is None:
-            return refusal(mt.NO_SUCH_MARATHON.format(given=marathon["id"]), NO_SUCH, 404)
-        was = mp.highlights(fresh)
-        if was == wanted:
-            said = words(bot, guild.id, MARATHON_PUBLIC_AUTO_SAME_KEY, marathon=fresh["name"])
-            return Outcome(True, said, value=fresh)
-        await update_marathon(bot.db, fresh["id"], public_highlight=1 if wanted else 0)
-        fresh = await get_marathon(bot.db, guild.id, fresh["id"])
-    await log_action(
-        bot,
-        guild,
-        kind_via("marathon.public_highlight_set", via),
-        actor=actor,
-        details={
-            "marathon_id": fresh["id"],
-            "name": fresh["name"],
-            "from": was,
-            "to": wanted,
-            "via": via,
-        },
-    )
-    await controls_changed(bot, guild, fresh["id"])
-    channel = public_channel(bot, guild.id)
-    key = MARATHON_PUBLIC_AUTO_ON_SAID_KEY if wanted else MARATHON_PUBLIC_AUTO_OFF_SAID_KEY
-    return Outcome(
-        True,
-        words(
-            bot,
-            guild.id,
-            key,
-            marathon=fresh["name"],
-            channel=f"<#{channel}>" if channel else "#?",
-        ),
-        value=fresh,
-    )
 
 
 class HighlightButton(
@@ -838,7 +774,6 @@ __all__ = [
     "HighlightButton",
     "auto_highlight",
     "button_of",
-    "default_for_new",
     "follow_opt",
     "named_on",
     "people_for",
@@ -849,7 +784,6 @@ __all__ = [
     "put_back",
     "send_public",
     "remove_highlight",
-    "set_public_highlight",
     "since",
     "stands",
     "sync_highlights",

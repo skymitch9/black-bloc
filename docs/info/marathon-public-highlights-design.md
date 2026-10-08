@@ -1,5 +1,7 @@
 # Marathon public highlights — each BaF runner highlighted where members can see it; the thread stays staff-only
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the per-marathon Auto-highlight switch is retired (D4): a run's live highlight follows its people's Runner/Host announcements answers; `marathon_public_highlight_default` and the auto-highlight answers are gone and the `public_highlight` column is no longer read. See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > **Audience:** the conductor, reviewers, and the next session touching marathon threads, runner posts, go-live or the
 > marathon drawer. **Status:** TRACKED · 🔨 **BUILT on branch `marathon-public-highlights` (off `main` `f8494278`, the
 > merged, undeployed runner-posts; v177 live), NOT merged, NOT deployed** — meant to ship with runner-posts as v178.
@@ -80,11 +82,11 @@ there (Deviation 2).
   `{relative}`, `{url}`, `{marathon}`, `{state}` — so the state words are the existing `marathon_state_*` keys, reused.
   An unchanged tick costs no Discord call (`cog.public_sent`); after a restart each highlight that is up is fetched once.
 
-**(3) The per-marathon switch — Auto-highlight BaF runners when live.** `marathons.public_highlight INTEGER NOT NULL
+~~**(3) The per-marathon switch — Auto-highlight BaF runners when live.** `marathons.public_highlight INTEGER NOT NULL
 DEFAULT 0` (schema 75). A new marathon copies the guild key `marathon_public_highlight_default` (bool, **off**) at
 creation (`create_marathon`); every marathon already on the list is off. One writer, `set_public_highlight` (words
 `marathon_public_auto_on_said` / `_off_said` / `_same_said`; logs `marathon.public_highlight_set` `from`/`to`/`via`), and
-three doors reach it:
+three doors reach it:~~ *(superseded 2026-10-08 — D4: the per-marathon switch, its key, its three doors and set_public_highlight are retired; a run's highlight follows Runner/Host announcements; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 - a **fourth button on the pinned thread control message** — `marathon:controls:{id}:highlight:{on|off}`, labels
   `marathon_controls_highlight_on` / `_off` (*Auto-highlight BaF runners when live: on · turn off* / *…: off · turn on*),
   green when on, grey when off, carrying its target like the other three;
@@ -95,11 +97,11 @@ three doors reach it:
 The writer calls the controls' canonical hook (`controls_changed`) after it writes, so the pinned message re-renders from
 any door.
 
-**When it is on**, `auto_highlight` runs inside `Marathons.shout` — the moment the shoutout fires, before the
+~~**When it is on**, `auto_highlight` runs inside `Marathons.shout` — the moment the shoutout fires, before the
 said-by-its-event skip, for every caller (`advance` when the schedule or the title flips a run live, Mark live, Shout it
 now): a tracked marathon with the switch on, a BaF run that is upcoming/live/done, and **no highlight ever posted for
 that run** (so a highlight staff took down is never put back by the switch). A failure there is a log line and never
-breaks the shoutout.
+breaks the shoutout.~~ *(superseded 2026-10-08 — D4: auto_highlight follows the people's announcements answers, no column read; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 
 **(4) Pings and shadow.** A highlight's first post pings through `Marathons._ping_roles` — the runner's fan role and the
 channel's through its ping-window gate — which returns nothing unless that marathon's `ping_role` is on. With it on, the
@@ -153,9 +155,9 @@ is a module constant, as the ping switch's is (it is a site answer, not a posted
 11. **Runner-post compare after a restart:** the runner post's cached value now includes its button; after a restart the
     compare also reads the fetched message's components (`marathon_public.shown_button`). A message whose components
     cannot be read is edited once.
-12. **No `/event` or `/settings` twin for the per-marathon switch beyond the thread button and the site** — the thread's
+12. ~~**No `/event` or `/settings` twin for the per-marathon switch beyond the thread button and the site** — the thread's
     control message is the Discord door, like the other three controls. The guild keys are reachable from both the
-    Settings page and the `/settings` panel as every registry key is.
+    Settings page and the `/settings` panel as every registry key is.~~ *(superseded 2026-10-08 — D4: there is no per-marathon switch any more; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 
 ## What was NOT verified
 

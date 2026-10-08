@@ -8,6 +8,7 @@ from black_bloc import marathon_people as mp
 from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content import marathon_people as people
 from black_bloc.cogs.content.marathon import create_marathon, get_marathon, runs_of
+from black_bloc.cogs.content.marathon_archive import archive_marathon
 from black_bloc.cogs.content.spotlight import channel_by_login, forget_spotlight
 from black_bloc.marathon_sources import Person, Run
 from tests.cogs.content.test_marathon import (  # noqa: F401
@@ -209,7 +210,7 @@ async def test_refusals_are_in_words_no_login_nobody_and_runs_over(bot, cog):  #
 async def test_removing_the_marathon_forgets_its_spotlights_and_keeps_the_rows(bot, cog):  # noqa: F811
     marathon = await added(bot)
     await people.spotlight_runner(bot, bot.guild, FakeActor(), marathon, "skyruns")
-    await cogmod.remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    await archive_marathon(bot, bot.guild, FakeActor(), marathon)
     assert await people.remembered_of(bot.db, marathon["id"]) == {}
     assert await channel_by_login(bot.db, GUILD, "skyruns") is not None
 
@@ -257,7 +258,7 @@ async def test_staff_pick_a_day_then_a_slot_then_a_person_and_the_race_is_one_sl
         bot, bot.guild, FakeActor(), marathon["id"], run_id=race.value, person="TheKing"
     )
     assert any(isinstance(one, people.LinkPick) for one in view.children)
-    assert "Spotlight" in labels_of(view)
+    assert "Spotlight their channel…" in labels_of(view)
     _, view = await people.build_people(
         bot, bot.guild, FakeActor(), marathon["id"], run_id=race.value, person="Bobbeigh"
     )
@@ -502,7 +503,7 @@ async def test_a_baf_persons_slot_offers_this_runs_answer_and_their_at(bot, cog)
         return embed.description, {one.action: one for one in moves}
 
     words, moves = await slot()
-    assert moves[people.RUN_ANSWER].label == "Announce anarchy for this run"
+    assert moves[people.RUN_ANSWER].label == "Announce anarchy"
     assert (moves[people.RUN_ANSWER].to, moves[people.RUN_ANSWER].row) == ("in", 3)
     assert moves[people.MENTION].label == "No @ for anarchy" and moves[people.MENTION].to == "plain"
     assert "anarchy: not announced for this run — host announcements are off" in words
@@ -520,8 +521,46 @@ async def test_a_baf_persons_slot_offers_this_runs_answer_and_their_at(bot, cog)
     assert said.ok and "with no @" in said.message
 
     words, moves = await slot()
-    assert moves[people.RUN_ANSWER].label == "anarchy: back to the default for this run"
+    assert moves[people.RUN_ANSWER].label == "anarchy: back to the default"
     assert moves[people.MENTION].label == "@ anarchy again"
     assert "anarchy: announced for this run — set for this run · written without an @" in words
     _, others = await slot("Vee")
     assert people.RUN_ANSWER not in others and people.MENTION not in others
+
+
+async def test_the_slot_view_reads_link_spotlight_opt_out_at_this_run_back_in_that_order(
+    bot, cog  # noqa: F811
+):
+    from tests.cogs.content.test_marathon_host_highlights import HOSTED_ONLY, show
+
+    await bot.store.set(GUILD, "events_create_scheduled", False)
+    await bot.store.set(GUILD, "marathon_people_button_back", "Back to the slots")
+    marathon = await show(bot, cog, HOSTED_ONLY, hosts=False)
+    run = (await runs_of(bot.db, marathon["id"]))[1]
+
+    _, view = await people.build_people(
+        bot, bot.guild, FakeActor(), marathon["id"], run_id=run["id"], person="anarchy"
+    )
+
+    moves = [one for one in view.children if isinstance(one, people.PeopleMove)]
+    actions = [one.action for one in moves]
+    assert actions.index(people.OPT_OUT) < actions.index(people.MENTION)
+    assert actions.index(people.MENTION) < actions.index(people.RUN_ANSWER)
+    assert actions[-1] == people.BACK and moves[-1].label == "Back to the slots"
+    assert not any("for this run" in one.label for one in moves)
+
+
+def test_every_people_view_label_is_a_settings_key():
+    from black_bloc import settings_store
+
+    assert set(people.LABEL_KEYS) == {
+        people.SPOTLIGHT,
+        people.UNSPOTLIGHT,
+        people.UNLINK,
+        people.LINK_NEAR,
+        people.TWITCH,
+        people.BACK,
+    }
+    said = {key: settings_store.MARATHON_WORDS[key][0] for key in people.LABEL_KEYS.values()}
+    assert said[people.LABEL_KEYS[people.SPOTLIGHT]] == "Spotlight their channel…"
+    assert said[people.LABEL_KEYS[people.UNSPOTLIGHT]] == "Stop spotlighting their channel"

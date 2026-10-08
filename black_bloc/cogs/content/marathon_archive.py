@@ -11,7 +11,6 @@ from ... import marathon_spotlight as ms
 from ...actionlog import log_action
 from ...golive import parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
-from ...marathon_feeds import VIA_FEED
 from ...marathon_sources import SOURCE_WORDS
 from ...panels import (
     KEEP_IT,
@@ -29,7 +28,6 @@ from ...settings_store import (
     MARATHON_ARCHIVED_SAID_KEY,
     MARATHON_ARCHIVED_WORD_KEY,
     MARATHON_NOT_ARCHIVED_KEY,
-    MARATHON_REMOVED_SAID_KEY,
     MARATHON_RESTORE_QUESTION_KEY,
     MARATHON_RESTORE_TAKEN_KEY,
     MARATHON_RESTORED_SAID_KEY,
@@ -255,8 +253,8 @@ async def archive_held(
     """Called with the marathon's lock held. The row moves first; the knock-ons follow it."""
     from .marathon import runs_of
     from .marathon_events import cancel_every_run_event
-    from .marathon_feeds import ignore_removed
     from .marathon_inbox import archived_inbox
+    from .marathon_thread_controls import archived_controls
 
     cog = cog_of(bot)
     runs = await runs_of(bot.db, marathon["id"])
@@ -277,9 +275,8 @@ async def archive_held(
         actor=actor,
         details=details_of(marathon, runs, why, via),
     )
-    if why == ma.REMOVED:
-        await ignore_removed(bot, guild, actor, marathon, via=VIA_FEED)
     await cog.unpin_board(guild, marathon, because=ma.UNPIN_BECAUSE, runs=runs)
+    await archived_controls(bot, guild, marathon)
     await archived_inbox(bot, guild, marathon, at)
     return True
 
@@ -293,8 +290,7 @@ async def archive_marathon(
         if fresh is None:
             return refusal(mt.NO_SUCH_MARATHON.format(given=marathon["id"]), NO_SUCH, 404)
         await archive_held(bot, guild, actor, fresh, why, via=via)
-    key = MARATHON_REMOVED_SAID_KEY if why == ma.REMOVED else MARATHON_ARCHIVED_SAID_KEY
-    return Outcome(True, words(bot, guild.id, key, name=fresh["name"]))
+    return Outcome(True, words(bot, guild.id, MARATHON_ARCHIVED_SAID_KEY, name=fresh["name"]))
 
 
 async def restore_marathon(

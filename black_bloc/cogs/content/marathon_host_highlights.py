@@ -335,7 +335,7 @@ async def skipped(
     found: list[dict[str, Any]],
 ) -> None:
     """A highlight that would have gone up but names nobody: one row a block saying why."""
-    if not mhh.auto_wanted(marathon, block, record) or (record or {}).get("skipped"):
+    if not mhh.auto_wanted(block, record) or (record or {}).get("skipped"):
         return
     if record is None:
         record = mhh.new_record(block)
@@ -402,7 +402,7 @@ async def went_live(cog: Any, guild: Any, marathon: Any, run_id: Any) -> None:
             if not people:
                 await skipped(bot, guild, fresh, block, record, found)
                 return
-            if not mhh.auto_wanted(fresh, block, record):
+            if not mhh.auto_wanted(block, record):
                 return
             if record is None:
                 record = mhh.new_record(block)

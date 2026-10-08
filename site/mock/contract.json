@@ -5819,7 +5819,6 @@
         "ping_role",
         "role_ping",
         "baf_event",
-        "public_highlight",
         "announcements",
         "host_announcements",
         "overlay",
@@ -5979,12 +5978,11 @@
         "public_highlight": true
       },
       "read_by": [
-        "marathons-section.js (events.html) the drawer's Settings foldout — Auto-highlight BaF runners when live"
+        "the retired Auto-highlight field (folded into Runner announcements 2026-10-08): answers in words, changes nothing"
       ],
       "shape": "object",
       "keys": [
         "id",
-        "public_highlight",
         "message"
       ]
     },
@@ -6049,7 +6047,6 @@
       "keys": [
         "id",
         "ping_role",
-        "public_highlight",
         "window",
         "message"
       ]
@@ -6071,20 +6068,6 @@
         "source",
         "source_word",
         "runs",
-        "message"
-      ]
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/marathons/{marathon_id}",
-      "read_by": [
-        "marathons-section.js (events.html) Remove — the marathon moves to the archive"
-      ],
-      "shape": "object",
-      "keys": [
-        "removed",
-        "archived",
-        "id",
         "message"
       ]
     },

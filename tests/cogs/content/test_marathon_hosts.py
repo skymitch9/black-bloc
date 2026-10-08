@@ -17,9 +17,9 @@ from black_bloc.cogs.content.marathon import (
     create_marathon,
     get_marathon,
     pair_runner,
-    remove_marathon,
     runs_of,
 )
+from black_bloc.cogs.content.marathon_archive import archive_marathon
 from black_bloc.cogs.content.marathon_events import set_event_mode
 from black_bloc.cogs.content.spotlight import channel_by_login
 from black_bloc.events import get_event
@@ -266,7 +266,7 @@ async def test_events_off_calls_the_host_event_off_and_removal_does_too(
     await events_on(bot, marathon)
     (again,) = host_records(await get_marathon(bot.db, GUILD, marathon["id"]))
     assert again["event_id"] != record["event_id"]
-    removed = await remove_marathon(
+    removed = await archive_marathon(
         bot, bot.guild, FakeActor(), await get_marathon(bot.db, GUILD, marathon["id"])
     )
     assert removed.ok

@@ -238,12 +238,11 @@ def is_up(record: Any) -> bool:
     return bool(record and record.get("message_id")) and not record.get("removed")
 
 
-def auto_wanted(marathon: Any, block: Block, record: Any) -> bool:
+def auto_wanted(block: Block, record: Any) -> bool:
     """The marathon's Auto-highlight switch, as for a runner: once per block, never again once
     it was tried or taken down."""
     return (
-        bool(mt._cell(marathon, "public_highlight", 0))
-        and state_of(block) == LIVE
+        state_of(block) == LIVE
         and not (record and (record.get("tried") or record.get("message_id")))
     )
 

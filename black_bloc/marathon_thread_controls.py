@@ -1,12 +1,24 @@
-"""The control message pinned in a tracked marathon's thread: events and the spotlight."""
+"""The control message pinned in a tracked marathon's thread, shaped by the show's phase."""
 
 from __future__ import annotations
 
 from typing import Any, NamedTuple
 
+from . import marathon as mt
 from . import marathon_events as me
 from . import marathon_spotlight as ms
-from .marathon_baf_event import CHOICES, CLEAR, FOLLOW, NO, YES
+from .golive import parse_ts
+from .marathon_baf_event import (
+    BY_LEADS,
+    BY_NAME,
+    BY_NO_RUNS,
+    CLEAR,
+    FOLLOW,
+    NO,
+    UNSURE,
+    YES,
+    Judgement,
+)
 
 EVENT = "event"
 RUNS = "runs"
@@ -19,40 +31,62 @@ ANNOUNCE = "announce"
 HOST_ANNOUNCE = "hostannounce"
 OVERLAY = "overlay"
 BAF = "baf"
-ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, ANNOUNCE, HOST_ANNOUNCE, OVERLAY, BAF)
-RETIRED = (HOSTS, HOST_EVENTS)
+ARCHIVE = "archive"
+LINK = "link"
+ACTIONS = (EVENT, SPOTLIGHT, PING, ANNOUNCE, HOST_ANNOUNCE, BAF, ARCHIVE)
+RETIRED = (HOSTS, HOST_EVENTS, RUNS, HIGHLIGHT, OVERLAY)
 ON = "on"
 OFF = "off"
 CANCEL = "cancel"
-BAF_CHOICES = CHOICES
-BAF_ROW = 4
-FOLLOW_ANSWER = "follow_answer"
 TEMPLATE = (
     r"marathon:controls:(?P<marathon_id>[0-9]+)"
     r":(?P<action>event|runs|spotlight|highlight|ping|hosts|hostevents|announce|hostannounce"
-    r"|overlay|baf)"
+    r"|overlay|baf|archive)"
     r":(?P<to>on|off|cancel|follow|yes|no|clear)"
 )
 CUSTOM_ID = "marathon:controls:{marathon_id}:{action}:{to}"
+RUNS_GONE = (
+    "BaF run/host events left the thread controls: the marathon's drawer on the site and "
+    "/event set them. Nothing was changed."
+)
+OVERLAY_GONE = (
+    "Event schedule left the thread controls: the marathon's drawer on the site sets it. "
+    "Nothing was changed."
+)
+HIGHLIGHT_GONE = (
+    "Auto-highlight is part of Runner announcements now: a run's highlight follows that switch "
+    "and each run's own answer. Nothing was changed."
+)
 
-SPOT_ON = "on"
-SPOT_OFF = "off"
-SPOT_KEPT = "kept"
-SPOT_NONE = "none"
-SPOT_WAITING = "waiting"
-SPOT_OF_STATE = {
-    ms.HELD: SPOT_ON,
-    ms.HELD_OTHER: SPOT_ON,
-    ms.UNTIL: SPOT_ON,
-    ms.SCHEDULED: SPOT_ON,
-    ms.KEPT: SPOT_KEPT,
-    ms.WAITING: SPOT_WAITING,
-    ms.DARK: SPOT_OFF,
-    ms.NO_CHANNEL: SPOT_NONE,
+BAF_SAID_YES = "said_yes"
+BAF_SAID_NO = "said_no"
+BAF_SAID_UNSURE = "said_unsure"
+BAF_STAFF_YES = "staff_yes"
+BAF_STAFF_NO = "staff_no"
+BAF_ANSWERED_YES = "answered_yes"
+BAF_ANSWERED_NO = "answered_no"
+REASON_NAMED = "named"
+REASON_RUNS = "runs"
+REASON_NO_RUNS = "no_runs"
+
+SPOT_SWITCHED = (ms.HELD, ms.HELD_OTHER, ms.UNTIL, ms.SCHEDULED, ms.WAITING, ms.DARK)
+LINE_UNTIL = "until"
+LINE_STARTS = "starts"
+LINE_KEPT = "kept"
+LINE_NONE = "none"
+LINE_RUNNING = "running"
+SPOT_RUNNING = (ms.UNTIL, ms.HELD_OTHER)
+SPOT_LINES = {
+    ms.HELD: LINE_UNTIL,
+    ms.HELD_OTHER: LINE_UNTIL,
+    ms.UNTIL: LINE_UNTIL,
+    ms.SCHEDULED: LINE_STARTS,
+    ms.WAITING: LINE_STARTS,
+    ms.KEPT: LINE_KEPT,
+    ms.NO_CHANNEL: LINE_NONE,
 }
 LABEL_LIMIT = 80
 POSTED_REASON = "Black Bloc: the marathon's controls"
-BECAUSE_STARTED = "staff_started"
 TRACKER_PAGE = "{origin}/schedule.html#marathon-{marathon_id}"
 
 
@@ -60,8 +94,7 @@ class Control(NamedTuple):
     action: str
     to: str
     word: str
-    disabled: bool = False
-    row: int | None = None
+    row: int = 0
     label: str | None = None
 
 
@@ -69,88 +102,91 @@ def custom_id(marathon_id: Any, action: str, to: str) -> str:
     return CUSTOM_ID.format(marathon_id=int(marathon_id), action=action, to=to)
 
 
-def halves(mode: Any) -> tuple[bool, bool]:
-    return (me.makes_marathon_event(mode), me.makes_run_events(mode))
-
-
-def mode_from(marathon_on: bool, runs_on: bool) -> str:
+def wanted_mode(mode: Any, action: str, to: str) -> str:
+    """The marathon half moves; the run/host half stays as the drawer or /event left it."""
+    marathon_on = me.makes_marathon_event(mode)
+    runs_on = me.makes_run_events(mode)
+    if action == EVENT:
+        marathon_on = to == ON
     if marathon_on and runs_on:
         return me.BOTH
     if marathon_on:
         return me.MARATHON
-    if runs_on:
-        return me.RUNS
-    return me.NONE
+    return me.RUNS if runs_on else me.NONE
 
 
-def wanted_mode(mode: Any, action: str, to: str) -> str:
-    """The new event mode a press asks for: one half moves, the other stays."""
-    marathon_on, runs_on = halves(mode)
-    if action == EVENT:
-        marathon_on = to == ON
-    elif action == RUNS:
-        runs_on = to == ON
-    return mode_from(marathon_on, runs_on)
+def switch(action: str, on: bool, row: int = 0) -> Control:
+    return Control(action, OFF if on else ON, ON if on else OFF, row)
 
 
-def spot_word(state: Any) -> str:
-    return SPOT_OF_STATE.get(str(state or ""), SPOT_OFF)
+def spot_switch(spot_state: Any, follows: bool) -> tuple[Control, ...]:
+    """None while the channel is kept on Go-live or the marathon has no channel."""
+    if str(spot_state or "") not in SPOT_SWITCHED:
+        return ()
+    return (switch(SPOTLIGHT, follows),)
 
 
-def spot_control(spot: str) -> Control:
-    if spot == SPOT_WAITING:
-        return Control(SPOTLIGHT, CANCEL, spot)
-    return Control(
-        SPOTLIGHT, ON if spot in (SPOT_OFF, SPOT_NONE) else OFF, spot, disabled=spot == SPOT_NONE
-    )
+def spot_line(spot_state: Any, follows: bool = True) -> str | None:
+    """A spotlight staff or another marathon set, while this one does not follow, says so."""
+    if not follows and str(spot_state or "") in SPOT_RUNNING:
+        return LINE_RUNNING
+    return SPOT_LINES.get(str(spot_state or ""))
 
 
-def switch(action: str, on: bool) -> Control:
-    return Control(action, OFF if on else ON, ON if on else OFF)
+def baf_reason(judged: Judgement) -> str:
+    if judged.reason == BY_NAME:
+        return REASON_NAMED
+    if judged.reason == BY_NO_RUNS:
+        return REASON_NO_RUNS
+    return REASON_RUNS
 
 
-def baf_controls(choice: Any, answered: bool = False) -> tuple[Control, ...]:
-    """The BaF event switch: one button per answer in a row of its own, the one that stands
-    lit and not pressable; while an answer to the question is stored, follow says it follows
-    that answer and a fourth button clears it."""
-    chosen = str(choice or FOLLOW)
-    switch = tuple(
-        Control(
-            BAF,
-            one,
-            ON if one == chosen else OFF,
-            disabled=one == chosen,
-            row=BAF_ROW,
-            label=FOLLOW_ANSWER if answered and one == FOLLOW else None,
-        )
-        for one in BAF_CHOICES
-    )
-    return switch + ((Control(BAF, CLEAR, OFF, row=BAF_ROW),) if answered else ())
+def baf_control(own: bool | None, followed: Judgement) -> Control:
+    """One button: the reading, and its one reverse. A staff answer clears back to follow, a
+    Leads answer clears, and what the bot worked out is said the other way."""
+    if own is not None:
+        return Control(BAF, FOLLOW, ON if own else OFF, 1, BAF_STAFF_YES if own else BAF_STAFF_NO)
+    if followed.reason == BY_LEADS:
+        yes = followed.answer == YES
+        said = BAF_ANSWERED_YES if yes else BAF_ANSWERED_NO
+        return Control(BAF, CLEAR, ON if yes else OFF, 1, said)
+    if followed.answer == YES:
+        return Control(BAF, NO, ON, 1, BAF_SAID_YES)
+    if followed.answer == UNSURE:
+        return Control(BAF, YES, OFF, 1, BAF_SAID_UNSURE)
+    return Control(BAF, YES, OFF, 1, BAF_SAID_NO)
 
 
 def controls(
     mode: Any,
     spot_state: Any,
-    highlight: bool = False,
-    ping: bool = False,
-    announce: bool = True,
-    overlay: bool | None = None,
     *,
-    host_announce: bool = False,
+    follows: bool,
+    ping: bool,
+    announce: bool,
+    host_announce: bool,
+    baf: Control | None = None,
+    over: bool = False,
 ) -> tuple[Control, ...]:
     """Each button carries the move it makes, so a stale label can never do the opposite."""
-    marathon_on, runs_on = halves(mode)
-    spot = spot_word(spot_state)
+    if over:
+        return (Control(LINK, "", ""), Control(ARCHIVE, ON, ARCHIVE))
+    marathon_on = me.makes_marathon_event(mode)
     return (
-        Control(EVENT, OFF if marathon_on else ON, ON if marathon_on else OFF),
-        Control(RUNS, OFF if runs_on else ON, ON if runs_on else OFF),
-        spot_control(spot),
-        switch(HIGHLIGHT, highlight),
-        switch(PING, ping),
         switch(ANNOUNCE, announce),
         switch(HOST_ANNOUNCE, host_announce),
-        *(() if overlay is None else (switch(OVERLAY, overlay),)),
+        switch(PING, ping),
+        *spot_switch(spot_state, follows),
+        switch(EVENT, marathon_on),
+        Control(LINK, "", "", 1),
+        *((baf,) if baf is not None else ()),
     )
+
+
+def after_show(marathon: Any, now: Any) -> bool:
+    """Only a known end puts the controls in their after-show shape."""
+    ends = parse_ts(mt._cell(marathon, "ends_at"))
+    return ends is not None and now > ends
 
 
 def tracker_url(origin: Any, marathon_id: Any) -> str | None:
@@ -167,22 +203,20 @@ def label(text: Any) -> str:
 
 __all__ = [
     "ACTIONS",
-    "BAF_CHOICES",
     "CLEAR",
     "Control",
     "FOLLOW",
-    "FOLLOW_ANSWER",
     "NO",
     "RETIRED",
     "YES",
-    "baf_controls",
+    "baf_control",
+    "baf_reason",
+    "after_show",
     "controls",
     "custom_id",
-    "halves",
     "label",
-    "mode_from",
-    "spot_control",
-    "spot_word",
+    "spot_line",
+    "spot_switch",
     "switch",
     "tracker_url",
     "wanted_mode",

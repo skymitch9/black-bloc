@@ -1,5 +1,7 @@
 # Marathon controls — a ping switch per marathon, a spotlight that follows the extended schedule, and the channel's spotlight controls on the marathon
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the `/event ▸ Marathons…` card is People… · Untrack/Track · Read it now · Open the thread · Open on the site · Back (D12); Remove is gone (D11). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > **Audience:** the conductor, reviewers, and the next session touching marathons, their pings or the spotlight.
 > **Status:** TRACKED · 🔨 **BUILT on branch `marathon-controls` (off `main` `70edbad9`), NOT merged, NOT deployed** —
 > it ships with the merged, undeployed `marathon-inbox` as one deploy. Schema **71 → 72**, registry keys **543 → 552**,
@@ -98,9 +100,9 @@ row, same shape) and `spotlight_state` (`black_bloc/marathon_spotlight.py:state_
 `tail_minutes`). The sentence has `{until}` / `{starts}` left in it for the reader's own clock — the site fills them with
 its local time, Discord with `<t:…:f>` (`discord_line`).
 
-**The `/event` card.** The header line reads the same state; **Spotlight…** (row 2, only with a channel) opens a
+~~**The `/event` card.** The header line reads the same state; **Spotlight…** (row 2, only with a channel) opens a
 Spotlight view: the state, the follow line, the follow switch, **The channel's spotlight…** (the `/golive` ▸ Channels
-card itself, picked on this channel) and **Back**.
+card itself, picked on this channel) and **Back**.~~ *(superseded 2026-10-08 — D12 and the fix round: the card's Spotlight… view is deleted; the drawer's Spotlight card is the door; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 
 **Staff final say.** Unchanged from v174 and kept on the new card: staff dates or Spotlight off on a held row make it
 theirs (Deviation 11 of v174); Follow Off gives back a spotlight the marathon holds.
@@ -138,10 +140,10 @@ theirs (Deviation 11 of v174); Follow Off gives back a spotlight the marathon ho
 13. **Not on the marathon card:** Twitch, YouTube, Ping role, Remove and the channel's *Marathons: on/off* — they are
     the channel's, not its spotlight's; **Open on Go-live ↗** leads there.
 14. **Pings is its own card below Spotlight** (the same component Go-live draws), not nested inside it.
-15. **Discord: the channel's controls are the `/golive` ▸ Channels card itself.** Row 2 of the marathon card is full
+15. ~~**Discord: the channel's controls are the `/golive` ▸ Channels card itself.** Row 2 of the marathon card is full
     (Read, Pause, Board, Ping, Spotlight…), so v174's follow button moved into the Spotlight… view, and **The channel's
     spotlight…** renders `render_spotlight` picked on the channel — one component, never a copy. Its **Back** returns to
-    `/golive`, not to the marathon card.
+    `/golive`, not to the marathon card.~~ *(superseded 2026-10-08 — D12 and the fix round: the Spotlight… view is deleted; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 16. **The state sentences are constants** (`marathon_spotlight.py:STATE_LINES`), served to the site as `line` — one home
     for both doors. They are panel and page words, never posted to a channel.
 17. **The mock:** AGDQ 2027 is seeded with its switch **on** (the only seeded marathon window stays), every other

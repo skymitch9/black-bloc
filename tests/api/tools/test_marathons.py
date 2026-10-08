@@ -272,18 +272,20 @@ async def test_staff_post_the_board_shout_a_run_and_mark_it_done(client, sign_in
     assert "web.marathon.run_done" in kinds
 
 
-async def test_removing_a_marathon_takes_its_runs_and_says_so(client, sign_in, web, cog, wf):
+async def test_delete_is_retired_answers_in_words_and_archives_nothing(
+    client, sign_in, web, cog, wf
+):
     sign_in(client)
     marathon_id = add(client).json()["id"]
-    gone = client.delete(f"/api/marathons/{marathon_id}").json()
-    assert gone["removed"] is True and gone["archived"] is True
-    assert "off the list and in the archive" in gone["message"]
-    assert await get_marathon(web.db, wf.GUILD_ID, marathon_id) is None
-    assert await runs_of(web.db, marathon_id) == []
-    kept = client.get(f"/api/marathons/{marathon_id}").json()
-    assert kept["archived"] is True and kept["archived_why"] == "removed"
-    assert client.get("/api/marathons/99999").status_code == 404
-    assert "web.marathon.removed" in await wf.kinds_in(web.db)
+
+    said = client.delete(f"/api/marathons/{marathon_id}")
+
+    assert said.status_code == 410
+    body = said.json()
+    assert body["error"] == "remove_gone"
+    assert "Remove is retired" in body["message"] and "Archive it" in body["message"]
+    assert "Nothing was changed" in body["message"]
+    assert client.get(f"/api/marathons/{marathon_id}").json()["id"] == marathon_id
 
 
 async def test_a_write_with_no_cog_loaded_is_refused_in_words_not_a_bare_status(
@@ -555,17 +557,6 @@ async def test_make_now_then_unlink_from_the_site_and_a_second_unlink_says_why(
     assert (await web_row(wf, web, "web.marathon.event_unlinked"))["event_id"] == event_id
 
 
-async def test_removing_from_the_site_calls_the_event_off(client, sign_in, web, cog, wf, review):
-    sign_in(client)
-    body = add(client, make_event=True).json()
-    assert client.delete(f"/api/marathons/{body['id']}").status_code == 200
-    event = client.get(f"/api/events/{body['event']['id']}").json()["event"]
-    assert event["status"] == "cancelled"
-    assert (await web_row(wf, web, "web.marathon.event_cancelled"))["marathon_id"] == body[
-        "id"
-    ]
-
-
 # --- event modes (docs/info/marathon-event-modes-design.md §B) --------------------------------
 
 
@@ -754,7 +745,7 @@ async def test_patch_the_announcements_switch_and_the_retired_host_switches_answ
     ).json()
 
     assert "hosts are always found now" in body["message"]
-    assert "follow the one **BaF run/host events** switch" in body["message"]
+    assert "BaF run/host events in the marathon's drawer" in body["message"]
     assert body["event_mode"] == first["event_mode"]
     bad = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "loud"})
     assert bad.status_code == 422 and bad.json()["error"] == "bad_switch"
@@ -833,23 +824,19 @@ async def test_the_drawer_reads_whether_the_heads_up_mentions_the_marathon_role_
     assert off["line"] == "The Marathon role is not mentioned: marathon_role_pings is off."
 
 
-async def test_patch_public_highlight_turns_the_auto_switch_on_and_off_and_refuses_a_bad_word(
+async def test_the_retired_auto_highlight_field_is_gone_and_a_patch_answers_in_words(
     client, sign_in, web, cog, wf
 ):
     sign_in(client)
     marathon_id = add(client).json()["id"]
-    assert client.get(f"/api/marathons/{marathon_id}").json()["public_highlight"] is False
+    assert "public_highlight" not in client.get(f"/api/marathons/{marathon_id}").json()
 
-    body = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": True}).json()
-
-    assert body["public_highlight"] is True
-    assert "the moment it goes live" in body["message"]
-    said = await web_row(wf, web, "web.marathon.public_highlight_set")
-    assert (said["from"], said["to"], said["via"]) == (False, True, "website")
-    body = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": False}).json()
-    assert body["public_highlight"] is False
-    bad = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": "loud"})
-    assert bad.status_code == 422 and bad.json()["error"] == "bad_public_highlight"
+    for given in (True, False, "loud"):
+        answer = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": given})
+        assert answer.status_code == 200
+        assert "part of Runner announcements now" in answer.json()["message"]
+    seen = [kind for kind, _details in await wf.web_rows_in(web.db)]
+    assert "web.marathon.public_highlight_set" not in seen
 
 
 async def test_following_again_spotlights_a_channel_whose_marathon_is_in_reach(
@@ -1127,7 +1114,7 @@ async def test_a_runs_own_answer_is_shown_on_the_run_and_moved_from_the_site(
         False,
         "hosts_off",
     )
-    assert shown["move"] == "in" and shown["move_label"] == "Announce Interview Crew for this run"
+    assert shown["move"] == "in" and shown["move_label"] == "Announce Interview Crew"
     assert shown["said"].startswith("Interview Crew: not announced for this run — host")
     path = f"/api/marathons/{marathon_id}/runs/{run_id}/people/77/announce"
 

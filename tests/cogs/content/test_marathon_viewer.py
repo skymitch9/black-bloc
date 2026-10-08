@@ -15,8 +15,7 @@ from black_bloc.cogs.content import marathon_feeds as feeds
 from black_bloc.cogs.content import marathon_signals as signals
 from black_bloc.cogs.content import marathon_viewer as viewers
 from black_bloc.cogs.content.marathon import get_marathon, refresh_marathon, runs_of
-from black_bloc.cogs.content.marathon_hosts import set_switch
-from black_bloc.cogs.content.marathon_thread_controls import overlay_switch
+from black_bloc.cogs.content.marathon_hosts import set_switch, switch_state
 from black_bloc.marathon_sources import ScheduleError
 from tests.cogs.content.test_marathon import bot  # noqa: F401
 from tests.cogs.content.test_marathon_feeds import (  # noqa: F401
@@ -355,7 +354,7 @@ async def test_staff_switch_the_event_schedule_off_and_on_again(bot, cog):  # no
     assert [one["part"] for one in mt.people_of(runs[0])] == ["runner"]
     fresh = await fresh_of(bot, marathon)
     assert fresh["overlay"] == 0 and mo.state_of(fresh)["applied"] is False
-    assert overlay_switch(bot, GUILD, fresh) is False
+    assert switch_state(bot, GUILD, fresh, mh.OVERLAY)["on"] is False
     dropped = await logged(bot, "marathon.overlay_dropped")
     assert [one["because"] for one in dropped] == ["switched_off"]
     assert [(one["from"], one["to"]) for one in await logged(bot, "marathon.overlay_set")] == [
@@ -364,7 +363,7 @@ async def test_staff_switch_the_event_schedule_off_and_on_again(bot, cog):  # no
     back = await set_switch(bot, bot.guild, FakeActor(), fresh, mh.OVERLAY, "follow")
     assert back.ok and "from the event's own schedule sheet" in back.message
     assert (await starts_of(bot, marathon))[1] == "2026-10-03T18:18:00+00:00"
-    assert overlay_switch(bot, GUILD, await fresh_of(bot, marathon)) is True
+    assert switch_state(bot, GUILD, await fresh_of(bot, marathon), mh.OVERLAY)["on"] is True
     assert not (await set_switch(bot, bot.guild, FakeActor(), fresh, mh.OVERLAY, "maybe")).ok
 
 
@@ -384,7 +383,7 @@ async def test_with_no_viewer_the_gdq_sheet_path_is_exactly_as_it_was(bot, cog):
     starts = await starts_of(bot, marathon)
     assert starts[:2] == ["2026-10-03T17:00:00+00:00", "2026-10-03T18:15:00+00:00"]
     fresh = await fresh_of(bot, marathon)
-    assert mo.state_of(fresh) is None and overlay_switch(bot, GUILD, fresh) is None
+    assert mo.state_of(fresh) is None
     plain = hf.parse_hotfix(hotfix_sheet(), ["GDQueer"], 7)[0]
     assert starts == [one.starts_at for one in plain.runs]
     assert fresh["ends_at"] == plain.ends_at
@@ -460,7 +459,7 @@ async def test_a_gdq_sheet_marathon_without_a_sheet_keeps_the_old_clock(bot, cog
     ViewerReads(cog.client)
     marathon = await heroes_of(bot, cog)
     fresh = await fresh_of(bot, marathon)
-    assert mo.state_of(fresh) is None and overlay_switch(bot, GUILD, fresh) is None
+    assert mo.state_of(fresh) is None
     runs = await runs_of(bot.db, marathon["id"])
     late = "2026-10-02T23:10:00+00:00"
     await cogmod.update_run(bot.db, runs[0]["id"], actual_started_at=late, state="live")

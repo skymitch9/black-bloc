@@ -160,7 +160,7 @@ async def test_hidden_heroes_gets_one_post_per_mark_for_its_block_and_none_per_r
     assert all(no_pings(one) and "<@&" not in one.content for one in said)
     assert await marks_logged(bot) == [1440, 120, 15]
     assert (await details_of(bot.db, "marathon.host_reminded"))["runs"] == [1, 2, 3]
-    assert highlights(bot) == []
+    assert (await kinds(bot.db)).count("marathon.host_highlight_posted") == 1
     assert cogmod.counts_of(await runs_of(bot.db, marathon["id"])) == (3, 0)
     for kind in ("marathon.shouted", "marathon.reminded", "marathon.public_highlight_posted"):
         assert kind not in await kinds(bot.db)
@@ -175,11 +175,10 @@ async def test_the_heads_up_is_the_runners_public_reminder_with_the_host_word(bo
     assert said.content.startswith("<@8101> will be hosting Titanfall 2 <t:")
 
 
-async def test_no_highlight_while_auto_highlight_is_off(bot, cog):
-    marathon = await show(bot, cog, HIDDEN_HEROES)
+async def test_no_highlight_while_host_announcements_is_off(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES, hosts=False)
     await walk(bot, cog, marathon, [45, 61, 146, 181, 231])
-    assert highlights(bot) == []
-    assert len(heads_ups(bot)) == 1
+    assert highlights(bot) == [] and heads_ups(bot) == []
 
 
 async def test_auto_highlight_posts_once_at_the_blocks_live_and_edits_it_to_done(bot, cog):
