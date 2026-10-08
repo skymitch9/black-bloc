@@ -1050,6 +1050,30 @@ watched fail).
 decision 55); log kinds +2 (`brackets.thread_moved`, `web.brackets.thread_moved`, IMPORTANT); `would_dm`/`dm_failed`
 gained `text`, `reason` (and `why`); `thread_failed` can carry `error`.
 
+## Gate — pools into a bracket (2026-10-07, branch `brackets-pools`)
+
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **12614 passed, 1 skipped** (main at `3a18e678`: 12556). New:
+  `tests/brackets/test_pools.py` (23), pools tests in `test_brackets_moves.py`, `_sets`, `_people`, `_view`, `_cards`,
+  `_panel`, `tests/api/tools/test_brackets.py`, `tests/storage/test_db.py` (the 90-file migration); counts moved in
+  `test_settings_store` (keys 1075 → 1088, core 246 → 259), `test_logkinds`, the schema asserts.
+- `python -m ruff check .`: all checks passed.
+- `MOCK_PORT=8819 node site/mock/check.mjs` against the branch's own mock: *ok - 26 pages, 347 routes, 259 core settings,
+  all keys present*.
+- Every `site/mock/*.test.mjs` (14): exit 0 (`brackets.test.mjs` adds the pools cases and the mock's worked examples).
+- `scripts/ci-local.ps1`: **CI MIRROR GREEN: 16 step(s) passed in 186s**.
+- Browser: headless Chrome over CDP with device emulation, the mock on 8819. At 1280: #15 *Pool Party* draws four pool
+  grids side by side in two rows (460 px each), each table with the cut line under 2nd, scrollWidth = 1280; #16 *Pools to
+  Top 4* draws two Swiss pools (round columns scroll inside each pool) and the Final tree. At 375: both pages
+  scrollWidth 375 (no sideways scroll), pools one per row (309 px); no bracket control under 40 px (the only sub-40 px
+  controls measured are the shared Settings panel's mode and reset buttons, not this change). Flows pressed in the
+  page: #17 Advance to the final → asks → *running* with W1-1 drawn → Back to pools → asks → *in pools*; #18 Back to
+  pools; #15 a pool cell opens *A.R3-1 · Pool A · round 3* with Report / Call / Decide / forfeits, a 2–0 report lands
+  and *your line* reads *Waiting on Remy to confirm A.R3-1*; a 6-player tie made through the API (a three-way cycle in
+  pool A, advance 1) is refused *Pool A is tied across the top 1: T1, T4, T5*, the page marks the three rows *tied*
+  with two 40×40 ↑ buttons, ↑ reorders them, Advance builds the final; the New tournament drawer shows the pool fields
+  only when a pools format is chosen (losers-from for double only, Swiss rounds for Swiss only) and creates a double
+  with Swiss pools ×3. No console errors or exceptions in any run.
+
 ## Gate — layer 3 review fixes (2026-10-07, branch `brackets-site`, code at `ac950d33`)
 
 - `python -m pytest tests -q -p no:cacheprovider -n 8`: **12556 passed, 1 skipped** (+4 on the layer-3 gate's 12552).
@@ -1118,6 +1142,18 @@ site/mock/check.mjs`: *ok - 25 pages, 344 routes, 171 core settings, all keys pr
 - Every `site/mock/*.test.mjs` (13): exit 0.
 
 ## What was NOT verified
+
+**Pools into a bracket:**
+
+- Nothing met the real Discord: the pool set cards, the starter card's pool lines, Advance from the panel and the cards
+  going quiet are exercised against the fakes in `tests/test_brackets_thread.py` / `test_brackets_panel.py` only.
+- The schema 91 migration ran on fixtures (a fresh file and a 90 file with a tournament and a set), not on the live
+  database (which is at 90 with v211's brackets in shadow).
+- start.gg's own progression seeding, its "avoid previous matchups" algorithm and its losers-side entry layout are not
+  confirmed from a source; the engine's are derived and pinned by the hand-worked cases in §P2.
+- The Discord panel offers no tie order (§P, not built); a tie on the line can only be ordered from the site or the API.
+- Phone checks are Chrome's device emulation (no Safari, no real touch); the ↑ buttons were pressed by `click()`.
+- The `/settings` and Settings pages were not opened to look at the 13 new keys.
 
 **Layer 3 review fixes:**
 
