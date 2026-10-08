@@ -56,6 +56,10 @@ const IDS = {
   // brackets_mode on and points brackets_channel_id at #general for that one request.
   bracket_rehearsal_id: '12',
   bracket_forum_id: '800000000000000002',
+  // Pools into a bracket: 17 is in pools with every pool finished, so Advance builds its final;
+  // 18 has its final built with nothing played, so Back to pools takes it away.
+  bracket_pooled_id: '17',
+  bracket_final_id: '18',
   structure_old_id: '1',
   structure_new_id: '2',
   test_channel_id: '800000000000000003',

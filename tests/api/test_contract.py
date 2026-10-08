@@ -1242,6 +1242,8 @@ async def seed_brackets(db, guild_id: int) -> dict:
     complete, _ = await made("complete", "single", [(MEMBER_ID, "ada")])
     cancelled, _ = await made("cancelled", "single", [], state_before="signups")
     rehearsal, _ = await made("signups", "single", [(MEMBER_ID, "ada")], shadow=1)
+    pooled = await pools_seeded(db, guild_id, "pools")
+    final = await pools_seeded(db, guild_id, "running")
     return {
         "bracket_draft_id": str(draft),
         "bracket_signups_id": str(signups),
@@ -1257,7 +1259,40 @@ async def seed_brackets(db, guild_id: int) -> dict:
         "bracket_running_entrant_id": str(playing),
         "bracket_rehearsal_id": str(rehearsal),
         "bracket_forum_id": str(INBOX_FORUM_ID),
+        "bracket_pooled_id": str(pooled),
+        "bracket_final_id": str(final),
     }
+
+
+async def pools_seeded(db, guild_id: int, state: str) -> int:
+    """Four guests in two pools, every pool set played; `running` has its final built, unplayed."""
+    from black_bloc import brackets_store as store_
+    from black_bloc.brackets import pools
+
+    tid = await store_.create(
+        db,
+        guild_id,
+        {
+            "name": f"Contract pools {state}",
+            "format": "single",
+            "pools_format": "round_robin",
+            "advance_per_pool": 1,
+        },
+        7,
+    )
+    for name in ("A1", "B1", "B2", "A2"):
+        await store_.add_entrant(db, tid, name, user_id=None, added_by=7)
+    row = await store_.tournament(db, guild_id, tid)
+    whole = pools.build(
+        await order_of(db, tid), store_.options_of(row), store_.plan_of(row)
+    ).bracket
+    for key in list(whole.matches):
+        whole = pools.override(whole, key, 7, None, score_a=2, score_b=0).bracket
+    if state == "running":
+        whole = pools.advance(whole, None).bracket
+    await store_.save(db, tid, whole, list(whole.matches), [])
+    await store_.update(db, tid, {"state": state})
+    return tid
 
 
 async def order_of(db, tournament_id: int) -> list[int]:

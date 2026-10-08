@@ -469,3 +469,196 @@ export function playOut(t, { until = () => false, scores = () => null } = {}) {
   }
   return t;
 }
+
+// Pools into a bracket (brackets-design.md, "Pools into a bracket 2026-10-07"): each pool is a
+// part of its own — a round robin or Swiss over its members, its keys carrying the pool letter —
+// and the final is the tournament's own sets, built by advance().
+export const POOL_FORMATS = ['round_robin', 'swiss'];
+const PLAYED = ['reported', 'disputed', 'complete'];
+
+export function letter(pool) {
+  return String.fromCharCode(64 + pool);
+}
+
+export function snake(ids, count) {
+  const found = Array.from({ length: count }, () => []);
+  ids.forEach((id, at) => {
+    const row = Math.floor(at / count);
+    const column = at % count;
+    found[row % 2 ? count - 1 - column : column].push(id);
+  });
+  return found;
+}
+
+export function tagPool(part, pool) {
+  for (const one of part.sets) {
+    if (!String(one.key).includes('.')) one.key = `${letter(pool)}.${one.key}`;
+    one.phase = 'pools';
+    one.pool = pool;
+  }
+  return part;
+}
+
+export function buildPools(t, ids) {
+  const o = t.options;
+  const format = o.pools_format;
+  const options = { best_of: Number(o.pools_best_of ?? 3), swiss_rounds: o.pools_swiss_rounds ?? null };
+  t.pools = snake(ids, Number(o.pool_count)).map((members, at) => {
+    const part = {
+      id: t.id, format, options,
+      entrants: t.entrants.filter((one) => members.includes(one.id)).sort((a, b) => a.seed - b.seed),
+      sets: build(format, members, options),
+    };
+    settle(part);
+    return tagPool(part, at + 1);
+  });
+  t.sets = [];
+  return t;
+}
+
+export function ownerOf(t, set) {
+  return set && set.pool ? t.pools[set.pool - 1] : t;
+}
+
+export function allSets(t) {
+  return [...(t.pools || []).flatMap((part) => part.sets), ...t.sets];
+}
+
+export function poolsFinished(t) {
+  return Boolean(t.pools && t.pools.length && t.pools.every((part) => finished(part)));
+}
+
+function outOf(t, id) {
+  const one = t.entrants.find((person) => person.id === id);
+  return Boolean(one && (one.dq || one.dropped));
+}
+
+export function cut(t, part) {
+  const advance = Number(t.options.advance_per_pool);
+  const rows = tableRows(part).filter((one) => !outOf(t, one.entrant));
+  const ranks = new Map(t.entrants.map((one) => [one.id, one.final_rank]));
+  if (rows.length > advance && rows[advance - 1].rank === rows[advance].rank) {
+    const tied = rows.filter((one) => one.rank === rows[advance].rank).map((one) => one.entrant);
+    if (!tied.every((id) => ranks.get(id))) return { going: [], tied };
+    const head = rows.filter((one) => one.rank < rows[advance].rank).map((one) => one.entrant);
+    tied.sort((a, b) => ranks.get(a) - ranks.get(b));
+    return { going: [...head, ...tied].slice(0, advance), tied: [] };
+  }
+  return { going: rows.slice(0, advance).map((one) => one.entrant), tied: [] };
+}
+
+function seated(order, size) {
+  const spots = standardOrder(size).map((seed) => order[seed - 1] ?? null);
+  return Array.from({ length: size / 2 }, (_, at) => [spots[2 * at], spots[2 * at + 1]]);
+}
+
+function clashes(order, size, home) {
+  return seated(order, size).filter(([a, b]) => a !== null && b !== null && home.get(a) === home.get(b)).length;
+}
+
+export function apart(order, size, home, tier) {
+  let found = order.slice();
+  for (let now = clashes(found, size, home); now; now = clashes(found, size, home)) {
+    const pair = seated(found, size).find(([a, b]) => a !== null && b !== null && home.get(a) === home.get(b));
+    const lower = found.indexOf(pair[0]) > found.indexOf(pair[1]) ? pair[0] : pair[1];
+    const at = found.indexOf(lower);
+    const others = found.filter((one) => tier.get(one) === tier.get(lower) && !pair.includes(one))
+      .sort((a, b) => Math.abs(found.indexOf(a) - at) - Math.abs(found.indexOf(b) - at));
+    const better = others.map((other) => {
+      const trial = found.slice();
+      trial[at] = other;
+      trial[found.indexOf(other)] = lower;
+      return trial;
+    }).find((trial) => clashes(trial, size, home) < now);
+    if (!better) return found;
+    found = better;
+  }
+  return found;
+}
+
+function entered(winners, losers, options) {
+  const size = Math.max(bracketSize(winners.length), bracketSize(losers.length));
+  const sets = buildDouble(Array.from({ length: 2 * size }, (_, at) => -1 - at), options)
+    .filter((one) => !(one.side === 'winners' && one.round === 1));
+  for (const [side, round, people] of [['winners', 2, winners], ['losers', 1, losers]]) {
+    seated(people, size).forEach(([a, b], at) => {
+      const one = sets.find((set) => set.side === side && set.round === round && set.position === at + 1);
+      one._feed = { a: { seed: a }, b: { seed: b } };
+    });
+  }
+  return sets;
+}
+
+export function advance(t) {
+  const going = t.pools.map((part) => cut(t, part));
+  const tiedAt = going.findIndex((one) => one.tied.length);
+  if (tiedAt >= 0) return { tied: going[tiedAt].tied, pool: letter(tiedAt + 1) };
+  const advanceN = Number(t.options.advance_per_pool);
+  const from = t.format === 'double' ? Number(t.options.advance_losers_from) || null : null;
+  const winners = [];
+  const losers = [];
+  const home = new Map();
+  const tier = new Map();
+  for (let place = 1; place <= advanceN; place += 1) {
+    going.forEach((one, pool) => {
+      const id = one.going[place - 1];
+      if (id === undefined) return;
+      home.set(id, pool);
+      tier.set(id, place);
+      (from && place >= from ? losers : winners).push(id);
+    });
+  }
+  if (!winners.length) winners.push(...losers.splice(0));
+  if (losers.length) {
+    const size = Math.max(bracketSize(winners.length), bracketSize(losers.length));
+    t.sets = entered(apart(winners, size, home, tier), apart(losers, size, home, tier), t.options);
+  } else {
+    t.sets = build(t.format, apart(winners, bracketSize(winners.length), home, tier), t.options);
+  }
+  for (const one of t.sets) one.phase = 'final';
+  settle(t);
+  return { tied: [], entrants: [...winners, ...losers] };
+}
+
+export function finalPlayed(t) {
+  return t.sets.filter((one) => PLAYED.includes(one.state)).map((one) => one.key);
+}
+
+export function inFinal(t) {
+  const found = new Set();
+  for (const one of t.sets) {
+    for (const id of [one.slot_a, one.slot_b]) if (id !== null && id !== undefined && id > 0) found.add(id);
+    for (const feed of Object.values(one._feed || {})) {
+      if (feed && 'seed' in feed && feed.seed !== null && feed.seed > 0) found.add(feed.seed);
+    }
+  }
+  return found;
+}
+
+export function poolPlacements(t) {
+  const placed = new Map(standings(t).map((one) => [one.entrant, one.place]));
+  const through = inFinal(t);
+  const ranks = new Map();
+  for (const part of t.pools) for (const one of tableRows(part)) ranks.set(one.entrant, one.rank);
+  const rest = t.entrants.filter((one) => ranks.has(one.id) && !through.has(one.id));
+  const group = (one) => [outOf(t, one.id) ? 1 : 0, ranks.get(one.id)];
+  const before = (a, b) => group(a)[0] - group(b)[0] || group(a)[1] - group(b)[1];
+  for (const one of rest) placed.set(one.id, through.size + 1 + rest.filter((other) => before(other, one) < 0).length);
+  return placed;
+}
+
+export function poolWaiting(t) {
+  if (!t.sets.length) {
+    return t.pools.flatMap((part) => {
+      const done = finished(part);
+      return waitingOn(part).map((one) => (done && one.what === 'done' ? { ...one, what: 'final' } : one));
+    });
+  }
+  const through = inFinal(t);
+  const finalRows = new Map(waitingOn(t).map((one) => [one.entrant, one]));
+  const names = new Map(t.entrants.map((one) => [one.id, one.name]));
+  return t.pools.flatMap((part) => part.entrants.map((person) => (through.has(person.id) && finalRows.get(person.id)) || {
+    entrant: person.id, name: names.get(person.id) ?? null, what: outOf(t, person.id) ? 'out' : 'done',
+    set: null, opponent: null, open: 0,
+  }));
+}

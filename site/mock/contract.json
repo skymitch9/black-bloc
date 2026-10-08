@@ -10232,7 +10232,8 @@
           "entrant_cap",
           "starts_at",
           "to_user_id",
-          "to_name"
+          "to_name",
+          "pools_format"
         ]
       },
       "nested": {
@@ -10244,7 +10245,11 @@
           "brackets_round_winners",
           "brackets_waiting_play",
           "brackets_discord_label",
-          "brackets_card_rounds_words"
+          "brackets_card_rounds_words",
+          "brackets_state_pools",
+          "brackets_round_pool",
+          "brackets_pool_title",
+          "brackets_waiting_final"
         ],
         "defaults": [
           "format",
@@ -10256,7 +10261,13 @@
           "third_place",
           "check_in_minutes",
           "entrant_cap",
-          "swiss_rounds"
+          "swiss_rounds",
+          "pools_format",
+          "pool_count",
+          "advance_per_pool",
+          "advance_losers_from",
+          "pools_swiss_rounds",
+          "pools_best_of"
         ]
       }
     },
@@ -10293,7 +10304,10 @@
         "started_at",
         "completed_at",
         "rules_text",
-        "rounds_to_play"
+        "rounds_to_play",
+        "phase",
+        "pools",
+        "pools_finished"
       ],
       "rows": {
         "entrants": [
@@ -10332,7 +10346,9 @@
           "placement_winner",
           "placement_loser",
           "rematch",
-          "message_id"
+          "message_id",
+          "phase",
+          "pool"
         ],
         "standings": [
           "entrant",
@@ -10360,7 +10376,13 @@
           "best_of_finals",
           "entrant_cap",
           "check_in_minutes",
-          "confirm_minutes"
+          "confirm_minutes",
+          "pools_format",
+          "pool_count",
+          "advance_per_pool",
+          "advance_losers_from",
+          "pools_swiss_rounds",
+          "pools_best_of"
         ]
       }
     },
@@ -10889,6 +10911,76 @@
           "entrant_count",
           "shadow",
           "to_name"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_pooled_id}/advance",
+      "body": {},
+      "read_by": [
+        "page-brackets.js Advance to the final"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "phase",
+          "pools",
+          "pools_finished"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_final_id}/unadvance",
+      "body": {},
+      "read_by": [
+        "page-brackets.js Back to pools"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "phase",
+          "pools",
+          "pools_finished"
         ]
       }
     },
