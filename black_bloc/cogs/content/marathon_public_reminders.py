@@ -125,9 +125,11 @@ async def post_public_reminder(
             return unsent
         people = people_for(bot, guild, marathon, row)
         because = (
-            "announcements_off"
+            None
+            if people
+            else "announcements_off"
             if not announces(bot, guild.id, marathon)
-            else ("opted_out" if not people else None)
+            else "opted_out"
         )
         if because is not None:
             await log_action(

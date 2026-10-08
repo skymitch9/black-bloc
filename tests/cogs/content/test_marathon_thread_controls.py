@@ -136,7 +136,7 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         "Spotlight: on now · stop",
         "Auto-highlight BaF runners when live: off · turn on",
         "Ping the marathon role: off · turn on",
-        "BaF announcements: on · turn off",
+        "Runner announcements: on · turn off",
         "Host announcements: off · turn on",
         "Marathon tracker ↗",
         "BaF event: follow the schedule (not a BaF event)",

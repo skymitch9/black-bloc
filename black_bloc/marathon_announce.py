@@ -1,5 +1,5 @@
-"""BaF announcements: the marathon's switches, each person's opt-out, each run's own answer
-and who is written without an @."""
+"""Marathon announcements: Runner and Host announcements, each person's opt-out, each run's own
+answer and who is written without an @."""
 
 from __future__ import annotations
 
@@ -68,12 +68,12 @@ BAD_MENTION_CODE = "bad_mention"
 RUNNER = "runner"
 HOST = "host"
 
-WHY_OFF = "marathon_off"
+WHY_RUNNERS_OFF = "runners_off"
 WHY_MARATHON = "opted_out"
 WHY_RUN = "run"
 WHY_DEFAULT = "default"
 WHY_HOSTS_OFF = "hosts_off"
-WHYS = (WHY_OFF, WHY_MARATHON, WHY_RUN, WHY_DEFAULT, WHY_HOSTS_OFF)
+WHYS = (WHY_RUNNERS_OFF, WHY_MARATHON, WHY_RUN, WHY_DEFAULT, WHY_HOSTS_OFF)
 
 NAMED = "public_people"
 GONE = "not_on_run"
@@ -81,7 +81,7 @@ BECAUSE = {
     WHY_MARATHON: "opted_out",
     WHY_HOSTS_OFF: "hosts_off",
     WHY_RUN: "run_answer",
-    WHY_OFF: "marathon_off",
+    WHY_RUNNERS_OFF: "runners_off",
 }
 
 MOVES = (IN, OUT, DEFAULT, PLAIN, MENTION)
@@ -109,7 +109,7 @@ class Verdict(NamedTuple):
 
 
 class Policy(NamedTuple):
-    master: bool = True
+    runners_on: bool = True
     hosts_on: bool = False
     opted: frozenset[int] = frozenset()
     mentions: Any = None
@@ -145,21 +145,21 @@ def announces_hosts(marathon: Any, default: Any) -> bool:
     return mh.switch_on(marathon, HOSTS, default)
 
 
-def decide(*, master: bool, opted_out: bool, answer: Any, role: str, hosts_on: bool) -> Verdict:
-    """Whether one person is announced for one run: the marathon's switch is the master, then
-    the person's marathon-wide opt-out (a run's own yes gets past it), then the run's own
-    answer, then the default for their part."""
-    if not master:
-        return Verdict(False, WHY_OFF)
-    if opted_out and answer != IN:
-        return Verdict(False, WHY_MARATHON)
+def decide(
+    *, runners_on: bool, opted_out: bool, answer: Any, role: str, hosts_on: bool
+) -> Verdict:
+    """Whether one person is announced for one run: the run's own answer, then their
+    marathon-wide opt-out, then the switch for their part as the default (Runner or Host
+    announcements, neither over the other)."""
     if answer == IN:
         return Verdict(True, WHY_RUN)
     if answer == OUT:
         return Verdict(False, WHY_RUN)
+    if opted_out:
+        return Verdict(False, WHY_MARATHON)
     if role == HOST:
         return Verdict(bool(hosts_on), WHY_DEFAULT if hosts_on else WHY_HOSTS_OFF)
-    return Verdict(True, WHY_DEFAULT)
+    return Verdict(bool(runners_on), WHY_DEFAULT if runners_on else WHY_RUNNERS_OFF)
 
 
 def _ids(raw: Any) -> set[int]:
@@ -211,21 +211,15 @@ def dump_answers(found: dict[int, str]) -> str | None:
 
 
 def policy(
-    marathon: Any, *, master_default: Any, hosts_default: Any, mention_default: Any
+    marathon: Any, *, runners_default: Any, hosts_default: Any, mention_default: Any
 ) -> Policy:
     return Policy(
-        master=announces(marathon, master_default),
+        runners_on=announces(marathon, runners_default),
         hosts_on=announces_hosts(marathon, hosts_default),
         opted=frozenset(opted_out(marathon)),
         mentions=mentions(marathon),
         mention_default=bool(mention_default),
     )
-
-
-def standing(found: Policy) -> Policy:
-    """The policy a post that is already up is followed by: the master going off stops new
-    posts, never one in flight."""
-    return found._replace(master=True)
 
 
 def dump(ids: Any) -> str:
@@ -260,7 +254,7 @@ def baf_on(row: Any) -> list[dict[str, Any]]:
 
 def verdict(found: Policy, row: Any, user_id: Any, role: str) -> Verdict:
     return decide(
-        master=found.master,
+        runners_on=found.runners_on,
         opted_out=int(user_id) in found.opted,
         answer=run_answers(row).get(int(user_id)),
         role=role,
@@ -276,7 +270,7 @@ def host_verdict(found: Policy, row: Any, user_id: Any) -> Verdict:
     """A host weighed for one run of their block: the run's own answer is about their hosting
     only where they do not also run it."""
     return decide(
-        master=found.master,
+        runners_on=found.runners_on,
         opted_out=int(user_id) in found.opted,
         answer=None if runs_it(row, user_id) else run_answers(row).get(int(user_id)),
         role=HOST,
@@ -342,7 +336,7 @@ def still_named(
     """Who a post already up names now. Someone it names stays unless they are left out by
     name; someone a move was aimed at is weighed by the real host switch; anyone it does not
     name joins only when the decision announces them. No record reads as naming everyone."""
-    held = found._replace(master=True)
+    held = found._replace(runners_on=True)
     carried = held._replace(hosts_on=True)
     was = None if recorded is None else {int(one) for one in recorded}
     aimed = {int(one) for one in moved or ()}
@@ -387,7 +381,7 @@ def _first(named: Any, moved: Any) -> list[dict[str, Any]]:
 
 def run_because(row: Any, found: Policy, named: Any, moved: Any = ()) -> str:
     """Which decision left a run's post naming nobody: the person a move was aimed at first."""
-    held = found._replace(master=True)
+    held = found._replace(runners_on=True)
     on = {int(one["user_id"]): one for one in mt.ours(mt.people_of(row))}
     for one in _first(named, moved):
         here = on.get(int(one["user_id"]))
@@ -396,12 +390,12 @@ def run_because(row: Any, found: Policy, named: Any, moved: Any = ()) -> str:
         said = verdict(held, row, here["user_id"], role_of(here))
         if not said.yes:
             return BECAUSE[said.why]
-    return BECAUSE[WHY_OFF] if not found.master else GONE
+    return BECAUSE[WHY_RUNNERS_OFF] if not found.runners_on else GONE
 
 
 def block_because(block: Any, found: Policy, named: Any, moved: Any = ()) -> str:
     """Which decision left a block's post naming nobody."""
-    held = found._replace(master=True)
+    held = found._replace(runners_on=True)
     hosting = {int(one["user_id"]) for one in block.hosts}
     for one in _first(named, moved):
         member = int(one["user_id"])
@@ -411,7 +405,7 @@ def block_because(block: Any, found: Policy, named: Any, moved: Any = ()) -> str
         for why in (WHY_MARATHON, WHY_HOSTS_OFF, WHY_RUN):
             if why in whys:
                 return BECAUSE[why]
-    return BECAUSE[WHY_OFF] if not found.master else GONE
+    return BECAUSE[WHY_HOSTS_OFF] if not found.hosts_on else GONE
 
 
 def all_out(user_ids: Any, opted: set[int]) -> bool:
@@ -472,7 +466,7 @@ def run_move(found: Policy, row: Any, person: dict[str, Any]) -> str:
     has an answer, else the opposite of what the defaults say."""
     if run_answers(row).get(int(person["user_id"])) is not None:
         return DEFAULT
-    return OUT if verdict(standing(found), row, person["user_id"], person["role"]).yes else IN
+    return OUT if verdict(found, row, person["user_id"], person["role"]).yes else IN
 
 
 def mention_move(found: Policy, person: dict[str, Any]) -> str:
@@ -636,7 +630,6 @@ __all__ = [
     "run_answers",
     "run_move",
     "run_people",
-    "standing",
     "state_lines",
     "toggled",
     "verdict",

@@ -243,16 +243,26 @@ async def test_the_heads_up_waits_for_public_reminders(bot, cog):
     assert skipped["because"] == "public_reminders_off"
 
 
-async def test_the_announcements_switch_off_posts_nothing_for_the_host(bot, cog):
+async def test_runner_announcements_off_leaves_the_host_announced(bot, cog):
     marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
     said = await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
-    assert said.ok and "announces nobody" in said.message
+    assert said.ok and "no longer announces its BaF runners" in said.message
+    await walk(bot, cog, marathon, [45, 61])
+    assert len(heads_ups(bot)) == 1 and len(highlights(bot)) == 1
+    skipped = await details_of(bot.db, "marathon.host_reminder_skipped")
+    assert skipped is None or skipped["because"] == "late", skipped
+    assert "marathon.announcements_set" in await kinds(bot.db)
+
+
+async def test_both_switches_off_posts_nothing_for_the_host(bot, cog):
+    marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
+    for which in (mh.ANNOUNCE, mh.HOST_ANNOUNCE):
+        assert (await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, which, False)).ok
     await walk(bot, cog, marathon, [45, 61, 146, 181, 231])
     assert heads_ups(bot) == [] and highlights(bot) == []
     assert (await details_of(bot.db, "marathon.host_reminder_skipped"))[
         "because"
-    ] == "announcements_off"
-    assert "marathon.announcements_set" in await kinds(bot.db)
+    ] == "host_announcements_off"
 
 
 async def test_an_opted_out_host_gets_nothing_and_opting_back_in_resumes_at_the_next_mark(

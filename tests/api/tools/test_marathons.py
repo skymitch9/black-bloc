@@ -760,7 +760,7 @@ async def test_patch_the_announcements_switch_and_the_retired_host_switches_answ
     assert bad.status_code == 422 and bad.json()["error"] == "bad_switch"
     body = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "off"}).json()
     assert body["announcements"] == {"own": False, "on": False, "default": True}
-    assert "announces nobody publicly" in body["message"]
+    assert "no longer announces its BaF runners publicly" in body["message"]
     said = await web_row(wf, web, "web.marathon.announcements_set")
     assert (said["to"], said["on"], said["via"]) == (False, False, "website")
     body = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "follow"}).json()

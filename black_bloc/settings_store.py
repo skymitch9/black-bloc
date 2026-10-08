@@ -6390,7 +6390,7 @@ MARATHON_PING_ROLE_LINE_OFF_KEY = "marathon_ping_role_line_off"
 MARATHON_ROLE_PINGS_KEY = "marathon_role_pings"
 MARATHON_ROLE_PING_LINE_ON_KEY = "marathon_role_ping_line_on"
 MARATHON_ROLE_PING_LINE_KEY_OFF_KEY = "marathon_role_ping_line_key_off"
-MARATHON_ROLE_PING_LINE_ANNOUNCEMENTS_OFF_KEY = "marathon_role_ping_line_announcements_off"
+MARATHON_ROLE_PING_LINE_ANNOUNCEMENTS_OFF_KEY = "marathon_role_ping_line_nobody_announced"
 MARATHON_ROLE_PING_LINE_REHEARSAL_KEY = "marathon_role_ping_line_rehearsal"
 MARATHON_ROLE_PING_LINE_UNSET_KEY = "marathon_role_ping_line_unset"
 MARATHON_ROLE_PING_LINE_GONE_KEY = "marathon_role_ping_line_gone"
@@ -6490,8 +6490,8 @@ MARATHON_HOST_HIGHLIGHTS_KEY = "marathon_host_highlights"
 MARATHON_ANNOUNCEMENTS_DEFAULT_KEY = "marathon_announcements_default"
 MARATHON_CONTROLS_ANNOUNCE_ON_KEY = "marathon_controls_announcements_on"
 MARATHON_CONTROLS_ANNOUNCE_OFF_KEY = "marathon_controls_announcements_off"
-MARATHON_ANNOUNCEMENTS_ON_SAID_KEY = "marathon_announcements_on_said"
-MARATHON_ANNOUNCEMENTS_OFF_SAID_KEY = "marathon_announcements_off_said"
+MARATHON_ANNOUNCEMENTS_ON_SAID_KEY = "marathon_runner_announcements_on_said"
+MARATHON_ANNOUNCEMENTS_OFF_SAID_KEY = "marathon_runner_announcements_off_said"
 MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY = "marathon_public_button_opt_out"
 MARATHON_PUBLIC_BUTTON_OPT_IN_KEY = "marathon_public_button_opt_in"
 MARATHON_ANNOUNCE_OPTED_OUT_SAID_KEY = "marathon_announce_opted_out_said"
@@ -6514,7 +6514,7 @@ MARATHON_ANNOUNCE_STATE_NO_KEY = "marathon_announce_state_no"
 MARATHON_ANNOUNCE_WHY_DEFAULT_KEY = "marathon_announce_why_default"
 MARATHON_ANNOUNCE_WHY_RUN_KEY = "marathon_announce_why_run"
 MARATHON_ANNOUNCE_WHY_MARATHON_KEY = "marathon_announce_why_marathon"
-MARATHON_ANNOUNCE_WHY_OFF_KEY = "marathon_announce_why_off"
+MARATHON_ANNOUNCE_WHY_OFF_KEY = "marathon_announce_why_runners_off"
 MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY = "marathon_announce_why_hosts_off"
 MARATHON_ANNOUNCE_STATE_PLAIN_KEY = "marathon_announce_state_plain"
 MARATHON_ANNOUNCE_RUN_IN_SAID_KEY = "marathon_announce_run_in_said"
@@ -6544,7 +6544,6 @@ MARATHON_NEAR_MISS_ANSWERED_KEY = "marathon_near_miss_answered"
 MARATHON_NEAR_MISS_FIELDS = ("runner", "member", "username", "display_name", "marathon")
 MARATHON_NEAR_MISS_DONE_FIELDS = (*MARATHON_NEAR_MISS_FIELDS, "staff")
 MARATHON_PUBLIC_REMOVED_KEY = "marathon_public_removed"
-MARATHON_PUBLIC_NOT_POSTABLE_KEY = "marathon_public_not_postable"
 MARATHON_PUBLIC_AUTO_ON_SAID_KEY = "marathon_public_auto_on_said"
 MARATHON_PUBLIC_AUTO_OFF_SAID_KEY = "marathon_public_auto_off_said"
 MARATHON_PUBLIC_AUTO_SAME_KEY = "marathon_public_auto_same_said"
@@ -6751,25 +6750,24 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "every marathon_reminder_minutes mark before the block's first run in "
         "marathon_reminder_channel_id while marathon_public_reminders is on, and the public "
         "highlight (marathon_public_template) when the block goes live and the marathon's "
-        "Auto-highlight is on. Both follow the marathon's BaF announcements switch and "
+        "Auto-highlight is on. Both follow the marathon's Host announcements switch and "
         "each host's opt-out. A host still never makes a run a BaF run. on by default",
     ),
     MARATHON_ANNOUNCEMENTS_DEFAULT_KEY: (
         "bool",
         True,
-        "whether a marathon announces its BaF people publicly at all — the master over "
-        "runners and hosts alike — when its own BaF announcements switch follows this "
-        "setting. Off, nobody on that marathon gets a public post. On, runners are announced "
-        "and hosts also need Host announcements; anyone can still be opted out one by one. "
-        "on by default",
+        "whether a marathon announces its BaF RUNNERS publicly — each run's reminders and "
+        "highlight — when its own Runner announcements switch follows this setting. Hosts "
+        "follow Host announcements; neither switch is over the other. A run's own answer for a "
+        "runner beats this switch either way. on by default",
     ),
     MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY: (
         "bool",
         False,
         "whether a marathon announces its BaF HOSTS publicly — a host block's reminders and "
-        "highlight — when its own Host announcements switch follows this setting. Runners are "
-        "announced either way; a host can still be announced for one run from that run's post. "
-        "The marathon's BaF announcements switch is the master over both. off by default",
+        "highlight — when its own Host announcements switch follows this setting. Runners "
+        "follow Runner announcements; neither switch is over the other. A run's own answer for a "
+        "host beats this switch either way. off by default",
     ),
     MARATHON_MENTION_PEOPLE_KEY: (
         "bool",
@@ -7195,7 +7193,7 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "bool",
         True,
         "whether every reminder of a tracked marathon also posts publicly, in "
-        "marathon_reminder_channel_id — the master switch over every marathon's BaF "
+        "marathon_reminder_channel_id — the switch over every marathon's runner and host "
         "announcements, for reminders. on by default; off keeps reminders in the staff thread "
         "only",
     ),
@@ -7547,29 +7545,30 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{marathon}",
     ),
     MARATHON_CONTROLS_ANNOUNCE_ON_KEY: (
-        "BaF announcements: on · turn off",
+        "Runner announcements: on · turn off",
         (),
-        "the thread controls' announcements button while the marathon's BaF runners and hosts "
-        "are announced publicly",
+        "the thread controls' runner announcements button while the marathon's BaF runners are "
+        "announced publicly",
     ),
     MARATHON_CONTROLS_ANNOUNCE_OFF_KEY: (
-        "BaF announcements: off · turn on",
+        "Runner announcements: off · turn on",
         (),
-        "the thread controls' announcements button while nobody on the marathon is announced "
-        "publicly",
+        "the thread controls' runner announcements button while the marathon's BaF runners are "
+        "not announced publicly",
     ),
     MARATHON_ANNOUNCEMENTS_ON_SAID_KEY: (
-        "**{marathon}** announces its BaF runners and hosts publicly now — reminders at every "
-        "mark, and highlights while Auto-highlight is on. Anyone can be opted out on their own.",
+        "**{marathon}** announces its BaF runners publicly now — reminders at every mark, and "
+        "highlights while Auto-highlight is on. A runner can still be left out of one run.",
         ("marathon",),
-        "what staff are told once a marathon's BaF announcements switch is on. It takes "
+        "what staff are told once a marathon's Runner announcements switch is on. It takes "
         "{marathon}",
     ),
     MARATHON_ANNOUNCEMENTS_OFF_SAID_KEY: (
-        "**{marathon}** announces nobody publicly now — no reminders and no highlights. Posts "
-        "already up follow their runs to the end.",
+        "**{marathon}** no longer announces its BaF runners publicly. A runner can still be "
+        "announced for one run from that run's post; posts already up follow their runs to the "
+        "end.",
         ("marathon",),
-        "what staff are told once a marathon's BaF announcements switch is off. It takes "
+        "what staff are told once a marathon's Runner announcements switch is off. It takes "
         "{marathon}",
     ),
     MARATHON_CONTROLS_HOST_ANNOUNCE_ON_KEY: (
@@ -7609,9 +7608,9 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_ANNOUNCE_BUTTON_RUN_IN_KEY: (
         "Announce {name} for this run",
         ("name",),
-        "the same button for a person who would not be announced for that run (a host while "
-        "Host announcements are off, or someone opted out of the whole marathon): it announces "
-        "them for that run. It takes {name}",
+        "the same button for a person who would not be announced for that run (the switch for "
+        "their part is off, or they are opted out of the whole marathon): it announces them for "
+        "that run. It takes {name}",
     ),
     MARATHON_ANNOUNCE_BUTTON_RUN_DEFAULT_KEY: (
         "{name}: back to the default for this run",
@@ -7668,9 +7667,10 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{why} of that line while the person is opted out of the whole marathon",
     ),
     MARATHON_ANNOUNCE_WHY_OFF_KEY: (
-        "BaF announcements are off for this marathon",
+        "runner announcements are off for this marathon",
         (),
-        "{why} of that line while the marathon's BaF announcements switch is off",
+        "{why} of that line for a runner while the marathon's Runner announcements switch is "
+        "off",
     ),
     MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY: (
         "host announcements are off for this marathon",
@@ -7718,9 +7718,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY: (
         "Opt out of every run on this marathon",
         (),
-        "the button on a BaF run's post in the staff thread, and on a BaF person in the People "
-        "slot view, that opts the person out of this marathon's public posts — every run of "
-        "theirs on it. It posts nothing",
+        "the button on a BaF person in the People slot view that opts the person out of this "
+        "marathon's public posts — every run of theirs on it. It posts nothing",
     ),
     MARATHON_PUBLIC_BUTTON_OPT_IN_KEY: (
         "Opt back in to this marathon",
@@ -8321,13 +8320,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "updated after unless they opt back in. It takes the same words as "
         "marathon_public_template",
     ),
-    MARATHON_PUBLIC_NOT_POSTABLE_KEY: (
-        "**{game}** is off the schedule or nobody from BaF is on it any more, so it was not "
-        "highlighted.",
-        ("runner", "game"),
-        "the refusal when Highlight is pressed on a run that was dropped or unlinked. It takes "
-        "{runner} {game}",
-    ),
     MARATHON_PUBLIC_AUTO_ON_SAID_KEY: (
         "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.",
         ("marathon", "channel"),
@@ -8438,10 +8430,11 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the heads-up. It takes {key}, the setting that is off",
     ),
     MARATHON_ROLE_PING_LINE_ANNOUNCEMENTS_OFF_KEY: (
-        "The Marathon role is not mentioned: this marathon's BaF announcements are off, so "
-        "no public heads-up posts.",
+        "The Marathon role is not mentioned: this marathon's runner and host announcements "
+        "are both off, so no public heads-up posts.",
         (),
-        "the line under a marathon's ping switch while its BaF announcements are off",
+        "the line under a marathon's ping switch while its Runner and Host announcements are "
+        "both off",
     ),
     MARATHON_ROLE_PING_LINE_REHEARSAL_KEY: (
         "The Marathon role is not mentioned while marathon posts rehearse: marathon_mode is "

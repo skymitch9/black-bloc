@@ -28,19 +28,6 @@ def test_a_button_posted_before_the_opt_out_maps_to_the_toggle():
     assert mp.move_of(mp.OPT_OUT) == mp.OPT_OUT and mp.move_of(mp.OPT_IN) == mp.OPT_IN
 
 
-def test_the_button_is_opt_out_until_everyone_on_the_run_is_out_and_none_for_nobody():
-    kwargs = {"out_label": "Opt out of highlight", "in_label": "Opt back in"}
-    assert mp.button_for(7, a_row(), opted=set(), **kwargs) == mp.Button(
-        "marathon:highlight:7:3:optout", "Opt out of highlight", "optout"
-    )
-    assert mp.button_for(7, a_row(), opted={9001}, **kwargs) == mp.Button(
-        "marathon:highlight:7:3:optin", "Opt back in", "optin"
-    )
-    up = a_row(public_message_id=55, public_channel_id=111)
-    assert mp.button_for(7, up, opted=set(), **kwargs).to == mp.OPT_OUT
-    assert mp.button_for(7, a_row(people=NOBODY), opted=set(), **kwargs) is None
-
-
 def test_auto_wants_a_switched_on_marathon_and_a_run_never_highlighted():
     on, off = {"public_highlight": 1}, {"public_highlight": 0}
     assert mp.auto_wanted(on, a_row(state="live"))

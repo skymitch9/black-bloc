@@ -1,5 +1,5 @@
-"""BaF announcements: whether a marathon posts its BaF people publicly, who is opted out of
-it, each run's own answer and who is written without an @."""
+"""Marathon announcements: Runner and Host announcements, who is opted out of the marathon,
+each run's own answer and who is written without an @."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ STATE_KEYS = {
     ma.WHY_DEFAULT: MARATHON_ANNOUNCE_WHY_DEFAULT_KEY,
     ma.WHY_RUN: MARATHON_ANNOUNCE_WHY_RUN_KEY,
     ma.WHY_MARATHON: MARATHON_ANNOUNCE_WHY_MARATHON_KEY,
-    ma.WHY_OFF: MARATHON_ANNOUNCE_WHY_OFF_KEY,
+    ma.WHY_RUNNERS_OFF: MARATHON_ANNOUNCE_WHY_OFF_KEY,
     ma.WHY_HOSTS_OFF: MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY,
 }
 RUN_SAID = {
@@ -85,10 +85,15 @@ def announces(bot: Any, guild_id: int, marathon: Any) -> bool:
     return ma.announces(marathon, bot.store.get(guild_id, MARATHON_ANNOUNCEMENTS_DEFAULT_KEY))
 
 
+def anyone_announced(bot: Any, guild_id: int, marathon: Any) -> bool:
+    found = policy_of(bot, guild_id, marathon)
+    return found.runners_on or found.hosts_on
+
+
 def policy_of(bot: Any, guild_id: int, marathon: Any) -> ma.Policy:
     return ma.policy(
         marathon,
-        master_default=bot.store.get(guild_id, MARATHON_ANNOUNCEMENTS_DEFAULT_KEY),
+        runners_default=bot.store.get(guild_id, MARATHON_ANNOUNCEMENTS_DEFAULT_KEY),
         hosts_default=bot.store.get(guild_id, MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY),
         mention_default=bot.store.get(guild_id, MARATHON_MENTION_PEOPLE_KEY),
     )
@@ -463,6 +468,7 @@ async def press(
 
 __all__ = [
     "announces",
+    "anyone_announced",
     "as_written",
     "baf_people",
     "named",

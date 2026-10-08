@@ -109,19 +109,6 @@ def move_of(to: Any) -> str:
     return LEGACY.get(str(to), str(to))
 
 
-def button_for(
-    marathon_id: Any, row: Any, *, opted: set[int], out_label: str, in_label: str
-) -> Button | None:
-    """Opt back in while everyone of ours on the run is opted out; Opt out otherwise; nothing
-    for a run nobody from BaF is on. It posts nothing."""
-    members = mt.member_ids(row)
-    if not members:
-        return None
-    if ma.all_out(members, opted):
-        return Button(custom_id(marathon_id, row["id"], OPT_IN), label(in_label), OPT_IN)
-    return Button(custom_id(marathon_id, row["id"], OPT_OUT), label(out_label), OPT_OUT)
-
-
 def shown_button(message: Any) -> tuple | bool:
     """What a fetched message carries, in order: its buttons and its menu as `button_of` makes
     them, or False when the message cannot say (it was never read with its components)."""
@@ -243,7 +230,6 @@ __all__ = [
     "SHADOW_FEATURE",
     "TEMPLATE",
     "auto_wanted",
-    "button_for",
     "channel_of",
     "clean_switch",
     "custom_id",

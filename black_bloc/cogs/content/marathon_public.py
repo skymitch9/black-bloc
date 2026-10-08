@@ -27,14 +27,11 @@ from ...settings_store import (
     MARATHON_PUBLIC_AUTO_OFF_SAID_KEY,
     MARATHON_PUBLIC_AUTO_ON_SAID_KEY,
     MARATHON_PUBLIC_AUTO_SAME_KEY,
-    MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
-    MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
     MARATHON_PUBLIC_CHANNEL_KEY,
     MARATHON_PUBLIC_DAY_EARLIER_KEY,
     MARATHON_PUBLIC_DAY_TODAY_KEY,
     MARATHON_PUBLIC_DEFAULT_KEY,
     MARATHON_PUBLIC_DONE_TEMPLATE_KEY,
-    MARATHON_PUBLIC_NOT_POSTABLE_KEY,
     MARATHON_PUBLIC_REMOVED_KEY,
     MARATHON_PUBLIC_TEMPLATE_KEY,
     MARATHON_RUNNER_POST_UNLISTED_KEY,
@@ -48,7 +45,6 @@ from .marathon import (
     MODE_ON,
     NO_CHANNEL,
     NO_SUCH,
-    NO_SUCH_RUN_CODE,
     NOT_VISIBLE,
     TEST_MODE,
     channel_login,
@@ -56,7 +52,6 @@ from .marathon import (
     get_marathon,
     mode_of,
     now_for,
-    run_by_id,
     runs_of,
     said_default,
     update_marathon,
@@ -66,8 +61,12 @@ from .marathon import (
 
 log = logging.getLogger(__name__)
 
-NOT_POSTABLE_CODE = "not_postable"
 NOBODY = "nobody_announced"
+WHOLE_MARATHON_GONE = (
+    "That button is gone — opt someone out of every run on this marathon from People… in "
+    "/event, so nothing was changed."
+)
+GONE_CODE = "gone"
 
 
 def words(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
@@ -119,17 +118,10 @@ def shadowed(bot: Any, guild: Any, text: str, home: int | None = None) -> str:
 
 
 def button_of(bot: Any, guild: Any, marathon: Any, row: Any) -> tuple:
-    """What a run's post carries: the whole-marathon opt-out, then each person's own moves."""
+    """What a run's post carries: each person's own moves for this run."""
     from .marathon_announce import controls_of
 
-    whole = mp.button_for(
-        marathon["id"],
-        row,
-        opted=ma.opted_out(marathon),
-        out_label=words(bot, guild.id, MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY),
-        in_label=words(bot, guild.id, MARATHON_PUBLIC_BUTTON_OPT_IN_KEY),
-    )
-    return (() if whole is None else (whole,)) + controls_of(bot, guild, marathon, row)
+    return controls_of(bot, guild, marathon, row)
 
 
 def people_for(
@@ -172,7 +164,7 @@ def why_down(bot: Any, guild: Any, marathon: Any, row: Any, was: Any, moved: Any
 
 
 def view_of(buttons: Any, marathon_id: Any, run_id: Any) -> discord.ui.View | None:
-    """The whole-marathon button on the first row, then a row a person, or the one menu."""
+    """A row a person, or the menus."""
     if not buttons:
         return None
     view = discord.ui.View(timeout=None)
@@ -555,16 +547,12 @@ async def sync_highlights(cog: Any, guild: Any, marathon: Any) -> None:
 
 
 async def auto_highlight(cog: Any, guild: Any, marathon: Any, row: Any) -> None:
-    """The moment a run's shoutout fires: posted when the marathon's switch is on, never
+    """The moment a run's shoutout fires: posted when someone on the run is announced, never
     again once staff took it down. A failure here never breaks the shoutout."""
-    from .marathon_announce import announces
-
     try:
         if not mi.is_tracked(marathon) or not mp.auto_wanted(marathon, row):
             return
         if mode_of(cog.bot, guild.id) == MODE_OFF or public_channel(cog.bot, guild.id) is None:
-            return
-        if not announces(cog.bot, guild.id, marathon):
             return
         if not people_for(cog.bot, guild, marathon, row):
             return
@@ -573,42 +561,9 @@ async def auto_highlight(cog: Any, guild: Any, marathon: Any, row: Any) -> None:
         log.warning("marathon: the auto-highlight failed — %s", reason_of(exc))
 
 
-async def press(
-    bot: Any,
-    guild: Any,
-    actor: Any,
-    marathon_id: Any,
-    run_id: Any,
-    to: str,
-    *,
-    via: str = VIA_DISCORD,
-) -> Outcome:
-    """The button on a runner post: opts every BaF person on the run out of (or back in to)
-    this marathon's public posts. It never posts anything itself."""
-    from .marathon_announce import set_opt_out
-
-    marathon = await get_marathon(bot.db, guild.id, marathon_id)
-    if marathon is None or cog_of(bot) is None:
-        return refusal(mt.NO_SUCH_MARATHON.format(given=marathon_id), NO_SUCH, 404)
-    row = await run_by_id(bot.db, marathon["id"], run_id)
-    if row is None:
-        return refusal(mt.NO_SUCH_RUN.format(name=marathon["name"]), NO_SUCH_RUN_CODE, 404)
-    members = mt.member_ids(row)
-    if not members:
-        return refusal(
-            words(
-                bot,
-                guild.id,
-                MARATHON_PUBLIC_NOT_POSTABLE_KEY,
-                runner=mrp.names_of(row),
-                game=row["game"],
-            ),
-            NOT_POSTABLE_CODE,
-            409,
-        )
-    return await set_opt_out(
-        bot, guild, actor, marathon, members, mp.move_of(to) == mp.OPT_OUT, via=via
-    )
+async def press(*_: Any, **__: Any) -> Outcome:
+    """The retired whole-marathon button on an old run post: it answers in words."""
+    return refusal(WHOLE_MARATHON_GONE, GONE_CODE, 410)
 
 
 async def put_back(

@@ -365,9 +365,12 @@ async def test_each_reason_has_its_own_words_and_the_words_are_settings(bot, cog
     assert "no role is picked in marathon_role_id" in line()
     await bot.store.set(GUILD, "marathon_role_ping_line_unset", "Pick the role first.")
     assert line() == "Pick the role first."
-    await update_marathon(bot.db, marathon["id"], announcements=0)
+    await update_marathon(bot.db, marathon["id"], announcements=0, host_announcements=1)
     marathon = await fresh(bot, marathon)
-    assert "BaF announcements are off" in line()
+    assert role_ping.state_of(bot, bot.guild, marathon)["reason"] != mrp.ANNOUNCEMENTS_OFF
+    await update_marathon(bot.db, marathon["id"], host_announcements=0)
+    marathon = await fresh(bot, marathon)
+    assert "runner and host announcements are both off" in line()
     state = role_ping.state_of(bot, bot.guild, marathon)
     assert state == {"mentions": False, "reason": mrp.ANNOUNCEMENTS_OFF, "line": line()}
 
