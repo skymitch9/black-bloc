@@ -1,5 +1,7 @@
 export const OPEN = ['ready', 'called', 'reported', 'disputed'];
-export const LIVE = ['signups', 'check_in', 'seeding', 'running'];
+export const LIVE = ['signups', 'check_in', 'seeding', 'pools', 'running'];
+export const PLAYING = ['pools', 'running'];
+const PLAYED = ['reported', 'disputed', 'complete'];
 export const BEFORE_START = ['draft', 'signups', 'check_in', 'seeding'];
 export const ELIMINATION = ['single', 'double'];
 
@@ -204,6 +206,43 @@ export function sortedStandings(rows) {
     .map((one) => one.row);
 }
 
+/** Every set of the tournament: each pool's, then the bracket's. */
+export function allSets(t) {
+  return [...(t.pools || []).flatMap((pool) => pool.sets || []), ...(t.sets || [])];
+}
+
+export function poolLetter(pool) {
+  return String.fromCharCode(64 + Number(pool));
+}
+
+/** The rows of `order` moved, in that order, into the places those rows held; the rest stay. */
+export function reorderedRows(rows, order) {
+  const wanted = (order || []).filter((id) => rows.some((row) => row.entrant === id));
+  const picked = wanted.map((id) => rows.find((row) => row.entrant === id));
+  let at = 0;
+  return rows.map((row) => (wanted.includes(row.entrant) ? picked[at++] : row));
+}
+
+/** A pool's table with its cut: who is through, who is tied across the line, and where the line falls. */
+export function poolTable(pool, order = null) {
+  const tied = new Set(pool.tied || []);
+  const rows = reorderedRows(sortedStandings(pool.standings || []), order);
+  const line = Math.min(Number(pool.cut) || 0, rows.length);
+  return { rows: rows.map((row, at) => ({ ...row, through: at < line, tied: tied.has(row.entrant) })), line };
+}
+
+/** The organiser's order for a pool's tie: what they set, else the table's own order. */
+export function tieOrder(pool, chosen = null) {
+  const tied = pool.tied || [];
+  if (chosen && chosen.length === tied.length && chosen.every((id) => tied.includes(id))) return chosen.slice();
+  return sortedStandings(pool.standings || []).map((row) => row.entrant).filter((id) => tied.includes(id));
+}
+
+/** Back to pools is legal while no set of the final has a result. */
+export function finalUntouched(t) {
+  return t.phase === 'final' && !(t.sets || []).some((one) => PLAYED.includes(one.state));
+}
+
 function entrantOf(t, id) {
   return (t.entrants || []).find((one) => one.id === id) || null;
 }
@@ -226,20 +265,21 @@ export function memberMoves(t, mode) {
   if (t.state === 'signups' && !isIn(me) && !(me && me.dropped_why === 'removed') && !full) found.push('join');
   if (t.state === 'check_in' && isIn(me) && !me.checked_in) found.push('check_in');
   if (BEFORE_START.includes(t.state) && isIn(me)) found.push('leave');
-  if (t.state === 'running' && isIn(me) && (t.sets || []).some((one) => one.slot_a === me.id || one.slot_b === me.id)) found.push('drop_out');
+  if (PLAYING.includes(t.state) && isIn(me) && allSets(t).some((one) => one.slot_a === me.id || one.slot_b === me.id)) found.push('drop_out');
   return found;
 }
 
 /** The organiser moves on the tournament legal in its state, as the panel offers them. */
 export function organiserMoves(t, { mode = 'shadow', staff = false } = {}) {
   if (!t.may_run || mode === 'off') return [];
-  const ready = (t.sets || []).some((one) => one.state === 'ready');
+  const ready = allSets(t).some((one) => one.state === 'ready');
   const byState = {
     draft: ['open_signups', 'edit', 'cancel'],
     signups: ['close_signups', 'open_check_in', 'edit', 'cancel'],
     check_in: ['close_check_in', 'edit', 'cancel'],
     seeding: ['open_signups', 'open_check_in', 'start', 'edit', 'cancel'],
-    running: [ready ? 'call_ready' : null, t.finished ? 'complete' : null, 'unstart', 'cancel'],
+    pools: [ready ? 'call_ready' : null, t.pools_finished ? 'advance' : null, 'unstart', 'cancel'],
+    running: [ready ? 'call_ready' : null, t.finished ? 'complete' : null, finalUntouched(t) ? 'unadvance' : null, 'unstart', 'cancel'],
     complete: ['reopen', 'cancel'],
     cancelled: ['restore'],
   };
@@ -250,7 +290,8 @@ export function organiserMoves(t, { mode = 'shadow', staff = false } = {}) {
 
 /** What the viewer may do on one set: a player's moves and, for an organiser, the deciding ones. */
 export function setMoves(t, set, { mode = 'shadow' } = {}) {
-  if (mode === 'off' || t.state !== 'running') return [];
+  if (mode === 'off' || !PLAYING.includes(t.state)) return [];
+  if (set.pool && t.phase === 'final') return [];
   const me = t.mine;
   const side = me !== null && me !== undefined ? (set.slot_a === me ? 'a' : set.slot_b === me ? 'b' : null) : null;
   const found = [];

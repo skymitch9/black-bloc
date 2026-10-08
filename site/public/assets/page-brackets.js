@@ -5,6 +5,8 @@ import {
   ELIMINATION,
   LIVE,
   OPEN,
+  PLAYING,
+  allSets,
   eliminationLayout,
   fill,
   memberMoves,
@@ -12,12 +14,15 @@ import {
   myEntrant,
   organiserMoves,
   placeWords,
+  poolLetter,
+  poolTable,
   resultsGrid,
   roundsLayout,
   scoreChoices,
   seedOrderWith,
   setMoves,
   sortedStandings,
+  tieOrder,
   TREE,
   treeSize,
 } from './bracket-layout.js';
@@ -52,7 +57,8 @@ const POLL_MS = 15000;
 const TAB = 'brackets';
 const LENGTHS = [1, 3, 5, 7, 9, 11, 13, 15];
 const FORMATS = ['double', 'single', 'round_robin', 'swiss'];
-const STATE_TONES = { signups: 'info', check_in: 'info', seeding: 'warn', running: 'ok', cancelled: 'danger' };
+const POOL_FORMATS = ['none', 'round_robin', 'swiss'];
+const STATE_TONES = { signups: 'info', check_in: 'info', seeding: 'warn', pools: 'ok', running: 'ok', cancelled: 'danger' };
 const SET_TONES = { ready: 'info', called: 'warn', reported: 'info', disputed: 'danger', complete: 'ok' };
 const OUT_WORDS = { removed: 'removed', left: 'left', no_show: 'no-show', dropped: 'dropped' };
 
@@ -70,6 +76,8 @@ const ORGANISER = {
   call_ready: 'Call ready sets',
   move: 'Move to #knuck-up',
   edit: 'Edit…',
+  advance: 'Advance to the final',
+  unadvance: 'Back to pools',
 };
 const PATHS = {
   open_signups: 'signups/open',
@@ -83,13 +91,17 @@ const PATHS = {
   cancel: 'cancel',
   restore: 'restore',
   move: 'move',
+  advance: 'advance',
+  unadvance: 'unadvance',
 };
 const ASKS = {
+  advance: ["Build {name}'s final from the pools?", 'Advance'],
+  unadvance: ["Send {name} back to its pools? The final's sets are cleared.", 'Back to pools'],
   unstart: ['Back to seeding? Every set and result is cleared.', 'Back to seeding'],
   cancel: ['Cancel {name}?', 'Cancel it'],
   move: ['Move {name} into #knuck-up? Its cards are posted there and its players are pinged.', 'Move it'],
 };
-const TONES = { cancel: 'danger', unstart: 'warn', move: 'warn', start: null };
+const TONES = { cancel: 'danger', unstart: 'warn', move: 'warn', start: null, advance: 'warn', unadvance: 'warn' };
 const WORDS = {
   newTournament: 'New tournament',
   editTitle: 'Edit {name}',
@@ -170,6 +182,17 @@ const WORDS = {
   byesNote: '{byes} bye(s)',
   bracketEmpty: 'The bracket is drawn when the tournament starts.',
   move: 'Drag to reorder',
+  pools: 'Pools',
+  final: 'Final',
+  poolsFormat: 'Pools',
+  noPools: 'None',
+  poolCountLabel: 'How many pools',
+  advancePer: 'Through from each',
+  losersFrom: 'Losers from place',
+  poolsBestOf: 'Pool best of',
+  poolRounds: 'Pool Swiss rounds',
+  tied: 'tied',
+  raise: 'Move up',
 };
 
 const view = {
@@ -184,6 +207,7 @@ const view = {
   seedOrder: null,
   readAt: 0,
   failed: null,
+  ties: {},
   timer: null,
   clock: null,
   filter: { query: '', filter: 'all' },
@@ -211,6 +235,10 @@ function stamp(iso) {
 
 function formatWords(format) {
   return w(`brackets_format_${format}_words`) || format;
+}
+
+function poolsWords(format) {
+  return format && format !== 'none' ? `${formatWords(format)} pools` : null;
 }
 
 function stateBadge(state) {
@@ -253,6 +281,7 @@ function listRow(t) {
   const cap = t.entrant_cap ? `${t.entrant_count ?? 0}/${t.entrant_cap}` : String(t.entrant_count ?? 0);
   const bits = [
     t.game,
+    poolsWords(t.pools_format),
     formatWords(t.format),
     `${cap} ${cap === '1' ? 'entrant' : 'entrants'}`,
     t.starts_at && BEFORE_START.includes(t.state) ? stamp(t.starts_at) : null,
@@ -269,7 +298,7 @@ function listRow(t) {
 
 function ordered(rows) {
   const live = rows.filter((t) => LIVE.includes(t.state) || t.state === 'draft');
-  const rank = { running: 0, check_in: 1, signups: 2, seeding: 3, draft: 4 };
+  const rank = { running: 0, pools: 0, check_in: 1, signups: 2, seeding: 3, draft: 4 };
   live.sort((a, b) => rank[a.state] - rank[b.state] || String(a.starts_at || '9').localeCompare(String(b.starts_at || '9')) || a.id - b.id);
   const done = rows.filter((t) => t.state === 'complete').sort((a, b) => String(b.starts_at || '').localeCompare(String(a.starts_at || '')) || b.id - a.id);
   const gone = rows.filter((t) => t.state === 'cancelled').sort((a, b) => b.id - a.id);
@@ -357,7 +386,7 @@ async function organiserMove(move) {
   const t = view.t;
   if (move === 'edit') return optionsDrawer(t);
   if (move === 'call_ready') {
-    const ready = t.sets.filter((one) => one.state === 'ready');
+    const ready = allSets(t).filter((one) => one.state === 'ready');
     for (const one of ready) {
       const done = await act(`${base(t.id)}/sets/${encodeURIComponent(one.key)}/call`);
       if (!done.ok) break;
@@ -369,7 +398,13 @@ async function organiserMove(move) {
     const yes = await ask({ title: said(title, { name: t.name }), body: [], confirmLabel, tone: TONES[move] || 'danger' });
     if (!yes) return null;
   }
-  return act(`${base(t.id)}/${PATHS[move]}`, move === 'complete' ? {} : {});
+  if (move === 'advance') {
+    const order = (t.pools || []).flatMap((pool) => (pool.tied && pool.tied.length ? tieOrder(pool, view.ties[pool.pool]) : []));
+    const done = await act(`${base(t.id)}/advance`, order.length ? { order } : {});
+    if (done.ok) view.ties = {};
+    return done;
+  }
+  return act(`${base(t.id)}/${PATHS[move]}`, {});
 }
 
 const MEMBER_LABELS = {
@@ -381,7 +416,7 @@ const MEMBER_LABELS = {
 
 function moveBar(t) {
   const members = memberMoves(t, mode()).map((move) => button(w(MEMBER_LABELS[move]), () => memberMove(move), { tone: move === 'join' || move === 'check_in' ? 'warn' : 'quiet', small: false }));
-  const organisers = organiserMoves(t, { mode: mode(), staff: staff() }).map((move) => button(ORGANISER[move], () => organiserMove(move), { tone: move === 'cancel' ? 'danger' : ['start', 'complete', 'open_signups', 'open_check_in', 'move', 'restore', 'reopen'].includes(move) ? 'warn' : 'quiet' }));
+  const organisers = organiserMoves(t, { mode: mode(), staff: staff() }).map((move) => button(ORGANISER[move], () => organiserMove(move), { tone: move === 'cancel' ? 'danger' : ['start', 'complete', 'open_signups', 'open_check_in', 'move', 'restore', 'reopen', 'advance'].includes(move) ? 'warn' : 'quiet' }));
   if (!members.length && !organisers.length) return null;
   return el('div', { class: 'bk-moves' }, [
     members.length ? bar(members) : null,
@@ -394,6 +429,10 @@ function moveBar(t) {
 function optionWords(t) {
   const o = t.options || {};
   const found = [`Bo${o.best_of}`];
+  if (o.pools_format && o.pools_format !== 'none') {
+    found.unshift(w('brackets_card_pools_words', { count: o.pool_count, format: formatWords(o.pools_format), advance: o.advance_per_pool }));
+    if (t.format === 'double' && o.advance_losers_from) found.push(w('brackets_card_losers_words', { place: o.advance_losers_from }));
+  }
   if (t.format === 'double' && o.grand_final_reset) found.push(w('brackets_card_reset_words'));
   if (t.format === 'single' && o.third_place) found.push(w('brackets_card_third_words'));
   if (t.format === 'swiss' && t.rounds_to_play) found.push(w('brackets_card_rounds_words', { rounds: t.rounds_to_play }));
@@ -405,13 +444,13 @@ function optionWords(t) {
 }
 
 function waitingLine(t) {
-  if (t.state !== 'running' || t.mine === null || t.mine === undefined) return null;
+  if (!PLAYING.includes(t.state) || t.mine === null || t.mine === undefined) return null;
   const mine = (t.waiting_on || []).find((one) => one.entrant === t.mine);
   if (!mine) return null;
   const opponent = (t.entrants.find((one) => one.id === mine.opponent) || {}).name || '';
   const text = w(`brackets_waiting_${mine.what}`, { set: mine.set || '', opponent });
   if (!text) return null;
-  const set = mine.set ? t.sets.find((one) => one.key === mine.set) : null;
+  const set = mine.set ? allSets(t).find((one) => one.key === mine.set) : null;
   const tone = ['play', 'called', 'confirm'].includes(mine.what) ? 'warn' : null;
   return el('div', { class: 'bk-you', 'data-tone': tone || undefined }, [
     set && setMoves(t, set, { mode: mode() }).length
@@ -432,7 +471,7 @@ function headBody(t) {
   const times = [];
   if (t.starts_at && BEFORE_START.includes(t.state)) times.push(stamp(t.starts_at));
   if (t.state === 'check_in' && t.check_in_closes_at) times.push(`check-in closes ${clockTime(t.check_in_closes_at, view.zone)}`);
-  if (t.state === 'running' && t.started_at) times.push(`started ${stamp(t.started_at)}`);
+  if (PLAYING.includes(t.state) && t.started_at) times.push(`started ${stamp(t.started_at)}`);
   if (t.state === 'complete' && t.completed_at) times.push(stamp(t.completed_at));
   return [
     el('div', { class: 'bk-title' }, [el('h2', { class: 'bk-name', text: t.name }), stateBadge(t.state), t.shadow && view.index.may_run ? badge('rehearsal', 'warn') : null]),
@@ -476,14 +515,14 @@ function entrantActions(t, one) {
   const out = one.dropped || one.dq;
   const parts = [];
   if (out) {
-    const back = BEFORE_START.includes(t.state) || (t.state === 'running' && (one.dq || one.dropped_why === 'dropped'));
+    const back = BEFORE_START.includes(t.state) || (PLAYING.includes(t.state) && (one.dq || one.dropped_why === 'dropped'));
     if (back && t.state !== 'complete') parts.push(button(WORDS.restore, () => entrantMove(`${path}/restore`), { tone: 'quiet' }));
   } else if (BEFORE_START.includes(t.state)) {
     if (t.state === 'check_in') {
       parts.push(button(one.checked_in ? WORDS.checkOutTo : WORDS.checkInTo, () => entrantMove(`${path}/checkin`, { checked_in: !one.checked_in }), { tone: 'quiet' }));
     }
     parts.push(button(WORDS.remove, () => reasonRow(holder, 'Remove', (reason) => entrantMove(path, { reason }, 'DELETE')), { tone: 'quiet' }));
-  } else if (t.state === 'running') {
+  } else if (PLAYING.includes(t.state)) {
     parts.push(button(WORDS.dq, () => reasonRow(holder, 'DQ', (reason) => entrantMove(`${path}/dq`, { reason })), { tone: 'quiet' }));
     parts.push(button(WORDS.drop, () => reasonRow(holder, 'Drop', (reason) => entrantMove(`${path}/drop`, { reason })), { tone: 'quiet' }));
   }
@@ -493,7 +532,7 @@ function entrantActions(t, one) {
 }
 
 function entrantLine(t, one, { handle = null, seed = null, placed = false } = {}) {
-  const waiting = t.state === 'running' ? (t.waiting_on || []).find((row) => row.entrant === one.id) : null;
+  const waiting = PLAYING.includes(t.state) ? (t.waiting_on || []).find((row) => row.entrant === one.id) : null;
   const opponent = waiting && waiting.opponent ? (t.entrants.find((row) => row.id === waiting.opponent) || {}).name : '';
   const lead = placed ? placeWords(one.placement) || '—' : seed ?? (one.seed ?? '—');
   const notes = [
@@ -645,8 +684,9 @@ function entrantsBody(t) {
     ].filter(Boolean);
     parts.push(tools.length ? bar(tools) : null, say, seedingList(t));
   } else {
-    const playing = new Set(t.sets.flatMap((one) => [one.slot_a, one.slot_b]).filter((id) => id !== null));
-    const pool = t.sets.length ? t.entrants.filter((one) => playing.has(one.id)) : activeOf(t);
+    const sets = allSets(t);
+    const playing = new Set(sets.flatMap((one) => [one.slot_a, one.slot_b]).filter((id) => id !== null));
+    const pool = sets.length ? t.entrants.filter((one) => playing.has(one.id)) : activeOf(t);
     const list = t.state === 'complete'
       ? sortedStandings(pool.map((one) => ({ ...one, place: one.placement })))
       : pool.sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9) || a.id - b.id);
@@ -676,6 +716,7 @@ const HEAD = 26;
 const SIDE_PAD = 40;
 
 function roundWords(set) {
+  if (set.pool) return w('brackets_round_pool', { pool: poolLetter(set.pool), round: set.round });
   if (set.side === 'winners') return w('brackets_round_winners', { round: set.round });
   if (set.side === 'losers') return w('brackets_round_losers', { round: set.round });
   if (set.side === 'grand') return w(set.round > 1 ? 'brackets_round_reset' : 'brackets_round_grand');
@@ -811,17 +852,17 @@ function byeLine(t, set) {
   ]);
 }
 
-function roundsNode(t) {
+function roundsNode(t, sets = t.sets) {
   return scrollHints(el('div', { class: 'bk-scroll' }, [
-    el('div', { class: 'bk-rounds' }, roundsLayout(t.sets).map((round) => el('div', { class: 'bk-col' }, [
+    el('div', { class: 'bk-rounds' }, roundsLayout(sets).map((round) => el('div', { class: 'bk-col' }, [
       el('span', { class: 'bk-round bk-round-flow', text: w('brackets_round_plain', { round: round.round }) }),
       ...round.sets.filter((set) => set.state !== 'void').map((set) => (set.state === 'bye' ? byeLine(t, set) : setCard(t, set))),
     ]))),
   ]));
 }
 
-function gridNode(t) {
-  const { players, cells } = resultsGrid(t.entrants, t.sets);
+function gridNode(t, sets = t.sets) {
+  const { players, cells } = resultsGrid(t.entrants, sets);
   return scrollHints(el('div', { class: 'bk-scroll' }, [
     el('table', { class: 'bk-grid' }, [
       el('thead', {}, [el('tr', {}, [el('th', {}), ...players.map((one) => el('th', { scope: 'col', text: one.name }))])]),
@@ -829,7 +870,7 @@ function gridNode(t) {
         el('th', { scope: 'row', text: row.name }),
         ...cells[i].map((cell) => {
           if (!cell) return el('td', { class: 'bk-cell-self' });
-          const set = t.sets.find((one) => one.key === cell.key);
+          const set = sets.find((one) => one.key === cell.key);
           const text = cell.state === 'complete' ? (cell.forfeit ? (cell.won ? 'W' : 'FF') : `${cell.own}–${cell.theirs}`) : cell.state === 'reported' || cell.state === 'disputed' ? `${cell.own ?? ''}–${cell.theirs ?? ''}?` : '·';
           return el('td', {}, [el('button', {
             class: 'bk-cell',
@@ -852,6 +893,51 @@ function bracketBody(t) {
   if (ELIMINATION.includes(t.format)) return [treeNode(t)];
   if (t.format === 'round_robin') return [gridNode(t)];
   return [roundsNode(t)];
+}
+
+/* ---------- pools ---------- */
+
+function raiseTied(pool, id) {
+  const order = tieOrder(pool, view.ties[pool.pool]);
+  const at = order.indexOf(id);
+  if (at > 0) view.ties[pool.pool] = moved(order, at, at - 1);
+  update('pools', null, view.holders.pools, () => poolsBody(view.t), { force: true });
+}
+
+function poolTableNode(t, pool) {
+  const runs = t.may_run && mode() !== 'off' && t.phase === 'pools';
+  const order = pool.tied && pool.tied.length ? tieOrder(pool, view.ties[pool.pool]) : null;
+  const { rows, line } = poolTable(pool, order);
+  return el('div', { class: 'rowlist bk-pool-table' }, rows.map((row, at) => el('div', {
+    class: 'rowlist-row bk-standing',
+    'data-mine': row.entrant === t.mine ? 'true' : undefined,
+    'data-through': row.through ? 'true' : undefined,
+    'data-cut': at === line - 1 && line < rows.length ? 'true' : undefined,
+    'data-tied': row.tied ? 'true' : undefined,
+  }, [
+    el('span', { class: 'bk-seed mono', 'data-place': 'true', text: placeWords(row.place ?? row.rank) || '—' }),
+    el('span', { class: 'rowlist-main' }, [
+      el('span', { class: 'rowlist-name', text: row.name || '' }),
+      el('span', { class: 'rowlist-note', text: [said(WORDS.gamesNote, { games: `${row.game_wins}–${row.game_losses}` }), row.tied ? WORDS.tied : null].filter(Boolean).join(' · ') }),
+    ]),
+    el('span', { class: 'mono bk-record', text: `${row.set_wins}–${row.set_losses}` }),
+    runs && row.tied && order.indexOf(row.entrant) > 0
+      ? el('button', { class: 'bk-raise', type: 'button', title: WORDS.raise, 'aria-label': `${WORDS.raise}: ${row.name}`, text: '↑', on: { click: () => raiseTied(pool, row.entrant) } })
+      : null,
+  ])));
+}
+
+function poolNode(t, pool) {
+  const draw = (t.options || {}).pools_format === 'swiss' ? roundsNode(t, pool.sets) : gridNode(t, pool.sets);
+  return el('div', { class: 'bk-pool', 'data-pool': pool.letter }, [
+    el('h3', { class: 'bk-pool-name', text: w('brackets_pool_title', { pool: pool.letter }) }),
+    draw,
+    poolTableNode(t, pool),
+  ]);
+}
+
+function poolsBody(t) {
+  return [el('div', { class: 'bk-pools' }, (t.pools || []).map((pool) => poolNode(t, pool)))];
 }
 
 /* ---------- standings ---------- */
@@ -951,7 +1037,7 @@ function discordLink(t, set) {
 
 function setDrawer(key) {
   const t = view.t;
-  const set = t.sets.find((one) => one.key === key);
+  const set = allSets(t).find((one) => one.key === key);
   if (!set) return;
   const moves = setMoves(t, set, { mode: mode() });
   const say = notice();
@@ -1051,6 +1137,13 @@ async function optionsDrawer(t) {
   const cap = numberBox('bk-cap', o.entrant_cap, { min: 2, blank: '—' });
   const checkIn = numberBox('bk-checkin', o.check_in_minutes, { min: 5, max: 1440 });
   const rules = el('textarea', { class: 'input', id: 'bk-rules', rows: '4', maxlength: '2000', text: t ? t.rules_text || '' : '' });
+  const poolsFormat = el('select', { class: 'input', id: 'bk-pools' });
+  for (const one of POOL_FORMATS) poolsFormat.append(el('option', { value: one, text: one === 'none' ? WORDS.noPools : formatWords(one), selected: (o.pools_format || 'none') === one || undefined }));
+  const poolCount = numberBox('bk-pool-count', o.pool_count, { max: 16 });
+  const advancePer = numberBox('bk-advance', o.advance_per_pool, { max: 16 });
+  const losersFrom = numberBox('bk-losers-from', o.advance_losers_from, { min: 2, max: 16, blank: '—' });
+  const poolsBestOf = lengthSelect('bk-pools-bo', o.pools_best_of ?? 3);
+  const poolRounds = numberBox('bk-pool-rounds', o.pools_swiss_rounds, { max: 20, blank: WORDS.roundsAuto });
   const say = notice();
   const tick = (box, label) => el('label', { class: 'bk-tick' }, [box, el('span', { text: label })]);
   const only = {
@@ -1058,14 +1151,24 @@ async function optionsDrawer(t) {
     double: el('div', { class: 'bk-fields' }, [tick(reset, WORDS.reset)]),
     swiss: el('div', { class: 'bk-fields' }, [field(WORDS.rounds, rounds)]),
     elimination: el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.lateFrom, lateFrom), field(WORDS.late, late), field(WORDS.finals, finals)]),
+    pools: el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.poolsFormat, poolsFormat)]),
+    pooled: el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.poolCountLabel, poolCount), field(WORDS.advancePer, advancePer), field(WORDS.poolsBestOf, poolsBestOf)]),
+    losers: el('div', { class: 'bk-fields' }, [field(WORDS.losersFrom, losersFrom)]),
+    poolRounds: el('div', { class: 'bk-fields' }, [field(WORDS.poolRounds, poolRounds)]),
   };
   const shapeFor = () => {
+    const pooled = ELIMINATION.includes(format.value) && poolsFormat.value !== 'none';
+    only.pools.hidden = !ELIMINATION.includes(format.value);
+    only.pooled.hidden = !pooled;
+    only.losers.hidden = !pooled || format.value !== 'double';
+    only.poolRounds.hidden = !pooled || poolsFormat.value !== 'swiss';
     only.single.hidden = format.value !== 'single';
     only.double.hidden = format.value !== 'double';
     only.swiss.hidden = format.value !== 'swiss';
     only.elimination.hidden = !ELIMINATION.includes(format.value);
   };
   format.addEventListener('change', shapeFor);
+  poolsFormat.addEventListener('change', shapeFor);
   shapeFor();
   const number = (box) => (box.value.trim() === '' ? null : Number(box.value));
   const save = async () => {
@@ -1090,6 +1193,16 @@ async function optionsDrawer(t) {
       body.best_of_late = Number(late.value);
       body.best_of_finals = Number(finals.value);
       body.best_of_from_round = number(lateFrom);
+      body.pools_format = poolsFormat.value;
+      if (poolsFormat.value !== 'none') {
+        if (number(poolCount) !== null) body.pool_count = number(poolCount);
+        if (number(advancePer) !== null) body.advance_per_pool = number(advancePer);
+        body.pools_best_of = Number(poolsBestOf.value);
+        if (format.value === 'double') body.advance_losers_from = number(losersFrom);
+        if (poolsFormat.value === 'swiss') body.pools_swiss_rounds = number(poolRounds);
+      }
+    } else {
+      body.pools_format = 'none';
     }
     const done = await run(say, () => (t ? send(base(t.id), 'PATCH', body) : send('/api/brackets', 'POST', body)), (found) => found.message);
     if (!done.ok) return;
@@ -1112,6 +1225,10 @@ async function optionsDrawer(t) {
     only.swiss,
     el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.bestOf, bestOf), field(WORDS.cap, cap), field(WORDS.checkIn, checkIn)]),
     only.elimination,
+    only.pools,
+    only.pooled,
+    only.losers,
+    only.poolRounds,
     field(WORDS.rules, rules),
     say,
     bar([button(t ? WORDS.save : WORDS.create, save, { tone: 'warn', small: false })]),
@@ -1177,13 +1294,14 @@ function paintStatus() {
 function paint() {
   const t = view.t;
   if (!t || !view.holders.head) return;
-  const shape = sig([t.id, t.state, t.sets.length > 0, t.format]);
+  const shape = sig([t.id, t.state, t.sets.length > 0, t.format, t.phase || null]);
   if (shape !== view.shape) {
     refresh();
     return;
   }
   update('head', sig([t, mode()]), view.holders.head, () => headBody(t));
   paintEntrants();
+  if (view.holders.pools) update('pools', sig([t.pools, t.mine, t.may_run, t.state, t.phase, mode(), view.ties]), view.holders.pools, () => poolsBody(t));
   if (view.holders.bracket) update('bracket', sig([t.sets, t.mine, t.may_run, t.state, mode()]), view.holders.bracket, () => bracketBody(t));
   if (view.holders.standings) update('standings', sig(t.standings), view.holders.standings, () => standingsBody(t));
   paintStatus();
@@ -1203,17 +1321,27 @@ async function tournamentView(id) {
   }
   view.t = t;
   view.seedOrder = null;
-  view.shape = sig([t.id, t.state, t.sets.length > 0, t.format]);
+  view.shape = sig([t.id, t.state, t.sets.length > 0, t.format, t.phase || null]);
+  view.ties = {};
   view.parts = new Map();
   view.say = notice();
   view.say.setAttribute('data-span', 'full');
   view.status = el('p', { class: 'bk-status', role: 'status' });
   view.holders = { head: el('div', { class: 'card-body bk-head' }) };
   view.sections = {};
-  const started = t.sets.length > 0;
+  const started = allSets(t).length > 0;
   const blocks = [el('div', { class: 'card bk-headcard', 'data-span': 'full' }, [view.holders.head, el('div', { class: 'bk-statusrow' }, [view.status])]), view.say];
-  if (started) {
-    const one = section(WORDS.bracket, null, { id: 'bracket', open: true });
+  if (t.pools && t.pools.length) {
+    const one = section(WORDS.pools, null, { id: 'pools', open: t.phase === 'pools' });
+    one.node.setAttribute('data-span', 'full');
+    one.count(t.pools.length);
+    view.holders.pools = one.body;
+    blocks.push(one.node);
+  } else {
+    view.holders.pools = null;
+  }
+  if (t.sets.length > 0) {
+    const one = section(t.pools && t.pools.length ? WORDS.final : WORDS.bracket, null, { id: 'bracket', open: true });
     one.node.setAttribute('data-span', 'full');
     view.holders.bracket = one.body;
     view.sections.bracket = one;

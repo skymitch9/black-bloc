@@ -207,7 +207,29 @@ button.bk-set:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px
 .bk-standing .bk-record { flex-shrink: 0; font-size: var(--et-ui-md); }
 .bk-standing[data-mine="true"] .rowlist-name { color: var(--et-accent); }
 
+/* pools: each pool's grid or rounds, then its table with the cut line under the last one through */
+.bk-pools { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); }
+.bk-pool { display: grid; gap: 10px; min-width: 0; align-content: start; }
+.bk-pool-name { margin: 0; font-size: var(--et-ui-md); font-weight: var(--et-weight-strong); }
+.bk-pool-table .bk-standing[data-through="true"] .rowlist-name { font-weight: var(--et-weight-medium); }
+.bk-pool-table .bk-standing[data-cut="true"] { border-bottom: 2px dashed color-mix(in srgb, var(--et-accent) 65%, transparent); }
+.bk-pool-table .bk-standing[data-tied="true"] .rowlist-note { color: var(--et-warn); }
+.bk-raise {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+  color: var(--et-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.bk-raise:hover { background: var(--et-row-hover); }
+.bk-raise:focus-visible { outline: var(--et-focus-ring); }
+
 @media (max-width: 699.98px) {
+  .bk-raise { width: 40px; height: 40px; }
   .bk-standings-wide { display: none; }
   .bk-standings-compact { display: block; }
 
