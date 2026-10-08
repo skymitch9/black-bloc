@@ -745,7 +745,7 @@ async def test_patch_the_announcements_switch_and_the_retired_host_switches_answ
     ).json()
 
     assert "hosts are always found now" in body["message"]
-    assert "follow the one **BaF run/host events** switch" in body["message"]
+    assert "BaF run/host events in the marathon's drawer" in body["message"]
     assert body["event_mode"] == first["event_mode"]
     bad = client.patch(f"/api/marathons/{marathon_id}", json={"announcements": "loud"})
     assert bad.status_code == 422 and bad.json()["error"] == "bad_switch"

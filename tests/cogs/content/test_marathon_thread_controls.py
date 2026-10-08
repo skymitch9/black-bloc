@@ -909,8 +909,8 @@ async def logged(bot, kind):
     [
         ("hosts", "on", "hosts are always found now"),
         ("hosts", "off", "hosts are always found now"),
-        ("hostevents", "on", "events now follow the one **BaF run/host events** switch"),
-        ("hostevents", "off", "events now follow the one **BaF run/host events** switch"),
+        ("hostevents", "on", "follow BaF run/host events in the marathon's drawer on the site"),
+        ("hostevents", "off", "follow BaF run/host events in the marathon's drawer on the site"),
         ("runs", "on", "BaF run/host events left the thread controls"),
         ("runs", "off", "BaF run/host events left the thread controls"),
         ("overlay", "on", "Event schedule left the thread controls"),
@@ -1040,3 +1040,12 @@ async def test_the_host_announcements_button_moves_the_marathons_own_switch(bot,
     assert off.ok and "no longer announces its BaF hosts" in off.message
     assert (await fresh(bot, marathon))["host_announcements"] == 0
     assert (await fresh(bot, marathon))["announcements"] is None
+
+
+async def test_the_host_events_retired_answer_is_a_key(bot, cog):
+    marathon = await tracked_marathon(bot, cog)
+    await bot.store.set(GUILD, "marathon_host_events_gone_said", "Host events: see the drawer.")
+
+    answered = await pressed(bot, marathon, "hostevents", "on")
+
+    assert not answered.ok and answered.message == "Host events: see the drawer."

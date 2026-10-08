@@ -910,6 +910,7 @@ const SETTING_SPECS = [
   ["marathon_controls_started_said", "text", "twitch.tv/{channel} is spotlit for **{marathon}** until {until} — its last run plus {tail} minutes, and it moves if the schedule does.", "twitch.tv/{channel} is spotlit for **{marathon}** until {until} — its last run plus {tail} minutes, and it moves if the schedule does.", "the answer once the thread controls started a marathon's spotlight. It takes {channel} {marathon} {until} {tail}"],
   ["marathon_controls_already_on", "text", "twitch.tv/{channel} is already spotlit, so nothing was changed.", "twitch.tv/{channel} is already spotlit, so nothing was changed.", "the answer when Spotlight start is pressed on a channel that is already spotlit. It takes {channel}"],
   ["marathon_controls_waits_said", "text", "Spotlight is set to start {lead} minutes before the first run — {when} — and end {tail} minutes after the last.", "Spotlight is set to start {lead} minutes before the first run — {when} — and end {tail} minutes after the last.", "the answer when Spotlight start is pressed before the marathon is near: nothing is spotlit yet, the marathon's follow turns it on in time. It takes {lead} {when} {tail} {channel} {marathon}"],
+  ["marathon_host_events_gone_said", "text", "BaF host events left this switch: they follow BaF run/host events in the marathon's drawer on the site. Nothing was changed.", "BaF host events left this switch: they follow BaF run/host events in the marathon's drawer on the site. Nothing was changed.", "the answer when an old BaF host events button or field is used; host events follow the one BaF run/host events setting in the marathon's drawer"],
   ["marathon_controls_follow_off_running_said", "text", "**{marathon}** no longer follows the schedule. twitch.tv/{channel} stays spotlit — stop it on Go-live.", "**{marathon}** no longer follows the schedule. twitch.tv/{channel} stays spotlit — stop it on Go-live.", "the answer when the thread controls' Spotlight switch is turned off while a spotlight staff (or another marathon) set is running; it is left on. It takes {marathon} {channel}"],
   ["marathon_controls_cancelled_said", "text", "**{marathon}** will not spotlight twitch.tv/{channel} after all — the start that was set is cancelled.", "**{marathon}** will not spotlight twitch.tv/{channel} after all — the start that was set is cancelled.", "the answer when the thread controls' Spotlight cancel is pressed before the marathon has started its spotlight. It takes {marathon} {channel}"],
   ["marathon_controls_cannot_wait", "text", "**{marathon}** is not near yet, and its spotlight cannot start itself — the marathon spotlight is off in Settings, or twitch.tv/{channel} is off for marathons. Nothing was changed; turn the spotlight on again within {lead} minutes of the first run, or set dates on the Go-live page.", "**{marathon}** is not near yet, and its spotlight cannot start itself — the marathon spotlight is off in Settings, or twitch.tv/{channel} is off for marathons. Nothing was changed; turn the spotlight on again within {lead} minutes of the first run, or set dates on the Go-live page.", "the refusal when Spotlight start is pressed before the marathon is near while nothing would turn the spotlight on in time. It takes {marathon} {channel} {lead}"],
@@ -7510,7 +7511,6 @@ const MARATHON_SWITCH_SAID = {
   overlay: ['marathon_overlay_on_said', 'marathon_overlay_off_said'],
 };
 const MARATHON_SCAN_GONE = 'The Scan hosts switch is gone — hosts are always found now, like runners, so nothing was changed.';
-const MARATHON_HOST_EVENTS_GONE = 'The BaF host events switch is gone — events now follow the one **BaF run/host events** switch, so nothing was changed.';
 
 // The bot's cogs/content/marathon_role_ping.state_of: whether the ping-mark heads-up mentions the
 // Marathon role, and the line staff read under the ping switch (empty while the switch is off).
@@ -8926,7 +8926,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   if ('baf_event_answer' in body) said.push(marathonSetBafAnswer(row, body.baf_event_answer));
   if ('baf_event' in body) said.push(marathonSetBafEvent(row, body.baf_event));
   if ('scan_hosts' in body) said.push(MARATHON_SCAN_GONE);
-  if ('host_events' in body) said.push(MARATHON_HOST_EVENTS_GONE);
+  if ('host_events' in body) said.push(marathonWords('marathon_host_events_gone_said'));
   if ('announcements' in body) said.push(marathonSetSwitch(row, 'announcements', body.announcements));
   if ('host_announcements' in body) said.push(marathonSetSwitch(row, 'host_announcements', body.host_announcements));
   if ('overlay' in body) said.push(marathonSetSwitch(row, 'overlay', body.overlay));

@@ -73,7 +73,7 @@ from ...cogs.content.marathon_events import (
 from ...cogs.content.marathon_feeds import get_feed
 from ...cogs.content.marathon_hosts import set_switch, switch_state
 from ...cogs.content.marathon_inbox import ignore as ignore_marathon
-from ...cogs.content.marathon_inbox import inbox_message_url, post_now
+from ...cogs.content.marathon_inbox import inbox_message_url, post_now, words
 from ...cogs.content.marathon_inbox import track as track_marathon
 from ...cogs.content.marathon_inbox import untrack as untrack_marathon
 from ...cogs.content.marathon_people import (
@@ -99,6 +99,7 @@ from ...marathon_sources import SOURCE_WORDS, retimes_itself, schedule_page
 from ...marathon_spotlight import mode_of as spotlight_mode_of
 from ...settings_store import (
     MARATHON_FAR_POLL_HOURS_KEY,
+    MARATHON_HOST_EVENTS_GONE_KEY,
     MARATHON_LEAD_DAYS_KEY,
     MARATHON_MODE_KEY,
     MARATHON_POLL_MINUTES_KEY,
@@ -749,7 +750,7 @@ def build_router(bot: Any) -> APIRouter:
         if "scan_hosts" in payload:
             said.append(mh.SCAN_GONE)
         if "host_events" in payload:
-            said.append(mh.HOST_EVENTS_GONE)
+            said.append(words(bot, guild.id, MARATHON_HOST_EVENTS_GONE_KEY))
         if mh.ANNOUNCE in payload:
             done = answered(
                 await set_switch(

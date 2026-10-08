@@ -256,6 +256,7 @@ export const LABELS = {
   marathon_controls_started_said: "What staff are told once the controls start the spotlight",
   marathon_controls_already_on: "The answer when the channel is already spotlit",
   marathon_controls_waits_said: "What staff are told when the spotlight will start with the marathon",
+  marathon_host_events_gone_said: "What an old BaF host events button or field answers",
   marathon_controls_follow_off_running_said: "What staff are told when the switch goes off and a staff spotlight stays up",
   marathon_controls_cancelled_said: "What staff are told when a waiting spotlight is cancelled",
   marathon_controls_cannot_wait: "The refusal when nothing would start the spotlight in time",

@@ -60,6 +60,7 @@ from ...settings_store import (
     MARATHON_CONTROLS_STARTED_KEY,
     MARATHON_CONTROLS_TRACKER_KEY,
     MARATHON_CONTROLS_WAITS_KEY,
+    MARATHON_HOST_EVENTS_GONE_KEY,
 )
 from ...spotlight import reason_of
 from .marathon import (
@@ -128,7 +129,6 @@ SPOT_LINE_KEYS = {
 }
 RETIRED_SAID = {
     mtc.HOSTS: mh.SCAN_GONE,
-    mtc.HOST_EVENTS: mh.HOST_EVENTS_GONE,
     mtc.RUNS: mtc.RUNS_GONE,
     mtc.OVERLAY: mtc.OVERLAY_GONE,
     mtc.HIGHLIGHT: mtc.HIGHLIGHT_GONE,
@@ -590,6 +590,8 @@ async def press(
     marathon = await get_marathon(bot.db, guild.id, marathon_id)
     if marathon is None:
         return refusal(mt.NO_SUCH_MARATHON.format(given=marathon_id), NO_SUCH, 404)
+    if action == mtc.HOST_EVENTS:
+        return refusal(words(bot, guild.id, MARATHON_HOST_EVENTS_GONE_KEY), GONE_CODE, 410)
     if action in RETIRED_SAID:
         return refusal(RETIRED_SAID[action], GONE_CODE, 410)
     if action == mtc.ARCHIVE:

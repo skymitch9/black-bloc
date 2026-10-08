@@ -6613,6 +6613,7 @@ MARATHON_CONTROLS_SPOTLIGHT_KEPT_LINE_KEY = "marathon_controls_spotlight_kept_li
 MARATHON_CONTROLS_SPOTLIGHT_NONE_LINE_KEY = "marathon_controls_spotlight_none_line"
 MARATHON_CONTROLS_SPOTLIGHT_RUNNING_LINE_KEY = "marathon_controls_spotlight_running_line"
 MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY = "marathon_controls_follow_off_running_said"
+MARATHON_HOST_EVENTS_GONE_KEY = "marathon_host_events_gone_said"
 MARATHON_CONTROLS_ARCHIVE_KEY = "marathon_controls_archive"
 MARATHON_BAF_EVENT_NAMES_KEY = "marathon_baf_event_names"
 MARATHON_BAF_EVENT_MIN_RUNS_KEY = "marathon_baf_event_min_runs"
@@ -8199,6 +8200,13 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the answer when Spotlight start is pressed before the marathon is near: nothing is "
         "spotlit yet, the marathon's follow turns it on in time. It takes {lead} {when} {tail} "
         "{channel} {marathon}",
+    ),
+    MARATHON_HOST_EVENTS_GONE_KEY: (
+        "BaF host events left this switch: they follow BaF run/host events in the marathon's "
+        "drawer on the site. Nothing was changed.",
+        (),
+        "the answer when an old BaF host events button or field is used; host events follow the "
+        "one BaF run/host events setting in the marathon's drawer",
     ),
     MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY: (
         "**{marathon}** no longer follows the schedule. twitch.tv/{channel} stays spotlit — "
