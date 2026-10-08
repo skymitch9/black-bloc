@@ -94,7 +94,7 @@ PICK_TEMPLATE = r"marathon:announce:(?P<marathon_id>[0-9]+):(?P<run_id>[0-9]+):p
 PICK_ID = "marathon:announce:{marathon_id}:{run_id}:pick{page}"
 PICK = "pick"
 PREFIX = "marathon:announce:"
-BUTTON_PEOPLE = 4
+BUTTON_PEOPLE = 5
 OPTION_LIMIT = 25
 PICK_PEOPLE = 12
 PICK_ROWS = 4
@@ -486,13 +486,13 @@ def over(row: Any) -> str | None:
 
 
 def moves(marathon_id: Any, row: Any, found: Policy, labels: dict[str, str]) -> tuple[Move, ...]:
-    """Two buttons a person — their answer for this run and their @ — for a run still ahead."""
+    """One button a person, their answer for this run, while the run is still ahead."""
     if not shown(row):
         return ()
     made: list[Move] = []
     for one in baf_on(row):
         name = str(one.get("name") or one["user_id"])
-        for to in (run_move(found, row, one), mention_move(found, one)):
+        for to in (run_move(found, row, one),):
             made.append(
                 Move(
                     MOVE_ID.format(
@@ -510,8 +510,8 @@ def moves(marathon_id: Any, row: Any, found: Policy, labels: dict[str, str]) -> 
 
 
 def laid_out(marathon_id: Any, row: Any, made: tuple[Move, ...], placeholder: str) -> tuple:
-    """Buttons while they fit under the run's own button; menus once they do not — twelve
-    people a menu, a person's two moves never split, a menu a row."""
+    """One row of buttons while five people or fewer are on the run; menus past that — twelve
+    people a menu, a menu a row."""
     people = list(dict.fromkeys(one.user_id for one in made))
     if len(people) <= BUTTON_PEOPLE:
         return made
@@ -541,7 +541,8 @@ def option_of(value: Any) -> tuple[int, str] | None:
 
 
 def state_lines(row: Any, found: Policy, words: dict[str, str], *, only: Any = None) -> list[str]:
-    """Who is announced for this run and why, one line a person."""
+    """One line a person whose run is an exception: not announced, or answered for this run.
+    `only` asks for one person's line whatever it says."""
     if not shown(row):
         return []
     lines = []
@@ -549,6 +550,9 @@ def state_lines(row: Any, found: Policy, words: dict[str, str], *, only: Any = N
         if only is not None and int(one["user_id"]) != int(only):
             continue
         said = verdict(found, row, one["user_id"], one["role"])
+        usual = said.yes and run_answers(row).get(int(one["user_id"])) is None
+        if only is None and usual:
+            continue
         lines.append(
             mt.render(
                 words["line"],

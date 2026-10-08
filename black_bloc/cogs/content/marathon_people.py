@@ -19,6 +19,12 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     DEFAULT_TIMEZONE_KEY,
     MARATHON_DEFAULTS,
+    MARATHON_PEOPLE_BUTTON_BACK_KEY,
+    MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY,
+    MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY,
+    MARATHON_PEOPLE_BUTTON_TWITCH_KEY,
+    MARATHON_PEOPLE_BUTTON_UNLINK_KEY,
+    MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY,
     MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
     MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
     MARATHON_SPOTLIGHT_HOST_NOTE_KEY,
@@ -64,17 +70,18 @@ OPT_IN = "opt_in"
 RUN_ANSWER = "run_answer"
 MENTION = "mention"
 BACK = "back"
-LABELS = {
-    SPOTLIGHT: ("Spotlight", discord.ButtonStyle.primary),
-    UNSPOTLIGHT: ("Stop spotlighting", discord.ButtonStyle.secondary),
-    UNLINK: ("Unlink", discord.ButtonStyle.secondary),
-    LINK_NEAR: ("Link @{username}", discord.ButtonStyle.primary),
-    TWITCH: ("Twitch name…", discord.ButtonStyle.secondary),
-    OPT_OUT: ("{label}", discord.ButtonStyle.secondary),
-    OPT_IN: ("{label}", discord.ButtonStyle.primary),
-    RUN_ANSWER: ("{label}", discord.ButtonStyle.secondary),
-    MENTION: ("{label}", discord.ButtonStyle.secondary),
-    BACK: ("Back", discord.ButtonStyle.secondary),
+STYLES = {
+    SPOTLIGHT: discord.ButtonStyle.primary,
+    LINK_NEAR: discord.ButtonStyle.primary,
+    OPT_IN: discord.ButtonStyle.primary,
+}
+LABEL_KEYS = {
+    SPOTLIGHT: MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY,
+    UNSPOTLIGHT: MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY,
+    UNLINK: MARATHON_PEOPLE_BUTTON_UNLINK_KEY,
+    LINK_NEAR: MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY,
+    TWITCH: MARATHON_PEOPLE_BUTTON_TWITCH_KEY,
+    BACK: MARATHON_PEOPLE_BUTTON_BACK_KEY,
 }
 PEOPLE_BUTTON = "People…"
 TWITCH_TITLE = "Their Twitch channel"
@@ -398,7 +405,7 @@ async def build_people(
     view = PeoplePanel(minutes_for(bot, guild.id), marathon["id"], staff=staff)
     lines = [mp.PEOPLE_BAF, *baf_lines(bot, guild, state["baf"])]
     if not staff:
-        view.add_item(PeopleMove(BACK))
+        view.add_item(keyed(bot, guild, BACK))
         return (discord.Embed(title=marathon["name"], description=clamped(lines)), view)
     zone = zone_of(bot, guild)
     days = mp.days_of(state["runs"], zone, now_for(bot))
@@ -416,7 +423,7 @@ async def build_people(
                 mp.SLOT_CAP_NOTE.format(cap=mp.SELECT_CAP, count=len(wanted.runs), day=wanted.label)
             )
         view.add_item(SlotPick(wanted.runs[: mp.SELECT_CAP], zone))
-    view.add_item(PeopleMove(BACK))
+    view.add_item(keyed(bot, guild, BACK))
     return (discord.Embed(title=marathon["name"], description=clamped(lines)), view)
 
 
@@ -455,23 +462,20 @@ def slot_card(
         view.person = chosen.get("name")
         entry = mp.entry_for(state["entries"], run["id"], chosen) or {}
         view.add_item(LinkPick())
-        if entry.get("login") and not entry.get("channel_id"):
-            view.add_item(PeopleMove(SPOTLIGHT))
-        if entry.get("spotlight_id"):
-            view.add_item(PeopleMove(UNSPOTLIGHT))
-        if entry.get("matched_by") == mp.BY_PAIRING and entry.get("pairing_id"):
-            view.add_item(PeopleMove(UNLINK))
-            view.add_item(PeopleMove(TWITCH))
-        opt_move = opt_move_for(bot, guild, marathon, chosen)
-        if opt_move is not None:
-            view.add_item(opt_move)
-        for one in run_moves_for(bot, guild, marathon, run, chosen):
-            view.add_item(one)
-        lines += run_state_for(bot, guild, marathon, run, chosen)
         near = entry.get("looks_like")
         if near and not chosen.get("user_id"):
-            view.add_item(PeopleMove(LINK_NEAR, username=near["username"]))
-    view.add_item(PeopleMove(BACK))
+            view.add_item(keyed(bot, guild, LINK_NEAR, username=near["username"]))
+        if entry.get("matched_by") == mp.BY_PAIRING and entry.get("pairing_id"):
+            view.add_item(keyed(bot, guild, UNLINK))
+            view.add_item(keyed(bot, guild, TWITCH))
+        if entry.get("login") and not entry.get("channel_id"):
+            view.add_item(keyed(bot, guild, SPOTLIGHT))
+        if entry.get("spotlight_id"):
+            view.add_item(keyed(bot, guild, UNSPOTLIGHT))
+        for one in announce_moves_for(bot, guild, marathon, run, chosen):
+            view.add_item(one)
+        lines += run_state_for(bot, guild, marathon, run, chosen)
+    view.add_item(keyed(bot, guild, BACK))
     return (discord.Embed(title=marathon["name"], description=clamped(lines)), view)
 
 
@@ -497,21 +501,31 @@ def announced_person(run: Any, chosen: dict[str, Any]) -> dict[str, Any] | None:
     )
 
 
-def run_moves_for(bot: Any, guild: Any, marathon: Any, run: Any, chosen: dict[str, Any]) -> list:
-    """This run's own answer for a BaF person and their @ — the run post's buttons, here."""
+def keyed(bot: Any, guild: Any, action: str, **fields: Any) -> Any:
+    from .marathon_announce import words
+
+    said = words(bot, guild.id, LABEL_KEYS[action], **fields)
+    return PeopleMove(action, label=said, username=str(fields.get("username") or ""))
+
+
+def announce_moves_for(
+    bot: Any, guild: Any, marathon: Any, run: Any, chosen: dict[str, Any]
+) -> list:
+    """Beside the marathon opt-out: the person's @, then this run's own answer."""
     from .marathon_announce import labels_of, policy_of
 
+    opt_move = opt_move_for(bot, guild, marathon, chosen)
+    made = [opt_move] if opt_move is not None else []
     person = announced_person(run, chosen)
-    if person is None or not ma.shown(run):
-        return []
+    if person is None:
+        return made
     found = policy_of(bot, guild.id, marathon)
     labels = labels_of(bot, guild.id)
     name = str(person.get("name") or person["user_id"])
-    made = []
-    for action, to in (
-        (RUN_ANSWER, ma.run_move(found, run, person)),
-        (MENTION, ma.mention_move(found, person)),
-    ):
+    moves = [(MENTION, ma.mention_move(found, person))]
+    if ma.shown(run):
+        moves.append((RUN_ANSWER, ma.run_move(found, run, person)))
+    for action, to in moves:
         said = mt.render(labels[to], "{name}", name=name).text
         made.append(PeopleMove(action, label=said, user_id=person["user_id"], to=to, row=3))
     return made
@@ -678,10 +692,9 @@ class PeopleMove(discord.ui.Button):
         to: Any = None,
         row: int = 2,
     ) -> None:
-        words, style = LABELS[action]
         super().__init__(
-            label=words.format(username=username, label=label)[:80] or "…",
-            style=style,
+            label=str(label)[:80] or "…",
+            style=STYLES.get(action, discord.ButtonStyle.secondary),
             row=4 if action == BACK else row,
         )
         self.action = action

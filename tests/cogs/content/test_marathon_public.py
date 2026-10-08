@@ -71,7 +71,7 @@ def current_view(message):
     return message.kwargs.get("view")
 
 
-RUN_MOVE_LABEL = "Do not announce Sky for this run"
+RUN_MOVE_LABEL = "Don't announce Sky"
 
 
 def button_on(message):
@@ -137,7 +137,7 @@ async def test_opt_out_answers_in_words_moves_the_runs_button_and_opt_back_in_un
     assert said.ok and "is opted out of **SS4C**" in said.message
     assert await opted(bot, marathon) == [SKY] and public_posts(bot) == []
     button = button_on(runner_posts(the_thread(bot))[0])
-    assert button.label == "Announce Sky for this run" and button.custom_id.endswith(":in")
+    assert button.label == "Announce Sky" and button.custom_id.endswith(":in")
     logged = await details_of(bot.db, "marathon.announce_opted_out")
     assert logged["members"] == [SKY] and logged["via"] == "discord"
 

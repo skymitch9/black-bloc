@@ -475,20 +475,14 @@ async def test_a_runs_post_carries_each_persons_moves_and_says_who_is_announced(
     post = staff_post(bot, "Alpha")
     row = await run_named(bot, marathon, "Alpha")
 
-    assert labels_on(post) == [
-        "Do not announce Sky for this run",
-        "No @ for Sky",
-        "Announce anarchy for this run",
-        "No @ for anarchy",
-    ]
+    assert labels_on(post) == ["Don't announce Sky", "Announce anarchy"]
     assert [one.custom_id for one in items_on(post)] == [
         f"marathon:announce:{marathon['id']}:{row['id']}:{SKY}:out",
-        f"marathon:announce:{marathon['id']}:{row['id']}:{SKY}:plain",
         f"marathon:announce:{marathon['id']}:{row['id']}:{ANARCHY}:in",
-        f"marathon:announce:{marathon['id']}:{row['id']}:{ANARCHY}:plain",
     ]
+    assert [one.row for one in items_on(post)] == [1, 1]
+    assert "Sky: announced" not in post.content
     assert post.content.endswith(
-        "\nSky: announced for this run — the default"
         "\nanarchy: not announced for this run — host announcements are off for this marathon"
     )
     count = len(bot.guild.channels[SHOW_ROOM].threads[-1].messages)
@@ -496,23 +490,16 @@ async def test_a_runs_post_carries_each_persons_moves_and_says_who_is_announced(
     assert (await answer(bot, marathon, "Alpha", ANARCHY, "in")).ok
     assert (await mention(bot, marathon, SKY, "plain")).ok
 
-    assert labels_on(post) == [
-        "Do not announce Sky for this run",
-        "@ Sky again",
-        "anarchy: back to the default for this run",
-        "No @ for anarchy",
-    ]
-    assert post.content.endswith(
-        "\nSky: announced for this run — the default · written without an @"
-        "\nanarchy: announced for this run — set for this run"
-    )
+    assert labels_on(post) == ["Don't announce Sky", "anarchy: back to the default"]
+    assert post.content.endswith("\nanarchy: announced for this run — set for this run")
+    assert "Sky: announced" not in post.content
     assert len(bot.guild.channels[SHOW_ROOM].threads[-1].messages) == count
     assert post.edits[-1]["allowed_mentions"].users is False
     await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.ANNOUNCE, False)
     await tick_at(bot, cog, marathon, 1)
     assert "Sky: not announced for this run — runner announcements are off" in post.content
     assert "anarchy: announced for this run — set for this run" in post.content
-    assert labels_on(post)[0] == "Announce Sky for this run"
+    assert labels_on(post)[0] == "Announce Sky"
 
 
 async def test_a_runs_post_never_carries_the_whole_marathon_opt_out(bot, cog):
@@ -523,7 +510,7 @@ async def test_a_runs_post_never_carries_the_whole_marathon_opt_out(bot, cog):
 
     await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [SKY], True)
 
-    assert labels_on(post)[0] == "Announce Sky for this run"
+    assert labels_on(post)[0] == "Announce Sky"
     assert not any(one.startswith("Opt ") for one in labels_on(post))
     assert (
         "Sky: not announced for this run — opted out of every run on this marathon" in post.content
@@ -578,7 +565,7 @@ async def test_a_persons_button_works_after_a_restart_and_refuses_a_stranger_in_
     await button.on_click(lead)
     assert "**Sky** is not announced for **Alpha**" in lead.sent
     assert ma.run_answers(await run_named(bot, marathon, "Alpha")) == {SKY: "out"}
-    assert "Sky: back to the default for this run" in labels_on(staff_post(bot, "Alpha"))
+    assert "Sky: back to the default" in labels_on(staff_post(bot, "Alpha"))
 
     plain = await public.AnnounceButton.from_custom_id(
         None, None, re.fullmatch(ma.MOVE_TEMPLATE, custom.replace(":out", ":plain"))
@@ -615,10 +602,10 @@ async def test_a_run_with_more_people_than_buttons_fit_carries_one_menu(bot, cog
     assert isinstance(pick, discord.ui.Select)
     assert pick.custom_id == f"marathon:announce:{marathon['id']}:{row['id']}:pick"
     assert pick.placeholder == "Announcements for a person on this run…"
-    assert len(pick.options) == 12
+    assert len(pick.options) == 6
     assert (pick.options[0].value, pick.options[0].label) == (
         "9300:out",
-        "Do not announce Runner0 for this run",
+        "Don't announce Runner0",
     )
     assert len(current_view(post).to_components()) == 1
 
@@ -630,7 +617,7 @@ async def test_a_run_with_more_people_than_buttons_fit_carries_one_menu(bot, cog
     await chosen.on_click(lead)
     assert "**Runner3** is not announced for **Alpha**" in lead.sent
     assert ma.run_answers(await run_named(bot, marathon, "Alpha")) == {9303: "out"}
-    assert items_on(post)[0].options[6].label == "Runner3: back to the default for this run"
+    assert items_on(post)[0].options[3].label == "Runner3: back to the default"
     chosen.item._values = ["nonsense"]
     lead = FakeInteraction(bot, FakeActor(), bot.guild)
     await chosen.on_click(lead)
@@ -1001,7 +988,7 @@ async def crowded(bot, cog, count):
     return marathon, next(one for one in thread.messages if one.content.startswith("**Runner0"))
 
 
-@pytest.mark.parametrize(("count", "sizes"), [(13, [24, 2]), (20, [24, 16])])
+@pytest.mark.parametrize(("count", "sizes"), [(13, [12, 1]), (20, [12, 8])])
 async def test_past_twelve_people_a_runs_post_carries_a_menu_for_every_twelve(
     bot, cog, count, sizes
 ):
@@ -1017,7 +1004,7 @@ async def test_past_twelve_people_a_runs_post_carries_a_menu_for_every_twelve(
     ]
     offered = [option.value for one in picks for option in one.options]
     for member in range(9300, 9300 + count):
-        assert f"{member}:out" in offered and f"{member}:plain" in offered
+        assert f"{member}:out" in offered and f"{member}:plain" not in offered
     assert len(current_view(post).to_components()) == 2
     edits = len(post.edits)
     await walk(bot, cog, marathon, [2, 3])

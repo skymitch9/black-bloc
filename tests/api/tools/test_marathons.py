@@ -1113,7 +1113,7 @@ async def test_a_runs_own_answer_is_shown_on_the_run_and_moved_from_the_site(
         False,
         "hosts_off",
     )
-    assert shown["move"] == "in" and shown["move_label"] == "Announce Interview Crew for this run"
+    assert shown["move"] == "in" and shown["move_label"] == "Announce Interview Crew"
     assert shown["said"].startswith("Interview Crew: not announced for this run — host")
     path = f"/api/marathons/{marathon_id}/runs/{run_id}/people/77/announce"
 

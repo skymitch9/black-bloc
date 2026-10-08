@@ -152,11 +152,10 @@ def why_down(bot: Any, guild: Any, marathon: Any, row: Any, was: Any, moved: Any
 
 
 def view_of(buttons: Any, marathon_id: Any, run_id: Any) -> discord.ui.View | None:
-    """A row a person, or the menus."""
+    """One row of buttons, a button a person, or the menus."""
     if not buttons:
         return None
     view = discord.ui.View(timeout=None)
-    rows: dict[int, int] = {}
     for one in buttons:
         if isinstance(one, ma.Pick):
             view.add_item(
@@ -170,9 +169,8 @@ def view_of(buttons: Any, marathon_id: Any, run_id: Any) -> discord.ui.View | No
                 )
             )
         elif isinstance(one, ma.Move):
-            row = rows.setdefault(one.user_id, len(rows) + 1)
             view.add_item(
-                AnnounceButton(marathon_id, run_id, one.user_id, one.to, one.label, row=row)
+                AnnounceButton(marathon_id, run_id, one.user_id, one.to, one.label, row=1)
             )
         else:
             view.add_item(HighlightButton(marathon_id, run_id, one.to, one.label))

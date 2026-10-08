@@ -6494,6 +6494,12 @@ MARATHON_ANNOUNCE_BUTTON_RUN_DEFAULT_KEY = "marathon_announce_button_run_default
 MARATHON_ANNOUNCE_BUTTON_PLAIN_KEY = "marathon_announce_button_plain"
 MARATHON_ANNOUNCE_BUTTON_MENTION_KEY = "marathon_announce_button_mention"
 MARATHON_ANNOUNCE_PICK_KEY = "marathon_announce_pick"
+MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY = "marathon_people_button_spotlight"
+MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY = "marathon_people_button_unspotlight"
+MARATHON_PEOPLE_BUTTON_UNLINK_KEY = "marathon_people_button_unlink"
+MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY = "marathon_people_button_link_near"
+MARATHON_PEOPLE_BUTTON_TWITCH_KEY = "marathon_people_button_twitch"
+MARATHON_PEOPLE_BUTTON_BACK_KEY = "marathon_people_button_back"
 MARATHON_ANNOUNCE_STATE_LINE_KEY = "marathon_announce_state_line"
 MARATHON_ANNOUNCE_STATE_YES_KEY = "marathon_announce_state_yes"
 MARATHON_ANNOUNCE_STATE_NO_KEY = "marathon_announce_state_no"
@@ -7637,21 +7643,21 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{marathon}",
     ),
     MARATHON_ANNOUNCE_BUTTON_RUN_OUT_KEY: (
-        "Do not announce {name} for this run",
+        "Don't announce {name}",
         ("name",),
         "the button on a BaF run's post in the staff thread (and in the People slot view) for a "
         "person who would be announced for that run: it leaves them out of that run's public "
         "posts only. It takes {name}",
     ),
     MARATHON_ANNOUNCE_BUTTON_RUN_IN_KEY: (
-        "Announce {name} for this run",
+        "Announce {name}",
         ("name",),
         "the same button for a person who would not be announced for that run (the switch for "
         "their part is off, or they are opted out of the whole marathon): it announces them for "
         "that run. It takes {name}",
     ),
     MARATHON_ANNOUNCE_BUTTON_RUN_DEFAULT_KEY: (
-        "{name}: back to the default for this run",
+        "{name}: back to the default",
         ("name",),
         "the same button once the person has their own answer for that run: it clears it. It "
         "takes {name}",
@@ -7672,6 +7678,41 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the menu a BaF run's post carries instead of buttons once more people are on the run "
         "than buttons fit; past twelve people it is one menu for every twelve",
+    ),
+    MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY: (
+        "Spotlight their channel…",
+        (),
+        "the People view's button that spotlights the person's own channel on Go-live while "
+        "their runs are on",
+    ),
+    MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY: (
+        "Stop spotlighting their channel",
+        (),
+        "the People view's button that stops spotlighting the person's own channel for this "
+        "marathon",
+    ),
+    MARATHON_PEOPLE_BUTTON_UNLINK_KEY: (
+        "Unlink",
+        (),
+        "the People view's button that takes back a link staff made; it is there only while "
+        "the person is linked",
+    ),
+    MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY: (
+        "Link @{username}",
+        ("username",),
+        "the People view's button that links a schedule name to the member it nearly "
+        "matched. It takes {username}",
+    ),
+    MARATHON_PEOPLE_BUTTON_TWITCH_KEY: (
+        "Twitch name…",
+        (),
+        "the People view's button that fixes the Twitch name of a person linked by staff; it "
+        "is there only while they are linked",
+    ),
+    MARATHON_PEOPLE_BUTTON_BACK_KEY: (
+        "Back",
+        (),
+        "the People view's button back to the schedule, the card or the panel",
     ),
     MARATHON_ANNOUNCE_STATE_LINE_KEY: (
         "{name}: {state} — {why}{plain}",
