@@ -810,7 +810,7 @@ gained `text`, `reason` (and `why`); `thread_failed` can carry `error`.
 - `MOCK_PORT=8816 node site/mock/check.mjs` against the branch's own mock: *ok - 26 pages, 345 routes, 246 core settings,
   all keys present*.
 - Every `site/mock/*.test.mjs` (14, the new `brackets.test.mjs` included): exit 0.
-- `scripts/ci-local.ps1`: see the branch report (run last).
+- `scripts/ci-local.ps1`: **CI MIRROR GREEN: 16 step(s) passed in 150s** (the new *Brackets drawing* step included).
 - Browser (Chrome, the mock on 8816, desktop width only): list as staff and member; a double elimination of 8 drawn with
   its lines, a reported and a disputed set; staff reported W2-1 2–1 from the drawer; the member (Moth) confirmed W2-2
   and dropped into L2-1; the member signed up to Knuck Up 13; staff dragged Remy to seed 1 and saved; the New
