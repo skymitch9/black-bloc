@@ -117,7 +117,7 @@ export const LABELS = {
   marathon_controls_host_announcements_on: "The thread controls’ Host announcements button while on",
   marathon_controls_host_announcements_off: "The thread controls’ Host announcements button while off",
   marathon_host_announcements_on_said: "What staff are told when a marathon starts announcing its BaF hosts",
-  marathon_host_announcements_stopped_said: "What staff are told when a marathon stops announcing its BaF hosts",
+  marathon_host_announcements_off_said: "What staff are told when a marathon stops announcing its BaF hosts",
   marathon_mention_people: "Whether public marathon posts write a BaF person as an @",
   marathon_reminder_minutes: 'How many minutes before a run the reminders go out',
   marathon_ping_minutes: 'Which reminder pings — minutes before the run',

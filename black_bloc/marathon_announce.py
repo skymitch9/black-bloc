@@ -148,20 +148,18 @@ def announces_hosts(marathon: Any, default: Any) -> bool:
 def decide(
     *, runners_on: bool, opted_out: bool, answer: Any, role: str, hosts_on: bool
 ) -> Verdict:
-    """Whether one person is announced for one run: the switch for their part (Runner or Host
-    announcements, neither over the other), then their marathon-wide opt-out (a run's own yes
-    gets past it), then the run's own answer."""
-    if role == HOST and not hosts_on:
-        return Verdict(False, WHY_HOSTS_OFF)
-    if role != HOST and not runners_on:
-        return Verdict(False, WHY_RUNNERS_OFF)
-    if opted_out and answer != IN:
-        return Verdict(False, WHY_MARATHON)
+    """Whether one person is announced for one run: the run's own answer, then their
+    marathon-wide opt-out, then the switch for their part as the default (Runner or Host
+    announcements, neither over the other)."""
     if answer == IN:
         return Verdict(True, WHY_RUN)
     if answer == OUT:
         return Verdict(False, WHY_RUN)
-    return Verdict(True, WHY_DEFAULT)
+    if opted_out:
+        return Verdict(False, WHY_MARATHON)
+    if role == HOST:
+        return Verdict(bool(hosts_on), WHY_DEFAULT if hosts_on else WHY_HOSTS_OFF)
+    return Verdict(bool(runners_on), WHY_DEFAULT if runners_on else WHY_RUNNERS_OFF)
 
 
 def _ids(raw: Any) -> set[int]:
@@ -222,12 +220,6 @@ def policy(
         mentions=mentions(marathon),
         mention_default=bool(mention_default),
     )
-
-
-def standing(found: Policy) -> Policy:
-    """The policy a person's per-run move is offered by: both switches held on, so the move
-    stores the answer for when the switch is back."""
-    return found._replace(runners_on=True, hosts_on=True)
 
 
 def dump(ids: Any) -> str:
@@ -474,7 +466,7 @@ def run_move(found: Policy, row: Any, person: dict[str, Any]) -> str:
     has an answer, else the opposite of what the defaults say."""
     if run_answers(row).get(int(person["user_id"])) is not None:
         return DEFAULT
-    return OUT if verdict(standing(found), row, person["user_id"], person["role"]).yes else IN
+    return OUT if verdict(found, row, person["user_id"], person["role"]).yes else IN
 
 
 def mention_move(found: Policy, person: dict[str, Any]) -> str:
@@ -638,7 +630,6 @@ __all__ = [
     "run_answers",
     "run_move",
     "run_people",
-    "standing",
     "state_lines",
     "toggled",
     "verdict",

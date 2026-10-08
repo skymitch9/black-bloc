@@ -1127,8 +1127,7 @@ async def test_a_runs_own_answer_is_shown_on_the_run_and_moved_from_the_site(
         False,
         "hosts_off",
     )
-    assert shown["move"] == "out"
-    assert shown["move_label"] == "Do not announce Interview Crew for this run"
+    assert shown["move"] == "in" and shown["move_label"] == "Announce Interview Crew for this run"
     assert shown["said"].startswith("Interview Crew: not announced for this run — host")
     path = f"/api/marathons/{marathon_id}/runs/{run_id}/people/77/announce"
 
@@ -1139,13 +1138,10 @@ async def test_a_runs_own_answer_is_shown_on_the_run_and_moved_from_the_site(
     _, shown = crew()
     assert (shown["answer"], shown["announced"], shown["why"], shown["move"]) == (
         "in",
-        False,
-        "hosts_off",
+        True,
+        "run",
         "default",
     )
-    client.patch(f"/api/marathons/{marathon_id}", json={"host_announcements": "on"})
-    _, shown = crew()
-    assert (shown["answer"], shown["announced"], shown["why"]) == ("in", True, "run")
     said = await web_row(wf, web, "web.marathon.announce_run_set")
     assert (said["member"], said["from"], said["to"], said["via"]) == (
         77,
