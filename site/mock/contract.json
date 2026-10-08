@@ -1,5 +1,5 @@
 {
-  "_": "The Phase 8b contract in machine-readable form: for every route, the keys the pages actually read. Derived from site/public/assets/*.js by grepping each page's property accesses. tests/api/test_contract.py checks the real routers against it; site/mock/check.mjs checks the mock. Both read THIS file, so the two halves cannot drift apart. shape: object | list | map. keys = required on the object, or on every row of a list. rows = {field: [keys required on every row of that list-valued field]}. nested = {field: [keys required on that object-valued field]}.",
+  "_": "The Phase 8b contract in machine-readable form: for every route, the keys the pages actually read. Derived from site/public/assets/*.js by grepping each page's property accesses. tests/api/test_contract.py checks the real routers against it; site/mock/check.mjs checks the mock. Both read THIS file, so the two halves cannot drift apart. shape: object | list | map. keys = required on the object, or on every row of a list. rows = {field: [keys required on every row of that list-valued field]}. nested = {field: [keys required on that object-valued field]}. settings = {key: value} written to the registry before the request (placeholders filled), for a route whose 200 needs a mode the rest of the seed must not run under; the seed puts it back.",
   "settings": {
     "_": "The registry IS the truth (black_bloc/settings_store.py). This block is the one table both halves read: tests/api/test_contract.py asserts it equals CORE_KEYS / KEY_MIN / KEY_MAX, and site/mock/check.mjs asserts the mock's own /api/settings matches it. A bound invented in the mock, or one added to the registry and not mirrored, fails one half or the other by name. The `help` map is the same guard for the WORDS a settings row carries, scoped to the golive / pings / youtube namespaces the Go-live page draws (owner, 2026-09-21: \"what each of the settings does isnt clear\"). KEY_HELP is the one home; this is the table both halves read. It is namespace-scoped because 59 of the registry's other keys still disagree with the mock — measured 2026-09-21 — and widening it is a follow-up, not a licence to keep two copies.",
     "core_keys": [
@@ -36,6 +36,7 @@
       "brackets_checked_out_said",
       "brackets_confirm_label",
       "brackets_confirm_minutes",
+      "brackets_discord_label",
       "brackets_dispute_label",
       "brackets_dispute_note_label",
       "brackets_dispute_title",
@@ -123,6 +124,15 @@
       "brackets_swiss_rounds_default",
       "brackets_third_place_default",
       "brackets_to_role_id",
+      "brackets_waiting_called",
+      "brackets_waiting_confirm",
+      "brackets_waiting_done",
+      "brackets_waiting_next_round",
+      "brackets_waiting_opponent_confirms",
+      "brackets_waiting_out",
+      "brackets_waiting_play",
+      "brackets_waiting_to_decides",
+      "brackets_waiting_waits",
       "brackets_wrong_state_said",
       "brackets_your_sets_title",
       "error_retry_expired",
@@ -10180,13 +10190,15 @@
       "method": "GET",
       "path": "/api/brackets",
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md)"
+        "page-brackets.js"
       ],
       "shape": "object",
       "keys": [
         "mode",
         "may_run",
-        "tournaments"
+        "tournaments",
+        "words",
+        "defaults"
       ],
       "rows": {
         "tournaments": [
@@ -10196,8 +10208,34 @@
           "format",
           "state",
           "entrant_count",
+          "entrant_cap",
           "starts_at",
-          "to_user_id"
+          "to_user_id",
+          "to_name"
+        ]
+      },
+      "nested": {
+        "words": [
+          "brackets_state_running",
+          "brackets_format_double_words",
+          "brackets_sign_up_label",
+          "brackets_report_label",
+          "brackets_round_winners",
+          "brackets_waiting_play",
+          "brackets_discord_label",
+          "brackets_card_rounds_words"
+        ],
+        "defaults": [
+          "format",
+          "best_of",
+          "best_of_late",
+          "best_of_finals",
+          "best_of_from_round",
+          "grand_final_reset",
+          "third_place",
+          "check_in_minutes",
+          "entrant_cap",
+          "swiss_rounds"
         ]
       }
     },
@@ -10205,7 +10243,7 @@
       "method": "GET",
       "path": "/api/brackets/{bracket_running_id}",
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md)"
+        "page-brackets.js"
       ],
       "shape": "object",
       "keys": [
@@ -10228,7 +10266,13 @@
         "thread_id",
         "channel_id",
         "message_id",
-        "check_in_closes_at"
+        "check_in_closes_at",
+        "shadow",
+        "to_name",
+        "started_at",
+        "completed_at",
+        "rules_text",
+        "rounds_to_play"
       ],
       "rows": {
         "entrants": [
@@ -10258,12 +10302,16 @@
           "score_b",
           "winner",
           "forfeit",
+          "winner_to",
+          "loser_to",
           "reported_side",
           "confirms_at",
           "confirmed_how",
           "dispute_note",
           "placement_winner",
-          "placement_loser"
+          "placement_loser",
+          "rematch",
+          "message_id"
         ],
         "standings": [
           "entrant",
@@ -10303,7 +10351,7 @@
         "format": "single"
       },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Create"
+        "page-brackets.js Create"
       ],
       "shape": "object",
       "keys": [
@@ -10324,7 +10372,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10336,7 +10386,7 @@
         "best_of": 5
       },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Options"
+        "page-brackets.js Options"
       ],
       "shape": "object",
       "keys": [
@@ -10357,7 +10407,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10366,7 +10418,7 @@
       "path": "/api/brackets/{bracket_draft_id}/signups/open",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Open sign-ups"
+        "page-brackets.js Open sign-ups"
       ],
       "shape": "object",
       "keys": [
@@ -10387,7 +10439,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10396,7 +10450,7 @@
       "path": "/api/brackets/{bracket_signups_id}/signups/close",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Close sign-ups"
+        "page-brackets.js Close sign-ups"
       ],
       "shape": "object",
       "keys": [
@@ -10417,7 +10471,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10426,7 +10482,7 @@
       "path": "/api/brackets/{bracket_signups_id}/checkin/open",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Open check-in"
+        "page-brackets.js Open check-in"
       ],
       "shape": "object",
       "keys": [
@@ -10447,7 +10503,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10456,7 +10514,7 @@
       "path": "/api/brackets/{bracket_checkin_id}/checkin/close",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Close check-in"
+        "page-brackets.js Close check-in"
       ],
       "shape": "object",
       "keys": [
@@ -10477,7 +10535,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10486,7 +10546,7 @@
       "path": "/api/brackets/{bracket_signups_id}/join",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Sign me up"
+        "page-brackets.js Sign me up"
       ],
       "shape": "object",
       "keys": [
@@ -10507,7 +10567,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10518,7 +10580,7 @@
         "name": "Remy"
       },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Add an entrant"
+        "page-brackets.js Add an entrant"
       ],
       "shape": "object",
       "keys": [
@@ -10539,7 +10601,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10547,7 +10611,7 @@
       "method": "DELETE",
       "path": "/api/brackets/{bracket_signups_id}/entrants/{bracket_entrant_id}",
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Remove"
+        "page-brackets.js Remove"
       ],
       "shape": "object",
       "keys": [
@@ -10568,8 +10632,13 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
+      },
+      "body": {
+        "reason": "contract check"
       }
     },
     {
@@ -10577,7 +10646,7 @@
       "path": "/api/brackets/{bracket_signups_id}/entrants/{bracket_removed_entrant_id}/restore",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Put back"
+        "page-brackets.js Put back"
       ],
       "shape": "object",
       "keys": [
@@ -10598,7 +10667,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10607,7 +10678,7 @@
       "path": "/api/brackets/{bracket_checkin_id}/entrants/{bracket_checkin_entrant_id}/checkin",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Check in"
+        "page-brackets.js Check in"
       ],
       "shape": "object",
       "keys": [
@@ -10628,16 +10699,20 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
     {
       "method": "POST",
       "path": "/api/brackets/{bracket_signups_id}/entrants/{bracket_entrant_id}/drop",
-      "body": {},
+      "body": {
+        "reason": "contract check"
+      },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Drop"
+        "page-brackets.js Drop"
       ],
       "shape": "object",
       "keys": [
@@ -10658,16 +10733,20 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
     {
       "method": "POST",
       "path": "/api/brackets/{bracket_running_id}/entrants/{bracket_running_entrant_id}/dq",
-      "body": {},
+      "body": {
+        "reason": "contract check"
+      },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — DQ"
+        "page-brackets.js DQ"
       ],
       "shape": "object",
       "keys": [
@@ -10688,7 +10767,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10699,7 +10780,7 @@
         "randomise": true
       },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Seed / Shuffle"
+        "page-brackets.js Seed / Shuffle"
       ],
       "shape": "object",
       "keys": [
@@ -10720,7 +10801,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10729,7 +10812,7 @@
       "path": "/api/brackets/{bracket_seeding_id}/start",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Start"
+        "page-brackets.js Start"
       ],
       "shape": "object",
       "keys": [
@@ -10750,7 +10833,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10759,7 +10844,7 @@
       "path": "/api/brackets/{bracket_running_id}/unstart",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Back to seeding"
+        "page-brackets.js Back to seeding"
       ],
       "shape": "object",
       "keys": [
@@ -10780,7 +10865,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10789,7 +10876,7 @@
       "path": "/api/brackets/{bracket_finished_id}/complete",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Complete"
+        "page-brackets.js Complete"
       ],
       "shape": "object",
       "keys": [
@@ -10810,7 +10897,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10819,7 +10908,7 @@
       "path": "/api/brackets/{bracket_complete_id}/reopen",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Reopen"
+        "page-brackets.js Reopen"
       ],
       "shape": "object",
       "keys": [
@@ -10840,7 +10929,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10849,7 +10940,7 @@
       "path": "/api/brackets/{bracket_draft_id}/cancel",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Cancel"
+        "page-brackets.js Cancel"
       ],
       "shape": "object",
       "keys": [
@@ -10870,7 +10961,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10879,7 +10972,7 @@
       "path": "/api/brackets/{bracket_cancelled_id}/restore",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Restore"
+        "page-brackets.js Restore"
       ],
       "shape": "object",
       "keys": [
@@ -10900,7 +10993,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10909,7 +11004,7 @@
       "path": "/api/brackets/{bracket_running_id}/sets/W1-2/call",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Call"
+        "page-brackets.js Call"
       ],
       "shape": "object",
       "keys": [
@@ -10930,7 +11025,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10942,7 +11039,7 @@
         "score_b": 0
       },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Report"
+        "page-brackets.js Report"
       ],
       "shape": "object",
       "keys": [
@@ -10963,7 +11060,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -10972,7 +11071,7 @@
       "path": "/api/brackets/{bracket_running_id}/sets/W1-1/confirm",
       "body": {},
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Confirm"
+        "page-brackets.js Confirm"
       ],
       "shape": "object",
       "keys": [
@@ -10993,7 +11092,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -11004,7 +11105,7 @@
         "note": "wrong stage"
       },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Dispute"
+        "page-brackets.js Dispute"
       ],
       "shape": "object",
       "keys": [
@@ -11025,7 +11126,9 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
@@ -11034,10 +11137,11 @@
       "path": "/api/brackets/{bracket_running_id}/sets/W1-2/override",
       "body": {
         "score_a": 0,
-        "score_b": 2
+        "score_b": 2,
+        "reason": "contract check"
       },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Decide"
+        "page-brackets.js Decide"
       ],
       "shape": "object",
       "keys": [
@@ -11058,16 +11162,20 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     },
     {
       "method": "POST",
       "path": "/api/brackets/{bracket_finished_id}/sets/W1-1/reset",
-      "body": {},
+      "body": {
+        "reason": "contract check"
+      },
       "read_by": [
-        "layer 3 Brackets page (not built yet; docs/info/brackets-design.md) — Reset"
+        "page-brackets.js Reset"
       ],
       "shape": "object",
       "keys": [
@@ -11088,7 +11196,45 @@
           "may_run",
           "mine",
           "finished",
-          "entrant_count"
+          "entrant_count",
+          "shadow",
+          "to_name"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_rehearsal_id}/move",
+      "body": {},
+      "settings": {
+        "brackets_mode": "on",
+        "brackets_channel_id": "{bracket_forum_id}"
+      },
+      "read_by": [
+        "page-brackets.js Move to #knuck-up"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name"
         ]
       }
     }
@@ -11118,7 +11264,8 @@
     "/minutes.html",
     "/schedule.html",
     "/structure.html",
-    "/pbs.html"
+    "/pbs.html",
+    "/brackets.html"
   ],
   "action_kinds": [
     "web.operator.read",

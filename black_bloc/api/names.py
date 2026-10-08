@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
+
+from ..sticky import GONE_CHANNEL
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +26,21 @@ CHANNEL_KINDS: dict[str, str] = {
 }
 
 UNKNOWN = {"name": None, "display_name": None, "kind": "unknown"}
+
+MENTION = re.compile(r"<#(\d+)>")
+
+
+def site_words(guild: Any, text: Any) -> Any:
+    """Discord's own markup in a sentence, as the page can show it: #name and no backticks."""
+    if not text:
+        return text
+    lookup = getattr(guild, "get_channel_or_thread", None) or guild.get_channel
+
+    def named(found: re.Match[str]) -> str:
+        name = getattr(lookup(int(found[1])), "name", None)
+        return f"#{name}" if name else GONE_CHANNEL.format(ident=found[1])
+
+    return MENTION.sub(named, str(text)).replace("`", "")
 
 
 def as_id(value: Any) -> int | None:

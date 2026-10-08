@@ -126,3 +126,18 @@ def test_named_puts_a_name_beside_every_id_and_leaves_a_missing_one_missing(guil
     row = named({"actor_id": "7", "target_id": None}, guild, "actor", "target")
     assert row["actor_name"] == "Lead"
     assert row["target_name"] is None
+
+
+def test_site_words_names_a_channel_or_a_thread_and_says_when_one_is_gone():
+    from types import SimpleNamespace
+
+    from black_bloc.api.names import site_words
+
+    places = {1: SimpleNamespace(name="knuck-up"), 2: SimpleNamespace(name="Knuck Up 12")}
+    guild = SimpleNamespace(get_channel=lambda ident: None, get_channel_or_thread=places.get)
+    said = site_words(guild, "**Knuck Up 12** is now in <#2>, under <#1>, not <#3> (`x`).")
+    assert said == (
+        "**Knuck Up 12** is now in #Knuck Up 12, under #knuck-up, not "
+        "a channel Discord no longer has (3) (x)."
+    )
+    assert site_words(guild, None) is None

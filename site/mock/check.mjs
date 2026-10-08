@@ -52,6 +52,10 @@ const IDS = {
   bracket_removed_entrant_id: '13',
   bracket_checkin_entrant_id: '21',
   bracket_running_entrant_id: '42',
+  // Move to #knuck-up: 12 is a rehearsal (its thread was made in shadow); the contract entry turns
+  // brackets_mode on and points brackets_channel_id at #general for that one request.
+  bracket_rehearsal_id: '12',
+  bracket_forum_id: '800000000000000002',
   structure_old_id: '1',
   structure_new_id: '2',
   test_channel_id: '800000000000000003',
@@ -381,6 +385,13 @@ async function checkGuard() {
   }
 }
 
+async function settingValues(keys) {
+  const response = await fetch(`${BASE}/api/settings`, { headers: { cookie: 'mock_as=staff' } });
+  const grouped = await response.json();
+  const rows = Object.values(grouped).flat();
+  return new Map(keys.map((key) => [key, (rows.find((row) => row.key === key) || {}).value ?? null]));
+}
+
 async function checkRoutes() {
   // The guard is off for this pass: every route has to answer so its shape can be read.
   await setGuard(false);
@@ -393,12 +404,23 @@ async function checkRoutes() {
       init.headers['content-type'] = 'application/json';
       init.body = fill(JSON.stringify(spec.body));
     }
+    const wanted = Object.entries(JSON.parse(fill(JSON.stringify(spec.settings || {}))));
+    const before = wanted.length ? await settingValues(wanted.map(([key]) => key)) : new Map();
+    for (const [key, value] of wanted) {
+      const set = await send('PUT', `/api/settings/${key}`, { value });
+      if (!set.ok) fail(where, `could not set ${key} first: ${set.status}`);
+    }
     let response;
     try {
       response = await fetch(`${BASE}${path}`, init);
     } catch (e) {
       fail(where, `the mock did not answer: ${e.message}`);
       continue;
+    } finally {
+      for (const [key, value] of before) {
+        const back = await send('PUT', `/api/settings/${key}`, { value });
+        if (!back.ok) fail(where, `could not put ${key} back: ${back.status}`);
+      }
     }
     const text = await response.text();
     if (response.status !== 200) {
