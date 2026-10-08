@@ -1,5 +1,7 @@
 # Marathon hosts — scan them per marathon, spotlight them, give them events; and a pairing can fix someone's Twitch channel
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the People view's buttons read *Spotlight their channel…* / *Stop spotlighting their channel* and are settings keys (D15). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > ⚠️ **2026-09-28 — people-unify (branch `people-unify`, 🔨 BUILT, NOT MERGED):** **§1 Scan hosts and §3 BaF host events are REVERSED** — hosts are always found (no switch, key or button; `marathons.scan_hosts` left in place, unread), and host events are one per host BLOCK under the one **BaF run/host events** switch (the runs half of `event_mode`); `marathons.host_events` is ignored. §2 (the host spotlight note) and §4 (the Twitch fix) stand. See [`people-unify-design.md`](people-unify-design.md).
 
 > 🔨 **BUILT 2026-09-28 on branch `marathon-host-spotlight` (worktree `C:/lcw/bb-marathon-host-spotlight`, off `main`

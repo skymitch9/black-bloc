@@ -1,5 +1,7 @@
 # BaF event ping — one Marathon-role ping per show-day on a BaF event
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the thread controls' BaF event switch is one button carrying the reading and its one reverse (D2); the question's own Yes/No are unchanged. See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > **Audience:** the conductor, reviewers, and the next session touching marathon reminders, the Marathon role, the
 > thread controls or the Marathon tracker. **Status:** TRACKED · ~~🔨 BUILT on branch `baf-event-ping` (off `main`
 > `2c2a256b`), NOT merged, NOT deployed~~ the per-show-day build below is **on `main` (`47df98d7`) and, per the

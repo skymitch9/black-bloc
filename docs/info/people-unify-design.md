@@ -1,5 +1,7 @@
 # People unify — hosts always found, one BaF run/host events switch, one set of moves per person
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the People view's labels are settings keys, Unlink shows only when linked, and the No-@ pair sits beside the opt-out (D7, D15). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > ⚠️ **2026-10-06 — announce-overrides (branch `announce-overrides`, 🔨 BUILT, NOT MERGED):** **§6's six thread-control buttons are seven** (a **Host announcements** switch sits after BaF announcements), and **§4's one set of moves per person gains two** — this run's own answer and the @ — the same for a runner and a host. Hosts are still always found; what changed is that a host is **not announced by default**. See [`announce-overrides-design.md`](announce-overrides-design.md).
 
 > 🔨 **BUILT 2026-09-28 on branch `people-unify` (worktree `C:/lcw/bb-people-unify`, off `main` `d3916a42`; v193

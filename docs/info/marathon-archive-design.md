@@ -1,5 +1,7 @@
 # Marathons are archived, never deleted — an archive table for ended marathons, and an expiry that keeps marathon channels
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** Remove is retired on every door (D11): Archive it is the one move, DELETE and an old feed-notice Remove answer in words, and the thread controls offer Archive it after the show (D5). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > 🔨 **2026-09-26 — Deviation 8 closed by `marathon-inbox`** (BUILT, NOT merged): at the move the marathon's inbox message reads `marathon_archived_word` with only *Open on the site*, and its thread is archived on Discord; Restore re-renders the message. [`marathon-inbox-design.md`](marathon-inbox-design.md).
 
 > ✅ **2026-09-26 16:36 — LIVE as v175** (merge `2ad8e43d`, release `35fa7de7`; boot clean; `GET /api/marathons/archive` answers). ⚠️ Design gap found at review: §B's three signals do not hold a marathon channel that has no feed or marathon yet (RGL row 7) — it was kept by hand; a follow-up could add `marathons = 1 AND a marathon feed seed login` as a fourth signal.

@@ -1,5 +1,7 @@
 # Marathon runner posts — each BaF run its own pinned post in the marathon's thread; the board is a head
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** a run's post carries one button a person, without "for this run", one row of five before a menu; the No-@ pair lives in the People view; state lines only for exceptions (D7). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > **Audience:** the conductor, reviewers, and the next session touching marathon boards, threads or pins.
 > **Status:** TRACKED · 🔨 **BUILT on branch `marathon-runner-posts` (off `main` `997c0be2`, v177 live), NOT merged, NOT
 > deployed.** Schema **73 → 74**, registry keys **574 → 578**, routes unchanged (**264**), five new log kinds plus two

@@ -1,5 +1,7 @@
 # Marathon controls — a ping switch per marathon, a spotlight that follows the extended schedule, and the channel's spotlight controls on the marathon
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the `/event ▸ Marathons…` card is People… · Untrack/Track · Read it now · Open the thread · Open on the site · Back (D12); Remove is gone (D11). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > **Audience:** the conductor, reviewers, and the next session touching marathons, their pings or the spotlight.
 > **Status:** TRACKED · 🔨 **BUILT on branch `marathon-controls` (off `main` `70edbad9`), NOT merged, NOT deployed** —
 > it ships with the merged, undeployed `marathon-inbox` as one deploy. Schema **71 → 72**, registry keys **543 → 552**,

@@ -1,5 +1,7 @@
 # Announce overrides — hosts off by default, a per-run answer for each person, and a no-@ choice
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the run post's per-person moves are one button each and the No-@ pair moved to the People view (D7); Runner announcements now also gates each run's live highlight (D4). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > 🔁 **SUPERSEDED IN PART 2026-10-08 — see [Runner announcements 2026-10-08](#runner-announcements-2026-10-08) at the
 > foot** (branch `marathon-controls-tidy`, NOT MERGED, NOT DEPLOYED). *BaF announcements* is now **Runner
 > announcements** and is **no longer a master**: it is the runners' DEFAULT, Host announcements the hosts', and a

@@ -1,5 +1,7 @@
 # Marathon public highlights — each BaF runner highlighted where members can see it; the thread stays staff-only
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the per-marathon Auto-highlight switch is retired (D4): a run's live highlight follows its people's Runner/Host announcements answers; `marathon_public_highlight_default` and the auto-highlight answers are gone and the `public_highlight` column is no longer read. See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > **Audience:** the conductor, reviewers, and the next session touching marathon threads, runner posts, go-live or the
 > marathon drawer. **Status:** TRACKED · 🔨 **BUILT on branch `marathon-public-highlights` (off `main` `f8494278`, the
 > merged, undeployed runner-posts; v177 live), NOT merged, NOT deployed** — meant to ship with runner-posts as v178.

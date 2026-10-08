@@ -1,5 +1,7 @@
 # Marathon thread controls — one pinned message in each tracked marathon's thread for its events and its spotlight
 
+> ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** the thread controls change shape by phase (D5); BaF run/host events, Event schedule, Auto-highlight and the help line leave the message (D1, D13, D4, D6); the spotlight is one *follows the schedule* switch with its dates in a state line (D3); the BaF event row is one button (D2). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
+
 > **Audience:** the conductor, reviewers, and the next session touching marathon threads, event modes or the marathon
 > spotlight. **Status:** TRACKED · 🔨 **BUILT on branch `marathon-thread-controls` (off `main` `28ad1e1c`), NOT merged,
 > NOT deployed** — it ships with the merged, undeployed `marathon-thread-move` as v177. Schema **72 → 73**, registry keys
