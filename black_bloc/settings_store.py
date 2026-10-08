@@ -5556,9 +5556,7 @@ CHANNEL_NOTE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the heading of the channel notes card on /chat",
     ),
     CHANNEL_NOTES_INTRO_KEY: (
-        "Pick a channel and say what it is for in one sentence. Black Bloc reads that note in "
-        "place of the channel's Discord topic whenever it points somebody somewhere. "
-        "**{count}** channel(s) have a note so far.",
+        "**{count}** channel(s) have a note.",
         ("count",),
         "the first lines of the channel notes card on /chat. It takes {count}, how many "
         "channels have a note",
@@ -5809,9 +5807,7 @@ VOICE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the heading of the card on /chat that lists which tone each member hears",
     ),
     VOICE_INTRO_KEY: (
-        "Every member hears the cookout voice; the tone is what sits on top of it. The server's "
-        "setting is **{setting}**, and a pin beats it until staff clear it. **{count}** "
-        "member(s) listed.",
+        "The server's setting is **{setting}**. **{count}** member(s) listed.",
         ("setting", "count"),
         "the first lines of that card. It takes {setting}, the chat_personality value, and "
         "{count}, how many members are listed",
@@ -6184,8 +6180,7 @@ REVIEW_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the heading of the review queue card on /chat",
     ),
     REVIEW_INTRO_KEY: (
-        "**{count}** answer(s) may have missed. Pick one to approve what the cheap model "
-        "suggests, change it, or dismiss it.",
+        "**{count}** answer(s) may have missed.",
         ("count",),
         "the first line of the review queue card on /chat. It takes {count}, how many wait",
     ),
