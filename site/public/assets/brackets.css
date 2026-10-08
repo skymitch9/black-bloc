@@ -188,3 +188,8 @@ button.bk-set:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px
 .bk-fields { display: grid; gap: 10px; }
 .bk-fields-row { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .bk-tick { display: inline-flex; align-items: center; gap: 8px; font-size: var(--et-ui-md); }
+.bk-statusrow { padding: 0 16px 10px; }
+.bk-statusrow .bk-status { margin: 0; }
+.bk-list { display: grid; gap: 12px; }
+.drawer-body:has(.bk-drawer-set) { display: grid; gap: 12px; align-content: start; }
+.bk-state { font-size: var(--et-ui-md); }

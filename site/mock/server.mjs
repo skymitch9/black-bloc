@@ -1171,7 +1171,7 @@ const SETTING_SPECS = [
   ["pb_feed_dm_no_reason", "text", "none was given.", "none was given.", "what {reason} becomes in a personal best DM when staff typed no reason"],
   // Tournament brackets (docs/info/brackets-design.md); all of it sits under core.
   ["brackets_mode", "enum", "shadow", "shadow", "off, shadow or on. off refuses every tournament move; shadow \u2014 the default \u2014 runs tournaments with each one's thread made in the rehearsal home instead of brackets_channel_id; on makes the threads in brackets_channel_id", ["off", "shadow", "on"]],
-  ["brackets_channel_id", "channel", 1076005097617760296, 1076005097617760296, "the text channel each tournament's thread is made under while brackets_mode is on; #knuck-up by default"],
+  ["brackets_channel_id", "channel", "1076005097617760296", "1076005097617760296", "the text channel each tournament's thread is made under while brackets_mode is on; #knuck-up by default"],
   ["brackets_shadow_channel_id", "channel", null, null, "where tournament threads are made while brackets_mode is shadow; blank means shadow_channel_id"],
   ["brackets_to_role_id", "role", null, null, "the Tournament Organiser role: its holders may create and run tournaments as staff can. Blank \u2014 the default \u2014 leaves tournaments to staff. Taking the role away takes the right away, even for a tournament that person created"],
   ["brackets_ping_role_id", "role", null, null, "a role @-mentioned in a tournament's thread when it starts. Blank \u2014 the default \u2014 pings nobody; the set cards still mention their two players"],
@@ -14548,7 +14548,7 @@ function seedBrackets() {
   ], {
     format: 'double', game: 'Street Fighter 6', started_at: minutesAgo(50), starts_at: minutesAgo(60),
     rules_text: 'Bo3 until top 6, Bo5 after. Stages: training only. Default controller settings.',
-    thread_id: 1290000000000000901, channel_id: 1076005097617760296,
+    thread_id: '1290000000000000901', channel_id: '1076005097617760296',
   }));
   bkPlay(double, 'W1-1', 2, 0);
   bkPlay(double, 'W1-2', 2, 1);
@@ -14557,7 +14557,7 @@ function seedBrackets() {
   bkReported(double, 'W2-2', 'a', 2, 1, casey);
   bkReported(double, 'L1-1', 'b', 1, 2, quiet, { state: 'disputed', disputed_by: dax, dispute_note: 'Game 3 was a disconnect.' });
   Object.assign(bkSetIn(double, 'L1-2'), { state: 'called', called_at: minutesAgo(2) });
-  bkSetIn(double, 'W1-1').message_id = 1290000000000000911;
+  bkSetIn(double, 'W1-1').message_id = '1290000000000000911';
 
   const robin = bkBuild(bkTournament(10, 'Friday Rumble', 'running', [
     bkEntrant(81, moth, 'Moth'), bkEntrant(82, casey, 'Casey'), bkEntrant(83, rivet, 'Rivet'),
@@ -14600,7 +14600,7 @@ function seedBrackets() {
     robin,
     swiss,
     bkTournament(12, 'Rehearsal Cup', 'signups', [bkEntrant(111, casey, 'Casey')], {
-      format: 'double', shadow: 1, thread_id: 1290000000000000912, channel_id: 800000000000000003,
+      format: 'double', shadow: 1, thread_id: '1290000000000000912', channel_id: '800000000000000003',
     }),
     done,
     bkTournament(14, 'Third Strike Open', 'seeding', [
@@ -14847,7 +14847,7 @@ route('POST', '/api/brackets/:tournament_id/move', (context) => {
   if (mode !== 'on') throw new Refused(409, 'not_on', `brackets_mode is ${mode}, so **${t.name}** stays where it is. Set brackets_mode to on first.`);
   if (!t.shadow) throw new Refused(409, 'not_rehearsal', `**${t.name}** is already in ${channel}, so nothing moved.`);
   const from = t.thread_id ?? null;
-  Object.assign(t, { shadow: 0, thread_id: Date.now(), channel_id: state.settings.get('brackets_channel_id') ?? null });
+  Object.assign(t, { shadow: 0, thread_id: String(Date.now()), channel_id: state.settings.get('brackets_channel_id') ?? null });
   t.updated_at = now();
   logAction('web.brackets.thread_moved', { actor_id: actorOf(context.session), details: { via: 'website', tournament: t.id, from_thread: from, to_thread: t.thread_id } });
   return { tournament: bkView(t, context), message: `**${t.name}** is now in <#${t.thread_id}>.` };

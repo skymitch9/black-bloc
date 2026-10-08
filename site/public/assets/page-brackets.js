@@ -181,6 +181,7 @@ const view = {
   timer: null,
   clock: null,
   filter: { query: '', filter: 'all' },
+  pending: null,
 };
 let refresh = () => {};
 
@@ -220,7 +221,7 @@ function base(id) {
 }
 
 function staff() {
-  return Boolean(view.me && view.me.staff);
+  return Boolean(view.me && view.me.staff && view.index && view.index.may_run);
 }
 
 function mode() {
@@ -326,6 +327,8 @@ async function act(path, body = {}, method = 'POST', say = view.say) {
   const done = await run(say, () => send(path, method, body), (found) => found.message);
   if (done.ok) {
     take(done.found);
+    view.readAt = Date.now();
+    view.failed = null;
     paint();
   }
   return done;
@@ -547,7 +550,6 @@ function dragRow(list, row, handle) {
   handle.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     event.preventDefault();
-    handle.setPointerCapture(event.pointerId);
     row.setAttribute('data-dragging', 'true');
     const moveTo = (y) => {
       const others = [...list.querySelectorAll('.bk-entrant')].filter((one) => one !== row);
@@ -559,16 +561,17 @@ function dragRow(list, row, handle) {
       else list.append(row);
     };
     const onMove = (next) => moveTo(next.clientY);
-    const onUp = () => {
-      handle.removeEventListener('pointermove', onMove);
-      handle.removeEventListener('pointerup', onUp);
-      handle.removeEventListener('pointercancel', onUp);
+    const onUp = (last) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (last.type === 'pointerup') moveTo(last.clientY);
       row.removeAttribute('data-dragging');
       dirty(list);
     };
-    handle.addEventListener('pointermove', onMove);
-    handle.addEventListener('pointerup', onUp);
-    handle.addEventListener('pointercancel', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   });
 }
 
@@ -629,7 +632,7 @@ function entrantsBody(t) {
     const list = t.state === 'complete'
       ? sortedStandings(pool.map((one) => ({ ...one, place: one.placement })))
       : pool.sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9) || a.id - b.id);
-    parts.push(list.length ? el('div', { class: 'rowlist' }, list.map((one) => entrantLine(t, one))) : sayNothing('Nobody yet.'));
+    parts.push(list.length ? el('div', { class: 'rowlist' }, list.map((one, at) => entrantLine(t, one, BEFORE_START.includes(t.state) ? { seed: at + 1 } : {}))) : sayNothing('Nobody yet.'));
   }
   const outBefore = BEFORE_START.includes(t.state) && t.may_run ? out : [];
   if (outBefore.length) parts.push(foldout('Out', [el('div', { class: 'rowlist' }, outBefore.map((one) => entrantLine(t, one)))], { count: outBefore.length }));
@@ -678,6 +681,10 @@ function slotLine(t, set, side) {
   ]);
 }
 
+function needsYou(t, set, moves) {
+  return moves.some((one) => ['report', 'confirm', 'dispute'].includes(one)) || (t.may_run && ['reported', 'disputed'].includes(set.state));
+}
+
 function setCard(t, set, style = null) {
   const moves = setMoves(t, set, { mode: mode() });
   const mine = t.mine !== null && (set.slot_a === t.mine || set.slot_b === t.mine);
@@ -691,7 +698,7 @@ function setCard(t, set, style = null) {
     'data-key': set.key,
     'data-state': set.state,
     'data-mine': mine ? 'true' : undefined,
-    'data-act': moves.length ? 'true' : undefined,
+    'data-act': needsYou(t, set, moves) ? 'true' : undefined,
     title: `${set.key} · ${roundWords(set)}`,
     on: quiet ? undefined : { click: () => setDrawer(set.key) },
   }, [
@@ -773,7 +780,7 @@ function gridNode(t) {
             type: 'button',
             'data-won': cell.won === true ? 'true' : cell.won === false ? 'false' : undefined,
             'data-state': cell.state,
-            'data-act': setMoves(t, set, { mode: mode() }).length ? 'true' : undefined,
+            'data-act': needsYou(t, set, setMoves(t, set, { mode: mode() })) ? 'true' : undefined,
             title: `${cell.key} · ${roundWords(set)}`,
             text,
             on: { click: () => setDrawer(cell.key) },
@@ -1036,6 +1043,7 @@ async function optionsDrawer(t) {
       paint();
       view.say.say(done.found.message, 'ok');
     } else {
+      view.pending = done.found.message;
       location.hash = `#${done.found.tournament.id}`;
     }
   };
@@ -1142,13 +1150,15 @@ async function tournamentView(id) {
   view.shape = sig([t.id, t.state, t.sets.length > 0, t.format]);
   view.parts = new Map();
   view.say = notice();
+  view.say.setAttribute('data-span', 'full');
   view.status = el('p', { class: 'bk-status', role: 'status' });
   view.holders = { head: el('div', { class: 'card-body bk-head' }) };
   view.sections = {};
   const started = t.sets.length > 0;
-  const blocks = [el('div', { class: 'card bk-headcard' }, [view.holders.head]), view.say];
+  const blocks = [el('div', { class: 'card bk-headcard', 'data-span': 'full' }, [view.holders.head, el('div', { class: 'bk-statusrow' }, [view.status])]), view.say];
   if (started) {
     const one = section(WORDS.bracket, null, { id: 'bracket', open: true });
+    one.node.setAttribute('data-span', 'full');
     view.holders.bracket = one.body;
     view.sections.bracket = one;
     blocks.push(one.node);
@@ -1168,7 +1178,6 @@ async function tournamentView(id) {
   blocks.push(entrants.node);
   paint();
   if (staff()) blocks.push(await logsNode(t.id), await settingsNode());
-  blocks.push(view.status);
   return blocks;
 }
 
@@ -1177,12 +1186,13 @@ async function listView() {
   view.holders = { list: el('div', { class: 'section-body' }) };
   view.status = el('p', { class: 'bk-status', role: 'status' });
   const one = section('Tournaments', null, { id: 'tournaments', open: true });
-  one.body.append(...listBody().filter(Boolean));
-  view.holders.list = one.body;
+  one.node.setAttribute('data-span', 'full');
+  const list = el('div', { class: 'bk-list' }, listBody().filter(Boolean));
+  one.body.append(list, view.status);
+  view.holders.list = list;
   view.parts.set('list', sig(view.index.tournaments));
   const blocks = [one.node];
   if (staff()) blocks.push(await logsNode(null), await settingsNode());
-  blocks.push(view.status);
   return blocks;
 }
 
@@ -1228,6 +1238,8 @@ async function load(me) {
   const id = wantedId();
   const blocks = id ? await tournamentView(id) : await listView();
   document.getElementById('dash').replaceChildren(...blocks.filter(Boolean));
+  if (view.pending && view.say) view.say.say(view.pending, 'ok');
+  view.pending = null;
   aside();
   paintStatus();
   if (view.timer === null) {
