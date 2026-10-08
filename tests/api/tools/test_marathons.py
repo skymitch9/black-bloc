@@ -5,7 +5,9 @@ from datetime import UTC, datetime, timedelta
 import discord
 import pytest
 
-from black_bloc.cogs.content.marathon import Marathons, get_marathon, runs_of
+from black_bloc.api.writes import WebActor
+from black_bloc.cogs.content.marathon import Marathons, get_marathon, runs_of, update_marathon
+from black_bloc.cogs.content.marathon_thread_controls import press
 from black_bloc.cogs.content.spotlight import add_channel, channel_by_id
 from black_bloc.marathon import BAD_POLL, NO_RENAME
 from black_bloc.marathon_people import BY_LINK, MATCHED_WORDS
@@ -21,6 +23,7 @@ ROUTES = [
     ("POST", "/api/marathons"),
     ("GET", "/api/marathons/1"),
     ("PATCH", "/api/marathons/1"),
+    ("POST", "/api/marathons/1/press"),
     ("DELETE", "/api/marathons/1"),
     ("POST", "/api/marathons/1/refresh"),
     ("POST", "/api/marathons/1/board"),
@@ -1365,3 +1368,219 @@ async def test_a_baf_event_day_says_which_heads_up_carries_the_ping_in_the_drawe
         day["line"],
     ]
     assert body["role_ping"]["mentions"] is True and body["role_ping"]["line"] == ""
+
+
+async def test_the_drawer_reads_the_threads_switches_in_order_with_their_words_and_moves(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+
+    body = client.get(f"/api/marathons/{marathon_id}").json()
+    found = body["controls"]
+
+    assert body["event_mode"] in ("none", "runs")
+    assert [one["action"] for one in found] == ["announce", "hostannounce", "ping", "event", "baf"]
+    assert [one["label"] for one in found] == [
+        "Runner announcements: on · turn off",
+        "Host announcements: off · turn on",
+        "Ping the marathon role: off · turn on",
+        "Marathon event: off · turn on",
+        "BaF event: no (1 of 3 runs) · say yes",
+    ]
+    assert (found[0]["to"], found[0]["on"], found[0]["state"]) == ("off", True, "announcements")
+    assert (found[1]["state"], found[2]["state"]) == ("host_announcements", None)
+    assert (found[4]["to"], found[4]["on"], found[4]["state"]) == ("yes", False, None)
+    move = {"action": found[0]["action"], "to": found[0]["to"]}
+    body = client.post(f"/api/marathons/{marathon_id}/press", json=move).json()
+    assert body["controls"][0]["label"] == "Runner announcements: off · turn on"
+    assert body["controls"][0]["to"] == "on"
+
+
+async def test_a_marathon_with_a_channel_carries_the_spotlight_switch_after_the_ping(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    spotlight_id = await add_channel(
+        web.db, wf.GUILD_ID, "gamesdonequick", added_by=7, expires_at=at(600), pin=True
+    )
+    marathon_id = add(client, spotlight_id=str(spotlight_id)).json()["id"]
+
+    found = client.get(f"/api/marathons/{marathon_id}").json()["controls"]
+
+    assert [one["action"] for one in found][2:4] == ["ping", "spotlight"]
+    spot = found[3]
+    assert spot["label"] == "Spotlight follows the schedule: on · turn off"
+    assert spot["to"] == "off"
+    move = {"action": "spotlight", "to": spot["to"]}
+    body = client.post(f"/api/marathons/{marathon_id}/press", json=move).json()
+    assert body["controls"][3]["label"] == "Spotlight follows the schedule: off · turn on"
+
+
+async def test_the_people_answer_carries_the_people_views_labels_as_the_keys_say_them(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    await web.store.set(wf.GUILD_ID, "marathon_public_button_opt_out", "Leave this one out")
+
+    labels = client.get(f"/api/marathons/{marathon_id}/people").json()["labels"]
+
+    assert labels["opt_out"] == "Leave this one out"
+    assert labels["spotlight"] == "Spotlight their channel…"
+    assert labels["unspotlight"] == "Stop spotlighting their channel"
+    assert labels["link_near"] == "Link @{username}"
+    assert set(labels) == {
+        "link_near",
+        "unlink",
+        "twitch",
+        "spotlight",
+        "unspotlight",
+        "opt_out",
+        "opt_in",
+    }
+
+
+async def test_the_drawer_reads_the_threads_spotlight_line_with_the_time_left_to_fill(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    spotlight_id = await add_channel(
+        web.db, wf.GUILD_ID, "gamesdonequick", added_by=7, expires_at=at(600), pin=True
+    )
+    lit = add(client, spotlight_id=str(spotlight_id)).json()["id"]
+    assert client.get(f"/api/marathons/{lit}").json()["spotlight_line"] == (
+        "Spotlight: on now until {until}"
+    )
+    client.patch(f"/api/marathons/{lit}", json={"spotlight_id": None})
+    assert client.get(f"/api/marathons/{lit}").json()["spotlight_line"] == (
+        "Spotlight: no channel to spotlight"
+    )
+
+
+async def quiet_marathon(client, web, wf, login, ref):
+    spotlight_id = await add_channel(
+        web.db, wf.GUILD_ID, login, added_by=7, expires_at=None, pin=True, spotlight=False
+    )
+    url = f"https://gamesdonequick.com/schedule/{ref}"
+    made = add(client, schedule_url=url, spotlight_id=str(spotlight_id))
+    assert made.status_code == 200, made.text
+    marathon_id = made.json()["id"]
+    await update_marathon(web.db, marathon_id, spotlight_mode="off")
+    return spotlight_id, marathon_id
+
+
+async def lit(web, spotlight_id, marathon_id):
+    row = await channel_by_id(web.db, spotlight_id)
+    return row["spotlight"], row["spotlit_by_marathon"] == marathon_id
+
+
+async def follows(web, wf, marathon_id):
+    return (await get_marathon(web.db, wf.GUILD_ID, marathon_id))["spotlight_mode"]
+
+
+@pytest.mark.parametrize("scenario", ["feature_off", "paused", "after_the_show"])
+async def test_spotlight_turn_on_from_the_drawer_is_the_threads_move(
+    client, sign_in, web, cog, wf, scenario
+):
+    sign_in(client)
+    thread_row, thread_one = await quiet_marathon(client, web, wf, "threaddoor", 74)
+    site_row, site_one = await quiet_marathon(client, web, wf, "sitedoor", 75)
+    span = {"starts_at": at(10), "ends_at": at(100)}
+    if scenario == "after_the_show":
+        span = {"starts_at": at(-500), "ends_at": at(-300)}
+    for one in (thread_one, site_one):
+        await update_marathon(web.db, one, **span, active=0 if scenario == "paused" else 1)
+    if scenario == "feature_off":
+        await web.store.set(wf.GUILD_ID, "marathon_spotlight", False)
+
+    thread = await press(web, web.guild, WebActor(7, "Lead"), thread_one, "spotlight", "on")
+    site = client.post(f"/api/marathons/{site_one}/press", json={"action": "spotlight", "to": "on"})
+
+    assert await lit(web, site_row, site_one) == await lit(web, thread_row, thread_one)
+    assert await follows(web, wf, site_one) == await follows(web, wf, thread_one)
+    if scenario == "after_the_show":
+        assert not thread.ok and thread.code == "no_end"
+        assert (site.status_code, site.json()["error"]) == (409, "no_end")
+        assert site.json()["message"] == thread.message
+        assert await lit(web, site_row, site_one) == (0, False)
+        assert await follows(web, wf, site_one) == "off"
+    else:
+        assert thread.ok and site.status_code == 200, site.text
+        assert await lit(web, site_row, site_one) == (1, True)
+        assert "<t:" not in site.json()["message"]
+        assert "twitch.tv/sitedoor is spotlit for **AGDQ 2027**" in site.json()["message"]
+
+
+@pytest.mark.parametrize(
+    "move",
+    [
+        {"action": "archive", "to": "on"},
+        {"action": "hostevents", "to": "on"},
+        {"action": "spotlight", "to": "cancel"},
+        {"action": "baf", "to": "on"},
+        {"action": "announce"},
+        {},
+    ],
+)
+async def test_a_press_that_is_not_a_drawer_switch_is_refused_in_words(
+    client, sign_in, web, cog, wf, move
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+
+    found = client.post(f"/api/marathons/{marathon_id}/press", json=move)
+
+    assert found.status_code == 422 and found.json()["error"] == "bad_press"
+    assert "nothing was changed" in found.json()["message"]
+    assert await get_marathon(web.db, wf.GUILD_ID, marathon_id) is not None
+
+
+async def test_each_drawer_switch_presses_through_the_threads_own_handler(
+    client, sign_in, web, cog, wf
+):
+    """The marathon event needs an events category to stay on; its press still answers 200."""
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+
+    for one in client.get(f"/api/marathons/{marathon_id}").json()["controls"]:
+        move = {"action": one["action"], "to": one["to"]}
+        found = client.post(f"/api/marathons/{marathon_id}/press", json=move)
+        assert found.status_code == 200, (move, found.text)
+        after = next(two for two in found.json()["controls"] if two["action"] == one["action"])
+        assert found.json()["message"]
+        if one["action"] != "event":
+            assert after["on"] is not one["on"], move
+
+
+async def test_the_drawer_reads_the_threads_tracker_and_archive_words_from_their_keys(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    await web.store.set(wf.GUILD_ID, "marathon_controls_archive", "Put it away")
+
+    labels = client.get(f"/api/marathons/{marathon_id}").json()["labels"]
+    assert labels == {
+        "tracker": "Marathon tracker ↗",
+        "archive": "Put it away",
+        "unlink_event": "Unlink the event",
+    }
+
+    client.post(f"/api/marathons/{marathon_id}/archive")
+    gone = client.get(f"/api/marathons/{marathon_id}").json()
+    assert gone["archived"] is True and gone["labels"]["tracker"] == "Marathon tracker ↗"
+
+
+async def test_a_runs_event_unlink_has_its_own_words_beside_the_persons_unlink(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    await web.store.set(wf.GUILD_ID, "marathon_run_event_unlink", "Drop the run's event")
+
+    labels = client.get(f"/api/marathons/{marathon_id}").json()["labels"]
+    people = client.get(f"/api/marathons/{marathon_id}/people").json()["labels"]
+
+    assert labels["unlink_event"] == "Drop the run's event"
+    assert people["unlink"] == "Unlink" and labels["unlink_event"] != people["unlink"]

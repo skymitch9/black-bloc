@@ -6616,6 +6616,7 @@ MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY = "marathon_controls_follow_off_running
 MARATHON_HOST_EVENTS_GONE_KEY = "marathon_host_events_gone_said"
 MARATHON_BAF_EVENT_STAFF_SET_KEY = "marathon_baf_event_staff_set_line"
 MARATHON_CONTROLS_ARCHIVE_KEY = "marathon_controls_archive"
+MARATHON_RUN_EVENT_UNLINK_KEY = "marathon_run_event_unlink"
 MARATHON_BAF_EVENT_NAMES_KEY = "marathon_baf_event_names"
 MARATHON_BAF_EVENT_MIN_RUNS_KEY = "marathon_baf_event_min_runs"
 MARATHON_BAF_EVENT_ASK_PERCENT_KEY = "marathon_baf_event_ask_percent"
@@ -7586,6 +7587,12 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the thread controls' button once the show is over: it moves the marathon to the "
         "archive, and Restore on the site puts it back",
     ),
+    MARATHON_RUN_EVENT_UNLINK_KEY: (
+        "Unlink the event",
+        (),
+        "the marathon drawer's button under a run's event link that unlinks that event from "
+        "the run; it sits beside the person's own Unlink",
+    ),
     MARATHON_OVERLAY_ON_SAID_KEY: (
         "**{marathon}** takes its start times, hosts and commentators from the event's own "
         "schedule sheet now, when the viewer links one that matches. The schedule is being "
@@ -8467,11 +8474,10 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "role: it is not set mentionable and the bot lacks Mention Everyone. It takes {role}",
     ),
     MARATHON_CHANNEL_PING_HELP_KEY: (
-        "On a marathon channel, During events pings only while one of its marathons is running "
-        "— the marathon sets that window from its schedule, and the channel is spotlit for it.",
+        "During events pings while one of its marathons runs.",
         (),
-        "the help line under the Pings choice on a marathon channel's Go-live drawer, saying what "
-        "During events means there",
+        "the state line under the Pings choice on a marathon channel's Go-live drawer and the "
+        "marathon drawer: when During events pings there",
     ),
     MARATHON_REMINDER_TEMPLATE_KEY: (
         "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}",

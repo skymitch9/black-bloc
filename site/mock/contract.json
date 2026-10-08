@@ -5833,9 +5833,19 @@
         "channel_spotlight",
         "spotlight_state",
         "retimed_runs",
-        "keeps_clock"
+        "keeps_clock",
+        "controls",
+        "spotlight_line",
+        "labels"
       ],
       "rows": {
+        "controls": [
+          "action",
+          "to",
+          "on",
+          "label",
+          "state"
+        ],
         "run_list": [
           "id",
           "game",
@@ -5956,18 +5966,20 @@
       ]
     },
     {
-      "method": "PATCH",
-      "path": "/api/marathons/{marathon_bare_id}",
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/press",
       "body": {
-        "spotlight_mode": "off"
+        "action": "announce",
+        "to": "off"
       },
       "read_by": [
-        "marathons-section.js (events.html) the drawer's Settings foldout — Spotlight the channel while it runs"
+        "marathons-section.js (events.html) Settings for this marathon — every switch presses the thread's own handler (marathon_thread_controls.press)"
       ],
       "shape": "object",
       "keys": [
         "id",
-        "spotlight_mode",
+        "controls",
+        "announcements",
         "message"
       ]
     },
@@ -6133,7 +6145,8 @@
         "unmatched",
         "tracked_state",
         "thread_url",
-        "inbox_message_url"
+        "inbox_message_url",
+        "labels"
       ],
       "rows": {
         "run_list": [
@@ -6349,7 +6362,8 @@
         "timezone",
         "pairings",
         "baf",
-        "others"
+        "others",
+        "labels"
       ],
       "rows": {
         "baf": [

@@ -19,7 +19,7 @@ import {
   zoneSelect,
 } from './ui.js';
 
-const HASH = /^marathon-(\d+)$/;
+const HASH = /^marathon-(\d+)(?:-run-(\d+))?$/;
 const TICK_MS = 1000;
 const FLASH_MS = 8000;
 const BY_MARKS = 'marks';
@@ -145,6 +145,24 @@ let reading = false;
 function wantedId() {
   const found = HASH.exec(String(location.hash || '').replace(/^#/, '').trim());
   return found ? found[1] : null;
+}
+
+function wantedRun() {
+  const found = HASH.exec(String(location.hash || '').replace(/^#/, '').trim());
+  return found && found[2] ? found[2] : null;
+}
+
+function showRun(runId) {
+  const row = runId ? sheet.rows.find((one) => String(one.id) === String(runId)) : null;
+  if (row) shown.day = row.day;
+  return row;
+}
+
+function pointAt(row) {
+  const node = row ? document.getElementById(`run-${row.id}`) : null;
+  if (!node) return;
+  node.scrollIntoView({ block: 'center' });
+  flash({ [row.id]: 'moved' });
 }
 
 function length(seconds) {
@@ -681,7 +699,9 @@ async function load() {
   }
   take(found);
   viewer = viewerZone(sheet.timezone);
+  const pointed = showRun(wantedRun());
   paint();
+  pointAt(pointed);
   if (timer === null) {
     timer = setInterval(tick, TICK_MS);
     document.addEventListener('visibilitychange', () => {

@@ -87,6 +87,7 @@ from ...cogs.content.marathon_role_ping import state_of as role_ping_state
 from ...cogs.content.marathon_signals import sheet_times
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
 from ...cogs.content.marathon_spotlight import state_for as spotlight_state_for
+from ...cogs.content.marathon_thread_controls import drawer_switches, press, spot_template
 from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...golive_replay import BECAUSE_REPLAY
@@ -98,11 +99,21 @@ from ...marathon_ping import pings_role
 from ...marathon_sources import SOURCE_WORDS, retimes_itself, schedule_page
 from ...marathon_spotlight import mode_of as spotlight_mode_of
 from ...settings_store import (
+    MARATHON_CONTROLS_ARCHIVE_KEY,
+    MARATHON_CONTROLS_TRACKER_KEY,
     MARATHON_FAR_POLL_HOURS_KEY,
     MARATHON_HOST_EVENTS_GONE_KEY,
     MARATHON_LEAD_DAYS_KEY,
     MARATHON_MODE_KEY,
+    MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY,
+    MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY,
+    MARATHON_PEOPLE_BUTTON_TWITCH_KEY,
+    MARATHON_PEOPLE_BUTTON_UNLINK_KEY,
+    MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY,
     MARATHON_POLL_MINUTES_KEY,
+    MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
+    MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
+    MARATHON_RUN_EVENT_UNLINK_KEY,
 )
 from ..auth import Refused, staff_dependency
 from ..names import member_row, resolve_one
@@ -110,6 +121,22 @@ from ..writes import actor_for, require_cog, require_db, require_guild, wanted_i
 from .golive import one_spotlight
 
 log = logging.getLogger(__name__)
+
+PEOPLE_LABELS = {
+    "link_near": MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY,
+    "unlink": MARATHON_PEOPLE_BUTTON_UNLINK_KEY,
+    "twitch": MARATHON_PEOPLE_BUTTON_TWITCH_KEY,
+    "spotlight": MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY,
+    "unspotlight": MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY,
+    "opt_out": MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
+    "opt_in": MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
+}
+
+DRAWER_LABELS = {
+    "tracker": MARATHON_CONTROLS_TRACKER_KEY,
+    "archive": MARATHON_CONTROLS_ARCHIVE_KEY,
+    "unlink_event": MARATHON_RUN_EVENT_UNLINK_KEY,
+}
 
 COG = "Marathons"
 FEATURE = "Marathon schedules"
@@ -158,6 +185,10 @@ def answered(outcome: Any) -> Any:
     if not outcome.ok:
         raise Refused(outcome.status, outcome.code, outcome.message)
     return outcome
+
+
+def stored_labels(bot: Any, guild: Any, keys: dict[str, str]) -> dict[str, str]:
+    return {name: str(bot.store.get(guild.id, key) or "") for name, key in keys.items()}
 
 
 def person_row(guild: Any, person: dict[str, Any], announce: Any = None) -> dict[str, Any]:
@@ -513,6 +544,7 @@ def build_router(bot: Any) -> APIRouter:
             "unmatched": [],
             "retimed_runs": 0,
             "keeps_clock": False,
+            "labels": stored_labels(bot, guild, DRAWER_LABELS),
         }
 
     async def detail(guild: Any, marathon_id: Any) -> dict[str, Any]:
@@ -530,6 +562,7 @@ def build_router(bot: Any) -> APIRouter:
         def announce(run: Any, user_id: Any) -> Any:
             return person_state(bot, guild, row, run, user_id)
 
+        spotlit = await spotlight_of(bot, guild, row)
         return (
             await marathon_row(bot, guild, row, runs)
             | {
@@ -538,8 +571,13 @@ def build_router(bot: Any) -> APIRouter:
                 "unmatched": mt.unmatched_names(runs),
                 "retimed_runs": sig.retimed_count(runs),
                 "keeps_clock": not retimes_itself(row["source"]),
+                "controls": drawer_switches(
+                    bot, guild, row, runs, spotlit["spotlight_state"]["state"]
+                ),
+                "spotlight_line": spot_template(bot, guild, row, spotlit["spotlight_state"]),
+                "labels": stored_labels(bot, guild, DRAWER_LABELS),
             }
-            | await spotlight_of(bot, guild, row)
+            | spotlit
         )
 
     async def people(guild: Any, marathon: Any) -> list[dict[str, Any]]:
@@ -563,6 +601,7 @@ def build_router(bot: Any) -> APIRouter:
             "pairings": await people(guild, marathon),
             "baf": [entry_row(guild, one, opted, words, mention) for one in state["baf"]],
             "others": [entry_row(guild, one, None, words) for one in state["others"]],
+            "labels": stored_labels(bot, guild, PEOPLE_LABELS),
         }
 
     @router.get("")
@@ -807,6 +846,25 @@ def build_router(bot: Any) -> APIRouter:
             )
             said.append(done.message)
         return await detail(guild, marathon_id) | {"message": " ".join(said)}
+
+    @router.post("/{marathon_id}/press")
+    async def marathon_press(
+        request: Request, marathon_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        await wanted(guild, marathon_id)
+        action, to = payload.get("action"), payload.get("to")
+        if not mtc.drawer_move(action, to):
+            raise Refused(422, "bad_press", mtc.BAD_PRESS)
+        actor = actor_for(bot, who, guild)
+        done = answered(
+            await press(bot, guild, actor, marathon_id, str(action), str(to), via=VIA_WEBSITE)
+        )
+        said = mtc.site_words(done.message, zone_of(bot, guild))
+        return await detail(guild, marathon_id) | {"message": said}
 
     @router.delete("/{marathon_id}")
     async def marathon_delete(request: Request, marathon_id: int) -> dict[str, Any]:

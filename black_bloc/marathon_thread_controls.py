@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
 from . import marathon as mt
@@ -19,6 +21,7 @@ from .marathon_baf_event import (
     YES,
     Judgement,
 )
+from .marathon_hotfix import local_words
 
 EVENT = "event"
 RUNS = "runs"
@@ -183,6 +186,37 @@ def controls(
     )
 
 
+DRAWER_MOVES = {
+    ANNOUNCE: (ON, OFF),
+    HOST_ANNOUNCE: (ON, OFF),
+    PING: (ON, OFF),
+    SPOTLIGHT: (ON, OFF),
+    EVENT: (ON, OFF),
+    BAF: (YES, NO, FOLLOW, CLEAR),
+}
+BAD_PRESS = (
+    "That is not one of the marathon's switches and moves, so nothing was changed. Reload the "
+    "drawer and press the switch again."
+)
+STAMP = re.compile(r"<t:(\d+)(?::[tTdDfFR])?>")
+
+
+def drawer_move(action: Any, to: Any) -> bool:
+    """A thread button the site's `POST /api/marathons/{id}/press` may make."""
+    return str(to or "") in DRAWER_MOVES.get(str(action or ""), ())
+
+
+def site_words(message: Any, zone_name: Any) -> str:
+    """A thread answer for the site: each Discord `<t:…>` stamp in the server's own time."""
+    return STAMP.sub(
+        lambda found: (
+            local_words(datetime.fromtimestamp(int(found[1]), UTC).isoformat(), zone_name)
+            or found[0]
+        ),
+        str(message or ""),
+    )
+
+
 def after_show(marathon: Any, now: Any) -> bool:
     """Only a known end puts the controls in their after-show shape."""
     ends = parse_ts(mt._cell(marathon, "ends_at"))
@@ -215,6 +249,8 @@ __all__ = [
     "controls",
     "custom_id",
     "label",
+    "drawer_move",
+    "site_words",
     "spot_line",
     "spot_switch",
     "switch",

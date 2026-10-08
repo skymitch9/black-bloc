@@ -2340,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1090
+    assert len(settings_store.KEY_TYPES) == 1091
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2792,3 +2792,10 @@ def test_every_thread_controls_button_label_fits_a_button():
     assert len(keys) == 19
     for key in keys:
         assert len(settings_store.MARATHON_WORDS[key][0]) <= 80, key
+
+
+async def test_the_marathon_channel_ping_line_says_when_during_events_pings(store):
+    key = settings_store.MARATHON_CHANNEL_PING_HELP_KEY
+    assert store.default(key) == "During events pings while one of its marathons runs."
+    await store.set(1, key, "Only while it runs.")
+    assert store.get(1, key) == "Only while it runs."

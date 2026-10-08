@@ -8,7 +8,16 @@ export const BAF = 'BaF';
 
 export const CARD_PEOPLE = 'People';
 export const SETTINGS_FOLD = 'Settings for this marathon';
-export const DRAWER_PARTS = ['the header', 'Spotlight', 'Pings', CARD_PEOPLE, SETTINGS_FOLD, 'the posts line', 'the moves'];
+export const MORE = 'More…';
+export const NO_BAF = `Nobody from ${BAF} is on this schedule yet.`;
+export const LINK_NOTE = '**{name}** as {marathon}’s schedule writes it.';
+export const SPOTLIGHT_BODY = 'A channel-only row for twitch.tv/{login} goes on the Go-live page — spotlit '
+  + 'and announced while they stream, from {lead} h before their first run on {marathon} to {slack} h '
+  + 'after their last.';
+export const SPOTLIGHT_SLOT_BODY = 'A channel-only row for twitch.tv/{login} goes on the Go-live page — '
+  + 'spotlit and announced while they stream, from {lead} h before this run to {slack} h after it.';
+export const UNSPOTLIGHT_BODY = 'twitch.tv/{login} comes off the Go-live page; an announcement already out stays as posted.';
+export const DRAWER_PARTS = ['the header', 'Spotlight', 'Pings', CARD_PEOPLE, SETTINGS_FOLD, 'the posts line', 'the moves', MORE];
 
 const LAST_READ = 'Last read {ago}';
 const NOT_READ = 'Not read yet';
@@ -177,7 +186,7 @@ export function sourcesTitle(feeds, { enabled = true } = {}, now = Date.now()) {
   return soonest ? `${head} · ${said(SOURCES_NEXT, { in: inWords(soonest, now) })}` : head;
 }
 
-/** The drawer's seven parts, top to bottom (Spotlight and Pings only with a channel). */
+/** The drawer's parts, top to bottom (Spotlight and Pings only with a channel). */
 export function drawerParts() {
   return [...DRAWER_PARTS];
 }
@@ -396,4 +405,63 @@ export function trackMoves(row) {
     tracked: ['untrack'],
     ignored: ['anyway'],
   }[row.tracked_state] || [];
+}
+
+/** The bar: the tracking move, Read it now while it is read, Archive it, More…. */
+export function barMoves(row) {
+  return [...trackMoves(row), row.active ? 'read' : null, 'archive', 'more'].filter(Boolean);
+}
+
+/** Under More…: the rare moves, each only where it changes something. */
+export function moreMoves(row) {
+  return [
+    'rename',
+    row.active ? 'pause' : 'resume',
+    row.inbox_message_url ? null : 'inbox',
+    row.retimed_runs ? 'sheet_times' : null,
+  ].filter(Boolean);
+}
+
+/** A person on a slot: the Discord People view's moves in its order. */
+export function slotMoves(entry, person, { archived = false } = {}) {
+  if (archived) return [];
+  const found = entry || {};
+  const moves = ['link'];
+  if (!found.member && found.looks_like) moves.push('link_near');
+  if (found.member && found.matched_by === 'pairing' && found.pairing_id) moves.push('unlink', 'twitch');
+  if (found.login) moves.push(found.spotlight_id ? 'unspotlight' : (found.channel_id ? 'on_golive' : 'spotlight'));
+  if (found.user_id && found.opted_out !== null && found.opted_out !== undefined) moves.push(found.opted_out ? 'opt_in' : 'opt_out');
+  if (found.user_id && found.mention) moves.push('mention');
+  if (person && person.user_id && person.announce && person.announce.move) moves.push('run_answer');
+  return moves;
+}
+
+/** Under a slot's people: the run on the tracker, its shoutout, its event link. */
+export function runMoves(run, marathon, { archived = false } = {}) {
+  if (archived) return [];
+  return ['tracker', run.shoutable && marathon.tracked ? 'shout' : null, run.event_id ? 'event' : null].filter(Boolean);
+}
+
+const RUN_HASH = /^#?marathon-(\d+)(?:-run-(\d+))?$/;
+
+export function trackerRunHash(marathonId, runId) {
+  return `#marathon-${marathonId}-run-${runId}`;
+}
+
+export function trackerRunOf(hash) {
+  const found = RUN_HASH.exec(String(hash || '').trim());
+  return found ? { marathon: found[1], run: found[2] || null } : null;
+}
+
+/** A switch with a server default: `default` while it follows it, `own` once it has its own. */
+export function switchDefault(state) {
+  if (!state || state.default === undefined) return null;
+  return state.own === null || state.own === undefined ? 'default' : 'own';
+}
+
+/** The event mode with only the BaF run/host half moved (marathon_thread_controls.wanted_mode's other half). */
+export function runsMode(mode, on) {
+  const marathon = ['marathon', 'both'].includes(mode);
+  if (on) return marathon ? 'both' : 'runs';
+  return marathon ? 'marathon' : 'none';
 }
