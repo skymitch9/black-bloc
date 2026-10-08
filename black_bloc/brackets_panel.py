@@ -15,7 +15,18 @@ from . import brackets_sets as sets_
 from . import brackets_store as store_
 from . import brackets_thread as thread_
 from .brackets import access, play
-from .brackets.model import CALLED, COMPLETE, DISPUTED, READY, REPORTED
+from .brackets.model import (
+    CALLED,
+    COMPLETE,
+    DISPUTED,
+    DOUBLE,
+    FORMATS,
+    READY,
+    REPORTED,
+    ROUND_ROBIN,
+    SINGLE,
+    SWISS,
+)
 from .brackets_moves import said
 from .command_errors import AnswersErrors
 from .panels import (
@@ -31,7 +42,7 @@ from .panels import (
     refusal,
     retire,
 )
-from .settings_store import BRACKETS_PANEL_MINUTES
+from .settings_store import BRACKETS_LENGTHS, BRACKETS_PANEL_MINUTES
 
 HOME = "home"
 TOURNAMENT = "tournament"
@@ -102,13 +113,27 @@ CONFIRMED = {
 }
 MEMBER_LISTED = (store_.SIGNUPS, store_.CHECK_IN, store_.SEEDING, store_.RUNNING)
 
-CREATE_LABEL = "Create…"
-CREATE_TITLE = "A new tournament"
+CREATE_PICK = "Create…"
 CREATE_NAME = "Name"
 CREATE_GAME = "Game"
-CREATE_FORMAT = "Format — single, double, round_robin or swiss"
-CREATE_BEST_OF = "Best of (blank: the default)"
+CREATE_BEST_OF = "Best of"
 CREATE_CAP = "Entrant cap (blank: none)"
+CREATE_THIRD = "Third-place set"
+CREATE_RESET = "Grand-final reset"
+CREATE_ROUNDS = "Swiss rounds (blank: automatic)"
+CREATE_ID = "bk-create-"
+FORMAT_LINES = {
+    SINGLE: "One loss and out",
+    DOUBLE: "Two losses and out",
+    ROUND_ROBIN: "Everyone plays everyone",
+    SWISS: "Paired by record each round",
+}
+FORMAT_EXTRAS = {
+    SINGLE: ("third_place",),
+    DOUBLE: ("grand_final_reset",),
+    ROUND_ROBIN: (),
+    SWISS: ("rounds",),
+}
 SEED_TITLE = "Seeding, top seed first"
 SEED_LABEL = "One entrant per line"
 SEED_UNKNOWN = "Line {line} names nobody in **{name}**, so nothing was changed."
@@ -224,7 +249,7 @@ async def build_home(
     if shown:
         view.add_item(TournamentPick(bot, guild, shown))
     if runs:
-        view.add_item(CreateButton())
+        view.add_item(FormatPick(bot, guild))
     return (embed, view)
 
 
@@ -568,34 +593,99 @@ class TournamentPick(discord.ui.Select):
         await render(interaction, (TOURNAMENT, int(self.values[0])), self.view)
 
 
-class CreateButton(discord.ui.Button):
-    def __init__(self) -> None:
-        super().__init__(label=CREATE_LABEL, style=discord.ButtonStyle.primary, row=0)
+class FormatPick(discord.ui.Select):
+    def __init__(self, bot: Any, guild: Any) -> None:
+        options = [
+            discord.SelectOption(
+                label=text(words(bot, guild, cards.FORMAT_KEYS[one])),
+                value=one,
+                description=FORMAT_LINES[one],
+            )
+            for one in FORMATS
+        ]
+        super().__init__(placeholder=CREATE_PICK, options=options, row=2)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await form_opened(interaction, CreateModal(self.view))
+        bot, guild = interaction.client, interaction.guild
+        modal = CreateModal(bot, guild, self.values[0], self.view)
+        await form_opened(interaction, modal)
 
 
-class CreateModal(AnswersErrors, discord.ui.Modal, title=CREATE_TITLE):
-    name = discord.ui.TextInput(label=CREATE_NAME, max_length=moves_.NAME_LIMIT)
-    game = discord.ui.TextInput(label=CREATE_GAME, max_length=moves_.GAME_LIMIT, required=False)
-    format = discord.ui.TextInput(label=CREATE_FORMAT, max_length=20, required=False)
-    best_of = discord.ui.TextInput(label=CREATE_BEST_OF, max_length=2, required=False)
-    cap = discord.ui.TextInput(label=CREATE_CAP, max_length=4, required=False)
+def typed(
+    custom: str, limit: int, *, required: bool = False, default: Any = None
+) -> discord.ui.TextInput:
+    return discord.ui.TextInput(
+        custom_id=CREATE_ID + custom,
+        max_length=limit,
+        required=required,
+        default=None if default is None else str(default),
+    )
 
-    def __init__(self, previous: Any = None) -> None:
-        super().__init__()
+
+def whole(value: str) -> Any:
+    value = value.strip()
+    if not value:
+        return None
+    return int(value) if value.isdigit() else value
+
+
+class CreateModal(AnswersErrors, discord.ui.Modal):
+    def __init__(self, bot: Any, guild: Any, chosen: str, previous: Any = None) -> None:
+        super().__init__(title=text(words(bot, guild, cards.FORMAT_KEYS[chosen]), 45))
+        self.chosen = chosen
         self.previous = previous
+        defaults = moves_.option_defaults(bot.store, guild.id)
+        self.name = self.ask(typed("name", moves_.NAME_LIMIT, required=True), CREATE_NAME)
+        self.game = self.ask(typed("game", moves_.GAME_LIMIT), CREATE_GAME)
+        self.best_of = self.ask(
+            discord.ui.Select(
+                custom_id=CREATE_ID + "best_of",
+                options=[
+                    discord.SelectOption(
+                        label=f"{CREATE_BEST_OF} {one}",
+                        value=one,
+                        default=one == str(defaults["best_of"]),
+                    )
+                    for one in BRACKETS_LENGTHS
+                ],
+            ),
+            CREATE_BEST_OF,
+        )
+        self.cap = self.ask(typed("cap", 4, default=defaults["entrant_cap"]), CREATE_CAP)
+        extras = FORMAT_EXTRAS[chosen]
+        if "third_place" in extras:
+            self.third_place = self.ask(self.tick("third_place", defaults), CREATE_THIRD)
+        if "grand_final_reset" in extras:
+            self.grand_final_reset = self.ask(
+                self.tick("grand_final_reset", defaults), CREATE_RESET
+            )
+        if "rounds" in extras:
+            self.rounds = self.ask(
+                typed("rounds", 2, default=defaults["swiss_rounds"]), CREATE_ROUNDS
+            )
+
+    def ask(self, component: Any, label: str) -> Any:
+        self.add_item(discord.ui.Label(text=label, component=component))
+        return component
+
+    @staticmethod
+    def tick(field: str, defaults: dict[str, Any]) -> discord.ui.Checkbox:
+        return discord.ui.Checkbox(custom_id=CREATE_ID + field, default=bool(defaults[field]))
 
     def given(self) -> dict[str, Any]:
-        found: dict[str, Any] = {"name": self.name.value, "game": self.game.value}
-        wanted = self.format.value.strip().lower().replace(" ", "_")
-        if wanted:
-            found["format"] = wanted
-        for field, value in (("best_of", self.best_of.value), ("entrant_cap", self.cap.value)):
-            value = value.strip()
-            if value:
-                found[field] = int(value) if value.isdigit() else value
+        found: dict[str, Any] = {
+            "name": self.name.value,
+            "game": self.game.value,
+            "format": self.chosen,
+            "entrant_cap": whole(self.cap.value),
+        }
+        if self.best_of.values:
+            found["best_of"] = int(self.best_of.values[0])
+        for field in ("third_place", "grand_final_reset"):
+            if field in FORMAT_EXTRAS[self.chosen]:
+                found[field] = bool(getattr(self, field).value)
+        if "rounds" in FORMAT_EXTRAS[self.chosen]:
+            found["swiss_rounds"] = whole(self.rounds.value)
         return found
 
     async def on_submit(self, interaction: discord.Interaction) -> None:

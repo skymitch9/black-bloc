@@ -499,11 +499,21 @@ every view with `render_again`):
 
 | View | A member sees | An organiser (staff or `brackets_to_role_id`) also sees |
 |---|---|---|
-| Home | the tournaments in sign-ups, check-in, seeding or running (one line each, a picker) | every tournament; **Create…** (form: name, game, format, best of, entrant cap) |
+| Home | the tournaments in sign-ups, check-in, seeding or running (one line each, a picker) | every tournament; ~~**Create…** (form: name, game, format, best of, entrant cap)~~ *(owner 2026-10-07: "elimination types should be a drop down")* a **Create…** dropdown of the four formats (the page's `brackets_format_*_words`, a one-line description each), which opens that format's form — see *The Create form* below |
 | A tournament | the starter card; *Your sets* (the players line is `brackets_set_card_players`, review fix 15); **Sign up** (sign-ups, not in) · **Leave** (in, before the start — draft and seeding too, review fix 11) · **Check in** (check-in, not yet) · **Drop out** (running, asks first); a picker of their sets | *Open sets*; the moves legal now — draft: Open sign-ups, Add entrant…, Cancel · sign-ups: Close sign-ups, Open check-in, Add entrant…, Cancel · check-in: Close check-in, Add entrant…, Cancel · seeding: Open sign-ups, Open check-in, Seed…, Shuffle, Start, Add entrant…, Cancel · running: Call ready sets (when one is ready), Complete (when finished), Back to seeding, Cancel · complete: Reopen, Cancel · cancelled: Restore; **staff only**, while the thread is a rehearsal and the mode is `on`: Move to #knuck-up; an entrant picker; a picker of every set |
 | An entrant | — | before the start: Remove… or Restore (check-in: Check in / Check out first) · running: DQ… and Drop…, or Restore |
 | A set | Report (ready/called) · Confirm and Dispute (reported, and not the reporter) | Report (not playing) · Call (ready) · Let it stand (reported/disputed) · Decide… · *{a} by forfeit…* · *{b} by forfeit…* · Reset… |
 | Add entrant | — | a member picker, **Add a guest…** (form: name) |
+
+**The Create form** (branch `brackets-format-select`). ~~The organiser typed the format into the form~~ — the format
+is the dropdown's choice, carried in the modal object (`CreateModal.chosen`); the form's title is the format's words
+and it holds only that format's fields: single — Name, Game, Best of (a dropdown, Bo1–Bo15), Entrant cap, Third-place
+set (a checkbox) · double — the same with Grand-final reset instead · round robin — Name, Game, Best of, Entrant cap ·
+Swiss — the same plus Swiss rounds (blank: automatic). Cap, rounds, best of and the flags start at the registry defaults
+(`option_defaults`); the late and finals best-ofs, start time, check-in minutes and rules are not on the Discord form
+(a modal holds at most five components) and stay at the registry defaults, editable on the page's drawer. The one
+writer is still `brackets_moves.create`, which re-checks the organiser and every option on submit. The panel has no
+Edit, so there is no second place the format is chosen on Discord.
 
 Cancel, Back to seeding and Drop out ask first (Keep it / yes). Remove, DQ, Drop, Decide, Reset and a forfeit open a
 form with an optional reason, which is what the member is DM'd — the form is the confirmation. Seed… is a form listing
