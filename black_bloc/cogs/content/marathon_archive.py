@@ -254,6 +254,7 @@ async def archive_held(
     from .marathon import runs_of
     from .marathon_events import cancel_every_run_event
     from .marathon_inbox import archived_inbox
+    from .marathon_thread_controls import archived_controls
 
     cog = cog_of(bot)
     runs = await runs_of(bot.db, marathon["id"])
@@ -275,6 +276,7 @@ async def archive_held(
         details=details_of(marathon, runs, why, via),
     )
     await cog.unpin_board(guild, marathon, because=ma.UNPIN_BECAUSE, runs=runs)
+    await archived_controls(bot, guild, marathon)
     await archived_inbox(bot, guild, marathon, at)
     return True
 

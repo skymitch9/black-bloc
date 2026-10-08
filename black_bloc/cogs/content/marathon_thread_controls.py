@@ -389,7 +389,7 @@ async def archived_controls(bot: Any, guild: Any, marathon: Any) -> None:
     if thread is None:
         return
     try:
-        message = await message_in(thread, int(message_id))
+        message = await message_in(await reopened(thread), int(message_id))
         await message.edit(view=None)
     except Exception as exc:
         log.info("marathon: could not clear the archived controls — %s", reason_of(exc))
@@ -604,10 +604,7 @@ async def archive_from_thread(
     from ... import marathon_archive as ma
     from .marathon_archive import archive_marathon
 
-    outcome = await archive_marathon(bot, guild, actor, marathon, why=ma.STAFF, via=via)
-    if outcome.ok:
-        await archived_controls(bot, guild, marathon)
-    return outcome
+    return await archive_marathon(bot, guild, actor, marathon, why=ma.STAFF, via=via)
 
 
 async def press(

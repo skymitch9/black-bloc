@@ -266,6 +266,71 @@ async def test_archive_it_moves_the_marathon_to_the_archive_and_restore_brings_t
     assert labels(message) == ["Marathon tracker ↗", "Archive it"]
 
 
+def edits_refused_once_archived(thread, message):
+    real = message.edit
+    seen = []
+
+    async def edit(content=None, **kwargs):
+        seen.append(thread.archived)
+        if thread.archived:
+            raise RuntimeError("Thread is archived")
+        return await real(content, **kwargs)
+
+    message.edit = edit
+    return seen
+
+
+async def an_ended_marathon(bot, cog):
+    marathon = await tracked_marathon(bot, cog, channel=await quiet_row(bot))
+    thread = the_thread(bot)
+    message = controls_in(thread)[0]
+    cog.clock = lambda: NOW + timedelta(minutes=230)
+    await controls.refresh_controls(bot, bot.guild, marathon["id"])
+    return marathon, thread, message, edits_refused_once_archived(thread, message)
+
+
+async def test_archive_it_on_the_thread_clears_the_buttons_before_the_thread_is_archived(bot, cog):
+    marathon, thread, message, seen = await an_ended_marathon(bot, cog)
+
+    assert (await pressed(bot, marathon, "archive", "on")).ok
+
+    assert seen and True not in seen and current_view(message) is None and thread.archived
+
+
+async def test_the_sites_archive_clears_the_buttons_before_the_thread_is_archived(bot, cog):
+    from black_bloc.cogs.content.marathon_archive import archive_marathon
+
+    marathon, thread, message, seen = await an_ended_marathon(bot, cog)
+
+    done = await archive_marathon(bot, bot.guild, FakeActor(), marathon, via="website")
+
+    assert done.ok and seen and True not in seen and current_view(message) is None and thread.archived
+
+
+async def test_the_automatic_archive_clears_the_buttons_before_the_thread_is_archived(bot, cog):
+    marathon, thread, message, seen = await an_ended_marathon(bot, cog)
+    await bot.store.set(GUILD, "marathon_archive_after_days", 1)
+    cog.clock = lambda: NOW + timedelta(days=3)
+
+    await cog.tick_once()
+
+    assert await fresh(bot, marathon) is None
+    assert seen and True not in seen and current_view(message) is None and thread.archived
+
+
+async def test_an_already_archived_thread_is_opened_to_clear_the_buttons_and_archived_again(
+    bot, cog
+):
+    from black_bloc.cogs.content.marathon_archive import archive_marathon
+
+    marathon, thread, message, seen = await an_ended_marathon(bot, cog)
+    thread.archived = True
+
+    await archive_marathon(bot, bot.guild, FakeActor(), marathon, via="website")
+
+    assert seen and True not in seen and current_view(message) is None and thread.archived
+
+
 # --- the marathon event button ------------------------------------------------------------------
 
 
