@@ -99,6 +99,8 @@ from ...marathon_ping import pings_role
 from ...marathon_sources import SOURCE_WORDS, retimes_itself, schedule_page
 from ...marathon_spotlight import mode_of as spotlight_mode_of
 from ...settings_store import (
+    MARATHON_CONTROLS_ARCHIVE_KEY,
+    MARATHON_CONTROLS_TRACKER_KEY,
     MARATHON_FAR_POLL_HOURS_KEY,
     MARATHON_HOST_EVENTS_GONE_KEY,
     MARATHON_LEAD_DAYS_KEY,
@@ -127,6 +129,11 @@ PEOPLE_LABELS = {
     "unspotlight": MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY,
     "opt_out": MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
     "opt_in": MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
+}
+
+DRAWER_LABELS = {
+    "tracker": MARATHON_CONTROLS_TRACKER_KEY,
+    "archive": MARATHON_CONTROLS_ARCHIVE_KEY,
 }
 
 COG = "Marathons"
@@ -176,6 +183,10 @@ def answered(outcome: Any) -> Any:
     if not outcome.ok:
         raise Refused(outcome.status, outcome.code, outcome.message)
     return outcome
+
+
+def stored_labels(bot: Any, guild: Any, keys: dict[str, str]) -> dict[str, str]:
+    return {name: str(bot.store.get(guild.id, key) or "") for name, key in keys.items()}
 
 
 def person_row(guild: Any, person: dict[str, Any], announce: Any = None) -> dict[str, Any]:
@@ -531,6 +542,7 @@ def build_router(bot: Any) -> APIRouter:
             "unmatched": [],
             "retimed_runs": 0,
             "keeps_clock": False,
+            "labels": stored_labels(bot, guild, DRAWER_LABELS),
         }
 
     async def detail(guild: Any, marathon_id: Any) -> dict[str, Any]:
@@ -561,6 +573,7 @@ def build_router(bot: Any) -> APIRouter:
                     bot, guild, row, runs, spotlit["spotlight_state"]["state"]
                 ),
                 "spotlight_line": spot_template(bot, guild, row, spotlit["spotlight_state"]),
+                "labels": stored_labels(bot, guild, DRAWER_LABELS),
             }
             | spotlit
         )
@@ -586,9 +599,7 @@ def build_router(bot: Any) -> APIRouter:
             "pairings": await people(guild, marathon),
             "baf": [entry_row(guild, one, opted, words, mention) for one in state["baf"]],
             "others": [entry_row(guild, one, None, words) for one in state["others"]],
-            "labels": {
-                name: str(bot.store.get(guild.id, key) or "") for name, key in PEOPLE_LABELS.items()
-            },
+            "labels": stored_labels(bot, guild, PEOPLE_LABELS),
         }
 
     @router.get("")

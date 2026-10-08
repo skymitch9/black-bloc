@@ -165,7 +165,6 @@ const EVENT_SELECT = 'Event';
 const OPEN_ON_GOLIVE = 'Open on Go-live ↗';
 const ROLE_PING_ON = 'Marathon role';
 const ROLE_PING_OFF = 'no Marathon role';
-const TRACKER_WORD = 'Marathon tracker ↗';
 const RUN_ON_TRACKER = 'Open this run on the tracker ↗';
 const DEFAULT_TAG = 'default';
 const BACK_TO_DEFAULT = 'back to the default ({state})';
@@ -496,7 +495,7 @@ function headerBlock(marathon, board, say) {
       badge(marathon.phase_word, PHASE_TONE[marathon.phase] || null),
       ...trackedHead(marathon),
       el('span', { class: 'mx-line', 'data-tone': reading.tone || undefined, text: reading.text }),
-      linkAction(TRACKER_WORD, trackerHref(marathon.id)),
+      linkAction((marathon.labels || {}).tracker, trackerHref(marathon.id)),
     ])),
     el('p', { class: 'field-help mx-head-quiet' }, joined([
       el('span', { text: datesWords(marathon, timeZone) }),
@@ -1141,7 +1140,7 @@ function barMove(marathon, say, move) {
     return step(marathon, say, one.label, () => send(`/api/marathons/${marathon.id}/${one.path}`, 'POST', one.body), one.tone);
   }
   if (move === 'read') return step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn');
-  if (move === 'archive') return button('Archive it', () => archiveMarathon(marathon, say), { tone: 'quiet' });
+  if (move === 'archive') return button((marathon.labels || {}).archive, () => archiveMarathon(marathon, say), { tone: 'quiet' });
   return null;
 }
 

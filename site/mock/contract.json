@@ -5835,7 +5835,8 @@
         "retimed_runs",
         "keeps_clock",
         "controls",
-        "spotlight_line"
+        "spotlight_line",
+        "labels"
       ],
       "rows": {
         "controls": [
@@ -6144,7 +6145,8 @@
         "unmatched",
         "tracked_state",
         "thread_url",
-        "inbox_message_url"
+        "inbox_message_url",
+        "labels"
       ],
       "rows": {
         "run_list": [

@@ -1549,3 +1549,18 @@ async def test_each_drawer_switch_presses_through_the_threads_own_handler(
         assert found.json()["message"]
         if one["action"] != "event":
             assert after["on"] is not one["on"], move
+
+
+async def test_the_drawer_reads_the_threads_tracker_and_archive_words_from_their_keys(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    await web.store.set(wf.GUILD_ID, "marathon_controls_archive", "Put it away")
+
+    labels = client.get(f"/api/marathons/{marathon_id}").json()["labels"]
+    assert labels == {"tracker": "Marathon tracker ↗", "archive": "Put it away"}
+
+    client.post(f"/api/marathons/{marathon_id}/archive")
+    gone = client.get(f"/api/marathons/{marathon_id}").json()
+    assert gone["archived"] is True and gone["labels"]["tracker"] == "Marathon tracker ↗"

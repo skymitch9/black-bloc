@@ -8055,6 +8055,7 @@ function marathonDetail(row) {
     keeps_clock: MARATHON_KEEPS_CLOCK.has(row.source),
     controls: marathonControls(row),
     spotlight_line: marathonSpotTemplate(row),
+    labels: marathonStoredLabels(MARATHON_DRAWER_LABELS),
     ...marathonSpotlightOf(row),
   };
 }
@@ -8956,6 +8957,7 @@ function marathonArchivedDetail(row) {
     unmatched: [],
     retimed_runs: 0,
     keeps_clock: false,
+    labels: marathonStoredLabels(MARATHON_DRAWER_LABELS),
   };
 }
 
@@ -9344,7 +9346,7 @@ function marathonBoard(row) {
     pairings: marathonPairingsFor(row),
     baf: entries.filter((one) => one.member).sort((a, b) => marathonBafOrder(a).localeCompare(marathonBafOrder(b)) || a.name.localeCompare(b.name)),
     others: entries.filter((one) => !one.member).sort((a, b) => a.key.localeCompare(b.key)),
-    labels: marathonPeopleLabels(),
+    labels: marathonStoredLabels(MARATHON_PEOPLE_LABELS),
   };
 }
 
@@ -9359,8 +9361,15 @@ const MARATHON_PEOPLE_LABELS = {
   opt_in: 'marathon_public_button_opt_in',
 };
 
-function marathonPeopleLabels() {
-  return Object.fromEntries(Object.entries(MARATHON_PEOPLE_LABELS).map(([name, key]) => [name, String(state.settings.get(key) || '')]));
+// The bot's api/tools/marathons.DRAWER_LABELS: the thread's own words the drawer reuses.
+const MARATHON_DRAWER_LABELS = {
+  tracker: 'marathon_controls_tracker',
+  archive: 'marathon_controls_archive',
+};
+
+// The bot's api/tools/marathons.stored_labels.
+function marathonStoredLabels(keys) {
+  return Object.fromEntries(Object.entries(keys).map(([name, key]) => [name, String(state.settings.get(key) || '')]));
 }
 
 function marathonEntryFor(row, given) {
