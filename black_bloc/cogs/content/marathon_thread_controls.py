@@ -127,6 +127,7 @@ SPOT_LINE_KEYS = {
     mtc.LINE_NONE: MARATHON_CONTROLS_SPOTLIGHT_NONE_LINE_KEY,
     mtc.LINE_RUNNING: MARATHON_CONTROLS_SPOTLIGHT_RUNNING_LINE_KEY,
 }
+STATE_FIELDS = {mtc.ANNOUNCE: mh.ANNOUNCE, mtc.HOST_ANNOUNCE: mh.HOST_ANNOUNCE}
 RETIRED_SAID = {
     mtc.HOSTS: mh.SCAN_GONE,
     mtc.RUNS: mtc.RUNS_GONE,
@@ -228,17 +229,16 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
 def drawer_switches(
     bot: Any, guild: Any, marathon: Any, rows: Any, spot_state: Any
 ) -> list[dict[str, Any]]:
-    """The thread's switches for the site drawer at every phase, each with its label and the
-    PATCH body that makes its move."""
+    """The thread's switches for the site drawer at every phase, each with its label, the
+    `{action, to}` the site's press route hands to `press`, and the field holding its default."""
     controls, labels = labelled(bot, guild, marathon, list(rows), spot_state, over=False)
-    mode = me.mode_of(marathon)
     return [
         {
             "action": one.action,
             "to": one.to,
             "on": one.word == mtc.ON,
             "label": text,
-            "patch": mtc.patch_for(one, mode),
+            "state": STATE_FIELDS.get(one.action),
         }
         for one, text in zip(controls, labels, strict=True)
         if one.action != mtc.LINK

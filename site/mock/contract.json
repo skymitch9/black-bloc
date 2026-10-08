@@ -5843,7 +5843,7 @@
           "to",
           "on",
           "label",
-          "patch"
+          "state"
         ],
         "run_list": [
           "id",
@@ -5965,18 +5965,20 @@
       ]
     },
     {
-      "method": "PATCH",
-      "path": "/api/marathons/{marathon_bare_id}",
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/press",
       "body": {
-        "spotlight_mode": "off"
+        "action": "announce",
+        "to": "off"
       },
       "read_by": [
-        "marathons-section.js (events.html) the drawer's Settings foldout — Spotlight the channel while it runs"
+        "marathons-section.js (events.html) Settings for this marathon — every switch presses the thread's own handler (marathon_thread_controls.press)"
       ],
       "shape": "object",
       "keys": [
         "id",
-        "spotlight_mode",
+        "controls",
+        "announcements",
         "message"
       ]
     },

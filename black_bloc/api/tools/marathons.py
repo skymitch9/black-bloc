@@ -87,7 +87,7 @@ from ...cogs.content.marathon_role_ping import state_of as role_ping_state
 from ...cogs.content.marathon_signals import sheet_times
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
 from ...cogs.content.marathon_spotlight import state_for as spotlight_state_for
-from ...cogs.content.marathon_thread_controls import drawer_switches, spot_template
+from ...cogs.content.marathon_thread_controls import drawer_switches, press, spot_template
 from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...golive_replay import BECAUSE_REPLAY
@@ -833,6 +833,25 @@ def build_router(bot: Any) -> APIRouter:
             )
             said.append(done.message)
         return await detail(guild, marathon_id) | {"message": " ".join(said)}
+
+    @router.post("/{marathon_id}/press")
+    async def marathon_press(
+        request: Request, marathon_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        await wanted(guild, marathon_id)
+        action, to = payload.get("action"), payload.get("to")
+        if not mtc.drawer_move(action, to):
+            raise Refused(422, "bad_press", mtc.BAD_PRESS)
+        actor = actor_for(bot, who, guild)
+        done = answered(
+            await press(bot, guild, actor, marathon_id, str(action), str(to), via=VIA_WEBSITE)
+        )
+        said = mtc.site_words(done.message, zone_of(bot, guild))
+        return await detail(guild, marathon_id) | {"message": said}
 
     @router.delete("/{marathon_id}")
     async def marathon_delete(request: Request, marathon_id: int) -> dict[str, Any]:

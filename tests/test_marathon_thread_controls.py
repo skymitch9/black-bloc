@@ -1,4 +1,5 @@
 import re
+from datetime import UTC, datetime
 
 import pytest
 
@@ -183,24 +184,34 @@ def test_no_known_end_is_never_after_the_show():
 
 
 @pytest.mark.parametrize(
-    ("control", "mode", "wanted"),
+    ("action", "to", "made"),
     [
-        (mtc.Control("announce", "off", "on"), "none", {"announcements": False}),
-        (mtc.Control("hostannounce", "on", "off"), "none", {"host_announcements": True}),
-        (mtc.Control("ping", "on", "off"), "none", {"ping_role": True}),
-        (mtc.Control("spotlight", "off", "on"), "none", {"spotlight_mode": "off"}),
-        (mtc.Control("spotlight", "on", "off"), "none", {"spotlight_mode": "follow"}),
-        (mtc.Control("event", "on", "off"), "runs", {"event_mode": "both"}),
-        (mtc.Control("event", "off", "on"), "both", {"event_mode": "runs"}),
-        (mtc.Control("baf", "yes", "off", 1, mtc.BAF_SAID_NO), "none", {"baf_event": "yes"}),
-        (mtc.Control("baf", "follow", "on", 1, mtc.BAF_STAFF_YES), "none", {"baf_event": "follow"}),
-        (
-            mtc.Control("baf", "clear", "on", 1, mtc.BAF_ANSWERED_YES),
-            "none",
-            {"baf_event_answer": "clear"},
-        ),
-        (mtc.Control("link", "", ""), "none", {}),
+        ("announce", "on", True),
+        ("hostannounce", "off", True),
+        ("ping", "on", True),
+        ("spotlight", "on", True),
+        ("spotlight", "off", True),
+        ("spotlight", "cancel", False),
+        ("event", "off", True),
+        ("baf", "yes", True),
+        ("baf", "no", True),
+        ("baf", "follow", True),
+        ("baf", "clear", True),
+        ("baf", "on", False),
+        ("archive", "on", False),
+        ("hostevents", "on", False),
+        ("link", "", False),
+        (None, None, False),
     ],
 )
-def test_each_switch_has_the_site_patch_that_makes_the_same_move(control, mode, wanted):
-    assert mtc.patch_for(control, mode) == wanted
+def test_the_site_presses_only_the_drawers_switches(action, to, made):
+    assert mtc.drawer_move(action, to) is made
+
+
+def test_a_thread_answer_reads_its_discord_stamps_in_the_servers_time_on_the_site():
+    stamp = int(datetime(2027, 1, 5, 18, 30, tzinfo=UTC).timestamp())
+
+    said = mtc.site_words(f"On until <t:{stamp}:f>, set <t:{stamp}>.", "America/Phoenix")
+
+    assert said == "On until Tue 5 Jan 11:30, set Tue 5 Jan 11:30."
+    assert mtc.site_words("no stamp", None) == "no stamp"

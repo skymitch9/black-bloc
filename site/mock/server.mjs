@@ -7487,6 +7487,81 @@ function marathonSetSpotlightMode(row, given) {
     : `**${row.name}** no longer spotlights its channel. A spotlight it had already turned on is turned off; one staff set stays as it is.`;
 }
 
+// The bot's cogs/content/marathon_thread_controls.start_spotlight: the thread's turn on. On now,
+// held by this marathon until its span end plus the tail, whatever follow would do; before the
+// lead window the marathon follows (refused when nothing could start it); no end is refused.
+function marathonStartSpotlight(row) {
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+  if (!channel) throw new Refused(409, 'no_channel', marathonSaid('marathon_controls_no_channel', { marathon: row.name }));
+  const lead = Number(state.settings.get('marathon_spotlight_lead_minutes') ?? 15);
+  const tail = Number(state.settings.get('marathon_spotlight_tail_minutes') ?? 60);
+  const said = [];
+  if (channel.spotlight !== false) {
+    if (row.spotlight_mode === 'off') said.push(marathonSetSpotlightMode(row, 'follow'));
+    said.push(marathonSaid('marathon_controls_already_on', { channel: channel.twitch_login }));
+    return said.join(' ');
+  }
+  const now = Date.now();
+  const starts = row.starts_at ? new Date(row.starts_at).getTime() : null;
+  const end = starts === null ? null : Math.max(starts, new Date(row.ends_at || row.starts_at).getTime()) + tail * 60000;
+  if (end === null || end <= now) throw new Refused(409, 'no_end', marathonSaid('marathon_controls_no_end', { marathon: row.name }));
+  if (now < starts - lead * 60000) {
+    const can = state.settings.get('marathon_spotlight') !== false && state.settings.get('marathon_mode') !== 'off' && channelTakesMarathons(channel);
+    if (!can) throw new Refused(409, 'cannot_wait', marathonSaid('marathon_controls_cannot_wait', { marathon: row.name, channel: channel.twitch_login, lead }));
+    if (row.spotlight_mode === 'off') marathonSetSpotlightMode(row, 'follow');
+    return marathonSaid('marathon_controls_waits_said', { lead, when: marathonStamp(starts - lead * 60000), tail, channel: channel.twitch_login, marathon: row.name });
+  }
+  if (row.spotlight_mode === 'off') said.push(marathonSetSpotlightMode(row, 'follow'));
+  if (channel.spotlight === false) {
+    Object.assign(channel, { spotlight: true, expires_at: new Date(end).toISOString(), spotlit_by_marathon: row.id });
+    logAction('web.golive.spotlight_updated', { details: { login: channel.twitch_login, spotlight: 1, expires_at: channel.expires_at, spotlit_by_marathon: row.id } });
+  }
+  said.push(marathonSaid('marathon_controls_started_said', { channel: channel.twitch_login, marathon: row.name, until: marathonStamp(new Date(channel.expires_at).getTime()), tail }));
+  return said.filter(Boolean).join(' ');
+}
+
+// The bot's cogs/content/marathon_thread_controls.turn_off_spotlight / cancel_spotlight.
+function marathonTurnOffSpotlight(row) {
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+  if (!channel) throw new Refused(409, 'no_channel', marathonSaid('marathon_controls_no_channel', { marathon: row.name }));
+  const spotlit = channel.spotlight !== false;
+  if (spotlit && !channel.expires_at) throw new Refused(409, 'kept', marathonSaid('marathon_controls_kept_refused', { channel: channel.twitch_login }));
+  const held = spotlit && channel.spotlit_by_marathon === row.id;
+  if (row.spotlight_mode !== 'off') {
+    const moved = marathonSetSpotlightMode(row, 'off');
+    if (held) return moved;
+  }
+  const key = spotlit && !held ? 'marathon_controls_follow_off_running_said' : 'marathon_controls_cancelled_said';
+  return marathonSaid(key, { marathon: row.name, channel: channel.twitch_login });
+}
+
+// The bot's marathon_thread_controls.site_words over a <t:…> stamp: the server's own time.
+function marathonStamp(ms) {
+  return hotfixLocal(new Date(ms).toISOString(), String(state.settings.get('default_timezone') || ''));
+}
+
+// The bot's marathon_thread_controls.DRAWER_MOVES and cogs/content/marathon_thread_controls.press.
+const MARATHON_DRAWER_MOVES = {
+  announce: ['on', 'off'],
+  hostannounce: ['on', 'off'],
+  ping: ['on', 'off'],
+  spotlight: ['on', 'off'],
+  event: ['on', 'off'],
+  baf: ['yes', 'no', 'follow', 'clear'],
+};
+const MARATHON_BAD_PRESS = "That is not one of the marathon's switches and moves, so nothing was changed. Reload the drawer and press the switch again.";
+
+function marathonPress(row, action, to) {
+  if (!(MARATHON_DRAWER_MOVES[String(action || '')] || []).includes(String(to || ''))) throw new Refused(422, 'bad_press', MARATHON_BAD_PRESS);
+  const on = to === 'on';
+  if (action === 'announce') return marathonSetSwitch(row, 'announcements', on);
+  if (action === 'hostannounce') return marathonSetSwitch(row, 'host_announcements', on);
+  if (action === 'ping') return marathonSetPingRole(row, on);
+  if (action === 'event') return marathonSetMode(row, marathonEventModeFor(marathonModeOf(row), on));
+  if (action === 'baf') return to === 'clear' ? marathonSetBafAnswer(row, 'clear') : marathonSetBafEvent(row, to);
+  return on ? marathonStartSpotlight(row) : marathonTurnOffSpotlight(row);
+}
+
 // The bot's cogs/content/marathon_ping.set_ping_role: off drops the marathon's ping window, on makes it again.
 function marathonSetPingRole(row, given) {
   const word = typeof given === 'boolean' ? String(given) : String(given ?? '').trim().toLowerCase();
@@ -7985,8 +8060,8 @@ function marathonDetail(row) {
 }
 
 // The bot's cogs/content/marathon_thread_controls.drawer_switches: the thread's switches in the
-// thread's order and words at every phase, each with the PATCH body that makes its move
-// (marathon_thread_controls.patch_for).
+// thread's order and words at every phase, each with the {action, to} POST …/press makes and
+// the field holding its server default (state).
 const MARATHON_SPOT_SWITCHED = ['held', 'held_other', 'until', 'scheduled', 'waiting', 'off'];
 const MARATHON_BAF_LABELS = {
   said_yes: 'marathon_controls_baf_said_yes',
@@ -8045,28 +8120,25 @@ function marathonBafControl(row) {
     to: shape.to,
     on: shape.on,
     label: marathonSaid(MARATHON_BAF_LABELS[shape.label], { reason }),
-    patch: shape.to === 'clear' ? { baf_event_answer: 'clear' } : { baf_event: shape.to },
+    state: null,
   };
 }
 
 function marathonControls(row) {
-  const flip = (action, on, key, patch) => ({
+  const flip = (action, on, key, field = null) => ({
     action,
     to: on ? 'off' : 'on',
     on,
     label: marathonSaid(`${key}_${on ? 'on' : 'off'}`, {}),
-    patch: patch(!on),
+    state: field,
   });
-  const mode = marathonModeOf(row);
   const spot = marathonSpotlightOf(row).spotlight_state.state;
   return [
-    flip('announce', marathonSwitch(row, 'announcements').on, 'marathon_controls_announcements', (to) => ({ announcements: to })),
-    flip('hostannounce', marathonSwitch(row, 'host_announcements').on, 'marathon_controls_host_announcements', (to) => ({ host_announcements: to })),
-    flip('ping', Boolean(row.ping_role), 'marathon_controls_ping', (to) => ({ ping_role: to })),
-    MARATHON_SPOT_SWITCHED.includes(spot)
-      ? flip('spotlight', row.spotlight_mode !== 'off', 'marathon_controls_spotlight_follow', (to) => ({ spotlight_mode: to ? 'follow' : 'off' }))
-      : null,
-    flip('event', ['marathon', 'both'].includes(mode), 'marathon_controls_event', (to) => ({ event_mode: marathonEventModeFor(mode, to) })),
+    flip('announce', marathonSwitch(row, 'announcements').on, 'marathon_controls_announcements', 'announcements'),
+    flip('hostannounce', marathonSwitch(row, 'host_announcements').on, 'marathon_controls_host_announcements', 'host_announcements'),
+    flip('ping', Boolean(row.ping_role), 'marathon_controls_ping'),
+    MARATHON_SPOT_SWITCHED.includes(spot) ? flip('spotlight', row.spotlight_mode !== 'off', 'marathon_controls_spotlight_follow') : null,
+    flip('event', ['marathon', 'both'].includes(marathonModeOf(row)), 'marathon_controls_event'),
     marathonBafControl(row),
   ].filter(Boolean);
 }
@@ -9030,6 +9102,14 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
     said.push(`**${record.name}** is dismissed for **${row.name}**. **Look again** asks the tracker once more.`);
   }
   return { ...marathonDetail(row), message: said.join(' ') };
+});
+
+route('POST', '/api/marathons/:marathon_id/press', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const body = await context.body();
+  const message = marathonPress(row, body.action, body.to);
+  return { ...marathonDetail(row), message };
 });
 
 route('POST', '/api/marathons/:marathon_id/next', (context) => {

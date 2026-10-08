@@ -942,11 +942,15 @@ async function patchMarathon(marathon, say, body) {
   await after(marathon, done);
 }
 
-const SWITCH_STATES = { announce: 'announcements', hostannounce: 'host_announcements' };
+async function pressSwitch(marathon, say, control) {
+  const move = { action: control.action, to: control.to };
+  const done = await run(say, () => send(`/api/marathons/${marathon.id}/press`, 'POST', move), (found) => found?.message || SAVED);
+  await after(marathon, done);
+}
 
 /** Beside a switch with a server default: `default` while it follows it, the way back once it has its own. */
 function defaultBit(marathon, say, control) {
-  const key = SWITCH_STATES[control.action];
+  const key = control.state;
   const state = key ? marathon[key] : null;
   const kind = switchDefault(state);
   if (kind === 'default') return badge(DEFAULT_TAG, null);
@@ -963,9 +967,9 @@ function switchLines(marathon, say, control) {
   return [];
 }
 
-/** One of the thread's switches: its label says the state and the move, and a press writes at once. */
+/** One of the thread's switches: its label says the state and the move, and a press is the thread's own. */
 function switchRow(marathon, say, control) {
-  const press = button(control.label, () => patchMarathon(marathon, say, control.patch), { tone: control.on ? null : 'quiet' });
+  const press = button(control.label, () => pressSwitch(marathon, say, control), { tone: control.on ? null : 'quiet' });
   press.setAttribute('aria-pressed', control.on ? 'true' : 'false');
   press.dataset.action = control.action;
   return [
