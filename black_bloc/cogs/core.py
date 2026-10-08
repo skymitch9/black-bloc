@@ -454,7 +454,6 @@ LEVELS_INTRO = (
     "Every feature keeps every line on the dashboard's Logs page. This decides how much of it "
     "is repeated in the Discord log channel as well."
 )
-GROUP_INTRO = "{count} setting(s) in **{group}**. Pick one to see what it is and change it."
 NOT_A_NUMBER = (
     "**{label}** takes a whole number and you typed `{given}`, so nothing was changed. Open it "
     "again and type digits only."
@@ -715,8 +714,7 @@ def build_level(bot: Any, guild: Any, key: str) -> tuple[discord.Embed, Settings
 def build_group(bot: Any, guild: Any, group: str, needle: str = "") -> tuple[Any, SettingsPanel]:
     store = bot.store
     keys = sp.keys_in(group)
-    lines = [GROUP_INTRO.format(count=len(keys), group=group), ""]
-    lines += [
+    lines = [
         sp.KEY_LINE.format(key=key, value=display_value(key, store.get(guild.id, key)))
         for key in keys
     ]

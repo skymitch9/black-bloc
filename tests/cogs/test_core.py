@@ -1818,3 +1818,11 @@ async def test_the_owner_and_an_administrator_set_and_clear_who_may(bot, db, lea
 async def test_every_other_structure_key_stays_with_staff(bot, lead):
     assert (await set_key(bot, bot.guild, "structure_backup_mode", "off", lead)).ok
     assert (await set_key(bot, bot.guild, "structure_backup_hour", 5, lead)).ok
+
+
+async def test_a_settings_group_lists_its_keys_with_no_intro_line(bot):
+    embed, _view = core_cog.build_group(bot, bot.guild, "core")
+    first = sp.keys_in("core")[0]
+    assert embed.description.splitlines()[0].startswith(sp.KEY_LINE.split("{")[0])
+    assert first in embed.description.splitlines()[0]
+    assert "Pick one to see" not in embed.description

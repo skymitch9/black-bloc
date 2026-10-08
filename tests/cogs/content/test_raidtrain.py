@@ -515,6 +515,7 @@ async def test_the_mode_off_panel_still_gives_staff_the_mode_select(bot, cog, or
     interaction = await open_the_panel(cog, bot, organizer)
     assert "Mode…" in placeholders(interaction.view)
     assert labels(interaction.view) == ["Setup…", "Logs", "Refresh", "Open on the site"]
+    assert "is how a Lead" not in interaction.embed.description
 
 
 async def test_a_shadow_panel_renders_exactly_like_an_on_one_plus_a_line(bot, cog, organizer, db):

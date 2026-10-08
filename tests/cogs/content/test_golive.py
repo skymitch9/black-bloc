@@ -2170,6 +2170,7 @@ async def test_the_streamers_panel_lists_everyone_who_linked_a_channel(cog, bot,
     shown = await press(bot, member, panel.view, "Streamers…")
 
     assert shown.embed.title == "Streamers"
+    assert "Everyone who has linked" not in str(shown.embed.description or "")
     options = picker(shown.view, cog_module.PICK_A_STREAMER).options
     assert [one.label for one in options] == [
         "Alice — twitch.tv/alice",

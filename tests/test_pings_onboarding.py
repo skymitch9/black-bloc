@@ -391,3 +391,8 @@ async def test_the_last_sync_comes_off_the_log_and_never_a_second_timestamp_key(
     await onboarding.reconcile(bot, bot.guild, by=STAFF, asked=True)
 
     assert await onboarding.last_sync(bot, GUILD) is not None
+
+
+def test_the_no_community_refusal_says_the_fix_and_no_how_to_aside():
+    assert onboarding.NO_COMMUNITY.endswith("Enable Community** first.")
+    assert "is how" not in onboarding.NO_COMMUNITY

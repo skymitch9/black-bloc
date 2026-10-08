@@ -157,10 +157,6 @@ MODE_PICK = "Announcements: off / shadow / on"
 MODE_OPTION = "Announcements: {mode}"
 PICK_A_STREAMER = "Somebody who has linked a channel…"
 STREAMERS_TITLE = "Streamers"
-STREAMERS_INTRO = (
-    "Everyone who has linked a Twitch channel. Picking one shows what Black Bloc knows about "
-    "them, and lets you undo it for them — the same as the Go-live page on the site."
-)
 STREAMERS_EMPTY = "Nobody has linked a Twitch channel yet."
 STREAMER_CARD = "**{name}** — twitch.tv/{login}"
 STREAMER_OPTION = "{name} — twitch.tv/{login}"
@@ -2213,7 +2209,7 @@ async def build_streamers(
         if picked is not None
         else None
     )
-    lines = [STREAMERS_INTRO] if rows else [STREAMERS_EMPTY]
+    lines = [] if rows else [STREAMERS_EMPTY]
     view = GoLivePanel(minutes_for(bot, guild.id))
     if rows:
         view.add_item(StreamerPick(guild, rows[:SELECT_CAP], len(rows), chosen))

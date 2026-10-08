@@ -10183,7 +10183,7 @@ route('POST', '/api/pings/onboarding/sync', (context) => {
   if (state.golive.onboardingManaged === false) {
     throw new Refused(409, 'not_managed', 'Black Bloc is not managing this server’s onboarding, so nothing was changed. **Manage onboarding again** on this panel turns it back on.');
   }
-  throw new Refused(409, 'no_community', 'This server is not a Community server yet, so Discord has no onboarding screen to put anything on and nothing was changed. Turn Community on in **Server Settings ▸ Enable Community** first; until then the *Notifications* role menu is how members opt in.');
+  throw new Refused(409, 'no_community', 'This server is not a Community server yet, so Discord has no onboarding screen to put anything on and nothing was changed. Turn Community on in **Server Settings ▸ Enable Community** first.');
 });
 
 // The two words black_bloc/api/tools/events.py:EDITABLE names; every other state is settled.

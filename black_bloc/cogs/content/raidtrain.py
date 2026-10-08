@@ -931,7 +931,6 @@ SHADOW_LINE = (
     "In **shadow** every move is recorded and the lineup post and the DMs are held back."
 )
 OFF_LINE = "Raid trains are **off**, so nothing new can be started."
-OFF_LINE_STAFF = " **Mode…** below is how a Lead turns them on."
 TRAIN_LINE = (
     "**#{train_id} {title}** — {when} · {taken}/{total} filled · {status} · open: {free}"
 )
@@ -1090,7 +1089,7 @@ async def staff_lines(bot: Any, guild: Any) -> list[str]:
 async def root_lines(bot: Any, guild: Any, rows: Any, *, mode: str, staff: bool) -> list[str]:
     lines = [MODE_LINE.format(mode=mode)]
     if mode == rt.MODE_OFF:
-        lines.append(OFF_LINE + (OFF_LINE_STAFF if staff else ""))
+        lines.append(OFF_LINE)
     elif mode == "shadow":
         lines.append(SHADOW_LINE)
     lines.append("")
