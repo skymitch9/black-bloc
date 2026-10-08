@@ -1,5 +1,8 @@
 # Marathon controls, streamlined — Layer A, the Discord side (2026-10-08)
 
+> **Layer B (the site drawer) BUILT 2026-10-08 on branch `marathon-controls-b` (off `main` `b4eee247`), NOT merged,
+> NOT deployed — section "Layer B" at the end.**
+>
 > **Audience:** the conductor, reviewers, Layer B (the site drawer) and the next session touching marathon threads, run
 > posts, the People view or the `/event ▸ Marathons…` card. **Status:** TRACKED · 🔨 **BUILT on branch
 > `marathon-controls-a` (off `main` `dd567a3e`), NOT merged, NOT deployed.** Registry keys **1089 → 1086**, then
@@ -79,16 +82,18 @@ longer have a Discord door (below) and were not touched.
 - **D7 "five people per row before a menu"** read as: one row of five buttons; six or more people → menus.
 - `marathon_controls_cancelled_said` / `_cannot_wait` defaults lost their "Press Spotlight: start" wording.
 
-## For Layer B (the drawer)
+## For Layer B (the drawer) — ✅ all done on `marathon-controls-b` (section below)
 
-- `GET /api/marathons/{id}` no longer carries `public_highlight`; a PATCH of it answers `HIGHLIGHT_GONE` and changes
-  nothing — drop the drawer's Auto-highlight row (`marathons-section.js` ~line 1001/1026 still reads it).
-- `DELETE /api/marathons/{id}` answers **410** `remove_gone` with `REMOVE_GONE`'s words (fix round) — drop Remove from
-  the bar (D11); until then the drawer's Remove shows that sentence (`marathons-section.js` ~line 1197 still calls it).
-- Retired keys the site listed: `marathon_public_highlight_default`, `marathon_remove_question`,
+- ✅ `GET /api/marathons/{id}` no longer carries `public_highlight`; a PATCH of it answers `HIGHLIGHT_GONE` and changes
+  nothing — drop the drawer's Auto-highlight row. **Done (B 2).**
+- ✅ `DELETE /api/marathons/{id}` answers **410** `remove_gone` with `REMOVE_GONE`'s words (fix round) — drop Remove from
+  the bar (D11). **Done (B 2).**
+- ✅ Retired keys the site listed: `marathon_public_highlight_default`, `marathon_remove_question`,
   `marathon_removed_said`, `marathon_ping_role_button_on/off` and the seventeen thread-controls keys (mock rows and
-  `labels.js` lines already removed here).
-- The slot's person moves now say `Don't announce {name}` / `Announce {name}` / `{name}: back to the default`.
+  `labels.js` lines already removed here). **Re-checked on B: none is named in `site/` (grep), `check.mjs` all keys
+  present.**
+- ✅ The slot's person moves now say `Don't announce {name}` / `Announce {name}` / `{name}: back to the default`.
+  **The drawer draws them from the API's `move_label` (B 2).**
 
 ## Review fix round (2026-10-08)
 
@@ -107,3 +112,41 @@ longer have a Discord door (below) and were not touched.
 Keys **1086 → 1090**: `marathon_controls_spotlight_running_line`, `marathon_controls_follow_off_running_said`,
 `marathon_host_events_gone_said`, `marathon_baf_event_staff_set_line`; none retired (the deleted views used no key).
 ⚠️ NOT checked: any of it in a real Discord client (an edit in a real archived thread, a real 80-character label).
+
+## Layer B — the site drawer (2026-10-08)
+
+> Branch `marathon-controls-b` off `main` `b4eee247` (commits B 1–B 4). **NOT merged, NOT deployed.** Registry keys
+> **1090 → 1090** (none added, none retired; `marathon_channel_ping_help`'s DEFAULT changed). Routes unchanged in number;
+> three response fields added (below). **Last verified 2026-10-08 ~12:5x Phoenix** by the full suite, ruff, every
+> gate node fixture, `scripts/site-gate.ps1 -Port 8836` (check.mjs green), and the drawer rendered in headless Chrome
+> on the worktree mock (`MOCK_PORT=8835`, `events.html#marathon-1`) and read back from its DOM and one screenshot at
+> 1280 wide. ⚠️ NOT checked: phone width, a press in a real browser (the writes were exercised by `curl` on the mock and
+> by the API tests), the live bot, Discord.
+
+The drawer, top to bottom: header (one state line: phase · tracked by · thread ↗ · inbox ↗ · read/next · Marathon
+tracker ↗; one facts line: dates · runs/BaF · the thread's spotlight line · source ↗ · feed · event · channel) ·
+Spotlight + Pings (the channel's cards, D8 kept) · People · **Settings for this marathon** · the posts line · the bar
+**Track/Untrack · Read it now · Archive it · More…**.
+
+| # | The drawer now | Keys / data | Test |
+|---|---|---|---|
+| D4 | No Auto-highlight row; Runner announcements is the one switch | — | DOM read: no "Auto-highlight" |
+| D8 | Owner answered **keep it as is**: the Go-live card and the Pings card stay. The Follow the schedule switch left the block for Settings (D14). `marathon_channel_ping_help` trimmed to a state line | `marathon_channel_ping_help` default → *Ping windows: its marathons' schedules.* (key kept; a staff value stays) | — (wording) |
+| D9 | A slot: Link to a member… · Link @name · Unlink · Twitch name… · Spotlight their channel… / Stop spotlighting their channel · Opt out of every run on this marathon / Opt back in to this marathon · No @ / @ again · Don't announce / Announce / back to the default — then **Open this run on the tracker ↗** · Shout it now · the run's event link. Mark live / done / upcoming and Make it now gone. Opt-out has no confirm (reversible) | People-view keys via the new `labels` on `GET …/people`; `move_label`s as before; tracker `#marathon-N-run-M` | `marathon-words.test.mjs` *a slot draws the People view's set in its order…*, *the tracker link for one run…*; API `test_the_people_answer_carries_the_people_views_labels_as_the_keys_say_them` |
+| D10 | Bar: tracking move · Read it now (while read) · Archive it · More…; More… = Reads from + Change the schedule link… · BaF run/host events · Event schedule (Hotfix) · Airs on · Re-read every · Save · Rename… · Pause/Resume · Post it to the inbox now · Back to the sheet's times | — | *the bar is the tracking move, Read it now while active, Archive it and More…* |
+| D11 | No Remove anywhere in the drawer; Archive it is a plain button (Restore reverses it) | — | same test (`!includes('remove')`) |
+| D14 | Settings = the thread's switches in its order and words, one button each, a press PATCHes at once and the drawer redraws (a refusal is the API's sentence in the drawer's notice); Runner/Host show a `default` pill or `back to the default (on|off)`; the role-ping line under Ping, the event line under Marathon event, the BaF event's day lines under BaF event | new `controls` on `GET /api/marathons/{id}` (`action, to, on, label, patch`) from `drawer_switches` — the thread's own labels; `spotlight_line` (the thread's spotlight key, `{until}`/`{starts}` unfilled) | `test_the_drawer_reads_the_threads_switches_in_order_with_their_words_and_patches`, `test_a_marathon_with_a_channel_carries_the_spotlight_switch_after_the_ping`, `test_the_drawer_reads_the_threads_spotlight_line_with_the_time_left_to_fill`, `test_each_switch_has_the_site_patch_that_makes_the_same_move` (11 cases), *BaF run/host events moves only its half* |
+
+Seen failing first: the 15 new Python cases and 6 new node tests fail on `b4eee247` (throwaway worktree).
+
+**Decisions beyond the brief, for the owner/reviewer:**
+- The brief said D8 = fold the cards; `docs/TODO.md` records the owner's answer as *"keep it as is"* — the owner's
+  answer was followed.
+- Switch words come from the thread (`Runner announcements: on · turn off`), as one button each — the D14 mock's
+  pills read `on`/`off`; one button that says state and move is the thread's shape and keeps one set of words.
+- The whole-marathon opt-out label is the existing key's value (*Opt out of every run on this marathon* / *Opt back in
+  to this marathon*), not the review's proposed *Opt out of this marathon* — keys reused, wording unchanged; staff can
+  change it on Settings.
+- The drawer keeps every switch after the show (the thread shows only tracker + Archive it then): staff final say.
+- The Spotlight-their-channel and Stop confirms (with an explaining body) were left as they were — not in this brief;
+  candidates for the blurb rule.

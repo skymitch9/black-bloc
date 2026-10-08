@@ -949,7 +949,7 @@ function defaultBit(marathon, say, control) {
   const key = SWITCH_STATES[control.action];
   const state = key ? marathon[key] : null;
   const kind = switchDefault(state);
-  if (kind === 'default') return el('span', { class: 'cell-quiet mx-default', text: DEFAULT_TAG });
+  if (kind === 'default') return badge(DEFAULT_TAG, null);
   if (kind === 'own') {
     return textAction(said(BACK_TO_DEFAULT, { state: state.default ? 'on' : 'off' }), () => patchMarathon(marathon, say, { [key]: null }));
   }
