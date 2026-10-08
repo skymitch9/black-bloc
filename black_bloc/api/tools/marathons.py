@@ -87,6 +87,7 @@ from ...cogs.content.marathon_role_ping import state_of as role_ping_state
 from ...cogs.content.marathon_signals import sheet_times
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
 from ...cogs.content.marathon_spotlight import state_for as spotlight_state_for
+from ...cogs.content.marathon_thread_controls import drawer_switches, spot_template
 from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...golive_replay import BECAUSE_REPLAY
@@ -102,7 +103,14 @@ from ...settings_store import (
     MARATHON_HOST_EVENTS_GONE_KEY,
     MARATHON_LEAD_DAYS_KEY,
     MARATHON_MODE_KEY,
+    MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY,
+    MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY,
+    MARATHON_PEOPLE_BUTTON_TWITCH_KEY,
+    MARATHON_PEOPLE_BUTTON_UNLINK_KEY,
+    MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY,
     MARATHON_POLL_MINUTES_KEY,
+    MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
+    MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
 )
 from ..auth import Refused, staff_dependency
 from ..names import member_row, resolve_one
@@ -110,6 +118,16 @@ from ..writes import actor_for, require_cog, require_db, require_guild, wanted_i
 from .golive import one_spotlight
 
 log = logging.getLogger(__name__)
+
+PEOPLE_LABELS = {
+    "link_near": MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY,
+    "unlink": MARATHON_PEOPLE_BUTTON_UNLINK_KEY,
+    "twitch": MARATHON_PEOPLE_BUTTON_TWITCH_KEY,
+    "spotlight": MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY,
+    "unspotlight": MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY,
+    "opt_out": MARATHON_PUBLIC_BUTTON_OPT_OUT_KEY,
+    "opt_in": MARATHON_PUBLIC_BUTTON_OPT_IN_KEY,
+}
 
 COG = "Marathons"
 FEATURE = "Marathon schedules"
@@ -530,6 +548,7 @@ def build_router(bot: Any) -> APIRouter:
         def announce(run: Any, user_id: Any) -> Any:
             return person_state(bot, guild, row, run, user_id)
 
+        spotlit = await spotlight_of(bot, guild, row)
         return (
             await marathon_row(bot, guild, row, runs)
             | {
@@ -538,8 +557,12 @@ def build_router(bot: Any) -> APIRouter:
                 "unmatched": mt.unmatched_names(runs),
                 "retimed_runs": sig.retimed_count(runs),
                 "keeps_clock": not retimes_itself(row["source"]),
+                "controls": drawer_switches(
+                    bot, guild, row, runs, spotlit["spotlight_state"]["state"]
+                ),
+                "spotlight_line": spot_template(bot, guild, row, spotlit["spotlight_state"]),
             }
-            | await spotlight_of(bot, guild, row)
+            | spotlit
         )
 
     async def people(guild: Any, marathon: Any) -> list[dict[str, Any]]:
@@ -563,6 +586,9 @@ def build_router(bot: Any) -> APIRouter:
             "pairings": await people(guild, marathon),
             "baf": [entry_row(guild, one, opted, words, mention) for one in state["baf"]],
             "others": [entry_row(guild, one, None, words) for one in state["others"]],
+            "labels": {
+                name: str(bot.store.get(guild.id, key) or "") for name, key in PEOPLE_LABELS.items()
+            },
         }
 
     @router.get("")

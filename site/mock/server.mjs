@@ -969,7 +969,7 @@ const SETTING_SPECS = [
   ["marathon_mention_plain_said", "text", "**{name}** is written by name, with no @, in **{marathon}**'s public posts. Posts already up are rewritten in place.", "**{name}** is written by name, with no @, in **{marathon}**'s public posts. Posts already up are rewritten in place.", "what staff are told once a person's name is written as plain text on a marathon. It takes {name} {marathon}"],
   ["marathon_mention_on_said", "text", "**{name}** is written as an @ again in **{marathon}**'s public posts. Posts already up are rewritten in place.", "**{name}** is written as an @ again in **{marathon}**'s public posts. Posts already up are rewritten in place.", "what staff are told once a person is written as an @ again on a marathon. It takes {name} {marathon}"],
   ["marathon_channel_ping_mode_default", "enum", "events", "events", "the pings a NEW channel row gets when it is a marathon channel (one a marathon feed is seeded for) that takes marathons: events — the default — mentions roles only inside a ping window, which its marathons set from their schedules; always and never as on the Go-live page. Every other new row follows spotlight_ping_mode_default, and no existing row is changed", ["always", "never", "events"]],
-  ["marathon_channel_ping_help", "text", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "the help line under the Pings choice on a marathon channel's Go-live drawer, saying what During events means there"],
+  ["marathon_channel_ping_help", "text", "Ping windows: its marathons' schedules.", "Ping windows: its marathons' schedules.", "the state line under the Pings choice on a marathon channel's Go-live drawer and the marathon drawer: where During events takes its windows from"],
   ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a BaF run goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
   ["marathon_run_event_cancel_on_leave", "bool", true, true, "whether a marathon's events are called off when staff change its event mode away from them (reason mode_changed). on by default; off leaves them on the calendar as ordinary events the marathon no longer keeps in step"],
   ["marathon_shout_when_run_has_event", "bool", false, false, "whether a BaF run that has its own event still gets the marathon shoutout when it goes live. off by default — the events feature announces that run as it starts, so the shoutout would say it twice. The reminders post either way"],
@@ -7978,8 +7978,97 @@ function marathonDetail(row) {
     unmatched: [...unmatched.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
     retimed_runs: runs.map(marathonRunRow).filter((one) => one.state !== 'dropped' && one.retimed).length,
     keeps_clock: MARATHON_KEEPS_CLOCK.has(row.source),
+    controls: marathonControls(row),
+    spotlight_line: marathonSpotTemplate(row),
     ...marathonSpotlightOf(row),
   };
+}
+
+// The bot's cogs/content/marathon_thread_controls.drawer_switches: the thread's switches in the
+// thread's order and words at every phase, each with the PATCH body that makes its move
+// (marathon_thread_controls.patch_for).
+const MARATHON_SPOT_SWITCHED = ['held', 'held_other', 'until', 'scheduled', 'waiting', 'off'];
+const MARATHON_BAF_LABELS = {
+  said_yes: 'marathon_controls_baf_said_yes',
+  said_no: 'marathon_controls_baf_said_no',
+  said_unsure: 'marathon_controls_baf_said_unsure',
+  staff_yes: 'marathon_controls_baf_staff_yes',
+  staff_no: 'marathon_controls_baf_staff_no',
+  answered_yes: 'marathon_controls_baf_answered_yes',
+  answered_no: 'marathon_controls_baf_answered_no',
+};
+
+// The bot's cogs/content/marathon_thread_controls.spot_template: the thread's spotlight line
+// (marathon_thread_controls.spot_line) with {until} / {starts} left for the page.
+const MARATHON_SPOT_LINE_KEYS = {
+  held: 'marathon_controls_spotlight_until_line',
+  held_other: 'marathon_controls_spotlight_until_line',
+  until: 'marathon_controls_spotlight_until_line',
+  scheduled: 'marathon_controls_spotlight_starts_line',
+  waiting: 'marathon_controls_spotlight_starts_line',
+  kept: 'marathon_controls_spotlight_kept_line',
+  none: 'marathon_controls_spotlight_none_line',
+};
+
+function marathonSpotTemplate(row) {
+  const spot = marathonSpotlightOf(row).spotlight_state.state;
+  const key = row.spotlight_mode === 'off' && ['until', 'held_other'].includes(spot)
+    ? 'marathon_controls_spotlight_running_line'
+    : MARATHON_SPOT_LINE_KEYS[spot];
+  return key ? String(state.settings.get(key) || '') : '';
+}
+
+function marathonEventModeFor(mode, on) {
+  const runs = ['runs', 'both'].includes(mode);
+  if (on) return runs ? 'both' : 'marathon';
+  return runs ? 'runs' : 'none';
+}
+
+function marathonBafControl(row) {
+  const runs = marathonRunsOf(row.id);
+  const worked = marathonBafWorkedOut(row, runs);
+  const said = ['yes', 'no'].includes(row.baf_answer) ? row.baf_answer : null;
+  const followed = said ? { ...worked, answer: said, reason: 'leads' } : worked;
+  const own = row.baf_event === null || row.baf_event === undefined ? null : Boolean(row.baf_event);
+  let reason;
+  if (followed.reason === 'name') reason = marathonSaid('marathon_controls_baf_named', { name: followed.name });
+  else if (followed.reason === 'no_runs') reason = marathonSaid(MARATHON_BAF_REASON_KEYS.no_runs, { name: '', runs: 0, baf: 0, min: state.settings.get('marathon_baf_event_min_runs') });
+  else reason = marathonSaid('marathon_controls_baf_runs', { baf: followed.baf, runs: followed.runs });
+  let shape;
+  if (own !== null) shape = { to: 'follow', on: own, label: own ? 'staff_yes' : 'staff_no' };
+  else if (followed.reason === 'leads') shape = { to: 'clear', on: followed.answer === 'yes', label: followed.answer === 'yes' ? 'answered_yes' : 'answered_no' };
+  else if (followed.answer === 'yes') shape = { to: 'no', on: true, label: 'said_yes' };
+  else if (followed.answer === 'unsure') shape = { to: 'yes', on: false, label: 'said_unsure' };
+  else shape = { to: 'yes', on: false, label: 'said_no' };
+  return {
+    action: 'baf',
+    to: shape.to,
+    on: shape.on,
+    label: marathonSaid(MARATHON_BAF_LABELS[shape.label], { reason }),
+    patch: shape.to === 'clear' ? { baf_event_answer: 'clear' } : { baf_event: shape.to },
+  };
+}
+
+function marathonControls(row) {
+  const flip = (action, on, key, patch) => ({
+    action,
+    to: on ? 'off' : 'on',
+    on,
+    label: marathonSaid(`${key}_${on ? 'on' : 'off'}`, {}),
+    patch: patch(!on),
+  });
+  const mode = marathonModeOf(row);
+  const spot = marathonSpotlightOf(row).spotlight_state.state;
+  return [
+    flip('announce', marathonSwitch(row, 'announcements').on, 'marathon_controls_announcements', (to) => ({ announcements: to })),
+    flip('hostannounce', marathonSwitch(row, 'host_announcements').on, 'marathon_controls_host_announcements', (to) => ({ host_announcements: to })),
+    flip('ping', Boolean(row.ping_role), 'marathon_controls_ping', (to) => ({ ping_role: to })),
+    MARATHON_SPOT_SWITCHED.includes(spot)
+      ? flip('spotlight', row.spotlight_mode !== 'off', 'marathon_controls_spotlight_follow', (to) => ({ spotlight_mode: to ? 'follow' : 'off' }))
+      : null,
+    flip('event', ['marathon', 'both'].includes(mode), 'marathon_controls_event', (to) => ({ event_mode: marathonEventModeFor(mode, to) })),
+    marathonBafControl(row),
+  ].filter(Boolean);
 }
 
 // The bot's black_bloc/marathon_spotlight.state_of and api/tools/marathons.spotlight_of: the
@@ -9175,7 +9264,23 @@ function marathonBoard(row) {
     pairings: marathonPairingsFor(row),
     baf: entries.filter((one) => one.member).sort((a, b) => marathonBafOrder(a).localeCompare(marathonBafOrder(b)) || a.name.localeCompare(b.name)),
     others: entries.filter((one) => !one.member).sort((a, b) => a.key.localeCompare(b.key)),
+    labels: marathonPeopleLabels(),
   };
+}
+
+// The bot's api/tools/marathons.PEOPLE_LABELS: the People view's words, as the keys hold them.
+const MARATHON_PEOPLE_LABELS = {
+  link_near: 'marathon_people_button_link_near',
+  unlink: 'marathon_people_button_unlink',
+  twitch: 'marathon_people_button_twitch',
+  spotlight: 'marathon_people_button_spotlight',
+  unspotlight: 'marathon_people_button_unspotlight',
+  opt_out: 'marathon_public_button_opt_out',
+  opt_in: 'marathon_public_button_opt_in',
+};
+
+function marathonPeopleLabels() {
+  return Object.fromEntries(Object.entries(MARATHON_PEOPLE_LABELS).map(([name, key]) => [name, String(state.settings.get(key) || '')]));
 }
 
 function marathonEntryFor(row, given) {

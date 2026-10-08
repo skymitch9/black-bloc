@@ -183,6 +183,26 @@ def controls(
     )
 
 
+PATCH_FIELDS = {
+    ANNOUNCE: "announcements",
+    HOST_ANNOUNCE: "host_announcements",
+    PING: "ping_role",
+}
+
+
+def patch_for(control: Control, mode: Any) -> dict[str, Any]:
+    """The site's `PATCH /api/marathons/{id}` body that makes the same move as the button."""
+    if control.action in PATCH_FIELDS:
+        return {PATCH_FIELDS[control.action]: control.to == ON}
+    if control.action == SPOTLIGHT:
+        return {"spotlight_mode": ms.FOLLOW if control.to == ON else ms.OFF}
+    if control.action == EVENT:
+        return {"event_mode": wanted_mode(mode, EVENT, control.to)}
+    if control.action == BAF:
+        return {"baf_event_answer": CLEAR} if control.to == CLEAR else {"baf_event": control.to}
+    return {}
+
+
 def after_show(marathon: Any, now: Any) -> bool:
     """Only a known end puts the controls in their after-show shape."""
     ends = parse_ts(mt._cell(marathon, "ends_at"))
@@ -215,6 +235,7 @@ __all__ = [
     "controls",
     "custom_id",
     "label",
+    "patch_for",
     "spot_line",
     "spot_switch",
     "switch",

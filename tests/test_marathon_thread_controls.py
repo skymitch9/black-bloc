@@ -180,3 +180,27 @@ def test_no_known_end_is_never_after_the_show():
     assert mtc.after_show(started, now) is False
     assert mtc.after_show({**started, "ends_at": "2027-01-02T00:00:00+00:00"}, now) is True
     assert mtc.after_show({**started, "ends_at": "2027-01-05T00:00:00+00:00"}, now) is False
+
+
+@pytest.mark.parametrize(
+    ("control", "mode", "wanted"),
+    [
+        (mtc.Control("announce", "off", "on"), "none", {"announcements": False}),
+        (mtc.Control("hostannounce", "on", "off"), "none", {"host_announcements": True}),
+        (mtc.Control("ping", "on", "off"), "none", {"ping_role": True}),
+        (mtc.Control("spotlight", "off", "on"), "none", {"spotlight_mode": "off"}),
+        (mtc.Control("spotlight", "on", "off"), "none", {"spotlight_mode": "follow"}),
+        (mtc.Control("event", "on", "off"), "runs", {"event_mode": "both"}),
+        (mtc.Control("event", "off", "on"), "both", {"event_mode": "runs"}),
+        (mtc.Control("baf", "yes", "off", 1, mtc.BAF_SAID_NO), "none", {"baf_event": "yes"}),
+        (mtc.Control("baf", "follow", "on", 1, mtc.BAF_STAFF_YES), "none", {"baf_event": "follow"}),
+        (
+            mtc.Control("baf", "clear", "on", 1, mtc.BAF_ANSWERED_YES),
+            "none",
+            {"baf_event_answer": "clear"},
+        ),
+        (mtc.Control("link", "", ""), "none", {}),
+    ],
+)
+def test_each_switch_has_the_site_patch_that_makes_the_same_move(control, mode, wanted):
+    assert mtc.patch_for(control, mode) == wanted

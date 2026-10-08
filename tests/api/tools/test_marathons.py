@@ -1365,3 +1365,86 @@ async def test_a_baf_event_day_says_which_heads_up_carries_the_ping_in_the_drawe
         day["line"],
     ]
     assert body["role_ping"]["mentions"] is True and body["role_ping"]["line"] == ""
+
+
+async def test_the_drawer_reads_the_threads_switches_in_order_with_their_words_and_patches(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+
+    found = client.get(f"/api/marathons/{marathon_id}").json()["controls"]
+
+    assert [one["action"] for one in found] == ["announce", "hostannounce", "ping", "event", "baf"]
+    assert [one["label"] for one in found] == [
+        "Runner announcements: on · turn off",
+        "Host announcements: off · turn on",
+        "Ping the marathon role: off · turn on",
+        found[3]["label"],
+        "BaF event: no (1 of 3 runs) · say yes",
+    ]
+    assert found[0]["patch"] == {"announcements": False} and found[0]["on"] is True
+    assert found[4]["patch"] == {"baf_event": "yes"} and found[4]["on"] is False
+    body = client.patch(f"/api/marathons/{marathon_id}", json=found[0]["patch"]).json()
+    assert body["controls"][0]["label"] == "Runner announcements: off · turn on"
+    assert body["controls"][0]["patch"] == {"announcements": True}
+
+
+async def test_a_marathon_with_a_channel_carries_the_spotlight_switch_after_the_ping(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    spotlight_id = await add_channel(
+        web.db, wf.GUILD_ID, "gamesdonequick", added_by=7, expires_at=at(600), pin=True
+    )
+    marathon_id = add(client, spotlight_id=str(spotlight_id)).json()["id"]
+
+    found = client.get(f"/api/marathons/{marathon_id}").json()["controls"]
+
+    assert [one["action"] for one in found][2:4] == ["ping", "spotlight"]
+    spot = found[3]
+    assert spot["label"] == "Spotlight follows the schedule: on · turn off"
+    assert spot["patch"] == {"spotlight_mode": "off"}
+    body = client.patch(f"/api/marathons/{marathon_id}", json=spot["patch"]).json()
+    assert body["controls"][3]["label"] == "Spotlight follows the schedule: off · turn on"
+
+
+async def test_the_people_answer_carries_the_people_views_labels_as_the_keys_say_them(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    await web.store.set(wf.GUILD_ID, "marathon_public_button_opt_out", "Leave this one out")
+
+    labels = client.get(f"/api/marathons/{marathon_id}/people").json()["labels"]
+
+    assert labels["opt_out"] == "Leave this one out"
+    assert labels["spotlight"] == "Spotlight their channel…"
+    assert labels["unspotlight"] == "Stop spotlighting their channel"
+    assert labels["link_near"] == "Link @{username}"
+    assert set(labels) == {
+        "link_near",
+        "unlink",
+        "twitch",
+        "spotlight",
+        "unspotlight",
+        "opt_out",
+        "opt_in",
+    }
+
+
+async def test_the_drawer_reads_the_threads_spotlight_line_with_the_time_left_to_fill(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    spotlight_id = await add_channel(
+        web.db, wf.GUILD_ID, "gamesdonequick", added_by=7, expires_at=at(600), pin=True
+    )
+    lit = add(client, spotlight_id=str(spotlight_id)).json()["id"]
+    assert client.get(f"/api/marathons/{lit}").json()["spotlight_line"] == (
+        "Spotlight: on now until {until}"
+    )
+    client.patch(f"/api/marathons/{lit}", json={"spotlight_id": None})
+    assert client.get(f"/api/marathons/{lit}").json()["spotlight_line"] == (
+        "Spotlight: no channel to spotlight"
+    )

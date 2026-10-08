@@ -188,17 +188,20 @@ def spot_words(bot: Any, guild: Any, state: dict[str, Any], follows: bool = True
     )
 
 
-async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tuple[str, ...]]:
-    """`(content, controls, labels)` from the row, the channel row and the keys."""
-    _row, state = await state_for(bot, guild, marathon)
-    rows = await runs_of(bot.db, marathon["id"])
-    over = mtc.after_show(marathon, now_for(bot))
-    follows = ms.mode_of(marathon) == ms.FOLLOW
+def spot_template(bot: Any, guild: Any, marathon: Any, state: dict[str, Any]) -> str:
+    """The thread's spotlight state line with `{until}` / `{starts}` left for the site to fill."""
+    line = mtc.spot_line(state["state"], ms.mode_of(marathon) == ms.FOLLOW)
+    return str(bot.store.get(guild.id, SPOT_LINE_KEYS[line]) or "") if line else ""
+
+
+def labelled(
+    bot: Any, guild: Any, marathon: Any, rows: Any, spot_state: Any, *, over: bool
+) -> tuple[tuple, tuple[str, ...]]:
     shown_baf, fields = (None, {}) if over else baf_button(bot, guild, marathon, rows)
     controls = mtc.controls(
         me.mode_of(marathon),
-        state["state"],
-        follows=follows,
+        spot_state,
+        follows=ms.mode_of(marathon) == ms.FOLLOW,
         ping=mping.pings_role(marathon),
         announce=announces(bot, guild.id, marathon),
         host_announce=policy_of(bot, guild.id, marathon).hosts_on,
@@ -206,11 +209,40 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         over=over,
     )
     labels = tuple(mtc.label(words(bot, guild.id, label_key(one), **fields)) for one in controls)
+    return controls, labels
+
+
+async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tuple[str, ...]]:
+    """`(content, controls, labels)` from the row, the channel row and the keys."""
+    _row, state = await state_for(bot, guild, marathon)
+    rows = await runs_of(bot.db, marathon["id"])
+    over = mtc.after_show(marathon, now_for(bot))
+    controls, labels = labelled(bot, guild, marathon, rows, state["state"], over=over)
     lines = [
-        spot_words(bot, guild, state, follows),
+        spot_words(bot, guild, state, ms.mode_of(marathon) == ms.FOLLOW),
         role_ping_line(bot, guild, marathon, rows=rows),
     ]
     return ("\n".join(one for one in lines if one), controls, labels)
+
+
+def drawer_switches(
+    bot: Any, guild: Any, marathon: Any, rows: Any, spot_state: Any
+) -> list[dict[str, Any]]:
+    """The thread's switches for the site drawer at every phase, each with its label and the
+    PATCH body that makes its move."""
+    controls, labels = labelled(bot, guild, marathon, list(rows), spot_state, over=False)
+    mode = me.mode_of(marathon)
+    return [
+        {
+            "action": one.action,
+            "to": one.to,
+            "on": one.word == mtc.ON,
+            "label": text,
+            "patch": mtc.patch_for(one, mode),
+        }
+        for one, text in zip(controls, labels, strict=True)
+        if one.action != mtc.LINK
+    ]
 
 
 def label_key(control: Any) -> str:
@@ -677,6 +709,8 @@ __all__ = [
     "archived_controls",
     "cancel_spotlight",
     "controls_changed",
+    "drawer_switches",
+    "spot_template",
     "post_controls",
     "press",
     "refresh_controls",

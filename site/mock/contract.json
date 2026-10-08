@@ -5833,9 +5833,18 @@
         "channel_spotlight",
         "spotlight_state",
         "retimed_runs",
-        "keeps_clock"
+        "keeps_clock",
+        "controls",
+        "spotlight_line"
       ],
       "rows": {
+        "controls": [
+          "action",
+          "to",
+          "on",
+          "label",
+          "patch"
+        ],
         "run_list": [
           "id",
           "game",
@@ -6349,7 +6358,8 @@
         "timezone",
         "pairings",
         "baf",
-        "others"
+        "others",
+        "labels"
       ],
       "rows": {
         "baf": [
