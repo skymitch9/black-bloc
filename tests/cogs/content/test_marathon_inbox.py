@@ -512,7 +512,7 @@ async def test_the_panel_card_says_the_state_and_offers_only_valid_moves(bot, co
     marathon = await found(bot, cog)
     embed, view = await build_card(bot, bot.guild, marathon["id"])
     labels = [getattr(one, "label", None) for one in view.children]
-    assert "Track" in labels and "Ignore" in labels and "Untrack" not in labels
+    assert "Track" in labels and "Ignore" not in labels and "Untrack" not in labels
     assert "not tracked" in embed.description
 
     await inbox.track(bot, bot.guild, FakeActor(), marathon)

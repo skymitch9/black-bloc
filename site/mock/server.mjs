@@ -828,8 +828,6 @@ const SETTING_SPECS = [
   ["marathon_ping_role_on_said", "text", "**{marathon}** pings again: its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel has a ping window while it runs.", "**{marathon}** pings again: its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel has a ping window while it runs.", "what staff are told once a marathon's Ping the role switch is turned on. It takes {marathon}"],
   ["marathon_ping_role_off_said", "text", "**{marathon}** pings no role now: its reminders and shoutouts still post, with no mention, and its channel has no ping window for it.", "**{marathon}** pings no role now: its reminders and shoutouts still post, with no mention, and its channel has no ping window for it.", "what staff are told once a marathon's Ping the role switch is turned off. It takes {marathon}"],
   ["marathon_ping_role_same_said", "text", "**{marathon}** already has that, so nothing was changed.", "**{marathon}** already has that, so nothing was changed.", "what staff are told when the Ping the role switch is already where they asked. It takes {marathon}"],
-  ["marathon_ping_role_button_on", "text", "Ping the role", "Ping the role", "the /event marathon card's button that turns a marathon's role pings on"],
-  ["marathon_ping_role_button_off", "text", "Stop pinging", "Stop pinging", "the /event marathon card's button that turns a marathon's role pings off"],
   ["marathon_ping_role_line_on", "text", "Pings the role", "Pings the role", "the marathon card's line while its reminders and shoutouts mention roles"],
   ["marathon_ping_role_line_off", "text", "Pings no role", "Pings no role", "the marathon card's line while its reminders and shoutouts mention no role"],
   ["marathon_role_pings", "bool", true, true, "whether the marathon_ping_minutes heads-up mentions the Marathon role (marathon_role_id) when the marathon's own ping switch is on. The mention goes in the public copy members see, once, never in the staff thread, and never on the live highlight or shoutout. on by default; off posts the heads-up without it"],
@@ -844,8 +842,6 @@ const SETTING_SPECS = [
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_archive_question", "text", "Archive **{name}**? It stops being read and its ping window closes; its runs, people and posts are kept, and **Restore** brings it back paused.", "Archive **{name}**? It stops being read and its ping window closes; its runs, people and posts are kept, and **Restore** brings it back paused.", "what staff are asked before Archive it moves a marathon to the archive early. It takes {name}"],
   ["marathon_archived_said", "text", "**{name}** is in the archive — its runs, people and posts are kept. **Restore** brings it back, paused.", "**{name}** is in the archive — its runs, people and posts are kept. **Restore** brings it back, paused.", "what staff are told once Archive it has moved a marathon to the archive. It takes {name}"],
-  ["marathon_remove_question", "text", "Remove **{name}**? It moves to the archive with its runs and pairings, its ping window closes and its events are called off; a feed will not add it again. Posts already made stay where they are.", "Remove **{name}**? It moves to the archive with its runs and pairings, its ping window closes and its events are called off; a feed will not add it again. Posts already made stay where they are.", "what staff are asked before Remove takes a marathon off the list — nothing is deleted, it is archived. It takes {name}"],
-  ["marathon_removed_said", "text", "**{name}** is off the list and in the archive, with its runs and pairings; a feed will not add it again.", "**{name}** is off the list and in the archive, with its runs and pairings; a feed will not add it again.", "what staff are told once Remove has archived a marathon. It takes {name}"],
   ["marathon_restore_question", "text", "Restore **{name}**? It comes back to the list paused — nothing is read or posted until someone presses **Resume**.", "Restore **{name}**? It comes back to the list paused — nothing is read or posted until someone presses **Resume**.", "what staff are asked before Restore brings an archived marathon back. It takes {name}"],
   ["marathon_restored_said", "text", "**{name}** is back on the list, paused — **Resume** reads it again.", "**{name}** is back on the list, paused — **Resume** reads it again.", "what staff are told once Restore has brought a marathon back. It takes {name}"],
   ["marathon_restore_taken", "text", "**{name}** cannot come back while **{other}** is on the list with the same schedule link — remove that one first, so nothing was changed.", "**{name}** cannot come back while **{other}** is on the list with the same schedule link — remove that one first, so nothing was changed.", "the refusal when Restore would put a second marathon on the list with the same schedule link. It takes {name} {other}"],
@@ -8382,12 +8378,6 @@ function feedRow(feed) {
   };
 }
 
-function marathonFeedIgnore(row) {
-  const feed = row.feed_id ? state.marathonFeeds.find((one) => one.id === row.feed_id) : null;
-  if (!feed || feed.ignored.includes(row.source_ref)) return;
-  feed.ignored.push(row.source_ref);
-  logAction('marathon.feed_ignored', { actor_id: null, details: { feed_id: feed.id, event: row.source_ref, marathon_id: row.id, automatic: true } });
-}
 
 function feedCheck(feed) {
   let added = 0;
@@ -8963,27 +8953,14 @@ route('POST', '/api/marathons/:marathon_id/next', (context) => {
   return { ...marathonDetail(row), message: words };
 });
 
+// Remove merged into Archive it (marathon controls D11, 2026-10-08): the bot's
+// marathon_archive.REMOVE_GONE, and nothing is changed.
+const MARATHON_REMOVE_GONE = "Remove is retired: Archive it is the one move now, Restore on the site's archive puts it back, and Ignore in the inbox keeps a feed from adding it again. Nothing was changed.";
+
 route('DELETE', '/api/marathons/:marathon_id', (context) => {
   requireStaff(context.session);
   const row = marathonOf(context.params.marathon_id);
-  const event = row.event_id ? state.events.find((one) => one.id === row.event_id) : null;
-  if (event && MARATHON_KEPT_IN_STEP.includes(event.status)) {
-    event.status = 'cancelled';
-    logAction('web.event.cancelled', { target_id: event.requester_id, reason: 'marathon_removed', details: { event_id: event.id, via: 'website' } });
-    logAction('web.marathon.event_cancelled', { details: { marathon_id: row.id, event_id: event.id, via: 'website' } });
-  }
-  for (const run of marathonRunsOf(row.id).filter((one) => one.event_id)) marathonRunEventCancel(row, run, 'marathon_removed');
-  for (const record of marathonHostRecords(row)) {
-    const event = state.events.find((one) => one.id === record.event_id);
-    if (event && MARATHON_KEPT_IN_STEP.includes(event.status)) {
-      event.status = 'cancelled';
-      logAction('marathon.host_event_cancelled', { target_id: record.hosts[0] || null, details: { marathon_id: row.id, members: record.hosts, runs: record.runs, event_id: record.event_id, reason: 'marathon_removed' } });
-    }
-  }
-  row.host_event_ids = [];
-  marathonArchive(row, 'removed', STAFF.id);
-  marathonFeedIgnore(row);
-  return { removed: true, archived: true, id: row.id, message: marathonSaid('marathon_removed_said', { name: row.name }) };
+  return { removed: false, archived: false, id: row.id, message: MARATHON_REMOVE_GONE };
 });
 
 route('POST', '/api/marathons/:marathon_id/runs/:run_id/event', (context) => {

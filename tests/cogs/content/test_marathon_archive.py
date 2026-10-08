@@ -10,7 +10,6 @@ from black_bloc.cogs.content.marathon import (
     marathon_by_ref,
     marathon_for_event,
     pair_runner,
-    remove_marathon,
     runs_of,
     update_marathon,
 )
@@ -181,16 +180,14 @@ async def test_the_feed_dedupe_and_the_next_event_see_an_archived_ref(bot, cog):
     assert (await marathon_by_ref(bot.db, GUILD, "gdq", "74"))["id"] == marathon["id"]
 
 
-async def test_a_removed_marathon_is_archived_and_left_to_the_feeds_ignore_list(bot, cog):  # noqa: F811
+async def test_archive_it_is_the_one_move_off_the_list(bot, cog):  # noqa: F811
     marathon = await added(bot, cog)
-    done = await remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    done = await archive_marathon(bot, bot.guild, FakeActor(), marathon)
 
-    assert done.ok and "off the list and in the archive" in done.message
+    assert done.ok and "is in the archive" in done.message
     kept = await archived_marathon(bot.db, GUILD, marathon["id"])
-    assert kept["archived_why"] == "removed"
-    assert await marathons_by_ref(bot.db, GUILD, "gdq") == {}
-    assert (await details_of(bot.db, "marathon.removed"))["archived_why"] == "removed"
-    assert await count(bot, "marathon.archived") == 0
+    assert kept["archived_why"] == "staff"
+    assert await count(bot, "marathon.removed") == 0
 
 
 async def test_restore_copies_it_back_paused_with_its_runs_and_people(bot, cog):  # noqa: F811
@@ -248,10 +245,10 @@ async def test_the_archived_people_card_reads_its_own_pairings(bot, cog):  # noq
     assert {one["name"] for one in state["baf"]} >= {"Somebody", "Sky"}
 
 
-async def test_the_panel_offers_archive_it_on_a_card_and_the_archive_from_the_root(bot, cog):  # noqa: F811
+async def test_the_panel_offers_the_archive_from_the_root_and_the_card_no_archive_it(bot, cog):  # noqa: F811
     marathon = await added(bot, cog)
     _, card = await build_card(bot, bot.guild, marathon["id"])
-    assert ma.ARCHIVE_MOVE.label in [getattr(one, "label", None) for one in card.children]
+    assert ma.ARCHIVE_MOVE.label not in [getattr(one, "label", None) for one in card.children]
     _, root = await build_panel(bot, bot.guild, FakeActor())
     assert ma.ARCHIVE_LIST_MOVE.label in [getattr(one, "label", None) for one in root.children]
 

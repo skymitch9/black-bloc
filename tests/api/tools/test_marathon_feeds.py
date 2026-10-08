@@ -229,7 +229,11 @@ async def test_forget_ignored_and_remove_the_feed(client, sign_in, web, wf, cog)
     sign_in(client)
     client.post(f"/api/marathons/feeds/{feed_id}/check")
     marathon = client.get("/api/marathons").json()["marathons"][0]
-    client.delete(f"/api/marathons/{marathon['id']}")
+    await web.db.conn.execute(
+        "UPDATE marathon_feeds SET ignored = ? WHERE id = ?",
+        (json.dumps([str(marathon["source_ref"])]), feed_id),
+    )
+    await web.db.conn.commit()
     body = client.get("/api/marathons/feeds").json()["feeds"][0]
     assert body["ignored_count"] == 1
     forgot = client.post(f"/api/marathons/feeds/{feed_id}/forget").json()

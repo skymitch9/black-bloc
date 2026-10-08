@@ -827,13 +827,11 @@ def test_the_shipped_words_are_the_registrys_defaults():
     assert MARATHON_DEFAULTS["marathon_live_pings"] is False
 
 
-def test_only_moves_that_change_something_are_drawn():
-    active = mt.card_moves({"active": 1, "board_message_id": None}, has_unmatched=False)
-    assert mt.PAUSE_MOVE in active and mt.RESUME_MOVE not in active
-    assert mt.BOARD_POST_MOVE in active and mt.PAIR_MOVE not in active
-    paused = mt.card_moves({"active": 0, "board_message_id": 5}, has_unmatched=True)
-    assert mt.RESUME_MOVE in paused and mt.READ_MOVE not in paused
-    assert mt.BOARD_REFRESH_MOVE in paused and mt.PAIR_MOVE in paused
+def test_the_card_is_people_the_tracking_move_and_read_it_now_while_active():
+    track = (mt.MarathonMove("track", "Track", "primary", 2),)
+    assert mt.card_moves({"active": 1}, track) == (mt.PEOPLE_MOVE, *track, mt.READ_MOVE)
+    assert mt.card_moves({"active": 0}) == (mt.PEOPLE_MOVE,)
+    assert not hasattr(mt, "REMOVE_MOVE")
     assert mt.ADD_MOVE not in mt.root_moves(staff=False)
 
 
@@ -938,9 +936,6 @@ def test_the_next_moves_offer_add_and_dismiss_only_while_the_suggestion_is_open(
     dismissed = record | {"dismissed_at": iso(0)}
     assert mt.next_moves(dismissed, over=True) == (mt.LOOK_AGAIN_MOVE, mt.BACK_MOVE)
     assert mt.next_moves(None, over=False) == (mt.BACK_MOVE,)
-    card = mt.card_moves({"active": 1}, has_unmatched=False, has_next=True)
-    assert mt.NEXT_MOVE in card and mt.SCHEDULE_MOVE in card and mt.POLL_MOVE not in card
-    assert mt.NEXT_MOVE not in mt.card_moves({"active": 1}, has_unmatched=False)
 
 
 def test_a_login_lent_by_the_viewer_never_costs_a_name_match_and_a_staff_login_beats_it():

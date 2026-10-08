@@ -60,13 +60,10 @@ from ...marathon_sources import (
     schedule_page,
 )
 from ...panels import (
-    KEEP_IT,
     Outcome,
     Panel,
     answer,
     clamped,
-    confirm,
-    confirm_items,
     opened,
     panel_minutes,
     refusal,
@@ -111,7 +108,6 @@ from ...settings_store import (
     MARATHON_REMINDER_PINGS_KEY,
     MARATHON_REMINDER_STALE_KEY,
     MARATHON_REMINDER_TEMPLATE_KEY,
-    MARATHON_REMOVE_QUESTION_KEY,
     MARATHON_RUNNER_POSTS_KEY,
     MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY,
     MARATHON_SUGGEST_NEXT_KEY,
@@ -942,15 +938,6 @@ async def rename_marathon(
         if "name" in changes:
             await controls_changed(bot, guild, marathon["id"])
     return Outcome(True, said, value=await get_marathon(bot.db, guild.id, marathon["id"]))
-
-
-async def remove_marathon(
-    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
-) -> Outcome:
-    """Nothing about a marathon is deleted any more: Remove archives it as `removed`."""
-    from .marathon_archive import archive_marathon
-
-    return await archive_marathon(bot, guild, actor, marathon, why=ma.REMOVED, via=via)
 
 
 async def pair_runner(
@@ -3345,12 +3332,6 @@ def ping_card_line(bot: Any, guild_id: int, row: Any) -> str:
     return card_line(bot, guild_id, row)
 
 
-def ping_card_move(bot: Any, guild_id: int, row: Any) -> Any:
-    from .marathon_ping import card_move
-
-    return card_move(bot, guild_id, row)
-
-
 async def inbox_line(bot: Any, guild: Any, row: Any) -> str:
     """The card's state, as the inbox message says it, with the thread's link when tracked."""
     from .marathon_inbox import feed_of, state_words
@@ -3453,15 +3434,32 @@ async def build_card(
     if movable:
         view.add_item(RunPick(movable, words))
     view.add_item(EventModePick(me.mode_of(row)))
-    add_moves(
-        view,
-        mt.card_moves(row, has_unmatched=bool(unmatched), has_next=has_next)
-        + ms.card_moves(row)
-        + (ping_card_move(bot, guild.id, row),)
-        + (ma.ARCHIVE_MOVE,)
-        + mi.panel_moves(row),
-    )
+    tracking = tuple(one._replace(row=2) for one in mi.panel_moves(row) if one != mi.IGNORE_MOVE)
+    add_moves(view, mt.card_moves(row, tracking))
+    add_card_links(view, bot, guild, row)
+    add_moves(view, (mt.BACK_MOVE._replace(row=3),))
     return (embed, view)
+
+
+def add_card_links(view: Any, bot: Any, guild: Any, row: Any) -> None:
+    from ...settings_store import MARATHON_INBOX_BUTTON_SITE_KEY, MARATHON_INBOX_BUTTON_THREAD_KEY
+    from .marathon_inbox import site_link
+    from .marathon_inbox import words as inbox_words
+
+    links = (
+        (MARATHON_INBOX_BUTTON_THREAD_KEY, mi.channel_url(guild.id, _cell(row, "thread_id"))),
+        (MARATHON_INBOX_BUTTON_SITE_KEY, site_link(bot, row["id"])),
+    )
+    for key, url in links:
+        if url:
+            view.add_item(
+                discord.ui.Button(
+                    style=discord.ButtonStyle.link,
+                    label=inbox_words(bot, guild.id, key)[:80],
+                    url=url,
+                    row=2,
+                )
+            )
 
 
 def next_line_of(bot: Any, guild: Any, row: Any) -> str:
@@ -3777,40 +3775,6 @@ async def back_to_run(interaction: discord.Interaction, view: Any) -> None:
     await render(interaction, embed, fresh, view)
 
 
-async def ask_remove(interaction: discord.Interaction, view: Any) -> None:
-    if not await opened(interaction):
-        return
-    row = await get_marathon(interaction.client.db, interaction.guild.id, view.marathon_id)
-    if row is None:
-        await open_root(interaction, view)
-        return
-    embed, fresh = await build_card(interaction.client, interaction.guild, row["id"])
-    fresh.clear_items()
-
-    async def yes(one: discord.Interaction, card: Any) -> None:
-        await run_move(
-            one,
-            card,
-            lambda bot, guild, actor, marathon: remove_marathon(bot, guild, actor, marathon),
-        )
-
-    async def no(one: discord.Interaction, card: Any) -> None:
-        await open_card(one, row["id"], card)
-
-    await confirm(
-        interaction,
-        fresh,
-        embed,
-        confirm_items(yes=mt.REMOVE_MOVE.label, no=KEEP_IT, on_yes=yes, on_no=no),
-        view,
-        question=mt.render(
-            interaction.client.store.get(interaction.guild.id, MARATHON_REMOVE_QUESTION_KEY),
-            said_default(MARATHON_REMOVE_QUESTION_KEY),
-            name=row["name"],
-        ).text,
-    )
-
-
 class MarathonMoveButton(discord.ui.Button):
     def __init__(self, move: Any) -> None:
         super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
@@ -3881,15 +3845,6 @@ class MarathonMoveButton(discord.ui.Button):
 
                 wanted = default_mode(interaction.client, interaction.guild.id)
                 await interaction.response.send_modal(AddMarathonModal(view, wanted))
-        elif action in mp.MOVE_WANTS:
-            from .marathon_ping import set_ping_role
-
-            wanted_ping = mp.MOVE_WANTS[action]
-            await run_move(
-                interaction,
-                view,
-                lambda bot, guild, actor, row: set_ping_role(bot, guild, actor, row, wanted_ping),
-            )
         elif action == ms.CARD_ACTION:
             await open_spot(interaction, view.marathon_id, view)
         elif action == ms.CHANNEL_ACTION:
@@ -3926,8 +3881,6 @@ class MarathonMoveButton(discord.ui.Button):
             )
         elif action == mt.BOARD:
             await run_move(interaction, view, post_board)
-        elif action == mt.REMOVE:
-            await ask_remove(interaction, view)
         elif action == ma.ARCHIVE_ACTION:
             from .marathon_archive import ask_archive
 
@@ -4229,7 +4182,6 @@ __all__ = [
     "pairings_of",
     "post_board",
     "refresh_marathon",
-    "remove_marathon",
     "rename_marathon",
     "run_by_id",
     "runs_of",

@@ -6383,8 +6383,6 @@ MARATHON_PING_ROLE_DEFAULT_KEY = "marathon_ping_role_default"
 MARATHON_PING_ROLE_ON_SAID_KEY = "marathon_ping_role_on_said"
 MARATHON_PING_ROLE_OFF_SAID_KEY = "marathon_ping_role_off_said"
 MARATHON_PING_ROLE_SAME_KEY = "marathon_ping_role_same_said"
-MARATHON_PING_ROLE_BUTTON_ON_KEY = "marathon_ping_role_button_on"
-MARATHON_PING_ROLE_BUTTON_OFF_KEY = "marathon_ping_role_button_off"
 MARATHON_PING_ROLE_LINE_ON_KEY = "marathon_ping_role_line_on"
 MARATHON_PING_ROLE_LINE_OFF_KEY = "marathon_ping_role_line_off"
 MARATHON_ROLE_PINGS_KEY = "marathon_role_pings"
@@ -6399,8 +6397,6 @@ MARATHON_ARCHIVE_AFTER_DAYS_KEY = "marathon_archive_after_days"
 MARATHON_ARCHIVED_WORD_KEY = "marathon_archived_word"
 MARATHON_ARCHIVE_QUESTION_KEY = "marathon_archive_question"
 MARATHON_ARCHIVED_SAID_KEY = "marathon_archived_said"
-MARATHON_REMOVE_QUESTION_KEY = "marathon_remove_question"
-MARATHON_REMOVED_SAID_KEY = "marathon_removed_said"
 MARATHON_RESTORE_QUESTION_KEY = "marathon_restore_question"
 MARATHON_RESTORED_SAID_KEY = "marathon_restored_said"
 MARATHON_RESTORE_TAKEN_KEY = "marathon_restore_taken"
@@ -7801,20 +7797,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("name",),
         "what staff are told once Archive it has moved a marathon to the archive. It takes {name}",
     ),
-    MARATHON_REMOVE_QUESTION_KEY: (
-        "Remove **{name}**? It moves to the archive with its runs and pairings, its ping window "
-        "closes and its events are called off; a feed will not add it again. Posts already made "
-        "stay where they are.",
-        ("name",),
-        "what staff are asked before Remove takes a marathon off the list — nothing is deleted, "
-        "it is archived. It takes {name}",
-    ),
-    MARATHON_REMOVED_SAID_KEY: (
-        "**{name}** is off the list and in the archive, with its runs and pairings; a feed will "
-        "not add it again.",
-        ("name",),
-        "what staff are told once Remove has archived a marathon. It takes {name}",
-    ),
     MARATHON_RESTORE_QUESTION_KEY: (
         "Restore **{name}**? It comes back to the list paused — nothing is read or posted until "
         "someone presses **Resume**.",
@@ -8361,16 +8343,6 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("marathon",),
         "what staff are told when the Ping the role switch is already where they asked. It "
         "takes {marathon}",
-    ),
-    MARATHON_PING_ROLE_BUTTON_ON_KEY: (
-        "Ping the role",
-        (),
-        "the /event marathon card's button that turns a marathon's role pings on",
-    ),
-    MARATHON_PING_ROLE_BUTTON_OFF_KEY: (
-        "Stop pinging",
-        (),
-        "the /event marathon card's button that turns a marathon's role pings off",
     ),
     MARATHON_PING_ROLE_LINE_ON_KEY: (
         "Pings the role",

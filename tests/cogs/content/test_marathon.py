@@ -2,6 +2,7 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+import discord
 import pytest
 
 from black_bloc import logkinds
@@ -17,7 +18,6 @@ from black_bloc.cogs.content.marathon import (
     pair_runner,
     post_board,
     refresh_marathon,
-    remove_marathon,
     rename_marathon,
     runs_of,
     set_active,
@@ -26,6 +26,7 @@ from black_bloc.cogs.content.marathon import (
     unpair_runner,
     update_run,
 )
+from black_bloc.cogs.content.marathon_archive import archive_marathon
 from black_bloc.cogs.content.spotlight import (
     delete_channel,
     set_ping_mode,
@@ -694,7 +695,7 @@ async def test_pause_and_remove_close_the_window(bot, cog):
     assert await windows_for(bot.db, channel["id"]) == []
     await set_active(bot, bot.guild, FakeActor(), marathon, True)
     assert len(await windows_for(bot.db, channel["id"])) == 1
-    await remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    await archive_marathon(bot, bot.guild, FakeActor(), marathon)
     assert await windows_for(bot.db, channel["id"]) == []
     assert await get_marathon(bot.db, GUILD, marathon["id"]) is None
     assert "marathon.window_dropped" in await kinds(bot.db)
@@ -807,16 +808,30 @@ async def test_my_runs_lists_only_the_members_own(bot, cog):
     assert mt.NOTHING_MINE in embed.description
 
 
-async def test_the_card_draws_only_the_moves_that_change_something(bot, cog):
+def card_buttons(view):
+    return [
+        (one.label, one.row) for one in view.children if isinstance(one, discord.ui.Button)
+    ]
+
+
+async def test_the_card_is_people_untrack_read_the_links_and_back(bot, cog):
     marathon = await added(bot, cog)
     _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
-    labels = [getattr(one, "label", None) for one in view.children]
-    assert "Pause" in labels and "Resume" not in labels
-    assert "Post the board" in labels and "Pair a runner…" in labels
+    assert card_buttons(view) == [
+        ("People…", 2),
+        ("Untrack", 2),
+        ("Read it now", 2),
+        ("Open on the site", 2),
+        ("Back", 3),
+    ]
     await set_active(bot, bot.guild, FakeActor(), marathon, False)
     _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
-    labels = [getattr(one, "label", None) for one in view.children]
-    assert "Resume" in labels and "Read it now" not in labels
+    assert [label for label, _row in card_buttons(view)] == [
+        "People…",
+        "Untrack",
+        "Open on the site",
+        "Back",
+    ]
 
 
 async def test_the_card_opens_on_the_two_header_lines_then_baf_then_posts(bot, cog):
@@ -1124,15 +1139,10 @@ async def test_the_notice_buttons_are_staff_only_and_rebuild_from_their_custom_i
 async def test_the_panel_card_offers_next_up_and_the_next_view_its_three_moves(bot, cog, over):
     await cog.tick_once()
     embed, view = await cogmod.build_card(bot, bot.guild, over["id"])
-    labels = [getattr(one, "label", None) for one in view.children]
-    assert "Next up…" in labels and "Schedule…" in labels and "Re-read every…" not in labels
     assert "Summer Games Done Quick 2027" in embed.description
     embed, view = await cogmod.build_next(bot, bot.guild, over["id"])
     labels = [getattr(one, "label", None) for one in view.children]
     assert labels == ["Add it", "Not this one", "Look again", "Back"]
-    cog.clock = lambda: NOW
-    _, view = await cogmod.build_card(bot, bot.guild, over["id"])
-    assert "Next up…" not in [getattr(one, "label", None) for one in view.children]
 
 
 # --- §G: a done run has a way back ----------------------------------------------------------
@@ -1411,7 +1421,7 @@ async def test_removing_the_marathon_calls_its_event_off_with_the_reason(bot, co
     outcome = await with_event(bot, cog)
     marathon, event = await event_of(bot, outcome.value)
 
-    await remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    await archive_marathon(bot, bot.guild, FakeActor(), marathon)
     from black_bloc.events import get_event
 
     assert (await get_event(bot.db, event["id"]))["status"] == "cancelled"
@@ -1431,7 +1441,7 @@ async def test_removing_a_marathon_whose_event_is_settled_leaves_the_event_as_it
     marathon, event = await event_of(bot, outcome.value)
     await set_status(bot.db, event["id"], "denied")
 
-    await remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    await archive_marathon(bot, bot.guild, FakeActor(), marathon)
 
     assert (await get_event(bot.db, event["id"]))["status"] == "denied"
     assert "marathon.event_cancelled" not in await kinds(bot.db)
@@ -1445,19 +1455,15 @@ async def test_pausing_does_nothing_to_the_event(bot, cog, proposals):
     assert again["status"] == "pending" and fresh["event_id"] == event["id"]
 
 
-async def test_the_card_says_the_event_and_draws_unlink_or_make_one_now(bot, cog, proposals):
+async def test_the_card_says_the_event_and_unlink_takes_it_off(bot, cog, proposals):
     outcome = await with_event(bot, cog)
     marathon, event = await event_of(bot, outcome.value)
     embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
-    labels = [getattr(one, "label", None) for one in view.children]
     assert f"Event **#{event['id']}** — pending" in embed.description
-    assert mt.UNLINK_EVENT_MOVE.label in labels and mt.MAKE_EVENT_MOVE.label not in labels
 
     await cogmod.unlink_the_event(bot, bot.guild, FakeActor(), marathon)
     embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
-    labels = [getattr(one, "label", None) for one in view.children]
     assert "Event **#" not in embed.description and mt.EVENT_NONE_LINE not in embed.description
-    assert mt.MAKE_EVENT_MOVE.label in labels and mt.UNLINK_EVENT_MOVE.label not in labels
 
 
 async def test_the_events_card_line_names_the_marathon_and_its_runs_of_ours(bot, cog, proposals):
@@ -1514,7 +1520,7 @@ def pressed(view, label):
     return next(one for one in view.children if getattr(one, "label", None) == label)
 
 
-async def test_the_card_says_the_spotlight_and_opens_its_view_and_the_channels_own_card(bot, cog):
+async def test_the_card_says_the_spotlight_and_its_view_opens_the_channels_own_card(bot, cog):
     channel = await gdq_row(bot)
     marathon = await added(bot, cog, channel=channel)
     embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
@@ -1522,7 +1528,7 @@ async def test_the_card_says_the_spotlight_and_opens_its_view_and_the_channels_o
     assert all(len([one for one in view.children if one.row == row]) <= 5 for row in range(5))
 
     interaction = FakeInteraction(bot, FakeActor(), bot.guild)
-    await pressed(view, "Spotlight…").callback(interaction)
+    await cogmod.open_spot(interaction, marathon["id"], view)
     assert interaction.view.where == cogmod.SPOT_VIEW
     assert "Spotlight the channel while it runs: **on**" in interaction.words
     assert "`/golive` ▸ Channels…" in interaction.words
@@ -1614,7 +1620,7 @@ async def test_the_card_opens_the_schedule_view_and_its_modal_changes_the_link(b
     assert all(len([one for one in view.children if one.row == row]) <= 5 for row in range(5))
 
     interaction = FakeInteraction(bot, FakeActor(), bot.guild)
-    await pressed(view, "Schedule…").callback(interaction)
+    await cogmod.open_schedule(interaction, marathon["id"], view)
     assert interaction.view.where == cogmod.SCHEDULE_VIEW
     assert URL in interaction.words
     assert interaction.labels()[:2] == ["Change the schedule link…", "Re-read every…"]
@@ -1683,7 +1689,7 @@ async def test_the_schedule_views_rename_button_opens_a_modal_with_the_name_and_
     marathon = await added(bot, cog)
     _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
     schedule = FakeInteraction(bot, FakeActor(), bot.guild)
-    await pressed(view, "Schedule…").callback(schedule)
+    await cogmod.open_schedule(schedule, marathon["id"], view)
     assert "Rename…" in schedule.labels()
 
     opening = FakeInteraction(bot, FakeActor(), bot.guild)

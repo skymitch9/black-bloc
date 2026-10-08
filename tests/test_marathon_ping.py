@@ -17,9 +17,5 @@ def test_the_switch_reads_booleans_words_and_zero_or_one_and_nothing_else():
         assert mp.clean_ping_role(bad) is None
 
 
-def test_the_card_button_names_the_next_state():
-    off = mp.card_move({"ping_role": 0}, "Ping the role", "Stop pinging")
-    on = mp.card_move({"ping_role": 1}, "Ping the role", "Stop pinging")
-    assert (off.action, off.label, off.row) == (mp.ON_ACTION, "Ping the role", 2)
-    assert (on.action, on.label) == (mp.OFF_ACTION, "Stop pinging")
-    assert mp.MOVE_WANTS == {mp.ON_ACTION: True, mp.OFF_ACTION: False}
+def test_the_card_button_is_gone_with_the_shrunk_card():
+    assert not hasattr(mp, "card_move") and not hasattr(mp, "MOVE_WANTS")

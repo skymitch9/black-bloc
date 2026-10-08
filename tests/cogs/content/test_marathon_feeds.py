@@ -18,10 +18,10 @@ from black_bloc.cogs.content.marathon import (
     get_marathon,
     list_marathons,
     refresh_marathon,
-    remove_marathon,
     runs_of,
     update_marathon,
 )
+from black_bloc.cogs.content.marathon_archive import archive_marathon
 from black_bloc.cogs.content.spotlight import forget_spotlight
 from black_bloc.marathon_sources import Person, Run, ScheduleError, oengus_home
 from tests.cogs.content.test_marathon import (  # noqa: F401
@@ -327,17 +327,24 @@ async def test_an_event_already_on_the_list_is_adopted_not_added(bot, cog):  # n
     assert (await checked_of(bot, "GDQ"))["adopted"] == 1
 
 
-async def test_a_removed_feed_marathon_is_ignored_and_forget_ignored_adds_it_again(
+async def seed_ignored(db, feed_id, ref):
+    await db.conn.execute(
+        "UPDATE marathon_feeds SET ignored = ? WHERE id = ?", (json.dumps([str(ref)]), int(feed_id))
+    )
+    await db.conn.commit()
+
+
+async def test_an_archived_feed_marathon_stays_out_and_forget_ignored_clears_the_list(
     bot,  # noqa: F811
     cog,
 ):
     await seeded(bot, cog)
     await cog.tick_once()
     agdq = next(one for one in await list_marathons(bot.db, GUILD) if one["source_ref"] == "74")
-    await remove_marathon(bot, bot.guild, FakeActor(), agdq)
+    await archive_marathon(bot, bot.guild, FakeActor(), agdq)
+    await seed_ignored(bot.db, agdq["feed_id"], "74")
     feed = (await all_feeds(bot))[0]
     assert mf.ignored_of(feed) == ["74"]
-    assert (await details_of(bot.db, "marathon.feed_ignored"))["event"] == "74"
     later(cog, 7)
     await cog.tick_once()
     assert "74" not in {one["source_ref"] for one in await list_marathons(bot.db, GUILD)}
@@ -345,13 +352,12 @@ async def test_a_removed_feed_marathon_is_ignored_and_forget_ignored_adds_it_aga
     forgot = await feeds.forget_ignored(bot, bot.guild, FakeActor(), feed)
     assert forgot.ok and "forgot 1" in forgot.message
     again = await feeds.check_now(bot, bot.guild, FakeActor(), feed)
-    assert again.ok and "1 added" in again.message
-    assert "74" in {one["source_ref"] for one in await list_marathons(bot.db, GUILD)}
+    assert again.ok and "0 added" in again.message
     nothing = await feeds.forget_ignored(bot, bot.guild, FakeActor(), feed)
     assert not nothing.ok and nothing.code == "nothing_ignored"
 
 
-async def test_pause_it_and_remove_it_on_the_notice_are_the_marathons_own_moves(
+async def test_pause_it_is_the_marathons_own_move_and_an_old_remove_answers_in_words(
     bot,  # noqa: F811
     cog,
 ):
@@ -379,10 +385,9 @@ async def test_pause_it_and_remove_it_on_the_notice_are_the_marathons_own_moves(
     other = FakeInteraction(bot, FakeActor(), bot.guild)
     other.message = notice
     await remove.on_click(other)
-    assert await get_marathon(bot.db, GUILD, marathon_id) is None
-    feed = (await all_feeds(bot))[0]
-    assert str((await details_of(bot.db, "marathon.removed"))["marathon_id"]) == str(marathon_id)
-    assert len(mf.ignored_of(feed)) == 1
+    assert "Remove is retired" in other.sent and "Nothing was changed" in other.sent
+    assert await get_marathon(bot.db, GUILD, marathon_id) is not None
+    assert mf.ignored_of((await all_feeds(bot))[0]) == []
 
 
 # --- suggest mode -----------------------------------------------------------------------------
@@ -689,7 +694,7 @@ async def test_the_added_notice_is_an_embed_with_the_six_fields_and_three_rows(
     ids = [one.custom_id for one in items if getattr(one, "custom_id", None)]
     assert ids == [
         f"marathon:feed:{feed_id}:{marathon_id}:{action}"
-        for action in ("pause", "remove", "read", "mode", "manage")
+        for action in ("pause", "read", "mode", "manage")
     ] + [f"marathon:people:{marathon_id}"]
 
 
@@ -777,17 +782,16 @@ async def test_manage_opens_the_marathon_card_for_staff_and_refuses_a_member_in_
     assert card["embed"].title == marathon["name"] and card["view"] is not None
 
 
-async def test_remove_it_strikes_the_embed_title_and_takes_the_rows_away(bot, cog):  # noqa: F811
+async def test_an_old_remove_it_leaves_the_notice_as_it_stands(bot, cog):  # noqa: F811
     notice, _items, feed_id, marathon_id = await the_notice(bot, cog)
-    title = notice.embeds[0].title
+    edits = len(notice.edits)
     remove = feeds.FeedButton(feed_id, str(marathon_id), "remove")
     lead = FakeInteraction(bot, FakeActor(), bot.guild)
     lead.message = notice
 
     await remove.on_click(lead)
 
-    assert notice.edits[-1]["view"] is None
-    assert notice.edits[-1]["embeds"][0].title == f"~~{title}~~"
+    assert len(notice.edits) == edits
 
 
 async def test_every_notice_custom_id_round_trips_through_from_custom_id():
@@ -1050,7 +1054,8 @@ async def test_look_again_on_an_oengus_feed_forgets_what_it_read_and_reads_it_al
 async def test_forget_ignored_leaves_the_oengus_memory_alone(bot, cog):  # noqa: F811
     _row, feed = await ss4c_feed(bot, cog)
     marathon = (await by_ref(bot))[SS4C]
-    await remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    await archive_marathon(bot, bot.guild, FakeActor(), marathon)
+    await seed_ignored(bot.db, feed["id"], SS4C)
     feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
     assert mf.ignored_of(feed) == [SS4C]
     forgot = await feeds.forget_ignored(bot, bot.guild, FakeActor(), feed)

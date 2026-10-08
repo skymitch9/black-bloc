@@ -6075,7 +6075,7 @@
       "method": "DELETE",
       "path": "/api/marathons/{marathon_id}",
       "read_by": [
-        "marathons-section.js (events.html) Remove — the marathon moves to the archive"
+        "the retired Remove (merged into Archive it 2026-10-08): answers in words, changes nothing"
       ],
       "shape": "object",
       "keys": [

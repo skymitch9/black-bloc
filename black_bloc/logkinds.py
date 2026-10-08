@@ -351,7 +351,6 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.feed_dismissed",
         "marathon.feed_failed",
         "marathon.feed_forgot",
-        "marathon.feed_ignored",
         "marathon.feed_looked",
         "marathon.feed_paused",
         "marathon.feed_removed",

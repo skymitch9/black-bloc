@@ -8,6 +8,7 @@ from black_bloc import marathon_people as mp
 from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content import marathon_people as people
 from black_bloc.cogs.content.marathon import create_marathon, get_marathon, runs_of
+from black_bloc.cogs.content.marathon_archive import archive_marathon
 from black_bloc.cogs.content.spotlight import channel_by_login, forget_spotlight
 from black_bloc.marathon_sources import Person, Run
 from tests.cogs.content.test_marathon import (  # noqa: F401
@@ -209,7 +210,7 @@ async def test_refusals_are_in_words_no_login_nobody_and_runs_over(bot, cog):  #
 async def test_removing_the_marathon_forgets_its_spotlights_and_keeps_the_rows(bot, cog):  # noqa: F811
     marathon = await added(bot)
     await people.spotlight_runner(bot, bot.guild, FakeActor(), marathon, "skyruns")
-    await cogmod.remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    await archive_marathon(bot, bot.guild, FakeActor(), marathon)
     assert await people.remembered_of(bot.db, marathon["id"]) == {}
     assert await channel_by_login(bot.db, GUILD, "skyruns") is not None
 

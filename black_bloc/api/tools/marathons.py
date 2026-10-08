@@ -33,7 +33,6 @@ from ...cogs.content.marathon import (
     pairings_of,
     post_board,
     refresh_marathon,
-    remove_marathon,
     rename_marathon,
     run_by_id,
     runs_of,
@@ -92,7 +91,7 @@ from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...golive_replay import BECAUSE_REPLAY
 from ...logkinds import VIA_WEBSITE
-from ...marathon_archive import STAFF, WHY_WORDS, page_of
+from ...marathon_archive import REMOVE_GONE, STAFF, WHY_WORDS, page_of
 from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_ping import pings_role
@@ -810,15 +809,12 @@ def build_router(bot: Any) -> APIRouter:
 
     @router.delete("/{marathon_id}")
     async def marathon_delete(request: Request, marathon_id: int) -> dict[str, Any]:
-        who = await writer(request)
+        await writer(request)
         guild = require_guild(bot)
         require_db(bot)
         require_cog(bot, COG, FEATURE)
-        row = await wanted(guild, marathon_id)
-        done = answered(
-            await remove_marathon(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
-        )
-        return {"removed": True, "archived": True, "id": marathon_id, "message": done.message}
+        await wanted(guild, marathon_id)
+        return {"removed": False, "archived": False, "id": marathon_id, "message": REMOVE_GONE}
 
     @router.post("/{marathon_id}/archive")
     async def marathon_archive_one(request: Request, marathon_id: int) -> dict[str, Any]:

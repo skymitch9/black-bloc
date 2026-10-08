@@ -9,6 +9,7 @@ from typing import Any
 import discord
 
 from ... import marathon as mt
+from ... import marathon_archive as ma
 from ... import marathon_events as me
 from ... import marathon_fastestfurs as ff
 from ... import marathon_feeds as mf
@@ -93,7 +94,6 @@ from .marathon import (
     refresh_marathon,
     refused_with,
     rehearsal_details,
-    remove_marathon,
     render,
     runs_of,
     said_default,
@@ -1390,35 +1390,6 @@ async def dismiss_suggestion(
     return Outcome(True, mf.SUGGESTION_DISMISSED.format(event=record["name"], name=fresh["name"]))
 
 
-async def ignore_removed(
-    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
-) -> None:
-    """Remove on a marathon a feed made: the feed remembers the ref and never adds it again."""
-    feed_id = _cell(marathon, "feed_id")
-    if not feed_id:
-        return
-    ref = str(marathon["source_ref"])
-    cur = await bot.db.conn.execute(
-        "UPDATE marathon_feeds SET ignored = json_insert(COALESCE(NULLIF(ignored, ''), '[]'), "
-        "'$[#]', ?) WHERE id = ? AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(NULLIF("
-        "marathon_feeds.ignored, ''), '[]')) WHERE value = ?)",
-        (ref, int(feed_id), ref),
-    )
-    await bot.db.conn.commit()
-    if not cur.rowcount:
-        return
-    feed = await get_feed(bot.db, guild.id, feed_id)
-    if feed is None:
-        return
-    await log_action(
-        bot,
-        guild,
-        kind_via("marathon.feed_ignored", via),
-        actor=actor,
-        details=feed_details(feed, via, event=ref, marathon_id=marathon["id"]),
-    )
-
-
 def who_of(actor: Any) -> str:
     found = actor_id(actor)
     return f"<@{found}>" if found else "staff"
@@ -1484,14 +1455,13 @@ class FeedButton(
                 await fold_message(interaction.message, mf.NOTICE_GONE, struck=True)
                 await answer(interaction, mf.NOTICE_GONE)
                 return
-            if self.action == PAUSE:
-                outcome = await set_active(bot, guild, user, marathon, False)
-                line = mf.NOTICE_PAUSED.format(who=who_of(user))
-            else:
-                outcome = await remove_marathon(bot, guild, user, marathon)
-                line = mf.NOTICE_REMOVED.format(who=who_of(user))
+            if self.action == REMOVE:
+                await answer(interaction, ma.REMOVE_GONE)
+                return
+            outcome = await set_active(bot, guild, user, marathon, False)
             if outcome.ok:
-                await fold_message(interaction.message, line, struck=self.action == REMOVE)
+                line = mf.NOTICE_PAUSED.format(who=who_of(user))
+                await fold_message(interaction.message, line, struck=False)
             await answer(interaction, outcome.message)
             return
         feed = await get_feed(bot.db, guild.id, self.feed_id)
@@ -1572,7 +1542,7 @@ def added_view(bot: Any, feed_id: Any, marathon: Any) -> Any:
     if not buttonable(ref):
         return None
     view = discord.ui.View(timeout=None)
-    for action in (PAUSE, REMOVE, READ):
+    for action in (PAUSE, READ):
         view.add_item(FeedButton(int(feed_id), ref, action))
     view.add_item(NoticeModePick(int(feed_id), ref, me.mode_of(marathon)))
     view.add_item(FeedButton(int(feed_id), ref, MANAGE))
@@ -2196,7 +2166,6 @@ __all__ = [
     "feed_move",
     "forget_ignored",
     "get_feed",
-    "ignore_removed",
     "list_feeds",
     "look_again",
     "remove_feed",

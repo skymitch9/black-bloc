@@ -270,7 +270,6 @@ PAUSE_MOVE = MarathonMove(PAUSE, "Pause", row=2)
 RESUME_MOVE = MarathonMove(RESUME, "Resume", row=2)
 BOARD_POST_MOVE = MarathonMove(BOARD, "Post the board", row=2)
 BOARD_REFRESH_MOVE = MarathonMove(BOARD, "Refresh the board", row=2)
-REMOVE_MOVE = MarathonMove(REMOVE, "Remove", "danger", 3)
 PAIR_MOVE = MarathonMove(PAIR, "Pair a runner…", row=3)
 BACK_MOVE = MarathonMove(BACK, "Back", row=4)
 EVENTS_MOVE = MarathonMove(EVENTS, "Back", row=4)
@@ -288,7 +287,7 @@ MARK_LIVE_MOVE = MarathonMove(MARK_LIVE, "Mark it live", row=2)
 MAKE_EVENT_MOVE = MarathonMove(MAKE_EVENT, "Make an event now", row=3)
 UNLINK_EVENT_MOVE = MarathonMove(UNLINK_EVENT, "Unlink the event", row=3)
 FEEDS_MOVE = MarathonMove(FEEDS, "Feeds…", row=3)
-PEOPLE_MOVE = MarathonMove(PEOPLE, "People…", "primary", 4)
+PEOPLE_MOVE = MarathonMove(PEOPLE, "People…", "primary", 2)
 
 
 def root_moves(*, staff: bool) -> tuple[MarathonMove, ...]:
@@ -299,24 +298,11 @@ def root_moves(*, staff: bool) -> tuple[MarathonMove, ...]:
     )
 
 
-def card_moves(
-    marathon: Any, *, has_unmatched: bool, has_next: bool = False
-) -> tuple[MarathonMove, ...]:
-    """Only moves that change something are drawn: Pause or Resume, Post or Refresh the board."""
-    active = bool(_cell(marathon, "active", 1))
-    found = [READ_MOVE] if active else []
-    found.append(PAUSE_MOVE if active else RESUME_MOVE)
-    found.append(BOARD_REFRESH_MOVE if _cell(marathon, "board_message_id") else BOARD_POST_MOVE)
-    found.append(REMOVE_MOVE)
-    if has_unmatched:
-        found.append(PAIR_MOVE)
-    if has_next:
-        found.append(NEXT_MOVE)
-    found.append(SCHEDULE_MOVE)
-    found.append(event_move(marathon))
-    found.append(PEOPLE_MOVE)
-    found.append(BACK_MOVE)
-    return tuple(found)
+def card_moves(marathon: Any, tracking: Any = ()) -> tuple[MarathonMove, ...]:
+    """People…, the inbox's Track or Untrack, Read it now while active, then Back; the two
+    links sit between them."""
+    read = (READ_MOVE,) if bool(_cell(marathon, "active", 1)) else ()
+    return (PEOPLE_MOVE, *tracking, *read)
 
 
 def wants_its_event(marathon: Any) -> bool:
