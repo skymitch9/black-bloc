@@ -9033,7 +9033,7 @@ Design: [`marathon-public-highlights-design.md`](marathon-public-highlights-desi
 | Where | Why |
 |---|---|
 | `black_bloc/marathon_public.py:48` `is_up` · `:61` `auto_wanted` | Up = a stored message not taken down. The switch wants a run with NO message id at all, so a highlight staff took down (`public_removed`) or one a person deleted and that was forgotten is never put back by it (Deviations 1, 6). |
-| `black_bloc/marathon_public.py:83` `button_for` | Remove while up (always, even with no public channel — staff can always take it down); Highlight only for a BaF run upcoming/live/done with a channel; else no button (Deviation 8). |
+| ~~`black_bloc/marathon_public.py:83` `button_for`~~ | ~~Remove while up …~~ **Removed 2026-10-08** (marathon-controls-tidy): a run's post carries no whole-marathon button; old `marathon:highlight:` ids answer `WHOLE_MARATHON_GONE` from `cogs/content/marathon_public.py` `press`. |
 | `black_bloc/marathon_public.py:94` `shown_button` | Reads a fetched message's real components; `False` means it cannot tell (the suite's fakes carry none), and the runner post is then edited once (Deviation 11). |
 | `black_bloc/cogs/content/marathon_public.py:80` `public_channel` | The one resolver: `marathon_public_channel_id`, else `golive_channel_id`. |
 | `black_bloc/cogs/content/marathon_public.py:169` `send_public` | Not `cog._send`: that one aims at the thread. Mode off posts nothing; shadow goes to the `marathon_public` feature home with the note naming the real channel; the guard is checked. Only the pinged roles are allowed. |

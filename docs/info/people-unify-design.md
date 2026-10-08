@@ -90,6 +90,8 @@ Right after the deploy, measured by the conductor's brief (not read live here):
 
 ### 5. BaF announcements
 
+> ⚠️ **2026-10-08:** renamed **Runner announcements** and no longer a master over hosts — see [`announce-overrides-design.md` § Runner announcements 2026-10-08](announce-overrides-design.md#runner-announcements-2026-10-08).
+
 `marathon_controls_announcements_on/_off` defaults reword to **BaF announcements: on · turn off** / **off · turn on**
 (stored custom values are staff's and stay); the drawer field, the refusal (*Say on, off or follow for **BaF
 announcements***) and every help text say *BaF announcements*. Behaviour unchanged.

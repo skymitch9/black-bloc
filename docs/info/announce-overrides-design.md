@@ -1,5 +1,11 @@
 # Announce overrides — hosts off by default, a per-run answer for each person, and a no-@ choice
 
+> 🔁 **SUPERSEDED IN PART 2026-10-08 — see [Runner announcements 2026-10-08](#runner-announcements-2026-10-08) at the
+> foot** (branch `marathon-controls-tidy`, NOT MERGED, NOT DEPLOYED). *BaF announcements* is now **Runner
+> announcements** and is **no longer a master**: it gates runners, Host announcements gates hosts, and a run's own yes
+> gets past neither. The whole-marathon opt-out left the run's post; it lives in the People view only. Struck text
+> below is what it replaced.
+
 > 🔴 **THIS CHANGES LIVE BEHAVIOUR AT DEPLOY.** Every marathon whose own **Host announcements** switch follows the
 > setting — which is **every marathon at deploy**, because the column is new and reads NULL — **stops announcing its BaF
 > hosts**: no host-block heads-up at any mark and no host highlight. Runners are unchanged. A host highlight already up
@@ -38,22 +44,25 @@ out/opt in override so some runners can be announced if staff allow runner to be
   add the opt in opt out anyway like planned"*.
 - **Hosts off by default, how far:** *"3. a"* — NO public host posts at all by default; hosts are still found and shown
   to staff; staff can turn hosts on for a marathon or opt a single run in. Runners stay on by default.
-- **Precedence:** *"4. b"* — the marathon's announcements switch is the MASTER: off means nobody on it is announced,
-  and no per-run button gets round it.
+- **Precedence:** ~~*"4. b"* — the marathon's announcements switch is the MASTER: off means nobody on it is announced,
+  and no per-run button gets round it.~~ **Reversed 2026-10-08:** neither switch is a master; Runner announcements
+  gates runners, Host announcements gates hosts, and no per-run button gets round the one for the person's part
+  (*Runner announcements 2026-10-08*).
 
 ## The decision — one pure function
 
-`marathon_announce.decide(master, opted_out, answer, role, hosts_on)` answers *is this person announced for this run*
-for every public post: a runner's reminder at every mark, a runner's highlight, a host block's heads-up and highlight.
-In this order:
+~~`marathon_announce.decide(master, opted_out, answer, role, hosts_on)`~~ `decide(runners_on, opted_out, answer, role,
+hosts_on)` (2026-10-08) answers *is this person announced for this run* for every public post: a runner's reminder at
+every mark, a runner's highlight, a host block's heads-up and highlight. ~~In this order:~~ The order now is in
+*Runner announcements 2026-10-08*; the list below is what it replaced.
 
-1. the marathon's **BaF announcements** switch is off → **no** (`marathon_off`);
-2. the person is opted out of the whole marathon and the run has no *yes* of its own → **no** (`opted_out`);
-3. the run's own answer, if it has one → *in* **yes**, *out* **no** (`run`);
-4. the default for their part on that run → runner **yes** (`default`); host → the marathon's **Host announcements**
-   (`default` when on, `hosts_off` when off).
+1. ~~the marathon's **BaF announcements** switch is off → **no** (`marathon_off`);~~
+2. ~~the person is opted out of the whole marathon and the run has no *yes* of its own → **no** (`opted_out`);~~
+3. ~~the run's own answer, if it has one → *in* **yes**, *out* **no** (`run`);~~
+4. ~~the default for their part on that run → runner **yes** (`default`); host → the marathon's **Host announcements**
+   (`default` when on, `hosts_off` when off).~~
 
-### Truth table (every row is one parametrized case of `test_every_row_of_the_truth_table`)
+### ~~Truth table~~ (SUPERSEDED 2026-10-08 — the pinned table is in *Runner announcements 2026-10-08*)
 
 | BaF announcements | Opted out of the marathon | This run's answer | Runner | Host, Host announcements OFF | Host, Host announcements ON |
 |---|---|---|---|---|---|
@@ -173,8 +182,9 @@ The record is written whenever who is named changes, before the edit. What follo
 
 ### The doors
 
-- **Each scanned run's post in the staff thread.** While the run is upcoming or live the post carries, under the
-  whole-marathon button, **two buttons a person** — never two spellings of one move:
+- **Each scanned run's post in the staff thread.** While the run is upcoming or live the post carries, ~~under the
+  whole-marathon button,~~ **two buttons a person** — never two spellings of one move (2026-10-08: the
+  whole-marathon button is gone from the run's post; it lives in the People view only):
   - the run's answer: **Do not announce {name} for this run** (they would be announced), **Announce {name} for this
     run** (they would not), or **{name}: back to the default for this run** (the run has an answer);
   - their @: **No @ for {name}** / **@ {name} again**.
@@ -187,8 +197,8 @@ The record is written whenever who is named changes, before the edit. What follo
   48 the rest are reached from the site (the post has no rows left).
 - **The state in words**, one line a person under the post's own text (`marathon_announce_state_line`):
   *Sky: announced for this run — the default* · *anarchy: not announced for this run — host announcements are off for
-  this marathon* · *… — set for this run* · *… — opted out of every run on this marathon* · *… — BaF announcements are
-  off for this marathon*, with *· written without an @* when that applies. The post is edited in place.
+  this marathon* · *… — set for this run* · *… — opted out of every run on this marathon* · *… — ~~BaF announcements are
+  off for this marathon~~ runner announcements are off for this marathon* (2026-10-08), with *· written without an @* when that applies. The post is edited in place.
 - **The People slot view** (`/event` ▸ a marathon ▸ People… ▸ a slot ▸ a BaF person): the same two moves on their own
   row and the same state line. This is the Discord door for a run that has no post of its own (a run only a BaF host is
   on).
@@ -234,7 +244,8 @@ The record is written whenever who is named changes, before the edit. What follo
 
 Numbered once. 1–12 are the build's; 13–20 were made by the review fixes.
 
-1. **A post already up is followed with the master held on**: BaF announcements going off stops new posts and never
+1. **A post already up is followed with ~~the master~~ Runner announcements held on** (2026-10-08 wording): ~~BaF
+   announcements~~ Runner announcements going off stops new posts and never
    rewrites or strands one in flight (the behaviour before this build, kept). Amended by the review: the master is
    held on only for people the post already names; nobody joins a post while the master is off.
 2. **Host announcements going off while a host post is up carries it** with everyone on it who is not left out by
@@ -244,10 +255,13 @@ Numbered once. 1–12 are the build's; 13–20 were made by the review fixes.
    a host; that run's reminder still names them as a runner. Amended by the review: that run's own answer is about
    their run only (*Host blocks*).
 4. **The run's answer and the @ are separate moves**, two buttons a person, so four people fit as buttons.
-5. **Per-run buttons and the state lines show only while the run is upcoming or live**; a finished run's post keeps the
-   whole-marathon button only.
-6. **With the master off the per-run button still offers the move the defaults would allow** (it stores the answer for
-   when the master comes back); the state line says *BaF announcements are off for this marathon*.
+5. **Per-run buttons and the state lines show only while the run is upcoming or live**; a finished run's post keeps
+   ~~the whole-marathon button only~~ no buttons (2026-10-08: the whole-marathon button left the run's post).
+6. **With ~~the master~~ the switch for a person's part off, the per-run button still offers the move the defaults
+   would allow** (it stores the answer for when the switch comes back); the state line says *~~BaF announcements~~
+   runner announcements are off …* / *host announcements are off …*. 2026-10-08: this now holds for hosts too, so a
+   host on a marathon whose Host announcements is off is offered *Do not announce {name} for this run*, not
+   ~~*Announce {name} for this run*~~ (a yes there would announce nobody).
 7. **The site's button words** *Opt out of every run* / *Opt back in to every run* are site chrome constants (the
    existing convention); the per-run and @ labels come from the keys.
 8. **Refusals are module constants** (`BAD_RUN`, `NOT_ON_RUN`, `BAD_MENTION`, and now `RUN_OVER` / `RUN_DROPPED`) — the
@@ -260,7 +274,8 @@ Numbered once. 1–12 are the build's; 13–20 were made by the review fixes.
 11. **A commentator who counts as ours is weighed as a runner** — announced by default, as before this build — and
     **someone who runs and hosts the same run is a runner for it** (*Who is on a run*).
 12. **The marathon-wide opt-out's two labels were reworded** to say *every run on this marathon*, so they never read
-    like the per-run button beside them; a stored custom wording is staff's and stays (see *Deploy note*).
+    like the per-run button ~~beside them~~ (2026-10-08: the button is in the People view only now); a stored custom
+    wording is staff's and stays (see *Deploy note*).
 13. **A post records who it names; nothing is inferred from "nobody is left"** (*A post already up*). This replaces
     the build's `carried` retry, which is what named a host who was never announced.
 14. **No record reads as "everyone of ours not left out by name"** — who `main` named — so a post that is up at deploy
@@ -343,3 +358,107 @@ the host.
   — who `main` named — and the record is written at the first tick that follows them. Nothing is rewritten by that.
 - **Four columns arrive through `ADDED_COLUMNS`** at boot, NULL for what was there; `SCHEMA_VERSION` stays 89.
 - **The plain name is the schedule's name** from this deploy; nobody is plain until staff say so.
+
+
+## Runner announcements 2026-10-08
+
+Branch `marathon-controls-tidy` (worktree `C:/lcw/bb-marathon-controls-tidy`, off `main` `b148a3af`, v213 live),
+**NOT MERGED, NOT DEPLOYED.** Last verified 2026-10-08 against the branch's own code by the suite, `ruff check .`,
+`node site/mock/check.mjs` (`MOCK_PORT=8824`), every `site/mock/*.test.mjs` and the Docker mirror. ⚠️ NOT checked:
+Discord, a browser, the live database, the live settings.
+
+### The owner's decisions, verbatim (2026-10-08)
+
+1. *"B"* — the whole-marathon opt-out leaves every run's post and lives only in the People view.
+2. *"BaF announcement should be runner announcement now"* — the conductor's reading, told to the owner: Runner
+   announcements gates runners, Host announcements gates hosts, **neither is a master over the other**; everyone off is
+   both off.
+
+**What the code did before:** BaF announcements WAS a master (`decide` returned `marathon_off` for runners and hosts
+alike, and four callers gated host posts on it). So this is a behaviour change, not a rename.
+
+### The decision now — `decide(runners_on, opted_out, answer, role, hosts_on)`
+
+1. the switch for the person's part is off → **no** — a runner reads **Runner announcements** (`runners_off`), a host
+   reads **Host announcements** (`hosts_off`);
+2. opted out of the whole marathon and the run has no *yes* of its own → **no** (`opted_out`);
+3. the run's own answer → *in* **yes**, *out* **no** (`run`);
+4. otherwise **yes** (`default`).
+
+A run's own *yes* still beats the person's marathon-wide opt-out; it **never** beats a switch that is off — for a
+host too (reverses the build's *"opt a single run in"* while Host announcements is off, owner answer *"3. a"*).
+
+| Part | Runner ann. | Host ann. | Opted out | Run's answer | Verdict |
+|---|---|---|---|---|---|
+| runner | off | any | any | any | no · `runners_off` |
+| runner | on | any | no | none | **yes** · `default` |
+| runner | on | any | no | in | **yes** · `run` |
+| runner | on | any | no | out | no · `run` |
+| runner | on | any | yes | none | no · `opted_out` |
+| runner | on | any | yes | in | **yes** · `run` |
+| runner | on | any | yes | out | no · `opted_out` |
+| host | any | off | any | any | no · `hosts_off` |
+| host | any | on | no | none | **yes** · `default` |
+| host | any | on | no | in | **yes** · `run` |
+| host | any | on | no | out | no · `run` |
+| host | any | on | yes | none | no · `opted_out` |
+| host | any | on | yes | in | **yes** · `run` |
+| host | any | on | yes | out | no · `opted_out` |
+
+All 2 × 2 × 2 × 2 × 3 = 48 rows are pinned one by one in `tests/test_marathon_announce.py::TRUTH`
+(`test_every_row_of_the_truth_table`, `test_the_truth_table_is_every_combination_once`).
+
+### What else moved
+
+- **Gates outside `decide` that read the old master** now follow the person's own switch: the host block's highlight
+  at go-live and its heads-up (`marathon_host_highlights.went_live` / `heads_up`; a skipped heads-up logs
+  `host_announcements_off` or `opted_out`, never `announcements_off`), a run's auto-highlight (`marathon_public.
+  auto_highlight`), a run's public reminder (posts whenever someone on it is announced; `announcements_off` is logged
+  only when it names nobody and Runner announcements is off), the schedule page's `reminds_hosts` (Host
+  announcements), and the **Marathon role ping**: blocked with `announcements_off` only while **both** switches are off
+  (`marathon_announce.anyone_announced`).
+- **A post already up** keeps its rules (*A post already up*): a switch going off stops new posts and carries one in
+  flight. Unchanged and now sharper: a move aimed at a host is weighed with the real Host announcements switch, so ANY
+  per-run or opt move on a host while Host announcements is off takes that host off a post already up
+  (`test_a_move_on_one_co_host_leaves_the_other_on_the_post`, `test_a_move_on_a_host_while_hosts_are_off_says_so_in_the_log`).
+- **The per-run button holds both switches on** (`standing`), so with a person's switch off it offers what the
+  defaults would allow once it is back (decision 6). For hosts on a Host-announcements-off marathon — the default —
+  that reads **Do not announce {name} for this run**, with the state line *not announced … host announcements are off*.
+- **`because` / `why`:** `marathon_off` is renamed **`runners_off`** (API `why`, log `because`).
+
+### The doors now
+
+| Door | Shows |
+|---|---|
+| A scanned run's post (staff thread) | per person: the run's answer (*Do not announce / Announce / back to the default*) and the no-@ move; past four people the menus; the state lines. **No** whole-marathon button. |
+| Old run-post button `marathon:highlight:{m}:{r}:{optout\|optin\|post\|remove}` | still registered; staff press answers `WHOLE_MARATHON_GONE` in words (410 `gone`), changes nothing. The next sync edits the post to drop it. |
+| People slot view (`/event` ▸ marathon ▸ People… ▸ slot ▸ BaF person) | *Opt out of every run on this marathon* / *Opt back in to this marathon* (unchanged, one place per person), the run's answer, the no-@ move, the state line. |
+| Thread controls | **Runner announcements: on · turn off** / *off · turn on*, then Host announcements (ids unchanged: `announce`, `hostannounce`). |
+| Site drawer | the field reads **Runner announcements**; `PATCH {"announcements": …}` unchanged. |
+
+### Keys
+
+Keys whose stored values must keep working kept their names: `marathons.announcements`, `marathon_announcements_default`,
+`marathon_controls_announcements_on` / `_off` (defaults reworded to *Runner announcements: …*; a staff override stays).
+
+**Renamed** — the meaning changed, so a stale stored value is dropped at load:
+
+| Was | Now |
+|---|---|
+| `marathon_announcements_on_said` | `marathon_runner_announcements_on_said` |
+| `marathon_announcements_off_said` | `marathon_runner_announcements_off_said` |
+| `marathon_host_announcements_off_said` | `marathon_host_announcements_stopped_said` (no longer says a host can be announced run by run) |
+| `marathon_announce_why_off` | `marathon_announce_why_runners_off` |
+| `marathon_role_ping_line_announcements_off` | `marathon_role_ping_line_nobody_announced` |
+
+**Retired:** `marathon_public_not_postable` (only the removed button read it). **Descriptions reworded:**
+`marathon_announcements_default`, `marathon_host_announcements_default`, `marathon_host_highlights`,
+`marathon_public_reminders`, `marathon_public_button_opt_out`, `marathon_announce_button_run_in` / `_run_out`.
+
+**Deltas:** registry keys **1090 → 1089**; routes, contract entries, log kinds, columns, dynamic items: **0**.
+
+### What was NOT verified
+
+- Discord: the run post without its first button, the old button's answer, the relabelled controls.
+- The live database and settings: whether staff stored values under the five renamed keys (they are dropped at load).
+- A browser: the drawer's relabelled field was read in code, not rendered.
