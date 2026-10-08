@@ -42,6 +42,7 @@ from ...settings_store import (
     MARATHON_CONTROLS_CANNOT_WAIT_KEY,
     MARATHON_CONTROLS_EVENT_OFF_KEY,
     MARATHON_CONTROLS_EVENT_ON_KEY,
+    MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY,
     MARATHON_CONTROLS_HOST_ANNOUNCE_OFF_KEY,
     MARATHON_CONTROLS_HOST_ANNOUNCE_ON_KEY,
     MARATHON_CONTROLS_KEPT_REFUSED_KEY,
@@ -53,6 +54,7 @@ from ...settings_store import (
     MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_ON_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_KEPT_LINE_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_NONE_LINE_KEY,
+    MARATHON_CONTROLS_SPOTLIGHT_RUNNING_LINE_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_STARTS_LINE_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_UNTIL_LINE_KEY,
     MARATHON_CONTROLS_STARTED_KEY,
@@ -79,14 +81,13 @@ from .marathon_inbox import find_channel, home_now, reopened, words
 from .marathon_role_ping import status_line as role_ping_line
 from .marathon_spotlight import (
     _row_of,
-    after_staff_dim,
     enabled,
     lead_of,
     set_spotlight_mode,
     state_for,
     tail_of,
 )
-from .spotlight import changed_spotlight, set_spotlight, update_channel
+from .spotlight import changed_spotlight, update_channel
 
 log = logging.getLogger(__name__)
 
@@ -123,6 +124,7 @@ SPOT_LINE_KEYS = {
     mtc.LINE_STARTS: MARATHON_CONTROLS_SPOTLIGHT_STARTS_LINE_KEY,
     mtc.LINE_KEPT: MARATHON_CONTROLS_SPOTLIGHT_KEPT_LINE_KEY,
     mtc.LINE_NONE: MARATHON_CONTROLS_SPOTLIGHT_NONE_LINE_KEY,
+    mtc.LINE_RUNNING: MARATHON_CONTROLS_SPOTLIGHT_RUNNING_LINE_KEY,
 }
 RETIRED_SAID = {
     mtc.HOSTS: mh.SCAN_GONE,
@@ -173,8 +175,8 @@ def stamp(value: Any) -> str:
     return f"<t:{int(when.timestamp())}:f>" if when else "—"
 
 
-def spot_words(bot: Any, guild: Any, state: dict[str, Any]) -> str:
-    line = mtc.spot_line(state["state"])
+def spot_words(bot: Any, guild: Any, state: dict[str, Any], follows: bool = True) -> str:
+    line = mtc.spot_line(state["state"], follows)
     if line is None:
         return ""
     return words(
@@ -191,11 +193,12 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
     _row, state = await state_for(bot, guild, marathon)
     rows = await runs_of(bot.db, marathon["id"])
     over = mt.is_over(marathon, now_for(bot))
+    follows = ms.mode_of(marathon) == ms.FOLLOW
     shown_baf, fields = (None, {}) if over else baf_button(bot, guild, marathon, rows)
     controls = mtc.controls(
         me.mode_of(marathon),
         state["state"],
-        follows=ms.mode_of(marathon) == ms.FOLLOW,
+        follows=follows,
         ping=mping.pings_role(marathon),
         announce=announces(bot, guild.id, marathon),
         host_announce=policy_of(bot, guild.id, marathon).hosts_on,
@@ -203,7 +206,10 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         over=over,
     )
     labels = tuple(mtc.label(words(bot, guild.id, label_key(one), **fields)) for one in controls)
-    lines = [spot_words(bot, guild, state), role_ping_line(bot, guild, marathon, rows=rows)]
+    lines = [
+        spot_words(bot, guild, state, follows),
+        role_ping_line(bot, guild, marathon, rows=rows),
+    ]
     return ("\n".join(one for one in lines if one), controls, labels)
 
 
@@ -434,9 +440,7 @@ async def start_spotlight(
             said.append(
                 (await set_spotlight_mode(bot, guild, actor, marathon, ms.FOLLOW, via=via)).message
             )
-        said.append(
-            words(bot, guild.id, MARATHON_CONTROLS_ALREADY_ON_KEY, channel=login_of(row))
-        )
+        said.append(words(bot, guild.id, MARATHON_CONTROLS_ALREADY_ON_KEY, channel=login_of(row)))
         return Outcome(True, " ".join(one for one in said if one))
     if span is None or ms.reach_end(span, tail) <= now_for(bot):
         return no_end(bot, guild, marathon)
@@ -532,27 +536,26 @@ async def cancel_spotlight(
     row = await _row_of(bot, guild, marathon)
     if row is None:
         return no_channel(bot, guild, marathon)
+    held = spot.is_spotlit(row) and ms.held_by(row) == int(marathon["id"])
     if ms.mode_of(marathon) != ms.OFF:
         moved = await set_spotlight_mode(bot, guild, actor, marathon, ms.OFF, via=via)
         if not moved.ok:
             return moved
+        if held:
+            return moved
+    key = MARATHON_CONTROLS_CANCELLED_KEY
+    if spot.is_spotlit(row) and not held:
+        key = MARATHON_CONTROLS_FOLLOW_OFF_RUNNING_KEY
     return Outcome(
-        True,
-        words(
-            bot,
-            guild.id,
-            MARATHON_CONTROLS_CANCELLED_KEY,
-            marathon=marathon["name"],
-            channel=login_of(row),
-        ),
+        True, words(bot, guild.id, key, marathon=marathon["name"], channel=login_of(row))
     )
 
 
-async def stop_spotlight(
+async def turn_off_spotlight(
     bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    """Off exactly as a staff Off on Go-live, and this marathon stops following; a kept
-    spotlight is refused in words."""
+    """The switch's off stops following the schedule and nothing more; a kept spotlight is
+    refused in words."""
     row = await _row_of(bot, guild, marathon)
     if row is None:
         return no_channel(bot, guild, marathon)
@@ -562,39 +565,6 @@ async def stop_spotlight(
             KEPT_CODE,
             409,
         )
-    said: list[str] = []
-    if spot.is_spotlit(row):
-        fresh_row, settled = await set_spotlight(bot, guild, actor, int(row["id"]), False, via=via)
-        said.append(spot.spotlight_said(fresh_row, settled))
-        said.append(await after_staff_dim(bot, guild, actor, row, fresh_row, via=via))
-    again = await get_marathon(bot.db, guild.id, marathon["id"])
-    if again is not None and ms.mode_of(again) != ms.OFF:
-        moved = await set_spotlight_mode(bot, guild, actor, again, ms.OFF, via=via)
-        said.append(moved.message)
-    return Outcome(True, " ".join(one for one in said if one))
-
-
-def during_show(bot: Any, guild: Any, marathon: Any, row: Any) -> bool:
-    """The channel is spotlit for this show: held by it, or lit while the show is in reach."""
-    if not spot.is_spotlit(row):
-        return False
-    if ms.held_by(row) == int(marathon["id"]):
-        return True
-    span = ms.span_of(marathon)
-    return span is not None and ms.in_reach(
-        span, now_for(bot), lead_of(bot, guild.id), tail_of(bot, guild.id)
-    )
-
-
-async def turn_off_spotlight(
-    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
-) -> Outcome:
-    """The switch's off: a cancel before the show, a stop during it."""
-    row = await _row_of(bot, guild, marathon)
-    if row is None:
-        return no_channel(bot, guild, marathon)
-    if ms.is_kept(row) or during_show(bot, guild, marathon, row):
-        return await stop_spotlight(bot, guild, actor, marathon, via=via)
     return await cancel_spotlight(bot, guild, actor, marathon, via=via)
 
 
@@ -710,7 +680,6 @@ __all__ = [
     "refresh_controls",
     "row_changed",
     "start_spotlight",
-    "stop_spotlight",
     "sync_controls",
     "turn_off_spotlight",
 ]

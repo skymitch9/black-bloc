@@ -304,7 +304,9 @@ async def test_the_sites_archive_clears_the_buttons_before_the_thread_is_archive
 
     done = await archive_marathon(bot, bot.guild, FakeActor(), marathon, via="website")
 
-    assert done.ok and seen and True not in seen and current_view(message) is None and thread.archived
+    assert (
+        done.ok and seen and True not in seen and current_view(message) is None and thread.archived
+    )
 
 
 async def test_the_automatic_archive_clears_the_buttons_before_the_thread_is_archived(bot, cog):
@@ -385,23 +387,57 @@ async def test_a_mode_change_from_the_drawer_or_the_card_re_renders_the_message(
 # --- the spotlight switch -----------------------------------------------------------------------
 
 
-async def test_turn_off_during_the_show_stops_it_as_staff_off_does(bot, cog):
+async def test_turn_off_during_the_show_stops_following_and_lifts_only_what_the_schedule_lit(
+    bot, cog
+):
     row = await quiet_row(bot)
     marathon = await tracked_marathon(bot, cog, channel=row)
     assert (await channel_by_id(bot.db, row["id"]))["spotlit_by_marathon"] == marathon["id"]
 
     said = await pressed(bot, marathon, "spotlight", "off")
 
-    assert said.ok and "**AGDQ 2027** will not spotlight it again." in said.message
+    assert said.ok and "**AGDQ 2027** no longer spotlights its channel." in said.message
     lit = await channel_by_id(bot.db, row["id"])
-    assert (lit["spotlight"], lit["expires_at"], lit["spotlit_by_marathon"]) == (0, None, None)
+    assert (lit["spotlight"], lit["spotlit_by_marathon"]) == (0, None)
     assert (await fresh(bot, marathon))["spotlight_mode"] == "off"
-    updated = await details_of(bot.db, "golive.spotlight_updated")
-    assert updated["spotlight"] == 0 and updated["spotlight_id"] == row["id"]
+    assert "marathon.spotlight_mode_set" in await kinds(bot.db)
     message = controls_in(the_thread(bot))[0]
     assert spot_label(message) == OFF_SWITCH
     assert spot_button(message).custom_id == f"marathon:controls:{marathon['id']}:spotlight:on"
     assert not message.content.startswith("Spotlight:")
+
+
+async def test_turn_off_during_the_show_leaves_a_staff_spotlight_running_and_says_so(bot, cog):
+    row = await quiet_row(bot)
+    marathon = await tracked_marathon(bot, cog, channel=row)
+    await update_channel_held(bot, row)
+    await change_spotlight(
+        bot, bot.guild, FakeActor(), row["id"], spotlight=True, expires_at=at(400)
+    )
+    staff = await channel_by_id(bot.db, row["id"])
+    assert staff["spotlight"] == 1 and staff["spotlit_by_marathon"] is None
+
+    said = await pressed(bot, marathon, "spotlight", "off")
+
+    assert said.ok and said.message == (
+        "**AGDQ 2027** no longer follows the schedule. twitch.tv/rpglimitbreak stays spotlit — "
+        "stop it on Go-live."
+    )
+    assert (await fresh(bot, marathon))["spotlight_mode"] == "off"
+    still = await channel_by_id(bot.db, row["id"])
+    assert (still["spotlight"], still["expires_at"]) == (1, at(400))
+    message = controls_in(the_thread(bot))[0]
+    assert spot_label(message) == OFF_SWITCH
+    until = int((NOW + timedelta(minutes=400)).timestamp())
+    assert message.content.splitlines()[0] == (
+        f"Spotlight: on until <t:{until}:f> · not following the schedule · stop it on Go-live"
+    )
+
+
+async def update_channel_held(bot, row):
+    from black_bloc.cogs.content.spotlight import update_channel
+
+    await update_channel(bot.db, int(row["id"]), spotlit_by_marathon=None)
 
 
 async def test_turn_off_on_a_held_marathon_not_in_reach_still_stops_it(bot, cog):
@@ -597,9 +633,7 @@ async def test_the_starts_line_is_a_key(bot, cog):
     await controls.refresh_controls(bot, bot.guild, marathon["id"])
 
     opening = int((NOW + timedelta(minutes=5000 - 15)).timestamp())
-    assert controls_in(the_thread(bot))[0].content.splitlines()[0] == (
-        f"Waits for <t:{opening}:f>"
-    )
+    assert controls_in(the_thread(bot))[0].content.splitlines()[0] == (f"Waits for <t:{opening}:f>")
 
 
 async def test_turn_on_inside_the_lead_window_turns_it_on_now_and_holds_it(bot, cog):
@@ -885,9 +919,7 @@ async def logged(bot, kind):
         ("highlight", "off", "Auto-highlight is part of Runner announcements now"),
     ],
 )
-async def test_a_retired_button_answers_in_words_and_changes_nothing(
-    bot, cog, action, to, said
-):
+async def test_a_retired_button_answers_in_words_and_changes_nothing(bot, cog, action, to, said):
     marathon = await tracked_marathon(bot, cog)
     message = controls_in(the_thread(bot))[0]
     before = dict(await fresh(bot, marathon))

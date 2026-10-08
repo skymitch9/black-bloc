@@ -162,3 +162,11 @@ def test_the_tracker_link_is_the_schedule_page_at_the_marathons_hash():
 
 def test_the_baf_answers_have_one_home():
     assert (mtc.FOLLOW, mtc.YES, mtc.NO, mtc.CLEAR) == (baf.FOLLOW, baf.YES, baf.NO, baf.CLEAR)
+
+
+def test_a_spotlight_this_marathon_does_not_follow_reads_as_running_not_as_its_own():
+    assert mtc.spot_line("until", False) == mtc.LINE_RUNNING
+    assert mtc.spot_line("held_other", False) == mtc.LINE_RUNNING
+    assert mtc.spot_line("until", True) == mtc.LINE_UNTIL
+    assert mtc.spot_line("kept", False) == mtc.LINE_KEPT
+    assert mtc.spot_line("off", False) is None

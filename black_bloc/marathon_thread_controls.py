@@ -72,6 +72,8 @@ LINE_UNTIL = "until"
 LINE_STARTS = "starts"
 LINE_KEPT = "kept"
 LINE_NONE = "none"
+LINE_RUNNING = "running"
+SPOT_RUNNING = (ms.UNTIL, ms.HELD_OTHER)
 SPOT_LINES = {
     ms.HELD: LINE_UNTIL,
     ms.HELD_OTHER: LINE_UNTIL,
@@ -122,7 +124,10 @@ def spot_switch(spot_state: Any, follows: bool) -> tuple[Control, ...]:
     return (switch(SPOTLIGHT, follows),)
 
 
-def spot_line(spot_state: Any) -> str | None:
+def spot_line(spot_state: Any, follows: bool = True) -> str | None:
+    """A spotlight staff or another marathon set, while this one does not follow, says so."""
+    if not follows and str(spot_state or "") in SPOT_RUNNING:
+        return LINE_RUNNING
     return SPOT_LINES.get(str(spot_state or ""))
 
 
