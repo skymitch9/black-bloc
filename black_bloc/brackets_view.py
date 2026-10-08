@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from . import brackets_store as store_
-from .brackets import play, standings
-from .brackets.model import ELIMINATION
+from .brackets import play, standings, swiss
+from .brackets.model import ELIMINATION, SWISS
 from .settings_store import BRACKETS_DEFAULTS
 
 PAGE_WORDS = (
@@ -56,6 +56,11 @@ PAGE_WORDS = (
     "brackets_waiting_done",
     "brackets_waiting_out",
     "brackets_discord_label",
+    "brackets_card_reset_words",
+    "brackets_card_third_words",
+    "brackets_card_rounds_words",
+    "brackets_card_late_words",
+    "brackets_card_finals_words",
 )
 
 SUMMARY_FIELDS = (
@@ -105,6 +110,21 @@ def page_words(store: Any, guild_id: int) -> dict[str, str]:
         key: str(store.get(guild_id, key) or "").strip() or str(BRACKETS_DEFAULTS[key])
         for key in PAGE_WORDS
     }
+
+
+def page_defaults(defaults: dict[str, Any]) -> dict[str, Any]:
+    """A new tournament's options as the create form fills them in."""
+    return {name: bool(value) if name in FLAG_FIELDS else value for name, value in defaults.items()}
+
+
+def rounds_to_play(row: Any, bracket: Any, people: list[Any]) -> int | None:
+    """The Swiss rounds the engine plays: the stored number, else enough for the field."""
+    if row["format"] != SWISS:
+        return None
+    field = len(bracket.entrants) if bracket is not None else sum(
+        1 for one in people if not one["dropped"] and not one["dq"]
+    )
+    return swiss.rounds_for(field, row["swiss_rounds"])
 
 
 def summary(row: Any) -> dict[str, Any]:
@@ -228,6 +248,7 @@ async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = Fal
         "options": options(row),
         "entrant_count": sum(1 for one in people if not one["dropped"]),
         "finished": bool(bracket is not None and play.finished(bracket)),
+        "rounds_to_play": rounds_to_play(row, bracket, people),
         "may_run": runs,
         "mine": mine,
         "entrants": [entrant_row(one) for one in people],

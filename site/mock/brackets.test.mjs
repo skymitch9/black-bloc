@@ -4,6 +4,8 @@
 // Exits 0 when every fixture matched, 1 with a list of what did not.
 
 import {
+  TREE,
+  drawnInTree,
   eliminationLayout,
   memberMoves,
   moved,
@@ -11,9 +13,12 @@ import {
   placeWords,
   resultsGrid,
   scoreChoices,
+  seedOrderWith,
   setMoves,
   sortedStandings,
   treeRows,
+  treeSize,
+  unplayedSets,
 } from '../public/assets/bracket-layout.js';
 import { build, decide, playOut, settle, standardOrder, standings, tableRows } from './brackets.mjs';
 
@@ -81,6 +86,46 @@ is('the losers side winning the grand final opens the reset', resetting.sets.fin
 const byes = settle(tournament('single', 5));
 is('five entrants: three byes to the top seeds', byes.sets.filter((one) => one.state === 'bye').map((one) => one.winner), [1, 2, 3]);
 
+const probe = (label, sets) => {
+  const drawn = eliminationLayout(sets);
+  const keys = new Set(drawn.nodes.map((one) => one.key));
+  const byKey = new Map(sets.map((one) => [one.key, one]));
+  is(`${label}: no bye or void set is drawn`, drawn.nodes.filter((one) => !drawnInTree(byKey.get(one.key))).map((one) => one.key), []);
+  const unplayed = unplayedSets(sets);
+  is(`${label}: every set that will be played is drawn`, sets.filter((one) => !unplayed.has(one.key) && !keys.has(one.key)).map((one) => one.key), []);
+  is(`${label}: a waiting set left out is one that can only ever hold one player or none`, sets.filter((one) => unplayed.has(one.key) && one.state === 'waiting' && [one.slot_a, one.slot_b].filter((id) => id !== null).length > 1).map((one) => one.key), []);
+  is(`${label}: no empty column`, Array.from({ length: drawn.cols }, (_, col) => drawn.nodes.some((one) => one.col === col)).every(Boolean), true);
+  const spots = drawn.nodes.map((one) => `${one.col}:${one.y}`);
+  is(`${label}: no two sets on one spot`, new Set(spots).size, spots.length);
+  is(`${label}: lines join drawn sets only`, drawn.links.every((one) => keys.has(one.from) && keys.has(one.to)), true);
+  is(`${label}: the top set sits on the first row`, Math.min(...drawn.nodes.filter((one) => one.side === 'winners').map((one) => one.y)), 0.5);
+};
+for (const format of ['single', 'double']) {
+  for (const count of [5, 6, 7, 12]) {
+    const t = settle(tournament(format, count));
+    probe(`${format} elimination of ${count} at the start`, t.sets);
+    playOut(t, { until: (one) => one.side === 'winners' && one.round === 3 });
+    probe(`${format} elimination of ${count} part played`, t.sets);
+    playOut(t);
+    probe(`${format} elimination of ${count} played out`, t.sets);
+  }
+}
+const five = settle(tournament('single', 5));
+is('five entrants: a bye is not a card, its player is already in round two', [eliminationLayout(five.sets).nodes.some((one) => one.key === 'W1-1'), five.sets.find((one) => one.key === 'W2-1').slot_a], [false, 1]);
+const fiveDouble = settle(tournament('double', 5));
+is('double elimination of 5: L1-2 is void, L1-1 can only ever be a bye; neither is drawn and L1 gives up its column', [fiveDouble.sets.find((one) => one.key === 'L1-2').state, fiveDouble.sets.find((one) => one.key === 'L1-1').state, eliminationLayout(fiveDouble.sets).nodes.filter((one) => one.side === 'losers').map((one) => [one.key, one.col])[0]], ['void', 'waiting', ['L2-1', 0]]);
+playOut(fiveDouble);
+is('double elimination of 5 played out: L1-1 turned out a bye, as the drawing said', fiveDouble.sets.find((one) => one.key === 'L1-1').state, 'bye');
+const predicted = (format, count) => {
+  const t = settle(tournament(format, count));
+  const said = unplayedSets(t.sets);
+  playOut(t);
+  return t.sets.filter((one) => said.has(one.key) !== !drawnInTree(one) && one.side !== 'grand').map((one) => one.key);
+};
+for (const format of ['single', 'double']) {
+  for (const count of [3, 5, 6, 7, 9, 12, 13]) is(`${format} elimination of ${count}: what the start leaves out is exactly what turns out a bye or void`, predicted(format, count), []);
+}
+
 const rr = settle(tournament('round_robin', 3));
 is('round robin of 3: three sets over three rounds', rr.sets.map((one) => one.key), ['R1-1', 'R2-1', 'R3-1']);
 const r1 = rr.sets.find((one) => one.slot_a === 1 && one.slot_b === 2) || rr.sets.find((one) => one.slot_a === 2 && one.slot_b === 1);
@@ -113,6 +158,13 @@ is('an even best-of offers nothing', scoreChoices(4), []);
 
 is('a seeding drag moves one entrant and keeps the rest in order', moved([1, 2, 3, 4], 3, 0), [4, 1, 2, 3]);
 is('a drag past the end lands last', moved([1, 2, 3], 0, 9), [2, 3, 1]);
+is('an unsaved order keeps its moves and puts a new entrant last', seedOrderWith([3, 1, 2], [1, 2, 3, 4]), [3, 1, 2, 4]);
+is('an unsaved order drops whoever left', seedOrderWith([3, 1, 2], [1, 3]), [3, 1]);
+is('an unsaved order with joiners and leavers names everyone in exactly once', seedOrderWith([6, 2, 5, 1], [1, 2, 3, 4, 5]).slice().sort(), [1, 2, 3, 4, 5]);
+
+is('a tree that fits keeps full-size cards', treeSize(6, 1400), { width: TREE.width, gap: TREE.gap, fits: true });
+is('eight in double elimination at 1280 (943 px of room, measured) squeezes to fit', [treeSize(6, 943).fits, treeSize(6, 943).width < TREE.width], [true, true]);
+is('a phone never squeezes a card under its floor', treeSize(6, 335), { width: TREE.tight, gap: TREE.tightGap, fits: false });
 
 const base = { state: 'signups', options: { entrant_cap: null }, entrant_count: 1, entrants: [{ id: 5, dropped: false, dq: false, checked_in: false }], sets: [], may_run: false };
 is('a member who is not in sees Sign up', memberMoves({ ...base, mine: null }, 'shadow'), ['join']);
@@ -138,4 +190,4 @@ if (failures.length) {
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log('brackets: ok - layout for single and double elimination at 4, 8 and 16, the reset, byes, round robin, Swiss, standings, scores, seeding and the moves');
+console.log('brackets: ok - layout for single and double elimination at 4, 8 and 16, byes and void sets at 5, 6, 7 and 12, the reset, round robin, Swiss, standings, scores, seeding, the tree size and the moves');

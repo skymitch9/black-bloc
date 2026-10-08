@@ -10197,7 +10197,8 @@
         "mode",
         "may_run",
         "tournaments",
-        "words"
+        "words",
+        "defaults"
       ],
       "rows": {
         "tournaments": [
@@ -10221,7 +10222,20 @@
           "brackets_report_label",
           "brackets_round_winners",
           "brackets_waiting_play",
-          "brackets_discord_label"
+          "brackets_discord_label",
+          "brackets_card_rounds_words"
+        ],
+        "defaults": [
+          "format",
+          "best_of",
+          "best_of_late",
+          "best_of_finals",
+          "best_of_from_round",
+          "grand_final_reset",
+          "third_place",
+          "check_in_minutes",
+          "entrant_cap",
+          "swiss_rounds"
         ]
       }
     },
@@ -10257,7 +10271,8 @@
         "to_name",
         "started_at",
         "completed_at",
-        "rules_text"
+        "rules_text",
+        "rounds_to_play"
       ],
       "rows": {
         "entrants": [
@@ -10288,6 +10303,7 @@
           "winner",
           "forfeit",
           "winner_to",
+          "loser_to",
           "reported_side",
           "confirms_at",
           "confirmed_how",

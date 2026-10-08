@@ -36,6 +36,7 @@
 .bk-entrant[data-checked="true"] .rowlist-note { color: var(--et-ok); }
 .bk-entrant[data-dragging="true"] { background: var(--et-row-hover); box-shadow: var(--et-shadow-lift); position: relative; z-index: 1; }
 .bk-seed { width: 2.2em; text-align: right; color: var(--et-muted); font-size: var(--et-ui-sm); flex-shrink: 0; }
+.bk-seed[data-place="true"] { width: 2.8em; color: var(--et-fg); }
 .bk-handle {
   flex-shrink: 0;
   width: 28px;
@@ -58,6 +59,9 @@
 
 /* the bracket */
 .bk-scroll { overflow-x: auto; overflow-y: hidden; max-width: 100%; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
+.bk-scroll[data-more="right"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); }
+.bk-scroll[data-more="left"] { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent); }
+.bk-scroll[data-more="both"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent); }
 .bk-tree { position: relative; }
 .bk-lines { position: absolute; inset: 0; pointer-events: none; }
 .bk-lines path { fill: none; stroke: var(--et-hairline); stroke-width: 1.5; }
@@ -131,6 +135,10 @@ button.bk-set:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px
 .bk-rounds { display: flex; gap: 20px; align-items: flex-start; }
 .bk-col { display: grid; gap: 10px; width: 188px; flex-shrink: 0; }
 .bk-col .bk-set { position: relative; height: 62px; }
+.bk-bye { display: flex; gap: 8px; align-items: center; margin: 0; padding: 4px 8px; color: var(--et-muted); font-size: var(--et-ui-sm); }
+.bk-bye[data-mine="true"] .bk-slot-name { color: var(--et-accent); }
+.bk-tree[data-tight="true"] .bk-set { padding: 4px 6px; }
+.bk-tree[data-tight="true"] .bk-set-top { gap: 4px; }
 
 .bk-grid { border-collapse: collapse; font-size: var(--et-ui-sm); }
 .bk-grid th, .bk-grid td { padding: 4px 6px; border: var(--et-hairline-w) solid var(--et-hairline); text-align: center; }
@@ -193,3 +201,27 @@ button.bk-set:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px
 .bk-list { display: grid; gap: 12px; }
 .drawer-body:has(.bk-drawer-set) { display: grid; gap: 12px; align-content: start; }
 .bk-state { font-size: var(--et-ui-md); }
+
+/* standings: the table wide, one compact row per player on a phone */
+.bk-standings-compact { display: none; }
+.bk-standing .bk-record { flex-shrink: 0; font-size: var(--et-ui-md); }
+.bk-standing[data-mine="true"] .rowlist-name { color: var(--et-accent); }
+
+@media (max-width: 699.98px) {
+  .bk-standings-wide { display: none; }
+  .bk-standings-compact { display: block; }
+
+  .bk-entrant { flex-wrap: wrap; row-gap: 8px; }
+  .bk-entrant .rowlist-main { flex: 1 1 0; }
+  .bk-entrant .rowlist-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bk-entrant .rowlist-note { overflow-wrap: anywhere; }
+  .bk-acts { flex: 1 0 100%; margin-left: 0; justify-content: flex-start; }
+  .bk-acts .bk-reason { flex: 1 1 140px; width: auto; min-height: 40px; }
+
+  #dash .btn, .drawer .btn, .ask .btn { min-height: 40px; }
+  .bk-score { height: 40px; min-width: 56px; }
+  .bk-handle { width: 40px; height: 40px; }
+  .bk-cell { min-height: 40px; min-width: 40px; }
+  .bk-you-go { display: inline-block; min-height: 40px; line-height: 40px; }
+  .drawer .say-nothing-do { display: inline-flex; align-items: center; min-height: 40px; }
+}

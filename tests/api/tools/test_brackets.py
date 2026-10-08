@@ -401,3 +401,65 @@ async def test_a_decision_and_a_reset_from_the_site_tell_both_players(
         (BEA, "brackets_dm_reset", "replay"),
     ]
     assert "W1-1 is final: Ada wins 2–0." in (await told(web))[0][1]["text"]
+
+
+async def test_the_list_carries_the_registry_defaults_a_new_tournament_starts_with(
+    client, sign_in, wf, web, people
+):
+    for key, value in (
+        ("brackets_format_default", "swiss"),
+        ("brackets_best_of", "5"),
+        ("brackets_best_of_finals", "7"),
+        ("brackets_third_place_default", True),
+        ("brackets_grand_final_reset_default", False),
+        ("brackets_check_in_minutes", 45),
+        ("brackets_entrant_cap_default", 24),
+        ("brackets_swiss_rounds_default", 4),
+    ):
+        await web.store.set(wf.GUILD_ID, key, value)
+    defaults = as_(client, sign_in, wf, TO).get("/api/brackets").json()["defaults"]
+    assert defaults == {
+        "format": "swiss",
+        "third_place": True,
+        "grand_final_reset": False,
+        "swiss_rounds": 4,
+        "best_of": 5,
+        "best_of_from_round": None,
+        "best_of_late": 5,
+        "best_of_finals": 7,
+        "entrant_cap": 24,
+        "check_in_minutes": 45,
+        "confirm_minutes": 12,
+    }
+    made_now = made(as_(client, sign_in, wf, TO))["options"]
+    assert {name: made_now[name] for name in defaults} == defaults
+
+
+async def test_a_swiss_says_the_rounds_the_engine_will_play(client, sign_in, wf, web, people):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser, format="swiss")["id"]
+    for name in ("A", "B", "C", "D", "E"):
+        organiser.post(f"/api/brackets/{tid}/entrants", json={"name": name})
+    assert organiser.get(f"/api/brackets/{tid}").json()["rounds_to_play"] == 3
+    organiser.patch(f"/api/brackets/{tid}", json={"swiss_rounds": 2})
+    organiser.post(f"/api/brackets/{tid}/signups/open", json={})
+    organiser.post(f"/api/brackets/{tid}/signups/close", json={})
+    started = organiser.post(f"/api/brackets/{tid}/start", json={}).json()["tournament"]
+    assert started["rounds_to_play"] == 2
+    single = made(organiser, format="single")
+    assert single["rounds_to_play"] is None
+
+
+async def test_a_channel_in_a_bracket_sentence_reads_as_its_name_on_the_site(
+    client, sign_in, guild, wf, web, people
+):
+    from tests.api.conftest import WebChannel
+
+    guild.channels.append(WebChannel(4242, "knuck-up"))
+    await web.store.set(wf.GUILD_ID, "brackets_channel_id", 4242)
+    await web.store.set(wf.GUILD_ID, "brackets_mode", "on")
+    staffer = as_(client, sign_in, wf, STAFFER)
+    tid = made(staffer)["id"]
+    refused = staffer.post(f"/api/brackets/{tid}/move", json={})
+    assert refused.status_code == 409
+    assert refused.json()["message"] == "**Knuck Up 12** is already in #knuck-up, so nothing moved."

@@ -13,6 +13,7 @@ from ... import brackets_sets as sets
 from ...brackets import access
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused
+from ..names import site_words
 from ..writes import (
     TOO_MANY_WRITES,
     actor_for,
@@ -138,7 +139,7 @@ def build_router(bot: Any) -> APIRouter:
         held = await before(guild) if before is not None else None
         outcome = await move(bot, guild, actor, *given, *args, via=VIA_WEBSITE, **words)
         if not outcome.ok:
-            raise Refused(outcome.status or 400, outcome.code, outcome.message)
+            raise Refused(outcome.status or 400, outcome.code, site_words(guild, outcome.message))
         if after is not None:
             await after(guild, actor, outcome, held)
         following = brackets_thread.follow_later(
@@ -148,7 +149,7 @@ def build_router(bot: Any) -> APIRouter:
             await asyncio.wait({following}, timeout=FOLLOW_GRACE_SECONDS)
         return {
             "tournament": await shown(guild, int(outcome.value), who),
-            "message": outcome.message,
+            "message": site_words(guild, outcome.message),
         }
 
     @router.get("")
@@ -161,6 +162,7 @@ def build_router(bot: Any) -> APIRouter:
             "mode": moves.mode_of(bot.store, guild.id),
             "may_run": runs(guild, who),
             "words": brackets_view.page_words(bot.store, guild.id),
+            "defaults": brackets_view.page_defaults(moves.option_defaults(bot.store, guild.id)),
             "tournaments": [
                 brackets_view.summary(row) | {"to_name": name_of(guild, row["to_user_id"])}
                 for row in rows

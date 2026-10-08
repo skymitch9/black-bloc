@@ -318,24 +318,26 @@ def clean_text(value: Any, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
+def option_defaults(store: Any, guild_id: int) -> dict[str, Any]:
+    """The options a new tournament starts with, as staff set them in the registry."""
+    return {
+        "format": store.get(guild_id, BRACKETS_FORMAT_DEFAULT),
+        "third_place": int(bool(store.get(guild_id, BRACKETS_THIRD_PLACE))),
+        "grand_final_reset": int(bool(store.get(guild_id, BRACKETS_GRAND_FINAL_RESET))),
+        "swiss_rounds": store.get(guild_id, BRACKETS_SWISS_ROUNDS),
+        "best_of": int(store.get(guild_id, BRACKETS_BEST_OF)),
+        "best_of_from_round": store.get(guild_id, BRACKETS_BEST_OF_FROM_ROUND),
+        "best_of_late": int(store.get(guild_id, BRACKETS_BEST_OF_LATE)),
+        "best_of_finals": int(store.get(guild_id, BRACKETS_BEST_OF_FINALS)),
+        "entrant_cap": store.get(guild_id, BRACKETS_ENTRANT_CAP),
+        "check_in_minutes": int(store.get(guild_id, BRACKETS_CHECK_IN_MINUTES)),
+        "confirm_minutes": int(store.get(guild_id, BRACKETS_CONFIRM_MINUTES)),
+    }
+
+
 def option_values(bot: Any, guild: Any, given: dict[str, Any], *, creating: bool) -> dict:
     """The options a create or an edit may set, each checked; a bad one refuses in words."""
-    store = bot.store
-    found: dict[str, Any] = {}
-    if creating:
-        found = {
-            "format": store.get(guild.id, BRACKETS_FORMAT_DEFAULT),
-            "third_place": int(bool(store.get(guild.id, BRACKETS_THIRD_PLACE))),
-            "grand_final_reset": int(bool(store.get(guild.id, BRACKETS_GRAND_FINAL_RESET))),
-            "swiss_rounds": store.get(guild.id, BRACKETS_SWISS_ROUNDS),
-            "best_of": int(store.get(guild.id, BRACKETS_BEST_OF)),
-            "best_of_from_round": store.get(guild.id, BRACKETS_BEST_OF_FROM_ROUND),
-            "best_of_late": int(store.get(guild.id, BRACKETS_BEST_OF_LATE)),
-            "best_of_finals": int(store.get(guild.id, BRACKETS_BEST_OF_FINALS)),
-            "entrant_cap": store.get(guild.id, BRACKETS_ENTRANT_CAP),
-            "check_in_minutes": int(store.get(guild.id, BRACKETS_CHECK_IN_MINUTES)),
-            "confirm_minutes": int(store.get(guild.id, BRACKETS_CONFIRM_MINUTES)),
-        }
+    found: dict[str, Any] = option_defaults(bot.store, guild.id) if creating else {}
 
     def bad(field: str, allowed: str) -> Stop:
         return stop(

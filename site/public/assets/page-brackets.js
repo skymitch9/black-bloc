@@ -15,8 +15,11 @@ import {
   resultsGrid,
   roundsLayout,
   scoreChoices,
+  seedOrderWith,
   setMoves,
   sortedStandings,
+  TREE,
+  treeSize,
 } from './bracket-layout.js';
 import { logsTable } from './logs.js';
 import { clockTime, dayLabel, viewerZone } from './timezone.js';
@@ -161,7 +164,10 @@ const WORDS = {
   opponents: 'Opp. win %',
   byes: 'Byes',
   bye: 'bye',
-  seedLabel: 'Seed',
+  seedNote: 'seed {seed}',
+  gamesNote: 'games {games}',
+  opponentsNote: 'opp. {rate}',
+  byesNote: '{byes} bye(s)',
   bracketEmpty: 'The bracket is drawn when the tournament starts.',
   move: 'Drag to reorder',
 };
@@ -388,14 +394,14 @@ function moveBar(t) {
 function optionWords(t) {
   const o = t.options || {};
   const found = [`Bo${o.best_of}`];
+  if (t.format === 'double' && o.grand_final_reset) found.push(w('brackets_card_reset_words'));
+  if (t.format === 'single' && o.third_place) found.push(w('brackets_card_third_words'));
+  if (t.format === 'swiss' && t.rounds_to_play) found.push(w('brackets_card_rounds_words', { rounds: t.rounds_to_play }));
   if (ELIMINATION.includes(t.format)) {
-    if (o.best_of_from_round) found.push(`top ${o.best_of_from_round} Bo${o.best_of_late}`);
-    found.push(`finals Bo${o.best_of_finals}`);
+    if (o.best_of_from_round) found.push(w('brackets_card_late_words', { best_of: o.best_of_late, top: o.best_of_from_round }));
+    if (o.best_of_finals !== o.best_of) found.push(w('brackets_card_finals_words', { best_of: o.best_of_finals }));
   }
-  if (t.format === 'double' && o.grand_final_reset) found.push(WORDS.reset.toLowerCase());
-  if (t.format === 'single' && o.third_place) found.push(WORDS.third.toLowerCase());
-  if (t.format === 'swiss') found.push(`${o.swiss_rounds || WORDS.roundsAuto} ${WORDS.rounds.split(' ')[1].toLowerCase()}`);
-  return found;
+  return found.filter(Boolean);
 }
 
 function waitingLine(t) {
@@ -457,6 +463,12 @@ function reasonRow(holder, label, onGo) {
   input.focus();
 }
 
+async function entrantMove(path, body = {}, method = 'POST') {
+  const done = await act(path, body, method);
+  if (done.ok) paintEntrants(true);
+  return done;
+}
+
 function entrantActions(t, one) {
   if (!t.may_run || mode() === 'off') return null;
   const holder = el('span', { class: 'bar bk-acts' });
@@ -465,25 +477,27 @@ function entrantActions(t, one) {
   const parts = [];
   if (out) {
     const back = BEFORE_START.includes(t.state) || (t.state === 'running' && (one.dq || one.dropped_why === 'dropped'));
-    if (back && t.state !== 'complete') parts.push(button(WORDS.restore, () => act(`${path}/restore`), { tone: 'quiet' }));
+    if (back && t.state !== 'complete') parts.push(button(WORDS.restore, () => entrantMove(`${path}/restore`), { tone: 'quiet' }));
   } else if (BEFORE_START.includes(t.state)) {
     if (t.state === 'check_in') {
-      parts.push(button(one.checked_in ? WORDS.checkOutTo : WORDS.checkInTo, () => act(`${path}/checkin`, { checked_in: !one.checked_in }), { tone: 'quiet' }));
+      parts.push(button(one.checked_in ? WORDS.checkOutTo : WORDS.checkInTo, () => entrantMove(`${path}/checkin`, { checked_in: !one.checked_in }), { tone: 'quiet' }));
     }
-    parts.push(button(WORDS.remove, () => reasonRow(holder, 'Remove', (reason) => act(path, { reason }, 'DELETE')), { tone: 'quiet' }));
+    parts.push(button(WORDS.remove, () => reasonRow(holder, 'Remove', (reason) => entrantMove(path, { reason }, 'DELETE')), { tone: 'quiet' }));
   } else if (t.state === 'running') {
-    parts.push(button(WORDS.dq, () => reasonRow(holder, 'DQ', (reason) => act(`${path}/dq`, { reason })), { tone: 'quiet' }));
-    parts.push(button(WORDS.drop, () => reasonRow(holder, 'Drop', (reason) => act(`${path}/drop`, { reason })), { tone: 'quiet' }));
+    parts.push(button(WORDS.dq, () => reasonRow(holder, 'DQ', (reason) => entrantMove(`${path}/dq`, { reason })), { tone: 'quiet' }));
+    parts.push(button(WORDS.drop, () => reasonRow(holder, 'Drop', (reason) => entrantMove(`${path}/drop`, { reason })), { tone: 'quiet' }));
   }
   if (!parts.length) return null;
   holder.append(...parts);
   return holder;
 }
 
-function entrantLine(t, one, { handle = null, seed = null } = {}) {
+function entrantLine(t, one, { handle = null, seed = null, placed = false } = {}) {
   const waiting = t.state === 'running' ? (t.waiting_on || []).find((row) => row.entrant === one.id) : null;
   const opponent = waiting && waiting.opponent ? (t.entrants.find((row) => row.id === waiting.opponent) || {}).name : '';
+  const lead = placed ? placeWords(one.placement) || '—' : seed ?? (one.seed ?? '—');
   const notes = [
+    placed && one.seed ? said(WORDS.seedNote, { seed: one.seed }) : null,
     one.guest ? WORDS.guest : null,
     t.state === 'check_in' && !one.dropped ? (one.checked_in ? WORDS.checkedIn : WORDS.notCheckedIn) : null,
     waiting && t.may_run ? w(`brackets_waiting_${waiting.what}`, { set: waiting.set || '', opponent: opponent || '' }) : null,
@@ -497,12 +511,12 @@ function entrantLine(t, one, { handle = null, seed = null } = {}) {
     'data-checked': t.state === 'check_in' && one.checked_in ? 'true' : undefined,
   }, [
     handle,
-    el('span', { class: 'bk-seed mono', text: seed ?? (one.seed ?? '—') }),
+    el('span', { class: 'bk-seed mono', 'data-place': placed ? 'true' : undefined, text: String(lead) }),
     el('span', { class: 'rowlist-main' }, [
       el('span', { class: 'rowlist-name', text: one.name }),
       notes.length ? el('span', { class: 'rowlist-note', text: notes.join(' · ') }) : null,
     ]),
-    one.placement ? badge(placeWords(one.placement), one.placement <= 3 ? 'ok' : null) : null,
+    one.placement && !placed ? badge(placeWords(one.placement), one.placement <= 3 ? 'ok' : null) : null,
     out ? badge(out, one.dq ? 'danger' : null) : null,
     entrantActions(t, one),
   ]);
@@ -512,12 +526,16 @@ function activeOf(t) {
   return t.entrants.filter((one) => !one.dropped && !one.dq).sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9) || a.id - b.id);
 }
 
+function unsaved(order) {
+  return seedOrderWith(order, activeOf(view.t).map((one) => one.id));
+}
+
 function seedingList(t) {
   const active = activeOf(t);
-  const order = view.seedOrder || active.map((one) => one.id);
+  const order = view.seedOrder ? unsaved(view.seedOrder) : active.map((one) => one.id);
   const byId = new Map(active.map((one) => [one.id, one]));
   const list = el('div', { class: 'rowlist bk-seeds' });
-  const rows = order.filter((id) => byId.has(id)).map((id, at) => {
+  const rows = order.map((id, at) => {
     const handle = el('button', { class: 'bk-handle', type: 'button', title: WORDS.move, 'aria-label': `${WORDS.move}: ${byId.get(id).name}`, text: '⠿' });
     const row = entrantLine(t, byId.get(id), { handle, seed: at + 1 });
     dragRow(list, row, handle);
@@ -532,7 +550,7 @@ function orderIn(list) {
 }
 
 function dirty(list) {
-  view.seedOrder = orderIn(list);
+  view.seedOrder = unsaved(orderIn(list));
   paintEntrants(true);
 }
 
@@ -542,7 +560,7 @@ function dragRow(list, row, handle) {
     event.preventDefault();
     const order = orderIn(list);
     const from = order.indexOf(Number(row.getAttribute('data-id')));
-    view.seedOrder = moved(order, from, from + (event.key === 'ArrowUp' ? -1 : 1));
+    view.seedOrder = unsaved(moved(order, from, from + (event.key === 'ArrowUp' ? -1 : 1)));
     paintEntrants(true);
     const again = view.holders.entrants.querySelector(`.bk-entrant[data-id="${row.getAttribute('data-id')}"] .bk-handle`);
     if (again) again.focus();
@@ -609,11 +627,11 @@ function entrantsBody(t) {
     const say = notice();
     const tools = [
       active.length > 1 ? button(WORDS.randomise, () => {
-        view.seedOrder = shuffled(view.seedOrder || active.map((one) => one.id));
+        view.seedOrder = shuffled(view.seedOrder ? unsaved(view.seedOrder) : active.map((one) => one.id));
         paintEntrants(true);
       }, { tone: 'quiet' }) : null,
       view.seedOrder ? button(WORDS.saveSeeding, async () => {
-        const done = await act(`${base(t.id)}/seed`, { order: view.seedOrder }, 'POST', say);
+        const done = await act(`${base(t.id)}/seed`, { order: unsaved(view.seedOrder) }, 'POST', say);
         if (done.ok) {
           view.seedOrder = null;
           paintEntrants(true);
@@ -632,7 +650,8 @@ function entrantsBody(t) {
     const list = t.state === 'complete'
       ? sortedStandings(pool.map((one) => ({ ...one, place: one.placement })))
       : pool.sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9) || a.id - b.id);
-    parts.push(list.length ? el('div', { class: 'rowlist' }, list.map((one, at) => entrantLine(t, one, BEFORE_START.includes(t.state) ? { seed: at + 1 } : {}))) : sayNothing('Nobody yet.'));
+    const shape = (at) => (BEFORE_START.includes(t.state) ? { seed: at + 1 } : { placed: t.state === 'complete' });
+    parts.push(list.length ? el('div', { class: 'rowlist' }, list.map((one, at) => entrantLine(t, one, shape(at)))) : sayNothing('Nobody yet.'));
   }
   const outBefore = BEFORE_START.includes(t.state) && t.may_run ? out : [];
   if (outBefore.length) parts.push(foldout('Out', [el('div', { class: 'rowlist' }, outBefore.map((one) => entrantLine(t, one)))], { count: outBefore.length }));
@@ -643,17 +662,18 @@ function entrantsBody(t) {
 function paintEntrants(force = false) {
   const t = view.t;
   if (!view.holders.entrants) return;
+  if (view.seedOrder) view.seedOrder = unsaved(view.seedOrder);
+  if (!force && view.holders.entrants.querySelector('[data-dragging]')) return;
   update('entrants', sig([t.entrants, t.state, t.may_run, t.mine, t.waiting_on, mode(), view.seedOrder]), view.holders.entrants, () => entrantsBody(t), { force });
   if (view.sections.entrants) view.sections.entrants.count(t.entrant_count);
 }
 
 /* ---------- the bracket ---------- */
 
-const W = 188;
 const H = 62;
-const GAP = 44;
 const U = 78;
 const HEAD = 26;
+const SIDE_PAD = 40;
 
 function roundWords(set) {
   if (set.side === 'winners') return w('brackets_round_winners', { round: set.round });
@@ -676,7 +696,7 @@ function slotLine(t, set, side) {
     'data-lost': lost ? 'true' : undefined,
     'data-mine': id !== null && id === t.mine ? 'true' : undefined,
   }, [
-    el('span', { class: 'bk-slot-name', text: name || (set.state === 'bye' && id === null ? WORDS.bye : '') }),
+    el('span', { class: 'bk-slot-name', text: name || '' }),
     el('span', { class: 'bk-slot-score mono', text: String(shownScore) }),
   ]);
 }
@@ -688,7 +708,7 @@ function needsYou(t, set, moves) {
 function setCard(t, set, style = null) {
   const moves = setMoves(t, set, { mode: mode() });
   const mine = t.mine !== null && (set.slot_a === t.mine || set.slot_b === t.mine);
-  const quiet = ['waiting', 'void'].includes(set.state);
+  const quiet = ['waiting', 'void', 'bye'].includes(set.state);
   const top = [set.key, `Bo${set.best_of}`, set.rematch ? w('brackets_set_card_rematch') : null].filter(Boolean).join(' · ');
   const stateWord = { called: 'called', reported: 'reported', disputed: 'disputed' }[set.state];
   return el(quiet ? 'div' : 'button', {
@@ -711,10 +731,37 @@ function setCard(t, set, style = null) {
   ]);
 }
 
+function treeRoom() {
+  const holder = view.holders.bracket;
+  if (holder && holder.isConnected && holder.clientWidth) {
+    const pad = getComputedStyle(holder);
+    return Math.max(0, holder.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight));
+  }
+  const dash = document.getElementById('dash');
+  return Math.max(0, (dash ? dash.clientWidth : window.innerWidth) - SIDE_PAD);
+}
+
+function scrollHints(box) {
+  const mark = () => {
+    const left = box.scrollLeft > 2;
+    const right = box.scrollLeft + box.clientWidth < box.scrollWidth - 2;
+    if (left || right) box.setAttribute('data-more', left && right ? 'both' : left ? 'left' : 'right');
+    else box.removeAttribute('data-more');
+  };
+  box.addEventListener('scroll', mark, { passive: true });
+  if (typeof ResizeObserver === 'function') new ResizeObserver(mark).observe(box);
+  else requestAnimationFrame(mark);
+  return box;
+}
+
 function treeNode(t) {
   const drawn = eliminationLayout(t.sets);
   const byKey = new Map(t.sets.map((one) => [one.key, one]));
   const at = new Map(drawn.nodes.map((one) => [one.key, one]));
+  const size = treeSize(drawn.cols, treeRoom());
+  view.treeSize = sig(size);
+  const W = size.width;
+  const GAP = size.gap;
   const width = drawn.cols * (W + GAP) - GAP;
   const height = HEAD + drawn.height * U + 8;
   const x = (node) => node.col * (W + GAP);
@@ -750,23 +797,32 @@ function treeNode(t) {
     labels.push(el('span', { class: 'bk-round', style: `left:${x(node)}px;top:${HEAD + firstY * U - 22}px;width:${W}px`, text: roundWords(set) }));
   }
   const cards = drawn.nodes.map((node) => setCard(t, byKey.get(node.key), `left:${x(node)}px;top:${y(node) - H / 2}px;width:${W}px;height:${H}px`));
-  return el('div', { class: 'bk-scroll' }, [
-    el('div', { class: 'bk-tree', style: `width:${width}px;height:${height}px` }, [svg, ...labels, ...cards]),
+  return scrollHints(el('div', { class: 'bk-scroll' }, [
+    el('div', { class: 'bk-tree', 'data-tight': size.width < TREE.width ? 'true' : undefined, style: `width:${width}px;height:${height}px` }, [svg, ...labels, ...cards]),
+  ]));
+}
+
+function byeLine(t, set) {
+  const id = set.slot_a ?? set.slot_b;
+  const name = set.a_name || set.b_name || '';
+  return el('p', { class: 'bk-bye', 'data-key': set.key, 'data-mine': id !== null && id === t.mine ? 'true' : undefined }, [
+    el('span', { class: 'bk-slot-name', text: name }),
+    el('span', { class: 'mono', text: WORDS.bye }),
   ]);
 }
 
 function roundsNode(t) {
-  return el('div', { class: 'bk-scroll' }, [
+  return scrollHints(el('div', { class: 'bk-scroll' }, [
     el('div', { class: 'bk-rounds' }, roundsLayout(t.sets).map((round) => el('div', { class: 'bk-col' }, [
       el('span', { class: 'bk-round bk-round-flow', text: w('brackets_round_plain', { round: round.round }) }),
-      ...round.sets.map((set) => setCard(t, set)),
+      ...round.sets.filter((set) => set.state !== 'void').map((set) => (set.state === 'bye' ? byeLine(t, set) : setCard(t, set))),
     ]))),
-  ]);
+  ]));
 }
 
 function gridNode(t) {
   const { players, cells } = resultsGrid(t.entrants, t.sets);
-  return el('div', { class: 'bk-scroll' }, [
+  return scrollHints(el('div', { class: 'bk-scroll' }, [
     el('table', { class: 'bk-grid' }, [
       el('thead', {}, [el('tr', {}, [el('th', {}), ...players.map((one) => el('th', { scope: 'col', text: one.name }))])]),
       el('tbody', {}, players.map((row, i) => el('tr', { 'data-mine': row.id === t.mine ? 'true' : undefined }, [
@@ -788,7 +844,7 @@ function gridNode(t) {
         }),
       ]))),
     ]),
-  ]);
+  ]));
 }
 
 function bracketBody(t) {
@@ -800,13 +856,37 @@ function bracketBody(t) {
 
 /* ---------- standings ---------- */
 
+function rate(row) {
+  return row.opponents_rate === null || row.opponents_rate === undefined ? '—' : `${Math.round(row.opponents_rate * 100)}%`;
+}
+
+function compactStandings(t, rows) {
+  const table_ = !ELIMINATION.includes(t.format);
+  return el('div', { class: 'rowlist bk-standings-compact' }, rows.map((row) => {
+    const more = table_ ? [
+      said(WORDS.gamesNote, { games: `${row.game_wins}–${row.game_losses}` }),
+      t.format === 'swiss' ? said(WORDS.opponentsNote, { rate: rate(row) }) : null,
+      t.format === 'swiss' && row.byes ? said(WORDS.byesNote, { byes: row.byes }) : null,
+    ].filter(Boolean) : [];
+    return el('div', { class: 'rowlist-row bk-standing', 'data-mine': row.entrant === t.mine ? 'true' : undefined }, [
+      el('span', { class: 'bk-seed mono', 'data-place': 'true', text: placeWords(row.place ?? row.rank) || '—' }),
+      el('span', { class: 'rowlist-main' }, [
+        el('span', { class: 'rowlist-name', text: row.name || '' }),
+        more.length ? el('span', { class: 'rowlist-note', text: more.join(' · ') }) : null,
+      ]),
+      table_ ? el('span', { class: 'mono bk-record', text: `${row.set_wins}–${row.set_losses}` }) : null,
+    ]);
+  }));
+}
+
 function standingsBody(t) {
   const rows = sortedStandings(t.standings || []);
   if (ELIMINATION.includes(t.format)) {
-    return [table([
+    const placed = rows.filter((row) => row.place);
+    return [el('div', { class: 'bk-standings-wide' }, [table([
       { label: WORDS.place, cell: (row) => placeWords(row.place), className: 'mono' },
       { label: WORDS.player, key: 'name' },
-    ], rows.filter((row) => row.place), { search: false, empty: 'No placings yet.' })];
+    ], placed, { search: false, empty: 'No placings yet.' })]), placed.length ? compactStandings(t, placed) : null];
   }
   const columns = [
     { label: WORDS.place, cell: (row) => placeWords(row.place ?? row.rank), className: 'mono' },
@@ -815,10 +895,10 @@ function standingsBody(t) {
     { label: WORDS.games, cell: (row) => `${row.game_wins}–${row.game_losses}`, className: 'mono' },
   ];
   if (t.format === 'swiss') {
-    columns.push({ label: WORDS.opponents, cell: (row) => (row.opponents_rate === null || row.opponents_rate === undefined ? '—' : `${Math.round(row.opponents_rate * 100)}%`), className: 'mono' });
+    columns.push({ label: WORDS.opponents, cell: rate, className: 'mono' });
     columns.push({ label: WORDS.byes, key: 'byes', className: 'mono' });
   }
-  return [table(columns, rows, { search: false, empty: 'No results yet.' })];
+  return [el('div', { class: 'bk-standings-wide' }, [table(columns, rows, { search: false, empty: 'No results yet.' })]), rows.length ? compactStandings(t, rows) : null];
 }
 
 /* ---------- a set ---------- */
@@ -955,38 +1035,14 @@ function localValue(iso) {
 }
 
 async function optionsDrawer(t) {
-  let defaults = {};
-  if (!t && staff()) {
-    try {
-      const specs = settingsNamespace(await settings(), 'core');
-      const value = (key) => {
-        const spec = specs.find((one) => one.key === key);
-        return spec ? spec.value ?? spec.default : null;
-      };
-      defaults = {
-        format: value('brackets_format_default'),
-        best_of: value('brackets_best_of'),
-        best_of_late: value('brackets_best_of_late'),
-        best_of_finals: value('brackets_best_of_finals'),
-        best_of_from_round: value('brackets_best_of_from_round'),
-        grand_final_reset: value('brackets_grand_final_reset_default'),
-        third_place: value('brackets_third_place_default'),
-        check_in_minutes: value('brackets_check_in_minutes'),
-        entrant_cap: value('brackets_entrant_cap_default'),
-        swiss_rounds: value('brackets_swiss_rounds_default'),
-      };
-    } catch (error) {
-      defaults = {};
-    }
-  }
-  const o = t ? { ...t.options } : { format: 'double', best_of: 3, best_of_late: 5, best_of_finals: 5, grand_final_reset: true, third_place: false, check_in_minutes: 30, ...Object.fromEntries(Object.entries(defaults).filter(([, v]) => v !== null && v !== undefined)) };
+  const o = t ? { ...t.options } : { ...((view.index && view.index.defaults) || {}) };
   const name = el('input', { class: 'input', type: 'text', id: 'bk-name', maxlength: '100', value: t ? t.name : undefined });
   const game = el('input', { class: 'input', type: 'text', id: 'bk-game', maxlength: '100', value: t ? t.game || undefined : undefined });
   const format = el('select', { class: 'input', id: 'bk-format' });
   for (const one of FORMATS) format.append(el('option', { value: one, text: formatWords(one), selected: o.format === one || undefined }));
   const startsAt = el('input', { class: 'input', type: 'datetime-local', id: 'bk-starts', value: t ? localValue(t.starts_at) || undefined : undefined });
   const third = el('input', { type: 'checkbox', id: 'bk-third', checked: Boolean(o.third_place) || undefined });
-  const reset = el('input', { type: 'checkbox', id: 'bk-reset', checked: o.grand_final_reset !== false || undefined });
+  const reset = el('input', { type: 'checkbox', id: 'bk-reset', checked: Boolean(o.grand_final_reset) || undefined });
   const rounds = numberBox('bk-rounds', o.swiss_rounds, { max: 20, blank: WORDS.roundsAuto });
   const bestOf = lengthSelect('bk-bo', o.best_of);
   const late = lengthSelect('bk-late', o.best_of_late);
@@ -1023,10 +1079,10 @@ async function optionsDrawer(t) {
       format: format.value,
       best_of: Number(bestOf.value),
       entrant_cap: number(cap),
-      check_in_minutes: number(checkIn) ?? 30,
       rules_text: rules.value.trim(),
       starts_at: startsAt.value ? new Date(startsAt.value).toISOString() : null,
     };
+    if (number(checkIn) !== null) body.check_in_minutes = number(checkIn);
     if (format.value === 'single') body.third_place = third.checked;
     if (format.value === 'double') body.grand_final_reset = reset.checked;
     if (format.value === 'swiss') body.swiss_rounds = number(rounds);
@@ -1228,6 +1284,13 @@ async function poll() {
   }
 }
 
+function resized() {
+  const t = view.t;
+  if (!t || !view.holders.bracket || !ELIMINATION.includes(t.format) || !t.sets.length) return;
+  if (sig(treeSize(eliminationLayout(t.sets).cols, treeRoom())) === view.treeSize) return;
+  update('bracket', view.parts.get('bracket'), view.holders.bracket, () => bracketBody(t), { force: true });
+}
+
 async function load(me) {
   view.me = me;
   view.zone = viewerZone('UTC').zone;
@@ -1238,6 +1301,7 @@ async function load(me) {
   const id = wantedId();
   const blocks = id ? await tournamentView(id) : await listView();
   document.getElementById('dash').replaceChildren(...blocks.filter(Boolean));
+  resized();
   if (view.pending && view.say) view.say.say(view.pending, 'ok');
   view.pending = null;
   aside();
@@ -1247,6 +1311,11 @@ async function load(me) {
     view.clock = setInterval(paintStatus, 1000);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) poll();
+    });
+    let settling = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(settling);
+      settling = setTimeout(resized, 150);
     });
   }
 }

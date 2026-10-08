@@ -14458,6 +14458,8 @@ const BK_PAGE_WORDS = [
   'brackets_your_sets_title', 'brackets_waiting_play', 'brackets_waiting_called', 'brackets_waiting_confirm',
   'brackets_waiting_opponent_confirms', 'brackets_waiting_to_decides', 'brackets_waiting_waits',
   'brackets_waiting_next_round', 'brackets_waiting_done', 'brackets_waiting_out', 'brackets_discord_label',
+  'brackets_card_reset_words', 'brackets_card_third_words', 'brackets_card_rounds_words', 'brackets_card_late_words',
+  'brackets_card_finals_words',
 ];
 
 function bkEntrant(id, user_id, name, extra = {}) {
@@ -14698,6 +14700,31 @@ function bkNames(t) {
   return Object.fromEntries(t.entrants.map((one) => [one.id, one.name]));
 }
 
+function bkDefaults() {
+  const number = (key) => (state.settings.get(key) === null || state.settings.get(key) === undefined ? null : Number(state.settings.get(key)));
+  return {
+    format: state.settings.get('brackets_format_default') ?? 'double',
+    third_place: Boolean(state.settings.get('brackets_third_place_default')),
+    grand_final_reset: Boolean(state.settings.get('brackets_grand_final_reset_default')),
+    swiss_rounds: number('brackets_swiss_rounds_default'),
+    best_of: number('brackets_best_of'),
+    best_of_from_round: number('brackets_best_of_from_round'),
+    best_of_late: number('brackets_best_of_late'),
+    best_of_finals: number('brackets_best_of_finals'),
+    entrant_cap: number('brackets_entrant_cap_default'),
+    check_in_minutes: number('brackets_check_in_minutes'),
+    confirm_minutes: number('brackets_confirm_minutes'),
+  };
+}
+
+function bkSiteWords(text, threads = {}) {
+  return String(text).replace(/<#(\d+)>/g, (all, id) => {
+    const channel = CHANNELS.find((one) => String(one.id) === id);
+    const name = channel ? channel.name : threads[id];
+    return name ? `#${name}` : `a channel Discord no longer has (${id})`;
+  }).replace(/`/g, '');
+}
+
 function bkView(t, context) {
   const names = bkNames(t);
   const me = actorOf(context.session);
@@ -14708,6 +14735,7 @@ function bkView(t, context) {
     to_name: memberName(t.to_user_id),
     entrant_count: t.entrants.filter((one) => !one.dropped).length,
     finished: mockBrackets.finished(t),
+    rounds_to_play: t.format === 'swiss' ? mockBrackets.swissRounds(t.sets.length ? new Set(t.sets.flatMap((one) => [one.slot_a, one.slot_b]).filter((id) => id !== null)).size : bkPlaying(t).length, t.options) : null,
     may_run: bkMayRun(context),
     mine: mine ? mine.id : null,
     sets: t.sets.map(({ _feed, _place, reset_of, ...one }) => ({ ...one, a_name: names[one.slot_a] ?? null, b_name: names[one.slot_b] ?? null })),
@@ -14761,6 +14789,7 @@ route('GET', '/api/brackets', (context) => {
     mode: state.settings.get('brackets_mode') ?? 'shadow',
     may_run: bkMayRun(context),
     words: Object.fromEntries(BK_PAGE_WORDS.map((key) => [key, String(state.settings.get(key) ?? '')])),
+    defaults: bkDefaults(),
     tournaments: bkState().tournaments.map((t) => ({
       id: t.id, name: t.name, game: t.game, format: t.format, state: t.state, starts_at: t.starts_at,
       created_at: t.created_at, updated_at: t.updated_at, to_user_id: t.to_user_id, to_name: memberName(t.to_user_id),
@@ -14841,7 +14870,7 @@ bkStateMove('restore', ['cancelled'], (t) => t.state_before || 'draft', 'restore
 route('POST', '/api/brackets/:tournament_id/move', (context) => {
   requireMember(context.session);
   const t = bkOf(context);
-  const channel = `<#${state.settings.get('brackets_channel_id') ?? 'brackets_channel_id'}>`;
+  const channel = state.settings.get('brackets_channel_id') ? bkSiteWords(`<#${state.settings.get('brackets_channel_id')}>`) : 'brackets_channel_id';
   if (context.session === 'member') throw new Refused(403, 'not_staff', `Moving a tournament into ${channel} is for staff, so nothing moved.`);
   const mode = state.settings.get('brackets_mode') ?? 'shadow';
   if (mode !== 'on') throw new Refused(409, 'not_on', `brackets_mode is ${mode}, so **${t.name}** stays where it is. Set brackets_mode to on first.`);
@@ -14850,7 +14879,7 @@ route('POST', '/api/brackets/:tournament_id/move', (context) => {
   Object.assign(t, { shadow: 0, thread_id: String(Date.now()), channel_id: state.settings.get('brackets_channel_id') ?? null });
   t.updated_at = now();
   logAction('web.brackets.thread_moved', { actor_id: actorOf(context.session), details: { via: 'website', tournament: t.id, from_thread: from, to_thread: t.thread_id } });
-  return { tournament: bkView(t, context), message: `**${t.name}** is now in <#${t.thread_id}>.` };
+  return { tournament: bkView(t, context), message: bkSiteWords(`**${t.name}** is now in <#${t.thread_id}>.`, { [t.thread_id]: t.name }) };
 });
 
 route('POST', '/api/brackets/:tournament_id/checkin/close', (context) => {

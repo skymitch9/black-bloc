@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -10,24 +9,10 @@ from ... import sticky as rules
 from ...logkinds import VIA_WEBSITE
 from ...sticky_posts import desk_of
 from ..auth import Refused, staff_dependency
-from ..names import resolve_one
+from ..names import resolve_one, site_words
 from ..writes import actor_for, require_db, require_guild, wanted_id, writer_dependency
 
 log = logging.getLogger(__name__)
-
-MENTION = re.compile(r"<#(\d+)>")
-
-
-def site_words(guild: Any, text: Any) -> Any:
-    """Discord's own markup in a sentence, as the page can show it: #name and no backticks."""
-    if not text:
-        return text
-
-    def named(found: re.Match[str]) -> str:
-        name = getattr(guild.get_channel(int(found[1])), "name", None)
-        return f"#{name}" if name else rules.GONE_CHANNEL.format(ident=found[1])
-
-    return MENTION.sub(named, str(text)).replace("`", "")
 
 
 def sticky_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
