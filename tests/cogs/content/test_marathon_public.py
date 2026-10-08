@@ -279,15 +279,16 @@ async def test_a_new_marathon_copies_the_default_and_the_switch_writes_both_ways
     assert (logged["from"], logged["to"]) == (True, False)
 
 
-async def test_the_fourth_control_button_flips_the_switch_and_relabels(bot, cog):
+async def test_the_retired_auto_highlight_button_answers_in_words(bot, cog):
     marathon = await ready(bot, cog)
 
     said = await controls.press(bot, bot.guild, FakeActor(), marathon["id"], mtc.HIGHLIGHT, "on")
 
-    assert said.ok and (await fresh(bot, marathon))["public_highlight"] == 1
+    assert not said.ok and said.code == "gone" and "Runner announcements" in said.message
+    assert (await fresh(bot, marathon))["public_highlight"] == 0
     message = the_thread(bot).messages[1]
     labels = [getattr(one, "item", one).label for one in current_view(message).children]
-    assert labels[3] == "Auto-highlight BaF runners when live: on · turn off"
+    assert not any(one.startswith("Auto-highlight") for one in labels)
 
 
 # --- pings, channel, shadow ---------------------------------------------------------------------
@@ -416,16 +417,16 @@ async def test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_
     assert button.label == RUN_MOVE_LABEL
     assert len(controls_message.edits) > control_edits
     shown = [getattr(one, "item", one) for one in current_view(controls_message).children]
-    assert len(shown) == 11 and shown[7].label == "Marathon tracker ↗"
+    assert len(shown) == 6 and shown[4].label == "Marathon tracker ↗"
     shown = [one for one in shown if one.custom_id and ":baf:" not in one.custom_id]
-    assert [one.label for one in shown][-3:] == [
-        "Ping the marathon role: off · turn on",
+    assert [one.label for one in shown][:3] == [
         "Runner announcements: on · turn off",
         "Host announcements: off · turn on",
+        "Ping the marathon role: off · turn on",
     ]
     assert not any(":hosts:" in one.custom_id or ":hostevents:" in one.custom_id for one in shown)
-    assert shown[-2].custom_id == f"marathon:controls:{marathon['id']}:announce:off"
-    assert shown[-1].custom_id == f"marathon:controls:{marathon['id']}:hostannounce:on"
+    assert shown[0].custom_id == f"marathon:controls:{marathon['id']}:announce:off"
+    assert shown[1].custom_id == f"marathon:controls:{marathon['id']}:hostannounce:on"
 
 
 async def test_a_highlight_a_person_deleted_is_forgotten_not_posted_again(bot, cog):

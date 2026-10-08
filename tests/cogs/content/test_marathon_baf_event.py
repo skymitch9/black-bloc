@@ -636,7 +636,7 @@ async def test_the_line_says_which_heads_up_carries_it_and_then_which_one_did(bo
     assert "**Game 1**" in after
 
 
-async def test_the_thread_controls_carry_the_line_and_the_three_way_switch(bot, cog):
+async def test_the_thread_controls_carry_the_line_and_one_baf_event_button(bot, cog):
     marathon = await event_marathon(bot, cog, day_of_runs(*[SKY_RUNS] * 4))
     await cog.tick_once()
     message = next(
@@ -658,24 +658,17 @@ async def test_the_thread_controls_carry_the_line_and_the_three_way_switch(bot, 
         ]
 
     assert "a BaF event — all 4 runs have a BaF runner." in message.content
-    assert switch() == [
-        ("BaF event: follow the schedule (a BaF event)", True),
-        ("BaF event: yes", False),
-        ("BaF event: no", False),
-    ]
+    assert switch() == [("BaF event: yes (4 of 4 runs) · say no", False)]
 
     said = await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "no")
 
     assert said.ok and "is not a BaF event now" in said.message
     assert (await fresh(bot, marathon))["baf_event"] == 0
     assert "not a BaF event — the BaF event switch says so." in message.content
-    assert switch() == [
-        ("BaF event: follow the schedule (a BaF event)", False),
-        ("BaF event: yes", False),
-        ("BaF event: no", True),
-    ]
+    assert switch() == [("BaF event: no (staff) · clear", False)]
     back = await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "follow")
     assert back.ok and (await fresh(bot, marathon))["baf_event"] is None
+    assert switch() == [("BaF event: yes (4 of 4 runs) · say no", False)]
 
 
 # --- review fixes 2026-10-06 ---------------------------------------------------------------------
@@ -1399,6 +1392,9 @@ async def test_words_staff_stored_for_the_per_day_question_fall_back_to_the_ship
 # --- review fixes (whole event) 2026-10-06 -------------------------------------------------------
 
 
+UNSURE_LABEL = "BaF event: not decided (3 of 4 runs) · say yes"
+
+
 def baf_buttons(bot, marathon):
     message = next(
         one for one in the_thread(bot).messages if one.id == marathon["controls_message_id"]
@@ -1501,13 +1497,16 @@ async def test_the_follow_choice_says_what_following_gives_and_that_it_is_the_an
     label = baf_buttons(bot, marathon)[0].label
     await controls.press(bot, bot.guild, FakeActor(), marathon["id"], "baf", "follow")
     followed = await state_now(bot, marathon)
+    (answered,) = baf_buttons(bot, marathon)
 
     assert (before["worked_out"]["answer"], before["worked_out"]["reason"]) == ("unsure", "share")
     assert (switched["answer"], switched["reason"]) == ("no", "staff")
     assert (switched["worked_out"]["answer"], switched["worked_out"]["reason"]) == ("yes", "leads")
     assert switched["worked_out"]["answer_word"] == "a BaF event"
     assert switched["worked_out"]["reason_word"].startswith("staff answered the question")
-    assert label == "BaF event: follow the answer (a BaF event)"
+    assert label == "BaF event: no (staff) · clear"
+    assert answered.label == "BaF event: yes (answered) · clear"
+    assert answered.custom_id.endswith(":baf:clear")
     assert (followed["answer"], followed["reason"]) == (
         switched["worked_out"]["answer"],
         switched["worked_out"]["reason"],
@@ -1521,18 +1520,13 @@ async def test_staff_clear_the_answer_from_the_thread_and_the_question_is_asked_
     marathon = await unsure(bot, cog)
     await at(bot, cog, marathon, 0)
     (asked,) = questions(bot)
-    assert [one.custom_id.rsplit(":", 1)[1] for one in baf_buttons(bot, marathon)] == [
-        "follow",
-        "yes",
-        "no",
-    ]
+    (unsure_button,) = baf_buttons(bot, marathon)
+    assert unsure_button.custom_id.rsplit(":", 1)[1] == "yes"
+    assert unsure_button.label == UNSURE_LABEL
     await press(bot, marathon, "yes")
     shown = baf_buttons(bot, marathon)
     assert [(one.label, one.row, one.disabled) for one in shown] == [
-        ("BaF event: follow the answer (a BaF event)", 4, True),
-        ("BaF event: yes", 4, False),
-        ("BaF event: no", 4, False),
-        ("Clear the answer", 4, False),
+        ("BaF event: yes (answered) · clear", 1, False)
     ]
     assert shown[-1].custom_id == f"marathon:controls:{marathon['id']}:baf:clear"
 
@@ -1552,11 +1546,7 @@ async def test_staff_clear_the_answer_from_the_thread_and_the_question_is_asked_
     )
     assert asked.content.endswith(f"<@{FakeActor().id}> cleared the answer.")
     assert "answered:" not in asked.content
-    assert [one.label for one in baf_buttons(bot, marathon)] == [
-        "BaF event: follow the schedule (not decided)",
-        "BaF event: yes",
-        "BaF event: no",
-    ]
+    assert [one.label for one in baf_buttons(bot, marathon)] == [UNSURE_LABEL]
     found = await state_now(bot, marathon)
     assert (found["answer"], found["reason"], found["ask"]) == ("unsure", "share", None)
 
