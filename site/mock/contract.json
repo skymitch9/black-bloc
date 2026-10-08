@@ -6072,20 +6072,6 @@
       ]
     },
     {
-      "method": "DELETE",
-      "path": "/api/marathons/{marathon_id}",
-      "read_by": [
-        "the retired Remove (merged into Archive it 2026-10-08): answers in words, changes nothing"
-      ],
-      "shape": "object",
-      "keys": [
-        "removed",
-        "archived",
-        "id",
-        "message"
-      ]
-    },
-    {
       "method": "GET",
       "path": "/api/marathons/archive",
       "read_by": [

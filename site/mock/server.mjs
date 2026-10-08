@@ -8967,8 +8967,8 @@ const MARATHON_REMOVE_GONE = "Remove is retired: Archive it is the one move now,
 
 route('DELETE', '/api/marathons/:marathon_id', (context) => {
   requireStaff(context.session);
-  const row = marathonOf(context.params.marathon_id);
-  return { removed: false, archived: false, id: row.id, message: MARATHON_REMOVE_GONE };
+  marathonOf(context.params.marathon_id);
+  throw new Refused(410, 'remove_gone', MARATHON_REMOVE_GONE);
 });
 
 route('POST', '/api/marathons/:marathon_id/runs/:run_id/event', (context) => {

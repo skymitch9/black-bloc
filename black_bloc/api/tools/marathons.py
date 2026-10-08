@@ -91,7 +91,7 @@ from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...golive_replay import BECAUSE_REPLAY
 from ...logkinds import VIA_WEBSITE
-from ...marathon_archive import REMOVE_GONE, STAFF, WHY_WORDS, page_of
+from ...marathon_archive import REMOVE_GONE, REMOVE_GONE_CODE, STAFF, WHY_WORDS, page_of
 from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_ping import pings_role
@@ -814,7 +814,7 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         require_cog(bot, COG, FEATURE)
         await wanted(guild, marathon_id)
-        return {"removed": False, "archived": False, "id": marathon_id, "message": REMOVE_GONE}
+        raise Refused(410, REMOVE_GONE_CODE, REMOVE_GONE)
 
     @router.post("/{marathon_id}/archive")
     async def marathon_archive_one(request: Request, marathon_id: int) -> dict[str, Any]:

@@ -280,10 +280,11 @@ async def test_delete_is_retired_answers_in_words_and_archives_nothing(
 
     said = client.delete(f"/api/marathons/{marathon_id}")
 
-    assert said.status_code == 200
+    assert said.status_code == 410
     body = said.json()
-    assert (body["removed"], body["archived"], body["id"]) == (False, False, marathon_id)
-    assert "Remove is retired" in body["message"] and "Nothing was changed" in body["message"]
+    assert body["error"] == "remove_gone"
+    assert "Remove is retired" in body["message"] and "Archive it" in body["message"]
+    assert "Nothing was changed" in body["message"]
     assert client.get(f"/api/marathons/{marathon_id}").json()["id"] == marathon_id
 
 
