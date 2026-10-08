@@ -274,7 +274,10 @@ def pool_rows(
     for number, one in enumerate(pools.pool_parts(bracket), start=1):
         finished = play.finished(one)
         tie = pools.tie_of(one, plan.advance, number)
-        going = [] if tie else pools.cut(one, plan.advance, number)
+        if tie:
+            going = [] if finished else pools.leaders(one, plan.advance)
+        else:
+            going = pools.cut(one, plan.advance, number)
         sets = [
             set_row(match, names, confirm_minutes, held.get(pools.prefixed(number, match.key)))
             | {"key": pools.prefixed(number, match.key), "phase": POOLS, "pool": number}

@@ -533,6 +533,10 @@ function outOf(t, id) {
   return Boolean(one && (one.dq || one.dropped));
 }
 
+export function leaders(t, part) {
+  return tableRows(part).filter((one) => !outOf(t, one.entrant)).slice(0, Number(t.options.advance_per_pool)).map((one) => one.entrant);
+}
+
 export function cut(t, part) {
   const advance = Number(t.options.advance_per_pool);
   const rows = tableRows(part).filter((one) => !outOf(t, one.entrant));

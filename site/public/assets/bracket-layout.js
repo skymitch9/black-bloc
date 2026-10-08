@@ -228,7 +228,7 @@ export function poolTable(pool, order = null) {
   const tied = new Set(pool.finished ? pool.tied || [] : []);
   const rows = reorderedRows(sortedStandings(pool.standings || []), order);
   const cut = Number(pool.cut) || 0;
-  const advancing = pool.advancing && pool.advancing.length ? new Set(pool.advancing) : null;
+  const advancing = Array.isArray(pool.advancing) && !tied.size ? new Set(pool.advancing) : null;
   let still = 0;
   const marked = rows.map((row) => {
     const through = advancing ? advancing.has(row.entrant) : !row.withdrawn && still++ < cut;

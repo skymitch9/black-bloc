@@ -126,6 +126,15 @@ async def test_a_pool_still_playing_reports_no_tie(db):
     assert first["finished"] is False
     assert pools.tie_of(pools.pool_parts(built)[0], 2, 1) != []
     assert first["tied"] == []
+    assert first["advancing"] == pools.leaders(pools.pool_parts(built)[0], 2)
+    assert len(first["advancing"]) == 2
+
+
+async def test_once_the_final_is_built_a_dqd_advancer_is_not_replaced_on_the_page(db):
+    row, ids = await pooled_view(db, advanced=True)
+    await store_.update_entrant(db, ids[0], {"dq": 1})
+    first = (await brackets_view.full(db, row))["pools"][0]
+    assert first["advancing"] == [ids[3]]
 
 
 async def test_once_advanced_the_view_draws_the_final_as_its_sets(db):

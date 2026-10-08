@@ -14827,8 +14827,9 @@ function bkPoolRows(t, names) {
   const through = mockBrackets.inFinal(t);
   return t.pools.map((part, at) => {
     mockBrackets.tagPool(part, at + 1);
-    const { going, tied } = mockBrackets.cut(t, part);
     const done = mockBrackets.finished(part);
+    const { going: cutGoing, tied } = mockBrackets.cut(t, part);
+    const going = tied.length && !done ? mockBrackets.leaders(t, part) : cutGoing;
     return {
       pool: at + 1,
       letter: mockBrackets.letter(at + 1),

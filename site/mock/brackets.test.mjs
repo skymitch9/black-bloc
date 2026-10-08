@@ -236,7 +236,9 @@ is('a tie while the pool still plays is not marked', poolTable({ ...tiedPool, fi
 const dqLeader = { pool: 1, letter: 'A', cut: 2, finished: true, tied: [], advancing: [4, 5], standings: [{ entrant: 1, rank: 1, withdrawn: true }, { entrant: 4, rank: 2 }, { entrant: 5, rank: 3 }, { entrant: 8, rank: 4 }] };
 is('a disqualified leader is not through: the advancing are', poolTable(dqLeader).rows.map((one) => [one.entrant, one.through]), [[1, false], [4, true], [5, true], [8, false]]);
 is('the line falls under the last one through', poolTable(dqLeader).line, 3);
-is('without advancing the cut skips the withdrawn', poolTable({ ...dqLeader, advancing: [] }).rows.map((one) => one.through), [false, true, true, false]);
+is('without advancing the cut skips the withdrawn', poolTable({ ...dqLeader, advancing: undefined }).rows.map((one) => one.through), [false, true, true, false]);
+is('an empty advancing means nobody is drawn through', poolTable({ ...dqLeader, advancing: [] }).rows.map((one) => one.through), [false, false, false, false]);
+is('a finished tie is drawn in the order shown', poolTable({ ...dqLeader, cut: 1, advancing: [], tied: [4, 5], standings: [{ entrant: 4, rank: 1 }, { entrant: 5, rank: 1 }, { entrant: 8, rank: 3 }] }, [5, 4]).rows.map((one) => [one.entrant, one.through]), [[5, true], [4, false], [8, false]]);
 is('reordering leaves rows outside the order alone', reorderedRows([{ entrant: 1 }, { entrant: 2 }, { entrant: 3 }], [3, 1]).map((one) => one.entrant), [3, 2, 1]);
 is('every set: the pools then the final', allSets({ pools: [{ sets: [{ key: 'A.R1-1' }] }, { sets: [{ key: 'B.R1-1' }] }], sets: [{ key: 'W1-1' }] }).map((one) => one.key), ['A.R1-1', 'B.R1-1', 'W1-1']);
 const inPools = { state: 'pools', phase: 'pools', may_run: true, finished: false, pools_finished: false, pools: [{ sets: [{ state: 'ready' }] }], sets: [] };
