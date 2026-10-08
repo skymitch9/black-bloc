@@ -8474,10 +8474,10 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "role: it is not set mentionable and the bot lacks Mention Everyone. It takes {role}",
     ),
     MARATHON_CHANNEL_PING_HELP_KEY: (
-        "Ping windows: its marathons' schedules.",
+        "During events pings while one of its marathons runs.",
         (),
         "the state line under the Pings choice on a marathon channel's Go-live drawer and the "
-        "marathon drawer: where During events takes its windows from",
+        "marathon drawer: when During events pings there",
     ),
     MARATHON_REMINDER_TEMPLATE_KEY: (
         "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}",

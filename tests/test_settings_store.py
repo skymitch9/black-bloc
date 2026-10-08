@@ -2792,3 +2792,10 @@ def test_every_thread_controls_button_label_fits_a_button():
     assert len(keys) == 19
     for key in keys:
         assert len(settings_store.MARATHON_WORDS[key][0]) <= 80, key
+
+
+async def test_the_marathon_channel_ping_line_says_when_during_events_pings(store):
+    key = settings_store.MARATHON_CHANNEL_PING_HELP_KEY
+    assert store.default(key) == "During events pings while one of its marathons runs."
+    await store.set(1, key, "Only while it runs.")
+    assert store.get(1, key) == "Only while it runs."
