@@ -9,6 +9,14 @@ export const BAF = 'BaF';
 export const CARD_PEOPLE = 'People';
 export const SETTINGS_FOLD = 'Settings for this marathon';
 export const MORE = 'More…';
+export const NO_BAF = `Nobody from ${BAF} is on this schedule yet.`;
+export const LINK_NOTE = '**{name}** as {marathon}’s schedule writes it.';
+export const SPOTLIGHT_BODY = 'A channel-only row for twitch.tv/{login} goes on the Go-live page — spotlit '
+  + 'and announced while they stream, from {lead} h before their first run on {marathon} to {slack} h '
+  + 'after their last.';
+export const SPOTLIGHT_SLOT_BODY = 'A channel-only row for twitch.tv/{login} goes on the Go-live page — '
+  + 'spotlit and announced while they stream, from {lead} h before this run to {slack} h after it.';
+export const UNSPOTLIGHT_BODY = 'twitch.tv/{login} comes off the Go-live page; an announcement already out stays as posted.';
 export const DRAWER_PARTS = ['the header', 'Spotlight', 'Pings', CARD_PEOPLE, SETTINGS_FOLD, 'the posts line', 'the moves', MORE];
 
 const LAST_READ = 'Last read {ago}';

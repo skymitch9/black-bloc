@@ -257,3 +257,16 @@ test('BaF run/host events moves only its half of the event mode', async () => {
   assert.equal(runsMode('both', false), 'marathon');
   assert.equal(runsMode('runs', false), 'none');
 });
+
+test('the drawer’s ask bodies and empty line say what happens, not how the drawer works', async () => {
+  const words = await import('../public/assets/marathon-words.js');
+  assert.equal(words.NO_BAF, 'Nobody from BaF is on this schedule yet.');
+  assert.equal(words.LINK_NOTE, '**{name}** as {marathon}’s schedule writes it.');
+  assert.equal(words.UNSPOTLIGHT_BODY, 'twitch.tv/{login} comes off the Go-live page; an announcement already out stays as posted.');
+  for (const body of [words.SPOTLIGHT_BODY, words.SPOTLIGHT_SLOT_BODY]) {
+    assert.ok(body.startsWith('A channel-only row for twitch.tv/{login} goes on the Go-live page'));
+    assert.ok(!body.includes('Stop spotlighting'));
+  }
+  assert.ok(words.SPOTLIGHT_BODY.endsWith('to {slack} h after their last.'));
+  assert.ok(words.SPOTLIGHT_SLOT_BODY.endsWith('to {slack} h after it.'));
+});

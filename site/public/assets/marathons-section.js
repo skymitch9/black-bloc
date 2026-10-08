@@ -2,8 +2,13 @@ import { api, names, saveSetting, send, settings, settingsNamespace } from './ap
 import {
   BAF,
   CARD_PEOPLE,
+  LINK_NOTE,
   MORE,
+  NO_BAF,
   SETTINGS_FOLD,
+  SPOTLIGHT_BODY,
+  SPOTLIGHT_SLOT_BODY,
+  UNSPOTLIGHT_BODY,
   archiveCounts,
   archiveTitle,
   archivedWhen,
@@ -90,7 +95,6 @@ const MODE_SHADOW = 'Marathon posts are in **shadow**: the board, the reminders 
 const NO_CHANNEL = 'No channel — each run links its runner';
 const NO_RUNS = 'No runs on this schedule yet — it may not be published. Black Bloc keeps '
   + 'reading it.';
-const NO_BAF = `Nobody from ${BAF} is on this schedule yet — open a slot below and **Link to a member…**.`;
 const NO_BAF_ARCHIVED = `Nobody from ${BAF} was on this schedule.`;
 const SCHEDULE_HEAD = 'The schedule';
 const FILTER_PLACEHOLDER = 'name, Twitch or game';
@@ -99,18 +103,8 @@ const SLOT_NOBODY = 'Nobody is named on this slot.';
 const NO_TWITCH = 'no Twitch channel';
 const LINK_BUTTON = 'Link to a member…';
 const LINK_TITLE = 'Link {name} to a member';
-const LINK_NOTE = '**{name}** as {marathon}’s schedule writes it. A link beats the automatic match '
-  + `and makes their runs ${BAF} at once; **Unlink** gives it back.`;
 const SPOTLIGHT_TITLE = 'Spotlight {name}?';
-const SPOTLIGHT_BODY = 'A channel-only row for twitch.tv/{login} goes on the Go-live page — spotlit '
-  + 'and announced while they stream, from {lead} h before their first run on {marathon} to {slack} h '
-  + 'after their last. Stop spotlighting takes it off again.';
-const SPOTLIGHT_SLOT_BODY = 'A channel-only row for twitch.tv/{login} goes on the Go-live page — '
-  + 'spotlit and announced while they stream, from {lead} h before this run to {slack} h after it. '
-  + 'Stop spotlighting takes it off again.';
 const UNSPOTLIGHT_TITLE = 'Stop spotlighting {name}?';
-const UNSPOTLIGHT_BODY = 'twitch.tv/{login} comes off the Go-live page the same way its own Remove '
-  + 'takes it off; any announcement already out stays as posted.';
 const SPOTLIT = 'Spotlit';
 const SPOTLIT_UNTIL = 'Spotlit until {when}';
 const OPEN_GOLIVE = 'Open on Go-live ↗';
