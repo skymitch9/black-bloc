@@ -52,6 +52,10 @@ const IDS = {
   bracket_removed_entrant_id: '13',
   bracket_checkin_entrant_id: '21',
   bracket_running_entrant_id: '42',
+  // Move to #knuck-up: 12 is a rehearsal (its thread was made in shadow); the contract entry turns
+  // brackets_mode on and points brackets_channel_id at #general for that one request.
+  bracket_rehearsal_id: '12',
+  bracket_forum_id: '800000000000000002',
   structure_old_id: '1',
   structure_new_id: '2',
   test_channel_id: '800000000000000003',
@@ -392,6 +396,10 @@ async function checkRoutes() {
     if (spec.body !== undefined) {
       init.headers['content-type'] = 'application/json';
       init.body = fill(JSON.stringify(spec.body));
+    }
+    for (const [key, value] of Object.entries(JSON.parse(fill(JSON.stringify(spec.settings || {}))))) {
+      const set = await send('PUT', `/api/settings/${key}`, { value });
+      if (!set.ok) fail(where, `could not set ${key} first: ${set.status}`);
     }
     let response;
     try {

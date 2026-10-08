@@ -2,7 +2,7 @@ import { api } from './api.js';
 import { duration, el, icon } from './ui.js';
 
 /** The pages a signed-in member who is not staff may use; the first is where they land. */
-export const MEMBER_TABS = ['requests', 'guides'];
+export const MEMBER_TABS = ['requests', 'guides', 'brackets'];
 export const MEMBER_TAB = MEMBER_TABS[0];
 
 export const GROUPS = [
@@ -33,6 +33,7 @@ export const GROUPS = [
     items: [
       { tab: 'golive', label: 'Go-live', icon: 'navGolive', feature: 'golive' },
       { tab: 'pbs', label: 'Personal bests', icon: 'navPbs' },
+      { tab: 'brackets', label: 'Brackets', icon: 'navBrackets', feature: 'brackets' },
       { tab: 'events', label: 'Events', icon: 'navEvents', feature: 'events' },
       { tab: 'raidtrain', label: 'Raid trains', icon: 'navRaidtrain', feature: 'raidtrain' },
       { tab: 'birthdays', label: 'Birthdays', icon: 'navBirthdays', feature: 'birthday' },
@@ -282,7 +283,7 @@ function paintCounts(tally, waiting, running) {
 }
 
 /**
- * A signed-in member who is not staff gets Requests and Guides, because every
+ * A signed-in member who is not staff gets Requests, Guides and Brackets, because every
  * other page would refuse them. The nav is built before `me` arrives, so this
  * trims it rather than the renderer knowing who is looking.
  */

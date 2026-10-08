@@ -4,6 +4,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mountTracker, trackerSeed } from './schedule.mjs';
+import * as mockBrackets from './brackets.mjs';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = resolve(HERE, '..', 'public');
@@ -14438,10 +14439,26 @@ route('POST', '/api/pbs/posts/:post_id/again', (context) => {
   return { post: { ...row, name: memberName(row.user_id) }, message: say(key, { member, game: source.game, channel: `<#${channel}>` }) + aside };
 });
 
-// Tournament brackets (docs/info/brackets-design.md): layer 1 is the API only, so the mock keeps
-// eight tournaments, one in each state a route is legal from, and walks state the simple way.
-// The engine (byes, drops, placements) is the bot's; the mock answers with the same shape.
+// Tournament brackets (docs/info/brackets-design.md). The engine stand-in is ./brackets.mjs; the
+// seed holds one tournament in each state a route is legal from (1-8, the contract's), plus a
+// running double elimination with a disputed set, a round robin, a Swiss, a rehearsal, a finished
+// double elimination and a seeding field, so the page can be played as a member and as staff.
 const BK_GUEST = null;
+const BK_PAGE_WORDS = [
+  'brackets_state_draft', 'brackets_state_signups', 'brackets_state_check_in', 'brackets_state_seeding',
+  'brackets_state_running', 'brackets_state_complete', 'brackets_state_cancelled',
+  'brackets_format_single_words', 'brackets_format_double_words', 'brackets_format_round_robin_words',
+  'brackets_format_swiss_words', 'brackets_sign_up_label', 'brackets_leave_label', 'brackets_check_in_label',
+  'brackets_drop_label', 'brackets_drop_confirm', 'brackets_report_label', 'brackets_confirm_label',
+  'brackets_dispute_label', 'brackets_report_title', 'brackets_dispute_title', 'brackets_dispute_note_label',
+  'brackets_round_winners', 'brackets_round_losers', 'brackets_round_grand', 'brackets_round_reset',
+  'brackets_round_third', 'brackets_round_plain', 'brackets_set_card_best_of', 'brackets_set_card_rematch',
+  'brackets_set_card_ready', 'brackets_set_card_called', 'brackets_set_card_reported', 'brackets_set_card_disputed',
+  'brackets_forfeit_words',
+  'brackets_your_sets_title', 'brackets_waiting_play', 'brackets_waiting_called', 'brackets_waiting_confirm',
+  'brackets_waiting_opponent_confirms', 'brackets_waiting_to_decides', 'brackets_waiting_waits',
+  'brackets_waiting_next_round', 'brackets_waiting_done', 'brackets_waiting_out', 'brackets_discord_label',
+];
 
 function bkEntrant(id, user_id, name, extra = {}) {
   return {
@@ -14450,84 +14467,151 @@ function bkEntrant(id, user_id, name, extra = {}) {
   };
 }
 
-function bkSet(key, side, round, position, slot_a, slot_b, state_, extra = {}) {
+function bkTournament(id, name, state_, entrants, extra = {}) {
+  const { options: given = {}, format = 'single', ...rest } = extra;
   return {
-    key, side, round, position, best_of: 3, state: state_, slot_a, slot_b, score_a: null,
-    score_b: null, winner: null, loser: null, forfeit: null, winner_to: null, loser_to: null,
-    called_at: null, reported_by: null, reported_side: null, reported_at: null, confirms_at: null,
-    confirmed_by: null, confirmed_how: null, disputed_by: null, dispute_note: null,
-    placement_winner: null, placement_loser: null, rematch: false, message_id: null, card_at: null,
-    ...extra,
-  };
-}
-
-function bkTournament(id, name, state_, entrants, sets = [], extra = {}) {
-  return {
-    id, name, game: 'Tekken 8', format: 'single', state: state_, starts_at: daysAhead(3),
+    id, name, game: 'Tekken 8', format, state: state_, starts_at: daysAhead(3),
     created_at: minutesAgo(60 * 24), updated_at: minutesAgo(30), rules_text: null,
     check_in_opened_at: null, check_in_closes_at: null, started_at: null, completed_at: null,
     cancelled_at: null, source: 'own', source_ref: null, created_by: STAFF.id, to_user_id: STAFF.id,
-    channel_id: null, thread_id: null, message_id: null, state_before: null,
+    channel_id: null, thread_id: null, message_id: null, state_before: null, shadow: 0,
     options: {
-      format: 'single', third_place: false, grand_final_reset: true, swiss_rounds: null, best_of: 3,
+      format, third_place: false, grand_final_reset: true, swiss_rounds: null, best_of: 3,
       best_of_from_round: null, best_of_late: 5, best_of_finals: 5, entrant_cap: null,
-      check_in_minutes: 30, confirm_minutes: 12,
+      check_in_minutes: 30, confirm_minutes: 12, ...given,
     },
     entrants: entrants.map((one, at) => ({ ...one, seed: one.seed ?? at + 1 })),
-    sets,
-    ...extra,
+    sets: [],
+    ...rest,
   };
 }
 
+function bkPlaying(t) {
+  return t.entrants.filter((one) => !one.dropped && !one.dq).sort((a, b) => a.seed - b.seed);
+}
+
+function bkBuild(t) {
+  const playing = bkPlaying(t);
+  playing.forEach((one, at) => { one.seed = at + 1; });
+  t.sets = mockBrackets.build(t.format, playing.map((one) => one.id), t.options);
+  mockBrackets.settle(t);
+  return t;
+}
+
+function bkSetIn(t, key) {
+  return t.sets.find((one) => one.key === key);
+}
+
+function bkPlay(t, key, a, b, extra = {}) {
+  const one = bkSetIn(t, key);
+  mockBrackets.decide(one, a > b ? 'a' : 'b', { score_a: a, score_b: b, how: 'opponent' });
+  Object.assign(one, extra);
+  mockBrackets.settle(t);
+}
+
+function bkReported(t, key, side, a, b, by, extra = {}) {
+  Object.assign(bkSetIn(t, key), {
+    state: 'reported', score_a: a, score_b: b, reported_side: side, reported_by: by,
+    reported_at: minutesAgo(4), confirms_at: daysAhead(8 / 1440), ...extra,
+  });
+}
+
 function seedBrackets() {
+  const nick = STAFF.id;
   const casey = MEMBERS[1].id;
   const rivet = MEMBERS[2].id;
   const moth = MEMBERS[3].id;
+  const quiet = MEMBERS[5].id;
+  const dax = MEMBERS[6].id;
+
+  const running = bkBuild(bkTournament(5, 'Knuck Up 16', 'running', [
+    bkEntrant(41, nick, 'Nick'), bkEntrant(42, casey, 'Casey'),
+    bkEntrant(43, rivet, 'Rivet'), bkEntrant(44, BK_GUEST, 'Remy'),
+  ], { started_at: minutesAgo(40), options: { best_of_finals: 5 } }));
+  bkReported(running, 'W1-1', 'b', 0, 2, null);
+
+  const finished = bkBuild(bkTournament(6, 'Knuck Up 17', 'running', [
+    bkEntrant(51, BK_GUEST, 'P1'), bkEntrant(52, BK_GUEST, 'P2'),
+  ], { started_at: minutesAgo(90) }));
+  bkPlay(finished, 'W1-1', 3, 1, { confirmed_how: 'to' });
+
+  const complete = bkBuild(bkTournament(7, 'Knuck Up 11', 'complete', [
+    bkEntrant(61, casey, 'Casey'), bkEntrant(62, rivet, 'Rivet'),
+  ], { started_at: minutesAgo(60 * 30), completed_at: minutesAgo(60 * 28), starts_at: minutesAgo(60 * 31) }));
+  bkPlay(complete, 'W1-1', 3, 0);
+  mockBrackets.placements(complete);
+
+  const double = bkBuild(bkTournament(9, 'Knuck Up 18', 'running', [
+    bkEntrant(71, nick, 'Nick'), bkEntrant(72, casey, 'Casey'), bkEntrant(73, moth, 'Moth'),
+    bkEntrant(74, rivet, 'Rivet'), bkEntrant(75, quiet, 'Quiet Kid'), bkEntrant(76, BK_GUEST, 'Juno'),
+    bkEntrant(77, BK_GUEST, 'Remy'), bkEntrant(78, dax, 'Dax'),
+  ], {
+    format: 'double', game: 'Street Fighter 6', started_at: minutesAgo(50), starts_at: minutesAgo(60),
+    rules_text: 'Bo3 until top 6, Bo5 after. Stages: training only. Default controller settings.',
+    thread_id: 1290000000000000901, channel_id: 1076005097617760296,
+  }));
+  bkPlay(double, 'W1-1', 2, 0);
+  bkPlay(double, 'W1-2', 2, 1);
+  bkPlay(double, 'W1-3', 2, 0);
+  bkPlay(double, 'W1-4', 2, 1);
+  bkReported(double, 'W2-2', 'a', 2, 1, casey);
+  bkReported(double, 'L1-1', 'b', 1, 2, quiet, { state: 'disputed', disputed_by: dax, dispute_note: 'Game 3 was a disconnect.' });
+  Object.assign(bkSetIn(double, 'L1-2'), { state: 'called', called_at: minutesAgo(2) });
+  bkSetIn(double, 'W1-1').message_id = 1290000000000000911;
+
+  const robin = bkBuild(bkTournament(10, 'Friday Rumble', 'running', [
+    bkEntrant(81, moth, 'Moth'), bkEntrant(82, casey, 'Casey'), bkEntrant(83, rivet, 'Rivet'),
+    bkEntrant(84, BK_GUEST, 'Remy'),
+  ], { format: 'round_robin', game: 'Guilty Gear Strive', started_at: minutesAgo(30), starts_at: minutesAgo(35) }));
+  for (const one of robin.sets.filter((set) => set.round === 1)) bkPlay(robin, one.key, 2, one.position === 1 ? 1 : 0);
+
+  const swiss = bkBuild(bkTournament(11, 'Swiss Sunday', 'running', [
+    bkEntrant(91, nick, 'Nick'), bkEntrant(92, moth, 'Moth'), bkEntrant(93, casey, 'Casey'),
+    bkEntrant(94, rivet, 'Rivet'), bkEntrant(95, quiet, 'Quiet Kid'), bkEntrant(96, BK_GUEST, 'Remy'),
+  ], { format: 'swiss', game: 'Tekken 8', started_at: minutesAgo(70), starts_at: minutesAgo(75) }));
+  for (const one of swiss.sets.filter((set) => set.round === 1)) bkPlay(swiss, one.key, 2, 1);
+
+  const done = bkBuild(bkTournament(13, 'Knuck Up 9', 'complete', [
+    bkEntrant(101, casey, 'Casey'), bkEntrant(102, nick, 'Nick'), bkEntrant(103, moth, 'Moth'),
+    bkEntrant(104, rivet, 'Rivet'), bkEntrant(105, quiet, 'Quiet Kid'), bkEntrant(106, dax, 'Dax'),
+    bkEntrant(107, BK_GUEST, 'Remy'), bkEntrant(108, BK_GUEST, 'Juno'),
+  ], { format: 'double', started_at: minutesAgo(60 * 24 * 8), completed_at: minutesAgo(60 * 24 * 8 - 180), starts_at: minutesAgo(60 * 24 * 8) }));
+  mockBrackets.playOut(done);
+  mockBrackets.placements(done);
+
   return [
     bkTournament(1, 'Knuck Up 12', 'draft', []),
     bkTournament(2, 'Knuck Up 13', 'signups', [
       bkEntrant(11, casey, 'Casey'),
       bkEntrant(12, BK_GUEST, 'Remy'),
       bkEntrant(13, rivet, 'Rivet', { dropped: true, dropped_why: 'removed' }),
-    ]),
-    bkTournament(3, 'Knuck Up 14', 'check_in', [bkEntrant(21, moth, 'Moth')], [], {
-      check_in_opened_at: minutesAgo(10), check_in_closes_at: daysAhead(0.01),
+    ], { options: { entrant_cap: 16 } }),
+    bkTournament(3, 'Knuck Up 14', 'check_in', [bkEntrant(21, moth, 'Moth')], {
+      check_in_opened_at: minutesAgo(10), check_in_closes_at: daysAhead(0.01), starts_at: daysAhead(0.02),
     }),
     bkTournament(4, 'Knuck Up 15', 'seeding', [
       bkEntrant(31, casey, 'Casey'), bkEntrant(32, rivet, 'Rivet'), bkEntrant(33, BK_GUEST, 'Remy'),
     ]),
-    bkTournament(5, 'Knuck Up 16', 'running', [
-      bkEntrant(41, STAFF.id, 'Nick'), bkEntrant(42, casey, 'Casey'),
-      bkEntrant(43, rivet, 'Rivet'), bkEntrant(44, BK_GUEST, 'Remy'),
-    ], [
-      bkSet('W1-1', 'winners', 1, 1, 41, 44, 'reported', {
-        score_a: 0, score_b: 2, reported_side: 'b', reported_by: STAFF.id,
-        reported_at: minutesAgo(3), confirms_at: daysAhead(0.006), winner_to: 'W2-1',
-      }),
-      bkSet('W1-2', 'winners', 1, 2, 42, 43, 'ready', { winner_to: 'W2-1' }),
-      bkSet('W2-1', 'winners', 2, 1, null, null, 'waiting', { best_of: 5 }),
-    ], { started_at: minutesAgo(40) }),
-    bkTournament(6, 'Knuck Up 17', 'running', [
-      bkEntrant(51, BK_GUEST, 'P1'), bkEntrant(52, BK_GUEST, 'P2'),
-    ], [
-      bkSet('W1-1', 'winners', 1, 1, 51, 52, 'complete', {
-        best_of: 5, score_a: 3, score_b: 1, winner: 51, loser: 52, confirmed_how: 'to',
-        placement_winner: 1, placement_loser: 2,
-      }),
-    ], { started_at: minutesAgo(90) }),
-    bkTournament(7, 'Knuck Up 11', 'complete', [
-      bkEntrant(61, casey, 'Casey', { placement: 1 }), bkEntrant(62, rivet, 'Rivet', { placement: 2 }),
-    ], [
-      bkSet('W1-1', 'winners', 1, 1, 61, 62, 'complete', {
-        best_of: 5, score_a: 3, score_b: 0, winner: 61, loser: 62, placement_winner: 1, placement_loser: 2,
-      }),
-    ], { started_at: minutesAgo(60 * 30), completed_at: minutesAgo(60 * 28) }),
-    bkTournament(8, 'Knuck Up 10', 'cancelled', [], [], { state_before: 'signups', cancelled_at: minutesAgo(60 * 50) }),
+    running,
+    finished,
+    complete,
+    bkTournament(8, 'Knuck Up 10', 'cancelled', [], { state_before: 'signups', cancelled_at: minutesAgo(60 * 50) }),
+    double,
+    robin,
+    swiss,
+    bkTournament(12, 'Rehearsal Cup', 'signups', [bkEntrant(111, casey, 'Casey')], {
+      format: 'double', shadow: 1, thread_id: 1290000000000000912, channel_id: 800000000000000003,
+    }),
+    done,
+    bkTournament(14, 'Third Strike Open', 'seeding', [
+      bkEntrant(121, casey, 'Casey'), bkEntrant(122, moth, 'Moth'), bkEntrant(123, rivet, 'Rivet'),
+      bkEntrant(124, nick, 'Nick'), bkEntrant(125, quiet, 'Quiet Kid'), bkEntrant(126, BK_GUEST, 'Remy'),
+    ], { game: '3rd Strike', options: { third_place: true }, starts_at: daysAhead(1) }),
   ];
 }
 
 function bkState() {
-  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 9, nextEntrant: 100 };
+  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 20, nextEntrant: 200 };
   return state.brackets;
 }
 
@@ -14551,6 +14635,7 @@ const BK_TO_WORDS = {
   cancelled: "**{name}** is cancelled.",
   restored: "**{name}** is back as it was before it was cancelled.",
   set_reset: "{set} is open again; every set it decided after it is cleared.",
+  set_accepted: "{set} stands as reported.",
   no_name: "An entrant needs a name of 1 to {limit} characters, so nothing was done.",
   bad_option: "{field} cannot be {given}, so nothing was saved. It takes {allowed}.",
   check_in_open: "Check-in for **{name}** is still open. Close it first so no-shows are taken out.",
@@ -14593,8 +14678,12 @@ function bkOf(context) {
   return found;
 }
 
+function bkMayRun(context) {
+  return context.session !== 'member';
+}
+
 function bkRuns(context) {
-  if (context.session === 'member') {
+  if (!bkMayRun(context)) {
     throw new Refused(403, 'not_organiser', bkSay('brackets_not_organiser_said', { role: bkSay('brackets_no_role_words') }));
   }
 }
@@ -14605,23 +14694,25 @@ function bkIn(t, ...allowed) {
   }
 }
 
+function bkNames(t) {
+  return Object.fromEntries(t.entrants.map((one) => [one.id, one.name]));
+}
+
 function bkView(t, context) {
-  const names = Object.fromEntries(t.entrants.map((one) => [one.id, one.name]));
+  const names = bkNames(t);
   const me = actorOf(context.session);
   const mine = t.entrants.find((one) => one.user_id === me);
-  const placed = t.entrants.filter((one) => !one.dropped || one.placement);
   return {
     ...t,
+    shadow: Boolean(t.shadow),
+    to_name: memberName(t.to_user_id),
     entrant_count: t.entrants.filter((one) => !one.dropped).length,
-    finished: t.sets.length > 0 && t.sets.every((one) => ['complete', 'bye', 'void'].includes(one.state)),
-    may_run: context.session !== 'member',
+    finished: mockBrackets.finished(t),
+    may_run: bkMayRun(context),
     mine: mine ? mine.id : null,
-    sets: t.sets.map((one) => ({ ...one, a_name: names[one.slot_a] ?? null, b_name: names[one.slot_b] ?? null })),
-    standings: t.sets.length ? placed.map((one) => ({ entrant: one.id, name: one.name, place: one.placement })) : [],
-    waiting_on: t.sets.length ? placed.map((one) => {
-      const live = t.sets.find((set) => [set.slot_a, set.slot_b].includes(one.id) && ['ready', 'called', 'reported', 'disputed'].includes(set.state));
-      return { entrant: one.id, name: one.name, what: live ? 'play' : 'done', set: live ? live.key : null, opponent: null, open: live ? 1 : 0 };
-    }) : [],
+    sets: t.sets.map(({ _feed, _place, reset_of, ...one }) => ({ ...one, a_name: names[one.slot_a] ?? null, b_name: names[one.slot_b] ?? null })),
+    standings: mockBrackets.standings(t),
+    waiting_on: mockBrackets.waitingOn(t),
   };
 }
 
@@ -14638,21 +14729,42 @@ function bkEntrantOf(t, context) {
   return found;
 }
 
+function bkSelfOr(t, context, one) {
+  if (bkMayRun(context) || one.user_id === actorOf(context.session)) return;
+  throw new Refused(403, 'not_yours', bkSay('brackets_not_yours_said', { entrant: one.name, name: t.name }));
+}
+
 function bkSetOf(t, context) {
   const found = t.sets.find((one) => one.key === String(context.params.key));
   if (!found) throw new Refused(404, 'no_set', bkSay('brackets_no_set_said', { set: String(context.params.key).slice(0, 20), name: t.name }));
   return found;
 }
 
+function bkWouldDm(context, t, userIds, dm, reason, fields = {}) {
+  for (const user of userIds) {
+    if (!user || user === actorOf(context.session)) continue;
+    logAction('brackets.would_dm', { actor_id: null, target_id: user, details: { tournament: t.id, dm, reason: reason || '', ...fields } });
+  }
+}
+
+function bkReason(body) {
+  return String((body && body.reason) || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+
+function bkPlayers(t, set) {
+  return [set.slot_a, set.slot_b].map((id) => (t.entrants.find((one) => one.id === id) || {}).user_id).filter(Boolean);
+}
+
 route('GET', '/api/brackets', (context) => {
   requireMember(context.session);
   return {
     mode: state.settings.get('brackets_mode') ?? 'shadow',
-    may_run: context.session !== 'member',
+    may_run: bkMayRun(context),
+    words: Object.fromEntries(BK_PAGE_WORDS.map((key) => [key, String(state.settings.get(key) ?? '')])),
     tournaments: bkState().tournaments.map((t) => ({
       id: t.id, name: t.name, game: t.game, format: t.format, state: t.state, starts_at: t.starts_at,
-      created_at: t.created_at, updated_at: t.updated_at, to_user_id: t.to_user_id,
-      entrant_count: t.entrants.filter((one) => !one.dropped).length,
+      created_at: t.created_at, updated_at: t.updated_at, to_user_id: t.to_user_id, to_name: memberName(t.to_user_id),
+      entrant_cap: t.options.entrant_cap, entrant_count: t.entrants.filter((one) => !one.dropped).length,
     })).sort((a, b) => b.id - a.id),
   };
 });
@@ -14662,6 +14774,15 @@ route('GET', '/api/brackets/:tournament_id', (context) => {
   return bkView(bkOf(context), context);
 });
 
+const BK_OPTION_FIELDS = ['format', 'third_place', 'grand_final_reset', 'swiss_rounds', 'best_of', 'best_of_from_round', 'best_of_late', 'best_of_finals', 'entrant_cap', 'check_in_minutes', 'confirm_minutes'];
+
+function bkOptions(t, body) {
+  for (const field of BK_OPTION_FIELDS) if (field in body) t.options[field] = body[field];
+  t.format = t.options.format;
+  for (const field of ['game', 'rules_text', 'starts_at']) if (field in body) t[field] = body[field] || null;
+  if (body.name) t.name = String(body.name).replace(/\s+/g, ' ').trim().slice(0, 100);
+}
+
 route('POST', '/api/brackets', async (context) => {
   requireMember(context.session);
   bkOff();
@@ -14670,11 +14791,9 @@ route('POST', '/api/brackets', async (context) => {
   const name = String(body.name || '').replace(/\s+/g, ' ').trim();
   if (!name || name.length > 100) throw new Refused(400, 'no_name', bkSay('no_name', { limit: 100 }));
   const held = bkState();
-  const t = bkTournament(held.next++, name, 'draft', [], [], { game: body.game || null, starts_at: body.starts_at || null });
-  if (body.format) {
-    t.format = body.format;
-    t.options.format = body.format;
-  }
+  const format = body.format || state.settings.get('brackets_format_default') || 'double';
+  const t = bkTournament(held.next++, name, 'draft', [], { format, starts_at: null, to_user_id: actorOf(context.session), created_by: actorOf(context.session) });
+  bkOptions(t, { ...body, format });
   held.tournaments.push(t);
   return bkAnswer(context, t, 'created', 'created');
 });
@@ -14686,9 +14805,7 @@ route('PATCH', '/api/brackets/:tournament_id', async (context) => {
   bkRuns(context);
   bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
   const body = await context.body();
-  if (body.name) t.name = String(body.name).trim().slice(0, 100);
-  for (const field of Object.keys(t.options)) if (field in body) t.options[field] = body[field];
-  t.format = t.options.format;
+  bkOptions(t, body);
   return bkAnswer(context, t, 'edited', 'edited', {}, { changed: Object.keys(body).sort() });
 });
 
@@ -14712,7 +14829,10 @@ function bkClock(stamp) {
 
 bkStateMove('signups/open', ['draft', 'seeding'], 'signups', 'signups_opened', 'signups_opened');
 bkStateMove('signups/close', ['signups'], 'seeding', 'signups_closed', 'signups_closed');
-bkStateMove('checkin/open', ['signups', 'seeding'], 'check_in', 'check_in_opened', 'check_in_opened', () => ({ check_in_opened_at: now(), check_in_closes_at: daysAhead(30 / 1440) }));
+bkStateMove('checkin/open', ['signups', 'seeding'], 'check_in', 'check_in_opened', 'check_in_opened', (t) => {
+  for (const one of t.entrants) if (!one.user_id && !one.dropped) one.checked_in = true;
+  return { check_in_opened_at: now(), check_in_closes_at: daysAhead(Number(t.options.check_in_minutes || 30) / 1440) };
+});
 bkStateMove('unstart', ['running'], 'seeding', 'unstarted', 'unstarted', () => ({ sets: [], started_at: null }));
 bkStateMove('reopen', ['complete'], 'running', 'reopened', 'reopened', (t) => ({ completed_at: null, entrants: t.entrants.map((one) => ({ ...one, placement: null })) }));
 bkStateMove('cancel', ['draft', 'signups', 'check_in', 'seeding', 'running', 'complete'], 'cancelled', 'cancelled', 'cancelled', (t) => ({ state_before: t.state, cancelled_at: now() }));
@@ -14754,6 +14874,8 @@ route('POST', '/api/brackets/:tournament_id/join', (context) => {
   const found = t.entrants.find((one) => one.user_id === me);
   if (found && !found.dropped) throw new Refused(409, 'already_in', bkSay('brackets_already_in_said', { entrant: found.name, name: t.name }));
   if (found && found.dropped_why === 'removed') throw new Refused(403, 'removed', bkSay('brackets_removed_by_to_said', { name: t.name }));
+  const cap = t.options.entrant_cap;
+  if (cap && t.entrants.filter((one) => !one.dropped).length >= cap) throw new Refused(409, 'full', bkSay('brackets_full_said', { name: t.name, cap }));
   if (found) Object.assign(found, { dropped: false, dropped_why: null });
   else t.entrants.push(bkEntrant(bkState().nextEntrant++, me, memberName(me), { seed: t.entrants.length + 1 }));
   return bkAnswer(context, t, 'entrant_added', 'brackets_joined_said', {}, { by_self: true });
@@ -14769,11 +14891,14 @@ route('POST', '/api/brackets/:tournament_id/entrants', async (context) => {
   const user = body.user_id ? String(body.user_id) : null;
   const name = String(body.name || (user ? memberName(user) : '') || '').trim();
   if (!name || name.length > 100) throw new Refused(400, 'no_name', bkSay('no_name', { limit: 100 }));
-  t.entrants.push(bkEntrant(bkState().nextEntrant++, user, name, { seed: t.entrants.length + 1, checked_in: !user && t.state === 'check_in' }));
+  const back = user ? t.entrants.find((one) => one.user_id === user) : null;
+  if (back && !back.dropped) throw new Refused(409, 'already_in', bkSay('brackets_already_in_said', { entrant: back.name, name: t.name }));
+  if (back) Object.assign(back, { dropped: false, dropped_why: null });
+  else t.entrants.push(bkEntrant(bkState().nextEntrant++, user, name, { seed: t.entrants.length + 1, checked_in: !user && t.state === 'check_in' }));
   return bkAnswer(context, t, 'entrant_added', 'entrant_added', { entrant: name }, { guest: !user });
 });
 
-route('DELETE', '/api/brackets/:tournament_id/entrants/:entrant_id', (context) => {
+route('DELETE', '/api/brackets/:tournament_id/entrants/:entrant_id', async (context) => {
   requireMember(context.session);
   bkOff();
   const t = bkOf(context);
@@ -14782,6 +14907,7 @@ route('DELETE', '/api/brackets/:tournament_id/entrants/:entrant_id', (context) =
   const one = bkEntrantOf(t, context);
   if (one.dropped) throw new Refused(409, 'already_out', bkSay('brackets_already_out_said', { entrant: one.name, name: t.name }));
   Object.assign(one, { dropped: true, dropped_why: 'removed' });
+  bkWouldDm(context, t, [one.user_id], 'brackets_dm_removed', bkReason(await context.body()));
   return bkAnswer(context, t, 'entrant_removed', 'entrant_removed', { entrant: one.name }, { entrant: one.id });
 });
 
@@ -14802,24 +14928,29 @@ route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/checkin', async
   const t = bkOf(context);
   bkIn(t, 'check_in');
   const one = bkEntrantOf(t, context);
+  bkSelfOr(t, context, one);
   const body = await context.body();
   one.checked_in = body.checked_in !== false;
   const event = one.checked_in ? 'checked_in' : 'checked_out';
   return bkAnswer(context, t, event, `brackets_${event}_said`, { entrant: one.name }, { entrant: one.id });
 });
 
-route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/drop', (context) => {
+route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/drop', async (context) => {
   requireMember(context.session);
   bkOff();
   const t = bkOf(context);
   bkIn(t, 'draft', 'signups', 'check_in', 'seeding', 'running');
   const one = bkEntrantOf(t, context);
+  bkSelfOr(t, context, one);
   if (one.dropped || one.dq) throw new Refused(409, 'already_out', bkSay('brackets_already_out_said', { entrant: one.name, name: t.name }));
-  Object.assign(one, { dropped: true, dropped_why: t.state === 'running' ? 'dropped' : 'left' });
-  return bkAnswer(context, t, 'dropped', t.state === 'running' ? 'brackets_dropped_said' : 'brackets_left_said', { entrant: one.name }, { entrant: one.id });
+  const running = t.state === 'running';
+  Object.assign(one, { dropped: true, dropped_why: running ? 'dropped' : 'left' });
+  if (running) mockBrackets.withdraw(t, one.id, 'drop');
+  bkWouldDm(context, t, [one.user_id], 'brackets_dm_dropped', bkReason(await context.body()));
+  return bkAnswer(context, t, 'dropped', running ? 'brackets_dropped_said' : 'brackets_left_said', { entrant: one.name }, { entrant: one.id });
 });
 
-route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/dq', (context) => {
+route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/dq', async (context) => {
   requireMember(context.session);
   bkOff();
   const t = bkOf(context);
@@ -14828,11 +14959,8 @@ route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/dq', (context) 
   const one = bkEntrantOf(t, context);
   if (one.dropped || one.dq) throw new Refused(409, 'already_out', bkSay('brackets_already_out_said', { entrant: one.name, name: t.name }));
   one.dq = true;
-  for (const set of t.sets) {
-    if ([set.slot_a, set.slot_b].includes(one.id) && ['ready', 'called', 'reported', 'disputed'].includes(set.state)) {
-      Object.assign(set, { state: 'complete', forfeit: 'dq', winner: set.slot_a === one.id ? set.slot_b : set.slot_a, loser: one.id, score_a: null, score_b: null });
-    }
-  }
+  mockBrackets.withdraw(t, one.id, 'dq');
+  bkWouldDm(context, t, [one.user_id], 'brackets_dm_dq', bkReason(await context.body()));
   return bkAnswer(context, t, 'dq', 'dq', { entrant: one.name }, { entrant: one.id });
 });
 
@@ -14843,7 +14971,7 @@ route('POST', '/api/brackets/:tournament_id/seed', async (context) => {
   bkRuns(context);
   bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
   const body = await context.body();
-  const playing = t.entrants.filter((one) => !one.dropped && !one.dq).map((one) => one.id);
+  const playing = bkPlaying(t).map((one) => one.id);
   let order = playing.slice();
   if (body.randomise === true) order.sort(() => Math.random() - 0.5);
   else {
@@ -14853,6 +14981,8 @@ route('POST', '/api/brackets/:tournament_id/seed', async (context) => {
     }
   }
   order.forEach((id, at) => { t.entrants.find((one) => one.id === id).seed = at + 1; });
+  let next = order.length;
+  for (const one of t.entrants) if (!order.includes(one.id)) one.seed = ++next;
   return bkAnswer(context, t, 'seeded', 'seeded', {}, { order, randomised: body.randomise === true });
 });
 
@@ -14863,16 +14993,15 @@ route('POST', '/api/brackets/:tournament_id/start', (context) => {
   bkRuns(context);
   if (t.state === 'check_in') throw new Refused(409, 'check_in_open', bkSay('check_in_open', { name: t.name }));
   bkIn(t, 'draft', 'signups', 'seeding');
-  const playing = t.entrants.filter((one) => !one.dropped && !one.dq).sort((a, b) => a.seed - b.seed);
+  const playing = bkPlaying(t);
   if (playing.length < 2) throw new Refused(409, 'too_few', bkSay('too_few', { name: t.name, count: playing.length }));
-  t.sets = [];
-  for (let at = 0; at < playing.length; at += 2) {
-    const a = playing[at];
-    const b = playing[at + 1];
-    t.sets.push(bkSet(`W1-${at / 2 + 1}`, 'winners', 1, at / 2 + 1, a.id, b ? b.id : null, b ? 'ready' : 'bye', b ? {} : { winner: a.id }));
+  if (t.format === 'swiss' && t.options.swiss_rounds && Number(t.options.swiss_rounds) > playing.length - 1) {
+    throw new Refused(409, 'too_many_rounds', bkSay('too_many_rounds', { name: t.name, count: playing.length, most: playing.length - 1, rounds: t.options.swiss_rounds }));
   }
+  bkBuild(t);
   Object.assign(t, { state: 'running', started_at: now() });
-  return bkAnswer(context, t, 'started', 'started', { sets: t.sets.filter((one) => one.state === 'ready').length }, { entrants: playing.length });
+  const playable = t.sets.filter((one) => !['bye', 'void'].includes(one.state) && !one.reset_of).length;
+  return bkAnswer(context, t, 'started', 'started', { sets: playable }, { entrants: playing.length });
 });
 
 route('POST', '/api/brackets/:tournament_id/complete', async (context) => {
@@ -14881,12 +15010,9 @@ route('POST', '/api/brackets/:tournament_id/complete', async (context) => {
   const t = bkOf(context);
   bkRuns(context);
   bkIn(t, 'running');
-  const open = t.sets.filter((one) => !['complete', 'bye', 'void'].includes(one.state)).length;
+  const open = t.sets.filter((one) => !mockBrackets.DONE.includes(one.state)).length;
   if (open || !t.sets.length) throw new Refused(409, 'unfinished', bkSay('unfinished', { name: t.name, open }));
-  for (const set of t.sets) {
-    if (set.placement_winner) t.entrants.find((one) => one.id === set.winner).placement = set.placement_winner;
-    if (set.placement_loser) t.entrants.find((one) => one.id === set.loser).placement = set.placement_loser;
-  }
+  mockBrackets.placements(t);
   Object.assign(t, { state: 'complete', completed_at: now() });
   return bkAnswer(context, t, 'completed', 'completed');
 });
@@ -14899,18 +15025,28 @@ function bkRunning(context) {
   return [t, bkSetOf(t, context)];
 }
 
+function bkSide(t, set, context) {
+  const me = t.entrants.find((one) => one.user_id === actorOf(context.session));
+  if (!me) return null;
+  if (set.slot_a === me.id) return 'a';
+  if (set.slot_b === me.id) return 'b';
+  return null;
+}
+
 function bkFinal(t, set) {
-  const names = Object.fromEntries(t.entrants.map((one) => [one.id, one.name]));
+  const names = bkNames(t);
   const result = set.forfeit || set.score_a === null ? bkSay('brackets_forfeit_words') : `${Math.max(set.score_a, set.score_b)}–${Math.min(set.score_a, set.score_b)}`;
   return bkSay('brackets_set_final_said', { set: set.key, winner: names[set.winner], result });
 }
 
-function bkDecide(set, score_a, score_b, how, forfeitSide = null) {
+function bkDecide(t, set, score_a, score_b, how, context, forfeitSide = null) {
   const side = forfeitSide || (score_a > score_b ? 'a' : 'b');
-  Object.assign(set, {
-    state: 'complete', score_a, score_b, confirmed_how: how, forfeit: forfeitSide ? 'to' : null,
-    winner: side === 'a' ? set.slot_a : set.slot_b, loser: side === 'a' ? set.slot_b : set.slot_a,
-  });
+  if (set.state === 'complete') {
+    const flips = (side === 'a' ? set.slot_a : set.slot_b) !== set.winner;
+    if (flips) mockBrackets.reset(t, set.key);
+  }
+  mockBrackets.decide(set, side, { score_a, score_b, how, forfeit: forfeitSide ? 'to' : null, by: actorOf(context.session), at: now() });
+  mockBrackets.settle(t);
 }
 
 function bkFits(set, score_a, score_b) {
@@ -14925,37 +15061,73 @@ function bkPlayable(set) {
   if (['bye', 'void'].includes(set.state)) throw new Refused(409, 'not_playable', bkSay('brackets_not_playable_said', { set: set.key }));
 }
 
+function bkSetLog(context, t, event, set, extra = {}) {
+  t.updated_at = now();
+  logAction(`web.brackets.${event}`, { actor_id: actorOf(context.session), details: { via: 'website', tournament: t.id, set: set.key, rematch: Boolean(set.rematch), ...extra } });
+}
+
 route('POST', '/api/brackets/:tournament_id/sets/:key/call', (context) => {
   const [t, set] = bkRunning(context);
   bkRuns(context);
   if (set.state !== 'ready') throw new Refused(409, 'already_called', bkSay('already_called', { set: set.key }));
   Object.assign(set, { state: 'called', called_at: now() });
-  const names = Object.fromEntries(t.entrants.map((one) => [one.id, one.name]));
+  const names = bkNames(t);
   return bkAnswer(context, t, 'set_called', 'brackets_set_called_said', { set: set.key, a: names[set.slot_a], b: names[set.slot_b] }, { set: set.key });
 });
 
 route('POST', '/api/brackets/:tournament_id/sets/:key/report', async (context) => {
   const [t, set] = bkRunning(context);
   bkPlayable(set);
+  const side = bkSide(t, set, context);
+  if (!side && !bkMayRun(context)) throw new Refused(403, 'not_in_set', bkSay('brackets_not_in_set_said', { set: set.key }));
+  if (side && set.state === 'complete') throw new Refused(409, 'already_complete', bkSay('brackets_already_complete_said', { set: set.key }));
+  if (side && set.state === 'disputed') throw new Refused(409, 'disputed', bkSay('brackets_disputed_said', { set: set.key }));
   const body = await context.body();
   bkFits(set, body.score_a, body.score_b);
-  bkRuns(context);
-  bkDecide(set, body.score_a, body.score_b, 'to');
-  logAction('web.brackets.set_overridden', { details: { via: 'website', tournament: t.id, set: set.key } });
-  return { tournament: bkView(t, context), message: bkFinal(t, set) };
+  const names = bkNames(t);
+  if (!side) {
+    bkDecide(t, set, body.score_a, body.score_b, 'to', context);
+    bkSetLog(context, t, 'set_overridden', set);
+    return { tournament: bkView(t, context), message: bkFinal(t, set) };
+  }
+  if (set.state === 'reported' && set.reported_side !== side) {
+    if (set.score_a !== body.score_a || set.score_b !== body.score_b) {
+      throw new Refused(409, 'reported_differently', bkSay('brackets_reported_differently_said', { set: set.key, score_a: set.score_a, score_b: set.score_b }));
+    }
+    bkDecide(t, set, set.score_a, set.score_b, 'opponent', context);
+    bkSetLog(context, t, 'set_confirmed', set, { how: 'opponent' });
+    return { tournament: bkView(t, context), message: bkFinal(t, set) };
+  }
+  const minutes = Number(t.options.confirm_minutes || 12);
+  Object.assign(set, {
+    state: 'reported', score_a: body.score_a, score_b: body.score_b, reported_side: side,
+    reported_by: actorOf(context.session), reported_at: now(), confirms_at: daysAhead(minutes / 1440),
+  });
+  bkSetLog(context, t, 'set_reported', set);
+  const opponent = names[side === 'a' ? set.slot_b : set.slot_a];
+  return { tournament: bkView(t, context), message: bkSay('brackets_set_reported_said', { set: set.key, score_a: body.score_a, score_b: body.score_b, minutes, opponent }) };
 });
 
 route('POST', '/api/brackets/:tournament_id/sets/:key/confirm', (context) => {
   const [t, set] = bkRunning(context);
-  if (!['reported', 'disputed'].includes(set.state)) throw new Refused(409, 'not_reported', bkSay('brackets_not_reported_said', { set: set.key }));
-  bkDecide(set, set.score_a, set.score_b, context.session === 'member' ? 'opponent' : 'to');
-  logAction('web.brackets.set_confirmed', { details: { via: 'website', tournament: t.id, set: set.key } });
+  const side = bkSide(t, set, context);
+  if (!['reported', 'disputed'].includes(set.state) || (side && set.state !== 'reported')) {
+    throw new Refused(409, 'not_reported', bkSay('brackets_not_reported_said', { set: set.key }));
+  }
+  if (side && set.reported_side === side) throw new Refused(409, 'own_report', bkSay('brackets_own_report_said', { set: set.key }));
+  if (!side && !bkMayRun(context)) throw new Refused(403, 'not_in_set', bkSay('brackets_not_in_set_said', { set: set.key }));
+  const how = side ? 'opponent' : 'to';
+  bkDecide(t, set, set.score_a, set.score_b, how, context);
+  bkSetLog(context, t, 'set_confirmed', set, { how });
   return { tournament: bkView(t, context), message: bkFinal(t, set) };
 });
 
 route('POST', '/api/brackets/:tournament_id/sets/:key/dispute', async (context) => {
   const [t, set] = bkRunning(context);
   if (set.state !== 'reported') throw new Refused(409, 'not_reported', bkSay('brackets_not_reported_said', { set: set.key }));
+  const side = bkSide(t, set, context);
+  if (!side) throw new Refused(403, 'not_in_set', bkSay('brackets_not_in_set_said', { set: set.key }));
+  if (set.reported_side === side) throw new Refused(409, 'own_report', bkSay('brackets_own_report_said', { set: set.key }));
   const body = await context.body();
   Object.assign(set, { state: 'disputed', disputed_by: actorOf(context.session), dispute_note: String(body.note || '').trim().slice(0, 300) || null });
   return bkAnswer(context, t, 'set_disputed', 'brackets_set_disputed_said', { set: set.key }, { set: set.key });
@@ -14966,23 +15138,28 @@ route('POST', '/api/brackets/:tournament_id/sets/:key/override', async (context)
   bkRuns(context);
   bkPlayable(set);
   const body = await context.body();
+  const players = bkPlayers(t, set);
   if (body.forfeit === true) {
     if (!['a', 'b'].includes(body.winner)) throw new Refused(400, 'forfeit_needs_winner', bkSay('forfeit_needs_winner'));
-    bkDecide(set, null, null, 'to', body.winner);
+    bkDecide(t, set, null, null, 'to', context, body.winner);
   } else {
     bkFits(set, body.score_a, body.score_b);
-    bkDecide(set, body.score_a, body.score_b, 'to');
+    bkDecide(t, set, body.score_a, body.score_b, 'to', context);
   }
-  logAction('web.brackets.set_overridden', { details: { via: 'website', tournament: t.id, set: set.key } });
-  return { tournament: bkView(t, context), message: bkFinal(t, set) };
+  bkSetLog(context, t, 'set_overridden', set);
+  const message = bkFinal(t, set);
+  bkWouldDm(context, t, players, 'brackets_dm_decided', bkReason(body), { set: set.key, result: message });
+  return { tournament: bkView(t, context), message };
 });
 
-route('POST', '/api/brackets/:tournament_id/sets/:key/reset', (context) => {
+route('POST', '/api/brackets/:tournament_id/sets/:key/reset', async (context) => {
   const [t, set] = bkRunning(context);
   bkRuns(context);
   if (['bye', 'void'].includes(set.state)) throw new Refused(409, 'not_resettable', bkSay('not_resettable', { set: set.key }));
   if (['ready', 'waiting'].includes(set.state)) throw new Refused(409, 'nothing_to_reset', bkSay('nothing_to_reset', { set: set.key }));
-  Object.assign(set, bkSet(set.key, set.side, set.round, set.position, set.slot_a, set.slot_b, 'ready', { best_of: set.best_of, winner_to: set.winner_to, loser_to: set.loser_to }));
+  const players = bkPlayers(t, set);
+  mockBrackets.reset(t, set.key);
+  bkWouldDm(context, t, players, 'brackets_dm_reset', bkReason(await context.body()), { set: set.key });
   return bkAnswer(context, t, 'set_reset', 'set_reset', { set: set.key }, { set: set.key });
 });
 
