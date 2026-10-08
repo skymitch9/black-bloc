@@ -522,7 +522,7 @@ suffix; written once per tournament, card and reason a run); `would_dm`, `would_
 
 ## F. Layer 3 — the site page (as built, branch `brackets-site`)
 
-*Rewritten 2026-10-07 from the spec to what runs. Differences from the old spec are §G 56–72.*
+*Rewritten 2026-10-07 from the spec to what runs. Differences from the old spec are §G 56–72; the layer-3 review fixes amended it in place the same day (§G 73–82, "Review fixes (layer 3)" below).*
 
 | File | Does |
 |---|---|
@@ -534,19 +534,20 @@ suffix; written once per tournament, card and reason a run); `would_dm`, `would_
 
 **The list** (`/brackets.html`): one *Tournaments* section, full width — live ones first (running, check-in, sign-ups, seeding, draft), then **Complete** and **Cancelled** folded; search and chips (All / Live / Complete / Cancelled) through `listFilter`, which opens the folds when a search or chip is active. Each row: name; game · format · entrants (`n/cap` when capped) · start time before the start (viewer's zone, AM/PM) · the organiser's name; the state pill. A member sees no drafts and no cancelled ones. **New tournament** (organisers, while the mode is not `off`) opens the drawer.
 
-**A tournament** (`/brackets.html#<id>` — the starter card's link): the head card — name, state pill (and *rehearsal* to organisers while the thread is a rehearsal), the meta line (game · format · Bo · late/finals best-of · reset or third place or Swiss rounds · entrants · organiser), the time line, **your line** (the viewer's `waiting_on` row in its word key; pressing it opens that set when there is a move), the member moves (`brackets_sign_up_label` / `_check_in_label` / `_leave_label` / `_drop_label`, legality = `memberMoves`, as the panel), the organiser moves (constants: Open/Close sign-ups, Open/Close check-in, Start, Edit…, Call ready sets, Complete, Back to seeding, Cancel, Reopen, Restore, and **Move to #knuck-up** for staff while the thread is a rehearsal and the mode is `on`; Cancel, Back to seeding, Move and Drop out ask first), Rules folded, and *updated N s ago*. Sections: **Bracket** (once started, full width), **Standings** (round robin and Swiss while running, every format once complete), **Entrants**, then **Logs** and **Settings** for staff.
+**A tournament** (`/brackets.html#<id>` — the starter card's link): the head card — name, state pill (and *rehearsal* to organisers while the thread is a rehearsal), the meta line (game · format · Bo · ~~late/finals best-of · reset or third place or Swiss rounds~~ the starter card's option words — `brackets_card_reset_words` / `_third_words` / `_rounds_words` (the rounds the engine will play, `rounds_to_play`) / `_late_words` / `_finals_words` (only when it differs from the Bo) · entrants · organiser), the time line, **your line** (the viewer's `waiting_on` row in its word key; pressing it opens that set when there is a move), the member moves (`brackets_sign_up_label` / `_check_in_label` / `_leave_label` / `_drop_label`, legality = `memberMoves`, as the panel), the organiser moves (constants: Open/Close sign-ups, Open/Close check-in, Start, Edit…, Call ready sets, Complete, Back to seeding, Cancel, Reopen, Restore, and **Move to #knuck-up** for staff while the thread is a rehearsal and the mode is `on`; Cancel, Back to seeding, Move and Drop out ask first), Rules folded, and *updated N s ago*. Sections: **Bracket** (once started, full width), **Standings** (round robin and Swiss while running, every format once complete), **Entrants**, then **Logs** and **Settings** for staff.
 
-- **Bracket**: elimination as an absolutely placed tree with SVG elbow lines along `winner_to` — winners on top, losers below, the grand final (and the reset while it may be played) after the longer side; round robin as a results grid (row player's score first, wins green, a disputed or reported pair marked `?`); Swiss as one column per round. Every set card: key · Bo · rematch mark, the state word (called / reported / disputed), both names and scores, the winner bold, the viewer's own sets outlined, a dot where the viewer has something to do. The tree scrolls sideways inside its section; the page does not.
+- **Bracket**: elimination as an absolutely placed tree with SVG elbow lines along `winner_to` — winners on top, losers below, the grand final (and the reset while it may be played) after the longer side; round robin as a results grid (row player's score first, wins green, a disputed or reported pair marked `?`); Swiss as one column per round (a Swiss bye is a plain `name · bye` line, not a card). *(Review fix 2:)* a set nobody will play — a bye, a void set, or a waiting set whose feeders can only ever bring it one player or none (`unplayedSets`) — is not drawn: the player who goes through is already named in the next round's slot, nothing is pressable, and a round left empty gives up its column. Every set card: key · Bo · rematch mark, the state word (called / reported / disputed), both names and scores, the winner bold, the viewer's own sets outlined, a dot where the viewer has something to do. The tree scrolls sideways inside its section; the page does not. *(Review fix 8:)* the cards squeeze to fit the section (188 px, down to 140 px with a 20 px gap — `treeSize`), so an 8-player double elimination fits at 1280 px; a tree still wider (a phone, a big field) scrolls with the edge that has more faded, and redraws when the window is resized.
 - **The set drawer** (press a set): the card, round · best-of · rematch, the state line in the set-card word keys, the dispute note, *In Discord* (`brackets_discord_label`) when the set has a card, then the moves `setMoves` allows: a score picker offering only scores that finish the best-of; **Report** (a player in a ready/called set, or the reporter again); **Confirm** / **Dispute** (with a note) for the opponent; and for organisers Call, Let it stand (only when not playing in it), Decide (the picker), *{name} by forfeit*, Reset, with one **Reason** field sent as `reason`.
-- **Entrants**: before the start, organisers get the seeding list — a drag handle per row (pointer events; ArrowUp/ArrowDown on the handle), **Randomise** (client-side), and **Save seeding** / **Discard** once the order differs; Remove… (an inline reason field, sent as `reason`), Check in / Check out during check-in; **Add entrant** folded (a member picker for staff — `/api/ref/members` is staff-only — and a guest name for anyone who runs). Out entrants fold under **Out** (organisers only) with Restore. Once started: everyone in the bracket by seed (by place once complete), marks for DQ / dropped, placings, and for organisers each entrant's `waiting_on` line and DQ… / Drop… / Restore.
-- **Standings**: elimination — place (ordinal) and player once placed; round robin — place/rank, sets W–L, games W–L; Swiss adds opponents' win % and byes.
+- **Entrants**: before the start, organisers get the seeding list — a drag handle per row (pointer events; ArrowUp/ArrowDown on the handle), **Randomise** (client-side), and **Save seeding** / **Discard** once the order differs (*review fix 1:* an unsaved order keeps its moves when the poll lands, drops whoever left and puts a newcomer last, visible and draggable — `seedOrderWith`); Remove… (an inline reason field, sent as `reason`), Check in / Check out during check-in; **Add entrant** folded (a member picker for staff — `/api/ref/members` is staff-only — and a guest name for anyone who runs). Out entrants fold under **Out** (organisers only) with Restore. Once started: everyone in the bracket by seed (by place once complete — *review fix 6:* then the left column is the place and the seed is in the note), marks for DQ / dropped, placings, and for organisers each entrant's `waiting_on` line and DQ… / Drop… / Restore.
+- **Standings**: elimination — place (ordinal) and player once placed; round robin — place/rank, sets W–L, games W–L; Swiss adds opponents' win % and byes. *(Review fix 7:)* under 700 px one compact row per player — place · name · sets W–L, with games, opp. win % and byes in the note.
+- **Phones** *(review fixes 3 and 5)*: under 700 px every move a player or organiser presses (the head moves, score picks, Report, Confirm, Dispute, Decide, forfeits, Reset, Close, DQ… / Drop… / Remove… / Restore, Keep, the seeding tools, the drag handle, a results-grid cell, *your line*) is at least 40 px; an entrant row keeps seed · name on one line (the name ellipsised, only the note wraps) and puts its actions on their own line.
 - **Logs** (staff): `GET /api/actions?feature=core&q=brackets&details=1`, kept to `brackets.`/`web.brackets.` rows (of this tournament in a tournament view).
 - **Settings** (staff), folded: the mode switch first (`modeSwitch`, the ON · SHADOW · OFF control every page uses), the other `brackets_*` keys through `settingsPanel` (channel pickers read `#name · Category` through the shared helper), the word keys under a folded **Wording**.
-- **Live**: the open view re-reads every 15 s while the tab is visible (and on returning to it); each part redraws only when its data changed and nobody is typing in it; a read that fails says so in the status line and tries again; a refused move is shown in words in the page's notice (or inside the drawer).
+- **Live**: the open view re-reads every 15 s while the tab is visible (and on returning to it); each part redraws only when its data changed and nobody is typing in it (*review fix 12:* an entrant move repaints Entrants when it lands whatever has focus); a read that fails says so in the status line and tries again; a refused move is shown in words in the page's notice (or inside the drawer).
 
-**API glue (this layer):** `GET /api/brackets` adds `words` (the player-facing templates the page draws, `brackets_view.PAGE_WORDS`) and per row `entrant_cap` and `to_name`; `GET /api/brackets/{id}` adds `shadow` and `to_name`. The DQ / drop / remove / override / reset routes take an optional `reason` (whitespace folded, 300 characters) and, on success, call `brackets_thread.tell` — `brackets_dm_dq` / `_dropped` / `_removed` for the entrant, `brackets_dm_decided` (`set`, `result` = the move's words) and `brackets_dm_reset` (`set`) for both players, read before the move — always with `actor=` so an organiser is never told about their own move. `POST /api/brackets/{id}/move` is in `contract.json` (a contract entry may now carry `settings`, written before the request: mode `on`, `brackets_channel_id` = a forum the fixture has).
+**API glue (this layer):** `GET /api/brackets` adds `words` (the player-facing templates the page draws, `brackets_view.PAGE_WORDS`), `defaults` (*review fix 4:* a new tournament's options from the registry, `brackets_moves.option_defaults` — what `create` applies — so the form shows a TO who is not staff the same defaults) and per row `entrant_cap` and `to_name`; `GET /api/brackets/{id}` adds `shadow`, `to_name` and `rounds_to_play` (*review fix 9:* Swiss only — the stored rounds, else `swiss.rounds_for` of the field). Every answer and refusal of a bracket write goes through `api/names.site_words` (*review fix 11:* `<#id>` reads `#name`, a thread too). The DQ / drop / remove / override / reset routes take an optional `reason` (whitespace folded, 300 characters) and, on success, call `brackets_thread.tell` — `brackets_dm_dq` / `_dropped` / `_removed` for the entrant, `brackets_dm_decided` (`set`, `result` = the move's words) and `brackets_dm_reset` (`set`) for both players, read before the move — always with `actor=` so an organiser is never told about their own move. `POST /api/brackets/{id}/move` is in `contract.json` (a contract entry may now carry `settings`, written before the request: mode `on`, `brackets_channel_id` = a forum the fixture has).
 
-**Keys:** 10 new player-facing word keys (`BRACKETS_PAGE_WORDS`): `brackets_waiting_play`, `_called`, `_confirm`, `_opponent_confirms`, `_to_decides`, `_waits`, `_next_round`, `_done`, `_out` (each takes `{set}` and `{opponent}`) and `brackets_discord_label`. Every other player-facing word on the page is an existing layer-1/2 key (states, formats, the button labels, round words, set-card lines, the report and dispute words), so Discord and the site share one wording.
+**Keys:** *(review fixes: no key added; `PAGE_WORDS` gained the five existing `brackets_card_*_words` keys the head meta now reads.)* 10 new player-facing word keys (`BRACKETS_PAGE_WORDS`): `brackets_waiting_play`, `_called`, `_confirm`, `_opponent_confirms`, `_to_decides`, `_waits`, `_next_round`, `_done`, `_out` (each takes `{set}` and `{opponent}`) and `brackets_discord_label`. Every other player-facing word on the page is an existing layer-1/2 key (states, formats, the button labels, round words, set-card lines, the report and dispute words), so Discord and the site share one wording.
 
 ## G. Decisions beyond the brief
 
@@ -708,11 +709,12 @@ suffix; written once per tournament, card and reason a run); `would_dm`, `would_
     override / reset; Discord's Report form does DM `_decided`) — §H.
 65. **Let it stand only when the organiser is not playing in the set**: playing, their confirm is the opponent's.
 66. **The drop line is not drawn**: lines follow `winner_to` only; who drops where is in the set cards and Discord.
-67. **A void grand-final reset is not drawn**; the reset set shows while it may still be played.
+67. **A void grand-final reset is not drawn**; the reset set shows while it may still be played. *(Widened by review fix 2: no set nobody will play is drawn — decision 73.)*
 68. **The bracket, the head card and the list are full width** (`data-span="full"`); the two-column layout would squeeze
     the tree. The tree scrolls inside its section so the page never scrolls sideways.
-69. **Poll every 15 s while visible**, redraw a part only when its data changed and nobody types in it, and skip the
-    Entrants part while a seeding order is unsaved; a change of shape (state, sets appearing) reloads the view.
+69. **Poll every 15 s while visible**, redraw a part only when its data changed and nobody types in it, ~~and skip the
+    Entrants part while a seeding order is unsaved~~ *(never what ran — it redrew; review fix 1: the unsaved order is
+    reconciled on every redraw, decision 74)*; a change of shape (state, sets appearing) reloads the view.
 70. **A contract entry may carry `settings`**, written before its request in both halves (`test_contract.py`,
     `check.mjs`); the per-test rewind puts them back. Used only by the move route (decision 55 resolved).
 71. **The mock plays brackets for real** (`site/mock/brackets.mjs`): builds with byes and the pair-flip drops, the reset
@@ -722,6 +724,30 @@ suffix; written once per tournament, card and reason a run); `would_dm`, `would_
     field of 6.
 72. **The mock's `brackets_channel_id` default and its fixture ids are strings** — as numbers they lost precision
     (1076005097617760296 read as …300), which made the Settings row look changed on load.
+
+**Layer 3 review fixes (2026-10-07):**
+
+73. **A set is drawn only if someone will play it.** Byes and void sets are never cards, and neither is a waiting set
+    whose feeders can only bring it one player or none — predicted at the start, so a 5-player double elimination's
+    L1-1 (fed by W1-1's bye and W1-2) is never drawn as a card that later vanishes. Measured: against the Python engine
+    at 3, 5, 6, 7, 9, 12, 13 and 17 entrants in both formats, the prediction equals what ends `bye`/`void`.
+74. **An unsaved seeding order meets a fresh read by `seedOrderWith`**: its order kept, leavers dropped, joiners last.
+    The poll still redraws Entrants (a member's sign-up must show), except while a row is mid-drag.
+75. **The tree squeezes before it scrolls, and fades when it must scroll** (both of the review's options): squeezing to
+    140 px fits 6 columns at 1280; a phone cannot fit a tree at all, so the fade is what tells it more is there. The round
+    labels sit at the top of the tree and scroll with their column.
+76. **40 px on phones, not 44**: the brief's floor; the shared buttons are lifted by `brackets.css` for this page only
+    (`#dash .btn`, `.drawer .btn`, `.ask .btn` under 700 px), so no other page changes.
+77. **The create form's defaults ride on `GET /api/brackets`** rather than a new route, beside `words`; a blank
+    check-in box is not sent, so the server's own default applies (no code constant anywhere — checklist 33).
+78. **The head meta uses the starter card's option words**, so a staff edit of `brackets_card_*_words` changes Discord
+    and the site together; the finals best-of shows only when it differs from the Bo, as on the card.
+79. **`site_words` moved to `api/names.py`** (shared by sticky and brackets) and looks threads up with
+    `get_channel_or_thread`; a channel the guild does not have reads *a channel Discord no longer has (id)*. The mock
+    names a moved tournament's new thread after the tournament (its threads are not in the mock's channel list).
+80. **Compact standings are a second drawing of the same rows**, swapped by CSS at 700 px, not a second source.
+81. **Once complete, the place leads an entrant row** and the placement badge is not drawn beside it.
+82. **`check.mjs` restores a contract entry's settings in a `finally`**, read back from `GET /api/settings` first.
 
 
 ## H. What is NOT built (and is not in L2/L3 either unless the owner asks)
@@ -741,9 +767,9 @@ reset ~~(layer 3 — §F)~~ *(built by layer 3)*. A forum channel as the parent 
 **Not built in layer 3:** the **Complete** tie-order picker on the site (Complete places a round robin or Swiss tie as
 shared, as on Discord); changing the organiser (`to_user_id`) from the page; editing a set's best-of; a DM when an
 organiser's plain Report decides someone else's set from the site (decision 64); a time-zone picker on the page (times
-are the viewer's device zone, as the tracker reads by default); rendering `<#id>` mentions inside a move's sentence
-(the Move answer shows the raw `<#…>`); the `/settings` and Settings pages showing the ten new keys were not opened in a
-browser.
+are the viewer's device zone, as the tracker reads by default); ~~rendering `<#id>` mentions inside a move's sentence
+(the Move answer shows the raw `<#…>`)~~ *(built by the layer-3 review fixes, decision 79)*; the `/settings` and Settings
+pages showing the ten new keys were not opened in a browser.
 
 ## Review fixes 2026-10-07
 
@@ -771,6 +797,31 @@ failing" = run against the code before the fix and watched fail).
 by playing it out, they are still 9 — the one W1 loser meets a bye in L1 and is first eliminated in L2. So W2 and L2
 playing Bo3 under "top 8" was correct, and L3/W3 on Bo5 is what the old and the new rule both give. The pin asserts
 that, and the property test (`…_is_who_is_still_unplaced…`) is what catches the real defect, 2(b), at every size.
+
+## Review fixes (layer 3) 2026-10-07
+
+An independent review of layer 3 used the page in headless Chrome at 375×812 and found no blocker. Each finding, what
+changed, and what pins it ("seen failing" = the pin run against `498f44ee`, the code before the fix, in a throwaway
+worktree, and watched fail; "harness" = measured in headless Chrome against the branch's mock, not committed).
+
+| # | Finding | What changed | Pinned by |
+|---|---|---|---|
+| 1 | An unsaved seeding order hid a newcomer; Save refused with no visible cause | `seedOrderWith` on every redraw, drop, key move, Randomise and Save; §G 69 struck, decision 74 | `site/mock/brackets.test.mjs` (*an unsaved order keeps its moves and puts a new entrant last*, *…drops whoever left*, *…names everyone in exactly once*); harness: on #14 a drag, a guest added behind the page, the poll → 7 rows with Newcomer last, Save → *Seeding for Third Strike Open is saved.* and the saved order matches |
+| 2 | A bye was a card that opened an empty drawer; void sets drawn | `unplayedSets`; `eliminationLayout` draws none of them, compacts empty rounds and lifts each side to its first row; a Swiss bye is a plain line; `setCard` treats `bye` as quiet | `brackets.test.mjs`: 5, 6, 7, 12 entrants × single/double × start / part played / played out (no bye or void drawn, every played set drawn, no empty column, no shared spot, lines between drawn sets only), the 5-player single and double cases by key, and *what the start leaves out is exactly what turns out a bye or void* at 3, 5, 6, 7, 9, 12, 13 (measured on `498f44ee`'s `eliminationLayout`: 3, 2, 1, 4 bye/void cards for single at 5, 6, 7, 12 and 4, 2, 1, 4 for double). Harness: a 5-player double elimination made on the mock draws W1-2, W2-1/2, W3-1, L2-1, L3-1, L4-1, G1-1, G2-1 — no W1 bye, no L1 |
+| 3 | Phone taps under 32 px | `brackets.css` under 700 px: every move 40 px | harness at 375 (all measured W×H): head moves 40 tall; score picks 56×40; Report 75×40; Confirm 84×40; Dispute 81×40; Decide 62×40; Let it stand 85×40; Call 44×40; forfeits 99–130×40; Reset 54×40; Close 55×40; DQ… 50×40; Drop… 61×40; DQ 40×40; Keep 51×40; Remove… 79×40; Randomise / Save seeding / Discard 86 / 99 / 66 ×40; drag handle 40×40; results-grid cell 40×40; *your line* 112×40 |
+| 4 | A TO who is not staff got code constants in New tournament | `GET /api/brackets` `defaults` (`brackets_moves.option_defaults`, shared with `create`); the form reads only that; a blank check-in is not sent | `tests/api/tools/test_brackets.py::test_the_list_carries_the_registry_defaults_a_new_tournament_starts_with` (read as the TO, not staff; seen failing) |
+| 5 | Entrant rows wrapped raggedly at 375 | under 700 px: seed · name on one line (ellipsised), the note wraps, actions on their own line | harness: every #14 and #9 row is one 20 px name line with its actions on the line below (rows 108–126 px; 126 where the note wraps) |
+| 6 | Complete tournaments printed the seed beside a place order | `entrantLine({ placed })`: the place leads, `seed n` in the note, no duplicate badge | harness: #13 reads 1st Casey *seed 1* · 2nd Juno *seed 8 · guest* · 3rd Nick *seed 2* … |
+| 7 | Standings stacked 2–4 lines per player on a phone | `compactStandings` under 700 px | harness: #10 rows *1st Moth / games 2–1 / 1–0*, 60–61 px each; #13 41 px; the table still shows at 1280 |
+| 8 | 8-player DE clipped at 1280 with a thin scrollbar as the only hint | squeeze to fit (`treeSize`) AND a fade when it still overflows (decision 75); redraw on resize | `brackets.test.mjs` (*fits keeps full size*, *943 px squeezes to fit*, *a phone never squeezes under the floor*); harness: #9 at 1280 → 943 px of room, 140 px cards, scrollWidth = clientWidth (no clip); at 1600 → 188 px cards; resized 1600→1280 → redrawn at 140; at 375 → 140 px cards, scrolls, `data-more="right"` |
+| 9 | Swiss meta read "auto rounds" from a split string | `rounds_to_play` on the view, `brackets_card_rounds_words` | `tests/api/tools/test_brackets.py::test_a_swiss_says_the_rounds_the_engine_will_play` (5 entrants → 3; stored 2 → 2 after the start; single → null; seen failing); harness: #11 reads *Swiss · Bo3 · 3 rounds* |
+| 10 | `check.mjs` never restored an entry's settings | read first, PUT back in a `finally` | `node site/mock/check.mjs` ok (345 routes); not a failing-first pin — the move entry is still last |
+| 11 | `<#id>` showed raw on the site | `site_words` moved to `api/names.py`, threads too, every bracket answer and refusal; the mock the same | `tests/api/tools/test_brackets.py::test_a_channel_in_a_bracket_sentence_reads_as_its_name_on_the_site`, `tests/api/test_names.py::test_site_words_names_a_channel_or_a_thread_and_says_when_one_is_gone` (both seen failing); §H item struck |
+| 12 | The inline reason row stayed stale after a DQ when focus stayed in it (Safari) | `entrantMove` repaints Entrants with `force` after any entrant move lands | harness: on #9 focus held in Dax's reason box, DQ pressed by `click()` (focus does not move) → the row reads out with only Restore |
+
+**Deltas:** registry keys 1075 → **1075** (none added; `PAGE_WORDS` +5 existing keys); routes 345 → **345**; `GET
+/api/brackets` + `defaults`; `GET /api/brackets/{id}` + `rounds_to_play`; `contract.json` reads `defaults`,
+`rounds_to_play` and the sets' `loser_to` (the page reads it now).
 
 ## Review fixes (layer 2) 2026-10-07
 
@@ -802,6 +853,19 @@ watched fail).
 `BRACKETS_KEYS`, `labels.js`); routes +1 (`POST /api/brackets/{id}/move`, real and mock; not in `contract.json`,
 decision 55); log kinds +2 (`brackets.thread_moved`, `web.brackets.thread_moved`, IMPORTANT); `would_dm`/`dm_failed`
 gained `text`, `reason` (and `why`); `thread_failed` can carry `error`.
+
+## Gate — layer 3 review fixes (2026-10-07, branch `brackets-site`, code at `ac950d33`)
+
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **12556 passed, 1 skipped** (+4 on the layer-3 gate's 12552).
+- `python -m ruff check .`: all checks passed.
+- `MOCK_PORT=8818 node site/mock/check.mjs` against the branch's own mock: *ok - 26 pages, 345 routes, 246 core settings,
+  all keys present*.
+- Every `site/mock/*.test.mjs` (14): exit 0.
+- `scripts/ci-local.ps1`: **CI MIRROR GREEN: 16 step(s) passed in 203s** (code at `ac950d33`).
+- Browser: headless Chrome (CDP, device emulation), the mock on 8818 — 375×812 for #14, #9 (staff, and the member Moth
+  through `?as=member`), #10, #11, #13 and a 5-player double elimination made on the page's API; 1280 and 1600 wide for
+  #9 and #13. Page width 375 = scrollWidth on every page at 375 (no sideways scroll). Measured figures are in the table
+  above. No console errors or exceptions.
 
 ## Gate — layer 3 (2026-10-07, branch `brackets-site`)
 
@@ -858,6 +922,15 @@ site/mock/check.mjs`: *ok - 25 pages, 344 routes, 171 core settings, all keys pr
 - Every `site/mock/*.test.mjs` (13): exit 0.
 
 ## What was NOT verified
+
+**Layer 3 review fixes:**
+
+- Phone checks are Chrome's device emulation, not a phone: Safari (the focus case of fix 12 is simulated with
+  `click()`, which does not move focus), real touch drags and iOS's own tap handling were not tried.
+- The drag in the seeding check was the keyboard path; a pointer drag at 375 was not repeated.
+- A Swiss bye line was not seen in a browser: the mock's Swiss is 6 players, so it has no bye.
+- The `/settings` and Settings pages were still not opened to look at the brackets keys.
+- The resize redraw was measured on an emulated window resize, not by dragging a real window edge.
 
 **Layer 2:**
 
