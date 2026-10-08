@@ -757,6 +757,23 @@ async function checkPostsModes() {
   }
 }
 
+function refusedConnection(error) {
+  const code = error?.cause?.code || error?.code;
+  return ['ECONNREFUSED', 'ECONNRESET', 'EHOSTUNREACH', 'ETIMEDOUT'].includes(code);
+}
+
+function die(error) {
+  if (refusedConnection(error)) {
+    process.stderr.write(`check: no mock is answering at ${BASE} - start node site/mock/server.mjs (or set MOCK_PORT) and run again\n`);
+  }
+  process.stderr.write(`${error.stack}\n`);
+  if (error.cause?.stack) process.stderr.write(`cause: ${error.cause.stack}\n`);
+  process.exit(1);
+}
+
+process.on('uncaughtException', die);
+await fetch(`${BASE}/api/mock/whoami`).catch(die);
+
 process.stdout.write(`check: ${BASE} against ${HERE}contract.json\n`);
 await checkPages();
 await checkGuard();

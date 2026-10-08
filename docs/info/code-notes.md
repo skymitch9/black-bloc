@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-08 — one section APPENDED, nothing re-keyed**: *The deploy gate's own mock* (branch `deploy-gate-mock`, off `main` `c103bf53`); keyed by NAME. Before that:
 > **2026-10-07 — one section APPENDED, nothing re-keyed**: *Pools into a bracket* (branch `brackets-pools`, off `main` `3a18e678`); keyed by NAME. Before that:
 > **2026-10-07 — the layer-3 brackets section AMENDED in place, nothing re-keyed**: *review fixes (layer 3)* (branch `brackets-site`, `ac950d33`); superseded rows struck, new rows keyed by NAME. Before that:
 > **2026-10-07 — one section APPENDED, nothing re-keyed**: *Tournament brackets, layer 3 — the site* (branch `brackets-site`, off `main` `7850359b`); keyed by NAME. Before that:
@@ -10274,3 +10275,12 @@ Design: [`brackets-design.md`](brackets-design.md) §E (as built) and §G 27–4
 - `brackets_view.pool_rows` — `tied` only for a finished pool; `advancing` is the leaders across a provisional tie, the cut once finished, and only those in the final after Advance (so an empty list after Advance means nobody is drawn through). `bracket-layout.js` `poolTable` trusts `advancing` except on a finished tie, where the shown order decides.
 - `brackets_moves.losers_blanked` — `advance_losers_from` is stored only for a double final; it reports True (the reply says so) only when the organiser gave a value or one was stored, so a registry default dropped on a single says nothing.
 - `tests/api/test_contract.py` / `site/mock/check.mjs` `then` — the inverse request that puts a single-use seed back after its route is checked (Advance ↔ Back to pools).
+
+## The deploy gate's own mock — `scripts/site-gate.ps1`, `site/mock/server.mjs`, `site/mock/check.mjs` (incident 2026-10-07)
+
+- `site-gate.ps1` `Get-PortHolders` — `netstat -ano` (TCP and TCPv6, LISTENING) unioned with `Get-NetTCPConnection`: at v213 a stale mock held 8788 and `Get-NetTCPConnection` did not list it. Holders are stopped and named (pid, start time, command line); `-LeaveHolders` names them and lets the nonce check refuse instead.
+- `site-gate.ps1` — the other `site/mock/server.mjs` node processes (`Win32_Process` command line) are WARNED about, never stopped: they may be another session's dev mock on another port.
+- `site-gate.ps1` nonce check — the gate sets `MOCK_NONCE` (a fresh guid) for its mock only and polls `/api/mock/whoami` up to 15 s; `check.mjs` runs only when the nonce matches. A different (or absent) nonce while something answers is a foreign listener: REFUSED naming the netstat holder. The mock's stdout/stderr go to `%TEMP%/black-bloc-gate/mock-<port>.{out,err}.log`, and the tail is printed when it exited. `$mock.Handle` is read once so PS 5.1 reports `ExitCode`.
+- `server.mjs` `NONCE` / `/api/mock/whoami` — answered before static and `ROUTES`, so it is not a contract route; `x-mock-nonce` rides every response when a nonce was given. `server.on('error')` exits 1 with *could not listen on <port>: EADDRINUSE* instead of an unhandled stack.
+- `check.mjs` `die` — a refused connection (probe of `/api/mock/whoami` first, and any later `uncaughtException`) prints *no mock is answering at <url>* as its first line, then the stack and its cause.
+- `deploy.ps1` `-GateOnly` — every gate, then exit 0 before `release.json`, the push and `flyctl`.

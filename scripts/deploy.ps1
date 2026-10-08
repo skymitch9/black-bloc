@@ -5,6 +5,7 @@
 # before the push: a refused gate must not leave a "Release vN: release.json" commit
 # behind (three of them had to be dropped before v111 would go). Nothing in the gate
 # reads the file, and the push still carries it, so it ships inside the image.
+param([switch]$GateOnly)
 $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
 Set-Location $repo
@@ -58,16 +59,7 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
         cmd /c "node --input-type=module --check < `"$($js.FullName)`""
         if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $($js.Name) does not parse as an ES module." }
     }
-    Get-NetTCPConnection -LocalPort 8788 -ErrorAction SilentlyContinue |
-        Select-Object -ExpandProperty OwningProcess -Unique |
-        ForEach-Object { try { Stop-Process -Id $_ -Force -Confirm:$false } catch {} }
-    Start-Sleep 1
-    $mock = Start-Process -FilePath node -ArgumentList 'site/mock/server.mjs' -PassThru -WindowStyle Hidden
-    Start-Sleep 2
-    node site/mock/check.mjs
-    $contract = $LASTEXITCODE
-    try { Stop-Process -Id $mock.Id -Force -Confirm:$false -ErrorAction Stop } catch {}
-    if ($contract -ne 0) { Write-Error "REFUSED: check.mjs is not green." }
+    & "$PSScriptRoot/site-gate.ps1"
     node site/mock/discordmd.test.mjs
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the preview renderer's fixtures are not green." }
     node site/mock/labels.test.mjs
@@ -90,6 +82,11 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the shared search/filter fixtures are not green." }
     node site/mock/fieldaids.test.mjs
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the shared field aids' fixtures are not green." }
+}
+
+if ($GateOnly) {
+    Write-Host "GATE ONLY: every gate passed; nothing was committed, pushed or deployed."
+    exit 0
 }
 
 # Every gate has passed, so this is the last thing that can add a commit.
