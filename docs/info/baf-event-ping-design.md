@@ -212,7 +212,7 @@ in words (`no_baf_question`).
 
 | Door | What it is |
 |---|---|
-| Thread controls | three buttons in a row of their own (`marathon:controls:{id}:baf:{follow|yes|no}`), the one that stands lit and not pressable; **a fourth, *Clear the answer* (`…:baf:clear`), only while an answer to the question is stored**; the follow button reads *BaF event: follow the schedule (answer)* or, while an answer stands, *BaF event: follow the answer (answer)* — the answer in brackets is what following gives right now; under the ping switch's line, one line for the event and one per show-day for its ping |
+| ~~Thread controls~~ | ~~three buttons in a row of their own (`marathon:controls:{id}:baf:{follow\|yes\|no}`), the one that stands lit and not pressable; **a fourth, *Clear the answer* (`…:baf:clear`), only while an answer to the question is stored**; the follow button reads *BaF event: follow the schedule (answer)* or, while an answer stands, *BaF event: follow the answer (answer)* — the answer in brackets is what following gives right now; under the ping switch's line, one line for the event and one per show-day for its ping~~ *(superseded 2026-10-08 — D2: ONE button carrying the reading and its one reverse; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))* |
 | Marathon drawer ▸ Settings | *BaF event*: *Follow the schedule (what following gives)* — or *Follow the answer (…)* while a Leads answer stands — / Yes / No, the same lines under it, and a *Clear the answer* button while an answer stands (`ask` is `answered`) |
 | `PATCH /api/marathons/{id}` | `baf_event`: `"follow"` / `"yes"` / `"no"` (or null / true / false); anything else is refused in words (`bad_baf_event`). **`baf_event_answer`: `"clear"`**; anything else is refused in words (`bad_baf_event_answer`) |
 | The question's buttons | yes / no, for the whole event |
@@ -350,7 +350,7 @@ marathon's, so it is drawn once and no day chip repeats it.
 | Registry keys | 867 | **906** — five decisions (`marathon_baf_event_names`, `_min_runs` 1–50, `_ask_percent` 1–100, `_ping_minutes` 1–1440, `_ask_role_id`) and thirty-four words (`marathon_baf_event_*`, `marathon_controls_baf_*`), all in the Marathons group. The build made 897; the review fixes added nine words: `_reason_leads`, `_ping_unconfirmed`, `_ping_no_run`, `_ping_nobody`, `_ask_pending`, `_ask_failed`, `_ask_nowhere`, `_day_set_said`, `_day_same_said`, and re-worded the defaults of `_ask_text`, `_reason_staff`, `_reason_share`, `_ping_none` |
 | Registry keys (review fixes of the whole event, 2026-10-06) | 931 | **937** — RENAMED so a value stored before the re-wording is ignored at load: `marathon_baf_event_ask_text` → `marathon_baf_event_question`, `marathon_baf_event_line` → `marathon_baf_event_answer_line`, `marathon_baf_event_reason_leads` → `marathon_baf_event_reason_answered`, `marathon_baf_event_ping_no_run` → `marathon_baf_event_ping_no_baf_run`. ADDED: `marathon_baf_event_reason_acted`, `marathon_baf_event_cleared`, `marathon_baf_event_cleared_said`, `marathon_baf_event_no_answer_said`, `marathon_controls_baf_follow_answer`, `marathon_controls_baf_clear`. `marathon_controls_baf_follow` now takes `{answer}` |
 | Log kinds (the same pass) | — | **+1**: routine `marathon.baf_event_no_baf_run`; `marathon.baf_event_no_ping` stays IMPORTANT for `nobody_to_name` and `marks_spent`; `marathon.baf_event_set` carries `cleared: true` when the answer was cleared |
-| Thread controls (the same pass) | 10 | **10 or 11**: the BaF row holds three buttons, four while an answer to the question is stored |
+| ~~Thread controls (the same pass)~~ | ~~10~~ | ~~**10 or 11**: the BaF row holds three buttons, four while an answer to the question is stored~~ *(superseded 2026-10-08 — D2: the BaF event is one button; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))* |
 | Registry keys (whole event, 2026-10-06) | 932 | **931** — `marathon_baf_event_day_line` added; `marathon_baf_event_day_set_said` and `marathon_baf_event_day_same_said` retired (a stored value is ignored at load, like any key the registry no longer has); defaults re-worded: `_ask_text`, `_line`, `_reason_leads`, `_ping_no_run` |
 | Log kinds | — | routine `marathon.baf_event_set` (`web.` from the site; `day` when it is one day's answer), `marathon.baf_event_asked`; IMPORTANT `marathon.baf_event_no_ping`, `marathon.baf_event_ask_failed` (by suffix; `try`, `gave_up`), **`marathon.baf_event_ping_unconfirmed`** (review fix 3) |
 | Role-ping reasons | 11 | **13**: `baf_event_day`, `baf_event_pinged` |
@@ -400,7 +400,7 @@ marathon's, so it is drawn once and no day chip repeats it.
     line per show-day only where the day's own ping rule governs. A day's line used to repeat the answer; the
     answer is the marathon's now, and on a marathon that is not a BaF event the ping switch's line already says
     what every day does.
-12. **The switch on the thread is three buttons, not one cycling button** — each carries its target.
+12. ~~**The switch on the thread is three buttons, not one cycling button** — each carries its target.~~ *(superseded 2026-10-08 — D2: one button, the reading and its one reverse; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 13. **`/event`'s marathon card has no BaF event move**; the thread controls are the Discord door.
 14. **The mock reads a marathon as one show-day** and seeds marathon 60 with a staff *yes* so the marks can be seen.
 
@@ -630,8 +630,8 @@ Row 4 is the BaF row; five is Discord's limit for a row.
 
 | State | Row 4 |
 |---|---|
-| No answer stored (the switch on follow, yes or no) | **3**: *BaF event: follow the schedule (what following gives)* · *BaF event: yes* · *BaF event: no* — the standing one lit and not pressable |
-| An answer to the question is stored (whatever the switch says) | **4**: *BaF event: follow the answer (the answer)* · *BaF event: yes* · *BaF event: no* · *Clear the answer* |
+| ~~No answer stored (the switch on follow, yes or no)~~ | ~~**3**: *BaF event: follow the schedule (what following gives)* · *BaF event: yes* · *BaF event: no* — the standing one lit and not pressable~~ *(superseded 2026-10-08 — D2; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))* |
+| ~~An answer to the question is stored (whatever the switch says)~~ | ~~**4**: *BaF event: follow the answer (the answer)* · *BaF event: yes* · *BaF event: no* · *Clear the answer*~~ *(superseded 2026-10-08 — D2; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))* |
 
 ### Decisions made in this pass
 

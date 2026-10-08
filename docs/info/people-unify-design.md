@@ -100,9 +100,9 @@ announcements***) and every help text say *BaF announcements*. Behaviour unchang
 
 ### 6. Thread controls — six buttons, the old ids answer in words
 
-- The controls are: Marathon event · **BaF run/host events** · Spotlight · Auto-highlight · Ping the marathon role · **BaF
+- ~~The controls are: Marathon event · **BaF run/host events** · Spotlight · Auto-highlight · Ping the marathon role · **BaF
   announcements**. `marathon_controls_runs_on/_off` defaults reword to **BaF run/host events: on · turn off** /
-  **off · turn on**.
+  **off · turn on**.~~ *(superseded 2026-10-08 — D1, D3, D4, D2, D5: the controls are Runner announcements · Host announcements · Ping the marathon role · Spotlight follows the schedule · Marathon event, then the tracker link and one BaF event button; after the show the link and Archive it; [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md))*
 - **Already-posted messages are EDITED on the first tick after boot** (`sync_controls` → `refresh_controls`: the render
   cache is empty after a boot, so the pinned message is edited once to six buttons; never re-sent). Tested:
   `test_after_the_upgrade_the_posted_controls_and_runner_post_are_edited_not_resent` now asserts six buttons and no
