@@ -473,3 +473,15 @@ def test_host_announcements_follow_their_own_setting():
     )
     assert (found.runners_on, found.hosts_on, found.opted) == (True, True, frozenset({9001}))
     assert found.plain(9002) and not found.plain(9001)
+
+
+def test_a_long_name_is_shortened_in_a_button_label_and_the_move_word_is_kept():
+    name = "Somebody With A Very Long Display Name That Goes On And On For Ages XY"
+    assert len(name) == 70
+
+    said = ma.named_label("Don't announce {name}", name)
+
+    assert len(said) == 80 and said.startswith("Don't announce Somebody") and said.endswith("…")
+    assert ma.named_label("{name}: back to the default", name).endswith("…: back to the default")
+    assert ma.named_label("Announce {name}", "Sky") == "Announce Sky"
+    assert ma.named_label("Announce {name}", name) == f"Announce {name}"

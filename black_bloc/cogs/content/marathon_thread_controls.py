@@ -192,7 +192,7 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
     """`(content, controls, labels)` from the row, the channel row and the keys."""
     _row, state = await state_for(bot, guild, marathon)
     rows = await runs_of(bot.db, marathon["id"])
-    over = mt.is_over(marathon, now_for(bot))
+    over = mtc.after_show(marathon, now_for(bot))
     follows = ms.mode_of(marathon) == ms.FOLLOW
     shown_baf, fields = (None, {}) if over else baf_button(bot, guild, marathon, rows)
     controls = mtc.controls(

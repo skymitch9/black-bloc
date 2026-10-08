@@ -461,6 +461,17 @@ def label(text: Any, limit: int = LABEL_LIMIT) -> str:
     return str(text or "").strip()[:limit] or "…"
 
 
+def named_label(template: Any, name: Any, limit: int = LABEL_LIMIT) -> str:
+    """Past the limit the name is shortened with an ellipsis, never the move's words."""
+    name = str(name or "")
+    said = mt.render(template, "{name}", name=name).text.strip()
+    over = len(said) - limit
+    if over <= 0 or not name:
+        return label(said, limit)
+    keep = max(1, len(name) - over - 1)
+    return label(mt.render(template, "{name}", name=name[:keep].rstrip() + "…").text, limit)
+
+
 def run_move(found: Policy, row: Any, person: dict[str, Any]) -> str:
     """The one move a person's answer for this run can take now: back to the default once it
     has an answer, else the opposite of what the defaults say."""
@@ -501,7 +512,7 @@ def moves(marathon_id: Any, row: Any, found: Policy, labels: dict[str, str]) -> 
                         user_id=int(one["user_id"]),
                         to=to,
                     ),
-                    label(mt.render(labels[to], "{name}", name=name).text),
+                    named_label(labels[to], name),
                     to,
                     int(one["user_id"]),
                 )

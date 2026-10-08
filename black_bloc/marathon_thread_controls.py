@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple
 
+from . import marathon as mt
 from . import marathon_events as me
 from . import marathon_spotlight as ms
+from .golive import parse_ts
 from .marathon_baf_event import (
     BY_LEADS,
     BY_NAME,
@@ -181,6 +183,12 @@ def controls(
     )
 
 
+def after_show(marathon: Any, now: Any) -> bool:
+    """Only a known end puts the controls in their after-show shape."""
+    ends = parse_ts(mt._cell(marathon, "ends_at"))
+    return ends is not None and now > ends
+
+
 def tracker_url(origin: Any, marathon_id: Any) -> str | None:
     """The marathon's Marathon tracker page on the site; None while the site has no address."""
     base = str(origin or "").strip().rstrip("/")
@@ -203,6 +211,7 @@ __all__ = [
     "YES",
     "baf_control",
     "baf_reason",
+    "after_show",
     "controls",
     "custom_id",
     "label",

@@ -1049,3 +1049,12 @@ async def test_the_host_events_retired_answer_is_a_key(bot, cog):
     answered = await pressed(bot, marathon, "hostevents", "on")
 
     assert not answered.ok and answered.message == "Host events: see the drawer."
+
+
+async def test_a_started_marathon_with_no_end_keeps_its_switches(bot, cog):
+    marathon = await tracked_marathon(bot, cog, channel=await quiet_row(bot))
+    await update_marathon(bot.db, marathon["id"], starts_at=at(-600), ends_at=None)
+
+    await controls.refresh_controls(bot, bot.guild, marathon["id"])
+
+    assert "Archive it" not in labels(controls_in(the_thread(bot))[0])

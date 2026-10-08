@@ -170,3 +170,13 @@ def test_a_spotlight_this_marathon_does_not_follow_reads_as_running_not_as_its_o
     assert mtc.spot_line("until", True) == mtc.LINE_UNTIL
     assert mtc.spot_line("kept", False) == mtc.LINE_KEPT
     assert mtc.spot_line("off", False) is None
+
+
+def test_no_known_end_is_never_after_the_show():
+    from datetime import UTC, datetime
+
+    now = datetime(2027, 1, 4, 18, 0, tzinfo=UTC)
+    started = {"starts_at": "2027-01-01T00:00:00+00:00", "ends_at": None}
+    assert mtc.after_show(started, now) is False
+    assert mtc.after_show({**started, "ends_at": "2027-01-02T00:00:00+00:00"}, now) is True
+    assert mtc.after_show({**started, "ends_at": "2027-01-05T00:00:00+00:00"}, now) is False

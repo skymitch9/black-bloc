@@ -526,7 +526,7 @@ def announce_moves_for(
     if ma.shown(run):
         moves.append((RUN_ANSWER, ma.run_move(found, run, person)))
     for action, to in moves:
-        said = mt.render(labels[to], "{name}", name=name).text
+        said = ma.named_label(labels[to], name)
         made.append(PeopleMove(action, label=said, user_id=person["user_id"], to=to, row=3))
     return made
 
