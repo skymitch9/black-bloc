@@ -299,3 +299,48 @@ async def test_an_organiser_reporting_a_guests_set_decides_it_and_the_member_is_
     assert press.said == ["W1-1 is final: Ada wins 2–0."]
     told = [target for kind, _, target, _ in await rows(bot.db) if kind == "brackets.would_dm"]
     assert told == [ADA]
+
+
+async def test_no_set_form_opens_while_the_mode_is_off(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, format="single", best_of_finals=3)
+    await moved(bot, guild, tid, sets.report, "W1-1", 2, 0, actor=ADA)
+    await bot.store.set(GUILD, "brackets_mode", "off")
+    off = moves.said(bot.store, GUILD, "brackets_off_said")
+
+    for user_id, action in (
+        (ADA, cards.REPORT),
+        (BEA, cards.DISPUTE),
+        (TO, cards.DECIDE),
+        (TO, cards.RESET),
+    ):
+        press = pressing(bot, user_id)
+        await buttons_.set_pressed(press, tid, "W1-1", action)
+        assert press.modal is None, action
+        assert press.said == [off], action
+
+
+async def test_an_organiser_deciding_their_own_set_is_not_told_about_it(bot, guild):
+    tid = await running(bot, guild, TO, BEA, format="single", best_of_finals=3)
+    press = pressing(bot, TO)
+    await buttons_.set_pressed(press, tid, "W1-1", cards.DECIDE)
+    fill(press.modal, score_a="2", score_b="0", reason="")
+
+    await press.modal.on_submit(press)
+
+    told = [target for kind, _, target, _ in await rows(bot.db) if kind == "brackets.would_dm"]
+    assert told == [BEA]
+
+
+async def test_leave_from_the_starter_card_works_while_seeding(bot, guild):
+    tid = await created(bot, guild)
+    await moved(bot, guild, tid, moves.open_signups)
+    await moved(bot, guild, tid, people.join, actor=ADA)
+    await moved(bot, guild, tid, moves.close_signups)
+    starter = the_thread(bot).messages[0]
+    assert starter.labels[0] == "Leave"
+    press = pressing(bot, ADA)
+
+    await buttons_.starter_pressed(press, tid, cards.LEAVE)
+
+    assert (await store_.entrant_of(bot.db, tid, ADA))["dropped"]
+    assert starter.labels == ["Open the bracket"]

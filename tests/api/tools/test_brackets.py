@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+
+import httpx
 import pytest
 
 STAFFER = 7
@@ -224,3 +227,68 @@ async def test_every_website_write_lets_the_thread_catch_up_and_a_refusal_does_n
 
     assert refused.status_code == 403
     assert followed == [(tid, "create", True), (tid, "open_signups", True)]
+
+
+async def test_a_website_write_answers_before_the_thread_catches_up(
+    client, sign_in, wf, web, people, monkeypatch
+):
+    from black_bloc import brackets_thread
+
+    gate = asyncio.Event()
+    caught_up = []
+
+    async def follow(bot, guild, tournament_id, outcome, *, move=None):
+        await gate.wait()
+        caught_up.append(move)
+
+    monkeypatch.setattr(brackets_thread, "follow", follow)
+    organiser = as_(client, sign_in, wf, TO)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=organiser.app),
+        base_url=str(organiser.base_url),
+        cookies=dict(organiser.cookies.items()),
+        headers=dict(organiser.headers),
+    ) as fast:
+        answered = await asyncio.wait_for(fast.post("/api/brackets", json={"name": "X"}), 5)
+
+    assert answered.status_code == 200 and caught_up == []
+    gate.set()
+    await asyncio.gather(*brackets_thread.following(web))
+    assert caught_up == ["create"]
+
+
+async def test_a_follow_that_fails_never_reaches_the_request(
+    client, sign_in, wf, web, people, monkeypatch
+):
+    from black_bloc import brackets_thread
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("discord is down")
+
+    monkeypatch.setattr(brackets_thread, "sync", broken)
+    organiser = as_(client, sign_in, wf, TO)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=organiser.app),
+        base_url=str(organiser.base_url),
+        cookies=dict(organiser.cookies.items()),
+        headers=dict(organiser.headers),
+    ) as fast:
+        answered = await fast.post("/api/brackets", json={"name": "X"})
+    await asyncio.gather(*brackets_thread.following(web))
+
+    assert answered.status_code == 200
+
+
+async def test_the_move_into_knuck_up_is_staff_only_and_refused_in_words_while_shadow(
+    client, sign_in, wf, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser)["id"]
+
+    refused = organiser.post(f"/api/brackets/{tid}/move", json={})
+    assert refused.status_code == 403 and "staff" in refused.json()["message"]
+
+    shadowed = as_(client, sign_in, wf, STAFFER).post(f"/api/brackets/{tid}/move", json={})
+    assert shadowed.status_code == 409
+    assert shadowed.json()["error"] == "not_on"
+    assert "brackets_mode is shadow" in shadowed.json()["message"]

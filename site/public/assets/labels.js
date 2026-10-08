@@ -634,6 +634,7 @@ export const LABELS = {
   brackets_dm_reset: "The DM both players get when an organiser resets their set",
   brackets_dm_reason: "The line under an organiser's DM when they gave a reason",
   brackets_start_ping: "Posted in a tournament's thread at the start when brackets_ping_role_id is picked",
+  brackets_moved_line: "The line a rehearsal thread keeps once staff move its tournament into #knuck-up",
   structure_backup_mode: "Whether the server's structure is saved, and which channel its notice uses",
   structure_backup_hour: "What hour the daily structure snapshot is taken",
   structure_backup_keep: "How many structure snapshots are kept",

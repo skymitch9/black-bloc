@@ -46,10 +46,25 @@ def not_found():
     return discord.NotFound(Response(404), "gone")
 
 
+def server_error():
+    return discord.HTTPException(Response(503), "upstream connect error")
+
+
+def no_access():
+    return discord.Forbidden(Response(403), {"code": 50001, "message": "Missing Access"})
+
+
+def system_message():
+    return discord.HTTPException(
+        Response(400), {"code": 50021, "message": "Cannot execute action on a system message"}
+    )
+
+
 class FakeMessage:
     def __init__(self, channel, content=None, **kwargs):
         self.id = next(IDS)
         self.channel = channel
+        self.type = discord.MessageType.default
         self.author = SimpleNamespace(id=BOT_ID)
         self.pinned = False
         self.edits = 0
@@ -89,6 +104,10 @@ class FakePartial:
         found = self.channel.find(self.id)
         if found is None:
             raise not_found()
+        if found.type != discord.MessageType.default:
+            raise system_message()
+        if found.id in self.channel.broken:
+            raise self.channel.broken[found.id]
         found.edits += 1
         found.apply(**kwargs)
         return found
@@ -102,6 +121,8 @@ class FakeThread:
         self.archived = False
         self.messages: list[FakeMessage] = []
         self.type = discord.ChannelType.public_thread
+        self.broken: dict[int, Exception] = {}
+        self.fetches = 0
 
     def find(self, message_id):
         return next((one for one in self.messages if one.id == int(message_id)), None)
@@ -113,6 +134,20 @@ class FakeThread:
 
     def get_partial_message(self, message_id):
         return FakePartial(self, message_id)
+
+    async def fetch_message(self, message_id):
+        self.fetches += 1
+        found = self.find(message_id)
+        if found is None:
+            raise not_found()
+        return found
+
+    def notice(self, after, kind=discord.MessageType.pins_add):
+        """A system message Discord writes as the bot, e.g. "pinned a message"."""
+        made = FakeMessage(self, None)
+        made.type = kind
+        self.messages.insert(self.messages.index(after) + 1, made)
+        return made
 
     async def history(self, limit=100, oldest_first=False):
         found = self.messages if oldest_first else list(reversed(self.messages))
@@ -611,3 +646,323 @@ async def test_follow_never_raises_into_the_move_that_called_it(bot, guild, monk
     outcome = await moves.open_signups(bot, guild, who(guild, TO), tid)
     await thread_.follow(bot, guild, tid, outcome)
     assert outcome.ok
+
+
+async def entrant_id(bot, tid, user_id):
+    return (await store_.entrant_of(bot.db, tid, user_id))["id"]
+
+
+def kinds(found, kind):
+    return [d for one, _, _, d in found if one == kind]
+
+
+async def test_a_deleted_starter_is_posted_fresh_and_never_adopts_a_set_card(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, format="single")
+    thread = the_thread(bot)
+    starter = thread.messages[0]
+    [card] = thread.cards
+    title = card.embed.title
+    thread.delete(starter)
+
+    await thread_.reconcile(bot, guild, full=True)
+
+    stored = (await row_of(bot, tid))["message_id"]
+    assert stored not in (starter.id, card.id)
+    again = thread.find(stored)
+    assert again.pinned and again.embed.title == "Knuck Up 12"
+    assert card.embed.title == title and card.labels == ["Report", "Call", "Decide…"]
+    assert (await card_ids(bot, tid))["W1-1"] == card.id
+
+
+async def test_a_pin_notice_is_never_taken_for_the_starter(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, format="single")
+    thread = the_thread(bot)
+    starter = thread.messages[0]
+    pinned = thread.notice(starter)
+    thread.delete(starter)
+
+    await thread_.reconcile(bot, guild, full=True)
+
+    stored = (await row_of(bot, tid))["message_id"]
+    assert stored != pinned.id
+    assert thread.find(stored).pinned and thread.find(stored).embed.title == "Knuck Up 12"
+    assert not kinds(await rows(bot.db), "brackets.card_failed")
+
+
+async def test_a_starter_the_restart_lost_is_adopted_by_its_own_buttons(bot, guild):
+    tid = await created(bot, guild)
+    await moved(bot, guild, tid, moves.open_signups)
+    thread = the_thread(bot)
+    starter = thread.messages[0]
+    await store_.update(bot.db, tid, {"message_id": None})
+    bot.forget()
+
+    await thread_.reconcile(bot, guild, full=True)
+
+    assert thread.messages == [starter]
+    assert (await row_of(bot, tid))["message_id"] == starter.id
+
+
+async def test_a_thread_made_on_pings_and_dms_nobody_once_the_mode_is_not_on(bot, guild):
+    await mode(bot, "on")
+    await bot.store.set(GUILD, "brackets_ping_role_id", PING_ROLE)
+    tid = await created(bot, guild, format="single")
+    await moved(bot, guild, tid, moves.open_signups)
+    for player in (ADA, BEA):
+        await moved(bot, guild, tid, people.join, actor=player)
+    await moved(bot, guild, tid, moves.close_signups)
+    await mode(bot, "shadow")
+
+    await moved(bot, guild, tid, moves.start)
+    await thread_.tell(bot, guild, await row_of(bot, tid), ADA, "brackets_dm_dq")
+
+    thread = the_thread(bot, KNUCK_UP)
+    [card] = thread.cards
+    [ping] = [one for one in thread.messages if one.embed is None]
+    none = discord.AllowedMentions.none().to_dict()
+    assert card.sent["allowed_mentions"].to_dict() == none
+    assert ping.sent["allowed_mentions"].to_dict() == none
+    assert guild.get_member(ADA).dms == []
+    assert kinds(await rows(bot.db), "brackets.would_dm")
+    row = await row_of(bot, tid)
+    assert thread_.live(bot, guild, row) is False
+    await mode(bot, "on")
+    assert thread_.live(bot, guild, row) is True
+
+
+async def test_a_thread_the_bot_may_not_read_is_written_down_once_as_a_permission(
+    bot, guild, caplog
+):
+    await running(bot, guild, ADA, BEA, format="single")
+    thread = the_thread(bot)
+    del bot.channels[thread.id]
+
+    async def fetch_channel(channel_id):
+        raise no_access()
+
+    guild.fetch_channel = fetch_channel
+    for _ in range(3):
+        await thread_.sweep(bot, guild)
+
+    [failed] = kinds(await rows(bot.db), "brackets.thread_failed")
+    assert "permission" in failed["reason"] and str(thread.id) in failed["reason"]
+    told = [one for one in caplog.records if one.levelname == "WARNING" and "failed" in one.message]
+    assert len(told) == 1
+
+
+async def test_a_thread_discord_could_not_return_is_never_called_a_permission(bot, guild):
+    await running(bot, guild, ADA, BEA, format="single")
+    thread = the_thread(bot)
+    del bot.channels[thread.id]
+
+    async def fetch_channel(channel_id):
+        raise server_error()
+
+    guild.fetch_channel = fetch_channel
+    await thread_.sweep(bot, guild)
+    await thread_.sweep(bot, guild)
+
+    [failed] = kinds(await rows(bot.db), "brackets.thread_failed")
+    assert "permission" not in failed["reason"] and "reach" in failed["reason"]
+
+
+async def test_the_minute_tick_finds_a_starter_card_deleted_while_nobody_looked(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, format="single")
+    thread = the_thread(bot)
+    starter = thread.messages[0]
+    thread.delete(starter)
+
+    await thread_.sweep(bot, guild)
+
+    stored = (await row_of(bot, tid))["message_id"]
+    assert stored != starter.id and thread.find(stored).pinned
+    assert thread.find(stored).embed.title == "Knuck Up 12"
+
+
+async def test_a_would_dm_and_a_failed_dm_carry_the_words_and_the_reason(bot, guild):
+    tid = await created(bot, guild)
+    await thread_.tell(bot, guild, await row_of(bot, tid), ADA, "brackets_dm_dq", "no-show twice")
+    await mode(bot, "on")
+    await store_.update(bot.db, tid, {"shadow": 0})
+    guild.get_member(BEA).closed = True
+    await thread_.tell(bot, guild, await row_of(bot, tid), BEA, "brackets_dm_removed", "spam")
+
+    found = await rows(bot.db)
+    [would] = kinds(found, "brackets.would_dm")
+    [failed] = kinds(found, "brackets.dm_failed")
+    assert would["text"].startswith("A tournament organiser disqualified you from **Knuck Up 12**")
+    assert would["text"].endswith("Reason: no-show twice") and would["reason"] == "no-show twice"
+    assert failed["text"] == "A tournament organiser took you out of **Knuck Up 12**.\nReason: spam"
+    assert failed["reason"] == "spam" and "403" in failed["why"]
+
+
+async def four_up(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, CY, STAFF, format="single", best_of_finals=3)
+    for key in ("W1-1", "W1-2"):
+        await moved(bot, guild, tid, sets.override, key, score_a=2, score_b=0)
+    return tid
+
+
+async def test_a_clear_that_fails_for_any_reason_but_404_keeps_the_card_it_could_not_clear(
+    bot, guild
+):
+    tid = await four_up(bot, guild)
+    thread = the_thread(bot)
+    final = next(one for one in thread.cards if one.embed.title.startswith("W2-1"))
+    thread.broken[final.id] = server_error()
+
+    await moved(bot, guild, tid, sets.reset, "W1-1")
+    assert (await card_ids(bot, tid))["W2-1"] == final.id
+
+    del thread.broken[final.id]
+    await moved(bot, guild, tid, sets.override, "W1-1", score_a=2, score_b=0)
+
+    assert [one for one in thread.cards if one.embed.title.startswith("W2-1")] == [final]
+    assert "Ready to play" in final.embed.description and "Report" in final.labels
+
+
+async def test_a_clear_that_failed_is_tried_again_by_the_next_tick(bot, guild):
+    tid = await four_up(bot, guild)
+    thread = the_thread(bot)
+    final = next(one for one in thread.cards if one.embed.title.startswith("W2-1"))
+    thread.broken[final.id] = server_error()
+    await moved(bot, guild, tid, sets.reset, "W1-1")
+    del thread.broken[final.id]
+
+    await thread_.sweep(bot, guild)
+
+    assert final.embed.description == "W2-1 was cleared" and final.view is None
+    assert (await card_ids(bot, tid)).get("W2-1") is None
+
+
+async def test_a_set_that_fills_already_forfeited_gets_its_final_card_once(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, CY, STAFF, format="double", best_of_finals=3)
+    await moved(bot, guild, tid, people.dq, await entrant_id(bot, tid, ADA))
+    await moved(bot, guild, tid, sets.override, "W1-2", score_a=2, score_b=0)
+    thread = the_thread(bot)
+
+    await thread_.reconcile(bot, guild, full=True)
+    await thread_.sweep(bot, guild)
+
+    walkover = [one for one in thread.cards if one.embed.title.startswith("L1-1")]
+    assert len(walkover) == 1
+    assert "L1-1 is final: Cy wins by forfeit" in walkover[0].embed.description
+    assert walkover[0].labels == ["Decide…", "Reset…"]
+
+
+async def test_the_empty_rehearsal_home_is_warned_about_once(bot, guild, caplog):
+    await bot.store.clear(GUILD, "shadow_channel_id")
+    await bot.store.clear(GUILD, "log_channel_id")
+    tid = await created(bot, guild)
+    await moved(bot, guild, tid, moves.open_signups)
+    await thread_.sweep(bot, guild)
+    await thread_.sweep(bot, guild)
+
+    warned = [one for one in caplog.records if "no rehearsal home" in one.message]
+    assert len(warned) == 1
+
+
+def test_the_modes_have_one_home():
+    assert (thread_.ON, thread_.SHADOW, thread_.OFF) == (moves.ON, moves.SHADOW, moves.OFF)
+    assert thread_.ON is moves.ON and thread_.SHADOW is moves.SHADOW
+
+
+async def test_a_card_edit_refused_for_any_reason_but_404_is_kept_and_tried_again(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, format="single", best_of_finals=3)
+    thread = the_thread(bot)
+    [card] = thread.cards
+    thread.broken[card.id] = server_error()
+
+    await moved(bot, guild, tid, sets.report, "W1-1", 2, 0, actor=ADA)
+    await thread_.sweep(bot, guild)
+    await thread_.reconcile(bot, guild, full=True)
+
+    assert thread.cards == [card]
+    assert (await card_ids(bot, tid))["W1-1"] == card.id
+    assert len(kinds(await rows(bot.db), "brackets.card_failed")) == 1
+    assert not kinds(await rows(bot.db), "brackets.card_reposted")
+
+    del thread.broken[card.id]
+    await thread_.sweep(bot, guild)
+    assert "Ada reported 2–0" in card.embed.description
+
+
+async def test_a_starter_edit_refused_for_any_reason_but_404_is_kept_and_tried_again(bot, guild):
+    tid = await created(bot, guild)
+    thread = the_thread(bot)
+    starter = thread.messages[0]
+    thread.broken[starter.id] = server_error()
+
+    await moved(bot, guild, tid, moves.open_signups)
+    await thread_.reconcile(bot, guild, full=True)
+    assert thread.messages == [starter]
+    assert (await row_of(bot, tid))["message_id"] == starter.id
+
+    del thread.broken[starter.id]
+    await thread_.sweep(bot, guild)
+    assert starter.labels[0] == "Sign up"
+
+
+async def rehearsed_then_on(bot, guild, *players):
+    tid = await running(bot, guild, *players, format="single")
+    await mode(bot, "on")
+    return tid
+
+
+async def test_staff_move_a_rehearsal_to_knuck_up_with_its_starter_and_open_cards(bot, guild):
+    tid = await rehearsed_then_on(bot, guild, ADA, BEA, CY, STAFF)
+    old = the_thread(bot, REHEARSAL)
+    old_starter = old.messages[0]
+    before = list(old.messages)
+
+    outcome = await thread_.move_home(bot, guild, who(guild, STAFF), tid)
+    await thread_.follow(bot, guild, tid, outcome, move=thread_.MOVE)
+
+    assert outcome.ok
+    new = the_thread(bot, KNUCK_UP)
+    assert outcome.message == f"**Knuck Up 12** is now in <#{new.id}>."
+    row = await row_of(bot, tid)
+    assert (row["channel_id"], row["thread_id"], row["shadow"]) == (KNUCK_UP, new.id, 0)
+    starter = new.messages[0]
+    assert row["message_id"] == starter.id and starter.pinned and starter.content is None
+    assert sorted(one.embed.title.split(" ·")[0] for one in new.cards) == ["W1-1", "W1-2"]
+    assert {one.id for one in new.cards[0].sent["allowed_mentions"].users} <= {ADA, BEA, CY, STAFF}
+    assert old.messages == before
+    assert old_starter.content == f"This tournament moved to <#{new.id}>."
+    assert old_starter.embed is None and old_starter.view is None
+    [(actor, details)] = [
+        (actor, d) for kind, actor, _, d in await rows(bot.db) if kind == "brackets.thread_moved"
+    ]
+    assert actor == STAFF
+    assert details["via"] == "discord" and details["to_thread"] == new.id
+    assert details["from_thread"] == old.id
+
+
+async def test_the_move_is_refused_in_words_unless_staff_on_and_a_rehearsal(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, format="single")
+
+    shadowed = await thread_.move_home(bot, guild, who(guild, STAFF), tid)
+    assert not shadowed.ok and shadowed.status == 409
+    assert "brackets_mode is shadow" in shadowed.message
+
+    await mode(bot, "on")
+    organiser = await thread_.move_home(bot, guild, who(guild, TO), tid)
+    assert not organiser.ok and organiser.status == 403
+    assert "staff" in organiser.message
+
+    assert (await thread_.move_home(bot, guild, who(guild, STAFF), tid)).ok
+    again = await thread_.move_home(bot, guild, who(guild, STAFF), tid)
+    assert not again.ok and again.status == 409 and "already" in again.message
+    assert len(home(bot, KNUCK_UP).threads) == 1
+
+
+async def test_a_move_whose_thread_cannot_be_made_moves_nothing(bot, guild):
+    tid = await rehearsed_then_on(bot, guild, ADA, BEA)
+    del bot.channels[KNUCK_UP]
+
+    outcome = await thread_.move_home(bot, guild, who(guild, STAFF), tid)
+
+    assert not outcome.ok and outcome.status == 502
+    assert str(KNUCK_UP) in outcome.message
+    row = await row_of(bot, tid)
+    assert (row["shadow"], row["thread_id"]) == (1, the_thread(bot, REHEARSAL).id)

@@ -8,9 +8,11 @@ from black_bloc import brackets_panel as panel
 from black_bloc import brackets_people as people
 from black_bloc import brackets_sets as sets
 from black_bloc import brackets_store as store_
+from black_bloc import brackets_thread as thread_
 from tests.test_brackets_buttons import FakeInteraction, fill, pressing
 from tests.test_brackets_moves import ADA, BEA, CY, GUILD, STAFF, TO, rows, who
 from tests.test_brackets_thread import (
+    KNUCK_UP,
     REHEARSAL,
     bot,
     created,
@@ -425,3 +427,85 @@ async def test_try_again_puts_the_member_back_where_they_were(bot, guild):
     await view.render_again(interaction)
 
     assert shown(interaction)["embed"].title == "Knuck Up 12"
+
+
+async def test_restoring_one_entrant_from_the_panel_edits_no_set_card(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, CY, STAFF, format="round_robin")
+    await thread_.sweep(bot, guild)
+    ada = (await store_.entrant_of(bot.db, tid, ADA))["id"]
+    await moved(bot, guild, tid, people.dq, ada)
+    thread = the_thread(bot)
+    before = {card.id: card.edits for card in thread.cards}
+    assert len(before) == 6
+
+    _, view = await panel.build_entrant(bot, guild, guild.get_member(TO), tid, ada)
+    after = await press(view, "Restore", pressing(bot, TO))
+
+    assert after["embed"].description.startswith("Ada is back in **Knuck Up 12**.")
+    assert {card.id: card.edits for card in thread.cards} == before
+
+
+@pytest.mark.parametrize("state", ["draft", "seeding"])
+async def test_leave_is_offered_and_works_wherever_it_is_legal(bot, guild, state):
+    tid = await created(bot, guild)
+    await moved(bot, guild, tid, people.add_entrant, user_id=ADA)
+    if state == "seeding":
+        await moved(bot, guild, tid, moves.open_signups)
+        await moved(bot, guild, tid, moves.close_signups)
+    _, view = await tournament(bot, guild, ADA, tid)
+    assert labels(view) == ["Leave", "Back"]
+    assert "Leave" in the_thread(bot).messages[0].labels
+
+    after = await press(view, "Leave", pressing(bot, ADA))
+
+    assert (await store_.entrant_of(bot.db, tid, ADA))["dropped"]
+    assert labels(after["view"]) == ["Back"]
+
+
+async def test_the_panels_set_lines_use_the_players_line_staff_can_edit(bot, guild):
+    await bot.store.set(GUILD, "brackets_set_card_players", "{a} vs {b}")
+    tid = await running(bot, guild, ADA, BEA, format="single")
+
+    embed, view = await tournament(bot, guild, TO, tid)
+    _, mine = await tournament(bot, guild, ADA, tid)
+
+    assert embed.fields[0].value.startswith("**W1-1** · Ada vs Bea · ")
+    picker = next(one for one in view.children if type(one).__name__ == "SetPick")
+    assert picker.options[0].label.startswith("W1-1 · Ada vs Bea")
+    assert mine.children[-1].options[0].label.startswith("W1-1 · Ada vs Bea")
+
+
+async def test_only_staff_see_the_move_and_it_moves_the_rehearsal_into_knuck_up(bot, guild):
+    tid = await running(bot, guild, ADA, BEA, format="single")
+    _, view = await tournament(bot, guild, STAFF, tid)
+    assert "Move to #knuck-up" not in labels(view)
+
+    await bot.store.set(GUILD, "brackets_mode", "on")
+    _, organiser = await tournament(bot, guild, TO, tid)
+    assert "Move to #knuck-up" not in labels(organiser)
+    _, view = await tournament(bot, guild, STAFF, tid)
+    asked = await press(view, "Move to #knuck-up", pressing(bot, STAFF))
+    assert (await store_.tournament(bot.db, GUILD, tid))["shadow"] == 1
+
+    done = await press(asked["view"], "Move to #knuck-up", pressing(bot, STAFF))
+
+    new = home(bot, KNUCK_UP).threads[0]
+    assert done["embed"].description.startswith(f"**Knuck Up 12** is now in <#{new.id}>.")
+    assert (await store_.tournament(bot.db, GUILD, tid))["shadow"] == 0
+    assert len(new.cards) == 1 and new.messages[0].pinned
+    assert "Move to #knuck-up" not in labels(done["view"])
+
+
+async def test_a_form_never_opens_while_the_mode_is_off(bot, guild):
+    tid = await created(bot, guild)
+    await moved(bot, guild, tid, moves.open_signups)
+    await moved(bot, guild, tid, people.join, actor=ADA)
+    await moved(bot, guild, tid, moves.close_signups)
+    _, view = await tournament(bot, guild, TO, tid)
+    await bot.store.set(GUILD, "brackets_mode", "off")
+    interaction = pressing(bot, TO)
+
+    await item(view, "Seed…").callback(interaction)
+
+    assert interaction.modal is None
+    assert interaction.said == [moves.said(bot.store, GUILD, "brackets_off_said")]

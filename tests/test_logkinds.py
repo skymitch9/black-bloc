@@ -87,6 +87,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
             "set_overridden",
             "set_reset",
             "entrant_removed",
+            "thread_moved",
         )
     ),
     "black_bloc/pb_looks.py::kind": (

@@ -12,18 +12,23 @@ from . import brackets_cards as cards
 from . import brackets_people, brackets_sets, shadow
 from . import brackets_store as store_
 from .actionlog import log_action
+from .brackets import access
 from .brackets.model import COMPLETE
-from .brackets_moves import OFF, mode_of
+from .brackets_moves import OFF, ON, SHADOW, Stop, answered, loaded, mode_of
+from .brackets_moves import note as move_note
+from .logkinds import VIA_DISCORD
+from .panels import Outcome, refusal
 from .settings_store import BRACKETS_CHANNEL, BRACKETS_PING_ROLE
 
 log = logging.getLogger(__name__)
 
-ON = "on"
-SHADOW = "shadow"
 LOCKS_ATTR = "_brackets_card_locks"
 MISSING_ATTR = "_brackets_missing"
+STALE_ATTR = "_brackets_stale"
+CLEARS_ATTR = "_brackets_clears"
 LOST_ATTR = "_brackets_lost_threads"
 FAILED_ATTR = "_brackets_failures_told"
+TASKS_ATTR = "_brackets_follows"
 STARTER = "starter"
 AUTO_ARCHIVE_MINUTES = 10080
 THREAD_NAME_LIMIT = 100
@@ -33,7 +38,22 @@ LOST_TWICE = 2
 LIVE = (*store_.BEFORE_START, store_.RUNNING)
 REASON = "Black Bloc tournament {id}"
 START = "start"
-EVERY_CARD = ("complete", "reopen", "cancel", "restore")
+MOVE = "move_home"
+EVERY_CARD = ("complete", "reopen", "cancel", "restore", MOVE)
+NO_HOME = "no rehearsal home or log channel"
+NO_CHANNEL = "brackets_channel_id is blank"
+CANNOT_SEE = "the bot lacks permission to see thread {id}"
+UNREACHABLE = "Discord could not be reached to read thread {id}"
+MOVE_WORDS = {
+    "moved": "**{name}** is now in <#{thread}>.",
+    "not_staff": "Moving a tournament into {channel} is for staff, so nothing moved.",
+    "not_on": (
+        "brackets_mode is {mode}, so **{name}** stays where it is. Set brackets_mode to on first."
+    ),
+    "not_rehearsal": "**{name}** is already in {channel}, so nothing moved.",
+    "failed": "The thread under {channel} could not be made ({reason}), so **{name}** stays put.",
+}
+MOVE_STATUS = {"not_staff": 403, "not_on": 409, "not_rehearsal": 409, "failed": 502}
 
 
 class Budget:
@@ -61,8 +81,20 @@ def missing(bot: Any) -> set[tuple[int, str]]:
     return bot.__dict__.setdefault(MISSING_ATTR, set())
 
 
+def stale(bot: Any) -> set[tuple[int, str]]:
+    return bot.__dict__.setdefault(STALE_ATTR, set())
+
+
+def clears(bot: Any, tournament_id: int) -> dict[str, int]:
+    return bot.__dict__.setdefault(CLEARS_ATTR, {}).setdefault(int(tournament_id), {})
+
+
 def lost_counts(bot: Any) -> dict[int, int]:
     return bot.__dict__.setdefault(LOST_ATTR, {})
+
+
+def following(bot: Any) -> set[asyncio.Task]:
+    return bot.__dict__.setdefault(TASKS_ATTR, set())
 
 
 def as_id(value: Any) -> int | None:
@@ -82,8 +114,9 @@ def origin_of(bot: Any) -> str | None:
     return getattr(getattr(bot, "settings", None), "origin", None)
 
 
-def rehearsing(row: Any) -> bool:
-    return bool(row["shadow"])
+def live(bot: Any, guild: Any, row: Any) -> bool:
+    """The one test for pinging and DMing: the mode is on and the thread was not made in shadow."""
+    return mode_of(bot.store, guild.id) == ON and not row["shadow"]
 
 
 def parent_id(bot: Any, guild: Any) -> tuple[int | None, bool]:
@@ -113,65 +146,60 @@ def told_once(bot: Any, row: Any, what: str, reason: str) -> bool:
 
 
 async def failed(bot: Any, guild: Any, row: Any, what: str, reason: str, **details: Any) -> None:
-    """Logged every time, written to the action log once per tournament and reason a run."""
-    log.warning("brackets: tournament %s %s failed — %s", row["id"], what, reason)
+    """Warned and written to the action log once per tournament and reason a run."""
     if not told_once(bot, row, what, reason):
+        log.debug("brackets: tournament %s %s failed again — %s", row["id"], what, reason)
         return
+    log.warning("brackets: tournament %s %s failed — %s", row["id"], what, reason)
     if what == "thread":
         await note(bot, guild, "brackets.thread_failed", row, reason=reason, **details)
         return
     await note(bot, guild, "brackets.card_failed", row, card=what, reason=reason, **details)
 
 
-async def find_thread(bot: Any, guild: Any, thread_id: Any) -> tuple[Any, bool]:
-    """`(thread, lost)`: lost only on a NotFound, never on a network hiccup."""
+async def find_thread(bot: Any, guild: Any, thread_id: Any) -> tuple[Any, bool, str, str]:
+    """`(thread, lost, reason, detail)`: lost only on a NotFound, never on a network hiccup."""
     found = shadow.channel_of(bot, guild, thread_id)
     if found is None:
         fetch = getattr(guild, "fetch_channel", None)
         if fetch is None:
-            return (None, True)
+            return (None, True, "", "")
         try:
             found = await fetch(int(thread_id))
         except discord.NotFound:
-            return (None, True)
+            return (None, True, "", "")
+        except discord.Forbidden as exc:
+            return (None, False, CANNOT_SEE.format(id=thread_id), reason_of(exc))
         except Exception as exc:
-            log.info("brackets: could not read thread %s — %s", thread_id, reason_of(exc))
-            return (None, False)
+            return (None, False, UNREACHABLE.format(id=thread_id), reason_of(exc))
     if getattr(found, "archived", False):
         try:
             await found.edit(archived=False)
         except Exception as exc:
             log.warning("brackets: could not reopen thread %s — %s", thread_id, reason_of(exc))
-    return (found, False)
+    return (found, False, "", "")
 
 
 def starter_payload(bot: Any, guild: Any, row: Any, people: list[Any]) -> dict[str, Any]:
     return {
         "content": cards.rehearsal_line(bot, guild, row),
         "embed": cards.starter_embed(bot.store, guild.id, row, people),
-        "view": cards.starter_view(bot.store, guild.id, row, origin_of(bot)),
+        "view": cards.starter_view(bot.store, guild.id, row, origin_of(bot), people),
         "allowed_mentions": discord.AllowedMentions.none(),
     }
 
 
-async def make_thread(bot: Any, guild: Any, row: Any) -> Any:
+async def built(bot: Any, guild: Any, row: Any) -> tuple[Any, str]:
+    """`(thread, "")`, or `(None, why)` with nothing written."""
     wanted, rehearsal = parent_id(bot, guild)
     if wanted is None:
-        if mode_of(bot.store, guild.id) == ON:
-            await failed(bot, guild, row, "thread", "brackets_channel_id is blank")
-        else:
-            log.warning(
-                "brackets: no rehearsal home or log channel, so no thread for %s", row["id"]
-            )
-        return None
+        return (None, NO_CHANNEL if mode_of(bot.store, guild.id) == ON else NO_HOME)
     guard = getattr(bot, "guard", None)
     if guard is not None and hasattr(guard, "allows_channel") and not guard.allows_channel(wanted):
-        await failed(bot, guild, row, "thread", "test mode keeps it out of that channel")
-        return None
+        return (None, "test mode keeps it out of that channel")
     parent = shadow.channel_of(bot, guild, wanted)
     if parent is None or not hasattr(parent, "create_thread"):
-        await failed(bot, guild, row, "thread", f"channel {wanted} cannot hold a thread")
-        return None
+        return (None, f"channel {wanted} cannot hold a thread")
     people = await store_.entrants(bot.db, row["id"])
     name = " ".join(str(row["name"]).split())[:THREAD_NAME_LIMIT] or f"#{row['id']}"
     first = None
@@ -192,8 +220,7 @@ async def make_thread(bot: Any, guild: Any, row: Any) -> Any:
                 reason=REASON.format(id=row["id"]),
             )
     except Exception as exc:
-        await failed(bot, guild, row, "thread", reason_of(exc))
-        return None
+        return (None, reason_of(exc))
     await store_.update(
         bot.db,
         row["id"],
@@ -216,7 +243,18 @@ async def make_thread(bot: Any, guild: Any, row: Any) -> Any:
         thread=int(thread.id),
         shadow=rehearsal,
     )
-    return thread
+    return (thread, "")
+
+
+async def make_thread(bot: Any, guild: Any, row: Any) -> Any:
+    thread, reason = await built(bot, guild, row)
+    if thread is not None:
+        return thread
+    if reason != NO_HOME:
+        await failed(bot, guild, row, "thread", reason)
+    elif told_once(bot, row, "thread", NO_HOME):
+        log.warning("brackets: %s, so no thread for %s", NO_HOME, row["id"])
+    return None
 
 
 async def fresh(bot: Any, guild: Any, tournament_id: int) -> Any:
@@ -226,18 +264,18 @@ async def fresh(bot: Any, guild: Any, tournament_id: int) -> Any:
 async def ensured(bot: Any, guild: Any, row: Any) -> tuple[Any, Any]:
     """The tournament's thread, made when it has none or was lost twice running; and the row."""
     if row["thread_id"]:
-        thread, lost = await find_thread(bot, guild, row["thread_id"])
+        thread, lost, reason, detail = await find_thread(bot, guild, row["thread_id"])
         if thread is not None:
             lost_counts(bot).pop(int(row["id"]), None)
             return (thread, row)
         if not lost:
+            await failed(bot, guild, row, "thread", reason, error=detail)
             return (None, row)
         counts = lost_counts(bot)
         counts[int(row["id"])] = counts.get(int(row["id"]), 0) + 1
         if counts[int(row["id"])] < LOST_TWICE:
             return (None, row)
-        for key in await store_.card_rows(bot.db, row["id"]):
-            await store_.set_card(bot.db, row["id"], key, None, None)
+        await drop_cards(bot, row["id"])
         await store_.update(bot.db, row["id"], {"thread_id": None, "message_id": None})
         await note(bot, guild, "brackets.thread_lost", row, thread=int(row["thread_id"]))
     if mode_of(bot.store, guild.id) == OFF:
@@ -246,19 +284,43 @@ async def ensured(bot: Any, guild: Any, row: Any) -> tuple[Any, Any]:
     return (thread, await fresh(bot, guild, row["id"]))
 
 
-async def oldest_own(bot: Any, thread: Any) -> Any:
+async def drop_cards(bot: Any, tournament_id: int) -> None:
+    """Every stored card id let go, and what this process remembered about them."""
+    for key in await store_.card_rows(bot.db, tournament_id):
+        await store_.set_card(bot.db, tournament_id, key, None, None)
+    clears(bot, tournament_id).clear()
+    for held in (missing(bot), stale(bot)):
+        held.difference_update({one for one in held if one[0] == int(tournament_id)})
+
+
+def is_starter(message: Any, row: Any) -> bool:
+    """The bot's own ordinary message that is this tournament's starter, by buttons or title."""
+    if getattr(message, "type", None) != discord.MessageType.default:
+        return False
+    ids = cards.custom_ids(message)
+    if any(cards.is_set_id(one, row["id"]) for one in ids):
+        return False
+    if any(cards.is_starter_id(one, row["id"]) for one in ids):
+        return True
+    titles = [getattr(one, "title", None) for one in cards.embeds_of(message)]
+    return str(row["name"])[: cards.TITLE_LIMIT] in titles
+
+
+async def adopt_starter(bot: Any, row: Any, thread: Any) -> Any:
+    """A starter posted just before a restart, before its id was stored: never another card."""
     me = getattr(getattr(bot, "user", None), "id", None)
     try:
-        async for message in thread.history(limit=1, oldest_first=True):
+        async for message in thread.history(limit=SCAN_LIMIT, oldest_first=True):
             if me is not None and getattr(message.author, "id", None) == me:
-                return message
+                if is_starter(message, row):
+                    return message
     except Exception as exc:
         log.info("brackets: could not read thread %s — %s", thread.id, reason_of(exc))
     return None
 
 
 async def post_starter(bot: Any, guild: Any, row: Any, thread: Any, people: list[Any]) -> None:
-    adopted = None if row["message_id"] else await oldest_own(bot, thread)
+    adopted = None if row["message_id"] else await adopt_starter(bot, row, thread)
     if adopted is not None:
         await store_.update(bot.db, row["id"], {"message_id": int(adopted.id)})
         await edit_starter(bot, guild, await fresh(bot, guild, row["id"]), thread, people)
@@ -277,16 +339,35 @@ async def post_starter(bot: Any, guild: Any, row: Any, thread: Any, people: list
 
 
 async def edit_starter(bot: Any, guild: Any, row: Any, thread: Any, people: list[Any]) -> bool:
-    """False when the stored card is gone; the reconcile posts it again."""
+    """False when the stored card is gone (a 404 only); the reconcile posts it again."""
+    key = (int(row["id"]), STARTER)
     try:
         await thread.get_partial_message(int(row["message_id"])).edit(
             **starter_payload(bot, guild, row, people)
         )
     except discord.NotFound:
-        missing(bot).add((int(row["id"]), STARTER))
+        stale(bot).discard(key)
+        missing(bot).add(key)
         return False
     except Exception as exc:
+        stale(bot).add(key)
         await failed(bot, guild, row, STARTER, reason_of(exc))
+        return True
+    stale(bot).discard(key)
+    return True
+
+
+async def resolves(thread: Any, message_id: Any) -> bool:
+    """Whether a stored message is still there; anything but a 404 is taken as yes."""
+    fetch = getattr(thread, "fetch_message", None)
+    if fetch is None:
+        return True
+    try:
+        await fetch(int(message_id))
+    except discord.NotFound:
+        return False
+    except Exception as exc:
+        log.info("brackets: could not check message %s — %s", message_id, reason_of(exc))
     return True
 
 
@@ -327,6 +408,11 @@ async def adopt(bot: Any, row: Any, thread: Any, key: str) -> Any:
     return None
 
 
+def owed(match: Any, held: tuple[int | None, str | None]) -> bool:
+    """A set that filled already forfeited: final at once, never carded, owed its one card."""
+    return match.state == COMPLETE and bool(match.forfeit) and held == (None, None)
+
+
 async def post_card(
     bot: Any, guild: Any, row: Any, thread: Any, match: Any, people: dict, budget: Budget
 ) -> None:
@@ -342,10 +428,12 @@ async def post_card(
     stamp = store_.stamp()
     await store_.set_card(bot.db, row["id"], match.key, None, stamp)
     payload = set_payload(bot, guild, row, match, people)
-    users = cards.player_ids(match, people)
+    users = cards.winner_ids(match, people) if match.state == COMPLETE else None
+    users = cards.player_ids(match, people) if users is None else users
     try:
         message = await thread.send(
-            **payload, allowed_mentions=cards.ping_mentions(users, rehearsal=rehearsing(row))
+            **payload,
+            allowed_mentions=cards.ping_mentions(users, rehearsal=not live(bot, guild, row)),
         )
     except Exception as exc:
         await store_.set_card(bot.db, row["id"], match.key, None, None)
@@ -358,22 +446,29 @@ async def post_card(
 async def edit_card(
     bot: Any, guild: Any, row: Any, thread: Any, match: Any, people: dict, message_id: int
 ) -> bool:
+    """False only on a 404; any other failure keeps the card and is tried again next pass."""
+    key = (int(row["id"]), match.key)
     try:
         await thread.get_partial_message(int(message_id)).edit(
             **set_payload(bot, guild, row, match, people),
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except discord.NotFound:
-        missing(bot).add((int(row["id"]), match.key))
+        stale(bot).discard(key)
+        missing(bot).add(key)
         return False
     except Exception as exc:
+        stale(bot).add(key)
         await failed(bot, guild, row, match.key, reason_of(exc))
+        return True
+    stale(bot).discard(key)
     return True
 
 
 async def clear_card(
     bot: Any, guild: Any, row: Any, thread: Any, key: str, message_id: int
-) -> None:
+) -> bool:
+    """True when the card was cleared or is gone; False keeps its id for the next pass."""
     try:
         await thread.get_partial_message(int(message_id)).edit(
             content=None,
@@ -382,9 +477,13 @@ async def clear_card(
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except discord.NotFound:
-        return
+        pass
     except Exception as exc:
+        stale(bot).add((int(row["id"]), key))
         await failed(bot, guild, row, key, reason_of(exc))
+        return False
+    stale(bot).discard((int(row["id"]), key))
+    return True
 
 
 async def sync_card(
@@ -401,19 +500,18 @@ async def sync_card(
 ) -> None:
     message_id = held[0]
     if match.state in cards.CLEARED:
-        if message_id:
-            await clear_card(bot, guild, row, thread, match.key, message_id)
+        if message_id and await clear_card(bot, guild, row, thread, match.key, message_id):
             await store_.set_card(bot.db, row["id"], match.key, None, None)
         return
     if message_id:
         if await edit_card(bot, guild, row, thread, match, people, message_id) or not repost:
             return
         if match.state == COMPLETE:
-            await store_.set_card(bot.db, row["id"], match.key, None, None)
+            await store_.set_card(bot.db, row["id"], match.key, None, held[1] or store_.stamp())
             return
         await store_.set_card(bot.db, row["id"], match.key, None, None)
         await note(bot, guild, "brackets.card_reposted", row, card=match.key)
-    if match.state in cards.OPEN_CARD:
+    if match.state in cards.OPEN_CARD or owed(match, held):
         await post_card(bot, guild, row, thread, match, people, budget)
 
 
@@ -424,7 +522,7 @@ async def ping_start(bot: Any, guild: Any, row: Any, thread: Any) -> None:
     text = cards.words(
         bot.store, guild.id, "brackets_start_ping", role=f"<@&{role_id}>", name=row["name"]
     )
-    rehearsal = rehearsing(row) or mode_of(bot.store, guild.id) != ON
+    rehearsal = not live(bot, guild, row)
     mentions = (
         discord.AllowedMentions.none()
         if rehearsal
@@ -439,6 +537,15 @@ async def ping_start(bot: Any, guild: Any, row: Any, thread: Any) -> None:
         return
     if rehearsal:
         await note(bot, guild, "brackets.would_ping", row, role=role_id)
+
+
+async def clear_gone(bot: Any, guild: Any, row: Any, thread: Any, gone: dict[str, int]) -> None:
+    """Removed sets' cards: the ones whose clear failed are kept in memory and tried next pass."""
+    waiting = clears(bot, row["id"])
+    waiting.update(gone)
+    for key, message_id in list(waiting.items()):
+        if await clear_card(bot, guild, row, thread, key, message_id):
+            waiting.pop(key, None)
 
 
 async def sync(
@@ -459,47 +566,30 @@ async def sync(
         thread, row = await ensured(bot, guild, await fresh(bot, guild, row["id"]))
         if thread is None or row is None:
             return
-        lost = missing(bot)
-        await sync_starter(
-            bot,
-            guild,
-            row,
-            thread,
-            edit=starter or full,
-            repost=full or (int(row["id"]), STARTER) in lost,
-        )
+        tid = int(row["id"])
+        lost, retry = missing(bot), stale(bot)
+        gone_starter = (tid, STARTER) in lost
+        edit = starter or full or (tid, STARTER) in retry
+        if row["message_id"] and not edit and not gone_starter:
+            gone_starter = not await resolves(thread, row["message_id"])
+        await sync_starter(bot, guild, row, thread, edit=edit, repost=full or gone_starter)
         row = await fresh(bot, guild, row["id"])
         if started:
             await ping_start(bot, guild, row, thread)
-        for key, message_id in (gone or {}).items():
-            await clear_card(bot, guild, row, thread, key, message_id)
+        await clear_gone(bot, guild, row, thread, dict(gone or {}))
         current = await store_.bracket(bot.db, row)
         if current is None:
             return
         people = {one["id"]: one for one in await store_.entrants(bot.db, row["id"])}
         held = await store_.card_rows(bot.db, row["id"])
         for match in current.ordered():
-            wanted = keys is None or match.key in keys
-            redo = full or (int(row["id"]), match.key) in lost
-            if (
-                not wanted
-                and not redo
-                and not (
-                    match.state in cards.OPEN_CARD and not held.get(match.key, (None, None))[0]
-                )
-            ):
+            mine = held.get(match.key, (None, None))
+            wanted = keys is None or match.key in keys or (tid, match.key) in retry
+            redo = full or (tid, match.key) in lost
+            due = (match.state in cards.OPEN_CARD and not mine[0]) or owed(match, mine)
+            if not wanted and not redo and not due:
                 continue
-            await sync_card(
-                bot,
-                guild,
-                row,
-                thread,
-                match,
-                people,
-                held.get(match.key, (None, None)),
-                budget,
-                repost=redo,
-            )
+            await sync_card(bot, guild, row, thread, match, people, mine, budget, repost=redo)
 
 
 async def follow(
@@ -524,6 +614,47 @@ async def follow(
         log.exception("brackets: the cards for tournament %s did not catch up", tournament_id)
 
 
+def followed(held: set[asyncio.Task], task: asyncio.Task) -> None:
+    held.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        log.error("brackets: a follow ended badly", exc_info=task.exception())
+
+
+def follow_later(
+    bot: Any, guild: Any, tournament_id: Any, outcome: Any, *, move: str | None = None
+) -> asyncio.Task | None:
+    """The website's door: the request is answered first, and the cards catch up behind it."""
+    if not getattr(outcome, "ok", False) or tournament_id is None:
+        return None
+    task = asyncio.create_task(
+        follow(bot, guild, tournament_id, outcome, move=move),
+        name=f"brackets-follow-{tournament_id}",
+    )
+    held = following(bot)
+    held.add(task)
+    task.add_done_callback(lambda done: followed(held, done))
+    return task
+
+
+async def sweep(bot: Any, guild: Any, *, full: bool = False) -> None:
+    """The minute's work: reports that stand, check-ins that close, then the cards catch up."""
+    if getattr(guild, "unavailable", False) or mode_of(bot.store, guild.id) == OFF:
+        return
+    confirmed = await brackets_sets.confirm_due(bot, guild)
+    closed = await brackets_people.close_due_check_ins(bot, guild)
+    budget = Budget()
+    for tournament_id in dict.fromkeys([*(one for one, _ in confirmed), *closed]):
+        row = await fresh(bot, guild, tournament_id)
+        if row is None:
+            continue
+        keys = tuple(key for one, key in confirmed if one == tournament_id)
+        try:
+            await sync(bot, guild, row, keys=keys, budget=budget)
+        except Exception:
+            log.exception("brackets: the sweep's cards for tournament %s failed", tournament_id)
+    await reconcile(bot, guild, budget=budget, full=full)
+
+
 async def reconcile(
     bot: Any, guild: Any, *, full: bool = False, budget: Budget | None = None
 ) -> None:
@@ -540,66 +671,141 @@ async def reconcile(
             log.exception("brackets: reconciling tournament %s failed", row["id"])
 
 
-async def sweep(bot: Any, guild: Any) -> None:
-    """The minute's work: reports that stand, check-ins that close, then the cards catch up."""
-    if getattr(guild, "unavailable", False) or mode_of(bot.store, guild.id) == OFF:
+def move_refused(which: str, **fields: Any) -> Stop:
+    return Stop(refusal(MOVE_WORDS[which].format(**fields), which, MOVE_STATUS[which]))
+
+
+def knuck_up_words(bot: Any, guild: Any) -> str:
+    wanted = as_id(bot.store.get(guild.id, BRACKETS_CHANNEL))
+    return f"<#{wanted}>" if wanted else BRACKETS_CHANNEL
+
+
+async def leave_word(bot: Any, guild: Any, row: Any, thread: Any) -> None:
+    """The old thread keeps everything and gains one line: where the tournament went."""
+    if not row["thread_id"]:
         return
-    confirmed = await brackets_sets.confirm_due(bot, guild)
-    closed = await brackets_people.close_due_check_ins(bot, guild)
-    budget = Budget()
-    for tournament_id in dict.fromkeys([*(one for one, _ in confirmed), *closed]):
-        row = await fresh(bot, guild, tournament_id)
-        if row is None:
-            continue
-        keys = tuple(key for one, key in confirmed if one == tournament_id)
+    old, _, _, _ = await find_thread(bot, guild, row["thread_id"])
+    if old is None:
+        return
+    text = cards.words(bot.store, guild.id, "brackets_moved_line", thread=f"<#{int(thread.id)}>")
+    quiet = discord.AllowedMentions.none()
+    if row["message_id"]:
         try:
-            await sync(bot, guild, row, keys=keys, budget=budget)
-        except Exception:
-            log.exception("brackets: the sweep's cards for tournament %s failed", tournament_id)
-    await reconcile(bot, guild, budget=budget)
+            await old.get_partial_message(int(row["message_id"])).edit(
+                content=text, embed=None, view=None, allowed_mentions=quiet
+            )
+            return
+        except discord.NotFound:
+            pass
+        except Exception as exc:
+            log.warning("brackets: the old starter of %s kept its card — %s", row["id"], exc)
+            return
+    try:
+        await old.send(text, allowed_mentions=quiet)
+    except Exception as exc:
+        log.warning("brackets: the old thread of %s was not told — %s", row["id"], exc)
 
 
-async def dm(member: Any, text: str) -> bool:
+@answered
+async def move_home(
+    bot: Any, guild: Any, actor: Any, tournament_id: int, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Staff: a tournament whose thread was made in shadow gets a new one under #knuck-up."""
+    row = await loaded(bot, guild, tournament_id)
+    channel = knuck_up_words(bot, guild)
+    if not access.is_staff(bot.store, actor):
+        raise move_refused("not_staff", channel=channel)
+    mode = mode_of(bot.store, guild.id)
+    if mode != ON:
+        raise move_refused("not_on", mode=mode, name=row["name"])
+    async with card_lock(bot, row["id"]):
+        row = await fresh(bot, guild, row["id"])
+        if not row["shadow"]:
+            raise move_refused("not_rehearsal", name=row["name"], channel=channel)
+        thread, reason = await built(bot, guild, row)
+        if thread is None:
+            raise move_refused("failed", channel=channel, reason=reason, name=row["name"])
+        await drop_cards(bot, row["id"])
+        await leave_word(bot, guild, row, thread)
+        await move_note(
+            bot,
+            guild,
+            "thread_moved",
+            actor,
+            row["id"],
+            via,
+            from_thread=as_id(row["thread_id"]),
+            to_thread=int(thread.id),
+            channel=as_id(bot.store.get(guild.id, BRACKETS_CHANNEL)),
+        )
+    return Outcome(
+        True, MOVE_WORDS["moved"].format(name=row["name"], thread=int(thread.id)), value=row["id"]
+    )
+
+
+async def dm(member: Any, text: str) -> str:
+    """Empty when the DM landed, else why it did not."""
     send = getattr(member, "send", None)
     if send is None:
-        return False
+        return "they cannot be sent a DM"
     try:
         await send(text, allowed_mentions=discord.AllowedMentions.none())
     except Exception as exc:
         log.info("brackets: could not DM %s — %s", getattr(member, "id", "?"), reason_of(exc))
-        return False
-    return True
+        return reason_of(exc)
+    return ""
 
 
 async def tell(
-    bot: Any, guild: Any, row: Any, user_id: Any, key: str, reason: str = "", **fields: Any
+    bot: Any,
+    guild: Any,
+    row: Any,
+    user_id: Any,
+    key: str,
+    reason: str = "",
+    *,
+    actor: Any = None,
+    **fields: Any,
 ) -> None:
     """An organiser's move that lands on a member: they are told, with the reason given."""
     wanted = as_id(user_id)
     if wanted is None or row is None:
         return
+    if actor is not None and as_id(getattr(actor, "id", actor)) == wanted:
+        return
     text = cards.words(bot.store, guild.id, key, name=row["name"], **fields)
     words = " ".join(str(reason or "").split())
     if words:
         text = f"{text}\n{cards.words(bot.store, guild.id, 'brackets_dm_reason', reason=words)}"
-    details = {"tournament": row["id"], "dm": key}
+    details = {"tournament": row["id"], "dm": key, "text": text, "reason": words}
     try:
-        if mode_of(bot.store, guild.id) != ON or rehearsing(row):
+        if not live(bot, guild, row):
             await log_action(bot, guild, "brackets.would_dm", target=wanted, details=details)
             return
         member = guild.get_member(wanted) if hasattr(guild, "get_member") else None
-        if member is None or not await dm(member, text):
-            await log_action(bot, guild, "brackets.dm_failed", target=wanted, details=details)
+        why = "they are not in the server" if member is None else await dm(member, text)
+        if why:
+            await log_action(
+                bot, guild, "brackets.dm_failed", target=wanted, details=details | {"why": why}
+            )
     except Exception:
         log.exception("brackets: the DM to %s was not recorded", wanted)
 
 
 __all__ = [
+    "MOVE",
+    "OFF",
+    "ON",
+    "SHADOW",
     "Budget",
     "card_lock",
     "ensured",
     "follow",
+    "follow_later",
+    "following",
+    "live",
     "make_thread",
+    "move_home",
     "parent_id",
     "reconcile",
     "sweep",

@@ -4734,6 +4734,11 @@ BRACKETS_CARD_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("role", "name"),
         "posted in a tournament's thread at the start when brackets_ping_role_id is picked",
     ),
+    "brackets_moved_line": (
+        "This tournament moved to {thread}.",
+        ("thread",),
+        "the line a rehearsal thread keeps once staff move its tournament into #knuck-up",
+    ),
 }
 BRACKETS_WORDS.update(BRACKETS_CARD_WORDS)
 BRACKETS_DEFAULTS: dict[str, Any] = {

@@ -10,7 +10,7 @@ from discord.ext import commands, tasks
 
 from ...brackets_cards import SetButton, StarterButton
 from ...brackets_panel import open_panel
-from ...brackets_thread import reconcile, sweep
+from ...brackets_thread import sweep
 from ...loops import Reconciler, wait_ready
 from ...panels import answer
 from ...settings_store import GUILD_ONLY
@@ -24,6 +24,8 @@ class Brackets(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.reconciler = Reconciler()
+        self.full_due = True
+        self.ready_seen = False
         self.last_ok_at: str | None = None
         self.last_error: str | None = None
 
@@ -48,19 +50,21 @@ class Brackets(commands.Cog):
             if not getattr(guild, "unavailable", False)
         ]
 
-    async def reconcile_all(self) -> None:
-        for guild in self.guilds():
-            await reconcile(self.bot, guild, full=True)
-
     async def tick(self) -> None:
-        for guild in self.guilds():
-            await sweep(self.bot, guild)
+        """The first tick after a boot or a reconnect is the full pass; the rest are cheap."""
+        full, self.full_due = self.full_due, False
+        try:
+            for guild in self.guilds():
+                await sweep(self.bot, guild, full=full)
+        except BaseException:
+            self.full_due = self.full_due or full
+            raise
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        if not self.bot.db.is_connected:
-            return
-        await self.reconciler.run(self.reconcile_all, skip_if_recent=True)
+        """A reconnect owes a full pass; the boot's first tick already is one."""
+        self.full_due = self.full_due or self.ready_seen
+        self.ready_seen = True
 
     @tasks.loop(minutes=TICK_MINUTES)
     async def _sweep(self) -> None:

@@ -60,10 +60,10 @@ def match(**given):
 @pytest.mark.parametrize(
     ("state", "wanted"),
     [
-        ("draft", ()),
+        ("draft", ("leave",)),
         ("signups", ("join", "leave")),
         ("check_in", ("check_in", "leave")),
-        ("seeding", ()),
+        ("seeding", ("leave",)),
         ("running", ()),
         ("complete", ()),
         ("cancelled", ()),
@@ -71,6 +71,13 @@ def match(**given):
 )
 def test_the_starter_card_offers_only_the_member_moves_legal_now(state, wanted):
     assert cards.starter_moves(state) == wanted
+
+
+def test_leave_is_offered_wherever_it_is_legal_and_only_while_someone_is_in():
+    legal = {state for state in cards.STARTER_MOVES if cards.LEAVE in cards.starter_moves(state)}
+    assert legal == set(store_.BEFORE_START)
+    assert cards.starter_moves("signups", 0) == ("join",)
+    assert cards.starter_moves("draft", 0) == ()
 
 
 @pytest.mark.parametrize(

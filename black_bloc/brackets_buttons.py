@@ -13,7 +13,7 @@ from . import brackets_sets as sets_
 from . import brackets_store as store_
 from . import brackets_thread as thread_
 from .brackets import access
-from .brackets_moves import NOTE_LIMIT, WRONG_STATE, role_words, said
+from .brackets_moves import NOTE_LIMIT, WRONG_STATE, Stop, require_on, role_words, said
 from .command_errors import AnswersErrors
 from .panels import Outcome, answer, db_ready, db_up, refusal
 
@@ -54,6 +54,15 @@ def no_tournament(bot: Any, guild: Any, tournament_id: int) -> Outcome:
         "no_tournament",
         404,
     )
+
+
+def off_now(bot: Any, guild: Any) -> str:
+    """The words for a brackets_mode of off, or nothing while a move can still land."""
+    try:
+        require_on(bot, guild)
+    except Stop as stop:
+        return stop.outcome.message
+    return ""
 
 
 def not_organiser(bot: Any, guild: Any) -> Outcome:
@@ -199,6 +208,10 @@ async def set_move(
     if action in (cards.DECIDE, cards.RESET) and not organiser:
         await answer(interaction, not_organiser(bot, guild).message)
         return
+    refused = off_now(bot, guild)
+    if refused:
+        await answer(interaction, refused)
+        return
     form = {
         cards.REPORT: ReportModal,
         cards.DISPUTE: DisputeModal,
@@ -218,11 +231,14 @@ def clipped(text: str, limit: int) -> str:
 
 
 async def told_players(
-    bot: Any, guild: Any, seat: Seat, key: str, reason: str, **fields: Any
+    bot: Any, guild: Any, seat: Seat, key: str, reason: str, *, actor: Any, **fields: Any
 ) -> None:
+    """Both players hear an organiser's move on their set, except the organiser themselves."""
     row = await store_.tournament(bot.db, guild.id, seat.row["id"]) or seat.row
     for user_id in seat.user_ids():
-        await thread_.tell(bot, guild, row, user_id, key, reason, set=seat.match.key, **fields)
+        await thread_.tell(
+            bot, guild, row, user_id, key, reason, actor=actor, set=seat.match.key, **fields
+        )
 
 
 class SetForm(AnswersErrors, discord.ui.Modal):
@@ -284,7 +300,13 @@ class ReportModal(SetForm):
             )
             if outcome.ok and self.seat.side is None:
                 await told_players(
-                    bot, guild, self.seat, "brackets_dm_decided", "", result=outcome.message
+                    bot,
+                    guild,
+                    self.seat,
+                    "brackets_dm_decided",
+                    "",
+                    actor=interaction.user,
+                    result=outcome.message,
                 )
         await self.landed(interaction, outcome, cards.REPORT)
 
@@ -372,6 +394,7 @@ class DecideModal(SetForm):
                     self.seat,
                     "brackets_dm_decided",
                     self.reason.value,
+                    actor=interaction.user,
                     result=outcome.message,
                 )
         await self.landed(interaction, outcome, cards.DECIDE)
@@ -391,7 +414,14 @@ class ResetModal(SetForm):
             bot, guild, interaction.user, self.seat.row["id"], self.seat.match.key
         )
         if outcome.ok:
-            await told_players(bot, guild, self.seat, "brackets_dm_reset", self.reason.value)
+            await told_players(
+                bot,
+                guild,
+                self.seat,
+                "brackets_dm_reset",
+                self.reason.value,
+                actor=interaction.user,
+            )
         await self.landed(interaction, outcome, cards.RESET)
 
 
@@ -424,6 +454,7 @@ class ForfeitModal(SetForm):
                 self.seat,
                 "brackets_dm_decided",
                 self.reason.value,
+                actor=interaction.user,
                 result=outcome.message,
             )
         await self.landed(interaction, outcome, cards.DECIDE)
@@ -441,6 +472,7 @@ __all__ = [
     "member_move",
     "may_run",
     "not_organiser",
+    "off_now",
     "seat_of",
     "set_move",
     "set_pressed",

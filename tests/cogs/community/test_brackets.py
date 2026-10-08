@@ -12,7 +12,16 @@ from black_bloc.command_visibility import HIDDEN_WHEN_OFF
 from black_bloc.settings_store import GUILD_ONLY
 from tests.test_brackets_buttons import FakeInteraction
 from tests.test_brackets_moves import ADA, BEA, GUILD, TO, who
-from tests.test_brackets_thread import REHEARSAL, bot, created, guild, home, moved, the_thread
+from tests.test_brackets_thread import (
+    REHEARSAL,
+    bot,
+    created,
+    guild,
+    home,
+    moved,
+    running,
+    the_thread,
+)
 
 
 class Loop:
@@ -74,9 +83,10 @@ async def test_slash_bracket_opens_the_panel(bot, monkeypatch):
 
 async def test_two_reconciles_at_boot_post_one_thread_and_one_starter_card(bot, guild, monkeypatch):
     outcome = await moves.create(bot, guild, who(guild, TO), {"name": "Knuck Up 12"})
+    body = cog_module.Brackets._sweep.coro
     cog, _ = cog_for(bot, monkeypatch)
 
-    await asyncio.gather(cog.on_ready(), cog.on_ready(), cog.reconciler.run(cog.reconcile_all))
+    await asyncio.gather(body(cog), cog.on_ready(), body(cog), cog.on_ready())
 
     thread = the_thread(bot, REHEARSAL)
     assert len(thread.messages) == 1
@@ -89,7 +99,7 @@ async def test_the_tick_runs_the_sweep_for_every_available_guild(bot, guild, mon
     cog, _ = cog_for(bot, monkeypatch)
     seen = []
 
-    async def sweep(found_bot, found_guild):
+    async def sweep(found_bot, found_guild, **given):
         seen.append(found_guild.id)
 
     monkeypatch.setattr(cog_module, "sweep", sweep)
@@ -117,3 +127,38 @@ async def test_a_failed_tick_is_recorded_and_a_good_one_clears_it(bot, monkeypat
     monkeypatch.setattr(cog, "tick", fine)
     await body(cog)
     assert cog.last_error is None and cog.last_ok_at
+
+
+async def test_the_first_tick_after_boot_is_the_full_pass(bot, guild, monkeypatch):
+    await running(bot, guild, ADA, BEA, format="single")
+    thread = the_thread(bot)
+    thread.delete(thread.cards[0])
+    bot.forget()
+    body = cog_module.Brackets._sweep.coro
+    cog, _ = cog_for(bot, monkeypatch)
+
+    await body(cog)
+    await cog.on_ready()
+
+    [card] = thread.cards
+    assert "Ready to play" in card.embed.description
+    edits = card.edits
+    await body(cog)
+    assert card.edits == edits
+
+
+async def test_a_reconnect_makes_the_next_tick_a_full_pass_again(bot, guild, monkeypatch):
+    await running(bot, guild, ADA, BEA, format="single")
+    thread = the_thread(bot)
+    body = cog_module.Brackets._sweep.coro
+    cog, _ = cog_for(bot, monkeypatch)
+    await cog.on_ready()
+    await body(cog)
+    thread.delete(thread.cards[0])
+    await body(cog)
+    assert thread.cards == []
+
+    await cog.on_ready()
+    await body(cog)
+
+    assert len(thread.cards) == 1

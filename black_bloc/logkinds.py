@@ -191,6 +191,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "brackets.set_overridden",
         "brackets.set_reset",
         "brackets.thread_lost",
+        "brackets.thread_moved",
         "automod.deleted",
         "case.restored",
         "case.voided",

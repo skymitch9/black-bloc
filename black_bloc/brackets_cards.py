@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import discord
@@ -61,8 +62,10 @@ LABEL_LIMIT = 80
 TITLE_LIMIT = 256
 
 STARTER_MOVES: dict[str, tuple[str, ...]] = {
+    store_.DRAFT: (LEAVE,),
     store_.SIGNUPS: (JOIN, LEAVE),
     store_.CHECK_IN: (CHECK_IN, LEAVE),
+    store_.SEEDING: (LEAVE,),
 }
 SET_MOVES: dict[str, tuple[str, ...]] = {
     READY: (REPORT, CALL, DECIDE),
@@ -122,8 +125,35 @@ def set_prefix(tournament_id: int, key: str) -> str:
     return f"{PREFIX}:{int(tournament_id)}:{key}:"
 
 
-def starter_moves(state: str) -> tuple[str, ...]:
-    return STARTER_MOVES.get(state, ())
+def starter_moves(state: str, entrants: int = 1) -> tuple[str, ...]:
+    """Leave wherever it is legal (before the start) while someone is in to press it."""
+    return tuple(one for one in STARTER_MOVES.get(state, ()) if one != LEAVE or entrants > 0)
+
+
+def custom_ids(message: Any) -> list[str]:
+    return [
+        str(getattr(child, "custom_id", "") or "")
+        for row in getattr(message, "components", None) or ()
+        for child in getattr(row, "children", None) or ()
+    ]
+
+
+def is_starter_id(custom_id: str, tournament_id: int) -> bool:
+    found = re.fullmatch(STARTER_TEMPLATE, custom_id)
+    return found is not None and int(found["tid"]) == int(tournament_id)
+
+
+def is_set_id(custom_id: str, tournament_id: int) -> bool:
+    found = re.fullmatch(SET_TEMPLATE, custom_id)
+    return found is not None and int(found["tid"]) == int(tournament_id)
+
+
+def embeds_of(message: Any) -> list[Any]:
+    found = getattr(message, "embeds", None)
+    if found is None:
+        one = getattr(message, "embed", None)
+        found = [one] if one is not None else []
+    return list(found)
 
 
 def set_moves(tournament_state: str, set_state: str) -> tuple[str, ...]:
@@ -360,6 +390,11 @@ def player_ids(match: Any, people: dict[int, Any]) -> list[int]:
     return found
 
 
+def winner_ids(match: Any, people: dict[int, Any]) -> list[int]:
+    person = people.get(match.winner) if match.winner is not None else None
+    return [int(person["user_id"])] if person is not None and person["user_id"] is not None else []
+
+
 def ping_mentions(user_ids: list[int], *, rehearsal: bool) -> discord.AllowedMentions:
     if rehearsal or not user_ids:
         return discord.AllowedMentions.none()
@@ -420,9 +455,12 @@ class SetButton(SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], temp
         await set_pressed(interaction, self.tournament_id, self.key, self.action)
 
 
-def starter_view(store: Any, guild_id: int, row: Any, origin: Any = None) -> discord.ui.View:
+def starter_view(
+    store: Any, guild_id: int, row: Any, origin: Any = None, people: list[Any] | None = None
+) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
-    for action in starter_moves(row["state"]):
+    count = 1 if people is None else sum(1 for one in people if not one["dropped"])
+    for action in starter_moves(row["state"], count):
         view.add_item(StarterButton(row["id"], action, label(store, guild_id, action)))
     url = site_url(origin, row["id"])
     if url:
@@ -445,11 +483,7 @@ def set_view(store: Any, guild_id: int, row: Any, match: Any) -> discord.ui.View
 
 def carries(message: Any, prefix: str) -> bool:
     """Whether a posted message is the card whose buttons start with this custom-id prefix."""
-    for row in getattr(message, "components", None) or ():
-        for child in getattr(row, "children", None) or ():
-            if str(getattr(child, "custom_id", "") or "").startswith(prefix):
-                return True
-    return False
+    return any(one.startswith(prefix) for one in custom_ids(message))
 
 
 __all__ = [
@@ -470,6 +504,10 @@ __all__ = [
     "StarterButton",
     "carries",
     "cleared_embed",
+    "custom_ids",
+    "embeds_of",
+    "is_set_id",
+    "is_starter_id",
     "label",
     "mention",
     "name_of",
@@ -490,5 +528,6 @@ __all__ = [
     "starter_moves",
     "starter_view",
     "state_words",
+    "winner_ids",
     "words",
 ]

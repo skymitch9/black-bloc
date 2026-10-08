@@ -60,6 +60,8 @@ CANCEL = "cancel"
 RESTORE = "restore"
 ADD_ENTRANT = "add"
 DROP_OUT = "drop_out"
+MOVE = thread_.MOVE
+RESTORE_ENTRANT = "restore_entrant"
 
 TO_LABELS = {
     OPEN_SIGNUPS: "Open sign-ups",
@@ -76,6 +78,7 @@ TO_LABELS = {
     CANCEL: "Cancel",
     RESTORE: "Restore",
     ADD_ENTRANT: "Add entrant…",
+    MOVE: "Move to #knuck-up",
 }
 TO_STYLES = {
     START: discord.ButtonStyle.success,
@@ -95,6 +98,7 @@ TO_MOVES: dict[str, tuple[str, ...]] = {
 CONFIRMED = {
     CANCEL: "Cancel **{name}**? Every result stays and Restore brings it back.",
     UNSTART: "Send **{name}** back to seeding? Every set and result is cleared.",
+    MOVE: "Move **{name}** into #knuck-up? Its players are pinged there.",
 }
 MEMBER_LISTED = (store_.SIGNUPS, store_.CHECK_IN, store_.SEEDING, store_.RUNNING)
 
@@ -235,21 +239,41 @@ def legal_to_moves(row: Any, current: Any) -> list[str]:
 
 
 def member_moves(row: Any, mine: Any) -> list[str]:
+    """Leave wherever it is legal — in, before the start — as the starter card offers it."""
     state = row["state"]
     inside = mine is not None and not mine["dropped"] and not mine["dq"]
-    if state == store_.SIGNUPS:
-        return [cards.LEAVE] if inside else [cards.JOIN]
-    if state == store_.CHECK_IN and inside:
-        return [cards.LEAVE] if mine["checked_in"] else [cards.CHECK_IN, cards.LEAVE]
+    if state == store_.SIGNUPS and not inside:
+        return [cards.JOIN]
+    if state == store_.CHECK_IN and inside and not mine["checked_in"]:
+        return [cards.CHECK_IN, cards.LEAVE]
+    if state in store_.BEFORE_START and inside:
+        return [cards.LEAVE]
     if state == store_.RUNNING and inside:
         return [DROP_OUT]
     return []
 
 
+def may_move(bot: Any, guild: Any, user: Any, row: Any) -> bool:
+    return (
+        access.is_staff(bot.store, user)
+        and bool(row["shadow"])
+        and moves_.mode_of(bot.store, guild.id) == moves_.ON
+    )
+
+
+def players(bot: Any, guild: Any, match: Any, people: dict) -> str:
+    return words(
+        bot,
+        guild,
+        "brackets_set_card_players",
+        a=cards.name_of(people, match.slot_a),
+        b=cards.name_of(people, match.slot_b),
+    )
+
+
 def set_line(bot: Any, guild: Any, row: Any, match: Any, people: dict) -> str:
     status = cards.status_line(bot.store, guild.id, match, people, row["confirm_minutes"])
-    players = f"{cards.name_of(people, match.slot_a)} v {cards.name_of(people, match.slot_b)}"
-    return f"**{match.key}** · {players} · {status[0]}"
+    return f"**{match.key}** · {players(bot, guild, match, people)} · {status[0]}"
 
 
 def entrant_option(person: Any) -> discord.SelectOption:
@@ -265,10 +289,7 @@ def entrant_option(person: Any) -> discord.SelectOption:
 
 def set_option(bot: Any, guild: Any, row: Any, match: Any, people: dict) -> discord.SelectOption:
     return discord.SelectOption(
-        label=text(
-            f"{match.key} · {cards.name_of(people, match.slot_a)} v "
-            f"{cards.name_of(people, match.slot_b)}"
-        ),
+        label=text(f"{match.key} · {players(bot, guild, match, people)}"),
         value=match.key,
         description=text(cards.status_line(bot.store, guild.id, match, people, 0)[0]),
     )
@@ -316,7 +337,9 @@ async def build_tournament(
         view.add_item(MemberButton(bot, guild, row["id"], move))
     view.add_item(BackButton(bot, guild, (HOME,)))
     if runs:
-        for index, move in enumerate(legal_to_moves(row, current)):
+        moves = legal_to_moves(row, current)
+        moves += [MOVE] if may_move(bot, guild, user, row) else []
+        for index, move in enumerate(moves):
             if move == SEED and not seed_text(everyone):
                 continue
             view.add_item(ToButton(row["id"], move, row=1 if index < 5 else 2))
@@ -494,6 +517,10 @@ async def landed(
 async def form_opened(interaction: discord.Interaction, modal: discord.ui.Modal) -> None:
     """A form is the first answer, so the organiser and the database are asked without a defer."""
     if not await db_up(interaction):
+        return
+    refused = buttons_.off_now(interaction.client, interaction.guild)
+    if refused:
+        await answer(interaction, refused)
         return
     if not organiser(interaction.client, interaction.guild, interaction.user):
         await answer(
@@ -690,6 +717,7 @@ async def run_to_move(interaction: discord.Interaction, tournament_id: int, move
         REOPEN: moves_.reopen,
         CANCEL: moves_.cancel,
         RESTORE: moves_.restore,
+        MOVE: thread_.move_home,
     }
     if move == SHUFFLE:
         return await moves_.seed(bot, guild, user, tournament_id, randomise=True)
@@ -886,7 +914,8 @@ class EntrantButton(discord.ui.Button):
                 self.entrant_id,
                 self.move == "check_in",
             )
-        await landed(interaction, place, self.view, self.tournament_id, outcome, self.move)
+        move = RESTORE_ENTRANT if self.move == "restore" else self.move
+        await landed(interaction, place, self.view, self.tournament_id, outcome, move)
 
 
 class EntrantReasonModal(AnswersErrors, discord.ui.Modal):
@@ -916,7 +945,13 @@ class EntrantReasonModal(AnswersErrors, discord.ui.Modal):
         if outcome.ok and person is not None:
             row = await store_.tournament(bot.db, guild.id, self.tournament_id)
             await thread_.tell(
-                bot, guild, row, person["user_id"], ENTRANT_DMS[self.move], self.reason.value
+                bot,
+                guild,
+                row,
+                person["user_id"],
+                ENTRANT_DMS[self.move],
+                self.reason.value,
+                actor=user,
             )
         await landed(
             interaction,
