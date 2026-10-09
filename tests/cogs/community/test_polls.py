@@ -1651,6 +1651,14 @@ async def test_past_ten_options_the_modal_falls_back_to_a_select(cog, bot, lead)
     assert [option.value for option in picker.options if option.default] == ["3"]
 
 
+def test_a_single_option_vote_never_builds_a_one_option_radio_group():
+    """Discord refuses a modal radio group with fewer than 2 options; a checkbox takes 1."""
+    rows = [{"position": 0, "label": "only"}]
+
+    assert isinstance(vote_picker(rows, multi=False), discord.ui.Select)
+    assert isinstance(vote_picker(rows, multi=True), discord.ui.CheckboxGroup)
+
+
 async def test_the_modal_marks_what_that_person_already_picked(cog, bot, lead, db):
     await panel(cog, bot, lead, kind=choice(pure.CHECKBOX), options=" | ".join("ABCDEF"))
     await press(bot, lead, 1, 1)

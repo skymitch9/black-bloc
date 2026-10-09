@@ -193,6 +193,7 @@ LOOP_NAMES = ("polls",)
 LIST_LIMIT = 25
 MODAL_TITLE_LIMIT = 45
 LABEL_TEXT_LIMIT = 45
+RADIO_OPTIONS_FROM = 2
 GROUP_OPTIONS_UP_TO = 10
 
 POLLS_OFF = (
@@ -1172,7 +1173,7 @@ def vote_picker(options: Any, *, multi: bool, standing: Any = ()) -> Any:
         (str(item["position"]), clamp(item["label"], LABEL_LIMIT), int(item["position"]) in chosen)
         for item in found
     ]
-    if len(rows) > GROUP_OPTIONS_UP_TO:
+    if len(rows) > GROUP_OPTIONS_UP_TO or (not multi and len(rows) < RADIO_OPTIONS_FROM):
         return discord.ui.Select(
             options=[
                 discord.SelectOption(label=label, value=value, default=picked)

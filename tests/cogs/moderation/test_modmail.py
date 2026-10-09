@@ -1832,6 +1832,52 @@ async def card_for(cog, bot, ticket):
     return await modmail_cog.refresh_card(bot, bot.guild, ticket["id"])
 
 
+def saved_replies(count):
+    return [{"name": f"reply-{n}", "content": f"Saved reply {n}."} for n in range(count)]
+
+
+def test_no_saved_replies_leave_the_reply_form_without_a_picker():
+    assert modmail_cog.snippet_picker(saved_replies(0)) is None
+    assert modmail_cog.snippet_picker(None) is None
+
+
+@pytest.mark.parametrize(
+    ("count", "kind", "shown"),
+    [
+        (1, discord.ui.Select, 1),
+        (2, discord.ui.RadioGroup, 2),
+        (10, discord.ui.RadioGroup, 10),
+        (11, discord.ui.Select, 11),
+        (26, discord.ui.Select, 25),
+    ],
+)
+def test_the_saved_reply_picker_stays_inside_discords_option_counts(count, kind, shown):
+    """Discord refuses a modal radio group with fewer than 2 or more than 10 options."""
+    picker = modmail_cog.snippet_picker(saved_replies(count))
+    payload = picker.to_component_dict()
+
+    assert type(picker) is kind
+    assert len(payload["options"]) == shown
+    low, high = (2, 10) if kind is discord.ui.RadioGroup else (1, 25)
+    assert low <= len(payload["options"]) <= high
+
+
+async def test_a_reply_by_the_only_saved_reply_sends_it(cog, bot, member, lead, db):
+    ticket = await open_one(cog, bot, member)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    await modmail_cog.put_snippet(bot, bot.guild, lead, "form-test", "Just the one.")
+    card = await card_for(cog, bot, ticket)
+
+    opened = await press_card(bot, lead, card, "Reply")
+    modal = opened.response.modals[-1]
+    assert isinstance(modal.picker, discord.ui.Select)
+    modal.text._value = ""
+    choose_snippet(modal.picker, "form-test")
+    await modal.on_submit(FakeInteraction(bot, lead))
+
+    assert member.dms[-1]["embed"].description == "Just the one."
+
+
 def choose_snippet(picker, name):
     """A RadioGroup answers with `value`; a Select answers with `values`."""
     if hasattr(picker, "values"):

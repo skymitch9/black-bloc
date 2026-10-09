@@ -4200,6 +4200,7 @@ class TicketButton(
 # --- the sticky ticket card ----------------------------------------------------------------------
 
 
+SNIPPET_GROUP_FROM = 2
 SNIPPET_GROUP_UP_TO = 10
 CLOSE_REASON_LIMIT = 400
 
@@ -4250,7 +4251,9 @@ def snippet_picker(rows: Any) -> Any:
     options = [
         (str(row["name"])[:SELECT_OPTION_LIMIT], clamp(row["content"], 100)) for row in found
     ]
-    if len(options) > SNIPPET_GROUP_UP_TO:
+    if not options:
+        return None
+    if not SNIPPET_GROUP_FROM <= len(options) <= SNIPPET_GROUP_UP_TO:
         return discord.ui.Select(
             placeholder=capped_placeholder(len(found), len(list(rows)), pick=PICK_A_SNIPPET),
             options=[
@@ -4451,7 +4454,7 @@ class ReplyModal(AnswersErrors, discord.ui.Modal):
             style=discord.TextStyle.paragraph, max_length=CONTENT_LIMIT, required=False
         )
         self.add_item(discord.ui.Label(text=REPLY_TEXT_LABEL, component=self.text))
-        self.picker = snippet_picker(rows) if rows else None
+        self.picker = snippet_picker(rows)
         if self.picker is not None:
             self.add_item(
                 discord.ui.Label(

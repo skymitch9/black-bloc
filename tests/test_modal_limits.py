@@ -16,6 +16,9 @@ SELECT_PLACEHOLDER = 150
 TEXT_INPUT = 4
 PACKAGE = Path(black_bloc.__file__).parent
 SKIP = {"black_bloc.__main__"}
+SAMPLE_ARGS = {
+    "PollVoteModal": {"options": [{"position": 0, "label": "Yes"}, {"position": 1, "label": "No"}]},
+}
 
 FIELD_LIMITS = {
     "Label": {"text": SHORT, "description": LONG},
@@ -25,6 +28,11 @@ FIELD_LIMITS = {
     "RadioGroupOption": {"label": LONG, "description": LONG},
 }
 MODAL_LIMITS = {"title": SHORT, "label": SHORT, "placeholder": LONG}
+OPTION_COUNTS = {
+    discord.ComponentType.select.value: (1, 25),
+    discord.ComponentType.radio_group.value: (2, 10),
+    discord.ComponentType.checkbox_group.value: (1, 10),
+}
 
 
 def modules():
@@ -53,16 +61,18 @@ def modal_classes(mods):
 
 def build(cls):
     args, kwargs = [], {}
+    sample = SAMPLE_ARGS.get(cls.__name__, {})
     for param in list(inspect.signature(cls.__init__).parameters.values())[1:]:
         if param.default is not param.empty or param.kind in (
             param.VAR_POSITIONAL,
             param.VAR_KEYWORD,
         ):
             continue
+        given = sample.get(param.name, MagicMock())
         if param.kind == param.KEYWORD_ONLY:
-            kwargs[param.name] = MagicMock()
+            kwargs[param.name] = given
         else:
-            args.append(MagicMock())
+            args.append(given)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return cls(*args, **kwargs)
@@ -77,6 +87,12 @@ def overs(node, where, in_options=False, kind=None):
     if not isinstance(node, dict):
         return found
     kind = node.get("type", kind)
+    counted = OPTION_COUNTS.get(node.get("type"))
+    if counted:
+        low, high = counted
+        given = len(node.get("options") or [])
+        if not low <= given <= high:
+            found.append(f"{where}.options has {given}, not {low}-{high}")
     for key, value in node.items():
         if not isinstance(value, str):
             found += overs(value, f"{where}.{key}", in_options or key == "options", kind)
@@ -171,7 +187,7 @@ def literal_overs(mod, modal_names):
 
 
 async def test_every_modal_that_builds_fits_discords_length_limits():
-    """Discord refuses the whole modal with a 400 when one word is too long."""
+    """Discord refuses the whole modal with a 400 when one word or one option count is off."""
     classes = modal_classes(modules())
     built, found = 0, []
     for name, cls in sorted(classes.items()):
