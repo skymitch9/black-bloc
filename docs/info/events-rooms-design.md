@@ -120,7 +120,7 @@ only, so the host sees it); pressing it as the host answers in words:
 ### C. The confirm step
 
 Pressing it opens a modal `RoomDeleteModal` (title **"Remove this room?"**) with one optional paragraph
-field, `label="A line the host is sent (if the event is still open)"`, `max_length=CANCEL_NOTE_LIMIT`.
+field, `label="A line sent to the host (if still open)"` (shortened 2026-10-09: the original 52-character label was over Discord's 45 cap, review-checklist item 39), `max_length=CANCEL_NOTE_LIMIT`.
 Submit runs, under `event_lock`:
 
 1. `fresh = get_event` — if `fresh["review_channel_id"] != interaction.channel_id`, answer

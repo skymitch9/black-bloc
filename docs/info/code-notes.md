@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-09 — one section APPENDED, nothing re-keyed**: *Modal length limits* (branch `modal-labels`, off `main` `04e0afc2`); keyed by NAME. Before that:
 > **2026-10-08 — one section APPENDED, nothing re-keyed**: *Marathon controls Layer B, the drawer* (branch `marathon-controls-b`, off `main` `b4eee247`); keyed by NAME. `marathons-section.js` lost and gained whole functions, so its older `path:line` rows are further off than before — trust the anchor text. Before that:
 > **2026-10-08 — one section APPENDED, nothing re-keyed**: *Marathon controls Layer A, review fix round* (branch `marathon-controls-a`); keyed by NAME. Before that:
 > **2026-10-08 — one section APPENDED, nothing re-keyed**: *The deploy gate's own mock* (branch `deploy-gate-mock`, off `main` `c103bf53`); keyed by NAME. Before that:
@@ -727,6 +728,14 @@ front of a person.
 |---|---|
 | `tests/test_bot.py:41` | The offline contract: the bot object builds and every cog in `COGS` loads with **no gateway and no token**. Anything that genuinely needs Discord is a manual smoke test in `../access/setup.md` §3, labelled as such (`architecture.md`, rule 6). |
 | `tests/test_bot.py:43` | Pins the three privileged intents so a refactor of `black_bloc/intents.py` cannot quietly drop one — dropping `message_content` would disable moderation with no error anywhere. |
+
+## `tests/test_modal_limits.py` — Discord's modal length limits (cross-cutting)
+
+| Key | Note |
+|---|---|
+| `tests/test_modal_limits.py:1` | ⚠️ **Why it is its own file and not under one cog**: the limit belongs to Discord, not to a feature, and every modal in the package is in scope. Discord refuses the WHOLE modal with `400 (50035) Invalid Form Body … Must be between 1 and 45 in length` when one Label `text`, TextInput `label` or modal `title` is over 45 (a Label `description`, a TextInput `placeholder` and an option label/description cap at 100, a select placeholder at 150). discord.py 2.7.1 checks none of it client-side, so a too-long label passes every unit test and fails only against a real Discord. Traced to `/poll` ▸ New poll refused on Fly 2026-10-09 13:35Z (`polls.py` `NewPollModal`, a 46-character label since `6dcb7e54`, 2026-09-03). Review-checklist item 39. |
+| `tests/test_modal_limits.py:173` | The runtime half: every `discord.ui.Modal` subclass in the package is built with `MagicMock` for each required argument and its `to_dict()` payload walked. A mock-derived string is not a `str`, so it is skipped rather than measured. The `built >= 90` floor stops the test passing vacuously if a refactor makes most modals unconstructible (94 of 101 built on 2026-10-09). |
+| `tests/test_modal_limits.py:188` | The static half, for what the runtime half cannot reach: the modals that need real arguments, and labels chosen by a branch (`STAFF_BODY_LABEL if staff_door else …`). It walks every `Label(text=/description=)`, `TextInput(label=/placeholder=)`, option label, modal `title=`/`label=` (class keyword, `super().__init__`, a call to a modal class) and `x.label =` inside a modal class, resolving each expression against the module's own globals; an expression containing a call is never evaluated, so the scan cannot run code. |
 
 ## `tests/test_guard.py`
 
