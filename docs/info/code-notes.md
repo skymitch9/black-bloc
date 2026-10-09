@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-09 — one section APPENDED, nothing re-keyed**: *Fastest Furs actual durations* (branch `ff-actual-durations`, off `main` `01d6e72b`); keyed by NAME. Before that:
 > **2026-10-09 — rows AMENDED in place, nothing re-keyed**: *Modal option counts* (branch `snippet-radio`, off `main` `86281011`) — the `snippet_picker` and `vote_picker` rows and three `tests/test_modal_limits.py` rows. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *Modal length limits* (branch `modal-labels`, off `main` `04e0afc2`); keyed by NAME. Before that:
 > **2026-10-08 — one section APPENDED, nothing re-keyed**: *Marathon controls Layer B, the drawer* (branch `marathon-controls-b`, off `main` `b4eee247`); keyed by NAME. `marathons-section.js` lost and gained whole functions, so its older `path:line` rows are further off than before — trust the anchor text. Before that:
@@ -10327,3 +10328,13 @@ Design: [`brackets-design.md`](brackets-design.md) §E (as built) and §G 27–4
 - `marathons-section.js` `sourceSettings` — BaF run/host events and Event schedule write on change; Save is only for the channel picker and Re-read every. `runsMode` (`marathon-words.js`) is `wanted_mode`'s other half.
 - `marathons-section.js` `spotlightBlock` — D8 was answered *keep it as is*: the channel's Go-live and Pings cards stay. Only the Follow the schedule switch left the block, into Settings with the thread's words (D14's six switches).
 - `site/public/assets/page-schedule.js` `wantedRun` / `showRun` / `pointAt` — `#marathon-N-run-M` (`marathon-words.js` `trackerRunHash`) selects that run's day before the first paint and scrolls to and flashes its row (`moved`, the existing flash kind).
+
+## Fastest Furs actual durations — keyed by NAME (branch `ff-actual-durations`, 2026-10-09; re-key after the merge)
+
+- `black_bloc/marathon_fastestfurs.py` `_slot` — a finished item (`actualDuration` an int >= 0) holds the clock for its real length; `includes_setup` False adds the planned `setupTime` on top. Measured 2026-10-09: the real length already covers the setup (`marathon-fastestfurs-design.md` > *Actual durations*).
+- `marathon_fastestfurs.py` `parse_fastestfurs` `timed` — computed BEFORE the item's own state updates `previous_done`/`runs_done`: "the item before me finished and no earlier RUN is unfinished". An unfinished break (the 482-min *End of Day 1*, which never gets an `actualDuration`) does not taint later items, only the item right after it.
+- `marathon_fastestfurs.py` `use_actuals` — exists for the planned-walk comparison in tests and docs; the bot always reads with actuals.
+- `black_bloc/marathon.py` `live_minutes` — `phase(..., lead_days=0)`: the lead only separates FAR from NEAR, ON does not depend on it. `fetch_failures >= LIVE_READ_FAILURES` (3, the same number as the cog's `FAILURES_IMPORTANT`) is the back-off; an unpublished answer never raises `fetch_failures`.
+- `marathon.py` `next_read_at` `live` — when given it wins over the marathon row's own `poll_minutes` override; every caller passes `mt.live_minutes(...)` so the page's next read and the loop agree.
+- `black_bloc/cogs/content/marathon.py` `_failed` `live_reads_paused` — the probe passes `fetch_failures: 0` to ask "is this marathon on the live cadence at all", then records whether this failure paused it.
+- `black_bloc/cogs/content/marathon_signals.py` `reader_for` — `setup_for` plus the Fastest Furs switch; only `refresh` uses it, because `resolve` does not take `actual_includes_setup`.
