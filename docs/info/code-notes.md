@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 2* (branch `points-discord`, off `main` `4ab03a82`); keyed by NAME. `cogs/moderation/modmail.py` rows below `open_or_find` sit a few lines lower. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 1* (branch `points-engine`, off `main` `01d6e72b`); keyed by NAME. Before that:
 > **2026-10-09 — rows AMENDED in place, nothing re-keyed**: *Modal option counts* (branch `snippet-radio`, off `main` `86281011`) — the `snippet_picker` and `vote_picker` rows and three `tests/test_modal_limits.py` rows. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *Modal length limits* (branch `modal-labels`, off `main` `04e0afc2`); keyed by NAME. Before that:
@@ -10354,3 +10355,23 @@ Design: [`points-design.md`](points-design.md).
 - `black_bloc/api/tools/points.py` `points_runs` — a member with no `user_id` gets their own runs; naming another member without the verifier right is a 403 in words, not a silent narrowing.
 - `api/tools/points.py` `decider` — approve/reject are member-gated at the door and spend the STAFF write bucket (the brackets `writer` shape), because the verifier role is not staff; the move decides.
 - `site/mock/server.mjs` `ptState` — the seed mirrors `tests/api/test_contract.py` `seed_points` (run 1 pending, 2 approved, 3 rejected, 4 approved; bounty 1 live); the mock fixes the tiers at the shipped ones and recomputes XP only.
+
+## The BaF point system, layer 2 — keyed by NAME (branch `points-discord`, 2026-10-09; re-key after the merge)
+
+Design: [`points-design.md`](points-design.md) §G.
+
+- `black_bloc/cogs/content/points.py` `Points.pb` — `/pb` moved here from the feed cog; `HIDDEN_WHEN_OFF["points_mode"] = ("pb",)`, so the feed's own `pb_feed_mode` no longer hides the command and sits in `settings_panel.EXTRA_MODES` instead (the mode block is 25 lines).
+- `black_bloc/points_tickets.py` `submit` — the fields are checked (`moves.require_on` + `moves.run_values`) BEFORE a ticket exists, so a bad time never leaves an empty ticket; the one-open-ticket-per-member rule is modmail's (`modmail_open_ticket` index) and is answered in points words (`busy_words`: a waiting run names its game). A move that still refuses after the ticket opened closes it silently with the code as reason.
+- `points_tickets.py` `submit` — the proof link is spoken into the ticket as a plain message after the opening relay (an embed never previews a link) and the card is bumped back under it.
+- `black_bloc/cogs/moderation/modmail.py` `open_or_find` / `open_a_ticket` — `source == SOURCE_POINTS` writes no `modmail.opened` row (the run's `points.submitted` carries `ticket`, one event one row) and sends no opening DM (owner Q12, *"Silent"*).
+- `cogs/moderation/modmail.py` `run_tickets` — the point system imports this module, so the card fetches `points_tickets` when pressed; `card_embed` adds the run line, `card_view` / `build_ticket` pass `run=` and drop the Send to… pair on a run ticket.
+- `cogs/moderation/modmail.py` `card_pressed` — `RUN_ACTIONS` go to `points_tickets.pressed` BEFORE `still_staff`, because the verifier role decides runs and is not staff; Close is held by `close_refused` there, in `MoveButton.open_card_modal` and again in `run_card_close` (a modal opened before the hold).
+- `black_bloc/api/tools/modmail.py` `modmail_close` — the site's Close is held the same way (`run_pending`, 409, the key's words).
+- `points_tickets.py` `settle` — the ONE follow-through both doors run after a run move: Approve/Reject close the run's ticket with the staff decision line (Reject adds the reason), Approve leaves the decision line with Remove in the thread, the member's DM (Approve: the ticket-closed DM plus `points_dm_approved`, only when a ticket closed; Reject/Remove: the move's `Result.dm`), then the top-places post. `api/tools/points.py` calls it for approve/reject/remove/edit/recompute, which is §G's *the site's reject and remove must call the same helper*.
+- `points_tickets.py` `tell` — not `on` → `points.would_dm` with the words; a closed DM → `points.dm_failed`; the move stands either way (the `pb_moves.tell` pattern).
+- `points_tickets.py` `close_with` — the decision line is spoken BEFORE the close (the thread is archived by it); in channel mode the room is deleted at close, so Remove from Discord exists only in thread/forum mode — the site's Remove is the other door (L3).
+- `points_tickets.py` `RemoveButton` — a persistent `DynamicItem` (`points:remove:<run>`) registered by the points cog's `cog_load`; staff-gated at the press, the move gates again.
+- `black_bloc/points_announce.py` `announce` — one post per move from `Result.announce`; `shadow` → `shadow.channel_id(feature="points")` with `shadow.note_line` and no ping; `on` → `points_channel_id`, `<@&role>` above it and `allowed_mentions` = that role only; a real post that cannot go (no channel, guard, send error) is `points.announce_failed`; a rehearsal that cannot go writes nothing more (the move already wrote `would_announce`).
+- `black_bloc/points_panel.py` `build_board` — Submit renders only while `points_mode` is not off; Pending (N) only for staff/the verifier role and only when N > 0; N is the open run tickets whose run waits (`points_tickets.pending`), not the store's pending count (a site-submitted run has no ticket).
+- `points_panel.py` `SubmitModal` — five `Label`-wrapped inputs, every label and the title clipped to 45 and the placeholders to 100 at render, so a staff edit cannot break the form (checklist 39).
+- `black_bloc/pb_panel.py` `home_of` / `HomeButton` — the feed panel opened from the board carries `home=True` through every render (own, Manage…, member), and only its first face shows Back to the board; opened any other way (tests) it is unchanged.

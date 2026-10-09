@@ -187,6 +187,13 @@ retried**: the baseline has moved on, which is what stops a retry loop.
 
 ## F. Doors
 
+> **2026-10-09 — `/pb`'s face is now the leaderboard** (the BaF point system, layer 2, branch `points-discord`;
+> [`points-design.md`](points-design.md) §G). This panel did not change and nothing of the feed was removed: it opens
+> behind the board's **speedrun.com…** button (`points_feed_label`) with **Back** to the board on its face
+> (`pb_panel.home_of`). `/pb` moved to `black_bloc/cogs/content/points.py` and hides with `points_mode`;
+> `pb_feed_mode` stays the feed's own switch (its mode line moved to the settings panel's hand-added rows). The
+> bullet below describes this panel as it still is, one button deeper.
+
 - **Discord — `/pb`, one command for everybody** (the `/golive` shape). The card shows the
   member's own match and one button: *Do not post my personal bests* / *Post my personal bests*.
   Staff see the same card plus **Manage…**: a member picker, then per member **Unmatch**,

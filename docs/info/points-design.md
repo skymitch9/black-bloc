@@ -1,10 +1,14 @@
 # The BaF point system — layer 1: engine, storage, API (and the specification layers 2 and 3 are built from)
 
 > **Audience:** the conductor, reviewers, and the agents that build layers 2 and 3 from this page alone.
-> **Status:** TRACKED · 🔨 **LAYER 1 BUILT on branch `points-engine`** (off `main` `01d6e72b`), **NOT merged, NOT
-> deployed**; schema **91 → 92**; registry keys **1091 → 1147** (all 56 under `core`; `CORE_KEYS` 261 → 317); contract
-> routes **346 → 360**, action kinds 276 → 286; log head `points` (filed under `core`), 10 kinds.
-> **Last verified: 2026-10-09** — by the hermetic test suite, `ruff`, `site/mock/check.mjs` against the branch's own
+> **Status:** TRACKED · ✅ **LAYER 1 MERGED** to `main` (`4ab03a82`), schema **91 → 92**, keys 1091 → 1147, contract
+> routes 346 → 360, log head `points` (filed under `core`), 10 kinds. 🔨 **LAYER 2 BUILT on branch `points-discord`**
+> (off `main` `4ab03a82`), **NOT merged, NOT deployed**: no schema change; registry keys **1147 → 1176** (29 word
+> keys, all `core`; `CORE_KEYS` 317 → 346); log kinds **+3** (`points.would_dm`, `points.dm_failed`,
+> `points.announce_failed`); no new route (§G).
+> **Last verified: 2026-10-09** (layer 2: the hermetic suite, `ruff`, `scripts/site-gate.ps1 -Port 8833` and the 14
+> `site/mock/*.test.mjs` — figures under *Gate (layer 2)*; ⚠️ nothing of layer 2 has met Discord). Layer 1: by the
+> hermetic test suite, `ruff`, `site/mock/check.mjs` against the branch's own
 > mock on port 8823 (started by `scripts/site-gate.ps1 -Port 8823`) and every `site/mock/*.test.mjs` (figures under
 > *Gate*). ⚠️ **NOT checked:** nothing here has met Discord (layer 1 has no Discord code); no browser rendered anything
 > (there is no page); schema 92 has not run on the live database. Secret NAMES only (none here).
@@ -60,7 +64,7 @@ From the `#blackbloc-logs` thread *Point System* written by [Stars Glitter] Pawp
 | Layer | What | State |
 |---|---|---|
 | **L1** | Pure engine `black_bloc/points/`, storage (schema 92), the moves both doors call, the view, the API `/api/points`, 56 keys, 10 log kinds, contract + mock | 🔨 branch `points-engine` |
-| **L2** | Discord: `/pb` takes over as the board panel; the top-places post; the DMs (§G) | not started |
+| **L2** | Discord: `/pb` takes over as the board panel; a run is a modmail ticket decided on its card; the top-places post; the DMs (§G) | 🔨 branch `points-discord` |
 | **L3** | The site: a Leaderboard page with the bounties editor (§H) | not started |
 
 ## A. The engine (`black_bloc/points/`, pure — no database, no Discord)
@@ -203,7 +207,17 @@ the verifier role sees them too, as a Tournament Organiser sees `TO_WORDS`). Nam
 upcoming bounties, `pending` count for a verifier, every word key), `full_board`, `next_rank_of`, `bounties`,
 `run_row`, `place_row`, `bounty_row` (with its one rendered `line`; dates in the server's zone as `Jan 31, 12:00`).
 
-## D. Settings — 56 keys, all under `core`
+## D. Settings — 56 keys (layer 1) + 29 (layer 2), all under `core`
+
+**Layer 2 added 29 word keys** to the same `POINTS_WORDS` block (1147 → 1176, `CORE_KEYS` 317 → 346): the panel's
+footer and buttons (`points_panel_footer`, `points_points_label`, `points_xp_label`, `points_full_board_label`,
+`points_next_rank_label`, `points_submit_label`, `points_feed_label`, `points_back_label`, `points_previous_label`,
+`points_next_label`, `points_page_words`, `points_bounties_heading`), the form (`points_submit_title`,
+`points_game_label`, `points_category_label`, `points_time_label`, `points_proof_label`, `points_note_label`,
+`points_time_hint`, `points_proof_hint`), the run ticket (`points_ticket_subject`, `points_ticket_body`,
+`points_close_refused_said`), the approval DM (`points_dm_approved`) and the five submission refusals that come from
+modmail (`points_modmail_off_said`, `points_blocked_said`, `points_ticket_open_said`, `points_run_waiting_said`,
+`points_cannot_open_said`). Labels in `labels.js`, rows in the mock, `contract.json` `core_keys`.
 
 `points_` would be a 26th `/settings` group and the group select is at Discord's cap of 25 (the structure-backup,
 pb-feed and brackets precedent), so every key is in `CORE_KEYS`; the brief's "a `points` namespace" is the `points_`
@@ -274,38 +288,88 @@ Each carries `via`; a run row carries `run`, `game`, the member as target. The `
 | `points.bounty_ended` | routine | — |
 | `points.top_changed` | routine | the top places moved while `on` (`top`, `changes`, `lines`) |
 | `points.would_announce` | shadow (routine by rule) | the same while `shadow` |
+| `points.would_dm` | shadow (routine by rule) | layer 2: a decision DM not sent because `points_mode` is not `on` (`move`, `text`) |
+| `points.dm_failed` | IMPORTANT (`_failed`) | layer 2: a decision DM Discord refused (`move`, `text`, `reason`); the move stands |
+| `points.announce_failed` | IMPORTANT (`_failed`) | layer 2: a real top-places post that could not go (`channel_id`, `reason`, `lines`) |
 
-## G. Layer 2 — Discord (to build; nothing here exists yet)
+## G. Layer 2 — Discord (built on `points-discord`, 2026-10-09)
 
-- **The staff door is MODMAIL (conductor, 2026-10-09, relaying the owner's decision).** Each submission opens a modmail
-  ticket in the member's name — a new ticket kind, built in L2 — and calls `submit(…, ticket_id=<the ticket>)`.
-  **Approve / Reject live on that ticket's card** and call `approve` / `reject` with `ticket_id=`; each closes the
-  ticket. **Reply still works** on the ticket, for asking the member for a clearer proof. Remove (staff) can find the
-  run by its ticket the same way. ⚠️ This supersedes the *Pending (N)* queue and the run card with Approve / Reject in
-  the panel bullet below: the panel shows the board, the member's own runs and Submit; deciding happens on the ticket.
-  Layer 1 builds NO modmail code — only the column, `submit`'s `ticket_id=` and the lookup.
+The owner's decisions that shape it (2026-10-09): Q11 (*"That's good"*) — `/pb` opens the board, the speedrun.com
+panel folds behind one button; Q1/Q5 — staff approve every run, the verifier role may too, never their own; **runs
+are approved THROUGH MODMAIL** (*"Can the approvals go through modmail? The entry to use end user can be in /pb but
+the staff just see it as a mod mail entry to be approved"*); Q12 (*"Silent"*) — opening a run ticket DMs nobody;
+Q8 — the post goes to `points_channel_id`, the ping role blank = no ping, and shadow rehearses to the shadow home.
 
-- **`/pb` becomes the board panel** (the one-command-per-feature, panel-not-slash rule). Today `/pb` opens the
-  speedrun.com feed panel (`black_bloc/pb_panel.py`, [`pb-feed-design.md`](pb-feed-design.md) §F) and `pb_feed_mode` is
-  `off`. L2 moves that panel under a staff-only **speedrun.com…** button on the new panel (or leaves it to the Settings
-  page), and makes the board the panel's face. Visibility follows `points_mode` (hidden at `off`, like every feature).
-- **The face:** the title (`points_board_title` / `_xp_title`), the top `points_top_n` as `points_board_line` rows
-  (or `points_board_empty`), the live bounties as `points_bounty_line` (or `points_bounty_none`). Buttons: **XP / Points**
-  (the switch), **Full board** (ephemeral, paged 25 a page), **Next rank** (`me.line`), **Submit a run**. Staff and
-  the verifier role also see **Pending (N)** → a run card with Approve / Reject (Reject asks for the reason); staff also
-  get Remove (asks the reason) and Edit on an approved or rejected run. Every button label, form title and field label
-  is a new key (and fits checklist 39: titles and labels ≤ 45 characters; a picker from rows follows checklist 40).
-- **Submit form:** game, category (optional), time, proof link, note (optional) — five fields, Discord's most. The
-  player is the presser.
-- **The top-places post:** on every `Outcome` whose `value.announce` is not empty, ONE post (title + the lines) — in
-  `on` to `points_channel_id` with `points_ping_role_id` above it (`allowed_mentions` = that role only); in `shadow` to
-  `shadow.channel_id(bot, guild, feature="points")` with the rehearsal note and no ping. A failed post is
-  `points.announce_failed` (IMPORTANT, checklist 2), never the same kind as the dry run.
-- **The DMs:** on `reject` and `remove`, send `Result.dm` to `Result.dm_to` (the `pb_moves.tell` /
-  `applications.send_dm` pattern: in `shadow` and `off` not sent, `points.would_dm`; a closed DM is `points.dm_failed`
-  in words and the move stands). ⚠️ **The site's reject and remove routes must call the same helper** (as
-  `api/tools/brackets.py` `told_entrant` does) — until L2 lands, a rejection from the site DMs nobody.
-- Every surface has a `render_again` (checklist 36); components get the shared `on_error` (checklist 30).
+| Module | Does |
+|---|---|
+| `black_bloc/cogs/content/points.py` | The `Points` cog (in `bot.py:COGS`): `/pb` (moved here from the feed cog; same name, so `TOP_LEVEL` is unchanged), and the persistent Remove button |
+| `black_bloc/points_panel.py` | The board panel and its surfaces: board, full board, pending list; the Submit form |
+| `black_bloc/points_tickets.py` | A run as a modmail ticket: open it silently, Approve / Reject / Remove, the hold on Close, `settle` (the follow-through both doors run), `tell` (the DM) |
+| `black_bloc/points_announce.py` | The one top-places post per move, routed by `points_mode` |
+
+- **`/pb` — the board.** Hidden at `points_mode = off` (`HIDDEN_WHEN_OFF["points_mode"] = ("pb",)`; `pb_feed_mode`
+  stays its own switch and moved to the settings panel's hand-added mode rows). The face: `points_board_title` /
+  `_xp_title`, the top `points_top_n` as `points_board_line` rows (or `points_board_empty`), a **Bounties** field
+  (`points_bounties_heading`) of the live bounties (or `points_bounty_none`). Buttons, each a key: the switch
+  (`points_xp_label` / `points_points_label`), **Full board** (25 a page, `points_previous_label` /
+  `points_next_label` / `points_page_words`, Back), **Next rank** (the member's next-place line drawn above the board),
+  **Submit a run** (not while `off`), **speedrun.com…** (`points_feed_label`: the old feed panel, unchanged, with a
+  Back to the board on its face — `pb_panel.home_of`), and for staff and the verifier role **Pending (N)** when N > 0: a
+  LIST of the open run tickets whose run waits, each a link to its thread — not a second queue. Panel minutes reuse
+  `pb_feed_panel_minutes` (the panel-minutes select is at Discord's 25 cap). Footer `points_panel_footer`.
+- **Submit form** (`points_submit_title`): game, category, time (`points_time_hint`), proof link
+  (`points_proof_hint`), note — five `Label`-wrapped inputs, labels and title clipped to 45, placeholders to 100. The
+  fields are checked by the move's own checks BEFORE anything opens; then a modmail ticket of source **`points`** opens
+  in the member's name (`modmail.open_a_ticket`), its subject `points_ticket_subject` and first message
+  `points_ticket_body` (the fields as typed, blanks as —), then the proof link alone as a plain message so Discord
+  previews it, then `submit(…, ticket_id=)`. **Silent:** no opening DM, and no `modmail.opened` row (the run's
+  `points.submitted` carries `ticket` — one event, one row). One open ticket per member still holds (modmail's index):
+  a member whose run waits is told `points_run_waiting_said`; one with another ticket open `points_ticket_open_said`;
+  modmail off / blocked / no room: `points_modmail_off_said` / `points_blocked_said` / `points_cannot_open_said`.
+- **The run ticket** is an ordinary ticket: the inbox's `A ticket…` select tags it `· run`, the header says *came in
+  by a run submitted on /pb*, transcripts and logs are modmail's. Its card has Reply / Reply as Staff / Private note /
+  Close… plus **Approve** and **Reject…** (no Send to… pair), and a **run** line (game, category, time, state, proof).
+  The panel's copy of the card has the same moves. Approve/Reject are gated on staff OR the verifier role (the move
+  gates again: `own_run`, `wrong_state`). **Close… is refused** in `points_close_refused_said` while the run waits —
+  on the card, on the panel's copy, in the Close modal's submit, and on the site's close route (`run_pending`, 409).
+- **Deciding (`points_tickets.settle`, both doors):** Approve/Reject call the move with `ticket_id=`; the decision line
+  (the move's staff words, Reject adds the reason) is spoken into the ticket — with a persistent **Take it off the
+  board…** button under an approval — and the ticket closes silently with that line as its reason. The member's DM:
+  approve = the ticket-closed DM + `points_dm_approved`; reject = `points_dm_rejected`; remove = `points_dm_removed`.
+  DMs go only while `points_mode = on`; otherwise `points.would_dm` with the words; a shut DM is `points.dm_failed`
+  and the move stands. Then the top-places post. The site's approve / reject / remove / edit / recompute routes call
+  the same `settle` (`via=website`), so a site rejection DMs and closes the ticket the same way.
+- **Remove:** the button under an approved run's decision line (staff; a reason modal) → `remove` → the DM and the
+  post. In channel mode the ticket's room is deleted at close, so there Remove is the site's (L3). Edit stays L3.
+- **The top-places post (`points_announce.announce`):** one post (title `points_announce_title` + the lines) per move
+  whose `Result.announce` is not empty. `on` → `points_channel_id`, `<@&points_ping_role_id>` above it when set,
+  `allowed_mentions` = that role only. `shadow` → `shadow.channel_id(feature="points")` (`points_shadow_channel_id`,
+  else the global shadow home) with the rehearsal note, no ping, nothing to the real channel. `off` → nothing. A real
+  post that cannot go is `points.announce_failed` (IMPORTANT, never the dry run's kind).
+- Every surface has a `render_again` (checklist 36); components use the shared `on_error` (checklist 30).
+
+### L2 decisions (builder's calls beyond the brief)
+
+1. **`/pb` lives in the points cog**, not the feed cog; the feed cog keeps its loop. `points_mode` hides `/pb`;
+   `pb_feed_mode` moved to `settings_panel.EXTRA_MODES` so its mode line stays (the mode block is 25 lines).
+2. **One open ticket per member still holds** — a second run waits for the first to be decided (refused in words).
+   Changing that needs a schema change to modmail's open-ticket index and DM routing; not done.
+3. **The fields are checked before the ticket opens**; a move that still refuses after it opened closes the ticket
+   silently.
+4. **The proof link is posted again as a plain message** so Discord previews it (the relay is an embed).
+5. **Decision DMs follow `points_mode`** (layer 1's §G: not sent in shadow/off, `points.would_dm`) — so in shadow a
+   member who submitted is not DM'd the decision; staff can still Reply on the ticket. The staff answer says so.
+6. **The approve DM is sent only when a ticket closed** (§Not built: *a DM on approval* otherwise).
+7. **Remove lives under the decision line in the thread** (persistent button), so it exists in thread/forum modes
+   only; channel mode deletes the room.
+8. **Pending (N) counts open run tickets**, not every pending run (a site-submitted run has no ticket).
+9. **Panel minutes reuse `pb_feed_panel_minutes`** (no new option on the 25-option select).
+10. **The Close-refusal words are a key** (`points_close_refused_said`), as the brief listed; the Reject / Remove
+    modal words, the Pending list and the run line are staff-only constants.
+11. **The site's decide routes run `settle`** (close the ticket, DM, post) — no new route; the site's close route
+    refuses a waiting run.
+12. **`/pb`'s description** is now *"The speedrun leaderboard: the top places, your next rank, a run"* (a literal, as
+    every command description is), and the chat persona's `/pb` line says what the board does.
 
 ## H. Layer 3 — the site (to build)
 
@@ -359,7 +423,25 @@ than one bounty on a run; per-game boards; an announcement for the XP view; a sw
   settings, all keys present*; the mock stopped by the gate afterwards.
 - Every `site/mock/*.test.mjs` (14): exit 0.
 
-## What was NOT verified
+## Gate (layer 2, 2026-10-09, branch `points-discord`)
+
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **13025 passed, 1 skipped**.
+- `python -m ruff check black_bloc tests site`: all checks passed.
+- `scripts/site-gate.ps1 -Port 8833` (its own mock; `node site/mock/check.mjs`): *ok - 26 pages, 360 routes, 346 core
+  settings, all keys present*; the mock stopped by the gate (port free afterwards). Every `site/mock/*.test.mjs`
+  (14): exit 0.
+
+## What was NOT verified (layer 2)
+
+- **Nothing met Discord.** The board, the form, the run ticket, the card's Approve/Reject, the Remove button in an
+  archived thread, the post and the DMs are tested against fakes only. Whether a button under a message in an
+  archived, locked thread still answers is Discord's behaviour and was not tried.
+- A verifier who is not staff may not be able to SEE a run ticket's room (its overwrites are the staff roles), so
+  deciding from the card may in practice be staff-only until the verifier role can see the modmail rooms — not tried.
+- The modmail inbox panel's tag and card copy were exercised through the pure helpers and the card, not by opening
+  `/modmail` against Discord.
+
+## What was NOT verified (layer 1)
 
 - Nothing met Discord — layer 1 has no Discord code; §G is a specification.
 - No browser rendered anything — there is no page; the mock answers the shapes and simplifies (no event bounties'
