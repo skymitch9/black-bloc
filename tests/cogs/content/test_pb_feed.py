@@ -23,7 +23,6 @@ from tests.test_pb_looks import (
     kinds,
     link,
 )
-from tests.test_pb_panel import FakeInteraction
 
 SOURCE = pathlib.Path(cog_module.__file__)
 
@@ -101,29 +100,11 @@ async def test_unloading_stops_the_loop_and_closes_the_client(bot, feed, client)
     assert client.closed is True and not cog._looks.is_running()
 
 
-async def test_the_command_opens_the_members_own_card(bot, guild, feed):
-    cog = PbFeed(bot)
-    interaction = FakeInteraction(bot)
-
-    await PbFeed.pb.callback(cog, interaction)
-
-    shown = interaction.response.messages[0]
-    assert shown["ephemeral"] is True and shown["embed"].title == "Personal bests"
-
-
-async def test_the_command_refuses_a_dm_in_words(bot, guild, feed):
-    cog = PbFeed(bot)
-    interaction = FakeInteraction(bot)
-    interaction.guild = None
-
-    await PbFeed.pb.callback(cog, interaction)
-
-    assert "server" in interaction.said[0] and interaction.response.messages[0]["ephemeral"]
-
-
-def test_the_command_hides_while_the_feed_is_off_and_is_open_to_members():
-    assert HIDDEN_WHEN_OFF["pb_feed_mode"] == ("pb",)
-    assert PbFeed.pb.default_permissions is None
+def test_pb_left_the_feed_cog_for_the_leaderboard_and_the_feed_keeps_its_own_mode():
+    """2026-10-09, points L2: `/pb` opens the leaderboard; the feed is its sub-panel."""
+    assert not hasattr(PbFeed, "pb")
+    assert HIDDEN_WHEN_OFF["points_mode"] == ("pb",)
+    assert "pb_feed_mode" not in HIDDEN_WHEN_OFF
 
 
 def test_the_cog_is_thin_and_reads_no_environment():

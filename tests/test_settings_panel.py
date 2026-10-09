@@ -141,14 +141,16 @@ def test_automod_rules_is_the_only_key_in_the_registry_with_no_editor():
     assert {key for key in KEY_TYPES if not has_editor(key)} == {"automod_rules"}
 
 
-def test_the_mode_block_is_the_hide_table_plus_exactly_four_hand_added_rows():
+def test_the_mode_block_is_the_hide_table_plus_exactly_five_hand_added_rows():
     """Derived, so the mode block and the hide table can never drift apart. `marathon_mode`
     joined the hand-added rows when `/marathon` folded into `/event` ▸ Marathons…;
-    `rolemenu_mode` left them 2026-09-25 (owner, "B") when it went back to hiding `/rolemenu`."""
+    `rolemenu_mode` left them 2026-09-25 (owner, "B") when it went back to hiding `/rolemenu`;
+    `pb_feed_mode` joined them 2026-10-09 when `points_mode` took over hiding `/pb`."""
     from black_bloc.settings_panel import FEATURE_MODES
 
-    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 24
-    assert len(EXTRA_MODES) == 4
+    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 25
+    assert len(EXTRA_MODES) == 5
+    assert "pb_feed_mode" in {row.key for row in EXTRA_MODES}
     assert "marathon_mode" in {row.key for row in EXTRA_MODES}
     assert "structure_backup_mode" in {row.key for row in EXTRA_MODES}
     assert "rolemenu_mode" in HIDDEN_WHEN_OFF
@@ -164,8 +166,9 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     lines = mode_lines(store, GUILD)
     said = "\n".join(lines)
 
-    assert len(lines) == 24
+    assert len(lines) == 25
     assert "**Personal bests** — None · `/pb` to change" in lines
+    assert "**Leaderboard** — None · `/pb` to change" in lines
     assert "**Sticky messages** — None · `/sticky` to change" in lines
     assert "**Structure backup** — None · `/structure` to change" in lines
     assert any(line.startswith("**The front door** —") and "`/ask`" in line for line in lines)

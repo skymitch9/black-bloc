@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Request
 
 from ... import points_moves as moves
-from ... import points_store, points_view
+from ... import points_store, points_tickets, points_view
 from ...brackets.access import is_staff
 from ...logkinds import VIA_WEBSITE
 from ...points.model import STATES
@@ -60,9 +60,13 @@ def build_router(bot: Any) -> APIRouter:
     def refused(guild: Any, outcome: Any) -> Refused:
         return Refused(outcome.status or 400, outcome.code, site_words(guild, outcome.message))
 
-    async def run_answer(guild: Any, outcome: Any) -> dict[str, Any]:
+    async def run_answer(
+        guild: Any, outcome: Any, actor: Any = None, move: str | None = None
+    ) -> dict[str, Any]:
         if not outcome.ok:
             raise refused(guild, outcome)
+        if move is not None:
+            await points_tickets.settle(bot, guild, actor, outcome, move, via=VIA_WEBSITE)
         row = await points_store.run(bot.db, guild.id, outcome.value.id)
         return {
             "run": points_view.run_row(bot.store, guild, row),
@@ -140,10 +144,11 @@ def build_router(bot: Any) -> APIRouter:
     async def points_approve(request: Request, run_id: str) -> dict[str, Any]:
         who = await decider(request)
         guild = place()
+        actor = actor_for(bot, who, guild)
         outcome = await moves.approve(
-            bot, guild, actor_for(bot, who, guild), wanted_id(run_id), via=VIA_WEBSITE
+            bot, guild, actor, wanted_id(run_id), via=VIA_WEBSITE
         )
-        return await run_answer(guild, outcome)
+        return await run_answer(guild, outcome, actor, points_tickets.APPROVE)
 
     @router.post("/runs/{run_id}/reject")
     async def points_reject(
@@ -151,15 +156,16 @@ def build_router(bot: Any) -> APIRouter:
     ) -> dict[str, Any]:
         who = await decider(request)
         guild = place()
+        actor = actor_for(bot, who, guild)
         outcome = await moves.reject(
             bot,
             guild,
-            actor_for(bot, who, guild),
+            actor,
             wanted_id(run_id),
             body_of(payload).get("reason"),
             via=VIA_WEBSITE,
         )
-        return await run_answer(guild, outcome)
+        return await run_answer(guild, outcome, actor, points_tickets.REJECT)
 
     @router.post("/runs/{run_id}/remove")
     async def points_remove(
@@ -167,37 +173,43 @@ def build_router(bot: Any) -> APIRouter:
     ) -> dict[str, Any]:
         who = await staff_writer(request)
         guild = place()
+        actor = actor_for(bot, who, guild)
         outcome = await moves.remove(
             bot,
             guild,
-            actor_for(bot, who, guild),
+            actor,
             wanted_id(run_id),
             body_of(payload).get("reason"),
             via=VIA_WEBSITE,
         )
-        return await run_answer(guild, outcome)
+        return await run_answer(guild, outcome, actor, points_tickets.REMOVE)
 
     @router.patch("/runs/{run_id}")
     async def points_edit(request: Request, run_id: str, payload: Any = OPTIONAL) -> dict[str, Any]:
         who = await staff_writer(request)
         guild = place()
+        actor = actor_for(bot, who, guild)
         outcome = await moves.edit(
             bot,
             guild,
-            actor_for(bot, who, guild),
+            actor,
             wanted_id(run_id),
             body_of(payload),
             via=VIA_WEBSITE,
         )
-        return await run_answer(guild, outcome)
+        return await run_answer(guild, outcome, actor, points_tickets.EDIT)
 
     @router.post("/recompute")
     async def points_recompute(request: Request) -> dict[str, Any]:
         who = await staff_writer(request)
         guild = place()
-        outcome = await moves.recompute(bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE)
+        actor = actor_for(bot, who, guild)
+        outcome = await moves.recompute(bot, guild, actor, via=VIA_WEBSITE)
         if not outcome.ok:
             raise refused(guild, outcome)
+        await points_tickets.settle(
+            bot, guild, actor, outcome, points_tickets.RECOMPUTE, via=VIA_WEBSITE
+        )
         return {
             "message": site_words(guild, outcome.message),
             "changed": list(outcome.changed),

@@ -160,11 +160,13 @@ async def test_a_verifier_and_staff_decide_runs_from_the_site(client, sign_in, w
         "web.points.approved",
         "web.points.would_announce",
         "web.points.rejected",
+        "web.points.would_dm",
         "web.points.edited",
         "web.points.approved",
         "web.points.would_announce",
         "web.points.removed",
         "web.points.would_announce",
+        "web.points.would_dm",
         "web.points.recomputed",
     ]
 

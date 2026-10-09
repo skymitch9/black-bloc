@@ -458,20 +458,34 @@ SOURCE_DM = "dm"
 SOURCE_PANEL = "panel"
 SOURCE_STAFF = "staff"
 SOURCE_PRACTICE = "practice"
-TICKET_SOURCES = (SOURCE_DM, SOURCE_COMMAND, SOURCE_PANEL, SOURCE_STAFF, SOURCE_PRACTICE)
+SOURCE_POINTS = "points"
+TICKET_SOURCES = (
+    SOURCE_DM,
+    SOURCE_COMMAND,
+    SOURCE_PANEL,
+    SOURCE_STAFF,
+    SOURCE_PRACTICE,
+    SOURCE_POINTS,
+)
 SOURCE_WORDS: dict[str, str] = {
     SOURCE_DM: "a DM to Black Bloc",
     SOURCE_COMMAND: "/modmail",
     SOURCE_PANEL: "the Open a ticket button",
     SOURCE_STAFF: "staff",
     SOURCE_PRACTICE: "practice",
+    SOURCE_POINTS: "a run submitted on /pb",
 }
+RUN_TAG = "run"
 
 
 def ticket_source(ticket: Any) -> str:
     """A ticket that predates the column came in by DM, because that was the only door."""
     found = str(field_of(ticket, "source", SOURCE_DM) or SOURCE_DM)
     return found if found in TICKET_SOURCES else SOURCE_DM
+
+
+def is_run(ticket: Any) -> bool:
+    return ticket_source(ticket) == SOURCE_POINTS
 
 
 def first_line(text: Any) -> str:
@@ -812,6 +826,8 @@ CARD_SPEAK = "card_speak"
 CARD_END = "card_end"
 CARD_TO_REQUEST = "card_to_request"
 CARD_TO_EVENT = "card_to_event"
+CARD_APPROVE = "card_approve"
+CARD_REJECT = "card_reject"
 
 CARD_TITLE = "Ticket #{ticket_id}"
 CARD_PRACTICE_TITLE = "Practice ticket #{ticket_id}"
@@ -848,6 +864,10 @@ TO_REQUEST_MOVE = CardMove(CARD_TO_REQUEST, MAKE_A_REQUEST, "secondary", 1)
 TO_EVENT_MOVE = CardMove(CARD_TO_EVENT, MAKE_AN_EVENT, "secondary", 1)
 HANDOFF_MOVES = (TO_REQUEST_MOVE, TO_EVENT_MOVE)
 HANDOFF_ACTIONS = tuple(one.action for one in HANDOFF_MOVES)
+APPROVE_MOVE = CardMove(CARD_APPROVE, "Approve", "primary", 1)
+REJECT_MOVE = CardMove(CARD_REJECT, "Reject…", "danger", 1)
+RUN_MOVES = (APPROVE_MOVE, REJECT_MOVE)
+RUN_ACTIONS = tuple(one.action for one in RUN_MOVES)
 
 CARD_MOVES = (
     REPLY_MOVE,
@@ -858,15 +878,21 @@ CARD_MOVES = (
     END_MOVE,
     TO_REQUEST_MOVE,
     TO_EVENT_MOVE,
+    APPROVE_MOVE,
+    REJECT_MOVE,
 )
 CARD_ROW_LIMIT = 5
 
 
-def card_buttons(*, practice: bool, handoff: bool = False) -> tuple[CardMove, ...]:
-    """The four moves every open ticket has; practice adds two, Send to… adds two."""
+def card_buttons(
+    *, practice: bool, handoff: bool = False, run: bool = False
+) -> tuple[CardMove, ...]:
+    """The four moves every open ticket has; practice, a run and Send to… each add two."""
     found = [REPLY_MOVE, ANON_MOVE, CARD_NOTE_MOVE, CARD_CLOSE_MOVE]
     if practice:
         return tuple(found + [SPEAK_MOVE, END_MOVE])
+    if run:
+        return tuple(found + list(RUN_MOVES))
     if handoff:
         found += list(HANDOFF_MOVES)
     return tuple(found)
@@ -879,10 +905,10 @@ CARD_ROW = 1
 
 
 def panel_card_buttons(
-    *, open_ticket: bool, handoff: bool = False
+    *, open_ticket: bool, handoff: bool = False, run: bool = False
 ) -> tuple[ModmailMove, ...]:
     """The panel redraws the card's own moves, so there is one label table and never two."""
-    moves = card_buttons(practice=False, handoff=handoff) if open_ticket else ()
+    moves = card_buttons(practice=False, handoff=handoff, run=run) if open_ticket else ()
     found = [
         ModmailMove(move.action, move.label, move.style, CARD_ROW + move.row, modal=True)
         for move in moves
@@ -898,7 +924,8 @@ def ticket_label(ticket: Any, label: Any = None) -> str:
     """One open ticket as one select option: its number, its mode, then whose it is."""
     from .panels import option_label
 
-    return option_label(ticket["id"], ticket["mode"], label or ticket["user_id"])
+    status = f"{ticket['mode']} · {RUN_TAG}" if is_run(ticket) else ticket["mode"]
+    return option_label(ticket["id"], status, label or ticket["user_id"])
 
 
 REPLY_STYLE_KEY = "modmail_reply_style"

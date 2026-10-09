@@ -12,6 +12,7 @@ from .command_errors import AnswersErrors
 from .panels import Panel, db_up, opened, retire, still_staff
 from .pb_feed import OFF, PAGE, mode_of, said, time_words
 from .pb_moves import NAME_LIMIT, REASON_LIMIT
+from .points_moves import said as points_said
 from .settings_store import PB_FEED_PANEL_MINUTES, PB_FEED_REMATCH_DAYS
 from .timezones import unix
 
@@ -74,19 +75,27 @@ AGAIN_MARK = " · again"
 
 
 class PbPanel(Panel):
-    def __init__(self, bot: Any, guild_id: int, *, subject: int | None = None) -> None:
+    def __init__(
+        self, bot: Any, guild_id: int, *, subject: int | None = None, home: bool = False
+    ) -> None:
         super().__init__(
             int(bot.store.get(guild_id, PB_FEED_PANEL_MINUTES)),
             footer=said(bot.store, guild_id, "pb_feed_panel_footer"),
             again=self.shown_again,
         )
         self.subject = subject
+        self.home = home
 
     async def shown_again(self, interaction: discord.Interaction, previous: Any) -> None:
         if self.subject is None:
             await render_own(interaction, previous)
             return
         await render_member(interaction, self.subject, previous)
+
+
+def home_of(previous: Any) -> bool:
+    """Opened from the leaderboard, so every render of this sub-panel keeps the way back."""
+    return bool(getattr(previous, "home", False))
 
 
 def when_words(at: Any) -> str:
@@ -195,7 +204,7 @@ def site_url(bot: Any) -> str | None:
 
 
 async def build_own(
-    bot: Any, guild: Any, member: Any, *, note: str = ""
+    bot: Any, guild: Any, member: Any, *, note: str = "", home: bool = False
 ) -> tuple[discord.Embed, PbPanel]:
     store = bot.store
     row = await pb_store.match(bot.db, guild.id, member.id)
@@ -206,7 +215,7 @@ async def build_own(
     embed = discord.Embed(
         title=said(store, guild.id, "pb_feed_panel_title"), description="\n\n".join(lines)
     )
-    view = PbPanel(bot, guild.id)
+    view = PbPanel(bot, guild.id, home=home)
     move = own_move(row)
     if move is not None:
         view.add_item(OwnButton(move, said(store, guild.id, f"pb_feed_{move}_label")))
@@ -220,17 +229,21 @@ async def build_own(
             view.add_item(
                 discord.ui.Button(label=SITE_LABEL, style=discord.ButtonStyle.link, url=url, row=0)
             )
+    if home:
+        view.add_item(HomeButton(points_said(store, guild.id, "points_back_label")))
     return (embed, view)
 
 
-async def build_manage(bot: Any, guild: Any, *, note: str = "") -> tuple[discord.Embed, PbPanel]:
+async def build_manage(
+    bot: Any, guild: Any, *, note: str = "", home: bool = False
+) -> tuple[discord.Embed, PbPanel]:
     embed = discord.Embed(
         title=said(bot.store, guild.id, "pb_feed_panel_title"), description=note or None
     )
     embed.add_field(
         name=FEED_FIELD, value="\n".join(await feed_lines(bot, guild))[:1024], inline=False
     )
-    view = PbPanel(bot, guild.id)
+    view = PbPanel(bot, guild.id, home=home)
     view.add_item(MemberPick())
     if mode_of(bot.store, guild.id) != OFF:
         posts = await pb_store.posts(bot.db, guild.id, AGAIN_CHOICES)
@@ -258,7 +271,7 @@ def again_option(guild: Any, row: Any) -> discord.SelectOption:
 
 
 async def build_member(
-    bot: Any, guild: Any, user_id: int, *, note: str = ""
+    bot: Any, guild: Any, user_id: int, *, note: str = "", home: bool = False
 ) -> tuple[discord.Embed, PbPanel]:
     row = await pb_store.match(bot.db, guild.id, user_id)
     embed = discord.Embed(
@@ -266,7 +279,7 @@ async def build_member(
         description="\n\n".join(part for part in (note, pb_moves.mention(guild, user_id)) if part),
     )
     embed.add_field(name=MEMBER_FIELD, value="\n".join(member_lines(row))[:1024], inline=False)
-    view = PbPanel(bot, guild.id, subject=int(user_id))
+    view = PbPanel(bot, guild.id, subject=int(user_id), home=home)
     for move in staff_moves(row, mode_of(bot.store, guild.id)):
         view.add_item(StaffButton(move, int(user_id)))
     view.add_item(BackButton(int(user_id)))
@@ -282,24 +295,37 @@ async def show(interaction: discord.Interaction, built: Any, previous: Any) -> N
 
 
 async def render_own(
-    interaction: discord.Interaction, previous: Any = None, *, note: str = ""
+    interaction: discord.Interaction,
+    previous: Any = None,
+    *,
+    note: str = "",
+    home: bool | None = None,
 ) -> None:
-    built = await build_own(interaction.client, interaction.guild, interaction.user, note=note)
+    built = await build_own(
+        interaction.client,
+        interaction.guild,
+        interaction.user,
+        note=note,
+        home=home_of(previous) if home is None else home,
+    )
     await show(interaction, built, previous)
 
 
 async def render_manage(
     interaction: discord.Interaction, previous: Any = None, *, note: str = ""
 ) -> None:
-    await show(
-        interaction, await build_manage(interaction.client, interaction.guild, note=note), previous
+    built = await build_manage(
+        interaction.client, interaction.guild, note=note, home=home_of(previous)
     )
+    await show(interaction, built, previous)
 
 
 async def render_member(
     interaction: discord.Interaction, user_id: int, previous: Any = None, *, note: str = ""
 ) -> None:
-    built = await build_member(interaction.client, interaction.guild, user_id, note=note)
+    built = await build_member(
+        interaction.client, interaction.guild, user_id, note=note, home=home_of(previous)
+    )
     await show(interaction, built, previous)
 
 
@@ -400,6 +426,18 @@ class BackButton(discord.ui.Button):
         await render_manage(interaction, self.view)
 
 
+class HomeButton(discord.ui.Button):
+    def __init__(self, label: str) -> None:
+        super().__init__(label=label[:80], style=discord.ButtonStyle.secondary, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        from .points_panel import render_board
+
+        if not await opened(interaction, staff=False):
+            return
+        await render_board(interaction, self.view)
+
+
 class MemberPick(discord.ui.UserSelect):
     def __init__(self) -> None:
         super().__init__(placeholder=PICK_PLACEHOLDER, min_values=1, max_values=1, row=0)
@@ -493,6 +531,7 @@ __all__ = [
     "AGAIN_CHOICES",
     "AgainPick",
     "BackButton",
+    "HomeButton",
     "ManageButton",
     "MemberPick",
     "OwnButton",

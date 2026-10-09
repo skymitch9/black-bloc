@@ -666,7 +666,7 @@ def test_a_ticket_that_predates_the_column_came_in_the_only_way_there_was():
     assert ticket_source(a_ticket()) == "dm"
     assert ticket_source(a_ticket(source="panel")) == "panel"
     assert ticket_source(a_ticket(source="sideways")) == "dm"
-    assert set(TICKET_SOURCES) == {"dm", "command", "panel", "staff", "practice"}
+    assert set(TICKET_SOURCES) == {"dm", "command", "panel", "staff", "practice", "points"}
 
 
 def test_the_reply_sources_and_the_ticket_sources_are_two_lists_on_purpose():
@@ -778,3 +778,34 @@ def test_the_posted_message_wears_the_two_keys_and_falls_back_to_its_defaults():
     assert said.title == "Need a hand?" and said.description == "Press it."
     assert empty.title == PANEL_HEADING_DEFAULT
     assert empty.description == PANEL_TEXT_DEFAULT
+
+
+def test_a_run_ticket_adds_approve_and_reject_and_never_the_send_to_pair():
+    from black_bloc.modmail import RUN_ACTIONS, card_buttons, is_run, panel_card_buttons
+
+    found = card_buttons(practice=False, handoff=True, run=True)
+
+    assert [move.label for move in found] == [
+        "Reply",
+        "Reply as Staff",
+        "Private note",
+        "Close…",
+        "Approve",
+        "Reject…",
+    ]
+    assert tuple(move.action for move in found[4:]) == RUN_ACTIONS
+    assert {move.row for move in found[4:]} == {1}
+    on_panel = [move.label for move in panel_card_buttons(open_ticket=True, run=True)]
+    assert on_panel[4:] == ["Approve", "Reject…", "Back"]
+    assert is_run({"source": "points"}) and not is_run({"source": "dm"})
+
+
+def test_a_run_ticket_is_tagged_in_the_inbox_and_says_where_it_came_from():
+    from black_bloc.modmail import SOURCE_WORDS, ticket_label, ticket_source
+
+    row = {"id": 4, "mode": "thread", "user_id": 9, "source": "points"}
+
+    assert ticket_label(row, "Ada") == "#4 · thread · run · Ada"
+    assert ticket_label({**row, "source": "dm"}, "Ada") == "#4 · thread · Ada"
+    assert ticket_source(row) == "points"
+    assert SOURCE_WORDS["points"] == "a run submitted on /pb"

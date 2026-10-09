@@ -5231,6 +5231,135 @@ POINTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "what the leaderboard says while no bounty is live",
     ),
+    "points_panel_footer": (
+        "This panel has gone quiet — run /pb again",
+        (),
+        "the footer the /pb leaderboard panel shows once it stops answering",
+    ),
+    "points_points_label": (
+        "By speedpoints",
+        (),
+        "the /pb button that ranks the leaderboard by speedpoints",
+    ),
+    "points_xp_label": ("By XP", (), "the /pb button that ranks the leaderboard by XP"),
+    "points_full_board_label": (
+        "Full board",
+        (),
+        "the /pb button that shows everyone on the leaderboard, a page at a time",
+    ),
+    "points_next_rank_label": (
+        "Next rank",
+        (),
+        "the /pb button that tells a member how far the next place up is",
+    ),
+    "points_submit_label": (
+        "Submit a run",
+        (),
+        "the /pb button that opens the form for sending a run to staff",
+    ),
+    "points_feed_label": (
+        "speedrun.com…",
+        (),
+        "the /pb button that opens the speedrun.com personal bests panel",
+    ),
+    "points_back_label": ("Back", (), "the button that goes back to the /pb leaderboard"),
+    "points_previous_label": ("Previous", (), "the full board's button for the page before"),
+    "points_next_label": ("Next", (), "the full board's button for the page after"),
+    "points_page_words": (
+        "Page {page} of {pages}",
+        ("page", "pages"),
+        "the full board's footer",
+    ),
+    "points_bounties_heading": (
+        "Bounties",
+        (),
+        "the heading over the live bounties on the /pb leaderboard",
+    ),
+    "points_submit_title": (
+        "Submit a run",
+        (),
+        "the title of the run form (45 characters at most)",
+    ),
+    "points_game_label": ("Game", (), "the run form's game field (45 characters at most)"),
+    "points_category_label": (
+        "Category",
+        (),
+        "the run form's category field (45 characters at most)",
+    ),
+    "points_time_label": ("Time", (), "the run form's time field (45 characters at most)"),
+    "points_proof_label": (
+        "Proof link",
+        (),
+        "the run form's proof field (45 characters at most)",
+    ),
+    "points_note_label": (
+        "Note for staff",
+        (),
+        "the run form's note field (45 characters at most)",
+    ),
+    "points_time_hint": (
+        "1:23:45, 23:45, 45.2 or 1h 2m 3s",
+        (),
+        "the greyed example inside the run form's time field (100 characters at most)",
+    ),
+    "points_proof_hint": (
+        "A video, or an image showing LiveSplit or the game's timer",
+        (),
+        "the greyed example inside the run form's proof field (100 characters at most)",
+    ),
+    "points_ticket_subject": (
+        "Run: {game} — {time}",
+        ("game", "category", "time"),
+        "the heading of the modmail ticket a submitted run opens, as staff see it",
+    ),
+    "points_ticket_body": (
+        "**Game:** {game}\n**Category:** {category}\n**Time:** {time}\n**Proof:** {proof}\n"
+        "**Note:** {note}",
+        ("game", "category", "time", "proof", "note"),
+        "the first message of the modmail ticket a submitted run opens: the fields as the "
+        "member typed them",
+    ),
+    "points_close_refused_said": (
+        "This run is still waiting for a decision, so the ticket stays open. **Approve** or "
+        "**Reject…** decides it and closes the ticket.",
+        (),
+        "what staff are told when they try to close a run's ticket before deciding the run",
+    ),
+    "points_dm_approved": (
+        "Your **{game}** run ({time}) is approved — {xp} XP and {points} speedpoints.",
+        ("game", "time", "xp", "points"),
+        "what is added to the ticket-closed DM a member gets when their run is approved",
+    ),
+    "points_modmail_off_said": (
+        "Runs reach staff through modmail, and Black Bloc is not answering modmail here yet, "
+        "so nothing was sent.",
+        (),
+        "what a member is told when they submit a run while modmail_enabled is off",
+    ),
+    "points_blocked_said": (
+        "Staff here have stopped Black Bloc from opening modmail tickets for you, so this run "
+        "was not sent.",
+        (),
+        "what a member blocked from modmail is told when they submit a run",
+    ),
+    "points_ticket_open_said": (
+        "You already have a ticket open with staff, so this run was not sent. Submit it again "
+        "once that ticket is closed.",
+        (),
+        "what a member with an open modmail ticket is told when they submit a run",
+    ),
+    "points_run_waiting_said": (
+        "Your **{game}** run is still waiting for staff, so this one was not sent. Submit it "
+        "once that one is decided.",
+        ("game",),
+        "what a member is told when they submit a run while another of theirs waits",
+    ),
+    "points_cannot_open_said": (
+        "Black Bloc could not open a ticket for this run just now, so nothing was sent. Try "
+        "again in a minute.",
+        (),
+        "what a member is told when the run's modmail ticket could not be made",
+    ),
 }
 POINTS_DEFAULTS: dict[str, Any] = {
     POINTS_CHANNEL: POINTS_CHANNEL_ID,

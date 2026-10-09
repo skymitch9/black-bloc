@@ -108,6 +108,9 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
             "would_announce",
         )
     ),
+    "black_bloc/points_tickets.py::kind": tuple(
+        f"{head}points.{name}" for head in ("", "web.") for name in ("would_dm", "dm_failed")
+    ),
     "black_bloc/pb_looks.py::kind": (
         "pbfeed.posted",
         "pbfeed.would_post",

@@ -128,6 +128,7 @@ from ...modmail import (
     REPLY_STYLE_KEY,
     REPLY_STYLE_OPTIONS,
     ROOT_ROW_SELECT,
+    RUN_ACTIONS,
     SETUP,
     SETUP_TITLE,
     SITE,
@@ -142,6 +143,7 @@ from ...modmail import (
     SOURCE_COMMAND,
     SOURCE_DM,
     SOURCE_PANEL,
+    SOURCE_POINTS,
     SOURCE_PRACTICE,
     SOURCE_STAFF,
     SOURCE_TYPED,
@@ -170,6 +172,7 @@ from ...modmail import (
     header_embed,
     is_note,
     is_practice,
+    is_run,
     last_reply_missed,
     mentions,
     modes_sentence,
@@ -1121,13 +1124,33 @@ async def card_embed(bot: Any, guild: Any, ticket: Any) -> discord.Embed:
     """One embed for the sticky card and for the panel's copy of it — never two shapes."""
     rows = await ticket_messages(bot.db, ticket["id"])
     blocked = await blocked_row(bot.db, ticket["user_id"]) is not None
-    return ticket_card_embed(
+    embed = ticket_card_embed(
         ticket,
         count_directions(rows),
         label=getattr(ticket_member(bot, guild, ticket), "display_name", None),
         blocked=blocked,
         not_reached=last_reply_missed(rows),
     )
+    if is_run(ticket):
+        line = await run_tickets().card_line(bot, guild, ticket)
+        if line:
+            embed.description = f"{embed.description}\n{line}"
+    return embed
+
+
+def run_tickets() -> Any:
+    """The point system's ticket half imports this module, so it is fetched when pressed."""
+    from ... import points_tickets
+
+    return points_tickets
+
+
+async def close_refused(interaction: discord.Interaction, ticket: Any) -> bool:
+    said = await run_tickets().close_held(interaction.client, interaction.guild, ticket)
+    if said is None:
+        return False
+    await answer(interaction, said)
+    return True
 
 
 async def post_card(bot: Any, guild: Any, ticket_id: int) -> Any:
@@ -1142,7 +1165,7 @@ async def post_card(bot: Any, guild: Any, ticket_id: int) -> Any:
         guild,
         fresh,
         embed=embed,
-        view=card_view(fresh, handoff=handoff_on(bot.store, guild.id)),
+        view=card_view(fresh, handoff=handoff_on(bot.store, guild.id) and not is_run(fresh)),
     )
     if message is None:
         await log_action(
@@ -2093,22 +2116,23 @@ async def open_or_find(
         place.id if mode in THREADED_MODES else None,
     )
     ticket = await get_ticket(bot.db, ticket_id)
-    await log_action(
-        bot,
-        guild,
-        kind_via(
-            "modmail.opened_by_staff" if source == SOURCE_STAFF else "modmail.opened", via
-        ),
-        actor=opened_by,
-        target=user,
-        details={
-            "ticket_id": ticket_id,
-            "mode": mode,
-            "channel_id": place.id,
-            "source": source,
-            "via": via,
-        },
-    )
+    if source != SOURCE_POINTS:
+        await log_action(
+            bot,
+            guild,
+            kind_via(
+                "modmail.opened_by_staff" if source == SOURCE_STAFF else "modmail.opened", via
+            ),
+            actor=opened_by,
+            target=user,
+            details={
+                "ticket_id": ticket_id,
+                "mode": mode,
+                "channel_id": place.id,
+                "source": source,
+                "via": via,
+            },
+        )
     await post_header(bot, guild, ticket, user, mode)
     await log_open(bot, guild, ticket, user, subject)
     return ticket, True
@@ -2254,8 +2278,10 @@ async def open_a_ticket(
                 value=ticket["id"],
             )
         await record_inbound(bot, guild, ticket, user, body)
-        why_not = await deliver_dm(user, opening_dm(guild.name))
         said = TICKET_OPENED_SAID.format(ticket_id=ticket["id"])
+        if source == SOURCE_POINTS:
+            return Outcome(True, said, value=ticket["id"])
+        why_not = await deliver_dm(user, opening_dm(guild.name))
         return Outcome(
             True, said if why_not is None else said + DMS_ARE_SHUT, value=ticket["id"]
         )
@@ -3377,8 +3403,9 @@ async def build_ticket(
     view = new_panel(bot, guild, cog)
     view.surface = TICKET_SURFACE
     view.picked_ticket = int(row["id"])
+    run = is_run(row)
     for move in panel_card_buttons(
-        open_ticket=still_open, handoff=handoff_on(bot.store, guild.id)
+        open_ticket=still_open, handoff=handoff_on(bot.store, guild.id) and not run, run=run
     ):
         view.add_item(MoveButton(move))
     return (embed, view)
@@ -3793,6 +3820,11 @@ class MoveButton(discord.ui.Button):
         if action == PANEL_DOWN:
             await run_take_panel_down(interaction, view)
             return
+        if action in RUN_ACTIONS:
+            await run_tickets().pressed(
+                interaction, action, int(getattr(view, "picked_ticket", None) or 0), view
+            )
+            return
         if action == SETUP:
             await open_setup(interaction, view)
             return
@@ -3877,6 +3909,8 @@ class MoveButton(discord.ui.Button):
         if ticket is None:
             return
         if await handoff_refused(interaction, self.move.action, ticket):
+            return
+        if self.move.action == CARD_CLOSE and await close_refused(interaction, ticket):
             return
         await interaction.response.send_modal(
             await card_modal(interaction, self.move.action, ticket_id, previous=view)
@@ -4240,7 +4274,7 @@ def card_custom_id(action: str, ticket_id: Any) -> str:
 def card_view(ticket: Any, *, handoff: bool = False) -> discord.ui.View:
     """The card belongs to the room, so its buttons outlive the process that posted them."""
     view = discord.ui.View(timeout=None)
-    for move in card_buttons(practice=is_practice(ticket), handoff=handoff):
+    for move in card_buttons(practice=is_practice(ticket), handoff=handoff, run=is_run(ticket)):
         view.add_item(TicketCardButton(move, ticket["id"]))
     return view
 
@@ -4371,6 +4405,8 @@ async def run_card_close(
 ) -> None:
     ticket = await opened_card(interaction, ticket_id, previous)
     if ticket is None:
+        return
+    if await close_refused(interaction, ticket):
         return
     closed, why_not = await close_ticket(
         interaction.client,
@@ -4778,6 +4814,9 @@ async def card_modal(
 
 async def card_pressed(interaction: discord.Interaction, move: Any, ticket_id: int) -> None:
     """Every card move re-asks staff first: a ticket channel is visible to every staff role."""
+    if move.action in RUN_ACTIONS:
+        await run_tickets().pressed(interaction, move.action, ticket_id)
+        return
     if not await still_staff(interaction):
         return
     if not await db_up(interaction):
@@ -4789,6 +4828,8 @@ async def card_pressed(interaction: discord.Interaction, move: Any, ticket_id: i
         return
     if move.action == CARD_END:
         await run_card_end(interaction, ticket_id)
+        return
+    if move.action == CARD_CLOSE and await close_refused(interaction, ticket):
         return
     await interaction.response.send_modal(
         await card_modal(interaction, move.action, ticket_id)

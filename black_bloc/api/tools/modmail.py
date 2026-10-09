@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ... import points_tickets
 from ...cogs.moderation.modmail import (
     all_snippets,
     block_member,
@@ -35,7 +36,7 @@ from ...modmail import (
     ticket_source,
 )
 from ..auth import Refused, staff_dependency
-from ..names import resolve_one
+from ..names import resolve_one, site_words
 from ..writes import (
     actor_for,
     guard_of,
@@ -232,6 +233,9 @@ def build_router(bot: Any) -> APIRouter:
         body = payload or {}
         reason = clamp(body.get("reason"), REASON_LIMIT) or None
         silent = bool(body.get("silent"))
+        held = await points_tickets.close_held(bot, guild, row)
+        if held is not None:
+            raise Refused(409, "run_pending", site_words(guild, held))
         if guard_of(bot) is not None:
             place, _ = await resolve_place(bot, guild, row)
             if place is not None and not may_remove(bot, place):

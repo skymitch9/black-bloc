@@ -3,15 +3,10 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-import discord
-from discord import app_commands
 from discord.ext import commands, tasks
 
 from ...loops import wait_ready
-from ...panels import answer
 from ...pb_looks import feed_of
-from ...pb_panel import open_panel
-from ...settings_store import GUILD_ONLY
 
 log = logging.getLogger(__name__)
 
@@ -66,13 +61,6 @@ class PbFeed(commands.Cog):
         self.last_error = f"{type(exc).__name__}: {exc}"
         log.error("pb feed: the loop stopped; restarting it", exc_info=exc)
         self._looks.restart()
-
-    @app_commands.command(name="pb", description="Your speedrun.com personal bests")
-    async def pb(self, interaction: discord.Interaction) -> None:
-        if interaction.guild is None:
-            await answer(interaction, GUILD_ONLY)
-            return
-        await open_panel(interaction)
 
 
 async def setup(bot: commands.Bot) -> None:

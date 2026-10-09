@@ -78,6 +78,7 @@ SKIN_TONE_KEY = "emoji_skin_tone"
 RULES_KEY = "automod_rules"
 MEMORY_MODE_KEY = "chat_memory_mode"
 MODMAIL_ENABLED_KEY = "modmail_enabled"
+PB_FEED_MODE_KEY = "pb_feed_mode"
 
 CORE_CHANNEL_KEYS: tuple[str, ...] = (
     STAFF_CHANNEL_KEY,
@@ -110,6 +111,7 @@ EXTRA_MODES: tuple[FeatureMode, ...] = (
     ),
     FeatureMode(MARATHON_MODE_KEY, "event", FEATURE_LABELS["marathon"]),
     FeatureMode(STRUCTURE_BACKUP_MODE, "structure", "Structure backup"),
+    FeatureMode(PB_FEED_MODE_KEY, "pb", "Personal bests"),
 )
 
 
@@ -117,6 +119,7 @@ MODE_LABELS: dict[str, str] = {
     "brackets": "Tournament brackets",
     "frontdoor": "The front door",
     "pb_feed": "Personal bests",
+    "points": "Leaderboard",
     "sticky": "Sticky messages",
     "youtube_live": FEATURE_LABELS["youtube"],
 }
