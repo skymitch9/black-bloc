@@ -60,6 +60,11 @@ const IDS = {
   // 18 has its final built with nothing played, so Back to pools takes it away.
   bracket_pooled_id: '17',
   bracket_final_id: '18',
+  // The point system: run 1 is pending, 2 approved, 3 rejected; bounty 1 is live.
+  points_pending_id: '1',
+  points_approved_id: '2',
+  points_rejected_id: '3',
+  points_bounty_id: '1',
   structure_old_id: '1',
   structure_new_id: '2',
   test_channel_id: '800000000000000003',
