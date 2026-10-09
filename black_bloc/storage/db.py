@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 91
+SCHEMA_VERSION = 92
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1424,6 +1424,43 @@ CREATE TABLE IF NOT EXISTS tournament_sets (
     card_at          TEXT,
     UNIQUE (tournament_id, key)
 );
+
+CREATE TABLE IF NOT EXISTS points_runs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id     INTEGER NOT NULL,
+    user_id      INTEGER NOT NULL,
+    game         TEXT    NOT NULL,
+    category     TEXT,
+    seconds      REAL    NOT NULL,
+    proof_url    TEXT    NOT NULL,
+    submitted_at TEXT    NOT NULL,
+    state        TEXT    NOT NULL DEFAULT 'pending',
+    decided_by   INTEGER,
+    decided_at   TEXT,
+    reason       TEXT,
+    xp           INTEGER NOT NULL DEFAULT 0,
+    speedpoints  INTEGER NOT NULL DEFAULT 0,
+    bounty_id    INTEGER,
+    note         TEXT
+);
+CREATE INDEX IF NOT EXISTS points_runs_by_state ON points_runs(guild_id, state, id);
+CREATE INDEX IF NOT EXISTS points_runs_by_member ON points_runs(guild_id, user_id, state);
+
+CREATE TABLE IF NOT EXISTS points_bounties (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER NOT NULL,
+    name       TEXT    NOT NULL,
+    games      TEXT    NOT NULL,
+    kind       TEXT    NOT NULL,
+    amount     REAL    NOT NULL,
+    event_id   INTEGER,
+    starts_at  TEXT,
+    ends_at    TEXT,
+    created_by INTEGER NOT NULL,
+    created_at TEXT    NOT NULL,
+    active     INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS points_bounties_by_guild ON points_bounties(guild_id, active);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

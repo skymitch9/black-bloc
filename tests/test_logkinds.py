@@ -92,6 +92,22 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
             "thread_moved",
         )
     ),
+    "black_bloc/points_moves.py::kind": tuple(
+        f"{head}points.{name}"
+        for head in ("", "web.")
+        for name in (
+            "submitted",
+            "approved",
+            "rejected",
+            "removed",
+            "edited",
+            "recomputed",
+            "bounty_set",
+            "bounty_ended",
+            "top_changed",
+            "would_announce",
+        )
+    ),
     "black_bloc/pb_looks.py::kind": (
         "pbfeed.posted",
         "pbfeed.would_post",
@@ -1299,6 +1315,8 @@ def test_like_patterns_cover_every_head_of_a_feature():
         "web.pbfeed.%",
         "brackets.%",
         "web.brackets.%",
+        "points.%",
+        "web.points.%",
     )
 
 
