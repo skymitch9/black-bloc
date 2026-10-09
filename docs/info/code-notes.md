@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *Fastest Furs actual durations* (branch `ff-actual-durations`, off `main` `01d6e72b`); keyed by NAME. Before that:
+> **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 1* (branch `points-engine`, off `main` `01d6e72b`); keyed by NAME. Before that:
 > **2026-10-09 — rows AMENDED in place, nothing re-keyed**: *Modal option counts* (branch `snippet-radio`, off `main` `86281011`) — the `snippet_picker` and `vote_picker` rows and three `tests/test_modal_limits.py` rows. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *Modal length limits* (branch `modal-labels`, off `main` `04e0afc2`); keyed by NAME. Before that:
 > **2026-10-08 — one section APPENDED, nothing re-keyed**: *Marathon controls Layer B, the drawer* (branch `marathon-controls-b`, off `main` `b4eee247`); keyed by NAME. `marathons-section.js` lost and gained whole functions, so its older `path:line` rows are further off than before — trust the anchor text. Before that:
@@ -10328,6 +10329,32 @@ Design: [`brackets-design.md`](brackets-design.md) §E (as built) and §G 27–4
 - `marathons-section.js` `sourceSettings` — BaF run/host events and Event schedule write on change; Save is only for the channel picker and Re-read every. `runsMode` (`marathon-words.js`) is `wanted_mode`'s other half.
 - `marathons-section.js` `spotlightBlock` — D8 was answered *keep it as is*: the channel's Go-live and Pings cards stay. Only the Follow the schedule switch left the block, into Settings with the thread's words (D14's six switches).
 - `site/public/assets/page-schedule.js` `wantedRun` / `showRun` / `pointAt` — `#marathon-N-run-M` (`marathon-words.js` `trackerRunHash`) selects that run's day before the first paint and scrolls to and flashes its row (`moved`, the existing flash kind).
+
+## The BaF point system, layer 1 — keyed by NAME (branch `points-engine`, 2026-10-09; re-key after the merge)
+
+Design: [`points-design.md`](points-design.md).
+
+- `black_bloc/points/clock.py` `seconds_of` — a plain number is tried first (seconds), then colons (`_colons`: seconds < 60 always, minutes < 60 only when hours are given), then units (`_units`: each unit once, in falling order, the whole text consumed). `MAX_SECONDS` (100 h) bounds junk like a pasted date.
+- `points/xp.py` `xp_for` — the best floor reached, starting from 0, then clamped `min(max(best, low), high)`: so a run under the first floor gets `low`, and `high` caps a tier staff set above it. `parse_tiers` returns the tiers sorted, which is what `tiers_text` writes back — the stored key is always one spelling.
+- `points/bounty.py` `points_for` — walks bounties by id and replaces only on a STRICTLY better value, which is what makes the oldest win a tie and keeps a bounty that does not raise the points unnamed.
+- `points/board.py` `next_rank` — the gap is `+1` so the line never promises a pass a tie-break could refuse; `runs` only for the speedpoints order (a run's XP varies).
+- `points/board.py` `diff` — membership in the top is decided on BOTH sides (`old_in`, `new_in`); `was`/`now` carry the real places, even outside the top, so a line can say *was #11*. Sorted by the new place, leavers last.
+- `black_bloc/points_store.py` `update_run(…, when_state=…)` — the DB half of checklist 6: the state change lands only if the row is still in the state the move read; `False` sends the move to `points_moves.raced`, which re-reads and says where the run is now.
+- `points_store.py` `totals` — the board is summed on every read, never stored, so a remove/edit/recompute cannot leave a stale total.
+- `black_bloc/points_moves.py` `lock_for` — ONE lock per server, not per run: an approval changes the whole board's before/after, and two decisions at once would each diff against a board the other is changing.
+- `points_moves.py` `edit` — a `rejected`/`removed` run is reopened to `pending` with its decision, scores and bounty cleared; an `approved` run is rescored at its OWN `decided_at` (`clock_of`), so an edit never moves a run into or out of a bounty by the date of the edit.
+- `points_moves.py` `clock_of` — `points_bounty_clock`: `approved` uses the decision time handed in (the approval being written, or the stored `decided_at` on edit/recompute); `submitted` uses the row's `submitted_at`.
+- `points_moves.py` `event_window` — an event bounty uses the event's scheduled window, `+DEFAULT_DURATION_MINUTES` when it has no end, and only while the event is approved / live / done; a missing event row (swept) gives no window, so the bounty is never live.
+- `points_moves.py` `bounty_values` — the window: an `event_id` and dates together refuse; an `event_id` clears the dates; dates (merged with the row's on an edit) clear the event. `when_of` reads a zone-less value in `default_timezone` and moves a bare END date to the next midnight (inclusive).
+- `points_moves.py` `board_moved` — ONE row per board change, `top_changed` in `on`, `would_announce` in `shadow`, carrying the rendered lines; `Result.announce` is the same lines for layer 2. Nothing is posted in layer 1.
+- `points_moves.py` `submit` — `user_id` naming someone else is a staff move (`require_staff`), never silently dropped.
+- `points_moves.py` `submit(…, ticket_id=)` / `loaded(…, ticket_id=)` — the modmail ticket a run came through is a keyword-only argument, never read from `given`, so the site's body cannot attach a run to someone else's ticket; approve / reject / remove load by run id or by ticket (`points_store.run_by_ticket`), one run per ticket by a partial unique index.
+- `points_moves.py` `said` — `STAFF_WORDS` first (staff-only lines are constants), then the staff's wording, then the shipped default when a staff edit cannot be filled (checklist 17).
+- `points_moves.py` `name_of` — display names through `pb_feed.plain` (the one escaping helper), `<@id>` for a member the cache does not hold.
+- `black_bloc/points_view.py` `bounties(current_only=True)` — the index shows bounties live OR still to come (active, end ahead); `GET /api/points/bounties` shows all, ended too, for the editor.
+- `black_bloc/api/tools/points.py` `points_runs` — a member with no `user_id` gets their own runs; naming another member without the verifier right is a 403 in words, not a silent narrowing.
+- `api/tools/points.py` `decider` — approve/reject are member-gated at the door and spend the STAFF write bucket (the brackets `writer` shape), because the verifier role is not staff; the move decides.
+- `site/mock/server.mjs` `ptState` — the seed mirrors `tests/api/test_contract.py` `seed_points` (run 1 pending, 2 approved, 3 rejected, 4 approved; bounty 1 live); the mock fixes the tiers at the shipped ones and recomputes XP only.
 
 ## Fastest Furs actual durations — keyed by NAME (branch `ff-actual-durations`, 2026-10-09; re-key after the merge)
 

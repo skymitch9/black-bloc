@@ -68,6 +68,14 @@ from .personas import (
     TONE_CLAUSE,
     TONE_CLAUSE_KEY,
 )
+from .points.model import PointsError
+from .points.scoring import DEFAULT_PER_RUN as POINTS_PER_RUN_DEFAULT
+from .points.xp import DEFAULT_HIGH as POINTS_XP_HIGH
+from .points.xp import DEFAULT_LOW as POINTS_XP_LOW
+from .points.xp import DEFAULT_TIERS_TEXT as POINTS_TIERS_TEXT
+from .points.xp import MOST_XP as POINTS_MOST_XP
+from .points.xp import parse_tiers as parse_point_tiers
+from .points.xp import tiers_text as point_tiers_text
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
@@ -4987,6 +4995,326 @@ KEY_HELP.update(
 )
 
 
+# The BaF point system (docs/info/points-design.md) — its own block so parallel branches merge
+# textually. Every key sits under `core`: `points_` would be a 26th setting group.
+POINTS_FEATURE = "points"
+POINTS_MODES = ("off", "shadow", "on")
+POINTS_ORDERS = ("points", "xp")
+POINTS_CLOCKS = ("approved", "submitted")
+POINTS_MODE = "points_mode"
+POINTS_CHANNEL = "points_channel_id"
+POINTS_CHANNEL_ID = 1076003845232148580
+POINTS_SHADOW_CHANNEL = shadow_feature_key(POINTS_FEATURE)
+POINTS_PING_ROLE = "points_ping_role_id"
+POINTS_VERIFIER_ROLE = "points_verifier_role_id"
+POINTS_XP_TIERS = "points_xp_tiers"
+POINTS_XP_MIN = "points_xp_min"
+POINTS_XP_MAX = "points_xp_max"
+POINTS_PER_RUN = "points_per_run"
+POINTS_TOP_N = "points_top_n"
+POINTS_BOARD_ORDER = "points_board_order"
+POINTS_BOUNTY_CLOCK = "points_bounty_clock"
+POINTS_NUMBERS: dict[str, tuple[int, int, int]] = {
+    POINTS_XP_MIN: (POINTS_XP_LOW, 0, POINTS_MOST_XP),
+    POINTS_XP_MAX: (POINTS_XP_HIGH, 1, POINTS_MOST_XP),
+    POINTS_PER_RUN: (POINTS_PER_RUN_DEFAULT, 0, POINTS_MOST_XP),
+    POINTS_TOP_N: (10, 1, 25),
+}
+POINTS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
+    POINTS_MODE: ("shadow", POINTS_MODES),
+    POINTS_BOARD_ORDER: ("points", POINTS_ORDERS),
+    POINTS_BOUNTY_CLOCK: ("approved", POINTS_CLOCKS),
+}
+POINTS_RUN = ("game", "time")
+POINTS_PLACE = ("name", "place", "was", "top", "points", "xp")
+POINTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "points_announce_title": (
+        "Leaderboard update",
+        (),
+        "the heading of the post in points_channel_id when the top places change",
+    ),
+    "points_announce_entered": (
+        "{name} is in the top {top} at #{place} with {points} speedpoints.",
+        POINTS_PLACE,
+        "the line that post carries for a member who entered the top places; {place} is where "
+        "they are now, {top} is points_top_n",
+    ),
+    "points_announce_left": (
+        "{name} dropped out of the top {top}.",
+        POINTS_PLACE,
+        "the line that post carries for a member who fell out of the top places; {was} is "
+        "where they were",
+    ),
+    "points_announce_up": (
+        "{name} moved up to #{place} (was #{was}).",
+        POINTS_PLACE,
+        "the line that post carries for a member in the top places who climbed",
+    ),
+    "points_announce_down": (
+        "{name} moved down to #{place} (was #{was}).",
+        POINTS_PLACE,
+        "the line that post carries for a member in the top places who was passed",
+    ),
+    "points_board_title": (
+        "Leaderboard",
+        (),
+        "the heading of the leaderboard ranked by speedpoints",
+    ),
+    "points_board_xp_title": (
+        "Leaderboard by XP",
+        (),
+        "the heading of the leaderboard ranked by XP",
+    ),
+    "points_column_player": ("Player", (), "the leaderboard's player column"),
+    "points_column_runs": ("Total runs", (), "the leaderboard's column of approved runs"),
+    "points_column_xp": ("Total XP", (), "the leaderboard's XP column"),
+    "points_column_points": ("Speedpoints", (), "the leaderboard's speedpoints column"),
+    "points_board_line": (
+        "#{place} {name} — {runs} runs · {xp} XP · {points} speedpoints",
+        ("place", "name", "runs", "xp", "points"),
+        "one row of the leaderboard where it is written as lines rather than a table",
+    ),
+    "points_board_empty": (
+        "No runs have been approved yet.",
+        (),
+        "what the leaderboard says while nobody has an approved run",
+    ),
+    "points_next_rank_said": (
+        "You are #{place} with {points} speedpoints. {gap} more passes {name} at #{above} — "
+        "about {runs} approved run(s).",
+        ("place", "points", "gap", "name", "above", "runs"),
+        "what a member is told when they ask how far the next place is; {gap} is one more than "
+        "the difference, so no tie-break decides it",
+    ),
+    "points_next_rank_first_said": (
+        "You are #1 with {points} speedpoints. Nobody is ahead of you.",
+        ("points",),
+        "what the member in first place is told when they ask how far the next place is",
+    ),
+    "points_next_rank_unranked_said": (
+        "You are not on the leaderboard yet. Your first approved run puts you on it.",
+        (),
+        "what a member with no approved run is told when they ask how far the next place is",
+    ),
+    "points_submitted_said": (
+        "Your **{game}** run ({time}) is in. Staff check the proof before it counts.",
+        POINTS_RUN,
+        "what a member is told after submitting a run",
+    ),
+    "points_no_game_said": (
+        "A run needs its game, at most {limit} characters, so nothing was sent.",
+        ("limit",),
+        "what a member is told when a submission has no game, or one too long",
+    ),
+    "points_too_long_said": (
+        "The {field} can be at most {limit} characters, so nothing was sent.",
+        ("field", "limit"),
+        "what a member is told when the category or the note is too long",
+    ),
+    "points_no_time_said": (
+        "A run needs its time — 1:23:45, 23:45, 45.2 or 1h 2m 3s — so nothing was sent.",
+        (),
+        "what a member is told when a submission has no time",
+    ),
+    "points_bad_time_said": (
+        "**{given}** is not a time Black Bloc can read, so nothing was sent. Write it like "
+        "1:23:45, 23:45, 45.2 or 1h 2m 3s.",
+        ("given",),
+        "what a member is told when the time they typed cannot be read",
+    ),
+    "points_no_proof_said": (
+        "A run needs a link to its video or image — an image must show LiveSplit or the "
+        "game's own timer — so nothing was sent.",
+        (),
+        "what a member is told when a submission has no proof link",
+    ),
+    "points_bad_proof_said": (
+        "**{given}** is not a link, so nothing was sent. Paste the whole address, starting "
+        "https://.",
+        ("given",),
+        "what a member is told when the proof they gave is not a web address",
+    ),
+    "points_off_said": (
+        "The point system is switched **off**, so nothing was done. Staff can set points_mode "
+        "to shadow or on — in /settings or on the Settings page.",
+        (),
+        "what anyone is told when they try a point system move while points_mode is off",
+    ),
+    "points_not_verifier_said": (
+        "Approving runs is for staff and {role}, so nothing was done.",
+        ("role",),
+        "what a member is told when they try to approve or reject a run; {role} names the "
+        "verifier role, or points_no_verifier_role_words when none is picked",
+    ),
+    "points_no_verifier_role_words": (
+        "the run verifier role (staff have not picked one yet — it is points_verifier_role_id)",
+        (),
+        "what {role} becomes in points_not_verifier_said while points_verifier_role_id is blank",
+    ),
+    "points_not_staff_said": (
+        "Only staff can do that, so nothing was done.",
+        (),
+        "what a member is told when they try a staff move on the leaderboard",
+    ),
+    "points_own_run_said": (
+        "You submitted that run, so someone else approves it.",
+        (),
+        "what a verifier who is not staff is told when they try to decide their own run",
+    ),
+    "points_no_run_said": (
+        "There is no run {id} here, so nothing was done.",
+        ("id",),
+        "what is said when a move names a run Black Bloc has no record of",
+    ),
+    "points_wrong_state_said": (
+        "That run is {state}, so that cannot be done now.",
+        ("state",),
+        "what is said when a move does not fit where a run is; {state} is one of the "
+        "points_state_* words",
+    ),
+    "points_state_pending": (
+        "waiting for staff",
+        (),
+        "what {state} says for a run nobody has decided",
+    ),
+    "points_state_approved": ("approved", (), "what {state} says for a run that counts"),
+    "points_state_rejected": ("not approved", (), "what {state} says for a rejected run"),
+    "points_state_removed": (
+        "taken off the leaderboard",
+        (),
+        "what {state} says for an approved run staff took back",
+    ),
+    "points_dm_rejected": (
+        "Your **{game}** run ({time}) was not approved. {reason}",
+        ("game", "time", "reason"),
+        "the DM a member gets when their run is rejected; {reason} is points_dm_reason or "
+        "points_dm_no_reason",
+    ),
+    "points_dm_removed": (
+        "Your **{game}** run ({time}) was taken off the leaderboard. {reason}",
+        ("game", "time", "reason"),
+        "the DM a member gets when staff take back a run that had been approved",
+    ),
+    "points_dm_reason": ("Staff said: {reason}", ("reason",), "what {reason} becomes in those DMs"),
+    "points_dm_no_reason": (
+        "Staff gave no reason.",
+        (),
+        "what {reason} becomes in those DMs when staff left the reason blank",
+    ),
+    "points_bounty_line": (
+        "**{name}** — {games}: {bonus}, {when}.",
+        ("name", "games", "bonus", "when"),
+        "one bounty as the leaderboard lists it",
+    ),
+    "points_bounty_multiplier_words": (
+        "×{amount} speedpoints",
+        ("amount",),
+        "what {bonus} says for a bounty that multiplies a run's speedpoints",
+    ),
+    "points_bounty_extra_words": (
+        "+{amount} speedpoints",
+        ("amount",),
+        "what {bonus} says for a bounty that adds speedpoints to a run",
+    ),
+    "points_bounty_until_words": (
+        "until {ends}",
+        ("ends", "starts"),
+        "what {when} says for a bounty with its own dates",
+    ),
+    "points_bounty_event_words": (
+        "during {event}",
+        ("event",),
+        "what {when} says for a bounty tied to an event",
+    ),
+    "points_bounty_none": (
+        "No bounties right now.",
+        (),
+        "what the leaderboard says while no bounty is live",
+    ),
+}
+POINTS_DEFAULTS: dict[str, Any] = {
+    POINTS_CHANNEL: POINTS_CHANNEL_ID,
+    POINTS_XP_TIERS: POINTS_TIERS_TEXT,
+    **{key: default for key, (default, _) in POINTS_ENUMS.items()},
+    **{key: default for key, (default, _, _) in POINTS_NUMBERS.items()},
+    **{key: default for key, (default, _, _) in POINTS_WORDS.items()},
+}
+POINTS_KEYS: tuple[str, ...] = (
+    POINTS_MODE,
+    POINTS_CHANNEL,
+    POINTS_SHADOW_CHANNEL,
+    POINTS_PING_ROLE,
+    POINTS_VERIFIER_ROLE,
+    POINTS_XP_TIERS,
+    *POINTS_NUMBERS,
+    POINTS_BOARD_ORDER,
+    POINTS_BOUNTY_CLOCK,
+    *POINTS_WORDS,
+)
+KEY_TYPES.update(
+    {
+        POINTS_CHANNEL: "channel",
+        POINTS_SHADOW_CHANNEL: "channel",
+        POINTS_PING_ROLE: "role",
+        POINTS_VERIFIER_ROLE: "role",
+        POINTS_XP_TIERS: "text",
+        **{key: "enum" for key in POINTS_ENUMS},
+        **{key: "int" for key in POINTS_NUMBERS},
+        **{key: "text" for key in POINTS_WORDS},
+    }
+)
+KEY_CHOICES.update({key: choices for key, (_, choices) in POINTS_ENUMS.items()})
+KEY_MIN.update({key: low for key, (_, low, _) in POINTS_NUMBERS.items()})
+KEY_MAX.update({key: high for key, (_, _, high) in POINTS_NUMBERS.items()})
+KEY_HELP.update(
+    {
+        POINTS_MODE: (
+            "off, shadow or on. off refuses every point system move; shadow — the default — "
+            "takes and approves runs and sends the top-places post to the rehearsal home; on "
+            "posts it in points_channel_id"
+        ),
+        POINTS_CHANNEL: (
+            "where the post goes when somebody enters, leaves or moves inside the top places "
+            "while points_mode is on; #speed-and-pbs by default"
+        ),
+        POINTS_SHADOW_CHANNEL: (
+            "where the top-places post is rehearsed while points_mode is shadow; blank means "
+            "shadow_channel_id"
+        ),
+        POINTS_PING_ROLE: (
+            "a role mentioned above the top-places post; blank — the default — pings nobody. "
+            "A rehearsal copy never pings"
+        ),
+        POINTS_VERIFIER_ROLE: (
+            "a role whose holders may approve and reject submitted runs as staff can. Blank — "
+            "the default — leaves approving to staff. A verifier never decides their own run"
+        ),
+        POINTS_XP_TIERS: (
+            "the XP a run earns by its length: each tier is the time it starts at and its XP, "
+            "like 1:00=5, 10:00=25, 15:00=50, 30:00=100. A run gets the highest tier it "
+            "reaches, never less than points_xp_min nor more than points_xp_max. A change "
+            "counts for runs approved after it; Recompute applies it to every approved run"
+        ),
+        POINTS_XP_MIN: "the least XP an approved run earns, however short it is; 5 by default",
+        POINTS_XP_MAX: "the most XP one approved run earns, however long it is; 100 by default",
+        POINTS_PER_RUN: "the speedpoints every approved run earns before any bounty; 10 by default",
+        POINTS_TOP_N: (
+            "how many places at the top of the leaderboard are shown and announced when they "
+            "change; 10 by default, at most 25"
+        ),
+        POINTS_BOARD_ORDER: (
+            "what the leaderboard ranks by when it first opens: points — the default — for "
+            "speedpoints, or xp. Anyone can switch it while they look"
+        ),
+        POINTS_BOUNTY_CLOCK: (
+            "which moment decides whether a bounty was live for a run: approved — the default "
+            "— uses when staff approved it, submitted uses when the member sent it in"
+        ),
+        **{key: said for key, (_, _, said) in POINTS_WORDS.items()},
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -5018,6 +5346,7 @@ CORE_KEYS = (
     *STRUCTURE_BACKUP_KEYS,
     *PB_FEED_KEYS,
     *BRACKETS_KEYS,
+    *POINTS_KEYS,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -5598,6 +5927,27 @@ TEXT_CHECKS.update(
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in BRACKETS_WORDS.items()}
 )
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in POINTS_WORDS.items()}
+)
+POINTS_BAD_TIERS = (
+    "**{given}** is not a tier list Black Bloc can read, so nothing was changed. Write each "
+    "tier as the time it starts at, an `=` and its XP, separated by commas — "
+    "`1:00=5, 10:00=25, 15:00=50, 30:00=100` — at most {most} tiers."
+)
+
+
+def checked_point_tiers(given: Any) -> str:
+    """The tiers in one spelling, earliest first."""
+    try:
+        return point_tiers_text(parse_point_tiers(given))
+    except PointsError:
+        raise SettingError(
+            POINTS_BAD_TIERS.format(given=str(given or "").strip()[:60], most=10)
+        ) from None
+
+
+TEXT_CHECKS[POINTS_XP_TIERS] = checked_point_tiers
 
 VOICE_SHEET_CHARS = 4000
 TONE_CLAUSE_CHARS = 600
@@ -10051,6 +10401,8 @@ class SettingsStore:
             return PB_FEED_DEFAULTS[key]
         if key in BRACKETS_DEFAULTS:
             return BRACKETS_DEFAULTS[key]
+        if key in POINTS_DEFAULTS:
+            return POINTS_DEFAULTS[key]
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

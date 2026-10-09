@@ -986,7 +986,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         await sticky.write_paused(db, guild_id, channel_id, paused, 7)
     structure_old, structure_new = await seed_structure(db, guild_id)
     brackets = await seed_brackets(db, guild_id)
-    return await seed_pbs(web, guild_id, wf.TEST_CHANNEL_ID) | brackets | {
+    points = await seed_points(db, guild_id)
+    return await seed_pbs(web, guild_id, wf.TEST_CHANNEL_ID) | brackets | points | {
         "sticky_channel_id": str(wf.OTHER_CHANNEL_ID),
         "sticky_paused_channel_id": str(wf.TEST_CHANNEL_ID),
         "structure_old_id": str(structure_old),
@@ -1261,6 +1262,55 @@ async def seed_brackets(db, guild_id: int) -> dict:
         "bracket_forum_id": str(INBOX_FORUM_ID),
         "bracket_pooled_id": str(pooled),
         "bracket_final_id": str(final),
+    }
+
+
+async def seed_points(db, guild_id: int) -> dict:
+    """One run in each state a route is legal from, two members on the board, one live bounty."""
+    from black_bloc import points_store
+
+    proof = {"proof_url": "https://youtu.be/contract", "category": "Any%"}
+    pending = await points_store.add_run(
+        db, guild_id, MEMBER_ID, {"game": "Celeste", "seconds": 1825.4, **proof}
+    )
+    approved = await points_store.add_run(
+        db, guild_id, MEMBER_ID, {"game": "Hollow Knight", "seconds": 2400, **proof}
+    )
+    rejected = await points_store.add_run(
+        db, guild_id, PING_MEMBER_ID, {"game": "Hades", "seconds": 610, **proof}
+    )
+    other = await points_store.add_run(
+        db, guild_id, PING_MEMBER_ID, {"game": "Celeste", "seconds": 700, **proof}
+    )
+    decided = {"decided_by": 7, "decided_at": "2026-10-09T12:00:00+00:00"}
+    await points_store.update_run(
+        db, approved, {"state": "approved", "xp": 100, "speedpoints": 10, **decided}
+    )
+    await points_store.update_run(
+        db, other, {"state": "approved", "xp": 25, "speedpoints": 20, **decided}
+    )
+    await points_store.update_run(
+        db, rejected, {"state": "rejected", "reason": "no timer in shot", **decided}
+    )
+    at = datetime.now(UTC)
+    bounty = await points_store.add_bounty(
+        db,
+        guild_id,
+        {
+            "name": "Game of the month",
+            "games": ["Celeste"],
+            "kind": "multiplier",
+            "amount": 2.0,
+            "starts_at": (at - timedelta(days=1)).isoformat(),
+            "ends_at": (at + timedelta(days=20)).isoformat(),
+        },
+        7,
+    )
+    return {
+        "points_pending_id": str(pending),
+        "points_approved_id": str(approved),
+        "points_rejected_id": str(rejected),
+        "points_bounty_id": str(bounty),
     }
 
 

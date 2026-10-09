@@ -217,6 +217,62 @@
       "pb_feed_you_waiting",
       "personality_pool_peer_url",
       "personality_pool_sync",
+      "points_announce_down",
+      "points_announce_entered",
+      "points_announce_left",
+      "points_announce_title",
+      "points_announce_up",
+      "points_bad_proof_said",
+      "points_bad_time_said",
+      "points_board_empty",
+      "points_board_line",
+      "points_board_order",
+      "points_board_title",
+      "points_board_xp_title",
+      "points_bounty_clock",
+      "points_bounty_event_words",
+      "points_bounty_extra_words",
+      "points_bounty_line",
+      "points_bounty_multiplier_words",
+      "points_bounty_none",
+      "points_bounty_until_words",
+      "points_channel_id",
+      "points_column_player",
+      "points_column_points",
+      "points_column_runs",
+      "points_column_xp",
+      "points_dm_no_reason",
+      "points_dm_reason",
+      "points_dm_rejected",
+      "points_dm_removed",
+      "points_mode",
+      "points_next_rank_first_said",
+      "points_next_rank_said",
+      "points_next_rank_unranked_said",
+      "points_no_game_said",
+      "points_no_proof_said",
+      "points_no_run_said",
+      "points_no_time_said",
+      "points_no_verifier_role_words",
+      "points_not_staff_said",
+      "points_not_verifier_said",
+      "points_off_said",
+      "points_own_run_said",
+      "points_per_run",
+      "points_ping_role_id",
+      "points_shadow_channel_id",
+      "points_state_approved",
+      "points_state_pending",
+      "points_state_rejected",
+      "points_state_removed",
+      "points_submitted_said",
+      "points_too_long_said",
+      "points_top_n",
+      "points_verifier_role_id",
+      "points_wrong_state_said",
+      "points_xp_max",
+      "points_xp_min",
+      "points_xp_tiers",
       "quiet_bot_pins",
       "rehearsal_note",
       "role_menu_channel_id",
@@ -332,6 +388,10 @@
       "pings_empty_role_days": 1,
       "pings_onboarding_option_cap": 1,
       "pings_streamer_stale_days": 7,
+      "points_per_run": 0,
+      "points_top_n": 1,
+      "points_xp_max": 1,
+      "points_xp_min": 0,
       "poll_archive_days": 1,
       "poll_default_hours": 1,
       "posts_block_live_minutes": 1,
@@ -438,6 +498,10 @@
       "pings_empty_role_days": 365,
       "pings_onboarding_option_cap": 50,
       "pings_streamer_stale_days": 365,
+      "points_per_run": 100000,
+      "points_top_n": 25,
+      "points_xp_max": 100000,
+      "points_xp_min": 100000,
       "poll_archive_days": 3650,
       "poll_default_hours": 768,
       "poll_draft_days": 365,
@@ -11361,6 +11425,500 @@
           "to_name"
         ]
       }
+    },
+    {
+      "_": "The BaF point system (docs/info/points-design.md §E). Layer 1 has no page yet; layer 3's Leaderboard page reads these, and layer 2's /pb panel calls the same moves.",
+      "method": "GET",
+      "path": "/api/points",
+      "read_by": [
+        "page-leaderboard.js (layer 3)"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "by",
+        "orders",
+        "top_n",
+        "may_verify",
+        "staff",
+        "words",
+        "board",
+        "members",
+        "me",
+        "bounties",
+        "pending"
+      ],
+      "rows": {
+        "board": [
+          "place",
+          "user_id",
+          "name",
+          "runs",
+          "xp",
+          "speedpoints"
+        ],
+        "bounties": [
+          "id",
+          "name",
+          "games",
+          "kind",
+          "amount",
+          "event_id",
+          "event_title",
+          "starts_at",
+          "ends_at",
+          "active",
+          "live",
+          "line"
+        ]
+      },
+      "nested": {
+        "me": [
+          "kind",
+          "place",
+          "speedpoints",
+          "above_user_id",
+          "above_name",
+          "above_place",
+          "gap",
+          "runs",
+          "line"
+        ],
+        "words": [
+          "points_board_title",
+          "points_board_xp_title",
+          "points_column_player",
+          "points_column_runs",
+          "points_column_xp",
+          "points_column_points",
+          "points_board_empty",
+          "points_state_pending",
+          "points_bounty_none"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/points/board?by=xp",
+      "read_by": [
+        "page-leaderboard.js (layer 3) Full board"
+      ],
+      "shape": "object",
+      "keys": [
+        "by",
+        "rows"
+      ],
+      "rows": {
+        "rows": [
+          "place",
+          "user_id",
+          "name",
+          "runs",
+          "xp",
+          "speedpoints"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/points/me",
+      "read_by": [
+        "page-leaderboard.js (layer 3) Next rank"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "place",
+        "speedpoints",
+        "above_user_id",
+        "above_name",
+        "above_place",
+        "gap",
+        "runs",
+        "line"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/points/runs?state=pending",
+      "read_by": [
+        "page-leaderboard.js (layer 3) Pending queue"
+      ],
+      "shape": "object",
+      "keys": [
+        "state",
+        "user_id",
+        "runs"
+      ],
+      "rows": {
+        "runs": [
+          "id",
+          "user_id",
+          "name",
+          "game",
+          "category",
+          "seconds",
+          "time",
+          "proof_url",
+          "note",
+          "submitted_at",
+          "state",
+          "state_words",
+          "decided_by",
+          "decided_by_name",
+          "decided_at",
+          "reason",
+          "xp",
+          "speedpoints",
+          "bounty_id",
+          "ticket_id"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/points/runs",
+      "body": {
+        "game": "Celeste",
+        "category": "Any%",
+        "time": "29:59.5",
+        "proof_url": "https://youtu.be/contract"
+      },
+      "read_by": [
+        "page-leaderboard.js (layer 3) Submit a run"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message",
+        "changed",
+        "announce"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "user_id",
+          "name",
+          "game",
+          "category",
+          "seconds",
+          "time",
+          "proof_url",
+          "note",
+          "submitted_at",
+          "state",
+          "state_words",
+          "decided_by",
+          "decided_by_name",
+          "decided_at",
+          "reason",
+          "xp",
+          "speedpoints",
+          "bounty_id",
+          "ticket_id"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/points/runs/{points_pending_id}/approve",
+      "body": {},
+      "read_by": [
+        "page-leaderboard.js (layer 3) Approve"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message",
+        "changed",
+        "announce"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "user_id",
+          "name",
+          "game",
+          "category",
+          "seconds",
+          "time",
+          "proof_url",
+          "note",
+          "submitted_at",
+          "state",
+          "state_words",
+          "decided_by",
+          "decided_by_name",
+          "decided_at",
+          "reason",
+          "xp",
+          "speedpoints",
+          "bounty_id",
+          "ticket_id"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/points/runs/{points_pending_id}/reject",
+      "body": {
+        "reason": "contract check"
+      },
+      "read_by": [
+        "page-leaderboard.js (layer 3) Reject"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message",
+        "changed",
+        "announce"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "user_id",
+          "name",
+          "game",
+          "category",
+          "seconds",
+          "time",
+          "proof_url",
+          "note",
+          "submitted_at",
+          "state",
+          "state_words",
+          "decided_by",
+          "decided_by_name",
+          "decided_at",
+          "reason",
+          "xp",
+          "speedpoints",
+          "bounty_id",
+          "ticket_id"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/points/runs/{points_approved_id}/remove",
+      "body": {
+        "reason": "contract check"
+      },
+      "read_by": [
+        "page-leaderboard.js (layer 3) Remove"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message",
+        "changed",
+        "announce"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "user_id",
+          "name",
+          "game",
+          "category",
+          "seconds",
+          "time",
+          "proof_url",
+          "note",
+          "submitted_at",
+          "state",
+          "state_words",
+          "decided_by",
+          "decided_by_name",
+          "decided_at",
+          "reason",
+          "xp",
+          "speedpoints",
+          "bounty_id",
+          "ticket_id"
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/points/runs/{points_rejected_id}",
+      "body": {
+        "time": "10:00"
+      },
+      "read_by": [
+        "page-leaderboard.js (layer 3) Edit"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message",
+        "changed",
+        "announce"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "user_id",
+          "name",
+          "game",
+          "category",
+          "seconds",
+          "time",
+          "proof_url",
+          "note",
+          "submitted_at",
+          "state",
+          "state_words",
+          "decided_by",
+          "decided_by_name",
+          "decided_at",
+          "reason",
+          "xp",
+          "speedpoints",
+          "bounty_id",
+          "ticket_id"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/points/recompute",
+      "body": {},
+      "read_by": [
+        "page-leaderboard.js (layer 3) Recompute"
+      ],
+      "shape": "object",
+      "keys": [
+        "message",
+        "changed",
+        "announce"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/points/bounties",
+      "read_by": [
+        "page-leaderboard.js (layer 3) Bounties"
+      ],
+      "shape": "object",
+      "keys": [
+        "bounties"
+      ],
+      "rows": {
+        "bounties": [
+          "id",
+          "name",
+          "games",
+          "kind",
+          "amount",
+          "event_id",
+          "event_title",
+          "starts_at",
+          "ends_at",
+          "active",
+          "live",
+          "line"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/points/bounties",
+      "body": {
+        "name": "Contract bounty",
+        "games": [
+          "Hades"
+        ],
+        "kind": "extra",
+        "amount": 5,
+        "starts_at": "2030-01-01",
+        "ends_at": "2030-01-31"
+      },
+      "read_by": [
+        "page-leaderboard.js (layer 3) New bounty"
+      ],
+      "shape": "object",
+      "keys": [
+        "bounty",
+        "message"
+      ],
+      "nested": {
+        "bounty": [
+          "id",
+          "name",
+          "games",
+          "kind",
+          "amount",
+          "event_id",
+          "event_title",
+          "starts_at",
+          "ends_at",
+          "active",
+          "live",
+          "line"
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/points/bounties/{points_bounty_id}",
+      "body": {
+        "amount": 3
+      },
+      "read_by": [
+        "page-leaderboard.js (layer 3) Edit bounty"
+      ],
+      "shape": "object",
+      "keys": [
+        "bounty",
+        "message"
+      ],
+      "nested": {
+        "bounty": [
+          "id",
+          "name",
+          "games",
+          "kind",
+          "amount",
+          "event_id",
+          "event_title",
+          "starts_at",
+          "ends_at",
+          "active",
+          "live",
+          "line"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/points/bounties/{points_bounty_id}/end",
+      "body": {},
+      "read_by": [
+        "page-leaderboard.js (layer 3) End bounty"
+      ],
+      "shape": "object",
+      "keys": [
+        "bounty",
+        "message"
+      ],
+      "nested": {
+        "bounty": [
+          "id",
+          "name",
+          "games",
+          "kind",
+          "amount",
+          "event_id",
+          "event_title",
+          "starts_at",
+          "ends_at",
+          "active",
+          "live",
+          "line"
+        ]
+      }
     }
   ],
   "pages": [
@@ -11667,6 +12225,16 @@
     "web.brackets.set_confirmed",
     "web.brackets.set_disputed",
     "web.brackets.set_overridden",
-    "web.brackets.set_reset"
+    "web.brackets.set_reset",
+    "web.points.submitted",
+    "web.points.approved",
+    "web.points.rejected",
+    "web.points.removed",
+    "web.points.edited",
+    "web.points.recomputed",
+    "web.points.bounty_set",
+    "web.points.bounty_ended",
+    "web.points.top_changed",
+    "web.points.would_announce"
   ]
 }

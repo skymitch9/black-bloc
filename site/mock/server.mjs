@@ -1319,6 +1319,63 @@ const SETTING_SPECS = [
   ["brackets_waiting_final", "text", "Waiting for the final", "Waiting for the final", "the bracket page's line for a player whose pool is done and the final is not built"],
   ["brackets_pool_tied", "text", "tied", "tied", "the bracket page's mark on a finished pool's row tied across the cut line"],
   ["brackets_pool_raise_label", "text", "Move up", "Move up", "the bracket page's button that moves a tied player up a finished pool's order"],
+  // The BaF point system (docs/info/points-design.md); all of it sits under core.
+  ["points_mode", "enum", "shadow", "shadow", "off, shadow or on. off refuses every point system move; shadow \u2014 the default \u2014 takes and approves runs and sends the top-places post to the rehearsal home; on posts it in points_channel_id", ["off", "shadow", "on"]],
+  ["points_channel_id", "channel", "1076003845232148580", "1076003845232148580", "where the post goes when somebody enters, leaves or moves inside the top places while points_mode is on; #speed-and-pbs by default"],
+  ["points_shadow_channel_id", "channel", null, null, "where the top-places post is rehearsed while points_mode is shadow; blank means shadow_channel_id"],
+  ["points_ping_role_id", "role", null, null, "a role mentioned above the top-places post; blank \u2014 the default \u2014 pings nobody. A rehearsal copy never pings"],
+  ["points_verifier_role_id", "role", null, null, "a role whose holders may approve and reject submitted runs as staff can. Blank \u2014 the default \u2014 leaves approving to staff. A verifier never decides their own run"],
+  ["points_xp_tiers", "text", "1:00=5, 10:00=25, 15:00=50, 30:00=100", "1:00=5, 10:00=25, 15:00=50, 30:00=100", "the XP a run earns by its length: each tier is the time it starts at and its XP, like 1:00=5, 10:00=25, 15:00=50, 30:00=100. A run gets the highest tier it reaches, never less than points_xp_min nor more than points_xp_max. A change counts for runs approved after it; Recompute applies it to every approved run"],
+  ["points_xp_min", "int", 5, 5, "the least XP an approved run earns, however short it is; 5 by default", null, 100000, 0],
+  ["points_xp_max", "int", 100, 100, "the most XP one approved run earns, however long it is; 100 by default", null, 100000, 1],
+  ["points_per_run", "int", 10, 10, "the speedpoints every approved run earns before any bounty; 10 by default", null, 100000, 0],
+  ["points_top_n", "int", 10, 10, "how many places at the top of the leaderboard are shown and announced when they change; 10 by default, at most 25", null, 25, 1],
+  ["points_board_order", "enum", "points", "points", "what the leaderboard ranks by when it first opens: points \u2014 the default \u2014 for speedpoints, or xp. Anyone can switch it while they look", ["points", "xp"]],
+  ["points_bounty_clock", "enum", "approved", "approved", "which moment decides whether a bounty was live for a run: approved \u2014 the default \u2014 uses when staff approved it, submitted uses when the member sent it in", ["approved", "submitted"]],
+  ["points_announce_title", "text", "Leaderboard update", "Leaderboard update", "the heading of the post in points_channel_id when the top places change"],
+  ["points_announce_entered", "text", "{name} is in the top {top} at #{place} with {points} speedpoints.", "{name} is in the top {top} at #{place} with {points} speedpoints.", "the line that post carries for a member who entered the top places; {place} is where they are now, {top} is points_top_n"],
+  ["points_announce_left", "text", "{name} dropped out of the top {top}.", "{name} dropped out of the top {top}.", "the line that post carries for a member who fell out of the top places; {was} is where they were"],
+  ["points_announce_up", "text", "{name} moved up to #{place} (was #{was}).", "{name} moved up to #{place} (was #{was}).", "the line that post carries for a member in the top places who climbed"],
+  ["points_announce_down", "text", "{name} moved down to #{place} (was #{was}).", "{name} moved down to #{place} (was #{was}).", "the line that post carries for a member in the top places who was passed"],
+  ["points_board_title", "text", "Leaderboard", "Leaderboard", "the heading of the leaderboard ranked by speedpoints"],
+  ["points_board_xp_title", "text", "Leaderboard by XP", "Leaderboard by XP", "the heading of the leaderboard ranked by XP"],
+  ["points_column_player", "text", "Player", "Player", "the leaderboard's player column"],
+  ["points_column_runs", "text", "Total runs", "Total runs", "the leaderboard's column of approved runs"],
+  ["points_column_xp", "text", "Total XP", "Total XP", "the leaderboard's XP column"],
+  ["points_column_points", "text", "Speedpoints", "Speedpoints", "the leaderboard's speedpoints column"],
+  ["points_board_line", "text", "#{place} {name} \u2014 {runs} runs \u00b7 {xp} XP \u00b7 {points} speedpoints", "#{place} {name} \u2014 {runs} runs \u00b7 {xp} XP \u00b7 {points} speedpoints", "one row of the leaderboard where it is written as lines rather than a table"],
+  ["points_board_empty", "text", "No runs have been approved yet.", "No runs have been approved yet.", "what the leaderboard says while nobody has an approved run"],
+  ["points_next_rank_said", "text", "You are #{place} with {points} speedpoints. {gap} more passes {name} at #{above} \u2014 about {runs} approved run(s).", "You are #{place} with {points} speedpoints. {gap} more passes {name} at #{above} \u2014 about {runs} approved run(s).", "what a member is told when they ask how far the next place is; {gap} is one more than the difference, so no tie-break decides it"],
+  ["points_next_rank_first_said", "text", "You are #1 with {points} speedpoints. Nobody is ahead of you.", "You are #1 with {points} speedpoints. Nobody is ahead of you.", "what the member in first place is told when they ask how far the next place is"],
+  ["points_next_rank_unranked_said", "text", "You are not on the leaderboard yet. Your first approved run puts you on it.", "You are not on the leaderboard yet. Your first approved run puts you on it.", "what a member with no approved run is told when they ask how far the next place is"],
+  ["points_submitted_said", "text", "Your **{game}** run ({time}) is in. Staff check the proof before it counts.", "Your **{game}** run ({time}) is in. Staff check the proof before it counts.", "what a member is told after submitting a run"],
+  ["points_no_game_said", "text", "A run needs its game, at most {limit} characters, so nothing was sent.", "A run needs its game, at most {limit} characters, so nothing was sent.", "what a member is told when a submission has no game, or one too long"],
+  ["points_too_long_said", "text", "The {field} can be at most {limit} characters, so nothing was sent.", "The {field} can be at most {limit} characters, so nothing was sent.", "what a member is told when the category or the note is too long"],
+  ["points_no_time_said", "text", "A run needs its time \u2014 1:23:45, 23:45, 45.2 or 1h 2m 3s \u2014 so nothing was sent.", "A run needs its time \u2014 1:23:45, 23:45, 45.2 or 1h 2m 3s \u2014 so nothing was sent.", "what a member is told when a submission has no time"],
+  ["points_bad_time_said", "text", "**{given}** is not a time Black Bloc can read, so nothing was sent. Write it like 1:23:45, 23:45, 45.2 or 1h 2m 3s.", "**{given}** is not a time Black Bloc can read, so nothing was sent. Write it like 1:23:45, 23:45, 45.2 or 1h 2m 3s.", "what a member is told when the time they typed cannot be read"],
+  ["points_no_proof_said", "text", "A run needs a link to its video or image \u2014 an image must show LiveSplit or the game's own timer \u2014 so nothing was sent.", "A run needs a link to its video or image \u2014 an image must show LiveSplit or the game's own timer \u2014 so nothing was sent.", "what a member is told when a submission has no proof link"],
+  ["points_bad_proof_said", "text", "**{given}** is not a link, so nothing was sent. Paste the whole address, starting https://.", "**{given}** is not a link, so nothing was sent. Paste the whole address, starting https://.", "what a member is told when the proof they gave is not a web address"],
+  ["points_off_said", "text", "The point system is switched **off**, so nothing was done. Staff can set points_mode to shadow or on \u2014 in /settings or on the Settings page.", "The point system is switched **off**, so nothing was done. Staff can set points_mode to shadow or on \u2014 in /settings or on the Settings page.", "what anyone is told when they try a point system move while points_mode is off"],
+  ["points_not_verifier_said", "text", "Approving runs is for staff and {role}, so nothing was done.", "Approving runs is for staff and {role}, so nothing was done.", "what a member is told when they try to approve or reject a run; {role} names the verifier role, or points_no_verifier_role_words when none is picked"],
+  ["points_no_verifier_role_words", "text", "the run verifier role (staff have not picked one yet \u2014 it is points_verifier_role_id)", "the run verifier role (staff have not picked one yet \u2014 it is points_verifier_role_id)", "what {role} becomes in points_not_verifier_said while points_verifier_role_id is blank"],
+  ["points_not_staff_said", "text", "Only staff can do that, so nothing was done.", "Only staff can do that, so nothing was done.", "what a member is told when they try a staff move on the leaderboard"],
+  ["points_own_run_said", "text", "You submitted that run, so someone else approves it.", "You submitted that run, so someone else approves it.", "what a verifier who is not staff is told when they try to decide their own run"],
+  ["points_no_run_said", "text", "There is no run {id} here, so nothing was done.", "There is no run {id} here, so nothing was done.", "what is said when a move names a run Black Bloc has no record of"],
+  ["points_wrong_state_said", "text", "That run is {state}, so that cannot be done now.", "That run is {state}, so that cannot be done now.", "what is said when a move does not fit where a run is; {state} is one of the points_state_* words"],
+  ["points_state_pending", "text", "waiting for staff", "waiting for staff", "what {state} says for a run nobody has decided"],
+  ["points_state_approved", "text", "approved", "approved", "what {state} says for a run that counts"],
+  ["points_state_rejected", "text", "not approved", "not approved", "what {state} says for a rejected run"],
+  ["points_state_removed", "text", "taken off the leaderboard", "taken off the leaderboard", "what {state} says for an approved run staff took back"],
+  ["points_dm_rejected", "text", "Your **{game}** run ({time}) was not approved. {reason}", "Your **{game}** run ({time}) was not approved. {reason}", "the DM a member gets when their run is rejected; {reason} is points_dm_reason or points_dm_no_reason"],
+  ["points_dm_removed", "text", "Your **{game}** run ({time}) was taken off the leaderboard. {reason}", "Your **{game}** run ({time}) was taken off the leaderboard. {reason}", "the DM a member gets when staff take back a run that had been approved"],
+  ["points_dm_reason", "text", "Staff said: {reason}", "Staff said: {reason}", "what {reason} becomes in those DMs"],
+  ["points_dm_no_reason", "text", "Staff gave no reason.", "Staff gave no reason.", "what {reason} becomes in those DMs when staff left the reason blank"],
+  ["points_bounty_line", "text", "**{name}** \u2014 {games}: {bonus}, {when}.", "**{name}** \u2014 {games}: {bonus}, {when}.", "one bounty as the leaderboard lists it"],
+  ["points_bounty_multiplier_words", "text", "\u00d7{amount} speedpoints", "\u00d7{amount} speedpoints", "what {bonus} says for a bounty that multiplies a run's speedpoints"],
+  ["points_bounty_extra_words", "text", "+{amount} speedpoints", "+{amount} speedpoints", "what {bonus} says for a bounty that adds speedpoints to a run"],
+  ["points_bounty_until_words", "text", "until {ends}", "until {ends}", "what {when} says for a bounty with its own dates"],
+  ["points_bounty_event_words", "text", "during {event}", "during {event}", "what {when} says for a bounty tied to an event"],
+  ["points_bounty_none", "text", "No bounties right now.", "No bounties right now.", "what the leaderboard says while no bounty is live"],
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
@@ -2421,6 +2478,9 @@ const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_chan
 CORE_KEYS.push(...PB_FEED_KEYS);
 const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_shadow_channel_id", "brackets_to_role_id", "brackets_ping_role_id", "brackets_format_default", "brackets_best_of", "brackets_best_of_late", "brackets_best_of_finals", "brackets_pools_format_default", "brackets_pools_best_of_default", "brackets_grand_final_reset_default", "brackets_third_place_default", "brackets_confirm_minutes", "brackets_check_in_minutes", "brackets_best_of_from_round", "brackets_swiss_rounds_default", "brackets_entrant_cap_default", "brackets_panel_minutes", "brackets_pool_count_default", "brackets_advance_per_pool_default", "brackets_advance_losers_from_default", "brackets_pools_swiss_rounds_default", "brackets_checked_in_said", "brackets_checked_out_said", "brackets_joined_said", "brackets_left_said", "brackets_dropped_said", "brackets_set_called_said", "brackets_set_reported_said", "brackets_set_final_said", "brackets_forfeit_words", "brackets_set_disputed_said", "brackets_off_said", "brackets_not_organiser_said", "brackets_no_role_words", "brackets_no_tournament_said", "brackets_wrong_state_said", "brackets_state_draft", "brackets_state_signups", "brackets_state_check_in", "brackets_state_seeding", "brackets_state_running", "brackets_state_complete", "brackets_state_cancelled", "brackets_not_yours_said", "brackets_full_said", "brackets_already_in_said", "brackets_removed_by_to_said", "brackets_no_set_said", "brackets_not_in_set_said", "brackets_not_ready_said", "brackets_not_playable_said", "brackets_already_complete_said", "brackets_disputed_said", "brackets_bad_score_said", "brackets_reported_differently_said", "brackets_not_reported_said", "brackets_own_report_said", "brackets_not_in_bracket_said", "brackets_already_out_said", "brackets_format_single_words", "brackets_format_double_words", "brackets_format_round_robin_words", "brackets_format_swiss_words", "brackets_card_format_line", "brackets_card_reset_words", "brackets_card_third_words", "brackets_card_rounds_words", "brackets_card_late_words", "brackets_card_finals_words", "brackets_card_state_line", "brackets_card_entrants_line", "brackets_card_entrants_cap_line", "brackets_card_starts_line", "brackets_card_check_in_line", "brackets_card_to_line", "brackets_card_place_line", "brackets_card_link_label", "brackets_sign_up_label", "brackets_leave_label", "brackets_check_in_label", "brackets_not_entered_said", "brackets_set_card_players", "brackets_round_winners", "brackets_round_losers", "brackets_round_grand", "brackets_round_reset", "brackets_round_third", "brackets_round_plain", "brackets_set_card_title", "brackets_set_card_best_of", "brackets_set_card_rematch", "brackets_set_card_ready", "brackets_set_card_called", "brackets_set_card_reported", "brackets_set_card_disputed", "brackets_set_card_note", "brackets_set_card_cleared", "brackets_report_label", "brackets_confirm_label", "brackets_dispute_label", "brackets_report_title", "brackets_score_label", "brackets_dispute_title", "brackets_dispute_note_label", "brackets_score_not_number_said", "brackets_panel_title", "brackets_panel_line", "brackets_panel_empty", "brackets_pick_placeholder", "brackets_pick_set_placeholder", "brackets_back_label", "brackets_your_sets_title", "brackets_drop_label", "brackets_drop_confirm", "brackets_panel_footer", "brackets_dm_removed", "brackets_dm_dq", "brackets_dm_dropped", "brackets_dm_decided", "brackets_dm_reset", "brackets_dm_reason", "brackets_start_ping", "brackets_moved_line", "brackets_waiting_play", "brackets_waiting_called", "brackets_waiting_confirm", "brackets_waiting_opponent_confirms", "brackets_waiting_to_decides", "brackets_waiting_waits", "brackets_waiting_next_round", "brackets_waiting_done", "brackets_waiting_out", "brackets_discord_label", "brackets_state_pools", "brackets_round_pool", "brackets_pool_title", "brackets_card_pools_words", "brackets_card_losers_words", "brackets_card_pool_line", "brackets_waiting_final", "brackets_pool_tied", "brackets_pool_raise_label"];
 CORE_KEYS.push(...BRACKETS_KEYS);
+const POINTS_KEYS = ["points_mode", "points_channel_id", "points_shadow_channel_id", "points_ping_role_id", "points_verifier_role_id", "points_xp_tiers", "points_xp_min", "points_xp_max", "points_per_run", "points_top_n", "points_board_order", "points_bounty_clock", "points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none"];
+CORE_KEYS.push(...POINTS_KEYS);
+const POINTS_WORD_KEYS = ["points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none"];
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
@@ -15823,6 +15883,400 @@ route('POST', '/api/structure/snapshots/:id/download', (context) => {
   const snapshot = { id: row.id, taken_at: row.taken_at, source: row.source, digest: row.digest, ...structureCounts(row.body), guild_id: row.body.guild.id };
   snapshot.filename = `structure-${snapshot.guild_id}-${String(row.taken_at).slice(0, 10)}-${row.id}.json`;
   return { snapshot, ...row.body };
+});
+
+// The BaF point system (docs/info/points-design.md): the mock's stand-in for points_moves and
+// points_view, enough for the contract and the Leaderboard page (layer 3) to be read locally.
+// The bot's engine is the truth; where the two differ, this block changes.
+const PT_TIERS = [[60, 5], [600, 25], [900, 50], [1800, 100]];
+const PT_STAFF_WORDS = {
+  approved: "Approved {name}'s **{game}** run ({time}) — {xp} XP, {points} speedpoints.",
+  approved_bounty: "Approved {name}'s **{game}** run ({time}) — {xp} XP, {points} speedpoints with the bounty **{bounty}**.",
+  rejected: "Rejected {name}'s **{game}** run ({time}).",
+  removed: "Took {name}'s **{game}** run ({time}) off the leaderboard.",
+  edited: "Saved {name}'s **{game}** run ({time}).",
+  reopened: "Saved {name}'s **{game}** run ({time}); it is waiting for a decision again.",
+  recomputed: 'Recomputed the approved runs: {count} of {total} changed.',
+  bounty_created: 'Created the bounty **{name}**.',
+  bounty_saved: 'Saved the bounty **{name}**.',
+  bounty_ended: 'Ended the bounty **{name}**.',
+  bounty_already_ended: 'The bounty **{name}** has already ended.',
+  no_bounty: 'There is no bounty {id} here, so nothing was done.',
+  bad_bounty_window: 'A bounty runs during one event or between a start and an end date — give one of the two, so nothing was saved.',
+  bad_bounty_amount: 'A {kind} bounty takes {allowed}, not {given}, so nothing was saved.',
+};
+
+function ptSay(key, fields = {}) {
+  return String(PT_STAFF_WORDS[key] ?? state.settings.get(key) ?? '').replace(/\{(\w+)\}/g, (all, name) => (name in fields ? String(fields[name]) : all));
+}
+
+function ptShown(seconds) {
+  const hundredths = Math.round(Number(seconds) * 100);
+  const whole = Math.floor(hundredths / 100);
+  const part = hundredths % 100;
+  const hours = Math.floor(whole / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  const secs = whole % 60;
+  const tail = part ? `.${String(part).padStart(2, '0')}` : '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return hours ? `${hours}:${pad(minutes)}:${pad(secs)}${tail}` : `${minutes}:${pad(secs)}${tail}`;
+}
+
+function ptSeconds(given) {
+  const text = String(given ?? '').trim().toLowerCase();
+  if (!text) throw new Refused(400, 'no_time', state.settings.get('points_no_time_said'));
+  let found = null;
+  if (/^\d+(\.\d+)?$/.test(text)) found = Number(text);
+  const colons = text.match(/^(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)$/);
+  if (colons) found = Number(colons[1] || 0) * 3600 + Number(colons[2]) * 60 + Number(colons[3]);
+  const units = text.match(/^(?:(\d+(?:\.\d+)?)\s*h\s*)?(?:(\d+(?:\.\d+)?)\s*m\s*)?(?:(\d+(?:\.\d+)?)\s*s)?$/);
+  if (found === null && units && units[0]) found = Number(units[1] || 0) * 3600 + Number(units[2] || 0) * 60 + Number(units[3] || 0);
+  if (found === null || !(found > 0) || found > 360000) {
+    throw new Refused(400, 'bad_time', ptSay('points_bad_time_said', { given: String(given).slice(0, 40) }));
+  }
+  return Math.round(found * 1000) / 1000;
+}
+
+function ptXp(seconds) {
+  let best = 0;
+  for (const [floor, xp] of PT_TIERS) if (seconds >= floor) best = xp;
+  return Math.min(Math.max(best, Number(state.settings.get('points_xp_min') ?? 5)), Number(state.settings.get('points_xp_max') ?? 100));
+}
+
+function ptState() {
+  if (!state.points) {
+    const at = minutesAgo(30);
+    const run = (id, user_id, game, seconds, extra) => ({
+      id, user_id, game, category: 'Any%', seconds, proof_url: 'https://youtu.be/mock', note: null,
+      submitted_at: minutesAgo(90), state: 'pending', decided_by: null, decided_at: null, reason: null,
+      xp: 0, speedpoints: 0, bounty_id: null, ticket_id: null, ...extra,
+    });
+    state.points = {
+      runs: [
+        run(1, MEMBERS[2].id, 'Celeste', 1825.4, {}),
+        run(2, MEMBERS[3].id, 'Hollow Knight', 2400, { state: 'approved', decided_by: STAFF.id, decided_at: at, xp: 100, speedpoints: 10 }),
+        run(3, MEMBERS[6].id, 'Hades', 610, { state: 'rejected', decided_by: STAFF.id, decided_at: at, reason: 'no timer in shot' }),
+        run(4, MEMBERS[2].id, 'Celeste', 700, { state: 'approved', decided_by: STAFF.id, decided_at: minutesAgo(20), xp: 25, speedpoints: 20, bounty_id: 1 }),
+      ],
+      bounties: [
+        { id: 1, name: 'Game of the month', games: ['Celeste'], kind: 'multiplier', amount: 2, event_id: null, starts_at: minutesAgo(60 * 24), ends_at: daysAhead(20), active: true, created_by: STAFF.id },
+      ],
+      nextRun: 5,
+      nextBounty: 2,
+    };
+  }
+  return state.points;
+}
+
+function ptOff() {
+  if ((state.settings.get('points_mode') ?? 'shadow') === 'off') throw new Refused(409, 'points_off', state.settings.get('points_off_said'));
+}
+
+function ptStaff(context) {
+  if (context.session === 'member') throw new Refused(403, 'not_staff', NOT_STAFF);
+}
+
+function ptVerifier(context) {
+  if (context.session === 'member') {
+    throw new Refused(403, 'not_verifier', ptSay('points_not_verifier_said', { role: ptSay('points_no_verifier_role_words') }));
+  }
+}
+
+function ptBoard(by = 'points') {
+  const totals = new Map();
+  for (const one of ptState().runs.filter((row) => row.state === 'approved')) {
+    const found = totals.get(one.user_id) || { user_id: one.user_id, runs: 0, xp: 0, speedpoints: 0, last_at: '' };
+    found.runs += 1;
+    found.xp += one.xp;
+    found.speedpoints += one.speedpoints;
+    if (String(one.decided_at) > found.last_at) found.last_at = String(one.decided_at);
+    totals.set(one.user_id, found);
+  }
+  const first = by === 'xp' ? 'xp' : 'speedpoints';
+  const second = by === 'xp' ? 'speedpoints' : 'xp';
+  return [...totals.values()]
+    .sort((a, b) => b[first] - a[first] || b[second] - a[second] || a.last_at.localeCompare(b.last_at))
+    .map((one, at) => ({ place: at + 1, user_id: String(one.user_id), name: memberName(one.user_id), runs: one.runs, xp: one.xp, speedpoints: one.speedpoints }));
+}
+
+function ptRun(row) {
+  return {
+    ...row, user_id: String(row.user_id), name: memberName(row.user_id), time: ptShown(row.seconds),
+    state_words: state.settings.get(`points_state_${row.state}`), decided_by: row.decided_by ? String(row.decided_by) : null,
+    decided_by_name: row.decided_by ? memberName(row.decided_by) : null,
+  };
+}
+
+function ptBountyRow(row) {
+  const amount = String(Number(row.amount));
+  const bonus = ptSay(row.kind === 'multiplier' ? 'points_bounty_multiplier_words' : 'points_bounty_extra_words', { amount });
+  const when = row.event_id ? ptSay('points_bounty_event_words', { event: `#${row.event_id}` }) : ptSay('points_bounty_until_words', { ends: String(row.ends_at).slice(0, 10), starts: String(row.starts_at).slice(0, 10) });
+  const at = now();
+  return {
+    id: row.id, name: row.name, games: row.games, kind: row.kind, amount: Number(row.amount), event_id: row.event_id,
+    event_title: null, starts_at: row.starts_at, ends_at: row.ends_at, active: row.active,
+    live: Boolean(row.active && row.starts_at && row.ends_at && row.starts_at <= at && at < row.ends_at),
+    line: ptSay('points_bounty_line', { name: row.name, games: row.games.join(', '), bonus, when }),
+  };
+}
+
+function ptMe(userId) {
+  const board = ptBoard();
+  const mine = board.find((one) => one.user_id === String(userId));
+  const blank = { kind: 'unranked', place: null, speedpoints: 0, above_user_id: null, above_name: null, above_place: null, gap: 0, runs: null };
+  if (!mine) return { ...blank, line: ptSay('points_next_rank_unranked_said') };
+  if (mine.place === 1) return { ...blank, kind: 'first', place: 1, speedpoints: mine.speedpoints, line: ptSay('points_next_rank_first_said', { points: mine.speedpoints }) };
+  const above = board[mine.place - 2];
+  const gap = above.speedpoints - mine.speedpoints + 1;
+  const perRun = Number(state.settings.get('points_per_run') ?? 10);
+  const runs = perRun > 0 ? Math.ceil(gap / perRun) : null;
+  return {
+    kind: 'climb', place: mine.place, speedpoints: mine.speedpoints, above_user_id: above.user_id, above_name: above.name,
+    above_place: above.place, gap, runs,
+    line: ptSay('points_next_rank_said', { place: mine.place, points: mine.speedpoints, gap, name: above.name, above: above.place, runs: runs ?? '' }),
+  };
+}
+
+function ptOf(context) {
+  const found = ptState().runs.find((one) => String(one.id) === String(context.params.run_id));
+  if (!found) throw new Refused(404, 'no_run', ptSay('points_no_run_said', { id: context.params.run_id }));
+  return found;
+}
+
+function ptIn(row, ...allowed) {
+  if (!allowed.includes(row.state)) {
+    throw new Refused(409, 'wrong_state', ptSay('points_wrong_state_said', { state: state.settings.get(`points_state_${row.state}`) }));
+  }
+}
+
+function ptDiff(before, after) {
+  const top = Number(state.settings.get('points_top_n') ?? 10);
+  const was = new Map(before.map((one) => [one.user_id, one]));
+  const lines = [];
+  for (const one of after) {
+    const old = was.get(one.user_id);
+    if (one.place <= top && (!old || old.place > top)) lines.push(ptSay('points_announce_entered', { name: one.name, place: one.place, top, points: one.speedpoints }));
+    else if (old && one.place <= top && one.place < old.place) lines.push(ptSay('points_announce_up', { name: one.name, place: one.place, was: old.place }));
+    else if (old && old.place <= top && one.place > old.place && one.place <= top) lines.push(ptSay('points_announce_down', { name: one.name, place: one.place, was: old.place }));
+  }
+  const latest = new Map(after.map((one) => [one.user_id, one]));
+  for (const old of before) {
+    const fresh = latest.get(old.user_id);
+    if (old.place <= top && (!fresh || fresh.place > top)) lines.push(ptSay('points_announce_left', { name: old.name, top }));
+  }
+  return lines;
+}
+
+function ptLog(event, context, extra = {}) {
+  logAction(`web.points.${event}`, { actor_id: actorOf(context.session), details: { via: 'website', ...extra } });
+}
+
+function ptMoved(context, before, row) {
+  const announce = ptDiff(before, ptBoard());
+  if (announce.length) {
+    const live = (state.settings.get('points_mode') ?? 'shadow') === 'on';
+    ptLog(live ? 'top_changed' : 'would_announce', context, { lines: announce });
+  }
+  return { changed: [`run:${row.id}`, 'board', ...(announce.length ? ['top'] : [])], announce };
+}
+
+function ptWords(row) {
+  return { name: memberName(row.user_id), game: row.game, time: ptShown(row.seconds) };
+}
+
+route('GET', '/api/points', (context) => {
+  requireMember(context.session);
+  const by = context.url.searchParams.get('by') === 'xp' ? 'xp' : (state.settings.get('points_board_order') ?? 'points');
+  const top = Number(state.settings.get('points_top_n') ?? 10);
+  const board = ptBoard(by);
+  const verifier = context.session !== 'member';
+  return {
+    mode: state.settings.get('points_mode') ?? 'shadow',
+    by,
+    orders: ['points', 'xp'],
+    top_n: top,
+    may_verify: verifier,
+    staff: verifier,
+    words: Object.fromEntries(POINTS_WORD_KEYS.map((key) => [key, String(state.settings.get(key) ?? '')])),
+    board: board.slice(0, top),
+    members: board.length,
+    me: ptMe(actorOf(context.session)),
+    bounties: ptState().bounties.filter((one) => one.active && one.ends_at && one.ends_at > now()).map(ptBountyRow),
+    pending: verifier ? ptState().runs.filter((one) => one.state === 'pending').length : null,
+  };
+});
+
+route('GET', '/api/points/board', (context) => {
+  requireMember(context.session);
+  const by = context.url.searchParams.get('by') === 'xp' ? 'xp' : 'points';
+  return { by, rows: ptBoard(by) };
+});
+
+route('GET', '/api/points/me', (context) => {
+  requireMember(context.session);
+  return ptMe(actorOf(context.session));
+});
+
+route('GET', '/api/points/runs', (context) => {
+  requireMember(context.session);
+  const wantedState = context.url.searchParams.get('state');
+  const asked = context.url.searchParams.get('user_id');
+  const self = String(actorOf(context.session));
+  if (context.session === 'member' && asked && asked !== self) ptVerifier(context);
+  const userId = asked || (context.session === 'member' ? self : null);
+  const known = ['pending', 'approved', 'rejected', 'removed'].includes(wantedState) ? wantedState : null;
+  const rows = ptState().runs
+    .filter((one) => (!known || one.state === known) && (!userId || String(one.user_id) === userId))
+    .sort((a, b) => (known === 'pending' ? a.id - b.id : b.id - a.id));
+  return { state: known, user_id: userId, runs: rows.map(ptRun) };
+});
+
+route('POST', '/api/points/runs', async (context) => {
+  requireMember(context.session);
+  ptOff();
+  const body = await context.body();
+  const game = String(body.game || '').replace(/\s+/g, ' ').trim();
+  if (!game || game.length > 100) throw new Refused(400, 'no_game', ptSay('points_no_game_said', { limit: 100 }));
+  const seconds = ptSeconds(body.time);
+  const proof = String(body.proof_url || '').trim();
+  if (!proof) throw new Refused(400, 'no_proof', state.settings.get('points_no_proof_said'));
+  if (!/^https?:\/\/[^\s/$.?#][^\s]*\.[^\s]+$/i.test(proof)) throw new Refused(400, 'bad_proof', ptSay('points_bad_proof_said', { given: proof.slice(0, 60) }));
+  const held = ptState();
+  const row = {
+    id: held.nextRun++, user_id: actorOf(context.session), game, category: String(body.category || '').trim() || null, seconds,
+    proof_url: proof, note: String(body.note || '').trim() || null, submitted_at: now(), state: 'pending', decided_by: null,
+    decided_at: null, reason: null, xp: 0, speedpoints: 0, bounty_id: null, ticket_id: null,
+  };
+  held.runs.push(row);
+  ptLog('submitted', context, { run: row.id, game });
+  return { run: ptRun(row), message: ptSay('points_submitted_said', { game, time: ptShown(seconds) }), changed: [`run:${row.id}`], announce: [] };
+});
+
+route('POST', '/api/points/runs/:run_id/approve', (context) => {
+  requireMember(context.session);
+  ptOff();
+  const row = ptOf(context);
+  ptVerifier(context);
+  ptIn(row, 'pending');
+  const before = ptBoard();
+  const at = now();
+  const base = Number(state.settings.get('points_per_run') ?? 10);
+  const bounty = ptState().bounties.find((one) => one.active && one.starts_at <= at && at < one.ends_at && one.games.some((game) => game.toLowerCase() === row.game.toLowerCase()));
+  const points = bounty ? (bounty.kind === 'multiplier' ? Math.round(base * bounty.amount) : base + Number(bounty.amount)) : base;
+  Object.assign(row, { state: 'approved', decided_by: actorOf(context.session), decided_at: at, reason: null, xp: ptXp(row.seconds), speedpoints: points, bounty_id: bounty ? bounty.id : null });
+  ptLog('approved', context, { run: row.id });
+  const moved = ptMoved(context, before, row);
+  const message = ptSay(bounty ? 'approved_bounty' : 'approved', { ...ptWords(row), xp: row.xp, points, bounty: bounty ? bounty.name : '' });
+  return { run: ptRun(row), message, ...moved };
+});
+
+route('POST', '/api/points/runs/:run_id/reject', async (context) => {
+  requireMember(context.session);
+  ptOff();
+  const row = ptOf(context);
+  ptVerifier(context);
+  ptIn(row, 'pending');
+  const body = await context.body();
+  Object.assign(row, { state: 'rejected', decided_by: actorOf(context.session), decided_at: now(), reason: String(body.reason || '').trim().slice(0, 300) || null });
+  ptLog('rejected', context, { run: row.id });
+  return { run: ptRun(row), message: ptSay('rejected', ptWords(row)), changed: [`run:${row.id}`], announce: [] };
+});
+
+route('POST', '/api/points/runs/:run_id/remove', async (context) => {
+  requireStaff(context.session);
+  ptOff();
+  const row = ptOf(context);
+  ptIn(row, 'approved');
+  const body = await context.body();
+  const before = ptBoard();
+  Object.assign(row, { state: 'removed', decided_by: actorOf(context.session), decided_at: now(), reason: String(body.reason || '').trim().slice(0, 300) || null });
+  ptLog('removed', context, { run: row.id });
+  return { run: ptRun(row), message: ptSay('removed', ptWords(row)), ...ptMoved(context, before, row) };
+});
+
+route('PATCH', '/api/points/runs/:run_id', async (context) => {
+  requireStaff(context.session);
+  ptOff();
+  const row = ptOf(context);
+  const body = await context.body();
+  for (const field of ['game', 'category', 'proof_url', 'note']) if (field in body) row[field] = String(body[field] || '').trim() || null;
+  if ('time' in body) row.seconds = ptSeconds(body.time);
+  const reopened = ['rejected', 'removed'].includes(row.state);
+  if (reopened) Object.assign(row, { state: 'pending', decided_by: null, decided_at: null, reason: null, xp: 0, speedpoints: 0, bounty_id: null });
+  else if (row.state === 'approved') row.xp = ptXp(row.seconds);
+  ptLog('edited', context, { run: row.id, reopened });
+  return { run: ptRun(row), message: ptSay(reopened ? 'reopened' : 'edited', ptWords(row)), changed: [`run:${row.id}`], announce: [] };
+});
+
+route('POST', '/api/points/recompute', (context) => {
+  requireStaff(context.session);
+  ptOff();
+  const approved = ptState().runs.filter((one) => one.state === 'approved');
+  let count = 0;
+  for (const row of approved) {
+    const xp = ptXp(row.seconds);
+    if (xp !== row.xp) {
+      row.xp = xp;
+      count += 1;
+    }
+  }
+  ptLog('recomputed', context, { changed: count, total: approved.length });
+  return { message: ptSay('recomputed', { count, total: approved.length }), changed: count ? ['board'] : [], announce: [] };
+});
+
+route('GET', '/api/points/bounties', (context) => {
+  requireMember(context.session);
+  return { bounties: ptState().bounties.map(ptBountyRow).sort((a, b) => b.id - a.id) };
+});
+
+function ptBountyFields(row, body) {
+  if ('name' in body) row.name = String(body.name || '').trim().slice(0, 100);
+  if ('games' in body) row.games = (Array.isArray(body.games) ? body.games : [body.games]).map((one) => String(one).trim()).filter(Boolean);
+  if ('kind' in body) row.kind = body.kind;
+  if ('amount' in body) row.amount = Number(body.amount);
+  const fits = row.kind === 'multiplier' ? row.amount > 1 && row.amount <= 10 : Number.isInteger(row.amount) && row.amount >= 1;
+  if (!fits) throw new Refused(400, 'bad_bounty_amount', ptSay('bad_bounty_amount', { kind: row.kind, allowed: 'another amount', given: String(body.amount) }));
+  if (body.event_id) Object.assign(row, { event_id: Number(body.event_id), starts_at: null, ends_at: null });
+  else if (body.starts_at || body.ends_at) Object.assign(row, { event_id: null, starts_at: new Date(body.starts_at || row.starts_at).toISOString(), ends_at: new Date(body.ends_at || row.ends_at).toISOString() });
+  if (!row.event_id && (!row.starts_at || !row.ends_at)) throw new Refused(400, 'bad_bounty_window', ptSay('bad_bounty_window'));
+  if ('active' in body) row.active = Boolean(body.active);
+}
+
+function ptBountyOf(context) {
+  const found = ptState().bounties.find((one) => String(one.id) === String(context.params.bounty_id));
+  if (!found) throw new Refused(404, 'no_bounty', ptSay('no_bounty', { id: context.params.bounty_id }));
+  return found;
+}
+
+route('POST', '/api/points/bounties', async (context) => {
+  requireStaff(context.session);
+  ptOff();
+  const body = await context.body();
+  const held = ptState();
+  const row = { id: held.nextBounty++, name: '', games: [], kind: 'extra', amount: 0, event_id: null, starts_at: null, ends_at: null, active: true, created_by: actorOf(context.session) };
+  ptBountyFields(row, body);
+  held.bounties.push(row);
+  ptLog('bounty_set', context, { bounty: row.id, created: true });
+  return { bounty: ptBountyRow(row), message: ptSay('bounty_created', { name: row.name }) };
+});
+
+route('PATCH', '/api/points/bounties/:bounty_id', async (context) => {
+  requireStaff(context.session);
+  ptOff();
+  const row = ptBountyOf(context);
+  ptBountyFields(row, await context.body());
+  ptLog('bounty_set', context, { bounty: row.id, created: false });
+  return { bounty: ptBountyRow(row), message: ptSay('bounty_saved', { name: row.name }) };
+});
+
+route('POST', '/api/points/bounties/:bounty_id/end', (context) => {
+  requireStaff(context.session);
+  ptOff();
+  const row = ptBountyOf(context);
+  if (!row.active) throw new Refused(409, 'already_ended', ptSay('bounty_already_ended', { name: row.name }));
+  row.active = false;
+  ptLog('bounty_ended', context, { bounty: row.id });
+  return { bounty: ptBountyRow(row), message: ptSay('bounty_ended', { name: row.name }) };
 });
 
 const server = createServer(async (request, response) => {

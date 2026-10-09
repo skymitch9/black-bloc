@@ -1982,7 +1982,7 @@ async def test_the_boot_status_ships_on_with_both_sentences_written(store):
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 261
+    assert len(settings_store.CORE_KEYS) == 317
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2340,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1093
+    assert len(settings_store.KEY_TYPES) == 1149
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2799,3 +2799,41 @@ async def test_the_marathon_channel_ping_line_says_when_during_events_pings(stor
     assert store.default(key) == "During events pings while one of its marathons runs."
     await store.set(1, key, "Only while it runs.")
     assert store.get(1, key) == "Only while it runs."
+
+
+# The BaF point system (docs/info/points-design.md §D): every decision of the owner's eleven is a
+# key both doors reach, all under core, and the tier table refuses what the engine cannot read.
+
+
+async def test_the_point_systems_decisions_are_keys_with_the_owners_defaults(store):
+    from black_bloc.settings_store import POINTS_KEYS
+
+    assert store.get(7, "points_mode") == "shadow"
+    assert store.get(7, "points_channel_id") == 1076003845232148580
+    assert store.get(7, "points_shadow_channel_id") is None
+    assert store.get(7, "points_ping_role_id") is None
+    assert store.get(7, "points_verifier_role_id") is None
+    assert store.get(7, "points_xp_tiers") == "1:00=5, 10:00=25, 15:00=50, 30:00=100"
+    assert (store.get(7, "points_xp_min"), store.get(7, "points_xp_max")) == (5, 100)
+    assert (store.get(7, "points_per_run"), store.get(7, "points_top_n")) == (10, 10)
+    assert store.get(7, "points_board_order") == "points"
+    assert store.get(7, "points_bounty_clock") == "approved"
+    assert {settings_store.namespace_of(key) for key in POINTS_KEYS} == {"core"}
+    assert all(KEY_HELP.get(key) for key in POINTS_KEYS)
+    assert settings_store.KEY_MAX["points_top_n"] == 25
+
+
+async def test_the_xp_tiers_are_stored_in_one_spelling_and_junk_is_refused(store):
+    await store.set(7, "points_xp_tiers", "30m=200,  1m=10")
+    assert store.get(7, "points_xp_tiers") == "1:00=10, 30:00=200"
+
+    with pytest.raises(settings_store.SettingError) as refused:
+        await store.set(7, "points_xp_tiers", "lots of xp")
+    assert "is not a tier list Black Bloc can read" in str(refused.value)
+    assert store.get(7, "points_xp_tiers") == "1:00=10, 30:00=200"
+
+
+async def test_a_point_system_word_takes_only_its_own_placeholders(store):
+    await store.set(7, "points_announce_up", "{name} climbs to #{place}!")
+    with pytest.raises(settings_store.SettingError):
+        await store.set(7, "points_announce_up", "{name} climbs to {rank}")
