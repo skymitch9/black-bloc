@@ -1,9 +1,7 @@
 {
-  "release": "v215",
-  "commit": "3b5033de",
+  "release": "v218",
+  "commit": "941cc9ed",
   "changed_features": [
-    "chat",
-    "events",
     "modmail",
     "poll"
   ]
