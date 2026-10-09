@@ -70,6 +70,7 @@ def run_row(store: Any, guild: Any, row: Any) -> dict[str, Any]:
         "xp": row["xp"],
         "speedpoints": row["speedpoints"],
         "bounty_id": row["bounty_id"],
+        "ticket_id": row["ticket_id"],
     }
 
 

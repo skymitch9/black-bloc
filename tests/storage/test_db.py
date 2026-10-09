@@ -4301,6 +4301,7 @@ POINTS_TABLES = {
         "speedpoints",
         "bounty_id",
         "note",
+        "ticket_id",
     ),
     "points_bounties": (
         "id",

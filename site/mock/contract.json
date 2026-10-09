@@ -11568,7 +11568,8 @@
           "reason",
           "xp",
           "speedpoints",
-          "bounty_id"
+          "bounty_id",
+          "ticket_id"
         ]
       }
     },
@@ -11611,7 +11612,8 @@
           "reason",
           "xp",
           "speedpoints",
-          "bounty_id"
+          "bounty_id",
+          "ticket_id"
         ]
       }
     },
@@ -11649,7 +11651,8 @@
           "reason",
           "xp",
           "speedpoints",
-          "bounty_id"
+          "bounty_id",
+          "ticket_id"
         ]
       }
     },
@@ -11689,7 +11692,8 @@
           "reason",
           "xp",
           "speedpoints",
-          "bounty_id"
+          "bounty_id",
+          "ticket_id"
         ]
       }
     },
@@ -11729,7 +11733,8 @@
           "reason",
           "xp",
           "speedpoints",
-          "bounty_id"
+          "bounty_id",
+          "ticket_id"
         ]
       }
     },
@@ -11769,7 +11774,8 @@
           "reason",
           "xp",
           "speedpoints",
-          "bounty_id"
+          "bounty_id",
+          "ticket_id"
         ]
       }
     },

@@ -90,3 +90,16 @@ async def test_events_are_read_by_id_in_their_own_server(db):
     assert list(await store_.events(db, GUILD, [event_id])) == [event_id]
     assert await store_.events(db, OTHER, [event_id]) == {}
     assert await store_.events(db, GUILD, []) == {}
+
+
+async def test_a_run_is_found_by_the_ticket_it_came_through(db):
+    run_id = await store_.add_run(
+        db,
+        GUILD,
+        21,
+        {"game": "Celeste", "seconds": 60, "proof_url": "https://x.io/a", "ticket_id": 5},
+    )
+
+    assert (await store_.run_by_ticket(db, GUILD, 5))["id"] == run_id
+    assert await store_.run_by_ticket(db, OTHER, 5) is None
+    assert await store_.run_by_ticket(db, GUILD, 6) is None

@@ -153,8 +153,10 @@ reads or writes them.
 
 - **`points_runs`** — `id`, `guild_id`, `user_id`, `game`, `category` (free text, nullable), `seconds` (REAL),
   `proof_url`, `submitted_at`, `state` (`pending` default · `approved` · `rejected` · `removed`), `decided_by`,
-  `decided_at`, `reason`, `xp`, `speedpoints`, `bounty_id`, `note` (the member's own, nullable). Indexes
-  `(guild_id, state, id)` and `(guild_id, user_id, state)`. `xp`, `speedpoints` and `bounty_id` are written at
+  `decided_at`, `reason`, `xp`, `speedpoints`, `bounty_id`, `note` (the member's own, nullable), `ticket_id`
+  (nullable — the modmail ticket the run was submitted through, §G). Indexes `(guild_id, state, id)` and
+  `(guild_id, user_id, state)`, and a partial UNIQUE `(guild_id, ticket_id) WHERE ticket_id IS NOT NULL` (one run per
+  ticket). `xp`, `speedpoints` and `bounty_id` are written at
   approval and stay as they were unless staff edit the run or press Recompute.
 - **`points_bounties`** — `id`, `guild_id`, `name`, `games` (JSON list), `kind`, `amount` (REAL), `event_id`
   (nullable), `starts_at`, `ends_at` (nullable; both set when `event_id` is not), `created_by`, `created_at`, `active`.
@@ -176,10 +178,10 @@ top places moved; bounty moves answer `bounty:<id>`.
 
 | Move | Who | Does |
 |---|---|---|
-| `submit(given)` | any member | `game` (1–100), `time` (§A1), `proof_url` (http(s) with a dotted host, ≤ 500) required; `category` (≤ 100) and `note` (≤ 300) optional → a `pending` run. Staff may pass `user_id` to submit for a member; a member naming someone else is refused (`not_staff`). |
-| `approve(run)` | staff or the verifier role | `pending` only → scores it (§A2, §A3) and writes `approved`. A verifier who is not staff cannot decide their own run (`own_run`); staff can. |
-| `reject(run, reason)` | staff or the verifier role | `pending` only → `rejected` with the reason. `Result.dm` = `points_dm_rejected`. |
-| `remove(run, reason)` | staff | `approved` only → `removed`; the board recomputes. `Result.dm` = `points_dm_removed`. |
+| `submit(given)` | any member | `game` (1–100), `time` (§A1), `proof_url` (http(s) with a dotted host, ≤ 500) required; `category` (≤ 100) and `note` (≤ 300) optional → a `pending` run. Staff may pass `user_id` to submit for a member; a member naming someone else is refused (`not_staff`). A keyword-only `ticket_id=` records the modmail ticket the run came through — only layer 2's ticket flow passes it; the website route never does, and a `ticket_id` in a body is not read. |
+| `approve(run)` (or `ticket_id=`) | staff or the verifier role | `pending` only → scores it (§A2, §A3) and writes `approved`. A verifier who is not staff cannot decide their own run (`own_run`); staff can. |
+| `reject(run, reason)` (or `ticket_id=`) | staff or the verifier role | `pending` only → `rejected` with the reason. `Result.dm` = `points_dm_rejected`. |
+| `remove(run, reason)` (or `ticket_id=`) | staff | `approved` only → `removed`; the board recomputes. `Result.dm` = `points_dm_removed`. |
 | `edit(run, given)` | staff | the fields `submit` takes. **A `rejected` or `removed` run goes back to `pending`** (decision cleared) — the only way back, so *rejected → cannot be approved without a staff edit*; an `approved` run is rescored at its own clock; a `pending` run stays pending. |
 | `recompute()` | staff | every approved run again under today's tiers, points and bounties, each at its own clock (staff changing a tier or adding a bounty for a past window is NOT retroactive until this). |
 | `bounty_create(given)` / `bounty_edit(id, given)` / `bounty_end(id)` | staff | §A3's fields: `name` (1–100), `games` (1–25, each 1–100), `kind`, `amount` (multiplier above 1 and at most 10; extra a whole number 1–100000), and EITHER `event_id` (an event in this server) OR `starts_at` + `ends_at` (end after start); giving both is refused. An edit with `active: true` brings an ended bounty back (staff final say). |
@@ -275,6 +277,14 @@ Each carries `via`; a run row carries `run`, `game`, the member as target. The `
 
 ## G. Layer 2 — Discord (to build; nothing here exists yet)
 
+- **The staff door is MODMAIL (conductor, 2026-10-09, relaying the owner's decision).** Each submission opens a modmail
+  ticket in the member's name — a new ticket kind, built in L2 — and calls `submit(…, ticket_id=<the ticket>)`.
+  **Approve / Reject live on that ticket's card** and call `approve` / `reject` with `ticket_id=`; each closes the
+  ticket. **Reply still works** on the ticket, for asking the member for a clearer proof. Remove (staff) can find the
+  run by its ticket the same way. ⚠️ This supersedes the *Pending (N)* queue and the run card with Approve / Reject in
+  the panel bullet below: the panel shows the board, the member's own runs and Submit; deciding happens on the ticket.
+  Layer 1 builds NO modmail code — only the column, `submit`'s `ticket_id=` and the lookup.
+
 - **`/pb` becomes the board panel** (the one-command-per-feature, panel-not-slash rule). Today `/pb` opens the
   speedrun.com feed panel (`black_bloc/pb_panel.py`, [`pb-feed-design.md`](pb-feed-design.md) §F) and `pb_feed_mode` is
   `off`. L2 moves that panel under a staff-only **speedrun.com…** button on the new panel (or leaves it to the Settings
@@ -301,7 +311,7 @@ Each carries `via`; a run row carries `run`, `game`, the member as target. The `
 
 A **Leaderboard** page (`leaderboard.html`, `page-leaderboard.js` — the name the contract's `read_by` uses): the board
 with the Points / XP switch and *Full board*, *My next place*, a Submit form, the Pending queue (verifier), run Edit /
-Remove (staff), Recompute (staff), and the **bounties editor**: name, games (a list), the **bonus kind dropdown**
+Remove (staff), Recompute (staff) — ⚠️ the Pending queue is a VIEW of the open run tickets (`GET /api/points/runs?state=pending`, each row carrying its `ticket_id` and a link to the ticket), not a second queue: deciding happens on the modmail ticket (§G) — and the **bounties editor**: name, games (a list), the **bonus kind dropdown**
 (multiplier / extra — the owner's *"we need a drop down"*), amount, and the window — an **event picker** (the events
 list) OR start and end dates. The page's settings drawer carries the 12 operational keys; labels exist. Search and
 filter chips through the one shared module in `ui.js`; channel pickers read `#name · Category`; no explaining blurbs.
@@ -342,8 +352,8 @@ than one bounty on a run; per-game boards; an announcement for the XP view; a sw
 
 ## Gate (2026-10-09, branch `points-engine`, measured on the final code)
 
-- `python -m pytest tests -q -p no:cacheprovider -n 8`: **12957 passed, 1 skipped** (`main` at `01d6e72b` collects
-  12715 in a throwaway worktree; the branch 12958 — **+243 tests**).
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **12960 passed, 1 skipped** (`main` at `01d6e72b` collects
+  12715 in a throwaway worktree; the branch 12961 — **+246 tests**).
 - `python -m ruff check black_bloc tests site`: all checks passed.
 - `scripts/site-gate.ps1 -Port 8823` (its own mock; `node site/mock/check.mjs`): *ok - 26 pages, 360 routes, 317 core
   settings, all keys present*; the mock stopped by the gate afterwards.

@@ -1441,10 +1441,13 @@ CREATE TABLE IF NOT EXISTS points_runs (
     xp           INTEGER NOT NULL DEFAULT 0,
     speedpoints  INTEGER NOT NULL DEFAULT 0,
     bounty_id    INTEGER,
-    note         TEXT
+    note         TEXT,
+    ticket_id    INTEGER
 );
 CREATE INDEX IF NOT EXISTS points_runs_by_state ON points_runs(guild_id, state, id);
 CREATE INDEX IF NOT EXISTS points_runs_by_member ON points_runs(guild_id, user_id, state);
+CREATE UNIQUE INDEX IF NOT EXISTS points_runs_one_per_ticket
+    ON points_runs(guild_id, ticket_id) WHERE ticket_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS points_bounties (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

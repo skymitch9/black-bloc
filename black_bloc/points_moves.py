@@ -321,10 +321,18 @@ async def raced(bot: Any, guild: Any, run_id: int) -> None:
     )
 
 
-async def loaded(bot: Any, guild: Any, run_id: int) -> Any:
-    row = await store_.run(bot.db, guild.id, int(run_id))
+async def loaded(
+    bot: Any, guild: Any, run_id: int | None = None, *, ticket_id: int | None = None
+) -> Any:
+    """A run by its own id, or by the modmail ticket it was submitted through."""
+    row = None
+    if run_id is not None:
+        row = await store_.run(bot.db, guild.id, int(run_id))
+    elif ticket_id is not None:
+        row = await store_.run_by_ticket(bot.db, guild.id, int(ticket_id))
     if row is None:
-        raise stop(bot, guild, "points_no_run_said", "no_run", 404, id=run_id)
+        shown = run_id if run_id is not None else f"for ticket {ticket_id}"
+        raise stop(bot, guild, "points_no_run_said", "no_run", 404, id=shown)
     return row
 
 
@@ -519,7 +527,13 @@ async def scored(bot: Any, guild: Any, row: Any, decided_at: str) -> Score:
 
 @answered
 async def submit(
-    bot: Any, guild: Any, actor: Any, given: dict[str, Any], *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    given: dict[str, Any],
+    *,
+    ticket_id: int | None = None,
+    via: str = VIA_DISCORD,
 ) -> Outcome:
     require_on(bot, guild)
     values = run_values(bot, guild, given, creating=True)
@@ -535,6 +549,8 @@ async def submit(
             if wanted <= 0:
                 raise stop(bot, guild, "points_no_run_said", "no_member", 404, id=str(named)[:20])
             user_id = wanted
+    if ticket_id is not None:
+        values["ticket_id"] = int(ticket_id)
     run_id = await store_.add_run(bot.db, guild.id, user_id, values)
     await note(
         bot,
@@ -544,6 +560,7 @@ async def submit(
         via,
         target=user_id,
         run=run_id,
+        ticket=ticket_id,
         game=values["game"],
         seconds=values["seconds"],
         proof_url=values["proof_url"],
@@ -557,11 +574,17 @@ async def submit(
 
 @answered
 async def approve(
-    bot: Any, guild: Any, actor: Any, run_id: int, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    run_id: int | None = None,
+    *,
+    ticket_id: int | None = None,
+    via: str = VIA_DISCORD,
 ) -> Outcome:
     require_on(bot, guild)
     async with lock_for(bot, guild.id):
-        row = await loaded(bot, guild, run_id)
+        row = await loaded(bot, guild, run_id, ticket_id=ticket_id)
         require_verifier(bot, guild, actor)
         if row["user_id"] == actor_id(actor) and not is_staff(bot.store, actor):
             raise stop(bot, guild, "points_own_run_said", "own_run", 403)
@@ -623,12 +646,19 @@ def reason_of(reason: Any) -> str:
 
 @answered
 async def reject(
-    bot: Any, guild: Any, actor: Any, run_id: int, reason: Any = "", *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    run_id: int | None = None,
+    reason: Any = "",
+    *,
+    ticket_id: int | None = None,
+    via: str = VIA_DISCORD,
 ) -> Outcome:
     require_on(bot, guild)
     why = reason_of(reason)
     async with lock_for(bot, guild.id):
-        row = await loaded(bot, guild, run_id)
+        row = await loaded(bot, guild, run_id, ticket_id=ticket_id)
         require_verifier(bot, guild, actor)
         if row["user_id"] == actor_id(actor) and not is_staff(bot.store, actor):
             raise stop(bot, guild, "points_own_run_said", "own_run", 403)
@@ -662,12 +692,19 @@ async def reject(
 
 @answered
 async def remove(
-    bot: Any, guild: Any, actor: Any, run_id: int, reason: Any = "", *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    run_id: int | None = None,
+    reason: Any = "",
+    *,
+    ticket_id: int | None = None,
+    via: str = VIA_DISCORD,
 ) -> Outcome:
     require_on(bot, guild)
     why = reason_of(reason)
     async with lock_for(bot, guild.id):
-        row = await loaded(bot, guild, run_id)
+        row = await loaded(bot, guild, run_id, ticket_id=ticket_id)
         require_staff(bot, guild, actor)
         require_state(bot, guild, row, APPROVED)
         before = await board(bot, guild.id)

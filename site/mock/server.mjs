@@ -15947,7 +15947,7 @@ function ptState() {
     const run = (id, user_id, game, seconds, extra) => ({
       id, user_id, game, category: 'Any%', seconds, proof_url: 'https://youtu.be/mock', note: null,
       submitted_at: minutesAgo(90), state: 'pending', decided_by: null, decided_at: null, reason: null,
-      xp: 0, speedpoints: 0, bounty_id: null, ...extra,
+      xp: 0, speedpoints: 0, bounty_id: null, ticket_id: null, ...extra,
     });
     state.points = {
       runs: [
@@ -16143,7 +16143,7 @@ route('POST', '/api/points/runs', async (context) => {
   const row = {
     id: held.nextRun++, user_id: actorOf(context.session), game, category: String(body.category || '').trim() || null, seconds,
     proof_url: proof, note: String(body.note || '').trim() || null, submitted_at: now(), state: 'pending', decided_by: null,
-    decided_at: null, reason: null, xp: 0, speedpoints: 0, bounty_id: null,
+    decided_at: null, reason: null, xp: 0, speedpoints: 0, bounty_id: null, ticket_id: null,
   };
   held.runs.push(row);
   ptLog('submitted', context, { run: row.id, game });

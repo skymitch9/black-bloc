@@ -650,3 +650,50 @@ async def test_an_ended_bounty_gives_nothing(bot, guild):
     await moves.bounty_end(bot, guild, who(guild, STAFF), bounty_id)
     run_id = await approved(bot, guild)
     assert (await store_.run(bot.db, GUILD, run_id))["speedpoints"] == 10
+
+
+async def test_a_run_submitted_through_a_ticket_is_decided_by_that_ticket(bot, guild):
+    outcome = await moves.submit(
+        bot,
+        guild,
+        who(guild, ADA),
+        {"game": "Celeste", "time": "30:00", "proof_url": PROOF, "ticket_id": 999},
+        ticket_id=41,
+    )
+    other = await submitted(bot, guild, BEA)
+
+    assert (await store_.run(bot.db, GUILD, outcome.value.id))["ticket_id"] == 41
+    assert (await store_.run(bot.db, GUILD, other))["ticket_id"] is None
+    approved_by_ticket = await moves.approve(bot, guild, who(guild, STAFF), ticket_id=41)
+    assert approved_by_ticket.ok and approved_by_ticket.value.id == outcome.value.id
+    removed = await moves.remove(bot, guild, who(guild, STAFF), reason="dupe", ticket_id=41)
+    assert removed.ok and removed.value.dm_to == ADA
+    second = await moves.submit(
+        bot,
+        guild,
+        who(guild, BEA),
+        {"game": "Hades", "time": "1:00", "proof_url": PROOF},
+        ticket_id=42,
+    )
+    rejected = await moves.reject(bot, guild, who(guild, VERA), None, "blurry", ticket_id=42)
+    assert rejected.ok and rejected.value.id == second.value.id
+    missing = await moves.approve(bot, guild, who(guild, STAFF), ticket_id=43)
+    assert (missing.code, missing.message) == (
+        "no_run",
+        "There is no run for ticket 43 here, so nothing was done.",
+    )
+    nothing = await moves.approve(bot, guild, who(guild, STAFF))
+    assert nothing.code == "no_run"
+
+
+async def test_one_ticket_carries_one_run(bot, guild):
+    import sqlite3
+
+    await store_.add_run(
+        bot.db, GUILD, ADA, {"game": "x", "seconds": 1, "proof_url": PROOF, "ticket_id": 7}
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        await store_.add_run(
+            bot.db, GUILD, BEA, {"game": "y", "seconds": 1, "proof_url": PROOF, "ticket_id": 7}
+        )
+    await bot.db.conn.rollback()

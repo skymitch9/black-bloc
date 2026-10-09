@@ -10,6 +10,7 @@ from .points.board import Row
 from .points.model import APPROVED, PENDING
 
 RUN_FIELDS = ("game", "category", "seconds", "proof_url", "note")
+TICKET = "ticket_id"
 BOUNTY_FIELDS = ("name", "games", "kind", "amount", "event_id", "starts_at", "ends_at", "active")
 LIST_LIMIT = 200
 
@@ -21,7 +22,7 @@ def stamp(now: datetime | None = None) -> str:
 async def add_run(
     db: Any, guild_id: int, user_id: int, values: dict[str, Any], at: str | None = None
 ) -> int:
-    wanted = {key: values.get(key) for key in RUN_FIELDS}
+    wanted = {key: values.get(key) for key in (*RUN_FIELDS, TICKET)}
     columns = ["guild_id", "user_id", *wanted, "submitted_at"]
     cur = await db.conn.execute(
         f"INSERT INTO points_runs({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})",
@@ -34,6 +35,13 @@ async def add_run(
 async def run(db: Any, guild_id: int, run_id: int) -> Any:
     cur = await db.conn.execute(
         "SELECT * FROM points_runs WHERE id = ? AND guild_id = ?", (run_id, guild_id)
+    )
+    return await cur.fetchone()
+
+
+async def run_by_ticket(db: Any, guild_id: int, ticket_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM points_runs WHERE ticket_id = ? AND guild_id = ?", (ticket_id, guild_id)
     )
     return await cur.fetchone()
 
