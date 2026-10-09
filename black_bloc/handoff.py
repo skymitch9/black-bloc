@@ -71,7 +71,8 @@ ASK_DASH = "—"
 ASKED_SAID = "{who} has been asked by DM whether this may be filed as a {what}."
 CONFIRM_COLOUR = 0x5865F2
 ASK_TITLE_LABEL = "What should it be called?"
-ASK_BODY_LABEL = "What should it say? (the member sees this before they answer)"
+ASK_BODY_LABEL = "What should it say?"
+ASK_BODY_HINT = "The member sees this before they answer"
 ASK_MODAL_TITLE = {
     REQUEST: "File this ticket as a request",
     EVENT: "File this ticket as an event",
@@ -753,6 +754,7 @@ __all__ = [
     "ASKED_KIND",
     "ASKED_SAID",
     "ASK_BODY_FIELD",
+    "ASK_BODY_HINT",
     "ASK_BODY_LABEL",
     "ASK_DASH",
     "ASK_MODAL_TITLE",

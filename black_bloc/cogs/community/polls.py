@@ -3175,7 +3175,9 @@ class NewPollModal(AnswersErrors, discord.ui.Modal):
         )
         self.add_item(
             discord.ui.Label(
-                text="How many hours? (blank for the server default)", component=self.hours
+                text="How many hours?",
+                description="Blank for the server default",
+                component=self.hours,
             )
         )
         self.add_item(discord.ui.Label(text=KIND_LABEL, component=self.kind))

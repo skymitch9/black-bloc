@@ -746,7 +746,7 @@ ROOM_GOES_MINUTES = "{n} minutes after it ends"
 ROOM_GOES_DAYS = "{n} days after it ends"
 ROOM_DELETE_BUTTON = "Delete this room"
 ROOM_DELETE_TITLE = "Remove this room?"
-ROOM_DELETE_LABEL = "A line the host is sent (if the event is still open)"
+ROOM_DELETE_LABEL = "A line sent to the host (if still open)"
 ROOM_DELETE_NOT_STAFF = (
     "Only staff can remove this room. If you want your event called off, use **Call it off** on "
     "`/event`."
@@ -3009,7 +3009,7 @@ def settings_lines(store: Any, guild: Any, health: Any = ()) -> list[str]:
 NUMBERS_LABELS: dict[str, str] = {
     "retention": f"Days a finished channel is kept ({EVENTS_RETENTION_MIN_DAYS}–"
     f"{EVENTS_RETENTION_MAX_DAYS})",
-    "late": f"Minutes late it may still be announced (0–{EVENTS_LATE_CEILING_MINUTES})",
+    "late": f"Minutes late it may be announced (0–{EVENTS_LATE_CEILING_MINUTES})",
 }
 NOT_A_NUMBER = (
     "**{given}** is not a whole number, so nothing was changed. {label} takes a number between "

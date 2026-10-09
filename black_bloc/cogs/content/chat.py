@@ -235,7 +235,8 @@ FIND_LABEL = "Words to look for, the way a member would ask"
 FIND_LIMIT = 200
 TITLE_LABEL = "What the note is about, in a few words"
 BODY_LABEL = "The note itself"
-TAG_LABEL = "Optional one-word grouping, like events or rules"
+TAG_LABEL = "Optional one-word grouping"
+TAG_PLACEHOLDER = "like events or rules"
 
 COOLDOWN_LABEL = "Seconds between one person's answers"
 HOURLY_LABEL = "Answers one person may have in an hour"
@@ -1535,7 +1536,9 @@ class NoteFieldsModal(AnswersErrors, discord.ui.Modal):
     body = discord.ui.TextInput(
         label=BODY_LABEL, style=discord.TextStyle.paragraph, max_length=BODY_LIMIT
     )
-    tag = discord.ui.TextInput(label=TAG_LABEL, max_length=TAG_LIMIT, required=False)
+    tag = discord.ui.TextInput(
+        label=TAG_LABEL, placeholder=TAG_PLACEHOLDER, max_length=TAG_LIMIT, required=False
+    )
 
     def __init__(self, previous: Any = None, *, row: Any = None) -> None:
         super().__init__(title=EDIT_MODAL_TITLE if row is not None else ADD_MODAL_TITLE)

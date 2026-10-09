@@ -27,6 +27,7 @@ from ...frontdoor import (
 )
 from ...golive import now_iso, parse_ts
 from ...handoff import (
+    ASK_BODY_HINT,
     ASK_BODY_LABEL,
     ASK_MODAL_TITLE,
     ASK_TITLE_LABEL,
@@ -456,7 +457,8 @@ TICKET_MODAL_TITLE = "Open a ticket"
 TICKET_SUBJECT_LABEL = "What is this about — a few words, if you like"
 TICKET_BODY_LABEL = "Tell us what is happening"
 STAFF_MODAL_TITLE = "Open a ticket with somebody"
-STAFF_BODY_LABEL = "What they are sent — it opens the ticket as your first reply"
+STAFF_BODY_LABEL = "What they are sent"
+STAFF_BODY_HINT = "It opens the ticket as your first reply"
 TICKET_OPENED_SAID = (
     "Your ticket is open — ticket **#{ticket_id}**. Staff can see it now, and their replies "
     "come back here as a DM from Black Bloc."
@@ -3092,10 +3094,10 @@ PICKED_TO_BLOCK = "About to block <@{user_id}> — **Block them…** asks for th
 PICKED_SNIPPET = "Picked: **{name}**."
 REALLY_REMOVE = "Remove the snippet **{name}**? Nothing that already went out changes."
 BLOCK_REASON_TITLE = "Why they are blocked"
-BLOCK_REASON_LABEL = "Why — the log records this, the member is not told"
+BLOCK_REASON_LABEL = "Why — for the log; the member is not told"
 SNIPPET_TITLE_NEW = "A new saved reply"
 SNIPPET_TITLE_EDIT = "Change a saved reply"
-SNIPPET_NAME_LABEL = "What to call it — lowercase, dashes, no spaces"
+SNIPPET_NAME_LABEL = "Its name — lowercase, dashes, no spaces"
 SNIPPET_CONTENT_LABEL = "What it says"
 
 
@@ -4144,7 +4146,9 @@ class TicketModal(AnswersErrors, discord.ui.Modal):
         self.add_item(discord.ui.Label(text=TICKET_SUBJECT_LABEL, component=self.subject))
         self.add_item(
             discord.ui.Label(
-                text=STAFF_BODY_LABEL if staff_door else TICKET_BODY_LABEL, component=self.body
+                text=STAFF_BODY_LABEL if staff_door else TICKET_BODY_LABEL,
+                description=STAFF_BODY_HINT if staff_door else None,
+                component=self.body,
             )
         )
 
@@ -4202,7 +4206,8 @@ CLOSE_REASON_LIMIT = 400
 REPLY_TITLE = "Reply to the member"
 ANON_REPLY_TITLE = "Reply as Staff"
 REPLY_TEXT_LABEL = "What the member is sent"
-REPLY_SNIPPET_LABEL = "Or a saved reply — with both, the snippet goes first"
+REPLY_SNIPPET_LABEL = "Or a saved reply"
+REPLY_SNIPPET_HINT = "With both, the snippet goes first"
 CARD_NOTE_TITLE = "A private note"
 CARD_NOTE_LABEL = "Why — the member never sees this"
 CLOSE_TITLE = "Close this ticket"
@@ -4448,7 +4453,11 @@ class ReplyModal(AnswersErrors, discord.ui.Modal):
         self.add_item(discord.ui.Label(text=REPLY_TEXT_LABEL, component=self.text))
         self.picker = snippet_picker(rows) if rows else None
         if self.picker is not None:
-            self.add_item(discord.ui.Label(text=REPLY_SNIPPET_LABEL, component=self.picker))
+            self.add_item(
+                discord.ui.Label(
+                    text=REPLY_SNIPPET_LABEL, description=REPLY_SNIPPET_HINT, component=self.picker
+                )
+            )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         picked = picked_values(self.picker) if self.picker is not None else []
@@ -4549,7 +4558,9 @@ class HandoffModal(AnswersErrors, discord.ui.Modal):
             style=discord.TextStyle.paragraph, max_length=BODY_LIMIT, default=body or None
         )
         self.add_item(discord.ui.Label(text=ASK_TITLE_LABEL, component=self.what))
-        self.add_item(discord.ui.Label(text=ASK_BODY_LABEL, component=self.body))
+        self.add_item(
+            discord.ui.Label(text=ASK_BODY_LABEL, description=ASK_BODY_HINT, component=self.body)
+        )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         await run_ask(
