@@ -946,3 +946,36 @@ def test_a_login_lent_by_the_viewer_never_costs_a_name_match_and_a_staff_login_b
             "login_from": "viewer",
         }
     ]
+
+
+def live_ff(**extra):
+    return marathon(source="fastestfurs", **extra)
+
+
+def test_a_live_marathon_whose_schedule_writes_actuals_reads_at_the_live_cadence():
+    on = NOW + timedelta(minutes=30)
+    assert mt.live_minutes(live_ff(), on, 1) == 1
+    assert mt.live_minutes(live_ff(), on, 5) == 5
+    assert mt.live_minutes(live_ff(), NOW - timedelta(minutes=1), 1) is None
+    assert mt.live_minutes(live_ff(), NOW + timedelta(minutes=700), 1) is None
+    for source in ("gdq", "oengus", "horaro", "rpglb", "gdq_hotfix", "ladyarcaders"):
+        assert mt.live_minutes(marathon(source=source), on, 1) is None
+
+
+def test_three_failed_reads_in_a_row_fall_back_to_the_poll_cadence():
+    on = NOW + timedelta(minutes=30)
+    assert mt.live_minutes(live_ff(fetch_failures=2), on, 1) == 1
+    assert mt.live_minutes(live_ff(fetch_failures=mt.LIVE_READ_FAILURES), on, 1) is None
+
+
+def test_fetch_due_takes_the_live_cadence_only_when_it_is_given():
+    gaps = {"poll_minutes": 30, "far_hours": 24, "lead_days": 7}
+    on = NOW + timedelta(minutes=30)
+    last = on - timedelta(minutes=2)
+    row_ = live_ff(last_fetched_at=last.isoformat())
+    live = mt.live_minutes(row_, on, 1)
+    assert mt.next_read_at(row_, on, **gaps, live=live) == last + timedelta(minutes=1)
+    assert mt.fetch_due(row_, on, **gaps, live=live)
+    assert not mt.fetch_due(row_, on, **gaps)
+    gdq = marathon(source="gdq", last_fetched_at=last.isoformat())
+    assert not mt.fetch_due(gdq, on, **gaps, live=mt.live_minutes(gdq, on, 1))

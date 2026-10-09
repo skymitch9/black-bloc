@@ -115,7 +115,7 @@ class FeedClient:
     async def resolve(self, source, ref, *, setup_minutes=0):
         return (str(ref), f"{source} {ref}")
 
-    async def runs(self, source, ref, *, setup_minutes=0):
+    async def runs(self, source, ref, *, setup_minutes=0, actual_includes_setup=True):
         if source == "oengus" and (source, str(ref)) not in self.runs_by_ref:
             raise ScheduleError("oengus.io has not published it", unpublished=True)
         if source == "fastestfurs" and (source, str(ref)) not in self.runs_by_ref:

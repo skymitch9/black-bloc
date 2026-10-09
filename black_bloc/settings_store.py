@@ -6349,6 +6349,9 @@ MARATHON_SETUP_MINUTES = 7
 MARATHON_SETUP_MAX = 30
 MARATHON_EARLY_START_KEY = "marathon_early_start_minutes"
 MARATHON_EARLY_START_MINUTES = 10
+MARATHON_LIVE_POLL_MINUTES_KEY = "marathon_live_poll_minutes"
+MARATHON_LIVE_POLL_MINUTES = 1
+MARATHON_FF_ACTUAL_INCLUDES_SETUP_KEY = "marathon_fastestfurs_actual_includes_setup"
 MARATHON_LATE_GRACE_KEY = "marathon_late_grace_minutes"
 MARATHON_MATCH_HOSTS_KEY = "marathon_match_hosts"
 MARATHON_HOSTS_COUNT_AS_OURS_KEY = "marathon_hosts_count_as_ours"
@@ -6845,6 +6848,21 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "call a run live — a channel set up for the show earlier than that is waited out, and the "
         "day's times stay where the schedule put them. 10 by default; 0 believes the stream at "
         "once",
+    ),
+    MARATHON_LIVE_POLL_MINUTES_KEY: (
+        "int",
+        MARATHON_LIVE_POLL_MINUTES,
+        "minutes between reads of a marathon's schedule while it is on, for a schedule that "
+        "writes each finished run's real length as it goes (Fastest Furs) — so a run that starts "
+        "early is posted when it starts. 1 by default; three failed reads in a row fall back to "
+        "marathon_poll_minutes",
+    ),
+    MARATHON_FF_ACTUAL_INCLUDES_SETUP_KEY: (
+        "bool",
+        True,
+        "whether a finished Fastest Furs run's real length already counts the setup after it — "
+        "on, the next run starts where the real length ends; off, the planned setup is added "
+        "on top. on by default",
     ),
     MARATHON_LATE_GRACE_KEY: (
         "int",
@@ -8651,6 +8669,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_MOVE_MINUTES_KEY: (1, 120),
     MARATHON_SETUP_MINUTES_KEY: (0, MARATHON_SETUP_MAX),
     MARATHON_EARLY_START_KEY: (0, 240),
+    MARATHON_LIVE_POLL_MINUTES_KEY: (1, 60),
     MARATHON_LATE_GRACE_KEY: (0, 360),
     MARATHON_PING_MINUTES_KEY: (0, 240),
     MARATHON_REMINDER_STALE_KEY: (1, 240),

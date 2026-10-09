@@ -1029,3 +1029,46 @@ async def test_an_early_opener_staff_marked_done_stays_done(bot, cog, helix):
     await tick(cog)
     assert (await times(bot, marathon))[WII]["state"] == mt.DONE
     assert await undone_rows(bot) == 0
+
+
+# --- Fastest Furs actual durations (2026-10-09) -------------------------------------------------
+
+FF_SETUP_KEY = "marathon_fastestfurs_actual_includes_setup"
+
+
+async def test_only_a_fastest_furs_read_is_told_how_its_actuals_count_setup(bot, cog, helix):
+    assert signals.reader_for(bot, GUILD, "fastestfurs") == {"actual_includes_setup": True}
+    await bot.store.set(GUILD, FF_SETUP_KEY, False)
+    assert signals.reader_for(bot, GUILD, "fastestfurs") == {"actual_includes_setup": False}
+    assert signals.reader_for(bot, GUILD, "gdq_hotfix") == {"setup_minutes": 7}
+    for source in ("gdq", "rpglb", "horaro", "oengus", "ladyarcaders"):
+        assert signals.reader_for(bot, GUILD, source) == {}
+
+
+async def test_a_refresh_passes_the_switch_to_the_reader(bot, cog, helix):
+    marathon = await added(bot, cog)
+    await bot.store.set(GUILD, FF_SETUP_KEY, False)
+    await cog.refresh(bot.guild, {**dict(marathon), "source": "fastestfurs"})
+    assert cog.client.asked[-1] == ("runs", "fastestfurs", {"actual_includes_setup": False})
+
+
+async def test_a_stream_match_on_a_schedule_that_times_itself_is_never_held_as_early(
+    bot, cog, helix
+):
+    """The schedule's current start is the only line for such a source: an hour before the old
+    planned time is not early once the read moved the run. A Hotfix day keeps its guard
+    (test_a_days_first_run_shown_80_minutes_early_is_held_and_logged_once)."""
+    now = datetime(2026, 10, 9, 21, 41, tzinfo=UTC)
+    row = {
+        "id": 36,
+        "state": mt.UPCOMING,
+        "game": "Dr. Robotnik's Ring Racers",
+        "scheduled_at": "2026-10-09T21:27:42+00:00",
+        "sheet_at": "2026-10-09T22:20:00+00:00",
+    }
+    verdict = signals.sig.Verdict(row, mt.BY_TITLE, row)
+    for source in ("fastestfurs", "gdq", "oengus", "horaro"):
+        marathon = {"id": 7, "source": source}
+        kept = await signals.guarded(cog, bot.guild, marathon, verdict, [row], now)
+        assert kept is verdict
+    assert "marathon.early_match_held" not in await kinds(bot.db)

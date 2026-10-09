@@ -171,3 +171,95 @@ async def test_an_event_resolves_by_the_list_even_before_its_schedule_is_out():
     request, _ = pages((200, fixture("fastestfurs_events.json")))
     with pytest.raises(ms.ScheduleError, match="fastestfurs.com has no event 99"):
         await ms.ScheduleClient(request=request).resolve("fastestfurs", "99")
+
+
+def by_game(runs):
+    return {one.game: one for one in runs}
+
+
+def test_a_finished_item_moves_the_clock_by_its_actual_duration_not_the_plan():
+    runs = by_game(ff.parse_fastestfurs(fixture("fastestfurs_schedule_actuals.json")))
+    planned = by_game(
+        ff.parse_fastestfurs(fixture("fastestfurs_schedule_actuals.json"), use_actuals=False)
+    )
+    mathcat = runs["Dr. Robotnik's Ring Racers"]
+    assert planned["Dr. Robotnik's Ring Racers"].starts_at == "2026-10-09T22:20:00+00:00"
+    assert mathcat.starts_at == "2026-10-09T21:27:42+00:00"
+    assert mathcat.ends_at == "2026-10-09T23:27:42+00:00"
+    assert (mathcat.timed_by_actuals, mathcat.actual_seconds) == (True, None)
+    yakuza = runs["Yakuza Kiwami 2"]
+    assert (yakuza.starts_at, yakuza.ends_at) == (
+        "2026-10-09T19:30:59+00:00",
+        "2026-10-09T21:27:42+00:00",
+    )
+    assert (yakuza.actual_seconds, yakuza.run_seconds) == (7003, 108 * 60)
+    puyo = runs["Super Puyo Puyo"]
+    assert puyo.starts_at == "2026-10-09T23:27:42+00:00"
+    assert puyo.timed_by_actuals is False
+    assert runs["Kena: Bridge of Spirits"].timed_by_actuals is False
+    assert runs["Devil May Cry 3"].timed_by_actuals is False
+
+
+def test_a_planned_only_schedule_walks_exactly_as_before():
+    payload = fixture("fastestfurs_schedule_21.json")
+    assert ff.parse_fastestfurs(payload) == ff.parse_fastestfurs(payload, use_actuals=False)
+    assert all(not one.timed_by_actuals for one in ff.parse_fastestfurs(payload))
+
+
+def item(order, duration, setup, actual, name=None):
+    return {
+        "itemType": "run" if name else "break",
+        "orderIndex": order,
+        "duration": duration,
+        "setupTime": setup,
+        "actualDuration": actual,
+        "runs": {"id": order, "name": name, "runners": "x"} if name else None,
+    }
+
+
+SMALL = {
+    "startDateTime": "2026-10-09T14:00:00.000Z",
+    "scheduleItems": [
+        item(0, 30, 10, 1800, "First"),
+        item(1, 15, 0, 600, None),
+        item(2, 60, 10, None, "Live"),
+        item(3, 20, 5, None, "Later"),
+    ],
+}
+
+
+def test_actual_includes_setup_is_a_switch_both_ways():
+    inside = by_game(ff.parse_fastestfurs(SMALL))
+    assert inside["Live"].starts_at == "2026-10-09T14:40:00+00:00"
+    assert inside["Later"].starts_at == "2026-10-09T15:50:00+00:00"
+    after = by_game(ff.parse_fastestfurs(SMALL, actual_includes_setup=False))
+    assert after["First"].ends_at == "2026-10-09T14:40:00+00:00"
+    assert after["Live"].starts_at == "2026-10-09T14:50:00+00:00"
+    assert after["Later"].starts_at == "2026-10-09T16:00:00+00:00"
+    assert inside["Live"].timed_by_actuals and after["Live"].timed_by_actuals
+
+
+def test_an_actual_duration_of_zero_is_finished_and_takes_no_time():
+    payload = {
+        "startDateTime": SMALL["startDateTime"],
+        "scheduleItems": [item(0, 30, 10, 0, "Skipped"), item(1, 20, 5, None, "Next")],
+    }
+    runs = by_game(ff.parse_fastestfurs(payload))
+    assert (runs["Skipped"].starts_at, runs["Skipped"].ends_at) == (
+        "2026-10-09T14:00:00+00:00",
+        "2026-10-09T14:00:00+00:00",
+    )
+    assert runs["Skipped"].actual_seconds == 0
+    assert runs["Next"].starts_at == "2026-10-09T14:00:00+00:00"
+    assert runs["Next"].timed_by_actuals is True
+
+
+def test_a_broken_actual_duration_is_read_as_not_finished():
+    payload = {
+        "startDateTime": SMALL["startDateTime"],
+        "scheduleItems": [item(0, 30, 10, "soon", "Odd"), item(1, 20, 5, -5, "Odder")],
+    }
+    runs = by_game(ff.parse_fastestfurs(payload))
+    assert runs["Odd"].actual_seconds is None
+    assert runs["Odder"].starts_at == "2026-10-09T14:40:00+00:00"
+    assert runs["Odder"].actual_seconds is None

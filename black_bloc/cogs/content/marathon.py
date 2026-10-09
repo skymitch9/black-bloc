@@ -91,6 +91,7 @@ from ...settings_store import (
     MARATHON_LINK_TAKEN_KEY,
     MARATHON_LINK_UNREADABLE_KEY,
     MARATHON_LIVE_PINGS_KEY,
+    MARATHON_LIVE_POLL_MINUTES_KEY,
     MARATHON_LIVE_TEMPLATE_KEY,
     MARATHON_MATCH_HOSTS_KEY,
     MARATHON_MODE_KEY,
@@ -1802,6 +1803,9 @@ class Marathons(commands.Cog):
             poll_minutes=int(store.get(guild.id, MARATHON_POLL_MINUTES_KEY)),
             far_hours=far_hours,
             lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY)),
+            live=mt.live_minutes(
+                marathon, now, store.get(guild.id, MARATHON_LIVE_POLL_MINUTES_KEY)
+            ),
         )
 
     async def tick_marathon(self, guild: Any, marathon: Any) -> None:
@@ -2050,7 +2054,7 @@ class Marathons(commands.Cog):
             runs = await self.client.runs(
                 marathon["source"],
                 marathon["source_ref"],
-                **signals.setup_for(self.bot, guild.id, marathon["source"]),
+                **signals.reader_for(self.bot, guild.id, marathon["source"]),
             )
         except ScheduleError as exc:
             return await self._failed(guild, marathon, exc, now)
@@ -2092,6 +2096,8 @@ class Marathons(commands.Cog):
             "failures": failures,
             "unpublished": exc.unpublished,
         }
+        if mt.live_minutes({**dict(marathon), "fetch_failures": 0}, now, 1) is not None:
+            details["live_reads_paused"] = failures >= mt.LIVE_READ_FAILURES
         await log_action(self.bot, guild, "marathon.fetch_failed", details=details)
         if failures == FAILURES_IMPORTANT and not exc.unpublished:
             await log_action(self.bot, guild, "marathon.schedule_stale", details=details)
@@ -3268,12 +3274,14 @@ def marathon_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
 def reading_of(bot: Any, guild: Any, row: Any, runs: list[Any]) -> dict[str, str]:
     """The reading line's three parts, shared by the card and the staff notice's embed."""
     store = bot.store
+    now = now_for(bot)
     due = mt.next_read_at(
         row,
-        now_for(bot),
+        now,
         poll_minutes=int(store.get(guild.id, MARATHON_POLL_MINUTES_KEY)),
         far_hours=int(store.get(guild.id, MARATHON_FAR_POLL_HOURS_KEY)),
         lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY)),
+        live=mt.live_minutes(row, now, store.get(guild.id, MARATHON_LIVE_POLL_MINUTES_KEY)),
     )
     total, ours = counts_of(runs)
     return {

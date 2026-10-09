@@ -39,6 +39,7 @@ RETIMES_ITSELF = {
     LADYARCADERS: True,
     GDQ_HOTFIX: False,
 }
+PUBLISHES_ACTUALS = frozenset({FASTESTFURS})
 SITE_WORDS = {
     GDQ: "the GDQ tracker",
     RPGLB: "the RPG Limit Break tracker",
@@ -175,6 +176,8 @@ class Run:
     run_seconds: int | None
     people: tuple[Person, ...] = field(default=())
     twitch_game: str = ""
+    actual_seconds: int | None = None
+    timed_by_actuals: bool = False
 
 
 def read_url(url: Any) -> tuple[str, str] | None:
@@ -804,13 +807,22 @@ class ScheduleClient:
             pages += 1
         return found
 
-    async def runs(self, source: str, ref: str, *, setup_minutes: int = 0) -> list[Run]:
+    async def runs(
+        self,
+        source: str,
+        ref: str,
+        *,
+        setup_minutes: int = 0,
+        actual_includes_setup: bool = True,
+    ) -> list[Run]:
         if source == HORARO:
             return parse_horaro(await self.horaro(ref))
         if source == OENGUS:
             return await self.oengus_runs(ref)
         if source == FASTESTFURS:
-            return await _ff().read_runs(self._request, ref)
+            return await _ff().read_runs(
+                self._request, ref, actual_includes_setup=actual_includes_setup
+            )
         if source == GDQ_HOTFIX:
             return list((await self.hotfix_block(ref, setup_minutes)).runs)
         if source == LADYARCADERS:
@@ -890,6 +902,11 @@ __all__ = [
     "unlinked",
     "utc_iso",
 ]
+
+
+def publishes_actuals(source: Any) -> bool:
+    """A source whose schedule writes each finished item's real length while the event is on."""
+    return str(source or "") in PUBLISHES_ACTUALS
 
 
 def retimes_itself(source: Any) -> bool:
