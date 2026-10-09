@@ -1,11 +1,10 @@
 {
-  "release": "v214",
-  "commit": "b3a5880c",
+  "release": "v215",
+  "commit": "3b5033de",
   "changed_features": [
-    "core",
-    "golive",
-    "marathon",
-    "pings",
-    "raidtrain"
+    "chat",
+    "events",
+    "modmail",
+    "poll"
   ]
 }
