@@ -489,6 +489,15 @@ async def running_channels(db: Any) -> list[tuple[int, int]]:
     return [(int(row["guild_id"]), int(row["channel_id"])) for row in await cur.fetchall()]
 
 
+async def rehearsal_homes(db: Any) -> list[tuple[int, int]]:
+    """(where a running copy sits, the sticky's own channel) for every copy away from home."""
+    cur = await db.conn.execute(
+        "SELECT channel_id, posted_channel_id FROM sticky_messages WHERE paused = 0 "
+        "AND trouble IS NULL AND posted_channel_id IS NOT NULL AND posted_channel_id != channel_id"
+    )
+    return [(int(row["posted_channel_id"]), int(row["channel_id"])) for row in await cur.fetchall()]
+
+
 async def write_words(
     db: Any, guild_id: int, channel_id: int, text: str, by: Any, *, post_id: Any = None
 ) -> bool:

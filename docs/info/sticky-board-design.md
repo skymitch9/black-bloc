@@ -1,5 +1,7 @@
 # The sticky leaderboard — the board as a post, kept at the bottom of #speed-and-pbs
 
+> 🔧 **2026-10-10 14:3x — a rehearsing copy now counts the talk where it SITS** (owner: *"The sticky post doesn't seem to be working for the leaderboard"* → *"A"*). Until v224 `Desk.watched` held only each sticky's REAL channel, so chatter in the rehearsal home never moved the copy (measured: the leaderboard's copy in #post-test was still the 16:12Z one at 13:5x). Now `Desk.homes` maps the channel a copy sits in to the sticky's channel (`sticky.rehearsal_homes` at boot, `Desk._watch` at every place / settle / outage), `on_message` resolves through it, and everything else stays keyed on the sticky's own channel; going live clears the mapping. Four tests in `tests/test_sticky_posts.py`. Rides as v225.
+
 > **Audience:** the conductor, reviewers, and the next build that touches stickies, post blocks or the point
 > system. **Status:** TRACKED · 🔨 **BUILT on branch `sticky-board`** (off `main` `b87ed763`, v219 live), **NOT
 > merged, NOT deployed.** Schema **92 → 93**; registry keys **1178 → 1183** (`CORE_KEYS` 346 → 347); contract routes

@@ -240,6 +240,59 @@ async def test_the_mode_ships_shadow_and_a_save_rehearses_in_the_home_with_the_n
     assert f"<#{HOME}>" in outcome.message and f"<#{RUNS}>" in outcome.message
 
 
+async def test_a_rehearsing_copy_counts_the_talk_where_it_sits(bot, desk, clock, db):
+    """Owner, 2026-10-10: five messages in #post-test move the rehearsal copy there."""
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    first = channel(bot, HOME).messages[0].id
+
+    await talk(desk, bot, 4, channel_id=HOME)
+    clock.tick(600)
+    assert [one.id for one in channel(bot, HOME).messages] == [first]
+
+    await talk(desk, bot, 1, channel_id=HOME)
+
+    assert channel(bot, HOME).deleted == [first]
+    assert len(channel(bot, HOME).messages) == 1 and channel(bot, HOME).messages[0].id != first
+    assert channel(bot).messages == []
+    assert (await row_of(bot))["reposts"] == 1
+    assert desk.homes == {HOME: RUNS}
+
+
+async def test_talk_in_the_stickys_own_channel_still_moves_a_rehearsing_copy(bot, desk, clock):
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    first = channel(bot, HOME).messages[0].id
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+
+    assert channel(bot, HOME).deleted == [first] and len(channel(bot, HOME).messages) == 1
+
+
+async def test_a_boot_learns_where_every_rehearsing_copy_sits(bot, desk, clock):
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    first = channel(bot, HOME).messages[0].id
+    fresh = Desk(bot, now=clock.now, sleep=clock.sleep)
+
+    await fresh.load()
+
+    assert fresh.watched == {RUNS} and fresh.homes == {HOME: RUNS}
+    clock.tick(600)
+    await talk(fresh, bot, 5, channel_id=HOME)
+    assert channel(bot, HOME).deleted == [first]
+
+
+async def test_going_live_stops_counting_the_old_rehearsal_home(bot, desk, clock):
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    await bot.store.set(GUILD, "sticky_mode", "on")
+    await desk.settle(bot.guild)
+    assert desk.homes == {} and len(channel(bot).messages) == 1
+    clock.tick(600)
+
+    await talk(desk, bot, 5, channel_id=HOME)
+
+    assert desk.heard.get(RUNS, 0) == 0 and (await row_of(bot))["reposts"] == 0
+
+
 async def test_the_features_own_home_wins_over_the_global_one(bot, desk):
     await bot.store.set(GUILD, "sticky_shadow_channel_id", OTHER_HOME)
 

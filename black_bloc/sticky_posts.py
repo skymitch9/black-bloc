@@ -139,6 +139,9 @@ class Desk:
         self.now = now
         self.sleep = sleep
         self.watched: set[int] = set()
+        # Owner, 2026-10-10: a rehearsing copy counts the talk where it SITS. The channel the
+        # copy is in -> the sticky's own channel, which keys everything else here.
+        self.homes: dict[int, int] = {}
         self.heard: dict[int, int] = {}
         self.waiting: dict[int, asyncio.Task] = {}
         self.locks: dict[int, asyncio.Lock] = {}
@@ -162,14 +165,27 @@ class Desk:
 
     async def load(self) -> None:
         self.watched = {channel_id for _, channel_id in await rules.running_channels(self.db)}
+        self.homes = dict(await rules.rehearsal_homes(self.db))
 
     def close(self) -> None:
         for task in self.waiting.values():
             task.cancel()
         self.waiting.clear()
 
+    def _watch(self, channel_id: int, home: Any = None) -> None:
+        """Count the sticky's channel, and the channel its copy sits in while that differs."""
+        self.watched.add(channel_id)
+        for sits_in, owner in list(self.homes.items()):
+            if owner == channel_id:
+                del self.homes[sits_in]
+        if home and int(home) != int(channel_id):
+            self.homes[int(home)] = int(channel_id)
+
     def forget(self, channel_id: int) -> None:
         self.watched.discard(channel_id)
+        for sits_in, owner in list(self.homes.items()):
+            if owner == channel_id:
+                del self.homes[sits_in]
         self.heard.pop(channel_id, None)
         self.outage.pop(channel_id, None)
         self.tried.pop(channel_id, None)
@@ -180,8 +196,9 @@ class Desk:
             task.cancel()
 
     async def on_message(self, message: Any) -> None:
-        channel_id = getattr(getattr(message, "channel", None), "id", None)
-        if channel_id not in self.watched or not rules.counts(message):
+        heard_in = getattr(getattr(message, "channel", None), "id", None)
+        channel_id = heard_in if heard_in in self.watched else self.homes.get(heard_in)
+        if channel_id is None or not rules.counts(message):
             return
         guild = message.guild
         if rules.mode_of(self.store, guild.id) == "off" or not self.db.is_connected:
@@ -359,7 +376,7 @@ class Desk:
         self.tried.pop(channel_id, None)
         self.last.pop(channel_id, None)
         self.reached.pop(channel_id, None)
-        self.watched.add(channel_id)
+        self._watch(channel_id, home)
         if first:
             await self._posted(guild, row, target, home, sent.id)
         return REHEARSED if home else POSTED
@@ -428,7 +445,7 @@ class Desk:
             return await self._failed(guild, row, undone, old_copy=True)
         await self._would(guild, row, None, None, reason=OWN_HOME, once=True)
         self.heard[channel_id] = 0
-        self.watched.add(channel_id)
+        self._watch(channel_id)
         return OWN_HOME
 
     async def _take_down(self, guild: Any, row: Any) -> Exception | None:
@@ -464,7 +481,7 @@ class Desk:
         reason = rules.UNREACHABLE_REASON.format(why=outage_why(exc), channel_id=channel_id)
         self.tried[channel_id] = self.now()
         self.outage[channel_id] = reason
-        self.watched.add(channel_id)
+        self._watch(channel_id, row["posted_channel_id"])
         if known:
             return UNREACHABLE
         log.warning("sticky: channel %s not reached, will try again — %s", channel_id, reason)
@@ -878,7 +895,7 @@ class Desk:
             row = await rules.get_row(self.db, guild.id, channel_id)
         if not rules.is_running(row) or mode == "off":
             return
-        self.watched.add(channel_id)
+        self._watch(channel_id, row["posted_channel_id"])
         if row["message_id"]:
             return
         await self._place(guild, channel_id, first=True)
