@@ -35,3 +35,8 @@ export function counterState(length, max, near = NEAR) {
 export function capState(count, cap) {
   return { full: count >= cap, text: `${count} of ${cap}` };
 }
+
+/** A one-line text key whose value or default has a line break needs a box that keeps it. */
+export function keepsLines(spec) {
+  return [spec && spec.value, spec && spec.default].some((one) => typeof one === 'string' && /\r|\n/.test(one));
+}

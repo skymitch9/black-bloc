@@ -14,7 +14,7 @@ import {
 import { messageTree, mountTree } from './discordmock.js';
 import { ICONS } from './icons.js';
 import { channelLabel, humanLabel } from './labels.js';
-import { capState, counterState, insertAt, placeholdersFor } from './fieldaids.js';
+import { capState, counterState, insertAt, keepsLines, placeholdersFor } from './fieldaids.js';
 import { applyFilters, matches, passes } from './listfilter.js';
 import * as md from './mdformat.js';
 
@@ -1234,7 +1234,7 @@ async function control(spec, onChange) {
     });
     return { node: input, read: (n) => n.value };
   }
-  if (kind === 'longtext') {
+  if (kind === 'longtext' || (kind === 'text' && keepsLines(spec))) {
     const area = el('textarea', { class: 'input area', rows: '3' });
     area.value = spec.value === null || spec.value === undefined ? '' : String(spec.value);
     return { node: area, read: (n) => (n.value === '' ? null : n.value) };

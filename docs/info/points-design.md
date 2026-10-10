@@ -465,6 +465,8 @@ replaces every `session === 'member'` test so a verifier is a member everywhere 
   refusal itself); at 375: `scrollWidth` 375 = the viewport, gutters 16 / 16 px, no page control under 40 px (the shared
   settings widgets inside the folded Settings were not measured).
 
+- **Found after the first report (coordinator, 2026-10-09):** the staff page loaded with *Wording — 1 change pending*. Cause: a shared-widget bug, not the page — `ui.js` drew every `text` key as a one-line `<input>`, which drops line breaks, so `points_ticket_body` read back different from its stored value (the Settings page showed 9 such rows). Fixed in `ui.js` (`fieldaids.keepsLines` → a textarea), pinned in `fieldaids.test.mjs`; the 9th Settings-page row was a mock seed gap (`structure_backup_mode` had no choices in `server.mjs`), fixed there. Fresh loads of Leaderboard, Settings, Personal bests and Brackets now show no pending change. Re-gated: suite 13041 passed / 1 skipped, ruff clean, site gate 27 pages / 360 routes / 346 core settings, 15 node tests exit 0.
+
 ### What was NOT verified (layer 3)
 
 - **Nothing ran against the real bot or Discord** — the browser walk was the mock. The real routes are covered by the

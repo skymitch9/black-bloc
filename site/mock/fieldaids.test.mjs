@@ -2,7 +2,7 @@
 //   node site/mock/fieldaids.test.mjs
 // Exits 0 when every fixture matched, 1 with a list of what did not.
 
-import { capState, counterState, insertAt, placeholdersFor, tokensIn } from '../public/assets/fieldaids.js';
+import { capState, counterState, insertAt, keepsLines, placeholdersFor, tokensIn } from '../public/assets/fieldaids.js';
 
 const failures = [];
 const is = (where, found, wanted) => {
@@ -45,6 +45,14 @@ is('room left under the cap', capState(3, 10), { full: false, text: '3 of 10' })
 is('at the cap it is full', capState(10, 10), { full: true, text: '10 of 10' });
 is('over the cap is still full', capState(11, 10).full, true);
 is('an empty list', capState(0, 5), { full: false, text: '0 of 5' });
+
+// A one-line <input> drops line breaks, so a stored value with one read back changed and the
+// row counted as a pending edit on a fresh load (points_ticket_body, 2026-10-09).
+is('a value with a line break keeps its lines', keepsLines({ type: 'text', value: 'a\nb', default: 'a' }), true);
+is('a default with a line break keeps its lines', keepsLines({ type: 'text', value: null, default: '**Game:** {game}\n**Time:** {time}' }), true);
+is('a carriage return counts', keepsLines({ value: 'a\r\nb' }), true);
+is('one line stays one line', keepsLines({ type: 'text', value: 'Page {page} of {pages}', default: 'Page {page} of {pages}' }), false);
+is('nothing set', keepsLines({ value: null, default: null }), false);
 
 if (failures.length) {
   process.stdout.write(`fieldaids: ${failures.length} problem(s)\n`);
