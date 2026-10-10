@@ -294,6 +294,7 @@ docs bookkeeping lands with the work, not after.
 
 - post-test rename + rehearsal homes -> [`DONE.md`](DONE.md) 2026-10-10.
 - Fastest Furs Sat 2026-10-10 (Phoenix): NO BaF runner; Mathcat ran Fri (done, 21:27Z actual); the next BaF run is Aston (glitchaston) - Kirby's Blowout Blast - Sun 2026-10-11 14:55Z (about 07:55 AM Phoenix, re-timed by actual durations from 16:04Z planned). No action.
+- 🧪 **Post to test (owner, Sat 2026-10-10 12:0x Phoenix, verbatim: *"So when we turn post live we'll lose the ability to preview them in post test. Can we have a button for post to test it first to post test even once we set the actual channel for the post?"*).** ASKED 12:05; design [`info/post-to-test-design.md`](info/post-to-test-design.md); build dispatched to Opus as branch `post-to-test` (NOT merged, NOT deployed). The shape: a **Post to test** button on the Posts drawer and the `/posts` card, route `POST /api/posts/{slug}/rehearse`, that sends (or edits in place) a copy in the posts rehearsal home (#post-test) whatever `posts_mode` says above off, tracked on `shadow_message_id` exactly as a shadow copy is, and taken down by the next real Post it / Update (`_drop_shadow`, as today). A sticky's post (the leaderboard) gets one plain copy there, not a sticky, dropped at the Desk's next real move. Hidden while posts are in shadow (Post it already goes there).
 
 ## ⏳ Waiting on the owner
 
