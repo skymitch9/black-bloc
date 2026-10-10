@@ -30,6 +30,8 @@ NEXT = "next"
 FEED = "feed"
 PREVIOUS = "previous"
 NEXT_PAGE = "next_page"
+SETTINGS = "settings"
+SETTINGS_LABEL = "Settings…"
 
 
 def words(bot: Any, guild: Any, key: str, **fields: Any) -> str:
@@ -55,6 +57,11 @@ class BoardPanel(Panel):
             return
         if self.surface == PENDING:
             await render_pending(interaction, previous)
+            return
+        if self.surface == SETTINGS:
+            from .points_board_panel import render_settings
+
+            await render_settings(interaction, previous)
             return
         await render_board(interaction, previous)
 
@@ -125,6 +132,8 @@ async def build_board(
         waiting = await points_tickets.pending(bot, guild)
         if waiting:
             view.add_item(Move(PENDING_LABEL.format(count=len(waiting)), PENDING, row=1))
+    if found["staff"]:
+        view.add_item(Move(SETTINGS_LABEL, SETTINGS, row=1))
     return (embed, view)
 
 
@@ -225,6 +234,11 @@ class Move(discord.ui.Button):
             await interaction.response.send_modal(
                 SubmitModal(interaction.client, interaction.guild, view)
             )
+            return
+        if self.action == SETTINGS:
+            from .points_board_panel import open_settings
+
+            await open_settings(interaction, view)
             return
         if not await opened(interaction, staff=False):
             return

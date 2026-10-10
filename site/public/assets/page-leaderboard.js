@@ -1,6 +1,7 @@
 import { api, listOf, Outage, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { syncSubnav } from './layout.js';
+import { stateLine, stickyMoves } from './sticky-section.js';
 import {
   amountRules,
   fill,
@@ -55,6 +56,11 @@ const WORDS = {
   pending: 'Pending',
   runs: 'Runs',
   settings: 'Settings',
+  pinIn: 'Pin the leaderboard in {channel}',
+  replaceIn: 'Replace the sticky message in {channel}',
+  pinnedIn: 'Pinned in {channel}',
+  notPinned: 'Not pinned',
+  alreadyThere: 'Already there: {words}',
   wording: 'Wording',
   approve: 'Approve',
   reject: 'Reject…',
@@ -685,6 +691,50 @@ function bountiesBody() {
 
 /* ---------- settings ---------- */
 
+function pinnedName(found) {
+  const sticky = found.sticky;
+  if (!sticky) return found.channel || '';
+  return sticky.channel_name ? `#${sticky.channel_name}` : found.channel || '';
+}
+
+async function boardPostNode() {
+  const holder = el('div', { class: 'lb-part' });
+  const say = notice();
+  const paint = async (message = null) => {
+    const found = await api('/api/points/board-post');
+    const sticky = found.sticky;
+    const lines = [
+      el('span', { class: 'rowlist-name', text: sticky ? fill(WORDS.pinnedIn, { channel: pinnedName(found) }) : WORDS.notPinned }),
+      sticky ? stateLine(sticky) : null,
+      sticky && sticky.trouble ? notice(sticky.trouble, 'danger') : null,
+      found.other ? el('span', { class: 'rowlist-line', text: fill(WORDS.alreadyThere, { words: found.other.words }) }) : null,
+    ];
+    const here = sticky && String(sticky.channel_id) === String(found.channel_id);
+    const moves = [];
+    if (found.channel_id && !here) {
+      const replace = Boolean(found.other);
+      const label = fill(replace ? WORDS.replaceIn : WORDS.pinIn, { channel: found.channel });
+      moves.push(button(label, async () => {
+        const done = await run(say, () => send('/api/points/board-post', 'POST', { replace }), (answer) => answer.message);
+        if (done.ok) await paint();
+      }, { tone: replace ? 'danger' : 'warn' }));
+    }
+    if (sticky) moves.push(...stickyMoves(sticky, say, () => paint()));
+    holder.replaceChildren(el('div', { class: 'rowlist-row' }, [
+      el('div', { class: 'rowlist-main' }, lines),
+      bar(moves),
+    ]));
+    if (message) say.say(message, 'ok');
+  };
+  try {
+    await paint();
+  } catch (error) {
+    const found = sentenceFor(error);
+    holder.replaceChildren(notice(found.text, found.tone));
+  }
+  return el('div', { class: 'rowlist' }, [holder, say]);
+}
+
 async function settingsNode() {
   const one = section(WORDS.settings, null, { id: 'settings' });
   try {
@@ -696,6 +746,7 @@ async function settingsNode() {
     one.count(specs.length);
     one.body.append(...[
       modeSpec ? el('div', { class: 'bar' }, [modeSwitch(modeSpec, { label: 'Leaderboard', onSaved: () => refresh() }).node]) : null,
+      await boardPostNode(),
       await settingsPanel(operational, { where: WORDS.settings, onSaved: () => refresh() }),
       foldout(WORDS.wording, [await settingsPanel(wording, { where: WORDS.wording, onSaved: () => refresh() })], { count: wording.length }),
     ].filter(Boolean));

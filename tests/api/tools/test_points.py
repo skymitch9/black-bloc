@@ -246,3 +246,49 @@ async def test_the_board_carries_pictures_and_a_run_carries_its_ticket_room(
     assert [row["avatar_url"] for row in index["board"]] == [f"https://cdn.test/{BEA}.png"]
     board = staff.get("/api/points/board").json()
     assert board["rows"][0]["avatar_url"] == f"https://cdn.test/{BEA}.png"
+
+
+async def test_the_board_post_is_pinned_from_the_site_and_says_where(
+    client, sign_in, web, guild, wf
+):
+    await web.store.set(wf.GUILD_ID, "points_channel_id", wf.OTHER_CHANNEL_ID)
+    await web.store.set(wf.GUILD_ID, "points_mode", "on")
+    sign_in(client)
+
+    before = client.get("/api/points/board-post").json()
+    pinned = client.post("/api/points/board-post", json={})
+    again = client.post("/api/points/board-post", json={})
+
+    assert before["sticky"] is None and before["post"] is None
+    assert before["channel"] == "#general"
+    assert pinned.status_code == 200, pinned.text
+    found = pinned.json()
+    assert found["post"]["slug"] == "leaderboard"
+    assert found["sticky"]["state"] == "live" and found["sticky"]["post"]["slug"] == "leaderboard"
+    assert "#general" in found["message"]
+    assert again.json()["message"].startswith("The leaderboard is already")
+    assert len(guild.get_channel(wf.OTHER_CHANNEL_ID).messages) == 1
+
+
+async def test_a_channel_with_another_sticky_is_replaced_only_when_asked(
+    client, sign_in, web, guild, wf
+):
+    await web.store.set(wf.GUILD_ID, "points_channel_id", wf.OTHER_CHANNEL_ID)
+    await web.store.set(wf.GUILD_ID, "sticky_mode", "on")
+    sign_in(client)
+    client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"text": "Post your runs here."})
+
+    shown = client.get("/api/points/board-post").json()
+    refused = client.post("/api/points/board-post", json={})
+    replaced = client.post("/api/points/board-post", json={"replace": True})
+
+    assert shown["other"]["words"] == "Post your runs here."
+    assert refused.status_code == 409 and refused.json()["error"] == "channel_has_sticky"
+    assert replaced.status_code == 200 and replaced.json()["other"] is None
+
+
+def test_the_board_post_is_staff_only(client, sign_in):
+    sign_in(client, uid=1234, staff=False)
+
+    assert client.get("/api/points/board-post").status_code == 403
+    assert client.post("/api/points/board-post", json={}).status_code == 403

@@ -387,7 +387,7 @@ class Desk:
                 log_action(
                     self.bot,
                     guild,
-                    PIN_FAILED,
+                    "sticky.pin_failed",
                     details={
                         "channel_id": channel_id,
                         "message_id": int(sent.id),
@@ -579,6 +579,7 @@ class Desk:
                     return refusal(
                         rules.NOT_POSTABLE.format(channel_id=channel_id), "not_postable", 400
                     )
+            await self._let_go(guild, existing, None)
             made = await rules.write_words(
                 self.db, guild.id, channel_id, words, getattr(actor, "id", actor)
             )
@@ -645,6 +646,7 @@ class Desk:
                     return refusal(
                         rules.NOT_POSTABLE.format(channel_id=channel_id), "not_postable", 400
                     )
+            await self._let_go(guild, existing, int(post["id"]))
             by = getattr(actor, "id", actor)
             made = await rules.write_words(
                 self.db, guild.id, channel_id, "", by, post_id=int(post["id"])
@@ -666,6 +668,13 @@ class Desk:
             )
             done = await self._place(guild, channel_id, first=True)
             return await self._answer(guild, channel_id, done, "set" if made else "edited")
+
+    async def _let_go(self, guild: Any, existing: Any, keeps: int | None) -> None:
+        """A sticky that stops keeping a post takes its copy down while it still knows it."""
+        if existing is None or not rules.is_post(existing):
+            return
+        if int(existing["post_id"]) != (keeps or 0):
+            await self._take_down(guild, existing)
 
     async def repost(
         self, guild: Any, channel_id: int, actor: Any, *, via: str = VIA_DISCORD

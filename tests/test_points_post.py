@@ -5,8 +5,11 @@ from types import SimpleNamespace
 import pytest
 
 from black_bloc import points_post as board_post
-from black_bloc import post_blocks, preview
+from black_bloc import post_blocks, posts, preview
+from black_bloc import sticky as sticky_rules
+from black_bloc.sticky_posts import Desk
 from tests.test_points_moves import ADA, BEA, CY, GUILD, approved, make_bot, make_guild
+from tests.test_sticky_posts import GUILD as ROOM
 
 
 @pytest.fixture
@@ -131,3 +134,77 @@ async def test_redraw_asks_the_door_cogs_keeper_and_never_raises(bot, guild):
     bot.get_cog = lambda name: None
     assert await board_post.redraw(bot, guild) is False
     assert asked == [guild]
+
+
+# --- Pin the leaderboard here ------------------------------------------------------------------
+
+
+@pytest.fixture
+async def room(db, monkeypatch):
+    from tests.test_sticky_posts import RUNS, Clock
+    from tests.test_sticky_posts import make_bot as sticky_bot
+
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    made = await sticky_bot(db)
+    await made.store.set(ROOM, "points_channel_id", RUNS)
+    await made.store.set(ROOM, "points_mode", "on")
+    clock = Clock()
+    made.sticky_desk = Desk(made, now=clock.now, sleep=clock.sleep)
+    return made
+
+
+async def test_pin_makes_the_post_and_the_sticky_once_and_again_is_safe(room):
+    from tests.test_sticky_posts import RUNS
+
+    first = await board_post.pin_board(room, room.guild, 1)
+    again = await board_post.pin_board(room, room.guild, 1)
+
+    assert first.ok and first.code == "pinned", first.message
+    assert again.ok and again.code == "already"
+    post = await posts.get_post(room.db, ROOM, "leaderboard")
+    assert (post["title"], post["style"], post["pin"]) == ("Leaderboard", "embed", 0)
+    assert await post_blocks.kinds_on(room.db, int(post["id"])) == ["leaderboard"]
+    assert len(room.guild.get_channel(RUNS).messages) == 1
+    found = await board_post.board_state(room, room.guild)
+    assert int(found["sticky"]["channel_id"]) == RUNS and found["other"] is None
+    assert found["channel"] == "#runs"
+
+
+async def test_a_channel_with_another_sticky_is_refused_until_staff_replace_it(room):
+    from tests.test_sticky_posts import RUNS, WORDS
+
+    await room.sticky_desk.save(room.guild, RUNS, WORDS, 1)
+
+    refused = await board_post.pin_board(room, room.guild, 1)
+    replaced = await board_post.pin_board(room, room.guild, 1, replace=True)
+
+    assert not refused.ok and refused.code == "channel_has_sticky"
+    assert "How to submit a run" in refused.message
+    assert replaced.ok, replaced.message
+    messages = room.guild.get_channel(RUNS).messages
+    assert len(messages) == 1 and messages[0].content is None
+    row = await sticky_rules.get_row(room.db, ROOM, RUNS)
+    assert row["post_id"] and row["text"] == ""
+
+
+async def test_a_new_channel_moves_the_leaderboard_there(room):
+    from tests.test_sticky_posts import OTHER_HOME, RUNS
+
+    await board_post.pin_board(room, room.guild, 1)
+    await room.store.set(ROOM, "points_channel_id", OTHER_HOME)
+
+    moved = await board_post.pin_board(room, room.guild, 1)
+
+    assert moved.ok, moved.message
+    assert room.guild.get_channel(RUNS).messages == []
+    assert len(room.guild.get_channel(OTHER_HOME).messages) == 1
+    assert await sticky_rules.get_row(room.db, ROOM, RUNS) is None
+
+
+async def test_a_channel_black_bloc_cannot_see_is_refused_in_words(room):
+    await room.store.clear(ROOM, "points_channel_id")
+
+    found = await board_post.pin_board(room, room.guild, 1)
+
+    assert not found.ok and found.code == "channel_gone" and "points_channel_id" in found.message
+    assert await posts.get_post(room.db, ROOM, "leaderboard") is None

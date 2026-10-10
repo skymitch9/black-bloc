@@ -6,11 +6,13 @@ from typing import Any
 from fastapi import APIRouter, Body, Request
 
 from ... import points_moves as moves
-from ... import points_store, points_tickets, points_view
+from ... import points_post, points_store, points_tickets, points_view
+from ... import sticky as sticky_rules
 from ...brackets.access import is_staff
 from ...logkinds import VIA_WEBSITE
 from ...points.model import STATES
-from ..auth import Refused
+from ...sticky_posts import desk_of
+from ..auth import Refused, staff_dependency
 from ..names import avatar_url, site_words
 from ..writes import (
     TOO_MANY_WRITES,
@@ -24,6 +26,7 @@ from ..writes import (
     wanted_id,
     writer_dependency,
 )
+from .sticky import sticky_row
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +43,7 @@ def build_router(bot: Any) -> APIRouter:
     signed_in = member_gate(bot)
     staff_writer = writer_dependency(bot)
     router = APIRouter(prefix="/api/points", tags=["points"])
+    staff_reader = staff_dependency(bot)
 
     async def decider(request: Request) -> dict[str, Any]:
         who = await signed_in(request)
@@ -270,5 +274,42 @@ def build_router(bot: Any) -> APIRouter:
             bot, guild, actor_for(bot, who, guild), wanted_id(bounty_id), via=VIA_WEBSITE
         )
         return await bounty_answer(guild, outcome)
+
+    async def board_post_answer(guild: Any, message: str | None = None) -> dict[str, Any]:
+        found = await points_post.board_state(bot, guild)
+        sticky, post, other = found["sticky"], found["post"], found["other"]
+        mode = (await desk_of(bot).rule_of(guild, sticky))[0] if sticky is not None else None
+        return {
+            "channel_id": str(found["channel_id"]) if found["channel_id"] else None,
+            "channel": found["channel"],
+            "post": {"slug": post["slug"], "title": post["title"]} if post is not None else None,
+            "sticky": sticky_row(bot, guild, sticky, mode) if sticky is not None else None,
+            "other": (
+                {"words": site_words(guild, sticky_rules.words_of(other))}
+                if other is not None
+                else None
+            ),
+            "message": site_words(guild, message) if message else None,
+        }
+
+    @router.get("/board-post")
+    async def points_board_post(request: Request) -> dict[str, Any]:
+        await staff_reader(request)
+        return await board_post_answer(place())
+
+    @router.post("/board-post")
+    async def points_board_post_pin(request: Request, payload: Any = OPTIONAL) -> dict[str, Any]:
+        who = await staff_writer(request)
+        guild = place()
+        outcome = await points_post.pin_board(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            replace=body_of(payload).get("replace") is True,
+            via=VIA_WEBSITE,
+        )
+        if not outcome.ok:
+            raise refused(guild, outcome)
+        return await board_post_answer(guild, outcome.message)
 
     return router

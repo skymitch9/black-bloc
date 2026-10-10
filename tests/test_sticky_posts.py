@@ -166,6 +166,10 @@ def person(channel, *, bot=False, webhook=None, kind=discord.MessageType.default
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    return await make_bot(db)
+
+
+async def make_bot(db):
     store = SettingsStore(db, load_settings(_env_file=None))
     await store.load()
     guild = FakeGuild()

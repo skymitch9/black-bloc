@@ -1906,8 +1906,28 @@ function seedState() {
       updated_at: minutesAgo(20),
       updated_by: STAFF.id,
     },
+    {
+      id: 4,
+      slug: 'leaderboard',
+      title: 'Leaderboard',
+      channel_id: '1076003845232148580',
+      body: '',
+      style: 'embed',
+      pin: false,
+      message_id: null,
+      shadow_message_id: '830000000000000104',
+      carries_door: false,
+      blocks: [{ kind: 'leaderboard', position: 0, added_at: minutesAgo(60), added_by: STAFF.id }],
+      door_hash: null,
+      posted_hash: null,
+      posted_at: minutesAgo(3),
+      posted_by: STAFF.id,
+      seeded: false,
+      updated_at: minutesAgo(60),
+      updated_by: STAFF.id,
+    },
   ],
-  nextPost: 4,
+  nextPost: 5,
   nextPostMessage: 820000000000000001,
   // Version history. welcome carries the backfilled `shipped` row the migration writes, so
   // the Versions foldout has a chip of every colour to look at; scratch-post has none, which
@@ -2208,6 +2228,7 @@ function seedState() {
   sticky: [
     { channel_id: '800000000000000002', text: '**How to submit a run** — post the link, the category and your time, and a Lead will add it.', paused: false, trouble: null, message_id: '830000000000000101', posted_channel_id: '800000000000000004', posted_at: minutesAgo(12), reposts: 7, updated_by: STAFF.id, updated_at: minutesAgo(4000) },
     { channel_id: '800000000000000003', text: 'Test posts only — nothing here is real.', paused: true, trouble: null, message_id: null, posted_channel_id: null, posted_at: null, reposts: 0, updated_by: STAFF.id, updated_at: minutesAgo(9000) },
+    { channel_id: '1076003845232148580', text: '', post_id: 4, paused: false, trouble: null, message_id: '830000000000000104', posted_channel_id: '800000000000000004', posted_at: minutesAgo(3), reposts: 3, updated_by: STAFF.id, updated_at: minutesAgo(60) },
     { channel_id: '800000000000000006', text: 'Announcements are staff-only. Questions go in #general.', paused: false, trouble: 'Black Bloc is missing Send Messages in #bot-log. Give it that permission there, then press Try again.', message_id: null, posted_channel_id: null, posted_at: null, reposts: 2, updated_by: STAFF.id, updated_at: minutesAgo(700) },
   ],
   honeypot: [
@@ -11497,12 +11518,32 @@ function stickyHome() {
 }
 
 function stickyOwnHome(row) {
-  return String(state.settings.get('sticky_mode') || 'shadow') === 'shadow' && String(stickyHome()) === String(row.channel_id);
+  return stickyMode(row) === 'shadow' && String(stickyHomeOf(row)) === String(row.channel_id);
 }
 const STICKY_NONE = 'That channel has no sticky message, so nothing was changed. The list on this panel and on the Posts page is every channel that has one.';
 
-function stickyState(row) {
+function stickyPostOf(row) {
+  return row.post_id ? state.posts.find((one) => one.id === Number(row.post_id)) || null : null;
+}
+
+// The twin of sticky_posts.owner_rule: sticky off stops everything; the leaderboard follows points.
+function stickyMode(row) {
   const mode = String(state.settings.get('sticky_mode') || 'shadow');
+  const post = stickyPostOf(row);
+  if (mode === 'off' || !post || !(post.blocks || []).some((one) => one.kind === 'leaderboard')) return mode;
+  return String(state.settings.get('points_mode') || 'shadow');
+}
+
+function stickyHomeOf(row) {
+  const post = stickyPostOf(row);
+  if (post && (post.blocks || []).some((one) => one.kind === 'leaderboard')) {
+    return state.settings.get('points_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id');
+  }
+  return stickyHome();
+}
+
+function stickyState(row) {
+  const mode = stickyMode(row);
   if (row.trouble) return 'stopped';
   if (row.paused) return 'paused';
   if (mode === 'off') return 'off';
@@ -11511,16 +11552,30 @@ function stickyState(row) {
 }
 
 function stickyPlace(row) {
-  const mode = String(state.settings.get('sticky_mode') || 'shadow');
+  const mode = stickyMode(row);
+  const post = stickyPostOf(row);
   if (row.paused || mode === 'off' || stickyOwnHome(row)) {
     row.message_id = null;
     row.posted_channel_id = null;
     row.posted_at = null;
+    if (post) Object.assign(post, { message_id: null, shadow_message_id: null, posted_at: null });
     return;
   }
   row.message_id = String(830000000000000000n + BigInt(Date.now()));
-  row.posted_channel_id = mode === 'on' ? row.channel_id : String(stickyHome());
+  row.posted_channel_id = mode === 'on' ? row.channel_id : String(stickyHomeOf(row));
   row.posted_at = new Date().toISOString();
+  if (post) {
+    post.channel_id = String(row.channel_id);
+    post.message_id = mode === 'on' ? row.message_id : null;
+    post.shadow_message_id = mode === 'on' ? null : row.message_id;
+    post.posted_at = row.posted_at;
+  }
+}
+
+function stickyWords(row) {
+  const post = stickyPostOf(row);
+  if (!row.post_id) return row.text;
+  return post ? `The post **${post.title}**` : 'a post that has been deleted';
 }
 
 function stickyRow(row) {
@@ -11530,6 +11585,8 @@ function stickyRow(row) {
     channel_name: channel ? channel.name : null,
     gone: !channel,
     text: row.text,
+    post: row.post_id ? { id: Number(row.post_id), slug: (stickyPostOf(row) || {}).slug || null, title: (stickyPostOf(row) || {}).title || null } : null,
+    words: stickyWords(row),
     paused: Boolean(row.paused),
     trouble: row.trouble || null,
     state: stickyState(row),
@@ -11563,9 +11620,30 @@ route('GET', '/api/sticky', (context) => {
   return state.sticky.map(stickyRow);
 });
 
+function stickyKeepPost(context, wanted, slug) {
+  const post = state.posts.find((one) => one.slug === String(slug));
+  if (!post) throw new Refused(404, 'no_such_post', `There is no post called **${String(slug).slice(0, 60)}**, so nothing was saved. Pick one from the Posts page's list.`);
+  if (post.carries_door) throw new Refused(409, 'post_carries_door', `**${post.title}** carries the front door, which keeps its own place, so it cannot be a sticky message and nothing was saved.`);
+  const held = state.sticky.find((one) => Number(one.post_id) === post.id && String(one.channel_id) !== wanted);
+  if (held) throw new Refused(409, 'post_is_a_sticky', `**${post.title}** is already the sticky message in ${stickyName(held.channel_id)}, so nothing was saved. Remove it there first.`);
+  let row = state.sticky.find((one) => String(one.channel_id) === wanted);
+  const made = !row;
+  if (made) {
+    const channel = CHANNELS.find((one) => one.id === wanted);
+    if (!channel) throw new Refused(404, 'no_such_channel', 'Black Bloc cannot find that channel in this server, so nothing was saved. Pick a channel it can see.');
+    row = { channel_id: wanted, text: '', paused: false, trouble: null, message_id: null, posted_channel_id: null, posted_at: null, reposts: 0 };
+    state.sticky.push(row);
+  }
+  Object.assign(row, { text: '', post_id: post.id, trouble: null, updated_by: STAFF.id, updated_at: new Date().toISOString() });
+  stickyPlace(row);
+  logAction(made ? 'web.sticky.set' : 'web.sticky.edited', { details: { channel_id: wanted, post: post.slug, post_id: post.id, via: 'website' } });
+  return { sticky: stickyRow(row), message: stickySaid(row) };
+}
+
 route('PUT', '/api/sticky/:channel_id', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
+  if (body.post) return stickyKeepPost(context, String(context.params.channel_id), body.post);
   if (body.text !== undefined && body.text !== null && typeof body.text !== 'string') throw new Refused(400, 'bad_text', STICKY_NOT_WORDS);
   const text = String(body.text || '').trim();
   if (!text) throw new Refused(400, 'bad_text', 'A sticky message needs some words, so nothing was saved. Type what it should say and save again.');
@@ -11583,6 +11661,7 @@ route('PUT', '/api/sticky/:channel_id', async (context) => {
     state.sticky.push(row);
   }
   row.text = text;
+  row.post_id = null;
   row.trouble = null;
   row.updated_by = STAFF.id;
   row.updated_at = new Date().toISOString();
@@ -11619,8 +11698,56 @@ route('DELETE', '/api/sticky/:channel_id', (context) => {
   requireStaff(context.session);
   const row = stickyOf(context);
   state.sticky = state.sticky.filter((one) => one !== row);
-  logAction('web.sticky.removed', { details: { channel_id: row.channel_id, text: row.text.slice(0, 200), via: 'website' } });
+  logAction('web.sticky.removed', { details: { channel_id: row.channel_id, text: stickyWords(row).slice(0, 200), via: 'website' } });
   return { removed: true, channel_id: String(row.channel_id), message: `Removed. ${stickyName(row.channel_id)} has no sticky message now.` };
+});
+
+// The leaderboard as a sticky post (docs/info/sticky-board-design.md): the twin of points_post.
+function boardPostAnswer(message = null) {
+  const channelId = String(state.settings.get('points_channel_id') || '') || null;
+  const post = state.posts.find((one) => one.slug === 'leaderboard') || null;
+  const mine = post ? state.sticky.find((one) => Number(one.post_id) === post.id) || null : null;
+  const there = channelId ? state.sticky.find((one) => String(one.channel_id) === channelId) || null : null;
+  const other = there && there !== mine ? there : null;
+  const channel = CHANNELS.find((one) => one.id === channelId);
+  const category = channel && channel.category_id ? CHANNELS.find((one) => one.id === channel.category_id) : null;
+  return {
+    channel_id: channelId,
+    channel: channel ? `#${channel.name}${category ? ` · ${category.name}` : ''}` : '',
+    post: post ? { slug: post.slug, title: post.title } : null,
+    sticky: mine ? stickyRow(mine) : null,
+    other: other ? { words: stickyWords(other) } : null,
+    message,
+  };
+}
+
+route('GET', '/api/points/board-post', (context) => {
+  requireStaff(context.session);
+  return boardPostAnswer();
+});
+
+route('POST', '/api/points/board-post', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const found = boardPostAnswer();
+  if (!found.channel_id || !CHANNELS.some((one) => one.id === found.channel_id)) {
+    throw new Refused(409, 'channel_gone', 'Black Bloc cannot find the leaderboard channel (points_channel_id), so nothing was done. Pick a channel it can see.');
+  }
+  if (found.sticky && String(found.sticky.channel_id) === found.channel_id) {
+    return boardPostAnswer(`The leaderboard is already the sticky message in ${stickyName(found.channel_id)}.`);
+  }
+  if (found.other && body.replace !== true) {
+    throw new Refused(409, 'channel_has_sticky', `${stickyName(found.channel_id)} already keeps another sticky message (${found.other.words}), so nothing was done. Press **Replace it** to keep the leaderboard there instead.`);
+  }
+  let post = state.posts.find((one) => one.slug === 'leaderboard');
+  if (!post) {
+    post = { id: state.nextPost++, slug: 'leaderboard', title: String(state.settings.get('points_board_post_title') || 'Leaderboard'), channel_id: null, body: '', style: 'embed', pin: false, message_id: null, shadow_message_id: null, posted_hash: null, posted_at: null, posted_by: null, seeded: false, carries_door: false, blocks: [], door_hash: null, updated_at: now(), updated_by: STAFF.id };
+    state.posts.push(post);
+  }
+  if (!(post.blocks || []).some((one) => one.kind === 'leaderboard')) post.blocks.push({ kind: 'leaderboard', position: post.blocks.length, added_at: now(), added_by: STAFF.id });
+  state.sticky = state.sticky.filter((one) => Number(one.post_id) !== post.id);
+  const saved = stickyKeepPost(context, found.channel_id, post.slug);
+  return boardPostAnswer(`The leaderboard is the sticky message in ${stickyName(found.channel_id)} now. ${saved.message}`);
 });
 
 route('GET', '/api/honeypot/hits', (context) => {

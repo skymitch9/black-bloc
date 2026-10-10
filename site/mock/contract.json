@@ -2833,7 +2833,8 @@
       "method": "GET",
       "path": "/api/sticky",
       "read_by": [
-        "sticky-section.js"
+        "sticky-section.js",
+        "page-leaderboard.js Settings"
       ],
       "shape": "list",
       "keys": [
@@ -2841,6 +2842,8 @@
         "channel_name",
         "gone",
         "text",
+        "post",
+        "words",
         "paused",
         "trouble",
         "state",
@@ -11837,6 +11840,55 @@
         "changed",
         "announce"
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/points/board-post",
+      "read_by": [
+        "page-leaderboard.js Settings"
+      ],
+      "shape": "object",
+      "keys": [
+        "channel_id",
+        "channel",
+        "post",
+        "sticky",
+        "other",
+        "message"
+      ],
+      "settings": {
+        "points_channel_id": "{board_channel_id}"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/points/board-post",
+      "body": {},
+      "read_by": [
+        "page-leaderboard.js Pin the leaderboard"
+      ],
+      "shape": "object",
+      "keys": [
+        "channel_id",
+        "channel",
+        "post",
+        "sticky",
+        "other",
+        "message"
+      ],
+      "nested": {
+        "sticky": [
+          "channel_id",
+          "words",
+          "paused",
+          "trouble",
+          "state",
+          "post"
+        ]
+      },
+      "settings": {
+        "points_channel_id": "{board_channel_id}"
+      }
     },
     {
       "method": "GET",
