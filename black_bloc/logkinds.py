@@ -417,6 +417,7 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.run_event_redated",
         "marathon.run_event_unlinked",
         "marathon.shout_skipped",
+        "marathon.late_shout_skipped",
         "marathon.runner_spotlit",
         "marathon.runner_unspotlit",
         "marathon.spotlight_extended",

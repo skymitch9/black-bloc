@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The sticky leaderboard* (branch `sticky-board`, off `main` `b87ed763`); keyed by NAME. Before that:
+> **2026-10-09 — one section APPENDED, nothing re-keyed**: *Late tracking* (branch `late-tracked-live`, off `main` `522fea26`); keyed by NAME. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 3 — the site* (branch `points-site`, off `main` `a41cb3d3`); keyed by NAME. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 2* (branch `points-discord`, off `main` `4ab03a82`); keyed by NAME. `cogs/moderation/modmail.py` rows below `open_or_find` sit a few lines lower. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *Fastest Furs actual durations* (branch `ff-actual-durations`, off `main` `01d6e72b`); keyed by NAME. Before that:
@@ -10435,3 +10436,13 @@ Design: [`sticky-board-design.md`](sticky-board-design.md).
 - `site/public/assets/sticky-section.js` `stickyMoves` / `stateLine` — exported for the Leaderboard page's pin row (no copy).
 - `site/mock/server.mjs` `stickyMode` / `stickyHomeOf` / `boardPostAnswer` — the twins of `owner_rule`, the points home and `points_post.board_state`; the seed has the leaderboard pinned in #speed-and-pbs, rehearsing.
 - `site/mock/check.mjs` `board_channel_id` / `tests/api/test_contract.py` seed — the contract's `POST /api/points/board-post` runs against a leaderboard already pinned there (the real seed pins it on the voice channel), so it answers `already` and changes nothing.
+## Late tracking — keyed by NAME (branch `late-tracked-live`, 2026-10-09; re-key after the merge)
+
+Design: [`marathon-public-highlights-design.md`](marathon-public-highlights-design.md) > *Late tracking (2026-10-09)*.
+
+- `black_bloc/cogs/content/marathon_late_track.py` `sweep` — re-reads the marathon (a caller's row may be stale) and clears `late_shout_due` BEFORE any post, so a failed or skipped shout is never retried and `late_shout_skipped` is written once. `skip` is every run the same tick's `mt.advance` changed: those belong to the transition.
+- `marathon_late_track.py` `too_old` — a run with no time at all counts as too old while a cap is set; 0 means always.
+- `black_bloc/cogs/content/marathon.py` `advance` — the sweep is called after the change loop and before `retime`, so it sees the states this tick wrote.
+- `black_bloc/cogs/content/marathon_inbox.py` `track_held` — arms only when it flips the row to tracked (inside `if not mi.is_tracked`), the one function every Track door reaches (site, thread, inbox button, Track anyway, feed auto-track).
+- `black_bloc/cogs/content/marathon_archive.py` `restore_marathon` — arms a restored row that was tracked; it comes back paused, and `advance` does not run while paused, so the catch-up happens on the first tick after Resume.
+

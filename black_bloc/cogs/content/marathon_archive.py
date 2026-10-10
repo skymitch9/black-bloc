@@ -7,6 +7,7 @@ import discord
 
 from ... import marathon as mt
 from ... import marathon_archive as ma
+from ... import marathon_inbox as mi
 from ... import marathon_spotlight as ms
 from ...actionlog import log_action
 from ...golive import parse_ts
@@ -34,6 +35,7 @@ from ...settings_store import (
 )
 from ...storage.db import ARCHIVED_TABLES
 from ...timezones import unix
+from . import marathon_late_track as late_track
 from .marathon import (
     ARCHIVE_VIEW,
     NO_SUCH,
@@ -325,6 +327,8 @@ async def restore_marathon(
             )
         runs = await archived_runs(bot.db, row["id"])
         await restore_rows(bot.db, row["id"])
+        if mi.is_tracked(row):
+            await late_track.arm(bot.db, row["id"])
     await log_action(
         bot,
         guild,
