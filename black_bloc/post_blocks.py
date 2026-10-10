@@ -51,10 +51,16 @@ from .settings_store import (
     PINGS_BLOCK_LABEL,
     PINGS_BLOCK_TEXT,
     PINGS_BLOCK_TITLE,
+    POINTS_BOARD_ORDER,
+    POINTS_FEATURE,
+    POINTS_MODE,
+    POINTS_TOP_N,
     POSTS_BLOCK_BIRTHDAY_NAME,
     POSTS_BLOCK_BIRTHDAY_NAME_DEFAULT,
     POSTS_BLOCK_FRONTDOOR_NAME,
     POSTS_BLOCK_FRONTDOOR_NAME_DEFAULT,
+    POSTS_BLOCK_LEADERBOARD_NAME,
+    POSTS_BLOCK_LEADERBOARD_NAME_DEFAULT,
     POSTS_BLOCK_LINKS_CARD,
     POSTS_BLOCK_LINKS_NAME,
     POSTS_BLOCK_LINKS_NAME_DEFAULT,
@@ -92,7 +98,8 @@ PROPOSEEVENT = "proposeevent"
 LIVENOW = "livenow"
 UPCOMING = "upcoming"
 LINKS = "links"
-LIVE_KINDS = (LIVENOW, UPCOMING)
+LEADERBOARD = "leaderboard"
+LIVE_KINDS = (LIVENOW, UPCOMING, LEADERBOARD)
 NAME_MAX = 80
 MAX_EMBEDS = 10
 MAX_ROWS = 5
@@ -153,6 +160,7 @@ class BlockKind:
     redraw: Callable[[Any, Any], Awaitable[bool]]
     footprint: tuple[int, int, int] = (1, 1, 5)
     load: Callable[[Any, Any], Awaitable[Any]] | None = None
+    owner: tuple[str, str] | None = None
 
 
 def door_parts(bot: Any, guild: Any, row: Any) -> Any:
@@ -263,6 +271,18 @@ def links_parts(bot: Any, guild: Any, row: Any) -> Any:
     from .link_buttons import links_parts as drawn
 
     return drawn(bot, guild, row)
+
+
+def leaderboard_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .points_post import block_parts
+
+    return block_parts(bot, guild, loaded(LEADERBOARD, guild.id))
+
+
+async def leaderboard_load(bot: Any, guild: Any) -> Any:
+    from .points_post import block_rows
+
+    return await block_rows(bot, guild)
 
 
 async def blocks_redraw(bot: Any, guild: Any) -> bool:
@@ -433,7 +453,37 @@ KINDS: dict[str, BlockKind] = {
         redraw=blocks_redraw,
         footprint=(1, 2, 10),
     ),
+    LEADERBOARD: BlockKind(
+        key=LEADERBOARD,
+        name_key=POSTS_BLOCK_LEADERBOARD_NAME,
+        name_default=POSTS_BLOCK_LEADERBOARD_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(
+            "points_board_title",
+            "points_board_xp_title",
+            "points_board_line",
+            "points_board_empty",
+            POINTS_TOP_N,
+            POINTS_BOARD_ORDER,
+        ),
+        parts=leaderboard_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 0, 0),
+        load=leaderboard_load,
+        owner=(POINTS_MODE, POINTS_FEATURE),
+    ),
 }
+
+
+def owner_of(kinds: Any) -> tuple[str, str] | None:
+    """The feature whose mode and rehearsal home a post carrying these blocks follows."""
+    for kind in kinds or ():
+        found = KINDS.get(str(kind))
+        if found is not None and found.owner is not None:
+            return found.owner
+    return None
 
 
 def kind_of(kind: Any) -> BlockKind | None:
@@ -951,8 +1001,12 @@ __all__ = [
     "remove_block",
     "reorder",
     "set_carried",
+    "LEADERBOARD",
     "LINKS",
     "LIVENOW",
+    "leaderboard_load",
+    "leaderboard_parts",
+    "owner_of",
     "LIVE_KINDS",
     "LOADED",
     "UPCOMING",

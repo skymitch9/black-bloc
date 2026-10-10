@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from typing import Any
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from ...panels import answer
 from ...points_panel import open_panel
+from ...points_post import redraw
 from ...points_tickets import RemoveButton
-from ...settings_store import GUILD_ONLY
+from ...post_blocks import KINDS, LEADERBOARD
+from ...settings_store import GUILD_ONLY, POINTS_MODE
+
+REDRAWS_THE_BOARD = (*KINDS[LEADERBOARD].keys, POINTS_MODE)
 
 
 class Points(commands.Cog):
@@ -16,6 +22,13 @@ class Points(commands.Cog):
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(RemoveButton)
+        for key in REDRAWS_THE_BOARD:
+            self.bot.store.on_change(key, self._board_setting_changed)
+
+    async def _board_setting_changed(self, guild_id: Any, key: str, value: Any, by: Any) -> None:
+        guild = self.bot.get_guild(int(guild_id))
+        if guild is not None:
+            await redraw(self.bot, guild)
 
     @app_commands.command(
         name="pb", description="The speedrun leaderboard: the top places, your next rank, a run"

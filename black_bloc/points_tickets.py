@@ -248,6 +248,9 @@ async def settle(
     if text and user_id is not None:
         extra += await tell(bot, guild, actor, int(user_id), text, move, via)
     await announce(bot, guild, outcome, via=via)
+    from .points_post import redraw
+
+    await redraw(bot, guild)
     return words + extra
 
 

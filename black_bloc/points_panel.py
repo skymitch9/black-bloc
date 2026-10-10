@@ -63,14 +63,14 @@ def by_of(previous: Any) -> str | None:
     return getattr(previous, "by", None)
 
 
-def board_lines(bot: Any, guild: Any, rows: list[dict[str, Any]]) -> list[str]:
+def lines_of(store: Any, guild_id: int, rows: list[dict[str, Any]]) -> list[str]:
     return [
-        words(
-            bot,
-            guild,
+        moves.said(
+            store,
+            guild_id,
             "points_board_line",
             place=row["place"],
-            name=moves.name_of(guild, row["user_id"]),
+            name=row["shown"],
             runs=row["runs"],
             xp=row["xp"],
             points=row["speedpoints"],
@@ -79,9 +79,18 @@ def board_lines(bot: Any, guild: Any, rows: list[dict[str, Any]]) -> list[str]:
     ]
 
 
-def title_of(bot: Any, guild: Any, by: str) -> str:
+def board_lines(bot: Any, guild: Any, rows: list[dict[str, Any]]) -> list[str]:
+    shown = [row | {"shown": moves.name_of(guild, row["user_id"])} for row in rows]
+    return lines_of(bot.store, guild.id, shown)
+
+
+def heading_of(store: Any, guild_id: int, by: str) -> str:
     key = "points_board_xp_title" if by == BY_XP else "points_board_title"
-    return words(bot, guild, key)
+    return moves.said(store, guild_id, key)
+
+
+def title_of(bot: Any, guild: Any, by: str) -> str:
+    return heading_of(bot.store, guild.id, by)
 
 
 async def build_board(

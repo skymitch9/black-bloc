@@ -381,3 +381,27 @@ async def test_the_inbox_tags_a_run_ticket(bot, ada):
     _, ticket = await sent_in(bot, ada)
 
     assert modmail_cog.ticket_label(ticket, "Ada") == f"#{ticket['id']} · thread · run · Ada"
+
+
+@pytest.mark.parametrize(
+    "move", [tickets.APPROVE, tickets.REJECT, tickets.REMOVE, tickets.EDIT, tickets.RECOMPUTE]
+)
+async def test_every_run_move_redraws_the_leaderboard_post_at_once(bot, lead, monkeypatch, move):
+    from types import SimpleNamespace
+
+    from black_bloc import points_post
+    from black_bloc.panels import Outcome
+
+    asked = []
+
+    async def redraw(found_bot, found_guild):
+        asked.append(found_guild)
+        return True
+
+    monkeypatch.setattr(points_post, "redraw", redraw)
+    done = SimpleNamespace(id=None, dm=None, dm_to=None, announce=())
+
+    await tickets.settle(bot, bot.guild, lead, Outcome(True, "done", value=done), move)
+    await tickets.settle(bot, bot.guild, lead, Outcome(False, "refused"), move)
+
+    assert asked == [bot.guild]
