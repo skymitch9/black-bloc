@@ -19,6 +19,7 @@ import {
   readSelect,
   run,
   sayAgain,
+  segment,
   sayNothing,
   section,
   settingsPanel,
@@ -36,6 +37,10 @@ const GONE = 'a channel the server no longer has';
 const POSTABLE = ['text', 'news'];
 const NEED_A_CHANNEL = 'Pick the channel it sits in, then save again.';
 const NEED_WORDS = 'A sticky message needs some words. Type what it should say and save again.';
+const NEED_A_POST = 'Pick the post it keeps, then save again.';
+const WORDS_KIND = 'words';
+const POST_KIND = 'post';
+const KINDS = [{ value: WORDS_KIND, label: 'Words' }, { value: POST_KIND, label: 'A post' }];
 
 const STATE_TONES = { live: 'ok', rehearsing: 'warn', stopped: 'danger' };
 const FILTERS = [
@@ -57,8 +62,27 @@ function nameOf(row, channels) {
   return row.channel_name ? `# ${row.channel_name}` : `${GONE} · ${row.channel_id}`;
 }
 
+function wordsOf(row) {
+  return row.post ? row.post.title || row.words : row.text;
+}
+
 function rowText(row, channels) {
-  return [nameOf(row, channels), row.text, row.state, row.trouble || ''].join(' ');
+  return [nameOf(row, channels), wordsOf(row), row.state, row.trouble || ''].join(' ');
+}
+
+async function postSelect(current = null) {
+  const found = await api('/api/posts');
+  const select = el('select', { class: 'input', id: 'sticky-post' });
+  select.append(el('option', { value: '', text: 'not set' }));
+  for (const post of found.posts || []) {
+    if (post.carries_door) continue;
+    select.append(el('option', {
+      value: post.slug,
+      text: post.title,
+      selected: post.slug === current || undefined,
+    }));
+  }
+  return select;
 }
 
 function wordsBox(value = '') {
@@ -90,22 +114,58 @@ async function saveWords(channelId, text, say, reload) {
   reload();
 }
 
+async function savePost(channelId, post, say, reload) {
+  const found = await send(where(channelId), 'PUT', { post });
+  say.say(found.message, 'ok');
+  keepSaying(SAID, say);
+  reload();
+}
+
 async function addOne(say, reload) {
   const select = await textChannelSelect();
   const box = wordsBox();
+  const posts = await postSelect();
+  const wordsField = field('What it says', box, limitCounter(box, TEXT_MAX));
+  const postField = field('The post it keeps', posts);
+  postField.hidden = true;
+  const kind = segment(KINDS, WORDS_KIND, {
+    onChange: () => {
+      wordsField.hidden = kind.readValue() !== WORDS_KIND;
+      postField.hidden = kind.readValue() !== POST_KIND;
+    },
+  });
   await askForm({
     title: 'A new sticky message',
-    body: [
-      field('Channel', select),
-      field('What it says', box, limitCounter(box, TEXT_MAX)),
-    ],
+    body: [field('Channel', select), kind, wordsField, postField],
     confirmLabel: 'Save it',
     tone: 'warn',
     onConfirm: async () => {
       const channelId = readSelect(select, false);
       if (!channelId) return NEED_A_CHANNEL;
+      if (kind.readValue() === POST_KIND) {
+        const post = readSelect(posts, false);
+        if (!post) return NEED_A_POST;
+        await savePost(channelId, post, say, reload);
+        return null;
+      }
       if (!box.value.trim()) return NEED_WORDS;
       await saveWords(channelId, box.value, say, reload);
+      return null;
+    },
+  });
+}
+
+async function changePost(row, name, say, reload) {
+  const posts = await postSelect(row.post.slug);
+  await askForm({
+    title: name,
+    body: [field('The post it keeps', posts)],
+    confirmLabel: 'Save it',
+    tone: 'warn',
+    onConfirm: async () => {
+      const post = readSelect(posts, false);
+      if (!post) return NEED_A_POST;
+      await savePost(row.channel_id, post, say, reload);
       return null;
     },
   });
@@ -126,22 +186,34 @@ async function editOne(row, name, say, reload) {
   });
 }
 
-function actions(row, name, say, reload) {
-  const act = async (method, tail) => {
+function acting(row, say, reload) {
+  return async (method, tail) => {
     const done = await run(say, () => send(where(row.channel_id, tail), method, {}), (found) => found.message);
     if (done.ok) {
       keepSaying(SAID, say);
       reload();
     }
   };
-  const moves = [button('Edit', () => editOne(row, name, say, reload))];
-  if (row.trouble) moves.push(button('Try again', () => act('POST', '/resume'), { tone: 'warn' }));
-  else if (row.paused) moves.push(button('Resume', () => act('POST', '/resume'), { tone: 'warn' }));
-  else moves.push(button('Pause', () => act('POST', '/pause')));
+}
+
+/** Pause, Resume or Try again — whichever the row can take; the Leaderboard page uses it too. */
+export function stickyMoves(row, say, reload) {
+  const act = acting(row, say, reload);
+  if (row.trouble) return [button('Try again', () => act('POST', '/resume'), { tone: 'warn' })];
+  if (row.paused) return [button('Resume', () => act('POST', '/resume'), { tone: 'warn' })];
+  return [button('Pause', () => act('POST', '/pause'))];
+}
+
+function actions(row, name, say, reload) {
+  const act = acting(row, say, reload);
+  const moves = [row.post
+    ? button('Change the post', () => changePost(row, name, say, reload))
+    : button('Edit', () => editOne(row, name, say, reload))];
+  moves.push(...stickyMoves(row, say, reload));
   moves.push(button('Remove', async () => {
     const sure = await ask({
       title: `Remove the sticky message from ${name}?`,
-      body: [row.text],
+      body: [wordsOf(row)],
       confirmLabel: 'Remove it',
     });
     if (sure) await act('DELETE', '');
@@ -149,7 +221,7 @@ function actions(row, name, say, reload) {
   return bar(moves);
 }
 
-function stateLine(row) {
+export function stateLine(row) {
   const parts = [badge(row.state, STATE_TONES[row.state] || null)];
   if (row.posted_at) parts.push(el('span', { class: 'rowlist-note', text: when(row.posted_at) }));
   if (row.reposts) parts.push(el('span', { class: 'rowlist-note', text: `moved ${row.reposts}×` }));
@@ -161,7 +233,9 @@ function stickyRow(row, channels, say, reload) {
   return el('div', { class: 'rowlist-row', 'data-channel': String(row.channel_id) }, [
     el('div', { class: 'rowlist-main' }, [
       el('span', { class: 'rowlist-name', text: name }),
-      el('span', { class: 'rowlist-line', style: 'white-space: pre-wrap', text: row.text }),
+      row.post
+        ? el('a', { class: 'rowlist-line', href: `#${encodeURIComponent(row.post.slug || '')}`, text: wordsOf(row) })
+        : el('span', { class: 'rowlist-line', style: 'white-space: pre-wrap', text: row.text }),
       stateLine(row),
       row.trouble ? notice(row.trouble, 'danger') : null,
     ]),

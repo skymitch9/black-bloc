@@ -10,7 +10,13 @@ from discord.ext import commands
 from ...command_visibility import STAFF_ONLY
 from ...loops import Reconciler
 from ...panels import answer, db_up
-from ...settings_store import GUILD_ONLY, STICKY_MODE, require_staff
+from ...settings_store import (
+    GUILD_ONLY,
+    POINTS_MODE,
+    POINTS_SHADOW_CHANNEL,
+    STICKY_MODE,
+    require_staff,
+)
 from ...shadow import LOG_CHANNEL_KEY, REHEARSAL_KEY, feature_key
 from ...sticky import FEATURE
 from ...sticky_panel import build_root
@@ -18,7 +24,14 @@ from ...sticky_posts import desk_of
 
 log = logging.getLogger(__name__)
 
-MOVES_THE_COPIES = (STICKY_MODE, feature_key(FEATURE), REHEARSAL_KEY, LOG_CHANNEL_KEY)
+MOVES_THE_COPIES = (
+    STICKY_MODE,
+    feature_key(FEATURE),
+    REHEARSAL_KEY,
+    LOG_CHANNEL_KEY,
+    POINTS_MODE,
+    POINTS_SHADOW_CHANNEL,
+)
 
 
 class Sticky(commands.Cog):

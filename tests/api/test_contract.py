@@ -12,7 +12,17 @@ import pytest
 import pytest_asyncio
 from discord.ext import tasks
 
-from black_bloc import applications, doc_import, guides, knowledge, minutes, pings, posts, sticky
+from black_bloc import (
+    applications,
+    doc_import,
+    guides,
+    knowledge,
+    minutes,
+    pings,
+    post_blocks,
+    posts,
+    sticky,
+)
 from black_bloc import rolegrants as grants
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.settings_api import grouped
@@ -984,12 +994,18 @@ async def seed_world(client, web, guild, wf) -> dict:
     for channel_id, paused in ((wf.OTHER_CHANNEL_ID, False), (wf.TEST_CHANNEL_ID, True)):
         await sticky.write_words(db, guild_id, channel_id, "How to submit a run.", 7)
         await sticky.write_paused(db, guild_id, channel_id, paused, 7)
+    board_id = await posts.create_post(
+        db, guild_id, slug="leaderboard", title="Leaderboard", style="embed", pin=False
+    )
+    await post_blocks.attach(db, await posts.get_post_by_id(db, board_id), "leaderboard")
+    await sticky.write_words(db, guild_id, wf.VOICE_CHANNEL_ID, "", 7, post_id=board_id)
     structure_old, structure_new = await seed_structure(db, guild_id)
     brackets = await seed_brackets(db, guild_id)
     points = await seed_points(db, guild_id)
     return await seed_pbs(web, guild_id, wf.TEST_CHANNEL_ID) | brackets | points | {
         "sticky_channel_id": str(wf.OTHER_CHANNEL_ID),
         "sticky_paused_channel_id": str(wf.TEST_CHANNEL_ID),
+        "board_channel_id": str(wf.VOICE_CHANNEL_ID),
         "structure_old_id": str(structure_old),
         "structure_new_id": str(structure_new),
         "member_id": str(MEMBER_ID),

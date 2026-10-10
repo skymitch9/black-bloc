@@ -374,3 +374,38 @@ async def test_more_stickies_than_one_picker_holds_says_so(bot, lead):
     assert len(picker.options) == 25
     assert picker.placeholder == "25 of 30 — the rest are on the site"
     assert len(opened.embed.description) <= 4000
+
+
+async def test_a_post_is_picked_then_its_channel_and_the_card_swaps_posts_not_words(bot, lead):
+    from black_bloc import posts
+
+    await bot.store.set(GUILD, "sticky_mode", "on")
+    first = await posts.create_post(
+        bot.db, GUILD, slug="rules", title="House rules", body="Be kind."
+    )
+    second = await posts.create_post(bot.db, GUILD, slug="faq", title="FAQ", body="Ask away.")
+    opened = await root(bot, lead)
+    offered = control(opened.view, panel.PostPick)
+    assert [one.label for one in offered.options] == ["House rules", "FAQ"]
+
+    where = await pick(bot, lead, opened.view, panel.PostPick, [str(first)])
+    assert where.embed.title == "House rules"
+    assert control(where.view, panel.WherePick).channel_types == [
+        discord.ChannelType.text,
+        discord.ChannelType.news,
+    ]
+    assert render_again_of(where.view) is not None
+
+    kept = await pick(
+        bot, lead, where.view, panel.WherePick, [SimpleNamespace(id=RUNS)]
+    )
+
+    assert kept.embed.title == "#runs" and "The post **House rules**" in kept.embed.description
+    assert "Edit…" not in labels(kept.view)
+    swap = control(kept.view, panel.PostPick)
+    assert [one.label for one in swap.options] == ["FAQ"]
+
+    swapped = await pick(bot, lead, kept.view, panel.PostPick, [str(second)])
+
+    assert "The post **FAQ**" in swapped.embed.description
+    assert [one.content for one in bot.guild.get_channel(RUNS).messages] == ["Ask away."]

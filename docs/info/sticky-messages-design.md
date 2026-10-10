@@ -12,6 +12,15 @@
 > decision below, the old text is struck and the new one sits beside it. Re-verified the same day by the suite,
 > `ruff`, the node tests and `check.mjs`; still nothing has met Discord.
 
+> **2026-10-09 — a post can be the sticky, every copy is pinned, and the move waits for quiet** (branch
+> `sticky-board`, off `main` `b87ed763`, NOT merged): `sticky_messages.post_id` (schema 93) — a row with a post posts
+> the post and its blocks instead of `text`; `sticky_pin_copies` pins every copy (QuietPins removes the notice);
+> `sticky_quiet_seconds` (300) and `sticky_max_buried_minutes` (60) make the move wait for 5 quiet minutes after the
+> count, never longer than an hour — **the defaults change the cadence of every existing sticky** (0 quiet = the old
+> rule). A post owned by a feature (the leaderboard: points) follows that feature's mode and home. The *As briefed*
+> rows below about "the words are the only thing posted" and "Only after BOTH a number of messages AND a minimum gap"
+> are amended by it — see [`sticky-board-design.md`](sticky-board-design.md).
+
 ## The ask
 
 Owner, 2026-10-05, verbatim, picking from a list of popular bot features: *"Let's build 1, 8, 10"* / *"We'll leave

@@ -654,6 +654,7 @@ async def test_the_blocks_section_lists_every_kind_and_the_redraw_answers_in_wor
         "livenow",
         "upcoming",
         "links",
+        "leaderboard",
     ]
     assert index["kinds"][1]["where"] == "on no post yet"
     assert index["kinds"][0]["where"] == "on A notice"

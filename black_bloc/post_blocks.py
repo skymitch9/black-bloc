@@ -51,10 +51,16 @@ from .settings_store import (
     PINGS_BLOCK_LABEL,
     PINGS_BLOCK_TEXT,
     PINGS_BLOCK_TITLE,
+    POINTS_BOARD_ORDER,
+    POINTS_FEATURE,
+    POINTS_MODE,
+    POINTS_TOP_N,
     POSTS_BLOCK_BIRTHDAY_NAME,
     POSTS_BLOCK_BIRTHDAY_NAME_DEFAULT,
     POSTS_BLOCK_FRONTDOOR_NAME,
     POSTS_BLOCK_FRONTDOOR_NAME_DEFAULT,
+    POSTS_BLOCK_LEADERBOARD_NAME,
+    POSTS_BLOCK_LEADERBOARD_NAME_DEFAULT,
     POSTS_BLOCK_LINKS_CARD,
     POSTS_BLOCK_LINKS_NAME,
     POSTS_BLOCK_LINKS_NAME_DEFAULT,
@@ -92,7 +98,8 @@ PROPOSEEVENT = "proposeevent"
 LIVENOW = "livenow"
 UPCOMING = "upcoming"
 LINKS = "links"
-LIVE_KINDS = (LIVENOW, UPCOMING)
+LEADERBOARD = "leaderboard"
+LIVE_KINDS = (LIVENOW, UPCOMING, LEADERBOARD)
 NAME_MAX = 80
 MAX_EMBEDS = 10
 MAX_ROWS = 5
@@ -153,6 +160,7 @@ class BlockKind:
     redraw: Callable[[Any, Any], Awaitable[bool]]
     footprint: tuple[int, int, int] = (1, 1, 5)
     load: Callable[[Any, Any], Awaitable[Any]] | None = None
+    owner: tuple[str, str] | None = None
 
 
 def door_parts(bot: Any, guild: Any, row: Any) -> Any:
@@ -263,6 +271,18 @@ def links_parts(bot: Any, guild: Any, row: Any) -> Any:
     from .link_buttons import links_parts as drawn
 
     return drawn(bot, guild, row)
+
+
+def leaderboard_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .points_post import block_parts
+
+    return block_parts(bot, guild, loaded(LEADERBOARD, guild.id))
+
+
+async def leaderboard_load(bot: Any, guild: Any) -> Any:
+    from .points_post import block_rows
+
+    return await block_rows(bot, guild)
 
 
 async def blocks_redraw(bot: Any, guild: Any) -> bool:
@@ -433,7 +453,37 @@ KINDS: dict[str, BlockKind] = {
         redraw=blocks_redraw,
         footprint=(1, 2, 10),
     ),
+    LEADERBOARD: BlockKind(
+        key=LEADERBOARD,
+        name_key=POSTS_BLOCK_LEADERBOARD_NAME,
+        name_default=POSTS_BLOCK_LEADERBOARD_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(
+            "points_board_title",
+            "points_board_xp_title",
+            "points_board_line",
+            "points_board_empty",
+            POINTS_TOP_N,
+            POINTS_BOARD_ORDER,
+        ),
+        parts=leaderboard_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 0, 0),
+        load=leaderboard_load,
+        owner=(POINTS_MODE, POINTS_FEATURE),
+    ),
 }
+
+
+def owner_of(kinds: Any) -> tuple[str, str] | None:
+    """The feature whose mode and rehearsal home a post carrying these blocks follows."""
+    for kind in kinds or ():
+        found = KINDS.get(str(kind))
+        if found is not None and found.owner is not None:
+            return found.owner
+    return None
 
 
 def kind_of(kind: Any) -> BlockKind | None:
@@ -756,6 +806,22 @@ def kept_part(message: Any) -> list[Any]:
     return [] if getattr(message, "content", "") else list(getattr(message, "embeds", [])[:1])
 
 
+async def sticky_edit(bot: Any, guild: Any, row: Any) -> dict[str, Any] | None:
+    """A sticky's post is drawn whole again, its rehearsal note too: the sticky reposts it fresh."""
+    from . import shadow
+    from . import sticky as sticky_rules
+    from .sticky_posts import post_message
+
+    owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
+    if owner is None:
+        return None
+    channel_id = int(owner["channel_id"])
+    rehearsing = int(owner["posted_channel_id"] or 0) != channel_id
+    note = shadow.note_line(bot, guild, f"<#{channel_id}>") if rehearsing else ""
+    payload, _ = await post_message(bot, guild, row, note)
+    return payload
+
+
 async def needs_redraw(bot: Any, row: Any, kinds: list[str], stamps: dict[str, Any]) -> bool:
     have = await drawn_of(bot.db, int(row["id"]))
     if any((stamps.get(kind) or None) != (have.get(kind) or None) for kind in kinds):
@@ -789,13 +855,12 @@ async def redraw_post(
     message = await posts.posted_message(bot, guild, row)
     if message is None:
         return False
-    made = posts.with_blocks({"content": None, "embed": None}, list(drawn.values()))
+    edit = await sticky_edit(bot, guild, row)
+    if edit is None:
+        made = posts.with_blocks({"content": None, "embed": None}, list(drawn.values()))
+        edit = {"embeds": kept_part(message) + made["embeds"], "view": made["view"]}
     try:
-        await message.edit(
-            embeds=kept_part(message) + made["embeds"],
-            view=made["view"],
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        await message.edit(**edit, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException as exc:
         log.warning("post blocks: could not redraw %s: %s", posts.row_value(row, "slug"), exc)
         await log_action(
@@ -951,8 +1016,12 @@ __all__ = [
     "remove_block",
     "reorder",
     "set_carried",
+    "LEADERBOARD",
     "LINKS",
     "LIVENOW",
+    "leaderboard_load",
+    "leaderboard_parts",
+    "owner_of",
     "LIVE_KINDS",
     "LOADED",
     "UPCOMING",

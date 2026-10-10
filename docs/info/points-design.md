@@ -1,5 +1,11 @@
 # The BaF point system — layer 1: engine, storage, API (and the specification layers 2 and 3 are built from)
 
+> **2026-10-09, later — the board as a sticky post** (branch `sticky-board`, off `main` `b87ed763`, NOT merged): the
+> `leaderboard` post block draws the top `points_top_n` in the `points_board_*` words; `points_post.pin_board` keeps
+> it as the sticky in `points_channel_id` (in shadow: the points rehearsal home); every run move redraws it through
+> `points_tickets.settle`; `/pb` gains a staff **Settings…** door; `GET`/`POST /api/points/board-post`; new word key
+> `points_board_post_title`. See [`sticky-board-design.md`](sticky-board-design.md).
+
 > **Audience:** the conductor, reviewers, and the agents that build layers 2 and 3 from this page alone.
 > **Status:** TRACKED · ✅ **LAYER 1 MERGED** to `main` (`4ab03a82`), schema **91 → 92**, keys 1091 → 1147, contract
 > routes 346 → 360, log head `points` (filed under `core`), 10 kinds. 🔨 **LAYER 2 BUILT on branch `points-discord`**

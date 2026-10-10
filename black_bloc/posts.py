@@ -12,6 +12,7 @@ from typing import Any
 import discord
 
 from . import shadow as shadow_home
+from . import sticky as sticky_rules
 from .actionlog import log_action
 from .logkinds import FEATURE_PAGES, VIA_BOOT, VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
@@ -1202,8 +1203,24 @@ async def turn_carrying(
     return fresh, CARRYING_NOW_SAID if door_drawn(fresh) else CARRYING_LATER_SAID
 
 
+async def sticky_copy(bot: Any, guild: Any, owner: Any) -> Any:
+    """A sticky's post lives where the sticky put it, whichever home that was."""
+    if not owner["message_id"] or not owner["posted_channel_id"]:
+        return None
+    channel = channel_of(bot, guild, owner["posted_channel_id"])
+    if channel is None:
+        return None
+    try:
+        return await channel.fetch_message(int(owner["message_id"]))
+    except discord.HTTPException:
+        return None
+
+
 async def posted_message(bot: Any, guild: Any, row: Any) -> Any:
     """The message the row's `posted_hash` describes — the real one, else the shadow copy."""
+    owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
+    if owner is not None:
+        return await sticky_copy(bot, guild, owner)
     real = row_value(row, "message_id")
     if real:
         channel = channel_of(bot, guild, row_value(row, "channel_id"))
@@ -1346,6 +1363,11 @@ async def publish_post(
 
     In shadow the copy goes to the shadow channel whatever the row says; the first real
     post on `on` takes that copy back down."""
+    owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
+    if owner is not None:
+        from .sticky_posts import desk_of
+
+        return await desk_of(bot).repost(guild, int(owner["channel_id"]), actor, via=via)
     mode = mode_of(bot.store, guild.id)
     if mode == OFF:
         return refusal(POSTS_OFF, "posts_off", 409)
@@ -1445,6 +1467,14 @@ async def take_down_post(
     bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """Whichever copies exist go — real, shadow or both; every word stays on the row."""
+    owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
+    if owner is not None:
+        from .sticky_posts import desk_of
+
+        paused = await desk_of(bot).pause(guild, int(owner["channel_id"]), actor, via=via)
+        if not paused.ok:
+            return paused
+        return Outcome(True, paused.message, value=await get_post_by_id(bot.db, int(row["id"])))
     title = str(row_value(row, "title", ""))
     real = row_value(row, "message_id")
     ghost = shadow_id(row)
@@ -1609,6 +1639,8 @@ async def reconcile_posts(bot: Any) -> dict[str, int]:
     for row in await posted_posts(db):
         guild = known.get(int(row["guild_id"]))
         if guild is None or bool(getattr(guild, "unavailable", False)):
+            continue
+        if await sticky_rules.row_of_post(db, int(row["id"])) is not None:
             continue
         for shadow in (False, True):
             message_id = shadow_id(row) if shadow else row_value(row, "message_id")

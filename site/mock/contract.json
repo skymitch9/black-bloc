@@ -229,6 +229,7 @@
       "points_board_empty",
       "points_board_line",
       "points_board_order",
+      "points_board_post_title",
       "points_board_title",
       "points_board_xp_title",
       "points_bounties_heading",
@@ -385,7 +386,6 @@
       "marathon_baf_event_min_runs": 1,
       "marathon_baf_event_ping_minutes": 1,
       "marathon_early_start_minutes": 0,
-      "marathon_live_poll_minutes": 1,
       "marathon_far_poll_hours": 1,
       "marathon_feed_hours": 1,
       "marathon_feed_recent_days": 0,
@@ -393,6 +393,7 @@
       "marathon_late_grace_minutes": 0,
       "marathon_late_track_shout_minutes": 0,
       "marathon_lead_days": 1,
+      "marathon_live_poll_minutes": 1,
       "marathon_move_minutes": 1,
       "marathon_ping_minutes": 0,
       "marathon_poll_minutes": 10,
@@ -439,8 +440,10 @@
       "spotlight_poll_minutes": 1,
       "spotlight_window_keep_days": 1,
       "sticky_after_messages": 1,
+      "sticky_max_buried_minutes": 0,
       "sticky_min_seconds": 5,
       "sticky_panel_minutes": 1,
+      "sticky_quiet_seconds": 0,
       "structure_backup_keep": 1,
       "structure_backup_notice_lines": 1,
       "structure_backup_panel_minutes": 1,
@@ -496,7 +499,6 @@
       "marathon_baf_event_min_runs": 50,
       "marathon_baf_event_ping_minutes": 1440,
       "marathon_early_start_minutes": 240,
-      "marathon_live_poll_minutes": 60,
       "marathon_far_poll_hours": 168,
       "marathon_feed_hours": 168,
       "marathon_feed_recent_days": 30,
@@ -504,6 +506,7 @@
       "marathon_late_grace_minutes": 360,
       "marathon_late_track_shout_minutes": 1440,
       "marathon_lead_days": 60,
+      "marathon_live_poll_minutes": 60,
       "marathon_move_minutes": 120,
       "marathon_ping_minutes": 240,
       "marathon_poll_minutes": 120,
@@ -553,7 +556,9 @@
       "spotlight_poll_minutes": 30,
       "spotlight_window_keep_days": 365,
       "sticky_after_messages": 100,
+      "sticky_max_buried_minutes": 1440,
       "sticky_min_seconds": 3600,
+      "sticky_quiet_seconds": 3600,
       "structure_backup_hour": 23,
       "structure_backup_keep": 365,
       "structure_backup_notice_lines": 40,
@@ -2830,7 +2835,8 @@
       "method": "GET",
       "path": "/api/sticky",
       "read_by": [
-        "sticky-section.js"
+        "sticky-section.js",
+        "page-leaderboard.js Settings"
       ],
       "shape": "list",
       "keys": [
@@ -2838,6 +2844,8 @@
         "channel_name",
         "gone",
         "text",
+        "post",
+        "words",
         "paused",
         "trouble",
         "state",
@@ -11834,6 +11842,55 @@
         "changed",
         "announce"
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/points/board-post",
+      "read_by": [
+        "page-leaderboard.js Settings"
+      ],
+      "shape": "object",
+      "keys": [
+        "channel_id",
+        "channel",
+        "post",
+        "sticky",
+        "other",
+        "message"
+      ],
+      "settings": {
+        "points_channel_id": "{board_channel_id}"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/points/board-post",
+      "body": {},
+      "read_by": [
+        "page-leaderboard.js Pin the leaderboard"
+      ],
+      "shape": "object",
+      "keys": [
+        "channel_id",
+        "channel",
+        "post",
+        "sticky",
+        "other",
+        "message"
+      ],
+      "nested": {
+        "sticky": [
+          "channel_id",
+          "words",
+          "paused",
+          "trouble",
+          "state",
+          "post"
+        ]
+      },
+      "settings": {
+        "points_channel_id": "{board_channel_id}"
+      }
     },
     {
       "method": "GET",

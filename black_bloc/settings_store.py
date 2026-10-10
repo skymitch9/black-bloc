@@ -3511,6 +3511,9 @@ STICKY_AFTER_MESSAGES = "sticky_after_messages"
 STICKY_MIN_SECONDS = "sticky_min_seconds"
 STICKY_SILENT = "sticky_silent"
 STICKY_PANEL_MINUTES = "sticky_panel_minutes"
+STICKY_QUIET_SECONDS = "sticky_quiet_seconds"
+STICKY_MAX_BURIED_MINUTES = "sticky_max_buried_minutes"
+STICKY_PIN_COPIES = "sticky_pin_copies"
 STICKY_MODES = ("off", "shadow", "on")
 STICKY_MODE_DEFAULT = "shadow"
 STICKY_AFTER_MESSAGES_DEFAULT = 5
@@ -3521,15 +3524,28 @@ STICKY_MIN_SECONDS_MIN = 5
 STICKY_MIN_SECONDS_MAX = 3600
 STICKY_SILENT_DEFAULT = True
 STICKY_PANEL_MINUTES_DEFAULT = 10
+STICKY_QUIET_SECONDS_DEFAULT = 300
+STICKY_QUIET_SECONDS_MIN = 0
+STICKY_QUIET_SECONDS_MAX = 3600
+STICKY_MAX_BURIED_MINUTES_DEFAULT = 60
+STICKY_MAX_BURIED_MINUTES_MIN = 0
+STICKY_MAX_BURIED_MINUTES_MAX = 1440
+STICKY_PIN_COPIES_DEFAULT = True
 STICKY_DEFAULTS: dict[str, Any] = {
     STICKY_MODE: STICKY_MODE_DEFAULT,
     STICKY_AFTER_MESSAGES: STICKY_AFTER_MESSAGES_DEFAULT,
     STICKY_MIN_SECONDS: STICKY_MIN_SECONDS_DEFAULT,
     STICKY_SILENT: STICKY_SILENT_DEFAULT,
     STICKY_PANEL_MINUTES: STICKY_PANEL_MINUTES_DEFAULT,
+    STICKY_QUIET_SECONDS: STICKY_QUIET_SECONDS_DEFAULT,
+    STICKY_MAX_BURIED_MINUTES: STICKY_MAX_BURIED_MINUTES_DEFAULT,
+    STICKY_PIN_COPIES: STICKY_PIN_COPIES_DEFAULT,
 }
 KEY_TYPES.update(
     {
+        STICKY_QUIET_SECONDS: "int",
+        STICKY_MAX_BURIED_MINUTES: "int",
+        STICKY_PIN_COPIES: "bool",
         STICKY_MODE: "enum",
         STICKY_AFTER_MESSAGES: "int",
         STICKY_MIN_SECONDS: "int",
@@ -3543,6 +3559,17 @@ KEY_MAX[STICKY_AFTER_MESSAGES] = STICKY_AFTER_MESSAGES_MAX
 KEY_MIN[STICKY_MIN_SECONDS] = STICKY_MIN_SECONDS_MIN
 KEY_MAX[STICKY_MIN_SECONDS] = STICKY_MIN_SECONDS_MAX
 KEY_MIN[STICKY_PANEL_MINUTES] = 1
+KEY_MIN[STICKY_QUIET_SECONDS] = STICKY_QUIET_SECONDS_MIN
+KEY_MAX[STICKY_QUIET_SECONDS] = STICKY_QUIET_SECONDS_MAX
+KEY_MIN[STICKY_MAX_BURIED_MINUTES] = STICKY_MAX_BURIED_MINUTES_MIN
+KEY_MAX[STICKY_MAX_BURIED_MINUTES] = STICKY_MAX_BURIED_MINUTES_MAX
+KEY_MAX_REASON[STICKY_QUIET_SECONDS] = (
+    "{limit} seconds is an hour of quiet; sticky_max_buried_minutes is the key for longer waits."
+)
+KEY_MAX_REASON[STICKY_MAX_BURIED_MINUTES] = (
+    "{limit} minutes is a day; past that, 0 means a sticky message waits for quiet however long "
+    "it takes."
+)
 KEY_MIN_REASON[STICKY_AFTER_MESSAGES] = (
     "A sticky message has to wait for at least {limit} new message before it moves."
 )
@@ -3578,6 +3605,22 @@ KEY_HELP.update(
         STICKY_SILENT: (
             "whether a sticky message is posted silently, so moving it to the bottom never "
             "lights up anybody's notifications. on by default"
+        ),
+        STICKY_QUIET_SECONDS: (
+            "once sticky_after_messages have been counted, how many seconds the channel must "
+            "be quiet before the sticky message moves down, so it never cuts into a "
+            "conversation; 300 by default, 0 to 3600. 0 moves it as soon as the count and "
+            "sticky_min_seconds allow"
+        ),
+        STICKY_MAX_BURIED_MINUTES: (
+            "the longest, in minutes, a sticky message waits for quiet after the count was "
+            "reached; past it the message moves down even mid-conversation. 60 by default, 0 "
+            "to 1440, and 0 waits for quiet however long it takes"
+        ),
+        STICKY_PIN_COPIES: (
+            "whether each new copy of a sticky message is pinned (and Discord's 'pinned a "
+            "message' line is removed by quiet_bot_pins), so it can always be found in the "
+            "channel's pins. on by default"
         ),
         STICKY_PANEL_MINUTES: (
             "minutes the /sticky panel stays live before its buttons disable themselves; 10 by "
@@ -5059,6 +5102,12 @@ POINTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "Leaderboard",
         (),
         "the heading of the leaderboard ranked by speedpoints",
+    ),
+    "points_board_post_title": (
+        "Leaderboard",
+        (),
+        "the title of the leaderboard post that Pin the leaderboard makes on the Posts page; "
+        "the post itself shows points_board_title",
     ),
     "points_board_xp_title": (
         "Leaderboard by XP",
@@ -9499,6 +9548,8 @@ POSTS_BLOCK_UPCOMING_NAME = "posts_block_upcoming_name"
 POSTS_BLOCK_UPCOMING_NAME_DEFAULT = "Upcoming events"
 POSTS_BLOCK_LINKS_NAME = "posts_block_links_name"
 POSTS_BLOCK_LINKS_NAME_DEFAULT = "Link buttons"
+POSTS_BLOCK_LEADERBOARD_NAME = "posts_block_leaderboard_name"
+POSTS_BLOCK_LEADERBOARD_NAME_DEFAULT = "Leaderboard"
 LIVE_LINE_FIELDS = ("name", "title")
 UPCOMING_LINE_FIELDS = ("title", "when", "relative")
 LINKS_MAX = 10
@@ -9584,6 +9635,7 @@ BLOCKS_LIVE_DEFAULTS: dict[str, Any] = {
     POSTS_BLOCK_LIVENOW_NAME: POSTS_BLOCK_LIVENOW_NAME_DEFAULT,
     POSTS_BLOCK_UPCOMING_NAME: POSTS_BLOCK_UPCOMING_NAME_DEFAULT,
     POSTS_BLOCK_LINKS_NAME: POSTS_BLOCK_LINKS_NAME_DEFAULT,
+    POSTS_BLOCK_LEADERBOARD_NAME: POSTS_BLOCK_LEADERBOARD_NAME_DEFAULT,
 }
 KEY_TYPES.update(
     {
@@ -9605,6 +9657,7 @@ KEY_TYPES.update(
         POSTS_BLOCK_LIVENOW_NAME: "text",
         POSTS_BLOCK_UPCOMING_NAME: "text",
         POSTS_BLOCK_LINKS_NAME: "text",
+        POSTS_BLOCK_LEADERBOARD_NAME: "text",
     }
 )
 KEY_HELP.update(
@@ -9662,6 +9715,10 @@ KEY_HELP.update(
         ),
         POSTS_BLOCK_LINKS_NAME: (
             "what the link-buttons block is called in the Posts page's Add a block list, its "
+            "Blocks section and the /posts card. Members never see it"
+        ),
+        POSTS_BLOCK_LEADERBOARD_NAME: (
+            "what the leaderboard block is called in the Posts page's Add a block list, its "
             "Blocks section and the /posts card. Members never see it"
         ),
     }

@@ -51,6 +51,15 @@ class FakeMessage:
         self.id = message_id
         self.content = content
         self.kwargs = kwargs
+        self.edits = []
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
+
+    async def pin(self, reason=None):
+        if self.channel.pin_raises is not None:
+            raise self.channel.pin_raises
+        self.channel.pinned.append(self.id)
 
     async def delete(self):
         if self.channel.delete_raises is not None:
@@ -72,6 +81,8 @@ class FakeChannel:
         self.deleted = []
         self.send_raises = None
         self.delete_raises = None
+        self.pin_raises = None
+        self.pinned = []
         self.perms = SimpleNamespace(view_channel=True, send_messages=True)
 
     def permissions_for(self, who):
@@ -88,6 +99,12 @@ class FakeChannel:
     def get_partial_message(self, message_id):
         found = next((one for one in self.messages if one.id == int(message_id)), None)
         return found if found is not None else FakeMessage(self, int(message_id), "", {})
+
+    async def fetch_message(self, message_id):
+        found = next((one for one in self.messages if one.id == int(message_id)), None)
+        if found is None:
+            raise discord.NotFound(_Response(404), "Unknown Message")
+        return found
 
 
 class FakeGuild:
@@ -149,12 +166,17 @@ def person(channel, *, bot=False, webhook=None, kind=discord.MessageType.default
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    return await make_bot(db)
+
+
+async def make_bot(db):
     store = SettingsStore(db, load_settings(_env_file=None))
     await store.load()
     guild = FakeGuild()
     for channel in guild.channels.values():
         channel.guild = guild
     await store.set(GUILD, "shadow_channel_id", HOME)
+    await store.set(GUILD, "sticky_quiet_seconds", 0)
     return SimpleNamespace(
         db=db,
         store=store,
@@ -892,3 +914,337 @@ def test_only_an_outage_that_passes_by_itself_is_retried():
     for status in (400, 403, 404):
         assert not passing(discord.HTTPException(_Response(status), "no"))
     assert not passing(forbidden()) and not passing(ValueError("no"))
+
+
+# --- a post as the sticky ---------------------------------------------------------------------
+
+
+async def a_post(bot, slug="leaderboard", *, body="", style="embed", blocks=("leaderboard",)):
+    from black_bloc import post_blocks, posts
+
+    post_id = await posts.create_post(
+        bot.db, GUILD, slug=slug, title=slug.title(), body=body, style=style, pin=False
+    )
+    row = await posts.get_post_by_id(bot.db, post_id)
+    for kind in blocks:
+        await post_blocks.attach(bot.db, row, kind)
+    return post_id
+
+
+async def post_row(bot, post_id):
+    from black_bloc import posts
+
+    return await posts.get_post_by_id(bot.db, post_id)
+
+
+async def points_on(bot):
+    await bot.store.set(GUILD, "points_mode", "on")
+
+
+async def test_a_post_sticky_posts_the_post_pins_it_and_both_rows_know_the_copy(bot, desk, db):
+    await points_on(bot)
+    post_id = await a_post(bot)
+
+    outcome = await desk.save(bot.guild, RUNS, None, STAFFER, post="leaderboard")
+
+    assert outcome.ok, outcome.message
+    copy = channel(bot).messages[0]
+    assert copy.content is None
+    assert [embed.title for embed in copy.kwargs["embeds"]] == ["Leaderboard"]
+    assert copy.kwargs["embeds"][0].description == "No runs have been approved yet."
+    assert copy.kwargs["allowed_mentions"].roles is False
+    assert channel(bot).pinned == [copy.id]
+    row = await row_of(bot)
+    assert (row["post_id"], row["message_id"], row["posted_channel_id"]) == (
+        post_id,
+        copy.id,
+        RUNS,
+    )
+    post = await post_row(bot, post_id)
+    assert (post["message_id"], post["channel_id"], post["shadow_message_id"]) == (
+        copy.id,
+        RUNS,
+        None,
+    )
+    assert await kinds(db) == ["sticky.set", "sticky.posted"]
+    assert rules.words_of(row) == "The post **Leaderboard**"
+
+
+async def test_the_next_move_deletes_and_so_unpins_the_old_copy_first(bot, desk, clock):
+    await points_on(bot)
+    post_id = await a_post(bot)
+    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
+    first = channel(bot).messages[0].id
+    await bot.store.set(GUILD, "sticky_quiet_seconds", 0)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+
+    now = channel(bot).messages[0].id
+    assert channel(bot).deleted == [first] and len(channel(bot).messages) == 1
+    assert channel(bot).pinned == [first, now]
+    assert (await post_row(bot, post_id))["message_id"] == now
+
+
+async def test_a_pin_that_fails_leaves_the_copy_and_is_said_once(bot, desk, db, clock):
+    await points_on(bot)
+    await a_post(bot)
+    channel(bot).pin_raises = forbidden()
+
+    await desk.save(bot.guild, RUNS, None, STAFFER, post="leaderboard")
+    await bot.store.set(GUILD, "sticky_quiet_seconds", 0)
+    clock.tick(600)
+    await talk(desk, bot, 5)
+
+    assert len(channel(bot).messages) == 1 and (await row_of(bot))["trouble"] is None
+    assert (await row_of(bot))["reposts"] == 1
+    assert (await kinds(db)).count("sticky.pin_failed") == 1
+
+
+async def test_sticky_pin_copies_off_pins_nothing(bot, desk):
+    await bot.store.set(GUILD, "sticky_pin_copies", False)
+    await live(bot, desk)
+
+    assert channel(bot).messages and channel(bot).pinned == []
+
+
+async def test_a_text_sticky_is_pinned_too(bot, desk):
+    await live(bot, desk)
+
+    assert channel(bot).pinned == [channel(bot).messages[0].id]
+
+
+async def test_the_points_mode_decides_where_the_leaderboard_goes_not_the_sticky_mode(bot, desk):
+    await bot.store.set(GUILD, "points_shadow_channel_id", OTHER_HOME)
+    post_id = await a_post(bot)
+
+    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
+
+    copy = channel(bot, OTHER_HOME).messages[0]
+    assert channel(bot).messages == [] and channel(bot, HOME).messages == []
+    assert copy.content == f"Rehearsal — this is where it would go: <#{RUNS}>"
+    post = await post_row(bot, post_id)
+    assert (post["message_id"], post["shadow_message_id"]) == (None, copy.id)
+
+    await bot.store.set(GUILD, "points_mode", "on")
+    await desk.settle(bot.guild)
+
+    assert channel(bot, OTHER_HOME).messages == [] and len(channel(bot).messages) == 1
+    post = await post_row(bot, post_id)
+    assert (post["message_id"], post["shadow_message_id"]) == (channel(bot).messages[0].id, None)
+
+
+async def test_points_off_or_sticky_off_takes_the_leaderboard_down(bot, desk):
+    await points_on(bot)
+    await a_post(bot)
+    await desk.save(bot.guild, RUNS, None, STAFFER, post="leaderboard")
+
+    await bot.store.set(GUILD, "points_mode", "off")
+    await desk.settle(bot.guild)
+    assert channel(bot).messages == []
+
+    await points_on(bot)
+    await desk.settle(bot.guild)
+    assert len(channel(bot).messages) == 1
+
+    await bot.store.set(GUILD, "sticky_mode", "off")
+    await desk.settle(bot.guild)
+    assert channel(bot).messages == []
+
+
+async def test_a_post_without_an_owner_follows_the_sticky_mode(bot, desk):
+    await a_post(bot, "rules", body="Be kind.", style="plain", blocks=())
+
+    await desk.save(bot.guild, RUNS, None, STAFFER, post="rules")
+
+    copy = channel(bot, HOME).messages[0]
+    assert copy.content == f"Rehearsal — this is where it would go: <#{RUNS}>\nBe kind."
+
+
+async def test_a_deleted_post_stops_the_sticky_in_words(bot, desk):
+    from black_bloc import posts
+
+    await points_on(bot)
+    post_id = await a_post(bot)
+    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
+    await desk.pause(bot.guild, RUNS, STAFFER)
+    await posts.delete_post(bot.db, post_id)
+
+    outcome = await desk.resume(bot.guild, RUNS, STAFFER)
+
+    assert rules.TROUBLE_POST_GONE in outcome.message
+    assert (await row_of(bot))["trouble"] == rules.TROUBLE_POST_GONE
+
+
+async def test_a_post_is_refused_in_words_when_it_cannot_be_a_sticky(bot, desk):
+    from black_bloc import posts
+
+    await a_post(bot, "empty", blocks=())
+    door = await a_post(bot, "door", body="Hi", blocks=("frontdoor",))
+    up = await a_post(bot, "up", body="Hi", blocks=())
+    await posts.set_posted(bot.db, up, 77, "hash")
+    await points_on(bot)
+    await a_post(bot)
+    await desk.save(bot.guild, OTHER_HOME, None, STAFFER, post="leaderboard")
+
+    found = {
+        wanted: (await desk.save(bot.guild, RUNS, None, STAFFER, post=wanted)).code
+        for wanted in ("nothing", "empty", door, "up", "leaderboard")
+    }
+
+    assert found == {
+        "nothing": "no_such_post",
+        "empty": "post_is_empty",
+        door: "post_carries_door",
+        "up": "post_is_posted",
+        "leaderboard": "post_is_a_sticky",
+    }
+    assert await row_of(bot) is None
+
+
+async def test_the_posts_pages_update_reposts_and_take_down_pauses(bot, desk):
+    from black_bloc import posts
+
+    await points_on(bot)
+    post_id = await a_post(bot)
+    bot.sticky_desk = desk
+    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
+    first = channel(bot).messages[0].id
+
+    updated = await posts.publish_post(bot, bot.guild, await post_row(bot, post_id), STAFFER)
+
+    assert updated.ok and int(updated.value["id"]) == post_id
+    assert channel(bot).deleted == [first] and len(channel(bot).messages) == 1
+
+    taken = await posts.take_down_post(bot, bot.guild, await post_row(bot, post_id), STAFFER)
+
+    assert taken.ok and channel(bot).messages == []
+    assert (await row_of(bot))["paused"] == 1
+    assert not posts.is_posted(await post_row(bot, post_id))
+
+
+async def test_a_board_change_edits_the_sticky_copy_in_place(bot, desk):
+    from black_bloc import post_blocks
+
+    await points_on(bot)
+    post_id = await a_post(bot)
+    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
+    copy = channel(bot).messages[0]
+    await bot.store.set(GUILD, "points_board_empty", "Be the first.")
+
+    drew = await post_blocks.redraw_post(bot, bot.guild, await post_row(bot, post_id))
+
+    assert drew is True
+    assert copy.edits[-1]["embeds"][0].description == "Be the first."
+    assert copy.edits[-1]["content"] is None and len(channel(bot).messages) == 1
+
+
+# --- the quieter move: the count, then quiet, never past the ceiling --------------------------
+
+
+def chatty(bot, clock, talks):
+    """A desk whose sleeps let people keep talking: `talks` sleeps each end with one message."""
+    left = {"talks": talks}
+    holder = {}
+
+    async def sleep(seconds):
+        clock.slept.append(seconds)
+        if left["talks"] > 0:
+            left["talks"] -= 1
+            clock.tick(seconds - 10)
+            await holder["desk"].on_message(person(channel(bot)))
+            clock.tick(10)
+            return
+        clock.tick(seconds)
+
+    holder["desk"] = Desk(bot, now=clock.now, sleep=sleep)
+    return holder["desk"]
+
+
+async def quiet_rule(bot, quiet=300, ceiling=60):
+    await bot.store.set(GUILD, "sticky_quiet_seconds", quiet)
+    await bot.store.set(GUILD, "sticky_max_buried_minutes", ceiling)
+
+
+async def settled_timer(desk):
+    await desk.waiting[RUNS]
+
+
+async def test_the_count_then_five_quiet_minutes_moves_it_once(bot, clock):
+    desk = chatty(bot, clock, 0)
+    await quiet_rule(bot)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+    assert len(channel(bot).messages) == 1 and list(desk.waiting) == [RUNS]
+    await settled_timer(desk)
+
+    assert clock.slept == [300.0]
+    assert len(channel(bot).messages) == 1 and channel(bot).deleted
+    assert (await row_of(bot))["reposts"] == 1
+
+
+async def test_talk_while_waiting_pushes_the_move_back_on_the_same_timer(bot, clock):
+    desk = chatty(bot, clock, 1)
+    await quiet_rule(bot)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+    timer = desk.waiting[RUNS]
+    await settled_timer(desk)
+
+    assert clock.slept == [300.0, 290.0]
+    assert timer.done() and desk.waiting == {}
+    assert (await row_of(bot))["reposts"] == 1
+
+
+async def test_the_ceiling_moves_it_an_hour_after_the_count_however_busy(bot, clock):
+    desk = chatty(bot, clock, 1000)
+    await quiet_rule(bot)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+    await settled_timer(desk)
+
+    assert sum(clock.slept) == pytest.approx(3600.0)
+    assert (await row_of(bot))["reposts"] == 1
+
+
+async def test_no_ceiling_waits_for_quiet_however_long(bot, clock):
+    desk = chatty(bot, clock, 30)
+    await quiet_rule(bot, ceiling=0)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+    await settled_timer(desk)
+
+    assert sum(clock.slept) > 7200
+    assert (await row_of(bot))["reposts"] == 1
+
+
+async def test_the_gap_since_the_last_copy_is_still_the_floor(bot, clock):
+    desk = chatty(bot, clock, 0)
+    await quiet_rule(bot, quiet=10)
+    await bot.store.set(GUILD, "sticky_min_seconds", 600)
+    await live(bot, desk)
+    clock.tick(5)
+
+    await talk(desk, bot, 5)
+    await settled_timer(desk)
+
+    assert clock.slept == [595.0]
+
+
+async def test_quiet_zero_is_the_old_rule_and_moves_at_the_count(bot, clock):
+    desk = chatty(bot, clock, 0)
+    await quiet_rule(bot, quiet=0)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+
+    assert clock.slept == [] and (await row_of(bot))["reposts"] == 1

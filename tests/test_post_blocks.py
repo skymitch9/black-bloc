@@ -93,6 +93,7 @@ def test_the_front_door_is_the_first_kind_and_goes_on_one_post_at_a_time():
         "livenow",
         "upcoming",
         "links",
+        "leaderboard",
     ]
     assert found.exclusive and found.cache_column == "carries_door"
     assert found.parts is post_blocks.door_parts
@@ -671,7 +672,7 @@ def test_the_three_live_kinds_go_on_any_number_of_posts_and_the_live_pair_loads_
     assert post_blocks.KINDS["links"].load is None
     assert post_blocks.KINDS["frontdoor"].load is None
     assert post_blocks.KINDS["tempvoice"].load is None
-    assert post_blocks.LIVE_KINDS == ("livenow", "upcoming")
+    assert post_blocks.LIVE_KINDS == ("livenow", "upcoming", "leaderboard")
     assert post_blocks.KINDS["links"].footprint == (1, 2, 10)
 
 

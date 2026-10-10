@@ -24,6 +24,8 @@ def row(**given):
         "posted_channel_id": None,
         "posted_at": None,
         "reposts": 0,
+        "post_id": None,
+        "post_title": None,
     }
     return base | given
 
@@ -46,7 +48,7 @@ async def store(db, monkeypatch):
     return found
 
 
-def test_the_six_keys_are_posts_keys_with_the_briefed_defaults(store):
+def test_the_nine_keys_are_posts_keys_with_the_briefed_defaults(store):
     assert set(settings_store.STICKY_KEYS) == {
         "sticky_mode",
         "sticky_after_messages",
@@ -54,6 +56,9 @@ def test_the_six_keys_are_posts_keys_with_the_briefed_defaults(store):
         "sticky_silent",
         "sticky_panel_minutes",
         "sticky_shadow_channel_id",
+        "sticky_quiet_seconds",
+        "sticky_max_buried_minutes",
+        "sticky_pin_copies",
     }
     assert {settings_store.namespace_of(key) for key in settings_store.STICKY_KEYS} == {"posts"}
     assert KEY_TYPES["sticky_mode"] == "enum"
@@ -61,6 +66,8 @@ def test_the_six_keys_are_posts_keys_with_the_briefed_defaults(store):
     assert rules.mode_of(store, GUILD) == "shadow"
     assert rules.numbers(store, GUILD) == (5, 30, True)
     assert rules.panel_minutes(store, GUILD) == 10
+    assert rules.numbers_waiting(store, GUILD) == (300, 60)
+    assert rules.pins(store, GUILD) is True
     assert store.get(GUILD, "sticky_shadow_channel_id") is None
 
 
@@ -215,3 +222,28 @@ async def test_the_copy_the_pause_and_the_delete_are_each_one_write(db):
     assert await rules.delete_row(db, GUILD, RUNS) is True
     assert await rules.delete_row(db, GUILD, RUNS) is False
     assert await rules.get_row(db, GUILD, RUNS) is None
+
+
+def test_quiet_is_owed_from_the_last_message_and_the_ceiling_cuts_it_short():
+    from datetime import UTC, datetime, timedelta
+
+    t0 = datetime(2026, 10, 9, 20, 0, tzinfo=UTC)
+    later = t0 + timedelta(minutes=10)
+
+    assert rules.quiet_left(t0, t0, t0, 300, 60) == 300
+    assert rules.quiet_left(t0 + timedelta(seconds=120), t0, t0, 300, 60) == 180
+    assert rules.quiet_left(later, later, t0, 300, 60) == 300
+    busy = t0 + timedelta(minutes=59)
+    over = t0 + timedelta(minutes=61)
+    assert rules.quiet_left(busy, busy, t0, 300, 60) == 60
+    assert rules.quiet_left(over, over, t0, 300, 60) == 0
+    assert rules.quiet_left(t0 + timedelta(hours=5), t0 + timedelta(hours=5), t0, 300, 0) == 300
+    assert rules.quiet_left(later, later, t0, 0, 60) == 0
+    assert rules.quiet_left(later, None, t0, 300, 60) == 0
+
+
+def test_the_gap_is_a_floor_under_the_quiet():
+    assert rules.due_in(25, 0) == 25
+    assert rules.due_in(0, 300) == 300
+    assert rules.due_in(500, 300) == 500
+    assert rules.due_in(-3, 0) == 0

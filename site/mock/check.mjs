@@ -31,6 +31,8 @@ const IDS = {
   // so Pause, Remove and Resume each reach a row their move is legal on.
   sticky_channel_id: '800000000000000002',
   sticky_paused_channel_id: '800000000000000003',
+  // The leaderboard is already the sticky post in #speed-and-pbs, so Pin answers "already".
+  board_channel_id: '1076003845232148580',
   // The personal best feed: one member in each state a move is legal from.
   pb_matched_member_id: '700000000000000002',
   pb_free_member_id: '700000000000000003',

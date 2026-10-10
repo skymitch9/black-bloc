@@ -6,6 +6,7 @@ from typing import Any
 
 import discord
 
+from . import posts
 from . import sticky as rules
 from .actionlog import send_logs
 from .command_errors import AnswersErrors
@@ -36,11 +37,17 @@ CHANNEL_TYPES = [discord.ChannelType.text, discord.ChannelType.news]
 
 
 class StickyPanel(Panel):
-    def __init__(self, minutes: int, *, channel_id: int | None = None) -> None:
+    def __init__(
+        self, minutes: int, *, channel_id: int | None = None, post_id: int | None = None
+    ) -> None:
         super().__init__(minutes, footer=rules.PANEL_TIMEOUT_FOOTER, again=self.shown_again)
         self.channel_id = channel_id
+        self.post_id = post_id
 
     async def shown_again(self, interaction: discord.Interaction, previous: Any) -> None:
+        if self.post_id is not None:
+            await render_where(interaction, self.post_id, previous)
+            return
         if self.channel_id is None:
             await render_root(interaction, previous)
             return
@@ -65,11 +72,17 @@ def channel_names(guild: Any, rows: Any) -> dict[int, str]:
     return found
 
 
+async def modes_of(bot: Any, guild: Any, rows: Any) -> dict[int, str]:
+    desk = desk_of(bot)
+    return {int(row["channel_id"]): (await desk.rule_of(guild, row))[0] for row in rows}
+
+
 async def build_root(bot: Any, guild: Any) -> tuple[discord.Embed, StickyPanel]:
     rows = await rules.rows_for_guild(bot.db, guild.id)
     mode = rules.mode_of(bot.store, guild.id)
+    modes = await modes_of(bot, guild, rows)
     embed = discord.Embed(
-        title=rules.PANEL_TITLE, description=clamped(rules.root_lines(rows, mode))
+        title=rules.PANEL_TITLE, description=clamped(rules.root_lines(rows, mode, modes))
     )
     view = StickyPanel(minutes_for(bot, guild.id))
     options = rules.sticky_options(rows, channel_names(guild, rows))
@@ -77,13 +90,16 @@ async def build_root(bot: Any, guild: Any) -> tuple[discord.Embed, StickyPanel]:
         view.add_item(StickyPick(options))
     view.add_item(AddPick())
     view.add_item(ModePick(mode))
+    offered = rules.post_options(await posts.list_posts(bot.db, guild.id))
+    if offered:
+        view.add_item(PostPick(offered, rules.POST_PLACEHOLDER, row=4))
     url = site_url(bot)
     for move in rules.root_buttons(has_site=url is not None):
         view.add_item(SiteButton(move, url) if move.action == rules.SITE else MoveButton(move))
     return (embed, view)
 
 
-def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, StickyPanel]:
+async def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, StickyPanel]:
     channel_id = int(row["channel_id"])
     channel = guild.get_channel(channel_id)
     name = getattr(channel, "name", None)
@@ -92,12 +108,26 @@ def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, StickyPan
         if name
         else rules.GONE_CHANNEL.format(ident=channel_id)
     )
-    state = rules.row_line(row, rules.mode_of(bot.store, guild.id))
-    body = str(row["text"])[: DESCRIPTION_LIMIT - len(state) - 2]
+    mode, _ = await desk_of(bot).rule_of(guild, row)
+    state = rules.row_line(row, mode)
+    body = rules.words_of(row)[: DESCRIPTION_LIMIT - len(state) - 2]
     embed = discord.Embed(title=title[:256], description=f"{body}\n\n{state}")
     view = StickyPanel(minutes_for(bot, guild.id), channel_id=channel_id)
     for move in rules.card_buttons(row):
         view.add_item(MoveButton(move))
+    if rules.is_post(row):
+        offered = rules.post_options(await posts.list_posts(bot.db, guild.id), row["post_id"])
+        if offered:
+            view.add_item(PostPick(offered, rules.SWAP_PLACEHOLDER, row=2, channel_id=channel_id))
+    return (embed, view)
+
+
+async def build_where(bot: Any, guild: Any, post: Any) -> tuple[discord.Embed, StickyPanel]:
+    title = str(post["title"] or post["slug"])
+    embed = discord.Embed(title=rules.WHERE_TITLE.format(title=title)[:256])
+    view = StickyPanel(minutes_for(bot, guild.id), post_id=int(post["id"]))
+    view.add_item(WherePick(int(post["id"])))
+    view.add_item(MoveButton(rules.BACK_MOVE))
     return (embed, view)
 
 
@@ -122,7 +152,39 @@ async def render_card(
     if row is None:
         await render_root(interaction, previous)
         return
-    await show(interaction, build_card(bot, interaction.guild, row), previous)
+    await show(interaction, await build_card(bot, interaction.guild, row), previous)
+
+
+async def render_where(
+    interaction: discord.Interaction, post_id: int, previous: Any = None
+) -> None:
+    """A post that is gone by the time its channel is asked for lands back on the list."""
+    bot = interaction.client
+    post = await posts.get_post_by_id(bot.db, int(post_id))
+    if post is None or int(post["guild_id"]) != interaction.guild.id:
+        await render_root(interaction, previous)
+        return
+    await show(interaction, await build_where(bot, interaction.guild, post), previous)
+
+
+async def open_where(interaction: discord.Interaction, post_id: int, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_where(interaction, post_id, previous)
+
+
+async def run_keep_post(
+    interaction: discord.Interaction, channel_id: int, post_id: int, previous: Any = None
+) -> None:
+    """A refused keep is answered and the panel is left where it was."""
+    if not await opened(interaction):
+        return
+    outcome = await desk_of(interaction.client).save(
+        interaction.guild, channel_id, None, interaction.user, post=int(post_id)
+    )
+    if outcome.ok:
+        await render_card(interaction, channel_id, previous)
+    await answer(interaction, outcome.message)
 
 
 async def back_to_root(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -186,7 +248,7 @@ async def ask_remove(
         await render_root(interaction, previous)
         await answer(interaction, rules.NO_STICKY)
         return
-    embed, _ = build_card(bot, interaction.guild, row)
+    embed, _ = await build_card(bot, interaction.guild, row)
     view = StickyPanel(minutes_for(bot, interaction.guild.id), channel_id=channel_id)
 
     async def yes(pressed: discord.Interaction, card: Any) -> None:
@@ -309,6 +371,52 @@ class ModePick(discord.ui.Select):
         await run_mode(interaction, self.values[0], self.view)
 
 
+class PostPick(discord.ui.Select):
+    """On the list: a post, then its channel. On a post's card: the post it keeps instead."""
+
+    def __init__(
+        self,
+        options: list[tuple[str, int]],
+        placeholder: str,
+        *,
+        row: int,
+        channel_id: int | None = None,
+    ) -> None:
+        shown = options[:SELECT_MAX]
+        super().__init__(
+            placeholder=capped_placeholder(len(shown), len(options), pick=placeholder),
+            options=[
+                discord.SelectOption(label=label, value=str(ident)) for label, ident in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+        self.channel_id = channel_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        post_id = int(self.values[0])
+        if self.channel_id is None:
+            await open_where(interaction, post_id, self.view)
+            return
+        await run_keep_post(interaction, self.channel_id, post_id, self.view)
+
+
+class WherePick(discord.ui.ChannelSelect):
+    def __init__(self, post_id: int) -> None:
+        super().__init__(
+            placeholder=rules.WHERE_PLACEHOLDER,
+            channel_types=CHANNEL_TYPES,
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+        self.post_id = post_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_keep_post(interaction, int(self.values[0].id), self.post_id, self.view)
+
+
 class WordsModal(AnswersErrors, discord.ui.Modal):
     words = discord.ui.TextInput(
         label=rules.WORDS_LABEL, style=discord.TextStyle.paragraph, max_length=rules.TEXT_MAX
@@ -328,6 +436,10 @@ __all__ = [
     "AddPick",
     "ModePick",
     "MoveButton",
+    "PostPick",
+    "WherePick",
+    "build_where",
+    "render_where",
     "StickyPanel",
     "StickyPick",
     "WordsModal",

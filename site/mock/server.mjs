@@ -372,6 +372,9 @@ const SETTING_SPECS = [
   ["sticky_after_messages", "int", 5, 5, "how many new messages from people it takes before a sticky message is posted again at the bottom; 5 by default, 1 to 100. Black Bloc's own messages and other bots' do not count", null, 100, 1],
   ["sticky_min_seconds", "int", 30, 30, "the shortest gap, in seconds, between two copies of one sticky message; 30 by default, 5 to 3600. Both this and sticky_after_messages have to be met, so a busy channel never gets a copy per message", null, 3600, 5],
   ["sticky_silent", "bool", true, true, "whether a sticky message is posted silently, so moving it to the bottom never lights up anybody's notifications. on by default"],
+  ["sticky_quiet_seconds", "int", 300, 300, "once sticky_after_messages have been counted, how many seconds the channel must be quiet before the sticky message moves down, so it never cuts into a conversation; 300 by default, 0 to 3600. 0 moves it as soon as the count and sticky_min_seconds allow", null, 3600, 0],
+  ["sticky_max_buried_minutes", "int", 60, 60, "the longest, in minutes, a sticky message waits for quiet after the count was reached; past it the message moves down even mid-conversation. 60 by default, 0 to 1440, and 0 waits for quiet however long it takes", null, 1440, 0],
+  ["sticky_pin_copies", "bool", true, true, "whether each new copy of a sticky message is pinned (and Discord's 'pinned a message' line is removed by quiet_bot_pins), so it can always be found in the channel's pins. on by default"],
   ["sticky_panel_minutes", "int", 10, 10, "minutes the /sticky panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, undefined, 1],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
   ['role_menu_channel_id', 'channel', '800000000000000002', null, 'the channel /rolemenu offers first when a menu is posted'],
@@ -1339,6 +1342,7 @@ const SETTING_SPECS = [
   ["points_announce_up", "text", "{name} moved up to #{place} (was #{was}).", "{name} moved up to #{place} (was #{was}).", "the line that post carries for a member in the top places who climbed"],
   ["points_announce_down", "text", "{name} moved down to #{place} (was #{was}).", "{name} moved down to #{place} (was #{was}).", "the line that post carries for a member in the top places who was passed"],
   ["points_board_title", "text", "Leaderboard", "Leaderboard", "the heading of the leaderboard ranked by speedpoints"],
+  ["points_board_post_title", "text", "Leaderboard", "Leaderboard", "the title of the leaderboard post that Pin the leaderboard makes on the Posts page; the post itself shows points_board_title"],
   ["points_board_xp_title", "text", "Leaderboard by XP", "Leaderboard by XP", "the heading of the leaderboard ranked by XP"],
   ["points_column_player", "text", "Player", "Player", "the leaderboard's player column"],
   ["points_column_runs", "text", "Total runs", "Total runs", "the leaderboard's column of approved runs"],
@@ -1470,6 +1474,7 @@ const SETTING_SPECS = [
   ["posts_block_livenow_name", "text", "Who's live now", "Who's live now", "what the who's-live-now block is called in the Posts page's Add a block list, its Blocks section and the /posts card. Members never see it"],
   ["posts_block_upcoming_name", "text", "Upcoming events", "Upcoming events", "what the upcoming-events block is called in the Posts page's Add a block list, its Blocks section and the /posts card. Members never see it"],
   ["posts_block_links_name", "text", "Link buttons", "Link buttons", "what the link-buttons block is called in the Posts page's Add a block list, its Blocks section and the /posts card. Members never see it"],
+  ["posts_block_leaderboard_name", "text", "Leaderboard", "Leaderboard", "what the leaderboard block is called in the Posts page's Add a block list, its Blocks section and the /posts card. Members never see it"],
   // Guides (G1) — black_bloc/settings_store.py owns them; these are the mock's copy.
   ['guides_mode', 'enum', 'on', 'on', 'on to give members the Guides page and to put a guide link beside a command in /help; off hides both. Staff can still open a guide\u2019s web address while it is off, and the page says so. There is no slash command to hide either way', ['off', 'on']],
   ['guides_who_edits', 'enum', 'staff', 'staff', 'who may change a guide\u2019s wording and screenshots: staff (anybody who can see the staff channel, the default) or manage_guild (a Lead only). It is read when Save is pressed rather than when the page is drawn, so taking the role away stops the next save', ['staff', 'manage_guild']],
@@ -1902,8 +1907,28 @@ function seedState() {
       updated_at: minutesAgo(20),
       updated_by: STAFF.id,
     },
+    {
+      id: 4,
+      slug: 'leaderboard',
+      title: 'Leaderboard',
+      channel_id: '1076003845232148580',
+      body: '',
+      style: 'embed',
+      pin: false,
+      message_id: null,
+      shadow_message_id: '830000000000000104',
+      carries_door: false,
+      blocks: [{ kind: 'leaderboard', position: 0, added_at: minutesAgo(60), added_by: STAFF.id }],
+      door_hash: null,
+      posted_hash: null,
+      posted_at: minutesAgo(3),
+      posted_by: STAFF.id,
+      seeded: false,
+      updated_at: minutesAgo(60),
+      updated_by: STAFF.id,
+    },
   ],
-  nextPost: 4,
+  nextPost: 5,
   nextPostMessage: 820000000000000001,
   // Version history. welcome carries the backfilled `shipped` row the migration writes, so
   // the Versions foldout has a chip of every colour to look at; scratch-post has none, which
@@ -2204,6 +2229,7 @@ function seedState() {
   sticky: [
     { channel_id: '800000000000000002', text: '**How to submit a run** — post the link, the category and your time, and a Lead will add it.', paused: false, trouble: null, message_id: '830000000000000101', posted_channel_id: '800000000000000004', posted_at: minutesAgo(12), reposts: 7, updated_by: STAFF.id, updated_at: minutesAgo(4000) },
     { channel_id: '800000000000000003', text: 'Test posts only — nothing here is real.', paused: true, trouble: null, message_id: null, posted_channel_id: null, posted_at: null, reposts: 0, updated_by: STAFF.id, updated_at: minutesAgo(9000) },
+    { channel_id: '1076003845232148580', text: '', post_id: 4, paused: false, trouble: null, message_id: '830000000000000104', posted_channel_id: '800000000000000004', posted_at: minutesAgo(3), reposts: 3, updated_by: STAFF.id, updated_at: minutesAgo(60) },
     { channel_id: '800000000000000006', text: 'Announcements are staff-only. Questions go in #general.', paused: false, trouble: 'Black Bloc is missing Send Messages in #bot-log. Give it that permission there, then press Try again.', message_id: null, posted_channel_id: null, posted_at: null, reposts: 2, updated_by: STAFF.id, updated_at: minutesAgo(700) },
   ],
   honeypot: [
@@ -2508,9 +2534,9 @@ const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_chan
 CORE_KEYS.push(...PB_FEED_KEYS);
 const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_shadow_channel_id", "brackets_to_role_id", "brackets_ping_role_id", "brackets_format_default", "brackets_best_of", "brackets_best_of_late", "brackets_best_of_finals", "brackets_pools_format_default", "brackets_pools_best_of_default", "brackets_grand_final_reset_default", "brackets_third_place_default", "brackets_confirm_minutes", "brackets_check_in_minutes", "brackets_best_of_from_round", "brackets_swiss_rounds_default", "brackets_entrant_cap_default", "brackets_panel_minutes", "brackets_pool_count_default", "brackets_advance_per_pool_default", "brackets_advance_losers_from_default", "brackets_pools_swiss_rounds_default", "brackets_checked_in_said", "brackets_checked_out_said", "brackets_joined_said", "brackets_left_said", "brackets_dropped_said", "brackets_set_called_said", "brackets_set_reported_said", "brackets_set_final_said", "brackets_forfeit_words", "brackets_set_disputed_said", "brackets_off_said", "brackets_not_organiser_said", "brackets_no_role_words", "brackets_no_tournament_said", "brackets_wrong_state_said", "brackets_state_draft", "brackets_state_signups", "brackets_state_check_in", "brackets_state_seeding", "brackets_state_running", "brackets_state_complete", "brackets_state_cancelled", "brackets_not_yours_said", "brackets_full_said", "brackets_already_in_said", "brackets_removed_by_to_said", "brackets_no_set_said", "brackets_not_in_set_said", "brackets_not_ready_said", "brackets_not_playable_said", "brackets_already_complete_said", "brackets_disputed_said", "brackets_bad_score_said", "brackets_reported_differently_said", "brackets_not_reported_said", "brackets_own_report_said", "brackets_not_in_bracket_said", "brackets_already_out_said", "brackets_format_single_words", "brackets_format_double_words", "brackets_format_round_robin_words", "brackets_format_swiss_words", "brackets_card_format_line", "brackets_card_reset_words", "brackets_card_third_words", "brackets_card_rounds_words", "brackets_card_late_words", "brackets_card_finals_words", "brackets_card_state_line", "brackets_card_entrants_line", "brackets_card_entrants_cap_line", "brackets_card_starts_line", "brackets_card_check_in_line", "brackets_card_to_line", "brackets_card_place_line", "brackets_card_link_label", "brackets_sign_up_label", "brackets_leave_label", "brackets_check_in_label", "brackets_not_entered_said", "brackets_set_card_players", "brackets_round_winners", "brackets_round_losers", "brackets_round_grand", "brackets_round_reset", "brackets_round_third", "brackets_round_plain", "brackets_set_card_title", "brackets_set_card_best_of", "brackets_set_card_rematch", "brackets_set_card_ready", "brackets_set_card_called", "brackets_set_card_reported", "brackets_set_card_disputed", "brackets_set_card_note", "brackets_set_card_cleared", "brackets_report_label", "brackets_confirm_label", "brackets_dispute_label", "brackets_report_title", "brackets_score_label", "brackets_dispute_title", "brackets_dispute_note_label", "brackets_score_not_number_said", "brackets_panel_title", "brackets_panel_line", "brackets_panel_empty", "brackets_pick_placeholder", "brackets_pick_set_placeholder", "brackets_back_label", "brackets_your_sets_title", "brackets_drop_label", "brackets_drop_confirm", "brackets_panel_footer", "brackets_dm_removed", "brackets_dm_dq", "brackets_dm_dropped", "brackets_dm_decided", "brackets_dm_reset", "brackets_dm_reason", "brackets_start_ping", "brackets_moved_line", "brackets_waiting_play", "brackets_waiting_called", "brackets_waiting_confirm", "brackets_waiting_opponent_confirms", "brackets_waiting_to_decides", "brackets_waiting_waits", "brackets_waiting_next_round", "brackets_waiting_done", "brackets_waiting_out", "brackets_discord_label", "brackets_state_pools", "brackets_round_pool", "brackets_pool_title", "brackets_card_pools_words", "brackets_card_losers_words", "brackets_card_pool_line", "brackets_waiting_final", "brackets_pool_tied", "brackets_pool_raise_label"];
 CORE_KEYS.push(...BRACKETS_KEYS);
-const POINTS_KEYS = ["points_mode", "points_channel_id", "points_shadow_channel_id", "points_ping_role_id", "points_verifier_role_id", "points_xp_tiers", "points_xp_min", "points_xp_max", "points_per_run", "points_top_n", "points_board_order", "points_bounty_clock", "points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_modmail_off_said", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
+const POINTS_KEYS = ["points_mode", "points_channel_id", "points_shadow_channel_id", "points_ping_role_id", "points_verifier_role_id", "points_xp_tiers", "points_xp_min", "points_xp_max", "points_per_run", "points_top_n", "points_board_order", "points_bounty_clock", "points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_modmail_off_said", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 CORE_KEYS.push(...POINTS_KEYS);
-const POINTS_WORD_KEYS = ["points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_modmail_off_said", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
+const POINTS_WORD_KEYS = ["points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_modmail_off_said", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
@@ -2544,6 +2570,9 @@ const NAMESPACE_OVERRIDE = {
   sticky_min_seconds: 'posts',
   sticky_silent: 'posts',
   sticky_panel_minutes: 'posts',
+  sticky_quiet_seconds: 'posts',
+  sticky_max_buried_minutes: 'posts',
+  sticky_pin_copies: 'posts',
   sticky_shadow_channel_id: 'posts',
   handoff_mode: 'request',
   handoff_confirm_hours: 'request',
@@ -3527,6 +3556,13 @@ const BLOCK_KINDS = [
     name_default: 'Link buttons',
     exclusive: false,
     keys: ['posts_block_links_rows', 'posts_block_links_title', 'posts_block_links_text', 'posts_block_links_card'],
+  },
+  {
+    kind: 'leaderboard',
+    name_key: 'posts_block_leaderboard_name',
+    name_default: 'Leaderboard',
+    exclusive: false,
+    keys: ['points_board_title', 'points_board_xp_title', 'points_board_line', 'points_board_empty', 'points_top_n', 'points_board_order'],
   },
 ];
 const BLOCK_UNKNOWN = 'There is no block called **{kind}**, so nothing was changed. Pick one from the **Add a block…** list.';
@@ -6730,6 +6766,20 @@ Object.assign(PREVIEW_DRAW, {
       fields: [],
     }], []);
   },
+  block_leaderboard(read) {
+    const rows = PREVIEW_BOARD_SAMPLE;
+    const byXp = String(read('points_board_order') || 'points') === 'xp';
+    const template = blockWord(read, 'points_board_line', '#{place} {name} — {runs} runs · {xp} XP · {points} speedpoints');
+    const lines = rows.slice(0, blockNumber(read, 'points_top_n', 10)).map(([name, runs, xp, points], at) => (
+      template.split('{place}').join(String(at + 1)).split('{name}').join(name).split('{runs}').join(String(runs))
+        .split('{xp}').join(String(xp)).split('{points}').join(String(points))
+    ));
+    return previewMade('', [{
+      title: byXp ? blockWord(read, 'points_board_xp_title', 'Leaderboard by XP') : blockWord(read, 'points_board_title', 'Leaderboard'),
+      description: blockLines(lines) || blockWord(read, 'points_board_empty', 'No runs have been approved yet.'),
+      fields: [],
+    }], []);
+  },
   block_links(read, sample = {}, rows = null) {
     const tick = String(sample.card || '').trim().toLowerCase();
     const stored = !['false', '0', 'off', 'no'].includes(String(read('posts_block_links_card')).trim().toLowerCase());
@@ -6743,6 +6793,8 @@ Object.assign(PREVIEW_DRAW, {
     return previewMade('', cards, buttons);
   },
 });
+
+const PREVIEW_BOARD_SAMPLE = [['Moth', 9, 425, 90], ['Dax', 7, 300, 70], ['Pawpette', 4, 175, 40]];
 
 // The twin of black_bloc/preview.py:BLOCK_DRAWS — each block drawn by its own feature's draw.
 const PREVIEW_BLOCK_DRAWS = {
@@ -6781,6 +6833,10 @@ const PREVIEW_BLOCK_DRAWS = {
   links(read) {
     const rows = blockLinkRows(read);
     return PREVIEW_DRAW.block_links(read, {}, rows.length ? rows : PREVIEW_LINK_SAMPLE);
+  },
+  leaderboard(read, sample, always) {
+    if (!always && String(read('points_mode') || 'off') === 'off') return null;
+    return PREVIEW_DRAW.block_leaderboard(read);
   },
 };
 
@@ -11463,12 +11519,32 @@ function stickyHome() {
 }
 
 function stickyOwnHome(row) {
-  return String(state.settings.get('sticky_mode') || 'shadow') === 'shadow' && String(stickyHome()) === String(row.channel_id);
+  return stickyMode(row) === 'shadow' && String(stickyHomeOf(row)) === String(row.channel_id);
 }
 const STICKY_NONE = 'That channel has no sticky message, so nothing was changed. The list on this panel and on the Posts page is every channel that has one.';
 
-function stickyState(row) {
+function stickyPostOf(row) {
+  return row.post_id ? state.posts.find((one) => one.id === Number(row.post_id)) || null : null;
+}
+
+// The twin of sticky_posts.owner_rule: sticky off stops everything; the leaderboard follows points.
+function stickyMode(row) {
   const mode = String(state.settings.get('sticky_mode') || 'shadow');
+  const post = stickyPostOf(row);
+  if (mode === 'off' || !post || !(post.blocks || []).some((one) => one.kind === 'leaderboard')) return mode;
+  return String(state.settings.get('points_mode') || 'shadow');
+}
+
+function stickyHomeOf(row) {
+  const post = stickyPostOf(row);
+  if (post && (post.blocks || []).some((one) => one.kind === 'leaderboard')) {
+    return state.settings.get('points_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id');
+  }
+  return stickyHome();
+}
+
+function stickyState(row) {
+  const mode = stickyMode(row);
   if (row.trouble) return 'stopped';
   if (row.paused) return 'paused';
   if (mode === 'off') return 'off';
@@ -11477,16 +11553,30 @@ function stickyState(row) {
 }
 
 function stickyPlace(row) {
-  const mode = String(state.settings.get('sticky_mode') || 'shadow');
+  const mode = stickyMode(row);
+  const post = stickyPostOf(row);
   if (row.paused || mode === 'off' || stickyOwnHome(row)) {
     row.message_id = null;
     row.posted_channel_id = null;
     row.posted_at = null;
+    if (post) Object.assign(post, { message_id: null, shadow_message_id: null, posted_at: null });
     return;
   }
   row.message_id = String(830000000000000000n + BigInt(Date.now()));
-  row.posted_channel_id = mode === 'on' ? row.channel_id : String(stickyHome());
+  row.posted_channel_id = mode === 'on' ? row.channel_id : String(stickyHomeOf(row));
   row.posted_at = new Date().toISOString();
+  if (post) {
+    post.channel_id = String(row.channel_id);
+    post.message_id = mode === 'on' ? row.message_id : null;
+    post.shadow_message_id = mode === 'on' ? null : row.message_id;
+    post.posted_at = row.posted_at;
+  }
+}
+
+function stickyWords(row) {
+  const post = stickyPostOf(row);
+  if (!row.post_id) return row.text;
+  return post ? `The post **${post.title}**` : 'a post that has been deleted';
 }
 
 function stickyRow(row) {
@@ -11496,6 +11586,8 @@ function stickyRow(row) {
     channel_name: channel ? channel.name : null,
     gone: !channel,
     text: row.text,
+    post: row.post_id ? { id: Number(row.post_id), slug: (stickyPostOf(row) || {}).slug || null, title: (stickyPostOf(row) || {}).title || null } : null,
+    words: stickyWords(row),
     paused: Boolean(row.paused),
     trouble: row.trouble || null,
     state: stickyState(row),
@@ -11529,9 +11621,30 @@ route('GET', '/api/sticky', (context) => {
   return state.sticky.map(stickyRow);
 });
 
+function stickyKeepPost(context, wanted, slug) {
+  const post = state.posts.find((one) => one.slug === String(slug));
+  if (!post) throw new Refused(404, 'no_such_post', `There is no post called **${String(slug).slice(0, 60)}**, so nothing was saved. Pick one from the Posts page's list.`);
+  if (post.carries_door) throw new Refused(409, 'post_carries_door', `**${post.title}** carries the front door, which keeps its own place, so it cannot be a sticky message and nothing was saved.`);
+  const held = state.sticky.find((one) => Number(one.post_id) === post.id && String(one.channel_id) !== wanted);
+  if (held) throw new Refused(409, 'post_is_a_sticky', `**${post.title}** is already the sticky message in ${stickyName(held.channel_id)}, so nothing was saved. Remove it there first.`);
+  let row = state.sticky.find((one) => String(one.channel_id) === wanted);
+  const made = !row;
+  if (made) {
+    const channel = CHANNELS.find((one) => one.id === wanted);
+    if (!channel) throw new Refused(404, 'no_such_channel', 'Black Bloc cannot find that channel in this server, so nothing was saved. Pick a channel it can see.');
+    row = { channel_id: wanted, text: '', paused: false, trouble: null, message_id: null, posted_channel_id: null, posted_at: null, reposts: 0 };
+    state.sticky.push(row);
+  }
+  Object.assign(row, { text: '', post_id: post.id, trouble: null, updated_by: STAFF.id, updated_at: new Date().toISOString() });
+  stickyPlace(row);
+  logAction(made ? 'web.sticky.set' : 'web.sticky.edited', { details: { channel_id: wanted, post: post.slug, post_id: post.id, via: 'website' } });
+  return { sticky: stickyRow(row), message: stickySaid(row) };
+}
+
 route('PUT', '/api/sticky/:channel_id', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
+  if (body.post) return stickyKeepPost(context, String(context.params.channel_id), body.post);
   if (body.text !== undefined && body.text !== null && typeof body.text !== 'string') throw new Refused(400, 'bad_text', STICKY_NOT_WORDS);
   const text = String(body.text || '').trim();
   if (!text) throw new Refused(400, 'bad_text', 'A sticky message needs some words, so nothing was saved. Type what it should say and save again.');
@@ -11549,6 +11662,7 @@ route('PUT', '/api/sticky/:channel_id', async (context) => {
     state.sticky.push(row);
   }
   row.text = text;
+  row.post_id = null;
   row.trouble = null;
   row.updated_by = STAFF.id;
   row.updated_at = new Date().toISOString();
@@ -11585,8 +11699,56 @@ route('DELETE', '/api/sticky/:channel_id', (context) => {
   requireStaff(context.session);
   const row = stickyOf(context);
   state.sticky = state.sticky.filter((one) => one !== row);
-  logAction('web.sticky.removed', { details: { channel_id: row.channel_id, text: row.text.slice(0, 200), via: 'website' } });
+  logAction('web.sticky.removed', { details: { channel_id: row.channel_id, text: stickyWords(row).slice(0, 200), via: 'website' } });
   return { removed: true, channel_id: String(row.channel_id), message: `Removed. ${stickyName(row.channel_id)} has no sticky message now.` };
+});
+
+// The leaderboard as a sticky post (docs/info/sticky-board-design.md): the twin of points_post.
+function boardPostAnswer(message = null) {
+  const channelId = String(state.settings.get('points_channel_id') || '') || null;
+  const post = state.posts.find((one) => one.slug === 'leaderboard') || null;
+  const mine = post ? state.sticky.find((one) => Number(one.post_id) === post.id) || null : null;
+  const there = channelId ? state.sticky.find((one) => String(one.channel_id) === channelId) || null : null;
+  const other = there && there !== mine ? there : null;
+  const channel = CHANNELS.find((one) => one.id === channelId);
+  const category = channel && channel.category_id ? CHANNELS.find((one) => one.id === channel.category_id) : null;
+  return {
+    channel_id: channelId,
+    channel: channel ? `#${channel.name}${category ? ` · ${category.name}` : ''}` : '',
+    post: post ? { slug: post.slug, title: post.title } : null,
+    sticky: mine ? stickyRow(mine) : null,
+    other: other ? { words: stickyWords(other) } : null,
+    message,
+  };
+}
+
+route('GET', '/api/points/board-post', (context) => {
+  requireStaff(context.session);
+  return boardPostAnswer();
+});
+
+route('POST', '/api/points/board-post', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const found = boardPostAnswer();
+  if (!found.channel_id || !CHANNELS.some((one) => one.id === found.channel_id)) {
+    throw new Refused(409, 'channel_gone', 'Black Bloc cannot find the leaderboard channel (points_channel_id), so nothing was done. Pick a channel it can see.');
+  }
+  if (found.sticky && String(found.sticky.channel_id) === found.channel_id) {
+    return boardPostAnswer(`The leaderboard is already the sticky message in ${stickyName(found.channel_id)}.`);
+  }
+  if (found.other && body.replace !== true) {
+    throw new Refused(409, 'channel_has_sticky', `${stickyName(found.channel_id)} already keeps another sticky message (${found.other.words}), so nothing was done. Press **Replace it** to keep the leaderboard there instead.`);
+  }
+  let post = state.posts.find((one) => one.slug === 'leaderboard');
+  if (!post) {
+    post = { id: state.nextPost++, slug: 'leaderboard', title: String(state.settings.get('points_board_post_title') || 'Leaderboard'), channel_id: null, body: '', style: 'embed', pin: false, message_id: null, shadow_message_id: null, posted_hash: null, posted_at: null, posted_by: null, seeded: false, carries_door: false, blocks: [], door_hash: null, updated_at: now(), updated_by: STAFF.id };
+    state.posts.push(post);
+  }
+  if (!(post.blocks || []).some((one) => one.kind === 'leaderboard')) post.blocks.push({ kind: 'leaderboard', position: post.blocks.length, added_at: now(), added_by: STAFF.id });
+  state.sticky = state.sticky.filter((one) => Number(one.post_id) !== post.id);
+  const saved = stickyKeepPost(context, found.channel_id, post.slug);
+  return boardPostAnswer(`The leaderboard is the sticky message in ${stickyName(found.channel_id)} now. ${saved.message}`);
 });
 
 route('GET', '/api/honeypot/hits', (context) => {

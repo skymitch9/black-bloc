@@ -49,3 +49,21 @@ def test_the_cog_is_thin_and_reads_no_environment():
 
     assert len(SOURCE.read_text(encoding="utf-8").splitlines()) < 60
     assert "os" not in {alias.name for node in plain for alias in node.names}
+
+
+async def test_a_board_setting_redraws_the_leaderboard_post(bot, monkeypatch):
+    asked = []
+
+    async def redraw(found_bot, found_guild):
+        asked.append(found_guild)
+        return True
+
+    monkeypatch.setattr(cog_module, "redraw", redraw)
+    bot.get_guild = lambda guild_id: bot.guild
+    await Points(bot).cog_load()
+
+    await bot.store.set(bot.guild.id, "points_top_n", 5)
+    await bot.store.set(bot.guild.id, "points_board_line", "{place}. {name}")
+    await bot.store.set(bot.guild.id, "points_ping_role_id", 77)
+
+    assert asked == [bot.guild, bot.guild]

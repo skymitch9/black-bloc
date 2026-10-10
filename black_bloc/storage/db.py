@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 92
+SCHEMA_VERSION = 93
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1203,6 +1203,7 @@ CREATE TABLE IF NOT EXISTS sticky_messages (
     created_at        TEXT    NOT NULL,
     updated_by        INTEGER,
     updated_at        TEXT    NOT NULL,
+    post_id           INTEGER,
     PRIMARY KEY (guild_id, channel_id)
 );
 
@@ -1622,6 +1623,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tournaments", "pools_best_of", "INTEGER NOT NULL DEFAULT 3"),
     ("tournament_sets", "phase", "TEXT"),
     ("tournament_sets", "pool", "INTEGER"),
+    ("sticky_messages", "post_id", "INTEGER"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

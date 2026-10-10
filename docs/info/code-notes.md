@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-09 — one section APPENDED, nothing re-keyed**: *The sticky leaderboard* (branch `sticky-board`, off `main` `b87ed763`); keyed by NAME. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *Late tracking* (branch `late-tracked-live`, off `main` `522fea26`); keyed by NAME. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 3 — the site* (branch `points-site`, off `main` `a41cb3d3`); keyed by NAME. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 2* (branch `points-discord`, off `main` `4ab03a82`); keyed by NAME. `cogs/moderation/modmail.py` rows below `open_or_find` sit a few lines lower. Before that:
@@ -10406,6 +10407,35 @@ Design: [`points-design.md`](points-design.md) §H.
 - `site/mock/server.mjs` `memberSession` — `as=verifier` is a member everywhere (every former `session === 'member'` test), and only the points block reads it as a verifier (`ptVerifier` refuses `member` alone; `ptOwn` refuses a verifier's own run).
 - `site/public/assets/ui.js` `control` + `fieldaids.js` `keepsLines` — a `text` key whose value or default has a line break is drawn as a textarea: a one-line `<input>` drops the breaks on render, so the row read back changed and a FRESH load showed "1 change pending" (`points_ticket_body`; on the Settings page also four `pb_feed_dm_*` keys, `chat_cookout_voice`, `chat_review_line`, `chat_review_item`) — and a Save would have stored the value with its lines gone. Pinned in `site/mock/fieldaids.test.mjs`.
 
+## The sticky leaderboard — keyed by NAME (branch `sticky-board`, 2026-10-09; re-key after the merge)
+
+Design: [`sticky-board-design.md`](sticky-board-design.md).
+
+- `black_bloc/points_post.py` `board_look` — pure (store, guild id, rows), so the preview's sample board and the real one are one drawing; rows carry `shown` (the escaped name or `<@id>`) because the preview has no members to look up. `block_rows` reads the board once per draw (`BlockKind.load`); `block_parts` reads what it loaded.
+- `points_post.redraw` — the door cog's `keep_live_now` (the one `Reconciler`), never raised: a redraw that fails must not fail the points move that asked for it.
+- `points_post.pin_board` — `already` when the leaderboard's sticky is in `points_channel_id`; a sticky of it elsewhere is REMOVED before the new one is saved (one post is one sticky); `replace` is the only way over another sticky.
+- `points_post.ensure_post` — `make_post` then `pin` 0: the sticky pins its copies, and the post's own `pin` would have the posts sweep pin a copy it does not own.
+- `black_bloc/points_panel.py` `lines_of` / `heading_of` — the store-only halves of `board_lines` / `title_of`, so the block and the panel draw the same lines.
+- `points_panel.Move.callback` `SETTINGS` — opened before `opened(staff=False)`: the settings door gates on staff itself; the import is lazy because `points_board_panel` imports this module.
+- `black_bloc/points_board_panel.py` `moves_of` — Pin only where the leaderboard is not already the sticky; Replace instead of Pin when another sticky holds the channel; Pause / Resume / Try again from the sticky row.
+- `points_board_panel.change` — `cogs.core.set_key`, so the door leaves the same single `settings.set` row the `/settings` panel does; the board redraw follows from the `Points` cog's store hooks.
+- `black_bloc/cogs/content/points.py` `REDRAWS_THE_BOARD` — the leaderboard block's own keys plus `points_mode`.
+- `black_bloc/post_blocks.py` `BlockKind.owner` / `owner_of` — the first attached kind with an owner decides; only `leaderboard` has one.
+- `post_blocks.sticky_edit` — a sticky's post is drawn whole (content, cards, buttons) on a redraw; `kept_part` would keep the first card, which for a blank-bodied post is the OLD board.
+- `black_bloc/sticky_posts.py` `owner_rule` — `sticky_mode` off wins over everything; then the owner's mode and shadow feature; a mode value outside off/shadow/on reads as off.
+- `sticky_posts.post_message` — a blank body draws no card of the post's own; the rehearsal note rides as content (`sticky.fit` keeps a plain body whole and cuts the note).
+- `Desk._place` — the post is read before the old copy comes down, so a deleted post stops the row with the copy still up rather than leaving the channel empty; an empty draw (no words, no block drawn) stops the row too, because Discord refuses an empty message.
+- `Desk._post_copy` — inside the same try as `write_copy`: a post that cannot be told its copy deletes the copy (`_unsend`), the review-fix-5 rule.
+- `Desk._pin` — after the store; `sticky.pin_failed` once per channel per boot (the `said` set); the notice is QuietPins' to delete.
+- `Desk._let_go` — a row that stops keeping a post takes that post's copy down while the row still names it; `_place`'s own take-down would clear the NEW post's ids.
+- `Desk._quiet` / `_later` — the timer re-reads the quiet after each sleep instead of being cancelled and re-armed per message, so a busy channel never creates a task per message; an outage owes no quiet (the next message retries, review fix 2).
+- `Desk.repost` — the Posts page's Update on a sticky's post; `NOT_RUNNING` / `TOO_SOON` cannot happen with `first=True` except while paused or off, which answer the refusal in the sticky's words.
+- `black_bloc/sticky.py` `quiet_left` / `due_in` — pure; the ceiling counts from when the count was reached, not from the last copy.
+- `sticky.COLUMNS` — the post's title and slug ride along as sub-selects, so every row read can say which post it keeps without a second query.
+- `black_bloc/posts.py` `posted_message` / `publish_post` / `take_down_post` / `reconcile_posts` — each asks `sticky.row_of_post` first; a sticky's post belongs to the sticky.
+- `site/public/assets/sticky-section.js` `stickyMoves` / `stateLine` — exported for the Leaderboard page's pin row (no copy).
+- `site/mock/server.mjs` `stickyMode` / `stickyHomeOf` / `boardPostAnswer` — the twins of `owner_rule`, the points home and `points_post.board_state`; the seed has the leaderboard pinned in #speed-and-pbs, rehearsing.
+- `site/mock/check.mjs` `board_channel_id` / `tests/api/test_contract.py` seed — the contract's `POST /api/points/board-post` runs against a leaderboard already pinned there (the real seed pins it on the voice channel), so it answers `already` and changes nothing.
 ## Late tracking — keyed by NAME (branch `late-tracked-live`, 2026-10-09; re-key after the merge)
 
 Design: [`marathon-public-highlights-design.md`](marathon-public-highlights-design.md) > *Late tracking (2026-10-09)*.

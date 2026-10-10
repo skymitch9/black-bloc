@@ -376,7 +376,8 @@ def test_each_new_block_kind_draws_through_its_own_feature(bot, guild):
         "livenow",
         "upcoming",
         "links",
+        "leaderboard",
     ]
-    for kind in ("livenow", "upcoming"):
+    for kind in ("livenow", "upcoming", "leaderboard"):
         found = preview.render(bot, guild, "post", None, {"blocks": kind, "always": "true"})
         assert len(found.embeds) == 1 and found.components == ()

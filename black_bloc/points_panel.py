@@ -30,6 +30,8 @@ NEXT = "next"
 FEED = "feed"
 PREVIOUS = "previous"
 NEXT_PAGE = "next_page"
+SETTINGS = "settings"
+SETTINGS_LABEL = "Settings…"
 
 
 def words(bot: Any, guild: Any, key: str, **fields: Any) -> str:
@@ -56,6 +58,11 @@ class BoardPanel(Panel):
         if self.surface == PENDING:
             await render_pending(interaction, previous)
             return
+        if self.surface == SETTINGS:
+            from .points_board_panel import render_settings
+
+            await render_settings(interaction, previous)
+            return
         await render_board(interaction, previous)
 
 
@@ -63,14 +70,14 @@ def by_of(previous: Any) -> str | None:
     return getattr(previous, "by", None)
 
 
-def board_lines(bot: Any, guild: Any, rows: list[dict[str, Any]]) -> list[str]:
+def lines_of(store: Any, guild_id: int, rows: list[dict[str, Any]]) -> list[str]:
     return [
-        words(
-            bot,
-            guild,
+        moves.said(
+            store,
+            guild_id,
             "points_board_line",
             place=row["place"],
-            name=moves.name_of(guild, row["user_id"]),
+            name=row["shown"],
             runs=row["runs"],
             xp=row["xp"],
             points=row["speedpoints"],
@@ -79,9 +86,18 @@ def board_lines(bot: Any, guild: Any, rows: list[dict[str, Any]]) -> list[str]:
     ]
 
 
-def title_of(bot: Any, guild: Any, by: str) -> str:
+def board_lines(bot: Any, guild: Any, rows: list[dict[str, Any]]) -> list[str]:
+    shown = [row | {"shown": moves.name_of(guild, row["user_id"])} for row in rows]
+    return lines_of(bot.store, guild.id, shown)
+
+
+def heading_of(store: Any, guild_id: int, by: str) -> str:
     key = "points_board_xp_title" if by == BY_XP else "points_board_title"
-    return words(bot, guild, key)
+    return moves.said(store, guild_id, key)
+
+
+def title_of(bot: Any, guild: Any, by: str) -> str:
+    return heading_of(bot.store, guild.id, by)
 
 
 async def build_board(
@@ -116,6 +132,8 @@ async def build_board(
         waiting = await points_tickets.pending(bot, guild)
         if waiting:
             view.add_item(Move(PENDING_LABEL.format(count=len(waiting)), PENDING, row=1))
+    if found["staff"]:
+        view.add_item(Move(SETTINGS_LABEL, SETTINGS, row=1))
     return (embed, view)
 
 
@@ -216,6 +234,11 @@ class Move(discord.ui.Button):
             await interaction.response.send_modal(
                 SubmitModal(interaction.client, interaction.guild, view)
             )
+            return
+        if self.action == SETTINGS:
+            from .points_board_panel import open_settings
+
+            await open_settings(interaction, view)
             return
         if not await opened(interaction, staff=False):
             return

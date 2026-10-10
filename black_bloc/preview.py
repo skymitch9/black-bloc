@@ -569,6 +569,16 @@ def links_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always
     return look_drawn(found)
 
 
+def leaderboard_block(
+    bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool
+) -> Any:
+    from . import points_post
+
+    if not always and points_post.is_off(store, guild.id):
+        return None
+    return look_drawn(points_post.board_look(store, guild.id, points_post.sample_rows()))
+
+
 def live_now(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
     embeds, rows = live_drawn(store, guild, sample)
     return made(guild, embeds=embeds, components=rows)
@@ -593,6 +603,7 @@ BLOCK_DRAWS: dict[str, Callable[..., Drawn | None]] = {
     "livenow": live_block,
     "upcoming": upcoming_block,
     "links": links_block,
+    "leaderboard": leaderboard_block,
 }
 
 
