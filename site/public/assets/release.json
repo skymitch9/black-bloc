@@ -1,7 +1,8 @@
 {
-  "release": "v217",
-  "commit": "f2a07d86",
+  "release": "v218",
+  "commit": "770e64a4",
   "changed_features": [
-    "marathon"
+    "core",
+    "modmail"
   ]
 }
