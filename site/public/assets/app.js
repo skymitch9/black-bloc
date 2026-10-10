@@ -30,6 +30,7 @@ export const TABS = [
   { tab: 'structure', href: '/structure.html', label: 'Structure' },
   { tab: 'pbs', href: '/pbs.html', label: 'Personal bests' },
   { tab: 'brackets', href: '/brackets.html', label: 'Brackets' },
+  { tab: 'leaderboard', href: '/leaderboard.html', label: 'Leaderboard' },
 ];
 
 export const FEATURE_TABS = {
@@ -53,6 +54,7 @@ export const FEATURE_TABS = {
   structure_backup: 'structure',
   pb_feed: 'pbs',
   brackets: 'brackets',
+  points: 'leaderboard',
 };
 
 export function tabHref(tab) {

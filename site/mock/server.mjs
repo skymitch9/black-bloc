@@ -2673,20 +2673,27 @@ function sessionOf(request, url) {
 }
 
 const MEMBER = MEMBERS[3];
+// `as=verifier` is a member who is not staff but holds points_verifier_role_id (Dax).
+const VERIFIER = MEMBERS[6];
+
+function memberSession(session) {
+  return session === 'member' || session === 'verifier';
+}
 
 /** The one session that is a signed-in guild member and NOT staff: requests only. */
 function requireMember(session) {
-  if (session === 'member') return;
+  if (memberSession(session)) return;
   requireStaff(session);
 }
 
 function actorOf(session) {
-  return session === 'member' ? MEMBER.id : STAFF.id;
+  if (session === 'verifier') return VERIFIER.id;
+  return memberSession(session) ? MEMBER.id : STAFF.id;
 }
 
 function requireStaff(session) {
   if (session === 'none') throw new Refused(401, 'not_signed_in', NOT_SIGNED_IN);
-  if (session === 'member') throw new Refused(403, 'not_staff', NOT_STAFF);
+  if (memberSession(session)) throw new Refused(403, 'not_staff', NOT_STAFF);
   if (session === 'stranger') throw new Refused(403, 'not_staff', NOT_STAFF);
   if (session === 'unknown') throw new Refused(503, 'staff_unknown', STAFF_UNKNOWN);
   if (session === 'expired') throw new Refused(401, 'session_expired', 'Your sign-in has expired. Sign in again — nothing is wrong with your access.');
@@ -2714,8 +2721,9 @@ function meBody(session) {
   if (session === 'expired') return { status: 401, body: { error: 'session_expired', message: 'Your sign-in has expired. Sign in again — nothing is wrong with your access.' } };
   const user = { id: STAFF.id, name: STAFF.name, avatar: null };
   const guild = { id: '600000000000000001', name: 'Black in a Flash!' };
-  if (session === 'member') {
-    return { status: 200, body: { user: { id: MEMBER.id, name: MEMBER.display_name, avatar: null }, staff: false, member: true, state: 'not_staff', guild, message: MEMBER_NOT_STAFF } };
+  if (memberSession(session)) {
+    const who = session === 'verifier' ? VERIFIER : MEMBER;
+    return { status: 200, body: { user: { id: who.id, name: who.display_name, avatar: null }, staff: false, member: true, state: 'not_staff', guild, message: MEMBER_NOT_STAFF } };
   }
   if (session === 'stranger') {
     return { status: 200, body: { user: { id: MEMBERS[5].id, name: MEMBERS[5].name, avatar: null }, staff: false, member: false, state: 'not_staff', guild, message: NOT_STAFF } };
@@ -4674,7 +4682,7 @@ function guideRightNow() {
 }
 
 function wantedGuide(slug, session) {
-  const staff = session !== 'member';
+  const staff = !memberSession(session);
   const found = state.guides.find((one) => one.slug === slug);
   const hidden = found && !staff && (!found.published || found.audience === 'staff');
   if (!found || hidden) throw new Refused(404, 'no_such_guide', GUIDE_NO_SUCH.split('{slug}').join(slug));
@@ -4693,7 +4701,7 @@ function guideSlugify(text) {
 
 route('GET', '/api/guides', (context) => {
   requireMember(context.session);
-  const staff = context.session !== 'member';
+  const staff = !memberSession(context.session);
   if (!guidesAreOn() && !staff) throw new Refused(409, 'guides_off', GUIDE_OFF);
   const rows = state.guides
     .filter((one) => staff || (one.published && one.audience === 'member'))
@@ -4793,7 +4801,7 @@ route('POST', '/api/guides', async (context) => {
 
 route('GET', '/api/guides/:slug', (context) => {
   requireMember(context.session);
-  const staff = context.session !== 'member';
+  const staff = !memberSession(context.session);
   if (!guidesAreOn() && !staff) throw new Refused(409, 'guides_off', GUIDE_OFF);
   const guide = wantedGuide(context.params.slug, context.session);
   return {
@@ -4806,7 +4814,7 @@ route('GET', '/api/guides/:slug', (context) => {
 
 route('POST', '/api/guides/:slug/confirmed', (context) => {
   requireMember(context.session);
-  const staff = context.session !== 'member';
+  const staff = !memberSession(context.session);
   if (!guidesAreOn() && !staff) throw new Refused(409, 'guides_off', GUIDE_OFF);
   const guide = wantedGuide(context.params.slug, context.session);
   logAction('web.guide.confirmed', {
@@ -13831,7 +13839,7 @@ route('GET', '/api/requests', (context) => {
 route('POST', '/api/requests', async (context) => {
   requireMember(context.session);
   if (state.settings.get('request_mode') === 'off') throw new Refused(409, 'requests_off', REQUESTS_OFF);
-  const staff = context.session !== 'member';
+  const staff = !memberSession(context.session);
   if (!staff && state.settings.get('request_who_can_file') === 'staff') {
     throw new Refused(403, 'staff_only', REQUEST_STAFF_ONLY);
   }
@@ -15024,7 +15032,7 @@ function bkOf(context) {
 }
 
 function bkMayRun(context) {
-  return context.session !== 'member';
+  return !memberSession(context.session);
 }
 
 function bkRuns(context) {
@@ -15279,7 +15287,7 @@ route('POST', '/api/brackets/:tournament_id/move', (context) => {
   requireMember(context.session);
   const t = bkOf(context);
   const channel = state.settings.get('brackets_channel_id') ? bkSiteWords(`<#${state.settings.get('brackets_channel_id')}>`) : 'brackets_channel_id';
-  if (context.session === 'member') throw new Refused(403, 'not_staff', `Moving a tournament into ${channel} is for staff, so nothing moved.`);
+  if (memberSession(context.session)) throw new Refused(403, 'not_staff', `Moving a tournament into ${channel} is for staff, so nothing moved.`);
   const mode = state.settings.get('brackets_mode') ?? 'shadow';
   if (mode !== 'on') throw new Refused(409, 'not_on', `brackets_mode is ${mode}, so **${t.name}** stays where it is. Set brackets_mode to on first.`);
   if (!t.shadow) throw new Refused(409, 'not_rehearsal', `**${t.name}** is already in ${channel}, so nothing moved.`);
@@ -15980,21 +15988,78 @@ function ptState() {
       submitted_at: minutesAgo(90), state: 'pending', decided_by: null, decided_at: null, reason: null,
       xp: 0, speedpoints: 0, bounty_id: null, ticket_id: null, ...extra,
     });
+    // The contract's four keep their ids (1 pending, 2 approved, 3 rejected, 4 approved under
+    // bounty 1); the rest fill a twelve-member board with Moth (as=member) at #12, below the top 10.
+    const runs = [
+      run(1, MEMBERS[2].id, 'Celeste', 1825.4, { ticket_id: 101 }),
+      run(2, MEMBERS[3].id, 'Hollow Knight', 2400, { state: 'approved', decided_by: STAFF.id, decided_at: at, xp: 100, speedpoints: 10 }),
+      run(3, MEMBERS[6].id, 'Hades', 610, { state: 'rejected', decided_by: STAFF.id, decided_at: at, reason: 'no timer in shot' }),
+      run(4, MEMBERS[2].id, 'Celeste', 700, { state: 'approved', decided_by: STAFF.id, decided_at: minutesAgo(20), xp: 25, speedpoints: 20, bounty_id: 1 }),
+    ];
+    const roster = (offset) => String(700000000000000001n + BigInt(200 + offset));
+    const games = ['Super Metroid', 'Hollow Knight', 'Celeste', 'Hades', 'Portal', 'Mario 64'];
+    const lengths = [3725.5, 1520, 905, 640, 2210.25, 75];
+    const plan = [
+      [MEMBERS[1].id, 9], [MEMBERS[2].id, 6], [roster(0), 7], [roster(1), 6], [STAFF.id, 6], [roster(2), 5],
+      [roster(3), 4], [roster(4), 3], [MEMBERS[5].id, 3], [roster(5), 2], [MEMBERS[6].id, 2],
+    ];
+    let id = 5;
+    plan.forEach(([user, count], who) => {
+      for (let n = 0; n < count; n += 1) {
+        const seconds = lengths[(who + n) % lengths.length];
+        const xp = seconds >= 1800 ? 100 : seconds >= 900 ? 50 : seconds >= 600 ? 25 : 5;
+        runs.push(run(id, user, games[(who + n) % games.length], seconds, {
+          state: 'approved', decided_by: STAFF.id, decided_at: minutesAgo(60 * 24 * (who + 1) - n * 30), xp, speedpoints: 10,
+          submitted_at: minutesAgo(60 * 24 * (who + 1) + 60),
+        }));
+        id += 1;
+      }
+    });
+    runs.push(
+      run(id, MEMBERS[1].id, 'Super Metroid', 2671.9, { ticket_id: 102, category: '100%', submitted_at: minutesAgo(45), note: 'New PB, split file in the description.' }),
+      run(id + 1, roster(0), 'Celeste', 1912, { submitted_at: minutesAgo(25), category: 'All Red Berries' }),
+      run(id + 2, MEMBERS[6].id, 'Portal', 512.4, { ticket_id: 103, submitted_at: minutesAgo(15), category: 'Inbounds' }),
+      run(id + 3, roster(1), 'Hades', 1690, { state: 'removed', decided_by: STAFF.id, decided_at: minutesAgo(400), reason: 'duplicate of an earlier run', submitted_at: minutesAgo(600), xp: 50, speedpoints: 10 }),
+    );
     state.points = {
-      runs: [
-        run(1, MEMBERS[2].id, 'Celeste', 1825.4, {}),
-        run(2, MEMBERS[3].id, 'Hollow Knight', 2400, { state: 'approved', decided_by: STAFF.id, decided_at: at, xp: 100, speedpoints: 10 }),
-        run(3, MEMBERS[6].id, 'Hades', 610, { state: 'rejected', decided_by: STAFF.id, decided_at: at, reason: 'no timer in shot' }),
-        run(4, MEMBERS[2].id, 'Celeste', 700, { state: 'approved', decided_by: STAFF.id, decided_at: minutesAgo(20), xp: 25, speedpoints: 20, bounty_id: 1 }),
-      ],
+      runs,
       bounties: [
         { id: 1, name: 'Game of the month', games: ['Celeste'], kind: 'multiplier', amount: 2, event_id: null, starts_at: minutesAgo(60 * 24), ends_at: daysAhead(20), active: true, created_by: STAFF.id },
+        { id: 2, name: 'AGDQ watch party', games: ['Super Metroid', 'Portal'], kind: 'extra', amount: 15, event_id: 5, starts_at: null, ends_at: null, active: true, created_by: STAFF.id },
+        { id: 3, name: 'Spooky month', games: ['Hollow Knight'], kind: 'multiplier', amount: 1.5, event_id: null, starts_at: daysAhead(5), ends_at: daysAhead(26), active: true, created_by: STAFF.id },
+        { id: 4, name: 'Summer sprint', games: ['Mario 64'], kind: 'extra', amount: 5, event_id: null, starts_at: minutesAgo(60 * 24 * 60), ends_at: minutesAgo(60 * 24 * 30), active: false, created_by: STAFF.id },
       ],
-      nextRun: 5,
-      nextBounty: 2,
+      nextRun: id + 4,
+      nextBounty: 5,
     };
   }
   return state.points;
+}
+
+const PT_PICTURES = { [MEMBERS[1].id]: '/favicon.ico' };
+
+function ptName(id) {
+  const found = memberName(id);
+  if (found) return found;
+  const row = ROSTER.find((one) => one.id === String(id));
+  return row ? row.display_name : null;
+}
+
+function ptTicketPlace(ticketId) {
+  return ticketId ? String(850000000000000000n + BigInt(ticketId)) : null;
+}
+
+function ptWindow(row) {
+  if (!row.event_id) return { starts: row.starts_at, ends: row.ends_at, title: null };
+  const event = state.events.find((one) => Number(one.id) === Number(row.event_id));
+  if (!event || !['approved', 'live', 'done'].includes(event.status)) return { starts: null, ends: null, title: event ? event.title : null };
+  const ends = event.ends_at || new Date(new Date(event.starts_at).getTime() + 120 * 60000).toISOString();
+  return { starts: event.starts_at, ends, title: event.title };
+}
+
+function ptLive(row, at = now()) {
+  const window = ptWindow(row);
+  return Boolean(row.active && window.starts && window.ends && window.starts <= at && at < window.ends);
 }
 
 function ptOff() {
@@ -16002,7 +16067,7 @@ function ptOff() {
 }
 
 function ptStaff(context) {
-  if (context.session === 'member') throw new Refused(403, 'not_staff', NOT_STAFF);
+  if (memberSession(context.session)) throw new Refused(403, 'not_staff', NOT_STAFF);
 }
 
 function ptVerifier(context) {
@@ -16025,26 +16090,26 @@ function ptBoard(by = 'points') {
   const second = by === 'xp' ? 'speedpoints' : 'xp';
   return [...totals.values()]
     .sort((a, b) => b[first] - a[first] || b[second] - a[second] || a.last_at.localeCompare(b.last_at))
-    .map((one, at) => ({ place: at + 1, user_id: String(one.user_id), name: memberName(one.user_id), runs: one.runs, xp: one.xp, speedpoints: one.speedpoints }));
+    .map((one, at) => ({ place: at + 1, user_id: String(one.user_id), name: ptName(one.user_id), runs: one.runs, xp: one.xp, speedpoints: one.speedpoints, avatar_url: PT_PICTURES[String(one.user_id)] || null }));
 }
 
 function ptRun(row) {
   return {
-    ...row, user_id: String(row.user_id), name: memberName(row.user_id), time: ptShown(row.seconds),
+    ...row, user_id: String(row.user_id), name: ptName(row.user_id), time: ptShown(row.seconds), ticket_place_id: ptTicketPlace(row.ticket_id),
     state_words: state.settings.get(`points_state_${row.state}`), decided_by: row.decided_by ? String(row.decided_by) : null,
-    decided_by_name: row.decided_by ? memberName(row.decided_by) : null,
+    decided_by_name: row.decided_by ? ptName(row.decided_by) : null,
   };
 }
 
 function ptBountyRow(row) {
   const amount = String(Number(row.amount));
   const bonus = ptSay(row.kind === 'multiplier' ? 'points_bounty_multiplier_words' : 'points_bounty_extra_words', { amount });
-  const when = row.event_id ? ptSay('points_bounty_event_words', { event: `#${row.event_id}` }) : ptSay('points_bounty_until_words', { ends: String(row.ends_at).slice(0, 10), starts: String(row.starts_at).slice(0, 10) });
-  const at = now();
+  const window = ptWindow(row);
+  const when = row.event_id ? ptSay('points_bounty_event_words', { event: window.title || `#${row.event_id}` }) : ptSay('points_bounty_until_words', { ends: String(row.ends_at).slice(0, 10), starts: String(row.starts_at).slice(0, 10) });
   return {
     id: row.id, name: row.name, games: row.games, kind: row.kind, amount: Number(row.amount), event_id: row.event_id,
-    event_title: null, starts_at: row.starts_at, ends_at: row.ends_at, active: row.active,
-    live: Boolean(row.active && row.starts_at && row.ends_at && row.starts_at <= at && at < row.ends_at),
+    event_title: window.title, starts_at: window.starts, ends_at: window.ends, active: row.active,
+    live: ptLive(row),
     line: ptSay('points_bounty_line', { name: row.name, games: row.games.join(', '), bonus, when }),
   };
 }
@@ -16070,6 +16135,12 @@ function ptOf(context) {
   const found = ptState().runs.find((one) => String(one.id) === String(context.params.run_id));
   if (!found) throw new Refused(404, 'no_run', ptSay('points_no_run_said', { id: context.params.run_id }));
   return found;
+}
+
+function ptOwn(context, row) {
+  if (context.session === 'verifier' && String(row.user_id) === String(VERIFIER.id)) {
+    throw new Refused(403, 'own_run', state.settings.get('points_own_run_said'));
+  }
 }
 
 function ptIn(row, ...allowed) {
@@ -16110,7 +16181,7 @@ function ptMoved(context, before, row) {
 }
 
 function ptWords(row) {
-  return { name: memberName(row.user_id), game: row.game, time: ptShown(row.seconds) };
+  return { name: ptName(row.user_id), game: row.game, time: ptShown(row.seconds) };
 }
 
 route('GET', '/api/points', (context) => {
@@ -16125,12 +16196,12 @@ route('GET', '/api/points', (context) => {
     orders: ['points', 'xp'],
     top_n: top,
     may_verify: verifier,
-    staff: verifier,
+    staff: !memberSession(context.session),
     words: Object.fromEntries(POINTS_WORD_KEYS.map((key) => [key, String(state.settings.get(key) ?? '')])),
     board: board.slice(0, top),
     members: board.length,
     me: ptMe(actorOf(context.session)),
-    bounties: ptState().bounties.filter((one) => one.active && one.ends_at && one.ends_at > now()).map(ptBountyRow),
+    bounties: ptState().bounties.filter((one) => one.active && ptWindow(one).ends && ptWindow(one).ends > now()).map(ptBountyRow),
     pending: verifier ? ptState().runs.filter((one) => one.state === 'pending').length : null,
   };
 });
@@ -16186,11 +16257,12 @@ route('POST', '/api/points/runs/:run_id/approve', (context) => {
   ptOff();
   const row = ptOf(context);
   ptVerifier(context);
+  ptOwn(context, row);
   ptIn(row, 'pending');
   const before = ptBoard();
   const at = now();
   const base = Number(state.settings.get('points_per_run') ?? 10);
-  const bounty = ptState().bounties.find((one) => one.active && one.starts_at <= at && at < one.ends_at && one.games.some((game) => game.toLowerCase() === row.game.toLowerCase()));
+  const bounty = ptState().bounties.find((one) => ptLive(one, at) && one.games.some((game) => game.toLowerCase() === row.game.toLowerCase()));
   const points = bounty ? (bounty.kind === 'multiplier' ? Math.round(base * bounty.amount) : base + Number(bounty.amount)) : base;
   Object.assign(row, { state: 'approved', decided_by: actorOf(context.session), decided_at: at, reason: null, xp: ptXp(row.seconds), speedpoints: points, bounty_id: bounty ? bounty.id : null });
   ptLog('approved', context, { run: row.id });
@@ -16204,6 +16276,7 @@ route('POST', '/api/points/runs/:run_id/reject', async (context) => {
   ptOff();
   const row = ptOf(context);
   ptVerifier(context);
+  ptOwn(context, row);
   ptIn(row, 'pending');
   const body = await context.body();
   Object.assign(row, { state: 'rejected', decided_by: actorOf(context.session), decided_at: now(), reason: String(body.reason || '').trim().slice(0, 300) || null });

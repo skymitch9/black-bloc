@@ -1,0 +1,96 @@
+/* The Leaderboard page (page-leaderboard.js). Tokens only from estate-theme.css. */
+
+.lb-part { display: grid; gap: 12px; min-width: 0; }
+.lb-status { margin: 4px 0 0; color: var(--et-muted); font-size: var(--et-ui-xs); }
+.lb-status[data-tone="warn"] { color: var(--et-warn); }
+.lb-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.lb-tools > .btn.warn { margin-left: auto; }
+.lb-push { margin-left: auto; }
+
+.lb-me {
+  margin: 0;
+  padding: 8px 12px;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius);
+  font-size: var(--et-ui-md);
+}
+.lb-me[data-kind="climb"] { border-color: color-mix(in srgb, var(--et-accent) 45%, var(--et-hairline)); }
+
+.lb-board { display: grid; min-width: 0; }
+.lb-row {
+  display: grid;
+  grid-template-columns: 3.2em minmax(0, 1fr) 7.5em 7em 8.5em;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: var(--et-hairline-w) solid var(--et-hairline);
+}
+.lb-row:last-child { border-bottom: 0; }
+.lb-head {
+  padding-top: 0;
+  color: var(--et-muted);
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-2xs);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: var(--et-label-transform);
+}
+.lb-place { color: var(--et-muted); font-size: var(--et-ui-sm); }
+.lb-row[data-top] .lb-place { color: var(--et-fg); font-weight: var(--et-weight-strong); }
+.lb-row[data-mine="true"] { background: color-mix(in srgb, var(--et-accent) 10%, transparent); border-radius: var(--et-radius); }
+.lb-row[data-mine="true"] .name { color: var(--et-accent); }
+.lb-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.lb-name-wrap { display: flex; flex-direction: column; min-width: 0; }
+.lb-name-wrap .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--et-weight-medium); }
+.lb-sub { display: none; color: var(--et-muted); font-size: var(--et-ui-xs); }
+.lb-num { text-align: right; font-size: var(--et-ui-sm); }
+.lb-board[data-by="points"] .lb-sp,
+.lb-board[data-by="xp"] .lb-xp { font-weight: var(--et-weight-strong); }
+.lb-gap { padding: 0 12px; color: var(--et-muted); text-align: center; line-height: 1; }
+.lb-pager { justify-content: center; }
+
+.lb-bounties { display: grid; gap: 6px; }
+.lb-subhead {
+  margin: 0;
+  color: var(--et-muted);
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-2xs);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: var(--et-label-transform);
+}
+.lb-bounty-lines { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: var(--et-ui-sm); }
+.lb-bounty-lines li[data-live="true"]::marker { color: var(--et-ok); }
+.lb-quiet { margin: 0; color: var(--et-muted); font-size: var(--et-ui-sm); }
+
+.lb-run { flex-wrap: wrap; align-items: flex-start; }
+.lb-run .badge, .lb-bounty .badge { flex-shrink: 0; }
+.lb-runline { font-size: var(--et-ui-sm); overflow-wrap: anywhere; }
+.lb-note { font-size: var(--et-ui-sm); color: var(--et-fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.lb-links { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--et-ui-xs); }
+.lb-link { color: var(--et-accent); text-decoration: none; }
+.lb-link:hover { text-decoration: underline; }
+.lb-link:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+.lb-acts { margin-left: auto; flex-wrap: wrap; }
+.lb-reason { width: min(220px, 100%); }
+.lb-run[data-state="removed"] .rowlist-name,
+.lb-run[data-state="rejected"] .rowlist-name { color: var(--et-muted); }
+.lb-bounty { flex-wrap: wrap; }
+.lb-drawer-who { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+.lb-window[hidden] { display: none; }
+
+@media (max-width: 560px) {
+  .lb-row { grid-template-columns: 2.6em minmax(0, 1fr) 5em; padding: 8px; }
+  .lb-runs { display: none; }
+  .lb-board[data-by="points"] .lb-xp,
+  .lb-board[data-by="xp"] .lb-sp { display: none; }
+  .lb-sub { display: block; }
+  .lb-tools > .btn.warn { margin-left: 0; }
+}
+
+@media (max-width: 700px) {
+  body[data-tab="leaderboard"] .btn,
+  body[data-tab="leaderboard"] .seg button,
+  body[data-tab="leaderboard"] .chip-filter,
+  body[data-tab="leaderboard"] .content .input,
+  body[data-tab="leaderboard"] .drawer .input { min-height: 40px; }
+  body[data-tab="leaderboard"] .lb-link { display: inline-flex; align-items: center; min-height: 40px; }
+}
