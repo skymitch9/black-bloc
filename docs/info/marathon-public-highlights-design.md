@@ -251,3 +251,57 @@ the button) re-renders the pinned message.
 - **The go-live channel's own behaviour** (slow mode, auto-publish) with reminders added — not read.
 - **Volume:** with the default marks (`120, 15`) every BaF run adds two public posts; not measured against a real
   marathon's run count.
+
+## Late tracking (2026-10-09)
+
+> **Status:** 🔨 **BUILT on branch `late-tracked-live` (off `main` `522fea26`), commit `1faabf55`, NOT merged, NOT
+> deployed.** One additive column (`marathons.late_shout_due`, no schema bump: an `ADDED_COLUMNS` row; the archive twin
+> mirrors it at boot), one registry key (**1178 → 1179**, measured `len(settings_store.KEY_TYPES)`), one IMPORTANT log
+> kind, no route change (`check.mjs`: *27 pages, 360 routes, 346 core settings*). **Last verified: 2026-10-09** by
+> `tests/cogs/content/test_marathon_late_track.py` (10), the route assertion in `tests/api/tools/test_marathons.py`, the
+> full suite and the site gate. ⚠️ Nothing met Discord.
+
+**The ask, verbatim (owner, Fri 2026-10-09 ~8:4x PM Phoenix):** *"side ask, priority. an event was tracked late and Ryan
+ford is running right now. the event should have been posted even though its after it starts. can we make it post?"* —
+then, on whether a Discord event should also be made: *"No event"*.
+
+**What happened (measured from the action log by the conductor).** Game Masters (#12, `gdq_hotfix`) was found, not
+tracked. The tick still advances an untracked marathon's runs, so Ryan Ford's run #172 flipped LIVE at 02:42:05Z
+(`marathon.run_live … because=title`); `cog.shout` returns silently for an untracked marathon, so nothing posted. Staff
+tracked it at 03:45:01Z: the thread, board and runner posts went up, but the shout and the public highlight belong to
+the live TRANSITION, which had already happened. Nothing public until "Shout it now" by hand at 03:52:06Z.
+
+**As built.**
+
+- **Every door that flips a marathon to tracked arms it:** `cogs/content/marathon_inbox.py` `track_held` (Track on the
+  site, the thread panel and the inbox button; Track anyway; a feed's auto-track) and `cogs/content/marathon_archive.py`
+  `restore_marathon` when the restored row is tracked (it comes back paused, so the catch-up waits for Resume).
+- **The first `advance()` after it** (`cogs/content/marathon_late_track.py` `sweep`, called at the end of the change
+  loop, under the marathon's lock) re-reads the flag, **clears it before posting** (a failed post is never retried —
+  the transition does not retry either), then for each BaF run that is LIVE and has no `shout_message_id` calls the
+  ordinary `cog.shout`: same `said_by_its_event` skip, same `marathon_live_pings`, same shadow routing by
+  `marathon_mode`, and the public highlight through `auto_highlight` with its own gates (tracked, `auto_wanted`, the
+  run's people announced, a public channel set).
+- **A run that changed state on the same tick is left to the transition** (skip list) — an UPCOMING run whose start
+  has passed flips live by the schedule on that tick and is shouted by the normal path, once (pinned by
+  `test_an_upcoming_run_past_its_start_at_tracking_goes_live_and_is_announced_once`; no code was needed for it).
+- **A DONE run gets nothing.**
+- **Stale cap — `marathon_late_track_shout_minutes`** (int, default **180**, range **0–1440**, 0 = always): a run live
+  longer than that when the sweep runs is left alone and logged ONCE as `marathon.late_shout_skipped` with
+  `age_minutes` / `cap_minutes` / `live_at`. The age is measured at the sweep (≈ the tracking moment — the next tick),
+  from `live_at`, else `actual_started_at`, else `scheduled_at`; a run with none of them counts as too old when a cap
+  is set. Tonight's case (63 min) is inside the default.
+- **No Discord event** (owner).
+
+**The Shout toast (*"The shoutout for is out."*).** NOT reproduced. `shout_now` answers
+`mt.SHOUTED.format(game=row["game"])` from the run row it just read; the route returns that sentence as `message`; the
+drawer's notice renders it through `ui.js` `boldParts`, which puts the game in a `<strong>`. Hotfix runs always carry a
+game (`marathon_hotfix.py` drops a row without one). Pinned now: the route answers
+``The shoutout for **<game>** is out.`` (`tests/api/tools/test_marathons.py`) and `shout_now` does
+(`test_shout_it_now_answers_with_the_runs_game`). ⚠️ The likeliest reading is that the sentence was read off the page by
+an instrument that drops the `<strong>` child (an accessibility-tree read), not that the slot was empty — not verified
+in a browser.
+
+**NOT verified:** nothing ran against Discord or the live site; the toast was not rendered in a browser; the restore
+door was exercised only through a hand-tracked fixture (an archived marathon with a live, unshouted run is not a state
+the tick normally produces).
