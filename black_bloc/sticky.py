@@ -12,10 +12,13 @@ from .panels import SELECT_OPTION_LIMIT
 from .panels import panel_minutes as _panel_minutes
 from .settings_store import (
     STICKY_AFTER_MESSAGES,
+    STICKY_MAX_BURIED_MINUTES,
     STICKY_MIN_SECONDS,
     STICKY_MODE,
     STICKY_MODES,
     STICKY_PANEL_MINUTES,
+    STICKY_PIN_COPIES,
+    STICKY_QUIET_SECONDS,
     STICKY_SILENT,
 )
 
@@ -33,7 +36,9 @@ MESSAGE_LINK = "https://discord.com/channels/{guild_id}/{channel_id}/{message_id
 
 COLUMNS = (
     "guild_id, channel_id, text, paused, trouble, message_id, posted_channel_id, posted_at, "
-    "reposts, created_by, created_at, updated_by, updated_at"
+    "reposts, created_by, created_at, updated_by, updated_at, post_id, "
+    "(SELECT title FROM posts WHERE posts.id = sticky_messages.post_id) AS post_title, "
+    "(SELECT slug FROM posts WHERE posts.id = sticky_messages.post_id) AS post_slug"
 )
 
 LIVE = "live"
@@ -68,6 +73,10 @@ MODE_LABELS: dict[str, str] = {
     "on": "on — each one is kept at the bottom of its channel",
 }
 MODE_PLACEHOLDER = "What sticky messages do…"
+POST_PLACEHOLDER = "Keep a post at the bottom of a channel…"
+SWAP_PLACEHOLDER = "Keep a different post here…"
+WHERE_PLACEHOLDER = "The channel it stays at the bottom of…"
+WHERE_TITLE = "{title}"
 PICK_PLACEHOLDER = "A sticky message…"
 ADD_PLACEHOLDER = "Add or edit one in a channel…"
 WORDS_TITLE = "Sticky message"
@@ -168,6 +177,33 @@ NOT_POSTABLE = (
     "saved. Pick a text or announcement channel."
 )
 
+POST_WORDS = "The post **{title}**"
+POST_GONE_WORDS = "a post that has been deleted"
+NO_SUCH_POST = (
+    "There is no post called **{slug}**, so nothing was saved. Pick one from the Posts page's list."
+)
+POST_CARRIES_DOOR = (
+    "**{title}** carries the front door, which keeps its own place, so it cannot be a sticky "
+    "message and nothing was saved."
+)
+POST_HELD = (
+    "**{title}** is already the sticky message in <#{channel_id}>, so nothing was saved. Remove it "
+    "there first."
+)
+POST_IS_UP = (
+    "**{title}** is posted already, so nothing was saved. Take it down on the Posts page first; "
+    "the sticky message then posts it here."
+)
+POST_IS_EMPTY = (
+    "**{title}** has no words and no block to show, so nothing was saved. Give it some on the "
+    "Posts page first."
+)
+POST_REPLACED = "{channel} now keeps the post **{title}** at the bottom."
+TROUBLE_POST_GONE = "Its post has been deleted. Pick another post or remove this sticky message."
+TROUBLE_POST_EMPTY = (
+    "Its post has no words and no block to show. Give it some on the Posts page, then press Try "
+    "again."
+)
 TROUBLE_CHANNEL_GONE = "Discord no longer has that channel. Remove this sticky message."
 TROUBLE_NO_HOME = (
     "There is no rehearsal home to post the copy in. Set `shadow_channel_id` or "
@@ -203,6 +239,18 @@ HOME_TROUBLES = re.compile(
 
 def now_iso(at: datetime | None = None) -> str:
     return (at or datetime.now(UTC)).isoformat()
+
+
+def is_post(row: Any) -> bool:
+    return bool(row["post_id"])
+
+
+def words_of(row: Any) -> str:
+    """What a sticky shows: staff's own words, or which post it keeps at the bottom."""
+    if not is_post(row):
+        return str(row["text"] or "")
+    title = row["post_title"]
+    return POST_WORDS.format(title=title) if title else POST_GONE_WORDS
 
 
 def clean(text: Any) -> str:
@@ -305,6 +353,17 @@ def posted_epoch(row: Any) -> int | None:
         return None
 
 
+def numbers_waiting(store: Any, guild_id: int) -> tuple[int, int]:
+    return (
+        int(store.get(guild_id, STICKY_QUIET_SECONDS)),
+        int(store.get(guild_id, STICKY_MAX_BURIED_MINUTES)),
+    )
+
+
+def pins(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, STICKY_PIN_COPIES))
+
+
 def row_line(row: Any, mode: str) -> str:
     state = state_of(row, mode)
     line = ROW_LINE.format(channel_id=row["channel_id"], state=STATE_WORDS[state])
@@ -319,9 +378,11 @@ def row_line(row: Any, mode: str) -> str:
     return line
 
 
-def root_lines(rows: Any, mode: str) -> list[str]:
+def root_lines(rows: Any, mode: str, modes: dict[int, str] | None = None) -> list[str]:
+    """Each row is read against its own mode; a post owned by another feature follows that one."""
+    each = modes or {}
     lines = [MODE_LINE.format(mode=mode), ""]
-    lines += [row_line(row, mode) for row in rows] or [NONE_YET]
+    lines += [row_line(row, each.get(int(row["channel_id"]), mode)) for row in rows] or [NONE_YET]
     return lines
 
 
@@ -335,13 +396,22 @@ def sticky_options(rows: Any, names: dict[int, str]) -> list[tuple[str, int]]:
         ident = int(row["channel_id"])
         name = names.get(ident)
         head = f"#{name}" if name else GONE_CHANNEL.format(ident=ident)
-        found.append((f"{head} · {preview(row['text'])}"[:SELECT_OPTION_LIMIT], ident))
+        found.append((f"{head} · {preview(words_of(row))}"[:SELECT_OPTION_LIMIT], ident))
     return found
 
 
+def post_options(rows: Any, but: Any = None) -> list[tuple[str, int]]:
+    """Posts a sticky may keep: not the front door's carrier, not the one already here."""
+    return [
+        (str(row["title"] or row["slug"])[:SELECT_OPTION_LIMIT], int(row["id"]))
+        for row in rows
+        if not row["carries_door"] and int(row["id"]) != int(but or 0)
+    ]
+
+
 def card_buttons(row: Any) -> tuple[StickyMove, ...]:
-    """A move the shared function would refuse is absent, never offered and refused."""
-    found = [EDIT_MOVE]
+    """A move the shared function would refuse is absent; a post's words are edited as a post."""
+    found = [] if is_post(row) else [EDIT_MOVE]
     if row["trouble"]:
         found.append(RETRY_MOVE)
     elif row["paused"]:
@@ -398,19 +468,30 @@ async def running_channels(db: Any) -> list[tuple[int, int]]:
     return [(int(row["guild_id"]), int(row["channel_id"])) for row in await cur.fetchall()]
 
 
-async def write_words(db: Any, guild_id: int, channel_id: int, text: str, by: Any) -> bool:
-    """True when this made the row; the words change and whatever stopped it is forgotten."""
+async def write_words(
+    db: Any, guild_id: int, channel_id: int, text: str, by: Any, *, post_id: Any = None
+) -> bool:
+    """True when this made the row; the words (or the post) change and any stop is forgotten."""
     at = now_iso()
     made = await get_row(db, guild_id, channel_id) is None
     await db.conn.execute(
-        "INSERT INTO sticky_messages(guild_id, channel_id, text, created_by, created_at, "
-        "updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT(guild_id, channel_id) DO UPDATE SET text = excluded.text, trouble = NULL, "
+        "INSERT INTO sticky_messages(guild_id, channel_id, text, post_id, created_by, created_at, "
+        "updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(guild_id, channel_id) DO UPDATE SET text = excluded.text, "
+        "post_id = excluded.post_id, trouble = NULL, "
         "updated_by = excluded.updated_by, updated_at = excluded.updated_at",
-        (int(guild_id), int(channel_id), text, by, at, by, at),
+        (int(guild_id), int(channel_id), text, int(post_id) if post_id else None, by, at, by, at),
     )
     await db.conn.commit()
     return made
+
+
+async def row_of_post(db: Any, post_id: Any) -> Any:
+    """The sticky that keeps this post at the bottom, if one does."""
+    cur = await db.conn.execute(
+        f"SELECT {COLUMNS} FROM sticky_messages WHERE post_id = ? LIMIT 1", (int(post_id),)
+    )
+    return await cur.fetchone()
 
 
 async def write_paused(db: Any, guild_id: int, channel_id: int, paused: bool, by: Any) -> None:

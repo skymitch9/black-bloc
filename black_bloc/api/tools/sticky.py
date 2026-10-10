@@ -15,7 +15,7 @@ from ..writes import actor_for, require_db, require_guild, wanted_id, writer_dep
 log = logging.getLogger(__name__)
 
 
-def sticky_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
+def sticky_row(bot: Any, guild: Any, row: Any, mode: str | None = None) -> dict[str, Any]:
     channel = guild.get_channel(int(row["channel_id"]))
     posted_in = row["posted_channel_id"]
     return {
@@ -23,9 +23,15 @@ def sticky_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
         "channel_name": getattr(channel, "name", None),
         "gone": channel is None,
         "text": row["text"],
+        "post": (
+            {"id": int(row["post_id"]), "slug": row["post_slug"], "title": row["post_title"]}
+            if rules.is_post(row)
+            else None
+        ),
+        "words": site_words(guild, rules.words_of(row)),
         "paused": bool(row["paused"]),
         "trouble": site_words(guild, row["trouble"]),
-        "state": rules.state_of(row, rules.mode_of(bot.store, guild.id)),
+        "state": rules.state_of(row, mode or rules.mode_of(bot.store, guild.id)),
         "message_id": str(row["message_id"]) if row["message_id"] else None,
         "posted_channel_id": str(posted_in) if posted_in else None,
         "posted_at": row["posted_at"],
@@ -49,17 +55,19 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(outcome.status or 400, outcome.code, site_words(guild, outcome.message))
         return site_words(guild, outcome.message)
 
-    def answered(guild: Any, outcome: Any) -> dict[str, Any]:
+    async def shaped(guild: Any, row: Any) -> dict[str, Any]:
+        mode, _ = await desk_of(bot).rule_of(guild, row)
+        return sticky_row(bot, guild, row, mode)
+
+    async def answered(guild: Any, outcome: Any) -> dict[str, Any]:
         message = said(guild, outcome)
-        return {"sticky": sticky_row(bot, guild, outcome.value), "message": message}
+        return {"sticky": await shaped(guild, outcome.value), "message": message}
 
     @router.get("")
     async def sticky_list() -> list[dict[str, Any]]:
         guild = require_guild(bot)
         require_db(bot)
-        return [
-            sticky_row(bot, guild, row) for row in await rules.rows_for_guild(bot.db, guild.id)
-        ]
+        return [await shaped(guild, row) for row in await rules.rows_for_guild(bot.db, guild.id)]
 
     @router.put("/{channel_id}")
     async def sticky_save(
@@ -74,8 +82,9 @@ def build_router(bot: Any) -> APIRouter:
             payload.get("text"),
             actor_for(bot, who, guild),
             via=VIA_WEBSITE,
+            post=payload.get("post") or None,
         )
-        return answered(guild, outcome)
+        return await answered(guild, outcome)
 
     @router.post("/{channel_id}/pause")
     async def sticky_pause(request: Request, channel_id: str) -> dict[str, Any]:
@@ -85,7 +94,7 @@ def build_router(bot: Any) -> APIRouter:
         outcome = await desk_of(bot).pause(
             guild, wanted_id(channel_id), actor_for(bot, who, guild), via=VIA_WEBSITE
         )
-        return answered(guild, outcome)
+        return await answered(guild, outcome)
 
     @router.post("/{channel_id}/resume")
     async def sticky_resume(request: Request, channel_id: str) -> dict[str, Any]:
@@ -95,7 +104,7 @@ def build_router(bot: Any) -> APIRouter:
         outcome = await desk_of(bot).resume(
             guild, wanted_id(channel_id), actor_for(bot, who, guild), via=VIA_WEBSITE
         )
-        return answered(guild, outcome)
+        return await answered(guild, outcome)
 
     @router.delete("/{channel_id}")
     async def sticky_remove(request: Request, channel_id: str) -> dict[str, Any]:

@@ -26,6 +26,9 @@ class FakeMessage:
         self.id = message_id
         self.content = content
 
+    async def pin(self, reason=None):
+        self.pinned = True
+
     async def delete(self):
         if self in self.channel.messages:
             self.channel.messages.remove(self)
@@ -233,6 +236,8 @@ async def test_moving_the_rehearsal_home_moves_the_rehearsal_copy(cog, bot):
         "sticky_shadow_channel_id",
         "shadow_channel_id",
         "log_channel_id",
+        "points_mode",
+        "points_shadow_channel_id",
     }
 
 

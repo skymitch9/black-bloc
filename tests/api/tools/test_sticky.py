@@ -160,3 +160,25 @@ async def test_a_sticky_whose_channel_is_gone_still_lists_so_it_can_be_removed(
 
     assert rows[0]["gone"] is True and rows[0]["channel_name"] is None
     assert client.delete("/api/sticky/424242").status_code == 200
+
+
+async def test_a_post_can_be_the_sticky_and_the_list_names_it(client, sign_in, web, guild, wf):
+    from black_bloc import posts
+
+    await web.store.set(wf.GUILD_ID, "sticky_mode", "on")
+    await posts.create_post(
+        web.db, wf.GUILD_ID, slug="rules", title="House rules", body="Be kind.", pin=False
+    )
+    sign_in(client)
+
+    saved = client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"post": "rules"})
+    missing = client.put(f"/api/sticky/{wf.TEST_CHANNEL_ID}", json={"post": "nothing"})
+    rows = client.get("/api/sticky").json()
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["sticky"]["post"]["slug"] == "rules"
+    assert [one.content for one in guild.get_channel(wf.OTHER_CHANNEL_ID).messages] == [
+        "Be kind."
+    ]
+    assert rows[0]["words"] == "The post **House rules**" and rows[0]["state"] == "live"
+    assert missing.status_code == 404 and missing.json()["error"] == "no_such_post"

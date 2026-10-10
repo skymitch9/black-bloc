@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 92
+        assert SCHEMA_VERSION == 93
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3624,7 +3624,7 @@ async def test_a_schema_86_file_gains_the_stored_tone_and_keeps_what_each_member
         cur = await again.conn.execute("PRAGMA table_info(chat_voice)")
         assert set(TONE_COLUMNS) <= {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "92"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "93"
     finally:
         await again.close()
 
@@ -3960,7 +3960,7 @@ async def test_a_schema_88_file_gains_the_pb_feed_tables_and_loses_nothing(tmp_p
         cur = await again.conn.execute("SELECT outcome FROM structure_looks")
         assert [row["outcome"] for row in await cur.fetchall()] == ["saved"]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "92"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "93"
     finally:
         await again.close()
 
@@ -4017,7 +4017,7 @@ async def test_a_pb_matches_table_from_the_first_build_gains_the_review_columns(
     try:
         from black_bloc.storage.db import ADDED_COLUMNS
 
-        assert SCHEMA_VERSION == 92
+        assert SCHEMA_VERSION == 93
         for column in PB_ADDED:
             assert any(row[:2] == ("pb_matches", column) for row in ADDED_COLUMNS), column
         assert (await pb_columns(again))["pb_matches"] == PB_TABLES["pb_matches"]
@@ -4049,7 +4049,7 @@ async def test_a_pb_posts_table_from_before_post_again_gains_again_of_and_keeps_
     again = Database(path)
     await again.connect()
     try:
-        assert SCHEMA_VERSION == 92
+        assert SCHEMA_VERSION == 93
         assert (await pb_columns(again))["pb_posts"] == PB_TABLES["pb_posts"]
         cur = await again.conn.execute("SELECT run_id, outcome, again_of FROM pb_posts")
         assert [tuple(row) for row in await cur.fetchall()] == [("r1", "rehearsed", None)]
@@ -4189,7 +4189,7 @@ async def test_a_schema_89_file_gains_the_bracket_tables_and_loses_nothing(tmp_p
             "message_id",
         } <= columns
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "92"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "93"
     finally:
         await again.close()
 
@@ -4250,7 +4250,7 @@ async def test_a_schema_90_file_gains_the_pool_columns_and_loses_nothing(tmp_pat
         )
         assert [tuple(row) for row in await cur.fetchall()] == [("W1-1", 4, 5, None, None)]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "92"
+        assert (await cur.fetchone())["value"] == "93"
     finally:
         await again.close()
 
@@ -4362,6 +4362,38 @@ async def test_a_schema_91_file_gains_the_point_tables_and_loses_nothing(tmp_pat
         cur = await again.conn.execute("SELECT state, xp, speedpoints FROM points_runs")
         assert tuple(await cur.fetchone()) == ("pending", 0, 0)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "92"
+        assert (await cur.fetchone())["value"] == "93"
+    finally:
+        await again.close()
+
+
+async def test_a_schema_92_file_gains_a_post_for_its_stickies_and_keeps_every_one(tmp_path):
+    """Schema 93 is one nullable column on sticky_messages: a text sticky stays a text sticky."""
+    path = tmp_path / "old92.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE sticky_messages DROP COLUMN post_id")
+    await db.conn.execute(
+        "INSERT INTO sticky_messages(guild_id, channel_id, text, message_id, posted_channel_id, "
+        "created_at, updated_at) VALUES (1, 5, 'How to submit a run', 99, 5, "
+        "'2026-10-05T00:00:00+00:00', '2026-10-05T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '92')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT * FROM sticky_messages WHERE channel_id = 5")
+        row = await cur.fetchone()
+        assert row["text"] == "How to submit a run" and row["message_id"] == 99
+        assert row["post_id"] is None
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == "93"
     finally:
         await again.close()

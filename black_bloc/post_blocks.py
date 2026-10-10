@@ -806,6 +806,22 @@ def kept_part(message: Any) -> list[Any]:
     return [] if getattr(message, "content", "") else list(getattr(message, "embeds", [])[:1])
 
 
+async def sticky_edit(bot: Any, guild: Any, row: Any) -> dict[str, Any] | None:
+    """A sticky's post is drawn whole again, its rehearsal note too: the sticky reposts it fresh."""
+    from . import shadow
+    from . import sticky as sticky_rules
+    from .sticky_posts import post_message
+
+    owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
+    if owner is None:
+        return None
+    channel_id = int(owner["channel_id"])
+    rehearsing = int(owner["posted_channel_id"] or 0) != channel_id
+    note = shadow.note_line(bot, guild, f"<#{channel_id}>") if rehearsing else ""
+    payload, _ = await post_message(bot, guild, row, note)
+    return payload
+
+
 async def needs_redraw(bot: Any, row: Any, kinds: list[str], stamps: dict[str, Any]) -> bool:
     have = await drawn_of(bot.db, int(row["id"]))
     if any((stamps.get(kind) or None) != (have.get(kind) or None) for kind in kinds):
@@ -839,13 +855,12 @@ async def redraw_post(
     message = await posts.posted_message(bot, guild, row)
     if message is None:
         return False
-    made = posts.with_blocks({"content": None, "embed": None}, list(drawn.values()))
+    edit = await sticky_edit(bot, guild, row)
+    if edit is None:
+        made = posts.with_blocks({"content": None, "embed": None}, list(drawn.values()))
+        edit = {"embeds": kept_part(message) + made["embeds"], "view": made["view"]}
     try:
-        await message.edit(
-            embeds=kept_part(message) + made["embeds"],
-            view=made["view"],
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        await message.edit(**edit, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException as exc:
         log.warning("post blocks: could not redraw %s: %s", posts.row_value(row, "slug"), exc)
         await log_action(
