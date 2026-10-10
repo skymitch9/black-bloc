@@ -72,6 +72,16 @@ class Sticky(commands.Cog):
             return
         await self.desk.load()
         await self.reconciler.run(self.reconcile, skip_if_recent=True)
+        for guild in list(self.bot.guilds):
+            try:
+                await self.desk.catch_up(guild)
+            except Exception as exc:
+                log.warning(
+                    "sticky: guild %s was not caught up - %s: %s",
+                    getattr(guild, "id", "?"),
+                    type(exc).__name__,
+                    exc,
+                )
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:

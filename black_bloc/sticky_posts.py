@@ -25,6 +25,7 @@ DESK_ATTR = "sticky_desk"
 NEEDED = (("view_channel", "View Channel"), ("send_messages", "Send Messages"))
 
 POSTED = "posted"
+HISTORY_LIMIT = 200  # messages read after a copy at boot (catch_up)
 REHEARSED = "rehearsed"
 TEST_MODE = "test_mode"
 NOT_RUNNING = "not_running"
@@ -249,6 +250,52 @@ class Desk:
             quiet,
             ceiling,
         )
+
+    async def catch_up(self, guild: Any) -> None:
+        """Owner, 2026-10-10: the move is measured from the LAST POSTED MESSAGE, not from when
+        this process heard it. At boot, read what was said after each running copy and arm the
+        move as if every one of those messages had been heard - now, if the quiet is already up."""
+        after, gap, _ = rules.numbers(self.store, guild.id)
+        for row in await rules.rows_for_guild(self.db, guild.id):
+            if not rules.is_running(row) or not row["message_id"] or not row["posted_channel_id"]:
+                continue
+            channel_id = int(row["channel_id"])
+            if channel_id in self.waiting or channel_id in self.deciding:
+                continue
+            channel = shadow_home.channel_of(self.bot, guild, row["posted_channel_id"])
+            history = getattr(channel, "history", None)
+            if history is None:
+                continue
+            count, last, reached = 0, None, None
+            try:
+                async for message in history(
+                    after=discord.Object(id=int(row["message_id"])),
+                    limit=HISTORY_LIMIT,
+                    oldest_first=True,
+                ):
+                    if not rules.counts(message):
+                        continue
+                    count += 1
+                    last = message.created_at
+                    if count == after:
+                        reached = last
+            except Exception as exc:
+                log.warning("sticky: channel %s history was not read - %s", channel_id, why(exc))
+                continue
+            if not count:
+                continue
+            self.heard[channel_id] = count
+            self.last[channel_id] = last
+            if count < after:
+                continue
+            self.reached.setdefault(channel_id, reached)
+            wait = rules.due_in(self._wait(row, gap), self._quiet(guild, channel_id))
+            if wait > 0:
+                self.waiting[channel_id] = asyncio.create_task(
+                    self._later(guild, channel_id, wait), name=f"sticky-{channel_id}"
+                )
+                continue
+            await self.place(guild, channel_id)
 
     async def _later(self, guild: Any, channel_id: int, wait: float) -> None:
         """One timer per channel: it sleeps again while people are still talking."""

@@ -83,6 +83,7 @@ class FakeChannel:
         self.delete_raises = None
         self.pin_raises = None
         self.pinned = []
+        self.spoken = []  # people's messages, for history()
         self.perms = SimpleNamespace(view_channel=True, send_messages=True)
 
     def permissions_for(self, who):
@@ -95,6 +96,14 @@ class FakeChannel:
         message = FakeMessage(self, FakeChannel._next, content, kwargs)
         self.messages.append(message)
         return message
+
+    async def history(self, *, after=None, limit=None, oldest_first=False):
+        floor = int(getattr(after, "id", after or 0))
+        found = sorted(
+            (one for one in self.messages + self.spoken if one.id > floor), key=lambda one: one.id
+        )
+        for one in found[: limit or len(found)]:
+            yield one
 
     def get_partial_message(self, message_id):
         found = next((one for one in self.messages if one.id == int(message_id)), None)
@@ -238,6 +247,75 @@ async def test_the_mode_ships_shadow_and_a_save_rehearses_in_the_home_with_the_n
     assert rules.state_of(row, "shadow") == rules.REHEARSING
     assert await kinds(db) == ["sticky.set", "sticky.would_post"]
     assert f"<#{HOME}>" in outcome.message and f"<#{RUNS}>" in outcome.message
+
+
+def spoke(channel, clock, times, *, ago=0):
+    """People talked while nobody was listening; the last word was `ago` seconds back."""
+    for n in range(times):
+        FakeChannel._next += 1
+        channel.spoken.append(
+            SimpleNamespace(
+                id=FakeChannel._next,
+                guild=channel.guild,
+                channel=channel,
+                author=SimpleNamespace(id=901, bot=False),
+                webhook_id=None,
+                type=discord.MessageType.default,
+                created_at=clock.now() - timedelta(seconds=ago + (times - 1 - n) * 10),
+            )
+        )
+
+
+async def test_a_boot_moves_a_copy_that_five_people_buried_and_left_quiet(bot, desk, clock):
+    """Owner, 2026-10-10: the move is five minutes from the last posted message, boots included."""
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    first = channel(bot, HOME).messages[0].id
+    clock.tick(900)
+    spoke(channel(bot, HOME), clock, 5, ago=600)
+    fresh = Desk(bot, now=clock.now, sleep=clock.sleep)
+    await fresh.load()
+
+    await fresh.catch_up(bot.guild)
+
+    assert channel(bot, HOME).deleted == [first]
+    assert len(channel(bot, HOME).messages) == 1 and channel(bot, HOME).messages[0].id != first
+    assert (await row_of(bot))["reposts"] == 1 and fresh.waiting == {}
+
+
+async def test_a_boot_arms_the_rest_of_the_quiet_when_the_last_word_was_recent(bot, desk, clock):
+    await bot.store.set(GUILD, "sticky_quiet_seconds", 300)
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    first = channel(bot, HOME).messages[0].id
+    clock.tick(900)
+    spoke(channel(bot, HOME), clock, 5, ago=60)
+    fresh = Desk(bot, now=clock.now, sleep=clock.sleep)
+    await fresh.load()
+    clock.gate = asyncio.Event()
+
+    await fresh.catch_up(bot.guild)
+
+    assert list(fresh.waiting) == [RUNS] and fresh.heard[RUNS] == 5
+    assert [one.id for one in channel(bot, HOME).messages] == [first]
+    clock.gate.set()
+    await fresh.waiting[RUNS]
+    assert clock.slept == [240.0]
+    assert channel(bot, HOME).deleted == [first]
+
+
+async def test_a_boot_remembers_a_count_short_of_the_mark_and_waits_for_the_rest(bot, desk, clock):
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    first = channel(bot, HOME).messages[0].id
+    clock.tick(900)
+    spoke(channel(bot, HOME), clock, 3, ago=600)
+    fresh = Desk(bot, now=clock.now, sleep=clock.sleep)
+    await fresh.load()
+
+    await fresh.catch_up(bot.guild)
+
+    assert fresh.heard[RUNS] == 3 and fresh.waiting == {}
+    assert [one.id for one in channel(bot, HOME).messages] == [first]
+    await talk(fresh, bot, 2, channel_id=HOME)
+    assert channel(bot, HOME).deleted == [first]
 
 
 async def test_a_rehearsing_copy_counts_the_talk_where_it_sits(bot, desk, clock, db):
