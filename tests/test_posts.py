@@ -1578,5 +1578,5 @@ def test_the_page_spells_the_test_copy_words_the_way_the_card_does():
         Path(posts.__file__).resolve().parent.parent / "site/public/assets/page-posts.js"
     ).read_text(encoding="utf-8")
     flat = page.replace("'\n  + '", "")
-    for name in ("POST_TO_TEST", "TEST_COPY_LINE", "REHEARSE_LINE", "ITS_CHANNEL"):
+    for name in ("POST_TO_TEST", "TEST_COPY_LINE"):
         assert f"const {name} = '{getattr(posts, name)}';" in flat, name

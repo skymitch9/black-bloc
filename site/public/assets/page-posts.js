@@ -63,13 +63,11 @@ const WILL_SHADOW_NOWHERE = 'shadow — this goes to {shadow}. It has no channel
   + 'and nothing reaches one until posts are on.';
 const WILL_SHADOW_SAME = 'shadow — this goes to {shadow}, which is where it was going anyway.';
 const NO_SHADOW_CHANNEL = 'no shadow channel yet';
-// Post to test (2026-10-10). The twins of posts.POST_TO_TEST, posts.TEST_COPY_LINE,
-// posts.REHEARSE_LINE and posts.ITS_CHANNEL — tests/test_posts.py reads them off this file.
+// Post to test (2026-10-10). The twins of posts.POST_TO_TEST and posts.TEST_COPY_LINE —
+// tests/test_posts.py reads them off this file. (The how-it-works line under the buttons was
+// dropped 2026-10-10 on the owner's word: no explaining blurbs.)
 const POST_TO_TEST = 'Post to test';
 const TEST_COPY_LINE = 'A test copy is in {shadow}.';
-const REHEARSE_LINE = 'Post to test sends a copy to {shadow} as it would look, without touching {where}; the next '
-  + 'Post it takes the copy down.';
-const ITS_CHANNEL = 'its channel';
 const SHADOW = 'shadow';
 const PIN_WORDS = { true: 'pins it', false: 'leaves it unpinned' };
 // Blocks (owner, 2026-09-27: "lets do blocks"). A block rides under a post in the same message.
@@ -239,13 +237,6 @@ function postedLine(row, shadow) {
   return line.replace('{where}', at) + (row.pin ? PINNED_TOO : NOT_PINNED) + (row.test_copy ? ` ${copy}` : '');
 }
 
-function rehearseLine(draft, post, payload) {
-  const named = draft.channel_name || post.channel_name;
-  return REHEARSE_LINE
-    .replace('{shadow}', shadowWords(payload.shadow))
-    .replace('{where}', draft.channel_id && named ? `#${named}` : ITS_CHANNEL);
-}
-
 /** The one word that decides the dot: what the row's own status list leads with. */
 function leadState(row) {
   if (row.changes_pending) return 'warn';
@@ -268,15 +259,14 @@ function willPost(draft, post, payload, dirty = false) {
       .replace('{shadow}', at)
       .replace('{where}', `#${draft.channel_name || post.channel_name || ''}`);
   }
-  const test = payload.mode === 'on' ? ` ${rehearseLine(draft, post, payload)}` : '';
-  if (!draft.channel_id) return NEEDS_A_CHANNEL + test;
+  if (!draft.channel_id) return NEEDS_A_CHANNEL;
   const up = post.test_copy ? Boolean(post.message_id) : post.posted;
   const saving = up ? WILL_UPDATE_SAVED : WILL_POST_SAVED;
   const template = dirty ? saving : (up ? WILL_UPDATE : WILL_POST);
   return template
     .replace('{where}', `#${draft.channel_name || post.channel_name || ''}`)
     .replace('{style}', STYLE_WORDS[draft.style] || STYLE_WORDS.plain)
-    .replace('{pin}', PIN_WORDS[String(Boolean(draft.pin))]) + test;
+    .replace('{pin}', PIN_WORDS[String(Boolean(draft.pin))]);
 }
 
 function draftOf(post) {

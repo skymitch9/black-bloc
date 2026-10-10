@@ -1,5 +1,7 @@
 # Post to test — a preview copy in #post-test whatever the posts switch says
 
+> ✂️ **2026-10-10 12:4x — the sentence under the drawer buttons is GONE** (owner, verbatim: *"B we don't need the blurb"*, the 2026-10-04 no-blurbs rule): `REHEARSE_LINE` / `rehearse_line` and the `willPost` suffix removed; the button and the *test copy* pill carry it. Rides as v223.
+
 > **Audience:** the build agent (branch `post-to-test`), reviewers, and the next build that touches Posts or
 > the sticky desk. **Status:** TRACKED · 🔨 DESIGN 2026-10-10 12:1x Phoenix, dispatched to Opus; BUILT on branch `post-to-test` (see **Deviations** at the end),
 > NOT merged, NOT deployed. **Last verified: 2026-10-10** — the code facts below were read off `main`

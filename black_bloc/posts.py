@@ -198,10 +198,6 @@ REHEARSAL_UPDATED_SAID = "Updated the test copy of **{title}** in {shadow}."
 STICKY_ALREADY_REHEARSING = "It already rehearses in {shadow} — the copy there is live."
 ITS_CHANNEL = "its channel"
 TEST_COPY_LINE = "A test copy is in {shadow}."
-REHEARSE_LINE = (
-    "Post to test sends a copy to {shadow} as it would look, without touching {where}; the next "
-    "Post it takes the copy down."
-)
 TAKEN_DOWN_SAID = "**{title}** is taken down. Every word is still here."
 TAKEN_DOWN_WITH_DOOR_SAID = (
     " The front door was part of that message, so it is down too — **Post it** puts both back."
@@ -464,13 +460,6 @@ def shows_post_to_test(mode: Any) -> bool:
 
 def copy_line(bot: Any, guild: Any) -> str:
     return TEST_COPY_LINE.format(shadow=where_words(guild, shadow_channel_id(bot, guild)))
-
-
-def rehearse_line(bot: Any, guild: Any, channel_id: Any) -> str:
-    where = where_words(guild, channel_id) if channel_id else ITS_CHANNEL
-    return REHEARSE_LINE.format(
-        shadow=where_words(guild, shadow_channel_id(bot, guild)), where=where
-    )
 
 
 def preview_of(row: Any) -> str:
@@ -1865,7 +1854,6 @@ __all__ = [
     "has_test_copy",
     "shows_post_to_test",
     "copy_line",
-    "rehearse_line",
     "REHEARSED",
     "REHEARSAL_UPDATED",
     "WOULD_REHEARSE",
@@ -1875,7 +1863,6 @@ __all__ = [
     "NO_TEST_CHANNEL",
     "ITS_CHANNEL",
     "TEST_COPY_LINE",
-    "REHEARSE_LINE",
     "POST_TO_TEST",
     "STATUS_TEST_COPY",
     "turn_carrying",
