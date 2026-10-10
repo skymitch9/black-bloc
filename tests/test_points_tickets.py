@@ -171,6 +171,7 @@ async def test_a_second_run_waits_for_the_first_in_words(bot, ada, db):
 
     assert not again.ok and again.code == "run_waiting"
     assert again.message.startswith("Your **Celeste** run is still waiting for staff")
+    assert (await details(db, "modmail.open_refused"))["reason"] == "run_waiting"
     assert len(await store_.runs(db, GUILD, limit=-1)) == 1
 
 
@@ -181,6 +182,7 @@ async def test_an_open_ordinary_ticket_holds_a_run_back_in_words(bot, ada, db):
 
     assert not outcome.ok and outcome.code == "already_open"
     assert "already have a ticket open with staff" in outcome.message
+    assert (await details(db, "modmail.open_refused"))["reason"] == "already_open"
 
 
 async def test_modmail_switched_off_refuses_a_run_in_points_words(bot, ada):

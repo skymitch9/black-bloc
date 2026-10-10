@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-10-07** — KI-33 only, by the `date-fuse-sweep` branch (not merged): the date-fuse sweep, seven tests (four fuses) pinned, the `BB_FAKE_NOW` guard and CI's `clock-ahead` job; measured by running the suite under moved clocks. ⚠️ Nothing else in this file was re-read.
+> Last verified: **2026-10-09** — KI-44 only, ADDED by the `points-discord` branch (not merged): the refusals and the DM routing read from the code and the branch's tests, not from the live log. 
+> Before that, **2026-10-07** — KI-33 only, by the `date-fuse-sweep` branch (not merged): the date-fuse sweep, seven tests (four fuses) pinned, the `BB_FAKE_NOW` guard and CI's `clock-ahead` job; measured by running the suite under moved clocks. ⚠️ Nothing else in this file was re-read.
 > Before that, **2026-10-04 18:3x** — the v202 docs ritual (v195 to v202): KI-41 was added 2026-10-04 (already in the file) and **KI-42 ADDED** (the 256 MB OOM kill, `WATCHING`; read from the TODO 💥 bullet, not re-measured). ⚠️ KI-10 and KI-40 were NOT re-read for these eight deploys; nothing else in this file was re-tested.
 > Before that, **2026-09-25 19:3x** — KI-10 only, at the v166 docs ritual: a KI-10 line for the v166 swap (the line itself NOT read — `flyctl logs --no-tail` at 19:3x starts at 02:32:34Z, after the boot). ⚠️ Nothing else re-read.
 > Before that, **2026-09-25 16:2x** — KI-10 and KI-26 only, at the v165 docs ritual: a KI-10 line for the v165 swap (the line itself NOT read — Fly's log buffer starts at the new machine); KI-26: the fix shipped inside v165, CI green (`gh run list`). ⚠️ Nothing else re-read.
@@ -170,6 +171,16 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-44 — Modmail's one-open-ticket-per-member rule now covers RUN tickets too, so a run and a support ticket wait on each other — `WATCHING`
+
+**Symptom:** a run submitted on `/pb` is a modmail ticket (source `points`, [`info/points-design.md`](info/points-design.md) §G), and modmail allows one open ticket per member (the `modmail_open_ticket` partial unique index). So, until staff decide the run: a member with a pending run who presses **Open a ticket** (panel, `/modmail`, the posted button) is told they already have a ticket open; a DM they send the bot is NOT refused — it is relayed INTO the run ticket (`any_open_ticket_for`), so their support question lands on the run's card; a member with a support ticket open is refused **Submit a run** (`points_ticket_open_said`); and a second run waits for the first decision (`points_run_waiting_said`). Every one of these refusals writes a `modmail.open_refused` row whose `reason` is `already_open` or `run_waiting`.
+
+**Status:** `WATCHING` since 2026-10-09 (owner: ship layer 2 with the rule as it stands; revisit per-kind tickets if runs sit).
+
+**Why tolerated:** the bot says why in words every time, and staff clear it by deciding the run (Approve / Reject… on the card close the ticket). Per-kind tickets need a change to modmail's uniqueness (the index) AND to DM routing (which open ticket a DM goes to), which is a schema change and a modmail behaviour change, not a points one.
+
+**What would change it:** **1** run that waits more than **24 h** while its member needs support, or **3** `modmail.open_refused` rows with `reason` `run_waiting` or `already_open` from Submit a run in one week (the action log, by code) — then build per-kind tickets.
 
 ## KI-42 — The bot's 256 MB machine was OOM-killed mid-marathon; what filled the memory is NOT known — `WATCHING`
 

@@ -324,7 +324,8 @@ Q8 — the post goes to `points_channel_id`, the ping role blank = no ping, and 
   `points_ticket_body` (the fields as typed, blanks as —), then the proof link alone as a plain message so Discord
   previews it, then `submit(…, ticket_id=)`. **Silent:** no opening DM, and no `modmail.opened` row (the run's
   `points.submitted` carries `ticket` — one event, one row). One open ticket per member still holds (modmail's index):
-  a member whose run waits is told `points_run_waiting_said`; one with another ticket open `points_ticket_open_said`;
+  a member whose run waits is told `points_run_waiting_said`; one with another ticket open `points_ticket_open_said`
+  (both write `modmail.open_refused`; the trade-off is [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) **KI-44**);
   modmail off / blocked / no room: `points_modmail_off_said` / `points_blocked_said` / `points_cannot_open_said`.
 - **The run ticket** is an ordinary ticket: the inbox's `A ticket…` select tags it `· run`, the header says *came in
   by a run submitted on /pb*, transcripts and logs are modmail's. Its card has Reply / Reply as Staff / Private note /
@@ -353,7 +354,9 @@ Q8 — the post goes to `points_channel_id`, the ping role blank = no ping, and 
 1. **`/pb` lives in the points cog**, not the feed cog; the feed cog keeps its loop. `points_mode` hides `/pb`;
    `pb_feed_mode` moved to `settings_panel.EXTRA_MODES` so its mode line stays (the mode block is 25 lines).
 2. **One open ticket per member still holds** — a second run waits for the first to be decided (refused in words).
-   Changing that needs a schema change to modmail's open-ticket index and DM routing; not done.
+   Changing that needs a schema change to modmail's open-ticket index and DM routing; not done. The owner chose to
+   ship it so (2026-10-09); tracked as [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) **KI-44**. Each such refusal is a
+   `modmail.open_refused` row (`reason` `run_waiting` / `already_open`).
 3. **The fields are checked before the ticket opens**; a move that still refuses after it opened closes the ticket
    silently.
 4. **The proof link is posted again as a plain message** so Discord previews it (the relay is an embed).

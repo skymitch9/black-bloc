@@ -76,8 +76,9 @@ async def busy_words(bot: Any, guild: Any, member: Any) -> Outcome | None:
         row = await store_.run_by_ticket(bot.db, guild.id, existing["id"])
         if row is not None and row["state"] == PENDING:
             words = said(bot, guild, "points_run_waiting_said", game=plain(row["game"]))
-            return refusal(words, "run_waiting", 409)
-    return refusal(said(bot, guild, "points_ticket_open_said"), "already_open", 409)
+            return await mm.refuse_open(bot, guild, member, "run_waiting", words)
+    words = said(bot, guild, "points_ticket_open_said")
+    return await mm.refuse_open(bot, guild, member, "already_open", words)
 
 
 async def submit(bot: Any, guild: Any, member: Any, given: dict[str, Any]) -> Outcome:
