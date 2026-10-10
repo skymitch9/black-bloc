@@ -7,7 +7,7 @@ from typing import Any
 
 import discord
 
-from . import pb_panel, points_tickets, points_view
+from . import pb_feed, pb_panel, points_tickets, points_view
 from . import points_moves as moves
 from .brackets.access import is_staff
 from .command_errors import AnswersErrors
@@ -127,7 +127,9 @@ async def build_board(
     view.add_item(Move(words(bot, guild, "points_next_rank_label"), NEXT, row=0))
     if found["mode"] != moves.OFF:
         view.add_item(Move(words(bot, guild, "points_submit_label"), SUBMIT, row=0, primary=True))
-    view.add_item(Move(words(bot, guild, "points_feed_label"), FEED, row=1))
+    if pb_feed.mode_of(bot.store, guild.id) != pb_feed.OFF:
+        # Owner, 2026-10-10: the speedrun.com door leaves the board while the feed is off.
+        view.add_item(Move(words(bot, guild, "points_feed_label"), FEED, row=1))
     if verifier:
         waiting = await points_tickets.pending(bot, guild)
         if waiting:

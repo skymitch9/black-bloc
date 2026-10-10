@@ -322,7 +322,7 @@ Q8 — the post goes to `points_channel_id`, the ping role blank = no ping, and 
   (`points_bounties_heading`) of the live bounties (or `points_bounty_none`). Buttons, each a key: the switch
   (`points_xp_label` / `points_points_label`), **Full board** (25 a page, `points_previous_label` /
   `points_next_label` / `points_page_words`, Back), **Next rank** (the member's next-place line drawn above the board),
-  **Submit a run** (not while `off`), **speedrun.com…** (`points_feed_label`: the old feed panel, unchanged, with a
+  **Submit a run** (not while `off`), **speedrun.com…** (⚠️ 2026-10-10, owner: drawn only while `pb_feed_mode` is above `off` — *"Remove speedrun.com from /pb until we reenable it"*; `points_feed_label`: the old feed panel, unchanged, with a
   Back to the board on its face — `pb_panel.home_of`), and for staff and the verifier role **Pending (N)** when N > 0: a
   LIST of the open run tickets whose run waits, each a link to its thread — not a second queue. Panel minutes reuse
   `pb_feed_panel_minutes` (the panel-minutes select is at Discord's 25 cap). Footer `points_panel_footer`.

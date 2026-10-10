@@ -187,6 +187,18 @@ async def test_the_speedrun_com_panel_opens_behind_its_button_and_comes_back(bot
     assert back.embed.title == "Leaderboard"
 
 
+async def test_the_feed_off_takes_speedrun_com_off_the_board(bot, ada):
+    """Owner, 2026-10-10: no speedrun.com door until the feed is turned back on."""
+    await bot.store.set(GUILD, "pb_feed_mode", "off")
+    view = (await opened_by(bot, ada)).response.messages[0]["view"]
+    assert "speedrun.com…" not in labels(view)
+    assert "Submit a run" in labels(view)
+
+    await bot.store.set(GUILD, "pb_feed_mode", "shadow")
+    view = (await opened_by(bot, ada)).response.messages[0]["view"]
+    assert "speedrun.com…" in labels(view)
+
+
 async def test_off_takes_submit_away_and_the_board_still_reads(bot, ada):
     await bot.store.set(GUILD, "points_mode", "off")
 
