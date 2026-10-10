@@ -1,5 +1,6 @@
 import { api, listOf, Outage, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { syncSubnav } from './layout.js';
 import {
   amountRules,
   fill,
@@ -210,7 +211,7 @@ async function reread() {
   await readRuns();
   view.readAt = Date.now();
   view.failed = null;
-  paint();
+  paint({ force: true });
 }
 
 async function act(say, work) {
@@ -269,9 +270,10 @@ function boardHead() {
 
 function boardRow(row) {
   const mine = row.user_id === myId();
-  const sub = view.by === 'xp'
-    ? `${row.runs} · ${row.speedpoints} ${w('points_column_points')}`
-    : `${row.runs} · ${row.xp} XP`;
+  const other = view.by === 'xp'
+    ? `${w('points_column_points')} ${row.speedpoints}`
+    : `${w('points_column_xp')} ${row.xp}`;
+  const sub = `${w('points_column_runs')} ${row.runs} · ${other}`;
   return el('div', {
     class: 'lb-row',
     'data-mine': mine ? 'true' : undefined,
@@ -396,7 +398,8 @@ function submitDrawer() {
       await readIndex();
       await readRuns();
     });
-    paint();
+    paint({ force: true });
+    if (view.sections.mine) view.sections.mine.details.open = true;
   }, { tone: 'warn', small: false });
   openDrawer(w('points_submit_title') || 'Submit a run', [
     picker ? picker.node : null,
@@ -718,12 +721,12 @@ function paintStatus() {
   else view.status.removeAttribute('data-tone');
 }
 
-function paint() {
-  update('board', sig([view.index, view.all, view.full, view.page, view.by]), boardBody);
-  update('mine', sig(view.mine), mineBody);
-  update('pending', sig([view.pending, mode()]), pendingBody);
-  update('runs', sig([view.runs, mode()]), runsBody);
-  update('bounties', sig([view.bounties, mode()]), bountiesBody);
+function paint({ force = false } = {}) {
+  update('board', sig([view.index, view.all, view.full, view.page, view.by]), boardBody, { force });
+  update('mine', sig(view.mine), mineBody, { force });
+  update('pending', sig([view.pending, mode()]), pendingBody, { force });
+  update('runs', sig([view.runs, mode()]), runsBody, { force });
+  update('bounties', sig([view.bounties, mode()]), bountiesBody, { force });
   for (const [key, one] of Object.entries(view.sections)) {
     if (key === 'mine') {
       one.node.hidden = !view.mine.length;
@@ -733,6 +736,7 @@ function paint() {
     if (key === 'runs') one.count(view.runs.length);
     if (key === 'bounties') one.count(view.bounties.filter((b) => b.active).length);
   }
+  syncSubnav();
   paintStatus();
 }
 

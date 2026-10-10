@@ -27,6 +27,8 @@ dashboard as that person.
 | `as=` | What the pages should show |
 |---|---|
 | `staff` (default) | the dashboard, as a lead: the Structure page opens |
+| `member` | a signed-in member who is not staff: Requests, Guides, Brackets and the Leaderboard |
+| `verifier` | a member who is not staff but holds the run verifier role (Dax): the Leaderboard's Pending queue, never their own run |
 | `mod` | the dashboard as staff who is not a lead: no Structure in the rail, and `/structure.html` says it is for the server's leads |
 | `none` | "Sign in to see this", with the Discord button |
 | `stranger` | signed in, not staff — "Ask a Lead for the role", no retry button |

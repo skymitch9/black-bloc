@@ -15989,7 +15989,7 @@ function ptState() {
       xp: 0, speedpoints: 0, bounty_id: null, ticket_id: null, ...extra,
     });
     // The contract's four keep their ids (1 pending, 2 approved, 3 rejected, 4 approved under
-    // bounty 1); the rest fill a twelve-member board with Moth (as=member) at #12, below the top 10.
+    // bounty 1); the rest fill a thirty-member board with Moth (as=member) at #12, below the top 10.
     const runs = [
       run(1, MEMBERS[2].id, 'Celeste', 1825.4, { ticket_id: 101 }),
       run(2, MEMBERS[3].id, 'Hollow Knight', 2400, { state: 'approved', decided_by: STAFF.id, decided_at: at, xp: 100, speedpoints: 10 }),
@@ -16002,11 +16002,13 @@ function ptState() {
     const plan = [
       [MEMBERS[1].id, 9], [MEMBERS[2].id, 6], [roster(0), 7], [roster(1), 6], [STAFF.id, 6], [roster(2), 5],
       [roster(3), 4], [roster(4), 3], [MEMBERS[5].id, 3], [roster(5), 2], [MEMBERS[6].id, 2],
+      // Eighteen members with one short run each sit below Moth (fewer XP), so the full board has two pages.
+      ...Array.from({ length: 18 }, (_, n) => [roster(6 + n), 1, 5]),
     ];
     let id = 5;
-    plan.forEach(([user, count], who) => {
+    plan.forEach(([user, count, only], who) => {
       for (let n = 0; n < count; n += 1) {
-        const seconds = lengths[(who + n) % lengths.length];
+        const seconds = only === undefined ? lengths[(who + n) % lengths.length] : lengths[only];
         const xp = seconds >= 1800 ? 100 : seconds >= 900 ? 50 : seconds >= 600 ? 25 : 5;
         runs.push(run(id, user, games[(who + n) % games.length], seconds, {
           state: 'approved', decided_by: STAFF.id, decided_at: minutesAgo(60 * 24 * (who + 1) - n * 30), xp, speedpoints: 10,
