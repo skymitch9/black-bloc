@@ -1,5 +1,7 @@
 # Guide screenshots — the capture session, step by step
 
+> 🗓️ **2026-10-09 22:0x–22:3x Phoenix - point-system guides, at v221.** Shot and published through the site (owner's Chrome): five new `/pb` guides (media 56-72, `v221`, one drawn mock = 69) and the `modmail-ticket` run-card step (media 73); detail in [`../info/guides-design.md`](../info/guides-design.md). ⚠️ Capture gotcha: the site pages are 2498 px wide at 1x, so site screenshots needed the page zoomed to **1.4**. ⚠️ Correction: the one-published-guide-per-command index (`guides_one_published_command`) was DROPPED 2026-09-25 (schema 66); the *would refuse a second* line in the 09-25 entry below is history. This session pressed buttons in Discord (shadow) against this runbook's no-presses rule - recorded in guides-design.md.
+>
 > 🗓️ **2026-09-25 19:38–20:00 Phoenix — THE THIRD RE-SHOOT SESSION, at v166, and the WORDS went first.** Stale list
 > read at 19:38: **12** (the audit's 12 — [`../info/guides-audit-2026-09-25.md`](../info/guides-audit-2026-09-25.md)).
 > **Words:** the live guide rows were found to be **the ORIGINAL v111 seed on most guides** — seeding is once, so the
