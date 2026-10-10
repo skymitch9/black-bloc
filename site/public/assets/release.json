@@ -1,8 +1,7 @@
 {
-  "release": "v222",
-  "commit": "89480902",
+  "release": "v223",
+  "commit": "ff4b86c5",
   "changed_features": [
-    "guides",
     "posts"
   ]
 }
