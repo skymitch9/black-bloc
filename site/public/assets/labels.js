@@ -100,6 +100,8 @@ export const LABELS = {
   marathon_category_confirms: 'Whether the stream’s Twitch category decides which run is on',
   marathon_retro_category: 'Twitch category a run with no category of its own is played under',
   marathon_early_start_minutes: 'Minutes before a show-day\'s first planned start that the stream may call a run live',
+  marathon_live_poll_minutes: 'How often a schedule that writes real run lengths is read while its marathon is on',
+  marathon_fastestfurs_actual_includes_setup: 'A finished Fastest Furs run’s real length already counts its setup',
   marathon_setup_minutes: 'Setup minutes between runs when a schedule gives no start time per run',
   marathon_late_grace_minutes: 'How long a late run waits before the schedule calls it live',
   marathon_match_hosts: 'Whether hosts and commentators count as BaF',

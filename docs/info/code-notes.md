@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 2* (branch `points-discord`, off `main` `4ab03a82`); keyed by NAME. `cogs/moderation/modmail.py` rows below `open_or_find` sit a few lines lower. Before that:
+> **2026-10-09 — one section APPENDED, nothing re-keyed**: *Fastest Furs actual durations* (branch `ff-actual-durations`, off `main` `01d6e72b`); keyed by NAME. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 1* (branch `points-engine`, off `main` `01d6e72b`); keyed by NAME. Before that:
 > **2026-10-09 — rows AMENDED in place, nothing re-keyed**: *Modal option counts* (branch `snippet-radio`, off `main` `86281011`) — the `snippet_picker` and `vote_picker` rows and three `tests/test_modal_limits.py` rows. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *Modal length limits* (branch `modal-labels`, off `main` `04e0afc2`); keyed by NAME. Before that:
@@ -10361,7 +10362,7 @@ Design: [`points-design.md`](points-design.md).
 Design: [`points-design.md`](points-design.md) §G.
 
 - `black_bloc/cogs/content/points.py` `Points.pb` — `/pb` moved here from the feed cog; `HIDDEN_WHEN_OFF["points_mode"] = ("pb",)`, so the feed's own `pb_feed_mode` no longer hides the command and sits in `settings_panel.EXTRA_MODES` instead (the mode block is 25 lines).
-- `black_bloc/points_tickets.py` `submit` — the fields are checked (`moves.require_on` + `moves.run_values`) BEFORE a ticket exists, so a bad time never leaves an empty ticket; the one-open-ticket-per-member rule is modmail's (`modmail_open_ticket` index) and is answered in points words (`busy_words`: a waiting run names its game). A move that still refuses after the ticket opened closes it silently with the code as reason.
+- `black_bloc/points_tickets.py` `submit` — the fields are checked (`moves.require_on` + `moves.run_values`) BEFORE a ticket exists, so a bad time never leaves an empty ticket; the one-open-ticket-per-member rule is modmail's (`modmail_open_ticket` index) and is answered in points words (`busy_words`: a waiting run names its game), each through `modmail.refuse_open` so it is a `modmail.open_refused` row (`run_waiting` / `already_open`) — the count KI-44 watches. A move that still refuses after the ticket opened closes it silently with the code as reason.
 - `points_tickets.py` `submit` — the proof link is spoken into the ticket as a plain message after the opening relay (an embed never previews a link) and the card is bumped back under it.
 - `black_bloc/cogs/moderation/modmail.py` `open_or_find` / `open_a_ticket` — `source == SOURCE_POINTS` writes no `modmail.opened` row (the run's `points.submitted` carries `ticket`, one event one row) and sends no opening DM (owner Q12, *"Silent"*).
 - `cogs/moderation/modmail.py` `run_tickets` — the point system imports this module, so the card fetches `points_tickets` when pressed; `card_embed` adds the run line, `card_view` / `build_ticket` pass `run=` and drop the Send to… pair on a run ticket.
@@ -10375,3 +10376,13 @@ Design: [`points-design.md`](points-design.md) §G.
 - `black_bloc/points_panel.py` `build_board` — Submit renders only while `points_mode` is not off; Pending (N) only for staff/the verifier role and only when N > 0; N is the open run tickets whose run waits (`points_tickets.pending`), not the store's pending count (a site-submitted run has no ticket).
 - `points_panel.py` `SubmitModal` — five `Label`-wrapped inputs, every label and the title clipped to 45 and the placeholders to 100 at render, so a staff edit cannot break the form (checklist 39).
 - `black_bloc/pb_panel.py` `home_of` / `HomeButton` — the feed panel opened from the board carries `home=True` through every render (own, Manage…, member), and only its first face shows Back to the board; opened any other way (tests) it is unchanged.
+
+## Fastest Furs actual durations — keyed by NAME (branch `ff-actual-durations`, 2026-10-09; re-key after the merge)
+
+- `black_bloc/marathon_fastestfurs.py` `_slot` — a finished item (`actualDuration` an int >= 0) holds the clock for its real length; `includes_setup` False adds the planned `setupTime` on top. Measured 2026-10-09: the real length already covers the setup (`marathon-fastestfurs-design.md` > *Actual durations*).
+- `marathon_fastestfurs.py` `parse_fastestfurs` `timed` — computed BEFORE the item's own state updates `previous_done`/`runs_done`: "the item before me finished and no earlier RUN is unfinished". An unfinished break (the 482-min *End of Day 1*, which never gets an `actualDuration`) does not taint later items, only the item right after it.
+- `marathon_fastestfurs.py` `use_actuals` — exists for the planned-walk comparison in tests and docs; the bot always reads with actuals.
+- `black_bloc/marathon.py` `live_minutes` — `phase(..., lead_days=0)`: the lead only separates FAR from NEAR, ON does not depend on it. `fetch_failures >= LIVE_READ_FAILURES` (3, the same number as the cog's `FAILURES_IMPORTANT`) is the back-off; an unpublished answer never raises `fetch_failures`.
+- `marathon.py` `next_read_at` `live` — when given it wins over the marathon row's own `poll_minutes` override; every caller passes `mt.live_minutes(...)` so the page's next read and the loop agree.
+- `black_bloc/cogs/content/marathon.py` `_failed` `live_reads_paused` — the probe passes `fetch_failures: 0` to ask "is this marathon on the live cadence at all", then records whether this failure paused it.
+- `black_bloc/cogs/content/marathon_signals.py` `reader_for` — `setup_for` plus the Fastest Furs switch; only `refresh` uses it, because `resolve` does not take `actual_includes_setup`.

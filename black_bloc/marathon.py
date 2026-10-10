@@ -10,7 +10,16 @@ from difflib import SequenceMatcher
 from typing import Any, NamedTuple
 
 from .golive import parse_ts
-from .marathon_sources import COMMENTATOR, GDQ, HOST, RUNNER, Run, event_url, utc_iso
+from .marathon_sources import (
+    COMMENTATOR,
+    GDQ,
+    HOST,
+    RUNNER,
+    Run,
+    event_url,
+    publishes_actuals,
+    utc_iso,
+)
 from .settings_store import (
     MARATHON_PART_COMMENTATOR_KEY,
     MARATHON_PART_HOST_KEY,
@@ -679,24 +688,58 @@ def is_near(marathon: Any, now: datetime, *, lead_days: int) -> bool:
     return ends is not None and now <= ends + AFTER_END
 
 
+LIVE_READ_FAILURES = 3
+
+
+def live_minutes(marathon: Any, now: datetime, minutes: Any) -> int | None:
+    """The quick cadence for a marathon that is on and whose schedule writes real run lengths;
+    None for every other marathon, and after LIVE_READ_FAILURES failed reads in a row."""
+    if not publishes_actuals(_cell(marathon, "source")):
+        return None
+    if phase(marathon, now, lead_days=0) != ON:
+        return None
+    if int(_cell(marathon, "fetch_failures") or 0) >= LIVE_READ_FAILURES:
+        return None
+    return max(1, int(minutes))
+
+
 def next_read_at(
-    marathon: Any, now: datetime, *, poll_minutes: int, far_hours: int, lead_days: int
+    marathon: Any,
+    now: datetime,
+    *,
+    poll_minutes: int,
+    far_hours: int,
+    lead_days: int,
+    live: int | None = None,
 ) -> datetime | None:
     if not bool(_cell(marathon, "active", 1)):
         return None
     last = parse_ts(_cell(marathon, "last_fetched_at"))
     if last is None:
         return now
+    if live is not None:
+        return last + timedelta(minutes=int(live))
     if is_near(marathon, now, lead_days=lead_days):
         return last + timedelta(minutes=int(_cell(marathon, "poll_minutes") or poll_minutes))
     return last + timedelta(hours=int(far_hours))
 
 
 def fetch_due(
-    marathon: Any, now: datetime, *, poll_minutes: int, far_hours: int, lead_days: int
+    marathon: Any,
+    now: datetime,
+    *,
+    poll_minutes: int,
+    far_hours: int,
+    lead_days: int,
+    live: int | None = None,
 ) -> bool:
     at = next_read_at(
-        marathon, now, poll_minutes=poll_minutes, far_hours=far_hours, lead_days=lead_days
+        marathon,
+        now,
+        poll_minutes=poll_minutes,
+        far_hours=far_hours,
+        lead_days=lead_days,
+        live=live,
     )
     return at is not None and now >= at
 

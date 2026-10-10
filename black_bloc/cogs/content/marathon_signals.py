@@ -10,11 +10,12 @@ from ... import marathon_reminder_posts as mrem
 from ... import marathon_signals as sig
 from ...actionlog import log_action
 from ...logkinds import VIA_DISCORD, kind_via
-from ...marathon_sources import retimes_itself
+from ...marathon_sources import FASTESTFURS, retimes_itself
 from ...panels import Outcome, refusal
 from ...settings_store import (
     MARATHON_CATEGORY_CONFIRMS_KEY,
     MARATHON_EARLY_START_KEY,
+    MARATHON_FF_ACTUAL_INCLUDES_SETUP_KEY,
     MARATHON_MOVE_MINUTES_KEY,
     MARATHON_REMINDER_ON_MOVE_KEY,
     MARATHON_RETRO_CATEGORY_KEY,
@@ -60,6 +61,16 @@ def setup_for(bot: Any, guild_id: int, source: Any) -> dict[str, int]:
     if retimes_itself(source):
         return {}
     return {"setup_minutes": setup_minutes(bot, guild_id)}
+
+
+def reader_for(bot: Any, guild_id: int, source: Any) -> dict[str, Any]:
+    """`setup_for`, plus how a Fastest Furs read counts a finished run's real length."""
+    found: dict[str, Any] = dict(setup_for(bot, guild_id, source))
+    if source == FASTESTFURS:
+        found["actual_includes_setup"] = bool(
+            bot.store.get(guild_id, MARATHON_FF_ACTUAL_INCLUDES_SETUP_KEY)
+        )
+    return found
 
 
 def holds(marathon: Any, row: Any) -> bool:

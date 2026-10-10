@@ -99,8 +99,10 @@ dropped) and `fastestfurs_schedule_21.json` (4,549 B — Fall Fest 2026's first 
    at `startDateTime`); that reading matches the tracker and Oengus but was not confirmed against the rendered page.
 3. **`run_seconds` = `duration`, not `estimatedTime`** — they differ on some runs (Islets: `duration` 87,
    `estimatedTime` 01:25:00); `duration` is what the timeline is built from.
-4. ⚠️ **`actualDuration` is ignored.** It is null on every item today; during a live event it probably holds the
-   real length and the site may re-time later runs. Not modelled (not measurable until 2026-10-08).
+4. ~~⚠️ **`actualDuration` is ignored.** It is null on every item today; during a live event it probably holds the
+   real length and the site may re-time later runs. Not modelled (not measurable until 2026-10-08).~~ **Reversed
+   2026-10-09 (`afc8af6d`):** it is the real length of every finished item and the walk now uses it; see
+   *Actual durations (2026-10-09)* below. Why it flipped: Mathcat's run posted ~40 min late on the planned walk.
 5. **Date-only event dates**: the list writes `startDate`/`endDate` as midnight UTC. A candidate's `starts_at` is moved
    to **12:00 UTC** of the first day (so a Discord `<t:…:D>` stamp reads the right calendar day either side of UTC,
    not *Oct 7* in Phoenix) and its end to the **midnight after the last day** — "recent" is measured from that end
@@ -160,3 +162,88 @@ dropped) and `fastestfurs_schedule_21.json` (4,549 B — Fall Fest 2026's first 
    Fest 2026 · Fastest Furs · feed · far off · 0 of 2*; its drawer opens (*2 runs · 0 BaF*). **Zero console errors.**
    Nothing was submitted in a browser; the Fastest Furs feed's own drawer was not opened (the click landed on the
    table cell). The writes were checked by `check.mjs` and the tests.
+
+## Actual durations (2026-10-09)
+
+> Branch `ff-actual-durations` (off `main` `01d6e72b`), code commit `afc8af6d`. **NOT merged, NOT deployed.**
+
+**The report (owner, Fri 2026-10-09 ~3:3x PM Phoenix, verbatim):** *"Fastest fur Mathcat run seemed like it posted late"*, then *"It looks like the run has been on for an hour and 5 minutes according to on screen timer"*.
+**The cadence decision (owner, same afternoon, verbatim):** *"Let's check every 30 minutes until an event starts then poll every minute during the event."*
+
+**Measured.** Marathon #7 *Fastest Furs Fall Fest 2026* (feed 5, schedule 23, ref 21), run #36 external id 889
+*Dr. Robotnik's Ring Racers* by Mathcat, `orderIndex` 23: the bot posted its 2 h reminder 20:20:59Z, its 15 min reminder
+22:05:59Z and `marathon.run_live because=schedule` + highlight + shout 22:20:59-22:21:00Z, exactly the PLANNED 22:20:00Z.
+The owner's on-screen timer put the real start at about 21:40Z. One GET of `.../api/public/schedules/event/21` at
+**2026-10-09T22:45:17Z** (PowerShell `Invoke-WebRequest`, User-Agent `BlackBloc-dev/0.1 (+https://blackbloc.heygabi.ai)`,
+200, 73,554 B): 66 items, 56 runs, **22 items carry `actualDuration` (seconds)**: every item before 23 except item 16, the
+482-minute *End of Day 1* break, which has none. Item 22 (*Yakuza Kiwami 2*): planned 108 + 25 min = 7,980 s,
+`actualDuration` 7,003, `updatedAt` 21:29:56Z (about when it ended).
+
+| Walk | Item 23 starts |
+|---|---|
+| planned `duration + setupTime` only (the bot before this fix) | **22:20:00Z**, reproduces the bot |
+| `actualDuration` where present, as the WHOLE slot (setup included) | **21:27:42Z**, within the transition of the ~21:40Z on-screen start |
+| `actualDuration` + the planned `setupTime` after it | drifts later with every finished item; the conductor's run of this variant gave an impossible next-day time |
+
+**Reader.** `parse_fastestfurs(payload, *, actual_includes_setup=True, use_actuals=True)`: a finished item
+(`actualDuration` an int >= 0, not a bool) holds the clock for `actualDuration` seconds, plus its planned `setupTime` only
+when `marathon_fastestfurs_actual_includes_setup` is OFF; an unfinished item holds it for `duration + setupTime` as before.
+`Run` gains `actual_seconds` (a finished run's real length) and `timed_by_actuals` (the item before it finished AND every
+earlier RUN finished; an unfinished BREAK such as *End of Day 1* does not break the chain for later items, but the item
+right after it is planned-timed). `run_seconds` stays the planned `duration`. A planned-only payload walks exactly as
+before (pinned). `actualDuration` 0 is finished and takes no time; a string or a negative number reads as not finished.
+
+**The flag.** `marathon_fastestfurs_actual_includes_setup` (bool, default **on**): the measurement above says the real
+length already covers the setup that follows; staff flip it if a future event proves otherwise. It reaches the reader
+through `cogs/content/marathon_signals.py` `reader_for` (Fastest Furs only; `setup_for` is unchanged for `resolve`).
+
+**Cadence.** `marathon_sources.PUBLISHES_ACTUALS = {fastestfurs}` / `publishes_actuals`. `marathon.live_minutes` gives
+`marathon_live_poll_minutes` (int, default **1**, range 1-60) while the marathon is ON (`phase == ON`: between its
+`starts_at` and `ends_at`) and its source publishes actuals; every other marathon (GDQ, RPGLB, horaro, Oengus, Hotfix, Lady
+Arcaders, or a Fastest Furs event before it starts) keeps `marathon_poll_minutes` (30) or the far cadence. All four
+next-read sites (the loop's `read_due`, the card's reading line, `/api/marathons`, the schedule page) pass it, so the page
+shows the same next read the loop uses. Politeness: the loop ticks once a minute (`TICK_MINUTES`), each read is ONE GET with
+no retry inside it, and the cadence is keyed per MARATHON (its own `last_fetched_at`); the feed's `/api/events` check keeps
+its own 6 h cadence. **Back-off:** after `LIVE_READ_FAILURES` (3) failed reads in a row (`fetch_failures`, which an
+unpublished answer does not raise) the marathon falls back to `marathon_poll_minutes`; a success resets it. The existing
+`marathon.schedule_stale` row fires once at the third failure; each `marathon.fetch_failed` on such a marathon carries
+`live_reads_paused`.
+
+**Re-timing (confirmed, no new code).** A source that re-times itself has `holds() == False`, so a read rewrites
+`scheduled_at` of every row incl. live ones; a shift of at least `marathon_move_minutes` logs `marathon.member_run_moved`
+and re-arms the reminders (`mrem.run_fields`). A run moved to BEFORE now: the same tick's `follow` -> `advance` (the
+schedule decides; with a watched stream it waits `marathon_late_grace_minutes` as for any run) makes it live, and `remind`
+runs AFTER `advance`, so `due_marks` sees a live run and **the 15-min reminder is never posted after the live post**
+(pinned: `test_a_run_moved_to_before_now_goes_live_at_once_and_never_posts_its_reminder`). A reminder copy ALREADY posted
+is left as posted: `sync_reminders` follows upcoming and dropped runs only (`FOLLOWED`), and the run is live before it runs
+(pinned: `test_a_reminded_run_moved_to_before_now_goes_live_and_posts_nothing_new`). An edit-at-read pass was tried and
+reverted: it doubled the per-tick edit budget and broke `test_the_edit_limit_is_the_keys` and the mode-off test.
+
+**Early-start guard: FINDING, the brief's premise did not hold.** `cogs/content/marathon_signals.py` `guarded` and
+`undo_early` return at once for every source where `retimes_itself` is True, Fastest Furs included, so the v202 guard
+**never** held a Fastest Furs stream match; it only guards GDQ Hotfix, whose `sheet_at` is rewritten on every read (it is
+already the schedule's current best start). What kept Mathcat at 22:20 was the schedule walk alone plus no stream
+confirmation (title/category confirms need an open session on the marathon's spotlight channel; that was not checked).
+Nothing in the guard was changed; pinned: `test_a_stream_match_on_a_schedule_that_times_itself_is_never_held_as_early`
+(a Fastest Furs row 39 min before its OLD sheet time passes) beside the Hotfix pin
+`test_a_days_first_run_shown_80_minutes_early_is_held_and_logged_once` (the typo protection).
+
+**Fixture.** `tests/fixtures/marathon/fastestfurs_schedule_actuals.json` (7,738 B): items **0-24** of the 22:45:17Z
+payload, each trimmed to `id, runId, itemType, duration, setupTime, actualDuration, orderIndex, label, runs{id, name,
+category}`; items 21-24 also keep `updatedAt`, `runs.runners` and host names. Deviation from the brief's "a handful around
+21-24": the walk needs every earlier item to reproduce the measured 22:20:00Z -> 21:27:42Z, so the leading items are kept,
+stripped.
+
+### What was NOT verified
+
+1. ⚠️ **Nothing met Discord, Fly or a live Fastest Furs read through the bot.** The parser, the cadence and the
+   moved-earlier path ran only against the suite's fakes and the saved fixture. **The next live Fastest Furs run after a
+   deploy is the proof.**
+2. The ~21:40Z real start is the owner's on-screen timer, not a measured stream event; 21:27:42Z vs ~21:40Z is ~12 min,
+   read as transition time, not checked against the VOD.
+3. Whether `actualDuration` truly includes the following setup is inferred from ONE event's timeline (hence the flag).
+4. How the organiser fills `actualDuration` mid-run (only at the end? corrected later?) and the overnight break's missing
+   value were seen once, at 22:45Z.
+5. A 1-minute read's cost on `cheetah.fastestfurs.com` (73 KB per GET, about 60 GETs an hour per live marathon); no rate
+   limit was measured.
+6. Whether the marathon had an open stream session (title/category confirms) on 2026-10-09 was not read from the live DB.

@@ -104,6 +104,7 @@ from ...settings_store import (
     MARATHON_FAR_POLL_HOURS_KEY,
     MARATHON_HOST_EVENTS_GONE_KEY,
     MARATHON_LEAD_DAYS_KEY,
+    MARATHON_LIVE_POLL_MINUTES_KEY,
     MARATHON_MODE_KEY,
     MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY,
     MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY,
@@ -395,6 +396,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         poll_minutes=int(bot.store.get(guild.id, MARATHON_POLL_MINUTES_KEY)),
         far_hours=int(bot.store.get(guild.id, MARATHON_FAR_POLL_HOURS_KEY)),
         lead_days=lead_days,
+        live=mt.live_minutes(row, now, bot.store.get(guild.id, MARATHON_LIVE_POLL_MINUTES_KEY)),
     )
     upcoming = await next_row(bot, guild, row, now)
     added_by = row["added_by"]

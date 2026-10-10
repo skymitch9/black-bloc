@@ -34,6 +34,7 @@ from ...cogs.content.youtube import all_links as youtube_links
 from ...settings_store import (
     MARATHON_FAR_POLL_HOURS_KEY,
     MARATHON_LEAD_DAYS_KEY,
+    MARATHON_LIVE_POLL_MINUTES_KEY,
     MARATHON_PING_MINUTES_KEY,
     MARATHON_POLL_MINUTES_KEY,
     MARATHON_REMINDER_STALE_KEY,
@@ -97,6 +98,7 @@ def reading_of(bot: Any, guild: Any, row: Any, now: datetime) -> dict[str, Any]:
         poll_minutes=int(store.get(guild.id, MARATHON_POLL_MINUTES_KEY)),
         far_hours=int(store.get(guild.id, MARATHON_FAR_POLL_HOURS_KEY)),
         lead_days=lead_days,
+        live=mt.live_minutes(row, now, store.get(guild.id, MARATHON_LIVE_POLL_MINUTES_KEY)),
     )
     return {
         "phase": phase,

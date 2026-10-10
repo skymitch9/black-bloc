@@ -78,8 +78,27 @@ def _order(item: dict[str, Any]) -> int:
     return given if isinstance(given, int) else 0
 
 
-def parse_fastestfurs(payload: Any) -> list[Run]:
-    """One public schedule into runs, timed by walking the items from `startDateTime`."""
+def _actual(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _slot(
+    item: dict[str, Any], *, use_actuals: bool, includes_setup: bool
+) -> tuple[int, int | None]:
+    """(seconds the item holds the clock, its actual seconds when finished)."""
+    planned = (_minutes(item.get("duration")) + _minutes(item.get("setupTime"))) * 60
+    actual = _actual(item.get("actualDuration")) if use_actuals else None
+    if actual is None:
+        return (planned, None)
+    setup = 0 if includes_setup else _minutes(item.get("setupTime")) * 60
+    return (actual + setup, actual)
+
+
+def parse_fastestfurs(
+    payload: Any, *, actual_includes_setup: bool = True, use_actuals: bool = True
+) -> list[Run]:
+    """One public schedule into runs, timed by walking the items from `startDateTime`: a
+    finished item by its `actualDuration`, the rest by `duration` + `setupTime`."""
     if not isinstance(payload, dict):
         return []
     at_text = utc_iso(payload.get("startDateTime"))
@@ -87,18 +106,24 @@ def parse_fastestfurs(payload: Any) -> list[Run]:
     items = [one for one in payload.get("scheduleItems") or () if isinstance(one, dict)]
     items.sort(key=_order)
     found: list[Run] = []
+    previous_done = False
+    runs_done = True
     for index, item in enumerate(items):
-        seconds = _minutes(item.get("duration")) * 60
-        setup = _minutes(item.get("setupTime")) * 60
+        slot, actual = _slot(item, use_actuals=use_actuals, includes_setup=actual_includes_setup)
+        timed = previous_done and runs_done
         starts = at
         if at is not None:
-            at = at + timedelta(seconds=seconds + setup)
+            at = at + timedelta(seconds=slot)
+        is_run = item.get("itemType") == RUN_ITEM
+        previous_done = actual is not None
+        runs_done = runs_done and (previous_done or not is_run)
         run = item.get("runs")
-        if item.get("itemType") != RUN_ITEM or not isinstance(run, dict):
+        if not is_run or not isinstance(run, dict):
             continue
         game = _text(run.get("name"))
         if not game:
             continue
+        seconds = _minutes(item.get("duration")) * 60
         given = run.get("id") if run.get("id") is not None else item.get("id")
         order = item.get("orderIndex")
         found.append(
@@ -112,6 +137,8 @@ def parse_fastestfurs(payload: Any) -> list[Run]:
                 ends_at=at.isoformat() if starts and at else None,
                 run_seconds=seconds or None,
                 people=people_of(item),
+                actual_seconds=actual,
+                timed_by_actuals=timed,
             )
         )
     return found
@@ -178,7 +205,7 @@ async def resolve(request: Request, ref: str) -> tuple[str, str]:
     raise ScheduleError(NO_SUCH_EVENT.format(site=site, ref=ref))
 
 
-async def read_runs(request: Request, ref: str) -> list[Run]:
+async def read_runs(request: Request, ref: str, *, actual_includes_setup: bool = True) -> list[Run]:
     """A 404 or a schedule with no runs yet reads like an unpublished tracker event."""
     site = site_of(FASTESTFURS)
     if not EVENT_ID.match(str(ref or "")):
@@ -190,7 +217,7 @@ async def read_runs(request: Request, ref: str) -> list[Run]:
         raise ScheduleError(ANSWERED.format(site=site, status=status))
     if not isinstance(body, dict):
         raise ScheduleError(NOT_JSON.format(site=site))
-    runs = parse_fastestfurs(body)
+    runs = parse_fastestfurs(body, actual_includes_setup=actual_includes_setup)
     if not runs:
         raise ScheduleError(NOT_PUBLISHED.format(site=site), unpublished=True)
     return runs

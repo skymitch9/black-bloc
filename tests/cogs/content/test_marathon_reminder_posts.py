@@ -799,3 +799,41 @@ async def test_runs_and_host_blocks_share_one_minutes_edits(bot, cog):
     assert [len(one.edits) for one in said] == [0, 1, 1]
     await following.sync_reminders(cog, bot.guild, marathon)
     assert [len(one.edits) for one in said] == [1, 1, 1]
+
+
+# --- a re-read that moves a run to before now (Fastest Furs actuals, 2026-10-09) ---------------
+
+
+async def test_a_run_moved_to_before_now_goes_live_at_once_and_never_posts_its_reminder(bot, cog):
+    marathon = await ready(bot, cog)
+    cog.clock = lambda: NOW + timedelta(minutes=5)
+
+    await moved(bot, cog, marathon, -5)
+
+    row = await run_of(bot, marathon, GAME)
+    assert row["state"] == mt.LIVE and row["scheduled_at"] == at(-5)
+    assert (await rows(bot, "marathon.member_run_moved"))[0]["to"] == at(-5)
+    assert "marathon.run_live" in await kinds(bot.db)
+    for minutes in (6, 15, 16, 25):
+        cog.clock = lambda minutes=minutes: NOW + timedelta(minutes=minutes)
+        await follow(bot, cog, marathon)
+    assert reminders_in(bot.guild.channels[CHANNEL]) == []
+    assert "marathon.public_reminded" not in await kinds(bot.db)
+
+
+async def test_a_reminded_run_moved_to_before_now_goes_live_and_posts_nothing_new(bot, cog):
+    """A live run's copies are not followed (FOLLOWED), so the posted one keeps its words."""
+    marathon = await reminded(bot, cog)
+    before = count(bot)
+    cog.clock = lambda: NOW + timedelta(minutes=16)
+
+    await moved(bot, cog, marathon, 10)
+
+    row = await run_of(bot, marathon, GAME)
+    assert row["state"] == mt.LIVE and row["scheduled_at"] == at(10)
+    public, staff = await copies(bot, marathon)
+    assert public.content == staff.content == words(30)
+    assert len(reminders_in(bot.guild.channels[CHANNEL])) == 1
+    assert len(await rows(bot, "marathon.public_reminded")) == 1
+    assert "marathon.reminder_edited" not in await kinds(bot.db)
+    assert count(bot) >= before

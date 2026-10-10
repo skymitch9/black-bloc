@@ -1,0 +1,417 @@
+{
+ "id": 23,
+ "eventId": 21,
+ "startDateTime": "2026-10-08T14:00:00.000Z",
+ "timeZone": "UTC",
+ "scheduleItems": [
+  {
+   "id": 5373,
+   "runId": 843,
+   "itemType": "run",
+   "duration": 35,
+   "setupTime": 10,
+   "actualDuration": 2563,
+   "orderIndex": 0,
+   "label": null,
+   "runs": {
+    "id": 843,
+    "name": "Kena: Bridge of Spirits",
+    "category": "Any% No Major Glitches"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5372,
+   "runId": 879,
+   "itemType": "run",
+   "duration": 70,
+   "setupTime": 10,
+   "actualDuration": 4787,
+   "orderIndex": 1,
+   "label": null,
+   "runs": {
+    "id": 879,
+    "name": "Skylanders: Spyro's Adventure",
+    "category": "Any%"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5371,
+   "runId": 873,
+   "itemType": "run",
+   "duration": 40,
+   "setupTime": 14,
+   "actualDuration": 3481,
+   "orderIndex": 2,
+   "label": null,
+   "runs": {
+    "id": 873,
+    "name": "Muramasa Rebirth",
+    "category": "Okoi Any%"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5370,
+   "runId": 874,
+   "itemType": "run",
+   "duration": 35,
+   "setupTime": 10,
+   "actualDuration": 2608,
+   "orderIndex": 3,
+   "label": null,
+   "runs": {
+    "id": 874,
+    "name": "Racin' Ratz",
+    "category": "Chris vs Betty Any% Race"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5369,
+   "runId": 838,
+   "itemType": "run",
+   "duration": 51,
+   "setupTime": 10,
+   "actualDuration": 4125,
+   "orderIndex": 4,
+   "label": null,
+   "runs": {
+    "id": 838,
+    "name": "KilaFlow",
+    "category": "Any%"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5368,
+   "runId": 906,
+   "itemType": "run",
+   "duration": 32,
+   "setupTime": 10,
+   "actualDuration": 2534,
+   "orderIndex": 5,
+   "label": null,
+   "runs": {
+    "id": 906,
+    "name": "Gordon and Daxter",
+    "category": "No LTS"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5367,
+   "runId": 910,
+   "itemType": "run",
+   "duration": 40,
+   "setupTime": 10,
+   "actualDuration": 2579,
+   "orderIndex": 6,
+   "label": null,
+   "runs": {
+    "id": 910,
+    "name": "Overload",
+    "category": "Trainee Any%"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5310,
+   "runId": null,
+   "itemType": "break",
+   "duration": 15,
+   "setupTime": 0,
+   "actualDuration": 993,
+   "orderIndex": 7,
+   "label": "Interview: RuneDerg (Boyfriend Dungeon) and selcouthmind",
+   "runs": null,
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5366,
+   "runId": 849,
+   "itemType": "run",
+   "duration": 63,
+   "setupTime": 20,
+   "actualDuration": 4387,
+   "orderIndex": 8,
+   "label": null,
+   "runs": {
+    "id": 849,
+    "name": "Resident Evil 2: Remake",
+    "category": "Claire A vs. Leon A NG Bidwar"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5365,
+   "runId": 867,
+   "itemType": "run",
+   "duration": 40,
+   "setupTime": 15,
+   "actualDuration": 3234,
+   "orderIndex": 9,
+   "label": null,
+   "runs": {
+    "id": 867,
+    "name": "Dredge",
+    "category": "Any% NMG (Keeper)"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5364,
+   "runId": 903,
+   "itemType": "run",
+   "duration": 87,
+   "setupTime": 10,
+   "actualDuration": 5025,
+   "orderIndex": 10,
+   "label": null,
+   "runs": {
+    "id": 903,
+    "name": "Islets",
+    "category": "Any% (Restricted, Easy)"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5363,
+   "runId": 860,
+   "itemType": "run",
+   "duration": 70,
+   "setupTime": 15,
+   "actualDuration": 4466,
+   "orderIndex": 11,
+   "label": null,
+   "runs": {
+    "id": 860,
+    "name": "Denshattack!",
+    "category": "Boss Rush"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5311,
+   "runId": null,
+   "itemType": "break",
+   "duration": 15,
+   "setupTime": 0,
+   "actualDuration": 1322,
+   "orderIndex": 12,
+   "label": "Interview: kinopio & LowerMercury (Balatro) and ProfessorBurtch",
+   "runs": null,
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5376,
+   "runId": 912,
+   "itemType": "run",
+   "duration": 20,
+   "setupTime": 10,
+   "actualDuration": 1800,
+   "orderIndex": 13,
+   "label": null,
+   "runs": {
+    "id": 912,
+    "name": "Paris Chase",
+    "category": "Any%"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5362,
+   "runId": 864,
+   "itemType": "run",
+   "duration": 160,
+   "setupTime": 20,
+   "actualDuration": 9845,
+   "orderIndex": 14,
+   "label": null,
+   "runs": {
+    "id": 864,
+    "name": "Escape from Ever After",
+    "category": "Any% (Easy, No Assists)"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5361,
+   "runId": 878,
+   "itemType": "run",
+   "duration": 50,
+   "setupTime": 10,
+   "actualDuration": 3789,
+   "orderIndex": 15,
+   "label": null,
+   "runs": {
+    "id": 878,
+    "name": "Balatro",
+    "category": "Gold Stake - 2P Head-to-Head"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5312,
+   "runId": null,
+   "itemType": "break",
+   "duration": 482,
+   "setupTime": 0,
+   "actualDuration": null,
+   "orderIndex": 16,
+   "label": "End of Day 1",
+   "runs": null,
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5360,
+   "runId": 853,
+   "itemType": "run",
+   "duration": 70,
+   "setupTime": 10,
+   "actualDuration": 4554,
+   "orderIndex": 17,
+   "label": null,
+   "runs": {
+    "id": 853,
+    "name": "Devil May Cry 3",
+    "category": "NG Dante"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5359,
+   "runId": 844,
+   "itemType": "run",
+   "duration": 55,
+   "setupTime": 15,
+   "actualDuration": 4203,
+   "orderIndex": 18,
+   "label": null,
+   "runs": {
+    "id": 844,
+    "name": "Sephonie",
+    "category": "All Species"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5358,
+   "runId": 898,
+   "itemType": "run",
+   "duration": 55,
+   "setupTime": 12,
+   "actualDuration": 4145,
+   "orderIndex": 19,
+   "label": null,
+   "runs": {
+    "id": 898,
+    "name": "Boyfriend Dungeon",
+    "category": "Any%"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5357,
+   "runId": 899,
+   "itemType": "run",
+   "duration": 83,
+   "setupTime": 13,
+   "actualDuration": 5701,
+   "orderIndex": 20,
+   "label": null,
+   "runs": {
+    "id": 899,
+    "name": "River City Ransom: Underground",
+    "category": "Any%"
+   },
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5313,
+   "runId": null,
+   "itemType": "break",
+   "duration": 15,
+   "setupTime": 0,
+   "actualDuration": 1198,
+   "orderIndex": 21,
+   "label": "Interview: Steph (Trans Lifeline) and ProfessorBurtch",
+   "updatedAt": "2026-10-09T19:32:59.521Z",
+   "runs": null,
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5356,
+   "runId": 846,
+   "itemType": "run",
+   "duration": 108,
+   "setupTime": 25,
+   "actualDuration": 7003,
+   "orderIndex": 22,
+   "label": null,
+   "updatedAt": "2026-10-09T21:29:56.612Z",
+   "runs": {
+    "id": 846,
+    "name": "Yakuza Kiwami 2",
+    "category": "NG+ Easy",
+    "runners": "cubsrule21"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "AuraDragoness"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5355,
+   "runId": 889,
+   "itemType": "run",
+   "duration": 110,
+   "setupTime": 10,
+   "actualDuration": null,
+   "orderIndex": 23,
+   "label": null,
+   "updatedAt": "2026-10-09T01:34:03.796Z",
+   "runs": {
+    "id": 889,
+    "name": "Dr. Robotnik's Ring Racers",
+    "category": "Any%",
+    "runners": "Mathcat"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "Sefhighwind"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5354,
+   "runId": 852,
+   "itemType": "run",
+   "duration": 12,
+   "setupTime": 10,
+   "actualDuration": null,
+   "orderIndex": 24,
+   "label": null,
+   "updatedAt": "2026-10-09T01:34:03.807Z",
+   "runs": {
+    "id": 852,
+    "name": "Super Puyo Puyo",
+    "category": "Any% Hardest",
+    "runners": "ephraim225"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "Sefhighwind"
+     }
+    }
+   ]
+  }
+ ]
+}
