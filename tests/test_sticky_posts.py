@@ -172,6 +172,7 @@ async def bot(db, monkeypatch):
     for channel in guild.channels.values():
         channel.guild = guild
     await store.set(GUILD, "shadow_channel_id", HOME)
+    await store.set(GUILD, "sticky_quiet_seconds", 0)
     return SimpleNamespace(
         db=db,
         store=store,
@@ -1132,3 +1133,114 @@ async def test_a_board_change_edits_the_sticky_copy_in_place(bot, desk):
     assert drew is True
     assert copy.edits[-1]["embeds"][0].description == "Be the first."
     assert copy.edits[-1]["content"] is None and len(channel(bot).messages) == 1
+
+
+# --- the quieter move: the count, then quiet, never past the ceiling --------------------------
+
+
+def chatty(bot, clock, talks):
+    """A desk whose sleeps let people keep talking: `talks` sleeps each end with one message."""
+    left = {"talks": talks}
+    holder = {}
+
+    async def sleep(seconds):
+        clock.slept.append(seconds)
+        if left["talks"] > 0:
+            left["talks"] -= 1
+            clock.tick(seconds - 10)
+            await holder["desk"].on_message(person(channel(bot)))
+            clock.tick(10)
+            return
+        clock.tick(seconds)
+
+    holder["desk"] = Desk(bot, now=clock.now, sleep=sleep)
+    return holder["desk"]
+
+
+async def quiet_rule(bot, quiet=300, ceiling=60):
+    await bot.store.set(GUILD, "sticky_quiet_seconds", quiet)
+    await bot.store.set(GUILD, "sticky_max_buried_minutes", ceiling)
+
+
+async def settled_timer(desk):
+    await desk.waiting[RUNS]
+
+
+async def test_the_count_then_five_quiet_minutes_moves_it_once(bot, clock):
+    desk = chatty(bot, clock, 0)
+    await quiet_rule(bot)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+    assert len(channel(bot).messages) == 1 and list(desk.waiting) == [RUNS]
+    await settled_timer(desk)
+
+    assert clock.slept == [300.0]
+    assert len(channel(bot).messages) == 1 and channel(bot).deleted
+    assert (await row_of(bot))["reposts"] == 1
+
+
+async def test_talk_while_waiting_pushes_the_move_back_on_the_same_timer(bot, clock):
+    desk = chatty(bot, clock, 1)
+    await quiet_rule(bot)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+    timer = desk.waiting[RUNS]
+    await settled_timer(desk)
+
+    assert clock.slept == [300.0, 290.0]
+    assert timer.done() and desk.waiting == {}
+    assert (await row_of(bot))["reposts"] == 1
+
+
+async def test_the_ceiling_moves_it_an_hour_after_the_count_however_busy(bot, clock):
+    desk = chatty(bot, clock, 1000)
+    await quiet_rule(bot)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+    await settled_timer(desk)
+
+    assert sum(clock.slept) == pytest.approx(3600.0)
+    assert (await row_of(bot))["reposts"] == 1
+
+
+async def test_no_ceiling_waits_for_quiet_however_long(bot, clock):
+    desk = chatty(bot, clock, 30)
+    await quiet_rule(bot, ceiling=0)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+    await settled_timer(desk)
+
+    assert sum(clock.slept) > 7200
+    assert (await row_of(bot))["reposts"] == 1
+
+
+async def test_the_gap_since_the_last_copy_is_still_the_floor(bot, clock):
+    desk = chatty(bot, clock, 0)
+    await quiet_rule(bot, quiet=10)
+    await bot.store.set(GUILD, "sticky_min_seconds", 600)
+    await live(bot, desk)
+    clock.tick(5)
+
+    await talk(desk, bot, 5)
+    await settled_timer(desk)
+
+    assert clock.slept == [595.0]
+
+
+async def test_quiet_zero_is_the_old_rule_and_moves_at_the_count(bot, clock):
+    desk = chatty(bot, clock, 0)
+    await quiet_rule(bot, quiet=0)
+    await live(bot, desk)
+    clock.tick(600)
+
+    await talk(desk, bot, 5)
+
+    assert clock.slept == [] and (await row_of(bot))["reposts"] == 1

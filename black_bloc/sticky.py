@@ -327,6 +327,27 @@ def seconds_left(row: Any, now: datetime, gap: int) -> float:
     return max(0.0, float(gap) - since)
 
 
+def quiet_left(
+    now: datetime,
+    heard_at: datetime | None,
+    reached_at: datetime | None,
+    quiet: int,
+    ceiling_minutes: int,
+) -> float:
+    """Seconds of quiet still owed since the last counted message; the ceiling cuts it short."""
+    if quiet <= 0 or heard_at is None:
+        return 0.0
+    left = float(quiet) - (now - heard_at).total_seconds()
+    if ceiling_minutes > 0 and reached_at is not None:
+        left = min(left, float(ceiling_minutes) * 60 - (now - reached_at).total_seconds())
+    return max(0.0, left)
+
+
+def due_in(floor_left: float, quiet: float) -> float:
+    """The gap since the last copy is a floor that neither the quiet nor the ceiling lowers."""
+    return max(0.0, float(floor_left), float(quiet))
+
+
 def state_of(row: Any, mode: str) -> str:
     if row["trouble"]:
         return STOPPED

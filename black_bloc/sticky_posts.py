@@ -146,6 +146,8 @@ class Desk:
         self.deciding: set[int] = set()
         self.outage: dict[int, str] = {}
         self.tried: dict[int, datetime] = {}
+        self.last: dict[int, datetime] = {}
+        self.reached: dict[int, datetime] = {}
 
     def lock(self, channel_id: int) -> asyncio.Lock:
         return self.locks.setdefault(int(channel_id), asyncio.Lock())
@@ -171,6 +173,8 @@ class Desk:
         self.heard.pop(channel_id, None)
         self.outage.pop(channel_id, None)
         self.tried.pop(channel_id, None)
+        self.last.pop(channel_id, None)
+        self.reached.pop(channel_id, None)
         task = self.waiting.pop(channel_id, None)
         if task is not None and task is not asyncio.current_task():
             task.cancel()
@@ -183,10 +187,13 @@ class Desk:
         if rules.mode_of(self.store, guild.id) == "off" or not self.db.is_connected:
             return
         after, gap, _ = rules.numbers(self.store, guild.id)
+        now = self.now()
         self.heard[channel_id] = self.heard.get(channel_id, 0) + 1
+        self.last[channel_id] = now
         needed = 1 if channel_id in self.outage else after
         if self.heard[channel_id] < needed:
             return
+        self.reached.setdefault(channel_id, now)
         if channel_id in self.waiting or channel_id in self.deciding:
             return
         self.deciding.add(channel_id)
@@ -195,7 +202,7 @@ class Desk:
             if not rules.is_running(row):
                 self.forget(channel_id)
                 return
-            wait = self._wait(row, gap)
+            wait = rules.due_in(self._wait(row, gap), self._quiet(guild, channel_id))
             if wait > 0:
                 self.waiting[channel_id] = asyncio.create_task(
                     self._later(guild, channel_id, wait), name=f"sticky-{channel_id}"
@@ -213,9 +220,25 @@ class Desk:
             left = max(left, float(gap) - (self.now() - tried).total_seconds())
         return max(0.0, left)
 
+    def _quiet(self, guild: Any, channel_id: int) -> float:
+        """Talk while waiting pushes the move back, up to the ceiling; an outage owes no quiet."""
+        if channel_id in self.outage:
+            return 0.0
+        quiet, ceiling = rules.numbers_waiting(self.store, guild.id)
+        return rules.quiet_left(
+            self.now(),
+            self.last.get(channel_id),
+            self.reached.get(channel_id),
+            quiet,
+            ceiling,
+        )
+
     async def _later(self, guild: Any, channel_id: int, wait: float) -> None:
+        """One timer per channel: it sleeps again while people are still talking."""
         try:
             await self.sleep(wait)
+            while (left := self._quiet(guild, channel_id)) > 0:
+                await self.sleep(left)
             self.waiting.pop(channel_id, None)
             await self.place(guild, channel_id)
         except asyncio.CancelledError:
@@ -332,6 +355,8 @@ class Desk:
         self.heard[channel_id] = 0
         self.outage.pop(channel_id, None)
         self.tried.pop(channel_id, None)
+        self.last.pop(channel_id, None)
+        self.reached.pop(channel_id, None)
         self.watched.add(channel_id)
         if first:
             await self._posted(guild, row, target, home, sent.id)

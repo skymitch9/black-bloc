@@ -121,6 +121,7 @@ async def bot(db, monkeypatch):
     store = SettingsStore(db, load_settings(_env_file=None))
     await store.load()
     await store.set(GUILD, "shadow_channel_id", HOME)
+    await store.set(GUILD, "sticky_quiet_seconds", 0)
     guild = FakeGuild()
     return SimpleNamespace(
         db=db,
