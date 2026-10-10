@@ -578,3 +578,51 @@ Owner, 2026-09-25 20:3x: *"why does marathon have an empty event category"*. §D
    never overwrites a command that is set. Limit: a staffer who had deliberately blanked one of these three commands
    gets it back once, at the first boot after this ships (the hash then matches, so never again); clearing it again
    sticks.
+
+### 2026-10-09 point-system guides (branch `guides-points`, off `main` `a09f5924`, v221 live)
+
+Owner, 2026-10-09 ~9:4x PM: *"after the fact make sure we update guides and make new guides. remember guides should have as
+little text as possible, let the pictures tell the story"*. Done live through the site (`POST /api/guides` + `PUT
+/api/guides/<slug>` + `POST /api/guides/<slug>/media`, the editor's own routes, from the page's own `fetch`), read back,
+then added to the seed (for clones; a live guild already has them, `seed_guides` skips by slug).
+
+**Staff edits checked first** (`GET /api/actions?feature=guides`, 225 rows): the only `web.guide.*` row not by the owner's
+account is Pawpette's `apply-form` edit of 2026-09-16, which this pass did not touch. No guide edit at all after
+2026-09-26 03:00Z before this pass.
+
+| Slug | Audience | Command | Steps | Pictures (media id, all `v221`) |
+|---|---|---|---|---|
+| `points-submit` | member | `/pb` | 4 | 56 board, 57 submit form, 58 *is in* |
+| `leaderboard-page` | member | `/pb` | 5 | 59 board, 60 Submit drawer, 61 Your runs (website) |
+| `points-approve` | staff | `/pb` | 6 | 62 ticket fields, 63 ticket card (Approve / Reject…), 64 approval line + Take it off the board…, 65 the remove form |
+| `points-bounties` | staff | `/pb` | 5 | 66 New bounty drawer, 67 a live bounty (website) |
+| `leaderboard-pin` | staff | `/pb` | 5 | 68 `/pb` staff (Settings…), **69 MOCK** (Settings… before the pin), 70 Settings… pinned (rehearsing), 71 the pinned copy edited in place, 72 the site's pin row |
+
+- **Every new guide carries `/pb`.** `tests/test_guides.py::test_the_seed_gives_every_guide_a_command_but_the_ones_it_means_not_to`
+  allows no command-less seed guide, and the per-command index is gone (above), so the two site guides take `/pb` too;
+  `/help`'s `/pb` line now links both member guides. `tests/cogs/test_core.py` link counts 20 commands / 27 links →
+  **21 / 32**. ⚠️ Consequence: the hub's *where you do it* chip says Discord for `leaderboard-page` and `points-bounties`.
+- **Feature is `core`** for all five — `points` is filed under core and has no `FEATURE_PAGES` entry, so the guide's
+  *Where it happens* reads *Dashboard* (settings.html), not the Leaderboard page, and ⚠️ **no deploy will ever mark these
+  pictures stale**: `guides.FEATURE_PATHS["core"]` does not list the points modules. A `points` feature entry (a code
+  change) would fix both.
+- **Refreshed:** `modmail-ticket` gained step 5 (*On a run ticket, press **Approve** or **Reject…***), picture 73 (the same
+  ticket card as 63); its 4 steps, 5 faults and 3 facts kept as they were. Its step-1 mock (54, v166) is still stale.
+- **Left:** `marathons-manage` / `marathons-follow` — today's changes (Shout it now in the drawer, Fastest Furs durations)
+  are not in their step pictures (the `/event ▸ Marathons…` root card); both pictures were already on the stale list
+  (v166) before today and belong to the next capture session with the other 17. No guide showed the old `/pb` panel
+  (none had a `/pb` picture). `/api/guides/stale` stood at **19** before this pass and is unchanged by it.
+- **The one mock:** 69, `scripts/scan/guides-2026-10-09/pin-mock.html` (colours sampled off the real Settings… capture),
+  because the board was already pinned and *Pin the leaderboard here* renders only when it is not. Uploaded `source: mock`.
+- **How the shots were made — a departure from `access/guides-capture.md`'s "presses nothing" line, on the conductor's
+  brief:** the session pressed on the owner's Discord: `/pb` (twice), **Submit a run** (Celeste, Any%, 29:58.4, a
+  `twitch.tv/videos/…` link, note *Guide shot, not a real run*) → ticket **#9**, **Approve** on its card, `/pb` ▸
+  **Settings…**, **Take it off the board…** (reason *Guide shot test run, not a real run*). On the site: **New bounty**
+  (*Guide shot: Celeste week*, ×2, 10-09 18:00 → 10-16 18:00) → **Create**, **Submit a run** opened and closed empty, the
+  Settings section unfolded, **End…** on the bounty. ⚠️ Opening ticket #9 pinged **@Bots, @Aunties / Uncles, @Leads** in
+  its forum post — modmail's own opening line; nobody was DMed (`points_mode` shadow). The rehearsal posts (two
+  *Leaderboard update* lines, the pinned copy's edit) went to `#blackbloc-logs`. **Cleaned up:** run 3 `removed`, bounty 1
+  ended (`active: false`), board empty — read back from `/api/points`. Site shots were taken at CSS zoom 1.4 (the window
+  is 2498 CSS px wide; a 1.0 crop was unreadably flat); the zoom was reset after.
+- **Not verified:** a member's view of the two member guides (only staff was signed in); phone width; the pictures' look in
+  light mode; `/help`'s `/pb` line as rendered in Discord.

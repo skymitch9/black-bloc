@@ -345,7 +345,8 @@
         {"do": "Type **/modmail** and press **Try a fake ticket**, then **Yes, open one**.", "expect": "A private thread with the same card a real ticket carries. Nobody is DMed."},
         {"do": "In a ticket, press **Reply** and type your answer.", "expect": "The member gets it as a DM from you. **Reply as Staff** sends it with no name."},
         {"do": "Press **Private note** to write something the member never sees.", "expect": "A note embed in the ticket. No DM."},
-        {"do": "Press **Close…** and type a reason.", "expect": "The member is DMed, the transcript is filed, and the ticket is tidied away — a channel goes, a thread is archived, and in forum mode the post is tagged **closed** and archived."}
+        {"do": "Press **Close…** and type a reason.", "expect": "The member is DMed, the transcript is filed, and the ticket is tidied away — a channel goes, a thread is archived, and in forum mode the post is tagged **closed** and archived."},
+        {"do": "On a run ticket, press **Approve** or **Reject…**.", "expect": "The run is decided and the ticket closes. **Close…** waits until then."}
       ],
       "faults": [
         {"symptom": "The card is in the spam channel, not the ticket", "answer": "Only during a rehearsal: while test mode is switched on for a drill, real tickets' cards go there. The practice thread shows it in place."},
@@ -702,6 +703,123 @@
       "faults": [],
       "facts": [
         {"kind": "setting", "ref": "posts_mode"}
+      ]
+    },
+    {
+      "slug": "points-submit",
+      "title": "Get a speedrun on the leaderboard",
+      "goal": "Send the run and its proof. Staff approve it, then it counts.",
+      "audience": "member",
+      "feature": "core",
+      "command": "/pb",
+      "sort": 105,
+      "steps": [
+        {"do": "Type **/pb** and press **Submit a run**.", "expect": "The board and the live bounties."},
+        {"do": "Fill **Game**, **Time** and **Proof link**.", "expect": "Category and the note are optional."},
+        {"do": "Press **Submit**.", "expect": "Your run is in, waiting for staff."},
+        {"do": "Press **Next rank** once it is approved.", "expect": "Your place, and the speedpoints to pass the next one up."}
+      ],
+      "faults": [
+        {"symptom": "No /pb or no Submit a run", "answer": "The point system is off. A Lead turns it on."},
+        {"symptom": "Told a run is already waiting", "answer": "One run at a time. Wait for staff to decide the first."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "points_per_run"},
+        {"kind": "setting", "ref": "points_xp_tiers"}
+      ]
+    },
+    {
+      "slug": "leaderboard-page",
+      "title": "See the leaderboard on the site",
+      "goal": "The board, your runs and the live bounties.",
+      "audience": "member",
+      "feature": "core",
+      "command": "/pb",
+      "sort": 106,
+      "steps": [
+        {"do": "Open **Leaderboard** in the side menu.", "expect": "The top places, your next-place line, the bounties."},
+        {"do": "Press **By XP**.", "expect": "The same board, ranked by XP."},
+        {"do": "Press **Full board**.", "expect": "Everyone, 25 a page. Shown once more members are on it than the top."},
+        {"do": "Press **Submit a run**.", "expect": "The same boxes as /pb."},
+        {"do": "Open **Your runs**.", "expect": "Each run and its state. A reason when one is turned down."}
+      ],
+      "faults": [],
+      "facts": [
+        {"kind": "setting", "ref": "points_top_n"}
+      ]
+    },
+    {
+      "slug": "points-approve",
+      "title": "Approve or reject a run",
+      "goal": "Every run is a modmail ticket. Decide it on the ticket card.",
+      "audience": "staff",
+      "feature": "core",
+      "command": "/pb",
+      "sort": 221,
+      "steps": [
+        {"do": "Open the run's ticket in the **modmail** forum.", "expect": "The run as typed, and the proof link."},
+        {"do": "Open the **proof** link.", "expect": "LiveSplit or the game's timer, showing the time typed."},
+        {"do": "Press **Approve**.", "expect": "The run counts, the ticket closes, the board updates."},
+        {"do": "Or press **Reject…** and type why.", "expect": "The member is told why. The ticket closes."},
+        {"do": "To undo an approval, press **Take it off the board…**.", "expect": "The button sits under the approval line."},
+        {"do": "Type why and press **Submit**.", "expect": "The run leaves the board. The member is told why."}
+      ],
+      "faults": [
+        {"symptom": "Close… is refused", "answer": "A run is waiting on the ticket. Approve or reject it first."},
+        {"symptom": "A waiting run with no ticket", "answer": "It came from the site. Decide it under **Pending** on the Leaderboard page."},
+        {"symptom": "The member got no DM", "answer": "points_mode is shadow. DMs go once points are on."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "points_mode"},
+        {"kind": "setting", "ref": "points_verifier_role_id"}
+      ]
+    },
+    {
+      "slug": "points-bounties",
+      "title": "Put a bounty on a game",
+      "goal": "More speedpoints for runs of chosen games, during an event or between dates.",
+      "audience": "staff",
+      "feature": "core",
+      "command": "/pb",
+      "sort": 222,
+      "steps": [
+        {"do": "On the Leaderboard page, press **New bounty**.", "expect": "Name, games, bonus, amount, when."},
+        {"do": "Pick **Multiplier** or **Extra speedpoints** and an amount.", "expect": "×2 doubles a run's speedpoints. +15 adds 15."},
+        {"do": "Press **Event** or **Dates**.", "expect": "An event bounty is live while its event runs."},
+        {"do": "Press **Create**.", "expect": "The bounty, marked LIVE, here, on the board and on /pb."},
+        {"do": "Press **End…** to stop it early.", "expect": "It moves under Ended. **Bring back** undoes it."}
+      ],
+      "faults": [
+        {"symptom": "Runs approved before the bounty did not change", "answer": "Press **Recompute** under Runs."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "points_bounty_clock"},
+        {"kind": "setting", "ref": "points_per_run"}
+      ]
+    },
+    {
+      "slug": "leaderboard-pin",
+      "title": "Pin the leaderboard in a channel",
+      "goal": "One copy at the bottom of the channel, edited as runs move.",
+      "audience": "staff",
+      "feature": "core",
+      "command": "/pb",
+      "sort": 223,
+      "steps": [
+        {"do": "Type **/pb** and press **Settings…**.", "expect": "Top places, order and channel."},
+        {"do": "Press **Pin the leaderboard here**.", "expect": "The board, pinned in that channel."},
+        {"do": "Read **Pinned**.", "expect": "Where it is, and whether it is live or rehearsing."},
+        {"do": "Approve or remove a **run**.", "expect": "The pinned copy is edited in place."},
+        {"do": "On the site, open **Leaderboard** ▸ **Settings**.", "expect": "The same pin, with **Pause**."}
+      ],
+      "faults": [
+        {"symptom": "Replace it instead of Pin", "answer": "That channel already keeps another sticky. **Replace it** swaps it for the board."},
+        {"symptom": "The copy is in the log channel", "answer": "points_mode is shadow. It moves to the channel when points go on."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "points_channel_id"},
+        {"kind": "setting", "ref": "points_top_n"},
+        {"kind": "setting", "ref": "points_mode"}
       ]
     }
   ]

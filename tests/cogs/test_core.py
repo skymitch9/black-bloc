@@ -1607,8 +1607,8 @@ async def test_eighteen_guide_links_keep_every_help_page_under_discords_limit(se
             links.setdefault(one["command"], []).append(
                 (one["title"], guides.guide_url(origin, one["slug"]))
             )
-    assert len(links) == 20
-    assert sum(len(found) for found in links.values()) == 27
+    assert len(links) == 21
+    assert sum(len(found) for found in links.values()) == 32
 
     pages = pages_under_limit([core_cog.HELP_HEADER, *help_lines(entries, "", links)])
     longest = max(len(page) for page in pages)
