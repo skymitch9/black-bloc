@@ -218,7 +218,11 @@ async def test_changing_the_mode_moves_the_copies_without_waiting_for_anybody_to
     assert len(channel(bot, HOME).messages) == 1
 
     await bot.store.set(GUILD, "sticky_mode", "on")
-    assert channel(bot, HOME).messages == [] and len(channel(bot).messages) == 1
+    # Owner, 2026-10-10: going live takes the rehearsal down and posts NOTHING until Post it.
+    assert channel(bot, HOME).messages == [] and channel(bot).messages == []
+    assert (await rules.get_row(bot.db, GUILD, RUNS))["trouble"] == rules.HELD_SAID
+    assert (await cog.desk.repost(bot.guild, RUNS, 1)).ok
+    assert len(channel(bot).messages) == 1
 
     await bot.store.set(GUILD, "sticky_mode", "off")
     assert channel(bot).messages == []

@@ -783,6 +783,7 @@ ROUTINE: frozenset[str] = frozenset(
         "sticky.removed",
         "sticky.mode",
         "sticky.posted",
+        "sticky.held",
         "minutes.started",
         "minutes.ended",
         "minutes.notes_written",

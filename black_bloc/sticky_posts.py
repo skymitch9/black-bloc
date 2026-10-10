@@ -757,10 +757,15 @@ class Desk:
     ) -> Outcome:
         """The Posts page's Update on a sticky's post: a fresh copy at the bottom, at once."""
         async with self.lock(channel_id):
+            held = await rules.get_row(self.db, guild.id, channel_id)
+            if held is not None and held["trouble"] == rules.HELD_SAID:
+                await rules.write_trouble(self.db, guild.id, channel_id, None)
             done = await self._place(guild, channel_id, first=True)
             row = await rules.get_row(self.db, guild.id, channel_id)
             words = self._placed_words(guild, channel_id, done, row)
-            post = await posts.get_post_by_id(self.db, int(row["post_id"])) if row else None
+            post = row
+            if row is not None and row["post_id"]:
+                post = await posts.get_post_by_id(self.db, int(row["post_id"]))
             if done in (POSTED, REHEARSED, OWN_HOME, TEST_MODE):
                 return Outcome(True, words, "reposted", 200, post)
             return refusal(words, "sticky_not_posted", 409)
@@ -929,7 +934,12 @@ class Desk:
         if row is None:
             return
         mode, feature = await self.rule_of(guild, row)
+        held = False
+        if row["trouble"] == rules.HELD_SAID and mode == "shadow":
+            await rules.write_trouble(self.db, guild.id, channel_id, None)  # a rehearsal is free
+            row = await rules.get_row(self.db, guild.id, channel_id)
         if self._misplaced(guild, row, mode, feature):
+            held = mode != "shadow" and not row["paused"] and not row["trouble"]
             left = await self._take_down(guild, row)
             if left is not None:
                 log.warning(
@@ -940,6 +950,18 @@ class Desk:
         if mode != "off" and self._home_is_back(guild, row, mode, feature):
             await rules.write_trouble(self.db, guild.id, channel_id, None)
             row = await rules.get_row(self.db, guild.id, channel_id)
+        if held:
+            # Owner, 2026-10-10: a copy the mode took down is not put back by a later mode; the
+            # row waits for Post it on the Posts page, Resume, or Pin the leaderboard here on /pb.
+            await rules.write_trouble(self.db, guild.id, channel_id, rules.HELD_SAID)
+            self.forget(channel_id)
+            await log_action(
+                self.bot,
+                guild,
+                "sticky.held",
+                details={"channel_id": channel_id, "mode": mode, "said": rules.HELD_SAID},
+            )
+            return
         if not rules.is_running(row) or mode == "off":
             return
         self._watch(channel_id, row["posted_channel_id"])

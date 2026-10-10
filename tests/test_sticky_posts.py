@@ -363,7 +363,7 @@ async def test_going_live_stops_counting_the_old_rehearsal_home(bot, desk, clock
     await desk.save(bot.guild, RUNS, WORDS, STAFFER)
     await bot.store.set(GUILD, "sticky_mode", "on")
     await desk.settle(bot.guild)
-    assert desk.homes == {} and len(channel(bot).messages) == 1
+    assert desk.homes == {} and channel(bot).messages == []  # held until Post it
     clock.tick(600)
 
     await talk(desk, bot, 5, channel_id=HOME)
@@ -658,8 +658,17 @@ async def test_settle_moves_every_copy_to_where_the_mode_says(bot, desk, db):
     await desk.settle(bot.guild)
     await desk.settle(bot.guild)
 
+    # Owner, 2026-10-10: going live takes the rehearsal down and posts NOTHING until Post it.
     assert channel(bot, HOME).messages == [] and channel(bot, HOME).deleted == [rehearsal]
-    assert len(channel(bot).messages) == 1
+    assert channel(bot).messages == []
+    assert rules.state_of(await row_of(bot), "on") == rules.WAITING
+    assert (await kinds(db)).count("sticky.held") == 1
+    await talk(desk, bot, 20)
+    assert channel(bot).messages == []
+
+    posted = await desk.repost(bot.guild, RUNS, STAFFER)
+    assert posted.ok and len(channel(bot).messages) == 1
+    assert rules.state_of(await row_of(bot), "on") == rules.LIVE
 
     await bot.store.set(GUILD, "sticky_mode", "off")
     await desk.settle(bot.guild)
@@ -1160,7 +1169,12 @@ async def test_the_points_mode_decides_where_the_leaderboard_goes_not_the_sticky
     await bot.store.set(GUILD, "points_mode", "on")
     await desk.settle(bot.guild)
 
-    assert channel(bot, OTHER_HOME).messages == [] and len(channel(bot).messages) == 1
+    # Owner, 2026-10-10: the flip takes the rehearsal down; the first real copy waits for Post it.
+    assert channel(bot, OTHER_HOME).messages == [] and channel(bot).messages == []
+    post = await post_row(bot, post_id)
+    assert (post["message_id"], post["shadow_message_id"]) == (None, None)
+    assert (await desk.repost(bot.guild, RUNS, STAFFER)).ok
+    assert len(channel(bot).messages) == 1
     post = await post_row(bot, post_id)
     assert (post["message_id"], post["shadow_message_id"]) == (channel(bot).messages[0].id, None)
 
@@ -1176,6 +1190,8 @@ async def test_points_off_or_sticky_off_takes_the_leaderboard_down(bot, desk):
 
     await points_on(bot)
     await desk.settle(bot.guild)
+    assert channel(bot).messages == []  # back on: nothing until Post it
+    assert (await desk.repost(bot.guild, RUNS, STAFFER)).ok
     assert len(channel(bot).messages) == 1
 
     await bot.store.set(GUILD, "sticky_mode", "off")

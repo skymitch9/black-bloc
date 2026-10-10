@@ -135,6 +135,11 @@ SAVED_OWN_HOME = (
     "so nothing was posted there. Set `sticky_shadow_channel_id` to another channel to see a "
     "rehearsal copy, or set `sticky_mode` to on."
 )
+# Owner, 2026-10-10: a mode going live never posts a real copy; it waits for a press.
+HELD_SAID = (
+    "Waiting for Post it: the mode is on, the rehearsal copy came down, and nothing is posted "
+    "until somebody presses Post it on the Posts page or Resume here."
+)
 PAUSED_NOW = "Paused. The copy in <#{where}> was taken down and the words are kept."
 PAUSED_NO_COPY = "Paused. No copy was up, and the words are kept."
 PAUSED_COPY_LEFT = (
@@ -349,6 +354,8 @@ def due_in(floor_left: float, quiet: float) -> float:
 
 
 def state_of(row: Any, mode: str) -> str:
+    if row["trouble"] == HELD_SAID:
+        return OFF if mode == "off" else WAITING
     if row["trouble"]:
         return STOPPED
     if row["paused"]:
