@@ -116,6 +116,15 @@ async def submit(bot: Any, guild: Any, member: Any, given: dict[str, Any]) -> Ou
     return outcome
 
 
+async def ticket_place(bot: Any, ticket_id: Any) -> str | None:
+    """The thread or channel a run's ticket lives in, for a link to it; None when there is none."""
+    if not ticket_id:
+        return None
+    ticket = await mm.get_ticket(bot.db, int(ticket_id))
+    place = mm.ticket_place_id(ticket) if ticket is not None else 0
+    return str(place) if place else None
+
+
 async def close_held(bot: Any, guild: Any, ticket: Any) -> str | None:
     """A run's ticket stays open while the run waits: Approve or Reject is what closes it."""
     if ticket is None or not is_run(ticket):

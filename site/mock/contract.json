@@ -2041,7 +2041,8 @@
       "method": "GET",
       "path": "/api/events?status=pending",
       "read_by": [
-        "page-events.js"
+        "page-events.js",
+        "page-leaderboard.js New bounty (the event picker)"
       ],
       "shape": "list",
       "keys": [
@@ -11456,11 +11457,11 @@
       }
     },
     {
-      "_": "The BaF point system (docs/info/points-design.md §E). Layer 1 has no page yet; layer 3's Leaderboard page reads these, and layer 2's /pb panel calls the same moves.",
+      "_": "The BaF point system (docs/info/points-design.md §E). The Leaderboard page (layer 3) reads these, and layer 2's /pb panel calls the same moves.",
       "method": "GET",
       "path": "/api/points",
       "read_by": [
-        "page-leaderboard.js (layer 3)"
+        "page-leaderboard.js"
       ],
       "shape": "object",
       "keys": [
@@ -11484,7 +11485,8 @@
           "name",
           "runs",
           "xp",
-          "speedpoints"
+          "speedpoints",
+          "avatar_url"
         ],
         "bounties": [
           "id",
@@ -11530,7 +11532,7 @@
       "method": "GET",
       "path": "/api/points/board?by=xp",
       "read_by": [
-        "page-leaderboard.js (layer 3) Full board"
+        "page-leaderboard.js Full board"
       ],
       "shape": "object",
       "keys": [
@@ -11544,7 +11546,8 @@
           "name",
           "runs",
           "xp",
-          "speedpoints"
+          "speedpoints",
+          "avatar_url"
         ]
       }
     },
@@ -11552,7 +11555,7 @@
       "method": "GET",
       "path": "/api/points/me",
       "read_by": [
-        "page-leaderboard.js (layer 3) Next rank"
+        "page-leaderboard.js Next rank"
       ],
       "shape": "object",
       "keys": [
@@ -11571,7 +11574,7 @@
       "method": "GET",
       "path": "/api/points/runs?state=pending",
       "read_by": [
-        "page-leaderboard.js (layer 3) Pending queue"
+        "page-leaderboard.js Pending queue"
       ],
       "shape": "object",
       "keys": [
@@ -11600,7 +11603,8 @@
           "xp",
           "speedpoints",
           "bounty_id",
-          "ticket_id"
+          "ticket_id",
+          "ticket_place_id"
         ]
       }
     },
@@ -11614,7 +11618,7 @@
         "proof_url": "https://youtu.be/contract"
       },
       "read_by": [
-        "page-leaderboard.js (layer 3) Submit a run"
+        "page-leaderboard.js Submit a run"
       ],
       "shape": "object",
       "keys": [
@@ -11644,7 +11648,8 @@
           "xp",
           "speedpoints",
           "bounty_id",
-          "ticket_id"
+          "ticket_id",
+          "ticket_place_id"
         ]
       }
     },
@@ -11653,7 +11658,7 @@
       "path": "/api/points/runs/{points_pending_id}/approve",
       "body": {},
       "read_by": [
-        "page-leaderboard.js (layer 3) Approve"
+        "page-leaderboard.js Approve"
       ],
       "shape": "object",
       "keys": [
@@ -11683,7 +11688,8 @@
           "xp",
           "speedpoints",
           "bounty_id",
-          "ticket_id"
+          "ticket_id",
+          "ticket_place_id"
         ]
       }
     },
@@ -11694,7 +11700,7 @@
         "reason": "contract check"
       },
       "read_by": [
-        "page-leaderboard.js (layer 3) Reject"
+        "page-leaderboard.js Reject"
       ],
       "shape": "object",
       "keys": [
@@ -11724,7 +11730,8 @@
           "xp",
           "speedpoints",
           "bounty_id",
-          "ticket_id"
+          "ticket_id",
+          "ticket_place_id"
         ]
       }
     },
@@ -11735,7 +11742,7 @@
         "reason": "contract check"
       },
       "read_by": [
-        "page-leaderboard.js (layer 3) Remove"
+        "page-leaderboard.js Remove"
       ],
       "shape": "object",
       "keys": [
@@ -11765,7 +11772,8 @@
           "xp",
           "speedpoints",
           "bounty_id",
-          "ticket_id"
+          "ticket_id",
+          "ticket_place_id"
         ]
       }
     },
@@ -11776,7 +11784,7 @@
         "time": "10:00"
       },
       "read_by": [
-        "page-leaderboard.js (layer 3) Edit"
+        "page-leaderboard.js Edit"
       ],
       "shape": "object",
       "keys": [
@@ -11806,7 +11814,8 @@
           "xp",
           "speedpoints",
           "bounty_id",
-          "ticket_id"
+          "ticket_id",
+          "ticket_place_id"
         ]
       }
     },
@@ -11815,7 +11824,7 @@
       "path": "/api/points/recompute",
       "body": {},
       "read_by": [
-        "page-leaderboard.js (layer 3) Recompute"
+        "page-leaderboard.js Recompute"
       ],
       "shape": "object",
       "keys": [
@@ -11828,7 +11837,7 @@
       "method": "GET",
       "path": "/api/points/bounties",
       "read_by": [
-        "page-leaderboard.js (layer 3) Bounties"
+        "page-leaderboard.js Bounties"
       ],
       "shape": "object",
       "keys": [
@@ -11865,7 +11874,7 @@
         "ends_at": "2030-01-31"
       },
       "read_by": [
-        "page-leaderboard.js (layer 3) New bounty"
+        "page-leaderboard.js New bounty"
       ],
       "shape": "object",
       "keys": [
@@ -11896,7 +11905,7 @@
         "amount": 3
       },
       "read_by": [
-        "page-leaderboard.js (layer 3) Edit bounty"
+        "page-leaderboard.js Edit bounty"
       ],
       "shape": "object",
       "keys": [
@@ -11925,7 +11934,7 @@
       "path": "/api/points/bounties/{points_bounty_id}/end",
       "body": {},
       "read_by": [
-        "page-leaderboard.js (layer 3) End bounty"
+        "page-leaderboard.js End bounty"
       ],
       "shape": "object",
       "keys": [
@@ -11976,7 +11985,8 @@
     "/schedule.html",
     "/structure.html",
     "/pbs.html",
-    "/brackets.html"
+    "/brackets.html",
+    "/leaderboard.html"
   ],
   "action_kinds": [
     "web.operator.read",

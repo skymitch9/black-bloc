@@ -11,7 +11,7 @@ from ...brackets.access import is_staff
 from ...logkinds import VIA_WEBSITE
 from ...points.model import STATES
 from ..auth import Refused
-from ..names import site_words
+from ..names import avatar_url, site_words
 from ..writes import (
     TOO_MANY_WRITES,
     actor_for,
@@ -57,6 +57,16 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         return guild
 
+    def pictured(guild: Any, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        for row in rows:
+            row["avatar_url"] = avatar_url(guild.get_member(int(row["user_id"])))
+        return rows
+
+    async def ticketed(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        for row in rows:
+            row["ticket_place_id"] = await points_tickets.ticket_place(bot, row["ticket_id"])
+        return rows
+
     def refused(guild: Any, outcome: Any) -> Refused:
         return Refused(outcome.status or 400, outcome.code, site_words(guild, outcome.message))
 
@@ -68,8 +78,9 @@ def build_router(bot: Any) -> APIRouter:
         if move is not None:
             await points_tickets.settle(bot, guild, actor, outcome, move, via=VIA_WEBSITE)
         row = await points_store.run(bot.db, guild.id, outcome.value.id)
+        (run,) = await ticketed([points_view.run_row(bot.store, guild, row)])
         return {
-            "run": points_view.run_row(bot.store, guild, row),
+            "run": run,
             "message": site_words(guild, outcome.message),
             "changed": list(outcome.changed),
             "announce": list(outcome.value.announce),
@@ -87,14 +98,19 @@ def build_router(bot: Any) -> APIRouter:
         who = await reader(request)
         guild = place()
         verifier, staff = roles_of(guild, who)
-        return await points_view.index(
+        found = await points_view.index(
             bot, guild, int(who["id"]), by=by, verifier=verifier, staff=staff
         )
+        pictured(guild, found["board"])
+        return found
 
     @router.get("/board")
     async def points_board(request: Request, by: str | None = None) -> dict[str, Any]:
         await reader(request)
-        return await points_view.full_board(bot, place(), by=by)
+        guild = place()
+        found = await points_view.full_board(bot, guild, by=by)
+        pictured(guild, found["rows"])
+        return found
 
     @router.get("/me")
     async def points_me(request: Request) -> dict[str, Any]:
@@ -128,7 +144,7 @@ def build_router(bot: Any) -> APIRouter:
         return {
             "state": state,
             "user_id": str(wanted) if wanted is not None else None,
-            "runs": [points_view.run_row(bot.store, guild, row) for row in rows],
+            "runs": await ticketed([points_view.run_row(bot.store, guild, row) for row in rows]),
         }
 
     @router.post("/runs")

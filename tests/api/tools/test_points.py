@@ -213,3 +213,36 @@ async def test_staff_run_bounties_from_the_site(client, sign_in, wf, web, people
         "web.points.bounty_set",
         "web.points.bounty_ended",
     ]
+
+
+async def test_the_board_carries_pictures_and_a_run_carries_its_ticket_room(
+    client, sign_in, wf, web, people
+):
+    from black_bloc import points_store
+
+    cur = await web.db.conn.execute(
+        "INSERT INTO modmail_tickets(guild_id, user_id, mode, channel_id, thread_id, status, "
+        "opened_at, source) VALUES (?, ?, 'thread', ?, ?, 'open', ?, 'points')",
+        (wf.GUILD_ID, ADA, 4400, 4401, "2026-10-09T12:00:00+00:00"),
+    )
+    await web.db.conn.commit()
+    ticketed = await points_store.add_run(
+        web.db,
+        wf.GUILD_ID,
+        ADA,
+        {"game": "Celeste", "seconds": 1800, "proof_url": PROOF, "ticket_id": cur.lastrowid},
+    )
+    loose = submit(as_(client, sign_in, wf, BEA))["run"]
+    assert loose["ticket_place_id"] is None
+
+    vera = as_(client, sign_in, wf, VERA)
+    queue = {row["id"]: row for row in vera.get("/api/points/runs?state=pending").json()["runs"]}
+    assert queue[ticketed]["ticket_place_id"] == "4401"
+    assert queue[loose["id"]]["ticket_place_id"] is None
+
+    staff = as_(client, sign_in, wf, STAFFER)
+    staff.post(f"/api/points/runs/{loose['id']}/approve", json={})
+    index = staff.get("/api/points").json()
+    assert [row["avatar_url"] for row in index["board"]] == [f"https://cdn.test/{BEA}.png"]
+    board = staff.get("/api/points/board").json()
+    assert board["rows"][0]["avatar_url"] == f"https://cdn.test/{BEA}.png"
