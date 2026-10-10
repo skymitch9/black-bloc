@@ -1,7 +1,7 @@
 # Post to test — a preview copy in #post-test whatever the posts switch says
 
 > **Audience:** the build agent (branch `post-to-test`), reviewers, and the next build that touches Posts or
-> the sticky desk. **Status:** TRACKED · 🔨 DESIGN 2026-10-10 12:1x Phoenix, dispatched to Opus; NOT built,
+> the sticky desk. **Status:** TRACKED · 🔨 DESIGN 2026-10-10 12:1x Phoenix, dispatched to Opus; BUILT on branch `post-to-test` (see **Deviations** at the end),
 > NOT merged, NOT deployed. **Last verified: 2026-10-10** — the code facts below were read off `main`
 > `c6a8b057` (v221 live) by the conductor: `posts.publish_post` `:1359`, `_existing_message` `:1285`,
 > `_drop_shadow` `:1323`, `set_shadow_posted` `:654`, `forget_message` `:665`, `shadow_channel_id` `:1254`,
@@ -107,3 +107,70 @@ The payload's post rows already carry `posted_where`; add `test_copy: bool` (a `
 2. Flip NOTHING live. The proof of the `on` path is the suite plus the mock until the owner flips posts on; record
    that in the deploy line as NOT verified live.
 3. `/posts` ▸ a card in shadow: no Post to test. Logs: nothing new.
+
+## Deviations
+
+> Written by the build agent on branch `post-to-test` (2026-10-10). Every line was exercised by the hermetic
+> suite or the mock gate; ⚠️ nothing here met Discord or a browser.
+
+1. **The shadow copy carries NO note today — the design said it did.** `publish_post`'s shadow branch sends
+   `message_parts(...)` with no rehearsal line (only the sticky desk, the door, modmail and others prefix
+   `shadow.note_line`). Post to test adds the line anyway, because the point of step 2 holds: in `on` a test copy
+   and nothing else marks it. It is `shadow.note_line(bot, guild, "<#channel>")` (or `no channel yet`), put above a
+   plain post with `sticky.fit` and as the content of an embed post (`posts.with_note`). The shadow MODE path is
+   unchanged and still sends no note.
+2. **In `shadow`, `rehearse_post` CALLS `publish_post`** (not a copy of it) for a post that is not a sticky's, so the
+   two cannot drift: same kinds (`post.shadow_posted`), same version, same pin. A sticky's post never takes that
+   path (rule 1 of the sticky section decides it).
+3. **`no_shadow_channel` has its own words, `posts.NO_TEST_CHANNEL`.** The existing `NO_SHADOW_CHANNEL` opens with
+   *"Posts are in shadow…"*, which is false in `on`. Same code, same 409.
+4. **Order of refusals.** `posts_off` first, then (sticky) the already-rehearsing answer, then `nothing_to_post`,
+   `title_too_long`, `body_too_long`, `no_shadow_channel`, the guard. A sticky's post with no words but a block is
+   not refused (the leaderboard is all block); it is refused `nothing_to_post` only when `post_message` comes back
+   empty.
+5. **No `set_drawn`, door, pin or `post_published` dispatch for a test copy beside a real one.** The block stamps
+   and the door describe the REAL message; stamping them from the test copy would tell a block redraw the real copy
+   is current when it is not. With no real copy up, `set_shadow_posted` + `set_drawn` run as the shadow branch does.
+6. **The narrower writer is `posts.set_test_copy`** (writes only `shadow_message_id`), used whenever the row already
+   has a `message_id`; otherwise `set_shadow_posted` as before.
+7. **`status_words` and `move_label` take the mode (optional, default unchanged).** In `on`, a `shadow_message_id`
+   is a test copy: with no real copy the pills read `not posted` + `test copy` and the button reads **Post it**
+   (before, a test copy would have read `posted (shadow)` / **Update the post**, and the drawer's sentence said
+   *"edits the message already in #channel"*, which Post it does not do). With a real copy: the usual pills plus
+   `test copy`. One helper, `posts.has_test_copy(row, mode)`, is what the API's `test_copy` field reads.
+8. **The sweep never pins a shadow copy while posts are `on`** (`reconcile_posts`). Without this, a test copy of a
+   `pin = true` post would have been pinned in #post-test within five minutes — the design says it is not pinned.
+9. **Desk drop: not one line.** `_post_copy` sits inside the `try` that UNSENDS the new real copy on any exception,
+   so dropping there would let a cosmetic failure undo the real copy (checklist 12). The drop is
+   `Desk._drop_test_copy`, called after that `try`, catching and logging its own failure. It also skips the id the
+   Desk itself just moved: `_take_down` already deleted a sticky's own REHEARSAL copy when it goes live, and the
+   stale `post` row still names it, so without the check every shadow→on flip would have logged a spurious
+   `post.shadow_message_gone`.
+10. **Taking a sticky's post down takes its test copy too.** `take_down_post` hands a sticky's post to
+    `Desk.pause`, which calls `clear_posted` and would have forgotten the test copy's id while leaving the message
+    in #post-test. When the sticky is not itself rehearsing, `drop_shadow` runs first. (The design said
+    `take_down_post` needed nothing; true for an ordinary post, not for a sticky's.)
+11. **Card layout: Post to test is on row 1 and takes one Remove slot** (`REMOVE_CAP` stays 3; the card draws
+    `REMOVE_CAP - 1` removes while Post to test shows, and 3 in shadow where it is hidden). Row 1 holds at most
+    Versions, Back, Post to test and two removes = 5. The third block is still removable from the site.
+12. **Card line and drawer line.** The card gains `posts.TEST_COPY_LINE` (*"A test copy is in #post-test."*) when a
+    test copy is up and posts are on. The drawer's posted line appends the same sentence (*"Posted in #welcome. It is
+    pinned. A test copy is in #post-test."* — the design's ` · ` form read badly after the pin sentence), or reads
+    only that sentence when no real copy is up. The second `willPost` line is `posts.REHEARSE_LINE`, shown only in
+    `on` (also under *Pick a channel…*, since a test copy needs no channel), with `{where}` = `its channel`
+    (`posts.ITS_CHANNEL`) when the draft has none. `tests/test_posts.py::test_the_page_spells_the_test_copy_words_the_way_the_card_does`
+    reads the four JS constants off `page-posts.js`.
+13. **The drawer stays open after Post to test** (Post it closes it): staff iterate — edit, Post to test, look,
+    edit again — so the drawer settles on the answer, repaints the pills and the versions, and reloads the list
+    behind it.
+14. **Log kinds are ROUTINE** (`post.rehearsed`, `post.rehearsal_updated`): a preview reaches no member, so it does
+    not post to the log channel at `important`. `post.would_rehearse` is routine by the `.would_` rule. Details
+    carry `shadow_home`, `message_id`, `slug`, `post_id`, `channel_id`, `via`.
+15. **Contract.** The entry sets `posts_shadow_channel_id` to the test channel for its own request (the real API's
+    seed has no rehearsal home and answered `no_shadow_channel` without it). `test_copy` was added to every posts
+    row shape in the contract, not only the new route's, because the list and the drawer both read it.
+16. **The mock has no sticky's post on the rehearse route** (its `/publish` has none either); shadow on the mock's
+    `/rehearse` runs the mock's publish.
+17. ⚠️ **House-rule tension, flagged not decided:** the second `willPost` line is a how-it-works sentence, which the
+    2026-10-04 *no explaining blurbs* rule forbids; it was built because this design (2026-10-10, later) asks for it.
+    Deleting the `test` suffix in `willPost` and the `REHEARSE_LINE` twin removes it cleanly.

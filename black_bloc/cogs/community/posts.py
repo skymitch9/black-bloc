@@ -44,6 +44,7 @@ from ...posts import (
     PANEL_TITLE,
     PIN_IT,
     PLAIN,
+    POST_TO_TEST,
     POSTS_OFF,
     REMOVE_BLOCK,
     SITE_BUTTON,
@@ -58,9 +59,11 @@ from ...posts import (
     VERSIONS_TITLE,
     VIEW_IT,
     cap_for,
+    copy_line,
     count_posts,
     get_post,
     get_version,
+    has_test_copy,
     in_shadow,
     is_posted,
     is_seeded,
@@ -76,6 +79,7 @@ from ...posts import (
     publish_post,
     reconcile_posts,
     refresh_seeds,
+    rehearse_post,
     remove_post,
     render_message,
     restore_version,
@@ -85,6 +89,7 @@ from ...posts import (
     set_mode,
     shadow_channel_id,
     shadow_words,
+    shows_post_to_test,
     site_page_url,
     status_words,
     summary_chars,
@@ -133,14 +138,14 @@ USE_IT_QUESTION = (
 DELETE_QUESTION = "Every word goes with it. Nothing puts it back."
 
 
-def line_for(guild: Any, row: Any) -> str:
+def line_for(guild: Any, row: Any, mode: Any = None) -> str:
     where = where_words(guild, row_value(row, "channel_id"))
-    marks = " · ".join(status_words(row))
+    marks = " · ".join(status_words(row, mode))
     return f"**{row['title']}** · {where} · {marks}"
 
 
-def option_label(guild: Any, row: Any) -> str:
-    marks = ", ".join(status_words(row))
+def option_label(guild: Any, row: Any, mode: Any = None) -> str:
+    marks = ", ".join(status_words(row, mode))
     return f"{row['title']} · {marks}"[:100]
 
 
@@ -148,7 +153,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     rows = await list_posts(bot.db, guild.id)
     mode = mode_of(bot.store, guild.id)
     lines = [PANEL_INTRO]
-    lines.extend(line_for(guild, row) for row in rows)
+    lines.extend(line_for(guild, row, mode) for row in rows)
     if not rows:
         lines.append(PANEL_EMPTY)
     if posts_are_off(bot.store, guild.id):
@@ -170,7 +175,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         )
     view.add_item(ModePick(mode))
     if rows:
-        view.add_item(PostPick(guild, rows))
+        view.add_item(PostPick(guild, rows, mode))
     return embed, view
 
 
@@ -190,7 +195,8 @@ async def block_state(bot: Any, guild: Any, row: Any) -> tuple[list[str], dict[s
 
 async def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, PostsView]:
     mine, held = await block_state(bot, guild, row)
-    lines = [line_for(guild, row)]
+    mode = mode_of(bot.store, guild.id)
+    lines = [line_for(guild, row, mode)]
     if mine:
         names = ", ".join(
             name_of(bot.store, guild.id, BLOCK_KINDS[kind]) for kind in mine if kind in BLOCK_KINDS
@@ -198,12 +204,14 @@ async def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Pos
         lines.append(BLOCKS_LINE.format(names=names))
     if in_shadow(bot.store, guild.id):
         lines.append(shadow_words(bot, guild, row))
+    if has_test_copy(row, mode):
+        lines.append(copy_line(bot, guild))
     body = preview_of(row)
     lines.append(body or NOT_POSTED_YET)
     embed = discord.Embed(title=row["title"], description=clamped(lines))
     slug = str(row["slug"])
     view = PostsView(panel_minutes(bot.store, guild.id))
-    view.add_item(MoveButton(slug, move_label(row)))
+    view.add_item(MoveButton(slug, move_label(row, mode)))
     if is_posted(row):
         view.add_item(TakeDownButton(slug))
     view.add_item(EditButton(slug))
@@ -212,7 +220,11 @@ async def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Pos
         view.add_item(DeleteButton(slug))
     view.add_item(VersionsButton(slug))
     view.add_item(BackButton())
-    for kind in mine[:REMOVE_CAP]:
+    removes = REMOVE_CAP
+    if shows_post_to_test(mode):
+        view.add_item(RehearseButton(slug))
+        removes -= 1
+    for kind in mine[:removes]:
         if kind in BLOCK_KINDS:
             view.add_item(
                 RemoveBlockButton(slug, kind, name_of(bot.store, guild.id, BLOCK_KINDS[kind]))
@@ -414,11 +426,13 @@ class LogsButton(discord.ui.Button):
 
 
 class PostPick(discord.ui.Select):
-    def __init__(self, guild: Any, rows: list[Any]) -> None:
+    def __init__(self, guild: Any, rows: list[Any], mode: Any = None) -> None:
         super().__init__(
             placeholder=PICK_A_POST,
             options=[
-                discord.SelectOption(label=option_label(guild, row), value=str(row["slug"]))
+                discord.SelectOption(
+                    label=option_label(guild, row, mode), value=str(row["slug"])
+                )
                 for row in rows[:SELECT_CAP]
             ],
             min_values=1,
@@ -449,6 +463,17 @@ class MoveButton(discord.ui.Button):
         if not await still_staff(interaction):
             return
         await run_move(interaction, self.slug, publish_post, self.view)
+
+
+class RehearseButton(discord.ui.Button):
+    def __init__(self, slug: str) -> None:
+        super().__init__(label=POST_TO_TEST, style=discord.ButtonStyle.secondary, row=1)
+        self.slug = slug
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await run_move(interaction, self.slug, rehearse_post, self.view)
 
 
 class TakeDownButton(discord.ui.Button):

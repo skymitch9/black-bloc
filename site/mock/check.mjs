@@ -589,6 +589,9 @@ async function checkActionKinds() {
   await send('PUT', '/api/settings/posts_mode', { value: 'on' });
   await post(`/api/posts/${IDS.post_slug}/publish`, {});
   await post(`/api/posts/${IDS.post_slug}/publish`, {});
+  // Post to test beside the real copy: the first press sends, the second edits in place.
+  await post(`/api/posts/${IDS.post_slug}/rehearse`, {});
+  await post(`/api/posts/${IDS.post_slug}/rehearse`, {});
   await post(`/api/posts/${IDS.post_slug}/takedown`, {});
   await post(`/api/posts/${IDS.posted_post_slug}/versions/${IDS.post_version_n}/restore`, {});
   await send('DELETE', `/api/posts/${IDS.scratch_post_slug}`, undefined);

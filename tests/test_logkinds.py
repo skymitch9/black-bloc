@@ -570,6 +570,8 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "post.pinned",
         "post.post_failed",
         "post.posted",
+        "post.rehearsal_updated",
+        "post.rehearsed",
         "post.restored",
         "post.saved",
         "post.shadow_message_gone",
@@ -580,6 +582,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "post.updated",
         "post.versions_trimmed",
         "post.would_post",
+        "post.would_rehearse",
         "post.would_take_down",
         # The dashboard's Posts page calls the same moves with a website via, so every kind
         # the panel writes arrives under a `web.` head as well.
@@ -590,6 +593,8 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.post.pinned",
         "web.post.post_failed",
         "web.post.posted",
+        "web.post.rehearsal_updated",
+        "web.post.rehearsed",
         "web.post.restored",
         "web.post.saved",
         "web.post.shadow_message_gone",
@@ -600,6 +605,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.post.updated",
         "web.post.versions_trimmed",
         "web.post.would_post",
+        "web.post.would_rehearse",
         "web.post.would_take_down",
     ),
     "black_bloc/cogs/content/marathon_role.py::helpers.FAILED": ("marathon.role_failed",),

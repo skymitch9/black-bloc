@@ -772,6 +772,8 @@ ROUTINE: frozenset[str] = frozenset(
         "post.versions_trimmed",
         "post.shadow_message_gone",
         "post.shadow_taken_down",
+        "post.rehearsed",
+        "post.rehearsal_updated",
         "post.seeded",
         "post.seed_channel_unknown",
         "sticky.set",

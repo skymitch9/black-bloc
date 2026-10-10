@@ -649,3 +649,63 @@ async def test_a_second_post_is_refused_the_front_door_in_words_from_the_card(bo
 
     assert "one post at a time" in interaction.said
     assert await post_blocks.kinds_on(bot.db, int(second["id"])) == []
+
+
+# --- Post to test (post-to-test-design.md) ------------------------------------------------------
+
+
+def rehearse_button(view):
+    return next((one for one in view.children if isinstance(one, cog.RehearseButton)), None)
+
+
+async def test_post_to_test_is_hidden_in_shadow_and_beside_post_it_otherwise(bot, staff):
+    row = await a_post(bot)
+
+    _, on = await cog.build_card(bot, bot.guild, row)
+    await bot.store.set(GUILD, posts.MODE_KEY, "shadow")
+    _, shadow = await cog.build_card(bot, bot.guild, row)
+    await bot.store.set(GUILD, posts.MODE_KEY, "off")
+    _, off = await cog.build_card(bot, bot.guild, row)
+
+    assert posts.POST_TO_TEST in labels(on) and posts.POST_TO_TEST in labels(off)
+    assert posts.POST_TO_TEST not in labels(shadow), "Post it already goes to #post-test"
+    assert rehearse_button(on).row == 1
+    assert rehearse_button(on).style == discord.ButtonStyle.secondary
+
+
+async def test_post_to_test_takes_one_remove_slot_so_no_row_holds_more_than_five(bot, staff):
+    row = await a_post(bot)
+    for kind in list(post_blocks.KINDS)[:4]:
+        await post_blocks.attach(bot.db, row, kind)
+
+    _, on = await cog.build_card(bot, bot.guild, row)
+    await bot.store.set(GUILD, posts.MODE_KEY, "shadow")
+    _, shadow = await cog.build_card(bot, bot.guild, row)
+
+    removes_on = [one for one in on.children if isinstance(one, cog.RemoveBlockButton)]
+    removes_shadow = [one for one in shadow.children if isinstance(one, cog.RemoveBlockButton)]
+    assert len(removes_on) == cog.REMOVE_CAP - 1 and len(removes_shadow) == cog.REMOVE_CAP
+    for view in (on, shadow):
+        assert all(
+            len([c for c in view.children if getattr(c, "row", None) == n]) <= 5
+            for n in range(5)
+        )
+
+
+async def test_the_card_button_sends_a_test_copy_and_the_card_says_one_is_up(bot, staff):
+    await bot.store.set(GUILD, "posts_shadow_channel_id", TEST_CHANNEL)
+    row = await a_post(bot, channel_id=WELCOME_CHANNEL)
+    await posts.publish_post(bot, bot.guild, row, staff)
+    interaction = FakeInteraction(bot, staff)
+
+    await cog.run_move(interaction, "notice", posts.rehearse_post)
+
+    assert interaction.said == posts.REHEARSED_SAID.format(
+        title="A notice", shadow="#blackbloc-logs", where="#welcome"
+    )
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    embed, view = await cog.build_card(bot, bot.guild, fresh)
+    assert posts.TEST_COPY_LINE.format(shadow="#blackbloc-logs") in embed.description
+    assert posts.STATUS_TEST_COPY in embed.description
+    assert "Update the post" in labels(view)
+    assert await kinds(bot.db) == ["post.posted", "post.pinned", "post.rehearsed"]

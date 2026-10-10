@@ -1248,3 +1248,81 @@ async def test_quiet_zero_is_the_old_rule_and_moves_at_the_count(bot, clock):
     await talk(desk, bot, 5)
 
     assert clock.slept == [] and (await row_of(bot))["reposts"] == 1
+
+
+# --- Post to test on a sticky's post (post-to-test-design.md) ---------------------------------
+
+
+async def test_a_rehearsing_sticky_answers_that_it_already_rehearses_and_sends_nothing(bot, desk):
+    from black_bloc import posts
+
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.ON)
+    post_id = await a_post(bot)
+    bot.sticky_desk = desk
+    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
+    before = await post_row(bot, post_id)
+    assert len(channel(bot, HOME).messages) == 1, "the leaderboard rehearses in the home"
+
+    found = await posts.rehearse_post(bot, bot.guild, before, STAFFER)
+
+    assert found.ok
+    assert found.message == posts.STICKY_ALREADY_REHEARSING.format(shadow="#welcome-test")
+    assert len(channel(bot, HOME).messages) == 1 and channel(bot, HOME).messages[0].edits == []
+    assert dict(await post_row(bot, post_id)) == dict(before)
+
+
+async def test_a_live_stickys_test_copy_is_one_plain_message_the_desk_never_counts(
+    bot, desk, db, clock
+):
+    from black_bloc import posts
+
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.ON)
+    await points_on(bot)
+    post_id = await a_post(bot)
+    bot.sticky_desk = desk
+    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
+    real = channel(bot).messages[0].id
+    sticky_before = dict(await row_of(bot))
+    stamped = ("message_id", "posted_hash", "posted_at", "posted_by")
+    was = await post_row(bot, post_id)
+    stamp_before = tuple(was[key] for key in stamped)
+
+    found = await posts.rehearse_post(bot, bot.guild, await post_row(bot, post_id), STAFFER)
+
+    assert found.ok, found.message
+    home = channel(bot, HOME)
+    assert len(home.messages) == 1 and home.pinned == []
+    copy = home.messages[0]
+    assert copy.content == f"Rehearsal — this is where it would go: <#{RUNS}>"
+    assert [embed.title for embed in copy.kwargs["embeds"]] == ["Leaderboard"]
+    assert [one.id for one in channel(bot).messages] == [real], "the sticky copy is untouched"
+    assert dict(await row_of(bot)) == sticky_before, "the Desk's row never learns of it"
+    post = await post_row(bot, post_id)
+    assert post["shadow_message_id"] == copy.id
+    assert tuple(post[key] for key in stamped) == stamp_before
+
+    clock.tick(600)
+    await talk(desk, bot, 5)
+
+    assert home.messages == [] and home.deleted == [copy.id], "a real copy takes it down"
+    post = await post_row(bot, post_id)
+    assert post["shadow_message_id"] is None
+    assert post["message_id"] == channel(bot).messages[0].id != real
+    assert "post.shadow_taken_down" in await kinds(db)
+
+
+async def test_taking_a_live_stickys_post_down_takes_its_test_copy_too(bot, desk):
+    from black_bloc import posts
+
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.ON)
+    await points_on(bot)
+    post_id = await a_post(bot)
+    bot.sticky_desk = desk
+    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
+    await posts.rehearse_post(bot, bot.guild, await post_row(bot, post_id), STAFFER)
+
+    taken = await posts.take_down_post(bot, bot.guild, await post_row(bot, post_id), STAFFER)
+
+    assert taken.ok
+    assert channel(bot, HOME).messages == [] and channel(bot).messages == []
+    assert not posts.is_posted(await post_row(bot, post_id))

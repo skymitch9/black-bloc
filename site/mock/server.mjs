@@ -3472,13 +3472,26 @@ function postPending(row) {
   return postIsUp(row) && row.posted_hash !== postHash(row);
 }
 
+// Post to test: with posts on, a copy in the rehearsal home is a test copy (posts.has_test_copy).
+function postTestCopy(row) {
+  return postsMode() === 'on' && Boolean(row.shadow_message_id);
+}
+
 function postStatus(row) {
+  const test = postTestCopy(row);
+  if (test && !row.message_id) return ['not posted', 'test copy'];
   if (!postIsUp(row)) return ['not posted'];
   const found = [postWhere(row) === 'shadow' ? 'posted (shadow)' : 'posted'];
   if (row.pin) found.push('pinned');
   if (row.door_hash) found.push('carries the front door');
   if (postPending(row)) found.push('changes not yet posted');
+  if (test) found.push('test copy');
   return found;
+}
+
+function postMove(row) {
+  const up = postTestCopy(row) ? Boolean(row.message_id) : postIsUp(row);
+  return up ? 'Update the post' : 'Post it';
 }
 
 // The twins of posts.DOOR_CARRIED_ELSEWHERE and the answers a carried front door gives.
@@ -3693,7 +3706,8 @@ function postRow(row) {
     pinned: postIsUp(row) && Boolean(row.pin),
     changes_pending: postPending(row),
     status: postStatus(row),
-    move: postIsUp(row) ? 'Update the post' : 'Post it',
+    move: postMove(row),
+    test_copy: postTestCopy(row),
     message_id: row.message_id ? String(row.message_id) : null,
     shadow_message_id: row.shadow_message_id ? String(row.shadow_message_id) : null,
     posted_at: row.posted_at,
@@ -4025,7 +4039,9 @@ route('PUT', '/api/posts/:slug', async (context) => {
   return postWhole(row, said);
 });
 
-route('POST', '/api/posts/:slug/publish', (context) => {
+route('POST', '/api/posts/:slug/publish', (context) => publishPost(context));
+
+function publishPost(context) {
   requireStaff(context.session);
   const row = wantedPost(context.params.slug);
   const mode = postsMode();
@@ -4090,6 +4106,45 @@ route('POST', '/api/posts/:slug/publish', (context) => {
       ? `**${row.title}** is updated where it was already posted, in ${where}.`
       : `**${row.title}** is posted in ${where}.`,
   );
+}
+
+// The twins of posts.REHEARSED_SAID / REHEARSAL_UPDATED_SAID / NO_TEST_CHANNEL. Shadow is the
+// publish route itself (the button is hidden there); the mock has no sticky's post to rehearse.
+const POST_REHEARSED = 'Sent a test copy of **{title}** to {shadow}. The real post in {where} is untouched; the next Post it takes the test copy down.';
+const POST_REHEARSAL_UPDATED = 'Updated the test copy of **{title}** in {shadow}.';
+const POST_NO_TEST_CHANNEL = 'There is nowhere to send a test copy of **{title}**: this server has neither a test channel nor a log channel, so nothing was sent. A Lead sets **posts_shadow_channel_id** on the Settings page.';
+
+route('POST', '/api/posts/:slug/rehearse', (context) => {
+  const mode = postsMode();
+  if (mode === 'shadow') return publishPost(context);
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  if (mode === 'off') throw new Refused(409, 'posts_off', POSTS_ARE_OFF);
+  if (!row.body.trim()) throw new Refused(409, 'nothing_to_post', POST_NOTHING_TO_POST.split('{title}').join(row.title));
+  if (row.body.length > postCap(row.style)) {
+    throw new Refused(400, 'body_too_long', postTooLong(row.body.length, postCap(row.style), row.style, 'posted'));
+  }
+  const target = postShadowChannel();
+  if (!target) throw new Refused(409, 'no_shadow_channel', POST_NO_TEST_CHANNEL.split('{title}').join(row.title));
+  if (testMode && String(target) !== '800000000000000003') {
+    logAction('web.post.would_rehearse', { details: { slug: row.slug, post_id: row.id, shadow_home: target, via: 'website' } });
+    throw new Refused(409, 'test_mode', GUARD);
+  }
+  const updating = Boolean(row.shadow_message_id);
+  if (!updating) row.shadow_message_id = String(state.nextPostMessage++);
+  // posted_hash / posted_at / posted_by describe the real copy while one is up.
+  if (!row.message_id) {
+    row.posted_hash = postHash(row);
+    row.posted_at = now();
+    row.posted_by = STAFF.id;
+  }
+  logAction(updating ? 'web.post.rehearsal_updated' : 'web.post.rehearsed', {
+    details: { slug: row.slug, post_id: row.id, message_id: row.shadow_message_id, shadow_home: target, via: 'website' },
+  });
+  const shadow = `#${postChannelName(target)}`;
+  const where = row.channel_id ? `#${postChannelName(row.channel_id)}` : 'its channel';
+  const said = updating ? POST_REHEARSAL_UPDATED : POST_REHEARSED;
+  return postWhole(row, said.split('{title}').join(row.title).split('{shadow}').join(shadow).split('{where}').join(where));
 });
 
 route('POST', '/api/posts/:slug/takedown', (context) => {

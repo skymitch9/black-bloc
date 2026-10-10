@@ -351,6 +351,8 @@ class Desk:
         except BaseException:
             await self._unsend(sent)
             raise
+        if post is not None and not home:
+            await self._drop_test_copy(guild, post, row["message_id"])
         await self._pin(guild, row, sent)
         self.heard[channel_id] = 0
         self.outage.pop(channel_id, None)
@@ -369,6 +371,16 @@ class Desk:
         write = posts.set_shadow_posted if rehearsed else posts.set_posted
         await write(self.db, int(post["id"]), message_id, posts.hash_of(post))
         await set_drawn(self.db, int(post["id"]), stamps)
+
+    async def _drop_test_copy(self, guild: Any, post: Any, old: Any) -> None:
+        """A real copy takes a Post to test copy down; the copy just moved is not one."""
+        ghost = posts.shadow_id(post)
+        if not ghost or int(ghost) == int(old or 0):
+            return
+        try:
+            await posts.drop_shadow(self.bot, guild, post, None, VIA_DISCORD)
+        except Exception as exc:
+            log.warning("sticky: a test copy %s was not taken down — %s", ghost, why(exc))
 
     async def _pin(self, guild: Any, row: Any, sent: Any) -> None:
         """The copy is already stored; a pin that fails leaves it up and is said once."""
@@ -894,6 +906,9 @@ __all__ = [
     "REHEARSED",
     "TEST_MODE",
     "TOO_SOON",
+    "is_empty",
+    "owner_rule",
+    "post_message",
     "UNREACHABLE",
     "Desk",
     "desk_of",

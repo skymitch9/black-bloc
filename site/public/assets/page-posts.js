@@ -63,6 +63,13 @@ const WILL_SHADOW_NOWHERE = 'shadow — this goes to {shadow}. It has no channel
   + 'and nothing reaches one until posts are on.';
 const WILL_SHADOW_SAME = 'shadow — this goes to {shadow}, which is where it was going anyway.';
 const NO_SHADOW_CHANNEL = 'no shadow channel yet';
+// Post to test (2026-10-10). The twins of posts.POST_TO_TEST, posts.TEST_COPY_LINE,
+// posts.REHEARSE_LINE and posts.ITS_CHANNEL — tests/test_posts.py reads them off this file.
+const POST_TO_TEST = 'Post to test';
+const TEST_COPY_LINE = 'A test copy is in {shadow}.';
+const REHEARSE_LINE = 'Post to test sends a copy to {shadow} as it would look, without touching {where}; the next '
+  + 'Post it takes the copy down.';
+const ITS_CHANNEL = 'its channel';
 const SHADOW = 'shadow';
 const PIN_WORDS = { true: 'pins it', false: 'leaves it unpinned' };
 // Blocks (owner, 2026-09-27: "lets do blocks"). A block rides under a post in the same message.
@@ -149,6 +156,7 @@ const COLUMNS = 'grid-template-columns: 12px minmax(0, 1.5fr) minmax(220px, 1.2f
 const TONES = {
   posted: 'ok',
   'posted (shadow)': 'info',
+  'test copy': 'info',
   pinned: null,
   'carries the front door': 'info',
   'changes not yet posted': 'warn',
@@ -222,11 +230,20 @@ function shadowWords(shadow) {
 }
 
 function postedLine(row, shadow) {
+  const copy = TEST_COPY_LINE.replace('{shadow}', shadowWords(shadow));
+  if (row.test_copy && !row.message_id) return copy;
   if (!row.posted) return NOT_POSTED_ANYWHERE;
   const rehearsal = row.posted_where === SHADOW;
   const line = rehearsal ? POSTED_IN_SHADOW : POSTED_HERE;
   const at = rehearsal ? shadowWords(shadow) : whereWords(row);
-  return line.replace('{where}', at) + (row.pin ? PINNED_TOO : NOT_PINNED);
+  return line.replace('{where}', at) + (row.pin ? PINNED_TOO : NOT_PINNED) + (row.test_copy ? ` ${copy}` : '');
+}
+
+function rehearseLine(draft, post, payload) {
+  const named = draft.channel_name || post.channel_name;
+  return REHEARSE_LINE
+    .replace('{shadow}', shadowWords(payload.shadow))
+    .replace('{where}', draft.channel_id && named ? `#${named}` : ITS_CHANNEL);
 }
 
 /** The one word that decides the dot: what the row's own status list leads with. */
@@ -251,13 +268,15 @@ function willPost(draft, post, payload, dirty = false) {
       .replace('{shadow}', at)
       .replace('{where}', `#${draft.channel_name || post.channel_name || ''}`);
   }
-  if (!draft.channel_id) return NEEDS_A_CHANNEL;
-  const saving = post.posted ? WILL_UPDATE_SAVED : WILL_POST_SAVED;
-  const template = dirty ? saving : (post.posted ? WILL_UPDATE : WILL_POST);
+  const test = payload.mode === 'on' ? ` ${rehearseLine(draft, post, payload)}` : '';
+  if (!draft.channel_id) return NEEDS_A_CHANNEL + test;
+  const up = post.test_copy ? Boolean(post.message_id) : post.posted;
+  const saving = up ? WILL_UPDATE_SAVED : WILL_POST_SAVED;
+  const template = dirty ? saving : (up ? WILL_UPDATE : WILL_POST);
   return template
     .replace('{where}', `#${draft.channel_name || post.channel_name || ''}`)
     .replace('{style}', STYLE_WORDS[draft.style] || STYLE_WORDS.plain)
-    .replace('{pin}', PIN_WORDS[String(Boolean(draft.pin))]);
+    .replace('{pin}', PIN_WORDS[String(Boolean(draft.pin))]) + test;
 }
 
 function draftOf(post) {
@@ -783,7 +802,28 @@ async function postDrawer(payload, known, history) {
     await andClose();
   }, { tone: 'warn' });
 
+  /** Post to test saves a dirty draft first too, and keeps the drawer open on the result. */
+  const rehearse = button(POST_TO_TEST, async () => {
+    if (draft.body.length > capOf()) {
+      say.say(OVER_ITS_LIMIT, 'danger');
+      return;
+    }
+    const done = await run(
+      say,
+      async () => {
+        if (changeCount(draft, was)) await saveDraft();
+        return send(where(post.slug, '/rehearse'), 'POST', {});
+      },
+      (found) => found?.message || 'Done.',
+    );
+    if (!done.ok) return;
+    settle(done.found);
+    paintVersions(await versionsOf(post.slug));
+    refresh();
+  }, { tone: 'quiet' });
+
   const moves = [save, discard, publish];
+  if (payload.mode !== SHADOW) moves.push(rehearse);
   if (post.posted) {
     moves.push(button('Take it down', async () => {
       const done = await run(
