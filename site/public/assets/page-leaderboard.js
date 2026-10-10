@@ -690,8 +690,9 @@ async function settingsNode() {
   try {
     const specs = settingsNamespace(await settings(true), 'core').filter((spec) => spec.key.startsWith('points_'));
     const modeSpec = specs.find((spec) => spec.key === 'points_mode');
-    const operational = specs.filter((spec) => spec.key !== 'points_mode' && spec.type !== 'text');
-    const wording = specs.filter((spec) => spec.type === 'text');
+    const words = new Set(Object.keys((view.index && view.index.words) || {}));
+    const operational = specs.filter((spec) => spec.key !== 'points_mode' && !words.has(spec.key));
+    const wording = specs.filter((spec) => words.has(spec.key));
     one.count(specs.length);
     one.body.append(...[
       modeSpec ? el('div', { class: 'bar' }, [modeSwitch(modeSpec, { label: 'Leaderboard', onSaved: () => refresh() }).node]) : null,

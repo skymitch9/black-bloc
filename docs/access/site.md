@@ -230,7 +230,7 @@ In order, because each step's failure looks different:
 
 ## The pages
 
-**Twenty-two** HTML files in `site/public/`, served by the same app at `/`
+⚠️ **27 pages** by `node site/mock/check.mjs` on branch `points-site` (2026-10-09, `leaderboard.html` added; the count and the list below were NOT re-walked page by page — the contract's `pages` list owns the names). Before that: **Twenty-two** HTML files in `site/public/`, served by the same app at `/`
 (re-counted 2026-09-25 on branch `marathon-events-page` — **23 → 22**, `marathons.html` DELETED: its content is the
 Marathons section of `events.html` (`assets/marathons-section.js`, deep link `events.html#marathon-<id>`);
 `node site/mock/check.mjs` reported **22 pages, 237 routes**. Before that, re-counted 2026-09-25 on branch `marathon-schedule` — **22 → 23**, `marathons.html` added; `node site/mock/check.mjs` reported **23 pages, 231 routes**. Before that, re-counted 2026-09-23 on branch `channels-page` — **21 → 22**, `channels.html` added; the 22
@@ -249,6 +249,7 @@ until 2026-08-31, which predates Polls, Chat, Requests and Members):
 
 | Page | What it is for |
 |---|---|
+| `leaderboard.html` (2026-10-09, branch `points-site`, 🔨 NOT merged, NOT deployed) | **Leaderboard** — the BaF point system's board (speedpoints, XP switch, full board, the viewer's next place), Submit a run, the member's own runs; for staff and the run verifier role the **Pending** queue (Approve / Reject… / Open the ticket); for staff Runs (Edit… / Remove… / Recompute), Bounties (New bounty: event or dates, multiplier or extra; End… / Bring back) and Settings folded. ⚠️ The FOURTH page a member who is not staff may open (`MEMBER_TABS`). Reads and writes `/api/points/*` and `GET /api/events`. Live URL once deployed: https://blackbloc.heygabi.ai/leaderboard.html. Design: [`../info/points-design.md`](../info/points-design.md) §H |
 | `channels.html` (2026-09-23, branch `channels-page`, ✅ LIVE v159, merge `654be0c8`) | **Channels** — staff review each live channel's drafted description (Use this / Save my wording / No note / Reset to the draft), see *What the bot sees*, and edit the channel-note words. Reads `GET /api/chat/channels`; writes `PUT/DELETE /api/chat/channels/{id}` and `POST …/{id}/use\|none\|reset`. In the rail right after Chat. Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md) ▸ follow-up |
 
 ⚠️ **`guides.html` is the SECOND page a signed-in member who is not staff may open**

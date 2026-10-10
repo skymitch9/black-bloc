@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 3 — the site* (branch `points-site`, off `main` `a41cb3d3`); keyed by NAME. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 2* (branch `points-discord`, off `main` `4ab03a82`); keyed by NAME. `cogs/moderation/modmail.py` rows below `open_or_find` sit a few lines lower. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *Fastest Furs actual durations* (branch `ff-actual-durations`, off `main` `01d6e72b`); keyed by NAME. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The BaF point system, layer 1* (branch `points-engine`, off `main` `01d6e72b`); keyed by NAME. Before that:
@@ -10386,3 +10387,19 @@ Design: [`points-design.md`](points-design.md) §G.
 - `marathon.py` `next_read_at` `live` — when given it wins over the marathon row's own `poll_minutes` override; every caller passes `mt.live_minutes(...)` so the page's next read and the loop agree.
 - `black_bloc/cogs/content/marathon.py` `_failed` `live_reads_paused` — the probe passes `fetch_failures: 0` to ask "is this marathon on the live cadence at all", then records whether this failure paused it.
 - `black_bloc/cogs/content/marathon_signals.py` `reader_for` — `setup_for` plus the Fastest Furs switch; only `refresh` uses it, because `resolve` does not take `actual_includes_setup`.
+
+## The BaF point system, layer 3 — the site — keyed by NAME (branch `points-site`, 2026-10-09; re-key after the merge)
+
+Design: [`points-design.md`](points-design.md) §H.
+
+- `black_bloc/api/tools/points.py` `pictured` / `ticketed` — the two fields the page needs, added at the door rather than in `points_view` (the view stays free of the API's `names` module and of modmail); every run answer goes through `ticketed`, so a run write's `run` carries `ticket_place_id` too.
+- `black_bloc/points_tickets.py` `ticket_place` — the thread, else the channel (`modmail.ticket_place_id`); None for a site-submitted run (no ticket) or a ticket row that is gone.
+- `site/public/assets/page-leaderboard.js` `update` / `paint({ force })` — the poll never repaints a section someone is typing in; a MOVE repaints by force (`reread`), because the reason box of the row just decided still has focus and the typing guard would otherwise leave the decided run on screen.
+- `page-leaderboard.js` `readIndex` — the full board is fetched only when it is open or the viewer sits below the top N (to pin their row); `view.all` is that read.
+- `page-leaderboard.js` `pendingRow` — no Approve / Reject on a verifier's own run unless they are staff (the move refuses `own_run`); the buttons render only when the move is valid.
+- `page-leaderboard.js` `editDrawer` — only changed fields are sent; an unchanged save still sends `game` so a rejected or removed run is reopened (the way back, L1 decision 10).
+- `page-leaderboard.js` `bountyDrawer` — the dates are sent as ISO with the picked zone's offset (`zonedIso`), because the bounty routes take no `tz` and read a bare time in the server's zone; the end box has no zone select of its own and uses the start's.
+- `page-leaderboard.js` `settingsNode` — operational vs wording is split by `index.words` (the `POINTS_WORDS` block), not by spec type: `points_xp_tiers` is a text key but operational.
+- `site/public/assets/leaderboard-layout.js` `zonedIso` — two passes of the zone's offset so a time near a DST change lands on the offset in force AT that wall time; a wall time inside a spring-forward gap gets the later offset.
+- `site/public/assets/leaderboard.css` — under 700 px every page control is at least 40 px tall (scoped to `body[data-tab="leaderboard"]`, so no other page changes); under 560 px the board drops to three columns and `.lb-sub` carries the rest.
+- `site/mock/server.mjs` `memberSession` — `as=verifier` is a member everywhere (every former `session === 'member'` test), and only the points block reads it as a verifier (`ptVerifier` refuses `member` alone; `ptOwn` refuses a verifier's own run).

@@ -6,6 +6,9 @@
 > (off `main` `4ab03a82`), **NOT merged, NOT deployed**: no schema change; registry keys **1147 → 1176** (29 word
 > keys, all `core`; `CORE_KEYS` 317 → 346); log kinds **+3** (`points.would_dm`, `points.dm_failed`,
 > `points.announce_failed`); no new route (§G).
+> 🔨 **LAYER 3 BUILT on branch `points-site`** (off `main` `a41cb3d3`, L1 + L2 live as v217/v218), **NOT merged, NOT
+> deployed**: the Leaderboard page (§H); no schema change, no new key, no new route — two fields on existing answers
+> (`avatar_url`, `ticket_place_id`); contract pages 26 → 27. **Last verified (layer 3): 2026-10-09** — §H *Gate*.
 > **Last verified: 2026-10-09** (layer 2: the hermetic suite, `ruff`, `scripts/site-gate.ps1 -Port 8833` and the 14
 > `site/mock/*.test.mjs` — figures under *Gate (layer 2)*; ⚠️ nothing of layer 2 has met Discord). Layer 1: by the
 > hermetic test suite, `ruff`, `site/mock/check.mjs` against the branch's own
@@ -65,7 +68,7 @@ From the `#blackbloc-logs` thread *Point System* written by [Stars Glitter] Pawp
 |---|---|---|
 | **L1** | Pure engine `black_bloc/points/`, storage (schema 92), the moves both doors call, the view, the API `/api/points`, 56 keys, 10 log kinds, contract + mock | 🔨 branch `points-engine` |
 | **L2** | Discord: `/pb` takes over as the board panel; a run is a modmail ticket decided on its card; the top-places post; the DMs (§G) | 🔨 branch `points-discord` |
-| **L3** | The site: a Leaderboard page with the bounties editor (§H) | not started |
+| **L3** | The site: the Leaderboard page with the pending queue and the bounties editor (§H) | 🔨 branch `points-site` |
 
 ## A. The engine (`black_bloc/points/`, pure — no database, no Discord)
 
@@ -258,9 +261,9 @@ recompute and the bounty writes are staff-only at the door (`writer_dependency`)
 | Route | Answers |
 |---|---|
 | `GET /api/points?by=xp` | `{mode, by, orders, top_n, may_verify, staff, words, board[], members, me, bounties[], pending}` |
-| `GET /api/points/board?by=xp` | `{by, rows[]}` — everyone |
+| `GET /api/points/board?by=xp` | `{by, rows[]}` — everyone; board rows here and in `GET /api/points` carry `avatar_url` (layer 3) |
 | `GET /api/points/me` | the next place: `{kind, place, speedpoints, above_user_id, above_name, above_place, gap, runs, line}` |
-| `GET /api/points/runs?state=&user_id=` | `{state, user_id, runs[]}` — a member gets their own (naming someone else is `not_verifier`, 403); a verifier any; the pending queue oldest first |
+| `GET /api/points/runs?state=&user_id=` | `{state, user_id, runs[]}` — a member gets their own (naming someone else is `not_verifier`, 403); a verifier any; the pending queue oldest first; each run carries `ticket_place_id` (layer 3) |
 | `POST /api/points/runs` `{game, time, proof_url, category?, note?, user_id?}` | `{run, message, changed, announce}` |
 | `POST …/runs/{id}/approve` · `/reject {reason?}` | same |
 | `POST …/runs/{id}/remove {reason?}` · `PATCH …/runs/{id} {fields}` | same (staff) |
@@ -374,14 +377,106 @@ Q8 — the post goes to `points_channel_id`, the ping role blank = no ping, and 
 12. **`/pb`'s description** is now *"The speedrun leaderboard: the top places, your next rank, a run"* (a literal, as
     every command description is), and the chat persona's `/pb` line says what the board does.
 
-## H. Layer 3 — the site (to build)
+## H. Layer 3 — the site (built on `points-site`, 2026-10-09)
 
-A **Leaderboard** page (`leaderboard.html`, `page-leaderboard.js` — the name the contract's `read_by` uses): the board
-with the Points / XP switch and *Full board*, *My next place*, a Submit form, the Pending queue (verifier), run Edit /
-Remove (staff), Recompute (staff) — ⚠️ the Pending queue is a VIEW of the open run tickets (`GET /api/points/runs?state=pending`, each row carrying its `ticket_id` and a link to the ticket), not a second queue: deciding happens on the modmail ticket (§G) — and the **bounties editor**: name, games (a list), the **bonus kind dropdown**
-(multiplier / extra — the owner's *"we need a drop down"*), amount, and the window — an **event picker** (the events
-list) OR start and end dates. The page's settings drawer carries the 12 operational keys; labels exist. Search and
-filter chips through the one shared module in `ui.js`; channel pickers read `#name · Category`; no explaining blurbs.
+The owner's decisions that shape it (2026-10-09): Q3 — the board ranks by speedpoints with an XP switch; Q4 — next rank
+is the next place up (staff still to confirm the wording); Q5 — staff approve, the verifier role may too, and **the
+site is the verifier's door** (a verifier who is not staff cannot see the modmail rooms — the L2 caveat); Q6 — by game,
+the category shown with it; Q9 — bounties: games, a bonus kind dropdown (multiplier | extra), an amount, and a window
+that is a linked EVENT or start/end dates; Q11 — one Leaderboard page holds the board, the XP switch, the full board,
+the next rank, Submit, the pending queue, Remove / Edit on a run, the bounties editor, settings folded. KI-44 stands:
+the site's Submit shows whatever refusal the API returns, in its words.
+
+**`site/public/leaderboard.html`** + **`assets/page-leaderboard.js`** + **`assets/leaderboard.css`**, the pure helpers in
+**`assets/leaderboard-layout.js`** (node test `site/mock/leaderboard.test.mjs`). In the rail under **Runs the cookout**
+(`shell.js` `GROUPS`, feature `points` so the mode dot shows), and in `MEMBER_TABS` — a signed-in member who is not staff
+may open it (the fourth such page after Requests, Guides and Brackets). The mode pill (`modeChip`) sits in the page head
+for staff and the verifier role.
+
+| Section | Who | What it does |
+|---|---|---|
+| **Board** | everyone | The top `points_top_n` (place, picture, name, runs, XP, speedpoints) from `GET /api/points`; the switch (`points_points_label` / `points_xp_label`) re-reads `?by=xp`; **Full board** (`points_full_board_label`, shown only when more members than the top exist) reads `GET /api/points/board`, 25 a page with `points_previous_label` / `points_next_label` / `points_page_words`, opening on the viewer's own page, **Back** (`points_back_label`). The viewer's next-place line (`me.line`) sits above the board; the viewer's own row is highlighted, and when it is not among the rows shown it is pinned under them after a `⋯`. The live and upcoming bounties' lines under `points_bounties_heading` (or `points_bounty_none`). **Submit a run** (not while `off`). Under 560 px the runs column and the non-ranking column fold into a second line under the name. |
+| **Submit a run** (drawer) | everyone | `points_submit_title`; game, category, time (placeholder `points_time_hint`), proof link (`points_proof_hint`), note — every label a key. `POST /api/points/runs`; a refusal stays inside the drawer in the API's words (the same keys Discord uses), the fields as typed. Staff get a member picker (*For*) and may submit for a member (L1 decision 9). |
+| **Your runs** | anyone with a run | `GET /api/points/runs?user_id=<me>` — each run, its state words, XP and speedpoints when approved, the reason when rejected or removed. Hidden when there is none; open when one waits. |
+| **Pending** | staff and the verifier role | `GET /api/points/runs?state=pending`, oldest first: name, game · category · time, how long ago, the member's note, **Proof** and **Open the ticket** (`https://discord.com/channels/<guild>/<ticket_place_id>`, only when the run came through a ticket), **Approve** and **Reject…** (an inline reason). A verifier who is not staff gets no buttons on their own run (the move would refuse `own_run`). Approve / Reject run the L2 follow-through (`points_tickets.settle`: the ticket closes, the DM per mode, the top-places post per mode). |
+| **Runs** | staff | `GET /api/points/runs` — every run, newest first, through the shared `listFilter` (search + chips All / Approved / Waiting / Rejected / Removed). **Edit…** on any run (a drawer with the submit fields; a rejected or removed run goes back to pending — the way back), **Remove…** (an inline reason) on an approved run, **Recompute** (asks first). |
+| **Bounties** | staff | `GET /api/points/bounties`, live first, then upcoming, idle, and the ended folded. **New bounty** / **Edit…** drawer: name, games (one per line; blanks and repeats dropped), **Bonus** (Multiplier \| Extra speedpoints — the owner's dropdown), amount (the box's bounds follow the kind), **When**: *Event* (a picker of approved / live / done events from `GET /api/events?status=approved,live,done`) or *Dates* (two `whenField`s, the zone select on the first; sent as ISO with the zone's offset). **End…** (asks first) on an active bounty, **Bring back** (`PATCH {active: true}`, staff final say) on an ended one. |
+| **Settings** (folded) | staff | `points_mode` as a mode switch, the 11 operational keys through `settingsPanel` (`points_xp_tiers` among them although its type is text — the split is by `words`, not by type), the 73 word keys under a folded **Wording**. |
+
+Every write repaints the sections from fresh reads (`reread`), by force, so a decided run leaves Pending even while
+focus is still in its reason box. The board and the pending queue are polled every 15 s; a section being typed in is
+not repainted by the poll.
+
+**Routes.** The 14 of §E; **no new route.** Two fields were missing and were added to existing answers
+(`api/tools/points.py`): `avatar_url` on every board row (`GET /api/points` `board[]`, `GET /api/points/board`
+`rows[]`, from `names.avatar_url`), and `ticket_place_id` on every run row (`GET /api/points/runs` and the `run` of
+every run write — the thread, or the channel, the run's ticket lives in, from `points_tickets.ticket_place`; null for a
+run submitted on the site, which has no ticket). Contract: the two keys on those rows, `/leaderboard.html` in `pages`
+(26 → 27), `page-leaderboard.js` in the `read_by` of the points routes and of `GET /api/events`; routes 360 → 360.
+
+**The mock** (`site/mock/server.mjs`, the L1 block extended): a thirty-member board with `as=member` (Moth) at #12, so
+the pinned row and the next-place line show; `as=verifier` (new — Dax, a member who is not staff but verifies; his own
+pending run has no buttons, and the mock refuses `own_run`); five pending runs, three with tickets (`ticket_place_id`
+`8500000000000001xx`); a removed run; four bounties — a live dated one, a live EVENT one (event 5, AGDQ 2027, its window
+read from the event), an upcoming dated one and an ended one; one board picture (`/favicon.ico`). `memberSession()`
+replaces every `session === 'member'` test so a verifier is a member everywhere else.
+
+### L3 decisions (builder's calls beyond the brief)
+
+1. **No new route.** Two fields on existing answers (`avatar_url`, `ticket_place_id`); the page needs nothing else.
+2. **Open the ticket links to Discord** (`discord.com/channels/<guild>/<thread or channel>`), not to the site's modmail
+   page — the brief's *Reply-on-Discord*, and the modmail page is staff-only (a verifier could not open it).
+3. **The pending queue lists every pending run**, not only those with a ticket — a run submitted on the site has no
+   ticket (the website route never opens one) and would otherwise be invisible. `/pb`'s Pending (N) still counts open
+   run tickets only (L2 decision 8); the two counts can differ by the site-submitted runs.
+4. **A dated bounty's times are sent with their zone's offset** (`leaderboard-layout.js` `zonedIso`), so the zone the
+   picker shows is the zone the bot reads — the route takes no `tz` and would otherwise read a bare time in the
+   server's zone. One zone select for both ends.
+5. **The next-place line is by speedpoints in both views** (the API's `me.line`; next rank is by speedpoints only, L1
+   §A5) — the XP switch changes the board, not the line.
+6. **The viewer's own row is pinned** under the shown rows when it is not among them (the top N, or a full-board page);
+   Full board opens on the viewer's own page.
+7. **Staff may submit for a member** from the site (a member picker in the drawer) — L1 decision 9's door.
+8. **Your runs** is a section for anyone with a run: a member who submitted on the site sees it waiting, and the reason
+   when it is rejected — nowhere else on the site says so.
+9. **The page's own labels are constants** (section titles, Approve, Reject…, Edit…, the bounty form's labels, the
+   chips) — the brackets precedent: staff-facing site chrome, not words the bot posts. Every word a MEMBER reads that
+   the bot also says (column names, the switch, Full board, Back, paging, Submit and its form, state words, bounty
+   lines, refusals) comes from the `points_*` keys via `GET /api/points` `words`.
+10. **Bring back** on an ended bounty (`active: true`) — staff final say; a dated bounty past its end stays *ended*
+    until its dates are edited.
+11. **Mobile:** under 700 px every control on the page (buttons, the switch, chips, inputs, links in the run rows) is at
+    least 40 px tall (`leaderboard.css`); under 560 px the board keeps three columns.
+
+### Gate (layer 3, 2026-10-09, branch `points-site`)
+
+- `python -m pytest tests -q -p no:cacheprovider -n 8`: **13041 passed, 1 skipped** (L2 on main: 13025 + this build's
+  `test_the_board_carries_pictures_and_a_run_carries_its_ticket_room` + the contract rows).
+- `python -m ruff check black_bloc tests site`: all checks passed.
+- `scripts/site-gate.ps1 -Port 8852` (its own mock; `node site/mock/check.mjs`): *ok - 27 pages, 360 routes, 346 core
+  settings, all keys present*; the mock stopped by the gate.
+- Every `site/mock/*.test.mjs` (15, with the new `leaderboard.test.mjs`): exit 0.
+- **Driven in `chrome-headless-shell` 149 over raw CDP** against the branch's mock (port 8851), at **1280** and **375**
+  wide, as `member`, `verifier` and `staff` — what was pressed is in the build report (TODO ▸ points): the XP switch,
+  Full board → Next → Back, Submit with a bad time (the API's words stayed in the drawer) then a good one (Your runs
+  showed it waiting), Approve (a run under the event bounty: +15), Reject with a reason, the Removed chip, a search,
+  Remove with a reason, Edit on a rejected run (back to waiting), Recompute (confirmed), a dated *extra* bounty, an
+  event *multiplier* bounty, End…, Bring back. No console error or exception (the one logged 400 is the bad-time
+  refusal itself); at 375: `scrollWidth` 375 = the viewport, gutters 16 / 16 px, no page control under 40 px (the shared
+  settings widgets inside the folded Settings were not measured).
+
+### What was NOT verified (layer 3)
+
+- **Nothing ran against the real bot or Discord** — the browser walk was the mock. The real routes are covered by the
+  hermetic tests (`tests/api/tools/test_points.py`, `tests/api/test_contract.py`); whether **Open the ticket** opens the
+  right thread in the Discord client, and whether a non-staff verifier can open that thread at all, were not tried.
+- The mock's engine is a stand-in: tiers fixed, recompute does not rescore speedpoints, an event bounty's window is the
+  mock event's. Approve / Reject from the site closing the ticket and DMing is L2's `settle`, tested there, not here.
+- The page was not opened on a real phone; tap targets and gutters were measured in the headless shell's 375 px
+  emulation only. The shared settings widgets (the folded Settings section) were not measured for tap size.
+- Light mode and the other themes were not looked at (dark, the default, only).
+- `zonedIso` was tested for Phoenix, New York (both DST sides), UTC and Kolkata; a time inside a DST gap is sent as the
+  zone's later offset, not checked against Python's reading.
 
 ## Decisions made by the build beyond the brief
 
