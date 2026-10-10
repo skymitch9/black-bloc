@@ -68,6 +68,9 @@ SHADOW_POSTED = "post.shadow_posted"
 SHADOW_UPDATED = "post.shadow_updated"
 SHADOW_TAKEN_DOWN = "post.shadow_taken_down"
 SHADOW_MESSAGE_GONE = "post.shadow_message_gone"
+REHEARSED = "post.rehearsed"
+REHEARSAL_UPDATED = "post.rehearsal_updated"
+WOULD_REHEARSE = "post.would_rehearse"
 
 VERSION_FIELDS = ("title", "body", "style", "channel_id", "pin")
 BECAUSE_SAVED = "saved"
@@ -119,6 +122,11 @@ NO_SHADOW_CHANNEL = (
     "Posts are in **shadow**, so **{title}** goes to the shadow channel rather than its own — "
     "and this server has neither a test channel nor a log channel, so there is nowhere to put "
     "it. A Lead sets **log_channel_id** on the Settings page, or turns posts on."
+)
+NO_TEST_CHANNEL = (
+    "There is nowhere to send a test copy of **{title}**: this server has neither a test channel "
+    "nor a log channel, so nothing was sent. A Lead sets **posts_shadow_channel_id** on the "
+    "Settings page."
 )
 CHANNEL_GONE = "the channel is not one Black Bloc can see any more"
 NO_CHANNEL_WORD = "no channel yet"
@@ -182,6 +190,18 @@ SHADOW_UPDATED_SAID = (
     "**{title}** is updated in {where} — the shadow copy, because posts are in shadow. Nothing "
     "went to its own channel."
 )
+REHEARSED_SAID = (
+    "Sent a test copy of **{title}** to {shadow}. The real post in {where} is untouched; the "
+    "next Post it takes the test copy down."
+)
+REHEARSAL_UPDATED_SAID = "Updated the test copy of **{title}** in {shadow}."
+STICKY_ALREADY_REHEARSING = "It already rehearses in {shadow} — the copy there is live."
+ITS_CHANNEL = "its channel"
+TEST_COPY_LINE = "A test copy is in {shadow}."
+REHEARSE_LINE = (
+    "Post to test sends a copy to {shadow} as it would look, without touching {where}; the next "
+    "Post it takes the copy down."
+)
 TAKEN_DOWN_SAID = "**{title}** is taken down. Every word is still here."
 TAKEN_DOWN_WITH_DOOR_SAID = (
     " The front door was part of that message, so it is down too — **Post it** puts both back."
@@ -210,6 +230,7 @@ PANEL_EMPTY = "There are no posts yet."
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run `/posts` again."
 SITE_BUTTON = "Open on the site"
 POST_IT = "Post it"
+POST_TO_TEST = "Post to test"
 UPDATE_THE_POST = "Update the post"
 TAKE_IT_DOWN = "Take it down"
 VERSIONS = "Versions…"
@@ -254,6 +275,7 @@ STATUS_PINNED = "pinned"
 STATUS_NOT_POSTED = "not posted"
 STATUS_PENDING = "changes not yet posted"
 STATUS_CARRIES_DOOR = "carries the front door"
+STATUS_TEST_COPY = "test copy"
 
 
 def now() -> str:
@@ -405,8 +427,16 @@ def where_words(guild: Any, channel_id: Any) -> str:
     return f"#{name}" if name else CHANNEL_UNSEEN
 
 
-def status_words(row: Any) -> list[str]:
+def has_test_copy(row: Any, mode: Any) -> bool:
+    """With posts on, a copy in the rehearsal home is a Post to test copy, never the post."""
+    return mode == ON and bool(shadow_id(row))
+
+
+def status_words(row: Any, mode: Any = None) -> list[str]:
     """The pills both doors wear, in one place so they cannot be spelled two ways."""
+    test_copy = has_test_copy(row, mode)
+    if test_copy and not row_value(row, "message_id"):
+        return [STATUS_NOT_POSTED, STATUS_TEST_COPY]
     if not is_posted(row):
         return [STATUS_NOT_POSTED]
     found = [STATUS_POSTED_SHADOW if posted_where(row) == SHADOW else STATUS_POSTED]
@@ -416,11 +446,31 @@ def status_words(row: Any) -> list[str]:
         found.append(STATUS_CARRIES_DOOR)
     if changes_pending(row):
         found.append(STATUS_PENDING)
+    if test_copy:
+        found.append(STATUS_TEST_COPY)
     return found
 
 
-def move_label(row: Any) -> str:
+def move_label(row: Any, mode: Any = None) -> str:
+    if has_test_copy(row, mode):
+        return UPDATE_THE_POST if row_value(row, "message_id") else POST_IT
     return UPDATE_THE_POST if is_posted(row) else POST_IT
+
+
+def shows_post_to_test(mode: Any) -> bool:
+    """Hidden in shadow, where Post it already goes to the rehearsal home."""
+    return mode != SHADOW
+
+
+def copy_line(bot: Any, guild: Any) -> str:
+    return TEST_COPY_LINE.format(shadow=where_words(guild, shadow_channel_id(bot, guild)))
+
+
+def rehearse_line(bot: Any, guild: Any, channel_id: Any) -> str:
+    where = where_words(guild, channel_id) if channel_id else ITS_CHANNEL
+    return REHEARSE_LINE.format(
+        shadow=where_words(guild, shadow_channel_id(bot, guild)), where=where
+    )
 
 
 def preview_of(row: Any) -> str:
@@ -658,6 +708,14 @@ async def set_shadow_posted(
         "UPDATE posts SET shadow_message_id = ?, posted_hash = ?, posted_at = ?, posted_by = ? "
         "WHERE id = ?",
         (int(message_id), str(digest), now(), by, int(post_id)),
+    )
+    await db.conn.commit()
+
+
+async def set_test_copy(db: Any, post_id: int, message_id: int) -> None:
+    """Only the test copy's id: the real copy's posted stamp stays what the real copy says."""
+    await db.conn.execute(
+        "UPDATE posts SET shadow_message_id = ? WHERE id = ?", (int(message_id), int(post_id))
     )
     await db.conn.commit()
 
@@ -1320,7 +1378,7 @@ async def _shadow_message(bot: Any, guild: Any, message_id: Any) -> Any:
     return message
 
 
-async def _drop_shadow(bot: Any, guild: Any, row: Any, actor: Any, via: str) -> None:
+async def drop_shadow(bot: Any, guild: Any, row: Any, actor: Any, via: str) -> None:
     """Checklist 12: the real post is already written down; losing the rehearsal never aborts it."""
     message_id = shadow_id(row)
     if not message_id:
@@ -1448,7 +1506,7 @@ async def publish_post(
         **home,
     )
     if not shadow:
-        await _drop_shadow(bot, guild, row, actor, via)
+        await drop_shadow(bot, guild, row, actor, via)
     await _pin(bot, guild, row, message, actor, via)
     fresh = await get_post_by_id(bot.db, int(row["id"]))
     if stamp:
@@ -1463,14 +1521,118 @@ async def publish_post(
     )
 
 
+def with_note(payload: dict[str, Any], note: str) -> dict[str, Any]:
+    """The rehearsal line rides above the post as content, the way every rehearsal carries it."""
+    if not note:
+        return payload
+    words = str(payload.get("content") or "")
+    return payload | {"content": sticky_rules.fit(note, words) if words else note}
+
+
+async def _test_copy_parts(bot: Any, guild: Any, row: Any, owner: Any, note: str) -> Any:
+    """What a test copy sends: the post and its blocks fresh, and the stamps when not a sticky."""
+    if owner is not None:
+        from .sticky_posts import is_empty, post_message
+
+        payload, _ = await post_message(bot, guild, row, note)
+        return (None, {}) if is_empty(payload) else (payload, {})
+    from .post_blocks import kinds_on, load_kinds
+
+    carried = await kinds_on(bot.db, int(row["id"]))
+    await load_kinds(bot, guild, carried)
+    drawn, stamps = message_parts(bot, guild, row, carried)
+    return with_note(drawn, note), stamps
+
+
+async def rehearse_post(
+    bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Post to test: a copy in the rehearsal home whatever the mode, the real post untouched."""
+    mode = mode_of(bot.store, guild.id)
+    if mode == OFF:
+        return refusal(POSTS_OFF, "posts_off", 409)
+    owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
+    if owner is None and mode == SHADOW:
+        return await publish_post(bot, guild, row, actor, via=via)
+    title = str(row_value(row, "title", ""))
+    target = shadow_channel_id(bot, guild)
+    shadow = where_words(guild, target)
+    if owner is not None:
+        from .sticky_posts import owner_rule
+
+        rule, _ = await owner_rule(bot, guild, owner)
+        if rule == SHADOW:
+            fresh = await get_post_by_id(bot.db, int(row["id"]))
+            return Outcome(True, STICKY_ALREADY_REHEARSING.format(shadow=shadow), value=fresh)
+    body = str(row_value(row, "body", "") or "")
+    style = wanted_style(row_value(row, "style", PLAIN))
+    if owner is None and not body.strip():
+        return refusal(NOTHING_TO_POST.format(title=title), "nothing_to_post", 409)
+    refused = refused_title(title, style)
+    if refused is not None:
+        return refusal(refused, "title_too_long", 400)
+    refused = refused_body(body, style, "posted")
+    if refused is not None:
+        return refusal(refused, "body_too_long", 400)
+    if not target:
+        return refusal(NO_TEST_CHANNEL.format(title=title), "no_shadow_channel", 409)
+    home = {"shadow_home": target}
+    if not guard_allows(bot, target):
+        await note(bot, guild, row, WOULD_REHEARSE, actor, via=via, channel=shadow, **home)
+        return refusal(guard_refusal(bot), "test_mode", 409)
+    channel = channel_of(bot, guild, target)
+    if channel is None:
+        await note(bot, guild, row, POST_FAILED, actor, via=via, reason=CHANNEL_GONE)
+        return refusal(
+            POST_FAILED_SAID.format(title=title, reason=CHANNEL_GONE), "post_failed", 409
+        )
+    channel_id = row_value(row, "channel_id")
+    aimed = f"<#{int(channel_id)}>" if channel_id else NO_CHANNEL_WORD
+    words, stamps = await _test_copy_parts(
+        bot, guild, row, owner, shadow_home.note_line(bot, guild, aimed)
+    )
+    if words is None:
+        return refusal(NOTHING_TO_POST.format(title=title), "nothing_to_post", 409)
+    payload = words | {"allowed_mentions": allowed_mentions_for(guild, body, actor)}
+    message = await _existing_message(bot, guild, row, channel, actor, via, shadow=True)
+    try:
+        if message is not None:
+            kind, said = REHEARSAL_UPDATED, REHEARSAL_UPDATED_SAID
+            await message.edit(**payload)
+        else:
+            kind, said = REHEARSED, REHEARSED_SAID
+            message = await channel.send(**payload)
+    except discord.HTTPException as exc:
+        await note(bot, guild, row, POST_FAILED, actor, via=via, reason=str(exc))
+        return refusal(
+            POST_FAILED_SAID.format(title=title, reason=str(exc)), "post_failed", 409
+        )
+    if row_value(row, "message_id"):
+        await set_test_copy(bot.db, int(row["id"]), int(message.id))
+    else:
+        from .post_blocks import set_drawn
+
+        await set_shadow_posted(
+            bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor)
+        )
+        await set_drawn(bot.db, int(row["id"]), stamps)
+    await note(bot, guild, row, kind, actor, via=via, message_id=int(message.id), **home)
+    fresh = await get_post_by_id(bot.db, int(row["id"]))
+    where = where_words(guild, channel_id) if channel_id else ITS_CHANNEL
+    return Outcome(True, said.format(title=title, shadow=shadow, where=where), value=fresh)
+
+
 async def take_down_post(
     bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """Whichever copies exist go — real, shadow or both; every word stays on the row."""
     owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
     if owner is not None:
-        from .sticky_posts import desk_of
+        from .sticky_posts import desk_of, owner_rule
 
+        rule, _ = await owner_rule(bot, guild, owner)
+        if rule != SHADOW:
+            await drop_shadow(bot, guild, row, actor, via)
         paused = await desk_of(bot).pause(guild, int(owner["channel_id"]), actor, via=via)
         if not paused.ok:
             return paused
@@ -1685,6 +1847,8 @@ async def reconcile_posts(bot: Any) -> dict[str, int]:
                         "posts: %s could not be re-read — %s", row_value(row, "slug"), exc
                     )
                     continue
+            if shadow and posts_are_on(bot.store, guild.id):
+                continue
             if row_value(row, "pin") and not bool(getattr(message, "pinned", False)):
                 before = done["pinned"]
                 await _pin(bot, guild, row, message, None, VIA_BOOT)
@@ -1694,6 +1858,26 @@ async def reconcile_posts(bot: Any) -> dict[str, int]:
 
 __all__ = [
     "with_door",
+    "with_note",
+    "rehearse_post",
+    "set_test_copy",
+    "drop_shadow",
+    "has_test_copy",
+    "shows_post_to_test",
+    "copy_line",
+    "rehearse_line",
+    "REHEARSED",
+    "REHEARSAL_UPDATED",
+    "WOULD_REHEARSE",
+    "REHEARSED_SAID",
+    "REHEARSAL_UPDATED_SAID",
+    "STICKY_ALREADY_REHEARSING",
+    "NO_TEST_CHANNEL",
+    "ITS_CHANNEL",
+    "TEST_COPY_LINE",
+    "REHEARSE_LINE",
+    "POST_TO_TEST",
+    "STATUS_TEST_COPY",
     "turn_carrying",
     "set_door_drawn",
     "set_carries_door",

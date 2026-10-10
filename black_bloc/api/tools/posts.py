@@ -57,6 +57,7 @@ def person(guild: Any, user_id: Any) -> str | None:
 def post_row(bot: Any, guild: Any, row: Any, blocks: Any = None) -> dict[str, Any]:
     channel_id = posts.row_value(row, "channel_id")
     style = posts.wanted_style(posts.row_value(row, "style", posts.PLAIN))
+    mode = posts.mode_of(bot.store, guild.id)
     return {
         "id": str(row["id"]),
         "slug": str(row["slug"]),
@@ -75,8 +76,9 @@ def post_row(bot: Any, guild: Any, row: Any, blocks: Any = None) -> dict[str, An
         "posted_where": posts.posted_where(row),
         "pinned": posts.is_posted(row) and bool(posts.row_value(row, "pin")),
         "changes_pending": posts.changes_pending(row),
-        "status": posts.status_words(row),
-        "move": posts.move_label(row),
+        "status": posts.status_words(row, mode),
+        "move": posts.move_label(row, mode),
+        "test_copy": posts.has_test_copy(row, mode),
         "message_id": str(posts.row_value(row, "message_id"))
         if posts.row_value(row, "message_id")
         else None,
@@ -311,6 +313,10 @@ def build_router(bot: Any) -> APIRouter:
     @router.post("/{slug}/publish")
     async def post_publish(request: Request, slug: str) -> dict[str, Any]:
         return await _move(request, slug, posts.publish_post)
+
+    @router.post("/{slug}/rehearse")
+    async def post_rehearse(request: Request, slug: str) -> dict[str, Any]:
+        return await _move(request, slug, posts.rehearse_post)
 
     @router.post("/{slug}/takedown")
     async def post_takedown(request: Request, slug: str) -> dict[str, Any]:

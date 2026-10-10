@@ -1405,3 +1405,178 @@ def test_the_carries_pill_shows_only_once_the_door_is_on_the_message():
 
     assert posts.STATUS_CARRIES_DOOR not in posts.status_words(asked)
     assert posts.STATUS_CARRIES_DOOR in posts.status_words(drawn)
+
+
+# --- Post to test (post-to-test-design.md) ------------------------------------------------------
+
+NOTE = f"Rehearsal — this is where it would go: <#{WELCOME_CHANNEL}>"
+
+
+async def real_post_up(bot, guild, **fields):
+    """Posts are on, the post is up in #welcome, and the rehearsal home is the test channel."""
+    await bot.store.set(GUILD, "posts_shadow_channel_id", TEST_CHANNEL)
+    row = await a_post(bot, guild, channel_id=WELCOME_CHANNEL, **fields)
+    assert (await posts.publish_post(bot, guild, row, STAFF)).ok
+    return await posts.get_post_by_id(bot.db, int(row["id"]))
+
+
+def stamp_of(row):
+    return tuple(row[key] for key in ("message_id", "posted_hash", "posted_at", "posted_by"))
+
+
+async def test_a_test_copy_beside_the_real_post_leaves_the_real_posts_stamp_alone(bot, guild):
+    row = await real_post_up(bot, guild)
+    await posts.save_post(bot, guild, row, STAFF, body="Changed, not yet posted.")
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+    before = stamp_of(row)
+    versions_before = len(await versions(bot, row))
+
+    found = await posts.rehearse_post(bot, guild, row, LEAD)
+
+    assert found.ok, found.message
+    assert found.message == posts.REHEARSED_SAID.format(
+        title="A notice", shadow="#blackbloc-logs", where="#welcome"
+    )
+    assert len(bot.channels[WELCOME_CHANNEL].sent) == 1, "the real post was not touched"
+    sent = bot.channels[TEST_CHANNEL].sent
+    assert len(sent) == 1 and sent[0]["content"] == f"{NOTE}\nChanged, not yet posted."
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert stamp_of(fresh) == before, "message_id and the posted stamp are the real copy's"
+    assert fresh["shadow_message_id"] == 9001
+    assert posts.changes_pending(fresh) is True
+    assert bot.channels[TEST_CHANNEL].messages[9001].pinned is False
+    assert len(await versions(bot, fresh)) == versions_before, "a test copy ships nothing"
+    assert posts.status_words(fresh, posts.ON)[-1] == posts.STATUS_TEST_COPY
+    assert posts.move_label(fresh, posts.ON) == posts.UPDATE_THE_POST
+    said = await details_of(bot.db, posts.REHEARSED)
+    assert said["shadow_home"] == TEST_CHANNEL and said["message_id"] == 9001
+    assert said["slug"] == "notice" and said["post_id"] == int(row["id"])
+    assert said["via"] == "discord"
+
+
+async def test_a_second_press_edits_the_test_copy_and_the_next_post_it_takes_it_down(bot, guild):
+    row = await real_post_up(bot, guild)
+    await posts.rehearse_post(bot, guild, row, STAFF)
+    await posts.save_post(bot, guild, row, STAFF, body="Second words.")
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+
+    found = await posts.rehearse_post(bot, guild, row, STAFF)
+
+    assert found.ok and found.message == posts.REHEARSAL_UPDATED_SAID.format(
+        title="A notice", shadow="#blackbloc-logs"
+    )
+    assert len(bot.channels[TEST_CHANNEL].sent) == 1, "one test copy, edited in place"
+    copy = bot.channels[TEST_CHANNEL].messages[9001]
+    assert copy.edits[-1]["content"] == f"{NOTE}\nSecond words."
+    assert posts.REHEARSAL_UPDATED in await kinds(bot.db)
+
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+    published = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert published.ok
+    assert bot.channels[TEST_CHANNEL].messages == {}, "the next Post it takes the copy down"
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["shadow_message_id"] is None and fresh["message_id"]
+    assert posts.changes_pending(fresh) is False
+    assert posts.status_words(fresh, posts.ON) == [posts.STATUS_POSTED, posts.STATUS_PINNED]
+
+
+async def test_with_no_channel_of_its_own_a_test_copy_still_goes_and_post_it_still_refuses(
+    bot, guild
+):
+    await bot.store.set(GUILD, "posts_shadow_channel_id", TEST_CHANNEL)
+    row = await a_post(bot, guild, channel_id=None)
+
+    found = await posts.rehearse_post(bot, guild, row, STAFF)
+
+    assert found.ok
+    assert posts.ITS_CHANNEL in found.message
+    sent = bot.channels[TEST_CHANNEL].sent
+    assert sent[0]["content"] == "Rehearsal — this is where it would go: no channel yet\nHello."
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["shadow_message_id"] == 9001 and fresh["message_id"] is None
+    assert posts.status_words(fresh, posts.ON) == [
+        posts.STATUS_NOT_POSTED,
+        posts.STATUS_TEST_COPY,
+    ]
+    assert posts.move_label(fresh, posts.ON) == posts.POST_IT
+    refused = await posts.publish_post(bot, guild, fresh, STAFF)
+    assert not refused.ok and refused.code == "no_channel"
+
+
+async def test_posts_off_refuses_a_test_copy_in_words(bot, guild):
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.OFF)
+    row = await a_post(bot, guild)
+
+    found = await posts.rehearse_post(bot, guild, row, STAFF)
+
+    assert (found.ok, found.code, found.status) == (False, "posts_off", 409)
+    assert bot.channels[TEST_CHANNEL].sent == [] and await kinds(bot.db) == []
+
+
+async def test_with_no_rehearsal_home_a_test_copy_is_refused_in_words(bot, guild):
+    await bot.store.clear(GUILD, "log_channel_id")
+    bot.settings.test_channel_id = None
+    row = await a_post(bot, guild, channel_id=WELCOME_CHANNEL)
+
+    found = await posts.rehearse_post(bot, guild, row, STAFF)
+
+    assert (found.ok, found.code) == (False, "no_shadow_channel")
+    assert found.message == posts.NO_TEST_CHANNEL.format(title="A notice")
+    assert await kinds(bot.db) == []
+
+
+async def test_the_guard_writes_would_rehearse_and_sends_nothing(bot, guild):
+    await bot.store.set(GUILD, "posts_shadow_channel_id", WELCOME_CHANNEL)
+    bot.guard = FakeGuard()
+    row = await a_post(bot, guild)
+
+    found = await posts.rehearse_post(bot, guild, row, STAFF, via=VIA_WEBSITE)
+
+    assert (found.ok, found.code) == (False, "test_mode")
+    assert bot.channels[WELCOME_CHANNEL].sent == []
+    assert await kinds(bot.db) == ["web.post.would_rehearse"]
+
+
+async def test_in_shadow_a_test_copy_is_what_post_it_does(bot, guild):
+    row = await shadow_post(bot, guild)
+
+    found = await posts.rehearse_post(bot, guild, row, STAFF)
+
+    assert found.ok and "shadow copy" in found.message
+    assert await kinds(bot.db) == ["post.shadow_posted", "post.pinned"]
+    assert posts.shows_post_to_test(posts.SHADOW) is False
+    assert posts.shows_post_to_test(posts.ON) and posts.shows_post_to_test(posts.OFF)
+
+
+async def test_from_the_site_the_rows_are_web_headed(bot, guild):
+    row = await real_post_up(bot, guild)
+
+    await posts.rehearse_post(bot, guild, row, STAFF, via=VIA_WEBSITE)
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+    await posts.rehearse_post(bot, guild, row, STAFF, via=VIA_WEBSITE)
+
+    said = await kinds(bot.db)
+    assert said[-2:] == ["web.post.rehearsed", "web.post.rehearsal_updated"]
+    assert (await details_of(bot.db, "web.post.rehearsed"))["via"] == VIA_WEBSITE
+
+
+async def test_the_sweep_never_pins_a_test_copy(bot, guild):
+    row = await real_post_up(bot, guild)
+    await posts.rehearse_post(bot, guild, row, STAFF)
+
+    await posts.reconcile_posts(bot)
+
+    assert bot.channels[TEST_CHANNEL].messages[9001].pinned is False
+
+
+def test_the_page_spells_the_test_copy_words_the_way_the_card_does():
+    """One spelling each: the card is written in Python, the drawer live in page-posts.js."""
+    from pathlib import Path
+
+    page = (
+        Path(posts.__file__).resolve().parent.parent / "site/public/assets/page-posts.js"
+    ).read_text(encoding="utf-8")
+    flat = page.replace("'\n  + '", "")
+    for name in ("POST_TO_TEST", "TEST_COPY_LINE", "REHEARSE_LINE", "ITS_CHANNEL"):
+        assert f"const {name} = '{getattr(posts, name)}';" in flat, name

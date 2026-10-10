@@ -11,6 +11,7 @@ ROUTES = [
     ("POST", "/api/posts", {"title": "A notice"}),
     ("PUT", "/api/posts/notice", {"body": "hello"}),
     ("POST", "/api/posts/notice/publish", {}),
+    ("POST", "/api/posts/notice/rehearse", {}),
     ("POST", "/api/posts/notice/takedown", {}),
     ("GET", "/api/posts/notice/versions", None),
     ("GET", "/api/posts/notice/versions/1", None),
@@ -753,3 +754,61 @@ async def test_a_redirect_off_google_is_a_fetch_problem_in_words(
     assert found.status_code == 502
     assert found.json()["error"] == "doc_redirect_refused"
     assert asked == [export]
+
+
+# --- Post to test (post-to-test-design.md) ------------------------------------------------------
+
+
+async def test_post_to_test_beside_a_real_post_leaves_one_web_row_and_marks_the_copy(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await web.store.set(wf.GUILD_ID, "posts_shadow_channel_id", wf.OTHER_CHANNEL_ID)
+    await a_post(web, wf)
+    client.post("/api/posts/notice/publish", json={})
+    real = guild.get_channel(wf.TEST_CHANNEL_ID)
+    home = guild.get_channel(wf.OTHER_CHANNEL_ID)
+
+    found = client.post("/api/posts/notice/rehearse", json={})
+
+    assert found.status_code == 200, found.text
+    body = found.json()
+    assert len(real.messages) == 1 and len(home.messages) == 1
+    assert body["post"]["test_copy"] is True
+    assert body["post"]["posted_where"] == posts.CHANNEL
+    assert body["post"]["status"][-1] == posts.STATUS_TEST_COPY
+    assert body["post"]["move"] == posts.UPDATE_THE_POST
+    assert body["message"].startswith("Sent a test copy of **A notice**")
+    rows = [kind for kind in await wf.kinds_in(web.db) if "rehears" in kind]
+    assert rows == ["web.post.rehearsed"], "one write, one row, never a bare twin"
+
+    again = client.post("/api/posts/notice/rehearse", json={}).json()
+
+    assert len(home.messages) == 1
+    assert again["message"].startswith("Updated the test copy")
+    listed = client.get("/api/posts").json()["posts"][0]
+    assert listed["test_copy"] is True
+
+
+async def test_post_to_test_in_shadow_is_post_it(client, sign_in, web, guild, wf):
+    sign_in(client)
+    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "shadow")
+    web.guard = wf.Guard()
+    await a_post(web, wf)
+
+    found = client.post("/api/posts/notice/rehearse", json={}).json()
+
+    assert found["post"]["posted_where"] == posts.SHADOW
+    assert found["post"]["test_copy"] is False
+    assert "web.post.shadow_posted" in await wf.kinds_in(web.db)
+
+
+async def test_post_to_test_with_posts_off_is_refused_in_words(client, sign_in, web, wf):
+    sign_in(client)
+    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "off")
+    await a_post(web, wf)
+
+    response = client.post("/api/posts/notice/rehearse", json={})
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "posts_off"
