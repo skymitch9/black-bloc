@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-25 19:3x — ONE gotcha added only**, at the v166 docs ritual: *flyctl can lose its login mid-day*, above *Every later deploy* (from `deploys.log`'s v166 line and the conductor's 19:1x `flyctl auth whoami` read recorded in `TODO.md` at `9b84b06e`). ⚠️ NOT known: why the token vanished; nothing else re-read.
+> Last verified: **2026-10-09 22:1x — ONE gotcha added only**, at the v221 docs ritual: *a release named by a hash*, above the stale-mock gotcha (from the v221 deploy; `release.json` at `c045acbc` read). ⚠️ Nothing else re-read.
+> Before that, **2026-09-25 19:3x — ONE gotcha added only**, at the v166 docs ritual: *flyctl can lose its login mid-day*, above *Every later deploy* (from `deploys.log`'s v166 line and the conductor's 19:1x `flyctl auth whoami` read recorded in `TODO.md` at `9b84b06e`). ⚠️ NOT known: why the token vanished; nothing else re-read.
 > Before that, **2026-09-23 16:2x — ONE gotcha added only**, at the v162 docs ritual: the dirty-tree refusal of the first v162 launch, under *Where `release.json` is written* (from `deploys.log`'s v162 line). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 04:3x — the gate's pytest step only**, at the v157 docs ritual: the step shipped with `gate-names`
 > (merge `01309d43`) and **v157 was the first real deploy gate to run it** — green on the first run, `deploys.log` line 156; its junit
@@ -158,6 +159,10 @@ Before pushing to `main`, [`ci-mirror.md`](ci-mirror.md) runs GitHub's `ci.yml` 
 flyctl logs --app black-bloc --no-tail        # boot log: cogs loaded, "commands synced"
 flyctl releases --app black-bloc              # a NEW version number = it landed
 ```
+
+### ⚠️ "The release is named by a hash (Release 4a7c1f3a), not v221" — the previous deploys.log line was still unfilled (incident 2026-10-09 21:58)
+
+Symptom: `site/public/assets/release.json` and the release commit read `Release 4a7c1f3a` (changed_features ["posts"]) and the site footer shows that label. Cause: `scripts/deploy.ps1` derives the next version number from the text `vNNN:` of the LAST `deploys.log` line, and the v220 line had been committed as an unfilled `<EDIT>` skeleton. Rule: fill the previous deploy's line (and commit it) BEFORE launching the next deploy. The label corrects itself at the next deploy.
 
 ### ⚠️ "The gate's site check fails on a tree the mirror passed" — a stale mock on 8788 (incident 2026-10-07 22:36, fixed on branch `deploy-gate-mock`)
 
