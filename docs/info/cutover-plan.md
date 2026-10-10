@@ -1,5 +1,7 @@
 # Cutover plan — from test mode to running the server
 
+> 📌 **2026-10-10 15:1x — ladder row 11 (Posts) and the front door are ON** (owner: *"Let's normalize those modes since we have the test button now"*): `posts_mode` on, `frontdoor_mode` on, Welcome and rules names `#welcome` and waits for its first Post it; `points_mode` was flipped on, auto-posted the sticky leaderboard into `#speed-and-pbs`, and went back to shadow — v227 makes a flip hold a sticky until Post it. The rehearsal channel is `#post-test` (renamed from `#welcome-test` that morning). Read 15:2x through the operator token.
+
 > 🔨 **2026-09-25 — the shadow home is PER FEATURE now, branch `shadow-home-per-feature` (BUILT, NOT merged):** a feature's own `<feature>_shadow_channel_id` (frontdoor, posts, golive, marathon, poll, birthday) wins over `shadow_channel_id`; blank follows it. The owner's state after the deploy: `shadow_channel_id` → #blackbloc-logs, `frontdoor_shadow_channel_id` → #welcome-test (set by the conductor, not the build). [`shadow-home-per-feature-design.md`](shadow-home-per-feature-design.md).
 
 > **Audience:** the owner (who flips the switches) + Claude sessions (who watch and
