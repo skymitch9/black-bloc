@@ -1,5 +1,7 @@
 # A rehearsal home per feature, and a marathon notice with the detail and the control staff need
 
+> 📌 **2026-10-10 - the rehearsal channel is now #post-test** (`1550284332365783091`, renamed from #welcome-test). `frontdoor_`, `posts_`, `points_` and `sticky_shadow_channel_id` point there; `shadow_channel_id` stays #blackbloc-logs. The dated history below still says #welcome-test and is deliberately unchanged.
+
 > 🔨 **2026-09-26 — §E: the marathon notice's home is the marathon inbox now** (branch `marathon-inbox`, BUILT, NOT merged): in `shadow` the inbox thread and each tracked marathon's thread are made in `marathon`'s shadow home (`marathon_shadow_channel_id`, then `shadow_channel_id`) with the rehearsal note naming the real channel; a flip to `on` makes fresh real ones. [`marathon-inbox-design.md`](marathon-inbox-design.md) §B3.
 
 > 🔨 **2026-09-25 22:xx — §E's notice now waits for the schedule, branch `marathon-notice-when` (BUILT, NOT merged):** the SAME embed + rows + People… (`send_added_notice`), through the same `_send_staff` (forum post under `marathon_notice_home = events`, staff channel, or the shadow home), posts on the first read that finds runs while `marathon_feed_notice_when = published` (default); `added` posts at add as §E shipped. `marathon.notice_posted` gains `because`. [`marathon-feeds-design.md`](marathon-feeds-design.md)'s top line has the rules.

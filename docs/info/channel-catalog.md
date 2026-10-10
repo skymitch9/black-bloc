@@ -74,7 +74,7 @@
 | `1073710703518683138` | `#join-log` | The Basement | — | unknown — the operator API does not expose topics; fill from the page after deploy | ⚠️ DRAFT — The log of members joining and leaving. |
 | `1542316174472380517` | `#blackbloc-logs` | The Basement | — | unknown — the operator API does not expose topics; fill from the page after deploy | ⚠️ DRAFT — Black Bloc's own log channel. |
 | `1496980277841363046` | `#baf-power-quotes` | The Basement | — | unknown — the operator API does not expose topics; fill from the page after deploy | ⚠️ DRAFT — Power quotes saved for BaF. |
-| `1550284332365783091` | `#welcome-test` | The Basement | — | unknown — the operator API does not expose topics; fill from the page after deploy | ⚠️ DRAFT — Where Black Bloc's rehearsal (shadow) copies are posted for staff to check. |
+| `1550284332365783091` | `#post-test` (renamed from #welcome-test 2026-10-10) | The Basement | — | unknown — the operator API does not expose topics; fill from the page after deploy | ⚠️ DRAFT — Where Black Bloc's rehearsal (shadow) copies are posted for staff to check. |
 | `1534971515932643390` | `#welcome` | Back to Black 2027 | — | unknown — the operator API does not expose topics; fill from the page after deploy | ⚠️ DRAFT — Welcome for the Back to Black 2027 event team. |
 | `1534775990704803930` | `#announcements` | Back to Black 2027 | — | unknown — the operator API does not expose topics; fill from the page after deploy | ⚠️ DRAFT — Announcements for the Back to Black 2027 event team. |
 | `1534777301781184522` | `#leads` | Back to Black 2027 | — | unknown — the operator API does not expose topics; fill from the page after deploy | ⚠️ DRAFT — The Back to Black 2027 leads' channel. |

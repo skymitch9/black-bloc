@@ -58,7 +58,7 @@ pytest                       # must be green before anything else
 black-bloc`, cutover step **P5** ([`../info/cutover-plan.md`](../info/cutover-plan.md)). **On the
 deployed bot the table below no longer applies:** there is no guard, and Black Bloc speaks
 wherever its settings point it. The brake is now each feature's own `*_mode` — `shadow` puts the
-rehearsal copy in `shadow_channel_id` (`#welcome-test`) and nothing in the real channel — and
+rehearsal copy in `shadow_channel_id` (`#welcome-test` (now #post-test, renamed 2026-10-10)) and nothing in the real channel — and
 events, requests and modmail are **live to members** (owner, 2026-09-18 17:1x: *"its live and
 people can use it"*). ⚠️ **Never flip `TEST_MODE` yourself, in either direction** — it is the
 owner's switch, and that rule did not lift with the flag.

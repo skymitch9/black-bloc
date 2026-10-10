@@ -3,7 +3,7 @@
 > **Audience:** whoever deploys or fixes the site, and the reviewer doing the
 > first live sign-in. **Status:** TRACKED (owner, 2026-08-31 — was local-only
 > until then; secret NAMES only). **Last verified:
-> 2026-09-25 — the pages paragraph only**, on branch `marathon-events-page` (NOT merged): 22 pages by
+> 2026-10-10 - the symptom table's last row only** (the ref-click gotcha, driven live); nothing else re-read. Before that, 2026-09-25 — the pages paragraph only**, on branch `marathon-events-page` (NOT merged): 22 pages by
 > `ls site/public/*.html` and `check.mjs`; nothing else re-read. Before that, 2026-09-23 14:1x — the pages count and the `channels.html` row only**, at the v159 ritual: `ls site/public/*.html` is
 > **22** and the row says LIVE v159; nothing else re-read, no browser. Before that, **2026-09-21 — the mock section only**: the `/preview/` door and its `LIVE_ROOT` live mirror of the
 > deployed release are RETIRED (owner, 12:2x, verbatim: *"We don't need the preview pages anymore"*)
@@ -227,6 +227,7 @@ In order, because each step's failure looks different:
 | **"Black Bloc could not check your roles with Discord just now"** | the fifth state, and it is **not** a refusal. The bot is up but could not consult the guild — still starting, the guild not yet cached, or a Discord outage. The retry button is the fix. ⚠️ Nobody is told they are not staff in this case, by design: the old code answered "not staff", which sent real mods to ask a Lead for a role they already had. |
 | "signed in but not staff" for somebody who IS a mod | the staff set is derived from who can *see* the staff channel (`staff_channel_id`), computed permissions and all. Run `/settings` in Discord and check the channel; the site and the slash commands share one definition, so if one is wrong both are. |
 | A mod who was just demoted still has access | they should not — staff is re-checked against the guild on **every** request, and the cookie's flag is no longer allowed to overrule a guild that answered. Signing them out (or rotating `SESSION_SECRET`) is the hard stop. |
+| A Save Changes / Pause button clicked by its accessibility ref does nothing | Tooling gotcha, seen 2026-10-10 driving the live site from a browser session: the ref click did not register and no save happened. A click by screen coordinate did register. Re-read the page afterwards to confirm the save (the `web.settings.set` row in the action log is the proof). |
 
 ## The pages
 

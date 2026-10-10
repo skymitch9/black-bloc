@@ -14,6 +14,8 @@
 
 ## 🔁 IF THIS SESSION DIES — resume here
 
+**UPDATE Sat 2026-10-10 ~9:2x AM Phoenix:** the rehearsal home for posts, the front door, points and stickies is #post-test (renamed from #welcome-test 2026-10-10); the global home stays #blackbloc-logs. See [`DONE.md`](DONE.md) 2026-10-10.
+
 **UPDATE Fri 2026-10-09 10:3x PM Phoenix (Fable 5.1 conductor):** live is **v221** (`c045acbc`, labelled "4a7c1f3a" - see deploy.md's gotcha; schema **93**, keys **1184**; `deploys.log` 220 lines). Today v215 -> v221 shipped: **v215** modal labels, **v216** Reply form, **v217** Fastest Furs actuals + points L1, **v218** points L2, **v219** Leaderboard page + settings line-break fix, **v220** late tracking, **v221** sticky leaderboard. The point system and the sticky leaderboard rehearse in #blackbloc-logs under `points_mode` shadow - the owner's switch; `pb_feed_mode` is off; the five point-system guides are live. NOTHING IN FLIGHT. The worktrees under `C:/lcw/` (bb-modal-labels, bb-snippet-radio, bb-points-engine, bb-points-discord, bb-points-site, bb-ff-actuals, bb-late-track, bb-sticky-board, bb-guides-points) are all merged and may be removed with `git worktree remove`. Waiting on the owner: his look at `/pb`, the Leaderboard page and the pinned copy; the `points_mode` switch; staff's Q4 next-rank wording. Proofs owed by time: the next Fastest Furs BaF run on time; the next late-tracked marathon's live run. The mock on port 8851 and the guides mock HTML are in scratch/worktrees, not the repo.
 
 **UPDATE Mon 2026-10-05 1:5x PM Phoenix (Opus 5.5 conductor):** live is **v204** (Sun 21:59, `3e0aa81c`; `deploys.log` 203 lines). Since the paragraph below: v203 (early-start review fixes, guard default 10) and v204 (a renamed run keeps its identity) shipped Sunday night; GDQueer ended cleanly. Both of its owner-waits are CLOSED: `spotlight_poll_minutes` is 1 (set 11:24 AM), and marathon 11 is NOT being renamed (owner 1:5x PM: *"Let's not do the rename"*). IN FLIGHT: two builds, `tone-settles` (`C:/lcw/bb-tone-settles`) and `memory-rapport` (`C:/lcw/bb-memory-rapport`) — see the 🎭 bullet; neither merges or deploys without the owner. Today's show: *Make Your Own Victory* 4:00 PM (Ryan Ford opens; heads-ups 2:00 PM and 3:45 PM; its Marathon ping switch is OFF — the owner's to turn on).
@@ -287,6 +289,11 @@ docs bookkeeping lands with the work, not after.
 - **Owner Fri 2026-10-09 ~12:0x PM, verbatim: *"Also check if therun.gg has an api"*** - status **DONE**, moved whole to [`DONE.md`](DONE.md) 2026-10-09; the findings are in [`info/therun-research-2026-10-09.md`](info/therun-research-2026-10-09.md).
 - ⏳ **Late tracking: the next late-tracked marathon with a live BaF run is the live proof owed** (v220 is live; the pinned tests and the boot columns are all that is verified; see [`DONE.md`](DONE.md) 2026-10-09 v220).
 - **QUEUED 2026-10-09 22:3x - guides follow-ups (found by the point-system guides pass, not built):** (1) points has no entry in `FEATURE_PAGES` / `FEATURE_PATHS` (`black_bloc/guides.py`), so the five guides are filed under `core`: *Where it happens* reads Dashboard instead of the Leaderboard page, and NO deploy will ever mark their pictures stale because `FEATURE_PATHS["core"]` lists no points module - a `points` feature entry is a small code change; (2) 19 guide pictures sitewide are still stale (v166 and older), unchanged by this pass; (3) the one-published-guide-per-command index was dropped 2026-09-25 (schema 66) - docs that still describe it (the capture doc's *would refuse a second*) need a dated correction line; (4) the capture doc's site screenshots needed the page zoomed to 1.4 because the page is 2498 px wide at 1x - a capture gotcha. Details: [`info/guides-design.md`](info/guides-design.md).
+
+## 📋 Session 2026-10-10
+
+- post-test rename + rehearsal homes -> [`DONE.md`](DONE.md) 2026-10-10.
+- Fastest Furs Sat 2026-10-10 (Phoenix): NO BaF runner; Mathcat ran Fri (done, 21:27Z actual); the next BaF run is Aston (glitchaston) - Kirby's Blowout Blast - Sun 2026-10-11 14:55Z (about 07:55 AM Phoenix, re-timed by actual durations from 16:04Z planned). No action.
 
 ## ⏳ Waiting on the owner
 

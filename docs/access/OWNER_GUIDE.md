@@ -139,7 +139,7 @@
 ✅ **You lifted test mode on 2026-09-18 at 16:08** (`flyctl secrets set TEST_MODE=false`, cutover
 step **P5**). Black Bloc now speaks wherever you have pointed it, and **events, requests and
 modmail are live to members** — your words, 17:1x: *"its live and people can use it"*. What holds
-the rest back is each feature's own switch: **shadow** puts the rehearsal copy in `#welcome-test`
+the rest back is each feature's own switch: **shadow** puts the rehearsal copy in `#welcome-test` (now #post-test, renamed 2026-10-10)
 for the mods and nothing in the real channel, and the front door, go-live, polls, birthdays, temp
 voice, the honeypot and automod are all sitting there. Turning any of them on is the ladder in
 [`../info/cutover-plan.md`](../info/cutover-plan.md) §2 — one at a time, watch, then the next.
