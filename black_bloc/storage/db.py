@@ -1602,6 +1602,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "baf_event", "INTEGER"),
     ("marathons", "baf_event_ask", "TEXT"),
     ("marathons", "baf_event_pings", "TEXT"),
+    ("marathons", "late_shout_due", "INTEGER NOT NULL DEFAULT 0"),
     ("chat_voice", "tone", "TEXT"),
     ("chat_voice", "how", "TEXT"),
     ("chat_voice", "settled", "INTEGER NOT NULL DEFAULT 0"),

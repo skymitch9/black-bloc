@@ -63,6 +63,7 @@ from ...settings_store import (
 )
 from ...spotlight import reason_of
 from ...timezones import unix
+from . import marathon_late_track as late_track
 from .marathon import (
     FEATURE,
     MODE_IS_OFF,
@@ -955,6 +956,7 @@ async def track_held(
             ignored_at=None,
             ignored_by=None,
         )
+        await late_track.arm(bot.db, fresh["id"])
         await log_action(
             bot,
             guild,

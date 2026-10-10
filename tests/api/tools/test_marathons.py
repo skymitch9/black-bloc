@@ -260,6 +260,7 @@ async def test_staff_post_the_board_shout_a_run_and_mark_it_done(client, sign_in
     assert board.status_code == 200 and board.json()["board_message_id"]
     shout = client.post(f"/api/marathons/{marathon_id}/runs/{ours['id']}/shout").json()
     assert shout["run"]["shouted"] is True and shout["run"]["state"] == "live"
+    assert ours["game"] and shout["message"] == f"The shoutout for **{ours['game']}** is out."
     twice = client.post(f"/api/marathons/{marathon_id}/runs/{ours['id']}/shout")
     assert twice.status_code == 409 and twice.json()["error"] == "not_shoutable"
     not_ours = client.post(f"/api/marathons/{marathon_id}/runs/{theirs['id']}/shout")

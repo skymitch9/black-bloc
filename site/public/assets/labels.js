@@ -104,6 +104,7 @@ export const LABELS = {
   marathon_fastestfurs_actual_includes_setup: 'A finished Fastest Furs run’s real length already counts its setup',
   marathon_setup_minutes: 'Setup minutes between runs when a schedule gives no start time per run',
   marathon_late_grace_minutes: 'How long a late run waits before the schedule calls it live',
+  marathon_late_track_shout_minutes: 'How long a run may already be live when its marathon is tracked and still be announced',
   marathon_match_hosts: 'Whether hosts and commentators count as BaF',
   marathon_hosts_count_as_ours: 'Whether a BaF host makes a run a BaF run',
   marathon_spotlight_host_note_template: "The note a spotlit host’s channel row carries",

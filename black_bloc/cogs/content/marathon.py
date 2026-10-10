@@ -370,6 +370,7 @@ MARATHON_COLUMNS = {
     "baf_event",
     "baf_event_ask",
     "baf_event_pings",
+    "late_shout_due",
 }
 REKEY_PARKED = "~rekey~{id}"
 RUN_COLUMNS = {
@@ -2467,6 +2468,7 @@ class Marathons(commands.Cog):
 
     async def advance(self, guild: Any, marathon: Any, now: datetime) -> bool:
         from .marathon_host_highlights import went_live as host_went_live
+        from .marathon_late_track import sweep as late_sweep
 
         store = self.bot.store
         rows = await runs_of(self.bot.db, marathon["id"])
@@ -2538,6 +2540,7 @@ class Marathons(commands.Cog):
                 )
                 continue
             await self.finish(guild, marathon, change.row, because=change.because, quiet=not ours)
+        await late_sweep(self, guild, marathon, now, skip=[one.row["id"] for one in changes])
         if anchored:
             await signals.retime(self, guild, marathon, because="stream")
         return touched

@@ -6832,6 +6832,7 @@ MARATHON_LIVE_POLL_MINUTES_KEY = "marathon_live_poll_minutes"
 MARATHON_LIVE_POLL_MINUTES = 1
 MARATHON_FF_ACTUAL_INCLUDES_SETUP_KEY = "marathon_fastestfurs_actual_includes_setup"
 MARATHON_LATE_GRACE_KEY = "marathon_late_grace_minutes"
+MARATHON_LATE_TRACK_SHOUT_KEY = "marathon_late_track_shout_minutes"
 MARATHON_MATCH_HOSTS_KEY = "marathon_match_hosts"
 MARATHON_HOSTS_COUNT_AS_OURS_KEY = "marathon_hosts_count_as_ours"
 MARATHON_REMINDER_MINUTES_KEY = "marathon_reminder_minutes"
@@ -7349,6 +7350,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "minutes a run may sit past its scheduled start with no sign on the stream before the "
         "schedule alone calls it live — the run before it is probably running long. 90 by "
         "default",
+    ),
+    MARATHON_LATE_TRACK_SHOUT_KEY: (
+        "int",
+        180,
+        "minutes a BaF run may already have been live when its marathon is tracked and still "
+        "get its shoutout and highlight on the next tick — a run live longer than that is left "
+        "alone. 180 by default; 0 always announces it",
     ),
     MARATHON_MATCH_HOSTS_KEY: (
         "bool",
@@ -9150,6 +9158,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_EARLY_START_KEY: (0, 240),
     MARATHON_LIVE_POLL_MINUTES_KEY: (1, 60),
     MARATHON_LATE_GRACE_KEY: (0, 360),
+    MARATHON_LATE_TRACK_SHOUT_KEY: (0, 1440),
     MARATHON_PING_MINUTES_KEY: (0, 240),
     MARATHON_REMINDER_STALE_KEY: (1, 240),
     MARATHON_REMINDER_EDIT_LIMIT_KEY: (1, 50),
