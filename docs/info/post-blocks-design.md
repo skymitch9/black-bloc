@@ -1,5 +1,10 @@
 # Post blocks — a post attaches blocks; the front door is the first kind
 
+> **2026-10-09 — a tenth kind, `leaderboard`** (branch `sticky-board`, NOT merged): a LIVE kind (now in
+> `LIVE_KINDS`, so `keep_live_now` and the `LiveBlocks` loop cover it) drawn by `points_post` from the `points_board_*`
+> words; `BlockKind` gained `owner` (the feature whose mode a sticky carrying it follows). A sticky's post is redrawn
+> whole (`post_blocks.sticky_edit`). See [`sticky-board-design.md`](sticky-board-design.md).
+
 > **Audience:** the conductor, reviewers, and the next build that adds a block kind or touches Posts or
 > the front door.
 > **Status:** TRACKED · 🔨 **BUILT on branch `post-blocks`** (off `main` `d90c9e8c`, v182 live), NOT merged,

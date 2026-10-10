@@ -1,5 +1,10 @@
 # Blocks live — who's live now, upcoming events, link buttons
 
+> **2026-10-09 — a tenth kind, `leaderboard`** (branch `sticky-board`, NOT merged): a LIVE kind (now in
+> `LIVE_KINDS`, so `keep_live_now` and the `LiveBlocks` loop cover it) drawn by `points_post` from the `points_board_*`
+> words; `BlockKind` gained `owner` (the feature whose mode a sticky carrying it follows). A sticky's post is redrawn
+> whole (`post_blocks.sticky_edit`). See [`sticky-board-design.md`](sticky-board-design.md).
+
 > **Audience:** the conductor, reviewers, and the next build that adds a block kind or touches the
 > post sweep.
 > **Status:** TRACKED · 🔨 **BUILT on branch `blocks-live`** (off `main` `d418ca13`), NOT merged, NOT
