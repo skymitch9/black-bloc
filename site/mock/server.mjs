@@ -855,6 +855,9 @@ const SETTING_SPECS = [
   ["marathon_inbox_channel_id", "channel", null, null, "where the marathon inbox thread is made — the one thread in which every marathon Black Bloc finds gets a message with Track and Ignore. Blank uses events_announce_channel_id. shadow makes it where marathon_shadow_channel_id or shadow_channel_id points"],
   ["marathon_thread_channel_id", "channel", null, null, "where a tracked marathon's own thread is made — its board, reminders and shoutouts post inside it. Blank uses the inbox's channel, beside the inbox thread"],
   ["marathon_track_makes_thread", "bool", true, true, "whether Track makes the marathon its own thread. on by default; off tracks it without a thread and its posts go to marathon_channel_id as before. A marathon that already has a thread keeps it"],
+  ["marathon_log_threads", "bool", true, true, "whether log rows about a tracked marathon post in that marathon's own thread under log_channel_id instead of in the channel itself. on by default; off posts them to the channel as before. Every row stays on the Logs page either way"],
+  ["marathon_log_thread_name_template", "text", "{marathon}", "{marathon}", "what a tracked marathon's log thread under log_channel_id is called. It takes {marathon} {when}"],
+  ["marathon_log_thread_opening_template", "text", "{marathon} — Black Bloc's log for this marathon. Tracker: {url}", "{marathon} — Black Bloc's log for this marathon. Tracker: {url}", "the first message in a tracked marathon's log thread. It takes {marathon} {when} {url}"],
   ["marathon_auto_track_default", "bool", false, false, "what a NEW marathon feed's auto-track switch starts at. off by default — Track is a staff press; a feed with auto-track on tracks each marathon it adds the moment its schedule is out. No existing feed is changed"],
   ["marathon_inbox_thread_name", "text", "Marathons — found and tracked", "Marathons — found and tracked", "what the marathon inbox thread is called when Black Bloc makes it"],
   ["marathon_inbox_opening", "text", "Every marathon Black Bloc finds gets a message here. **Track** gives it its own thread for its board, reminders and shoutouts; **Ignore** keeps it on the list and quiet.", "Every marathon Black Bloc finds gets a message here. **Track** gives it its own thread for its board, reminders and shoutouts; **Ignore** keeps it on the list and quiet.", "the first message in the marathon inbox thread, saying what the thread is for"],
@@ -7302,7 +7305,7 @@ function seedMarathons() {
 const MARATHON_INBOX_THREAD = '860000000000000000';
 function marathonInboxSeed() {
   return {
-    1: { tracked_at: minutesAgo(8800), tracked_by: STAFF.id, thread_id: '860000000000000001', board_channel_id: '860000000000000001' },
+    1: { tracked_at: minutesAgo(8800), tracked_by: STAFF.id, thread_id: '860000000000000001', board_channel_id: '860000000000000001', log_thread_id: '860000000000000201' },
     4: { ignored_at: minutesAgo(20000), ignored_by: STAFF.id },
   };
 }
@@ -7601,6 +7604,8 @@ function marathonTracking(row, archived = false) {
     ignored_by_name: row.ignored_by ? memberName(row.ignored_by) : null,
     thread_id: row.thread_id || null,
     thread_url: discord(row.thread_id),
+    log_thread_id: row.log_thread_id || null,
+    log_thread_url: discord(row.log_thread_id),
     inbox_message_url: row.inbox_message_id ? discord(MARATHON_INBOX_THREAD, row.inbox_message_id) : null,
   };
 }

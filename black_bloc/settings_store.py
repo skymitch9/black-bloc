@@ -6935,6 +6935,9 @@ MARATHON_THREAD_CHANNEL_KEY = "marathon_thread_channel_id"
 MARATHON_THREAD_NAME_KEY = "marathon_thread_name_template"
 MARATHON_THREAD_OPENING_KEY = "marathon_thread_opening_template"
 MARATHON_TRACK_MAKES_THREAD_KEY = "marathon_track_makes_thread"
+MARATHON_LOG_THREADS_KEY = "marathon_log_threads"
+MARATHON_LOG_THREAD_NAME_KEY = "marathon_log_thread_name_template"
+MARATHON_LOG_THREAD_OPENING_KEY = "marathon_log_thread_opening_template"
 MARATHON_AUTO_TRACK_DEFAULT_KEY = "marathon_auto_track_default"
 MARATHON_INBOX_LABEL_WHEN_KEY = "marathon_inbox_label_when"
 MARATHON_INBOX_LABEL_SOURCE_KEY = "marathon_inbox_label_source"
@@ -7080,6 +7083,8 @@ MARATHON_PUBLIC_DAY_EARLIER_KEY = "marathon_public_day_earlier"
 MARATHON_PUBLIC_DONE_FIELDS = (*MARATHON_PUBLIC_FIELDS, "day")
 MARATHON_THREAD_FIELDS = ("marathon", "channel", "when")
 MARATHON_OPENING_FIELDS = ("marathon", "who", "url", "channel", "when")
+MARATHON_LOG_THREAD_FIELDS = ("marathon", "when")
+MARATHON_LOG_OPENING_FIELDS = ("marathon", "when", "url")
 MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY = "marathon_channel_ping_mode_default"
 MARATHON_CHANNEL_PING_HELP_KEY = "marathon_channel_ping_help"
 MARATHON_BOARD_TEMPLATE_KEY = "marathon_board_template"
@@ -7790,6 +7795,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "a thread and its posts go to marathon_channel_id as before. A marathon that already has "
         "a thread keeps it",
     ),
+    MARATHON_LOG_THREADS_KEY: (
+        "bool",
+        True,
+        "whether log rows about a tracked marathon post in that marathon's own thread under "
+        "log_channel_id instead of in the channel itself. on by default; off posts them to the "
+        "channel as before. Every row stays on the Logs page either way",
+    ),
     MARATHON_AUTO_TRACK_DEFAULT_KEY: (
         "bool",
         False,
@@ -8457,6 +8469,17 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         MARATHON_OPENING_FIELDS,
         "the first message in a tracked marathon's own thread. It takes {marathon} {who} {url} "
         "{channel} {when}",
+    ),
+    MARATHON_LOG_THREAD_NAME_KEY: (
+        "{marathon}",
+        MARATHON_LOG_THREAD_FIELDS,
+        "what a tracked marathon's log thread under log_channel_id is called. It takes "
+        "{marathon} {when}",
+    ),
+    MARATHON_LOG_THREAD_OPENING_KEY: (
+        "{marathon} — Black Bloc's log for this marathon. Tracker: {url}",
+        MARATHON_LOG_OPENING_FIELDS,
+        "the first message in a tracked marathon's log thread. It takes {marathon} {when} {url}",
     ),
     MARATHON_INBOX_LABEL_WHEN_KEY: ("When", (), "the When label on a marathon's inbox message"),
     MARATHON_INBOX_LABEL_SOURCE_KEY: (
