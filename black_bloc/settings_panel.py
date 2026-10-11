@@ -119,7 +119,6 @@ MODE_LABELS: dict[str, str] = {
     "brackets": "Tournament brackets",
     "frontdoor": "The front door",
     "pb_feed": "Personal bests",
-    "points": "Leaderboard",
     "sticky": "Sticky messages",
     "youtube_live": FEATURE_LABELS["youtube"],
 }

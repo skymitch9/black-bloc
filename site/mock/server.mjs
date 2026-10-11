@@ -4597,14 +4597,21 @@ const GUIDE_PROBE_VALUES = {
   'raidtrain.next': '1 upcoming, 2 of 3 hours taken',
   test_mode: `on \u2014 #${TEST_CHANNEL_NAME}`,
 };
-const GUIDE_FEATURE_PAGES = {
-  core: 'settings.html', automod: 'automod.html', honeypot: 'honeypot.html', mod: 'moderation.html',
-  modmail: 'modmail.html', golive: 'golive.html', youtube: 'golive.html', events: 'events.html',
-  birthday: 'birthdays.html', tempvoice: 'tempvoice.html', rolemenu: 'rolemenus.html',
-  poll: 'polls.html', chat: 'chat.html', request: 'requests.html', pings: 'golive.html',
-  raidtrain: 'raidtrain.html', marathon: 'events.html', applications: 'rolemenus.html', selftest: 'health.html',
-  guides: 'guides.html',
-};
+const GUIDE_FEATURES = [
+  ['core', 'settings.html', 'Core'], ['automod', 'automod.html', 'Automod'],
+  ['honeypot', 'honeypot.html', 'Honeypot'], ['mod', 'moderation.html', 'Moderation'],
+  ['modmail', 'modmail.html', 'Modmail'], ['golive', 'golive.html', 'Go-live'],
+  ['youtube', 'golive.html', 'YouTube'], ['events', 'events.html', 'Events'],
+  ['birthday', 'birthdays.html', 'Birthdays'], ['tempvoice', 'tempvoice.html', 'Temp voice'],
+  ['rolemenu', 'rolemenus.html', 'Role menus'], ['poll', 'polls.html', 'Polls'],
+  ['chat', 'chat.html', 'Chat'], ['request', 'requests.html', 'Requests'],
+  ['pings', 'golive.html', 'Ping roles'], ['raidtrain', 'raidtrain.html', 'Raid trains'],
+  ['marathon', 'events.html', 'Marathons'], ['applications', 'rolemenus.html', 'Applications'],
+  ['selftest', 'health.html', 'Test'], ['guides', 'guides.html', 'Guides'],
+  ['posts', 'posts.html', 'Posts'], ['minutes', 'minutes.html', 'Meeting minutes'],
+  ['points', 'leaderboard.html', 'Leaderboard'],
+];
+const GUIDE_FEATURE_PAGES = Object.fromEntries(GUIDE_FEATURES.map(([feature, page]) => [feature, page]));
 const GUIDE_CORE_KEYS = ['staff_channel_id', 'log_channel_id', 'modlog_channel_id', 'role_menu_channel_id'];
 const GUIDE_NO_SUCH = 'There is no guide called **{slug}**, so nothing was done. It may have been renamed \u2014 open the guides page and pick it from the list.';
 const GUIDE_SEEDED = '**{slug}** is one of the guides Black Bloc ships with, so it cannot be deleted \u2014 a deploy would only put it back. Press **Unpublish** instead: members and `/help` stop seeing it and every word you have written is kept.';
@@ -4805,7 +4812,7 @@ route('GET', '/api/guides', (context) => {
     may_edit: staff,
     mode: state.settings.get('guides_mode') || 'on',
     stale: staff ? rows.reduce((total, one) => total + one.stale_count, 0) : 0,
-    features: Object.entries(GUIDE_FEATURE_PAGES).map(([feature, page]) => ({ feature, page })),
+    features: GUIDE_FEATURES.map(([feature, page, label]) => ({ feature, page, label })),
     fact_choices: staff ? guideFactChoices() : { settings: [], probes: [] },
     right_now: guideRightNow(),
     notes: guidesAreOn() ? [] : [GUIDES_OFF_FOR_STAFF],

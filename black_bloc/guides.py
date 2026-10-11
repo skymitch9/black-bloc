@@ -293,6 +293,16 @@ FEATURE_PATHS: dict[str, tuple[str, ...]] = {
         "site/public/assets/page-posts.js",
         "site/public/assets/discordmd.js",
     ),
+    "points": (
+        "black_bloc/points/",
+        "black_bloc/points_",
+        "black_bloc/cogs/content/points.py",
+        "black_bloc/api/tools/points.py",
+        "site/public/leaderboard.html",
+        "site/public/assets/page-leaderboard.js",
+        "site/public/assets/leaderboard-layout.js",
+        "site/public/assets/leaderboard.css",
+    ),
     "guides": (
         "black_bloc/guides.py",
         "black_bloc/guides_seed.json",
@@ -874,8 +884,14 @@ async def refresh_seeds(db: Any, guild_id: int) -> int:
                 (seed["do"], seed.get("expect"), int(step["id"])),
             )
         await db.conn.execute(
-            "UPDATE guides SET seed_hash = ?, command = COALESCE(command, ?) WHERE id = ?",
-            (fresh, entry.get("command") or None, int(guide["id"])),
+            "UPDATE guides SET seed_hash = ?, command = COALESCE(command, ?), "
+            "feature = CASE WHEN feature = 'core' THEN ? ELSE feature END WHERE id = ?",
+            (
+                fresh,
+                entry.get("command") or None,
+                entry.get("feature", "core"),
+                int(guide["id"]),
+            ),
         )
         changed += 1
     await db.conn.commit()

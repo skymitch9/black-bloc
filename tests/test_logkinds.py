@@ -1376,3 +1376,11 @@ def test_the_member_optout_end_rows_are_routine_and_their_failures_important():
     assert _classification("golive.unpinned") == "routine"
     assert _classification("golive.post_delete_failed") == "important (_failed)"
     assert _classification("golive.unpin_failed") == "important (_failed)"
+
+
+def test_points_has_a_page_and_a_label_but_logs_under_core():
+    assert FEATURE_PAGES["points"] == "leaderboard.html"
+    assert logkinds.FEATURE_LABELS["points"] == "Leaderboard"
+    assert "points" not in FEATURES
+    assert feature_of("points.approved") == logkinds.CORE
+    assert "points_log_level" not in logkinds.LOG_LEVEL_KEYS

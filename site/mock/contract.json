@@ -7774,7 +7774,8 @@
       "rows": {
         "features": [
           "feature",
-          "page"
+          "page",
+          "label"
         ],
         "guides": [
           "id",

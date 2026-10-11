@@ -295,7 +295,8 @@ never a broken image).
 3. A stale shot stays up with a pill rather than being hidden → one branch in the renderer.
 4. The linter warns and never refuses → one flag.
 5. `/help`'s link is masked Markdown per line + one button → §C7; the button alone is one `if`.
-6. One published guide per command → the partial unique index; drop it to allow two.
+6. One published guide per command → the partial unique index; drop it to allow two. ⚠️ **Overturned 2026-09-25** (schema 66,
+   the index is dropped at boot): several published guides may share a command. Correction added 2026-10-10.
 
 ## E. Out of scope (so nobody builds it by accident)
 
@@ -602,7 +603,8 @@ account is Pawpette's `apply-form` edit of 2026-09-16, which this pass did not t
   allows no command-less seed guide, and the per-command index is gone (above), so the two site guides take `/pb` too;
   `/help`'s `/pb` line now links both member guides. `tests/cogs/test_core.py` link counts 20 commands / 27 links →
   **21 / 32**. ⚠️ Consequence: the hub's *where you do it* chip says Discord for `leaderboard-page` and `points-bounties`.
-- **Feature is `core`** for all five — `points` is filed under core and has no `FEATURE_PAGES` entry, so the guide's
+- ⚠️ **SUPERSEDED 2026-10-10** (*2026-10-10 points as a guide feature*, below): the five now carry `feature: "points"`. Was:
+  **Feature is `core`** for all five — `points` is filed under core and has no `FEATURE_PAGES` entry, so the guide's
   *Where it happens* reads *Dashboard* (settings.html), not the Leaderboard page, and ⚠️ **no deploy will ever mark these
   pictures stale**: `guides.FEATURE_PATHS["core"]` does not list the points modules. A `points` feature entry (a code
   change) would fix both.
@@ -626,3 +628,28 @@ account is Pawpette's `apply-form` edit of 2026-09-16, which this pass did not t
   is 2498 CSS px wide; a 1.0 crop was unreadably flat); the zoom was reset after.
 - **Not verified:** a member's view of the two member guides (only staff was signed in); phone width; the pictures' look in
   light mode; `/help`'s `/pb` line as rendered in Discord.
+
+### 2026-10-10 points as a guide feature (branch `guides-points-feature`, off `main` `b4d232a1`)
+
+Owner, 2026-10-10 17:0x: *"also update guides"* — the follow-ups queued 2026-10-09 (above). The five point-system guides
+(`points-submit`, `leaderboard-page`, `points-approve`, `points-bounties`, `leaderboard-pin`) now carry `feature: "points"`:
+*Where it happens* reads **Leaderboard** with the `points_mode` pill and *Open its page* → `leaderboard.html`, and a deploy
+that touches a points module or the Leaderboard page marks their pictures stale (`FEATURE_PATHS["points"]`).
+
+**Deviation 1 — `points` is a guide feature, not a log feature.** Measured ripple of making it a `logkinds.FEATURES` entry
+(`HEADS["points"] = "points"`): a new registry key `points_log_level` (and its mock row, help line, settings group and
+`/settings` ▸ Logs option), a new Logs chip in `logs.js`, a contract change, and a BEHAVIOUR change nobody asked for —
+every `points.*` line would stop following `core_log_level` and post to its own *Leaderboard log* thread. `brackets` and
+`pbfeed` sit under core the same way. Instead `FEATURE_PAGES` and `FEATURE_LABELS` gain a `points` row and nothing else in
+`logkinds` moves: one home for the page (`logkinds.FEATURE_PAGES`, which guides already read) and for the label (the
+`"Leaderboard"` that `settings_panel.MODE_LABELS` carried moves there). Contract: `GET /api/guides` `features[]` gains
+`label`, so the page shows *Leaderboard* rather than the raw key. If the owner wants points lines in their own log thread
+with their own level, that is the FEATURES change above, as its own ask.
+
+**Live rows:** `refresh_seeds` never wrote `feature`. It now moves a guide still filed under `core` to its seed's feature
+when the seed entry changes (these five do, by this edit); wording, title, goal, steps, faults, facts and pictures are
+untouched, and a guide staff filed under another feature keeps it. The 2026-10-09 staff-edit check found no staff edit to
+these five.
+
+**Not verified:** the live guild after deploy (that the five read `points` and *Where it happens* says Leaderboard); the
+page in a browser (mock contract checked, not looked at); any picture re-shot — none was, by brief.

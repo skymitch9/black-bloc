@@ -710,7 +710,7 @@
       "title": "Get a speedrun on the leaderboard",
       "goal": "Send the run and its proof. Staff approve it, then it counts.",
       "audience": "member",
-      "feature": "core",
+      "feature": "points",
       "command": "/pb",
       "sort": 105,
       "steps": [
@@ -733,7 +733,7 @@
       "title": "See the leaderboard on the site",
       "goal": "The board, your runs and the live bounties.",
       "audience": "member",
-      "feature": "core",
+      "feature": "points",
       "command": "/pb",
       "sort": 106,
       "steps": [
@@ -753,7 +753,7 @@
       "title": "Approve or reject a run",
       "goal": "Every run is a modmail ticket. Decide it on the ticket card.",
       "audience": "staff",
-      "feature": "core",
+      "feature": "points",
       "command": "/pb",
       "sort": 221,
       "steps": [
@@ -779,7 +779,7 @@
       "title": "Put a bounty on a game",
       "goal": "More speedpoints for runs of chosen games, during an event or between dates.",
       "audience": "staff",
-      "feature": "core",
+      "feature": "points",
       "command": "/pb",
       "sort": 222,
       "steps": [
@@ -802,7 +802,7 @@
       "title": "Pin the leaderboard in a channel",
       "goal": "One copy at the bottom of the channel, edited as runs move.",
       "audience": "staff",
-      "feature": "core",
+      "feature": "points",
       "command": "/pb",
       "sort": 223,
       "steps": [

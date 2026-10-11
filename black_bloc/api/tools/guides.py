@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request, Response
 
 from ... import guides
-from ...logkinds import FEATURE_PAGES
+from ...logkinds import FEATURE_LABELS, FEATURE_PAGES
 from ...settings_store import KEY_TYPES
 from ..auth import Refused
 from ..names import resolve_one
@@ -362,7 +362,8 @@ def build_router(bot: Any) -> APIRouter:
             "mode": bot.store.get(guild.id, "guides_mode"),
             "stale": sum(one["stale_count"] for one in found) if staff else 0,
             "features": [
-                {"feature": name, "page": page} for name, page in FEATURE_PAGES.items()
+                {"feature": name, "page": page, "label": FEATURE_LABELS.get(name, name)}
+                for name, page in FEATURE_PAGES.items()
             ],
             "fact_choices": fact_choices() if staff else {"settings": [], "probes": []},
             "right_now": guides.right_now(bot, guild),
