@@ -44,6 +44,14 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-10 — Dead code-notes rows retired (44 archived, 2 re-pointed, 4 struck)
+
+Moved whole from `TODO.md`:
+
+- 📝 **31 code-notes rows describe code that no longer exists (found by the re-key 2026-09-28, merge `35d3005b`).** The re-key against `f4ba0f2b` could not find their named anchor anywhere in the current source — e.g. `CarryButton` (removed by post-blocks), `golive_preview` / `preview_payload` and four `page-golive.js` helpers, eight `marathon.py` / `marathons-section.js` names from the marathon rebuilds, `Events.submit`, `send_added_notice`. Each needs a look: mark superseded (pointing at what replaced it) or move to `docs/archive/`. The full list is in the re-key agent's report summarised in the code-notes header line of 2026-09-28. Docs-only, low priority.
+
+Closed 2026-10-10 17:5x by the `codenotes-dead-rows` merge (`305222c8`): the record of what was found and moved is the 📝 bullet under *Session 2026-10-10* in `TODO.md` at the time, repeated here: 50 dead rows measured against `main` `b4d232a1` (the original 31-row list was never saved), 44 archived to `docs/archive/code-notes-retired-2026-10-10.md`, 2 re-pointed, 4 struck in place, 13 found live after all.
+
 ## 2026-10-05 — A tone is a starting point: stored tones that settle, Reroll and Pin, memory with rapport (v205)
 
 Moved whole from `TODO.md`:
