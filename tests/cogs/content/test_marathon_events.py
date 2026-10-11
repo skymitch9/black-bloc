@@ -157,6 +157,7 @@ async def test_a_far_off_runs_event_is_re_dated_once_its_move_has_read_the_same_
     def far(start):
         return [a_run(3, start, game="Super Metroid", people=(("Sky", "skyruns", "runner"),))]
 
+    await bot.store.set(GUILD, "marathon_move_damping_reads", 2)
     cog.client.runs_given = far(1430)
     marathon = await made(bot, "runs")
     event_id = (await runs(bot, marathon))["Super Metroid"]["event_id"]

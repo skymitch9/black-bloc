@@ -2580,11 +2580,11 @@ def test_the_reminder_edit_limit_is_a_marathon_int_from_1_to_50_and_10_by_defaul
             settings_store.coerce_value(key, bad)
 
 
-def test_move_damping_is_two_marathon_ints_60_minutes_and_2_reads_by_default(store):
+def test_move_damping_is_two_marathon_ints_60_minutes_and_4_reads_by_default(store):
     minutes = settings_store.MARATHON_MOVE_DAMPING_MINUTES_KEY
     reads = settings_store.MARATHON_MOVE_DAMPING_READS_KEY
     assert (minutes, reads) == ("marathon_move_damping_minutes", "marathon_move_damping_reads")
-    for key, default, least, most in ((minutes, 60, 0, 1440), (reads, 2, 2, 10)):
+    for key, default, least, most in ((minutes, 60, 0, 1440), (reads, 4, 2, 10)):
         assert settings_store.KEY_TYPES[key] == "int"
         assert settings_store.namespace_of(key) == "marathon"
         assert settings_store.MARATHON_DEFAULTS[key] == store.default(key) == default

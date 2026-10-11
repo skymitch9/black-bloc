@@ -61,6 +61,7 @@ NOTHING_WAITS = (None, None, None, None)
 @pytest.fixture(autouse=True)
 async def both_copies(bot):
     await bot.store.set(GUILD, "marathon_thread_reminders", True)
+    await bot.store.set(GUILD, READS, 2)
 
 
 def day(start):

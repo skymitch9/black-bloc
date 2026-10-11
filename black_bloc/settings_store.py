@@ -6870,7 +6870,7 @@ MARATHON_MOVE_MINUTES_KEY = "marathon_move_minutes"
 MARATHON_MOVE_DAMPING_MINUTES_KEY = "marathon_move_damping_minutes"
 MARATHON_MOVE_DAMPING_MINUTES = 60
 MARATHON_MOVE_DAMPING_READS_KEY = "marathon_move_damping_reads"
-MARATHON_MOVE_DAMPING_READS = 2
+MARATHON_MOVE_DAMPING_READS = 4
 MARATHON_TITLE_CONFIRMS_KEY = "marathon_title_confirms"
 MARATHON_CATEGORY_CONFIRMS_KEY = "marathon_category_confirms"
 MARATHON_RETRO_CATEGORY_KEY = "marathon_retro_category"
@@ -7390,7 +7390,7 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         MARATHON_MOVE_DAMPING_READS,
         "how many reads of the schedule in a row must give a far-off run the same new start "
         "before its public posts follow and the move is logged — a start that goes back within "
-        "that many reads changes nothing anybody sees. 2 by default; see "
+        "that many reads changes nothing anybody sees. 4 by default; see "
         "marathon_move_damping_minutes",
     ),
     MARATHON_TITLE_CONFIRMS_KEY: (

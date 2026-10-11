@@ -298,6 +298,7 @@ async def test_a_whole_day_that_shifts_is_one_edit_per_post_ten_a_minute_soonest
     await bot.store.set(GUILD, "marathon_reminder_minutes", "1440")
     await bot.store.set(GUILD, "marathon_reminder_stale_minutes", 240)
     await bot.store.set(GUILD, "marathon_ping_minutes", 0)
+    await bot.store.set(GUILD, "marathon_move_damping_reads", 2)
 
     def day(shift):
         return [

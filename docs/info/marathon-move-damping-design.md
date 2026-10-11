@@ -1,6 +1,6 @@
 # Move damping — a far-off run's move waits until it reads the same again
 
-> 🔨 **2026-10-10 — BUILT on branch `move-damping` (off `main` `8ecbab63`), NOT merged, NOT deployed.** Schema stays **94** (four nullable columns through `ADDED_COLUMNS`), keys **1208 → 1210**, one new log kind. Deviations and *What was NOT verified* at the foot.
+> ✅ **2026-10-10 21:3x — MERGED to `main` (`ad1beef1`); the reads default RAISED 2 → 4 by the owner before the first deploy (below). Deploy v230 pending the gate.** Built on branch `move-damping` (off `main` `8ecbab63`). Schema stays **94** (four nullable columns through `ADDED_COLUMNS`), keys **1208 → 1210**, one new log kind. Deviations and *What was NOT verified* at the foot.
 
 > **Audience:** the conductor (merge + deploy), reviewers, and the next session touching the schedule read, the stream re-time or anything that prints a run's start. **Status:** TRACKED.
 > **Last verified: 2026-10-10 ~19:5x Phoenix** — by the build's own gate on the branch (ruff, the hermetic suite, the mock check). ⚠️ Nothing met live Discord, the live database or the live Fastest Furs feed.
@@ -13,7 +13,7 @@
 | 3 | 3 | 3 |
 | 4 | **2** | **1** |
 
-The decision below fixes the default at 2 and was not widened; the key is on the Settings page. The brief's own replay (wrong value one read, corrected the next) is quiet at 2 and is tested as asked.
+➕ **Owner, 2026-10-10 21:3x, shown this table and the recommendation of 4, verbatim: *"What you suggest"*** → the default is **4** (`settings_store.MARATHON_MOVE_DAMPING_READS`, the mock row, the settings test). The price told to him: a genuine move of a far-off run reaches the public reminder about 4 minutes later instead of 2 at the one-a-minute cadence. The cog tests pin 2 in their autouse fixture, so each still reads as written. The decision below was first fixed at 2; the key is on the Settings page. The brief's own replay (wrong value one read, corrected the next) is quiet at 2 and is tested as asked.
 
 ## The ask and the decision, verbatim
 
@@ -23,7 +23,7 @@ The diagnosis this answers: [`marathon-fastestfurs-design.md`](marathon-fastestf
 
 **The decision (owner, 2026-10-10 19:1x: "Do what you suggest" to this exact proposal).** Damping. A move of a run that is far enough away must read the same on N consecutive reads before anything PUBLIC follows it.
 
-1. Two settings keys: `marathon_move_damping_minutes` (int, default **60**; 0 = damping off = today's behaviour) — a run whose start (both its stored start and the newly read one) is MORE than this many minutes away is damped; a run inside the window is NEVER damped, a late change close to start goes out at once. `marathon_move_damping_reads` (int, default **2**, min 2) — how many consecutive reads must agree on the new time before it is published.
+1. Two settings keys: `marathon_move_damping_minutes` (int, default **60**; 0 = damping off = today's behaviour) — a run whose start (both its stored start and the newly read one) is MORE than this many minutes away is damped; a run inside the window is NEVER damped, a late change close to start goes out at once. `marathon_move_damping_reads` (int, default **2** as first decided, **4** since 21:3x the same day, min 2) — how many consecutive reads must agree on the new time before it is published.
 2. What updates AT ONCE, undamped: the stored schedule (`scheduled_at`, `ends_at`), the Marathon tracker page / API, `marathon.fetched` / `marathon.schedule_changed` / `marathon.retimed` rows. The schedule in the database is always what the source last said.
 3. What WAITS for the move to hold: every public or member-facing consequence of the move for that run — the edit of an already-posted public reminder (and thread copy), the re-arming / re-scheduling of reminder marks, the `marathon.member_run_moved` log row, and any runner post / highlight / pinned board line that prints the run's time publicly, each damped the same way through ONE helper.
 4. Per run, remember the time last PUBLISHED and a pending candidate with a count. A flip that reverses within N reads publishes nothing. When a run crosses INTO the near window with a pending candidate, publish at once. A reminder mark that comes due while a move is pending fires on the STORED (latest) time, never skipped or doubled.
