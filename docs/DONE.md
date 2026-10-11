@@ -44,6 +44,14 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-11 - the music bot is scrapped completely; the monthly feasibility check is retired
+
+Moved whole from `TODO.md`:
+
+- 🔁 **RECURRING — monthly music-bot feasibility check (owner, 2026-09-07 15:10: "scrap this whole project, until we find a reliable way to do this let's be done with me. Maybe set up a monthly research task to look into if it's doable in a stable way").** The music bot / request #3 is SCRAPPED (moved whole to `DONE.md`, "Music bot scrapped"). What a session does when the date below has passed: one research pass, no build — is there now a STABLE, terms-compliant way for a Discord bot to play music (Spotify's developer terms and dev-mode 250k-user gate; whether YouTube/SoundCloud sources via Lavalink still survive datacenter-IP blocking; anything new from Discord itself, e.g. Activities/Watch Together-style playback); write the dated finding to `info/music-source-research.md` (create it), bump the next-check date here, and only if the answer is a clear YES put ONE question to the owner. **Next check: 2026-10-07.** This line is the reminder — session crons die with the session, and every session reads this file; a Windows scheduled task running Claude headless is the upgrade if the owner wants it unattended.
+
+Closed Sun 2026-10-11 10:4x Phoenix. Owner, verbatim: *"Scrap the music bot project completely"*. The monthly feasibility check is RETIRED with the project: no further research passes, no next-check date, and the 2026-10-07 check that fell due was never run. `info/music-source-research.md` was never created and is not owed. There was no code, no settings key and no scheduled task to remove (the TODO line was the only reminder). This supersedes the 2026-09-07 "maybe set up a monthly research task". A future session does NOT re-open this unless the owner asks for a music bot again.
+
 ## 2026-10-11 - every guide has a current picture: three re-shot, seven first pictures
 
 Moved whole from `TODO.md`:
