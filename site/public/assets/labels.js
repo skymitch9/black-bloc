@@ -96,6 +96,8 @@ export const LABELS = {
   marathon_far_poll_hours: 'How often a far-off marathon’s schedule is read',
   marathon_lead_days: 'How many days before a marathon it counts as near',
   marathon_move_minutes: 'How far a run must shift to count as moved',
+  marathon_move_damping_minutes: 'How far off a run must be for a move of it to wait',
+  marathon_move_damping_reads: 'How many reads must agree before a far-off move is shown',
   marathon_title_confirms: 'Whether the stream’s title decides which run is on',
   marathon_category_confirms: 'Whether the stream’s Twitch category decides which run is on',
   marathon_retro_category: 'Twitch category a run with no category of its own is played under',

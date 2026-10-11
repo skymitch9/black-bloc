@@ -7,6 +7,7 @@ from typing import Any
 
 from ... import marathon as mt
 from ... import marathon_announce as ma
+from ... import marathon_damping as md
 from ... import marathon_reminder_posts as mrem
 from ... import marathon_role_ping as mrp
 from ... import shadow as shadow_home
@@ -168,7 +169,7 @@ async def post_public_reminder(
             | mrp.row_fields(marathon_role)
             | {
                 "copy": mrem.copy_of(
-                    message, channel_id, text, row["scheduled_at"], people=ma.ids_of(people)
+                    message, channel_id, text, md.shown_start(row), people=ma.ids_of(people)
                 )
             }
         )

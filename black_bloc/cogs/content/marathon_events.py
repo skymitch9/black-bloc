@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from ... import marathon as mt
+from ... import marathon_damping as md
 from ... import marathon_events as me
 from ... import marathon_hosts as mh
 from ...actionlog import log_action
@@ -106,7 +107,7 @@ def run_words(bot: Any, guild: Any, row: Any, marathon: Any) -> me.RunEventWords
 
 
 async def run_fields(bot: Any, guild: Any, marathon: Any, row: Any) -> EventFields | None:
-    starts, finishes = parse_ts(row["scheduled_at"]), parse_ts(row["ends_at"])
+    starts, finishes = parse_ts(md.shown_start(row)), parse_ts(md.shown_end(row))
     if starts is None:
         return None
     if finishes is None or finishes <= starts:
@@ -288,7 +289,7 @@ async def cancel_run_event(
 
 
 async def redate_run_event(bot: Any, guild: Any, marathon: Any, row: Any, event: Any) -> None:
-    starts, finishes = parse_ts(row["scheduled_at"]), parse_ts(row["ends_at"])
+    starts, finishes = parse_ts(md.shown_start(row)), parse_ts(md.shown_end(row))
     if starts is None:
         return
     if finishes is None or finishes <= starts:

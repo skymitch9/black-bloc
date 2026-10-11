@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from ... import marathon as mt
+from ... import marathon_damping as md
 from ... import marathon_overlay as overlay
 from ... import marathon_reminder_posts as mrem
 from ... import marathon_signals as sig
@@ -23,6 +24,7 @@ from ...settings_store import (
     MARATHON_TITLE_CONFIRMS_KEY,
 )
 from ...twitch import TwitchError
+from . import marathon_damping as damping
 from .spotlight import GOLIVE_COG
 
 log = logging.getLogger(__name__)
@@ -277,11 +279,6 @@ async def undo_early(cog: Any, guild: Any, marathon: Any, rows: Any, now: dateti
     return bool(found)
 
 
-def _moved_enough(before: Any, after: Any, minutes: int) -> bool:
-    shift = mt.moved_by(before, after)
-    return shift is not None and shift >= int(minutes)
-
-
 async def retime(
     cog: Any, guild: Any, marathon: Any, *, because: str, on_move: str | None = None
 ) -> int:
@@ -304,7 +301,12 @@ async def retime(
     on_move = on_move or str(bot.store.get(guild.id, MARATHON_REMINDER_ON_MOVE_KEY))
     for change in changes:
         fields: dict[str, Any] = {"scheduled_at": change.starts_at, "ends_at": change.ends_at}
-        if _moved_enough(change.row["scheduled_at"], change.starts_at, move_minutes):
+        wait = damping.written(
+            bot, guild.id, change.row, change.starts_at, now, because=because
+        )
+        fields |= wait.fields
+        moved = md.moved_enough(change.row["scheduled_at"], change.starts_at, move_minutes)
+        if wait.public(moved, change.starts_at, move_minutes):
             fields |= mrem.run_fields(change.row, change.starts_at, now, on_move)
         await update_run(bot.db, change.row["id"], **fields)
     first = changes[0]
@@ -361,6 +363,7 @@ async def sheet_times(
                 staff_start_at=None,
                 staff_start_by=None,
                 staff_start_set_at=None,
+                **md.CLEARED,
             )
         await log_action(
             bot,

@@ -9,6 +9,7 @@ from typing import Any
 
 from ... import marathon as mt
 from ... import marathon_announce as ma
+from ... import marathon_damping as md
 from ... import marathon_host_highlights as mhh
 from ... import marathon_inbox as mi
 from ... import marathon_reminder_posts as mrem
@@ -440,7 +441,8 @@ async def remind_hosts(cog: Any, guild: Any, marathon: Any, now: datetime) -> No
                 if record.pop("legacy_reminded", False):
                     record["marks"] = mhh.passed_marks(block, marks, now)
                     touched = True
-                if mhh.rearmed(record, block, now, on_move) or touched:
+                mode = mrem.EDIT if md.waits(block.first) else on_move
+                if mhh.rearmed(record, block, now, mode) or touched:
                     await save(bot, fresh, found)
             mark, skipped = mhh.due(block, record, marks, now, stale_minutes=stale)
             if mark is None and not skipped:
@@ -557,9 +559,7 @@ async def heads_up(
         | mrp.row_fields(marathon_role)
         | rehearsal_of(bot, guild),
     )
-    return mrem.copy_of(
-        message, channel_id, text, mt._cell(block.first, "scheduled_at"), people=named
-    )
+    return mrem.copy_of(message, channel_id, text, md.shown_start(block.first), people=named)
 
 
 def quiet_because(bot: Any, guild: Any, marathon: Any, block: mhh.Block) -> str:

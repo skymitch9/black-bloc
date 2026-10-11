@@ -2340,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1208
+    assert len(settings_store.KEY_TYPES) == 1210
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2578,6 +2578,22 @@ def test_the_reminder_edit_limit_is_a_marathon_int_from_1_to_50_and_10_by_defaul
     for bad in (0, 51, True, "10"):
         with pytest.raises(settings_store.SettingError):
             settings_store.coerce_value(key, bad)
+
+
+def test_move_damping_is_two_marathon_ints_60_minutes_and_2_reads_by_default(store):
+    minutes = settings_store.MARATHON_MOVE_DAMPING_MINUTES_KEY
+    reads = settings_store.MARATHON_MOVE_DAMPING_READS_KEY
+    assert (minutes, reads) == ("marathon_move_damping_minutes", "marathon_move_damping_reads")
+    for key, default, least, most in ((minutes, 60, 0, 1440), (reads, 2, 2, 10)):
+        assert settings_store.KEY_TYPES[key] == "int"
+        assert settings_store.namespace_of(key) == "marathon"
+        assert settings_store.MARATHON_DEFAULTS[key] == store.default(key) == default
+        assert (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) == (least, most)
+        assert settings_store.KEY_HELP[key]
+        for bad in (least - 1, most + 1, True, "2"):
+            with pytest.raises(settings_store.SettingError):
+                settings_store.coerce_value(key, bad)
+    assert settings_store.coerce_value(minutes, 0) == 0
 
 
 def test_the_dropped_reminder_is_a_marathon_template_that_takes_the_reminder_fields_and_state(

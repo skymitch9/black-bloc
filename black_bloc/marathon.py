@@ -1056,8 +1056,11 @@ def run_url(row: Any, channel_login: Any, fallback: str = "", *, people: Any = N
 def run_fields(
     row: Any, marathon: Any, words: dict[str, str], *, url: str, people: Any = None
 ) -> dict[str, Any]:
+    from .marathon_damping import shown_start
+
     people = ours(people_of(row)) if people is None else list(people)
     part = people[0]["part"] if people else RUNNER
+    at = shown_start(row)
     return {
         "member": mention_line(people),
         "game": _cell(row, "game") or "",
@@ -1065,9 +1068,9 @@ def run_fields(
         "url": url,
         "marathon": _cell(marathon, "name") or "",
         "part": words.get(PART_KEYS.get(part, MARATHON_PART_RUNNER_KEY), part),
-        "when": stamp_of(_cell(row, "scheduled_at"), "f"),
-        "relative": stamp_of(_cell(row, "scheduled_at"), "R"),
-        "in": stamp_of(_cell(row, "scheduled_at"), "R"),
+        "when": stamp_of(at, "f"),
+        "relative": stamp_of(at, "R"),
+        "in": stamp_of(at, "R"),
         "state": words.get(STATE_KEYS.get(str(_cell(row, "state")), ""), _cell(row, "state")),
     }
 

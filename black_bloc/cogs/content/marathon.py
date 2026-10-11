@@ -12,6 +12,7 @@ from discord.ext import commands, tasks
 
 from ... import marathon as mt
 from ... import marathon_archive as ma
+from ... import marathon_damping as md
 from ... import marathon_events as me
 from ... import marathon_feeds as mfeeds
 from ... import marathon_hosts as mh
@@ -117,6 +118,7 @@ from ...settings_store import (
     MARATHON_WORDS,
 )
 from ...timezones import unix
+from . import marathon_damping as damping
 from . import marathon_signals as signals
 from .spotlight import channel_by_id, channel_by_login, open_session, windows_for
 
@@ -414,6 +416,7 @@ RUN_COLUMNS = {
     "staff_start_at",
     "staff_start_by",
     "staff_start_set_at",
+    *md.COLUMNS,
 }
 
 
@@ -2126,7 +2129,8 @@ class Marathons(commands.Cog):
         stamp = now.isoformat()
         if changed:
             counts = await self._write_plan(guild, marathon, plan, now) | {"runs": len(runs)}
-            await signals.retime(self, guild, marathon, because="schedule_read")
+            await signals.retime(self, guild, marathon, because=damping.READ)
+        await damping.settle(self, guild, marathon, now, read=True)
         starts, ends = mt.span(runs)
         await update_marathon(
             db,
@@ -2210,6 +2214,7 @@ class Marathons(commands.Cog):
     async def _write_plan(self, guild: Any, marathon: Any, plan: Any, now: datetime) -> dict:
         db = self.bot.db
         stamp = now.isoformat()
+        move_minutes = int(self.bot.store.get(guild.id, MARATHON_MOVE_MINUTES_KEY))
         await rekey_runs(db, plan.rekeyed)
         for run in plan.inserts:
             await db.conn.execute(
@@ -2263,9 +2268,15 @@ class Marathons(commands.Cog):
                 fields |= dict.fromkeys(("twitch_game_id", "twitch_category", "twitch_looked_at"))
             if row["state"] == mt.DROPPED:
                 fields["state"] = mt.UPCOMING
+            wait = damping.written(
+                self.bot, guild.id, row, fields.get("scheduled_at", row["scheduled_at"]), now
+            )
+            fields |= wait.fields
             if moved:
                 fields["previous_scheduled_at"] = row["scheduled_at"]
                 fields["moved_at"] = stamp
+            public = wait.public(moved, run.starts_at, move_minutes)
+            if public:
                 fields |= mrem.run_fields(
                     row,
                     run.starts_at,
@@ -2273,7 +2284,7 @@ class Marathons(commands.Cog):
                     str(self.bot.store.get(guild.id, MARATHON_REMINDER_ON_MOVE_KEY)),
                 )
             await update_run(db, row["id"], **fields)
-            if moved and mt.is_ours(row):
+            if public and mt.is_ours(row):
                 for member_id in mt.member_ids(row):
                     await log_action(
                         self.bot,
@@ -2285,7 +2296,7 @@ class Marathons(commands.Cog):
                             "run_id": row["id"],
                             "member_id": member_id,
                             "game": run.game,
-                            "from": row["scheduled_at"],
+                            "from": wait.before,
                             "to": run.starts_at,
                         },
                     )
@@ -2463,6 +2474,7 @@ class Marathons(commands.Cog):
         from .marathon_host_highlights import remind_hosts
         from .marathon_reminder_posts import sync_reminders
 
+        await damping.settle(self, guild, marathon, now, read=False)
         moved = await self.advance(guild, marathon, now)
         await self.remind(guild, marathon, now)
         await remind_hosts(self, guild, marathon, now)
@@ -2692,7 +2704,7 @@ class Marathons(commands.Cog):
             guild, ping_prefix(*roles) + text, roles, marathon=marathon
         )
         entry = mrem.entry_of(
-            staff=mrem.copy_of(message, channel_id, text, row["scheduled_at"]),
+            staff=mrem.copy_of(message, channel_id, text, md.shown_start(row)),
             public=went_public,
         )
         details = (

@@ -315,6 +315,9 @@ async def test_a_whole_day_that_shifts_is_one_edit_per_post_ten_a_minute_soonest
     assert len(posted) == 24
 
     await reads(bot, cog, marathon, runs=day(3))
+    await follow(bot, cog, marathon)
+    assert "marathon.reminder_edited" not in await kinds(bot.db)
+    await reads(bot, cog, marathon, runs=day(3))
     seen = []
     for _ in range(4):
         await follow(bot, cog, marathon)
@@ -738,6 +741,7 @@ async def test_a_host_block_taken_off_the_schedule_says_so_once(bot, cog):
 
 
 async def test_a_deleted_host_heads_up_is_logged_once_and_never_posted_again(bot, cog):
+    await bot.store.set(GUILD, "marathon_move_damping_minutes", 0)
     marathon = await host_show(bot, cog, until=(60,))
     (said,) = heads_ups(bot)
     await said.delete()
@@ -771,6 +775,7 @@ async def test_a_host_heads_up_from_before_posts_were_remembered_is_never_posted
 
 async def test_repost_posts_a_host_heads_up_again_and_edits_nothing(bot, cog):
     await bot.store.set(GUILD, "marathon_reminder_on_move", "repost")
+    await bot.store.set(GUILD, "marathon_move_damping_minutes", 0)
     marathon = await host_show(bot, cog, until=(60,))
     (said,) = heads_ups(bot)
 
