@@ -247,3 +247,97 @@ stripped.
 5. A 1-minute read's cost on `cheetah.fastestfurs.com` (73 KB per GET, about 60 GETs an hour per live marathon); no rate
    limit was measured.
 6. Whether the marathon had an open stream session (title/category confirms) on 2026-10-09 was not read from the live DB.
+
+## The back-and-forth hour (2026-10-11)
+
+> Branch `ff-flipflop` (off `main` `7c0c9488`), **docs only: no code changed, nothing to merge but this section.**
+> **Last verified: 2026-10-11 ~01:1x-01:5xZ** (Sat 2026-10-10 evening Phoenix): the live action log through
+> `scripts/read.ps1` (`/api/actions`, also `?kind=marathon.member_run_moved` and `?kind=marathon.schedule_changed`),
+> `/api/marathons/7/schedule`, `/api/settings`, `/api/settings/audit`, and the public feed read once a minute from the
+> build machine from 01:09:48Z. **NOT checked:** see the foot of this section.
+
+**The symptom.** Marathon #7, run 63 *Kirby's Blowout Blast* (external id 858, `orderIndex` 54), moved four times in an
+hour, each move editing its public 24-hour reminder in #upcoming-events:
+
+| Read (UTC) | Run 63 from → to | Shift | `moved` |
+|---|---|---|---|
+| 00:04:02 | 14:54:06 → 13:50:06 | −64:00 | 27 |
+| 00:07:02 | 13:50:06 → 14:50:06 | +60:00 | 27 |
+| 01:03:17 | 14:50:06 → 16:22:28 | +92:22 | 23 |
+| 01:05:17 | 16:22:28 → 15:32:28 | −50:00 | 23 |
+
+**The cause is the organisers' feed, not the walk.** `refresh` → `apply` stores exactly what `parse_fastestfurs` makes
+of one GET, and `changed` is the hash of that; the read at 00:06:02 logged `changed=False`, so the feed itself differed
+between 00:06:02 and 00:07:02. Nothing on our side moved: `marathon_fastestfurs_actual_includes_setup` is on and has no
+audit row, `marathon_move_minutes` is 5, and no deploy fell between the two reads of a pair (`deploys.log`: v227
+22:27:04Z, v228 00:58:22Z, v229 01:14:39Z; the reads at 01:00:17 and 01:01:17, after v228's boot, logged
+`changed=False`).
+
+What the feed held at 01:09:48Z, and when the organisers wrote it (`updatedAt`):
+
+| Item | Planned slot | `actualDuration` | item `updatedAt` | run `updatedAt` |
+|---|---|---|---|---|
+| 34 *Duck Detective* | 52 + 12 min = 3,840 s | **3,600** | 10-11 **00:03:54**.004Z | 00:03:54.168Z |
+| 35 *Atomfall* | 2,700 s | null (`runs.actualTime` 00:29:50) | 10-09 01:34:03Z | 10-11 00:07:45Z |
+| 36 *Love Eternal* | 2,460 s | null (00:25:05) | 10-09 01:34:03Z | 10-11 00:07:56Z |
+| 37 *Dr. Mario (SNES)* | 3,000 s | null (00:38:32) | 10-09 01:34:03Z | 10-11 01:02:22Z |
+| 38 *Super Mario Sunshine* | 202 + 10 min = 12,720 s | **15,262** | 10-11 **01:02:47**.891Z | 01:02:48.313Z |
+
+Items 28-33 were each written within minutes of their own end (the last at 10-10 16:50:39Z). Item 34 was written
+**seven hours late**, 35-37 have still no `actualDuration`, and 38 was written 46 minutes after the walk says it ended.
+Each flip is the first read after one of those two late writes (8 s and 30 s after them), and each `moved` count is
+exactly the runs AFTER that item (27 after item 34; 23 after item 38), so both moves of a pair are a change in that
+one item's slot.
+
+**Replayed through the real parser** (the 01:09:48Z payload with only these two fields altered; every logged time and
+both `moved` counts come out exactly):
+
+| State | item 34 | item 38 | Run 63 starts | Runs moved ≥ 5 min |
+|---|---|---|---|---|
+| before 00:03:54 | null | null | 14:54:06 | |
+| read 00:04:02 | **0** | null | 13:50:06 | 27 |
+| read 00:07:02 | 3,600 | null | 14:50:06 | 27 |
+| read 01:03:17 | 3,600 | **18,262** | 16:22:28 | 23 |
+| read 01:05:17 | 3,600 | 15,262 | 15:32:28 | 23 |
+
+So the organisers' tool first published `actualDuration` **0** for item 34 and **18,262** for item 38, and someone put
+3,600 (a round hour) and 15,262 (exactly 3,000 s less) in their place two to three minutes later. The likeliest reading
+(an inference): a finish pressed late. 01:02:47Z − 18,262 s = 19:58:25Z, about where the walk starts item 38
+(20:02:06Z), so the first value ran to the moment of the press, 46 minutes after the run was over, and the correction
+took the overrun back out; item 34 had no running time to stop. ⚠️ **The 0 and the 18,262 are reconstructions**: they
+are the only single-field values that reproduce the log, but no payload carrying them was saved. Why the second write
+left `updatedAt` at the first write's time is not known.
+
+**A finish written on time was captured, and it is one move.** Item 40 (*BONUS GAME 1 - Grand Theft Auto III*,
+planned 4,920 s) went null → **5,306** between the captures of 01:55:26Z and 01:56:26Z (`updatedAt` 01:55:57.201Z)
+and did not change again; the replay moves run 63 to 15:38:54Z and the bot's own read stored exactly that at
+01:56:33Z (`moved=22`, the runs after item 40). So the replay method is checked against the live bot, not only against
+the log.
+
+**Before today there was no flip.** Every earlier move of run 63 since v217 is one write, one move: 10-10 04:51:40
+(+18:00, item 28), 05:02:25 (−23:00, 31 runs; not traced to a field, and not followed by a reversal), 06:18:25 (+7:07, item 29),
+14:50:26 (−5:59, the *End of Day 2* break), 15:32:25 (−5:04, item 31).
+
+**The organisers' own page walks the same way.** `fastestfurs.com/assets/index-B_6BVqav.js` (read 2026-10-11): the
+start of item *n* is `startDateTime` + Σ (`actualDuration` when it is not null, else (`duration` + `setupTime`) × 60);
+a 0 counts as 0. Its *total time* label prints `actualDuration`, which is the v217 reading (the slot, setup included).
+Fed the same payloads, their page draws the same hour ours stored (the page itself was not opened at those minutes).
+
+**No fix was built**: the walk reproduces the source. What is left is an owner decision (two candidates, neither
+built): (a) a finished RUN item whose `actualDuration` is 0 reads as not finished (it would have removed the first
+pair: 00:04 no move, 00:07 a −4:00 shift, under `marathon_move_minutes`); it does nothing for the second pair;
+(b) a move of a run that is hours away must be read the same on reads a few minutes apart before the public
+reminder is edited and `marathon.member_run_moved` is logged (both corrections here came within 3 minutes).
+
+### What was NOT verified
+
+1. ⚠️ **No payload holding a transient value was captured.** The 0 and the 18,262 are inferred from the log's
+   arithmetic and the `moved` counts, replayed through the parser.
+2. **How the organisers' tool makes `actualDuration`** (a timer, a hand-typed field, a later recompute) and why the
+   correcting write does not move `updatedAt`.
+3. **Whether the stored start is when run 63 will really start.** It is what the feed and the organisers' page say
+   (15:38:54Z at 01:57Z). One check of the walk against the real clock: it ends item 40 at 01:59:54Z, its finish was
+   written 01:55:57Z and the stream title was on item 41 at 01:56:52Z (decapi.me, one read each at 01:12Z and
+   01:56Z), so the walk was about 4 minutes behind the stream then. Items 35-37 are still walked at their planned
+   lengths; if the organisers back-fill them, run 63 moves again.
+4. Nothing in Discord was opened; the reminder's edits are the log's `marathon.reminder_edited` rows.
