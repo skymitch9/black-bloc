@@ -10446,3 +10446,14 @@ Design: [`marathon-public-highlights-design.md`](marathon-public-highlights-desi
 - `black_bloc/cogs/content/marathon_inbox.py` `track_held` — arms only when it flips the row to tracked (inside `if not mi.is_tracked`), the one function every Track door reaches (site, thread, inbox button, Track anyway, feed auto-track).
 - `black_bloc/cogs/content/marathon_archive.py` `restore_marathon` — arms a restored row that was tracked; it comes back paused, and `advance` does not run while paused, so the catch-up happens on the first tick after Resume.
 
+
+## Marathon log threads — keyed by NAME (branch `marathon-log-threads`, 2026-10-10; re-key after the merge)
+
+Design: [`marathon-log-threads-design.md`](marathon-log-threads-design.md).
+
+- `black_bloc/actionlog.py` `_post` — `log_threads.deliver` replaces the bare `channel.send`; the channel is still resolved here, so a missing or invisible log channel warns exactly as before and no thread is tried.
+- `black_bloc/log_threads.py` `routed_id` — the module's own two kinds are skipped: they are logged while the marathon's lock is held, and routing them would wait on that lock for ever.
+- `log_threads.thread_for` — the tracked check runs once before the lock (cheap, so untracked rows never queue) and again inside it (checklist 37: the row may have changed while waiting). A NotFound thread is lost and remade; any other read failure raises, so `deliver` warns and uses the channel without forgetting the stored id.
+- `log_threads.made_thread` — the imports are lazy because `actionlog` imports this module and the cog modules import `actionlog`. A parent with no `create_thread` raises (falls back) rather than posting a thread-less copy somewhere else.
+- `log_threads.lock_for` — locks live on `bot.__dict__` (the `brackets_moves.lock_for` shape), never module-level, so each test's event loop gets fresh locks.
+- `log_threads.deliver` — two warnings, two causes: the thread could not be found or made, or the thread refused the send. Both end in `channel.send`; a failure there is `_post`'s own warning.

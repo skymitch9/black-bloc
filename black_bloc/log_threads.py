@@ -126,7 +126,10 @@ async def thread_for(bot: Any, guild: Any, kind: str, details: Any, channel: Any
             if not lost:
                 raise LookupError(f"thread {stored} could not be read just now")
             await log_action(
-                bot, guild, "marathon.log_thread_lost", details={"marathon_id": marathon_id, "thread_id": stored}
+                bot,
+                guild,
+                "marathon.log_thread_lost",
+                details={"marathon_id": marathon_id, "thread_id": stored},
             )
         return await made_thread(bot, guild, row, channel, stored or None)
 
