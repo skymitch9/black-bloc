@@ -329,6 +329,8 @@ pair: 00:04 no move, 00:07 a −4:00 shift, under `marathon_move_minutes`); it d
 (b) a move of a run that is hours away must be read the same on reads a few minutes apart before the public
 reminder is edited and `marathon.member_run_moved` is logged (both corrections here came within 3 minutes).
 
+**2026-10-10 — (b) was decided and built** on branch `move-damping`: [`marathon-move-damping-design.md`](marathon-move-damping-design.md). (a) was declined; the v217 reading of `actualDuration` stays.
+
 ### What was NOT verified
 
 1. ⚠️ **No payload holding a transient value was captured.** The 0 and the 18,262 are inferred from the log's

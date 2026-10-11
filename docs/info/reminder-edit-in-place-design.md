@@ -68,7 +68,7 @@ after it; a crash in between leaves a sent mark with no entry, which reads as *p
 1. **Any change of a run's start edits every reminder already posted for it** — the schedule sheet, the setup buffer,
    a stream re-time, staff's *sheet times*, a move earlier, a 3-minute slip inside the 15-minute window. There is no
    threshold: `marathon_move_minutes` still decides what is *logged as moved* and what re-arms an unposted mark, not
-   what is edited.
+   what is edited. ⚠️ **Qualified 2026-10-10 by the `move-damping` build**: a move a schedule READ makes to a run more than `marathon_move_damping_minutes` away is not edited in until it has read the same `marathon_move_damping_reads` times in a row; the rule above is unchanged for a run inside that window and for staff and stream moves ([`marathon-move-damping-design.md`](marathon-move-damping-design.md)).
 2. **One place does it.** `sync_reminders` (`cogs/content/marathon_reminder_posts.py`) runs in `Marathons.follow`
    after `remind` and `remind_hosts`, every minute, per marathon, under the marathon's lock. It does not care who moved
    the run: it re-renders the same template with the run's current fields and compares the words with `text`.

@@ -170,6 +170,24 @@ async def test_the_four_moves_of_run_63_are_two_edits_and_one_moved_row(bot, cog
     ]
 
 
+MINUTE_BY_MINUTE = (-64, -64, -64, -4, -4, -4, -4, 88, 88, 38, 38, 38, 38)
+
+
+@pytest.mark.parametrize(("reads", "edits", "moves"), [(2, 4, 4), (3, 3, 3), (4, 2, 1)])
+async def test_read_every_minute_the_hour_as_it_stood_is_quiet_only_from_four_reads(
+    bot, cog, reads, edits, moves
+):
+    await bot.store.set(GUILD, READS, reads)
+    marathon = await far_day(bot, cog)
+    public, _staff = await copies(bot, marathon)
+
+    for minute, shift in enumerate(MINUTE_BY_MINUTE, start=1):
+        await read(bot, cog, marathon, minute, FAR + shift)
+
+    assert public.content == words(FAR + 38)
+    assert (len(public.edits), len(await rows(bot, MOVED))) == (edits, moves)
+
+
 async def test_a_move_under_the_moved_threshold_waits_too_and_leaves_no_held_row(bot, cog):
     marathon = await far_day(bot, cog)
     public, _staff = await copies(bot, marathon)
