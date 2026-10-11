@@ -127,6 +127,7 @@ FEATURE_LABELS: dict[str, str] = {
     "guides": "Guides",
     "posts": "Posts",
     "minutes": "Meeting minutes",
+    "points": "Leaderboard",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -152,6 +153,7 @@ FEATURE_PAGES: dict[str, str] = {
     "guides": "guides.html",
     "posts": "posts.html",
     "minutes": "minutes.html",
+    "points": "leaderboard.html",
 }
 
 IMPORTANT_SUFFIXES = (

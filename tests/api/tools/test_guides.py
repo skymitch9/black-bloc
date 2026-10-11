@@ -696,7 +696,8 @@ async def test_the_feature_list_is_the_bots_own_so_the_picker_cannot_offer_a_ref
     rows = as_staff.get("/api/guides").json()["features"]
 
     assert {one["feature"] for one in rows} == set(pure.features())
-    assert {"feature", "page"} == set(rows[0])
+    assert {"feature", "page", "label"} == set(rows[0])
+    assert {"feature": "points", "page": "leaderboard.html", "label": "Leaderboard"} in rows
 
 
 async def test_a_guide_says_whether_somethings_off_files_a_request(as_member, web, wf):

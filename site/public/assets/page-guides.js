@@ -288,11 +288,16 @@ function newGuideCard(payload, say) {
   ]);
 }
 
+function featureName(hub, feature) {
+  const row = listOf(hub, 'features').find((one) => one.feature === feature);
+  return (row && row.label) || featureLabel(feature);
+}
+
 function featureSelect(payload, current) {
   const rows = listOf(payload, 'features');
   const select = el('select', { class: 'input' });
   for (const one of rows) {
-    const label = featureLabel(one.feature);
+    const label = one.label || featureLabel(one.feature);
     select.append(el('option', {
       value: one.feature,
       text: label === one.feature ? label : `${label} (${one.feature})`,
@@ -564,7 +569,7 @@ function rail(payload, hub) {
     ]),
     railBlock('Where it happens', [
       el('p', { class: 'guiderail-line' }, [
-        el('span', { text: `${featureLabel(guide.feature)} ` }),
+        el('span', { text: `${featureName(hub, guide.feature)} ` }),
         modePill(guide.feature_mode),
       ]),
       guide.feature_page

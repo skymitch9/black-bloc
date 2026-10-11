@@ -280,6 +280,72 @@ def test_feature_paths_map_a_changed_file_to_the_feature_that_owns_it():
     assert set(guides.FEATURE_PATHS) <= set(guides.features())
 
 
+POINT_GUIDES = (
+    "points-submit",
+    "leaderboard-page",
+    "points-approve",
+    "points-bounties",
+    "leaderboard-pin",
+)
+
+
+def test_the_point_system_is_its_own_guide_feature_on_the_leaderboard_page():
+    assert "points" in guides.features()
+    assert guides.FEATURE_PAGES["points"] == "leaderboard.html"
+    for path in (
+        "black_bloc/points/board.py",
+        "black_bloc/points_tickets.py",
+        "black_bloc/points_panel.py",
+        "black_bloc/cogs/content/points.py",
+        "black_bloc/api/tools/points.py",
+        "site/public/leaderboard.html",
+        "site/public/assets/page-leaderboard.js",
+        "site/public/assets/leaderboard-layout.js",
+        "site/public/assets/leaderboard.css",
+    ):
+        assert guides.features_changed([path]) == ["points"], path
+
+
+def test_the_five_point_system_guides_ship_under_points():
+    by_slug = {one["slug"]: one["feature"] for one in guides.seed_entries()}
+
+    assert {by_slug[slug] for slug in POINT_GUIDES} == {"points"}
+    assert by_slug["feature-modes"] == "core"
+
+
+async def test_a_changed_seed_moves_a_core_guide_to_its_feature_and_keeps_staff_words(
+    bot, db, monkeypatch
+):
+    await guides.seed_guides(db, GUILD)
+    moved = await guides.get_guide(db, GUILD, "points-submit")
+    step = (await guides.steps_of(db, moved["id"]))[0]
+    await db.conn.execute(
+        "UPDATE guides SET feature = 'core', title = 'Staff title', seed_hash = 'the old seed' "
+        "WHERE id = ?",
+        (moved["id"],),
+    )
+    await db.conn.execute(
+        "UPDATE guide_steps SET do_text = 'Staff words.' WHERE id = ?", (step["id"],)
+    )
+    await db.conn.execute(
+        "UPDATE guides SET feature = 'request', seed_hash = 'the old seed' "
+        "WHERE guild_id = ? AND slug = 'points-approve'",
+        (GUILD,),
+    )
+    await db.conn.commit()
+
+    assert await guides.refresh_seeds(db, GUILD) == 2
+
+    fresh = await guides.get_guide(db, GUILD, "points-submit")
+    assert fresh["feature"] == "points"
+    assert fresh["title"] == "Staff title"
+    assert (await guides.steps_of(db, moved["id"]))[0]["do_text"] == "Staff words."
+    kept = await guides.get_guide(db, GUILD, "points-approve")
+    assert kept["feature"] == "request"
+    assert (await guides.get_guide(db, GUILD, "feature-modes"))["feature"] == "core"
+    assert await guides.refresh_seeds(db, GUILD) == 0
+
+
 def test_a_release_without_digits_still_orders_against_the_one_before_it():
     assert guides.release_before("v110", "v112") is True
     assert guides.release_before("v112", "v110") is False

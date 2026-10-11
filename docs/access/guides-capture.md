@@ -13,7 +13,8 @@
 > **New guides:** the site has a door (`POST /api/guides`, the hub's **Make it**), so all **8** were made and
 > published there and added to the seed (commit `7a3cdff1`); `marathons-follow`, `marathons-manage` and `ping-windows`
 > carry **no command**, because their command already has a published guide for that audience (the
-> `guides_one_published_command` index would refuse a second). **Cards:** purge window 1 → **30** (per-key PUT, read
+> `guides_one_published_command` index would refuse a second — ⚠️ **corrected 2026-10-10: that index was DROPPED the
+> same day, 2026-09-25, schema 66; several published guides may share a command, and all three now carry one**). **Cards:** purge window 1 → **30** (per-key PUT, read
 > back), **Run the self-test** pressed on the Health page → **run #69** (02:48:29Z, `131 OK · 0 FAILED`, **25 cards**,
 > `via: website`), window → **1** after the shots (read back). **Shots:** 9 root cards read then shot with the
 > painted-union recipe (frame 1543×784, `k` 0.6177, `dy` 0.1 — unchanged since 09-17), files in
@@ -308,6 +309,11 @@ Measured on the owner's machine 2026-09-16: frame **1512×802**, `innerWidth` **
 `innerHeight` **1269**, `devicePixelRatio` **1.5** → `k` = **0.6053**, `dy` = **34**. A card
 predicted this way landed exactly on its box first time. ⚠️ **Re-measure every session** —
 `k` and `dy` change with the window size and the zoom level; nothing here is hardcodable.
+
+⚠️ **Site pages: zoom the page to 1.4 before shooting** (measured 2026-10-09, the point-system guides). At 1x the
+dashboard is laid out across the whole **2498** CSS px, so a crop of a drawer or a card comes back flat and unreadably
+small. Set CSS zoom 1.4 on the page, re-read the boxes (they move), shoot, and **reset the zoom after**. Discord
+captures are unaffected.
 
 **The two limits take care of themselves, and here is why.** `zoom` upscales the crop by
 `devicePixelRatio × (innerWidth / frameWidth)` — **2.478** in the reading above — and **caps
