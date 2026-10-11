@@ -183,7 +183,15 @@ def test_start_and_finish_follow_the_existing_mark_rules_and_every_other_flag_is
         (True, True),
         (False, False),
     ]
-    assert not any(one[key] for one in cans for key in ("set_start", "estimate", "skip", "restore"))
+    assert not any(one[key] for one in cans for key in ("estimate", "skip", "restore"))
+    assert [(one["set_start"], one["shift"]) for one in cans] == [
+        (False, False),
+        (False, False),
+        (True, True),
+        (False, False),
+    ]
+    tracker = read(marathon(GDQ), rows)
+    assert not any(one["can"]["set_start"] or one["can"]["shift"] for one in tracker["rows"])
     assert not any(day["can_shift"] or day["can_reset"] for day in found["days"])
     assert found["undo"] == {"available": False, "text": None}
 
@@ -575,3 +583,38 @@ def test_the_role_follows_what_the_day_decides_and_the_ping_mark_where_it_decide
     assert {one["minutes"]: one["role"] for one in carried["next_posts"]} == {120: True, 15: False}
     assert {one["minutes"]: one["role"] for one in per_run["next_posts"]} == {120: False, 15: True}
     assert {one["role"] for one in silent["next_posts"]} == {False}
+
+
+# --- a start staff set -----------------------------------------------------------------------
+
+
+def test_a_start_staff_set_is_tagged_set_by_staff_and_the_runs_after_it_follow():
+    rows = [
+        run(1, 0),
+        run(2, 75, sheet=60, staff_start_at=iso(75)),
+        run(3, 135, sheet=120),
+    ]
+    found = read(marathon(), rows, labels={"set_start": "Set start…", "shift": "Shift from here…"})
+    assert tags(found) == {1: page.SOURCE, 2: page.STAFF, 3: page.FOLLOWS}
+    assert found["rows"][1]["staff_at"] == page._moment(iso(75))
+    assert found["days"][0]["staff_times"] == 1
+    assert found["labels"] == {"set_start": "Set start…", "shift": "Shift from here…"}
+
+
+def test_a_real_start_beats_the_staff_start_on_the_page_too():
+    rows = [run(1, 70, sheet=60, staff_start_at=iso(75), state=mt.LIVE, actual_started_at=iso(70))]
+    assert tags(read(marathon(), rows)) == {1: page.STREAM}
+
+
+def test_the_two_staff_moves_read_as_sentences():
+    start = {"game": "Bombun", "from": iso(60), "to": iso(75), "minutes": None}
+    shift = {"game": "Bombun", "from": iso(60), "to": iso(70), "minutes": 10}
+    found = moves(
+        [action(6, "web.marathon.day_shifted", shift), action(5, "marathon.start_set", start)]
+    )
+    was, to, later = (page._moment(iso(60)), page._moment(iso(75)), page._moment(iso(70)))
+    assert found[0]["text"] == (
+        f"From **Bombun** on, the day moved +10 min: {{{{at:{was}}}}} is now {{{{at:{later}}}}}"
+    )
+    assert found[1]["text"] == f"**Bombun** set to start at {{{{at:{to}}}}} (was {{{{at:{was}}}}})"
+    assert [one["kind"] for one in found] == ["day_shifted", "start_set"]

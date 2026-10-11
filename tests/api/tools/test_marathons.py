@@ -51,6 +51,8 @@ ROUTES = [
     ("POST", "/api/marathons/1/ignore"),
     ("POST", "/api/marathons/1/inbox"),
     ("POST", "/api/marathons/1/sheet-times"),
+    ("POST", "/api/marathons/1/runs/1/start"),
+    ("POST", "/api/marathons/1/runs/1/shift"),
 ]
 
 
@@ -1602,3 +1604,45 @@ async def test_a_marathon_with_a_log_thread_carries_its_link(client, sign_in, we
     assert row["log_thread_url"] == (
         f"https://discord.com/channels/{wf.GUILD_ID}/870000000000000001"
     )
+
+
+async def test_staff_set_a_start_and_shift_the_day_from_the_tracker_page(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    body = add(client).json()
+    marathon_id = body["id"]
+    metroid = next(one for one in body["run_list"] if one["game"] == "Super Metroid")
+    route = f"/api/marathons/{marathon_id}/runs/{metroid['id']}"
+
+    tracker = client.post(f"{route}/start", json={"at": at(200), "tz": "UTC"})
+    assert tracker.status_code == 409 and tracker.json()["error"] == "retimes_itself"
+    assert "publishes its own times" in tracker.json()["message"]
+
+    await web.db.conn.execute(
+        "UPDATE marathons SET source = 'gdq_hotfix' WHERE id = ?", (marathon_id,)
+    )
+    await web.db.conn.commit()
+    moved = client.post(f"{route}/start", json={"at": at(200), "tz": "UTC"})
+    assert moved.status_code == 200, moved.text
+    said = moved.json()
+    assert "Super Metroid" in said["message"] and "{{at:" in said["message"]
+    assert said["run"]["id"] == metroid["id"]
+    runs = {row["game"]: row for row in await runs_of(web.db, marathon_id)}
+    assert runs["Super Metroid"]["scheduled_at"] == at(200)
+    assert runs["Blaster Master"]["scheduled_at"] == at(300)
+
+    shifted = client.post(f"{route}/shift", json={"minutes": -15})
+    assert shifted.status_code == 200, shifted.text
+    runs = {row["game"]: row for row in await runs_of(web.db, marathon_id)}
+    assert runs["Super Metroid"]["scheduled_at"] == at(185)
+    bad = client.post(f"{route}/shift", json={"minutes": "lots"})
+    assert bad.status_code == 400 and bad.json()["error"] == "bad_minutes"
+    found = await wf.kinds_in(web.db)
+    assert "web.marathon.start_set" in found and "web.marathon.day_shifted" in found
+
+    page = client.get(f"/api/marathons/{marathon_id}/schedule").json()
+    row = next(one for one in page["rows"] if one["id"] == metroid["id"])
+    assert row["from"] == "staff" and row["can"]["set_start"] and row["can"]["shift"]
+    assert page["labels"] == {"set_start": "Set start…", "shift": "Shift from here…"}
+    assert any(one["kind"] == "day_shifted" for one in page["moves"])

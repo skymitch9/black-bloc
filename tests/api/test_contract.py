@@ -858,6 +858,30 @@ async def seed_world(client, web, guild, wf) -> dict:
         (guild_id, ended.isoformat()),
     )
     marathon_waiting_id = int(cur.lastrowid)
+    # The tracker's two staff moves: GDQueer keeps Black Bloc's clock, one run not yet started.
+    soon = datetime.now(UTC) + timedelta(hours=3)
+    cur = await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, starts_at, "
+        "ends_at, added_at) VALUES (?, 'GDQueer', 'https://gamesdonequick.com/hotfix/schedule', "
+        "'gdq_hotfix', 'gdqueer/contract', ?, ?, ?)",
+        (guild_id, soon.isoformat(), (soon + timedelta(hours=1)).isoformat(), ended.isoformat()),
+    )
+    marathon_clock_id = int(cur.lastrowid)
+    cur = await db.conn.execute(
+        "INSERT INTO marathon_runs(marathon_id, external_id, order_no, game, scheduled_at, "
+        "ends_at, sheet_at, sheet_ends_at, run_seconds, first_seen_at, last_seen_at) "
+        "VALUES (?, 'q1', 1, 'Spyro the Dragon', ?, ?, ?, ?, 3600, ?, ?)",
+        (
+            marathon_clock_id,
+            soon.isoformat(),
+            (soon + timedelta(hours=1)).isoformat(),
+            soon.isoformat(),
+            (soon + timedelta(hours=1)).isoformat(),
+            ended.isoformat(),
+            ended.isoformat(),
+        ),
+    )
+    marathon_clock_run_id = int(cur.lastrowid)
     # marathon-inbox-when: GDQx 2026 has no inbox message yet, so Post it to the inbox now
     # reaches it; the inbox lives in a forum `rewind` adds, which takes its first message.
     await web.store.set(guild_id, "marathon_inbox_channel_id", INBOX_FORUM_ID, by=7)
@@ -1062,6 +1086,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_over_id": str(marathon_over_id),
         "marathon_bare_id": str(marathon_id),
         "marathon_retimed_id": str(marathon_id),
+        "marathon_clock_id": str(marathon_clock_id),
+        "marathon_clock_run_id": str(marathon_clock_run_id),
         "tracker_marathon_id": str(marathon_id),
         "marathon_waiting_id": str(marathon_waiting_id),
         "marathon_unposted_id": str(marathon_waiting_id),

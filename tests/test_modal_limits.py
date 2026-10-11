@@ -18,6 +18,7 @@ PACKAGE = Path(black_bloc.__file__).parent
 SKIP = {"black_bloc.__main__"}
 SAMPLE_ARGS = {
     "PollVoteModal": {"options": [{"position": 0, "label": "Yes"}, {"position": 1, "label": "No"}]},
+    "RetimeModal": {"choices": [("Sat 3 Oct 10:00 · Spyro the Dragon", "1")]},
 }
 
 FIELD_LIMITS = {

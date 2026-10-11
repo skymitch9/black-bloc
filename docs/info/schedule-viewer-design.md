@@ -6,9 +6,9 @@
 > marathon tracker and make the url schedule"*. Older sections below keep the words they were written with
 > ("run sheet", `/runsheet`); read them as the same page.
 > 🔨 **READ-ONLY VERSION BUILT on branch `runsheet-live` (2026-10-03), NOT merged, NOT deployed** — the page on the
-> real bot, updating itself: see *Live, read-only 2026-10-03* at the end. 📐 **The staff re-timing moves are still
-> DESIGN — NOT AGREED**; every item under *Open decisions* is the owner's, and they exist only on the mock
-> (*Prototype 2026-10-03*).
+> real bot, updating itself: see *Live, read-only 2026-10-03*. 🔨 **2026-10-10: TWO staff moves BUILT on branch
+> `tracker-retime`, NOT merged, NOT deployed** — *Set start…* and *Shift the day*, section *The two moves
+> (2026-10-10)* at the end; the other five moves exist only on the mock (*Prototype 2026-10-03*).
 > Last verified: **2026-10-03 20:4x Phoenix** — the facts under *What exists today* were read off
 > `main` at `455cce06` (the run table in `storage/db.py`, the routes in `api/tools/marathons.py`,
 > `marathon_sources.RETIMES_ITSELF`) and the live action log for GDQueer day 1. ⚠️ **NOT checked:**
@@ -445,7 +445,7 @@ not wired into `scripts/deploy.ps1` or CI.
 | **Started now** / **Finished now** | built — they call the EXISTING `POST /api/marathons/{id}/runs/{run}/live` and `/done`, then re-read |
 | A **Marathon tracker** button on every marathon row and drawer on Events | built (the prototype's, renamed) |
 | A **Marathon tracker ↗** link button on each tracked marathon's pinned thread controls | built |
-| Set start, Behind / Ahead, estimate, skip, bring back, back to the source's times, undo | **mock only** — `can` is `false` for all of them on the bot and the page draws none of them |
+| Set start, Behind / Ahead, estimate, skip, bring back, back to the source's times, undo | **mock only** — `can` is `false` for all of them on the bot and the page draws none of them. ⚠️ **2026-10-10:** Set start and a shift are built on branch `tracker-retime` — *The two moves (2026-10-10)* |
 | A member-facing view | not built — the route is behind the same staff sign-in as every other marathon GET |
 
 No schema change (86), no new write route, no new action kind.
@@ -628,3 +628,129 @@ answer them — and `schedule.test.mjs` walks every one of them against the mock
 9. **The page's own sentences are constants in `page-schedule.js`**, as on every other page; the one string the
    BOT posts (the link button) is a key.
 10. **No clean `/schedule` path** (above).
+
+## The two moves (2026-10-10) — Set start and Shift the day (branch `tracker-retime`, NOT merged, NOT deployed)
+
+> **Owner, 2026-10-10 17:4x–17:5x:** of the seven staff moves under *The design* §3, build TWO — **Set start…** and
+> **Shift the rest of the day ±N** — verbatim *"do it"* to that narrowing. Why: on 2026-10-04 GDQueer day 2 started
+> 79 minutes early off a pre-show title, and a sheet typo made a live run a new one; staff had no hand on the clock.
+> Skip, change-estimate and undo are NOT built; **Back to the sheet's times** is the undo. This settles *Open
+> decisions* 3 (the two moves), 5 (the Discord door is in this build) and 8 (trackers stay read-only for times);
+> 4 is staff only; 7 follows `marathon_reminder_on_move` as every re-time does; 2 and 6 are untouched.
+> **Last verified: 2026-10-10** on the branch — `ruff check .` clean; `pytest -n 16 -q` **13,191 passed, 1 skipped**;
+> `node site/mock/check.mjs` **ok — 27 pages, 365 routes, 347 core settings**; every `site/mock/*.test.mjs` green
+> against the branch's mock (`MOCK_PORT=8861`); the page driven in headless Chrome (below).
+
+### What a move does
+
+| Move | Doors | Writes | Then |
+|---|---|---|---|
+| **Set start…** | tracker page: a run's **Edit…** panel, a `whenField` in the zone the page shows times in; Discord: **Set start…** on the thread controls → a form (run picker + time box) | `staff_start_at` = the typed moment on the run, `staff_start_by`, `staff_start_set_at`; every LATER staff start of the same day moves by the same amount | `retime(..., because="staff")` — the existing path: reminders follow `marathon_reminder_on_move`, highlights and events follow `scheduled_at`, `marathon.retimed` is logged |
+| **Shift from here…** (page) / **Shift the day…** (Discord) | the same panel, a minutes box (`10`, `-5`); the thread's second form (run picker + minutes) | exactly Set start at the run's current `scheduled_at` + N — one mechanism, two doors; N and the run live only in the log row | the same |
+
+**The walk** (`marathon_signals.anchor_of`): a run's anchor is what really happened (`actual_started_at`), else the
+start staff set. The run starts there and its chain walks after it (estimate + `marathon_setup_minutes`, or the
+organisers' own gaps when their sheet is laid over). **A real stream start later wins** (the stream is truth); the
+staff column stays, unread while a real start exists. **Back to the sheet's times** clears the three staff columns
+with the actual ones.
+
+**Refused in words, nothing changed** (each a key): a schedule that moves its own times (`retimes_itself` — GDQ
+tracker, Fastest Furs, horaro, Oengus, RPG Limit Break, Lady Arcaders), and its buttons are not drawn; a run live,
+done or skipped; a time that cannot be read; minutes that are not a whole number, are 0, or exceed
+`marathon_shift_max_minutes`; the time the run already starts at; a start before a run ahead in the day that really
+began; the Discord button pressed with every run started.
+
+### Routes, kinds, columns, keys
+
+- `POST /api/marathons/{id}/runs/{run_id}/start` `{at, tz}` — `at` is `YYYY-MM-DD HH:MM` read in `tz` (else
+  `default_timezone`), an ISO moment with its offset, or a clock time (`2:30 PM`, `14:30`) on the day nearest the
+  run's current start. `POST …/shift` `{minutes}`. Both answer `{run, message}` like `…/live`; the page re-reads the
+  schedule after either (the auto-update path), so the move shows without a reload. Both pass `via=website`; no
+  `note()` (checklist 34).
+- Log kinds **`marathon.start_set`** and **`marathon.day_shifted`** (+ `web.` twins), IMPORTANT; details
+  `marathon_id, run_id, game, from, to, minutes, runs, actor, via`. Both are in `MOVE_KINDS`, so *Moves today* on the
+  page reads them as sentences.
+- Columns on `marathon_runs` (`ADDED_COLUMNS`, mirrored to `marathon_runs_archive` at boot): `staff_start_at` TEXT,
+  `staff_start_by` INTEGER, `staff_start_set_at` TEXT.
+- Payload: `rows[].from` gains `staff` (*set by staff*); `rows[].staff_at` is the staff start; `rows[].can` gains
+  `shift`, and `set_start` / `shift` are true on upcoming rows of a clock-kept schedule only; `days[].staff_times`
+  counts staff starts; a new top-level `labels` `{set_start, shift}` carries the two page labels from their keys.
+- **21 keys** (registry **1184 → 1205**), each with help, a `labels.js` label and a mock row:
+
+| Key | Type (fields) | Default |
+|---|---|---|
+| `marathon_shift_max_minutes` | int 1–1440 | `240` |
+| `marathon_controls_set_start` | text | `Set start…` |
+| `marathon_controls_shift` | text | `Shift the day…` |
+| `marathon_tracker_set_start` | text | `Set start…` |
+| `marathon_tracker_shift` | text | `Shift from here…` |
+| `marathon_retime_start_title` | text | `Set a run's start` |
+| `marathon_retime_shift_title` | text | `Shift the day` |
+| `marathon_retime_run_label` | text | `Run` |
+| `marathon_retime_at_label` | text (`zone`) | `New start ({zone})` |
+| `marathon_retime_at_placeholder` | text | `2:30 PM or 2026-10-04 14:30` |
+| `marathon_retime_minutes_label` | text | `Minutes (+ later, - earlier)` |
+| `marathon_retime_minutes_placeholder` | text | `10 or -5` |
+| `marathon_retime_tracker_said` | text (`marathon`) | `**{marathon}** publishes its own times, so nothing was changed. Back to the sheet's times and the stream decide its clock.` |
+| `marathon_retime_not_upcoming_said` | text (`game state`) | `**{game}** is {state}, so its start was not changed. Only a run that has not started can be moved.` |
+| `marathon_retime_bad_time_said` | text (`given zone`) | `**{given}** is not a time, so nothing was changed. Type it like 2:30 PM or 2026-10-04 14:30; it is read in {zone} time.` |
+| `marathon_retime_bad_minutes_said` | text (`given most`) | `**{given}** is not a number of minutes to move by, so nothing was changed. Type a whole number from 1 to {most}, with a minus sign for earlier.` |
+| `marathon_retime_same_said` | text (`game at`) | `**{game}** already starts at {at}, so nothing was changed.` |
+| `marathon_retime_before_ahead_said` | text (`at ahead started`) | `{at} is before **{ahead}** started ({started}), so nothing was changed. Pick a time after it.` |
+| `marathon_retime_nothing_said` | text (`marathon`) | `**{marathon}** has no run left that has not started, so there is nothing to move.` |
+| `marathon_start_set_said` | text (`game at was runs`) | `**{game}** now starts at {at} (was {was}). {runs} run(s) re-timed.` |
+| `marathon_day_shifted_said` | text (`game minutes at was runs`) | `From **{game}** on, the day moved {minutes} min: {was} is now {at}. {runs} run(s) re-timed.` |
+
+### Deviations
+
+1. **No `SCHEMA_VERSION` bump.** `marathon-log-threads` (in flight) takes **94**; the three columns ride
+   `ADDED_COLUMNS`, which runs at every boot whatever the stored version, so nothing depends on the number. The
+   conductor may stamp **95** at merge if the house wants one; this branch's `test_db` still asserts 93.
+2. **Two Discord buttons, not one *Re-time…*.** One form holding a time AND a minutes box needs an either/or rule
+   (fill exactly one) that the form cannot carry without an explaining line; two buttons each open a two-field form
+   (run picker + one box) and need none.
+3. **A new start carries the later staff starts of its day** by the same amount (`marathon_retime.anchors`, the
+   prototype's *keep their gaps*). Without it a shift would stop at the first later run staff had set, which is not
+   "every not-yet-started run from here moves by N".
+4. **Shift is NOT exactly +N for every later run.** It anchors the chosen run at +N and the walk lays the rest by
+   estimate + setup (or the organisers' gaps) — the brief's *one mechanism*. Where the stored times already follow
+   that rule the result is +N for all; on a day still on the raw sheet, a gap the sheet left between two runs larger
+   than the walk's is closed. A run in a separate chain (more than the setup reach after the one before) does not move.
+5. **Two refusals beyond the brief's list**: the time the run already starts at, and a start before a run ahead in the
+   day that really began (the prototype's `before_the_run_ahead`). Both are keys.
+6. **The page's own words stay page constants** except the two move labels, which come from
+   `marathon_tracker_set_start` / `marathon_tracker_shift` through the payload's `labels`; the rest follows
+   *Deviations — live, read-only* 9. Every word the BOT posts is a key.
+7. **The mock's tracker sheets are still the prototype's.** The bot's two routes are mocked in `server.mjs`
+   (`marathonStaffStart`, which also writes the prototype's `staff_at`) and the contract walks them on GDQueer (50) /
+   Hamtaro (51), but the mock's `GET …/schedule` for a clock-kept marathon is still the editable prototype
+   (`moves_by: tracker`), so on the mock the page shows the prototype's Edit… panel, not the bot's.
+8. **The contract's real fixture gained a clock-kept marathon** (`marathon_clock_id`, one run three hours out), the
+   only way both `POST` routes answer 200 against the real router.
+
+### What was NOT verified
+
+- ⚠️ **Nothing met live Discord or the live site.** The thread controls' two buttons, the two forms (a `Select`
+  inside a `Label` — Discord's limits checked only by `tests/test_modal_limits.py`), the ephemeral answers and their
+  `<t:…>` stamps were exercised with fakes only.
+- **The page on the bot's shape** was driven in headless Chrome (1280 px) against the branch's mock with the `GET`
+  rewritten over CDP to the bot's shape: **Edit…** on an upcoming run showed *Set start* (a `datetime-local` + zone
+  picker on the page's zone) and *Shift from here*; Save sent `POST …/runs/51/start
+  {"at":"2026-10-03 12:10","tz":"America/Phoenix"}` and `POST …/runs/52/shift {"minutes":"-5"}`, both answers
+  rendered with their times filled, the row re-drew as *set by staff*; no page exception. NOT checked: a phone
+  width, keyboard-only, a screen reader, a theme other than the default, the page against the real bot.
+- Reminder edits after a move are the existing `retime` path; not re-tested beyond `retime` running with
+  `because="staff"`.
+- A tick racing a move: both take the marathon's lock; not exercised concurrently.
+
+### Tests (each new one seen failing on `main` first, except the two guards marked)
+
+`tests/test_marathon_signals.py` (a staff start alone; *a real start beats it* — a guard, green on `main`; Back to
+the sheet clears it; only a schedule that never moves itself takes one); `tests/test_marathon_overlay.py` (the
+organisers' walk); `tests/test_marathon_retime.py` (typed times, minutes, carried later starts, the floor, the
+picker — red as an import error on `main`); `tests/test_marathon_schedule_page.py` (tags, `staff_at`, `labels`, the
+two move sentences, the `can` flags; *a real start beats it on the page* — a guard, green on `main`);
+`tests/cogs/content/test_marathon_retime.py` (both moves end to end, the stream override, Back to the sheet, the
+tracker refusal and no buttons, every wrong move, the controls' buttons and custom ids, the button opening the form,
+nothing upcoming — red as an import error on `main`); `tests/api/tools/test_marathons.py` (both routes, the session
+and staff gates, the tracker 409, the page read after — red on `main`).

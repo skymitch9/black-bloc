@@ -327,3 +327,36 @@ def test_an_early_opener_a_replay_ended_comes_back_until_the_days_planned_end():
     assert sig.early_repair(ended[0][0], ended, NOW, 15) is None
     on_time = [[early_opener(-5, state=mt.DONE), row(2, 45, 30)]]
     assert sig.early_repair(on_time[0][0], on_time, NOW, 15) is None
+
+
+# --- a start staff set --------------------------------------------------------------------------
+
+
+def staffed(one, minutes):
+    return one | {"staff_start_at": iso(minutes)}
+
+
+def test_a_staff_start_anchors_its_run_and_the_rest_of_its_chain_walks_after_it():
+    rows = [row(1, 0, 60), staffed(row(2, 60, 60), 75), row(3, 120, 60)]
+    found = {one.row["id"]: (one.starts_at, one.ends_at) for one in sig.retimed(rows, 5)}
+    assert found == {2: (iso(75), iso(135)), 3: (iso(140), iso(200))}
+
+
+def test_a_real_start_beats_the_start_staff_set():
+    rows = [
+        row(1, 0, 60),
+        staffed(row(2, 60, 60), 75) | {"state": mt.LIVE, "actual_started_at": iso(70)},
+        row(3, 120, 60),
+    ]
+    found = {one.row["id"]: one.starts_at for one in sig.retimed(rows)}
+    assert found == {2: iso(70), 3: iso(130)}
+
+
+def test_back_to_the_sheet_takes_a_staff_start_with_it():
+    held = staffed(row(2, 60, 60), 75)
+    assert [one.row["id"] for one in sig.on_the_sheet([row(1, 0, 60), held])] == [2]
+
+
+def test_only_a_schedule_that_never_moves_itself_takes_a_staff_start():
+    assert sig.takes_staff_times(GDQ_HOTFIX) is True
+    assert sig.takes_staff_times(GDQ) is False

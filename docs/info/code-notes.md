@@ -10421,3 +10421,22 @@ Design: [`marathon-log-threads-design.md`](marathon-log-threads-design.md).
 - `log_threads.made_thread` — the imports are lazy because `actionlog` imports this module and the cog modules import `actionlog`. A parent with no `create_thread` raises (falls back) rather than posting a thread-less copy somewhere else.
 - `log_threads.lock_for` — locks live on `bot.__dict__` (the `brackets_moves.lock_for` shape), never module-level, so each test's event loop gets fresh locks.
 - `log_threads.deliver` — two warnings, two causes: the thread could not be found or made, or the thread refused the send. Both end in `channel.send`; a failure there is `_post`'s own warning.
+
+## Tracker re-timing — keyed by NAME (branch `tracker-retime`, 2026-10-10; re-key after the merge)
+
+Design: [`schedule-viewer-design.md`](schedule-viewer-design.md) > *The two moves (2026-10-10)*.
+
+- `black_bloc/marathon_signals.py` `anchor_of` — the one place a staff start enters the walk: `actual_started_at` first, `staff_start_at` second. Both `retimed` (setup walk) and `marathon_overlay.retimed` (organisers' gaps) read it, so a staff start behaves exactly like a start seen on stream until a real one arrives, and the real one wins without clearing the staff column.
+- `marathon_signals.on_the_sheet` — a row with only `staff_start_at` counts as off the sheet, so Back to the sheet reaches it; `cogs/content/marathon_signals.sheet_times` nulls the three staff columns with the actual ones.
+- `marathon_signals.takes_staff_times` — `not retimes_itself(source)`; every door asks this one function.
+- `black_bloc/marathon_retime.py` `target_of` — a typed time is a full date and time read in the zone (the page's `whenField` sends `YYYY-MM-DD HH:MM` plus `tz`), an ISO moment with an offset, or a clock time put on whichever of yesterday / today / tomorrow (local to the zone) lands nearest the run's current start, so `12:10 AM` typed against an 11:50 PM run moves it 20 minutes, not a day back.
+- `marathon_retime.anchors` — a new start carries every LATER staff start of the same day by the same amount (the gaps staff chose stay); a live or done row is never written.
+- `marathon_retime.ahead_started` — the floor: the last run ahead in the day with a real start. A start before it is refused, never clamped.
+- `black_bloc/cogs/content/marathon_retime.py` `shift_day` — Shift is Set start at `scheduled_at + N` through the same `moved`; N and the run ride only in the log row.
+- `cogs/content/marathon_retime.moved` — under the marathon's `cog.lock`, the row is re-read before the state check; the staff columns are written before `retime(..., because=staff)`, which is the existing path (reminders follow `marathon_reminder_on_move`, `marathon.retimed` is logged as for any re-time). `moment` writes `{{at:ISO}}` for the site and `<t:…:f>` for Discord, so one key renders on both doors.
+- `cogs/content/marathon_retime.RetimeButton` — its own `DynamicItem` (`marathon:retime:<id>:start|shift`), not a `ControlButton` action, because a modal must be the interaction's FIRST response and `ControlButton.on_click` defers. Registered in `Marathons.cog_load` before `MarathonRoleButton` (a role test pins that one last).
+- `cogs/content/marathon_retime.RetimeModal` — one `Select` of at most 25 runs (`marathon_retime.pickable`, soonest first, the next one preselected) plus one text box; every word is a key, clipped to Discord's 45 / 100.
+- `black_bloc/marathon_thread_controls.py` `retime_controls` — drawn on row 1 after the link and the BaF button, only while the source keeps Black Bloc's clock and a run is upcoming (`cogs/content/marathon_thread_controls.retimes`); never after the show. `drawer_switches` leaves them out — the site's door is the tracker page.
+- `black_bloc/marathon_schedule_page.py` `from_of` — `staff` when there is no real start and the start shown IS the staff start; `anchored` counts a staff start, so the runs after it read `follows`. `can_of` gives `set_start` / `shift` to upcoming rows of a clock-kept schedule only.
+- `site/public/assets/page-schedule.js` `staffMoves` — on the bot's shape (`moves_by: marks`) the row's Edit… panel holds a `whenField` in the zone the page shows times in and a minutes box; both POST through `mark()` and re-read. The prototype's own `set-start` path stays for the mock's editable sheets.
+- `site/mock/server.mjs` `marathonStaffStart` — the mock twin; it also writes the prototype's `staff_at` so the mock's tracker page shows the move.

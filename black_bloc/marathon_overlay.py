@@ -314,7 +314,7 @@ def retimed(rows: Any) -> list[sig.Retime]:
         cursor: datetime | None = None
         before: Any = None
         for row in chain:
-            actual = parse_ts(_cell(row, "actual_started_at"))
+            actual = sig.anchor_of(row)
             ended = parse_ts(_cell(row, "actual_ended_at"))
             held = actual is None and sig.settled(row)
             gap = timedelta(0)

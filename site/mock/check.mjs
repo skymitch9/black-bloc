@@ -127,6 +127,9 @@ const IDS = {
   // Back to the sheet's times reaches it.
   marathon_retimed_id: '50',
   tracker_marathon_id: '60',
+  // The tracker's two staff moves: GDQueer (50) keeps its own clock and Hamtaro (51) has not started.
+  marathon_clock_id: '50',
+  marathon_clock_run_id: '51',
   // The archive: SGDQ 2026 (40) was moved by the sweep with Rivet as BaF, so the Archive list,
   // the read-only drawer, its People card and Restore all reach it.
   marathon_archived_id: '40',

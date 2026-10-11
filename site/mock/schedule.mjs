@@ -457,6 +457,7 @@ export function mountTracker({ route, Refused, requireStaff, actorOf, memberName
       next_posts: nextPosts(days, now, Boolean(base.ping_role)),
       moves: book.moves.slice(0, 100),
       undo: { available: Boolean(last), text: last ? last.text : null },
+      labels: { set_start: String(state().settings.get('marathon_tracker_set_start') || ''), shift: String(state().settings.get('marathon_tracker_shift') || '') },
       ...(message ? { message } : {}),
     };
   }

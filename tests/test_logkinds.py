@@ -611,6 +611,10 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/content/marathon_role.py::helpers.FAILED": ("marathon.role_failed",),
     "black_bloc/cogs/content/marathon_role.py::helpers.JOINED": ("marathon.role_joined",),
     "black_bloc/cogs/content/marathon_role.py::helpers.LEFT": ("marathon.role_left",),
+    "black_bloc/cogs/content/marathon_retime.py::kind": (
+        "marathon.start_set",
+        "marathon.day_shifted",
+    ),
 }
 
 

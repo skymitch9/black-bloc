@@ -358,6 +358,9 @@ async def sheet_times(
                 ends_at=one.ends_at,
                 actual_started_at=None,
                 actual_ended_at=None,
+                staff_start_at=None,
+                staff_start_by=None,
+                staff_start_set_at=None,
             )
         await log_action(
             bot,

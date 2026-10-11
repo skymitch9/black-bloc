@@ -316,3 +316,25 @@ def test_a_live_or_done_run_never_seen_starting_stays_where_it_is():
     changes = {one.row["id"]: one for one in mo.retimed(rows)}
     assert not ({1, 2, 3} & set(changes))
     assert changes[4].starts_at == "2026-10-03T19:39:00+00:00"
+
+
+def test_a_staff_start_anchors_a_sheet_with_gaps_and_its_day_keeps_them():
+    def at(minutes):
+        return (datetime(2026, 10, 3, 17, 0, tzinfo=UTC) + timedelta(minutes=minutes)).isoformat()
+
+    def one(ident, start, length, **extra):
+        return {
+            "id": ident,
+            "order_no": ident,
+            "state": "upcoming",
+            "scheduled_at": at(start),
+            "ends_at": at(start + length),
+            "sheet_at": at(start),
+            "sheet_ends_at": at(start + length),
+            "run_seconds": length * 60,
+            **extra,
+        }
+
+    rows = [one(1, 0, 60), one(2, 70, 60, staff_start_at=at(90)), one(3, 140, 30)]
+    found = {row.row["id"]: row.starts_at for row in mo.retimed(rows)}
+    assert found == {2: at(90), 3: at(160)}

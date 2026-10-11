@@ -16,6 +16,7 @@ import {
   notice,
   sayNothing,
   sentenceFor,
+  whenField,
   zoneSelect,
 } from './ui.js';
 
@@ -103,6 +104,7 @@ const SKIP = 'Skip this run';
 const SET_START = 'Set start…';
 const SET_START_FIELD = 'New start';
 const SET_START_HELP = 'Read in {zone} time';
+const SHIFT_FROM = 'Shift from here…';
 const ESTIMATE = 'Change estimate…';
 const ESTIMATE_FIELD = 'Estimate';
 const SAVE = 'Save';
@@ -196,10 +198,10 @@ function byMarks() {
   return sheet.moves_by === BY_MARKS;
 }
 
-async function mark(runId, move) {
+async function mark(runId, move, body = {}) {
   tell(WORKING);
   try {
-    const found = await send(`/api/marathons/${shown.id}/runs/${runId}/${move}`, 'POST', {});
+    const found = await send(`/api/marathons/${shown.id}/runs/${runId}/${move}`, 'POST', body);
     shown.open = null;
     await read();
     tell(found.message || '', 'ok');
@@ -446,15 +448,39 @@ function folded(row) {
   const first = primary(row);
   const start = row.can.start && first !== 'start';
   const finish = row.can.finish && first !== 'finish';
-  return { start, finish, any: start || finish || row.can.set_start || row.can.estimate || row.can.skip };
+  return { start, finish, any: start || finish || row.can.set_start || row.can.shift || row.can.estimate || row.can.skip };
+}
+
+function zonedWhen(iso, zone) {
+  if (!iso) return '';
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(iso)).map((one) => [one.type, one.value]));
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+function fieldWord(text) {
+  return String(text || '').replace(/…$/, '');
+}
+
+function staffMoves(row) {
+  const labels = sheet.labels || {};
+  const found = [];
+  if (row.can.set_start) {
+    const when = whenField({ label: fieldWord(labels.set_start || SET_START), value: zonedWhen(row.start_at, viewer.zone), tz: viewer.zone });
+    found.push(el('div', { class: 'rs-field' }, [when.node, button(SAVE, () => mark(row.id, 'start', { at: when.value(), tz: when.tz() }))]));
+  }
+  if (row.can.shift) found.push(typedField(fieldWord(labels.shift || SHIFT_FROM), '', null, (minutes) => mark(row.id, 'shift', { minutes })));
+  return found;
 }
 
 function editPanel(row) {
   const base = `runs/${row.id}`;
   const more = folded(row);
   return el('div', { class: 'rs-edit' }, [
-    row.can.set_start ? typedField(SET_START_FIELD, clock(row.start_at), said(SET_START_HELP, { zone: viewer.zone }), (time) => act(`${base}/set-start`, { time, zone: viewer.zone })) : null,
-    row.can.estimate ? typedField(ESTIMATE_FIELD, length(row.estimate_seconds), null, (estimate) => act(`${base}/estimate`, { estimate })) : null,
+    ...(byMarks() ? staffMoves(row) : []),
+    row.can.set_start && !byMarks() ? typedField(SET_START_FIELD, clock(row.start_at), said(SET_START_HELP, { zone: viewer.zone }), (time) => act(`${base}/set-start`, { time, zone: viewer.zone })) : null,
+    row.can.estimate && !byMarks() ? typedField(ESTIMATE_FIELD, length(row.estimate_seconds), null, (estimate) => act(`${base}/estimate`, { estimate })) : null,
     el('div', { class: 'bar' }, [
       more.start ? button(row.state === 'done' ? START_AGAIN : START_NOW, () => startRun(row), { tone: 'quiet' }) : null,
       more.finish ? button(row.state === 'upcoming' ? FINISH_UNRUN : FINISH_NOW, () => finishRun(row), { tone: 'quiet' }) : null,

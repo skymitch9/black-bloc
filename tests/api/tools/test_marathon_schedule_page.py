@@ -114,6 +114,7 @@ async def test_the_tracker_read_answers_the_pages_shape_from_the_real_rows(
         "start": True,
         "finish": True,
         "set_start": False,
+        "shift": False,
         "estimate": False,
         "skip": False,
         "restore": False,

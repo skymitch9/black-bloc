@@ -2340,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1187
+    assert len(settings_store.KEY_TYPES) == 1208
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2789,7 +2789,7 @@ def test_every_thread_controls_button_label_fits_a_button():
     from black_bloc.cogs.content import marathon_thread_controls as controls
 
     keys = [*controls.LABEL_KEYS.values(), *controls.BAF_LABEL_KEYS.values()]
-    assert len(keys) == 19
+    assert len(keys) == 21
     for key in keys:
         assert len(settings_store.MARATHON_WORDS[key][0]) <= 80, key
 

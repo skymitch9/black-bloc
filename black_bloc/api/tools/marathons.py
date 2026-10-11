@@ -83,6 +83,7 @@ from ...cogs.content.marathon_people import (
     zone_of,
 )
 from ...cogs.content.marathon_ping import set_ping_role
+from ...cogs.content.marathon_retime import set_start, shift_day
 from ...cogs.content.marathon_role_ping import state_of as role_ping_state
 from ...cogs.content.marathon_signals import sheet_times
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
@@ -1299,5 +1300,25 @@ def build_router(bot: Any) -> APIRouter:
     @router.post("/{marathon_id}/runs/{run_id}/live")
     async def marathon_run_live(request: Request, marathon_id: int, run_id: int) -> dict[str, Any]:
         return await run_step(request, marathon_id, run_id, mark_live)
+
+    @router.post("/{marathon_id}/runs/{run_id}/start")
+    async def marathon_run_start(
+        request: Request, marathon_id: int, run_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        async def shared(bot: Any, guild: Any, actor: Any, row: Any, run: Any, *, via: str):
+            return await set_start(
+                bot, guild, actor, row, run, payload.get("at"), payload.get("tz"), via=via
+            )
+
+        return await run_step(request, marathon_id, run_id, shared)
+
+    @router.post("/{marathon_id}/runs/{run_id}/shift")
+    async def marathon_run_shift(
+        request: Request, marathon_id: int, run_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        async def shared(bot: Any, guild: Any, actor: Any, row: Any, run: Any, *, via: str):
+            return await shift_day(bot, guild, actor, row, run, payload.get("minutes"), via=via)
+
+        return await run_step(request, marathon_id, run_id, shared)
 
     return router

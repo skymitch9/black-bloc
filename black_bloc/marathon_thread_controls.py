@@ -36,6 +36,9 @@ OVERLAY = "overlay"
 BAF = "baf"
 ARCHIVE = "archive"
 LINK = "link"
+RETIME = "retime"
+RETIME_START = "start"
+RETIME_SHIFT = "shift"
 ACTIONS = (EVENT, SPOTLIGHT, PING, ANNOUNCE, HOST_ANNOUNCE, BAF, ARCHIVE)
 RETIRED = (HOSTS, HOST_EVENTS, RUNS, HIGHLIGHT, OVERLAY)
 ON = "on"
@@ -170,6 +173,7 @@ def controls(
     host_announce: bool,
     baf: Control | None = None,
     over: bool = False,
+    retimes: bool = False,
 ) -> tuple[Control, ...]:
     """Each button carries the move it makes, so a stale label can never do the opposite."""
     if over:
@@ -183,6 +187,17 @@ def controls(
         switch(EVENT, marathon_on),
         Control(LINK, "", "", 1),
         *((baf,) if baf is not None else ()),
+        *retime_controls(retimes),
+    )
+
+
+def retime_controls(retimes: bool) -> tuple[Control, ...]:
+    """Set start and Shift the day, only while a clock-kept schedule has a run to move."""
+    if not retimes:
+        return ()
+    return (
+        Control(RETIME, RETIME_START, RETIME_START, 1),
+        Control(RETIME, RETIME_SHIFT, RETIME_SHIFT, 1),
     )
 
 
@@ -250,6 +265,7 @@ __all__ = [
     "custom_id",
     "label",
     "drawer_move",
+    "retime_controls",
     "site_words",
     "spot_line",
     "spot_switch",
