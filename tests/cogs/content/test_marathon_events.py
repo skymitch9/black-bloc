@@ -151,6 +151,28 @@ async def test_a_pairing_makes_a_run_ours_and_its_event_and_unpairing_calls_it_o
     assert {one["reason"] for one in cancelled} == {"not_ours"}
 
 
+async def test_a_far_off_runs_event_is_re_dated_once_its_move_has_read_the_same_twice(
+    bot, cog, proposals  # noqa: F811
+):
+    def far(start):
+        return [a_run(3, start, game="Super Metroid", people=(("Sky", "skyruns", "runner"),))]
+
+    cog.client.runs_given = far(1430)
+    marathon = await made(bot, "runs")
+    event_id = (await runs(bot, marathon))["Super Metroid"]["event_id"]
+
+    cog.client.runs_given = far(1470)
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert (await runs(bot, marathon))["Super Metroid"]["scheduled_at"] == at(1470)
+    assert (await get_event(bot.db, event_id))["starts_at"] == at(1430)
+    assert "marathon.run_event_redated" not in await kinds(bot.db)
+
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    event = await get_event(bot.db, event_id)
+    assert event["starts_at"] == at(1470) and event["ends_at"] == at(1530)
+    assert len(await rows_of(bot, "marathon.run_event_redated")) == 1
+
+
 async def test_a_moved_run_re_dates_its_event_and_a_dropped_one_calls_it_off(
     bot, cog, proposals  # noqa: F811
 ):

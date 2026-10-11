@@ -6867,6 +6867,10 @@ MARATHON_POLL_MINUTES_KEY = "marathon_poll_minutes"
 MARATHON_FAR_POLL_HOURS_KEY = "marathon_far_poll_hours"
 MARATHON_LEAD_DAYS_KEY = "marathon_lead_days"
 MARATHON_MOVE_MINUTES_KEY = "marathon_move_minutes"
+MARATHON_MOVE_DAMPING_MINUTES_KEY = "marathon_move_damping_minutes"
+MARATHON_MOVE_DAMPING_MINUTES = 60
+MARATHON_MOVE_DAMPING_READS_KEY = "marathon_move_damping_reads"
+MARATHON_MOVE_DAMPING_READS = 2
 MARATHON_TITLE_CONFIRMS_KEY = "marathon_title_confirms"
 MARATHON_CATEGORY_CONFIRMS_KEY = "marathon_category_confirms"
 MARATHON_RETRO_CATEGORY_KEY = "marathon_retro_category"
@@ -7370,6 +7374,24 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         5,
         "how many minutes a run's start must shift before it counts as moved — a moved run of "
         "ours is logged as important with the old and the new time. 5 by default",
+    ),
+    MARATHON_MOVE_DAMPING_MINUTES_KEY: (
+        "int",
+        MARATHON_MOVE_DAMPING_MINUTES,
+        "how many minutes away a run must be for a move of it to wait — a run further off than "
+        "this, before and after the move, keeps its posted reminders, its board line and its "
+        "other public posts on the old time until the schedule has read the same "
+        "marathon_move_damping_reads times in a row; a run nearer than this follows at once, "
+        "and so does a move staff made or the stream showed. The stored schedule and the "
+        "Marathon tracker page always follow at once. 60 by default; 0 never waits",
+    ),
+    MARATHON_MOVE_DAMPING_READS_KEY: (
+        "int",
+        MARATHON_MOVE_DAMPING_READS,
+        "how many reads of the schedule in a row must give a far-off run the same new start "
+        "before its public posts follow and the move is logged — a start that goes back within "
+        "that many reads changes nothing anybody sees. 2 by default; see "
+        "marathon_move_damping_minutes",
     ),
     MARATHON_TITLE_CONFIRMS_KEY: (
         "bool",
@@ -9380,6 +9402,8 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_FAR_POLL_HOURS_KEY: (1, 168),
     MARATHON_LEAD_DAYS_KEY: (1, 60),
     MARATHON_MOVE_MINUTES_KEY: (1, 120),
+    MARATHON_MOVE_DAMPING_MINUTES_KEY: (0, 1440),
+    MARATHON_MOVE_DAMPING_READS_KEY: (2, 10),
     MARATHON_SETUP_MINUTES_KEY: (0, MARATHON_SETUP_MAX),
     MARATHON_EARLY_START_KEY: (0, 240),
     MARATHON_LIVE_POLL_MINUTES_KEY: (1, 60),

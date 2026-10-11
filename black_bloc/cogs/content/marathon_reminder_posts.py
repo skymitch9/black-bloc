@@ -12,6 +12,7 @@ import discord
 
 from ... import marathon as mt
 from ... import marathon_announce as ma
+from ... import marathon_damping as md
 from ... import marathon_host_highlights as mhh
 from ... import marathon_inbox as mi
 from ... import marathon_reminder_posts as mrem
@@ -206,12 +207,13 @@ async def follow_run(cog: Any, guild: Any, marathon: Any, row: Any, budget: mrem
     async def text_for(name: str, copy: dict[str, Any]) -> tuple[str | None, Any]:
         return await run_text(cog, guild, marathon, row, name, copy)
 
-    changes = await follow_copies(cog, guild, posts, budget, text_for, row["scheduled_at"])
+    at = md.shown_start(row)
+    changes = await follow_copies(cog, guild, posts, budget, text_for, at)
     if stored(changes):
         await update_run(bot.db, row["id"], **{mrem.COLUMN: mrem.dump(posts)})
     for one in changes:
         details = cog.run_details(marathon, row) | one.details(
-            row["scheduled_at"], dropped=row["state"] == mt.DROPPED
+            at, dropped=row["state"] == mt.DROPPED
         )
         if one.outcome == EDITED:
             await log_action(
@@ -271,7 +273,7 @@ async def follow_block(
     budget: mrem.Budget,
 ) -> bool:
     bot = cog.bot
-    at = mt._cell(block.first, "scheduled_at")
+    at = md.shown_start(block.first)
     login = await channel_login(bot, marathon)
 
     async def text_for(name: str, copy: dict[str, Any]) -> tuple[str | None, Any]:

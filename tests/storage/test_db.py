@@ -3568,6 +3568,47 @@ async def test_a_schema_85_file_gains_the_posted_reminders_of_each_run(tmp_path)
         await again.close()
 
 
+async def test_a_file_from_before_move_damping_gains_four_empty_columns_on_each_run(tmp_path):
+    """No version step: ADDED_COLUMNS runs at every boot. Empty reads as nothing waiting, so
+    the first tick after the deploy edits no post."""
+    columns = ("published_at", "published_ends_at", "pending_at", "pending_reads")
+    path = tmp_path / "before_damping.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for table in ("marathon_runs", "marathon_runs_archive"):
+        for column in columns:
+            await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at) "
+        "VALUES (1, 'Fall Fest', 'https://x', 'fastestfurs', 'q', 'x')"
+    )
+    await db.conn.execute(
+        "INSERT INTO marathon_runs(marathon_id, external_id, game, scheduled_at, "
+        "first_seen_at, last_seen_at) VALUES (1, '858', 'Kirby', '2026-10-11T14:54:06Z', 'x', 'x')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            f"SELECT game, scheduled_at, {', '.join(columns)} FROM marathon_runs"
+        )
+        assert tuple(await cur.fetchone()) == (
+            "Kirby",
+            "2026-10-11T14:54:06Z",
+            None,
+            None,
+            None,
+            None,
+        )
+        cur = await again.conn.execute("PRAGMA table_info(marathon_runs_archive)")
+        assert set(columns) <= {row["name"] for row in await cur.fetchall()}
+    finally:
+        await again.close()
+
+
 PLACEHOLDER_PINS = (
     112357806396416000,
     213475085145604096,

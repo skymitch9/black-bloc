@@ -1122,6 +1122,10 @@ CREATE TABLE IF NOT EXISTS marathon_runs (
     staff_start_at        TEXT,
     staff_start_by        INTEGER,
     staff_start_set_at    TEXT,
+    published_at          TEXT,
+    published_ends_at     TEXT,
+    pending_at            TEXT,
+    pending_reads         INTEGER,
     UNIQUE (marathon_id, external_id)
 );
 
@@ -1606,6 +1610,10 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathon_runs", "staff_start_at", "TEXT"),
     ("marathon_runs", "staff_start_by", "INTEGER"),
     ("marathon_runs", "staff_start_set_at", "TEXT"),
+    ("marathon_runs", "published_at", "TEXT"),
+    ("marathon_runs", "published_ends_at", "TEXT"),
+    ("marathon_runs", "pending_at", "TEXT"),
+    ("marathon_runs", "pending_reads", "INTEGER"),
     ("marathons", "baf_event", "INTEGER"),
     ("marathons", "baf_event_ask", "TEXT"),
     ("marathons", "baf_event_pings", "TEXT"),
