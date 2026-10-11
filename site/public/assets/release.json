@@ -1,9 +1,7 @@
 {
-  "release": "v228",
-  "commit": "c4f441fc",
+  "release": "v229",
+  "commit": "7c0c9488",
   "changed_features": [
-    "core",
-    "guides",
     "marathon"
   ]
 }
