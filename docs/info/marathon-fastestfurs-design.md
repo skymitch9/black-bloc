@@ -300,11 +300,19 @@ both `moved` counts come out exactly):
 | read 01:03:17 | 3,600 | **18,262** | 16:22:28 | 23 |
 | read 01:05:17 | 3,600 | 15,262 | 15:32:28 | 23 |
 
-So the organisers' tool first published `actualDuration` **0** for item 34 and **18,262** for item 38 (20:02:06 +
-18,262 s = 01:06:28Z, the wall clock at the moment it was pressed), and someone put 3,600 (a round hour) and 15,262
-(exactly 3,000 s less) in their place two to three minutes later. ⚠️ **The 0 and the 18,262 are reconstructions**: they
+So the organisers' tool first published `actualDuration` **0** for item 34 and **18,262** for item 38, and someone put
+3,600 (a round hour) and 15,262 (exactly 3,000 s less) in their place two to three minutes later. The likeliest reading
+(an inference): a finish pressed late. 01:02:47Z − 18,262 s = 19:58:25Z, about where the walk starts item 38
+(20:02:06Z), so the first value ran to the moment of the press, 46 minutes after the run was over, and the correction
+took the overrun back out; item 34 had no running time to stop. ⚠️ **The 0 and the 18,262 are reconstructions**: they
 are the only single-field values that reproduce the log, but no payload carrying them was saved. Why the second write
 left `updatedAt` at the first write's time is not known.
+
+**A finish written on time was captured, and it is one move.** Item 40 (*BONUS GAME 1 - Grand Theft Auto III*,
+planned 4,920 s) went null → **5,306** between the captures of 01:55:26Z and 01:56:26Z (`updatedAt` 01:55:57.201Z)
+and did not change again; the replay moves run 63 to 15:38:54Z and the bot's own read stored exactly that at
+01:56:33Z (`moved=22`, the runs after item 40). So the replay method is checked against the live bot, not only against
+the log.
 
 **Before today there was no flip.** Every earlier move of run 63 since v217 is one write, one move: 10-10 04:51:40
 (+18:00, item 28), 05:02:25 (−23:00, 31 runs; not traced to a field, and not followed by a reversal), 06:18:25 (+7:07, item 29),
@@ -327,9 +335,9 @@ reminder is edited and `marathon.member_run_moved` is logged (both corrections h
    arithmetic and the `moved` counts, replayed through the parser.
 2. **How the organisers' tool makes `actualDuration`** (a timer, a hand-typed field, a later recompute) and why the
    correcting write does not move `updatedAt`.
-3. ⚠️ **Whether 15:32:28 is when run 63 will really start.** It is what the feed and the organisers' page say. The feed
-   itself looks about 45 minutes ahead of the real clock: item 38's finish was written 01:02:47Z while the walk ends it
-   00:16:28Z, items 35-37 are walked at their planned lengths, and the stream title was still on item 40 at 01:12Z
-   (decapi.me, one read). The last day has no overnight break to absorb it. If the organisers back-fill 35-37, run 63
-   moves again, later.
+3. **Whether the stored start is when run 63 will really start.** It is what the feed and the organisers' page say
+   (15:38:54Z at 01:57Z). One check of the walk against the real clock: it ends item 40 at 01:59:54Z, its finish was
+   written 01:55:57Z and the stream title was on item 41 at 01:56:52Z (decapi.me, one read each at 01:12Z and
+   01:56Z), so the walk was about 4 minutes behind the stream then. Items 35-37 are still walked at their planned
+   lengths; if the organisers back-fill them, run 63 moves again.
 4. Nothing in Discord was opened; the reminder's edits are the log's `marathon.reminder_edited` rows.
