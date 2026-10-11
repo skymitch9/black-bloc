@@ -354,6 +354,8 @@ async def tracking_of(bot: Any, guild: Any, row: Any, *, archived: bool = False)
         "ignored_by_name": resolve_one(guild, ignored_by)["display_name"] if ignored_by else None,
         "thread_id": _id(_cell(row, "thread_id")),
         "thread_url": mi.channel_url(guild.id, _cell(row, "thread_id")),
+        "log_thread_id": _id(_cell(row, "log_thread_id")),
+        "log_thread_url": mi.channel_url(guild.id, _cell(row, "log_thread_id")),
         "inbox_message_url": await inbox_message_url(bot, guild, row),
     }
 

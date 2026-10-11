@@ -7,6 +7,7 @@ from typing import Any
 
 import discord
 
+from . import log_threads
 from .logkinds import (
     ALL,
     CORE,
@@ -135,11 +136,13 @@ async def log_action(
         embed = build_embed(
             kind, actor=actor, target=target, reason=reason, details=details, at=at
         )
-        await _post(bot, guild, kind, embed)
+        await _post(bot, guild, kind, embed, details)
     return cur.lastrowid
 
 
-async def _post(bot: Any, guild: Any, kind: str, embed: discord.Embed) -> None:
+async def _post(
+    bot: Any, guild: Any, kind: str, embed: discord.Embed, details: Any = None
+) -> None:
     try:
         channel_id = bot.store.get(guild.id, "log_channel_id")
         if not channel_id:
@@ -149,7 +152,7 @@ async def _post(bot: Any, guild: Any, kind: str, embed: discord.Embed) -> None:
         if channel is None:
             log.warning("action log: %s not posted — channel %s is not visible", kind, channel_id)
             return
-        await channel.send(embed=embed)
+        await log_threads.deliver(bot, guild, kind, details, channel, embed)
     except Exception as exc:
         log.warning("action log: %s not posted — %s: %s", kind, type(exc).__name__, exc)
 

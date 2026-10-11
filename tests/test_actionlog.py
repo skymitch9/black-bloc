@@ -98,6 +98,26 @@ async def test_row_written_and_embed_posted(wired):
     assert channel.sent[0]["embed"].title == "role_menu.update"
 
 
+async def test_the_post_hands_the_rows_details_to_the_thread_router(wired, monkeypatch):
+    from black_bloc import log_threads
+
+    db, store = wired
+    asked = []
+
+    async def deliver(bot, guild, kind, details, channel, embed):
+        asked.append((kind, details, channel))
+        await channel.send(embed=embed)
+
+    monkeypatch.setattr(log_threads, "deliver", deliver)
+    channel = _Channel()
+    bot = _Bot(db, store, channel)
+    await log_action(bot, _Guild(), "marathon.member_run_moved", details={"marathon_id": 5})
+    assert asked == [
+        ("marathon.member_run_moved", {"marathon_id": 5, "via": "discord"}, channel)
+    ]
+    assert channel.sent[0]["embed"].title == "marathon.member_run_moved"
+
+
 async def test_discord_failure_is_swallowed_and_warned(wired, caplog):
     db, store = wired
     await store.set(7, "core_log_level", "all")

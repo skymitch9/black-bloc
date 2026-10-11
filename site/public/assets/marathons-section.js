@@ -244,6 +244,7 @@ const ACTION_CHOICES = [{ value: 'add', label: 'Add' }, { value: 'suggest', labe
 const AUTO_CHOICES = [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }];
 const AUTO_FIELD = 'Auto-track';
 const THREAD_LINK = 'thread ↗';
+const LOG_THREAD_LINK = 'log thread ↗';
 const POST_NOW = 'Post it to the inbox now';
 const INBOX_LINK = 'inbox ↗';
 const TRACK_MOVES = {
@@ -472,6 +473,9 @@ function trackedHead(marathon) {
     el('span', { class: 'mx-line', 'data-tone': state.tone || undefined, text: trackedLine(marathon) }),
     marathon.thread_url && marathon.tracked
       ? el('a', { class: 'say-nothing-do', href: marathon.thread_url, text: THREAD_LINK, rel: 'noreferrer', target: '_blank' })
+      : null,
+    marathon.log_thread_url
+      ? el('a', { class: 'say-nothing-do', href: marathon.log_thread_url, text: LOG_THREAD_LINK, rel: 'noreferrer', target: '_blank' })
       : null,
     marathon.inbox_message_url
       ? el('a', { class: 'say-nothing-do', href: marathon.inbox_message_url, text: INBOX_LINK, rel: 'noreferrer', target: '_blank' })

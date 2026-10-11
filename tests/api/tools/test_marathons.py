@@ -1585,3 +1585,20 @@ async def test_a_runs_event_unlink_has_its_own_words_beside_the_persons_unlink(
 
     assert labels["unlink_event"] == "Drop the run's event"
     assert people["unlink"] == "Unlink" and labels["unlink_event"] != people["unlink"]
+
+
+async def test_a_marathon_with_a_log_thread_carries_its_link(client, sign_in, web, cog, wf):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    assert client.get(f"/api/marathons/{marathon_id}").json()["log_thread_url"] is None
+    await web.db.conn.execute(
+        "UPDATE marathons SET log_thread_id = 870000000000000001 WHERE id = ?", (marathon_id,)
+    )
+    await web.db.conn.commit()
+
+    row = client.get(f"/api/marathons/{marathon_id}").json()
+
+    assert row["log_thread_id"] == "870000000000000001"
+    assert row["log_thread_url"] == (
+        f"https://discord.com/channels/{wf.GUILD_ID}/870000000000000001"
+    )
