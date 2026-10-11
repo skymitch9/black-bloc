@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mountTracker, trackerSeed } from './schedule.mjs';
+import { clockMoment, clockNear, clockOf, mountTracker, trackerSeed, zoneOr } from './schedule.mjs';
 import * as mockBrackets from './brackets.mjs';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -786,6 +786,7 @@ const SETTING_SPECS = [
   ["marathon_reminder_on_move", "enum", "edit", "edit", "what happens to a reminder already posted when its run (or its host block) moves: edit rewrites that post in place with the new time — any size of move, earlier or later, in the staff thread and the public channel alike — pings nobody, and never posts that mark a second time; a run taken off the schedule gets marathon_reminder_dropped_template. repost leaves the old post as it was and, when the run moves later by marathon_move_minutes or more, posts the reminder again at the new time (pinging again at marathon_ping_minutes). edit by default", ["edit", "repost"]],
   ["marathon_reminder_edit_limit", "int", 10, 10, "how many posted reminders one marathon may rewrite per minute while marathon_reminder_on_move is edit — when a whole day shifts, the soonest runs are corrected first and the rest follow a minute later. 10 by default", null, 50, 1],
   ["marathon_tracker_refresh_seconds", "int", 30, 30, "seconds between one read and the next on a marathon's Marathon tracker page on the site, while the tab is open and showing — the page re-reads itself so a run going live, finishing or moving shows without a reload. 30 by default", null, 300, 10],
+  ["marathon_shift_max_minutes", "int", 240, 240, "the most minutes one Shift the day move may carry a schedule Black Bloc keeps the clock for, later or earlier — a larger number typed on the Marathon tracker page or the thread's Shift the day form is refused in words. 240 by default", null, 1440, 1],
   ["marathon_pin_board", "bool", true, true, "whether a marathon's board is pinned while the marathon is on; it comes down a day after the marathon ends. on by default"],
   ["marathon_edit_done", "bool", true, true, "whether a shoutout is rewritten in the past tense when the run is over. on by default"],
   ["marathon_runner_posts", "bool", true, true, "whether each BaF run gets its own post in the marathon's thread, edited in place as its slot moves, goes live, ends or is dropped, and the board is only its head. off = the board lists every BaF run as before. on by default"],
@@ -1043,6 +1044,26 @@ const SETTING_SPECS = [
   ["marathon_controls_baf_runs", "text", "{baf} of {runs} runs", "{baf} of {runs} runs", "the reason inside the thread controls' BaF event button when the runs decide it. It takes {baf} {runs}, counted over the whole marathon"],
   ["marathon_baf_event_day_line", "text", "{day}: {ping}", "{day}: {ping}", "the line the thread controls and the marathon drawer carry for one show-day of a BaF event, under the event's own line: the day, then what its one Marathon-role mention did or will do. It takes {day} {ping}"],
   ["marathon_controls_tracker", "text", "Marathon tracker ↗", "Marathon tracker ↗", "the link button on a tracked marathon's thread controls that opens its Marathon tracker page on the site — the runs in order with the times the bot is working from"],
+  ["marathon_controls_set_start", "text", "Set start…", "Set start…", "the thread controls' button that opens a form to give one run of a schedule Black Bloc keeps the clock for a new start; the later runs of its day follow from it"],
+  ["marathon_controls_shift", "text", "Shift the day…", "Shift the day…", "the thread controls' button that opens a form to move every run not yet started, from a chosen run on, later or earlier by a number of minutes"],
+  ["marathon_tracker_set_start", "text", "Set start…", "Set start…", "the Marathon tracker page's move on a run not yet started, for a schedule Black Bloc keeps the clock for: a new start for that run, and the later runs follow it"],
+  ["marathon_tracker_shift", "text", "Shift from here…", "Shift from here…", "the Marathon tracker page's move on a run not yet started: that run and every later run of its day move by a number of minutes"],
+  ["marathon_retime_start_title", "text", "Set a run's start", "Set a run's start", "the title of the thread controls' Set start form (Discord shows at most 45 characters)"],
+  ["marathon_retime_shift_title", "text", "Shift the day", "Shift the day", "the title of the thread controls' Shift the day form (Discord shows at most 45 characters)"],
+  ["marathon_retime_run_label", "text", "Run", "Run", "the label over the run picker in the Set start and Shift the day forms (at most 45 characters)"],
+  ["marathon_retime_at_label", "text", "New start ({zone})", "New start ({zone})", "the label over the time box in the Set start form; it takes {zone}, the server's time zone the typed time is read in (at most 45 characters)"],
+  ["marathon_retime_at_placeholder", "text", "2:30 PM or 2026-10-04 14:30", "2:30 PM or 2026-10-04 14:30", "the grey example inside the Set start form's time box (at most 100 characters)"],
+  ["marathon_retime_minutes_label", "text", "Minutes (+ later, - earlier)", "Minutes (+ later, - earlier)", "the label over the minutes box in the Shift the day form (at most 45 characters)"],
+  ["marathon_retime_minutes_placeholder", "text", "10 or -5", "10 or -5", "the grey example inside the Shift the day form's minutes box (at most 100 characters)"],
+  ["marathon_retime_tracker_said", "text", "**{marathon}** publishes its own times, so nothing was changed. Back to the sheet's times and the stream decide its clock.", "**{marathon}** publishes its own times, so nothing was changed. Back to the sheet's times and the stream decide its clock.", "the answer when staff try Set start or Shift the day on a marathon whose schedule moves its own times (a tracker). It takes {marathon}"],
+  ["marathon_retime_not_upcoming_said", "text", "**{game}** is {state}, so its start was not changed. Only a run that has not started can be moved.", "**{game}** is {state}, so its start was not changed. Only a run that has not started can be moved.", "the answer when Set start or Shift the day names a run that is live, done or skipped. It takes {game} {state}"],
+  ["marathon_retime_bad_time_said", "text", "**{given}** is not a time, so nothing was changed. Type it like 2:30 PM or 2026-10-04 14:30; it is read in {zone} time.", "**{given}** is not a time, so nothing was changed. Type it like 2:30 PM or 2026-10-04 14:30; it is read in {zone} time.", "the answer when the time typed for Set start cannot be read. It takes {given} {zone}"],
+  ["marathon_retime_bad_minutes_said", "text", "**{given}** is not a number of minutes to move by, so nothing was changed. Type a whole number from 1 to {most}, with a minus sign for earlier.", "**{given}** is not a number of minutes to move by, so nothing was changed. Type a whole number from 1 to {most}, with a minus sign for earlier.", "the answer when the minutes typed for Shift the day are not a whole number, are 0, or are more than marathon_shift_max_minutes. It takes {given} {most}"],
+  ["marathon_retime_same_said", "text", "**{game}** already starts at {at}, so nothing was changed.", "**{game}** already starts at {at}, so nothing was changed.", "the answer when Set start names the time the run already starts at. It takes {game} {at}"],
+  ["marathon_retime_before_ahead_said", "text", "{at} is before **{ahead}** started ({started}), so nothing was changed. Pick a time after it.", "{at} is before **{ahead}** started ({started}), so nothing was changed. Pick a time after it.", "the answer when Set start or Shift the day would put a run before the start of a run ahead of it that has already begun. It takes {at} {ahead} {started}"],
+  ["marathon_retime_nothing_said", "text", "**{marathon}** has no run left that has not started, so there is nothing to move.", "**{marathon}** has no run left that has not started, so there is nothing to move.", "the answer when the thread's Set start or Shift the day is pressed and every run has started. It takes {marathon}"],
+  ["marathon_start_set_said", "text", "**{game}** now starts at {at} (was {was}). {runs} run(s) re-timed.", "**{game}** now starts at {at} (was {was}). {runs} run(s) re-timed.", "the answer after Set start: the run, its new start, its start before, and how many runs the move re-timed. It takes {game} {at} {was} {runs}"],
+  ["marathon_day_shifted_said", "text", "From **{game}** on, the day moved {minutes} min: {was} is now {at}. {runs} run(s) re-timed.", "From **{game}** on, the day moved {minutes} min: {was} is now {at}. {runs} run(s) re-timed.", "the answer after Shift the day: the run it starts from, the signed minutes, that run's start before and after, and how many runs the move re-timed. It takes {game} {minutes} {at} {was} {runs}"],
   ["marathon_controls_spotlight_follow_on", "text", "Spotlight follows the schedule: on · turn off", "Spotlight follows the schedule: on · turn off", "the thread controls' spotlight switch while the marathon spotlights its channel from the lead before its first run to the tail after its last; a press cancels it before the show and stops it during"],
   ["marathon_controls_spotlight_follow_off", "text", "Spotlight follows the schedule: off · turn on", "Spotlight follows the schedule: off · turn on", "the thread controls' spotlight switch while the marathon does not spotlight its channel on its own; a press turns it on, and on now when the show is near"],
   ["marathon_controls_spotlight_until_line", "text", "Spotlight: on now until {until}", "Spotlight: on now until {until}", "the state line on the thread controls while the marathon's channel is spotlit. It takes {until}, read in each viewer's own clock"],
@@ -7493,7 +7514,8 @@ function marathonRetime(row) {
   for (const run of runs) {
     if (previous && Math.abs(sheetOf(run) - sheetEnd(previous)) > 60000) cursor = null;
     previous = run;
-    const actual = run.actual_started_at ? new Date(run.actual_started_at).getTime() : null;
+    const anchor = run.actual_started_at || run.staff_start_at || null;
+    const actual = anchor ? new Date(anchor).getTime() : null;
     const ended = run.actual_ended_at ? new Date(run.actual_ended_at).getTime() : null;
     let start = sheetOf(run);
     let end = sheetEnd(run);
@@ -9397,10 +9419,10 @@ route('POST', '/api/marathons/:marathon_id/sheet-times', (context) => {
   requireStaff(context.session);
   const row = marathonOf(context.params.marathon_id);
   const back = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped'
-    && ((one.sheet_at && one.sheet_at !== one.scheduled_at) || (one.sheet_ends_at && one.sheet_ends_at !== one.ends_at) || one.actual_started_at || one.actual_ended_at));
+    && ((one.sheet_at && one.sheet_at !== one.scheduled_at) || (one.sheet_ends_at && one.sheet_ends_at !== one.ends_at) || one.actual_started_at || one.actual_ended_at || one.staff_start_at));
   if (!back.length) throw new Refused(409, 'not_retimed', `**${row.name}** is on the sheet's times already, so nothing was changed.`);
   for (const run of back) {
-    Object.assign(run, { scheduled_at: run.sheet_at || run.scheduled_at, ends_at: run.sheet_ends_at || run.ends_at, actual_started_at: null, actual_ended_at: null });
+    Object.assign(run, { scheduled_at: run.sheet_at || run.scheduled_at, ends_at: run.sheet_ends_at || run.ends_at, actual_started_at: null, actual_ended_at: null, staff_start_at: null, staff_at: null });
   }
   logAction('web.marathon.sheet_times', { details: { marathon_id: row.id, runs: back.length, via: 'website' } });
   return { ...marathonDetail(row), message: `**${row.name}** is back on the sheet's times (${back.length} run(s)).` };
@@ -9930,6 +9952,53 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/done', (context) => {
   marathonRetime(row);
   logAction('web.marathon.run_done', { details: { marathon_id: row.id, run_id: run.id, because: 'staff', via: 'website' } });
   return { run: marathonRunRow(run), message: `**${run.game}** is marked done.` };
+});
+
+// The bot's cogs/content/marathon_retime: a start staff set on one run of a schedule Black Bloc keeps
+// the clock for; the later runs of its day walk from it (marathonRetime reads staff_start_at).
+function marathonStaffStart(context, kind, minutes, targetOf) {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const run = marathonRunOf(row, context.params.run_id);
+  if (!MARATHON_KEEPS_CLOCK.has(row.source)) throw new Refused(409, 'retimes_itself', `**${row.name}** publishes its own times, so nothing was changed. Back to the sheet's times and the stream decide its clock.`);
+  if (run.state !== 'upcoming') throw new Refused(409, 'not_upcoming', `**${run.game}** is ${run.state === 'dropped' ? 'skipped' : run.state}, so its start was not changed. Only a run that has not started can be moved.`);
+  const was = new Date(run.scheduled_at).getTime();
+  const target = targetOf(was);
+  if (target === was) throw new Refused(409, 'same_time', `**${run.game}** already starts at {{at:${new Date(target).toISOString()}}}, so nothing was changed.`);
+  run.staff_start_at = new Date(target).toISOString();
+  run.staff_at = run.staff_start_at;
+  const moved = marathonRetime(row);
+  const to = new Date(target).toISOString();
+  const from = new Date(was).toISOString();
+  logAction(`web.${kind}`, { details: { marathon_id: row.id, run_id: run.id, game: run.game, from, to, minutes, runs: moved, via: 'website' } });
+  const message = minutes === null
+    ? `**${run.game}** now starts at {{at:${to}}} (was {{at:${from}}}). ${moved} run(s) re-timed.`
+    : `From **${run.game}** on, the day moved ${minutes > 0 ? '+' : ''}${minutes} min: {{at:${from}}} is now {{at:${to}}}. ${moved} run(s) re-timed.`;
+  return { run: marathonRunRow(run), message };
+}
+
+route('POST', '/api/marathons/:marathon_id/runs/:run_id/start', async (context) => {
+  const body = await context.body();
+  return marathonStaffStart(context, 'marathon.start_set', null, (was) => {
+    const given = String(body.at ?? '').trim();
+    const zone = zoneOr(body.tz, state.settings.get('default_timezone') || 'America/Phoenix');
+    const dated = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})$/.exec(given);
+    const clock = clockOf(given);
+    let found = null;
+    if (/[T ].*(?:Z|[+-]\d{2}:?\d{2})$/.test(given)) found = Date.parse(given);
+    else if (dated) found = clockNear(Date.parse(`${dated[1]}T12:00:00Z`), Number(dated[2]), Number(dated[3]), zone);
+    else if (clock) found = clockMoment(was, clock, zone);
+    if (!Number.isFinite(found)) throw new Refused(400, 'bad_time', `**${given.slice(0, 40) || 'Nothing'}** is not a time, so nothing was changed. Type it like 2:30 PM or 2026-10-04 14:30; it is read in ${zone} time.`);
+    return found;
+  });
+});
+
+route('POST', '/api/marathons/:marathon_id/runs/:run_id/shift', async (context) => {
+  const body = await context.body();
+  const most = Number(state.settings.get('marathon_shift_max_minutes') || 240);
+  const minutes = Number(String(body.minutes ?? '').trim().replace(/[−–—]/g, '-'));
+  if (!Number.isInteger(minutes) || minutes === 0 || Math.abs(minutes) > most) throw new Refused(400, 'bad_minutes', `**${String(body.minutes ?? '').slice(0, 40) || 'Nothing'}** is not a number of minutes to move by, so nothing was changed. Type a whole number from 1 to ${most}, with a minus sign for earlier.`);
+  return marathonStaffStart(context, 'marathon.day_shifted', minutes, (was) => was + minutes * 60000);
 });
 
 mountTracker({ route, Refused, requireStaff, actorOf, memberName, logAction, state: () => state, marathonOf, marathonRow, keepsClock: MARATHON_KEEPS_CLOCK });

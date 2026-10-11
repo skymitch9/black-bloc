@@ -232,6 +232,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "marathon.inbox_moved",
         "marathon.thread_moved",
         "marathon.runner_post_pin_capped",
+        "marathon.start_set",
+        "marathon.day_shifted",
         "youtube.probe_unreadable",
         "mod.untimed_out",
         "mod.unbanned",

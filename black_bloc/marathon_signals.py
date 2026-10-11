@@ -18,6 +18,7 @@ from .marathon import (
     _cell,
     normalise,
 )
+from .marathon_sources import retimes_itself
 from .settings_store import MARATHON_SETUP_MAX
 
 CHAIN_SLACK = timedelta(minutes=1)
@@ -225,6 +226,19 @@ def settled(row: Any) -> bool:
     return _cell(row, "state") in (LIVE, DONE)
 
 
+def takes_staff_times(source: Any) -> bool:
+    return not retimes_itself(source)
+
+
+def staff_start(row: Any) -> datetime | None:
+    return parse_ts(_cell(row, "staff_start_at"))
+
+
+def anchor_of(row: Any) -> datetime | None:
+    """Where a run is pinned: what really happened, else the start staff set."""
+    return parse_ts(_cell(row, "actual_started_at")) or staff_start(row)
+
+
 def retimed(rows: Any, setup_minutes: int = 0) -> list[Retime]:
     """Each run's start where the stream puts it: a run seen starting is anchored there, and
     every later run of its chain starts `setup_minutes` after the one before it should end
@@ -235,7 +249,7 @@ def retimed(rows: Any, setup_minutes: int = 0) -> list[Retime]:
     for chain in chains(rows):
         cursor: datetime | None = None
         for row in chain:
-            actual = parse_ts(_cell(row, "actual_started_at"))
+            actual = anchor_of(row)
             ended = parse_ts(_cell(row, "actual_ended_at"))
             held = actual is None and settled(row)
             if actual is None and cursor is None and ended is None:
@@ -331,5 +345,6 @@ def on_the_sheet(rows: Any) -> list[Retime]:
             or _differs(_cell(row, "ends_at"), sheet_end(row))
             or _cell(row, "actual_started_at")
             or _cell(row, "actual_ended_at")
+            or _cell(row, "staff_start_at")
         )
     ]

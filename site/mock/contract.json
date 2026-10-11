@@ -400,6 +400,7 @@
       "marathon_reminder_edit_limit": 1,
       "marathon_reminder_stale_minutes": 1,
       "marathon_setup_minutes": 0,
+      "marathon_shift_max_minutes": 1,
       "marathon_spotlight_lead_hours": 0,
       "marathon_spotlight_lead_minutes": 0,
       "marathon_spotlight_slack_hours": 0,
@@ -513,6 +514,7 @@
       "marathon_reminder_edit_limit": 50,
       "marathon_reminder_stale_minutes": 240,
       "marathon_setup_minutes": 30,
+      "marathon_shift_max_minutes": 1440,
       "marathon_spotlight_lead_hours": 48,
       "marathon_spotlight_lead_minutes": 240,
       "marathon_spotlight_slack_hours": 48,
@@ -7213,7 +7215,8 @@
         "rows",
         "next_posts",
         "moves",
-        "undo"
+        "undo",
+        "labels"
       ],
       "nested": {
         "marathon": [
@@ -7297,6 +7300,49 @@
           "state",
           "state_word",
           "held"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_clock_id}/runs/{marathon_clock_run_id}/start",
+      "body": {
+        "at": "11:58 PM",
+        "tz": "UTC"
+      },
+      "read_by": [
+        "page-schedule.js (schedule.html) Set start…"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "state"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_clock_id}/runs/{marathon_clock_run_id}/shift",
+      "body": {
+        "minutes": 10
+      },
+      "read_by": [
+        "page-schedule.js (schedule.html) Shift from here…"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "state"
         ]
       }
     },
@@ -12363,6 +12409,8 @@
     "web.marathon.run_reset",
     "web.marathon.run_live",
     "web.marathon.sheet_times",
+    "web.marathon.start_set",
+    "web.marathon.day_shifted",
     "web.marathon.next_suggested",
     "web.marathon.would_suggest_next",
     "web.marathon.next_none",

@@ -411,6 +411,9 @@ RUN_COLUMNS = {
     "twitch_game_id",
     "twitch_category",
     "twitch_looked_at",
+    "staff_start_at",
+    "staff_start_by",
+    "staff_start_set_at",
 }
 
 
@@ -1706,6 +1709,7 @@ class Marathons(commands.Cog):
         from .marathon_near_miss import NearMissButton
         from .marathon_people import PeopleButton
         from .marathon_public import AnnounceButton, AnnouncePick, HighlightButton
+        from .marathon_retime import RetimeButton
         from .marathon_role import MarathonRoleButton
         from .marathon_thread_controls import ControlButton
 
@@ -1721,6 +1725,7 @@ class Marathons(commands.Cog):
             AnnouncePick,
             NearMissButton,
             AskButton,
+            RetimeButton,
             MarathonRoleButton,
         )
         if not self.bot.db.is_connected:

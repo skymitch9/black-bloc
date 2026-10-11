@@ -21,6 +21,7 @@ ORGANISERS = "organisers"
 SOURCE = "source"
 FOLLOWS = "follows"
 HELD = "held"
+STAFF = "staff"
 TRACKER = "tracker"
 KIND_TRACKER = "tracker"
 KIND_CLOCK_KEPT = "clock_kept"
@@ -61,6 +62,8 @@ MOVE_KINDS = (
     "marathon.overlay_applied",
     "marathon.overlay_dropped",
     "marathon.sheet_times",
+    "marathon.start_set",
+    "marathon.day_shifted",
 )
 RETIMED_WORDS = {
     STREAM: "the stream showed a run starting",
@@ -86,6 +89,10 @@ MOVE_WORDS = {
     ),
     "marathon.overlay_dropped": "The organisers' sheet was taken off the schedule",
     "marathon.sheet_times": "{runs} put back on the sheet's times",
+    "marathon.start_set": "**{game}** set to start at {{{{at:{to}}}}} (was {{{{at:{was}}}}})",
+    "marathon.day_shifted": (
+        "From **{game}** on, the day moved {minutes} min: {{{{at:{was}}}}} is now {{{{at:{to}}}}}"
+    ),
 }
 
 
@@ -218,7 +225,11 @@ def end_of(row: Any) -> datetime | None:
 
 
 def anchored(row: Any) -> bool:
-    return bool(mt._cell(row, "actual_started_at") or mt._cell(row, "actual_ended_at"))
+    return bool(
+        mt._cell(row, "actual_started_at")
+        or mt._cell(row, "actual_ended_at")
+        or mt._cell(row, "staff_start_at")
+    )
 
 
 def from_of(row: Any, plan_from: str, after_anchor: bool) -> str | None:
@@ -230,6 +241,9 @@ def from_of(row: Any, plan_from: str, after_anchor: bool) -> str | None:
         return STARTED if mt._cell(row, "live_because") == mt.BY_STAFF else STREAM
     if plan_from == TRACKER:
         return TRACKER
+    staff = parse_ts(mt._cell(row, "staff_start_at"))
+    if staff is not None and start_of(row) == staff:
+        return STAFF
     if start_of(row) == plan_of(row):
         return plan_from
     return FOLLOWS if after_anchor else HELD
@@ -316,12 +330,14 @@ def estimate_of(row: Any) -> int:
     return max(0, int((end - start).total_seconds())) if start and end else 0
 
 
-def can_of(row: Any, writes: bool) -> dict[str, bool]:
+def can_of(row: Any, writes: bool, clock_kept: bool = False) -> dict[str, bool]:
     state = mt._cell(row, "state")
+    moves = writes and clock_kept and state == mt.UPCOMING
     return {
         "start": writes and mt.can_mark_live(row),
         "finish": writes and state in (mt.UPCOMING, mt.LIVE),
-        "set_start": False,
+        "set_start": moves,
+        "shift": moves,
         "estimate": False,
         "skip": False,
         "restore": False,
@@ -364,10 +380,10 @@ def sheet_row(
         "source_estimate_seconds": estimate,
         "actual_started_at": _moment(mt._cell(row, "actual_started_at")),
         "actual_ended_at": _moment(mt._cell(row, "actual_ended_at")),
-        "staff_at": None,
+        "staff_at": _moment(mt._cell(row, "staff_start_at")),
         "live_because": mt._cell(row, "live_because"),
         "next_up": next_up,
-        "can": can_of(row, writes),
+        "can": can_of(row, writes, plan_from != TRACKER),
     }
 
 
@@ -509,6 +525,7 @@ def move_text(kind: str, details: Any, because_words: dict[str, str]) -> str | N
         "renamed": RENAMED_WORDS.format(renamed=renamed) if renamed else "",
         "label": _safe(details, "label") or "its sheet",
         "matched": _safe(details, "matched", 0),
+        "minutes": f"{int(_safe(details, 'minutes', 0) or 0):+d}",
     }
     if "{was}" in template and not (fields["was"] and fields["to"]):
         return None
@@ -582,6 +599,7 @@ def payload(
     actions: Any = (),
     because_words: dict[str, str] | None = None,
     names: bool = True,
+    labels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     rows = list(runs or ())
     plan_from = times_from(marathon)
@@ -624,7 +642,7 @@ def payload(
                 "upcoming": len([one for one in kept if mt._cell(one, "state") == mt.UPCOMING]),
                 "drift_minutes": minutes,
                 "drift_run_id": run_id,
-                "staff_times": 0,
+                "staff_times": len([one for one in kept if mt._cell(one, "staff_start_at")]),
                 "staff_estimates": 0,
                 "can_shift": False,
                 "can_reset": False,
@@ -688,6 +706,7 @@ def payload(
             actions, because_words=because_words or {}, name_of=name_of, names=names
         ),
         "undo": {"available": False, "text": None},
+        "labels": dict(labels or {}),
     }
 
 

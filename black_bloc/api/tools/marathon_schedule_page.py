@@ -39,6 +39,8 @@ from ...settings_store import (
     MARATHON_POLL_MINUTES_KEY,
     MARATHON_REMINDER_STALE_KEY,
     MARATHON_TRACKER_REFRESH_KEY,
+    MARATHON_TRACKER_SET_START_KEY,
+    MARATHON_TRACKER_SHIFT_KEY,
 )
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
@@ -48,6 +50,7 @@ from .marathons import BECAUSE_WORDS
 log = logging.getLogger(__name__)
 
 SCAN = 400
+PAGE_LABELS = {"set_start": MARATHON_TRACKER_SET_START_KEY, "shift": MARATHON_TRACKER_SHIFT_KEY}
 
 
 def kinds() -> tuple[str, ...]:
@@ -174,6 +177,7 @@ async def sheet(
         actions=await recent_moves(db, guild.id, row["id"]),
         because_words=BECAUSE_WORDS,
         names=True,
+        labels={name: str(bot.store.get(guild.id, key) or "") for name, key in PAGE_LABELS.items()},
         baf_event=baf_event_of(bot, guild, row, runs),
         **(
             {}

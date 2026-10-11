@@ -6895,6 +6895,8 @@ MARATHON_REMINDER_EDIT_LIMIT_KEY = "marathon_reminder_edit_limit"
 MARATHON_REMINDER_EDIT_LIMIT = 10
 MARATHON_TRACKER_REFRESH_KEY = "marathon_tracker_refresh_seconds"
 MARATHON_TRACKER_REFRESH = 30
+MARATHON_SHIFT_MAX_KEY = "marathon_shift_max_minutes"
+MARATHON_SHIFT_MAX = 240
 MARATHON_PIN_BOARD_KEY = "marathon_pin_board"
 MARATHON_RUNNER_POSTS_KEY = "marathon_runner_posts"
 MARATHON_RUNNER_POSTS_PINNED_KEY = "marathon_runner_posts_pinned"
@@ -7137,6 +7139,26 @@ MARATHON_HOTFIX_VIEWER_URL_LENGTH = 300
 MARATHON_HOTFIX_VIEWER_INNER = (".internal", ".local", ".localhost", ".lan", ".home", ".corp")
 MARATHON_HOTFIX_OVERLAY_DEFAULT_KEY = "marathon_hotfix_overlay_default"
 MARATHON_CONTROLS_TRACKER_KEY = "marathon_controls_tracker"
+MARATHON_CONTROLS_SET_START_KEY = "marathon_controls_set_start"
+MARATHON_CONTROLS_SHIFT_KEY = "marathon_controls_shift"
+MARATHON_TRACKER_SET_START_KEY = "marathon_tracker_set_start"
+MARATHON_TRACKER_SHIFT_KEY = "marathon_tracker_shift"
+MARATHON_RETIME_START_TITLE_KEY = "marathon_retime_start_title"
+MARATHON_RETIME_SHIFT_TITLE_KEY = "marathon_retime_shift_title"
+MARATHON_RETIME_RUN_LABEL_KEY = "marathon_retime_run_label"
+MARATHON_RETIME_AT_LABEL_KEY = "marathon_retime_at_label"
+MARATHON_RETIME_AT_PLACEHOLDER_KEY = "marathon_retime_at_placeholder"
+MARATHON_RETIME_MINUTES_LABEL_KEY = "marathon_retime_minutes_label"
+MARATHON_RETIME_MINUTES_PLACEHOLDER_KEY = "marathon_retime_minutes_placeholder"
+MARATHON_RETIME_TRACKER_SAID_KEY = "marathon_retime_tracker_said"
+MARATHON_RETIME_NOT_UPCOMING_SAID_KEY = "marathon_retime_not_upcoming_said"
+MARATHON_RETIME_BAD_TIME_SAID_KEY = "marathon_retime_bad_time_said"
+MARATHON_RETIME_BAD_MINUTES_SAID_KEY = "marathon_retime_bad_minutes_said"
+MARATHON_RETIME_SAME_SAID_KEY = "marathon_retime_same_said"
+MARATHON_RETIME_BEFORE_AHEAD_SAID_KEY = "marathon_retime_before_ahead_said"
+MARATHON_RETIME_NOTHING_SAID_KEY = "marathon_retime_nothing_said"
+MARATHON_START_SET_SAID_KEY = "marathon_start_set_said"
+MARATHON_DAY_SHIFTED_SAID_KEY = "marathon_day_shifted_said"
 MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_ON_KEY = "marathon_controls_spotlight_follow_on"
 MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_OFF_KEY = "marathon_controls_spotlight_follow_off"
 MARATHON_CONTROLS_SPOTLIGHT_UNTIL_LINE_KEY = "marathon_controls_spotlight_until_line"
@@ -7476,6 +7498,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "seconds between one read and the next on a marathon's Marathon tracker page on the "
         "site, while the tab is open and showing — the page re-reads itself so a run going "
         "live, finishing or moving shows without a reload. 30 by default",
+    ),
+    MARATHON_SHIFT_MAX_KEY: (
+        "int",
+        MARATHON_SHIFT_MAX,
+        "the most minutes one Shift the day move may carry a schedule Black Bloc keeps the "
+        "clock for, later or earlier — a larger number typed on the Marathon tracker page or "
+        "the thread's Shift the day form is refused in words. 240 by default",
     ),
     MARATHON_PIN_BOARD_KEY: (
         "bool",
@@ -8090,6 +8119,131 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the link button on a tracked marathon's thread controls that opens its Marathon "
         "tracker page on the site — the runs in order with the times the bot is working from",
+    ),
+    MARATHON_CONTROLS_SET_START_KEY: (
+        "Set start…",
+        (),
+        "the thread controls' button that opens a form to give one run of a schedule Black "
+        "Bloc keeps the clock for a new start; the later runs of its day follow from it",
+    ),
+    MARATHON_CONTROLS_SHIFT_KEY: (
+        "Shift the day…",
+        (),
+        "the thread controls' button that opens a form to move every run not yet started, "
+        "from a chosen run on, later or earlier by a number of minutes",
+    ),
+    MARATHON_TRACKER_SET_START_KEY: (
+        "Set start…",
+        (),
+        "the Marathon tracker page's move on a run not yet started, for a schedule Black "
+        "Bloc keeps the clock for: a new start for that run, and the later runs follow it",
+    ),
+    MARATHON_TRACKER_SHIFT_KEY: (
+        "Shift from here…",
+        (),
+        "the Marathon tracker page's move on a run not yet started: that run and every "
+        "later run of its day move by a number of minutes",
+    ),
+    MARATHON_RETIME_START_TITLE_KEY: (
+        "Set a run's start",
+        (),
+        "the title of the thread controls' Set start form (Discord shows at most 45 "
+        "characters)",
+    ),
+    MARATHON_RETIME_SHIFT_TITLE_KEY: (
+        "Shift the day",
+        (),
+        "the title of the thread controls' Shift the day form (Discord shows at most 45 "
+        "characters)",
+    ),
+    MARATHON_RETIME_RUN_LABEL_KEY: (
+        "Run",
+        (),
+        "the label over the run picker in the Set start and Shift the day forms (at most 45 "
+        "characters)",
+    ),
+    MARATHON_RETIME_AT_LABEL_KEY: (
+        "New start ({zone})",
+        ("zone",),
+        "the label over the time box in the Set start form; it takes {zone}, the server's "
+        "time zone the typed time is read in (at most 45 characters)",
+    ),
+    MARATHON_RETIME_AT_PLACEHOLDER_KEY: (
+        "2:30 PM or 2026-10-04 14:30",
+        (),
+        "the grey example inside the Set start form's time box (at most 100 characters)",
+    ),
+    MARATHON_RETIME_MINUTES_LABEL_KEY: (
+        "Minutes (+ later, - earlier)",
+        (),
+        "the label over the minutes box in the Shift the day form (at most 45 characters)",
+    ),
+    MARATHON_RETIME_MINUTES_PLACEHOLDER_KEY: (
+        "10 or -5",
+        (),
+        "the grey example inside the Shift the day form's minutes box (at most 100 "
+        "characters)",
+    ),
+    MARATHON_RETIME_TRACKER_SAID_KEY: (
+        "**{marathon}** publishes its own times, so nothing was changed. Back to the sheet's "
+        "times and the stream decide its clock.",
+        ("marathon",),
+        "the answer when staff try Set start or Shift the day on a marathon whose schedule "
+        "moves its own times (a tracker). It takes {marathon}",
+    ),
+    MARATHON_RETIME_NOT_UPCOMING_SAID_KEY: (
+        "**{game}** is {state}, so its start was not changed. Only a run that has not "
+        "started can be moved.",
+        ("game", "state"),
+        "the answer when Set start or Shift the day names a run that is live, done or "
+        "skipped. It takes {game} {state}",
+    ),
+    MARATHON_RETIME_BAD_TIME_SAID_KEY: (
+        "**{given}** is not a time, so nothing was changed. Type it like 2:30 PM or "
+        "2026-10-04 14:30; it is read in {zone} time.",
+        ("given", "zone"),
+        "the answer when the time typed for Set start cannot be read. It takes {given} "
+        "{zone}",
+    ),
+    MARATHON_RETIME_BAD_MINUTES_SAID_KEY: (
+        "**{given}** is not a number of minutes to move by, so nothing was changed. Type a "
+        "whole number from 1 to {most}, with a minus sign for earlier.",
+        ("given", "most"),
+        "the answer when the minutes typed for Shift the day are not a whole number, are 0, "
+        "or are more than marathon_shift_max_minutes. It takes {given} {most}",
+    ),
+    MARATHON_RETIME_SAME_SAID_KEY: (
+        "**{game}** already starts at {at}, so nothing was changed.",
+        ("game", "at"),
+        "the answer when Set start names the time the run already starts at. It takes "
+        "{game} {at}",
+    ),
+    MARATHON_RETIME_BEFORE_AHEAD_SAID_KEY: (
+        "{at} is before **{ahead}** started ({started}), so nothing was changed. Pick a time "
+        "after it.",
+        ("at", "ahead", "started"),
+        "the answer when Set start or Shift the day would put a run before the start of a "
+        "run ahead of it that has already begun. It takes {at} {ahead} {started}",
+    ),
+    MARATHON_RETIME_NOTHING_SAID_KEY: (
+        "**{marathon}** has no run left that has not started, so there is nothing to move.",
+        ("marathon",),
+        "the answer when the thread's Set start or Shift the day is pressed and every run "
+        "has started. It takes {marathon}",
+    ),
+    MARATHON_START_SET_SAID_KEY: (
+        "**{game}** now starts at {at} (was {was}). {runs} run(s) re-timed.",
+        ("game", "at", "was", "runs"),
+        "the answer after Set start: the run, its new start, its start before, and how many "
+        "runs the move re-timed. It takes {game} {at} {was} {runs}",
+    ),
+    MARATHON_DAY_SHIFTED_SAID_KEY: (
+        "From **{game}** on, the day moved {minutes} min: {was} is now {at}. {runs} run(s) "
+        "re-timed.",
+        ("game", "minutes", "at", "was", "runs"),
+        "the answer after Shift the day: the run it starts from, the signed minutes, that "
+        "run's start before and after, and how many runs the move re-timed. It takes {game} "
+        "{minutes} {at} {was} {runs}",
     ),
     MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_ON_KEY: (
         "Spotlight follows the schedule: on · turn off",
@@ -9212,6 +9366,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_REMINDER_STALE_KEY: (1, 240),
     MARATHON_REMINDER_EDIT_LIMIT_KEY: (1, 50),
     MARATHON_TRACKER_REFRESH_KEY: (10, 300),
+    MARATHON_SHIFT_MAX_KEY: (1, 1440),
     MARATHON_WINDOW_SLACK_KEY: (0, 24),
     MARATHON_SPOTLIGHT_LEAD_KEY: (0, 48),
     MARATHON_SPOTLIGHT_SLACK_KEY: (0, 48),

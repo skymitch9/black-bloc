@@ -14,6 +14,7 @@ from ... import marathon_events as me
 from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
 from ... import marathon_ping as mping
+from ... import marathon_signals as sig
 from ... import marathon_spotlight as ms
 from ... import marathon_thread_controls as mtc
 from ... import spotlight as spot
@@ -50,6 +51,8 @@ from ...settings_store import (
     MARATHON_CONTROLS_NO_END_KEY,
     MARATHON_CONTROLS_PING_OFF_KEY,
     MARATHON_CONTROLS_PING_ON_KEY,
+    MARATHON_CONTROLS_SET_START_KEY,
+    MARATHON_CONTROLS_SHIFT_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_OFF_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_FOLLOW_ON_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_KEPT_LINE_KEY,
@@ -110,6 +113,8 @@ LABEL_KEYS = {
     (mtc.HOST_ANNOUNCE, mtc.OFF): MARATHON_CONTROLS_HOST_ANNOUNCE_OFF_KEY,
     (mtc.ARCHIVE, mtc.ARCHIVE): MARATHON_CONTROLS_ARCHIVE_KEY,
     (mtc.LINK, ""): MARATHON_CONTROLS_TRACKER_KEY,
+    (mtc.RETIME, mtc.RETIME_START): MARATHON_CONTROLS_SET_START_KEY,
+    (mtc.RETIME, mtc.RETIME_SHIFT): MARATHON_CONTROLS_SHIFT_KEY,
 }
 BAF_LABEL_KEYS = {
     mtc.BAF_SAID_YES: MARATHON_CONTROLS_BAF_SAID_YES_KEY,
@@ -195,6 +200,12 @@ def spot_template(bot: Any, guild: Any, marathon: Any, state: dict[str, Any]) ->
     return str(bot.store.get(guild.id, SPOT_LINE_KEYS[line]) or "") if line else ""
 
 
+def retimes(marathon: Any, rows: Any) -> bool:
+    return sig.takes_staff_times(_cell(marathon, "source")) and any(
+        _cell(one, "state") == mt.UPCOMING for one in rows or ()
+    )
+
+
 def labelled(
     bot: Any, guild: Any, marathon: Any, rows: Any, spot_state: Any, *, over: bool
 ) -> tuple[tuple, tuple[str, ...]]:
@@ -208,6 +219,7 @@ def labelled(
         host_announce=policy_of(bot, guild.id, marathon).hosts_on,
         baf=shown_baf,
         over=over,
+        retimes=retimes(marathon, rows),
     )
     labels = tuple(mtc.label(words(bot, guild.id, label_key(one), **fields)) for one in controls)
     return controls, labels
@@ -241,7 +253,7 @@ def drawer_switches(
             "state": STATE_FIELDS.get(one.action),
         }
         for one, text in zip(controls, labels, strict=True)
-        if one.action != mtc.LINK
+        if one.action not in (mtc.LINK, mtc.RETIME)
     ]
 
 
@@ -258,9 +270,13 @@ def tracker_url(bot: Any, marathon: Any) -> str | None:
 def view_of(
     marathon_id: Any, controls: tuple, labels: tuple[str, ...], link: Any = None
 ) -> discord.ui.View:
+    from .marathon_retime import RetimeButton
+
     view = discord.ui.View(timeout=None)
     for one, text in zip(controls, labels, strict=True):
-        if one.action != mtc.LINK:
+        if one.action == mtc.RETIME:
+            view.add_item(RetimeButton(marathon_id, one.to, text, one.row))
+        elif one.action != mtc.LINK:
             view.add_item(ControlButton(marathon_id, one.action, one.to, text, one.word, one.row))
         elif link:
             view.add_item(

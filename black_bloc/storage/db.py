@@ -1119,6 +1119,9 @@ CREATE TABLE IF NOT EXISTS marathon_runs (
     twitch_game_id        TEXT,
     twitch_category       TEXT,
     twitch_looked_at      TEXT,
+    staff_start_at        TEXT,
+    staff_start_by        INTEGER,
+    staff_start_set_at    TEXT,
     UNIQUE (marathon_id, external_id)
 );
 
@@ -1600,6 +1603,9 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "mention_people", "TEXT"),
     ("marathon_runs", "announce_people", "TEXT"),
     ("marathon_runs", "public_people", "TEXT"),
+    ("marathon_runs", "staff_start_at", "TEXT"),
+    ("marathon_runs", "staff_start_by", "INTEGER"),
+    ("marathon_runs", "staff_start_set_at", "TEXT"),
     ("marathons", "baf_event", "INTEGER"),
     ("marathons", "baf_event_ask", "TEXT"),
     ("marathons", "baf_event_pings", "TEXT"),
