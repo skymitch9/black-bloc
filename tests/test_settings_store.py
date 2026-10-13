@@ -2340,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1210
+    assert len(settings_store.KEY_TYPES) == 1213
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2594,6 +2594,28 @@ def test_move_damping_is_two_marathon_ints_60_minutes_and_4_reads_by_default(sto
             with pytest.raises(settings_store.SettingError):
                 settings_store.coerce_value(key, bad)
     assert settings_store.coerce_value(minutes, 0) == 0
+
+
+def test_the_stale_archive_is_two_marathon_ints_3_reads_and_24_hours_and_one_word(store):
+    reads = settings_store.MARATHON_STALE_ARCHIVE_READS_KEY
+    hours = settings_store.MARATHON_STALE_ARCHIVE_HOURS_KEY
+    word = settings_store.MARATHON_ARCHIVED_STALE_WORD_KEY
+    assert (reads, hours) == ("marathon_stale_archive_reads", "marathon_stale_archive_hours")
+    for key, default, least, most in ((reads, 3, 0, 20), (hours, 24, 0, 720)):
+        assert settings_store.KEY_TYPES[key] == "int"
+        assert settings_store.namespace_of(key) == "marathon"
+        assert settings_store.MARATHON_DEFAULTS[key] == store.default(key) == default
+        assert (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) == (least, most)
+        assert settings_store.KEY_HELP[key]
+        assert settings_store.coerce_value(key, 0) == 0
+        for bad in (least - 1, most + 1, True, "2"):
+            with pytest.raises(settings_store.SettingError):
+                settings_store.coerce_value(key, bad)
+    assert word == "marathon_archived_stale_word"
+    assert settings_store.KEY_TYPES[word] == "text"
+    assert settings_store.namespace_of(word) == "marathon"
+    assert store.default(word) == "could not be read"
+    assert settings_store.MARATHON_WORDS[word][1] == ()
 
 
 def test_the_dropped_reminder_is_a_marathon_template_that_takes_the_reminder_fields_and_state(

@@ -849,6 +849,9 @@ const SETTING_SPECS = [
   ["marathon_role_ping_line_not_mentionable", "text", "The Marathon role is not mentioned: {role} is not mentionable and Black Bloc may not mention every role, so a mention would notify nobody.", "The Marathon role is not mentioned: {role} is not mentionable and Black Bloc may not mention every role, so a mention would notify nobody.", "the line under a marathon's ping switch while Discord would not notify the Marathon role: it is not set mentionable and the bot lacks Mention Everyone. It takes {role}"],
   ["marathon_archive_after_days", "int", 7, 7, "days after a marathon's last run ends that it moves to the archive, with its runs and people — kept, browsable under Archive on the Events page, and Restore brings it back paused. 7 by default; 0 moves it the same day. A marathon with no dates never moves by itself", null, 365, 0],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
+  ["marathon_stale_archive_reads", "int", 3, 3, "how many reads of a marathon's schedule in a row must fail before it moves to the archive as unreadable, once marathon_stale_archive_hours have also passed — a schedule that is not published yet never counts, and a paused or ignored marathon never moves. Restore brings it back, and so does its feed listing it again with a schedule that reads. 3 by default; 0 never archives an unreadable marathon", null, 20, 0],
+  ["marathon_stale_archive_hours", "int", 24, 24, "how many hours a marathon's schedule must have gone without an answer before marathon_stale_archive_reads failed reads move it to the archive — counted from the last read that worked, or from a Restore or Resume since. 24 by default; 0 needs the failed reads alone", null, 720, 0],
+  ["marathon_archived_stale_word", "text", "could not be read", "could not be read", "the state word an archived marathon carries when it was archived because its schedule stayed unreadable — on the Events page's Archive list and drawer and in the Discord Archive card"],
   ["marathon_archive_question", "text", "Archive **{name}**? It stops being read and its ping window closes; its runs, people and posts are kept, and **Restore** brings it back paused.", "Archive **{name}**? It stops being read and its ping window closes; its runs, people and posts are kept, and **Restore** brings it back paused.", "what staff are asked before Archive it moves a marathon to the archive early. It takes {name}"],
   ["marathon_archived_said", "text", "**{name}** is in the archive — its runs, people and posts are kept. **Restore** brings it back, paused.", "**{name}** is in the archive — its runs, people and posts are kept. **Restore** brings it back, paused.", "what staff are told once Archive it has moved a marathon to the archive. It takes {name}"],
   ["marathon_restore_question", "text", "Restore **{name}**? It comes back to the list paused — nothing is read or posted until someone presses **Resume**.", "Restore **{name}**? It comes back to the list paused — nothing is read or posted until someone presses **Resume**.", "what staff are asked before Restore brings an archived marathon back. It takes {name}"],
@@ -7339,6 +7342,7 @@ function seedMarathonArchive() {
   return [
     { ...base, id: 40, name: 'SGDQ 2026', schedule_url: 'https://gamesdonequick.com/schedule/70', source: 'gdq', source_ref: '70', starts_at: minutesAgo(130000), ends_at: minutesAgo(128340), active: true, last_fetched_at: minutesAgo(128000), added_by: STAFF.id, added_at: minutesAgo(140000), archived_at: minutesAgo(118000), archived_by: null, archived_why: 'ended' },
     { ...base, id: 41, name: 'ESA Winter 2026', schedule_url: 'https://horaro.net/esa/2026-winter1', source: 'horaro', source_ref: 'esa/2026-winter1', starts_at: minutesAgo(60000), ends_at: minutesAgo(59940), active: false, last_fetched_at: minutesAgo(59000), added_by: STAFF.id, added_at: minutesAgo(70000), archived_at: minutesAgo(50000), archived_by: STAFF.id, archived_why: 'staff' },
+    { ...base, id: 42, name: 'Speed Stuff at InfernaLAN 2026', schedule_url: 'https://oengus.io/marathon/infernalan26', source: 'oengus', source_ref: 'infernalan26', starts_at: minutesAgo(-20000), ends_at: minutesAgo(-17000), active: true, last_fetched_at: minutesAgo(30), last_fetch_ok: 0, last_error: 'oengus.io answered 401', fetch_failures: 5, added_by: STAFF.id, added_at: minutesAgo(40000), archived_at: minutesAgo(30), archived_by: null, archived_why: 'stale' },
   ];
 }
 
@@ -9146,6 +9150,10 @@ function marathonCreate(name, scheduleUrl, spotlight) {
 // its runs and pairings stay keyed by marathon_id, so the read-only drawer reads them as before.
 const MARATHON_WHY_WORDS = { ended: 'ended', staff: 'archived by staff', removed: 'removed by staff' };
 
+function marathonWhyWord(why) {
+  return why === 'stale' ? marathonSaid('marathon_archived_stale_word', {}) : (MARATHON_WHY_WORDS[why] || why);
+}
+
 function marathonArchivedOf(id) {
   return state.marathonArchive.find((one) => String(one.id) === String(id)) || null;
 }
@@ -9191,7 +9199,7 @@ function marathonArchivedRow(row) {
     archived_at: row.archived_at,
     archived_by_name: row.archived_by ? memberName(row.archived_by) : null,
     archived_why: row.archived_why,
-    archived_why_word: MARATHON_WHY_WORDS[row.archived_why] || row.archived_why,
+    archived_why_word: marathonWhyWord(row.archived_why),
     archived_word: marathonArchivedWord(row),
     ...marathonTracking(row, true),
   };
@@ -9278,7 +9286,7 @@ route('POST', '/api/marathons/:marathon_id/restore', (context) => {
   if (taken) throw new Refused(409, 'restore_taken', marathonSaid('marathon_restore_taken', { name: row.name, other: taken.name }));
   state.marathonArchive = state.marathonArchive.filter((one) => one !== row);
   const { archived_at: archivedAt, archived_by: _by, archived_why: why, ...back } = row;
-  state.marathons.push({ ...back, active: false, board_pinned: false });
+  state.marathons.push({ ...back, active: false, board_pinned: false, ...(why === 'stale' ? { fetch_failures: 0 } : {}) });
   logAction('web.marathon.restored', { details: { marathon_id: row.id, name: row.name, archived_why: why, archived_at: archivedAt, via: 'website' } });
   return { ...marathonDetailAny(row.id), message: marathonSaid('marathon_restored_said', { name: row.name }) };
 });

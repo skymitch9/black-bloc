@@ -313,6 +313,7 @@ routes **219 → 231**.)*
    `settings_store.py` (`MARATHON_SETTINGS`, `MARATHON_WORDS`), the `REVIEW_*` pattern.
 6. **The third consecutive failure is its own kind, `marathon.schedule_stale` (IMPORTANT)**; every `marathon.fetch_failed`
    is ROUTINE. Importance is per kind in `logkinds`, and `notify=True` would ignore the level entirely.
+   ➕ **2026-10-12 (branch `stale-archive`): the third failure is no longer the end of it.** A marathon that reaches `marathon_stale_archive_reads` counted failures and `marathon_stale_archive_hours` without an answer is archived as `stale`, and read again when its feed lists it — [`marathon-stale-archive-design.md`](marathon-stale-archive-design.md). `marathon.schedule_stale` fires as before.
 7. **`run_live` / `run_done` / `run_skipped` are logged for runs of OURS only.** A GDQ marathon is ~150 runs; logging
    every one would bury the rows staff read. Runs nobody here is on still move state silently.
 8. **The board is pinned only in `on`.** A shadow copy in `#welcome-test` is not pinned. The pin helpers are the

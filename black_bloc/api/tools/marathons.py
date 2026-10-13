@@ -61,6 +61,7 @@ from ...cogs.content.marathon_archive import (
     count_archived,
     list_archived,
     restore_marathon,
+    why_word,
 )
 from ...cogs.content.marathon_baf_event import set_baf_event, set_question_answer
 from ...cogs.content.marathon_baf_event import state_of as baf_event_state
@@ -93,7 +94,7 @@ from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...golive_replay import BECAUSE_REPLAY
 from ...logkinds import VIA_WEBSITE
-from ...marathon_archive import REMOVE_GONE, REMOVE_GONE_CODE, STAFF, WHY_WORDS, page_of
+from ...marathon_archive import REMOVE_GONE, REMOVE_GONE_CODE, STAFF, page_of
 from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_ping import pings_role
@@ -498,7 +499,7 @@ async def archived_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "archived_at": row["archived_at"],
         "archived_by_name": resolve_one(guild, by)["display_name"] if by else None,
         "archived_why": why,
-        "archived_why_word": WHY_WORDS.get(why, why),
+        "archived_why_word": why_word(bot, guild.id, why),
         "archived_word": archived_word(bot, guild.id, row),
     } | await tracking_of(bot, guild, row, archived=True)
 

@@ -6928,6 +6928,11 @@ MARATHON_ROLE_PING_LINE_GONE_KEY = "marathon_role_ping_line_gone"
 MARATHON_ROLE_PING_LINE_NOT_MENTIONABLE_KEY = "marathon_role_ping_line_not_mentionable"
 MARATHON_ARCHIVE_AFTER_DAYS_KEY = "marathon_archive_after_days"
 MARATHON_ARCHIVED_WORD_KEY = "marathon_archived_word"
+MARATHON_STALE_ARCHIVE_READS_KEY = "marathon_stale_archive_reads"
+MARATHON_STALE_ARCHIVE_READS = 3
+MARATHON_STALE_ARCHIVE_HOURS_KEY = "marathon_stale_archive_hours"
+MARATHON_STALE_ARCHIVE_HOURS = 24
+MARATHON_ARCHIVED_STALE_WORD_KEY = "marathon_archived_stale_word"
 MARATHON_ARCHIVE_QUESTION_KEY = "marathon_archive_question"
 MARATHON_ARCHIVED_SAID_KEY = "marathon_archived_said"
 MARATHON_RESTORE_QUESTION_KEY = "marathon_restore_question"
@@ -7811,6 +7816,23 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "paused. 7 by default; 0 moves it the same day. A marathon with no dates never moves "
         "by itself",
     ),
+    MARATHON_STALE_ARCHIVE_READS_KEY: (
+        "int",
+        MARATHON_STALE_ARCHIVE_READS,
+        "how many reads of a marathon's schedule in a row must fail before it moves to the "
+        "archive as unreadable, once marathon_stale_archive_hours have also passed — a schedule "
+        "that is not published yet never counts, and a paused or ignored marathon never moves. "
+        "Restore brings it back, and so does its feed listing it again with a schedule that "
+        "reads. 3 by default; 0 never archives an unreadable marathon",
+    ),
+    MARATHON_STALE_ARCHIVE_HOURS_KEY: (
+        "int",
+        MARATHON_STALE_ARCHIVE_HOURS,
+        "how many hours a marathon's schedule must have gone without an answer before "
+        "marathon_stale_archive_reads failed reads move it to the archive — counted from the "
+        "last read that worked, or from a Restore or Resume since. 24 by default; 0 needs the "
+        "failed reads alone",
+    ),
     MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY: (
         "enum",
         PING_EVENTS,
@@ -8586,6 +8608,13 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("when",),
         "the line an archived marathon carries where its message is — the archived drawer on "
         "the Events page today, the marathon's inbox message once there is one. It takes {when}",
+    ),
+    MARATHON_ARCHIVED_STALE_WORD_KEY: (
+        "could not be read",
+        (),
+        "the state word an archived marathon carries when it was archived because its schedule "
+        "stayed unreadable — on the Events page's Archive list and drawer and in the Discord "
+        "Archive card",
     ),
     MARATHON_ARCHIVE_QUESTION_KEY: (
         "Archive **{name}**? It stops being read and its ping window closes; its runs, people "
@@ -9404,6 +9433,8 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_MOVE_MINUTES_KEY: (1, 120),
     MARATHON_MOVE_DAMPING_MINUTES_KEY: (0, 1440),
     MARATHON_MOVE_DAMPING_READS_KEY: (2, 10),
+    MARATHON_STALE_ARCHIVE_READS_KEY: (0, 20),
+    MARATHON_STALE_ARCHIVE_HOURS_KEY: (0, 720),
     MARATHON_SETUP_MINUTES_KEY: (0, MARATHON_SETUP_MAX),
     MARATHON_EARLY_START_KEY: (0, 240),
     MARATHON_LIVE_POLL_MINUTES_KEY: (1, 60),

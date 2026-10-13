@@ -1,5 +1,7 @@
 # Marathons are archived, never deleted — an archive table for ended marathons, and an expiry that keeps marathon channels
 
+> ➕ **2026-10-12 (branch `stale-archive`, BUILT, NOT merged):** `archived_why` has a fourth value, **`stale`** — the bot archives a marathon whose schedule stays unreadable, through `archive_held`, and the feed poll (which still never re-adds an archived event) gives a listed `stale` one a trial read and restores it when the read works. Restore now also restarts the stale clock, and resets `fetch_failures` for a `stale` row. [`marathon-stale-archive-design.md`](marathon-stale-archive-design.md); the text below is left as it was decided.
+
 > ⚠️ **Superseded in part 2026-10-08 (marathon controls, branch `marathon-controls-a`):** Remove is retired on every door (D11): Archive it is the one move, DELETE and an old feed-notice Remove answer in words, and the thread controls offer Archive it after the show (D5). See [`marathon-controls-design-2026-10-08.md`](marathon-controls-design-2026-10-08.md); the text below is left as it was decided.
 
 > 🔨 **2026-09-26 — Deviation 8 closed by `marathon-inbox`** (BUILT, NOT merged): at the move the marathon's inbox message reads `marathon_archived_word` with only *Open on the site*, and its thread is archived on Discord; Restore re-renders the message. [`marathon-inbox-design.md`](marathon-inbox-design.md).

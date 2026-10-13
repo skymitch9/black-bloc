@@ -9,7 +9,8 @@ from .marathon import MarathonMove
 ENDED = "ended"
 STAFF = "staff"
 REMOVED = "removed"
-WHYS = (ENDED, STAFF, REMOVED)
+STALE = "stale"
+WHYS = (ENDED, STAFF, REMOVED, STALE)
 WHY_WORDS = {ENDED: "ended", STAFF: "archived by staff", REMOVED: "removed by staff"}
 BECAUSE_ARCHIVED = "marathon_archived"
 UNPIN_BECAUSE = "archived"
@@ -85,6 +86,7 @@ __all__ = [
     "ENDED",
     "REMOVED",
     "STAFF",
+    "STALE",
     "WHYS",
     "WHY_WORDS",
     "clean_why",

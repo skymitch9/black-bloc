@@ -890,6 +890,44 @@ async def test_archive_it_moves_a_marathon_and_the_archive_lists_it_read_only(
     assert client.post(f"/api/marathons/{marathon_id}/refresh").status_code == 404
 
 
+async def test_a_stale_archive_carries_its_mark_and_its_word_and_nothing_else_new(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    hand = add(client).json()["id"]
+    client.post(f"/api/marathons/{hand}/archive")
+    plain = client.get("/api/marathons/archive").json()["marathons"][0]
+    drawer = client.get(f"/api/marathons/{hand}").json()
+    await web.db.conn.execute(
+        "UPDATE marathons_archive SET archived_why = 'stale', archived_by = NULL, "
+        "fetch_failures = 4, stale_clock_at = '2027-01-01T00:00:00+00:00' WHERE id = ?",
+        (hand,),
+    )
+    await web.db.conn.commit()
+
+    row = client.get("/api/marathons/archive").json()["marathons"][0]
+    assert (row["archived_why"], row["archived_why_word"]) == ("stale", "could not be read")
+    assert row["archived_by_name"] is None
+    assert set(row) == set(plain)
+    assert "stale_clock_at" not in row and "fetch_failures" not in row
+    opened = client.get(f"/api/marathons/{hand}").json()
+    assert (opened["archived_why"], opened["archived_why_word"]) == ("stale", "could not be read")
+    assert set(opened) == set(drawer) and "stale_clock_at" not in opened
+
+    await web.store.set(wf.GUILD_ID, "marathon_archived_stale_word", "schedule went away")
+    again = client.get("/api/marathons/archive").json()["marathons"][0]
+    assert again["archived_why_word"] == "schedule went away"
+
+    back = client.post(f"/api/marathons/{hand}/restore")
+    assert back.status_code == 200 and back.json()["archived"] is False
+    cur = await web.db.conn.execute(
+        "SELECT active, fetch_failures, stale_clock_at FROM marathons WHERE id = ?", (hand,)
+    )
+    kept = await cur.fetchone()
+    assert (kept["active"], kept["fetch_failures"]) == (0, 0)
+    assert kept["stale_clock_at"] != "2027-01-01T00:00:00+00:00"
+
+
 async def test_restore_brings_it_back_paused_and_refuses_in_words_twice(
     client, sign_in, web, cog, wf
 ):

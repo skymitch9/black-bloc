@@ -11,6 +11,7 @@ import {
   UNSPOTLIGHT_BODY,
   archiveCounts,
   archiveTitle,
+  archivedStale,
   archivedWhen,
   archivedWho,
   barMoves,
@@ -1680,6 +1681,7 @@ function archiveLine(row) {
     el('span', { text: datesWords(row) }),
     el('span', { text: archiveCounts(row) }),
     el('span', { class: 'cell-quiet', text: archivedWhen(row) }),
+    archivedStale(row) ? badge(archivedStale(row), 'warn') : null,
   ]));
 }
 

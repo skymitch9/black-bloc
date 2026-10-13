@@ -4466,3 +4466,41 @@ async def test_a_schema_93_file_gains_the_marathon_log_thread_columns(tmp_path):
         assert (await cur.fetchone())["value"] == "94"
     finally:
         await again.close()
+
+
+async def test_a_file_from_before_the_stale_archive_gains_one_empty_clock_column(tmp_path):
+    """No version step: ADDED_COLUMNS runs at every boot. An empty clock archives nothing, so a
+    marathon already at three failed reads is kept at the first tick after the deploy."""
+    path = tmp_path / "before_stale.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for table in ("marathons", "marathons_archive"):
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN stale_clock_at")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at, "
+        "fetch_failures, last_error) VALUES (1, 'Speed Stuff', 'https://x', 'oengus', 'q', 'x', "
+        "3, 'oengus.io answered 401')"
+    )
+    await db.conn.execute(
+        "INSERT INTO marathons_archive(id, guild_id, name, schedule_url, source, source_ref, "
+        "added_at, archived_at, archived_why) VALUES (9, 1, 'Old', 'https://y', 'gdq', '1', "
+        "'x', 'x', 'staff')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT name, fetch_failures, last_error, stale_clock_at FROM marathons"
+        )
+        assert tuple(await cur.fetchone()) == ("Speed Stuff", 3, "oengus.io answered 401", None)
+        cur = await again.conn.execute(
+            "SELECT name, archived_why, stale_clock_at FROM marathons_archive"
+        )
+        assert tuple(await cur.fetchone()) == ("Old", "staff", None)
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "94"
+    finally:
+        await again.close()

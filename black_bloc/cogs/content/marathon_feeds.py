@@ -17,6 +17,7 @@ from ... import marathon_horaro_events as hre
 from ... import marathon_hotfix as hf
 from ... import marathon_inbox as mi
 from ... import marathon_ladyarcaders as la
+from ... import marathon_stale as stale
 from ...actionlog import log_action
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
@@ -273,9 +274,10 @@ async def marathons_by_ref(db: Any, guild_id: int, source: str) -> dict[str, Any
     """Live and archived refs in one read, live first: a feed never re-adds an archived event.
     A removed one is left to the feed's ignore list, which Forget ignored can clear."""
     cur = await db.conn.execute(
-        "SELECT id, name, source_ref, feed_id, 0 AS archived FROM marathons "
-        "WHERE guild_id = ? AND source = ? "
-        "UNION ALL SELECT id, name, source_ref, feed_id, 1 AS archived FROM marathons_archive "
+        "SELECT id, name, source_ref, feed_id, 0 AS archived, NULL AS archived_why "
+        "FROM marathons WHERE guild_id = ? AND source = ? "
+        "UNION ALL SELECT id, name, source_ref, feed_id, 1 AS archived, archived_why "
+        "FROM marathons_archive "
         "WHERE guild_id = ? AND source = ? AND archived_why <> 'removed' ORDER BY archived, id",
         (int(guild_id), source) * 2,
     )
@@ -570,6 +572,8 @@ async def run_check(
 ) -> Outcome:
     """One read of the feed's list; every new event is added or suggested, never twice.
     Called with the feed's lock held."""
+    from .marathon_stale import try_again
+
     cog = cog_of(bot)
     now = cog.clock()
     try:
@@ -584,6 +588,8 @@ async def run_check(
         if row is not None and row["feed_id"] is None and not row["archived"]:
             await update_marathon(bot.db, row["id"], feed_id=int(feed["id"]))
             adopted += 1
+    tried = stale.tries(known, [candidate.ref for candidate in candidates])
+    back = [row["id"] for row in tried if await try_again(bot, guild, row["id"])]
     records = mf.suggested_of(feed)
     new = mf.fresh(
         candidates,
@@ -623,6 +629,8 @@ async def run_check(
             added=added,
             suggested=suggested,
             adopted=adopted,
+            stale_tried=len(tried),
+            stale_restored=len(back),
         ),
     )
     said = mf.FEED_CHECKED.format(

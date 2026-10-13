@@ -223,6 +223,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "marathon.baf_event_no_ping",
         "marathon.baf_event_ping_unconfirmed",
         "marathon.schedule_stale",
+        "marathon.stale_archived",
+        "marathon.stale_restored",
         "marathon.spotlight_set",
         "golive.spotlight_kept",
         "marathon.archived",
