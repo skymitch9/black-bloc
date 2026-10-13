@@ -20,6 +20,7 @@ from ... import marathon_inbox as mi
 from ... import marathon_ping as mp
 from ... import marathon_reminder_posts as mrem
 from ... import marathon_spotlight as ms
+from ... import marathon_stale as stale
 from ... import pings
 from ... import shadow as shadow_home
 from ... import spotlight as spot
@@ -339,6 +340,7 @@ MARATHON_COLUMNS = {
     "last_fetch_ok",
     "last_error",
     "fetch_failures",
+    "stale_clock_at",
     "fetch_hash",
     "source_ref",
     "suggested_next",
@@ -768,7 +770,11 @@ async def set_active(
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
         await update_marathon(
-            bot.db, marathon["id"], active=1 if active else 0, held_by_channel=0
+            bot.db,
+            marathon["id"],
+            active=1 if active else 0,
+            held_by_channel=0,
+            **({stale.CLOCK: cog.clock().isoformat()} if active else {}),
         )
         fresh = await get_marathon(bot.db, guild.id, marathon["id"])
         await cog.sync_window(guild, fresh)
@@ -1820,12 +1826,15 @@ class Marathons(commands.Cog):
     async def tick_marathon(self, guild: Any, marathon: Any) -> None:
         from .marathon_inbox import follow_thread_home
         from .marathon_runner_posts import unpin_due
+        from .marathon_stale import archive_if_stale
         from .marathon_thread_controls import sync_controls
 
         now = self.clock()
         store = self.bot.store
         if self.read_due(guild, marathon, now):
             read = await self.refresh(guild, marathon)
+            if not read.ok and await archive_if_stale(self, guild, marathon):
+                return
             await notice_if_published(self.bot, guild, marathon["id"], read)
             marathon = await get_marathon(self.bot.db, guild.id, marathon["id"])
         if marathon is None:
@@ -2069,6 +2078,10 @@ class Marathons(commands.Cog):
             return await self._failed(guild, marathon, exc, now)
         except Exception as exc:
             return await self._failed(guild, marathon, ScheduleError(str(exc)[:200]), now)
+        return await self.take(guild, marathon, runs, now)
+
+    async def take(self, guild: Any, marathon: Any, runs: list[Any], now: datetime) -> Outcome:
+        """A read that worked, applied; the stale trial read comes in here too."""
         runs = await viewer_decorated(self.bot, guild, marathon, runs)
         found = await self.apply(guild, marathon, runs, now)
         await self.sync_window(guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
@@ -2097,6 +2110,7 @@ class Marathons(commands.Cog):
             last_fetch_ok=0,
             last_error=str(exc)[:300],
             fetch_failures=failures,
+            **stale.failed_fields(marathon, now, unpublished=exc.unpublished),
         )
         details = {
             "marathon_id": marathon["id"],
@@ -2142,6 +2156,7 @@ class Marathons(commands.Cog):
             last_fetch_ok=1,
             last_error=None,
             fetch_failures=0,
+            stale_clock_at=stamp,
         )
         matched = await self.rematch(guild, marathon)
         await self.event_follows(

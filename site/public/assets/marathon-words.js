@@ -317,7 +317,8 @@ export function slotMatches(run, query) {
 
 const ARCHIVE_TITLE = 'Archive';
 const ARCHIVE_TITLE_COUNT = 'Archive · {count}';
-const ARCHIVE_WHY = { ended: 'archived', staff: 'archived', removed: 'removed' };
+const ARCHIVE_WHY = { ended: 'archived', staff: 'archived', removed: 'removed', stale: 'archived' };
+const STALE_WHY = 'stale';
 const ARCHIVED_AGO = '{why} {ago}';
 const ARCHIVED_AGO_BY = '{why} {ago} by {who}';
 const ARCHIVED_AFTER = '{ago}, {days} after its last run';
@@ -357,9 +358,15 @@ export function archivedWhen(row, now = Date.now()) {
   return row.archived_by_name ? said(ARCHIVED_AGO_BY, { why, ago, who: row.archived_by_name }) : said(ARCHIVED_AGO, { why, ago });
 }
 
-/** The archived drawer's who: the sweep and its grace, or the staff member who moved it. */
+/** The state word of a marathon archived as unreadable, from its setting; '' for any other. */
+export function archivedStale(row) {
+  return row && row.archived_why === STALE_WHY ? String(row.archived_why_word || STALE_WHY) : '';
+}
+
+/** The archived drawer's who: the sweep and its grace, the stale word, or who moved it. */
 export function archivedWho(row) {
   const why = ARCHIVE_WHY[row.archived_why] || 'archived';
+  if (archivedStale(row)) return archivedStale(row);
   if (row.archived_why === 'ended') {
     const days = sinceEnd(row);
     return days ? said(ARCHIVED_BY_SWEEP, { days }) : 'moved here by the sweep';

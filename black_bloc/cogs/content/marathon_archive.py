@@ -9,6 +9,7 @@ from ... import marathon as mt
 from ... import marathon_archive as ma
 from ... import marathon_inbox as mi
 from ... import marathon_spotlight as ms
+from ... import marathon_stale as stale
 from ...actionlog import log_action
 from ...golive import parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
@@ -27,6 +28,7 @@ from ...settings_store import (
     MARATHON_ARCHIVE_AFTER_DAYS_KEY,
     MARATHON_ARCHIVE_QUESTION_KEY,
     MARATHON_ARCHIVED_SAID_KEY,
+    MARATHON_ARCHIVED_STALE_WORD_KEY,
     MARATHON_ARCHIVED_WORD_KEY,
     MARATHON_NOT_ARCHIVED_KEY,
     MARATHON_RESTORE_QUESTION_KEY,
@@ -52,6 +54,7 @@ from .marathon import (
     open_root,
     render,
     said_default,
+    update_marathon,
 )
 
 log = logging.getLogger(__name__)
@@ -327,6 +330,9 @@ async def restore_marathon(
             )
         runs = await archived_runs(bot.db, row["id"])
         await restore_rows(bot.db, row["id"])
+        await update_marathon(
+            bot.db, row["id"], **stale.restored_fields(row, cog_of(bot).clock())
+        )
         if mi.is_tracked(row):
             await late_track.arm(bot.db, row["id"])
     await log_action(
@@ -359,6 +365,12 @@ async def archive_one(cog: Any, guild: Any, rows: list[Any]) -> bool:
         return await archive_held(bot, guild, None, fresh, ma.ENDED)
 
 
+def why_word(bot: Any, guild_id: int, why: Any) -> str:
+    if why == ma.STALE:
+        return words(bot, guild_id, MARATHON_ARCHIVED_STALE_WORD_KEY)
+    return ma.WHY_WORDS.get(why, str(why))
+
+
 def archived_word(bot: Any, guild_id: int, row: Any) -> str:
     at = parse_ts(_cell(row, "archived_at"))
     when = at.strftime("%d %b %Y") if at is not None else ""
@@ -368,7 +380,7 @@ def archived_word(bot: Any, guild_id: int, row: Any) -> str:
 # --- the Discord panel ------------------------------------------------------------------------
 
 
-def archive_line(row: Any, runs: list[Any]) -> str:
+def archive_line(row: Any, runs: list[Any], why: str) -> str:
     total, ours = counts_of(runs)
     starts = parse_ts(row["starts_at"])
     ends = parse_ts(row["ends_at"])
@@ -380,7 +392,7 @@ def archive_line(row: Any, runs: list[Any]) -> str:
         dates=dates,
         runs=total,
         ours=ours,
-        why=ma.WHY_WORDS.get(row["archived_why"], row["archived_why"]),
+        why=why,
         when=f"<t:{unix(at)}:R>" if at is not None else "",
     )
 
@@ -388,14 +400,17 @@ def archive_line(row: Any, runs: list[Any]) -> str:
 async def build_archive(bot: Any, guild: Any) -> tuple[discord.Embed, MarathonPanel]:
     rows = await list_archived(bot.db, guild.id, limit=25)
     total = await count_archived(bot.db, guild.id)
-    lines = [archive_line(row, await archived_runs(bot.db, row["id"])) for row in rows]
+    whys = {row["id"]: why_word(bot, guild.id, row["archived_why"]) for row in rows}
+    lines = [
+        archive_line(row, await archived_runs(bot.db, row["id"]), whys[row["id"]]) for row in rows
+    ]
     if not rows:
         days = int(bot.store.get(guild.id, MARATHON_ARCHIVE_AFTER_DAYS_KEY))
         lines = [ma.ARCHIVE_EMPTY.format(days=days)]
     embed = discord.Embed(title=ma.ARCHIVE_TITLE.format(count=total), description=clamped(lines))
     view = MarathonPanel(minutes_for(bot, guild.id), ARCHIVE_VIEW)
     if rows:
-        view.add_item(ArchivedPick(rows))
+        view.add_item(ArchivedPick(rows, whys))
     from .marathon import add_moves
 
     add_moves(view, (mt.BACK_MOVE,))
@@ -486,14 +501,14 @@ async def ask_restore(interaction: discord.Interaction, view: Any, marathon_id: 
 
 
 class ArchivedPick(discord.ui.Select):
-    def __init__(self, rows: list[Any]) -> None:
+    def __init__(self, rows: list[Any], whys: dict[Any, str]) -> None:
         super().__init__(
             placeholder=ma.PICK_ARCHIVED,
             options=[
                 discord.SelectOption(
                     label=str(row["name"])[:100],
                     value=str(row["id"]),
-                    description=ma.WHY_WORDS.get(row["archived_why"], "")[:100] or None,
+                    description=str(whys.get(row["id"]) or "")[:100] or None,
                 )
                 for row in rows[:25]
             ],
@@ -521,4 +536,5 @@ __all__ = [
     "open_archive",
     "restore_marathon",
     "restore_rows",
+    "why_word",
 ]

@@ -158,7 +158,7 @@ test('the Archive foldout says Archive alone while empty, then its count', async
 });
 
 test('an archived row says who moved it: the sweep by its grace, staff by name', async () => {
-  const { archivedWhen, archivedWho, archiveCounts } = await import('../public/assets/marathon-words.js');
+  const { archivedStale, archivedWhen, archivedWho, archiveCounts } = await import('../public/assets/marathon-words.js');
   const now = Date.parse('2026-10-10T12:00:00Z');
   const swept = { archived_why: 'ended', archived_at: '2026-09-20T12:00:00Z', ends_at: '2026-09-13T08:00:00Z' };
   assert.equal(archivedWhen(swept, now), 'archived 20 days ago, 7 days after its last run');
@@ -170,6 +170,12 @@ test('an archived row says who moved it: the sweep by its grace, staff by name',
   assert.equal(archivedWhen(removed, now), 'removed just now');
   assert.equal(archivedWho(removed), 'removed by staff');
   assert.equal(archivedWho({ archived_why: 'ended', archived_at: null }), 'moved here by the sweep');
+  const stale = { archived_why: 'stale', archived_why_word: 'could not be read', archived_at: '2026-10-10T09:00:00Z', archived_by_name: null };
+  assert.equal(archivedWhen(stale, now), 'archived 3 h ago');
+  assert.equal(archivedWho(stale), 'could not be read');
+  assert.equal(archivedStale(stale), 'could not be read');
+  assert.equal(archivedStale({ ...stale, archived_why_word: 'schedule went away' }), 'schedule went away');
+  for (const other of [swept, staff, removed, null]) assert.equal(archivedStale(other), '');
   assert.equal(archiveCounts({ runs: 1, ours: 0 }), '1 run · 0 BaF');
   assert.equal(archiveCounts({ runs: 3, ours: 1 }), '3 runs · 1 BaF');
 });

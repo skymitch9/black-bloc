@@ -51,7 +51,8 @@ def test_a_why_nobody_wrote_reads_as_ended():
     assert ma.clean_why("staff") == "staff"
     assert ma.clean_why("removed") == "removed"
     assert ma.clean_why("bogus") == "ended"
-    assert set(ma.WHY_WORDS) == set(ma.WHYS)
+    assert ma.clean_why("stale") == "stale"
+    assert set(ma.WHY_WORDS) == set(ma.WHYS) - {ma.STALE}
 
 
 def test_a_page_is_clamped_and_a_bad_number_takes_the_default():
