@@ -189,6 +189,14 @@ async def test_an_unpublished_read_never_counts_and_never_archives(bot, cog):  #
     assert kept is not None and kept["fetch_failures"] == 3
     assert ARCHIVED not in await kinds(bot.db)
 
+    await bot.store.set(GUILD, HOURS, 0)
+    await read_at(bot, cog, marathon, 95)
+    kept = await get_marathon(bot.db, GUILD, marathon["id"])
+    assert kept is not None and kept["fetch_failures"] == 3
+    cog.client.raises = DOWN
+    await read_at(bot, cog, marathon, 96)
+    assert await get_marathon(bot.db, GUILD, marathon["id"]) is None
+
 
 async def test_a_row_from_before_the_column_is_not_archived_at_the_first_tick(bot, cog):  # noqa: F811
     marathon = await added(bot, cog)
