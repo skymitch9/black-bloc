@@ -1085,6 +1085,7 @@ CREATE TABLE IF NOT EXISTS marathons (
     added_by         INTEGER,
     added_at         TEXT    NOT NULL,
     stale_clock_at   TEXT,
+    untracked_alert_at TEXT,
     UNIQUE (guild_id, schedule_url)
 );
 
@@ -1642,6 +1643,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "log_thread_id", "INTEGER"),
     ("marathons", "log_thread_channel_id", "INTEGER"),
     ("marathons", "stale_clock_at", "TEXT"),
+    ("marathons", "untracked_alert_at", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

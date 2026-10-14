@@ -341,6 +341,7 @@ MARATHON_COLUMNS = {
     "last_error",
     "fetch_failures",
     "stale_clock_at",
+    "untracked_alert_at",
     "fetch_hash",
     "source_ref",
     "suggested_next",
@@ -1828,6 +1829,7 @@ class Marathons(commands.Cog):
         from .marathon_runner_posts import unpin_due
         from .marathon_stale import archive_if_stale
         from .marathon_thread_controls import sync_controls
+        from .marathon_untracked_alert import alert_if_due
 
         now = self.clock()
         store = self.bot.store
@@ -1849,6 +1851,7 @@ class Marathons(commands.Cog):
         await sync_controls(self.bot, guild, marathon)
         if not marathon["active"]:
             return
+        await alert_if_due(self, guild, marathon)
         await self.follow_spotlight(guild, marathon["id"])
         if mt.is_near(marathon, now, lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY))):
             await signals.resolve_categories(self, guild, marathon)

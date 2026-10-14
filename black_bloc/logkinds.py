@@ -225,6 +225,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "marathon.schedule_stale",
         "marathon.stale_archived",
         "marathon.stale_restored",
+        "marathon.untracked_alert",
         "marathon.spotlight_set",
         "golive.spotlight_kept",
         "marathon.archived",
