@@ -42,7 +42,7 @@ On the minute tick, under the marathon's lock, after the inbox message is synced
 
 ## Words
 
-Key `marathon_untracked_alert_template`, default `{role} **{name}** starts {when} ({relative}) and is not tracked. {baf} BaF on it.` Fields: `{role}` (the mention), `{name}`, `{when}` (`<t:…:f>`), `{relative}` (`<t:…:R>`), `{hours}` (hours left, one decimal), `{baf}` (distinct members, runners and hosts together), `{runners}`, `{hosts}`. A template that will not fill falls back to the shipped words (checklist 17, `marathon.render`).
+Key `marathon_untracked_alert_template`, default `{role} **{name}** starts {when} ({relative}) and is not tracked. {who}.` (changed 2026-10-14 at the owner's *"Yes"* to naming who is on it; it was `{baf} BaF on it.`). `{who}` is each BaF person once per part, in run order, as `marathon_untracked_alert_runner` (`{who} running`) or `marathon_untracked_alert_host` (`{who} hosting`) words them with `{who}` = `<@id>`, joined by `, `; the send allows the role mention only, so the names render without pinging anyone (`marathon_untracked_alert.py` `parts_of` / `who_of`). Other fields: `{role}` (the mention), `{name}`, `{when}` (`<t:…:f>`), `{relative}` (`<t:…:R>`), `{hours}` (hours left, one decimal), `{baf}` (distinct members, runners and hosts together), `{runners}`, `{hosts}`. A template that will not fill falls back to the shipped words (checklist 17, `marathon.render`).
 
 ## Log
 

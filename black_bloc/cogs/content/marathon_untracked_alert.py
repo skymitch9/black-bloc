@@ -9,8 +9,10 @@ import discord
 from ... import marathon_untracked_alert as ua
 from ...actionlog import log_action
 from ...settings_store import (
+    MARATHON_UNTRACKED_ALERT_HOST_KEY,
     MARATHON_UNTRACKED_ALERT_HOURS_KEY,
     MARATHON_UNTRACKED_ALERT_ROLE_KEY,
+    MARATHON_UNTRACKED_ALERT_RUNNER_KEY,
     MARATHON_UNTRACKED_ALERT_TEMPLATE_KEY,
 )
 from ...spotlight import reason_of
@@ -110,7 +112,17 @@ async def alert_if_due(cog: Any, guild: Any, marathon: Any) -> bool:
         bot,
         guild.id,
         MARATHON_UNTRACKED_ALERT_TEMPLATE_KEY,
-        **ua.fields_of(fresh, runs, now, f"<@&{int(role.id)}>"),
+        **ua.fields_of(
+            fresh,
+            runs,
+            now,
+            f"<@&{int(role.id)}>",
+            ua.who_of(
+                runs,
+                lambda who: words(bot, guild.id, MARATHON_UNTRACKED_ALERT_RUNNER_KEY, who=who),
+                lambda who: words(bot, guild.id, MARATHON_UNTRACKED_ALERT_HOST_KEY, who=who),
+            ),
+        ),
     )
     body = note_for(bot, guild, home, real_inbox_parent(bot, guild), text)
     mentions = (

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -15,6 +16,7 @@ POSTED = "posted"
 SKIPPED = "skipped"
 FAILED = "failed"
 NO_ROLE = "no role is set (marathon_untracked_alert_role_id)"
+RUNNER = "runner"
 ROLE_GONE = "the role is not on the server"
 
 
@@ -43,6 +45,29 @@ def baf_of(runs: Any) -> tuple[set[int], set[int]]:
     return (runners, hosts)
 
 
+def parts_of(runs: Any) -> list[tuple[int, str]]:
+    found: list[tuple[int, str]] = []
+    for run in live_runs(runs):
+        for person in mt.people_of(run):
+            if not person.get("user_id"):
+                continue
+            if person.get("part") == mt.HOST:
+                one = (int(person["user_id"]), mt.HOST)
+            elif person.get("counts") is not False:
+                one = (int(person["user_id"]), RUNNER)
+            else:
+                continue
+            if one not in found:
+                found.append(one)
+    return found
+
+
+def who_of(runs: Any, runner: Callable[[str], str], host: Callable[[str], str]) -> str:
+    return ", ".join(
+        (host if part == mt.HOST else runner)(f"<@{user_id}>") for user_id, part in parts_of(runs)
+    )
+
+
 def start_of(marathon: Any, runs: Any) -> datetime | None:
     found = parse_ts(_cell(marathon, "starts_at"))
     if found is not None:
@@ -68,7 +93,9 @@ def hours_left(start: datetime, now: datetime) -> float:
     return round((start - now).total_seconds() / 3600, 1)
 
 
-def fields_of(marathon: Any, runs: Any, now: datetime, role: str) -> dict[str, Any]:
+def fields_of(
+    marathon: Any, runs: Any, now: datetime, role: str, who: str = ""
+) -> dict[str, Any]:
     start = start_of(marathon, runs) or now
     runners, hosts = baf_of(runs)
     at = unix(start)
@@ -81,6 +108,7 @@ def fields_of(marathon: Any, runs: Any, now: datetime, role: str) -> dict[str, A
         "baf": len(runners | hosts),
         "runners": len(runners),
         "hosts": len(hosts),
+        "who": who,
     }
 
 
