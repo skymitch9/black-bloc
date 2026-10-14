@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-14 — one section APPENDED, nothing re-keyed**: *Untracked alert* (branch `untracked-alert`, off `main` `1a843655`); keyed by NAME. `cogs/content/marathon.py` rows below `tick_marathon` sit a line or two lower. Before that:
 > **2026-10-10 — 44 dead rows MOVED OUT, 2 re-pointed, 4 marked in place, nothing re-keyed**: the rows whose named anchor is nowhere in `black_bloc/`, `site/`, `tests/` or `scripts/` at `main` `b4d232a1` (the follow-up to the 2026-09-28 re-key's *31 not found*, re-measured: 50 dead anchors today) moved whole to [`../archive/code-notes-retired-2026-10-10.md`](../archive/code-notes-retired-2026-10-10.md) with the commit that removed each and what replaced it; `Events.submit` → `submit_draft` and `rearm` → `rearmed` re-pointed by NAME (the explanation still holds); the four `PICK_HELP` rows keep their live `PICK_GUESS` / `shownPick` / `FEED_*_NOTE` anchors with the dead one struck. Before that:
 > **2026-10-10 — one section APPENDED, nothing re-keyed**: *Move damping* (branch `move-damping`, off `main` `8ecbab63`); keyed by NAME. `cogs/content/marathon.py` rows below `_write_plan` sit a few lines lower. Before that:
 > **2026-10-09 — one section APPENDED, nothing re-keyed**: *The sticky leaderboard* (branch `sticky-board`, off `main` `b87ed763`); keyed by NAME. Before that:
@@ -10487,3 +10488,17 @@ Design: [`marathon-stale-archive-design.md`](marathon-stale-archive-design.md).
 - `black_bloc/cogs/content/marathon_feeds.py` `marathons_by_ref` — carries `archived_why` (NULL for a live row) so `run_check` can tell a stale archive from a hand one without a second query. `run_check` logs the trial counts on `marathon.feed_checked` (`stale_tried`, `stale_restored`); a failed trial writes no row of its own.
 - `black_bloc/storage/db.py` `ADDED_COLUMNS` — one nullable column, no `SCHEMA_VERSION` step; the archive twin gains it through `_mirror_archived_tables`.
 - `site/public/assets/marathon-words.js` `archivedStale` — the word comes from the payload's `archived_why_word` (the key), never a literal in the page; `STALE_WHY` is only the fallback if the field is missing.
+
+## Untracked alert — keyed by NAME (branch `untracked-alert`, 2026-10-14; re-key after the merge)
+
+Design: [`marathon-untracked-alert-design.md`](marathon-untracked-alert-design.md).
+
+- `black_bloc/marathon_untracked_alert.py` `wanted` — the whole rule. `state_of(...) != FOUND` covers tracked, ignored and archived in one test; `start <= now + hours` with `now < start` makes a marathon found inside the window fire on its first tick and a started one never.
+- `marathon_untracked_alert.baf_of` — reads the people the matcher already wrote (`marathon.match_people`), so `marathon_match_hosts` and the per-marathon host scan are honoured without re-matching. A host counts even with `counts: false` (`marathon_hosts_count_as_ours` off): the ask names hosts. Runners and commentators keep the `counts` flag. Dropped runs are left out.
+- `marathon_untracked_alert.start_of` — `starts_at` first; the earliest non-dropped `scheduled_at` only when the span was never written.
+- `black_bloc/cogs/content/marathon_untracked_alert.py` `alert_if_due` — called from `Marathons.tick_marathon` with the marathon's lock held, after `inbox_sync` (so the inbox message it replies to exists) and after the `active` return (a paused marathon is never flagged). The stamp is written BEFORE `ensure_inbox` and the send, so a failure is one `failed` row and never a retry loop (the `marathon_late_track.sweep` precedent). The role check comes before the stamp on purpose: a blank or deleted role leaves the marathon unstamped.
+- `cogs/content/marathon_untracked_alert.skipped_once` — the `(guild, marathon, reason)` set lives on the cog instance, so it resets per boot; without it a blank role would write an IMPORTANT row every minute per marathon in the window.
+- `cogs/content/marathon_untracked_alert.reply_to` — only a message in the current home and not mid-move (`cog.inbox_moved`) is replied to; a reference into another channel would be refused by Discord. `fail_if_not_exists=False` covers a deleted inbox message.
+- `alert_if_due` mentions — the mention string is built from the role id (`<@&id>`), not `role.mention`, and shadow sends `AllowedMentions.none()`: a rehearsal never pings.
+- `black_bloc/api/tools/marathons.py` `tracking_of` — `untracked_alert_at` rides on every row and drawer, live and archived; the site does not draw it.
+- `black_bloc/storage/db.py` `ADDED_COLUMNS` — one nullable column, no `SCHEMA_VERSION` step; the archive twin gains it through `_mirror_archived_tables`.

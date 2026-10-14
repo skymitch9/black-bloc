@@ -359,6 +359,7 @@ async def tracking_of(bot: Any, guild: Any, row: Any, *, archived: bool = False)
         "log_thread_id": _id(_cell(row, "log_thread_id")),
         "log_thread_url": mi.channel_url(guild.id, _cell(row, "log_thread_id")),
         "inbox_message_url": await inbox_message_url(bot, guild, row),
+        "untracked_alert_at": _cell(row, "untracked_alert_at"),
     }
 
 

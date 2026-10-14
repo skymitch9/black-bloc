@@ -2340,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1213
+    assert len(settings_store.KEY_TYPES) == 1216
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2594,6 +2594,32 @@ def test_move_damping_is_two_marathon_ints_60_minutes_and_4_reads_by_default(sto
             with pytest.raises(settings_store.SettingError):
                 settings_store.coerce_value(key, bad)
     assert settings_store.coerce_value(minutes, 0) == 0
+
+
+def test_the_untracked_alert_is_36_hours_a_blank_role_and_one_template(store):
+    hours = settings_store.MARATHON_UNTRACKED_ALERT_HOURS_KEY
+    role = settings_store.MARATHON_UNTRACKED_ALERT_ROLE_KEY
+    words = settings_store.MARATHON_UNTRACKED_ALERT_TEMPLATE_KEY
+    assert (hours, role, words) == (
+        "marathon_untracked_alert_hours",
+        "marathon_untracked_alert_role_id",
+        "marathon_untracked_alert_template",
+    )
+    for key, kind, default in ((hours, "int", 36), (role, "role", None), (words, "text", None)):
+        assert settings_store.KEY_TYPES[key] == kind
+        assert settings_store.namespace_of(key) == "marathon"
+        assert settings_store.KEY_HELP[key]
+        if default is not None or kind == "role":
+            assert store.default(key) == default
+    assert (settings_store.KEY_MIN[hours], settings_store.KEY_MAX[hours]) == (0, 336)
+    assert settings_store.coerce_value(hours, 0) == 0
+    for bad in (-1, 337, True, "2"):
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(hours, bad)
+    assert store.default(words).startswith("{role} **{name}** starts {when}")
+    assert set(settings_store.MARATHON_WORDS[words][1]) == {
+        "role", "name", "when", "relative", "hours", "baf", "runners", "hosts"
+    }  # fmt: skip
 
 
 def test_the_stale_archive_is_two_marathon_ints_3_reads_and_24_hours_and_one_word(store):
