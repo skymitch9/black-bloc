@@ -197,6 +197,8 @@ export const LABELS = {
   marathon_untracked_alert_hours: 'Hours before its start an untracked BaF marathon is flagged',
   marathon_untracked_alert_role_id: 'Role told about an untracked BaF marathon',
   marathon_untracked_alert_template: 'The untracked BaF marathon alert',
+  marathon_untracked_alert_runner: 'A BaF runner in the untracked alert',
+  marathon_untracked_alert_host: 'A BaF host in the untracked alert',
   marathon_archive_question: 'What staff are asked before Archive it',
   marathon_archived_said: 'What staff are told once a marathon is archived',
   marathon_restore_question: 'What staff are asked before Restore',

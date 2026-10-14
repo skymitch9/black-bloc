@@ -1,4 +1,5 @@
 # ruff: noqa: F401, F811
+import re
 from datetime import timedelta
 
 import discord
@@ -95,7 +96,7 @@ async def test_an_untracked_marathon_with_a_baf_runner_36_hours_out_is_flagged_o
     assert len(said) == 1
     message = said[0]
     assert message.content.startswith(f"<@&{AUNTIES}> **AGDQ 2027** starts <t:")
-    assert message.content.endswith("and is not tracked. 1 BaF on it.")
+    assert re.search(r"and is not tracked\. <@\d+> running\.$", message.content)
     reply = message.kwargs["reference"]
     assert reply.message_id == inbox_messages(bot, EVENTS)[0].id
     assert reply.channel_id == inbox_thread(bot, EVENTS).id
@@ -152,7 +153,7 @@ async def test_a_baf_host_alone_is_enough(bot, cog):
     await found(bot, cog, schedule(10, NOBODY, HOST_PART))
     await cog.tick_once()
     assert len(alerts(bot)) == 1
-    assert alerts(bot)[0].content.endswith("1 BaF on it.")
+    assert alerts(bot)[0].content.endswith(f"and is not tracked. <@{HOST}> hosting.")
     details = await details_of(bot.db, KIND)
     assert (details["baf_runners"], details["baf_hosts"]) == (0, 1)
 
@@ -262,3 +263,15 @@ async def test_the_words_are_the_template_key(bot, cog):
     await found(bot, cog, schedule(10, SKY_RUN, HOST_PART))
     await cog.tick_once()
     assert alerts(bot)[0].content == f"<@&{AUNTIES}> AGDQ 2027: 1r 1h 10.0"
+
+
+async def test_each_baf_person_is_named_once_with_their_part_in_the_words_keys(bot, cog):
+    await bot.store.set(GUILD, "marathon_untracked_alert_template", "{who}")
+    await bot.store.set(GUILD, "marathon_untracked_alert_runner", "{who} runs")
+    await bot.store.set(GUILD, "marathon_untracked_alert_host", "{who} hosts")
+    runs = schedule(10, SKY_RUN, HOST_PART) + [a_run(3, 700, people=(HOST_PART,))]
+    await found(bot, cog, runs)
+    await cog.tick_once()
+    content = alerts(bot)[0].content
+    assert re.fullmatch(rf"<@\d+> runs, <@{HOST}> hosts", content)
+    assert alerts(bot)[0].kwargs["allowed_mentions"].users is False

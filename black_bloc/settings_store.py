@@ -6937,6 +6937,8 @@ MARATHON_UNTRACKED_ALERT_HOURS_KEY = "marathon_untracked_alert_hours"
 MARATHON_UNTRACKED_ALERT_HOURS = 36
 MARATHON_UNTRACKED_ALERT_ROLE_KEY = "marathon_untracked_alert_role_id"
 MARATHON_UNTRACKED_ALERT_TEMPLATE_KEY = "marathon_untracked_alert_template"
+MARATHON_UNTRACKED_ALERT_RUNNER_KEY = "marathon_untracked_alert_runner"
+MARATHON_UNTRACKED_ALERT_HOST_KEY = "marathon_untracked_alert_host"
 MARATHON_ARCHIVE_QUESTION_KEY = "marathon_archive_question"
 MARATHON_ARCHIVED_SAID_KEY = "marathon_archived_said"
 MARATHON_RESTORE_QUESTION_KEY = "marathon_restore_question"
@@ -8635,12 +8637,25 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "Archive card",
     ),
     MARATHON_UNTRACKED_ALERT_TEMPLATE_KEY: (
-        "{role} **{name}** starts {when} ({relative}) and is not tracked. {baf} BaF on it.",
-        ("role", "name", "when", "relative", "hours", "baf", "runners", "hosts"),
+        "{role} **{name}** starts {when} ({relative}) and is not tracked. {who}.",
+        ("role", "name", "when", "relative", "hours", "baf", "runners", "hosts", "who"),
         "the alert posted in the marathon inbox, as a reply to the marathon's message, when a "
         "marathon with a BaF runner or host is still not tracked marathon_untracked_alert_hours "
         "before it starts. It takes {role} {name} {when} {relative} {hours} {baf} {runners} "
-        "{hosts}",
+        "{hosts} {who}; {who} is each BaF person, as marathon_untracked_alert_runner or "
+        "marathon_untracked_alert_host says, joined by commas",
+    ),
+    MARATHON_UNTRACKED_ALERT_RUNNER_KEY: (
+        "{who} running",
+        ("who",),
+        "one BaF runner in the {who} of marathon_untracked_alert_template. {who} is the member, "
+        "shown without a ping",
+    ),
+    MARATHON_UNTRACKED_ALERT_HOST_KEY: (
+        "{who} hosting",
+        ("who",),
+        "one BaF host in the {who} of marathon_untracked_alert_template. {who} is the member, "
+        "shown without a ping",
     ),
     MARATHON_ARCHIVE_QUESTION_KEY: (
         "Archive **{name}**? It stops being read and its ping window closes; its runs, people "

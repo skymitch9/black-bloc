@@ -69,7 +69,7 @@ def test_wanted_never_for_off_stamped_tracked_ignored_paused_or_no_baf():
 
 
 def test_the_fields_and_details():
-    fields = ua.fields_of(marathon(), RUNS, NOW, "<@&9>")
+    fields = ua.fields_of(marathon(), RUNS, NOW, "<@&9>", "a, b")
     at = int((NOW + timedelta(hours=30)).timestamp())
     assert fields == {
         "role": "<@&9>",
@@ -80,7 +80,12 @@ def test_the_fields_and_details():
         "baf": 2,
         "runners": 1,
         "hosts": 1,
+        "who": "a, b",
     }
+    assert ua.who_of(RUNS, "{} running".format, "{} hosting".format) == ", ".join(
+        f"<@{uid}> {'hosting' if part == 'host' else 'running'}" for uid, part in ua.parts_of(RUNS)
+    )
+    assert len(ua.parts_of(RUNS + RUNS)) == len(ua.parts_of(RUNS)) == 2
     assert ua.details_of(marathon(), RUNS, NOW) == {
         "marathon_id": 1,
         "name": "AGDQ 2027",
