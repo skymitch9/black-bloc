@@ -66,7 +66,10 @@ async def skipped_once(cog: Any, guild: Any, details: dict[str, Any], why: str) 
         return
     seen.add(key)
     await log_action(
-        cog.bot, guild, ua.KIND, details=details | {"outcome": ua.SKIPPED, "reason": why}
+        cog.bot,
+        guild,
+        "marathon.untracked_alert",
+        details=details | {"outcome": ua.SKIPPED, "reason": why},
     )
 
 
@@ -97,7 +100,10 @@ async def alert_if_due(cog: Any, guild: Any, marathon: Any) -> bool:
         thread, why = None, TEST_MODE
     if thread is None:
         await log_action(
-            bot, guild, ua.KIND, details=details | {"outcome": ua.FAILED, "reason": why}
+            bot,
+            guild,
+            "marathon.untracked_alert",
+            details=details | {"outcome": ua.FAILED, "reason": why},
         )
         return False
     text = words(
@@ -118,13 +124,16 @@ async def alert_if_due(cog: Any, guild: Any, marathon: Any) -> bool:
         message = await thread.send(body, allowed_mentions=mentions, **extra)
     except Exception as exc:
         await log_action(
-            bot, guild, ua.KIND, details=details | {"outcome": ua.FAILED, "reason": reason_of(exc)}
+            bot,
+            guild,
+            "marathon.untracked_alert",
+            details=details | {"outcome": ua.FAILED, "reason": reason_of(exc)},
         )
         return False
     await log_action(
         bot,
         guild,
-        ua.KIND,
+        "marathon.untracked_alert",
         details=details
         | {
             "outcome": ua.POSTED,

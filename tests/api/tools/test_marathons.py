@@ -890,6 +890,23 @@ async def test_archive_it_moves_a_marathon_and_the_archive_lists_it_read_only(
     assert client.post(f"/api/marathons/{marathon_id}/refresh").status_code == 404
 
 
+async def test_the_row_and_the_drawer_carry_when_the_untracked_alert_went(
+    client, sign_in, web, cog
+):
+    sign_in(client)
+    made = add(client).json()["id"]
+    assert client.get(f"/api/marathons/{made}").json()["untracked_alert_at"] is None
+    await web.db.conn.execute(
+        "UPDATE marathons SET untracked_alert_at = '2027-01-03T06:00:00+00:00' WHERE id = ?",
+        (made,),
+    )
+    await web.db.conn.commit()
+    opened = client.get(f"/api/marathons/{made}").json()
+    assert opened["untracked_alert_at"] == "2027-01-03T06:00:00+00:00"
+    listed = [one for one in client.get("/api/marathons").json()["marathons"] if one["id"] == made]
+    assert listed[0]["untracked_alert_at"] == "2027-01-03T06:00:00+00:00"
+
+
 async def test_a_stale_archive_carries_its_mark_and_its_word_and_nothing_else_new(
     client, sign_in, web, cog, wf
 ):

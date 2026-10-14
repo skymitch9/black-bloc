@@ -199,7 +199,8 @@ async def test_no_role_waits_unstamped_and_says_so_once_then_posts_when_one_is_s
     assert alerts(bot) == [] and (await fresh(bot, marathon))["untracked_alert_at"] is None
     assert (await kinds(bot.db)).count(KIND) == 1
     skipped = await details_of(bot.db, KIND)
-    assert skipped["outcome"] == "skipped" and "marathon_untracked_alert_role_id" in skipped["reason"]
+    assert skipped["outcome"] == "skipped"
+    assert "marathon_untracked_alert_role_id" in skipped["reason"]
 
     await bot.store.set(GUILD, ROLE, 4242)
     await tick_at(cog, 0.2)

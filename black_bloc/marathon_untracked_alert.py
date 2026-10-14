@@ -11,7 +11,6 @@ from .golive import parse_ts
 from .timezones import unix
 
 COLUMN = "untracked_alert_at"
-KIND = "marathon.untracked_alert"
 POSTED = "posted"
 SKIPPED = "skipped"
 FAILED = "failed"

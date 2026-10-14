@@ -4468,6 +4468,32 @@ async def test_a_schema_93_file_gains_the_marathon_log_thread_columns(tmp_path):
         await again.close()
 
 
+async def test_a_file_from_before_the_untracked_alert_gains_one_empty_column(tmp_path):
+    """No version step: ADDED_COLUMNS runs at every boot, and the archive twin follows."""
+    path = tmp_path / "before_untracked_alert.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for table in ("marathons", "marathons_archive"):
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN untracked_alert_at")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at) "
+        "VALUES (1, 'AGDQ 2027', 'https://x', 'gdq', '74', 'x')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name, untracked_alert_at FROM marathons")
+        assert tuple(await cur.fetchone()) == ("AGDQ 2027", None)
+        cur = await again.conn.execute("PRAGMA table_info(marathons_archive)")
+        assert "untracked_alert_at" in [row["name"] for row in await cur.fetchall()]
+        assert SCHEMA_VERSION == 94
+    finally:
+        await again.close()
+
+
 async def test_a_file_from_before_the_stale_archive_gains_one_empty_clock_column(tmp_path):
     """No version step: ADDED_COLUMNS runs at every boot. An empty clock archives nothing, so a
     marathon already at three failed reads is kept at the first tick after the deploy."""
