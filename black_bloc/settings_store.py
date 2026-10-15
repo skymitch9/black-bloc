@@ -5145,6 +5145,19 @@ POINTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "what a member with no approved run is told when they ask how far the next place is",
     ),
+    "points_next_rank_top_said": (
+        "{gap} more puts you in the top {top}, about {runs} approved run(s).",
+        ("gap", "top", "runs"),
+        "added after points_next_rank_said when a member is below the top points_top_n and the "
+        "place above is not its last place; {gap} passes #{top}",
+    ),
+    "points_next_rank_unranked_top_said": (
+        "You are not on the leaderboard yet. {gap} speedpoints puts you in the top {top}, about "
+        "{runs} approved run(s).",
+        ("gap", "top", "runs"),
+        "what a member with no approved run is told when the top points_top_n is full; while it "
+        "has room, points_next_rank_unranked_said",
+    ),
     "points_submitted_said": (
         "Your **{game}** run ({time}) is in. Staff check the proof before it counts.",
         POINTS_RUN,

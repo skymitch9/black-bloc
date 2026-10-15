@@ -727,6 +727,8 @@ export const LABELS = {
   points_next_rank_said: "What a member is told about the next place up",
   points_next_rank_first_said: "What the member in first place is told about the next place",
   points_next_rank_unranked_said: "What a member not on the leaderboard is told about the next place",
+  points_next_rank_top_said: "What a member below the top is told about entering it",
+  points_next_rank_unranked_top_said: "What a member not on the leaderboard is told about entering the top",
   points_submitted_said: "What a member is told after submitting a run",
   points_no_game_said: "What a member is told when a run has no game",
   points_too_long_said: "What a member is told when the category or note is too long",
