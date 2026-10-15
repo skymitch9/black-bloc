@@ -1,5 +1,7 @@
 {
-  "release": "v233",
-  "commit": "30196dc7",
-  "changed_features": []
+  "release": "v234",
+  "commit": "e142d65d",
+  "changed_features": [
+    "points"
+  ]
 }
