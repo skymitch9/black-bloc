@@ -87,6 +87,19 @@ def next_rank(
     return NextRank(CLIMB, mine.place, mine.value(by), above, gap, runs)
 
 
+def to_top(
+    board: Sequence[Place], user_id: int, top: int, *, by: str = BY_POINTS, per_run: int = 0
+) -> tuple[Place, int, int | None] | None:
+    """The last place inside the top and what passing it takes, when that is a second climb."""
+    mine = place_of(board, user_id)
+    if top < 1 or len(board) < top or (mine is not None and mine.place <= top + 1):
+        return None
+    edge = board[top - 1]
+    gap = edge.value(by) - (mine.value(by) if mine is not None else 0) + 1
+    runs = math.ceil(gap / per_run) if by == BY_POINTS and per_run > 0 else None
+    return edge, gap, runs
+
+
 def diff(before: Sequence[Place], after: Sequence[Place], top: int) -> list[Change]:
     """Who entered, left, moved up or moved down inside the top `top` places."""
     was = {one.user_id: one.place for one in before}

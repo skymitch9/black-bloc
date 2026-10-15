@@ -10,7 +10,7 @@ from . import points_moves as moves
 from . import points_store as store_
 from .pb_feed import plain
 from .points import clock
-from .points.board import CLIMB, FIRST, Place, next_rank
+from .points.board import CLIMB, FIRST, Place, next_rank, to_top
 from .points.bounty import live_at
 from .points.model import BY_POINTS, BY_XP, MULTIPLIER, ORDERS, PENDING
 from .settings_store import (
@@ -142,8 +142,14 @@ async def bounties(bot: Any, guild: Any, *, current_only: bool = False) -> list[
 
 async def next_rank_of(bot: Any, guild: Any, user_id: int) -> dict[str, Any]:
     board = await moves.board(bot, guild.id, BY_POINTS)
-    found = next_rank(
-        board, int(user_id), by=BY_POINTS, per_run=int(bot.store.get(guild.id, POINTS_PER_RUN))
+    per_run = int(bot.store.get(guild.id, POINTS_PER_RUN))
+    found = next_rank(board, int(user_id), by=BY_POINTS, per_run=per_run)
+    top = moves.top_of(bot.store, guild.id)
+    edge = to_top(board, int(user_id), top, by=BY_POINTS, per_run=per_run)
+    top_fields = (
+        {"gap": edge[1], "top": top, "runs": edge[2] if edge[2] is not None else ""}
+        if edge is not None
+        else {}
     )
     above = found.above
     if found.kind == CLIMB and above is not None:
@@ -158,8 +164,14 @@ async def next_rank_of(bot: Any, guild: Any, user_id: int) -> dict[str, Any]:
             above=above.place,
             runs=found.runs if found.runs is not None else "",
         )
+        if edge is not None:
+            line = f"{line} " + moves.said(
+                bot.store, guild.id, "points_next_rank_top_said", **top_fields
+            )
     elif found.kind == FIRST:
         line = moves.said(bot.store, guild.id, "points_next_rank_first_said", points=found.value)
+    elif edge is not None:
+        line = moves.said(bot.store, guild.id, "points_next_rank_unranked_top_said", **top_fields)
     else:
         line = moves.said(bot.store, guild.id, "points_next_rank_unranked_said")
     return {
@@ -171,6 +183,9 @@ async def next_rank_of(bot: Any, guild: Any, user_id: int) -> dict[str, Any]:
         "above_place": above.place if above is not None else None,
         "gap": found.gap,
         "runs": found.runs,
+        "top": top,
+        "top_gap": edge[1] if edge is not None else None,
+        "top_runs": edge[2] if edge is not None else None,
         "line": line,
     }
 

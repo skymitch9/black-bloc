@@ -75,8 +75,34 @@ async def test_the_board_shows_the_top_n_and_the_full_board_shows_everyone(bot, 
     assert [row["name"] for row in found["board"]] == ["Ada"]
     assert [row["name"] for row in whole["rows"]] == ["Ada", "Bea"]
     assert found["me"]["line"] == (
+        "You are not on the leaderboard yet. 11 speedpoints puts you in the top 1, about 2 "
+        "approved run(s)."
+    )
+    assert (found["me"]["top"], found["me"]["top_gap"], found["me"]["top_runs"]) == (1, 11, 2)
+    await bot.store.set(GUILD, "points_top_n", 3)
+    assert (await view.next_rank_of(bot, guild, CY))["line"] == (
         "You are not on the leaderboard yet. Your first approved run puts you on it."
     )
+
+
+async def test_below_the_top_a_member_sees_the_place_above_and_the_way_in(bot, guild):
+    await bot.store.set(GUILD, "points_top_n", 1)
+    await approved(bot, guild, ADA)
+    await approved(bot, guild, BEA)
+    await approved(bot, guild, CY)
+
+    third = await view.next_rank_of(bot, guild, CY)
+    second = await view.next_rank_of(bot, guild, BEA)
+
+    assert third["line"] == (
+        "You are #3 with 10 speedpoints. 1 more passes Bea at #2 — about 1 approved run(s). "
+        "1 more puts you in the top 1, about 1 approved run(s)."
+    )
+    assert (third["top_gap"], third["top_runs"]) == (1, 1)
+    assert second["line"] == (
+        "You are #2 with 10 speedpoints. 1 more passes Ada at #1 — about 1 approved run(s)."
+    )
+    assert second["top_gap"] is None
 
 
 async def test_first_place_is_told_nobody_is_ahead(bot, guild):

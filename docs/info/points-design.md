@@ -141,6 +141,8 @@ with the member above, and **gap = their points − mine + 1** — one more than
 depends on a tie-break — and `runs = ceil(gap / points_per_run)` (by speedpoints only). Worked: A 50, B 30, C 30
 (later) → B needs 21 to pass A (about 3 runs at 10); C needs 1 to pass B.
 
+**The way into the top (owner, 2026-10-14, his Q4 answer: *"they should see how many points they need to pass the person above them, if theyre not in the top 10 it should show them points needed to enter the top 10 and points needed to pass the person above them"*).** `to_top(board, member, points_top_n)` returns the last place inside the top and `gap = its points - mine + 1` (0 for a member not on the board), only when that is a SECOND climb: the board holds at least `points_top_n` places and the member is below `top + 1` (at `top + 1` the place above IS the edge, so one sentence says it), or is not on the board. The climb line then gains `points_next_rank_top_said`; a member not on the board gets `points_next_rank_unranked_top_said` instead of `points_next_rank_unranked_said` while the top is full. `/pb`, the page and the mock carry `top`, `top_gap`, `top_runs`. Q4 is settled by this, no staff confirmation owed.
+
 ### A6. What moved in the top N (the announcement)
 
 `diff(before, after, top)` over everyone inside the top `points_top_n` before or after: **entered** (in the top now,

@@ -10,6 +10,7 @@ from black_bloc.points.board import (
     next_rank,
     place_of,
     standings,
+    to_top,
 )
 from black_bloc.points.model import BY_XP, DOWN, ENTERED, LEFT, UP
 
@@ -133,3 +134,23 @@ def test_fewer_members_than_the_top_still_reports_each_move():
     after = top((1, 30), (2, 40))
     assert diff(before, after, 10) == [Change(ENTERED, 2, None, 1), Change(DOWN, 1, 1, 2)]
     assert diff([], top((1, 10)), 10) == [Change(ENTERED, 1, None, 1)]
+
+
+def test_to_top_is_the_last_place_inside_and_only_when_it_is_a_second_climb():
+    board = standings([row(n, 100 - n * 10) for n in range(1, 6)])
+    edge, gap, runs = to_top(board, 5, 2, per_run=10)
+    assert (edge.place, edge.user_id, gap, runs) == (2, 2, 31, 4)
+    assert to_top(board, 3, 2, per_run=10) is None
+    assert to_top(board, 2, 2) is None
+    assert to_top(board, 1, 2) is None
+    unranked = to_top(board, 99, 2, per_run=10)
+    assert (unranked[0].user_id, unranked[1], unranked[2]) == (2, 81, 9)
+    assert to_top(board, 99, 6) is None
+    assert to_top(board, 5, 0) is None
+    by_xp = to_top(
+        standings([row(1, 10, xp=100), row(2, 50, xp=25), row(3, 1, xp=5)], by=BY_XP),
+        3,
+        1,
+        by=BY_XP,
+    )
+    assert (by_xp[1], by_xp[2]) == (96, None)
