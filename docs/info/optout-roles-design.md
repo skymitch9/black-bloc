@@ -3,7 +3,7 @@
 > **Audience:** the conductor, the build agent, reviewers. **Status:** TRACKED. **Last verified: 2026-10-18** — against
 > `main` `58fb50ab` by reading the code named below. ⚠️ **NOT checked:** the live server (who holds `Staff`, whether
 > that role can see the staff channel), the live database. Secret NAMES only.
-> **State: 🔨 BUILT on branch `optout-roles` (off `main` `c009d4fc`), NOT merged, NOT deployed** — see *As built* below.
+> **State: 🚀 LIVE v235 (2026-10-18 16:24, merge `cf25b5c0`); the role is not picked yet** — built on branch `optout-roles` (off `main` `c009d4fc`), see *As built* below. Was: 🔨 BUILT, NOT merged.
 > ~~State: 📝 DESIGNED, owner sign-off pending — nothing built.~~ (signed off 2026-10-18, the four decisions below)
 
 ## The ask, verbatim (owner, Sun 2026-10-18 15:1x Phoenix)
