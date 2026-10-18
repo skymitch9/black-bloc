@@ -1256,12 +1256,14 @@ def test_the_card_moves_key_is_typed_in_as_a_comma_list_and_read_back_as_words()
 
 def test_every_registry_key_is_reachable_from_the_panel_as_well_as_the_dashboard():
     """Checklist 33 — a key `/settings` cannot open is a dashboard-only key. `automod_rules` is
-    the one deliberate exception: `/automod` ▸ **A rule…** owns the rule book."""
+    the one deliberate exception: `/automod` ▸ **A rule…** owns the rule book. The opted-out
+    roles are the other, website only by the owner's word (2026-10-18)."""
     from black_bloc.settings_panel import groups, has_editor, keys_in
 
     opened = {key for group in groups() for key in keys_in(group)}
 
-    assert opened == set(KEY_TYPES)
+    assert settings_store.SITE_ONLY_KEYS == {"marathon_optout_role_ids"}
+    assert opened == set(KEY_TYPES) - settings_store.SITE_ONLY_KEYS
     assert {key for key in opened if not has_editor(key)} == {"automod_rules"}
     assert "request_channel_moves" in opened and "request_review_by_other" in opened
 
@@ -2340,7 +2342,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1220
+    assert len(settings_store.KEY_TYPES) == 1228
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):

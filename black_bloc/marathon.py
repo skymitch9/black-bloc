@@ -79,6 +79,9 @@ STATE_KEYS = {
     DROPPED: MARATHON_STATE_DROPPED_KEY,
 }
 PART_ORDER = (RUNNER, HOST, COMMENTATOR)
+NOT_OURS = "not_ours"
+NOT_OURS_ID = "not_ours_id"
+NOT_OURS_ROLE = "role"
 MESSAGE_LIMIT = 2000
 TWITCH_URL = "https://twitch.tv/{login}"
 
@@ -380,9 +383,12 @@ def match_people(
     scan_hosts: bool = True,
     hosts_count: bool = True,
     commentators_count: bool = True,
+    not_ours: Any = frozenset(),
 ) -> list[dict[str, Any]]:
     """Staff pairings first, then the member's Twitch link, then — only for a name the schedule
-    gave no link for — a member whose Discord username is exactly that name."""
+    gave no link for — a member whose Discord username is exactly that name. A member in
+    `not_ours` is left unmatched and carries why."""
+    excluded = {int(one) for one in not_ours or ()}
     here: dict[str, Any] = {}
     everywhere: dict[str, Any] = {}
     for row in pairings or ():
@@ -411,7 +417,13 @@ def match_people(
                 user_id = lowered.get(str(login).lower())
             if user_id is None and (not login or borrowed):
                 user_id = named.get(key)
+        held = user_id if user_id is not None and int(user_id) in excluded else None
+        if held is not None:
+            user_id = None
         one = {"name": name, "login": login, "part": part, "user_id": user_id}
+        if held is not None:
+            one[NOT_OURS] = NOT_OURS_ROLE
+            one[NOT_OURS_ID] = int(held)
         if fixed and fixed != sheet:
             one["sheet_login"] = sheet
         if lent:
@@ -455,7 +467,7 @@ def unmatched_names(runs: Any) -> list[str]:
     seen: dict[str, str] = {}
     for run in runs or ():
         for person in people_of(run):
-            if not person.get("user_id"):
+            if not person.get("user_id") and not person.get(NOT_OURS):
                 seen.setdefault(runner_key(person.get("name")), str(person.get("name") or ""))
     return sorted((name for name in seen.values() if name), key=str.lower)
 

@@ -10,7 +10,8 @@ import discord
 from ... import marathon as mt
 from ... import marathon_announce as ma
 from ...actionlog import log_action
-from ...logkinds import VIA_DISCORD, kind_via
+from ...golive import now_iso
+from ...logkinds import VIA_DISCORD, VIA_WEBSITE, kind_via
 from ...panels import Outcome, refusal
 from ...pb_feed import plain as unlinked
 from ...settings_store import (
@@ -35,6 +36,8 @@ from ...settings_store import (
     MARATHON_ANNOUNCE_WHY_OFF_KEY,
     MARATHON_ANNOUNCE_WHY_RUN_KEY,
     MARATHON_ANNOUNCEMENTS_DEFAULT_KEY,
+    MARATHON_BAF_OVERRIDE_CLEARED_SAID_KEY,
+    MARATHON_BAF_OVERRIDE_SET_SAID_KEY,
     MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY,
     MARATHON_MENTION_ON_SAID_KEY,
     MARATHON_MENTION_PEOPLE_KEY,
@@ -43,11 +46,14 @@ from ...settings_store import (
 from .marathon import (
     NO_SUCH,
     NO_SUCH_RUN_CODE,
+    baf_overrides,
     cog_of,
     get_marathon,
+    list_marathons,
     run_by_id,
     runs_of,
     said_default,
+    sync_runs,
     update_marathon,
     update_run,
 )
@@ -79,6 +85,12 @@ MENTION_SAID = {
     ma.PLAIN: MARATHON_MENTION_PLAIN_SAID_KEY,
     ma.MENTION: MARATHON_MENTION_ON_SAID_KEY,
 }
+OVERRIDE_SAID = {
+    True: MARATHON_BAF_OVERRIDE_SET_SAID_KEY,
+    False: MARATHON_BAF_OVERRIDE_CLEARED_SAID_KEY,
+}
+NOT_A_MEMBER = "Nobody with the id **{given}** is in the server, so nothing was changed."
+NOT_A_MEMBER_CODE = "not_a_member"
 
 
 def announces(bot: Any, guild_id: int, marathon: Any) -> bool:
@@ -446,6 +458,123 @@ async def set_mention(
     )
 
 
+def ours_and_held(rows: Any) -> tuple[set[int], set[int]]:
+    """Who is of ours on a marathon's runs, and who a role keeps out of it."""
+    ours: set[int] = set()
+    held: set[int] = set()
+    for row in rows:
+        people = mt.people_of(row)
+        ours |= {int(one["user_id"]) for one in mt.ours(people)}
+        held |= {int(one[mt.NOT_OURS_ID]) for one in people if one.get(mt.NOT_OURS_ID)}
+    return (ours, held)
+
+
+async def role_rematch(
+    bot: Any, guild: Any, *, actor: Any = None, via: str = VIA_DISCORD
+) -> dict[str, list[int]]:
+    """Every marathon still ahead is matched again once who is not BaF changed; its public
+    posts follow the opt-out's own path — taken down when they name nobody, put back in place."""
+    cog = cog_of(bot)
+    found: dict[str, list[int]] = {"out": [], "in": [], "marathons": []}
+    if cog is None or not bot.db.is_connected:
+        return found
+    went_out: set[int] = set()
+    came_in: set[int] = set()
+    now = cog.clock()
+    for listed in await list_marathons(bot.db, guild.id):
+        if not listed["active"] or mt.is_over(listed, now):
+            continue
+        async with cog.lock(listed["id"]):
+            fresh = await get_marathon(bot.db, guild.id, listed["id"])
+            if fresh is None:
+                continue
+            ours, held = ours_and_held(await runs_of(bot.db, fresh["id"]))
+            await cog.rematch(guild, fresh)
+            now_ours, now_held = ours_and_held(await runs_of(bot.db, fresh["id"]))
+            moved = ours ^ now_ours
+            if not moved and held == now_held:
+                continue
+            found["marathons"].append(int(fresh["id"]))
+            went_out |= now_held - held
+            came_in |= held - now_held
+            fresh = await get_marathon(bot.db, guild.id, fresh["id"])
+            await sync_runs(bot, guild, fresh, actor=actor)
+            if moved:
+                await followed(cog, guild, fresh, moved, actor=actor, via=via)
+            await cog.sync_board(guild, fresh)
+    found["out"] = sorted(went_out)
+    found["in"] = sorted(came_in)
+    for out, members in ((True, went_out), (False, came_in)):
+        if not members:
+            continue
+        await log_action(
+            bot,
+            guild,
+            kind_via("marathon.role_opted_out" if out else "marathon.role_opted_in", via),
+            actor=actor,
+            details={"members": sorted(members), "marathons": found["marathons"], "via": via},
+        )
+    return found
+
+
+async def roles_changed(bot: Any, guild_id: Any, key: str, value: Any, by: Any) -> None:
+    """marathon_optout_role_ids was changed on the site."""
+    guild = bot.get_guild(int(guild_id))
+    if guild is None:
+        return
+    actor = guild.get_member(int(by)) if by else None
+    await role_rematch(bot, guild, actor=actor or by, via=VIA_WEBSITE)
+
+
+async def member_roles_changed(bot: Any, before: Any, after: Any) -> None:
+    """A member put on or took off a role of marathon_optout_role_ids."""
+    guild = getattr(after, "guild", None)
+    if guild is None or getattr(after, "bot", False) or not bot.db.is_connected:
+        return
+    wanted = ma.optout_roles(guild, bot.store)
+    was = wanted & {int(role.id) for role in getattr(before, "roles", ())}
+    now = wanted & {int(role.id) for role in getattr(after, "roles", ())}
+    if not wanted or bool(was) == bool(now):
+        return
+    if int(after.id) in await baf_overrides(bot.db):
+        return
+    await role_rematch(bot, guild, via=VIA_DISCORD)
+
+
+async def set_baf_override(
+    bot: Any, guild: Any, actor: Any, user_id: Any, on: bool, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The one writer of who counts as BaF anyway, on every marathon; the marathons still ahead
+    are matched again at once."""
+    member_id = int(user_id)
+    member = guild.get_member(member_id)
+    if on and member is None:
+        return refusal(NOT_A_MEMBER.format(given=member_id), NOT_A_MEMBER_CODE, 404)
+    was = member_id in await baf_overrides(bot.db)
+    if was != bool(on):
+        if on:
+            await bot.db.conn.execute(
+                "INSERT OR REPLACE INTO marathon_baf_overrides(user_id, by, at) VALUES (?, ?, ?)",
+                (member_id, int(getattr(actor, "id", 0) or 0) or None, now_iso()),
+            )
+        else:
+            await bot.db.conn.execute(
+                "DELETE FROM marathon_baf_overrides WHERE user_id = ?", (member_id,)
+            )
+        await bot.db.conn.commit()
+        await log_action(
+            bot,
+            guild,
+            kind_via("marathon.baf_override_set" if on else "marathon.baf_override_cleared", via),
+            actor=actor,
+            target=member_id,
+            details={"member": member_id, "via": via},
+        )
+        await role_rematch(bot, guild, actor=actor, via=via)
+    name = display_name(guild, member_id, str(member_id))
+    return Outcome(True, words(bot, guild.id, OVERRIDE_SAID[bool(on)], name=name))
+
+
 async def press(
     bot: Any,
     guild: Any,
@@ -467,6 +596,13 @@ async def press(
 
 
 __all__ = [
+    "NOT_A_MEMBER",
+    "NOT_A_MEMBER_CODE",
+    "ours_and_held",
+    "member_roles_changed",
+    "role_rematch",
+    "roles_changed",
+    "set_baf_override",
     "announces",
     "anyone_announced",
     "as_written",
