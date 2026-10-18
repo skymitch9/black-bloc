@@ -189,9 +189,10 @@ def role_holders(guild: Any, role_ids: Any) -> set[int]:
     wanted = {int(one) for one in role_ids or ()}
     if not wanted:
         return set()
+    found = getattr(guild, "members", None) or ()
     return {
         int(member.id)
-        for member in list(getattr(guild, "members", None) or ())
+        for member in list(found.values() if isinstance(found, dict) else found)
         if not getattr(member, "bot", False)
         and wanted & {int(getattr(role, "id", 0) or 0) for role in getattr(member, "roles", ())}
     }
