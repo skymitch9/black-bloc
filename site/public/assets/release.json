@@ -1,7 +1,8 @@
 {
-  "release": "v234",
-  "commit": "e142d65d",
+  "release": "v235",
+  "commit": "cf25b5c0",
   "changed_features": [
-    "points"
+    "core",
+    "marathon"
   ]
 }
