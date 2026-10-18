@@ -1,8 +1,5 @@
 {
-  "release": "v235",
-  "commit": "cf25b5c0",
-  "changed_features": [
-    "core",
-    "marathon"
-  ]
+  "release": "v236",
+  "commit": "237924d2",
+  "changed_features": []
 }
