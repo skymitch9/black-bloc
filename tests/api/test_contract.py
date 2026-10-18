@@ -774,6 +774,14 @@ async def seed_world(client, web, guild, wf) -> dict:
     await pings.set_fan_role(
         db, guild_id, None, wf.PLAIN_ROLE_ID, 7, spotlight_id=role_spotlight_id
     )
+    # The Members page's Opted out list draws a channel opted out of marathons in its own block.
+    quiet_spotlight_id = await add_spotlight(
+        db, guild_id, "optedoutfest", added_by=7, expires_at=None, pin=False
+    )
+    await db.conn.execute(
+        "UPDATE spotlight_channels SET marathons = 0 WHERE id = ?", (quiet_spotlight_id,)
+    )
+    await db.conn.commit()
     # Marathon schedules (schema 60): the real cog on a canned tracker, one marathon on the GDQ
     # row, three runs, and a pairing that makes the second run ours.
     marathons = Marathons(web)
