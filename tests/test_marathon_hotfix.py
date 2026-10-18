@@ -363,9 +363,9 @@ def everywhere(name, user_id):
     return {"runner_name": name.lower(), "user_id": user_id, "marathon_id": None}
 
 
-def matched(links=None, pairings=(), hosts=True):
+def matched(links=None, pairings=(), hosts=True, not_ours=frozenset()):
     return {
-        one.ref: hf.matched_of(one, links or {}, pairings, match_hosts=hosts)
+        one.ref: hf.matched_of(one, links or {}, pairings, match_hosts=hosts, not_ours=not_ours)
         for one in hf.blocks_of(SHEET)
     }
 
@@ -411,6 +411,13 @@ def test_a_host_counts_only_while_hosts_count_as_people_and_is_always_scanned():
     assert hf.tracked(hf.blocks_of(SHEET), [], people) == []
     people = matched(pairings=[everywhere("anarchy", ANARCHY)], hosts=True)
     assert hf.tracked(hf.blocks_of(SHEET), [], people) != []
+
+
+def test_a_host_a_role_keeps_out_of_baf_is_never_the_reason_a_show_is_tracked():
+    people = matched(pairings=[everywhere("anarchy", ANARCHY)], not_ours={ANARCHY})
+    assert hf.tracked(hf.blocks_of(SHEET), [], people) == []
+    held = [one for found in people.values() for one in found if one.get("not_ours_id")]
+    assert held and {one["user_id"] for one in held} == {None}
 
 
 def test_a_pairing_made_for_one_marathon_does_not_track_a_show():

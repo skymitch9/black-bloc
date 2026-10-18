@@ -58,6 +58,17 @@ def test_a_runner_is_ours_through_their_linked_twitch_login_whatever_its_case():
     assert found == [{"name": "Sky", "login": "SkyRuns", "part": "runner", "user_id": 9}]
 
 
+def test_a_member_a_role_keeps_out_is_left_unmatched_with_why_and_a_pairing_is_no_way_round():
+    people = [Person("Sky", "SkyRuns", "runner"), Person("Crew", None, "host")]
+    pairings = [{"marathon_id": None, "runner_name": "crew", "user_id": 5}]
+    found = mt.match_people(people, {"skyruns": 9}, pairings, not_ours=frozenset({9, 5}))
+    assert [one["user_id"] for one in found] == [None, None]
+    assert [(one[mt.NOT_OURS], one[mt.NOT_OURS_ID]) for one in found] == [("role", 9), ("role", 5)]
+    assert mt.ours(found) == [] and mt.unmatched_names([{"people": json.dumps(found)}]) == []
+    kept = mt.match_people(people, {"skyruns": 9}, pairings, not_ours=frozenset({5}))
+    assert kept[0] == {"name": "Sky", "login": "SkyRuns", "part": "runner", "user_id": 9}
+
+
 def test_a_name_with_no_login_is_ours_through_a_staff_pairing():
     found = mt.match_people(
         [Person("Interview Crew", None, "host")],

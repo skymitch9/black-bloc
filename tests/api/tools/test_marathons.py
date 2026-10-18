@@ -35,6 +35,8 @@ ROUTES = [
     ("DELETE", "/api/marathons/1/people/somebody/spotlight"),
     ("POST", "/api/marathons/1/people/77/opt-out"),
     ("DELETE", "/api/marathons/1/people/77/opt-out"),
+    ("POST", "/api/marathons/baf-override/77"),
+    ("DELETE", "/api/marathons/baf-override/77"),
     ("POST", "/api/marathons/1/runs/1/shout"),
     ("POST", "/api/marathons/1/runs/1/done"),
     ("POST", "/api/marathons/1/runs/1/upcoming"),
@@ -1128,6 +1130,78 @@ async def test_a_baf_persons_opt_out_is_shown_on_the_people_card_and_moved_both_
     assert crew["opted_out"] is False
     stranger = client.post(f"/api/marathons/{marathon_id}/people/424242/opt-out")
     assert stranger.status_code == 404 and stranger.json()["error"] == "not_baf"
+
+
+async def staff_role_on_sky(web, wf):
+    from functools import partial
+
+    from black_bloc.cogs.content.marathon_announce import roles_changed
+    from tests.api.conftest import WebRole
+
+    role = WebRole(6100, "Staff", position=3)
+    web.guild.roles.append(role)
+    wf.member(web.guild, SKY, name="sky").roles.append(role)
+    web.store.on_change("marathon_optout_role_ids", partial(roles_changed, web))
+
+
+def person(board, name):
+    found = [one for one in [*board["baf"], *board["others"]] if one["name"] == name]
+    assert len(found) == 1, found
+    return found[0], found[0] in board["baf"]
+
+
+async def test_a_role_holder_reads_not_baf_and_count_as_baf_anyway_moves_both_ways(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    await staff_role_on_sky(web, wf)
+    marathon_id = add(client).json()["id"]
+    people = f"/api/marathons/{marathon_id}/people"
+    sky, baf = person(client.get(people).json(), "Sky")
+    assert baf and sky["baf_rule"] is None
+
+    put = client.put("/api/settings/marathon_optout_role_ids", json={"value": ["6100"]})
+
+    assert put.status_code == 200, put.text
+    sky, baf = person(client.get(people).json(), "Sky")
+    assert not baf and sky["user_id"] is None and sky["looks_like"] is None
+    assert sky["baf_rule"] == {
+        "state": "role",
+        "user_id": str(SKY),
+        "member_name": "Sky",
+        "said": "not BaF (Staff)",
+        "move": "set",
+        "move_label": "Count as BaF anyway",
+    }
+    assert (await web_row(wf, web, "web.marathon.role_opted_out"))["members"] == [SKY]
+
+    out = client.post(f"/api/marathons/baf-override/{SKY}")
+    assert out.status_code == 200, out.text
+    assert out.json() == {
+        "user_id": str(SKY),
+        "override": True,
+        "message": "**Sky** counts as BaF on every marathon.",
+    }
+    sky, baf = person(client.get(people).json(), "Sky")
+    assert baf and sky["baf_rule"]["state"] == "override"
+    assert sky["baf_rule"]["said"] == "BaF (staff override)"
+    assert sky["baf_rule"]["move_label"] == "Undo the override"
+    assert (await web_row(wf, web, "web.marathon.baf_override_set"))["member"] == SKY
+
+    back = client.delete(f"/api/marathons/baf-override/{SKY}")
+    assert back.status_code == 200 and back.json()["override"] is False
+    assert "follows the opted-out roles again" in back.json()["message"]
+    assert not person(client.get(people).json(), "Sky")[1]
+    assert (await web_row(wf, web, "web.marathon.baf_override_cleared"))["member"] == SKY
+
+
+async def test_the_override_refuses_in_words(client, sign_in, web, cog, wf):
+    sign_in(client)
+    stranger = client.post("/api/marathons/baf-override/424242")
+    assert stranger.status_code == 404 and stranger.json()["error"] == "not_a_member"
+    assert "424242" in stranger.json()["message"]
+    bad = client.post("/api/marathons/baf-override/somebody")
+    assert bad.status_code == 400 and bad.json()["message"]
 
 
 async def test_patch_the_host_announcements_switch_off_by_default_and_logged(

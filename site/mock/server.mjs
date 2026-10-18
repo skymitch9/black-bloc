@@ -101,6 +101,7 @@ const ROLES = [
   { id: '900000000000000007', name: 'Events', color: '#8a8f98', position: 2, managed: false },
   { id: '900000000000000008', name: 'Casey pings', color: '#8a8f98', position: 3, managed: false },
   { id: '900000000000000010', name: 'GamesDoneQuick pings', color: '#8a8f98', position: 3, managed: false },
+  { id: '900000000000000011', name: 'Staff', color: '#8a8f98', position: 6, managed: false },
 ];
 
 const CHANNELS = [
@@ -236,6 +237,8 @@ const ROSTER = [
     roles: at % 7 === 0 ? [BOOSTER_ROLE_ID, MEMBER_ROLE_ID] : [MEMBER_ROLE_ID],
   })),
 ];
+// QuietKid and Dax wear GDQ's Staff role, which marathon_optout_role_ids lists (Dax is counted as BaF anyway).
+for (const at of [5, 6]) ROSTER[at].role_ids.push('900000000000000011');
 
 // Mirrors black_bloc/logkinds.py. The mock only needs enough of it to sort and
 // mark its own seed rows; the router is the truth and test_logkinds.py guards it.
@@ -956,6 +959,14 @@ const SETTING_SPECS = [
   ["marathon_public_button_opt_in", "text", "Opt back in to this marathon", "Opt back in to this marathon", "the same button once the person is opted out of the whole marathon; they are announced again from the next reminder mark"],
   ["marathon_announce_opted_out_said", "text", "**{name}** is opted out of **{marathon}**'s public posts: no reminders and no highlight. A highlight of theirs that was up is taken down.", "**{name}** is opted out of **{marathon}**'s public posts: no reminders and no highlight. A highlight of theirs that was up is taken down.", "what staff are told once a person is opted out of a marathon's public posts. It takes {name} {marathon}"],
   ["marathon_announce_opted_in_said", "text", "**{name}** is back in **{marathon}**'s public posts from the next reminder mark.", "**{name}** is back in **{marathon}**'s public posts from the next reminder mark.", "what staff are told once a person is opted back in to a marathon's public posts. It takes {name} {marathon}"],
+  ["marathon_optout_role_ids", "roles", ["900000000000000011"], [], "roles whose holders are NOT BaF in marathons: a member wearing one is never matched as ours — no BaF mark, no staff-thread runner post, never the reason a Hotfix show is tracked, no public post — unless staff count them as BaF anyway on the site. Changed on the website only. none by default"],
+  ["marathon_not_baf_role_word", "text", "not BaF ({role})", "not BaF ({role})", "what the site's People card and the Members page's Opted out list say about someone a marathon would match but who wears one of marathon_optout_role_ids. It takes {role}"],
+  ["marathon_baf_override_word", "text", "BaF (staff override)", "BaF (staff override)", "what the site says about someone staff count as BaF on every marathon although they wear one of marathon_optout_role_ids"],
+  ["marathon_posts_opted_out_word", "text", "opted out of posts", "opted out of posts", "what the Members page's Opted out list says about a BaF person opted out of a marathon's public posts; they are still tracked"],
+  ["marathon_baf_override_button", "text", "Count as BaF anyway", "Count as BaF anyway", "the site's button on someone left out by marathon_optout_role_ids that counts them as BaF on every marathon"],
+  ["marathon_baf_override_clear_button", "text", "Undo the override", "Undo the override", "the site's button that puts someone counted as BaF anyway back under marathon_optout_role_ids"],
+  ["marathon_baf_override_set_said", "text", "**{name}** counts as BaF on every marathon.", "**{name}** counts as BaF on every marathon.", "what staff are told on the site once someone is counted as BaF anyway. It takes {name}"],
+  ["marathon_baf_override_cleared_said", "text", "**{name}** follows the opted-out roles again.", "**{name}** follows the opted-out roles again.", "what staff are told on the site once the override on someone is undone. It takes {name}"],
   ["marathon_host_announcements_default", "bool", false, false, "whether a marathon announces its BaF HOSTS publicly — a host block's reminders and highlight — when its own Host announcements switch follows this setting. Runners follow Runner announcements; neither switch is over the other. A run's own answer for a host beats this switch either way. off by default"],
   ["marathon_mention_people", "bool", true, true, "whether a public marathon post writes a BaF person as an @ (drawn, never notified). Off, every public post writes their name as the schedule has it, as plain text, instead; one person on one marathon can be set the other way from a run's post. on by default"],
   ["marathon_controls_host_announcements_on", "text", "Host announcements: on · turn off", "Host announcements: on · turn off", "the thread controls' host announcements button while the marathon's BaF hosts are announced publicly"],
@@ -3453,6 +3464,62 @@ route('GET', '/api/members', (context) => {
   };
 });
 
+// The Members page's Opted out list (black_bloc/api/tools/optouts.py): every place someone is
+// out of, read where it lives; no copy of any opt-out is kept here.
+const OPTOUT_SOURCES = ['marathon_role', 'marathon_override', 'marathon_posts', 'golive', 'chat_memory', 'birthdays', 'pbs'];
+
+function chatMemoryOptouts() {
+  if (!state.chatMemoryOptouts) state.chatMemoryOptouts = [{ user_id: MEMBERS[4].id, at: minutesAgo(3000) }];
+  return state.chatMemoryOptouts;
+}
+
+route('GET', '/api/members/optouts', (context) => {
+  requireStaff(context.session);
+  const found = new Map();
+  const add = (userId, source, said = null, extra = {}) => {
+    const key = String(userId);
+    if (!found.has(key)) found.set(key, []);
+    found.get(key).push({ source, said, marathons: [], rule: null, ...extra });
+  };
+  for (const userId of [...marathonNotOurs()].sort()) {
+    const rule = marathonBafRule({ held: userId });
+    add(userId, 'marathon_role', rule.said, { rule });
+  }
+  for (const row of marathonBafOverrides()) {
+    const rule = marathonBafRule({ userId: row.user_id });
+    add(row.user_id, 'marathon_override', rule.said, { rule });
+  }
+  const posts = new Map();
+  for (const row of state.marathons) {
+    for (const userId of [...marathonOptedOut(row)].sort()) {
+      if (!posts.has(userId)) posts.set(userId, []);
+      posts.get(userId).push({ id: row.id, name: row.name });
+    }
+  }
+  for (const [userId, marathons] of posts) add(userId, 'marathon_posts', marathonWords('marathon_posts_opted_out_word'), { marathons });
+  for (const row of state.golive.optouts) add(row.user_id, 'golive');
+  if ((state.settings.get('chat_memory_consent') || 'optout') === 'optout') {
+    for (const row of chatMemoryOptouts()) add(row.user_id, 'chat_memory');
+  }
+  for (const row of state.birthdays.filter((one) => !one.opted_in)) add(row.user_id, 'birthdays');
+  for (const row of pbState().people.filter((one) => one.state === 'opted_out')) add(row.user_id, 'pbs');
+  const people = [...found].map(([userId, chips]) => {
+    const member = ROSTER.find((one) => one.id === userId && one.id !== '700000000000000008');
+    return {
+      user_id: userId,
+      name: member ? member.display_name : userId,
+      username: member ? member.name : null,
+      avatar: member ? member.avatar_url || null : null,
+      here: Boolean(member),
+      chips: chips.sort((a, b) => OPTOUT_SOURCES.indexOf(a.source) - OPTOUT_SOURCES.indexOf(b.source)),
+    };
+  }).sort((a, b) => Number(!a.here) - Number(!b.here) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  const channels = state.golive.spotlights
+    .filter((one) => one.marathons === false)
+    .map((one) => ({ id: one.id, login: one.twitch_login, name: one.display_name || one.twitch_login }));
+  return { people, channels, sources: OPTOUT_SOURCES };
+});
+
 route('GET', '/api/ref/names', (context) => {
   requireStaff(context.session);
   const ids = (context.url.searchParams.get('ids') || '').split(',').map((id) => id.trim()).filter(Boolean);
@@ -5108,6 +5175,7 @@ route('PUT', '/api/settings/:key', async (context) => {
   const value = validate(context.params.key, body.value === undefined ? null : body.value);
   armingRefusal(context.params.key, value);
   state.settings.set(context.params.key, value);
+  settingChanged(context.params.key);
   state.audit.unshift({ key: context.params.key, value, updated_by: STAFF.id, updated_at: now() });
   logAction('web.settings.set', { reason: `${context.params.key} = ${JSON.stringify(value)}`, details: { key: context.params.key, value, via: 'website' } });
   return keyRow(context.params.key);
@@ -5119,6 +5187,7 @@ route('DELETE', '/api/settings/:key', (context) => {
   const spec = specOf(context.params.key);
   if (spec === null) throw new Refused(400, 'unknown_key', `Black Bloc has no setting called ${context.params.key}.`);
   state.settings.set(context.params.key, spec[3] ?? null);
+  settingChanged(context.params.key);
   state.audit.unshift({ key: context.params.key, value: spec[3] ?? null, updated_by: STAFF.id, updated_at: now() });
   logAction('web.settings.clear', { reason: context.params.key, details: { key: context.params.key, via: 'website' } });
   return { ...keyRow(context.params.key), cleared: true };
@@ -7289,7 +7358,7 @@ function seedMarathonRuns() {
     // The People card (marathon-people-design.md): a four-player race shares ONE slot — Casey is
     // BaF, QuietKid is one Discord name away from @quietkid (a near miss), the other two are
     // strangers — with Moth on commentary; then two more days, so the schedule folds by day.
-    run(15, 1, 13, 110, 'Super Mario 64', '16 Star Race', [marathonPerson('Casey', 'caseyfast', 'runner', casey), marathonPerson('TheKingsPride', 'thekingspride', 'runner'), marathonPerson('QuietKid', 'quietkid_tv', 'runner'), marathonPerson('Peas', 'peasplays', 'runner'), marathonPerson('Moth', null, 'commentator', moth)]),
+    run(15, 1, 13, 110, 'Super Mario 64', '16 Star Race', [marathonPerson('Casey', 'caseyfast', 'runner', casey), marathonPerson('TheKingsPride', 'thekingspride', 'runner'), { ...marathonPerson('QuietKid', 'quietkid_tv', 'runner'), name_match: MEMBERS[5].id, not_ours: 'role', not_ours_id: MEMBERS[5].id }, marathonPerson('Peas', 'peasplays', 'runner'), marathonPerson('Moth', null, 'commentator', moth)]),
     run(16, 1, 14, 1500, 'Hollow Knight', 'Any% No Major Glitches', [marathonPerson('Rivet', 'rivetplays', 'runner', rivet)]),
     run(17, 1, 15, 1620, 'Metroid Dread', 'Any%', [marathonPerson('Flyingludicolo', 'flyingludicolo', 'runner')]),
     run(18, 1, 16, 2940, 'Portal', 'Inbounds', [marathonPerson('DECosmic', 'decosmic', 'runner')]),
@@ -8447,6 +8516,7 @@ function marathonRematch(row) {
   const links = new Map((state.golive.links || []).map((one) => [String(one.twitch_login).toLowerCase(), one.user_id]));
   const hosts = Boolean(state.settings.get('marathon_match_hosts'));
   const count = Boolean(state.settings.get('marathon_hosts_count_as_ours'));
+  const notOurs = marathonNotOurs();
   for (const run of marathonRunsOf(row.id)) {
     run.people = run.people.map((one) => {
       let userId = null;
@@ -8458,10 +8528,19 @@ function marathonRematch(row) {
       const login = fixed || sheet;
       if (one.part === 'runner' || hosts) {
         userId = pairing ? pairing.user_id : (login ? links.get(String(login).toLowerCase()) || null : null);
+        // The mock has no Discord-name match; `name_match` stands in for one.
+        if (!userId && one.name_match) userId = one.name_match;
       }
       const rest = { ...one };
       delete rest.sheet_login;
       delete rest.counts;
+      delete rest.not_ours;
+      delete rest.not_ours_id;
+      if (userId && notOurs.has(String(userId))) {
+        rest.not_ours = 'role';
+        rest.not_ours_id = String(userId);
+        userId = null;
+      }
       if (userId && one.part === 'host' && !count) rest.counts = false;
       return fixed && fixed !== sheet ? { ...rest, login, sheet_login: sheet, user_id: userId } : { ...rest, login, user_id: userId };
     });
@@ -8471,6 +8550,98 @@ function marathonRematch(row) {
 function marathonWords(key) {
   return String(state.settings.get(key) || '');
 }
+
+// Opted-out roles (black_bloc/marathon_announce.not_ours + cogs/content/marathon_announce): a
+// member wearing a listed role is not BaF in marathons, unless staff count them as BaF anyway.
+function marathonOptoutRoles() {
+  return new Set((state.settings.get('marathon_optout_role_ids') || []).map(String));
+}
+
+function marathonBafOverrides() {
+  if (!state.marathonBafOverrides) state.marathonBafOverrides = [{ user_id: MEMBERS[6].id, by: STAFF.id, at: minutesAgo(600) }];
+  return state.marathonBafOverrides;
+}
+
+function marathonHeldRole(userId) {
+  const wanted = marathonOptoutRoles();
+  const row = ROSTER.find((one) => one.id === String(userId));
+  const held = (row ? row.role_ids : []).filter((id) => wanted.has(id)).map((id) => ROLES.find((role) => role.id === id)).filter(Boolean);
+  return held.sort((a, b) => b.position - a.position)[0] || null;
+}
+
+function marathonNotOurs() {
+  const kept = new Set(marathonBafOverrides().map((one) => String(one.user_id)));
+  return new Set(ROSTER.filter((row) => !row.bot && marathonHeldRole(row.id) && !kept.has(row.id)).map((row) => row.id));
+}
+
+function marathonBafRule({ held = null, userId = null } = {}) {
+  if (held) {
+    const role = marathonHeldRole(held);
+    return {
+      state: 'role',
+      user_id: String(held),
+      member_name: memberName(held),
+      said: marathonWords('marathon_not_baf_role_word').split('{role}').join(role ? role.name : ''),
+      move: 'set',
+      move_label: marathonWords('marathon_baf_override_button'),
+    };
+  }
+  if (userId && marathonBafOverrides().some((one) => String(one.user_id) === String(userId))) {
+    return {
+      state: 'override',
+      user_id: String(userId),
+      member_name: memberName(userId),
+      said: marathonWords('marathon_baf_override_word'),
+      move: 'clear',
+      move_label: marathonWords('marathon_baf_override_clear_button'),
+    };
+  }
+  return null;
+}
+
+function marathonRoleRematch(via) {
+  const before = new Set();
+  const after = new Set();
+  const touched = [];
+  for (const row of state.marathons.filter((one) => one.active)) {
+    const held = () => new Set(marathonRunsOf(row.id).flatMap((run) => run.people.filter((one) => one.not_ours_id).map((one) => String(one.not_ours_id))));
+    const was = held();
+    marathonRematch(row);
+    const now = held();
+    was.forEach((one) => before.add(one));
+    now.forEach((one) => after.add(one));
+    if ([...was].sort().join() !== [...now].sort().join()) touched.push(row.id);
+  }
+  const out = [...after].filter((one) => !before.has(one)).sort();
+  const back = [...before].filter((one) => !after.has(one)).sort();
+  const head = via === 'website' ? 'web.' : '';
+  if (out.length) logAction(`${head}marathon.role_opted_out`, { details: { members: out, marathons: touched, via } });
+  if (back.length) logAction(`${head}marathon.role_opted_in`, { details: { members: back, marathons: touched, via } });
+}
+
+function settingChanged(key) {
+  if (key === 'marathon_optout_role_ids') marathonRoleRematch('website');
+}
+
+function marathonOverrideMove(context, on) {
+  requireStaff(context.session);
+  const userId = String(decodeURIComponent(context.params.user_id));
+  if (!/^\d+$/.test(userId)) throw new Refused(400, 'bad_request', `**${userId.slice(0, 40)}** is not a number, so nothing was changed.`);
+  if (on && !MEMBERS.some((one) => one.id === userId)) throw new Refused(404, 'not_a_member', `Nobody with the id **${userId}** is in the server, so nothing was changed.`);
+  const rows = marathonBafOverrides();
+  const was = rows.some((one) => String(one.user_id) === userId);
+  if (was !== on) {
+    if (on) rows.push({ user_id: userId, by: STAFF.id, at: now() });
+    else state.marathonBafOverrides = rows.filter((one) => String(one.user_id) !== userId);
+    logAction(on ? 'web.marathon.baf_override_set' : 'web.marathon.baf_override_cleared', { target_id: userId, details: { member: userId, via: 'website' } });
+    marathonRoleRematch('website');
+  }
+  const said = marathonSaid(on ? 'marathon_baf_override_set_said' : 'marathon_baf_override_cleared_said', { name: memberName(userId) || userId });
+  return { user_id: userId, override: marathonBafOverrides().some((one) => String(one.user_id) === userId), message: said };
+}
+
+route('POST', '/api/marathons/baf-override/:user_id', (context) => marathonOverrideMove(context, true));
+route('DELETE', '/api/marathons/baf-override/:user_id', (context) => marathonOverrideMove(context, false));
 
 const MARATHON_RPGLB = /^https?:\/\/tracker\.rpglimitbreak\.com\/(?:event|runs|index)\/(\d+)\/?(?:[?#].*)?$/i;
 const MARATHON_OENGUS = /^https?:\/\/(?:www\.)?oengus\.io\/marathon\/([A-Za-z0-9_-]{1,40})(?:\/schedule(?:\/([A-Za-z0-9_-]{1,40}))?)?\/?(?:[?#].*)?$/i;
@@ -9507,7 +9678,7 @@ function marathonOneEdit(a, b) {
 }
 
 function marathonLooksLike(entry) {
-  if (entry.user_id) return null;
+  if (entry.user_id || entry.not_ours_id) return null;
   const wanted = [entry.name, entry.login].filter(Boolean).map((one) => String(one).trim().toLowerCase());
   for (const member of [...MEMBERS].sort((a, b) => a.name.localeCompare(b.name))) {
     const username = member.name.toLowerCase();
@@ -9533,6 +9704,7 @@ function marathonPeopleOf(row) {
       const entry = found.get(key);
       if (!entry.login && person.login) entry.login = person.login;
       if (!entry.sheet_login && person.sheet_login) entry.sheet_login = person.sheet_login;
+      if (person.not_ours_id && !entry.not_ours_id) Object.assign(entry, { not_ours: person.not_ours, not_ours_id: String(person.not_ours_id) });
       if (!entry.parts.includes(person.part)) entry.parts.push(person.part);
       entry.runs.push({ id: run.id, game: run.game, category: run.category, scheduled_at: run.scheduled_at, ends_at: run.ends_at, state: run.state, part: person.part, name: person.name });
     }
@@ -9588,6 +9760,7 @@ function marathonBoardRow(row, entry) {
     opted_out: entry.user_id ? marathonOptedOut(row).has(String(entry.user_id)) : null,
     mention: entry.user_id ? marathonMentionState(row, entry.user_id, entry.name) : null,
     part_tag: marathonPartTag(entry.parts),
+    baf_rule: marathonBafRule({ held: entry.not_ours_id, userId: entry.user_id }),
   };
 }
 

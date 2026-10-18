@@ -8,6 +8,7 @@ from typing import Any, NamedTuple
 
 from . import marathon as mt
 from . import marathon_hosts as mh
+from .settings_store import MARATHON_OPTOUT_ROLE_IDS_KEY
 
 SWITCH = mh.ANNOUNCE
 HOSTS = mh.HOST_ANNOUNCE
@@ -178,6 +179,37 @@ def _ids(raw: Any) -> set[int]:
 
 def opted_out(marathon: Any) -> set[int]:
     return _ids(mt._cell(marathon, OPTED))
+
+
+def optout_roles(guild: Any, store: Any) -> set[int]:
+    return _ids(store.get(guild.id, MARATHON_OPTOUT_ROLE_IDS_KEY))
+
+
+def role_holders(guild: Any, role_ids: Any) -> set[int]:
+    wanted = {int(one) for one in role_ids or ()}
+    if not wanted:
+        return set()
+    found = getattr(guild, "members", None) or ()
+    return {
+        int(member.id)
+        for member in list(found.values() if isinstance(found, dict) else found)
+        if not getattr(member, "bot", False)
+        and wanted & {int(getattr(role, "id", 0) or 0) for role in getattr(member, "roles", ())}
+    }
+
+
+def not_ours(guild: Any, store: Any, overrides: Any) -> frozenset[int]:
+    """Who is not BaF in marathons: everyone wearing a role of marathon_optout_role_ids, less
+    the people staff count as BaF anyway."""
+    kept = {int(one) for one in overrides or ()}
+    return frozenset(role_holders(guild, optout_roles(guild, store)) - kept)
+
+
+def held_role(member: Any, role_ids: Any) -> Any:
+    """The highest opted-out role a member wears, or None."""
+    wanted = {int(one) for one in role_ids or ()}
+    found = [role for role in getattr(member, "roles", ()) or () if int(role.id) in wanted]
+    return max(found, key=lambda role: int(getattr(role, "position", 0) or 0), default=None)
 
 
 def _answers(raw: Any, allowed: tuple[str, ...]) -> dict[int, str]:
@@ -639,6 +671,10 @@ __all__ = [
     "mentions",
     "moves",
     "opted_out",
+    "optout_roles",
+    "not_ours",
+    "role_holders",
+    "held_role",
     "option_of",
     "policy",
     "role_of",

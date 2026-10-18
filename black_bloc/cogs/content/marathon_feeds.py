@@ -87,6 +87,7 @@ from .marathon import (
     links_of,
     minutes_for,
     mode_of,
+    not_ours_of,
     open_root,
     opted_out_channel,
     opted_out_said,
@@ -463,9 +464,10 @@ async def people_on_blocks(bot: Any, guild: Any, blocks: list[Any]) -> dict[str,
     pairings = await pairings_of(bot.db, guild.id)
     hosts = bool(bot.store.get(guild.id, MARATHON_MATCH_HOSTS_KEY))
     usernames = usernames_of(guild)
+    excluded = await not_ours_of(bot, guild)
     return {
         one.ref: hf.matched_of(
-            one, links, pairings, match_hosts=hosts, usernames=usernames
+            one, links, pairings, match_hosts=hosts, usernames=usernames, not_ours=excluded
         )
         for one in blocks
     }

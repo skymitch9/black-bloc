@@ -128,6 +128,9 @@ def group_people(runs: Any) -> list[dict[str, Any]]:
                 entry["login"] = person["login"]
             if not entry["sheet_login"] and person.get("sheet_login"):
                 entry["sheet_login"] = person["sheet_login"]
+            if person.get(mt.NOT_OURS_ID) and not entry.get(mt.NOT_OURS_ID):
+                entry[mt.NOT_OURS] = person.get(mt.NOT_OURS)
+                entry[mt.NOT_OURS_ID] = int(person[mt.NOT_OURS_ID])
             if person.get("part") not in entry["parts"]:
                 entry["parts"].append(person.get("part"))
             entry["runs"].append(run_brief(run, person))
@@ -218,7 +221,7 @@ def one_edit(a: str, b: str) -> bool:
 def looks_like(entry: dict[str, Any], usernames: dict[str, int]) -> tuple[str, int] | None:
     """A Discord username a stranger is probably: the same letters, one edit away, or the head
     of an underscored name (`gz` / `gz_hero`). A suggestion only; staff press Link."""
-    if entry.get("user_id"):
+    if entry.get("user_id") or entry.get(mt.NOT_OURS_ID):
         return None
     words = [str(entry.get("name") or ""), str(entry.get("login") or "")]
     wanted = [one.strip().lower() for one in words if one.strip()]

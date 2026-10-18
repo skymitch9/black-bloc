@@ -19,6 +19,7 @@ from .settings_store import (
     SELFTEST_PURGE_MINUTES,
     SETTINGS_CORE_KEYS_ADMIN_ONLY,
     SETTINGS_PANEL_MINUTES,
+    SITE_ONLY_KEYS,
     STRUCTURE_BACKUP_MODE,
     display_value,
     namespace_of,
@@ -410,7 +411,9 @@ def groups() -> tuple[str, ...]:
 
 
 def keys_in(group: str) -> tuple[str, ...]:
-    return tuple(key for key in KEY_TYPES if namespace_of(key) == group)
+    return tuple(
+        key for key in KEY_TYPES if namespace_of(key) == group and key not in SITE_ONLY_KEYS
+    )
 
 
 def reachable_on_the_panel(key: str) -> bool:

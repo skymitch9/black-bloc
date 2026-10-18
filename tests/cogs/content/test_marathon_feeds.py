@@ -1734,6 +1734,21 @@ async def test_a_host_is_not_tracked_while_hosts_are_not_matched(bot, cog):  # n
     assert (heroes["hosts"], heroes["tracked"], heroes["because"]) == (["anarchy"], False, [])
 
 
+async def test_a_host_wearing_an_opted_out_role_is_never_why_a_show_is_tracked(bot, cog):  # noqa: F811
+    from types import SimpleNamespace
+
+    crew = SimpleNamespace(id=ANARCHY, bot=False, roles=[SimpleNamespace(id=6100, position=1)])
+    bot.guild.members = [crew]
+    await bot.store.set(GUILD, "marathon_optout_role_ids", [6100])
+    await pair_everywhere(bot, "anarchy", ANARCHY)
+    _row, feed = await hotfix_feed(bot, cog)
+    made = [ref for ref, row in (await by_ref(bot)).items() if row["source"] == "gdq_hotfix"]
+    assert made == ["gdqueer/2026-10-03"]
+    got = await feeds.hotfix_picker(bot, bot.guild, feed)
+    heroes = next(one for one in got.value["blocks"] if one["show"] == "Hidden Heroes")
+    assert (heroes["tracked"], heroes["because"]) == (False, [])
+
+
 async def test_the_tracker_off_takes_only_the_listed_shows(bot, cog):  # noqa: F811
     await bot.store.set(GUILD, "marathon_hotfix_track_people", False)
     await pair_everywhere(bot, "anarchy", ANARCHY)

@@ -261,3 +261,36 @@ async def test_a_grant_with_no_end_date_is_not_reported_as_one(client, sign_in, 
     row = next(one for one in client.get(ROUTE).json()["members"] if one["username"] == "ada")
 
     assert all(one["expires_at"] is None for one in row["roles"])
+
+
+OPTOUTS = "/api/members/optouts"
+
+
+def test_the_opted_out_list_needs_staff(client, sign_in):
+    assert client.get(OPTOUTS).status_code == 401
+    sign_in(client, uid=1234, staff=False)
+    assert client.get(OPTOUTS).status_code == 403
+
+
+async def test_the_opted_out_list_is_one_row_a_person_with_a_chip_a_source(
+    client, sign_in, web, wf, roster
+):
+    sign_in(client)
+    await web.db.conn.execute(
+        "INSERT INTO golive_optout(user_id, at) VALUES (?, ?)", (21, "2026-10-18T00:00:00+00:00")
+    )
+    await web.db.conn.execute(
+        "INSERT INTO chat_memory_optout(user_id, guild_id, at) VALUES (?, ?, ?)",
+        (21, wf.GUILD_ID, "2026-10-18T00:00:00+00:00"),
+    )
+    await web.db.conn.commit()
+
+    found = client.get(OPTOUTS)
+
+    assert found.status_code == 200, found.text
+    body = found.json()
+    assert set(body) == {"people", "channels", "sources"}
+    (ada,) = body["people"]
+    assert (ada["user_id"], ada["name"], ada["username"], ada["here"]) == ("21", "Ada", "ada", True)
+    assert [one["source"] for one in ada["chips"]] == ["golive", "chat_memory"]
+    assert body["channels"] == []

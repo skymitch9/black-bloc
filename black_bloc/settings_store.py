@@ -7058,6 +7058,20 @@ MARATHON_PEOPLE_BUTTON_SPOTLIGHT_KEY = "marathon_people_button_spotlight"
 MARATHON_PEOPLE_BUTTON_UNSPOTLIGHT_KEY = "marathon_people_button_unspotlight"
 MARATHON_PEOPLE_BUTTON_UNLINK_KEY = "marathon_people_button_unlink"
 MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY = "marathon_people_button_link_near"
+MARATHON_OPTOUT_ROLE_IDS_KEY = "marathon_optout_role_ids"
+MARATHON_NOT_BAF_ROLE_WORD_KEY = "marathon_not_baf_role_word"
+MARATHON_BAF_OVERRIDE_WORD_KEY = "marathon_baf_override_word"
+MARATHON_POSTS_OPTED_OUT_WORD_KEY = "marathon_posts_opted_out_word"
+MARATHON_BAF_OVERRIDE_BUTTON_KEY = "marathon_baf_override_button"
+MARATHON_BAF_OVERRIDE_CLEAR_BUTTON_KEY = "marathon_baf_override_clear_button"
+MARATHON_BAF_OVERRIDE_SET_SAID_KEY = "marathon_baf_override_set_said"
+MARATHON_BAF_OVERRIDE_CLEARED_SAID_KEY = "marathon_baf_override_cleared_said"
+SITE_ONLY_KEYS = frozenset({MARATHON_OPTOUT_ROLE_IDS_KEY})
+SITE_ONLY_SAID = (
+    "**{key}** is changed on the Black Bloc website only, so nothing was changed. Open the "
+    "Settings page on the site to change it."
+)
+SITE_ONLY_CODE = "site_only"
 MARATHON_PEOPLE_BUTTON_TWITCH_KEY = "marathon_people_button_twitch"
 MARATHON_PEOPLE_BUTTON_BACK_KEY = "marathon_people_button_back"
 MARATHON_ANNOUNCE_STATE_LINE_KEY = "marathon_announce_state_line"
@@ -7325,6 +7339,14 @@ MARATHON_BAD_MARKS = (
     "`120, 15`."
 )
 MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
+    MARATHON_OPTOUT_ROLE_IDS_KEY: (
+        "roles",
+        [],
+        "roles whose holders are NOT BaF in marathons: a member wearing one is never matched as "
+        "ours — no BaF mark, no staff-thread runner post, never the reason a Hotfix show is "
+        "tracked, no public post — unless staff count them as BaF anyway on the site. Changed "
+        "on the website only. none by default",
+    ),
     MARATHON_HOST_HIGHLIGHTS_KEY: (
         "bool",
         True,
@@ -7917,6 +7939,46 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     ),
 }
 MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    MARATHON_NOT_BAF_ROLE_WORD_KEY: (
+        "not BaF ({role})",
+        ("role",),
+        "what the site's People card and the Members page's Opted out list say about someone "
+        "a marathon would match but who wears one of marathon_optout_role_ids. It takes {role}",
+    ),
+    MARATHON_BAF_OVERRIDE_WORD_KEY: (
+        "BaF (staff override)",
+        (),
+        "what the site says about someone staff count as BaF on every marathon although they "
+        "wear one of marathon_optout_role_ids",
+    ),
+    MARATHON_POSTS_OPTED_OUT_WORD_KEY: (
+        "opted out of posts",
+        (),
+        "what the Members page's Opted out list says about a BaF person opted out of a "
+        "marathon's public posts; they are still tracked",
+    ),
+    MARATHON_BAF_OVERRIDE_BUTTON_KEY: (
+        "Count as BaF anyway",
+        (),
+        "the site's button on someone left out by marathon_optout_role_ids that counts them as "
+        "BaF on every marathon",
+    ),
+    MARATHON_BAF_OVERRIDE_CLEAR_BUTTON_KEY: (
+        "Undo the override",
+        (),
+        "the site's button that puts someone counted as BaF anyway back under "
+        "marathon_optout_role_ids",
+    ),
+    MARATHON_BAF_OVERRIDE_SET_SAID_KEY: (
+        "**{name}** counts as BaF on every marathon.",
+        ("name",),
+        "what staff are told on the site once someone is counted as BaF anyway. It takes {name}",
+    ),
+    MARATHON_BAF_OVERRIDE_CLEARED_SAID_KEY: (
+        "**{name}** follows the opted-out roles again.",
+        ("name",),
+        "what staff are told on the site once the override on someone is undone. It takes {name}",
+    ),
     MARATHON_SPOTLIGHT_HOST_NOTE_KEY: (
         "{name} hosting {marathon}",
         ("name", "marathon"),

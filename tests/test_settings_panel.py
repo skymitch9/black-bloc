@@ -68,7 +68,12 @@ from black_bloc.settings_panel import (
     stored_count,
     toggle_label,
 )
-from black_bloc.settings_store import HIDE_COMMANDS_WHEN_OFF, KEY_TYPES, SettingsStore
+from black_bloc.settings_store import (
+    HIDE_COMMANDS_WHEN_OFF,
+    KEY_TYPES,
+    SITE_ONLY_KEYS,
+    SettingsStore,
+)
 from black_bloc.storage.db import Database
 
 GUILD = 7
@@ -184,7 +189,7 @@ def test_every_key_lands_in_exactly_one_of_the_twenty_five_groups():
     found = groups()
     assert len(found) == GROUP_COUNT
     counted = Counter(key for group in found for key in keys_in(group))
-    assert set(counted) == set(KEY_TYPES)
+    assert set(counted) == set(KEY_TYPES) - SITE_ONLY_KEYS
     assert set(counted.values()) == {1}
 
 

@@ -395,6 +395,7 @@ def matched_of(
     *,
     match_hosts: bool,
     usernames: dict[str, int] | None = None,
+    not_ours: Any = frozenset(),
 ) -> list[dict[str, Any]]:
     """Every person on the block, matched by the people feature's rule with the pairings made
     for every schedule only."""
@@ -408,6 +409,7 @@ def matched_of(
             wide,
             match_hosts=match_hosts,
             usernames=usernames,
+            not_ours=not_ours,
         )
     ]
 

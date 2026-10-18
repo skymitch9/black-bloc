@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any
 
 import discord
@@ -48,6 +49,7 @@ from ...events import TITLE_LIMIT as EVENT_TITLE_LIMIT
 from ...golive import now_iso, parse_ts, ping_prefix
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
+from ...marathon_announce import not_ours as role_not_ours
 from ...marathon_channels import HELD_REFUSAL, OPTED_OUT_REFUSAL, takes_marathons
 from ...marathon_channels import channel_word as channel_word_of
 from ...marathon_sources import (
@@ -102,6 +104,7 @@ from ...settings_store import (
     MARATHON_NEXT_NONE_TEMPLATE_KEY,
     MARATHON_NEXT_TEMPLATE_KEY,
     MARATHON_NOT_TRACKED_KEY,
+    MARATHON_OPTOUT_ROLE_IDS_KEY,
     MARATHON_PIN_BOARD_KEY,
     MARATHON_PING_MINUTES_KEY,
     MARATHON_POLL_MINUTES_KEY,
@@ -537,6 +540,15 @@ def usernames_of(guild: Any) -> dict[str, int]:
 async def links_of(db: Any) -> dict[str, int]:
     cur = await db.conn.execute("SELECT twitch_login, user_id FROM golive_links")
     return {str(row["twitch_login"]).lower(): int(row["user_id"]) for row in await cur.fetchall()}
+
+
+async def baf_overrides(db: Any) -> dict[int, Any]:
+    cur = await db.conn.execute("SELECT user_id, by, at FROM marathon_baf_overrides")
+    return {int(row["user_id"]): row for row in await cur.fetchall()}
+
+
+async def not_ours_of(bot: Any, guild: Any) -> frozenset[int]:
+    return role_not_ours(guild, bot.store, await baf_overrides(bot.db))
 
 
 async def marathon_windows(db: Any, marathon_id: int) -> list[Any]:
@@ -1738,6 +1750,11 @@ class Marathons(commands.Cog):
             RetimeButton,
             MarathonRoleButton,
         )
+        from .marathon_announce import roles_changed
+
+        store = getattr(self.bot, "store", None)
+        if store is not None:
+            store.on_change(MARATHON_OPTOUT_ROLE_IDS_KEY, partial(roles_changed, self.bot))
         if not self.bot.db.is_connected:
             return
         self.ticker.start()
@@ -1751,6 +1768,12 @@ class Marathons(commands.Cog):
         if not self.bot.db.is_connected:
             return
         await self._reconciler.run(self.tick_once, skip_if_recent=True)
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before: Any, after: Any) -> None:
+        from .marathon_announce import member_roles_changed
+
+        await member_roles_changed(self.bot, before, after)
 
     # --- the minute tick --------------------------------------------------------------------
 
@@ -2351,6 +2374,7 @@ class Marathons(commands.Cog):
         hosts = bool(self.bot.store.get(guild.id, MARATHON_MATCH_HOSTS_KEY))
         count = bool(self.bot.store.get(guild.id, MARATHON_HOSTS_COUNT_AS_OURS_KEY))
         usernames = usernames_of(guild)
+        excluded = await not_ours_of(self.bot, guild)
         newly = 0
         for row in await runs_of(db, marathon["id"]):
             before = mt.people_of(row)
@@ -2363,6 +2387,7 @@ class Marathons(commands.Cog):
                 usernames=usernames,
                 hosts_count=count,
                 commentators_count=marathon["source"] != GDQ_HOTFIX,
+                not_ours=excluded,
             )
             if after == before:
                 continue
@@ -3879,6 +3904,8 @@ __all__ = [
     "Marathons",
     "NextButton",
     "add_next",
+    "baf_overrides",
+    "not_ours_of",
     "create_marathon",
     "dismiss_next",
     "get_marathon",

@@ -1,12 +1,19 @@
-import { api, listOf } from './api.js';
+import { api, listOf, send } from './api.js';
 import { start, tabHref } from './app.js';
 import {
   avatar,
+  button,
+  card,
   chipBar,
   el,
   icon,
+  keepSaying,
+  listFilter,
+  notice,
   pager,
   roleChip,
+  run,
+  sayAgain,
   sayNothing,
   searchField,
   shortWhen,
@@ -19,7 +26,37 @@ const FILTERS = [
   ['staff', 'Staff'],
   ['bots', 'Bots'],
   ['new', 'New this week'],
+  ['optouts', 'Opted out'],
 ];
+
+const OPTOUTS = 'optouts';
+const SOURCE_WORDS = {
+  marathon_role: 'Marathons',
+  marathon_override: 'Marathons',
+  marathon_posts: 'Marathons',
+  golive: 'Go-live',
+  chat_memory: 'Chat memory',
+  birthdays: 'Birthdays',
+  pbs: 'Personal bests',
+};
+const SOURCE_CHIPS = [
+  ['marathon_role', 'Not BaF'],
+  ['marathon_override', 'BaF override'],
+  ['marathon_posts', 'Out of marathon posts'],
+  ['golive', 'Go-live'],
+  ['chat_memory', 'Chat memory'],
+  ['birthdays', 'Birthdays'],
+  ['pbs', 'Personal bests'],
+];
+const SOURCE_FILTERS = [
+  ['all', 'Every source', null],
+  ...SOURCE_CHIPS.map(([key, label]) => [key, label, (row) => row.chips.some((one) => one.source === key)]),
+];
+const OPTOUT_COLUMNS = ['Member', 'Opted out of'];
+const NO_OPTOUTS = 'Nobody is opted out of anything.';
+const NO_OPTOUT_HIT = 'Nobody opted out matches that.';
+const CHANNELS_TITLE = 'Channels out of marathons';
+const OPTOUTS_SAID = 'members.optouts';
 
 const STATS = [
   ['Members', 'total'],
@@ -119,12 +156,96 @@ function memberRow(row) {
   ]);
 }
 
-function toolbar() {
-  const chips = chipBar(FILTERS, state.filter, (key) => {
-    state.filter = key;
-    state.page = 1;
+function homeOf(source) {
+  if (source === 'marathon_role' || source === 'marathon_override') return `${tabHref('settings')}#marathon_optout_role_ids`;
+  return tabHref({ golive: 'golive', chat_memory: 'chat', birthdays: 'birthdays', pbs: 'pbs' }[source] || 'members');
+}
+
+function sourceLink(text, href) {
+  return el('a', { class: 'badge', 'data-tone': 'warn', href, text });
+}
+
+function ruleMove(rule, say) {
+  return button(rule.move_label, async () => {
+    const path = `/api/marathons/baf-override/${encodeURIComponent(rule.user_id)}`;
+    const done = await run(say, () => send(path, rule.move === 'set' ? 'POST' : 'DELETE'), (found) => found?.message);
+    if (!done.ok) return;
+    keepSaying(OPTOUTS_SAID, say);
     refresh();
+  }, { tone: 'quiet' });
+}
+
+function optoutChips(row, say) {
+  return el('span', { class: 'cell-roles' }, row.chips.flatMap((chip) => {
+    const head = SOURCE_WORDS[chip.source] || chip.source;
+    if (chip.source === 'marathon_posts') {
+      return chip.marathons.map((one) => sourceLink(`${head} · ${chip.said} · ${one.name}`, `${tabHref('events')}#marathon-${one.id}`));
+    }
+    const link = sourceLink(chip.said ? `${head} · ${chip.said}` : head, homeOf(chip.source));
+    return chip.rule ? [link, ruleMove(chip.rule, say)] : [link];
+  }));
+}
+
+function optoutRow(row, say) {
+  const who = String(row.name || row.username || row.user_id);
+  return el('tr', { title: `Discord id ${row.user_id}` }, [
+    el('td', { 'data-label': OPTOUT_COLUMNS[0] }, [
+      el('span', { class: 'cell-member' }, [
+        avatar(who, row.avatar),
+        el('span', { class: 'cell-member-text' }, [
+          el('span', { class: 'cell-member-name', text: who }),
+          el('span', { class: 'cell-member-tag', text: row.here ? String(row.username || row.user_id) : 'left the server' }),
+        ]),
+      ]),
+    ]),
+    el('td', { class: 'wrap', 'data-label': OPTOUT_COLUMNS[1] }, [optoutChips(row, say)]),
+  ]);
+}
+
+function channelsCard(channels) {
+  if (!channels.length) return null;
+  return card(CHANNELS_TITLE, [
+    el('div', { class: 'cell-roles' }, channels.map((one) => sourceLink(one.name, tabHref('golive')))),
+  ], { count: channels.length });
+}
+
+function optoutsCard(payload) {
+  const say = sayAgain(OPTOUTS_SAID, notice());
+  const people = listOf(payload, 'people');
+  const items = people.map((row) => ({ row, node: optoutRow(row, say) }));
+  const filter = listFilter({
+    items,
+    value: (one) => one.row,
+    text: (row) => [row.name, row.username, row.user_id, ...row.chips.map((one) => one.said || SOURCE_WORDS[one.source])].join(' '),
+    filters: SOURCE_FILTERS,
+    label: 'Search the opted out',
+    placeholder: 'Search the opted out…',
+    empty: NO_OPTOUT_HIT,
   });
+  const head = el('tr', {}, OPTOUT_COLUMNS.map((label) => el('th', { text: label })));
+  const body = people.length
+    ? el('div', { class: 'table-scroll' }, [el('table', { class: 'log-table' }, [el('thead', {}, [head]), el('tbody', {}, items.map((one) => one.node))])])
+    : sayNothing(NO_OPTOUTS);
+  return el('div', {}, [
+    el('div', { class: 'card' }, [
+      el('div', { class: 'card-head' }, [chipBar(FILTERS, state.filter, pickFilter)]),
+      el('div', { class: 'card-head' }, filter.parts),
+      say,
+      body,
+      filter.none,
+    ]),
+    channelsCard(listOf(payload, 'channels')),
+  ]);
+}
+
+function pickFilter(key) {
+  state.filter = key;
+  state.page = 1;
+  refresh();
+}
+
+function toolbar() {
+  const chips = chipBar(FILTERS, state.filter, pickFilter);
   return el('div', { class: 'card-head' }, [
     searchField({
       label: 'Search members',
@@ -205,7 +326,16 @@ function keepTyping(typed) {
   box.setSelectionRange(typed.length, typed.length);
 }
 
+async function loadOptouts() {
+  const [stats, payload] = await Promise.all([
+    api('/api/members?filter=all&page=1&per_page=1&sort=joined_desc'),
+    api('/api/members/optouts'),
+  ]);
+  document.getElementById('dash').replaceChildren(statStrip(stats), optoutsCard(payload));
+}
+
 async function load() {
+  if (state.filter === OPTOUTS) return loadOptouts();
   const query = new URLSearchParams({
     filter: state.filter,
     page: String(state.page),

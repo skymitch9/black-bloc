@@ -2987,6 +2987,34 @@
     },
     {
       "method": "GET",
+      "path": "/api/members/optouts",
+      "read_by": [
+        "page-members.js the Opted out filter"
+      ],
+      "shape": "object",
+      "keys": [
+        "people",
+        "channels",
+        "sources"
+      ],
+      "rows": {
+        "people": [
+          "user_id",
+          "name",
+          "username",
+          "avatar",
+          "here",
+          "chips"
+        ],
+        "channels": [
+          "id",
+          "login",
+          "name"
+        ]
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/mod/cases?page=1",
       "read_by": [
         "page-moderation.js"
@@ -6512,7 +6540,8 @@
           "looks_like",
           "sheet_login",
           "opted_out",
-          "mention"
+          "mention",
+          "baf_rule"
         ],
         "others": [
           "key",
@@ -6537,7 +6566,8 @@
           "channel_id",
           "spotlight_id",
           "spotlight_until",
-          "looks_like"
+          "looks_like",
+          "baf_rule"
         ]
       }
     },
@@ -6821,6 +6851,37 @@
           "looks_like"
         ]
       }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/baf-override/{member_id}",
+      "body": {},
+      "then": {
+        "method": "DELETE",
+        "path": "/api/marathons/baf-override/{member_id}"
+      },
+      "read_by": [
+        "marathons-section.js People card and page-members.js Opted out — Count as BaF anyway"
+      ],
+      "shape": "object",
+      "keys": [
+        "user_id",
+        "override",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/marathons/baf-override/{member_id}",
+      "read_by": [
+        "marathons-section.js People card and page-members.js Opted out — Undo the override"
+      ],
+      "shape": "object",
+      "keys": [
+        "user_id",
+        "override",
+        "message"
+      ]
     },
     {
       "method": "POST",
@@ -12405,6 +12466,10 @@
     "web.marathon.runner_unspotlit",
     "web.marathon.announce_opted_out",
     "web.marathon.announce_opted_in",
+    "web.marathon.baf_override_set",
+    "web.marathon.baf_override_cleared",
+    "web.marathon.role_opted_out",
+    "web.marathon.role_opted_in",
     "web.marathon.announcements_set",
     "web.marathon.host_announcements_set",
     "web.marathon.announce_run_set",

@@ -3,7 +3,8 @@
 > **Audience:** the conductor, the build agent, reviewers. **Status:** TRACKED. **Last verified: 2026-10-18** — against
 > `main` `58fb50ab` by reading the code named below. ⚠️ **NOT checked:** the live server (who holds `Staff`, whether
 > that role can see the staff channel), the live database. Secret NAMES only.
-> **State: 📝 DESIGNED, owner sign-off pending — nothing built.**
+> **State: 🔨 BUILT on branch `optout-roles` (off `main` `c009d4fc`), NOT merged, NOT deployed** — see *As built* below.
+> ~~State: 📝 DESIGNED, owner sign-off pending — nothing built.~~ (signed off 2026-10-18, the four decisions below)
 
 ## The ask, verbatim (owner, Sun 2026-10-18 15:1x Phoenix)
 
@@ -102,3 +103,40 @@ Read through the operator token (`/api/ref/roles`, every page of `/api/members` 
   `resolved_staff_roles`) — a live read, reported, not changed.
 - How many current holders and how many runs/highlights change on the first rematch — measured after deploy, both
   numbers reported.
+
+## As built (branch `optout-roles`, 2026-10-18)
+
+| Part | Where |
+|---|---|
+| Setting `marathon_optout_role_ids` (roles, default `[]`) | `settings_store.MARATHON_SETTINGS`; `SITE_ONLY_KEYS` |
+| Website only | `settings_panel.keys_in` leaves it out of `/settings`; `cogs/core.leads_only` refuses it off the site (403 `site_only`, in words). The recorded exception to checklist 33 (`tests/test_settings_store.py::test_every_registry_key_is_reachable_from_the_panel_as_well_as_the_dashboard`) |
+| The rule | `marathon_announce.not_ours(guild, store, overrides)`; `match_people(..., not_ours=)` → `user_id None`, `not_ours: "role"`, `not_ours_id` |
+| Callers | `Marathons.rematch`, `marathon_hotfix.matched_of` (Hotfix tracking + picker) |
+| Override | table `marathon_baf_overrides(user_id PK, by, at)`, **schema 94 → 95**; writer `cogs/content/marathon_announce.set_baf_override`; `POST`/`DELETE /api/marathons/baf-override/{user_id}` → `{user_id, override, message}` |
+| Rematch at once | `role_rematch` on the setting (`store.on_change`, registered in `Marathons.cog_load`), on an override, on `on_member_update` (members intent is on) |
+| Posts | the hand opt-out's own `followed` path: a highlight naming nobody is edited to `marathon_public_removed`, put back in place on re-inclusion |
+| Logs | `marathon.role_opted_out` / `role_opted_in` (`members`, `marathons`, `via`), `marathon.baf_override_set` / `_cleared` (+ `web.` twins), all IMPORTANT |
+| People board | `baf_rule` on every row: `{state: role\|override, user_id, member_name, said, move: set\|clear, move_label}`; the site draws the words + one button on the slot line (role) and the BaF row (override) |
+| Global list | Members ▸ **Opted out**; `GET /api/members/optouts` → `{people[{user_id,name,username,avatar,here,chips[{source,said,marathons,rule}]}], channels[{id,login,name}], sources}`; `api/tools/optouts.roll_up`, read-only |
+| Keys | **+8** (1220 → 1228): `marathon_optout_role_ids`, `marathon_not_baf_role_word`, `marathon_baf_override_word`, `marathon_posts_opted_out_word`, `marathon_baf_override_button`, `marathon_baf_override_clear_button`, `marathon_baf_override_set_said`, `marathon_baf_override_cleared_said` (registry + mock row + label) |
+| Routes | **+3** (`check.mjs`: 27 pages, 368 routes) |
+
+### Deviations
+
+1. **Channel opt-outs read `spotlight_channels.marathons = 0`, not the `optout:{login}` keys.** Those keys are the boot seed's done-once markers (`marathon_channels.seed_key`); the opt-out itself is the column. Shown under *Channels out of marathons*, linking to Go-live.
+2. **Chat memory under `optin` consent lists nobody**: everyone is off by default there, and a row means *opted in*.
+3. **Logs are per trigger, not per member**: one `role_opted_out` row naming every member whose held state changed on some live/upcoming marathon. A role holder on no marathon changes nothing, so logs nothing.
+4. **A role-held person on a slot shows the rule instead of *Link to a member…*** — a pairing cannot make them ours, so the button would mislead.
+5. Members-page source chips and their labels (*Marathons*, *Go-live*, …) are site chrome in `page-members.js`; the marathon words on each chip come from the keys.
+
+### Measured (on the branch)
+
+- `pytest -q -n 16`: 13372 passed, 1 skipped; `ruff check .` clean; every `site/public/assets/*.js` parses; the 13 node fixture suites the gate runs pass; `node site/mock/check.mjs` against the mock on port 8871: *27 pages, 368 routes, 349 core settings*.
+- In a browser against the local mock: Members ▸ Opted out draws Dax (*BaF (staff override)* + Undo), QuietKid (*not BaF (Staff)* + Count as BaF anyway, Go-live, Personal bests), spamlord99 (Chat memory), ESA under Channels; Count as BaF anyway flipped QuietKid's chip and said so; the People card's Super Mario 64 slot shows *not BaF (Staff)* + Count as BaF anyway on QuietKid.
+
+### NOT verified
+
+- Nothing ran against Discord or the live database: not the real `on_member_update` event, not the six `Staff` holders, not how many runs/highlights change on the first rematch (§7 — measure after deploy, both numbers).
+- Whether the GDQ `Staff` role can see the staff channel (§7) — not read.
+- An excluded HOST's block post: the block vanishes, so it is left to `sync_host_highlights`' left-behind walk on the next tick; no test covers it.
+- The schema 95 migration on a copy of the live file.

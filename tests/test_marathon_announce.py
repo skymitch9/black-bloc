@@ -485,3 +485,33 @@ def test_a_long_name_is_shortened_in_a_button_label_and_the_move_word_is_kept():
     assert ma.named_label("{name}: back to the default", name).endswith("…: back to the default")
     assert ma.named_label("Announce {name}", "Sky") == "Announce Sky"
     assert ma.named_label("Announce {name}", name) == f"Announce {name}"
+
+
+def member(user_id, *role_ids, bot=False):
+    roles = [SimpleNamespace(id=one, name=f"role {one}", position=one) for one in role_ids]
+    return SimpleNamespace(id=user_id, roles=roles, bot=bot)
+
+
+class Roles:
+    def __init__(self, ids):
+        self.ids = ids
+
+    def get(self, guild_id, key):
+        assert key == "marathon_optout_role_ids"
+        return self.ids
+
+
+def test_not_ours_is_everyone_wearing_a_listed_role_less_the_overrides():
+    guild = SimpleNamespace(
+        id=1,
+        members=[member(1, 50), member(2, 60), member(3, 50, 60), member(4, 50, bot=True)],
+    )
+    assert ma.not_ours(guild, Roles([50]), ()) == frozenset({1, 3})
+    assert ma.not_ours(guild, Roles(["50", 60]), {3}) == frozenset({1, 2})
+    assert ma.not_ours(guild, Roles([]), ()) == frozenset()
+    assert ma.not_ours(SimpleNamespace(id=1), Roles([50]), ()) == frozenset()
+
+
+def test_the_role_a_holder_is_named_by_is_the_highest_listed_one_they_wear():
+    assert ma.held_role(member(1, 50, 60, 70), {50, 60}).id == 60
+    assert ma.held_role(member(1, 70), {50}) is None

@@ -13,7 +13,7 @@ from .. import settings_panel as sp
 from ..actionlog import log_action, send_logs
 from ..command_errors import AnswersErrors
 from ..command_visibility import STAFF_ONLY, hidden_names
-from ..logkinds import CORE, SELFTEST, VIA_BOOT, VIA_DISCORD, kind_via
+from ..logkinds import CORE, SELFTEST, VIA_BOOT, VIA_DISCORD, VIA_WEBSITE, kind_via
 from ..loops import wait_ready
 from ..modcases import pages_under_limit
 from ..panels import (
@@ -33,6 +33,9 @@ from ..settings_store import (
     KEY_HELP,
     KEY_MAX,
     KEY_MIN,
+    SITE_ONLY_CODE,
+    SITE_ONLY_KEYS,
+    SITE_ONLY_SAID,
     TEXT_MAY_BE_BLANK,
     SettingError,
     display_value,
@@ -82,8 +85,12 @@ def actor_id(actor: Any) -> int | None:
     return int(getattr(actor, "id", actor) or 0) or None
 
 
-def leads_only(bot: Any, guild: Any, key: str, actor: Any) -> Outcome | None:
+def leads_only(
+    bot: Any, guild: Any, key: str, actor: Any, via: str = VIA_DISCORD
+) -> Outcome | None:
     """The keys that decide who sees structure backup are changed only by who already may."""
+    if key in SITE_ONLY_KEYS and via != VIA_WEBSITE:
+        return refusal(SITE_ONLY_SAID.format(key=key), SITE_ONLY_CODE, 403)
     if key in LEADS_KEYS and not may_see(bot.store, guild, actor):
         return refusal(LEADS_ONLY, LEADS_ONLY_CODE, 403)
     return None
@@ -93,7 +100,7 @@ async def set_key(
     bot: Any, guild: Any, key: str, value: Any, actor: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """One write and one `settings.set` row, whatever control on the panel made the change."""
-    refused = leads_only(bot, guild, key, actor)
+    refused = leads_only(bot, guild, key, actor, via)
     if refused is not None:
         return refused
     try:
@@ -114,7 +121,7 @@ async def clear_key(
     bot: Any, guild: Any, key: str, actor: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """One delete and one `settings.clear` row; `value` is whether a row was actually there."""
-    refused = leads_only(bot, guild, key, actor)
+    refused = leads_only(bot, guild, key, actor, via)
     if refused is not None:
         return refused
     try:
