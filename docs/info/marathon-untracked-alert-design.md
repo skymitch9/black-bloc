@@ -1,5 +1,7 @@
 # Untracked alert — a marathon with BaF on it that nobody tracked, flagged to a role before it starts
 
+> ✅ **2026-10-18 — LIVE since v232 (2026-10-14 12:01) and v233 (14:45, the names); PROVEN live:** the first real alert, Hidden Heroes (marathon 16), `marathon.untracked_alert` 2026-10-15 11:00:18Z, outcome posted, a reply (message `1560245929574015078`) in its inbox thread. ⚠️ NOT seen by eye: the reply's look, whether the role ping notified. The BUILT line below is history.
+
 > 🔨 **2026-10-14 — BUILT on branch `untracked-alert` (off `main` `1a843655`), NOT merged, NOT deployed.** Schema stays **94** (one nullable column through `ADDED_COLUMNS`, the `stale_clock_at` precedent), keys **1213 → 1216**, one new IMPORTANT log kind. Deviations and *What was NOT verified* at the foot.
 
 > **Audience:** the conductor (merge + deploy + setting the live role), reviewers, and the next session touching the marathon tick, the inbox or Track. **Status:** TRACKED.

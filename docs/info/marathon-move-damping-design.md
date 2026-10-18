@@ -1,5 +1,7 @@
 # Move damping — a far-off run's move waits until it reads the same again
 
+> ✅ **2026-10-18 — LIVE since v230 (2026-10-10 22:02); PROVEN live:** 26 `marathon.move_held` rows (Fastest Furs run 63 on 2026-10-11; RGLtv's A Fistful of Brawlers, marathon 14, 2026-10-13 to 10-18), the held moves then published as `marathon.member_run_moved`. ⚠️ NOT seen by eye: the two Settings rows. The MERGED line below is history.
+
 > ✅ **2026-10-10 21:3x — MERGED to `main` (`ad1beef1`); the reads default RAISED 2 → 4 by the owner before the first deploy (below). Deploy v230 pending the gate.** Built on branch `move-damping` (off `main` `8ecbab63`). Schema stays **94** (four nullable columns through `ADDED_COLUMNS`), keys **1208 → 1210**, one new log kind. Deviations and *What was NOT verified* at the foot.
 
 > **Audience:** the conductor (merge + deploy), reviewers, and the next session touching the schedule read, the stream re-time or anything that prints a run's start. **Status:** TRACKED.

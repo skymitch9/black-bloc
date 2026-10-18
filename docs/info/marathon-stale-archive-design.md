@@ -1,5 +1,7 @@
 # Stale archive — an unreadable marathon is archived, and tried again when its feed lists it
 
+> ✅ **2026-10-18 — LIVE since v231 (2026-10-12 22:51); PROVEN live:** marathon 17 (InfernaLAN) archived 2026-10-15 04:25:17Z after 5 failures, unreadable since 2026-10-14 04:24Z (`oengus.io answered 401`). ⚠️ NOT seen: a restore. ⚠️ **Gap found 2026-10-18:** a Hotfix show the sheet stops listing fails as *unpublished*, so its clock restarts every read and it is never archived (marathon 18, 83 failures); open in `TODO.md` ▸ Session 2026-10-18. The BUILT line below is history.
+
 > 🔨 **2026-10-12 — BUILT on branch `stale-archive` (off `main` `8dd38d16`), NOT merged, NOT deployed.** Schema stays **94** (one nullable column through `ADDED_COLUMNS`), keys **1210 → 1213**, two new IMPORTANT log kinds. Deviations and *What was NOT verified* at the foot.
 
 > **Audience:** the conductor (merge + deploy), reviewers, and the next session touching the schedule read, the archive, Restore or the feed poll. **Status:** TRACKED.
