@@ -1100,6 +1100,20 @@ async def profile_rows(db: Any, guild_id: Any) -> list[Any]:
         return []
 
 
+async def off_default(db: Any, guild_id: Any, *, consent: Any) -> list[int]:
+    """Everyone whose row puts them out of chat memory under this consent model."""
+    try:
+        cur = await db.conn.execute(
+            "SELECT user_id FROM chat_memory_optout WHERE guild_id = ? ORDER BY user_id",
+            (int(guild_id or 0),),
+        )
+        rows = await cur.fetchall()
+    except Exception as exc:
+        log.warning("chat memory: the opt-outs were not read — %s: %s", type(exc).__name__, exc)
+        return []
+    return [int(row["user_id"]) for row in rows if not remembered(consent, True)]
+
+
 async def optout_count(db: Any, guild_id: Any) -> int:
     try:
         cur = await db.conn.execute(

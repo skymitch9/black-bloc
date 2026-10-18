@@ -28,6 +28,7 @@ from black_bloc.chat_memory import (
     forget_everywhere,
     memory_note,
     merge,
+    off_default,
     optout_count,
     other_names,
     overridden,
@@ -425,6 +426,18 @@ async def test_a_choice_is_remembered_and_can_be_lifted(tmp_path):
         assert await clear_override(db, 9, 7) is True
         assert await clear_override(db, 9, 7) is False
         assert await overridden(db, 9, 7) is False
+    finally:
+        await db.close()
+
+
+async def test_off_the_default_lists_a_row_as_out_only_where_the_default_is_on(tmp_path):
+    db = await a_db(tmp_path, "off.sqlite3")
+    try:
+        assert await set_override(db, 9, 7, at=AT)
+        assert await set_override(db, 4, 7, at=AT)
+        assert await set_override(db, 5, 8, at=AT)
+        assert await off_default(db, 7, consent="optout") == [4, 9]
+        assert await off_default(db, 7, consent="optin") == []
     finally:
         await db.close()
 

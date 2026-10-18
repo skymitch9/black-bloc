@@ -36,12 +36,16 @@ from ...settings_store import (
     MARATHON_ANNOUNCE_WHY_OFF_KEY,
     MARATHON_ANNOUNCE_WHY_RUN_KEY,
     MARATHON_ANNOUNCEMENTS_DEFAULT_KEY,
+    MARATHON_BAF_OVERRIDE_BUTTON_KEY,
+    MARATHON_BAF_OVERRIDE_CLEAR_BUTTON_KEY,
     MARATHON_BAF_OVERRIDE_CLEARED_SAID_KEY,
     MARATHON_BAF_OVERRIDE_SET_SAID_KEY,
+    MARATHON_BAF_OVERRIDE_WORD_KEY,
     MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY,
     MARATHON_MENTION_ON_SAID_KEY,
     MARATHON_MENTION_PEOPLE_KEY,
     MARATHON_MENTION_PLAIN_SAID_KEY,
+    MARATHON_NOT_BAF_ROLE_WORD_KEY,
 )
 from .marathon import (
     NO_SUCH,
@@ -541,6 +545,42 @@ async def member_roles_changed(bot: Any, before: Any, after: Any) -> None:
     await role_rematch(bot, guild, via=VIA_DISCORD)
 
 
+RULE_ROLE = "role"
+RULE_OVERRIDE = "override"
+MOVE_SET = "set"
+MOVE_CLEAR = "clear"
+
+
+def baf_rule(
+    bot: Any, guild: Any, *, held: Any = None, user_id: Any = None, overrides: Any = ()
+) -> dict[str, Any] | None:
+    """How the site draws the role rule on one person: left out by a role (`held`), or counted
+    as BaF anyway, with the one move that changes it; None when the rule is not about them."""
+    if held:
+        member = guild.get_member(int(held))
+        role = ma.held_role(member, ma.optout_roles(guild, bot.store)) if member else None
+        return {
+            "state": RULE_ROLE,
+            "user_id": str(int(held)),
+            "member_name": display_name(guild, int(held), str(held)),
+            "said": words(
+                bot, guild.id, MARATHON_NOT_BAF_ROLE_WORD_KEY, role=getattr(role, "name", "")
+            ),
+            "move": MOVE_SET,
+            "move_label": words(bot, guild.id, MARATHON_BAF_OVERRIDE_BUTTON_KEY),
+        }
+    if user_id and int(user_id) in {int(one) for one in overrides or ()}:
+        return {
+            "state": RULE_OVERRIDE,
+            "user_id": str(int(user_id)),
+            "member_name": display_name(guild, int(user_id), str(user_id)),
+            "said": words(bot, guild.id, MARATHON_BAF_OVERRIDE_WORD_KEY),
+            "move": MOVE_CLEAR,
+            "move_label": words(bot, guild.id, MARATHON_BAF_OVERRIDE_CLEAR_BUTTON_KEY),
+        }
+    return None
+
+
 async def set_baf_override(
     bot: Any, guild: Any, actor: Any, user_id: Any, on: bool, *, via: str = VIA_DISCORD
 ) -> Outcome:
@@ -598,6 +638,7 @@ async def press(
 __all__ = [
     "NOT_A_MEMBER",
     "NOT_A_MEMBER_CODE",
+    "baf_rule",
     "ours_and_held",
     "member_roles_changed",
     "role_rematch",

@@ -12,7 +12,8 @@ from ...modcases import count_cases_for
 from ...settings_store import member_is_staff
 from ..auth import staff_dependency
 from ..names import avatar_url
-from ..writes import reader_dependency, require_guild
+from ..writes import reader_dependency, require_db, require_guild
+from .optouts import roll_up
 
 log = logging.getLogger(__name__)
 
@@ -143,6 +144,12 @@ def build_router(bot: Any) -> APIRouter:
         tags=["members"],
         dependencies=[Depends(staff_dependency(bot)), Depends(reader_dependency(bot))],
     )
+
+    @router.get("/members/optouts")
+    async def member_optouts() -> dict[str, Any]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return await roll_up(bot, guild)
 
     @router.get("/members")
     async def members(
