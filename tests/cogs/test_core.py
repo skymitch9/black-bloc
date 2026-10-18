@@ -950,6 +950,23 @@ async def test_set_key_refuses_a_bad_value_in_words_and_writes_nothing(bot, db, 
     assert await kinds(db) == []
 
 
+async def test_a_website_only_key_is_refused_off_the_site_and_written_from_it(bot, db, member):
+    """Owner, 2026-10-18: the opted-out roles are changed on the website only."""
+    for move in (
+        set_key(bot, bot.guild, "marathon_optout_role_ids", [5], member),
+        clear_key(bot, bot.guild, "marathon_optout_role_ids", member),
+    ):
+        found = await move
+        assert not found.ok and found.status == 403 and found.code == "site_only"
+        assert "website only" in found.message
+    assert bot.store.get(GUILD, "marathon_optout_role_ids") == [] and await kinds(db) == []
+
+    done = await set_key(bot, bot.guild, "marathon_optout_role_ids", [5], member, via="website")
+    assert done.ok and bot.store.get(GUILD, "marathon_optout_role_ids") == [5]
+    cleared = await clear_key(bot, bot.guild, "marathon_optout_role_ids", member, via="website")
+    assert cleared.ok
+
+
 async def test_set_key_refuses_a_key_the_registry_does_not_have(bot, db, member):
     found = await set_key(bot, bot.guild, "not_a_setting", 1, member)
 

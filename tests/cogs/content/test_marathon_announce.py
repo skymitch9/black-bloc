@@ -1087,3 +1087,180 @@ async def test_a_finished_highlight_whose_runner_left_the_schedule_is_left_as_it
     assert post.content.startswith("**Sky** ran **Alpha**") and len(post.edits) == edits
     assert not names_the_host(bot)
     assert "marathon.public_highlight_removed" not in await kinds(bot.db)
+
+
+# --- opted-out roles: a role keeps its holders out of BaF, staff can count one as BaF anyway ----
+
+STAFF_ROLE = 6100
+OPTOUT_KEY = "marathon_optout_role_ids"
+
+
+class Holder:
+    def __init__(self, user_id, role_ids, name="Sky"):
+        self.id = user_id
+        self.display_name = name
+        self.name = name.lower()
+        self.bot = False
+        self.roles = [SimpleNamespace(id=one, name="Staff", position=53) for one in role_ids]
+
+
+def wear(bot, *members):
+    for one in members:
+        one.guild = bot.guild
+    bot.guild.members = list(members)
+    bot.guild.get_member = lambda user_id: next(
+        (one for one in members if one.id == int(user_id)), None
+    )
+    bot.get_guild = lambda guild_id: bot.guild
+
+
+def the_highlight(found):
+    (post,) = [one for one in found if "on **SS4C**" in one.content]
+    return post
+
+
+async def role_out(bot, cog):
+    from functools import partial
+
+    from tests.cogs.content.test_marathon_public import highlighted, ready
+
+    marathon = await ready(bot, cog)
+    post = the_highlight(await highlighted(bot, cog, marathon))
+    wear(bot, Holder(SKY, [STAFF_ROLE]))
+    bot.store.on_change(OPTOUT_KEY, partial(announce.roles_changed, bot))
+    await bot.store.set(GUILD, OPTOUT_KEY, [STAFF_ROLE], by=FakeActor.id)
+    return marathon, post
+
+
+async def sky_on(bot, marathon):
+    from tests.cogs.content.test_marathon_runner_posts import run_of
+
+    row = await run_of(bot, marathon, "Super Metroid")
+    return row, next(one for one in mt.people_of(row) if one["name"] == "Sky")
+
+
+async def test_a_role_holder_is_not_baf_and_their_highlight_comes_down_the_opt_out_way(bot, cog):
+    marathon, post = await role_out(bot, cog)
+
+    row, sky = await sky_on(bot, marathon)
+    assert sky["user_id"] is None and sky[mt.NOT_OURS] == "role" and sky[mt.NOT_OURS_ID] == SKY
+    assert not mt.is_ours(row) and mt.unmatched_names([row]) == []
+    assert post.content == "Staff took down the highlight for **Sky** on **SS4C**."
+    assert not post.deleted and row["public_removed"] == 1
+    logged = await details_of(bot.db, "web.marathon.role_opted_out")
+    assert logged["members"] == [SKY] and logged["marathons"] == [marathon["id"]]
+    assert ma.opted_out(await fresh(bot, marathon)) == set()
+
+
+async def test_count_as_baf_anyway_puts_the_same_highlight_back_and_undoing_it_takes_it_down(
+    bot, cog
+):
+    marathon, post = await role_out(bot, cog)
+
+    said = await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True, via="website")
+
+    assert said.ok and said.message == "**Sky** counts as BaF on every marathon."
+    row, sky = await sky_on(bot, marathon)
+    assert sky["user_id"] == SKY and mt.NOT_OURS not in sky and mt.is_ours(row)
+    assert post.content.startswith("**Sky** runs **Super Metroid**") and not post.deleted
+    assert (await details_of(bot.db, "web.marathon.baf_override_set"))["member"] == SKY
+    assert (await details_of(bot.db, "web.marathon.role_opted_in"))["members"] == [SKY]
+
+    again = await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True, via="website")
+    assert again.ok and (await kinds(bot.db)).count("web.marathon.baf_override_set") == 1
+
+    back = await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, False, via="website")
+    assert back.ok and back.message == "**Sky** follows the opted-out roles again."
+    assert not mt.is_ours((await sky_on(bot, marathon))[0])
+    assert "took down" in post.content
+
+
+async def test_an_override_needs_a_member_and_a_hand_opt_out_still_applies_on_top(bot, cog):
+    marathon, post = await role_out(bot, cog)
+
+    stranger = await announce.set_baf_override(bot, bot.guild, FakeActor(), 4242, True)
+    assert not stranger.ok and stranger.status == 404 and stranger.code == "not_a_member"
+    assert "4242" in stranger.message
+
+    await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True)
+    out = await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [SKY], True)
+
+    assert out.ok and mt.is_ours((await sky_on(bot, marathon))[0])
+    assert "took down" in post.content
+
+
+async def test_a_member_putting_on_or_taking_off_the_role_rematches_at_once(bot, cog):
+    from tests.cogs.content.test_marathon_public import highlighted, ready
+
+    marathon = await ready(bot, cog)
+    post = the_highlight(await highlighted(bot, cog, marathon))
+    await bot.store.set(GUILD, OPTOUT_KEY, [STAFF_ROLE])
+    plain, staff = Holder(SKY, []), Holder(SKY, [STAFF_ROLE])
+    plain.guild = staff.guild = bot.guild
+
+    wear(bot, staff)
+    await cog.on_member_update(plain, staff)
+    assert not mt.is_ours((await sky_on(bot, marathon))[0]) and "took down" in post.content
+    assert (await details_of(bot.db, "marathon.role_opted_out"))["via"] == "discord"
+
+    wear(bot, plain)
+    await cog.on_member_update(staff, plain)
+    assert mt.is_ours((await sky_on(bot, marathon))[0]) and "**Super Metroid**" in post.content
+    assert "marathon.role_opted_in" in await kinds(bot.db)
+
+
+async def test_a_member_update_that_is_not_about_the_listed_roles_changes_nothing(bot, cog):
+    from tests.cogs.content.test_marathon_public import ready
+
+    marathon = await ready(bot, cog)
+    before = Holder(SKY, [1])
+    after = Holder(SKY, [1, 2])
+    before.guild = bot.guild
+    wear(bot, after)
+    await cog.on_member_update(before, after)
+    await bot.store.set(GUILD, OPTOUT_KEY, [STAFF_ROLE])
+    await cog.on_member_update(before, after)
+
+    assert mt.is_ours((await sky_on(bot, marathon))[0])
+    assert not [one for one in await kinds(bot.db) if "role_opted" in one]
+
+
+async def test_a_pairing_is_not_a_back_door_round_the_role(bot, cog):
+    from tests.cogs.content.test_marathon_public import ready
+
+    marathon = await ready(bot, cog)
+    wear(bot, Holder(SKY, [STAFF_ROLE]))
+    await bot.store.set(GUILD, OPTOUT_KEY, [STAFF_ROLE])
+    done = await pair_runner(bot, bot.guild, FakeActor(), marathon, "Sky", SKY)
+
+    assert done.ok
+    _row, sky = await sky_on(bot, marathon)
+    assert sky["user_id"] is None and sky[mt.NOT_OURS_ID] == SKY
+
+
+async def test_the_marathon_cog_hooks_the_role_setting_when_it_loads():
+    hooked = []
+    made = cogmod.Marathons.__new__(cogmod.Marathons)
+    made.bot = SimpleNamespace(
+        db=SimpleNamespace(is_connected=False),
+        add_dynamic_items=lambda *items: None,
+        store=SimpleNamespace(on_change=lambda key, callback: hooked.append(key)),
+    )
+    await cogmod.Marathons.cog_load(made)
+
+    assert hooked == [OPTOUT_KEY]
+
+
+async def test_the_role_rule_reads_in_the_sites_words(bot, cog):
+    wear(bot, Holder(SKY, [STAFF_ROLE]))
+    await bot.store.set(GUILD, OPTOUT_KEY, [STAFF_ROLE])
+
+    held = announce.baf_rule(bot, bot.guild, held=SKY)
+    kept = announce.baf_rule(bot, bot.guild, user_id=SKY, overrides={SKY})
+
+    assert held["said"] == "not BaF (Staff)" and held["move"] == "set"
+    assert held["move_label"] == "Count as BaF anyway" and held["user_id"] == str(SKY)
+    assert kept["said"] == "BaF (staff override)" and kept["move"] == "clear"
+    assert announce.baf_rule(bot, bot.guild, user_id=SKY, overrides=()) is None
+    await bot.store.set(GUILD, "marathon_not_baf_role_word", "GDQ crew ({role})")
+    assert announce.baf_rule(bot, bot.guild, held=SKY)["said"] == "GDQ crew (Staff)"
