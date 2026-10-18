@@ -1036,6 +1036,49 @@ export async function roleSelect(value, { multiple = false, id = null } = {}) {
   return select;
 }
 
+export function pickChips(listed, value, { labelOf, gone, add }) {
+  const known = new Map(listed.map((one) => [String(one.id), labelOf(one)]));
+  let chosen = [...new Set((value || []).filter(Boolean).map(String))];
+  const chips = el('div', { class: 'pickchips-list' });
+  const adder = el('select', { class: 'input pickchips-add' });
+  const node = el('div', { class: 'pickchips' }, [chips, adder]);
+  const changed = () => node.dispatchEvent(new Event('change', { bubbles: true }));
+  const labelFor = (id) => known.get(id) || `${gone} · ${id}`;
+  const render = () => {
+    chips.replaceChildren(
+      ...chosen.map((id) =>
+        el('span', { class: 'pickchip' }, [
+          el('span', { text: labelFor(id) }),
+          el('button', {
+            type: 'button',
+            class: 'pickchip-x',
+            'aria-label': `Remove ${labelFor(id)}`,
+            text: '×',
+            on: { click: () => { chosen = chosen.filter((one) => one !== id); render(); changed(); } },
+          }),
+        ]),
+      ),
+    );
+    adder.replaceChildren(
+      optionNode('', add, true),
+      ...listed.filter((one) => !chosen.includes(String(one.id))).map((one) => optionNode(one.id, labelOf(one), false)),
+    );
+  };
+  adder.addEventListener('change', (event) => {
+    event.stopPropagation();
+    if (adder.value) chosen = [...chosen, adder.value];
+    render();
+    changed();
+  });
+  node.readValue = () => [...chosen];
+  node.setValue = (next) => {
+    chosen = [...new Set((Array.isArray(next) ? next : []).filter(Boolean).map(String))];
+    render();
+  };
+  render();
+  return node;
+}
+
 /** A stored id the list cannot show still reads back as itself, so a save elsewhere never clears it. */
 function keepUnlisted(select, chosen, listed, said) {
   const known = new Set(listed.map((one) => String(one.id)));
@@ -1167,9 +1210,24 @@ export function segment(choices, current, { onChange = null } = {}) {
 async function control(spec, onChange) {
   const kind = spec.type;
   if (kind === 'channel') return { node: await channelSelect(spec.value), read: (n) => readSelect(n, false) };
-  if (kind === 'channels') return { node: await channelSelect(spec.value, { multiple: true }), read: (n) => readSelect(n, true) };
+  if (kind === 'channels') {
+    const channels = await refChannels();
+    const node = pickChips(channels, spec.value, {
+      labelOf: (channel) => channelLabel(channel, channels),
+      gone: 'a channel the server no longer has',
+      add: 'Add a channel…',
+    });
+    return { node, read: (n) => n.readValue() };
+  }
   if (kind === 'role') return { node: await roleSelect(spec.value), read: (n) => readSelect(n, false) };
-  if (kind === 'roles') return { node: await roleSelect(spec.value, { multiple: true }), read: (n) => readSelect(n, true) };
+  if (kind === 'roles') {
+    const node = pickChips(await refRoles(), spec.value, {
+      labelOf: (role) => `@${role.name}`,
+      gone: 'a role the server no longer has',
+      add: 'Add a role…',
+    });
+    return { node, read: (n) => n.readValue() };
+  }
   if (kind === 'bool') {
     const node = segment(
       [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }],

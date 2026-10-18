@@ -678,6 +678,36 @@ details:not([open]) > .sect-summary .sect-mark { transform: rotate(-90deg); }
   font-weight: var(--et-weight-medium);
 }
 
+.pickchips { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pickchips-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.pickchips-list:empty { display: none; }
+.pickchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 4px 3px 10px;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius-pill);
+  background: var(--et-shell-inset);
+  font-size: var(--et-ui-xs);
+  overflow-wrap: anywhere;
+}
+.pickchip-x {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--et-muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.pickchip-x:hover { color: var(--et-fg); background: var(--et-row-hover); }
+.pickchip-x:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px; }
+
 /* The overview feature link, and any card row that is really a link. */
 .chip {
   display: flex;
