@@ -81,7 +81,22 @@ ways"; the site is the one place they are changed.
   same view.
 - `GET /api/members/optouts` returns the rows; no blurb on the page (owner rule 2026-10-04).
 
-## 6. Not decided here / to verify on build
+## 6. Dry run (owner: *"dry run everyone with the staff run and tell me who they are"*, read 2026-10-18 15:3x Phoenix)
+
+Read through the operator token (`/api/ref/roles`, every page of `/api/members` — 123 of 123, `/api/marathons` and each
+`/{id}/people`). Nothing changed.
+
+- Role **`Staff`** = id `1335035657730523219`, position 53 of 58, not managed.
+- **Six holders**, none of them bot staff (`staff: false` on the Members read): Ashley (`ashleyawoww`), UraniumAnchor
+  (`uraniumanchor`), ogNdrahciR (`ogndrahcir`), GDQ Tech - Richard (`gdqtech`), Raelcun (`raelcun`), so (`_so_`).
+- **Matched as BaF today: one** — Raelcun, *host*, matched by Discord name, the ONLY BaF person on marathon 18
+  *Special Event* (runs 287-289) and marathon 19 *GDQueer (Oct 2026)* (runs 290-292), all 2026-10-20 23:00Z to
+  10-21 01:59Z. Both are `gdq_hotfix`, untracked (`tracked_state` found), `opted_out: false`. With the role opted out,
+  both boards would show nobody from BaF.
+- ⚠️ NOT read: archived marathons; pairings of the six by id; Members shows a member's top 5 roles only, so a holder
+  with 5+ roles above position 53 would be missed (all six list `Staff` first).
+
+## 7. Not decided here / to verify on build
 
 - Whether the GDQ `Staff` role can see the staff channel (if so it would also be bot staff via
   `resolved_staff_roles`) — a live read, reported, not changed.
