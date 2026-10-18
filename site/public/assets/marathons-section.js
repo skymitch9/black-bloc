@@ -638,6 +638,13 @@ async function optMove(marathon, say, entry, runId, out) {
   await after(marathon, done);
 }
 
+async function bafRuleMove(marathon, say, rule, runId) {
+  shown.focus = runId;
+  const path = `/api/marathons/baf-override/${encodeURIComponent(rule.user_id)}`;
+  const done = await run(say, () => send(path, rule.move === 'set' ? 'POST' : 'DELETE'), (found) => found?.message);
+  await after(marathon, done);
+}
+
 async function mentionMove(marathon, say, entry, runId) {
   shown.focus = runId;
   const path = `/api/marathons/${marathon.id}/people/${encodeURIComponent(entry.user_id)}/mention`;
@@ -692,6 +699,11 @@ function personMove(move, { marathon, say, labels, entry, person, runId }) {
       ];
     case 'mention':
       return [button(entry.mention.move_label, () => mentionMove(marathon, say, entry, runId), quiet)];
+    case 'baf_rule':
+      return [
+        el('span', { class: 'cell-quiet', 'data-tone': entry.baf_rule.state === 'role' ? 'warn' : undefined, text: entry.baf_rule.said }),
+        button(entry.baf_rule.move_label, () => bafRuleMove(marathon, say, entry.baf_rule, runId), quiet),
+      ];
     case 'run_answer':
       return [
         person.announce.said ? el('span', { class: 'cell-quiet', 'data-tone': person.announce.announced ? undefined : 'warn', text: person.announce.said }) : null,

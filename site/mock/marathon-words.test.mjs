@@ -236,6 +236,11 @@ test('a slot draws the People view’s set in its order, and the tracker and Sho
   assert.deepEqual(slotMoves({ login: 'x', channel_id: 3, looks_like: { user_id: '7', username: 'x' } }, { name: 'X' }), ['link', 'link_near', 'on_golive']);
   assert.deepEqual(slotMoves({}, { name: 'Nobody' }), ['link']);
   assert.deepEqual(slotMoves(baf, person, { archived: true }), []);
+  assert.deepEqual(slotMoves({ login: 'quietkid_tv', baf_rule: { state: 'role' } }, { name: 'QuietKid' }), ['baf_rule', 'spotlight']);
+  assert.deepEqual(
+    slotMoves({ ...baf, baf_rule: { state: 'override' } }, { ...person, announce: { move: null } }),
+    ['link', 'unlink', 'twitch', 'spotlight', 'opt_out', 'mention', 'baf_rule'],
+  );
   assert.deepEqual(runMoves({ shoutable: true }, { tracked: true }), ['tracker', 'shout']);
   assert.deepEqual(runMoves({ shoutable: true, can_mark_done: true, can_mark_live: true, can_mark_upcoming: true, ours: true }, { tracked: false }), ['tracker']);
   assert.deepEqual(runMoves({ event_id: 5 }, { tracked: true }), ['tracker', 'event']);

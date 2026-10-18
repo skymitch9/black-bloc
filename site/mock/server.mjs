@@ -7358,7 +7358,7 @@ function seedMarathonRuns() {
     // The People card (marathon-people-design.md): a four-player race shares ONE slot — Casey is
     // BaF, QuietKid is one Discord name away from @quietkid (a near miss), the other two are
     // strangers — with Moth on commentary; then two more days, so the schedule folds by day.
-    run(15, 1, 13, 110, 'Super Mario 64', '16 Star Race', [marathonPerson('Casey', 'caseyfast', 'runner', casey), marathonPerson('TheKingsPride', 'thekingspride', 'runner'), { ...marathonPerson('QuietKid', 'quietkid_tv', 'runner'), not_ours: 'role', not_ours_id: MEMBERS[5].id }, marathonPerson('Peas', 'peasplays', 'runner'), marathonPerson('Moth', null, 'commentator', moth)]),
+    run(15, 1, 13, 110, 'Super Mario 64', '16 Star Race', [marathonPerson('Casey', 'caseyfast', 'runner', casey), marathonPerson('TheKingsPride', 'thekingspride', 'runner'), { ...marathonPerson('QuietKid', 'quietkid_tv', 'runner'), name_match: MEMBERS[5].id, not_ours: 'role', not_ours_id: MEMBERS[5].id }, marathonPerson('Peas', 'peasplays', 'runner'), marathonPerson('Moth', null, 'commentator', moth)]),
     run(16, 1, 14, 1500, 'Hollow Knight', 'Any% No Major Glitches', [marathonPerson('Rivet', 'rivetplays', 'runner', rivet)]),
     run(17, 1, 15, 1620, 'Metroid Dread', 'Any%', [marathonPerson('Flyingludicolo', 'flyingludicolo', 'runner')]),
     run(18, 1, 16, 2940, 'Portal', 'Inbounds', [marathonPerson('DECosmic', 'decosmic', 'runner')]),
@@ -8528,8 +8528,8 @@ function marathonRematch(row) {
       const login = fixed || sheet;
       if (one.part === 'runner' || hosts) {
         userId = pairing ? pairing.user_id : (login ? links.get(String(login).toLowerCase()) || null : null);
-        // The mock has no Discord-name match; a person a role held keeps the id it was matched by.
-        if (!userId && one.not_ours_id) userId = one.not_ours_id;
+        // The mock has no Discord-name match; `name_match` stands in for one.
+        if (!userId && one.name_match) userId = one.name_match;
       }
       const rest = { ...one };
       delete rest.sheet_login;
