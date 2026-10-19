@@ -475,6 +475,20 @@ const SETTING_SPECS = [
   ['poll_archive_days', 'int', 365, 365, 'days a closed poll stays on the list before it moves to the archive', null, 3650, 1],
   ['poll_archive_drop_votes', 'bool', true, true, 'true to forget who voted when a poll is archived; the totals are kept either way'],
   ['poll_date_labels', 'enum', 'plain', 'plain', "how a date poll writes its slots: plain (Sat 30 Aug · 7 pm, in the server's zone) or timestamp (each reader sees their own clock, if Discord renders one in an answer)", ['plain', 'timestamp']],
+  ["question_mode", "enum", "shadow", "shadow", "off, shadow or on. off posts nothing and checks nothing; shadow \u2014 the default \u2014 resolves each week's question in the rehearsal home; on posts it in question_channel_id", ["off", "shadow", "on"]],
+  ["question_channel_id", "channel", null, null, "where the weekly question is posted while question_mode is on"],
+  ["question_shadow_channel_id", "channel", null, null, "where the weekly question is rehearsed while question_mode is shadow; blank means shadow_channel_id"],
+  ["question_weekday", "enum", "monday", "monday", "the day of the week the question goes up; monday by default", ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]],
+  ["question_time", "text", "09:00", "09:00", "the time the question goes up, as HH:MM on a 24-hour clock in default_timezone; 09:00 by default"],
+  ["question_grace_minutes", "int", 5, 5, "minutes after the question's time that Black Bloc waits for the owner's own post before posting the question itself; 5 by default", null, 120, 1],
+  ["question_catchup_hours", "int", 24, 24, "hours after the question's time that a question not yet up is still posted, after a restart for example; past that the week is logged as missed. 24 by default", null, 72, 1],
+  ["question_owner_user_id", "text", "", "", "the Discord user id of the account expected to post the question itself; blank means Black Bloc always posts it"],
+  ["question_template", "text", "{question}", "{question}", "what the posted question says; {question} is the question from the queue"],
+  ["question_thread", "bool", false, false, "true to open a reply thread on the question once it is up"],
+  ["question_thread_name_template", "text", "{question}", "{question}", "the reply thread's name; {question} is the question, cut to Discord's 100 characters"],
+  ["question_warn_days", "int", 3, 3, "how many days before the question's time an empty queue is warned about; 3 by default", null, 7, 1],
+  ["question_warn_dm", "bool", true, true, "true to DM question_owner_user_id the empty-queue warning as well as the log channel line"],
+  ["question_warn_template", "text", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some on the Weekly questions page or with /questions.", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some on the Weekly questions page or with /questions.", "the empty-queue warning, sent once per week to the log channel and the owner; {day} and {time} are when the question would have gone up"],
   ['birthday_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post birthday wishes)', ['off', 'shadow', 'on']],
   ['birthday_channel_id', 'channel', '800000000000000002', null, 'where birthday wishes are posted'],
   ['birthday_template', 'text', 'Happy birthday {name}!', 'Happy birthday {name}!', 'the birthday wording; {name} and {age}'],
@@ -2261,6 +2275,14 @@ function seedState() {
     { id: 4, creator_id: STAFF.id, question: 'Are we running tonight?', kind: 'yesno', surface: 'native', hours: 6, anonymous: false, results: 'live', channel_id: '800000000000000003', cadence: 'daily', at: '19:00', tz: 'America/Phoenix', next_at: daysAhead(1), created_at: minutesAgo(8000), options: [{ position: 0, label: 'Yes', votes: 0 }, { position: 1, label: 'No', votes: 0 }] },
     { id: 5, creator_id: STAFF.id, question: 'Best day for next week?', kind: 'checkbox', surface: 'native', hours: 48, anonymous: false, results: 'live', channel_id: '800000000000000003', cadence: 'weekly:mon', at: '09:00', tz: 'America/Phoenix', next_at: null, created_at: minutesAgo(9000), options: [{ position: 0, label: 'Friday', votes: 0 }, { position: 1, label: 'Saturday', votes: 0 }] },
   ],
+  questions: [
+    { id: 1, position: 1, body: 'What game got you into speedrunning?', status: 'queued', slot_at: null, posted_by: null, channel_id: null, message_id: null, added_by: STAFF.id, added_at: minutesAgo(3000), resolved_at: null },
+    { id: 2, position: 2, body: 'Which run are you proudest of this year?', status: 'queued', slot_at: null, posted_by: null, channel_id: null, message_id: null, added_by: STAFF.id, added_at: minutesAgo(3000), resolved_at: null },
+    { id: 3, position: 3, body: 'What is a category you want to try next?', status: 'queued', slot_at: null, posted_by: null, channel_id: null, message_id: null, added_by: STAFF.id, added_at: minutesAgo(3000), resolved_at: null },
+    { id: 4, position: 0, body: 'What is your comfort game?', status: 'posted', slot_at: '2026-10-12T16:00:00+00:00', posted_by: 'bot', channel_id: '800000000000000003', message_id: '900000000000000444', added_by: STAFF.id, added_at: minutesAgo(20000), resolved_at: minutesAgo(10000) },
+    { id: 5, position: 0, body: 'Favourite glitch?', status: 'removed', slot_at: null, posted_by: null, channel_id: null, message_id: null, added_by: STAFF.id, added_at: minutesAgo(20000), resolved_at: minutesAgo(12000) },
+  ],
+  questionSlots: {},
   birthdays: [
     { user_id: MEMBERS[1].id, month: 2, day: 14, year: 1996, opted_in: true, source: 'self', set_at: minutesAgo(9000) },
     { user_id: MEMBERS[2].id, month: 2, day: 27, year: null, opted_in: true, source: 'import', set_at: minutesAgo(12000) },
@@ -2583,6 +2605,8 @@ const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_shadow_
 CORE_KEYS.push(...BRACKETS_KEYS);
 const POINTS_KEYS = ["points_mode", "points_channel_id", "points_shadow_channel_id", "points_ping_role_id", "points_verifier_role_id", "points_xp_tiers", "points_xp_min", "points_xp_max", "points_per_run", "points_top_n", "points_board_order", "points_bounty_clock", "points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_next_rank_top_said", "points_next_rank_unranked_top_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_modmail_off_said", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 CORE_KEYS.push(...POINTS_KEYS);
+const QUESTION_KEYS = ["question_mode", "question_channel_id", "question_shadow_channel_id", "question_weekday", "question_time", "question_grace_minutes", "question_catchup_hours", "question_owner_user_id", "question_template", "question_thread", "question_thread_name_template", "question_warn_days", "question_warn_dm", "question_warn_template"];
+CORE_KEYS.push(...QUESTION_KEYS);
 const POINTS_WORD_KEYS = ["points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_next_rank_top_said", "points_next_rank_unranked_top_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_modmail_off_said", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
@@ -4712,7 +4736,7 @@ const GUIDE_FEATURES = [
   ['marathon', 'events.html', 'Marathons'], ['applications', 'rolemenus.html', 'Applications'],
   ['selftest', 'health.html', 'Test'], ['guides', 'guides.html', 'Guides'],
   ['posts', 'posts.html', 'Posts'], ['minutes', 'minutes.html', 'Meeting minutes'],
-  ['points', 'leaderboard.html', 'Leaderboard'],
+  ['points', 'leaderboard.html', 'Leaderboard'], ['question', 'questions.html', 'Weekly questions'],
 ];
 const GUIDE_FEATURE_PAGES = Object.fromEntries(GUIDE_FEATURES.map(([feature, page]) => [feature, page]));
 const GUIDE_CORE_KEYS = ['staff_channel_id', 'log_channel_id', 'modlog_channel_id', 'role_menu_channel_id'];
@@ -11699,6 +11723,212 @@ route('DELETE', '/api/birthdays/:user_id', (context) => {
   state.birthdays.splice(at, 1);
   logAction('web.birthday.clear', { target_id: context.params.user_id });
   return { removed: true, user_id: context.params.user_id };
+});
+
+// Weekly questions (docs/info/weekly-questions-design.md). The slot maths is the bot's, read in
+// a fixed Phoenix offset: the mock has no zone database to follow default_timezone through DST.
+const QUESTION_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const QUESTION_OPEN = ['pending', 'skipped', 'skipped_empty', 'taken_down'];
+const PHOENIX_MS = 7 * 3600000;
+
+function questionSlots() {
+  const wanted = Math.max(0, QUESTION_DAYS.indexOf(String(state.settings.get('question_weekday') || 'monday')));
+  const [hour, minute] = String(state.settings.get('question_time') || '09:00').split(':').map(Number);
+  const nowMs = Date.now();
+  const local = new Date(nowMs - PHOENIX_MS);
+  const found = [];
+  for (let offset = -8; offset <= 8; offset += 1) {
+    const day = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + offset));
+    if ((day.getUTCDay() + 6) % 7 !== wanted) continue;
+    found.push(new Date(day.getTime() + (hour * 60 + minute) * 60000 + PHOENIX_MS));
+  }
+  const last = found.filter((at) => at.getTime() <= nowMs).pop();
+  const next = found.find((at) => at.getTime() > nowMs);
+  return { last, next, nowMs };
+}
+
+const slotKey = (at) => at.toISOString().replace('.000Z', '+00:00');
+
+function questionWeek() {
+  const { last, next, nowMs } = questionSlots();
+  const lastRow = state.questionSlots[slotKey(last)];
+  const catchup = Number(state.settings.get('question_catchup_hours') || 24) * 3600000;
+  const open = lastRow && QUESTION_OPEN.includes(lastRow.status) && nowMs < last.getTime() + catchup;
+  const key = slotKey(open ? last : next);
+  return { key, row: state.questionSlots[key] || { status: 'pending', question_id: null } };
+}
+
+const questionQueue = () => state.questions
+  .filter((one) => one.status === 'queued')
+  .sort((a, b) => a.position - b.position || a.id - b.id);
+
+function questionTarget(mode) {
+  if (mode === 'on') return state.settings.get('question_channel_id') || null;
+  return state.settings.get('question_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id') || null;
+}
+
+function questionOut(row) {
+  const url = row.channel_id && row.message_id ? `https://discord.com/channels/${REVIEW_GUILD_ID}/${row.channel_id}/${row.message_id}` : null;
+  return { ...row, url };
+}
+
+function questionOne(context) {
+  const row = state.questions.find((one) => String(one.id) === String(context.params.id));
+  if (!row) throw new Refused(404, 'no_question', 'That question is not in the queue any more, so nothing changed. Refresh to see the queue.');
+  return row;
+}
+
+function questionQueued(context) {
+  const row = questionOne(context);
+  if (row.status !== 'queued') throw new Refused(409, 'not_queued', `That question is ${row.status}, not queued, so it cannot be changed. Refresh to see the queue.`);
+  return row;
+}
+
+function questionLines(text) {
+  return String(text || '').split(/\r?\n/).map((one) => one.trim()).filter(Boolean);
+}
+
+route('GET', '/api/questions', (context) => {
+  requireStaff(context.session);
+  const { key, row } = questionWeek();
+  const history = state.questions
+    .filter((one) => one.status !== 'queued')
+    .sort((a, b) => String(b.resolved_at || b.added_at).localeCompare(String(a.resolved_at || a.added_at)));
+  return {
+    mode: String(state.settings.get('question_mode') || 'shadow'),
+    slot_at: key,
+    state: row.status,
+    owner_set: Boolean(String(state.settings.get('question_owner_user_id') || '').trim()),
+    posted_id: row.question_id,
+    queue: questionQueue(),
+    history: history.map(questionOut),
+  };
+});
+
+route('GET', '/api/questions/current', (context) => {
+  requireStaff(context.session);
+  const { key, row } = questionWeek();
+  const mode = String(state.settings.get('question_mode') || 'shadow');
+  const first = mode !== 'off' && row.status === 'pending' ? questionQueue()[0] : null;
+  const target = mode === 'off' ? null : questionTarget(mode);
+  const template = String(state.settings.get('question_template') || '{question}');
+  return {
+    slot_at: key,
+    state: row.status,
+    question_id: first ? first.id : null,
+    body: first ? first.body : null,
+    rendered: first ? template.replace('{question}', first.body) : null,
+    channel_id: target ? String(target) : null,
+    guild_id: REVIEW_GUILD_ID,
+    channel_url: target ? `https://discord.com/channels/${REVIEW_GUILD_ID}/${target}` : null,
+    mode,
+  };
+});
+
+route('POST', '/api/questions', async (context) => {
+  requireStaff(context.session);
+  const lines = questionLines((await context.body()).text);
+  if (!lines.length) throw new Refused(400, 'nothing_to_add', 'There was no question in that, so nothing was added. Write one per line.');
+  let top = state.questions.reduce((most, one) => Math.max(most, one.position), 0);
+  let id = state.questions.reduce((most, one) => Math.max(most, one.id), 0);
+  const ids = lines.map((text) => {
+    id += 1;
+    top += 1;
+    state.questions.push({ id, position: top, body: text.slice(0, 1500), status: 'queued', slot_at: null, posted_by: null, channel_id: null, message_id: null, added_by: STAFF.id, added_at: now(), resolved_at: null });
+    return id;
+  });
+  logAction('web.question.added', { details: { via: 'website', count: ids.length, ids } });
+  return { ok: true, message: `${ids.length} question(s) added to the queue.`, value: ids };
+});
+
+route('PUT', '/api/questions/:id', async (context) => {
+  requireStaff(context.session);
+  const row = questionQueued(context);
+  const text = questionLines((await context.body()).body).join(' ');
+  if (!text) throw new Refused(400, 'nothing_to_add', 'There was no question in that, so nothing was added. Write one per line.');
+  logAction('web.question.edited', { details: { via: 'website', question_id: row.id, before: row.body, after: text } });
+  row.body = text;
+  return { ok: true, message: 'The question is changed.', value: row.id };
+});
+
+route('DELETE', '/api/questions/:id', (context) => {
+  requireStaff(context.session);
+  const row = questionQueued(context);
+  row.status = 'removed';
+  row.resolved_at = now();
+  logAction('web.question.removed', { details: { via: 'website', question_id: row.id, question: row.body } });
+  return { ok: true, message: 'The question is out of the queue. Put it back from the history on the site.', value: row.id };
+});
+
+route('POST', '/api/questions/:id/move', async (context) => {
+  requireStaff(context.session);
+  const row = questionQueued(context);
+  const { direction } = await context.body();
+  if (direction !== 'up' && direction !== 'down') throw new Refused(400, 'bad_direction', 'A question moves up or down, so nothing moved.');
+  const queue = questionQueue();
+  const at = queue.indexOf(row);
+  const other = queue[direction === 'up' ? at - 1 : at + 1];
+  if (!other) throw new Refused(409, 'not_moved', `The question is already at the ${direction === 'up' ? 'top' : 'bottom'} of the queue, so nothing moved.`);
+  [row.position, other.position] = [other.position, row.position];
+  logAction('web.question.moved', { details: { via: 'website', question_id: row.id, direction } });
+  return { ok: true, message: `The question moved ${direction}.`, value: row.id };
+});
+
+route('POST', '/api/questions/:id/requeue', (context) => {
+  requireStaff(context.session);
+  const row = questionOne(context);
+  if (row.status !== 'removed') throw new Refused(409, 'not_removed', `Only a removed question can be put back, and that one is ${row.status}.`);
+  const top = state.questions.reduce((most, one) => Math.max(most, one.position), 0);
+  Object.assign(row, { status: 'queued', position: top + 1, slot_at: null, posted_by: null, channel_id: null, message_id: null, resolved_at: null });
+  logAction('web.question.requeued', { details: { via: 'website', question_id: row.id, question: row.body } });
+  return { ok: true, message: 'The question is back at the end of the queue.', value: row.id };
+});
+
+route('POST', '/api/questions/:id/take-down', (context) => {
+  requireStaff(context.session);
+  const row = questionOne(context);
+  if (row.status !== 'posted') throw new Refused(409, 'not_posted', `That question is ${row.status}, not posted, so there is nothing to take down.`);
+  if (row.posted_by !== 'bot') throw new Refused(409, 'not_bots', 'Only a question Black Bloc posted can be taken down. The owner’s own post is never deleted by the bot.');
+  const slot = row.slot_at;
+  const bottom = Math.min(1, ...questionQueue().map((one) => one.position));
+  Object.assign(row, { status: 'queued', position: bottom - 1, slot_at: null, posted_by: null, channel_id: null, message_id: null, resolved_at: null });
+  if (slot) state.questionSlots[slot] = { status: 'taken_down', question_id: row.id };
+  logAction('web.question.taken_down', { details: { via: 'website', question_id: row.id, question: row.body, slot_at: slot } });
+  return { ok: true, message: 'Black Bloc’s post is deleted and the question is back at the top of the queue.', value: row.id };
+});
+
+route('POST', '/api/questions/post-now', (context) => {
+  requireStaff(context.session);
+  const mode = String(state.settings.get('question_mode') || 'shadow');
+  if (mode === 'off') throw new Refused(409, 'questions_off', 'Weekly questions are off, so nothing was posted. Set question_mode to shadow or on in Settings first.');
+  const { key, row } = questionWeek();
+  if (row.status === 'posted') throw new Refused(409, 'already_up', 'This week’s question is already up, so nothing was posted. Take it down first to post another.');
+  const first = questionQueue()[0];
+  if (!first) throw new Refused(409, 'queue_empty', 'The queue is empty, so there is nothing to post. Add a question first.');
+  const target = questionTarget(mode);
+  if (!target) throw new Refused(409, 'not_posted', 'There is nowhere to post it: question_channel_id is not set. Pick the channel in Settings first.');
+  Object.assign(first, { status: 'posted', slot_at: key, posted_by: 'bot', channel_id: String(target), message_id: String(900000000000000000 + first.id), resolved_at: now() });
+  state.questionSlots[key] = { status: 'posted', question_id: first.id };
+  logAction('web.question.posted_by_bot', { details: { via: 'website', question_id: first.id, question: first.body, slot_at: key, mode, reason: 'posted now by staff' } });
+  return { ok: true, message: `The question is up in <#${target}>.`, value: first.id };
+});
+
+route('POST', '/api/questions/skip', (context) => {
+  requireStaff(context.session);
+  const { key, row } = questionWeek();
+  if (row.status !== 'pending' && row.status !== 'skipped_empty') throw new Refused(409, 'not_skippable', `This week’s question is already ${row.status}, so there is nothing to skip.`);
+  state.questionSlots[key] = { status: 'skipped', question_id: null };
+  logAction('web.question.skipped', { details: { via: 'website', slot_at: key } });
+  return { ok: true, message: 'This week is skipped. The next question stays at the top of the queue.', value: key };
+});
+
+route('POST', '/api/questions/unskip', (context) => {
+  requireStaff(context.session);
+  const { key, row } = questionWeek();
+  if (row.status !== 'skipped') throw new Refused(409, 'not_skipped', 'This week is not skipped, so there is nothing to undo.');
+  state.questionSlots[key] = { status: 'pending', question_id: null };
+  logAction('web.question.unskipped', { details: { via: 'website', slot_at: key } });
+  return { ok: true, message: 'This week is back on.', value: key };
 });
 
 function roomRow(row) {

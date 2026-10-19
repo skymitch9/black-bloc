@@ -2682,6 +2682,41 @@
     },
     {
       "method": "GET",
+      "path": "/api/questions",
+      "read_by": [
+        "page-questions.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "slot_at",
+        "state",
+        "owner_set",
+        "posted_id",
+        "queue",
+        "history"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/questions/current",
+      "read_by": [
+        "the owner-side weekly question task (docs/info/weekly-questions-design.md §7)"
+      ],
+      "shape": "object",
+      "keys": [
+        "slot_at",
+        "question_id",
+        "body",
+        "rendered",
+        "channel_id",
+        "guild_id",
+        "channel_url",
+        "mode"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/tempvoice/channels",
       "read_by": [
         "page-tempvoice.js"
@@ -12263,6 +12298,7 @@
     "/golive.html",
     "/rolemenus.html",
     "/birthdays.html",
+    "/questions.html",
     "/tempvoice.html",
     "/honeypot.html",
     "/settings.html",

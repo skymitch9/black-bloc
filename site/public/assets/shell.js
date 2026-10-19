@@ -38,6 +38,7 @@ export const GROUPS = [
       { tab: 'events', label: 'Events', icon: 'navEvents', feature: 'events' },
       { tab: 'raidtrain', label: 'Raid trains', icon: 'navRaidtrain', feature: 'raidtrain' },
       { tab: 'birthdays', label: 'Birthdays', icon: 'navBirthdays', feature: 'birthday' },
+      { tab: 'questions', label: 'Weekly questions', icon: 'navQuestions', feature: 'question' },
       { tab: 'tempvoice', label: 'Temp voice', icon: 'navTempvoice', feature: 'tempvoice' },
       { tab: 'rolemenus', label: 'Role menus', icon: 'navRolemenus', feature: 'rolemenu', count: 'requests' },
       { tab: 'polls', label: 'Polls', icon: 'navPolls', feature: 'poll', count: 'polls' },
