@@ -61,6 +61,7 @@ COGS: tuple[str, ...] = (
     "black_bloc.cogs.content.pb_feed",
     "black_bloc.cogs.content.points",
     "black_bloc.cogs.community.brackets",
+    "black_bloc.cogs.community.questions",
 )
 
 

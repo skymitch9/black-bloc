@@ -303,6 +303,13 @@ FEATURE_PATHS: dict[str, tuple[str, ...]] = {
         "site/public/assets/leaderboard-layout.js",
         "site/public/assets/leaderboard.css",
     ),
+    "question": (
+        "black_bloc/questions",
+        "black_bloc/cogs/community/questions.py",
+        "black_bloc/api/tools/questions.py",
+        "site/public/questions.html",
+        "site/public/assets/page-questions.js",
+    ),
     "guides": (
         "black_bloc/guides.py",
         "black_bloc/guides_seed.json",

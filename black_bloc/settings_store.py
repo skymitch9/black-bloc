@@ -5506,6 +5506,207 @@ KEY_HELP.update(
 )
 
 
+# Weekly questions (docs/info/weekly-questions-design.md) — its own block so parallel branches
+# merge textually. Every key sits under `core`: `question_` would be a 26th setting group.
+QUESTION_FEATURE = "question"
+QUESTION_MODES = ("off", "shadow", "on")
+QUESTION_WEEKDAYS = (
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+)
+QUESTION_MODE = "question_mode"
+QUESTION_CHANNEL = "question_channel_id"
+QUESTION_SHADOW_CHANNEL = shadow_feature_key(QUESTION_FEATURE)
+QUESTION_WEEKDAY = "question_weekday"
+QUESTION_TIME = "question_time"
+QUESTION_GRACE = "question_grace_minutes"
+QUESTION_CATCHUP = "question_catchup_hours"
+QUESTION_OWNER = "question_owner_user_id"
+QUESTION_TEMPLATE = "question_template"
+QUESTION_THREAD = "question_thread"
+QUESTION_THREAD_NAME = "question_thread_name_template"
+QUESTION_WARN_DAYS = "question_warn_days"
+QUESTION_WARN_DM = "question_warn_dm"
+QUESTION_WARN_TEMPLATE = "question_warn_template"
+QUESTION_FIELD = "question"
+QUESTION_FIELDS = (QUESTION_FIELD,)
+QUESTION_WARN_FIELDS = ("day", "time")
+QUESTION_TEMPLATE_DEFAULT = "{question}"
+QUESTION_WARN_TEMPLATE_DEFAULT = (
+    "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add "
+    "some on the Weekly questions page or with /questions."
+)
+QUESTION_TIME_DEFAULT = "09:00"
+QUESTION_CLOCK = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
+QUESTION_NUMBERS: dict[str, tuple[int, int, int]] = {
+    QUESTION_GRACE: (5, 1, 120),
+    QUESTION_CATCHUP: (24, 1, 72),
+    QUESTION_WARN_DAYS: (3, 1, 7),
+}
+QUESTION_DEFAULTS: dict[str, Any] = {
+    QUESTION_MODE: "shadow",
+    QUESTION_WEEKDAY: "monday",
+    QUESTION_TIME: QUESTION_TIME_DEFAULT,
+    QUESTION_OWNER: "",
+    QUESTION_TEMPLATE: QUESTION_TEMPLATE_DEFAULT,
+    QUESTION_THREAD: False,
+    QUESTION_THREAD_NAME: QUESTION_TEMPLATE_DEFAULT,
+    QUESTION_WARN_DM: True,
+    QUESTION_WARN_TEMPLATE: QUESTION_WARN_TEMPLATE_DEFAULT,
+    **{key: default for key, (default, _, _) in QUESTION_NUMBERS.items()},
+}
+QUESTION_KEYS: tuple[str, ...] = (
+    QUESTION_MODE,
+    QUESTION_CHANNEL,
+    QUESTION_SHADOW_CHANNEL,
+    QUESTION_WEEKDAY,
+    QUESTION_TIME,
+    QUESTION_GRACE,
+    QUESTION_CATCHUP,
+    QUESTION_OWNER,
+    QUESTION_TEMPLATE,
+    QUESTION_THREAD,
+    QUESTION_THREAD_NAME,
+    QUESTION_WARN_DAYS,
+    QUESTION_WARN_DM,
+    QUESTION_WARN_TEMPLATE,
+)
+KEY_TYPES.update(
+    {
+        QUESTION_MODE: "enum",
+        QUESTION_CHANNEL: "channel",
+        QUESTION_SHADOW_CHANNEL: "channel",
+        QUESTION_WEEKDAY: "enum",
+        QUESTION_TIME: "text",
+        QUESTION_OWNER: "text",
+        QUESTION_TEMPLATE: "text",
+        QUESTION_THREAD: "bool",
+        QUESTION_THREAD_NAME: "text",
+        QUESTION_WARN_DM: "bool",
+        QUESTION_WARN_TEMPLATE: "text",
+        **{key: "int" for key in QUESTION_NUMBERS},
+    }
+)
+KEY_CHOICES.update({QUESTION_MODE: QUESTION_MODES, QUESTION_WEEKDAY: QUESTION_WEEKDAYS})
+KEY_MIN.update({key: low for key, (_, low, _) in QUESTION_NUMBERS.items()})
+KEY_MAX.update({key: high for key, (_, _, high) in QUESTION_NUMBERS.items()})
+KEY_HELP.update(
+    {
+        QUESTION_MODE: (
+            "off, shadow or on. off posts nothing and checks nothing; shadow — the default — "
+            "resolves each week's question in the rehearsal home; on posts it in "
+            "question_channel_id"
+        ),
+        QUESTION_CHANNEL: "where the weekly question is posted while question_mode is on",
+        QUESTION_SHADOW_CHANNEL: (
+            "where the weekly question is rehearsed while question_mode is shadow; blank means "
+            "shadow_channel_id"
+        ),
+        QUESTION_WEEKDAY: "the day of the week the question goes up; monday by default",
+        QUESTION_TIME: (
+            "the time the question goes up, as HH:MM on a 24-hour clock in default_timezone; "
+            "09:00 by default"
+        ),
+        QUESTION_GRACE: (
+            "minutes after the question's time that Black Bloc waits for the owner's own post "
+            "before posting the question itself; 5 by default"
+        ),
+        QUESTION_CATCHUP: (
+            "hours after the question's time that a question not yet up is still posted, after "
+            "a restart for example; past that the week is logged as missed. 24 by default"
+        ),
+        QUESTION_OWNER: (
+            "the Discord user id of the account expected to post the question itself; blank "
+            "means Black Bloc always posts it"
+        ),
+        QUESTION_TEMPLATE: (
+            "what the posted question says; {question} is the question from the queue"
+        ),
+        QUESTION_THREAD: "true to open a reply thread on the question once it is up",
+        QUESTION_THREAD_NAME: (
+            "the reply thread's name; {question} is the question, cut to Discord's 100 "
+            "characters"
+        ),
+        QUESTION_WARN_DAYS: (
+            "how many days before the question's time an empty queue is warned about; 3 by "
+            "default"
+        ),
+        QUESTION_WARN_DM: (
+            "true to DM question_owner_user_id the empty-queue warning as well as the log "
+            "channel line"
+        ),
+        QUESTION_WARN_TEMPLATE: (
+            "the empty-queue warning, sent once per week to the log channel and the owner; "
+            "{day} and {time} are when the question would have gone up"
+        ),
+    }
+)
+
+QUESTION_BAD_TIME = (
+    "**{given}** is not a time Black Bloc can read, so nothing was changed. Write it as HH:MM on "
+    "a 24-hour clock, like `09:00` or `18:30`."
+)
+QUESTION_BAD_OWNER = (
+    "**{given}** is not a Discord user id, so nothing was changed. Copy the id from the "
+    "member's profile (Developer Mode ▸ Copy User ID), or leave it blank."
+)
+QUESTION_BAD_PLACEHOLDER = (
+    "**{{{found}}}** is not something this wording can fill, so nothing was changed. It takes "
+    "{allowed}; write any other braces out as words."
+)
+
+
+def checked_question_time(given: Any) -> str:
+    """HH:MM, zero-padded."""
+    text = str(given or "").strip()
+    match = QUESTION_CLOCK.match(text)
+    if match is None:
+        raise SettingError(QUESTION_BAD_TIME.format(given=text[:20] or "(nothing)"))
+    return f"{int(match.group(1)):02d}:{match.group(2)}"
+
+
+def checked_question_owner(given: Any) -> str:
+    """A snowflake or blank."""
+    text = str(given or "").strip().strip("<@!>")
+    if not text:
+        return ""
+    if not text.isdigit() or not 15 <= len(text) <= 21:
+        raise SettingError(QUESTION_BAD_OWNER.format(given=text[:30]))
+    return text
+
+
+def checked_question_words(fields: tuple[str, ...]) -> Any:
+    def check(given: Any) -> str:
+        text = str(given or "").strip()
+        stray = next(
+            (one.strip() for one in PLACEHOLDERS.findall(text) if one.strip() not in fields),
+            None,
+        )
+        if stray is not None:
+            raise SettingError(
+                QUESTION_BAD_PLACEHOLDER.format(
+                    found=stray[:40], allowed=", ".join(f"`{{{one}}}`" for one in fields)
+                )
+            )
+        return text
+
+    return check
+
+
+QUESTION_TEXT_CHECKS: dict[str, Any] = {
+    QUESTION_TIME: checked_question_time,
+    QUESTION_OWNER: checked_question_owner,
+    QUESTION_TEMPLATE: checked_question_words(QUESTION_FIELDS),
+    QUESTION_THREAD_NAME: checked_question_words(QUESTION_FIELDS),
+    QUESTION_WARN_TEMPLATE: checked_question_words(QUESTION_WARN_FIELDS),
+}
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -5538,6 +5739,7 @@ CORE_KEYS = (
     *PB_FEED_KEYS,
     *BRACKETS_KEYS,
     *POINTS_KEYS,
+    *QUESTION_KEYS,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -6139,6 +6341,7 @@ def checked_point_tiers(given: Any) -> str:
 
 
 TEXT_CHECKS[POINTS_XP_TIERS] = checked_point_tiers
+TEXT_CHECKS.update(QUESTION_TEXT_CHECKS)
 
 VOICE_SHEET_CHARS = 4000
 TONE_CLAUSE_CHARS = 600
@@ -10948,6 +11151,8 @@ class SettingsStore:
             return BRACKETS_DEFAULTS[key]
         if key in POINTS_DEFAULTS:
             return POINTS_DEFAULTS[key]
+        if key in QUESTION_DEFAULTS:
+            return QUESTION_DEFAULTS[key]
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

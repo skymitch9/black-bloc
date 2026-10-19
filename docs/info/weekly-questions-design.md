@@ -1,8 +1,8 @@
 # Weekly questions — a queue the owner posts from, with the bot as the safety net
 
 > **Audience:** the build agent (branch `weekly-questions`), reviewers, and the session that sets up
-> the owner-side Claude task. **Status:** TRACKED · 📝 DESIGN 2026-10-19 15:3x Phoenix, all four forks
-> decided by the owner, NOT built. **Last verified: 2026-10-19** — nothing here is measured yet; the
+> the owner-side Claude task. **Status:** TRACKED · 🔨 BUILT on branch `weekly-questions`, NOT merged, NOT deployed (2026-10-19);
+> designed 2026-10-19 15:3x Phoenix, all four forks decided by the owner. See *Deviations* at the end. **Last verified: 2026-10-19** — nothing here is measured yet; the
 > code shapes named are the birthdays feature's (`black_bloc/birthdays.py`,
 > `black_bloc/cogs/community/birthdays.py`, `site/public/birthdays.html`) read as the reference pattern,
 > not re-traced line by line. ⚠️ NOT checked: whether an unattended scheduled Claude run can drive
@@ -115,3 +115,20 @@ run can drive Claude in Chrome; if it cannot run, the bot covers the week, so no
 ## Not built
 
 Several queues; recycling used questions; reply threads by default.
+
+## Deviations
+
+Recorded by the build (branch `weekly-questions`, 2026-10-19). Each is what the code does and why.
+
+1. **A second table, `weekly_question_slots`** (one row per server and slot, `PRIMARY KEY (guild_id, slot_at)`). §1 named only `weekly_questions`, but "once per slot" (the empty-queue warning, `skipped_empty`, `missed`) and "Skip this week" must survive a restart, and a slot with no question has no question row to carry it. Statuses: `pending`, `posted`, `skipped`, `skipped_empty`, `missed`, `taken_down`. `weekly_questions` also carries `guild_id` (every table here is per server).
+2. **`missed` is logged only for a slot the bot met before it passed.** The loop writes the NEXT slot's row as `pending` the first time it sees it. A slot already past `question_catchup_hours` with no row (the first deploy, or the feature switched on mid-week) is silent rather than reported missed — checklist 43's rule that an empty value means "the clock starts now".
+3. **The 24-hour catch-up is a setting**, `question_catchup_hours` (1–72, default 24), per the configurable-both-ways rule.
+4. **No `question_panel_minutes`.** A 26th `*_panel_minutes` key breaks the `/settings` panel-minutes select (25 cap, pinned by `tests/test_settings_panel.py`). `/questions` borrows `posts_panel_minutes`, the way points borrows `pb_feed_panel_minutes`.
+5. **`question_mode` is not in `command_visibility.HIDDEN_WHEN_OFF`.** The mode block on `/settings` is one select at its 25 cap. `/questions` is staff-only (`STAFF_ONLY`) and its panel says `Mode — off` and offers no Post now while off.
+6. **Every `question_*` key and every `question.*` log kind sit under `core`.** A `question` namespace or log FEATURE would be the 26th `/settings` group (same reason as pb_feed, brackets, points). The page reads core keys by the `question_` prefix.
+7. **`question_owner_user_id` ships blank.** No owner id exists in config or settings (only Discord's `guild.owner_id`, which is not necessarily the owner). Blank means the bot posts every week; the panel and the page say so in one state line.
+8. **Shadow warnings.** In `shadow` the empty-queue line goes to the rehearsal home and the DM is not sent (the row records `dm: "shadow"`); in `on` it goes to `log_channel_id` and the owner is DMed. A failed DM writes `error.dm` (a new IMPORTANT kind under `core`, not one of the four interaction `ERROR_KINDS`).
+9. **Extra kinds:** `question.unskipped`, `question.requeued` (Put back a removed question), `question.post_failed` (no channel / Discord refused, once per distinct reason per slot), `question.thread_failed`. In shadow the bot's post is still `question.posted_by_bot` with `mode: "shadow"` in its details.
+10. **`/api/questions/current` adds `state`** (the slot's status) and answers `body: null` whenever the slot is not `pending` (already posted, skipped, taken down) or the mode is `off`, so the owner-side task never posts a duplicate. The page's index uses `state` too (the mock reads a top-level `status` as an HTTP code).
+11. **Take it down** marks the slot `taken_down`: the loop does not re-post that week by itself; Post now still can.
+12. **Reorder** is Up/Down buttons (page and panel), not drag.
