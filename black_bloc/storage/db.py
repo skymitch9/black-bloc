@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 95
+SCHEMA_VERSION = 96
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1202,6 +1202,34 @@ CREATE TABLE IF NOT EXISTS marathon_baf_overrides (
     user_id INTEGER PRIMARY KEY,
     by      INTEGER,
     at      TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS weekly_questions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    INTEGER NOT NULL,
+    position    INTEGER NOT NULL,
+    body        TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'queued',
+    slot_at     TEXT,
+    posted_by   TEXT,
+    channel_id  INTEGER,
+    message_id  INTEGER,
+    added_by    INTEGER,
+    added_at    TEXT    NOT NULL,
+    resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS weekly_questions_queue ON weekly_questions(guild_id, status, position);
+
+CREATE TABLE IF NOT EXISTS weekly_question_slots (
+    guild_id    INTEGER NOT NULL,
+    slot_at     TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'pending',
+    question_id INTEGER,
+    warned_at   TEXT,
+    note        TEXT,
+    seen_at     TEXT    NOT NULL,
+    resolved_at TEXT,
+    PRIMARY KEY (guild_id, slot_at)
 );
 
 CREATE TABLE IF NOT EXISTS sticky_messages (

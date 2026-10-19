@@ -70,6 +70,7 @@ HEADS: dict[str, str] = {
     "pbfeed": CORE,
     "brackets": CORE,
     "points": CORE,
+    "question": CORE,
     "automod": "automod",
     "honeypot": "honeypot",
     "mod": "mod",
@@ -128,6 +129,7 @@ FEATURE_LABELS: dict[str, str] = {
     "posts": "Posts",
     "minutes": "Meeting minutes",
     "points": "Leaderboard",
+    "question": "Weekly questions",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -154,6 +156,7 @@ FEATURE_PAGES: dict[str, str] = {
     "posts": "posts.html",
     "minutes": "minutes.html",
     "points": "leaderboard.html",
+    "question": "questions.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -179,6 +182,14 @@ IMPORTANT_SUFFIXES = (
 IMPORTANT: frozenset[str] = frozenset(
     {
         *ERROR_KINDS,
+        "error.dm",
+        "question.posted_by_bot",
+        "question.skipped",
+        "question.unskipped",
+        "question.skipped_empty",
+        "question.missed",
+        "question.warned_empty",
+        "question.taken_down",
         "pbfeed.match_refused",
         "pbfeed.cap_reached",
         "pbfeed.runner_gone",
@@ -281,6 +292,11 @@ IMPORTANT: frozenset[str] = frozenset(
 
 ROUTINE: frozenset[str] = frozenset(
     {
+        "question.added",
+        "question.edited",
+        "question.moved",
+        "question.requeued",
+        "question.posted_by_owner",
         "golive.replay_detected",
         "golive.replay_overruled",
         "golive.replay_announced",
