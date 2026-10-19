@@ -21,6 +21,7 @@ STAFF_COMMANDS = {
     "minutes",
     "mod",
     "posts",
+    "questions",
     "purge",
     "reply",
     "rolemenu",
