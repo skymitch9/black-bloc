@@ -468,3 +468,7 @@ verified 200 with real content at the bot's 400-token ceiling (note: gpt-oss
 spends tokens on a `reasoning` field first — tiny max_tokens returns empty
 content). KI-1 line above also removed — closed 2026-09-01 (DATABASE_PATH moved
 out of OneDrive, recorded in KNOWN_ISSUES).
+
+## 📋 Session 2026-10-20
+
+- 🔧 **Owner 06:4x Phoenix, verbatim: *"We aren't ready for pt go check"*, then *"We didn't fill in series, I want to add a genre column too"*.** ✅ 06:51 request #13 sent back from *ready to check* to *in progress* through the site (note: *Not ready for PT to check yet: series still to fill in, and a genre column to add.*; the sent-back card went to the forum post, the DM to the owner as ready_by; PT was never DM'd — the review look is not a DM look and `request_check_on_ready` is false). QUEUED as one build: (a) a **genre** per game beside series (same shape: staff-set on the Games view, a Runs-sheet column + chip, a CSV column that fills only a blank, in the `/runs` line); (b) **fill series and genre for the 8 games live today** (DKC2, Sekiro, Poly Fighter, Pronoun Palace, Ember Knights, Jet Force Gemini, Dr. Robotnik's Ring Racers, Denshattack!) as logged data edits after the deploy, each value checked against a public source; (c) the v240 owed item: the panel's *seen N times* line becomes the `runs_lookup_seen` word key (already landed v241 — verify) and the series/genre words join it. #13 goes back to *ready to check* only when the owner says so.
