@@ -2930,3 +2930,13 @@ body[data-show-was="1"] .preview-was { display: block; }
   .mx-slot-head .mx-chips, .mx-slot-head .cell-kind { grid-column: 2; }
   .mx-slot-body { padding-left: 4px; }
 }
+
+/* BaF runs page (runs.html). */
+.runs-views { margin-bottom: 12px; }
+.runs-chips { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.runs-chiprow { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
+.runs-chiplabel { flex: 0 0 4.5rem; padding-top: 5px; font-size: var(--et-ui-xs); color: var(--et-muted); }
+.runs-chiprow > .chipbar { min-width: 0; }
+.runs-how { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.log-table th.th-sort { cursor: pointer; user-select: none; }
+.runs-page, .runs-grid { min-width: 0; }

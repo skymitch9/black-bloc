@@ -36,6 +36,7 @@ export const GROUPS = [
       { tab: 'leaderboard', label: 'Leaderboard', icon: 'navLeaderboard', feature: 'points' },
       { tab: 'brackets', label: 'Brackets', icon: 'navBrackets', feature: 'brackets' },
       { tab: 'events', label: 'Events', icon: 'navEvents', feature: 'events' },
+      { tab: 'runs', label: 'BaF runs', icon: 'navRuns' },
       { tab: 'raidtrain', label: 'Raid trains', icon: 'navRaidtrain', feature: 'raidtrain' },
       { tab: 'birthdays', label: 'Birthdays', icon: 'navBirthdays', feature: 'birthday' },
       { tab: 'tempvoice', label: 'Temp voice', icon: 'navTempvoice', feature: 'tempvoice' },

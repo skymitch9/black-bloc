@@ -2717,6 +2717,77 @@
     },
     {
       "method": "GET",
+      "path": "/api/runs",
+      "read_by": [
+        "page-runs.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "rows",
+        "events",
+        "series_names",
+        "sources",
+        "parts"
+      ],
+      "rows": {
+        "rows": [
+          "key",
+          "how",
+          "how_word",
+          "date",
+          "event",
+          "event_source",
+          "event_word",
+          "event_ref",
+          "marathon_id",
+          "game",
+          "game_key",
+          "series",
+          "category",
+          "runners",
+          "runners_text",
+          "note",
+          "removed",
+          "edited",
+          "tracked",
+          "state"
+        ],
+        "events": [
+          "marathon_id",
+          "name",
+          "source",
+          "word",
+          "starts_at",
+          "archived"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs/games",
+      "read_by": [
+        "page-runs.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "games"
+      ],
+      "rows": {
+        "games": [
+          "game",
+          "game_key",
+          "series",
+          "times",
+          "last_date",
+          "last_event",
+          "runners",
+          "categories",
+          "keys"
+        ]
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/tempvoice/channels",
       "read_by": [
         "page-tempvoice.js"
@@ -12314,7 +12385,8 @@
     "/structure.html",
     "/pbs.html",
     "/brackets.html",
-    "/leaderboard.html"
+    "/leaderboard.html",
+    "/runs.html"
   ],
   "action_kinds": [
     "web.operator.read",
@@ -12611,6 +12683,12 @@
     "web.points.bounty_set",
     "web.points.bounty_ended",
     "web.points.top_changed",
-    "web.points.would_announce"
+    "web.points.would_announce",
+    "web.runs.added",
+    "web.runs.edited",
+    "web.runs.removed",
+    "web.runs.restored",
+    "web.runs.imported",
+    "web.runs.series_set"
   ]
 }

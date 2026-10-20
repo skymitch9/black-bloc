@@ -79,6 +79,8 @@ import {
 } from './ui.js';
 
 const shown = { id: null, slots: new Set(), people: new Set(), more: false, focus: null, where: null, archived: false };
+const RUNS_LINK = `${BAF} runs`;
+const RUNS_HREF = '/runs.html';
 const HASH = /^marathon-(\d+)$/;
 let refresh = async () => {};
 let showEvent = () => {};
@@ -1754,7 +1756,7 @@ function listSection(payload, feeds, say, archive) {
     payload.mode === 'off' ? el('p', { class: 'field-help' }, boldParts(said(MODE_OFF, { mode: payload.mode }))) : null,
     payload.mode === 'shadow' ? el('p', { class: 'field-help' }, boldParts(MODE_SHADOW)) : null,
     say,
-    card(null, [grid, bar([add, sources])]),
+    card(null, [grid, bar([add, sources, el('a', { class: 'btn small quiet', href: RUNS_HREF, text: RUNS_LINK })])]),
     archiveFold(archive),
   ].filter(Boolean));
   return full(list.node);

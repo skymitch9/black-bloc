@@ -609,6 +609,7 @@ async function checkActionKinds() {
   await send('PUT', `/api/minutes/${IDS.meeting_id}`, { notes: 'Staff wrote this line.' });
   await post(`/api/minutes/${IDS.meeting_id}/post`, {});
   await send('DELETE', `/api/minutes/${IDS.meeting_id}`, undefined);
+  await post('/api/runs', { game: 'Contract run', event: 'BtB 2025' });
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);
