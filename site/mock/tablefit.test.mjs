@@ -76,7 +76,18 @@ win.flush();
 is('a short table gets no fit', short.props['--table-fit'], undefined);
 is('a short table is not opted in', short.dataset.fit, undefined);
 
-const holder = { matches: () => false, querySelector: (selector) => (selector === '.table-scroll' ? fakeBox({ top: 0 }) : null) };
+win.innerHeight = 1400;
+const late = fakeBox({ top: 200 });
+late.isConnected = false;
+late.parentElement = { scrollTop: 300, parentElement: null };
+fitScroll(late, { win });
+win.frames.shift()();
+is('not on the page yet: waits', late.props['--table-fit'], undefined);
+late.isConnected = true;
+win.flush();
+is('measured once it lands, through a scrolled shell', late.props['--table-fit'], `${1400 - (200 + 40 + 300) - FIT_BELOW - FIT_GAP}px`);
+
+const holder ={ matches: () => false, querySelector: (selector) => (selector === '.table-scroll' ? fakeBox({ top: 0 }) : null) };
 is('finds the box inside a holder', fitScroll(holder, { win })?.dataset.fit, 'true');
 is('an empty holder is ignored', fitScroll({ matches: () => false, querySelector: () => null }, { win }), null);
 
