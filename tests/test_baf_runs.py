@@ -354,6 +354,7 @@ async def test_the_gdq_importer_dry_runs_then_writes_exactly_that_and_never_make
     assert (await kinds(bot.db)).count("web.runs.imported") == 1
     rows = await runs.view(bot, bot.guild)
     assert {row["event"] for row in rows} == {"SGDQ 2025"}
+    assert {row["runners_text"] for row in rows} == {"Kat (kaizo_kat)", "PT (Gamer2025)"}
     assert all(row["how"] == "imported" for row in rows)
     assert not client.closed
 

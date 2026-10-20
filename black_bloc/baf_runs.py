@@ -238,6 +238,13 @@ def runners_line(entries: list[dict[str, Any]]) -> str:
     return ", ".join(said)
 
 
+def row_people(row: Any, parts: Any) -> list[dict[str, Any]]:
+    people = people_json(row["people"])
+    if row["run_ref"]:
+        return counted_people(people, parts) or hand_people(people, parts)
+    return hand_people(people, parts)
+
+
 def hand_people(people: list[dict[str, Any]], parts: Any) -> list[dict[str, Any]]:
     wanted = set(parts or ())
     kept = [one for one in people if one.get("part", RUNNER) in wanted]
@@ -372,7 +379,7 @@ def _hand_row(
         marathon_id=marathons.get((str(source), str(ref))) if source and ref else None,
         game=row["game"],
         category=row["category"],
-        runners=runner_entries(guild, hand_people(people_json(row["people"]), parts)),
+        runners=runner_entries(guild, row_people(row, parts)),
         note=row["note"],
         series=series,
         removed=False,
