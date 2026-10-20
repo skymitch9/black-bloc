@@ -1,11 +1,9 @@
 {
-  "release": "v242",
-  "commit": "56a6d49b",
+  "release": "v243",
+  "commit": "18bc6ca9",
   "changed_features": [
-    "guides",
-    "modmail",
-    "points",
-    "poll",
+    "birthday",
+    "marathon",
     "posts",
     "question"
   ]
