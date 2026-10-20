@@ -10698,3 +10698,23 @@ Design: [`posts-one-switch-design.md`](posts-one-switch-design.md).
 | `black_bloc/settings_store.py:10007` | `SMALL_FIXES_WORDS`: every word this build posts; `SMALL_FIXES_SWITCHES` (`:10052`) are the two take-back switches, default true. |
 | `black_bloc/bot.py:117` | `install_handed_roles` after the cogs load, beside the other store hooks. |
 | `site/mock/server.mjs:5270` | `handedAsked` / `handedTaken`: the mock's twin, with `pingsHanded` standing in for the action-log ledger. |
+
+## Runs genre and the filter row — keyed by LINE at `runs-genre` (branch `runs-genre`, 2026-10-20; re-key after the merge)
+
+| Where | Why |
+|---|---|
+| `black_bloc/storage/db.py:1738` `("baf_series", "genre", "TEXT NOT NULL DEFAULT ''")` | Schema 98 -> 99. Genre lives in the series table (one row per game holds series, genre or both); the table keeps its name so nothing that reads `baf_series` moves. Added at boot by `_add_missing_columns`, idempotent; every series row gets `genre = ''`. `series` keeps its old `NOT NULL` with no default, so every insert names both columns. |
+| `black_bloc/baf_runs.py:46` `TAG_LIMIT` / `SERIES` / `GENRE` / `TAGS` | Series and genre are the two "tags" of a game; every write and CSV path loops `TAGS`, so a third tag is one entry plus a column. |
+| `black_bloc/baf_runs.py:672` `_write_tag` | One upsert sets ONE column and leaves the other; a row whose series and genre are both blank is deleted afterwards, so "cleared" still means "no row". The column name comes from `TAGS`, never from input. |
+| `black_bloc/baf_runs.py:698` `_write_given_tags(blank=)` | Add (`blank=False`) never writes a blank tag, so a new run cannot clear a tag set on the game; Edit (`blank=True`) writes whatever the editor sent, which is how a blank clears. |
+| `black_bloc/baf_runs.py:1042` `set_tag` + `set_series` / `set_genre` | One body for both PUT routes; the log kind is `runs.{tag}_set` (`tests/test_logkinds.py` `KNOWN_DYNAMIC` names both). |
+| `black_bloc/baf_runs.py:1268` `for tag in TAGS:` (in `import_csv`) | A CSV `series` or `genre` cell fills only a blank; `known_tags` is updated as rows land, so two rows of one game in one file write once. |
+| `black_bloc/baf_runs_panel.py:47` `tag_fields` / `:56` `tag_line` | `{tags}` is the set ones joined by ` · `. The `runs_lookup_tags` line is drawn only when the game has a series or genre, and dropped when a staff template renders blank. The *seen N time(s)* line is `runs_lookup_seen` (no constant carries those words; `tests/test_baf_runs_panel.py::test_no_panel_constant_carries_the_seen_words`). |
+| `black_bloc/settings_store.py:10338` `RUNS_TAG_FIELDS` | `{series}` `{genre}` `{tags}` are allowed in the title, seen and tags keys; every older placeholder still checks. |
+| `black_bloc/api/tools/runs.py:28` `names_of` | `series_names` and `genre_names` (the datalist suggestions) come from the same rows. |
+| `site/public/assets/listfilter.js:24` `countedChoices` | Pure: `[value, "value (n)"]`, counted once per item, blanks dropped, sorted by name unless an `order` is given. Fixtures in `site/mock/listfilter.test.mjs`. |
+| `site/public/assets/ui.js:933` `filterSelect` | THE filter drop-down: `all` is the first option's text and the aria-label; a value that is no longer a choice stays shown as `value (0)`, so a link never silently changes what it filters. |
+| `site/public/assets/page-runs.js:64` `readHash` / `writeHash` | The hash is the whole filter state (`q view year event runner series genre removed`) and `readHash` is authoritative, so a pasted link reproduces the view and a Games-view game click (`#q=`) clears the rest. |
+| `site/public/assets/page-runs.js:123` `ruleFor` / `tagRules` | Every dimension still goes through the shared `passes`; a select value of `''` means All, `__none` means No series / No genre. |
+| `site/public/assets/page-runs.js:176` `pickers` | Builds the four selects from the rows of the current removed state; a select with nothing to choose is not drawn; focus returns to the select that changed after the repaint. |
+| `site/public/assets/page-runs.js:275` `paintFilters` | The How chip row is gone; the *Removed (N)* chip is how a removed run is reached (and restored). The array is `filter(Boolean)`ed: `replaceChildren(null)` prints the word *null*. |
