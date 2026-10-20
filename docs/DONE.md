@@ -44,6 +44,11 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-20 v243
+
+- 🔨 **Switch-sheet build 3 of 6 — one test channel (sheet items p2, p4k; the audit's P2; `points_shadow_channel_id` retired with them since v242 left it without a reader).** Dispatched to Opus 2026-10-20 00:5x on branch `one-test-channel` (262k).
+  ↳ ✅ **LIVE v243** 2026-10-20 01:19 (release `a5f98055`, merge `18bc6ca9`); the boot migration copied #post-test into `shadow_channel_id` and dropped the two stored overrides exactly as its dry run said; design [`info/one-test-channel-design.md`](info/one-test-channel-design.md); see `deploys.log` v243 for what was and was not verified. Brackets rehearsal threads and poll Post to test now land in #post-test instead of the log channel.
+
 ## 2026-10-20 v242
 
 - 🔨 **Switch-sheet build 2 of 6 — one Posts switch (sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the audit's P1 slice 2 + P3(a); owner 2026-10-19 18:3x: *"on off shadow should be one button for everything in the post page umbrella i think to keep permissions simple"*).** Dispatched to Opus 23:4x on branch `posts-one-switch` (700k).
