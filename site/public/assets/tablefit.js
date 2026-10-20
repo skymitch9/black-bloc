@@ -16,10 +16,11 @@ function scrollBox(node) {
   return node.querySelector?.('.table-scroll') || null;
 }
 
-function scrolledBy(box, win) {
-  let by = win.scrollY || 0;
-  for (let up = box.parentElement; up; up = up.parentElement) by += up.scrollTop || 0;
-  return by;
+function shellTop(box, win) {
+  for (let up = box.parentElement; up && up !== win.document.documentElement; up = up.parentElement) {
+    if (/(auto|scroll)/.test(win.getComputedStyle(up).overflowY || '')) return Math.max(0, up.getBoundingClientRect().top);
+  }
+  return 0;
 }
 
 function measure(box, below, win, tries = 0) {
@@ -31,7 +32,7 @@ function measure(box, below, win, tries = 0) {
   const rem = parseFloat(win.getComputedStyle(win.document.documentElement).fontSize) || 16;
   const under = below && below.isConnected ? below.getBoundingClientRect().height : FIT_BELOW;
   const px = tableFit({
-    top: box.getBoundingClientRect().top + scrolledBy(box, win),
+    top: shellTop(box, win),
     viewport: win.innerHeight,
     below: under + FIT_GAP,
     floor: FIT_FLOOR_REM * rem,

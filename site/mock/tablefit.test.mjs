@@ -15,26 +15,30 @@ is('short window keeps the 26rem floor', tableFit({ top: 500, viewport: 700, bel
 is('no floor', tableFit({ top: 100, viewport: 500, below: 50 }), 350);
 is('fractions floor down', tableFit({ top: 100.6, viewport: 500, below: 50 }), 349);
 
-function fakeWin({ innerHeight, scrollY = 0, rem = 16 }) {
+function fakeWin({ innerHeight, rem = 16 }) {
   const frames = [];
   const listeners = {};
   return {
     innerHeight,
-    scrollY,
+    scrollY: 0,
     frames,
     listeners,
-    document: { documentElement: {} },
-    getComputedStyle: () => ({ fontSize: `${rem}px` }),
+    document: { documentElement: { tag: 'html' } },
+    getComputedStyle: (node) => ({ fontSize: `${rem}px`, overflowY: node?.overflowY || 'visible' }),
     requestAnimationFrame: (fn) => frames.push(fn),
     addEventListener: (type, fn) => { listeners[type] = fn; },
     flush() { while (frames.length) frames.shift()(); },
   };
 }
 
-function fakeBox({ top, long = true }) {
+const shell = (top) => ({ overflowY: 'auto', parentElement: null, getBoundingClientRect: () => ({ top }) });
+const inCard = (parent) => ({ overflowY: 'visible', parentElement: parent, getBoundingClientRect: () => ({ top: 400 }) });
+
+function fakeBox({ top, long = true, parent = inCard(shell(56)) }) {
   const props = {};
   const box = {
     isConnected: true,
+    parentElement: parent,
     dataset: long ? { long: 'true' } : {},
     rect: { top, height: 0 },
     style: {
@@ -49,26 +53,38 @@ function fakeBox({ top, long = true }) {
   return box;
 }
 
-const win = fakeWin({ innerHeight: 802, scrollY: 40 });
-const box = fakeBox({ top: 220 });
-const pager = { isConnected: true, getBoundingClientRect: () => ({ height: 44 }) };
+const win = fakeWin({ innerHeight: 795 });
+const box = fakeBox({ top: 327 });
+const pager = { isConnected: true, getBoundingClientRect: () => ({ height: 48 }) };
 is('returns the box', fitScroll(box, { below: pager, win }), box);
 is('opts the box in', box.dataset.fit, 'true');
 is('waits for a frame', box.props['--table-fit'], undefined);
 win.flush();
-is('the fit from top + scroll, viewport and the pager', box.props['--table-fit'], `${802 - 260 - 60}px`);
+is('owner window: the window under the topbar, not under the box', box.props['--table-fit'], `${795 - 56 - 64}px`);
 is('never sets height', 'height' in box.props, false);
 is('never sets max-height inline', 'maxHeight' in box.props, false);
 
+box.rect.top = -900;
 win.innerHeight = 1000;
 win.listeners.resize();
 win.flush();
-is('re-fits on resize', box.props['--table-fit'], `${1000 - 260 - 60}px`);
+is('re-fits on resize; the box scrolled out of view does not matter', box.props['--table-fit'], `${1000 - 56 - 64}px`);
 
 const bare = fakeBox({ top: 100 });
 fitScroll(bare, { win });
 win.flush();
-is('no pager: the default below', bare.props['--table-fit'], `${1000 - (100 + 40) - FIT_BELOW - FIT_GAP}px`);
+is('no pager: the default below', bare.props['--table-fit'], `${1000 - 56 - FIT_BELOW - FIT_GAP}px`);
+
+const windowed = fakeBox({ top: 300, parent: inCard(null) });
+fitScroll(windowed, { win });
+win.flush();
+is('no scrolling shell: the window top', windowed.props['--table-fit'], `${1000 - 0 - FIT_BELOW - FIT_GAP}px`);
+
+const tiny = fakeWin({ innerHeight: 400 });
+const cramped = fakeBox({ top: 300 });
+fitScroll(cramped, { win: tiny });
+tiny.flush();
+is('a short window keeps the 26rem floor', cramped.props['--table-fit'], '416px');
 
 const short = fakeBox({ top: 100, long: false });
 is('a short table is left alone', fitScroll(short, { win }), null);
@@ -76,25 +92,24 @@ win.flush();
 is('a short table gets no fit', short.props['--table-fit'], undefined);
 is('a short table is not opted in', short.dataset.fit, undefined);
 
-win.innerHeight = 1400;
 const late = fakeBox({ top: 200 });
 late.isConnected = false;
-late.parentElement = { scrollTop: 300, parentElement: null };
 fitScroll(late, { win });
 win.frames.shift()();
 is('not on the page yet: waits', late.props['--table-fit'], undefined);
 late.isConnected = true;
 win.flush();
-is('measured once it lands, through a scrolled shell', late.props['--table-fit'], `${1400 - (200 + 40 + 300) - FIT_BELOW - FIT_GAP}px`);
+is('measured once it lands', late.props['--table-fit'], `${1000 - 56 - FIT_BELOW - FIT_GAP}px`);
 
-const holder ={ matches: () => false, querySelector: (selector) => (selector === '.table-scroll' ? fakeBox({ top: 0 }) : null) };
+const holder = { matches: () => false, querySelector: (selector) => (selector === '.table-scroll' ? fakeBox({ top: 0 }) : null) };
 is('finds the box inside a holder', fitScroll(holder, { win })?.dataset.fit, 'true');
 is('an empty holder is ignored', fitScroll({ matches: () => false, querySelector: () => null }, { win }), null);
 
 box.isConnected = false;
+win.innerHeight = 1200;
 win.listeners.resize();
 win.flush();
-is('a box gone from the page is dropped, not re-measured', box.props['--table-fit'], `${1000 - 260 - 60}px`);
+is('a box gone from the page is dropped, not re-measured', box.props['--table-fit'], `${1000 - 56 - 64}px`);
 
 if (failures.length) {
   console.error(`tablefit: ${failures.length} failure(s)`);
