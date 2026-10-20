@@ -46,6 +46,7 @@ def build_router(bot: Any) -> APIRouter:
         event: str = "",
         series: str = "",
         genre: str = "",
+        developer: str = "",
         runner: str = "",
         year: str = "",
         how: str = "",
@@ -59,6 +60,7 @@ def build_router(bot: Any) -> APIRouter:
             "event": event,
             "series": series,
             "genre": genre,
+            "developer": developer,
             "runner": runner,
             "year": year,
             "how": how,
@@ -74,6 +76,7 @@ def build_router(bot: Any) -> APIRouter:
             "events": await runs.counted_events(bot.db, guild.id, sources),
             "series_names": names_of(every, runs.SERIES),
             "genre_names": names_of(every, runs.GENRE),
+            "developer_names": names_of(every, runs.DEVELOPER),
             "genre_families": runs.families_shown(rule),
             "sources": sources,
             "parts": list(bot.store.get(guild.id, RUNS_PARTS) or ()),
@@ -151,6 +154,22 @@ def build_router(bot: Any) -> APIRouter:
             actor_for(bot, who, guild),
             game_key,
             payload.get("genre"),
+            via=VIA_WEBSITE,
+        )
+        return answered(outcome)
+
+    @router.put("/developer/{game_key:path}")
+    async def runs_developer(
+        request: Request, game_key: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = ready()
+        outcome = await runs.set_developer(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            game_key,
+            payload.get("developer"),
             via=VIA_WEBSITE,
         )
         return answered(outcome)

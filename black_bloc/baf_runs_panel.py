@@ -47,7 +47,13 @@ def date_word(bot: Any, guild_id: int, value: Any) -> str:
 def tag_fields(game: dict[str, Any]) -> dict[str, str]:
     series = game.get(runs.SERIES) or ""
     genre = game.get(runs.GENRE) or ""
-    return {"series": series, "genre": genre, "tags": TAG_JOIN.join(filter(None, (series, genre)))}
+    developer = game.get(runs.DEVELOPER) or ""
+    return {
+        "series": series,
+        "genre": genre,
+        "developer": developer,
+        "tags": TAG_JOIN.join(filter(None, (series, genre, developer))),
+    }
 
 
 def game_field(bot: Any, guild_id: int, game: dict[str, Any]) -> tuple[str, str]:

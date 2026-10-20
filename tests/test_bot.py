@@ -533,3 +533,45 @@ async def test_a_failed_one_optout_migration_never_stops_the_boot(settings, monk
 
     assert "one opt-out: the boot migration failed" in caplog.text
     await bot.close()
+
+
+async def test_the_runs_genre_format_migration_runs_after_one_optout_and_before_cogs(
+    tmp_path, monkeypatch
+):
+    from black_bloc.config import load_settings
+
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    bot = BlackBlocBot(
+        load_settings(_env_file=None, database_path=tmp_path / "boot.sqlite3", dev_guild_id=7)
+    )
+    await bot.db.connect()
+    await bot.store.load()
+    await bot.db.conn.execute(
+        "INSERT INTO baf_series(guild_id, game_key, series, genre, by, at) "
+        "VALUES (7, 'sekiro', '', 'Action-adventure', NULL, 'x')"
+    )
+    await bot.db.conn.commit()
+
+    await bot._migrate_runs_genre_format()
+
+    cur = await bot.db.conn.execute("SELECT genre FROM baf_series")
+    assert (await cur.fetchone())["genre"] == "Action adventure"
+    order = bot_module.BlackBlocBot.setup_hook.__code__.co_names
+    assert order.index("_migrate_one_optout") < order.index("_migrate_runs_genre_format")
+    assert order.index("_migrate_runs_genre_format") < order.index("_load_cogs")
+    await bot.close()
+
+
+async def test_a_failed_runs_genre_format_migration_never_stops_the_boot(
+    settings, monkeypatch, caplog
+):
+    async def broken(_bot):
+        raise RuntimeError("disk")
+
+    monkeypatch.setattr(bot_module, "migrate_runs_genre_format", broken)
+    bot = BlackBlocBot(settings)
+
+    await bot._migrate_runs_genre_format()
+
+    assert "runs genre format: the boot migration failed" in caplog.text
+    await bot.close()

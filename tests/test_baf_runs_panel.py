@@ -299,3 +299,27 @@ async def test_search_again_opens_the_form_with_the_query_already_typed(bot):
 
     assert pressed.response.modals[0].typed.default == "celeste"
     assert panel.SearchModal().typed.default is None
+
+
+async def test_a_developer_joins_the_tags_line_and_has_its_own_placeholder(bot):
+    who = staff_of(bot)
+    modal = panel.SearchModal()
+    modal.typed._value = "shredder"
+
+    await runs.set_developer(bot, bot.guild, None, "Shredder's Revenge", "Tribute Games")
+    alone = FakeInteraction(bot, who)
+    await modal.on_submit(alone)
+    assert alone.edits[0]["embed"].fields[0].value.split("\n")[0] == "Tribute Games"
+
+    await runs.set_genre(bot, bot.guild, None, "Shredder's Revenge", "Beat 'em up, Fighting")
+    await bot.store.set(GUILD, RUNS_LOOKUP_TITLE, "{game} by {developer}", by=1)
+    both = FakeInteraction(bot, who)
+    await modal.on_submit(both)
+    field = both.edits[0]["embed"].fields[0]
+    assert field.name == "Shredder's Revenge by Tribute Games"
+    assert field.value.split("\n")[0] == "Beat 'em up, Fighting · Tribute Games"
+
+    await bot.store.set(GUILD, RUNS_LOOKUP_TAGS, "Made by {developer}", by=1)
+    worded = FakeInteraction(bot, who)
+    await modal.on_submit(worded)
+    assert worded.edits[0]["embed"].fields[0].value.split("\n")[0] == "Made by Tribute Games"

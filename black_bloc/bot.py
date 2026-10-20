@@ -26,6 +26,7 @@ from .prefix import no_prefix_commands
 from .presence import boot_presence, shutdown_presence
 from .rolemenu_panels import install as install_panels
 from .rolemenu_panels import panels_on_boot
+from .runs_genre_format import apply as migrate_runs_genre_format
 from .selftest import on_boot as selftest_on_boot
 from .settings_store import SettingsStore
 from .shadow import install as install_rehearsal_home
@@ -106,6 +107,7 @@ class BlackBlocBot(commands.Bot):
         await self._migrate_test_channel()
         await self._migrate_shadow_one_meaning()
         await self._migrate_one_optout()
+        await self._migrate_runs_genre_format()
         install_rehearsal_home(self)
         self._apply_boot_presence()
         log.info("database ready at %s", self.settings.database_path)
@@ -147,6 +149,15 @@ class BlackBlocBot(commands.Bot):
             await migrate_one_optout(self)
         except Exception:
             log.exception("one opt-out: the boot migration failed; the old stores still hold them")
+
+    async def _migrate_runs_genre_format(self) -> None:
+        """Before any cog loads, so the runs page and /runs only ever read the house spelling."""
+        try:
+            await migrate_runs_genre_format(self)
+        except Exception:
+            log.exception(
+                "runs genre format: the boot migration failed; genres keep their spelling"
+            )
 
     def _apply_boot_presence(self) -> None:
         """setup_hook runs before IDENTIFY, so the stored sentence is the one Discord is sent."""

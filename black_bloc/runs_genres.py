@@ -9,6 +9,9 @@ Rule = tuple[tuple[str, ...], tuple[Family, ...]]
 NOT_A_WORD = re.compile(r"[\W_]+")
 QUALIFIER_SPLIT = re.compile(r"[,\n]")
 NO_RULE: Rule = ((), ())
+HYPHENS = re.compile(r"[-_]")
+GENRE_JOIN = ", "
+UPPER_WORDS: tuple[str, ...] = ("2d", "3d", "fps", "tps", "rpg", "jrpg", "mmo", "rts")
 
 
 def normal(text: Any) -> str:
@@ -83,3 +86,51 @@ def family_terms(family: Any, families: Any = ()) -> str:
         if name == family:
             return " ".join((name, *aliases))
     return str(family or "")
+
+
+def genre_entries(text: Any) -> list[str]:
+    return [one for one in (" ".join(part.split()) for part in str(text or "").split(",")) if one]
+
+
+def parse_upper(text: Any) -> tuple[str, ...]:
+    found = map(normal, QUALIFIER_SPLIT.split(str(text or "")))
+    return tuple(dict.fromkeys(one for one in found if one))
+
+
+def format_entry(entry: str, upper: Any = UPPER_WORDS) -> str:
+    text = " ".join(HYPHENS.sub(" ", entry).split()).lower()
+    if not text:
+        return ""
+    words = (text[:1].upper() + text[1:]).split(" ")
+    wanted = set(upper)
+    return " ".join(word.upper() if word.lower() in wanted else word for word in words)
+
+
+def genre_format(
+    text: Any, qualifiers: Any = (), families: Any = (), upper: Any = UPPER_WORDS
+) -> str:
+    """The house spelling of a genre list: each entry cased once, joined by ', ', one per family."""
+    kept: list[str] = []
+    seen: set[str] = set()
+    for entry in genre_entries(text):
+        shown = format_entry(entry, upper)
+        family = genre_family(shown, qualifiers, families) or normal(shown)
+        if shown and family not in seen:
+            seen.add(family)
+            kept.append(shown)
+    return GENRE_JOIN.join(kept)
+
+
+def genre_families(text: Any, qualifiers: Any = (), families: Any = ()) -> list[str]:
+    found = (genre_family(entry, qualifiers, families) for entry in genre_entries(text))
+    return list(dict.fromkeys(one for one in found if one))
+
+
+def alias_words(name: Any, aliases: Any = ()) -> list[str]:
+    wanted = normal(name)
+    if not wanted:
+        return []
+    for key, more in aliases:
+        if wanted == key or wanted in more:
+            return [key, *more]
+    return []

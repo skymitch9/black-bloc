@@ -10776,3 +10776,25 @@ Design: `docs/info/baf-runs-design.md` *Folding renamed tracked runs*.
 | `black_bloc/baf_runs.py:1072` `_edit_tracked` | `field not in shown["carried"]`: a value equal to the source on a carried field is STORED (it pins the sheet's value over the carry) instead of being treated as *no change*. |
 | `site/public/assets/page-runs.js:258` / `:478` | The `N rows` pill (tooltip = the keys) and *Folded rows:* under the Date in the editor. |
 | `site/mock/server.mjs:12252` `runsFold` | The mock's copy of `fold` and `_carry`. `runsTracked(facts)` fills the side facts. The Game Masters seed rows are in `seedMarathonRuns` (171–173), with archive marathon 12 in `seedMarathonArchive`. |
+
+## Developer, two genres, one genre format — keyed by LINE at `66523dd6` (branch `runs-developer`, 2026-10-20; re-key after the merge)
+
+Design: `docs/info/baf-runs-design.md` *Developer, two genres, one genre format*.
+
+| Where | Why |
+|---|---|
+| `black_bloc/runs_genres.py:109` `genre_format` / `:100` `format_entry` | The house spelling. Lower-case then capitalise the first letter, THEN the capitals words, so *2d platformer* -> *2D platformer* (the first character is a digit). A later entry whose family (or, with no family, normalised text) was already kept is dropped. Idempotent, which is what makes the boot migration safe to run every boot. |
+| `black_bloc/runs_genres.py:124` `genre_families` / `:91` `genre_entries` | One family per comma-separated entry, duplicates dropped, order kept. The JS twins are `listfilter.js:130` `genreFamiliesOf` and `genreEntries`; `listfilter.js:116` `genreFormat` is the format twin, both on `tests/fixtures/runs/genre_format.json`. |
+| `black_bloc/runs_genres.py:129` `alias_words` | A developer's alias line found by its name or any alias (normalised); the line's name and every alias go into the haystack. JS twin `listfilter.js:134` `aliasWords`. |
+| `black_bloc/baf_runs.py:486` `Tagging` / `tagging` | The four settings a save reads once: the genre rule, the capitals words, the cap, the developer aliases. |
+| `black_bloc/baf_runs.py:502` `tag_text` / `:508` `tag_problem` / `:515` `capped` | The one place a tag is normalised and capped. Series and developer are only `clean`ed (never re-cased); a genre is `genre_format`ted then cut to `TAG_LIMIT`. The cap counts entries after formatting. |
+| `black_bloc/baf_runs.py:908` `given_tags` | `add`, `_edit_hand` and `_edit_tracked` call it before writing anything, so a capped refusal leaves no row, no edit and no log line. `_write_tag` now takes the already-normalised text. |
+| `black_bloc/baf_runs.py:552` `view` | `genre_families` per row and `genre_family` = the first; `search` is built here with the developer aliases. `filtered(q=)` and `text_of_game` (`:1725`) read `row["search"]` so they see the aliases too. |
+| `black_bloc/baf_runs.py:662` `text_of` | Line order: game, series, genre, every family's words, developer, its aliases, category, runners, event, note. Game/series/genre stay first (`tests/test_baf_runs.py` pins `lines[:3]`). |
+| `black_bloc/baf_runs.py:707` `filtered` | `?genre=` matches any entry's family; `?developer=` is a `game_key` equality on the developer text. |
+| `black_bloc/baf_runs.py:1484` `import_csv` | A genre list longer than the cap is cut with `capped` (not refused); `genres_cut` counts the games and the report line gets `GENRES_CUT` appended. |
+| `black_bloc/runs_genre_format.py:31` `dry_run` / `:68` `apply` | Per guild, the store's own qualifiers, families and capitals words; never cuts to the cap (design deviation 37). Logs a literal `runs.migrated` (a constant kind would be a dynamic kind to `tests/test_logkinds.py`). |
+| `black_bloc/bot.py:153` `_migrate_runs_genre_format` | After `_migrate_one_optout`, before `_load_cogs`; a failure is logged and the boot goes on (`tests/test_bot.py`). |
+| `black_bloc/baf_runs_panel.py:54` `tag_fields` | `{developer}` and `{tags}` = series · genre · developer, the set ones. `RUNS_TAG_FIELDS` in `settings_store` gained `developer` so the templates accept it. |
+| `site/public/assets/page-runs.js:127` `TAG_VALUES` | Each tag answers a LIST, so `countedChoices` counts a game once per genre family and `tagTest` uses `includes`. |
+| `site/mock/server.mjs:12483` `runsTagText` / `:12490` `runsTagProblem` | The mock's copies of `tag_text` / `tag_problem` (a mock, not a second implementation the site runs). |

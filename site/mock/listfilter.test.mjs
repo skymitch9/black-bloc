@@ -6,16 +6,21 @@ import { readFileSync } from 'node:fs';
 
 import {
   BLOCK_FILTERS,
+  aliasWords,
   applyFilters,
   blockText,
   countedChoices,
   familyLabel,
   familyLines,
   familyTerms,
+  genreEntries,
   genreFamilies,
+  genreFamiliesOf,
   genreFamily,
+  genreFormat,
   genreNormal,
   genreQualifiers,
+  genreUpper,
   matches,
   passes,
   ruleOf,
@@ -120,6 +125,15 @@ is('genres: terms carry every alias', familyTerms('racing', families), 'racing r
 is('genres: a family no line names is its own term', familyTerms('puzzle', families), 'puzzle');
 is('genres: a label is capitalised', familyLabel('survival horror'), 'Survival horror');
 
+const shapes = JSON.parse(readFileSync(new URL('../../tests/fixtures/runs/genre_format.json', import.meta.url), 'utf8'));
+const shapeRule = [genreQualifiers(shapes.qualifiers), genreFamilies(shapes.families), genreUpper(shapes.upper)];
+for (const [text, wanted] of shapes.cases) is(`genre format: ${JSON.stringify(text)}`, genreFormat(text, ...shapeRule), wanted);
+is('genre format: a list splits on commas, blanks dropped', genreEntries(' Soulslike ,, Action  adventure '), ['Soulslike', 'Action adventure']);
+is('genre format: every entry has its own family', genreFamiliesOf('Soulslike, Action adventure', shapeRule[0], shapeRule[1]), ['soulslike', 'adventure']);
+is('genre format: one family once', genreFamiliesOf('Kart racer, Racing', shapeRule[0], shapeRule[1]), ['racing']);
+is('developer aliases: a name or an alias finds the line', aliasWords('From Software', genreFamilies('FromSoftware: fromsoft, from software')), ['fromsoftware', 'fromsoft', 'from software']);
+is('developer aliases: a name no line names has none', aliasWords('Capcom', genreFamilies('FromSoftware: fromsoft')), []);
+
 const search = JSON.parse(readFileSync(new URL('../../tests/fixtures/runs/search.json', import.meta.url), 'utf8'));
 for (const [query, wanted] of search.cases) {
   const found = Object.entries(search.haystacks).filter(([, haystack]) => runsMatches(query, haystack)).map(([name]) => name);
@@ -137,4 +151,4 @@ if (failures.length) {
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log('listfilter: ok - substring search (trimmed, case-insensitive), chips AND search, the Blocks filters, counted select choices, the genre family rule on the shared fixture, the runs search rule on its shared fixture');
+console.log('listfilter: ok - substring search (trimmed, case-insensitive), chips AND search, the Blocks filters, counted select choices, the genre family and genre format rules on their shared fixtures, developer aliases, the runs search rule on its shared fixture');

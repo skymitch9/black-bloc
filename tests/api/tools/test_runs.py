@@ -112,7 +112,7 @@ async def test_a_genre_is_set_from_the_page_beside_the_series_with_one_web_row(
     games = client.get("/api/runs/games").json()["games"]
     assert [(one["series"], one["genre"]) for one in games] == [("Celeste", "Platformer")]
     head = client.get("/api/runs/export.csv").text.splitlines()[0]
-    assert ",series,genre,category," in head
+    assert ",series,genre,developer,category," in head
 
     kinds = [kind for kind in await wf.kinds_in(web.db) if "runs." in kind]
     assert kinds == ["web.runs.series_set", "web.runs.genre_set"]
@@ -237,3 +237,62 @@ async def test_a_renamed_tracked_run_is_one_row_carrying_its_folded_keys(client,
     saved = client.put("/api/settings/runs_same_run_minutes", json={"value": 0})
     assert saved.status_code == 200
     assert len(client.get("/api/runs").json()["rows"]) == 2
+
+
+async def test_a_developer_is_set_from_the_page_filtered_and_found_by_its_alias(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await seed_tracked(web, wf, 7)
+
+    said = client.put("/api/runs/developer/celeste", json={"developer": " Maddy  Makes Games "})
+    assert said.status_code == 200 and said.json()["message"] == (
+        "**Celeste** is by **Maddy Makes Games**."
+    )
+    again = client.put("/api/runs/developer/celeste", json={"developer": "Maddy Makes Games"})
+    assert again.status_code == 409 and "nothing was saved" in again.json()["message"]
+
+    found = client.get("/api/runs").json()
+    assert found["developer_names"] == ["Maddy Makes Games"]
+    assert [row["developer"] for row in found["rows"]] == ["Maddy Makes Games"]
+    assert client.get("/api/runs?developer=maddy makes games").json()["rows"] == found["rows"]
+    assert client.get("/api/runs?developer=fromsoftware").json()["rows"] == []
+    games = client.get("/api/runs/games").json()["games"]
+    assert [one["developer"] for one in games] == ["Maddy Makes Games"]
+    head = client.get("/api/runs/export.csv").text.splitlines()[0]
+    assert ",genre,developer,category," in head
+
+    client.put("/api/runs/developer/celeste", json={"developer": "FromSoftware"})
+    assert len(client.get("/api/runs?q=fromsoft").json()["rows"]) == 1
+    assert len(client.get("/api/runs?q=from software").json()["rows"]) == 1
+
+    kinds = [kind for kind in await wf.kinds_in(web.db) if "runs." in kind]
+    assert kinds == ["web.runs.developer_set", "web.runs.developer_set"]
+
+
+async def test_a_genre_list_carries_a_family_per_entry_and_a_third_is_refused_in_words(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await seed_tracked(web, wf, 7)
+
+    said = client.put("/api/runs/genre/celeste", json={"genre": "Soulslike,action-ADVENTURE"})
+    assert said.status_code == 200 and said.json()["message"] == (
+        "**Celeste** is in the genre **Soulslike, Action adventure**."
+    )
+    row = client.get("/api/runs").json()["rows"][0]
+    assert row["genre"] == "Soulslike, Action adventure"
+    assert (row["genre_family"], row["genre_families"]) == ("soulslike", ["soulslike", "adventure"])
+    for wanted in ("adventure", "souls"):
+        assert len(client.get(f"/api/runs?genre={wanted}").json()["rows"]) == 1
+
+    refused = client.put("/api/runs/genre/celeste", json={"genre": "Platformer, Puzzle, Indie"})
+    assert refused.status_code == 400
+    body = refused.json()
+    assert body["error"] == "too_many_genres"
+    assert body["message"] == (
+        "**Platformer, Puzzle, Indie** is 3 genres and a game may have 2, so nothing was saved. "
+        "Keep the 2 that fit best, separated by commas, or raise the most genres a game may have "
+        "on the Settings page."
+    )
+    assert client.get("/api/runs").json()["rows"][0]["genre"] == "Soulslike, Action adventure"

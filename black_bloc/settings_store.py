@@ -10326,12 +10326,26 @@ RUNS_BAD_FAMILY = (
 )
 
 
-def checked_genre_families(given: Any) -> str:
-    _, bad = genre_family_lines(given)
-    if bad:
-        number, line = bad[0]
-        raise SettingError(RUNS_BAD_FAMILY.format(n=number, line=line[:60]))
-    return "\n".join(line.strip() for line in str(given).splitlines() if line.strip())
+RUNS_BAD_DEVELOPER = (
+    "Line {n} of the developer aliases, `{line}`, is not a developer Black Bloc can read, so "
+    "nothing was changed. Write each developer as its name, a colon and the other names it "
+    "goes by, separated by commas — `FromSoftware: fromsoft, from software`."
+)
+
+
+def checked_family_lines(said: str) -> Any:
+    def check(given: Any) -> str:
+        _, bad = genre_family_lines(given)
+        if bad:
+            number, line = bad[0]
+            raise SettingError(said.format(n=number, line=line[:60]))
+        return "\n".join(line.strip() for line in str(given).splitlines() if line.strip())
+
+    return check
+
+
+checked_genre_families = checked_family_lines(RUNS_BAD_FAMILY)
+checked_developer_aliases = checked_family_lines(RUNS_BAD_DEVELOPER)
 
 
 RUNS_SOURCES = "runs_sources"
@@ -10347,6 +10361,9 @@ RUNS_LOOKUP_NO_DATE = "runs_lookup_no_date"
 RUNS_GENRE_QUALIFIERS = "runs_genre_qualifiers"
 RUNS_GENRE_FAMILIES = "runs_genre_families"
 RUNS_SAME_RUN_MINUTES = "runs_same_run_minutes"
+RUNS_GENRE_MAX = "runs_genre_max"
+RUNS_GENRE_UPPER = "runs_genre_upper"
+RUNS_DEVELOPER_ALIASES = "runs_developer_aliases"
 RUNS_SOURCE_CHOICES = (
     "gdq",
     "gdq_hotfix",
@@ -10357,7 +10374,7 @@ RUNS_SOURCE_CHOICES = (
     "ladyarcaders",
 )
 RUNS_PART_CHOICES = ("runner", "host", "commentator")
-RUNS_TAG_FIELDS = ("series", "genre", "tags")
+RUNS_TAG_FIELDS = ("series", "genre", "developer", "tags")
 RUNS_TITLE_FIELDS = ("game", *RUNS_TAG_FIELDS)
 RUNS_LINE_FIELDS = ("date", "event", "category", "runners")
 RUNS_NONE_FIELDS = ("query", "suggestions")
@@ -10371,7 +10388,11 @@ RUNS_GENRE_FAMILIES_DEFAULT = (
     "shooter: shooters, fps, tps, shmup, shoot 'em up, third-person shooter, "
     "first-person shooter\n"
     "adventure: action-adventure, action adventure\n"
-    "fighting: fighter, fighting game"
+    "fighting: fighter, fighting game\n"
+    "soulslike: souls, soulsborne, dark souls, souls-like, souls like"
+)
+RUNS_DEVELOPER_ALIASES_DEFAULT = (
+    "FromSoftware: fromsoft, from software\nNintendo: nintendo ead, nintendo epd"
 )
 RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_SOURCES: ["gdq", "gdq_hotfix"],
@@ -10387,6 +10408,9 @@ RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_GENRE_QUALIFIERS: "action, 2d, 3d, kart, third-person, first-person",
     RUNS_GENRE_FAMILIES: RUNS_GENRE_FAMILIES_DEFAULT,
     RUNS_SAME_RUN_MINUTES: 90,
+    RUNS_GENRE_MAX: 2,
+    RUNS_GENRE_UPPER: "2d, 3d, fps, tps, rpg, jrpg, mmo, rts",
+    RUNS_DEVELOPER_ALIASES: RUNS_DEVELOPER_ALIASES_DEFAULT,
 }
 RUNS_KEYS: tuple[str, ...] = tuple(RUNS_DEFAULTS)
 KEY_TYPES.update(
@@ -10404,6 +10428,9 @@ KEY_TYPES.update(
         RUNS_GENRE_QUALIFIERS: "text",
         RUNS_GENRE_FAMILIES: "text",
         RUNS_SAME_RUN_MINUTES: "int",
+        RUNS_GENRE_MAX: "int",
+        RUNS_GENRE_UPPER: "text",
+        RUNS_DEVELOPER_ALIASES: "text",
     }
 )
 KEY_CHOICES.update({RUNS_SOURCES: RUNS_SOURCE_CHOICES, RUNS_PARTS: RUNS_PART_CHOICES})
@@ -10419,7 +10446,7 @@ KEY_HELP.update(
         ),
         RUNS_LOOKUP_TITLE: (
             "the heading of one game's answer in the /runs panel; {game}, {series}, {genre}, "
-            "and {tags} (the series and genre that are set, joined by ·)"
+            "{developer}, and {tags} (the series, genre and developer that are set, joined by ·)"
         ),
         RUNS_LOOKUP_LINE: (
             "one run's line under a game in the /runs panel; {date}, {event}, {category} and "
@@ -10432,11 +10459,12 @@ KEY_HELP.update(
         ),
         RUNS_LOOKUP_SEEN: (
             "the first line under a game in the /runs panel; {n} is how many times it was run, "
-            "{date} and {event} the latest run; {series}, {genre} and {tags} too"
+            "{date} and {event} the latest run; {series}, {genre}, {developer} and {tags} too"
         ),
         RUNS_LOOKUP_TAGS: (
             "the line under a game's heading in the /runs panel, drawn only when the game has a "
-            "series or a genre; {series}, {genre}, and {tags} (the ones set, joined by ·)"
+            "series, a genre or a developer; {series}, {genre}, {developer}, and {tags} (the ones "
+            "set, joined by ·)"
         ),
         RUNS_LOOKUP_MORE: (
             "the last line under a game in the /runs panel when it has more runs than are listed; "
@@ -10466,6 +10494,21 @@ KEY_HELP.update(
             "runners; runs whose times overlap are one run too. The newest wins, so a run the "
             "schedule renamed mid-show counts once. 90 by default; 0 shows every tracked row"
         ),
+        RUNS_GENRE_MAX: (
+            "how many genres one game may have on the BaF runs page, written as a list separated "
+            "by commas; a save with more is refused and a CSV import keeps the first ones. 2 by "
+            "default, 1 to 5"
+        ),
+        RUNS_GENRE_UPPER: (
+            "words written in capitals wherever they appear in a genre, separated by commas, so "
+            "2d platformer is saved as 2D platformer. Every genre saved is spelled one way: each "
+            "entry starts with a capital, the rest lower case, hyphens become spaces, except these"
+        ),
+        RUNS_DEVELOPER_ALIASES: (
+            "other names a developer goes by, so a search on the BaF runs page and in /runs finds "
+            "its games under any of them; one per line as the developer, a colon and its other "
+            "names separated by commas — FromSoftware: fromsoft, from software"
+        ),
     }
 )
 TEXT_CHECKS.update(
@@ -10479,12 +10522,20 @@ TEXT_CHECKS.update(
         RUNS_LOOKUP_COUNT: checked_fields(RUNS_COUNT_FIELDS),
         RUNS_LOOKUP_NO_DATE: checked_fields(()),
         RUNS_GENRE_FAMILIES: checked_genre_families,
+        RUNS_DEVELOPER_ALIASES: checked_developer_aliases,
     }
 )
-TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, RUNS_GENRE_QUALIFIERS)
+TEXT_MAY_BE_BLANK = (
+    *TEXT_MAY_BE_BLANK,
+    RUNS_GENRE_QUALIFIERS,
+    RUNS_GENRE_UPPER,
+    RUNS_DEVELOPER_ALIASES,
+)
 NAMESPACE_OVERRIDE.update({key: "marathon" for key in RUNS_KEYS})
 KEY_MIN[RUNS_SAME_RUN_MINUTES] = 0
 KEY_MAX[RUNS_SAME_RUN_MINUTES] = 1440
+KEY_MIN[RUNS_GENRE_MAX] = 1
+KEY_MAX[RUNS_GENRE_MAX] = 5
 
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""

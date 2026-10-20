@@ -40,8 +40,8 @@ const OTHER = '__other';
 const ALL = 'all';
 const NO_TAG = '__none';
 const VIEWS = [['runs', 'Runs'], ['games', 'Games']];
-const PICKS = ['event', 'runner', 'series', 'genre'];
-const TAGS = ['series', 'genre'];
+const PICKS = ['event', 'runner', 'series', 'genre', 'developer'];
+const TAGS = ['series', 'genre', 'developer'];
 const FIELD_WORDS = { date: 'Date', event: 'Event', game: 'Game', category: 'Category', runners: 'Runner(s)', note: 'Note' };
 
 const state = {
@@ -52,10 +52,11 @@ const state = {
   runner: '',
   series: '',
   genre: '',
+  developer: '',
   removed: false,
   sort: { key: 'date', dir: -1 },
 };
-let payload = { rows: [], events: [], series_names: [], genre_names: [], genre_families: [] };
+let payload = { rows: [], events: [], series_names: [], genre_names: [], developer_names: [], genre_families: [] };
 let games = [];
 let refresh = () => {};
 let showView = () => {};
@@ -123,8 +124,8 @@ function distinct(list) {
 }
 
 const ruleFor = (on, test) => ({ filters: [[ALL, 'All', null], ['on', 'on', test]], filter: on ? 'on' : ALL });
-const TAG_VALUES = { series: (item) => item.series, genre: (item) => item.genre_family };
-const tagTest = (name) => (item) => (state[name] === NO_TAG ? !item[name] : TAG_VALUES[name](item) === state[name]);
+const TAG_VALUES = { series: (item) => [item.series], genre: (item) => item.genre_families || [], developer: (item) => [item.developer] };
+const tagTest = (name) => (item) => (state[name] === NO_TAG ? !item[name] : TAG_VALUES[name](item).includes(state[name]));
 const tagRules = () => TAGS.map((name) => ruleFor(state[name], tagTest(name)));
 
 function dimensionRules() {
@@ -162,7 +163,7 @@ function latestFirst(rows) {
 function tagChoices(name, none, label) {
   return (items) => {
     const blank = items.filter((item) => !item[name]).length;
-    const named = countedChoices(items, (item) => [TAG_VALUES[name](item)], { label });
+    const named = countedChoices(items, TAG_VALUES[name], { label });
     return named.length || state[name] ? [...named, [NO_TAG, `${none} (${blank})`]] : [];
   };
 }
@@ -172,6 +173,7 @@ const PICKERS = {
   runner: { all: 'All runners', choices: (rows) => countedChoices(rows, (row) => row.runners.map((one) => one.display)) },
   series: { all: 'All series', choices: tagChoices('series', 'No series') },
   genre: { all: 'All genres', choices: tagChoices('genre', 'No genre', familyLabel) },
+  developer: { all: 'All developers', choices: tagChoices('developer', 'No developer') },
 };
 
 function pickers(items, names, again) {
@@ -201,6 +203,7 @@ const SORTERS = {
   game: (row) => row.game_key,
   series: (row) => String(row.series || '').toLowerCase(),
   genre: (row) => String(row.genre || '').toLowerCase(),
+  developer: (row) => String(row.developer || '').toLowerCase(),
   category: (row) => String(row.category || '').toLowerCase(),
   runners: (row) => String(row.runners_text || '').toLowerCase(),
   how: (row) => row.how,
@@ -248,6 +251,7 @@ function runColumns() {
     { label: 'Game', sort: 'game', cell: (row) => row.game },
     { label: 'Series', sort: 'series', cell: (row) => row.series },
     { label: 'Genre', sort: 'genre', cell: (row) => row.genre },
+    { label: 'Developer', sort: 'developer', cell: (row) => row.developer },
     { label: 'Category', sort: 'category', cell: (row) => row.category },
     { label: 'Runner(s)', sort: 'runners', cell: runnersCell },
     {
@@ -332,7 +336,7 @@ function runsView() {
   return node;
 }
 
-const TAG_WORDS = { series: 'Series', genre: 'Genre' };
+const TAG_WORDS = { series: 'Series', genre: 'Genre', developer: 'Developer' };
 
 function tagBox(game, say, tag) {
   const input = el('input', { class: 'input', list: `runs-${tag}-names`, value: game[tag] || undefined, 'aria-label': `${TAG_WORDS[tag]} of ${game.game}` });
@@ -361,6 +365,7 @@ function gamesView() {
     },
     { label: 'Series', cell: (game) => tagBox(game, say, 'series') },
     { label: 'Genre', cell: (game) => tagBox(game, say, 'genre') },
+    { label: 'Developer', cell: (game) => tagBox(game, say, 'developer') },
     { label: 'Times featured', cell: (game) => String(game.times) },
     { label: 'Last seen', cell: (game) => `${dateWord(game.last_date)} · ${game.last_event || '—'}` },
     { label: 'Runners', cell: (game) => game.runners.join(', ') },
@@ -480,6 +485,7 @@ function openEditor(row = null) {
   const category = el('input', { class: 'input', value: row ? row.category || undefined : undefined });
   const series = el('input', { class: 'input', list: 'runs-editor-series', value: row ? row.series || undefined : undefined });
   const genre = el('input', { class: 'input', list: 'runs-editor-genre', value: row ? row.genre || undefined : undefined });
+  const developer = el('input', { class: 'input', list: 'runs-editor-developer', value: row ? row.developer || undefined : undefined });
   const note = el('textarea', { class: 'input', rows: '2' });
   note.value = row ? row.note || '' : '';
   const event = eventEditor(row);
@@ -495,6 +501,7 @@ function openEditor(row = null) {
     if (!row || runners.changed()) Object.assign(found, runners.payload());
     if (!row || series.value.trim() !== (row.series || '')) found.series = series.value.trim();
     if (!row || genre.value.trim() !== (row.genre || '')) found.genre = genre.value.trim();
+    if (!row || developer.value.trim() !== (row.developer || '')) found.developer = developer.value.trim();
     if (!row || note.value.trim() !== (row.note || '')) found.note = note.value.trim();
     return found;
   };
@@ -535,6 +542,7 @@ function openEditor(row = null) {
   openDrawer(row ? row.game : 'Add a run', [
     el('datalist', { id: 'runs-editor-series' }, payload.series_names.map((name) => el('option', { value: name }))),
     el('datalist', { id: 'runs-editor-genre' }, payload.genre_names.map((name) => el('option', { value: name }))),
+    el('datalist', { id: 'runs-editor-developer' }, payload.developer_names.map((name) => el('option', { value: name }))),
     when.node,
     event.node,
     field('Game', game, was(row, 'game')),
@@ -542,6 +550,7 @@ function openEditor(row = null) {
     runners.node,
     field('Series', series),
     field('Genre', genre),
+    field('Developer', developer),
     field('Note', note, was(row, 'note')),
     say,
     bar(moves),
@@ -691,6 +700,7 @@ async function load() {
     events: listOf(found, 'events'),
     series_names: listOf(found, 'series_names'),
     genre_names: listOf(found, 'genre_names'),
+    developer_names: listOf(found, 'developer_names'),
     genre_families: listOf(found, 'genre_families').map((one) => [one.family, one.aliases || []]),
   };
   games = listOf(grouped, 'games');

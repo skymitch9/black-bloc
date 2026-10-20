@@ -1,0 +1,71 @@
+{
+  "qualifiers": "action, 2d, 3d, kart, third-person, first-person",
+  "families": "racing: racer, racers, race, kart racer, kart racing\nplatformer: platform, platformers, 2d platformer, 3d platformer\nroguelike: rogue-like, rogue like, roguelite, rogue-lite\nshooter: shooters, fps, tps, shmup, shoot 'em up, third-person shooter, first-person shooter\nadventure: action-adventure, action adventure\nfighting: fighter, fighting game\nsoulslike: souls, soulsborne, dark souls, souls-like, souls like",
+  "upper": "2d, 3d, fps, tps, rpg, jrpg, mmo, rts",
+  "cases": [
+    [
+      "Action-adventure",
+      "Action adventure"
+    ],
+    [
+      "Action Roguelike",
+      "Action roguelike"
+    ],
+    [
+      "third-person shooter",
+      "Third person shooter"
+    ],
+    [
+      "2d platformer",
+      "2D platformer"
+    ],
+    [
+      "Soulslike,action adventure",
+      "Soulslike, Action adventure"
+    ],
+    [
+      "Roguelike, roguelite",
+      "Roguelike"
+    ],
+    [
+      "",
+      ""
+    ],
+    [
+      "2D platformer",
+      "2D platformer"
+    ],
+    [
+      "Fighting",
+      "Fighting"
+    ],
+    [
+      "Kart racing",
+      "Kart racing"
+    ],
+    [
+      "3D PLATFORMER",
+      "3D platformer"
+    ],
+    [
+      "  fps   ",
+      "FPS"
+    ],
+    [
+      "action_rpg",
+      "Action RPG"
+    ],
+    [
+      "jrpg, , Kart  racer",
+      "JRPG, Kart racer"
+    ],
+    [
+      "Shoot 'em up",
+      "Shoot 'em up"
+    ],
+    [
+      "Kart racer, Racing",
+      "Kart racer"
+    ]
+  ]
+}
