@@ -29,6 +29,7 @@ RETIRED_KEYS: tuple[str, ...] = (
     "pb_feed_no_channel_words",
     "points_modmail_off_said",
     "youtube_mode",
+    "rehearsal_note",
 )
 READ_KEYS: tuple[str, ...] = (*RETIRED_KEYS, GREETING, GOLIVE_MODE, GOLIVE_YOUTUBE)
 YOUTUBE_WATCHES = {"on": True, "shadow": False, "off": False}

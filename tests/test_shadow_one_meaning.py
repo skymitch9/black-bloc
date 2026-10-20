@@ -17,6 +17,7 @@ LIVE_ROWS = {
     "modmail_enabled": True,
     "youtube_mode": "on",
     "tempvoice_mode": "on",
+    "rehearsal_note": "",
 }
 DEFAULT_ROWS = {
     "boot_status_mode": "on",
@@ -40,7 +41,8 @@ async def stored(db, guild_id, key, value):
 
 async def live_mirror(db):
     """The values read live through /api/settings 2026-10-20 02:13 Phoenix, plus the stale
-    youtube_mode row the boot log names; the API cannot say which defaults are stored."""
+    youtube_mode row and the blank rehearsal_note row the boot log names; the API cannot say
+    which defaults are stored."""
     for key, value in LIVE_ROWS.items():
         await stored(db, GUILD, key, value)
 
@@ -80,7 +82,7 @@ def test_every_retired_key_is_gone_from_the_registry_and_the_new_one_is_a_bool()
     assert settings_store.KEY_TYPES["chat_greeting_via_model"] == "bool"
 
 
-async def test_the_dry_run_against_the_live_rows_drops_four_and_writes_golive_youtube(db):
+async def test_the_dry_run_against_the_live_rows_drops_five_and_writes_golive_youtube(db):
     await live_mirror(db)
 
     [found] = await shadow_one_meaning.dry_run(db)
@@ -92,6 +94,7 @@ async def test_the_dry_run_against_the_live_rows_drops_four_and_writes_golive_yo
             "spotlight_mode": "on",
             "modmail_enabled": True,
             "youtube_mode": "on",
+            "rehearsal_note": "",
         },
         "write": {"golive_youtube": {"before": None, "after": True}},
         "notes": [],
@@ -115,6 +118,7 @@ async def test_applying_twice_writes_once_drops_once_and_logs_one_row(bot, db):
     assert details["build"] == "shadow-one-meaning"
     assert details["removed"] == [
         "modmail_enabled",
+        "rehearsal_note",
         "spotlight_mode",
         "youtube_live_mode",
         "youtube_mode",
@@ -209,3 +213,13 @@ async def test_a_lost_log_row_is_a_warning_and_the_settings_still_move(
 
     assert "a migration row was not written" in caplog.text
     assert "youtube_live_mode" not in await keys_of(db, GUILD)
+
+
+async def test_the_stale_rehearsal_note_row_alone_is_dropped_once(bot, db):
+    await stored(db, GUILD, "rehearsal_note", "")
+
+    [found] = await shadow_one_meaning.apply(bot)
+
+    assert found["drop"] == {"rehearsal_note": ""} and found["write"] == {}
+    assert "rehearsal_note" not in await keys_of(db, GUILD)
+    assert await shadow_one_meaning.apply(bot) == []
