@@ -113,8 +113,11 @@ async def test_the_page_is_told_in_words_when_posts_are_off(client, sign_in, web
     found = client.get("/api/posts").json()
 
     assert found["mode"] == "off"
-    assert found["notes"] == [tools_posts.POSTS_ARE_OFF]
-    assert "`/sticky`" in found["notes"][0] and "sticky copy is down" in found["notes"][0]
+    assert found["notes"] == [
+        tools_posts.POSTS_ARE_OFF,
+        tools_posts.COMMANDS_HIDDEN.format(commands="`/posts`, `/sticky`, `/questions`"),
+    ]
+    assert "sticky copy is down" in found["notes"][0]
 
 
 async def test_test_mode_is_said_in_words_rather_than_left_to_be_discovered(
@@ -751,3 +754,15 @@ async def test_post_to_test_with_posts_off_is_refused_in_words(client, sign_in, 
 
     assert response.status_code == 409
     assert response.json()["error"] == "posts_off"
+
+
+async def test_switching_posts_off_says_which_commands_left_the_server(client, sign_in, web, wf):
+    sign_in(client)
+    assert client.get("/api/posts").json()["commands_hidden"] == []
+
+    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "off")
+
+    found = client.get("/api/posts").json()
+    assert found["commands_hidden"] == ["posts", "sticky", "questions"]
+    await web.store.set(wf.GUILD_ID, "hide_commands_when_off", False)
+    assert client.get("/api/posts").json()["commands_hidden"] == []

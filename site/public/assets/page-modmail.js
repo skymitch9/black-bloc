@@ -40,11 +40,6 @@ const SOURCE_LABEL = {
 };
 const DOOR_WORDS = 'Edit its words';
 const DOOR_OFF_LINE = 'frontdoor_mode is off, so /ask is hidden and no front door stays posted.';
-const DOOR_SHADOW_HOMELESS = 'shadow — the door has nowhere to rehearse, so it is posted nowhere '
-  + 'at all. Set shadow_channel_id on the Settings page.';
-const DOOR_SHADOW_NOWHERE_END = '. It has no channel of its own yet, and nothing reaches members '
-  + 'until the door is on.';
-const DOOR_SHADOW_FOLLOWS = 'The Open a ticket button is down while the door rehearses.';
 const DOOR_ONE_PER_CHANNEL = 'The Open a ticket button in this channel is down while the front door is here.';
 
 function messageNode(message) {
@@ -261,20 +256,8 @@ function ticketForumCard(forumId) {
   ]);
 }
 
-function doorShadowLine(door) {
-  const home = door.shadow_channel_id;
-  if (!home) return sayNothing(DOOR_SHADOW_HOMELESS);
-  if (!door.channel_id) {
-    return el('p', { class: 'muted' }, ['shadow — the door is rehearsing in ', nameNode(home), DOOR_SHADOW_NOWHERE_END]);
-  }
-  return el('p', { class: 'muted' }, [
-    'shadow — the door is rehearsing in ', nameNode(home), '; nothing is in ', nameNode(door.channel_id), '.',
-  ]);
-}
-
 function doorWhere(door) {
   if (door.mode === 'off') return sayNothing(DOOR_OFF_LINE);
-  if (door.mode === 'shadow') return doorShadowLine(door);
   return door.channel_id
     ? el('p', {}, ['It is in ', nameNode(door.channel_id), '.'])
     : sayNothing('No front door is posted anywhere. /ask still opens the same three buttons.');
@@ -291,7 +274,6 @@ function doorPreview(door) {
 
 function doorTicketLine(door) {
   if (door.replaces === false || door.mode === 'off') return null;
-  if (door.mode === 'shadow') return el('p', { class: 'muted', text: DOOR_SHADOW_FOLLOWS });
   const shared = door.channel_id && String(door.channel_id) === String(door.ticket_channel_id || '');
   return shared ? el('p', { class: 'muted', text: DOOR_ONE_PER_CHANNEL }) : null;
 }
@@ -356,14 +338,11 @@ async function frontDoorCard(door) {
 async function panelSettings() {
   const payload = await settings(true);
   const specs = settingsNamespace(payload, 'modmail');
-  const core = settingsNamespace(payload, 'core');
   const value = (key) => (specs.find((spec) => spec.key === key) || {}).value ?? null;
-  const coreValue = (key) => (core.find((spec) => spec.key === key) || {}).value ?? null;
   const channelId = value('modmail_panel_channel_id');
   const forumId = value('modmail_forum_channel_id');
   const doorId = value('frontdoor_channel_id');
-  const shadowId = value('frontdoor_shadow_channel_id') || coreValue('shadow_channel_id') || coreValue('log_channel_id');
-  const known = [channelId, forumId, doorId, shadowId].filter(Boolean).map(String);
+  const known = [channelId, forumId, doorId].filter(Boolean).map(String);
   if (known.length) await names(known);
   return {
     channel_id: channelId,
@@ -372,7 +351,6 @@ async function panelSettings() {
     door: {
       mode: value('frontdoor_mode'),
       channel_id: doorId,
-      shadow_channel_id: shadowId,
       message_id: value('frontdoor_message_id'),
       title: value('frontdoor_title'),
       text: value('frontdoor_text'),

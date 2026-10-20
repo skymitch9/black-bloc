@@ -284,8 +284,6 @@ IMPORTANT: frozenset[str] = frozenset(
         "role.extended",
         "post.posted",
         "post.updated",
-        "post.shadow_posted",
-        "post.shadow_updated",
         "post.taken_down",
         "post.restored",
         "sticky.channel_gone",

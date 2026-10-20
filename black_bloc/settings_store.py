@@ -5419,17 +5419,18 @@ KEY_MAX.update({key: high for key, (_, _, high) in POINTS_NUMBERS.items()})
 KEY_HELP.update(
     {
         POINTS_MODE: (
-            "off, shadow or on. off refuses every point system move; shadow — the default — "
-            "takes and approves runs and sends the top-places post to the rehearsal home; on "
-            "posts it in points_channel_id"
+            "off, shadow or on: whether runs are taken. off refuses every point system move; "
+            "shadow — the default — takes and approves runs and DMs nobody about them; on DMs "
+            "the runner too. Where the top-places post and the leaderboard sticky go is "
+            "posts_mode on the Posts page, never this"
         ),
         POINTS_CHANNEL: (
             "where the post goes when somebody enters, leaves or moves inside the top places "
-            "while points_mode is on; #speed-and-pbs by default"
+            "while posts_mode is on; #speed-and-pbs by default"
         ),
         POINTS_SHADOW_CHANNEL: (
-            "where the top-places post is rehearsed while points_mode is shadow; blank means "
-            "shadow_channel_id"
+            "not read since 2026-10-19: the top-places post and the leaderboard sticky follow "
+            "posts_mode, and Post to test sends to posts_shadow_channel_id"
         ),
         POINTS_PING_ROLE: (
             "a role mentioned above the top-places post; blank — the default — pings nobody. "

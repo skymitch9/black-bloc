@@ -57,12 +57,6 @@ const NOT_PINNED = ' It is not pinned.';
 const WILL_POST = 'Post it sends this to {where} as {style} and {pin}.';
 const WILL_UPDATE = 'Update the post edits the message already in {where}, as {style} and {pin}.';
 const NEEDS_A_CHANNEL = 'Pick a channel before this can be posted anywhere.';
-// The twins of posts.SHADOW_LINE / posts.SHADOW_LINE_NOWHERE: Discord's card is written in
-// Python, this line is written live from the draft, so the words are kept the same by test.
-const WILL_SHADOW = 'shadow — this goes to {shadow}, not {where}, until posts are on.';
-const WILL_SHADOW_NOWHERE = 'shadow — this goes to {shadow}. It has no channel of its own yet, '
-  + 'and nothing reaches one until posts are on.';
-const WILL_SHADOW_SAME = 'shadow — this goes to {shadow}, which is where it was going anyway.';
 const NO_SHADOW_CHANNEL = 'no shadow channel yet';
 // Post to test (2026-10-10). The twins of posts.POST_TO_TEST and posts.TEST_COPY_LINE —
 // tests/test_posts.py reads them off this file. (The how-it-works line under the buttons was
@@ -250,16 +244,6 @@ function statusPills(row) {
 }
 
 function willPost(draft, post, payload, dirty = false) {
-  if (payload.mode === SHADOW) {
-    const at = shadowWords(payload.shadow);
-    if (!draft.channel_id) return WILL_SHADOW_NOWHERE.replace('{shadow}', at);
-    if (payload.shadow && String(draft.channel_id) === String(payload.shadow.channel_id)) {
-      return WILL_SHADOW_SAME.replace('{shadow}', at);
-    }
-    return WILL_SHADOW
-      .replace('{shadow}', at)
-      .replace('{where}', `#${draft.channel_name || post.channel_name || ''}`);
-  }
   if (!draft.channel_id) return NEEDS_A_CHANNEL;
   const up = post.test_copy ? Boolean(post.message_id) : post.posted;
   const saving = up ? WILL_UPDATE_SAVED : WILL_POST_SAVED;
@@ -814,7 +798,7 @@ async function postDrawer(payload, known, history) {
   }, { tone: 'quiet' });
 
   const moves = [save, discard, publish];
-  if (payload.mode !== SHADOW) moves.push(rehearse);
+  if (payload.mode === 'on') moves.push(rehearse);
   if (post.posted) {
     moves.push(button('Take it down', async () => {
       const done = await run(

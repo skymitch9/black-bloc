@@ -308,9 +308,7 @@
       "question_catchup_hours",
       "question_channel_id",
       "question_grace_minutes",
-      "question_mode",
       "question_owner_user_id",
-      "question_shadow_channel_id",
       "question_template",
       "question_thread",
       "question_thread_name_template",
@@ -2370,6 +2368,29 @@
       }
     },
     {
+      "_": "Post to test for a poll (posts-one-switch-design.md): the create form's body, sent as members would see it to shadow_channel_id; no poll row, vote or draft is written.",
+      "method": "POST",
+      "path": "/api/polls/rehearse",
+      "body": {
+        "question": "Contract poll?",
+        "options": [
+          "Yes",
+          "No"
+        ],
+        "hours": 24
+      },
+      "settings": {
+        "shadow_channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "page-polls.js create form Post to test"
+      ],
+      "shape": "object",
+      "keys": [
+        "message"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/polls/recurrences",
       "read_by": [
@@ -2699,12 +2720,12 @@
       ]
     },
     {
-      "_": "Post to test for weekly questions (weekly-questions-design.md, Follow-up 2026-10-19): a copy of this week's question in the rehearsal home; the slot, the queue and posted_by are untouched. The real API's seed queues one question and points question_shadow_channel_id at the test channel for this request.",
+      "_": "Post to test for weekly questions (weekly-questions-design.md, Follow-up 2026-10-19): a copy of this week's question in the rehearsal home; the slot, the queue and posted_by are untouched. The real API's seed queues one question and points posts_shadow_channel_id at the test channel for this request.",
       "method": "POST",
       "path": "/api/questions/rehearse",
       "body": {},
       "settings": {
-        "question_shadow_channel_id": "{test_channel_id}"
+        "posts_shadow_channel_id": "{test_channel_id}"
       },
       "read_by": [
         "questions-section.js Post to test"
@@ -3063,13 +3084,12 @@
       }
     },
     {
-      "_": "Post to test for a sticky (sticky-messages-design.md, Follow-up 2026-10-19): one plain, unpinned copy in the rehearsal home; the sticky's row and state are untouched. The entry turns sticky_mode on so the seeded sticky is not rehearsing, and points sticky_shadow_channel_id at the test channel.",
+      "_": "Post to test for a sticky (sticky-messages-design.md, Follow-ups 2026-10-19): one plain, unpinned copy in the rehearsal home; the sticky's row and state are untouched. posts_mode is on, and the entry points posts_shadow_channel_id at the test channel.",
       "method": "POST",
       "path": "/api/sticky/{sticky_channel_id}/rehearse",
       "body": {},
       "settings": {
-        "sticky_mode": "on",
-        "sticky_shadow_channel_id": "{test_channel_id}"
+        "posts_shadow_channel_id": "{test_channel_id}"
       },
       "read_by": [
         "sticky-section.js Post to test"
@@ -8524,7 +8544,8 @@
         "shadow",
         "block_kinds",
         "import_style",
-        "untitled_title"
+        "untitled_title",
+        "commands_hidden"
       ],
       "nested": {
         "guard": [
@@ -12601,8 +12622,6 @@
     "web.post.posted",
     "web.post.shadow_message_gone",
     "web.post.shadow_taken_down",
-    "web.post.shadow_updated",
-    "web.post.shadow_posted",
     "web.post.reset",
     "web.post.saved",
     "web.post.taken_down",
@@ -12739,6 +12758,7 @@
     "web.runs.imported",
     "web.runs.series_set",
     "web.question.rehearsed",
-    "web.sticky.rehearsed"
+    "web.sticky.rehearsed",
+    "web.poll.rehearsed"
   ]
 }

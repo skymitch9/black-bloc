@@ -65,8 +65,6 @@ RESTORED = "post.restored"
 VERSIONS_TRIMMED = "post.versions_trimmed"
 CREATED = "post.created"
 DELETED = "post.deleted"
-SHADOW_POSTED = "post.shadow_posted"
-SHADOW_UPDATED = "post.shadow_updated"
 SHADOW_TAKEN_DOWN = "post.shadow_taken_down"
 SHADOW_MESSAGE_GONE = "post.shadow_message_gone"
 REHEARSED = "post.rehearsed"
@@ -1855,9 +1853,7 @@ __all__ = [
     "SHADOW",
     "SHADOW_FEATURE",
     "SHADOW_MESSAGE_GONE",
-    "SHADOW_POSTED",
     "SHADOW_TAKEN_DOWN",
-    "SHADOW_UPDATED",
     "SHIPPED_WORD",
     "SITE_BUTTON",
     "SLUG_NEEDED",
