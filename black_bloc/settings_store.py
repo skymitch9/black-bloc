@@ -10322,6 +10322,72 @@ NAMESPACE_OVERRIDE.update(
 )
 
 
+# The BaF runs database (docs/info/baf-runs-design.md §5.7), filed under Marathons.
+RUNS_SOURCES = "runs_sources"
+RUNS_PARTS = "runs_parts"
+RUNS_LOOKUP_TITLE = "runs_lookup_title"
+RUNS_LOOKUP_LINE = "runs_lookup_line"
+RUNS_LOOKUP_NONE = "runs_lookup_none"
+RUNS_SOURCE_CHOICES = (
+    "gdq",
+    "gdq_hotfix",
+    "rpglb",
+    "horaro",
+    "oengus",
+    "fastestfurs",
+    "ladyarcaders",
+)
+RUNS_PART_CHOICES = ("runner", "host", "commentator")
+RUNS_TITLE_FIELDS = ("game",)
+RUNS_LINE_FIELDS = ("date", "event", "category", "runners")
+RUNS_NONE_FIELDS = ("query",)
+RUNS_DEFAULTS: dict[str, Any] = {
+    RUNS_SOURCES: ["gdq", "gdq_hotfix"],
+    RUNS_PARTS: ["runner"],
+    RUNS_LOOKUP_TITLE: "{game}",
+    RUNS_LOOKUP_LINE: "{date} · {event} · {category} · {runners}",
+    RUNS_LOOKUP_NONE: "Nothing in the BaF runs database matches **{query}**.",
+}
+RUNS_KEYS: tuple[str, ...] = tuple(RUNS_DEFAULTS)
+KEY_TYPES.update(
+    {
+        RUNS_SOURCES: "enums",
+        RUNS_PARTS: "enums",
+        RUNS_LOOKUP_TITLE: "text",
+        RUNS_LOOKUP_LINE: "text",
+        RUNS_LOOKUP_NONE: "text",
+    }
+)
+KEY_CHOICES.update({RUNS_SOURCES: RUNS_SOURCE_CHOICES, RUNS_PARTS: RUNS_PART_CHOICES})
+KEY_HELP.update(
+    {
+        RUNS_SOURCES: (
+            "which marathon sources count towards the BaF runs page and /runs; gdq and "
+            "gdq_hotfix by default, so a run in a horaro or Oengus marathon is left out"
+        ),
+        RUNS_PARTS: (
+            "which part a BaF member must play on a run for it to count as a BaF run; runner by "
+            "default, so hosting or commentary alone does not count"
+        ),
+        RUNS_LOOKUP_TITLE: "the heading of one game's answer in the /runs panel; {game}",
+        RUNS_LOOKUP_LINE: (
+            "one run's line under a game in the /runs panel; {date}, {event}, {category} and "
+            "{runners}"
+        ),
+        RUNS_LOOKUP_NONE: (
+            "what the /runs panel says when no game matches; {query} is what was typed"
+        ),
+    }
+)
+TEXT_CHECKS.update(
+    {
+        RUNS_LOOKUP_TITLE: checked_fields(RUNS_TITLE_FIELDS),
+        RUNS_LOOKUP_LINE: checked_fields(RUNS_LINE_FIELDS),
+        RUNS_LOOKUP_NONE: checked_fields(RUNS_NONE_FIELDS),
+    }
+)
+NAMESPACE_OVERRIDE.update({key: "marathon" for key in RUNS_KEYS})
+
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
     kind = KEY_TYPES.get(key)
@@ -11153,6 +11219,9 @@ class SettingsStore:
             return POINTS_DEFAULTS[key]
         if key in QUESTION_DEFAULTS:
             return QUESTION_DEFAULTS[key]
+        if key in RUNS_DEFAULTS:
+            value = RUNS_DEFAULTS[key]
+            return list(value) if isinstance(value, list) else value
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):
