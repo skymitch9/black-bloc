@@ -1472,11 +1472,10 @@ async def test_shadow_posts_a_rehearsal_to_the_rehearsal_home_and_not_the_real_c
     assert json.loads((await details_for(bot.db, "birthday.would_announce"))[0])["rehearsed"]
 
 
-async def test_birthdays_rehearse_in_their_own_home_over_the_global_one(
+async def test_birthdays_rehearse_in_the_test_channel(
     bot, cog, birthday_person
 ):
-    await bot.store.set(GUILD, "shadow_channel_id", PARTY_CHANNEL)
-    await bot.store.set(GUILD, "birthday_shadow_channel_id", LOG_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", LOG_CHANNEL)
     await stored(bot)
 
     found = await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)

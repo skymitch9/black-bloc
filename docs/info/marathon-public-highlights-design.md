@@ -305,3 +305,5 @@ in a browser.
 **NOT verified:** nothing ran against Discord or the live site; the toast was not rendered in a browser; the restore
 door was exercised only through a hand-tracked fixture (an archived marathon with a live, unshouted run is not a state
 the tick normally produces).
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `marathon_public_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

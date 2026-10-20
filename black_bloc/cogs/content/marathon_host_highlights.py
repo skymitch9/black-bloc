@@ -53,7 +53,6 @@ from .marathon_role_ping import verdict_for
 
 log = logging.getLogger(__name__)
 
-SHADOW_FEATURE = "marathon_public"
 
 
 def switched_on(bot: Any, guild_id: int) -> bool:
@@ -177,7 +176,7 @@ async def put_back(
     """A post taken down comes back IN PLACE when it is still where one would go now."""
     bot = cog.bot
     home = (
-        shadow_home.channel_id(bot, guild, feature=SHADOW_FEATURE)
+        shadow_home.channel_id(bot, guild)
         if rehearsing(bot, guild)
         else public_channel(bot, guild.id)
     )

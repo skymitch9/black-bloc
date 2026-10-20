@@ -125,7 +125,7 @@ def parent_id(bot: Any, guild: Any) -> tuple[int | None, bool]:
     if mode == ON:
         return (as_id(bot.store.get(guild.id, BRACKETS_CHANNEL)), False)
     if mode == SHADOW:
-        return (shadow.channel_id(bot, guild, feature="brackets"), True)
+        return (shadow.channel_id(bot, guild), True)
     return (None, False)
 
 

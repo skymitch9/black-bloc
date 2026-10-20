@@ -261,7 +261,7 @@ async def test_a_co_runner_opted_out_is_left_out_of_the_public_copy(bot, cog):
 async def test_shadow_sends_the_public_copy_to_the_public_rehearsal_home(bot, cog):
     marathon = await ready(bot, cog)
     await bot.store.set(GUILD, "marathon_mode", "shadow")
-    await bot.store.set(GUILD, "marathon_public_shadow_channel_id", LOG_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", LOG_CHANNEL)
     await bot.store.set(GUILD, "marathon_reminder_channel_id", REMINDERS)
     room(bot, REMINDERS, "baf-reminders")
 

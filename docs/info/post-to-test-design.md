@@ -176,3 +176,5 @@ The payload's post rows already carry `posted_where`; add `test_copy: bool` (a `
 17. ⚠️ **House-rule tension, flagged not decided:** the second `willPost` line is a how-it-works sentence, which the
     2026-10-04 *no explaining blurbs* rule forbids; it was built because this design (2026-10-10, later) asks for it.
     Deleting the `test` suffix in `willPost` and the `REHEARSE_LINE` twin removes it cleanly.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `posts_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

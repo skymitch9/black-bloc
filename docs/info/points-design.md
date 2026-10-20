@@ -570,3 +570,5 @@ Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole buil
 - `points_shadow_channel_id` has no reader any more; its help says so. A removal candidate.
 
 Deviations: (1) with points off, a leaderboard-only sticky stops at its next move with the existing *no words and no block* trouble instead of being taken down quietly.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `points_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

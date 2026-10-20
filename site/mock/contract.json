@@ -124,7 +124,6 @@
       "brackets_set_disputed_said",
       "brackets_set_final_said",
       "brackets_set_reported_said",
-      "brackets_shadow_channel_id",
       "brackets_sign_up_label",
       "brackets_start_ping",
       "brackets_state_cancelled",
@@ -203,7 +202,6 @@
       "pb_feed_rehearsed_again_said",
       "pb_feed_rematch_days",
       "pb_feed_set_said",
-      "pb_feed_shadow_channel_id",
       "pb_feed_taken_said",
       "pb_feed_unblocked_opted_out_said",
       "pb_feed_unblocked_said",
@@ -284,7 +282,6 @@
       "points_proof_hint",
       "points_proof_label",
       "points_run_waiting_said",
-      "points_shadow_channel_id",
       "points_state_approved",
       "points_state_pending",
       "points_state_rejected",
@@ -638,7 +635,6 @@
       "golive_replay_treated_said": "what staff are told after Treat as live; {login} is the channel",
       "golive_replay_words": "the words that make a stream title read as a replay, separated by commas. Each is matched as a whole word in any case — [REPLAY], Replay:, (Rerun) all match, and a longer word that merely contains one does not. Blank leaves only Twitch's own rerun mark",
       "golive_require_role_id": "when this is set, only people wearing that role are ever announced. Blank — the default — announces anybody the bot sees streaming",
-      "golive_shadow_channel_id": "where this feature's rehearsals land while it is in shadow (spotlight announcements); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else",
       "golive_template": "the sentence a go-live announcement is made of. It takes {name} {game} {title} {url} {platform}, and {platform} fills itself in as Twitch or YouTube so one wording serves both platforms",
       "pings_block_label": "what the ping me when they go live block's button says, at most 80 characters; the button opens the same /pings panel and its picker. Blank restores the shipped wording",
       "pings_block_text": "the line under that heading on the ping me when they go live block; blank restores the shipped wording",
@@ -2720,12 +2716,12 @@
       ]
     },
     {
-      "_": "Post to test for weekly questions (weekly-questions-design.md, Follow-up 2026-10-19): a copy of this week's question in the rehearsal home; the slot, the queue and posted_by are untouched. The real API's seed queues one question and points posts_shadow_channel_id at the test channel for this request.",
+      "_": "Post to test for weekly questions (weekly-questions-design.md, Follow-up 2026-10-19): a copy of this week's question in the rehearsal home; the slot, the queue and posted_by are untouched. The real API's seed queues one question and points the test channel (shadow_channel_id) at it for this request.",
       "method": "POST",
       "path": "/api/questions/rehearse",
       "body": {},
       "settings": {
-        "posts_shadow_channel_id": "{test_channel_id}"
+        "shadow_channel_id": "{test_channel_id}"
       },
       "read_by": [
         "questions-section.js Post to test"
@@ -3084,12 +3080,12 @@
       }
     },
     {
-      "_": "Post to test for a sticky (sticky-messages-design.md, Follow-ups 2026-10-19): one plain, unpinned copy in the rehearsal home; the sticky's row and state are untouched. posts_mode is on, and the entry points posts_shadow_channel_id at the test channel.",
+      "_": "Post to test for a sticky (sticky-messages-design.md, Follow-ups 2026-10-19): one plain, unpinned copy in the rehearsal home; the sticky's row and state are untouched. posts_mode is on, and the entry points the test channel (shadow_channel_id) at it.",
       "method": "POST",
       "path": "/api/sticky/{sticky_channel_id}/rehearse",
       "body": {},
       "settings": {
-        "posts_shadow_channel_id": "{test_channel_id}"
+        "shadow_channel_id": "{test_channel_id}"
       },
       "read_by": [
         "sticky-section.js Post to test"
@@ -9100,12 +9096,12 @@
       }
     },
     {
-      "_": "Post to test (post-to-test-design.md): a copy in the rehearsal home beside the real post, posts on. The real API's seed has no rehearsal home, so the entry points posts_shadow_channel_id at the test channel for this request.",
+      "_": "Post to test (post-to-test-design.md): a copy in the rehearsal home beside the real post, posts on. The entry points the test channel (shadow_channel_id) at it for this request.",
       "method": "POST",
       "path": "/api/posts/{post_slug}/rehearse",
       "body": {},
       "settings": {
-        "posts_shadow_channel_id": "{test_channel_id}"
+        "shadow_channel_id": "{test_channel_id}"
       },
       "read_by": [
         "page-posts.js Post to test"

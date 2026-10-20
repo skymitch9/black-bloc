@@ -171,3 +171,4 @@ The feed's *added* notice (and the next-event / suggestion notices, same shape) 
 - **Read it now against the real GDQ tracker / horaro** — only the fake schedule client.
 - **TEST_MODE** (a guard installed) with a feature home set — reasoned (Deviation 7), one modmail test only.
 
+> **Follow-up 2026-10-20: SUPERSEDED by [`one-test-channel-design.md`](one-test-channel-design.md).** The per-feature `<feature>_shadow_channel_id` overrides this doc built are retired (owner, sheet items p2 + p4k of the 2026-10-19 switch audit); `shadow_channel_id` — labelled *Test channel* — is the only rehearsal home, and `shadow.py` has no `feature=` argument. The marathon notice half of this doc is unaffected.

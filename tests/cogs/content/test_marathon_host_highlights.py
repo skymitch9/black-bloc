@@ -356,7 +356,7 @@ async def test_a_baf_runners_run_is_unchanged_beside_the_hosted_block(bot, cog):
 async def test_shadow_mode_rehearses_both_in_the_public_rehearsal_home(bot, cog):
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     bot.guild.channels[REHEARSAL] = FakeChannel(REHEARSAL)
-    await bot.store.set(GUILD, "marathon_public_shadow_channel_id", REHEARSAL)
+    await bot.store.set(GUILD, "shadow_channel_id", REHEARSAL)
     marathon = await show(bot, cog, HIDDEN_HEROES, auto=True)
     await walk(bot, cog, marathon, [45, 61])
     assert heads_ups(bot) == [] and highlights(bot) == []

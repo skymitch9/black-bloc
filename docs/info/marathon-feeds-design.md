@@ -450,3 +450,5 @@ pages, top-level commands and log features unchanged. **Sources shipped: tracker
   clicked in a browser** and console errors were not read; the writes were checked by `check.mjs` and the route tests.
 - **Cost:** one events-list GET per feed per 6 h (+ per added event, one resolve GET and the schedule reads that any
   marathon costs). Not measured.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `marathon_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

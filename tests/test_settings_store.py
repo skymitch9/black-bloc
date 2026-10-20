@@ -1921,33 +1921,23 @@ async def test_the_rehearsal_home_is_a_core_key_reachable_from_both_doors(store)
     assert "rehearsal_note" not in KEY_TYPES
 
 
-def test_the_rehearsal_home_help_says_it_widens_test_mode_and_a_features_own_home_wins():
+def test_the_test_channel_help_says_it_widens_test_mode_and_serves_every_feature():
     said = KEY_HELP[settings_store.SHADOW_CHANNEL]
 
+    assert said.startswith("the test channel") and "every feature" in said
     assert "test mode" in said and "one channel" in said
-    assert "_shadow_channel_id wins over this" in said
+    assert "wins over this" not in said
 
 
 async def test_the_rehearsal_home_ships_blank(store):
     assert store.get(7, settings_store.SHADOW_CHANNEL) is None
 
 
-async def test_every_feature_that_rehearses_has_its_own_home_key_shipped_blank(store):
-    """A feature's own home is a channel key in its OWN namespace, blank meaning the global one."""
-    wanted = {
-        "posts_shadow_channel_id": "posts",
-        "golive_shadow_channel_id": "golive",
-        "marathon_shadow_channel_id": "marathon",
-        "marathon_public_shadow_channel_id": "marathon",
-        "birthday_shadow_channel_id": "birthday",
-    }
+def test_no_feature_has_a_test_channel_of_its_own_but_the_structure_notice():
+    """One test channel (one-test-channel-design.md); the structure notice never falls back."""
+    own = sorted(key for key in KEY_TYPES if key.endswith("_shadow_channel_id"))
 
-    assert set(settings_store.SHADOW_HOME_KEYS.values()) == set(wanted)
-    for key, namespace in wanted.items():
-        assert KEY_TYPES[key] == "channel"
-        assert namespace_of(key) == namespace
-        assert store.get(7, key) is None
-        assert "shadow_channel_id" in KEY_HELP[key] and "blank" in KEY_HELP[key]
+    assert own == ["structure_backup_shadow_channel_id"]
 
 
 async def test_the_three_boot_status_keys_are_core_and_reachable_from_both_doors(store):
@@ -1973,7 +1963,7 @@ async def test_the_boot_status_ships_on_with_both_sentences_written(store):
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 360
+    assert len(settings_store.CORE_KEYS) == 357
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2153,11 +2143,11 @@ def golive_page_keys() -> list[str]:
     )
 
 
-def test_the_golive_page_still_draws_ninety_keys():
+def test_the_golive_page_still_draws_eighty_nine_keys():
     """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
     A key added to one of these namespaces has to be added there too, or it lands in the
     Everything else catch-all with nobody noticing."""
-    assert len(golive_page_keys()) == 90
+    assert len(golive_page_keys()) == 89
 
 
 def test_every_golive_page_key_says_in_words_what_it_does():
@@ -2331,7 +2321,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1238
+    assert len(settings_store.KEY_TYPES) == 1230
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2873,7 +2863,6 @@ async def test_the_point_systems_decisions_are_keys_with_the_owners_defaults(sto
 
     assert store.get(7, "points_mode") == "shadow"
     assert store.get(7, "points_channel_id") == 1076003845232148580
-    assert store.get(7, "points_shadow_channel_id") is None
     assert store.get(7, "points_ping_role_id") is None
     assert store.get(7, "points_verifier_role_id") is None
     assert store.get(7, "points_xp_tiers") == "1:00=5, 10:00=25, 15:00=50, 30:00=100"

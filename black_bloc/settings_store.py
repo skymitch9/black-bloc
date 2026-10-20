@@ -81,12 +81,11 @@ from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
 from .polls import MODES as POLL_MODES
 from .shadow import REHEARSAL_KEY as SHADOW_CHANNEL
-from .shadow import feature_key as shadow_feature_key
 from .storage.db import Database
-from .structure import FEATURE as STRUCTURE_FEATURE
 from .structure import MODE_DEFAULT as STRUCTURE_MODE_DEFAULT
 from .structure import MODES as STRUCTURE_MODES
 from .structure import ROLE_KEY as STRUCTURE_ROLE_KEY
+from .structure import SHADOW_CHANNEL_KEY as STRUCTURE_SHADOW_CHANNEL_KEY
 from .timezones import DEFAULT_TZ, is_known, suggest
 
 log = logging.getLogger(__name__)
@@ -2887,7 +2886,7 @@ KEY_HELP.update(
             "off hides /posts, /sticky and /questions, takes every sticky copy down and posts "
             "no weekly question; every word already written is kept. on lets Post it, a "
             "sticky's Resume and the weekly question reach their own channels. Post to test "
-            "sends a copy of any of them to posts_shadow_channel_id first"
+            "sends a copy of any of them to the test channel (shadow_channel_id) first"
         ),
         "posts_panel_minutes": (
             "minutes the /posts panel stays live before its buttons disable themselves; 10 by "
@@ -3392,39 +3391,12 @@ KEY_TYPES.update({SHADOW_CHANNEL: "channel"})
 KEY_HELP.update(
     {
         SHADOW_CHANNEL: (
-            "where every rehearsal goes while a feature is in shadow — the welcome post, the "
-            "front door, the ticket button, polls; blank means the bot's own log channel. "
-            "Setting it is the deliberate act that lets test mode speak in that one channel "
-            "as well, so pick a channel only the people reviewing can see. A feature's own "
-            "…_shadow_channel_id wins over this"
+            "the test channel: where every rehearsal and every Post to test copy goes, for "
+            "every feature; blank means the bot's own log channel. Setting it is the "
+            "deliberate act that lets test mode speak in that one channel as well, so pick a "
+            "channel only the people reviewing can see"
         ),
     }
-)
-
-
-# A rehearsal home per feature: blank follows shadow_channel_id, set wins over it.
-SHADOW_HOME_WORDS = {
-    "posts": "posts, sticky messages and weekly questions",
-    "golive": "spotlight announcements",
-    "marathon": "the marathon board, reminders, shoutouts and staff notices",
-    "marathon_public": "a marathon's public highlights of BaF runners and its public reminders",
-    "birthday": "birthday wishes",
-}
-SHADOW_HOME_KEYS = {feature: shadow_feature_key(feature) for feature in SHADOW_HOME_WORDS}
-KEY_TYPES.update({key: "channel" for key in SHADOW_HOME_KEYS.values()})
-KEY_HELP.update(
-    {
-        SHADOW_HOME_KEYS[feature]: (
-            f"where this feature's rehearsals land while it is in shadow ({words}); blank "
-            "means shadow_channel_id. Set it to send only this feature's rehearsals somewhere "
-            "else"
-        )
-        for feature, words in SHADOW_HOME_WORDS.items()
-    }
-)
-KEY_HELP[SHADOW_HOME_KEYS["posts"]] = (
-    "where Post to test sends its copy of a post, a sticky message or this week's question; "
-    "blank means shadow_channel_id"
 )
 
 
@@ -3599,7 +3571,7 @@ STRUCTURE_BACKUP_HOUR = "structure_backup_hour"
 STRUCTURE_BACKUP_KEEP = "structure_backup_keep"
 STRUCTURE_BACKUP_NOTIFY = "structure_backup_notify"
 STRUCTURE_BACKUP_CHANNEL = "structure_backup_channel_id"
-STRUCTURE_BACKUP_SHADOW_CHANNEL = shadow_feature_key(STRUCTURE_FEATURE)
+STRUCTURE_BACKUP_SHADOW_CHANNEL = STRUCTURE_SHADOW_CHANNEL_KEY
 STRUCTURE_BACKUP_ROLE = STRUCTURE_ROLE_KEY
 STRUCTURE_BACKUP_NOTICE_LINES = "structure_backup_notice_lines"
 STRUCTURE_BACKUP_PANEL_MINUTES = "structure_backup_panel_minutes"
@@ -3895,7 +3867,6 @@ PB_FEED_FEATURE = "pb_feed"
 PB_FEED_MODES = ("off", "shadow", "on")
 PB_FEED_MODE = "pb_feed_mode"
 PB_FEED_CHANNEL = "pb_feed_channel_id"
-PB_FEED_SHADOW_CHANNEL = shadow_feature_key(PB_FEED_FEATURE)
 PB_FEED_PING_ROLE = "pb_feed_ping_role_id"
 PB_FEED_AUTO_MATCH = "pb_feed_auto_match"
 PB_FEED_INTERVAL = "pb_feed_interval_minutes"
@@ -4212,7 +4183,6 @@ PB_FEED_DEFAULTS: dict[str, Any] = {
 PB_FEED_KEYS: tuple[str, ...] = (
     PB_FEED_MODE,
     PB_FEED_CHANNEL,
-    PB_FEED_SHADOW_CHANNEL,
     PB_FEED_PING_ROLE,
     PB_FEED_AUTO_MATCH,
     *PB_FEED_NUMBERS,
@@ -4222,7 +4192,6 @@ KEY_TYPES.update(
     {
         PB_FEED_MODE: "enum",
         PB_FEED_CHANNEL: "channel",
-        PB_FEED_SHADOW_CHANNEL: "channel",
         PB_FEED_PING_ROLE: "role",
         PB_FEED_AUTO_MATCH: "bool",
         **{key: "int" for key in PB_FEED_NUMBERS},
@@ -4248,10 +4217,6 @@ KEY_HELP.update(
         PB_FEED_CHANNEL: (
             "where a new personal best is posted while pb_feed_mode is on. Blank posts "
             "nothing and says so in the log — Black Bloc never picks a channel itself"
-        ),
-        PB_FEED_SHADOW_CHANNEL: (
-            "where a new personal best is rehearsed while pb_feed_mode is shadow; blank means "
-            "shadow_channel_id"
         ),
         PB_FEED_PING_ROLE: (
             "a role mentioned above each personal best post; blank — the default — pings "
@@ -4304,7 +4269,6 @@ BRACKETS_LENGTHS = ("1", "3", "5", "7", "9", "11", "13", "15")
 BRACKETS_MODE = "brackets_mode"
 BRACKETS_CHANNEL = "brackets_channel_id"
 BRACKETS_CHANNEL_ID = 1076005097617760296
-BRACKETS_SHADOW_CHANNEL = shadow_feature_key(BRACKETS_FEATURE)
 BRACKETS_TO_ROLE = "brackets_to_role_id"
 BRACKETS_FORMAT_DEFAULT = "brackets_format_default"
 BRACKETS_BEST_OF = "brackets_best_of"
@@ -4872,7 +4836,6 @@ BRACKETS_DEFAULTS: dict[str, Any] = {
 BRACKETS_KEYS: tuple[str, ...] = (
     BRACKETS_MODE,
     BRACKETS_CHANNEL,
-    BRACKETS_SHADOW_CHANNEL,
     BRACKETS_TO_ROLE,
     BRACKETS_PING_ROLE,
     BRACKETS_FORMAT_DEFAULT,
@@ -4888,7 +4851,6 @@ BRACKETS_KEYS: tuple[str, ...] = (
 KEY_TYPES.update(
     {
         BRACKETS_CHANNEL: "channel",
-        BRACKETS_SHADOW_CHANNEL: "channel",
         BRACKETS_TO_ROLE: "role",
         BRACKETS_PING_ROLE: "role",
         **{key: "enum" for key in BRACKETS_ENUMS},
@@ -4910,10 +4872,6 @@ KEY_HELP.update(
         BRACKETS_CHANNEL: (
             "the text channel each tournament's thread is made under while brackets_mode is "
             "on; #knuck-up by default"
-        ),
-        BRACKETS_SHADOW_CHANNEL: (
-            "where tournament threads are made while brackets_mode is shadow; blank means "
-            "shadow_channel_id"
         ),
         BRACKETS_TO_ROLE: (
             "the Tournament Organiser role: its holders may create and run tournaments as staff "
@@ -5006,7 +4964,6 @@ POINTS_CLOCKS = ("approved", "submitted")
 POINTS_MODE = "points_mode"
 POINTS_CHANNEL = "points_channel_id"
 POINTS_CHANNEL_ID = 1076003845232148580
-POINTS_SHADOW_CHANNEL = shadow_feature_key(POINTS_FEATURE)
 POINTS_PING_ROLE = "points_ping_role_id"
 POINTS_VERIFIER_ROLE = "points_verifier_role_id"
 POINTS_XP_TIERS = "points_xp_tiers"
@@ -5392,7 +5349,6 @@ POINTS_DEFAULTS: dict[str, Any] = {
 POINTS_KEYS: tuple[str, ...] = (
     POINTS_MODE,
     POINTS_CHANNEL,
-    POINTS_SHADOW_CHANNEL,
     POINTS_PING_ROLE,
     POINTS_VERIFIER_ROLE,
     POINTS_XP_TIERS,
@@ -5404,7 +5360,6 @@ POINTS_KEYS: tuple[str, ...] = (
 KEY_TYPES.update(
     {
         POINTS_CHANNEL: "channel",
-        POINTS_SHADOW_CHANNEL: "channel",
         POINTS_PING_ROLE: "role",
         POINTS_VERIFIER_ROLE: "role",
         POINTS_XP_TIERS: "text",
@@ -5427,10 +5382,6 @@ KEY_HELP.update(
         POINTS_CHANNEL: (
             "where the post goes when somebody enters, leaves or moves inside the top places "
             "while posts_mode is on; #speed-and-pbs by default"
-        ),
-        POINTS_SHADOW_CHANNEL: (
-            "not read since 2026-10-19: the top-places post and the leaderboard sticky follow "
-            "posts_mode, and Post to test sends to posts_shadow_channel_id"
         ),
         POINTS_PING_ROLE: (
             "a role mentioned above the top-places post; blank — the default — pings nobody. "
@@ -8049,7 +8000,7 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         None,
         "where the marathon inbox thread is made — the one thread in which every marathon Black "
         "Bloc finds gets a message with Track and Ignore. Blank uses events_announce_channel_id. "
-        "shadow makes it where marathon_shadow_channel_id or shadow_channel_id points",
+        "shadow makes it where shadow_channel_id points",
     ),
     MARATHON_THREAD_CHANNEL_KEY: (
         "channel",

@@ -118,9 +118,9 @@ async def test_off_an_empty_queue_and_no_home_are_refused_in_words(bot):
     assert await details_of(bot.db, "question.rehearsed") == []
 
 
-async def test_the_feature_home_wins_and_discord_refusing_is_said(bot):
+async def test_the_test_channel_takes_it_and_discord_refusing_is_said(bot):
     await queue(bot)
-    await bot.store.set(GUILD, "posts_shadow_channel_id", LOG)
+    await bot.store.set(GUILD, "shadow_channel_id", LOG)
     bot.guild.get_channel(LOG).send_raises = refused(403)
 
     outcome = await testing.rehearse(bot, bot.guild, None, now=EARLY)

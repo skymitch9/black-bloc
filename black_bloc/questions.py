@@ -33,7 +33,6 @@ from .timezones import zone as zone_named
 
 log = logging.getLogger(__name__)
 
-FEATURE = "posts"
 PANEL_MINUTES_KEY = "posts_panel_minutes"
 OFF = "off"
 ON = "on"
@@ -350,8 +349,8 @@ NO_CHANNEL = (
     "Settings first."
 )
 NO_REHEARSAL = (
-    "There is nowhere to send a test copy: no rehearsal home is set. Pick "
-    "posts_shadow_channel_id or shadow_channel_id in Settings first."
+    "There is nowhere to send a test copy: no test channel is set. Pick the test channel "
+    "(shadow_channel_id) in Settings first."
 )
 CHANNEL_GONE = (
     "Black Bloc cannot see channel {channel}, so nothing was posted. Check the channel in Settings."

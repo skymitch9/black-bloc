@@ -133,7 +133,6 @@ FEATURE = "marathon"
 GOLIVE_CHANNEL_KEY = "golive_channel_id"
 MODE_ON = "on"
 MODE_OFF = "off"
-SHADOW_FEATURE = "marathon"
 TICK_MINUTES = 1
 FAILURES_IMPORTANT = 3
 NO_CHANNEL = "no channel is set for marathon posts"
@@ -591,7 +590,7 @@ def cog_of(bot: Any) -> Any:
 
 
 def rehearsal_home(bot: Any, guild: Any) -> int | None:
-    return shadow_home.channel_id(bot, guild, feature=SHADOW_FEATURE)
+    return shadow_home.channel_id(bot, guild)
 
 
 def rehearsal_details(bot: Any, guild: Any) -> dict[str, Any]:

@@ -170,3 +170,5 @@ every sticky row carries `post` and `words`.
   and the Leaderboard block card; no console error was logged. NOT clicked: Pin / Replace, Pause / Resume, the
   Words / A post switch in **New sticky message**, **Change the post**. Phone width and other themes not looked at.
 - Rate limits for a delete + send + pin every few minutes in a busy channel — reasoned, not measured.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `points_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

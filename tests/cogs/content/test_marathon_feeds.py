@@ -490,7 +490,7 @@ async def test_shadow_adds_the_marathon_but_notices_the_shadow_home(bot, cog):  
 async def test_a_feed_notice_rehearses_in_the_marathon_home(bot, cog):  # noqa: F811
     await seeded(bot, cog)
     await bot.store.set(GUILD, "marathon_mode", "shadow")
-    await bot.store.set(GUILD, "marathon_shadow_channel_id", LOG_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", LOG_CHANNEL)
     threading(bot, LOG_CHANNEL)
     await cog.tick_once()
 

@@ -6,12 +6,7 @@
 
 export const LABELS = {
   log_channel_id: 'Where the bot writes its log',
-  shadow_channel_id: 'Where rehearsals go while a feature is in shadow',
-  posts_shadow_channel_id: 'Where Post to test sends its copy',
-  golive_shadow_channel_id: 'Where spotlights rehearse',
-  marathon_shadow_channel_id: 'Where marathons rehearse',
-  marathon_public_shadow_channel_id: "Where public highlights and reminders rehearse",
-  birthday_shadow_channel_id: 'Where birthday wishes rehearse',
+  shadow_channel_id: 'Test channel',
   staff_channel_id: 'Which channel decides who counts as staff',
   role_menu_channel_id: 'Where role menus are posted',
   core_log_level: 'How much of the dashboard’s own work is repeated into Discord',
@@ -508,7 +503,6 @@ export const LABELS = {
 
   pb_feed_mode: "Whether new personal bests are posted, rehearsed or left alone",
   pb_feed_channel_id: "Where a new personal best is posted",
-  pb_feed_shadow_channel_id: "Where personal bests rehearse",
   pb_feed_ping_role_id: "Which role a personal best post pings",
   pb_feed_auto_match: "Whether members are found from their Twitch link",
   pb_feed_interval_minutes: "How often each member\u2019s personal bests are looked at",
@@ -566,7 +560,6 @@ export const LABELS = {
   pb_feed_dm_no_reason: "What a personal best DM says when staff gave no reason",
   brackets_mode: "Whether tournaments run, and where their threads go",
   brackets_channel_id: "The channel tournament threads are made under",
-  brackets_shadow_channel_id: "Where tournament threads rehearse",
   brackets_to_role_id: "Which role may create and run tournaments",
   brackets_ping_role_id: "Which role is pinged when a tournament starts",
   brackets_format_default: "The format a new tournament starts with",
@@ -710,7 +703,6 @@ export const LABELS = {
   brackets_pool_raise_label: "The bracket page's button that moves a tied player up",
   points_mode: "Whether the point system takes runs, and where its top-places post goes",
   points_channel_id: "Where the top-places post goes",
-  points_shadow_channel_id: "Where the top-places post is rehearsed",
   points_ping_role_id: "The role pinged on the top-places post",
   points_verifier_role_id: "The role that may approve runs besides staff",
   points_xp_tiers: "The XP a run earns by its length",

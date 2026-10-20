@@ -26,8 +26,8 @@ LABEL = "Post to test"
 TESTED = "A test copy of the poll is in <#{where}>. Nothing was posted or saved."
 TEST_OFF = "Polls are off, so no test copy was sent. Turn poll_mode on in Settings first."
 NO_HOME = (
-    "There is nowhere to send a test copy: no rehearsal home is set. Pick shadow_channel_id in "
-    "Settings first."
+    "There is nowhere to send a test copy: no test channel is set. Pick the test channel "
+    "(shadow_channel_id) in Settings first."
 )
 HOME_GONE = "Black Bloc cannot see the rehearsal home <#{home}>, so nothing was sent."
 TEST_MODE = "Test mode keeps Black Bloc out of channel {channel}, so no test copy was sent."

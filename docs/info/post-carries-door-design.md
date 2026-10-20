@@ -139,3 +139,5 @@ The note rides the door's card as a footer because the message's `content` belon
 5. Reversal if wanted: untick the switch (the door returns to its own message within five minutes)
    or Modmail page ▸ Front door ▸ **Take it down** (the rules stay, the door goes, the switch
    goes off).
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `posts_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

@@ -41,8 +41,9 @@ import {
 } from './ui.js';
 
 const MODE_KEY = 'posts_mode';
+const TEST_CHANNEL_KEY = 'shadow_channel_id';
 const SETTING_KEYS = [
-  MODE_KEY, 'posts_shadow_channel_id', 'posts_panel_minutes', 'posts_import_style', 'posts_untitled_title',
+  MODE_KEY, TEST_CHANNEL_KEY, 'posts_panel_minutes', 'posts_import_style', 'posts_untitled_title',
   'posts_log_level',
 ];
 const NOTHING_YET = 'There are no posts yet.';
@@ -1251,8 +1252,10 @@ async function machinerySection(specs) {
 async function load() {
   const payload = await api('/api/posts');
   const say = sayAgain('posts', notice());
-  const specs = settingsNamespace(await settings(), 'posts')
-    .filter((spec) => SETTING_KEYS.includes(spec.key));
+  const all = await settings();
+  const specs = [...settingsNamespace(all, 'posts'), ...settingsNamespace(all, 'core')]
+    .filter((spec) => SETTING_KEYS.includes(spec.key))
+    .sort((one, two) => SETTING_KEYS.indexOf(one.key) - SETTING_KEYS.indexOf(two.key));
   const head = document.getElementById('page-aside');
   if (head) head.replaceChildren();
 

@@ -37,7 +37,7 @@ const STATE_WORDS = {
 const BY_WORDS = { owner: 'by the owner', bot: 'by Black Bloc' };
 const POST_ONE = 'Post one now';
 const POST_TO_TEST = 'Post to test';
-const NO_TEST_HOME = 'No rehearsal home is set, so Post to test has nowhere to go. Pick posts_shadow_channel_id or shadow_channel_id in Settings.';
+const NO_TEST_HOME = 'No test channel is set, so Post to test has nowhere to go. Pick the Test channel in Settings.';
 const OUT_OF_CYCLE = 'out of cycle';
 const STATUS_WORDS = { removed: 'removed', skipped: 'skipped' };
 

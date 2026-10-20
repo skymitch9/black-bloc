@@ -1243,7 +1243,7 @@ async def seed_pbs(web, guild_id: int, rehearsal_id: int) -> dict:
     )
     await pb_store.settle_post(web.db, claimed, pb_store.REHEARSED, channel_id=1, message_id=2)
     await pb_store.record_ok(web.db, guild_id, found=1)
-    await web.store.set(guild_id, "pb_feed_shadow_channel_id", rehearsal_id, by=7)
+    await web.store.set(guild_id, "shadow_channel_id", rehearsal_id, by=7)
     return {
         "pb_post_id": str(claimed),
         "pb_matched_member_id": str(PB_MATCHED),
