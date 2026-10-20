@@ -1147,3 +1147,5 @@ whole verification was `ruff`, `pytest` (**5020**, **5546** today) and `node sit
    / `CARD_MIN_GAP_SECONDS` were ever timed against a real channel: **they have not been, here
    either** — there is no Discord in this environment. Sweep row 222 now says what to time and
    what number to write down.
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** `modmail_enabled` is RETIRED: Black Bloc's modmail always answers DMs. *Answer DMs on/off*, the incumbent line, `DISABLED_DM`, `MEMBER_DOOR_OFF` and `STAFF_DISABLED_SAID` are gone, and so is `points_modmail_off_said`. Modmail no longer has an off switch; blocking a person is the per-member stop. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

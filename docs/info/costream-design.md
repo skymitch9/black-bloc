@@ -230,3 +230,5 @@ Specifically NOT verified:
 - **A co-stream that starts on both platforms within one poll tick.** The lock and the unique index make
   one session the only possible outcome, and the tests drive the two arrivals in sequence; nothing here
   raced them.
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** `golive_costream_mode` is RETIRED — co-streaming always joins a second platform into the open session (the old `off` hold-back is gone). `joins_session(row, platform)` takes no mode. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

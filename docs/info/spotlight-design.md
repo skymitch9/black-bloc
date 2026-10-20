@@ -539,3 +539,4 @@ started as a replay has always done.
 accepting `embed=None` on the pinned announcement, the unpin, the real GDQueer rows' block edges
 (the fixture sheet is the test's source), and what the real title reads at 09:55.
 
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** `spotlight_mode` is RETIRED: spotlights follow `golive_mode` (test posts the rehearsal copy in the test channel, as spotlight shadow did); the per-channel `announce` field still gates each channel. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

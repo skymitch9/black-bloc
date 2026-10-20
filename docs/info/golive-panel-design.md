@@ -665,3 +665,5 @@ the same breath that a stream already running is not announced after the fact �
   the mock's `leave` branch does nothing but close the session, which is all it can do.
 - **No migration was written and none is needed** — the key is a settings row with a default, so an
   unset guild reads `end` from the default chain.
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** `golive_mode` shadow is called **test**; it now governs spotlights and (with *Also watch YouTube*, `golive_youtube`) YouTube too. Staff get *Also watch YouTube* / *Stop watching YouTube* on row 1, and a **YouTube** status line. The help no longer says "Off by default" — the registry default is test (`shadow`). See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).
