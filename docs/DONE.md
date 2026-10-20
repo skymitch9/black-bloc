@@ -44,6 +44,11 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-20 v245
+
+- 🔨 **Switch-sheet build 5 of 6 — one opt-out every announcer reads (sheet items i4, i8, i9a, i9b, i5a, i5b, i5c; the audit's §5 loops; i10 left as is per the owner's No).** Dispatched to Opus 2026-10-20 02:4x on branch `one-optout` (573k).
+  ↳ ✅ **LIVE v245** 2026-10-20 03:31 (release `66a8cc34`, merge `69830865`); schema 98; live counts were zero in every kind so the migration copied nothing and nobody became newly silent; design [`info/one-optout-design.md`](info/one-optout-design.md); see `deploys.log` v245 for what was and was not verified. The old opt-out stores stay written for one release as the rollback net — dropping them is a later build.
+
 ## 2026-10-20 v244
 
 - 🔨 **Switch-sheet build 4 of 6 — shadow has one meaning + the dead switches (sheet items p3b, p3c, p3d, p3e, p4a–p4e, p4g, h1, h2; the audit's P3(b)(c) and P4).** Dispatched to Opus 2026-10-20 01:2x on branch `shadow-one-meaning` (512k).
