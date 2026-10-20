@@ -488,7 +488,7 @@ const SETTING_SPECS = [
   ["question_thread_name_template", "text", "{question}", "{question}", "the reply thread's name; {question} is the question, cut to Discord's 100 characters"],
   ["question_warn_days", "int", 3, 3, "how many days before the question's time an empty queue is warned about; 3 by default", null, 7, 1],
   ["question_warn_dm", "bool", true, true, "true to DM question_owner_user_id the empty-queue warning as well as the log channel line"],
-  ["question_warn_template", "text", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some on the Weekly questions page or with /questions.", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some on the Weekly questions page or with /questions.", "the empty-queue warning, sent once per week to the log channel and the owner; {day} and {time} are when the question would have gone up"],
+  ["question_warn_template", "text", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some under Weekly questions on the Posts page or with /questions.", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some under Weekly questions on the Posts page or with /questions.", "the empty-queue warning, sent once per week to the log channel and the owner; {day} and {time} are when the question would have gone up"],
   ['birthday_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post birthday wishes)', ['off', 'shadow', 'on']],
   ['birthday_channel_id', 'channel', '800000000000000002', null, 'where birthday wishes are posted'],
   ['birthday_template', 'text', 'Happy birthday {name}!', 'Happy birthday {name}!', 'the birthday wording; {name} and {age}'],
@@ -4736,7 +4736,7 @@ const GUIDE_FEATURES = [
   ['marathon', 'events.html', 'Marathons'], ['applications', 'rolemenus.html', 'Applications'],
   ['selftest', 'health.html', 'Test'], ['guides', 'guides.html', 'Guides'],
   ['posts', 'posts.html', 'Posts'], ['minutes', 'minutes.html', 'Meeting minutes'],
-  ['points', 'leaderboard.html', 'Leaderboard'], ['question', 'questions.html', 'Weekly questions'],
+  ['points', 'leaderboard.html', 'Leaderboard'], ['question', 'posts.html#sect-questions', 'Weekly questions'],
 ];
 const GUIDE_FEATURE_PAGES = Object.fromEntries(GUIDE_FEATURES.map(([feature, page]) => [feature, page]));
 const GUIDE_CORE_KEYS = ['staff_channel_id', 'log_channel_id', 'modlog_channel_id', 'role_menu_channel_id'];

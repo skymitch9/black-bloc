@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-19 — rows APPENDED to *Weekly questions*, nothing re-keyed**: the move into the Posts page (branch `questions-in-posts`, off `main` `83083fd0`); keyed by NAME. Before that:
 > **2026-10-19 — one section APPENDED, nothing re-keyed**: *Weekly questions* (branch `weekly-questions`, off `main` `c2b1d769`); keyed by NAME. Before that:
 > **2026-10-18 — one section APPENDED, nothing re-keyed**: *Opted-out roles* (branch `optout-roles`, off `main` `c009d4fc`); keyed by NAME. `cogs/content/marathon.py` rows below `links_of` sit a few lines lower. Before that:
 > **2026-10-18 — FULL RE-KEY** against `main` `a683d2d0` (v234) with `C:/lcw/bb-codenotes-rekey-tools/rekey.py` in a throwaway worktree: 887 anchors moved, 646 unchanged, 42 fuzzy and 25 ambiguous matched by name, 31 not found (left as they were). This settles the 2026-10-14 note below. Before that:
@@ -10542,3 +10543,7 @@ Design: [`weekly-questions-design.md`](weekly-questions-design.md) (its *Deviati
 - `black_bloc/api/tools/questions.py` `index` / `current` — the week's state is the key `state`, not `status`: the mock server reads a top-level `status` as the HTTP status code.
 - `black_bloc/logkinds.py` — `question` is headed `core` (like `points`): a `question` FEATURE would add a `question_log_level` key and a 26th group.
 - `tests/questions_fakes.py` — the shared fakes for the four question test files (`FakeChannel.send` yields once, so an unlocked double tick really interleaves).
+- `site/public/assets/questions-section.js` `questionsSection` — the old `page-questions.js`, renamed and mounted by `page-posts.js:load` (the `sticky-section.js` pattern), not a second copy. Queue is a card; History, Settings and Logs are foldouts so the page's "On this page" rail gets ONE entry (`sect-questions`), not four. `refresh` is the Posts page's reload, handed in. `kept` remembers which folds were open, because a write redraws the whole page and the move's result line (e.g. under History) would otherwise land in a closed fold.
+- `site/public/assets/posts-hash.js` `SECTION_HASHES` — `sect-questions` is a section hash, so `posts.html#sect-questions` opens the section instead of looking for a post with that slug.
+- `site/public/questions.html` — a bare redirect (meta refresh + `location.replace`) to `/posts.html#sect-questions`, kept for open tabs and bookmarks. It is NOT in `site/mock/contract.json` `pages` (it has no `#dash` / `#tabnav` for `check.mjs`), but it still carries the favicon link and `/assets/` URLs because `tests/api/test_server.py` checks every `*.html` for both.
+- `black_bloc/logkinds.py` `FEATURE_PAGES["question"]` — `posts.html#sect-questions`, a page plus hash: every reader builds `{origin}/{page}` or `/{page}`, so the guides "Where it happens" link, the log footer and panel links land on the section. `app.js` `FEATURE_TABS.question` is `posts` for the Overview rows.

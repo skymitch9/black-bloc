@@ -2684,7 +2684,7 @@
       "method": "GET",
       "path": "/api/questions",
       "read_by": [
-        "page-questions.js"
+        "questions-section.js"
       ],
       "shape": "object",
       "keys": [
@@ -12298,7 +12298,6 @@
     "/golive.html",
     "/rolemenus.html",
     "/birthdays.html",
-    "/questions.html",
     "/tempvoice.html",
     "/honeypot.html",
     "/settings.html",

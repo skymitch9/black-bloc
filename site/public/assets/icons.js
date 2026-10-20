@@ -21,7 +21,6 @@ export const ICONS = {
   navEvents: { body: '<rect x="3.5" y="5.5" width="17" height="15" rx="2"></rect><path d="M3.5 10.2h17M8 3.5v4M16 3.5v4"></path>', width: 1.7 },
   navRaidtrain: { body: '<rect x="2.8" y="8.5" width="5.4" height="6.2" rx="1.3"></rect><rect x="9.6" y="8.5" width="4.8" height="6.2" rx="1.3"></rect><rect x="15.8" y="8.5" width="5.4" height="6.2" rx="1.3"></rect><path d="M2.8 18.5h18.4"></path>', width: 1.7 },
   navBirthdays: { body: '<path d="M4 20h16"></path><path d="M5.2 20v-6.4c0-1 .8-1.8 1.8-1.8h10c1 0 1.8.8 1.8 1.8V20"></path><path d="M12 11.8V8.2"></path><path d="M12 4.9c1 .9 1 1.9 0 2.8-1-.9-1-1.9 0-2.8z"></path>', width: 1.7 },
-  navQuestions: { body: '<circle cx="12" cy="12" r="8.5"></circle><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"></path><path d="M12 16.8v.1"></path>', width: 1.7 },
   navTempvoice: { body: '<rect x="9" y="3.2" width="6" height="10" rx="3"></rect><path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0M12 17.8V21"></path>', width: 1.7 },
   navRolemenus: { body: '<path d="M11.2 3H4v7.2l9.8 9.8 7.2-7.2z"></path><circle cx="7.6" cy="7.6" r="1.3"></circle>', width: 1.7 },
   navPolls: { body: '<path d="M5 20v-7M12 20V4M19 20v-5"></path>', width: 1.7 },

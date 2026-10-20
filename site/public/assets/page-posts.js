@@ -8,6 +8,7 @@ import { logsSection } from './logs.js';
 import { remember, remembered } from './layout.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
 import { postSlugOf } from './posts-hash.js';
+import { questionsSection } from './questions-section.js';
 import { stickySection } from './sticky-section.js';
 import {
   ago,
@@ -1275,6 +1276,7 @@ async function load() {
     postsSection(payload, say),
     await blocksSection(payload),
     await stickySection(() => refresh()),
+    await questionsSection(() => refresh()),
     await machinerySection(specs),
   );
 

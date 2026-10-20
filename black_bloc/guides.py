@@ -308,7 +308,7 @@ FEATURE_PATHS: dict[str, tuple[str, ...]] = {
         "black_bloc/cogs/community/questions.py",
         "black_bloc/api/tools/questions.py",
         "site/public/questions.html",
-        "site/public/assets/page-questions.js",
+        "site/public/assets/questions-section.js",
     ),
     "guides": (
         "black_bloc/guides.py",

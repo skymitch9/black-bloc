@@ -1,5 +1,4 @@
 import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
-import { start } from './app.js';
 import { logsTable } from './logs.js';
 import {
   ask,
@@ -7,6 +6,7 @@ import {
   button,
   card,
   el,
+  foldout,
   idsIn,
   keepSaying,
   notice,
@@ -19,6 +19,8 @@ import {
   when,
 } from './ui.js';
 
+const TITLE = 'Weekly questions';
+const SLUG = 'questions';
 const KEY_PREFIX = 'question_';
 const LOG_ROWS = 50;
 const NO_LOGS = 'Nothing has happened to the weekly questions yet.';
@@ -35,6 +37,13 @@ const BY_WORDS = { owner: 'by the owner', bot: 'by Black Bloc' };
 const STATUS_WORDS = { removed: 'removed', skipped: 'skipped' };
 
 let refresh = () => {};
+const opened = new Set();
+
+function kept(title, children, count) {
+  const fold = foldout(title, children, { count, open: opened.has(title) });
+  fold.addEventListener('toggle', () => (fold.open ? opened.add(title) : opened.delete(title)));
+  return fold;
+}
 
 const path = (id, tail = '') => `/api/questions/${encodeURIComponent(id)}${tail}`;
 
@@ -102,9 +111,8 @@ function editInPlace(row, say) {
   return holder;
 }
 
-function queueSection(rows) {
+function queueCard(rows) {
   const say = notice();
-  const group = section('Queue', null, { count: rows.length });
   const moveTo = (row, direction) => () => act(say, 'questions.queue', () => send(path(row.id, '/move'), 'POST', { direction }), (found) => found?.message || 'Moved.');
   const edit = (row) => () => {
     const node = document.querySelector(`[data-question="${row.id}"] .question-body`);
@@ -126,13 +134,11 @@ function queueSection(rows) {
       ].filter(Boolean)),
     },
   ], rows, { empty: 'The queue is empty.' });
-  group.body.append(list, say, sayAgain('questions.queue', say));
-  return group.node;
+  return card('Queue', [list, say, sayAgain('questions.queue', say)], { count: rows.length });
 }
 
-function historySection(rows) {
+function historyFold(rows) {
   const say = notice();
-  const group = section('History', null, { count: rows.length });
   const list = table([
     { label: 'When', cell: (row) => (row.resolved_at ? when(row.resolved_at) : null) },
     { label: 'Question', cell: (row) => row.body },
@@ -155,50 +161,48 @@ function historySection(rows) {
       },
     },
   ], rows, { empty: 'Nothing has gone up yet.' });
-  group.body.append(list, say, sayAgain('questions.history', say));
-  return group.node;
+  return kept('History', [list, say, sayAgain('questions.history', say)], rows.length);
 }
 
-async function settingsSection(specs) {
-  const group = section('Settings', null, { count: specs.length || null });
-  if (!specs.length) {
-    group.body.append(sayNothing('The bot reported no question_ settings.'));
-    return group.node;
-  }
+async function settingsFold(specs) {
+  if (!specs.length) return kept('Settings', [sayNothing('The bot reported no question_ settings.')], 0);
   const wording = specs.filter((spec) => WORDING_KEYS.includes(spec.key));
   const operational = specs.filter((spec) => !WORDING_KEYS.includes(spec.key));
-  group.body.append(
-    await settingsPanel(operational, { where: 'Settings', onSaved: () => refresh() }),
+  return kept('Settings', [
+    await settingsPanel(operational, { where: TITLE, onSaved: () => refresh() }),
     await settingsPanel(wording, { where: 'Wording' }),
-  );
-  return group.node;
+  ], specs.length);
 }
 
-async function logsSectionNode() {
+async function logsFold() {
   const payload = await api(`/api/actions?feature=core&q=question&per_page=${LOG_ROWS}`);
   const rows = listOf(payload, 'actions').filter((row) => /^(web\.)?question\./.test(String(row.kind)));
   await names(idsIn(rows, ['actor_id', 'target_id']));
-  const one = section('Logs', null, { count: rows.length });
-  one.body.append(logsTable(rows, NO_LOGS));
-  return one.node;
+  return kept('Logs', [logsTable(rows, NO_LOGS)], rows.length);
 }
 
-async function load() {
+/** The Weekly questions section of the Posts page; `reload` redraws the page after a write. */
+export async function questionsSection(reload) {
+  refresh = reload;
   const [payload, all] = await Promise.all([api('/api/questions'), settings()]);
   const specs = settingsNamespace(all, 'core').filter((spec) => spec.key.startsWith(KEY_PREFIX));
-  const aside = document.getElementById('page-aside');
-  if (aside) aside.replaceChildren();
-  document.getElementById('dash').replaceChildren(
+  const queue = listOf(payload, 'queue');
+  const asked = location.hash === `#sect-${SLUG}`;
+  const one = section(TITLE, null, { count: queue.length, id: SLUG, open: asked });
+  one.body.append(
     weekCard(payload),
     addCard(),
-    queueSection(listOf(payload, 'queue')),
-    historySection(listOf(payload, 'history')),
-    await settingsSection(specs),
-    await logsSectionNode(),
+    queueCard(queue),
+    historyFold(listOf(payload, 'history')),
+    await settingsFold(specs),
+    await logsFold(),
   );
+  one.node.setAttribute('data-span', 'full');
+  if (asked) {
+    requestAnimationFrame(() => {
+      one.details.open = true;
+      one.node.scrollIntoView({ block: 'start' });
+    });
+  }
+  return one.node;
 }
-
-refresh = start({
-  tab: 'questions',
-  load,
-});
