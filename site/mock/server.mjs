@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { clockMoment, clockNear, clockOf, mountTracker, trackerSeed, zoneOr } from './schedule.mjs';
 import * as mockBrackets from './brackets.mjs';
+import { familyLines, genreFamilies, genreFamily, genreQualifiers } from '../public/assets/listfilter.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = resolve(HERE, '..', 'public');
@@ -359,6 +360,16 @@ const LOG_LEVEL_FEATURES = [
   ['posts', 'posts', 'posts'],
   ['minutes', 'meeting minutes', 'minutes'],
 ];
+
+const RUNS_GENRE_QUALIFIERS_DEFAULT = 'action, 2d, 3d, kart, third-person, first-person';
+const RUNS_GENRE_FAMILIES_DEFAULT = [
+  'racing: racer, racers, race, kart racer, kart racing',
+  'platformer: platform, platformers, 2d platformer, 3d platformer',
+  'roguelike: rogue-like, rogue like, roguelite, rogue-lite',
+  "shooter: shooters, fps, tps, shmup, shoot 'em up, third-person shooter, first-person shooter",
+  'adventure: action-adventure, action adventure',
+  'fighting: fighter, fighting game',
+].join('\n');
 
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
@@ -868,6 +879,11 @@ const SETTING_SPECS = [
   ["runs_lookup_none", "text", "Nothing in the BaF runs database matches **{query}**.", "Nothing in the BaF runs database matches **{query}**.", "what the /runs panel says when no game matches; {query} is what was typed"],
   ["runs_lookup_seen", "text", "seen {n} time(s), last {date} at {event}", "seen {n} time(s), last {date} at {event}", "the first line under a game in the /runs panel; {n} is how many times it was run, {date} and {event} the latest run; {series}, {genre} and {tags} too"],
   ["runs_lookup_tags", "text", "{tags}", "{tags}", "the line under a game's heading in the /runs panel, drawn only when the game has a series or a genre; {series}, {genre}, and {tags} (the ones set, joined by ·)"],
+  ["runs_lookup_more", "text", "… and {more} more", "… and {more} more", "the last line under a game in the /runs panel when it has more runs than are listed; {more} is how many more"],
+  ["runs_lookup_count", "text", "{runs} run(s) · {games} game(s)", "{runs} run(s) · {games} game(s)", "the line the /runs panel opens with; {runs} is how many BaF runs there are, {games} how many games"],
+  ["runs_lookup_no_date", "text", "no date", "no date", "the date word in the /runs panel for a run with no date"],
+  ["runs_genre_qualifiers", "text", RUNS_GENRE_QUALIFIERS_DEFAULT, RUNS_GENRE_QUALIFIERS_DEFAULT, "words left out of a genre before the BaF runs page groups it into a family, separated by commas; capitals, hyphens and slashes do not matter, so Action-adventure groups as adventure and Third-person shooter as shooter. The genre itself keeps every word"],
+  ["runs_genre_families", "text", RUNS_GENRE_FAMILIES_DEFAULT, RUNS_GENRE_FAMILIES_DEFAULT, "the genre families the BaF runs page and /runs filter and search by, one per line as the family, a colon and the other genres that belong to it separated by commas — racing: racer, kart racer. A genre is matched whole first, then without the words in runs_genre_qualifiers; the first family that matches wins, and a genre no family names is its own family"],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_stale_archive_reads", "int", 3, 3, "how many reads of a marathon's schedule in a row must fail before it moves to the archive as unreadable, once marathon_stale_archive_hours have also passed — a schedule that is not published yet never counts, and a paused or ignored marathon never moves. Restore brings it back, and so does its feed listing it again with a schedule that reads. 3 by default; 0 never archives an unreadable marathon", null, 20, 0],
   ["marathon_stale_archive_hours", "int", 24, 24, "how many hours a marathon's schedule must have gone without an answer before marathon_stale_archive_reads failed reads move it to the archive — counted from the last read that worked, or from a Restore or Resume since. 24 by default; 0 needs the failed reads alone", null, 720, 0],
@@ -1794,7 +1810,7 @@ function seedState() {
   bafRuns: seedBafRuns(),
   bafEdits: {},
   bafSeries: { 'super metroid': 'Metroid' },
-  bafGenre: { 'hollow knight': 'Metroidvania' },
+  bafGenre: { 'hollow knight': 'Metroidvania', 'mario kart 8 deluxe': 'Kart racer', 'f-zero gx': 'Racing' },
   marathonPeople: seedMarathonPeople(),
   marathonFeeds: seedMarathonFeeds(),
   marathonSpotlights: seedMarathonSpotlights(),
@@ -2629,6 +2645,11 @@ const NAMESPACE_OVERRIDE = {
   runs_lookup_none: 'marathon',
   runs_lookup_seen: 'marathon',
   runs_lookup_tags: 'marathon',
+  runs_lookup_more: 'marathon',
+  runs_lookup_count: 'marathon',
+  runs_lookup_no_date: 'marathon',
+  runs_genre_qualifiers: 'marathon',
+  runs_genre_families: 'marathon',
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
   mod_log_level: 'automod',
@@ -2932,7 +2953,18 @@ function validate(key, value) {
   if (key === 'marathon_hotfix_shows') return checkedShows(value);
   if (key === 'marathon_hotfix_viewer_url') return checkedViewerUrl(value);
   if (key === 'marathon_retro_category') return checkedRetro(value);
+  if (key === 'runs_genre_families') return checkedGenreFamilies(value);
   return value;
+}
+
+// The twin of settings_store.checked_genre_families: every line a family, or the first that is not named.
+function checkedGenreFamilies(value) {
+  const { bad } = familyLines(value);
+  if (bad.length) {
+    const [n, line] = bad[0];
+    throw new Refused(400, 'bad_value', `Line ${n} of the genre families, \`${line.slice(0, 60)}\`, is not a family Black Bloc can read, so nothing was changed. Write each family as its name, a colon and the genres that belong to it, separated by commas — \`racing: racer, kart racer\`.`);
+  }
+  return String(value).split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join('\n');
 }
 
 // The twin of settings_store.checked_retro: one Twitch category name, never blank.
@@ -12118,6 +12150,8 @@ function seedBafRuns() {
   return [
     { id: 1, how: 'hand', event_name: 'BtB 2025', event_source: null, event_ref: null, run_ref: null, started_at: '2025-03-15T20:00:00+00:00', game: 'Super Metroid', category: 'Any%', people: people('Casey', MEMBERS[1].id), note: 'Couch run', added_by: STAFF.id },
     { id: 2, how: 'imported', event_name: 'Frost 2024', event_source: null, event_ref: null, run_ref: null, started_at: '2024-12-07T22:00:00+00:00', game: 'Hollow Knight', category: 'Any% NMG', people: people('KnightFan'), note: '', added_by: STAFF.id },
+    { id: 3, how: 'hand', event_name: 'BtB 2025', event_source: null, event_ref: null, run_ref: null, started_at: '2025-03-16T01:00:00+00:00', game: 'Mario Kart 8 Deluxe', category: '48 Tracks', people: people('Casey', MEMBERS[1].id), note: '', added_by: STAFF.id },
+    { id: 4, how: 'imported', event_name: 'Frost 2024', event_source: null, event_ref: null, run_ref: null, started_at: '2024-12-08T03:00:00+00:00', game: 'F-Zero GX', category: 'Story', people: people('KnightFan'), note: '', added_by: STAFF.id },
   ];
 }
 
@@ -12139,8 +12173,17 @@ function runsLine(runners) {
   return runners.map((one) => (one.linked && one.name && one.name.toLowerCase() !== one.display.toLowerCase() ? `${one.display} (${one.name})` : one.display)).join(', ');
 }
 
+function runsGenreRule() {
+  const read = (key, fallback) => {
+    const found = state.settings.get(key);
+    return typeof found === 'string' ? found : fallback;
+  };
+  return [genreQualifiers(read('runs_genre_qualifiers', RUNS_GENRE_QUALIFIERS_DEFAULT)), genreFamilies(read('runs_genre_families', RUNS_GENRE_FAMILIES_DEFAULT))];
+}
+
 function runsShaped(given) {
   const gameKey = runsKey(given.game);
+  const genre = state.bafGenre[gameKey] || '';
   return {
     key: given.key,
     how: given.how,
@@ -12154,7 +12197,8 @@ function runsShaped(given) {
     game: given.game,
     game_key: gameKey,
     series: state.bafSeries[gameKey] || '',
-    genre: state.bafGenre[gameKey] || '',
+    genre,
+    genre_family: genreFamily(genre, ...runsGenreRule()),
     category: given.category || '',
     runners: given.runners,
     runners_text: runsLine(given.runners),
@@ -12247,6 +12291,7 @@ function runsGames(rows) {
       game_key: key,
       series: last.series,
       genre: last.genre,
+      genre_family: last.genre_family,
       times: runs.length,
       last_date: last.date,
       last_event: last.event,
@@ -12332,6 +12377,7 @@ route('GET', '/api/runs', (context) => {
     events: runsEvents(),
     series_names: [...new Set(every.map((row) => row.series).filter(Boolean))].sort(),
     genre_names: [...new Set(every.map((row) => row.genre).filter(Boolean))].sort(),
+    genre_families: runsGenreRule()[1].map(([family, aliases]) => ({ family, aliases })),
     sources: runsSetting('runs_sources', ['gdq', 'gdq_hotfix']),
     parts: runsSetting('runs_parts', ['runner']),
   };

@@ -2762,6 +2762,7 @@
         "events",
         "series_names",
         "genre_names",
+        "genre_families",
         "sources",
         "parts"
       ],
@@ -2780,6 +2781,7 @@
           "game_key",
           "series",
           "genre",
+          "genre_family",
           "category",
           "runners",
           "runners_text",
@@ -2815,6 +2817,7 @@
           "game_key",
           "series",
           "genre",
+          "genre_family",
           "times",
           "last_date",
           "last_event",

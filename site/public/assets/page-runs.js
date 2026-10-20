@@ -10,6 +10,8 @@ import {
   closeDrawer,
   countedChoices,
   el,
+  familyLabel,
+  familyTerms,
   field,
   filterChip,
   filterSelect,
@@ -54,7 +56,7 @@ const state = {
   removed: false,
   sort: { key: 'date', dir: -1 },
 };
-let payload = { rows: [], events: [], series_names: [], genre_names: [] };
+let payload = { rows: [], events: [], series_names: [], genre_names: [], genre_families: [] };
 let games = [];
 let refresh = () => {};
 let showView = () => {};
@@ -67,6 +69,7 @@ function readHash() {
   state.view = found.get('view') === 'games' ? 'games' : 'runs';
   state.year = found.get('year') || ALL;
   for (const name of PICKS) state[name] = found.get(name) || '';
+  if (state.genre !== NO_TAG) state.genre = state.genre.toLowerCase();
   state.removed = found.get('removed') === '1';
 }
 
@@ -121,7 +124,8 @@ function distinct(list) {
 }
 
 const ruleFor = (on, test) => ({ filters: [[ALL, 'All', null], ['on', 'on', test]], filter: on ? 'on' : ALL });
-const tagTest = (name) => (item) => (state[name] === NO_TAG ? !item[name] : item[name] === state[name]);
+const TAG_VALUES = { series: (item) => item.series, genre: (item) => item.genre_family };
+const tagTest = (name) => (item) => (state[name] === NO_TAG ? !item[name] : TAG_VALUES[name](item) === state[name]);
 const tagRules = () => TAGS.map((name) => ruleFor(state[name], tagTest(name)));
 
 function dimensionRules() {
@@ -135,7 +139,10 @@ function dimensionRules() {
 }
 
 function rowText(row) {
-  return [row.game, row.category, row.runners_text, row.event, row.series, row.genre, row.note].join(' ');
+  return [
+    row.game, row.category, row.runners_text, row.event, row.series, row.genre,
+    familyTerms(row.genre_family, payload.genre_families), row.note,
+  ].join(' ');
 }
 
 function shownRows() {
@@ -158,10 +165,10 @@ function latestFirst(rows) {
   return (a, b) => (latest.get(b) || '').localeCompare(latest.get(a) || '') || String(a).localeCompare(String(b));
 }
 
-function tagChoices(name, none) {
+function tagChoices(name, none, label) {
   return (items) => {
     const blank = items.filter((item) => !item[name]).length;
-    const named = countedChoices(items, (item) => [item[name]]);
+    const named = countedChoices(items, (item) => [TAG_VALUES[name](item)], { label });
     return named.length || state[name] ? [...named, [NO_TAG, `${none} (${blank})`]] : [];
   };
 }
@@ -170,7 +177,7 @@ const PICKERS = {
   event: { all: 'All events', choices: (rows) => countedChoices(rows, (row) => [row.event], { order: latestFirst(rows) }) },
   runner: { all: 'All runners', choices: (rows) => countedChoices(rows, (row) => row.runners.map((one) => one.display)) },
   series: { all: 'All series', choices: tagChoices('series', 'No series') },
-  genre: { all: 'All genres', choices: tagChoices('genre', 'No genre') },
+  genre: { all: 'All genres', choices: tagChoices('genre', 'No genre', familyLabel) },
 };
 
 function pickers(items, names, again) {
@@ -688,6 +695,7 @@ async function load() {
     events: listOf(found, 'events'),
     series_names: listOf(found, 'series_names'),
     genre_names: listOf(found, 'genre_names'),
+    genre_families: listOf(found, 'genre_families').map((one) => [one.family, one.aliases || []]),
   };
   games = listOf(grouped, 'games');
   const aside = document.getElementById('page-aside');
