@@ -549,7 +549,7 @@ def live_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always:
 
 
 def upcoming_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool) -> Any:
-    if not always and store.get(guild.id, "events_mode") == "off":
+    if not always and not block_look.shows(store.get(guild.id, "events_mode")):
         return None
     return upcoming_drawn(store, guild, sample)
 

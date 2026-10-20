@@ -3270,17 +3270,19 @@ async def test_the_live_block_lists_announced_go_live_and_spotlight_streams_once
     ]
 
 
-async def test_the_live_block_draws_nothing_while_go_live_is_off(bot):
+@pytest.mark.parametrize(("mode", "shown"), [("on", True), ("shadow", False), ("off", False)])
+async def test_the_live_block_draws_only_while_go_live_is_on(bot, mode, shown):
     from types import SimpleNamespace
 
     guild = SimpleNamespace(id=GUILD)
-    await bot.store.set(GUILD, "golive_mode", "off")
-    assert cog_module.block_parts(bot, guild, []) is None
+    await bot.store.set(GUILD, "golive_mode", mode)
 
-    await bot.store.set(GUILD, "golive_mode", "shadow")
-    embed, view, stamp = cog_module.block_parts(bot, guild, [])
+    parts = cog_module.block_parts(bot, guild, [])
 
-    assert embed.title == "Live now" and view is None and stamp
+    assert (parts is not None) is shown
+    if shown:
+        embed, view, stamp = parts
+        assert embed.title == "Live now" and view is None and stamp
 
 
 async def test_the_gate_reads_the_opt_out_first_then_the_role_filters(cog, bot, db):

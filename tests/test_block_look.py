@@ -1,3 +1,5 @@
+import pytest
+
 from black_bloc import block_look
 from black_bloc.settings_store import BLOCKS_LIVE_DEFAULTS as SHIPPED
 
@@ -71,3 +73,10 @@ def test_a_look_with_no_words_draws_no_card_and_its_buttons_go_five_to_a_row():
         ("L5", "https://example.org/5", 1),
     ]
     assert block_look.view_of(block_look.Look("Links", "")) is None
+
+
+@pytest.mark.parametrize(
+    ("mode", "shown"), [("on", True), ("shadow", False), ("off", False), (None, False)]
+)
+def test_a_feature_block_draws_only_while_its_feature_is_on(mode, shown):
+    assert block_look.shows(mode) is shown

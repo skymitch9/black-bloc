@@ -5417,7 +5417,8 @@ async def test_cog_load_registers_the_propose_block_beside_the_decision_buttons(
 # --- blocks-live: the upcoming-events block reads the events feature's own store ----------------
 
 
-async def test_the_upcoming_block_lists_approved_events_only_while_events_are_on(bot):
+@pytest.mark.parametrize(("mode", "shown"), [("on", True), ("shadow", False), ("off", False)])
+async def test_the_upcoming_block_draws_only_while_events_are_on(bot, mode, shown):
     ahead = (datetime.now(UTC) + timedelta(days=1)).isoformat()
     await bot.db.conn.execute(
         "INSERT INTO events(guild_id, requester_id, title, starts_at, status, created_at) "
@@ -5425,13 +5426,10 @@ async def test_the_upcoming_block_lists_approved_events_only_while_events_are_on
         (GUILD, ahead, ahead),
     )
     await bot.db.conn.commit()
+    await bot.store.set(GUILD, "events_mode", mode)
 
-    await bot.store.set(GUILD, "events_mode", "on")
     found = await events_cog.upcoming_block_events(bot, bot.guild)
-    assert [one.title for one in found] == ["Games"]
-    await bot.store.set(GUILD, "events_mode", "shadow")
-    assert await events_cog.upcoming_block_events(bot, bot.guild) == []
-    embed = events_cog.upcoming_block_parts(bot, bot.guild, [])[0]
-    assert embed.description.startswith("Nothing is on")
-    await bot.store.set(GUILD, "events_mode", "off")
-    assert events_cog.upcoming_block_parts(bot, bot.guild, []) is None
+    parts = events_cog.upcoming_block_parts(bot, bot.guild, found)
+
+    assert [one.title for one in found] == (["Games"] if shown else [])
+    assert (parts is not None) is shown

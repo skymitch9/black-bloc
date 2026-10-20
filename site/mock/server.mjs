@@ -7045,12 +7045,11 @@ const PREVIEW_BLOCK_DRAWS = {
     return PREVIEW_DRAW.block_proposeevent(read);
   },
   livenow(read, sample, always) {
-    const off = String(read('golive_mode') || 'off') === 'off';
-    if (!always && off) return null;
+    if (!always && String(read('golive_mode') || 'off') !== 'on') return null;
     return PREVIEW_DRAW.block_livenow(read, sample);
   },
   upcoming(read, sample, always) {
-    if (!always && String(read('events_mode') || 'off') === 'off') return null;
+    if (!always && String(read('events_mode') || 'off') !== 'on') return null;
     return PREVIEW_DRAW.block_upcoming(read, sample);
   },
   links(read) {
