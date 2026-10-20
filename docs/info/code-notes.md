@@ -10758,3 +10758,21 @@ Design: [`posts-one-switch-design.md`](posts-one-switch-design.md).
 | `black_bloc/baf_runs_panel.py:156` / `:166` `typed.default` | Search again opens the form with the last query already typed. |
 | `site/public/assets/listfilter.js:1` `matches(..., { match })` | `match: 'words'` routes to `runsMatches`; the default `'text'` is the old substring test, so every other page's search is unchanged (`site/mock/listfilter.test.mjs` proves both). `passes` carries the option through. |
 | `site/public/assets/page-runs.js:140` `rowText` | The Runs sheet searches `row.search` with `match: 'words'`. The Games view's own table box is still the shared substring search. |
+
+## Folding renamed tracked runs — keyed by LINE at `runs-renamed-collapse` (branch `runs-renamed-collapse`, 2026-10-20; re-key after the merge)
+
+Design: `docs/info/baf-runs-design.md` *Folding renamed tracked runs*.
+
+| Where | Why |
+|---|---|
+| `black_bloc/baf_runs.py:283` `TRACKED_SQL` | Reads `actual_ended_at` and `ends_at` as well, for the run's window. Both tables (live and archive) have the columns. |
+| `black_bloc/baf_runs.py:486` `view` → `fold` | Folding happens after the tracked rows are shaped and the edits overlaid, before the hand rows are added, so the hand and imported rows never fold. `search` and `genre_family` are computed after the fold, so a carried category is searchable. `minutes` 0 returns the rows untouched. |
+| `black_bloc/baf_runs.py:499` `Fact` / `_fact_of` | Side facts per tracked key: the marathon id (the row's `marathon_id` is None once archived, so it cannot be used), the run id (newest wins by id, not by date), the window, and the raw stored edits (including an edit equal to the source, which `edited` leaves out). |
+| `black_bloc/baf_runs.py:519` `runner_set` | The shown runners: `user_id`, else the lowercased source name. An edited runner list therefore groups by its edited people. |
+| `black_bloc/baf_runs.py:523` `same_run` | Overlap, or starts at most `minutes` apart (inclusive). A row with no date never folds. |
+| `black_bloc/baf_runs.py:531` `_groups` / `:552` `_top` | A union-find inside each (marathon, game_key, runner set) bucket, so groups chain. `_top` is a module function because a closure in the loop tripped ruff B023. |
+| `black_bloc/baf_runs.py:558` `_carry` | The survivor's own stored edit (any value) blocks a carry. A donor must have the field in `edited` (a real change), and the newest donor wins. `tracked` gets the survivor's source value via `setdefault`. |
+| `black_bloc/baf_runs.py:574` `fold` | A removed older row is not hidden unless the survivor itself is removed. That is how a staff exclusion keeps its Restore, and how Remove on the survivor removes the whole run. |
+| `black_bloc/baf_runs.py:1072` `_edit_tracked` | `field not in shown["carried"]`: a value equal to the source on a carried field is STORED (it pins the sheet's value over the carry) instead of being treated as *no change*. |
+| `site/public/assets/page-runs.js:258` / `:478` | The `N rows` pill (tooltip = the keys) and *Folded rows:* under the Date in the editor. |
+| `site/mock/server.mjs:12252` `runsFold` | The mock's copy of `fold` and `_carry`. `runsTracked(facts)` fills the side facts. The Game Masters seed rows are in `seedMarathonRuns` (171–173), with archive marathon 12 in `seedMarathonArchive`. |
