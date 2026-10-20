@@ -6,6 +6,7 @@ import {
   BLOCK_FILTERS,
   applyFilters,
   blockText,
+  countedChoices,
   matches,
   passes,
   ruleOf,
@@ -77,9 +78,23 @@ is('blocks: exclusive drops any-number', block(eventsKind, '', 'exclusive'), fal
 is('blocks: filter and query combine', block(doorKind, 'birthday', 'on_post'), false);
 is('blocks: unknown filter key falls back to all', block(doorKind, '', 'nonsense'), true);
 
+const runs = [
+  { event: 'BtB 2025', runners: ['Kat', 'PT'] },
+  { event: 'SGDQ 2025', runners: ['kat'] },
+  { event: 'BtB 2025', runners: ['Kat', 'Kat'] },
+  { event: '', runners: [] },
+];
+is('choices: counted per item, blanks dropped, a repeat in one item counted once',
+  countedChoices(runs, (run) => run.runners), [['Kat', 'Kat (2)'], ['kat', 'kat (1)'], ['PT', 'PT (1)']]);
+is('choices: sorted by name, case-insensitive', countedChoices(runs, (run) => [run.event]).map(([key]) => key), ['BtB 2025', 'SGDQ 2025']);
+is('choices: a given order wins',
+  countedChoices(runs, (run) => [run.event], { order: (a, b) => b.localeCompare(a) }).map(([, label]) => label),
+  ['SGDQ 2025 (1)', 'BtB 2025 (2)']);
+is('choices: nothing to choose', countedChoices([], (run) => [run.event]), []);
+
 if (failures.length) {
   console.error('listfilter: not ok');
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log('listfilter: ok - substring search (trimmed, case-insensitive), chips AND search, the Blocks filters');
+console.log('listfilter: ok - substring search (trimmed, case-insensitive), chips AND search, the Blocks filters, counted select choices');

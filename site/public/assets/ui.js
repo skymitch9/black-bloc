@@ -16,10 +16,10 @@ import { messageTree, mountTree } from './discordmock.js';
 import { ICONS } from './icons.js';
 import { channelLabel, humanLabel, modeWord } from './labels.js';
 import { capState, counterState, insertAt, keepsLines, placeholdersFor } from './fieldaids.js';
-import { applyFilters, matches, passes } from './listfilter.js';
+import { applyFilters, countedChoices, matches, passes } from './listfilter.js';
 import * as md from './mdformat.js';
 
-export { applyFilters, channelLabel, humanLabel, matches, passes };
+export { applyFilters, channelLabel, countedChoices, humanLabel, matches, passes };
 
 const OUTAGE_WRITE = 'Black Bloc did not answer, so nothing was changed. That is an outage, not a ' +
   'permission problem — try again in a minute.';
@@ -928,6 +928,18 @@ export function field(label, control, help = null) {
 
 function optionNode(value, label, selected) {
   return el('option', { value: String(value), text: label, selected: selected || undefined });
+}
+
+export function filterSelect({ all, choices = [], value = '', onChange = null, label = null } = {}) {
+  const wanted = String(value ?? '');
+  const select = el('select', { class: 'input filter-select', 'aria-label': label || all });
+  select.append(optionNode('', all, wanted === ''));
+  for (const [key, text] of choices) select.append(optionNode(key, text, String(key) === wanted));
+  if (wanted && !choices.some(([key]) => String(key) === wanted)) select.append(optionNode(wanted, `${wanted} (0)`, true));
+  select.addEventListener('change', () => {
+    if (onChange) onChange(select.value);
+  });
+  return select;
 }
 
 export const HERE_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';

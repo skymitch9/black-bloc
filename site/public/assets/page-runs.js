@@ -8,8 +8,11 @@ import {
   card,
   chipBar,
   closeDrawer,
+  countedChoices,
   el,
   field,
+  filterChip,
+  filterSelect,
   idsIn,
   keepSaying,
   memberPicker,
@@ -34,47 +37,50 @@ const NO_RUNS = 'No BaF runs in GDQ events yet.';
 const NO_MATCH = 'Nothing here matches.';
 const OTHER = '__other';
 const ALL = 'all';
-const NO_SERIES = '__none';
+const NO_TAG = '__none';
 const VIEWS = [['runs', 'Runs'], ['games', 'Games']];
-const HOW_CHIPS = [
-  [ALL, 'All', (row) => !row.removed],
-  ['tracked', 'Tracked', (row) => !row.removed && row.how === 'tracked'],
-  ['imported', 'Imported', (row) => !row.removed && row.how === 'imported'],
-  ['hand', 'By hand', (row) => !row.removed && row.how === 'hand'],
-  ['removed', 'Removed', (row) => row.removed],
-];
+const PICKS = ['event', 'runner', 'series', 'genre'];
+const TAGS = ['series', 'genre'];
 const FIELD_WORDS = { date: 'Date', event: 'Event', game: 'Game', category: 'Category', runners: 'Runner(s)', note: 'Note' };
 
 const state = {
   view: 'runs',
   query: '',
-  how: ALL,
   year: ALL,
-  event: ALL,
-  series: ALL,
-  runner: ALL,
+  event: '',
+  runner: '',
+  series: '',
+  genre: '',
+  removed: false,
   sort: { key: 'date', dir: -1 },
 };
-let payload = { rows: [], events: [], series_names: [] };
+let payload = { rows: [], events: [], series_names: [], genre_names: [] };
 let games = [];
 let refresh = () => {};
+let showView = () => {};
 
 const rowPath = (key, tail = '') => `/api/runs/${encodeURIComponent(key)}${tail}`;
 
 function readHash() {
-  const raw = String(location.hash || '').replace(/^#/, '');
-  const found = new URLSearchParams(raw);
-  if (found.has('q')) {
-    state.query = String(found.get('q') || '').trim().toLowerCase();
-    state.view = 'runs';
-  }
-  if (found.get('view') === 'games') state.view = 'games';
+  const found = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+  state.query = String(found.get('q') || '').trim().toLowerCase();
+  state.view = found.get('view') === 'games' ? 'games' : 'runs';
+  state.year = found.get('year') || ALL;
+  for (const name of PICKS) state[name] = found.get(name) || '';
+  state.removed = found.get('removed') === '1';
+}
+
+function hashState() {
+  return JSON.stringify([state.view, state.query, state.year, state.removed, ...PICKS.map((name) => state[name])]);
 }
 
 function writeHash() {
   const parts = new URLSearchParams();
   if (state.query) parts.set('q', state.query);
   if (state.view === 'games') parts.set('view', 'games');
+  if (state.year !== ALL) parts.set('year', state.year);
+  for (const name of PICKS) if (state[name]) parts.set(name, state[name]);
+  if (state.removed) parts.set('removed', '1');
   const text = parts.toString().replace(/\+/g, '%20');
   history.replaceState(null, '', text ? `#${text}` : location.pathname);
 }
@@ -114,24 +120,22 @@ function distinct(list) {
   return [...new Set(list.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
 }
 
+const ruleFor = (on, test) => ({ filters: [[ALL, 'All', null], ['on', 'on', test]], filter: on ? 'on' : ALL });
+const tagTest = (name) => (item) => (state[name] === NO_TAG ? !item[name] : item[name] === state[name]);
+const tagRules = () => TAGS.map((name) => ruleFor(state[name], tagTest(name)));
+
 function dimensionRules() {
   return [
-    { filters: HOW_CHIPS, filter: state.how },
-    { filters: [[ALL, 'All', null], [state.year, state.year, (row) => String(row.date || '').startsWith(state.year)]], filter: state.year },
-    { filters: [[ALL, 'All', null], [state.event, state.event, (row) => row.event === state.event]], filter: state.event },
-    {
-      filters: [[ALL, 'All', null], [state.series, state.series, (row) => (state.series === NO_SERIES ? !row.series : row.series === state.series)]],
-      filter: state.series,
-    },
-    {
-      filters: [[ALL, 'All', null], [state.runner, state.runner, (row) => row.runners.some((one) => one.display === state.runner)]],
-      filter: state.runner,
-    },
+    ruleFor(true, (row) => Boolean(row.removed) === state.removed),
+    ruleFor(state.year !== ALL, (row) => String(row.date || '').startsWith(state.year)),
+    ruleFor(state.event, (row) => row.event === state.event),
+    ruleFor(state.runner, (row) => row.runners.some((one) => one.display === state.runner)),
+    ...tagRules(),
   ];
 }
 
 function rowText(row) {
-  return [row.game, row.category, row.runners_text, row.event, row.series, row.note].join(' ');
+  return [row.game, row.category, row.runners_text, row.event, row.series, row.genre, row.note].join(' ');
 }
 
 function shownRows() {
@@ -140,11 +144,62 @@ function shownRows() {
     && passes(row, { text: rowText, query: state.query }));
 }
 
+function shownGames() {
+  const rules = tagRules();
+  return games.filter((game) => rules.every((rule) => passes(game, rule)));
+}
+
+function latestFirst(rows) {
+  const latest = new Map();
+  for (const row of rows) {
+    const date = String(row.date || '');
+    if (date > (latest.get(row.event) || '')) latest.set(row.event, date);
+  }
+  return (a, b) => (latest.get(b) || '').localeCompare(latest.get(a) || '') || String(a).localeCompare(String(b));
+}
+
+function tagChoices(name, none) {
+  return (items) => {
+    const blank = items.filter((item) => !item[name]).length;
+    const named = countedChoices(items, (item) => [item[name]]);
+    return named.length || state[name] ? [...named, [NO_TAG, `${none} (${blank})`]] : [];
+  };
+}
+
+const PICKERS = {
+  event: { all: 'All events', choices: (rows) => countedChoices(rows, (row) => [row.event], { order: latestFirst(rows) }) },
+  runner: { all: 'All runners', choices: (rows) => countedChoices(rows, (row) => row.runners.map((one) => one.display)) },
+  series: { all: 'All series', choices: tagChoices('series', 'No series') },
+  genre: { all: 'All genres', choices: tagChoices('genre', 'No genre') },
+};
+
+function pickers(items, names, again) {
+  const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.pick : null;
+  const made = names.map((name) => {
+    const choices = PICKERS[name].choices(items);
+    if (!choices.length && !state[name]) return null;
+    const select = filterSelect({
+      all: PICKERS[name].all,
+      choices,
+      value: state[name],
+      onChange: (value) => {
+        state[name] = value;
+        again();
+      },
+    });
+    select.dataset.pick = name;
+    return select;
+  }).filter(Boolean);
+  if (focused) queueMicrotask(() => made.find((one) => one.dataset.pick === focused)?.focus());
+  return made;
+}
+
 const SORTERS = {
   date: (row) => String(row.date || ''),
   event: (row) => String(row.event || '').toLowerCase(),
   game: (row) => row.game_key,
   series: (row) => String(row.series || '').toLowerCase(),
+  genre: (row) => String(row.genre || '').toLowerCase(),
   category: (row) => String(row.category || '').toLowerCase(),
   runners: (row) => String(row.runners_text || '').toLowerCase(),
   how: (row) => row.how,
@@ -191,6 +246,7 @@ function runColumns() {
     { label: 'Event', sort: 'event', cell: eventCell },
     { label: 'Game', sort: 'game', cell: (row) => row.game },
     { label: 'Series', sort: 'series', cell: (row) => row.series },
+    { label: 'Genre', sort: 'genre', cell: (row) => row.genre },
     { label: 'Category', sort: 'category', cell: (row) => row.category },
     { label: 'Runner(s)', sort: 'runners', cell: runnersCell },
     {
@@ -214,26 +270,31 @@ function runColumns() {
 let grid = null;
 let counter = null;
 let chipHolder = null;
+let pickHolder = null;
 
-function paintChips() {
-  const rows = payload.rows;
-  const pick = (name) => (key) => {
-    state[name] = key;
-    paint();
-  };
-  const groups = [
-    ['How', HOW_CHIPS.map(([key, label]) => [key, label]), 'how'],
-    ['Year', chipsFrom(distinct(rows.map((row) => String(row.date || '').slice(0, 4))).reverse()), 'year'],
-    ['Event', chipsFrom(distinct(rows.map((row) => row.event))), 'event'],
-    ['Series', [...chipsFrom(distinct(rows.map((row) => row.series))), [NO_SERIES, 'No series', null]], 'series'],
-    ['Runner', chipsFrom(distinct(rows.flatMap((row) => row.runners.map((one) => one.display)))), 'runner'],
-  ];
-  chipHolder.replaceChildren(...groups
-    .filter(([, choices, name]) => name === 'how' || choices.length > 2 || state[name] !== ALL)
-    .map(([label, choices, name]) => el('div', { class: 'runs-chiprow' }, [
-      el('span', { class: 'runs-chiplabel', text: label }),
-      chipBar(choices, state[name], pick(name)),
-    ])));
+function paintFilters() {
+  const kept = payload.rows.filter((row) => Boolean(row.removed) === state.removed);
+  const gone = payload.rows.filter((row) => row.removed).length;
+  pickHolder.replaceChildren(
+    ...pickers(kept, PICKS, paint),
+    gone || state.removed
+      ? filterChip(`Removed (${gone})`, state.removed, () => {
+        state.removed = !state.removed;
+        paint();
+      })
+      : null,
+  );
+  const years = chipsFrom(distinct(kept.map((row) => String(row.date || '').slice(0, 4))).reverse());
+  const yearRow = years.length > 2 || state.year !== ALL
+    ? el('div', { class: 'runs-chiprow' }, [
+      el('span', { class: 'runs-chiplabel', text: 'Year' }),
+      chipBar(years, state.year, (key) => {
+        state.year = key;
+        paint();
+      }),
+    ])
+    : null;
+  chipHolder.replaceChildren(...[yearRow].filter(Boolean));
 }
 
 function paint() {
@@ -245,14 +306,15 @@ function paint() {
     ? sortable(table(columns, rows, { search: false }), columns)
     : sayNothing(payload.rows.length ? NO_MATCH : NO_RUNS);
   grid.replaceChildren(built);
-  counter.textContent = `${rows.length} of ${payload.rows.filter((row) => !row.removed).length}`;
-  paintChips();
+  counter.textContent = `${rows.length} of ${payload.rows.filter((row) => Boolean(row.removed) === state.removed).length}`;
+  paintFilters();
 }
 
 function runsView() {
   grid = el('div', { class: 'runs-grid' });
   counter = el('span', { class: 'table-count' });
   chipHolder = el('div', { class: 'runs-chips' });
+  pickHolder = el('div', { class: 'runs-picks' });
   const search = searchField({
     label: 'Search runs',
     placeholder: 'game, category, runner, event',
@@ -262,18 +324,20 @@ function runsView() {
       paint();
     },
   });
-  const tools = el('div', { class: 'table-tools' }, [search, el('span', { class: 'table-gap' }), counter]);
+  const tools = el('div', { class: 'table-tools' }, [search, pickHolder, el('span', { class: 'table-gap' }), counter]);
   const node = card(null, [tools, chipHolder, grid], { flush: false });
   paint();
   return node;
 }
 
-function seriesBox(game, say) {
-  const input = el('input', { class: 'input', list: 'runs-series-names', value: game.series || undefined, 'aria-label': `Series of ${game.game}` });
+const TAG_WORDS = { series: 'Series', genre: 'Genre' };
+
+function tagBox(game, say, tag) {
+  const input = el('input', { class: 'input', list: `runs-${tag}-names`, value: game[tag] || undefined, 'aria-label': `${TAG_WORDS[tag]} of ${game.game}` });
   input.addEventListener('change', async () => {
     const done = await run(
       say,
-      () => send(`/api/runs/series/${encodeURIComponent(game.game_key)}`, 'PUT', { series: input.value }),
+      () => send(`/api/runs/${tag}/${encodeURIComponent(game.game_key)}`, 'PUT', { [tag]: input.value }),
       (found) => found?.message || 'Saved.',
     );
     if (done.ok) {
@@ -290,18 +354,25 @@ function gamesView() {
     {
       label: 'Game',
       cell: (game) => textAction(game.game, () => {
-        Object.assign(state, { how: ALL, year: ALL, event: ALL, series: ALL, runner: ALL });
         location.hash = `#q=${encodeURIComponent(game.game_key)}`;
       }),
     },
-    { label: 'Series', cell: (game) => seriesBox(game, say) },
+    { label: 'Series', cell: (game) => tagBox(game, say, 'series') },
+    { label: 'Genre', cell: (game) => tagBox(game, say, 'genre') },
     { label: 'Times featured', cell: (game) => String(game.times) },
     { label: 'Last seen', cell: (game) => `${dateWord(game.last_date)} · ${game.last_event || '—'}` },
     { label: 'Runners', cell: (game) => game.runners.join(', ') },
     { label: 'Categories', cell: (game) => game.categories.join(', ') },
   ];
-  const list = el('datalist', { id: 'runs-series-names' }, payload.series_names.map((name) => el('option', { value: name })));
-  return card(null, [list, table(columns, games, { empty: NO_RUNS, search: true, searchLabel: 'Search games' }), say]);
+  const lists = TAGS.map((tag) => el('datalist', { id: `runs-${tag}-names` }, payload[`${tag}_names`].map((name) => el('option', { value: name }))));
+  const picks = pickers(games, TAGS, showView);
+  const shown = shownGames();
+  return card(null, [
+    ...lists,
+    picks.length ? el('div', { class: 'table-tools runs-picks' }, picks) : null,
+    table(columns, shown, { empty: games.length ? NO_MATCH : NO_RUNS, search: true, searchLabel: 'Search games' }),
+    say,
+  ].filter(Boolean));
 }
 
 function localValue(iso) {
@@ -405,6 +476,7 @@ function openEditor(row = null) {
   const game = el('input', { class: 'input', value: row ? row.game : undefined });
   const category = el('input', { class: 'input', value: row ? row.category || undefined : undefined });
   const series = el('input', { class: 'input', list: 'runs-editor-series', value: row ? row.series || undefined : undefined });
+  const genre = el('input', { class: 'input', list: 'runs-editor-genre', value: row ? row.genre || undefined : undefined });
   const note = el('textarea', { class: 'input', rows: '2' });
   note.value = row ? row.note || '' : '';
   const event = eventEditor(row);
@@ -419,6 +491,7 @@ function openEditor(row = null) {
     if (!row || category.value.trim() !== (row.category || '')) found.category = category.value.trim();
     if (!row || runners.changed()) Object.assign(found, runners.payload());
     if (!row || series.value.trim() !== (row.series || '')) found.series = series.value.trim();
+    if (!row || genre.value.trim() !== (row.genre || '')) found.genre = genre.value.trim();
     if (!row || note.value.trim() !== (row.note || '')) found.note = note.value.trim();
     return found;
   };
@@ -458,12 +531,14 @@ function openEditor(row = null) {
 
   openDrawer(row ? row.game : 'Add a run', [
     el('datalist', { id: 'runs-editor-series' }, payload.series_names.map((name) => el('option', { value: name }))),
+    el('datalist', { id: 'runs-editor-genre' }, payload.genre_names.map((name) => el('option', { value: name }))),
     when.node,
     event.node,
     field('Game', game, was(row, 'game')),
     field('Category', category, was(row, 'category')),
     runners.node,
     field('Series', series),
+    field('Genre', genre),
     field('Note', note, was(row, 'note')),
     say,
     bar(moves),
@@ -612,13 +687,14 @@ async function load() {
     rows: listOf(found, 'rows'),
     events: listOf(found, 'events'),
     series_names: listOf(found, 'series_names'),
+    genre_names: listOf(found, 'genre_names'),
   };
   games = listOf(grouped, 'games');
   const aside = document.getElementById('page-aside');
   if (aside) aside.replaceChildren(bar(asideButtons()));
   const say = sayAgain('runs.page', notice());
   const holder = el('div');
-  const showView = () => {
+  showView = () => {
     writeHash();
     holder.replaceChildren(state.view === 'games' ? gamesView() : runsView());
   };
@@ -638,7 +714,7 @@ readHash();
 refresh = start({ tab: 'runs', load });
 
 window.addEventListener('hashchange', () => {
-  const before = `${state.view}|${state.query}`;
+  const before = hashState();
   readHash();
-  if (`${state.view}|${state.query}` !== before) refresh();
+  if (hashState() !== before) refresh();
 });
