@@ -540,7 +540,7 @@ const SETTING_SPECS = [
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
   ['rolemenu_approval_channel_id', 'channel', '800000000000000005', null, 'where a role request card is posted for staff to answer; defaults to staff_channel_id'],
   ['rolemenu_approver_role_id', 'role', null, null, 'role mentioned when a role request needs answering'],
-  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the posted panels, and takes back every menu role Black Bloc handed out from a panel, a request or the staff picker (asked first, with how many); a role given anywhere else stays. on posts them again and gives nothing back; off also hides /rolemenu while hiding is on, and the timed roles stay under /mod ▸ Role grants…', ['off', 'on']],
+  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the posted panels, and takes back every menu role a member picked from a panel or had approved on request (asked first, with how many); a role staff handed over or given anywhere else stays. on posts them again and gives nothing back; off also hides /rolemenu while hiding is on, and the timed roles stay under /mod ▸ Role grants…', ['off', 'on']],
   ['chat_mode', 'enum', 'on', 'on', 'off, or on (Black Bloc answers when somebody @-mentions it)', ['off', 'on']],
   ['chat_cooldown_seconds', 'int', 20, 20, 'seconds before the same person gets another @-mention reply, 5 to 600', null, 600, 5],
   ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
@@ -2100,6 +2100,13 @@ function seedState() {
   nextMenu: 4,
   nextRequest: 5,
   nextGrant: 6,
+  // small-fixes: who wears a ping role pings itself put on (black_bloc/handed_roles.py reads
+  // the pings.follow / pings.events_on rows of the action log for this).
+  pingsHanded: [
+    { user_id: MEMBERS[2].id, role_id: '900000000000000006' },
+    { user_id: MEMBERS[3].id, role_id: '900000000000000006' },
+    { user_id: MEMBERS[3].id, role_id: '900000000000000007' },
+  ],
   applicationForms: [
     {
       id: 1,
@@ -5240,6 +5247,48 @@ function consentFlipped(to) {
   return { from: to === 'optin' ? 'optout' : 'optin', to, count: moved.length };
 }
 
+// small-fixes: an off that takes roles back answers with a count first (black_bloc/handed_roles.py).
+const HANDED_ASKS = { pings_mode: 'pings_off_confirm_said', rolemenu_mode: 'rolemenu_off_confirm_said' };
+const HANDED_KINDS = { pings_mode: 'pings.roles_taken_back', rolemenu_mode: 'role_menu.roles_taken_back' };
+const MENU_PICKED = ['menu', 'approval'];
+
+function handedHeld(key) {
+  if (key === 'pings_mode') return state.pingsHanded.map((row) => ({ ...row }));
+  const menuRoles = new Set(state.menus.flatMap((menu) => menu.options.map((one) => String(one.role_id))));
+  return state.grants
+    .filter((row) => row.removed_at === null && MENU_PICKED.includes(row.source) && menuRoles.has(String(row.role_id)))
+    .map((row) => ({ user_id: String(row.user_id), role_id: String(row.role_id), grant_id: row.id }));
+}
+
+function handedAsked(key, value, confirmed) {
+  if (confirmed || !(key in HANDED_ASKS) || value !== 'off') return;
+  const members = new Set(handedHeld(key).map((row) => row.user_id)).size;
+  if (!members) return;
+  const said = String(state.settings.get(HANDED_ASKS[key]) || specOf(HANDED_ASKS[key])[3]).split('{count}').join(String(members));
+  throw new Refused(409, 'confirm_needed', said);
+}
+
+function handedTaken(key) {
+  if (!(key in HANDED_ASKS) || state.settings.get(key) !== 'off') return;
+  const held = handedHeld(key);
+  if (!held.length) return;
+  if (key === 'pings_mode') state.pingsHanded = [];
+  for (const row of held) {
+    const grant = state.grants.find((one) => one.id === row.grant_id);
+    if (grant) Object.assign(grant, { removed_at: now(), removed_reason: 'feature_off' });
+  }
+  logAction(HANDED_KINDS[key], {
+    details: {
+      key,
+      members: new Set(held.map((row) => row.user_id)).size,
+      roles: held.length,
+      failed: 0,
+      dms: held.filter((row) => state.grants.find((one) => one.id === row.grant_id)?.source === 'approval').length,
+      taken: held.map((row) => [row.user_id, row.role_id]),
+    },
+  });
+}
+
 route('PUT', '/api/settings/:key', async (context) => {
   requireStaff(context.session);
   if (STRUCTURE_LEADS_KEYS.includes(context.params.key)) requireLeads(context.session);
@@ -5250,8 +5299,10 @@ route('PUT', '/api/settings/:key', async (context) => {
     consentAsked(value, body.confirm === true);
     if (value !== (state.settings.get(CONSENT_KEY) || 'optout')) consentFlipped(value);
   }
+  handedAsked(context.params.key, value, body.confirm === true);
   state.settings.set(context.params.key, value);
   settingChanged(context.params.key);
+  handedTaken(context.params.key);
   state.audit.unshift({ key: context.params.key, value, updated_by: STAFF.id, updated_at: now() });
   logAction('web.settings.set', { reason: `${context.params.key} = ${JSON.stringify(value)}`, details: { key: context.params.key, value, via: 'website' } });
   return keyRow(context.params.key);
@@ -5266,8 +5317,10 @@ route('DELETE', '/api/settings/:key', (context) => {
     consentAsked(spec[3], context.url.searchParams.get('confirm') === 'true');
     if (spec[3] !== (state.settings.get(CONSENT_KEY) || 'optout')) consentFlipped(spec[3]);
   }
+  handedAsked(context.params.key, spec[3], context.url.searchParams.get('confirm') === 'true');
   state.settings.set(context.params.key, spec[3] ?? null);
   settingChanged(context.params.key);
+  handedTaken(context.params.key);
   state.audit.unshift({ key: context.params.key, value: spec[3] ?? null, updated_by: STAFF.id, updated_at: now() });
   logAction('web.settings.clear', { reason: context.params.key, details: { key: context.params.key, via: 'website' } });
   return { ...keyRow(context.params.key), cleared: true };

@@ -14,6 +14,7 @@ from .command_sync import sync_dev_guild
 from .command_visibility import install as install_visibility
 from .config import Settings
 from .guard import TestModeGuard
+from .handed_roles import install as install_handed_roles
 from .intents import build_intents
 from .invite import invite_url
 from .one_optout import apply as migrate_one_optout
@@ -113,6 +114,7 @@ class BlackBlocBot(commands.Bot):
         await sync_dev_guild(self, self.settings.dev_guild_id)
         install_visibility(self)
         install_panels(self)
+        install_handed_roles(self)
         self._start_api()
 
     async def _migrate_posts_switch(self) -> None:

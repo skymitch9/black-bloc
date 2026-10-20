@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ... import button_block, pings
+from ... import button_block, handed_roles, pings
 from ... import pings_onboarding as onboarding
 from ...actionlog import send_logs
 from ...command_errors import AnswersErrors, SafeDynamicItem
@@ -933,16 +933,47 @@ async def run_remake(
     await answer(interaction, outcome.message)
 
 
+async def asked_off(
+    interaction: discord.Interaction, changes: dict[str, Any], previous: Any
+) -> bool:
+    """Pings going off with roles out asks first, with the count; the second press saves it."""
+    bot, guild = interaction.client, interaction.guild
+    if pings.MODE_KEY not in changes:
+        return False
+    asked = await handed_roles.asked(bot, guild, pings.MODE_KEY, changes[pings.MODE_KEY])
+    if asked is None:
+        return False
+    embed, view = build_settings(bot, guild)
+    view.clear_items()
+    await confirm(
+        interaction,
+        view,
+        embed,
+        confirm_items(
+            yes=handed_roles.button_label(bot.store, guild.id, pings.MODE_KEY),
+            no=pings.KEEP_IT,
+            on_yes=lambda one, card: run_settings(one, changes, card, confirmed=True),
+            on_no=lambda one, card: render_settings(one, card),
+        ),
+        previous,
+        question=asked,
+    )
+    return True
+
+
 async def run_settings(
     interaction: discord.Interaction,
     changes: dict[str, Any],
     previous: Any = None,
     *,
     echo: str = "",
+    confirmed: bool = False,
 ) -> None:
     if not await still_staff(interaction):
         return
     if not await opened(interaction, staff=False):
+        return
+    if not confirmed and await asked_off(interaction, changes, previous):
         return
     said = await pings.save_settings(
         interaction.client, interaction.guild, interaction.user, changes

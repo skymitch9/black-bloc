@@ -1060,10 +1060,10 @@ KEY_HELP: dict[str, str] = {
     "status_prefix": "what goes in front of the member count in Black Bloc's status",
     "rolemenu_mode": (
         "whether members can pick roles from the panels; off takes them down and hides the "
-        "posted panels, and takes back every menu role Black Bloc handed out from a panel, a "
-        "request or the staff picker (asked first, with how many); a role given anywhere else "
-        "stays. on posts them again and gives nothing back; off also hides /rolemenu while hiding "
-        "is on, and the timed roles stay under /mod ▸ Role grants…"
+        "posted panels, and takes back every menu role a member picked from a panel or had "
+        "approved on request (asked first, with how many); a role staff handed over or given "
+        "anywhere else stays. on posts them again and gives nothing back; off also hides "
+        "/rolemenu while hiding is on, and the timed roles stay under /mod ▸ Role grants…"
     ),
     "request_mode": (
         "off, or on (members can ask for things with /request and staff decide on the site)"

@@ -465,7 +465,7 @@ async def test_a_setting_group_reaches_a_key_card_with_its_value_default_and_hel
 
     opened = FakeInteraction(bot, lead)
     await choose(groups, opened, ["birthday"])
-    keys = picker(opened.view, "25 of 27 — the rest are on the site")
+    keys = picker(opened.view, "25 of 28 — the rest are on the site")
 
     card = FakeInteraction(bot, lead)
     await choose(keys, card, ["birthday_color"])
@@ -1906,3 +1906,62 @@ async def test_putting_the_consent_default_back_asks_too(bot, db, member):
     assert bot.store.is_stored(GUILD, "chat_memory_consent")
     done = await clear_key(bot, bot.guild, "chat_memory_consent", member, confirmed=True)
     assert done.ok and bot.store.get(GUILD, "chat_memory_consent") == "optout"
+
+
+# --- an off that takes roles back asks first (small-fixes, 2026-10-20) ---------------------------
+
+
+async def pings_role_out(bot, user_id=41, role_id=51):
+    from black_bloc.actionlog import log_action
+
+    wearer = FakeMember(bot.guild, user_id=user_id)
+    wearer.roles = [FakeRole(role_id)]
+    await log_action(
+        bot, bot.guild, "pings.follow", actor=user_id, target=user_id, details={"role_id": role_id}
+    )
+    return wearer
+
+
+async def test_pings_off_with_roles_out_is_held_until_it_is_confirmed(bot, db, member):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await pings_role_out(bot)
+
+    held = await set_key(bot, bot.guild, "pings_mode", "off", member)
+
+    assert not held.ok and held.status == 409 and held.code == "confirm_needed"
+    assert held.message == (
+        "**1** members hold ping roles Black Bloc handed out; switching pings off removes them."
+    )
+    assert bot.store.get(GUILD, "pings_mode") == "on"
+    done = await set_key(bot, bot.guild, "pings_mode", "off", member, confirmed=True)
+    assert done.ok and bot.store.get(GUILD, "pings_mode") == "off"
+
+
+async def test_pings_off_with_nothing_handed_out_saves_on_the_first_press(bot, db, member):
+    await bot.store.set(GUILD, "pings_mode", "on")
+
+    done = await set_key(bot, bot.guild, "pings_mode", "off", member)
+
+    assert done.ok and bot.store.get(GUILD, "pings_mode") == "off"
+
+
+async def test_resetting_pings_to_its_off_default_asks_too(bot, db, member):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await pings_role_out(bot)
+
+    held = await clear_key(bot, bot.guild, "pings_mode", member)
+
+    assert not held.ok and held.code == "confirm_needed"
+    assert bot.store.is_stored(GUILD, "pings_mode")
+
+
+async def test_the_key_card_asking_wears_the_features_own_yes_and_leave_it(bot, db):
+    embed, view = core_cog.build_key(
+        bot,
+        bot.guild,
+        "pings_mode",
+        asking=core_cog.Asking("off", "**1** members hold ping roles."),
+    )
+
+    assert labels(view)[:2] == ["Yes, switch pings off", "Leave it as it is"]
+    assert "**1** members hold ping roles." in embed.description

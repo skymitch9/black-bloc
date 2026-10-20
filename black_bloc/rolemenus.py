@@ -135,6 +135,7 @@ HOW_LONG = "how_long"
 PUSH_BACK = "push_back"
 END_NOW = "end_now"
 END_YES = "end_yes"
+MODE_OFF_YES = "mode_off_yes"
 LEAVE_IT = "leave_it"
 APPROVE = "approve"
 APPROVE_DAYS = "approve_days"
@@ -405,6 +406,7 @@ __all__ = [
     "KEEP",
     "LABEL_IT",
     "LEAVE_IT",
+    "MODE_OFF_YES",
     "LOGS",
     "MENU",
     "MODE",

@@ -8,7 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from .. import __version__, chat_consent, guides, selftest
+from .. import __version__, chat_consent, guides, handed_roles, selftest
 from .. import settings_panel as sp
 from ..actionlog import log_action, send_logs
 from ..chat_memory import CONSENT_KEY
@@ -101,16 +101,35 @@ def leads_only(
     return None
 
 
+CONFIRMED_KEYS: tuple[str, ...] = (CONSENT_KEY, *handed_roles.KEYS)
+
+
 async def unconfirmed(bot: Any, guild: Any, key: str, value: Any, confirmed: bool) -> Any:
-    """A consent-model change answers with how many people it moves before it is made."""
-    if confirmed or key != CONSENT_KEY:
+    """A consent-model change, or an off that takes roles back, answers with how many people
+    it moves before it is made."""
+    if confirmed or key not in CONFIRMED_KEYS:
         return None
     try:
         wanted = coerce_value(key, value)
     except SettingError:
         return None
-    asked = await chat_consent.asked(bot, guild, wanted)
+    if key == CONSENT_KEY:
+        asked = await chat_consent.asked(bot, guild, wanted)
+    else:
+        asked = await handed_roles.asked(bot, guild, key, wanted)
     return refusal(asked, chat_consent.CONFIRM_CODE, 409) if asked else None
+
+
+def reset_value(bot: Any, key: str) -> Any:
+    if key in handed_roles.KEYS:
+        return bot.store.default(key)
+    return CONSENT_DEFAULT
+
+
+def confirm_label(store: Any, guild_id: int, key: str) -> str:
+    if key in handed_roles.KEYS:
+        return handed_roles.button_label(store, guild_id, key)
+    return str(store.get(guild_id, CHAT_MEMORY_CONSENT_CONFIRM_BUTTON_KEY))
 
 
 async def set_key(
@@ -155,7 +174,7 @@ async def clear_key(
     refused = leads_only(bot, guild, key, actor, via)
     if refused is not None:
         return refused
-    held = await unconfirmed(bot, guild, key, CONSENT_DEFAULT, confirmed)
+    held = await unconfirmed(bot, guild, key, reset_value(bot, key), confirmed)
     if held is not None:
         return held
     was = bot.store.get(guild.id, key) if key == CONSENT_KEY else None
@@ -796,8 +815,7 @@ def build_key(
     view = SettingsPanel(minutes_for(bot, guild.id), back=partial(render_group, group=group))
     value = store.get(guild.id, key)
     if asking is not None:
-        label = str(store.get(guild.id, CHAT_MEMORY_CONSENT_CONFIRM_BUTTON_KEY))
-        view.add_item(ConfirmValueButton(label, key, asking))
+        view.add_item(ConfirmValueButton(confirm_label(store, guild.id, key), key, asking))
         view.add_item(MoveButton(sp.CANCEL_MOVE, key=key, group=group))
     for move in sp.key_card_buttons(store, guild.id, key, stored=stored, confirming=confirming):
         if asking is not None:

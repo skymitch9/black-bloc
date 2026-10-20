@@ -381,3 +381,15 @@ def test_each_new_block_kind_draws_through_its_own_feature(bot, guild):
     for kind in ("livenow", "upcoming", "leaderboard"):
         found = preview.render(bot, guild, "post", None, {"blocks": kind, "always": "true"})
         assert len(found.embeds) == 1 and found.components == ()
+
+
+def test_the_lookup_card_for_an_opted_out_person_draws_the_not_shared_words(bot, guild):
+    found = preview.render(bot, guild, "birthday_lookup", None, {"name": "Nadia"})
+
+    [embed] = found.embeds
+    assert embed["title"] == "Nadia — birthday"
+    assert embed["description"] == "**Nadia** keeps their birthday to themselves."
+    drafted = preview.render(
+        bot, guild, "birthday_lookup", {"birthday_not_shared_said": "{name} said no."}
+    )
+    assert drafted.embeds[0]["description"] == "Nadia said no."
