@@ -809,8 +809,9 @@ KEY_HELP: dict[str, str] = {
     ),
     "pings_mode": (
         "whether members can opt in to pings at all. off — the default — stops every opt-in and "
-        "every ping, though nobody loses a role they already wear; on lets members take the "
-        "shared Events role and follow individual streamers"
+        "every ping, and takes back every ping role Black Bloc itself put on a member (asked "
+        "first, with how many); a role worn from anywhere else stays. on lets members take the "
+        "shared Events role and follow individual streamers; switching back on gives nothing back"
     ),
     "pings_events_role_name": (
         "what **Set up the Events role** on `/pings` calls the one shared opt-in role for "
@@ -1059,8 +1060,10 @@ KEY_HELP: dict[str, str] = {
     "status_prefix": "what goes in front of the member count in Black Bloc's status",
     "rolemenu_mode": (
         "whether members can pick roles from the panels; off takes them down and hides the "
-        "posted panels, on posts them again; off also hides /rolemenu while hiding is on, and "
-        "the timed roles stay under /mod ▸ Role grants…"
+        "posted panels, and takes back every menu role a member picked from a panel or had "
+        "approved on request (asked first, with how many); a role staff handed over or given "
+        "anywhere else stays. on posts them again and gives nothing back; off also hides "
+        "/rolemenu while hiding is on, and the timed roles stay under /mod ▸ Role grants…"
     ),
     "request_mode": (
         "off, or on (members can ask for things with /request and staff decide on the site)"
@@ -1502,7 +1505,8 @@ KEY_HELP.update(
         ),
         "birthday_panel_lookup": (
             "true to let any member look somebody else's stored birthday up on the /birthday "
-            "panel; staff always can. Opting out is still the member's own privacy control"
+            "panel; staff always can. A member who opted out is shown as not shared "
+            "(birthday_not_shared_said), so opting out stays their own privacy control"
         ),
     }
 )
@@ -9992,6 +9996,82 @@ TEXT_CHECKS.update(
 )
 
 
+# Small fixes (small-fixes, 2026-10-20): birthday privacy, and a feature switched off takes back
+# the roles it handed out after staff see how many.
+BIRTHDAY_NOT_SHARED_KEY = "birthday_not_shared_said"
+PINGS_OFF_CONFIRM_KEY = "pings_off_confirm_said"
+PINGS_OFF_BUTTON_KEY = "pings_off_confirm_button"
+ROLEMENU_OFF_CONFIRM_KEY = "rolemenu_off_confirm_said"
+ROLEMENU_OFF_BUTTON_KEY = "rolemenu_off_confirm_button"
+ROLEMENU_OFF_DM_KEY = "rolemenu_off_dm"
+SMALL_FIXES_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    BIRTHDAY_NOT_SHARED_KEY: (
+        "**{name}** keeps their birthday to themselves.",
+        ("name",),
+        "what a member sees on /birthday when they look up someone who opted out; staff still "
+        "see the date. It takes {name}",
+    ),
+    PINGS_OFF_CONFIRM_KEY: (
+        "**{count}** members hold ping roles Black Bloc handed out; switching pings off removes "
+        "them.",
+        ("count",),
+        "what staff are asked before pings_mode goes off while members wear ping roles Black "
+        "Bloc put on them. It takes {count}",
+    ),
+    PINGS_OFF_BUTTON_KEY: (
+        "Yes, switch pings off",
+        (),
+        "the button that confirms pings_mode off and takes those roles back",
+    ),
+    ROLEMENU_OFF_CONFIRM_KEY: (
+        "**{count}** members hold roles the role menus handed out; switching role menus off "
+        "removes them.",
+        ("count",),
+        "what staff are asked before rolemenu_mode goes off while members wear menu roles Black "
+        "Bloc handed out. It takes {count}",
+    ),
+    ROLEMENU_OFF_BUTTON_KEY: (
+        "Yes, switch role menus off",
+        (),
+        "the button that confirms rolemenu_mode off and takes those roles back",
+    ),
+    ROLEMENU_OFF_DM_KEY: (
+        "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing "
+        "else changed.",
+        ("guild", "label"),
+        "the DM sent when role menus go off to a member whose menu role staff approved (those "
+        "members were sent a DM when it was given). It takes {guild} {label}",
+    ),
+}
+SMALL_FIXES_DEFAULTS: dict[str, Any] = {
+    key: default for key, (default, _, _) in SMALL_FIXES_WORDS.items()
+}
+KEY_TYPES.update({key: "text" for key in SMALL_FIXES_WORDS})
+PINGS_OFF_TAKES_KEY = "pings_off_takes_roles_back"
+ROLEMENU_OFF_TAKES_KEY = "rolemenu_off_takes_roles_back"
+SMALL_FIXES_SWITCHES: dict[str, tuple[bool, str]] = {
+    PINGS_OFF_TAKES_KEY: (
+        True,
+        "true — the default — makes switching pings_mode off take back every ping role Black "
+        "Bloc itself put on a member, after staff confirm the count; false switches pings off "
+        "and leaves every role where it is",
+    ),
+    ROLEMENU_OFF_TAKES_KEY: (
+        True,
+        "true — the default — makes switching rolemenu_mode off take back every menu role a "
+        "member picked or had approved, after staff confirm the count; false switches role "
+        "menus off and leaves every role where it is",
+    ),
+}
+SMALL_FIXES_DEFAULTS.update({key: default for key, (default, _) in SMALL_FIXES_SWITCHES.items()})
+KEY_TYPES.update({key: "bool" for key in SMALL_FIXES_SWITCHES})
+KEY_HELP.update({key: said for key, (_, said) in SMALL_FIXES_SWITCHES.items()})
+KEY_HELP.update({key: said for key, (_, _, said) in SMALL_FIXES_WORDS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in SMALL_FIXES_WORDS.items()}
+)
+
+
 # Blocks live (blocks-live, 2026-09-28) — who's live now, upcoming events and link buttons. Every
 # word the three blocks post is one of these. Filed under posts, except the upcoming words
 # (events, by prefix): the Go-live page's drawers are pinned by golive-join.test.mjs.
@@ -10876,6 +10956,8 @@ class SettingsStore:
             return GOLIVE_REPLAY_DEFAULTS[key]
         if key in OPTOUT_DEFAULTS:
             return OPTOUT_DEFAULTS[key]
+        if key in SMALL_FIXES_DEFAULTS:
+            return SMALL_FIXES_DEFAULTS[key]
         if key in TEMPVOICE_BLOCK_DEFAULTS:
             return TEMPVOICE_BLOCK_DEFAULTS[key]
         if key in BUTTON_BLOCK_DEFAULTS:

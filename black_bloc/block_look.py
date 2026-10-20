@@ -13,6 +13,7 @@ TEXT_MAX = 4000
 LABEL_MAX = 80
 ROW_WIDTH = 5
 LINK_PREFIXES = ("https://", "http://")
+SHOWN_MODE = "on"
 
 
 class Look(NamedTuple):
@@ -24,6 +25,11 @@ class Look(NamedTuple):
 
     def stamp(self) -> str:
         return hashlib.sha256(json.dumps(list(self), ensure_ascii=False).encode()).hexdigest()
+
+
+def shows(mode: Any) -> bool:
+    """A feature's block draws only while its feature is on."""
+    return str(mode or "") == SHOWN_MODE
 
 
 def word(store: Any, guild_id: int, key: str, limit: int = TEXT_MAX) -> str:

@@ -39,6 +39,7 @@ machine, but commands of switched-off features could show in the server until th
 (the v242 deploy, 2026-10-20 00:4x). Rule: an import sweep skips `black_bloc.__main__` and `black_bloc.app`;
 the fuller fix is a `__name__ == "__main__"` guard so an import never runs anything (queued in `TODO.md`).
 Record of the incident: [`posts-one-switch-design.md`](posts-one-switch-design.md) §10.
+**FIXED by v246** (2026-10-20, branch `small-fixes`): `__main__.py` runs `main()` only under `if __name__ == "__main__":`; `tests/test___main__.py` imports it under a fake `main` and asserts it was not called. `app.py` only defines `main` (its imports load `bot.py`, which only defines).
 
 ## Login fails with `PrivilegedIntentsRequired` *(anticipated)*
 

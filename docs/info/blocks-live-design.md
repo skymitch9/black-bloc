@@ -213,3 +213,5 @@ draft). The mock twins all of it (`PREVIEW_DRAW.block_*`, `PREVIEW_BLOCK_DRAWS`,
 - **Shadow behaviour** (Deviation 5) — keep, or list shadow sessions/events while rehearsing?
 - **The who's-live words under `posts`** (Deviation 1) — or move them onto the Go-live page (re-pin the
   83-key fixture and give them a drawer).
+
+> **Follow-up 2026-10-20 (`small-fixes`, v246):** the who's-live-now and upcoming-events blocks draw only while their feature is **on** (one rule, `block_look.shows`, which temp voice already followed); before, both drew an empty card in test. See [`small-fixes-2026-10-20-design.md`](small-fixes-2026-10-20-design.md) §1.

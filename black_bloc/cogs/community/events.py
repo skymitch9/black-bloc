@@ -2561,12 +2561,13 @@ class Events(commands.Cog):
         await change_settings(interaction, changes, previous)
 
 
-BLOCK_SHOWN_MODE = "on"
+def upcoming_shown(store: Any, guild_id: int) -> bool:
+    return look.shows(store.get(guild_id, "events_mode"))
 
 
 async def upcoming_block_events(bot: Any, guild: Any) -> list[Any]:
     """The events still ahead, from the events feature's own store, while events are on."""
-    if bot.store.get(guild.id, "events_mode") != BLOCK_SHOWN_MODE:
+    if not upcoming_shown(bot.store, guild.id):
         return []
     rows = await events_by_status(bot.db, guild.id, (APPROVED,))
     limit = look.number(bot.store, guild.id, EVENTS_UPCOMING_MAX)
@@ -2574,8 +2575,8 @@ async def upcoming_block_events(bot: Any, guild: Any) -> list[Any]:
 
 
 def upcoming_block_parts(bot: Any, guild: Any, events: Any) -> Any:
-    """The upcoming-events block a post carries: nothing while events are off."""
-    if bot.store.get(guild.id, "events_mode") == "off":
+    """The upcoming-events block a post carries: nothing unless events are on."""
+    if not upcoming_shown(bot.store, guild.id):
         return None
     return look.parts_of(upcoming_block_look(bot.store, guild.id, events or ()))
 

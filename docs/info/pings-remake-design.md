@@ -409,3 +409,5 @@ with fakes — see deviation 3.
 
 18. **Nothing was cut.** §C1–§C9 are all here, including §C5's staff sub-panel and §C9's
     Onboarding card, which the brief named as the first and last things to drop.
+
+> **Follow-up 2026-10-20 (`small-fixes`, v246):** switching `pings_mode` off now takes back every ping role Black Bloc itself put on a member (its own `pings.follow` / `pings.events_on` log rows are the ledger), after staff confirm the count; a role from Discord onboarding or by hand stays; switching back on gives nothing back; `pings_off_takes_roles_back` = false keeps the old behaviour (switch-audit i7b). See [`small-fixes-2026-10-20-design.md`](small-fixes-2026-10-20-design.md) §3.

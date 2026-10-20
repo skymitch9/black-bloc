@@ -194,6 +194,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "question.warned_empty",
         "question.taken_down",
         "pbfeed.match_refused",
+        "pings.roles_taken_back",
+        "role_menu.roles_taken_back",
         "pbfeed.cap_reached",
         "pbfeed.runner_gone",
         "pbfeed.runner_missing",

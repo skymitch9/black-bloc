@@ -89,6 +89,7 @@ from ...settings_store import (
     BIRTHDAY_BLOCK_REFUSED_SAID,
     BIRTHDAY_BLOCK_SAVED_SAID,
     BIRTHDAY_MODES,
+    BIRTHDAY_NOT_SHARED_KEY,
     BIRTHDAY_POST_AGAIN_KEY,
     BIRTHDAY_POST_BUTTON_KEY,
     BIRTHDAY_POST_CONFIRM_KEY,
@@ -484,13 +485,13 @@ async def person_lines(bot: Any, guild: Any, member: Any, row: Any, *, mine: boo
         zone,
         when,
         years,
-        bool(row["opted_in"]),
+        await wished(bot.db, row),
         mine,
     )
 
 
 async def next_lines(bot: Any, guild: Any) -> list[str]:
-    rows = [row for row in await rows_for_guild(bot.db, guild.id) if row["opted_in"]]
+    rows = [row for row in await rows_for_guild(bot.db, guild.id) if await wished(bot.db, row)]
     if not rows:
         return [NOTHING_UPCOMING]
     entries = [
@@ -516,7 +517,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     staff = store.is_staff(actor)
     row = await get_birthday(bot.db, actor.id)
     has_date = row is not None
-    opted_out = bool(has_date and not row["opted_in"])
+    opted_out = bool(has_date and not await wished(bot.db, row))
     mode = str(store.get(guild.id, "birthday_mode"))
 
     lines = [PANEL_INTRO]
@@ -554,6 +555,18 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     return embed, view
 
 
+def not_shared_said(store: Any, guild_id: int, name: str) -> str:
+    return optouts.said(store, guild_id, BIRTHDAY_NOT_SHARED_KEY, name=name)
+
+
+def card_embed(store: Any, guild_id: int, name: str, lines: list[str]) -> discord.Embed:
+    return discord.Embed(
+        title=f"{name} — birthday",
+        description="\n".join(lines),
+        colour=panel_colour(store, guild_id),
+    )
+
+
 async def build_card(
     bot: Any, guild: Any, actor: Any, member: Any
 ) -> tuple[discord.Embed, BirthdayView]:
@@ -565,13 +578,11 @@ async def build_card(
         lines = [
             NOT_STORED if mine else NOT_STORED_FOR.format(who=f"**{member.display_name}**")
         ]
+    elif not (mine or staff or await wished(bot.db, row)):
+        lines = [not_shared_said(store, guild.id, member.display_name)]
     else:
         lines = await person_lines(bot, guild, member, row, mine=mine)
-    embed = discord.Embed(
-        title=f"{member.display_name} — birthday",
-        description="\n".join(lines),
-        colour=panel_colour(store, guild.id),
-    )
+    embed = card_embed(store, guild.id, member.display_name, lines)
     view = BirthdayView(panel_minutes(store, guild.id))
     if staff:
         view.add_item(SetTheirsButton(member))
@@ -811,7 +822,8 @@ async def send_month(interaction: discord.Interaction, month: int) -> None:
             NONE_THIS_MONTH.format(month=MONTH_NAMES[month - 1]) if month else NOBODY_YET,
         )
         return
-    for page in chunked(month_lines(rows)):
+    out = await optouts.out_of(bot.db, interaction.guild.id, optouts.BIRTHDAY)
+    for page in chunked(month_lines(rows, out)):
         await said_after(interaction, page)
 
 

@@ -53,6 +53,7 @@ GOLIVE_END_TEMPLATE_KEY = "golive_end_template"
 GOLIVE_END_AUTHOR_KEY = "golive_end_author"
 GOLIVE_END_KEEP_MENTION_KEY = "golive_end_keep_mention"
 BIRTHDAY_TEMPLATE_KEY = "birthday_template"
+BIRTHDAY_NOT_SHARED_KEY = "birthday_not_shared_said"
 BIRTHDAY_COLOR_KEY = "birthday_color"
 
 SAMPLE_LIMIT = 4000
@@ -549,7 +550,7 @@ def live_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always:
 
 
 def upcoming_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool) -> Any:
-    if not always and store.get(guild.id, "events_mode") == "off":
+    if not always and not block_look.shows(store.get(guild.id, "events_mode")):
         return None
     return upcoming_drawn(store, guild, sample)
 
@@ -648,6 +649,14 @@ def birthday(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Render
         colour=discord.Colour(birthdays.parse_color(store.get(guild.id, BIRTHDAY_COLOR_KEY))),
     )
     return made(guild, embeds=[embed])
+
+
+def birthday_lookup(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
+    from .cogs.community.birthdays import card_embed, not_shared_said
+
+    name = str(sample.get("name") or "Nadia")
+    said = not_shared_said(store, guild.id, name)
+    return made(guild, embeds=[card_embed(store, guild.id, name, [said])])
 
 
 def minutes_notes(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
@@ -779,6 +788,14 @@ RENDERERS: dict[str, Renderer] = {
             birthday,
             keys=(BIRTHDAY_TEMPLATE_KEY,),
             sample={"name": "Casey", "age": ""},
+        ),
+        Renderer(
+            "birthday_lookup",
+            "Looking up someone who opted out",
+            "birthdays.html",
+            birthday_lookup,
+            keys=(BIRTHDAY_NOT_SHARED_KEY,),
+            sample={"name": "Nadia"},
         ),
         Renderer(
             "minutes_notes",

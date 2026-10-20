@@ -2153,3 +2153,37 @@ def test_the_mock_servers_copy_of_the_refusal_has_not_drifted():
     found = re.search(r"^const ROLE_MENUS_OFF = '(.*)';$", text, re.M)
     assert found is not None, "site/mock/server.mjs no longer defines ROLE_MENUS_OFF"
     assert found.group(1).replace("\\'", "'") == ROLE_MENUS_OFF
+
+
+# --- switching role menus off takes back what members picked, asked first (small-fixes) ---------
+
+
+async def test_the_mode_button_asks_with_the_count_when_members_wear_picked_roles(bot, db, lead):
+    await self_serve_menu(db)
+    FakeMember(bot.guild, user_id=900, roles=(1,))
+    await grants.add_grant(db, GUILD, 900, 1, grants.MENU)
+    interaction = await open_the_panel(bot, lead)
+
+    await press(interaction, menus.MODE_OFF_LABEL)
+
+    assert bot.store.get(GUILD, MODE_KEY) == "on"
+    assert labels(interaction.view) == ["Yes, switch role menus off", menus.LEAVE_IT_LABEL]
+    assert "**1** members hold roles the role menus handed out" in interaction.embed.description
+
+    await press(interaction, "Yes, switch role menus off")
+
+    assert bot.store.get(GUILD, MODE_KEY) == "off"
+    assert "role_menu.mode" in await action_kinds(db)
+
+
+async def test_leaving_role_menus_on_changes_nothing(bot, db, lead):
+    await self_serve_menu(db)
+    FakeMember(bot.guild, user_id=900, roles=(1,))
+    await grants.add_grant(db, GUILD, 900, 1, grants.MENU)
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, menus.MODE_OFF_LABEL)
+
+    await press(interaction, menus.LEAVE_IT_LABEL)
+
+    assert bot.store.get(GUILD, MODE_KEY) == "on"
+    assert "role_menu.mode" not in await action_kinds(db)

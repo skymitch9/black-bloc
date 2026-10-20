@@ -1909,8 +1909,8 @@ BLOCK_SHOWN_MODE = "on"
 
 
 def block_is_on(store: Any, guild_id: int) -> bool:
-    """The who's-live-now block draws while go-live (spotlights too) is on at all."""
-    return store.get(guild_id, "golive_mode") not in (None, "off")
+    """The who's-live-now block draws only while go-live (spotlights too) is on."""
+    return look.shows(store.get(guild_id, "golive_mode"))
 
 
 async def block_streams(bot: Any, guild: Any) -> list[LiveLine]:
@@ -1946,7 +1946,7 @@ async def block_streams(bot: Any, guild: Any) -> list[LiveLine]:
 
 
 def block_parts(bot: Any, guild: Any, streams: Any) -> Any:
-    """The who's-live-now block a post carries: nothing while go-live and spotlight are off."""
+    """The who's-live-now block a post carries: nothing unless go-live is on."""
     if not block_is_on(bot.store, guild.id):
         return None
     return look.parts_of(live_block_look(bot.store, guild.id, streams or ()))

@@ -1539,3 +1539,54 @@ async def test_cog_load_registers_the_block_button(cog, bot, monkeypatch):
     await cog.cog_load()
 
     assert bot.dynamic_items == [OpenPingsButton]
+
+
+# --- switching pings off takes back what it handed out, asked first (small-fixes) --------------
+
+
+async def a_follower_with_a_ping_role(bot, fan):
+    from black_bloc.actionlog import log_action
+
+    role = bot.guild.add_role(FakeRole(51, "SuperNamu fans"))
+    await fan.add_roles(role)
+    await log_action(
+        bot, bot.guild, "pings.follow", actor=fan, target=fan, details={"role_id": role.id}
+    )
+    return role
+
+
+async def test_the_mode_select_asks_with_the_count_before_pings_go_off(bot, lead, fan):
+    staff_is(bot)
+    await a_follower_with_a_ping_role(bot, fan)
+    asked = FakeInteraction(bot, lead)
+
+    await run_settings(asked, {"pings_mode": "off"})
+
+    assert bot.store.get(GUILD, "pings_mode") == "on"
+    assert labels(asked.view) == ["Yes, switch pings off", "Keep it"]
+    assert "**1** members hold ping roles" in asked.embed.fields[0].value
+    kept = FakeInteraction(bot, lead)
+    await button(asked.view, "Keep it").callback(kept)
+    assert bot.store.get(GUILD, "pings_mode") == "on"
+
+
+async def test_the_second_press_switches_pings_off(bot, lead, fan):
+    staff_is(bot)
+    await a_follower_with_a_ping_role(bot, fan)
+    asked = FakeInteraction(bot, lead)
+    await run_settings(asked, {"pings_mode": "off"})
+    done = FakeInteraction(bot, lead)
+
+    await button(asked.view, "Yes, switch pings off").callback(done)
+
+    assert bot.store.get(GUILD, "pings_mode") == "off"
+
+
+async def test_other_settings_on_the_card_never_ask(bot, lead, fan):
+    staff_is(bot)
+    await a_follower_with_a_ping_role(bot, fan)
+    saved = FakeInteraction(bot, lead)
+
+    await run_settings(saved, {"pings_fan_role_creation": "staff"})
+
+    assert bot.store.get(GUILD, "pings_fan_role_creation") == "staff"

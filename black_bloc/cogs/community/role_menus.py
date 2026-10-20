@@ -8,6 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import handed_roles
 from ... import rolegrants as grants
 from ... import rolemenus as menus
 from ...actionlog import log_action, send_logs
@@ -2472,11 +2473,28 @@ async def run_delete_menu(interaction: discord.Interaction, previous: Any) -> No
     )
 
 
-async def run_mode(interaction: discord.Interaction, previous: Any) -> None:
+async def run_mode(
+    interaction: discord.Interaction, previous: Any, *, confirmed: bool = False
+) -> None:
     if not await opened(interaction):
         return
-    bot = interaction.client
-    wanted = "off" if picking_is_on(bot, interaction.guild.id) else "on"
+    bot, guild = interaction.client, interaction.guild
+    wanted = "off" if confirmed or picking_is_on(bot, guild.id) else "on"
+    asked = None if confirmed else await handed_roles.asked(bot, guild, MODE_KEY, wanted)
+    if asked is not None:
+        label = handed_roles.button_label(bot.store, guild.id, MODE_KEY)
+        moves = (
+            menus.PanelMove(menus.MODE_OFF_YES, label, "danger", 0),
+            menus.PanelMove(menus.LEAVE_IT, menus.LEAVE_IT_LABEL, "secondary", 0),
+        )
+        await confirm(
+            interaction,
+            confirm_panel(bot, interaction.guild, previous),
+            discord.Embed(title=menus.CONFIRM_TITLE, description=asked),
+            [MoveButton(move) for move in moves],
+            previous,
+        )
+        return
     said = await set_mode(bot, interaction.guild, interaction.user, wanted)
     await render_panel(interaction, previous)
     await answer(interaction, f"Picking roles from the panels is now **{wanted}**. {said}")
@@ -2607,6 +2625,9 @@ class MoveButton(discord.ui.Button):
             return
         if action == menus.MODE:
             await run_mode(interaction, view)
+            return
+        if action == menus.MODE_OFF_YES:
+            await run_mode(interaction, view, confirmed=True)
             return
         if action == menus.ADD_ROLE:
             await open_add_role(interaction, view)

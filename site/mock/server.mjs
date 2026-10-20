@@ -405,7 +405,7 @@ const SETTING_SPECS = [
   ['golive_ping_role_id', 'role', null, null, 'the role mentioned in front of every go-live announcement, so the people who asked for streaming pings get one. Blank — the default — posts the announcement with no mention at all'],
   ['golive_max_session_hours', 'int', 12, 12, 'a safety net: a stream still marked live after this many hours is closed anyway, in case the bot never saw it end. 12 by default'],
   ['golive_panel_minutes', 'int', 10, 10, "minutes the /golive panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
-  ['pings_mode', 'enum', 'off', 'off', 'whether members can opt in to pings at all. off — the default — stops every opt-in and every ping, though nobody loses a role they already wear; on lets members take the shared Events role and follow individual streamers', ['off', 'on']],
+  ['pings_mode', 'enum', 'off', 'off', 'whether members can opt in to pings at all. off — the default — stops every opt-in and every ping, and takes back every ping role Black Bloc itself put on a member (asked first, with how many); a role worn from anywhere else stays. on lets members take the shared Events role and follow individual streamers; switching back on gives nothing back', ['off', 'on']],
   ['pings_events_role_name', 'text', 'Events', 'Events', 'what **Set up the Events role** on `/pings` calls the one shared opt-in role for go-live and event pings when it has to make it. *Events* by default; a role of that name that already exists is reused rather than duplicated'],
   ['pings_fan_role_creation', 'enum', 'follow', 'follow', 'who can bring a streamer\'s own follower role into being. follow — the default — makes it the first time somebody follows them on `/pings`, so a role exists only where somebody wants one; self lets the streamer make their own with **Start my own ping role**; staff means only an Auntie or Uncle can, from `/pings` ▸ **Streamers…**; auto makes one the moment a Twitch channel is linked. Staff can always do it for anybody, whichever this says', ['self', 'staff', 'auto', 'follow']],
   ['pings_fan_role_template', 'text', '{name} pings', '{name} pings', 'what a streamer\'s own follower role is called. {name} is their display name at the moment the role is made and is the only field there is; *{name} pings* by default'],
@@ -540,7 +540,7 @@ const SETTING_SPECS = [
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
   ['rolemenu_approval_channel_id', 'channel', '800000000000000005', null, 'where a role request card is posted for staff to answer; defaults to staff_channel_id'],
   ['rolemenu_approver_role_id', 'role', null, null, 'role mentioned when a role request needs answering'],
-  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down, on posts them again; /rolemenu itself stays either way', ['off', 'on']],
+  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the posted panels, and takes back every menu role a member picked from a panel or had approved on request (asked first, with how many); a role staff handed over or given anywhere else stays. on posts them again and gives nothing back; off also hides /rolemenu while hiding is on, and the timed roles stay under /mod ▸ Role grants…', ['off', 'on']],
   ['chat_mode', 'enum', 'on', 'on', 'off, or on (Black Bloc answers when somebody @-mentions it)', ['off', 'on']],
   ['chat_cooldown_seconds', 'int', 20, 20, 'seconds before the same person gets another @-mention reply, 5 to 600', null, 600, 5],
   ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
@@ -744,6 +744,14 @@ const SETTING_SPECS = [
   ["spotlight_window_none_words", "text", "no window set", "no window set", "the {window} line when a channel pings only during events and has no window ahead of it, so nothing it posts mentions a role"],
   ['golive_channel_spotlight_default', 'bool', false, false, "whether a channel added through **Add a streamer** with nobody here behind it is spotlighted from the start — its announcement pinned while it streams and a reminder every few hours. off by default: it is announced like any other stream, and its own row's **Spotlight on** adds the pin and the reminders whenever staff want them"],
   ["golive_spotlight_opted_out_said", "text", " **{name}** asked not to be announced, so nothing of this channel's is posted until they opt back in on /golive.", " **{name}** asked not to be announced, so nothing of this channel's is posted until they opt back in on /golive.", "added to what staff are told when they spotlight a channel whose member stopped every announcement of theirs. It takes {name}"],
+  ["birthday_not_shared_said", "text", "**{name}** keeps their birthday to themselves.", "**{name}** keeps their birthday to themselves.", "what a member sees on /birthday when they look up someone who opted out; staff still see the date. It takes {name}"],
+  ["pings_off_confirm_said", "text", "**{count}** members hold ping roles Black Bloc handed out; switching pings off removes them.", "**{count}** members hold ping roles Black Bloc handed out; switching pings off removes them.", "what staff are asked before pings_mode goes off while members wear ping roles Black Bloc put on them. It takes {count}"],
+  ["pings_off_confirm_button", "text", "Yes, switch pings off", "Yes, switch pings off", "the button that confirms pings_mode off and takes those roles back"],
+  ["rolemenu_off_confirm_said", "text", "**{count}** members hold roles the role menus handed out; switching role menus off removes them.", "**{count}** members hold roles the role menus handed out; switching role menus off removes them.", "what staff are asked before rolemenu_mode goes off while members wear menu roles Black Bloc handed out. It takes {count}"],
+  ["rolemenu_off_confirm_button", "text", "Yes, switch role menus off", "Yes, switch role menus off", "the button that confirms rolemenu_mode off and takes those roles back"],
+  ["rolemenu_off_dm", "text", "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing else changed.", "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing else changed.", "the DM sent when role menus go off to a member whose menu role staff approved (those members were sent a DM when it was given). It takes {guild} {label}"],
+  ["pings_off_takes_roles_back", "bool", true, true, "true \u2014 the default \u2014 makes switching pings_mode off take back every ping role Black Bloc itself put on a member, after staff confirm the count; false switches pings off and leaves every role where it is"],
+  ["rolemenu_off_takes_roles_back", "bool", true, true, "true \u2014 the default \u2014 makes switching rolemenu_mode off take back every menu role a member picked or had approved, after staff confirm the count; false switches role menus off and leaves every role where it is"],
   ['golive_channel_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a CHANNEL is opted out of announcements mid-stream. end — the default — unpins it and rewrites it to the ended wording, exactly as a real stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so no reminder follows and nothing waits on Twitch", ['end', 'delete', 'leave']],
   ['golive_member_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a MEMBER opts out of announcements mid-stream — the same three treatments the channel key has. end — the default — unpins it and rewrites it to the ended wording; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so their live role comes off and nothing waits on Twitch or on their presence", ['end', 'delete', 'leave']],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -1467,7 +1475,7 @@ const SETTING_SPECS = [
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
-  ["birthday_panel_lookup", "bool", true, true, "true to let any member look somebody else's stored birthday up on the /birthday panel; staff always can. Opting out is still the member's own privacy control"],
+  ["birthday_panel_lookup", "bool", true, true, "true to let any member look somebody else's stored birthday up on the /birthday panel; staff always can. A member who opted out is shown as not shared (birthday_not_shared_said), so opting out stays their own privacy control"],
   ["birthday_panel_minutes", "int", 10, 10, "minutes the /birthday panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ["birthday_panel_next_for_members", "bool", true, true, "true to show every member the birthdays coming up on the /birthday panel; staff always see them. False makes the list staff-only and the panel says so in words"],
   ["bot_bio", "text", "Black Bloc \u2014 moderation & content bot for Black in a Flash!. Staff dashboard: https://blackbloc.heygabi.ai", "Black Bloc \u2014 moderation & content bot for Black in a Flash!. Staff dashboard: https://blackbloc.heygabi.ai", "the About Me on Black Bloc's own profile, dashboard link and all"],
@@ -2094,6 +2102,13 @@ function seedState() {
   nextMenu: 4,
   nextRequest: 5,
   nextGrant: 6,
+  // small-fixes: who wears a ping role pings itself put on (black_bloc/handed_roles.py reads
+  // the pings.follow / pings.events_on rows of the action log for this).
+  pingsHanded: [
+    { user_id: MEMBERS[2].id, role_id: '900000000000000006' },
+    { user_id: MEMBERS[3].id, role_id: '900000000000000006' },
+    { user_id: MEMBERS[3].id, role_id: '900000000000000007' },
+  ],
   applicationForms: [
     {
       id: 1,
@@ -5234,6 +5249,53 @@ function consentFlipped(to) {
   return { from: to === 'optin' ? 'optout' : 'optin', to, count: moved.length };
 }
 
+// small-fixes: an off that takes roles back answers with a count first (black_bloc/handed_roles.py).
+const HANDED_ASKS = { pings_mode: 'pings_off_confirm_said', rolemenu_mode: 'rolemenu_off_confirm_said' };
+const HANDED_KINDS = { pings_mode: 'pings.roles_taken_back', rolemenu_mode: 'role_menu.roles_taken_back' };
+const MENU_PICKED = ['menu', 'approval'];
+const HANDED_TAKES = { pings_mode: 'pings_off_takes_roles_back', rolemenu_mode: 'rolemenu_off_takes_roles_back' };
+
+function handedTakes(key) {
+  return key in HANDED_TAKES && state.settings.get(HANDED_TAKES[key]) !== false;
+}
+
+function handedHeld(key) {
+  if (key === 'pings_mode') return state.pingsHanded.map((row) => ({ ...row }));
+  const menuRoles = new Set(state.menus.flatMap((menu) => menu.options.map((one) => String(one.role_id))));
+  return state.grants
+    .filter((row) => row.removed_at === null && MENU_PICKED.includes(row.source) && menuRoles.has(String(row.role_id)))
+    .map((row) => ({ user_id: String(row.user_id), role_id: String(row.role_id), grant_id: row.id }));
+}
+
+function handedAsked(key, value, confirmed) {
+  if (confirmed || !handedTakes(key) || value !== 'off') return;
+  const members = new Set(handedHeld(key).map((row) => row.user_id)).size;
+  if (!members) return;
+  const said = String(state.settings.get(HANDED_ASKS[key]) || specOf(HANDED_ASKS[key])[3]).split('{count}').join(String(members));
+  throw new Refused(409, 'confirm_needed', said);
+}
+
+function handedTaken(key) {
+  if (!handedTakes(key) || state.settings.get(key) !== 'off') return;
+  const held = handedHeld(key);
+  if (!held.length) return;
+  if (key === 'pings_mode') state.pingsHanded = [];
+  for (const row of held) {
+    const grant = state.grants.find((one) => one.id === row.grant_id);
+    if (grant) Object.assign(grant, { removed_at: now(), removed_reason: 'feature_off' });
+  }
+  logAction(HANDED_KINDS[key], {
+    details: {
+      key,
+      members: new Set(held.map((row) => row.user_id)).size,
+      roles: held.length,
+      failed: 0,
+      dms: held.filter((row) => state.grants.find((one) => one.id === row.grant_id)?.source === 'approval').length,
+      taken: held.map((row) => [row.user_id, row.role_id]),
+    },
+  });
+}
+
 route('PUT', '/api/settings/:key', async (context) => {
   requireStaff(context.session);
   if (STRUCTURE_LEADS_KEYS.includes(context.params.key)) requireLeads(context.session);
@@ -5244,8 +5306,10 @@ route('PUT', '/api/settings/:key', async (context) => {
     consentAsked(value, body.confirm === true);
     if (value !== (state.settings.get(CONSENT_KEY) || 'optout')) consentFlipped(value);
   }
+  handedAsked(context.params.key, value, body.confirm === true);
   state.settings.set(context.params.key, value);
   settingChanged(context.params.key);
+  handedTaken(context.params.key);
   state.audit.unshift({ key: context.params.key, value, updated_by: STAFF.id, updated_at: now() });
   logAction('web.settings.set', { reason: `${context.params.key} = ${JSON.stringify(value)}`, details: { key: context.params.key, value, via: 'website' } });
   return keyRow(context.params.key);
@@ -5260,8 +5324,10 @@ route('DELETE', '/api/settings/:key', (context) => {
     consentAsked(spec[3], context.url.searchParams.get('confirm') === 'true');
     if (spec[3] !== (state.settings.get(CONSENT_KEY) || 'optout')) consentFlipped(spec[3]);
   }
+  handedAsked(context.params.key, spec[3], context.url.searchParams.get('confirm') === 'true');
   state.settings.set(context.params.key, spec[3] ?? null);
   settingChanged(context.params.key);
+  handedTaken(context.params.key);
   state.audit.unshift({ key: context.params.key, value: spec[3] ?? null, updated_by: STAFF.id, updated_at: now() });
   logAction('web.settings.clear', { reason: context.params.key, details: { key: context.params.key, via: 'website' } });
   return { ...keyRow(context.params.key), cleared: true };
@@ -6632,6 +6698,7 @@ const PREVIEW_FEATURES = [
   ['post', 'A post', 'posts.html', []],
   ['block_tempvoice', 'The temp voice lobby block', 'posts.html', ['tempvoice_block_title', 'tempvoice_block_text', 'tempvoice_block_lobby_label', 'tempvoice_block_controls_label']],
   ['birthday', 'A birthday announcement', 'birthdays.html', ['birthday_template']],
+  ['birthday_lookup', 'Looking up someone who opted out', 'birthdays.html', ['birthday_not_shared_said']],
   ['minutes_notes', 'What minutes post when a meeting starts and ends', 'minutes.html', ['minutes_start_text', 'minutes_notes_title']],
   ['block_marathonrole', 'The Marathon role block', 'posts.html', ['marathon_block_title', 'marathon_block_text', 'marathon_block_label']],
   ['block_pingsfollow', 'The ping me when they go live block', 'posts.html', ['pings_block_title', 'pings_block_text', 'pings_block_label']],
@@ -6654,6 +6721,7 @@ const PREVIEW_SAMPLES = {
   modmail_relay: { name: '', text: '' },
   post: { style: 'plain', title: '', body: '', carries_door: false, blocks: '', always: '' },
   birthday: { name: 'Casey', age: '' },
+  birthday_lookup: { name: 'Nadia' },
   minutes_notes: { notes: '' },
   frontdoor: { shows: '' },
   block_tempvoice: { controls: '' },
@@ -6873,6 +6941,11 @@ const PREVIEW_DRAW = {
       .replace('{age}', String(sample.age || ''));
     return previewMade('', [{ description: text, color: 0x4eefff, fields: [] }]);
   },
+  birthday_lookup(read, sample) {
+    const name = sample.name || 'Nadia';
+    const text = String(read('birthday_not_shared_said') || '').split('{name}').join(name);
+    return previewMade('', [{ title: `${name} — birthday`, description: text, color: 0x4eefff, fields: [] }]);
+  },
   minutes_notes(read, sample) {
     return previewMade(String(read('minutes_start_text') || ''), [{
       title: String(read('minutes_notes_title') || ''),
@@ -7045,12 +7118,11 @@ const PREVIEW_BLOCK_DRAWS = {
     return PREVIEW_DRAW.block_proposeevent(read);
   },
   livenow(read, sample, always) {
-    const off = String(read('golive_mode') || 'off') === 'off';
-    if (!always && off) return null;
+    if (!always && String(read('golive_mode') || 'off') !== 'on') return null;
     return PREVIEW_DRAW.block_livenow(read, sample);
   },
   upcoming(read, sample, always) {
-    if (!always && String(read('events_mode') || 'off') === 'off') return null;
+    if (!always && String(read('events_mode') || 'off') !== 'on') return null;
     return PREVIEW_DRAW.block_upcoming(read, sample);
   },
   links(read) {

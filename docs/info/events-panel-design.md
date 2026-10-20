@@ -463,3 +463,5 @@ same test, the same way.** It is pre-existing and load-sensitive, not a regressi
 `black_bloc/api/` changed in this build except `api/tools/events.py`, which that test does not
 touch. Reported, not fixed. The honest test counts: **base 3442 (3441 + this flake), this branch
 3502 (3501 + this flake)** — +60 tests, none lost.
+
+> **Follow-up 2026-10-20 (`small-fixes`, v246):** the Upcoming events block now draws only while `events_mode` is **on**; in test or off it is hidden instead of showing an empty "no upcoming events" card (switch-audit i3). One rule for every live block: `block_look.shows`. See [`small-fixes-2026-10-20-design.md`](small-fixes-2026-10-20-design.md) §1.

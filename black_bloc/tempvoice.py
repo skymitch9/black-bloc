@@ -4,6 +4,7 @@ import hashlib
 import json
 from typing import Any, NamedTuple
 
+from .block_look import shows as block_shows
 from .panels import KEEP_IT
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
@@ -215,7 +216,7 @@ def makes_rooms(mode: Any) -> bool:
 
 def shows_block(mode: Any) -> bool:
     """The lobby block is drawn only while members can see the lobby."""
-    return str(mode or "") == ON_MODE
+    return block_shows(mode)
 
 
 def named_regions() -> tuple[str, ...]:
