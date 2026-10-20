@@ -777,3 +777,5 @@ listed here was built as §B–§H say. The header above is the CONDUCTOR's to f
     `tests/test_bot.py::test_the_command_tree_stays_inside_discords_limits`, which counts the real
     tree after loading every cog. `node site/mock/check.mjs` reports **17 pages / 142 routes**,
     unchanged (no route was added or removed).
+
+> **Follow-up 2026-10-20 (`small-fixes`, v246):** switching `rolemenu_mode` off now takes back every menu role a member picked or had approved on request (open `role_grants` rows, source `menu`/`approval`, never an application or staff-handed one), after staff confirm the count; approved members get the `rolemenu_off_dm` DM; `rolemenu_off_takes_roles_back` = false keeps the old behaviour (switch-audit i7b). See [`small-fixes-2026-10-20-design.md`](small-fixes-2026-10-20-design.md) §3.

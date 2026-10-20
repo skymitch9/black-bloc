@@ -480,3 +480,5 @@ off refusal) — never against the real API or a real guild. Whether Discord ren
 rehearsal note plus embed as intended in `#welcome-test` is unseen.
 
 > **Follow-up 2026-10-20 (`shadow-one-meaning`):** `birthday_mode` shadow is called **test** wherever a person reads it; its help now says what the code does: test writes the day's wishes to the log and posts nothing, and a wish staff post by hand goes to the test channel as a rehearsal copy. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).
+
+> **Follow-up 2026-10-20 (`small-fixes`, v246):** opting out of birthdays now hides the date from other members: a member looking someone up who opted out reads `birthday_not_shared_said`; staff still see the date with the *opted out* line. The opt-out is read from the `birthday` kind of `optouts.py` on the card, the panel, *Next birthdays* and the staff month list (switch-audit i6). See [`small-fixes-2026-10-20-design.md`](small-fixes-2026-10-20-design.md) §2.
