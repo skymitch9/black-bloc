@@ -5,7 +5,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { clockMoment, clockNear, clockOf, mountTracker, trackerSeed, zoneOr } from './schedule.mjs';
 import * as mockBrackets from './brackets.mjs';
-import { familyLines, genreFamilies, genreFamily, genreQualifiers } from '../public/assets/listfilter.js';
+import { aliasWords, familyLines, genreEntries, genreFamilies, genreFamiliesOf, genreFamily, genreFormat, genreQualifiers, genreUpper } from '../public/assets/listfilter.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = resolve(HERE, '..', 'public');
@@ -369,7 +369,10 @@ const RUNS_GENRE_FAMILIES_DEFAULT = [
   "shooter: shooters, fps, tps, shmup, shoot 'em up, third-person shooter, first-person shooter",
   'adventure: action-adventure, action adventure',
   'fighting: fighter, fighting game',
+  'soulslike: souls, soulsborne, dark souls, souls-like, souls like',
 ].join('\n');
+const RUNS_GENRE_UPPER_DEFAULT = '2d, 3d, fps, tps, rpg, jrpg, mmo, rts';
+const RUNS_DEVELOPER_ALIASES_DEFAULT = 'FromSoftware: fromsoft, from software\nNintendo: nintendo ead, nintendo epd';
 
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
@@ -874,16 +877,19 @@ const SETTING_SPECS = [
   ["marathon_archive_after_days", "int", 7, 7, "days after a marathon's last run ends that it moves to the archive, with its runs and people — kept, browsable under Archive on the Events page, and Restore brings it back paused. 7 by default; 0 moves it the same day. A marathon with no dates never moves by itself", null, 365, 0],
   ["runs_sources", "enums", ["gdq", "gdq_hotfix"], ["gdq", "gdq_hotfix"], "which marathon sources count towards the BaF runs page and /runs; gdq and gdq_hotfix by default, so a run in a horaro or Oengus marathon is left out", ["gdq", "gdq_hotfix", "rpglb", "horaro", "oengus", "fastestfurs", "ladyarcaders"]],
   ["runs_parts", "enums", ["runner"], ["runner"], "which part a BaF member must play on a run for it to count as a BaF run; runner by default, so hosting or commentary alone does not count", ["runner", "host", "commentator"]],
-  ["runs_lookup_title", "text", "{game}", "{game}", "the heading of one game's answer in the /runs panel; {game}, {series}, {genre}, and {tags} (the series and genre that are set, joined by ·)"],
+  ["runs_lookup_title", "text", "{game}", "{game}", "the heading of one game's answer in the /runs panel; {game}, {series}, {genre}, {developer}, and {tags} (the series, genre and developer that are set, joined by ·)"],
   ["runs_lookup_line", "text", "{date} · {event} · {category} · {runners}", "{date} · {event} · {category} · {runners}", "one run's line under a game in the /runs panel; {date}, {event}, {category} and {runners}"],
   ["runs_lookup_none", "text", "Nothing in the BaF runs database matches **{query}**.\n{suggestions}", "Nothing in the BaF runs database matches **{query}**.\n{suggestions}", "what the /runs panel says when no game matches; {query} is what was typed, {suggestions} up to three game names closest to it joined by · (blank when none is close)"],
-  ["runs_lookup_seen", "text", "seen {n} time(s), last {date} at {event}", "seen {n} time(s), last {date} at {event}", "the first line under a game in the /runs panel; {n} is how many times it was run, {date} and {event} the latest run; {series}, {genre} and {tags} too"],
-  ["runs_lookup_tags", "text", "{tags}", "{tags}", "the line under a game's heading in the /runs panel, drawn only when the game has a series or a genre; {series}, {genre}, and {tags} (the ones set, joined by ·)"],
+  ["runs_lookup_seen", "text", "seen {n} time(s), last {date} at {event}", "seen {n} time(s), last {date} at {event}", "the first line under a game in the /runs panel; {n} is how many times it was run, {date} and {event} the latest run; {series}, {genre}, {developer} and {tags} too"],
+  ["runs_lookup_tags", "text", "{tags}", "{tags}", "the line under a game's heading in the /runs panel, drawn only when the game has a series, a genre or a developer; {series}, {genre}, {developer}, and {tags} (the ones set, joined by ·)"],
   ["runs_lookup_more", "text", "… and {more} more", "… and {more} more", "the last line under a game in the /runs panel when it has more runs than are listed; {more} is how many more"],
   ["runs_lookup_count", "text", "{runs} run(s) · {games} game(s)", "{runs} run(s) · {games} game(s)", "the line the /runs panel opens with; {runs} is how many BaF runs there are, {games} how many games"],
   ["runs_lookup_no_date", "text", "no date", "no date", "the date word in the /runs panel for a run with no date"],
   ["runs_genre_qualifiers", "text", RUNS_GENRE_QUALIFIERS_DEFAULT, RUNS_GENRE_QUALIFIERS_DEFAULT, "words left out of a genre before the BaF runs page groups it into a family, separated by commas; capitals, hyphens and slashes do not matter, so Action-adventure groups as adventure and Third-person shooter as shooter. The genre itself keeps every word"],
   ["runs_genre_families", "text", RUNS_GENRE_FAMILIES_DEFAULT, RUNS_GENRE_FAMILIES_DEFAULT, "the genre families the BaF runs page and /runs filter and search by, one per line as the family, a colon and the other genres that belong to it separated by commas — racing: racer, kart racer. A genre is matched whole first, then without the words in runs_genre_qualifiers; the first family that matches wins, and a genre no family names is its own family"],
+  ["runs_genre_max", "int", 2, 2, "how many genres one game may have on the BaF runs page, written as a list separated by commas; a save with more is refused and a CSV import keeps the first ones. 2 by default, 1 to 5", null, 5, 1],
+  ["runs_genre_upper", "text", RUNS_GENRE_UPPER_DEFAULT, RUNS_GENRE_UPPER_DEFAULT, "words written in capitals wherever they appear in a genre, separated by commas, so 2d platformer is saved as 2D platformer. Every genre saved is spelled one way: each entry starts with a capital, the rest lower case, hyphens become spaces, except these"],
+  ["runs_developer_aliases", "text", RUNS_DEVELOPER_ALIASES_DEFAULT, RUNS_DEVELOPER_ALIASES_DEFAULT, "other names a developer goes by, so a search on the BaF runs page and in /runs finds its games under any of them; one per line as the developer, a colon and its other names separated by commas — FromSoftware: fromsoft, from software"],
   ["runs_same_run_minutes", "int", 90, 90, "how many minutes apart two tracked runs of one marathon may start and still be one run on the BaF runs page and in /runs, when they have the same game and the same runners; runs whose times overlap are one run too. The newest wins, so a run the schedule renamed mid-show counts once. 90 by default; 0 shows every tracked row", null, 1440, 0],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_stale_archive_reads", "int", 3, 3, "how many reads of a marathon's schedule in a row must fail before it moves to the archive as unreadable, once marathon_stale_archive_hours have also passed — a schedule that is not published yet never counts, and a paused or ignored marathon never moves. Restore brings it back, and so does its feed listing it again with a schedule that reads. 3 by default; 0 never archives an unreadable marathon", null, 20, 0],
@@ -1811,7 +1817,8 @@ function seedState() {
   bafRuns: seedBafRuns(),
   bafEdits: {},
   bafSeries: { 'super metroid': 'Metroid' },
-  bafGenre: { 'hollow knight': 'Metroidvania', 'mario kart 8 deluxe': 'Kart racer', 'f-zero gx': 'Racing', "donkey kong country 2: diddy's kong quest": '2D platformer' },
+  bafGenre: { 'hollow knight': 'Metroidvania', 'mario kart 8 deluxe': 'Kart racer', 'f-zero gx': 'Racing', "donkey kong country 2: diddy's kong quest": '2D platformer', 'sekiro: shadows die twice': 'Soulslike, Action adventure' },
+  bafDeveloper: { 'sekiro: shadows die twice': 'FromSoftware', "donkey kong country 2: diddy's kong quest": 'Rare', 'mario kart 8 deluxe': 'Nintendo' },
   marathonPeople: seedMarathonPeople(),
   marathonFeeds: seedMarathonFeeds(),
   marathonSpotlights: seedMarathonSpotlights(),
@@ -2652,6 +2659,9 @@ const NAMESPACE_OVERRIDE = {
   runs_genre_qualifiers: 'marathon',
   runs_genre_families: 'marathon',
   runs_same_run_minutes: 'marathon',
+  runs_genre_max: 'marathon',
+  runs_genre_upper: 'marathon',
+  runs_developer_aliases: 'marathon',
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
   mod_log_level: 'automod',
@@ -2956,7 +2966,18 @@ function validate(key, value) {
   if (key === 'marathon_hotfix_viewer_url') return checkedViewerUrl(value);
   if (key === 'marathon_retro_category') return checkedRetro(value);
   if (key === 'runs_genre_families') return checkedGenreFamilies(value);
+  if (key === 'runs_developer_aliases') return checkedDeveloperAliases(value);
   return value;
+}
+
+// The twin of settings_store.checked_developer_aliases: every line a developer, or the first that is not named.
+function checkedDeveloperAliases(value) {
+  const { bad } = familyLines(value);
+  if (bad.length) {
+    const [n, line] = bad[0];
+    throw new Refused(400, 'bad_value', `Line ${n} of the developer aliases, \`${line.slice(0, 60)}\`, is not a developer Black Bloc can read, so nothing was changed. Write each developer as its name, a colon and the other names it goes by, separated by commas — \`FromSoftware: fromsoft, from software\`.`);
+  }
+  return String(value).split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join('\n');
 }
 
 // The twin of settings_store.checked_genre_families: every line a family, or the first that is not named.
@@ -12143,7 +12164,7 @@ route('POST', '/api/questions/unskip', (context) => {
 const RUNS_HOW_WORDS = { tracked: 'tracked', imported: 'imported', hand: 'by hand' };
 const RUNS_EVENT_WORDS = { gdq: 'GDQ', gdq_hotfix: 'GDQ Hotfix' };
 const RUNS_FIELDS = ['date', 'event', 'game', 'category', 'runners', 'note'];
-const RUNS_CSV_COLUMNS = ['key', 'date', 'event', 'event_source', 'event_ref', 'game', 'series', 'genre', 'category', 'runners', 'runner_names', 'runner_ids', 'how', 'note'];
+const RUNS_CSV_COLUMNS = ['key', 'date', 'event', 'event_source', 'event_ref', 'game', 'series', 'genre', 'developer', 'category', 'runners', 'runner_names', 'runner_ids', 'how', 'note'];
 const MOCK_TRACKER_EVENT = {
   id: '51',
   name: 'SGDQ 2025',
@@ -12193,11 +12214,19 @@ function runsGenreRule() {
   return [genreQualifiers(read('runs_genre_qualifiers', RUNS_GENRE_QUALIFIERS_DEFAULT)), genreFamilies(read('runs_genre_families', RUNS_GENRE_FAMILIES_DEFAULT))];
 }
 
+function runsTextSetting(key, fallback) {
+  const found = state.settings.get(key);
+  return typeof found === 'string' ? found : fallback;
+}
+
 function runsSearchText(row, families) {
-  const found = families.find(([name]) => name === row.genre_family);
-  const familyWords = found ? [found[0], ...found[1]] : [row.genre_family];
+  const familyWords = row.genre_families.flatMap((family) => {
+    const found = families.find(([name]) => name === family);
+    return found ? [found[0], ...found[1]] : [family];
+  });
+  const developers = genreFamilies(runsTextSetting('runs_developer_aliases', RUNS_DEVELOPER_ALIASES_DEFAULT));
   const lines = [
-    row.game, row.series, row.genre, ...familyWords, row.category,
+    row.game, row.series, row.genre, ...familyWords, row.developer, ...aliasWords(row.developer, developers), row.category,
     ...row.runners.map((one) => one.display), ...row.runners.map((one) => one.name), row.event, row.note,
   ];
   return [...new Set(lines.filter(Boolean).map(String))].join('\n');
@@ -12227,7 +12256,9 @@ function runsRowShaped(given, rule) {
     game_key: gameKey,
     series: state.bafSeries[gameKey] || '',
     genre,
-    genre_family: genreFamily(genre, ...rule),
+    genre_family: genreFamiliesOf(genre, ...rule)[0] || '',
+    genre_families: genreFamiliesOf(genre, ...rule),
+    developer: state.bafDeveloper[gameKey] || '',
     category: given.category || '',
     runners: given.runners,
     runners_text: runsLine(given.runners),
@@ -12390,6 +12421,8 @@ function runsGames(rows) {
       series: last.series,
       genre: last.genre,
       genre_family: last.genre_family,
+      genre_families: last.genre_families,
+      developer: last.developer,
       times: runs.length,
       last_date: last.date,
       last_event: last.event,
@@ -12440,12 +12473,35 @@ function runsEvent(body) {
 const RUNS_NO_GAME = 'A run needs a game, so nothing was saved. Type the game’s name in the Game box and save again.';
 const RUNS_NO_RUN = 'That run is not in the BaF runs database any more, so nothing was changed. Refresh the page to see the runs as they are now.';
 
-const RUNS_TAG_STORES = { series: 'bafSeries', genre: 'bafGenre' };
+const RUNS_TAG_STORES = { series: 'bafSeries', genre: 'bafGenre', developer: 'bafDeveloper' };
+
+function runsGenreCap() {
+  return Math.max(1, Number(state.settings.get('runs_genre_max') ?? 2));
+}
+
+// The twin of baf_runs.tag_text: a genre is spelled the house way, the others only lose extra spaces.
+function runsTagText(tag, value) {
+  const text = String(value || '');
+  if (tag !== 'genre') return text.split(/\s+/).filter(Boolean).join(' ').slice(0, 100);
+  const upper = genreUpper(runsTextSetting('runs_genre_upper', RUNS_GENRE_UPPER_DEFAULT));
+  return genreFormat(text, ...runsGenreRule(), upper).slice(0, 100);
+}
+
+function runsTagProblem(tag, text) {
+  const found = tag === 'genre' ? genreEntries(text).length : 0;
+  const cap = runsGenreCap();
+  if (found <= cap) return;
+  throw new Refused(400, 'too_many_genres', `**${text}** is ${found} genres and a game may have ${cap}, so nothing was saved. Keep the ${cap} that fit best, separated by commas, or raise the most genres a game may have on the Settings page.`);
+}
+
+function runsCheckTags(body) {
+  for (const tag of Object.keys(RUNS_TAG_STORES)) if (tag in body) runsTagProblem(tag, runsTagText(tag, body[tag]));
+}
 
 function runsTagSet(tag, game, value) {
   const store = state[RUNS_TAG_STORES[tag]];
   const key = runsKey(game);
-  const text = String(value || '').trim().slice(0, 100);
+  const text = runsTagText(tag, value);
   if (text) store[key] = text;
   else delete store[key];
 }
@@ -12475,6 +12531,7 @@ route('GET', '/api/runs', (context) => {
     events: runsEvents(),
     series_names: [...new Set(every.map((row) => row.series).filter(Boolean))].sort(),
     genre_names: [...new Set(every.map((row) => row.genre).filter(Boolean))].sort(),
+    developer_names: [...new Set(every.map((row) => row.developer).filter(Boolean))].sort(),
     genre_families: runsGenreRule()[1].map(([family, aliases]) => ({ family, aliases })),
     sources: runsSetting('runs_sources', ['gdq', 'gdq_hotfix']),
     parts: runsSetting('runs_parts', ['runner']),
@@ -12494,7 +12551,7 @@ function runsCsv(rows) {
   const lines = [RUNS_CSV_COLUMNS.join(',')];
   for (const row of rows.filter((one) => !one.removed)) {
     lines.push([
-      row.key, row.date || '', row.event, row.event_source || '', row.event_ref || '', row.game, row.series, row.genre, row.category,
+      row.key, row.date || '', row.event, row.event_source || '', row.event_ref || '', row.game, row.series, row.genre, row.developer, row.category,
       row.runners_text, row.runners.map((one) => one.name).join('; '), row.runners.map((one) => one.user_id || '').join('; '), row.how, row.note,
     ].map(cell).join(','));
   }
@@ -12519,10 +12576,12 @@ route('POST', '/api/runs', async (context) => {
   const when = runsDate(body.date);
   if (!when.ok) throw new Refused(400, 'bad_date', `**${String(body.date).slice(0, 40)}** is not a date Black Bloc can read, so nothing was saved. Pick it in the date box, or write it as YYYY-MM-DD.`);
   const event = runsEvent(body);
+  runsCheckTags(body);
   const id = state.bafRuns.reduce((most, one) => Math.max(most, one.id), 0) + 1;
   state.bafRuns.push({ id, how: 'hand', ...event, run_ref: null, started_at: when.value, game, category: String(body.category || '').trim(), people: runsPeople(body), note: String(body.note || '').trim(), added_by: STAFF.id });
   if (body.series) runsSeriesSet(game, body.series);
   if (body.genre) runsTagSet('genre', game, body.genre);
+  if (body.developer) runsTagSet('developer', game, body.developer);
   logAction('web.runs.added', { details: { via: 'website', key: `h${id}`, game, event: event.event_name } });
   return { ok: true, message: `**${game}** is in the BaF runs database.`, value: `h${id}` };
 });
@@ -12533,12 +12592,14 @@ for (const tag of Object.keys(RUNS_TAG_STORES)) {
     const body = await context.body();
     const key = runsKey(context.params.game_key);
     const before = state[RUNS_TAG_STORES[tag]][key] || '';
-    const text = String(body[tag] || '').trim();
+    const text = runsTagText(tag, body[tag]);
+    runsTagProblem(tag, text);
     if (before === text) throw new Refused(409, 'no_change', 'Nothing in that run changed, so nothing was saved.');
     runsTagSet(tag, key, text);
     logAction(`web.runs.${tag}_set`, { details: { via: 'website', game_key: key, before, after: text } });
     const game = (runsGames(runsView()).find((one) => one.game_key === key) || { game: key }).game;
-    return { ok: true, message: text ? `**${game}** is in the ${tag} **${text}**.` : `**${game}** has no ${tag} now.`, value: key };
+    const said = tag === 'developer' ? `**${game}** is by **${text}**.` : `**${game}** is in the ${tag} **${text}**.`;
+    return { ok: true, message: text ? said : `**${game}** has no ${tag} now.`, value: key };
   });
 }
 
@@ -12546,6 +12607,7 @@ route('PUT', '/api/runs/:key', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
   const key = String(context.params.key);
+  runsCheckTags(body);
   if (key.startsWith('h')) {
     const row = runsHand(key);
     if ('date' in body) {
@@ -12563,6 +12625,7 @@ route('PUT', '/api/runs/:key', async (context) => {
     if ('event' in body || 'marathon_id' in body) Object.assign(row, runsEvent(body));
     if ('series' in body) runsSeriesSet(row.game, body.series);
     if ('genre' in body) runsTagSet('genre', row.game, body.genre);
+    if ('developer' in body) runsTagSet('developer', row.game, body.developer);
     logAction('web.runs.edited', { details: { via: 'website', key, game: row.game, after: body } });
     return { ok: true, message: `**${row.game}** is saved.`, value: key };
   }
@@ -12583,6 +12646,7 @@ route('PUT', '/api/runs/:key', async (context) => {
   state.bafEdits[slot] = held;
   if ('series' in body) runsSeriesSet(held.game || run.game, body.series);
   if ('genre' in body) runsTagSet('genre', held.game || run.game, body.genre);
+  if ('developer' in body) runsTagSet('developer', held.game || run.game, body.developer);
   logAction('web.runs.edited', { details: { via: 'website', key, game: held.game || run.game, after: body } });
   return { ok: true, message: `**${held.game || run.game}** is saved.`, value: key };
 });
@@ -12658,6 +12722,7 @@ function runsImportCsv(text, dryRun) {
   let skipped = 0;
   let need = 0;
   let bad = 0;
+  let cut = 0;
   for (const values of table.slice(1)) {
     const row = Object.fromEntries(head.map((name, at) => [name === 'runner(s)' ? 'runners' : name, values[at] || '']));
     const game = row.game.trim();
@@ -12671,9 +12736,14 @@ function runsImportCsv(text, dryRun) {
     const ids = String(row.runner_ids || '').split(/\s*;\s*/);
     const people = names.map((name, at) => ({ name, login: null, part: 'runner', user_id: /^\d+$/.test(ids[at] || '') ? ids[at] : runsMember(name) }));
     if (people.some((one) => !one.user_id)) need += 1;
-    adds.push({ event_name: String(row.event || '').trim(), event_source: row.event_source || null, event_ref: row.event_ref || null, run_ref: null, started_at: when.value, game, category: String(row.category || '').trim(), people, note: String(row.note || '').trim(), series: String(row.series || '').trim(), genre: String(row.genre || '').trim() });
+    let genre = runsTagText('genre', row.genre);
+    if (genreEntries(genre).length > runsGenreCap()) {
+      genre = genreEntries(genre).slice(0, runsGenreCap()).join(', ');
+      cut += 1;
+    }
+    adds.push({ event_name: String(row.event || '').trim(), event_source: row.event_source || null, event_ref: row.event_ref || null, run_ref: null, started_at: when.value, game, category: String(row.category || '').trim(), people, note: String(row.note || '').trim(), series: String(row.series || '').trim(), genre, developer: String(row.developer || '').trim() });
   }
-  return { adds, skipped, need, bad, unmatched: [], later: 0, event: null };
+  return { adds, skipped, need, bad, cut, unmatched: [], later: 0, event: null };
 }
 
 function runsImportEvent(url, pairs) {
@@ -12695,7 +12765,7 @@ function runsImportEvent(url, pairs) {
     });
     if (!people.some((one) => one.user_id)) continue;
     if (here.has(run.id)) { skipped += 1; continue; }
-    adds.push({ event_name: MOCK_TRACKER_EVENT.name, event_source: 'gdq', event_ref: MOCK_TRACKER_EVENT.id, run_ref: run.id, started_at: run.at, game: run.game, category: run.category, people, note: '', series: '', genre: '' });
+    adds.push({ event_name: MOCK_TRACKER_EVENT.name, event_source: 'gdq', event_ref: MOCK_TRACKER_EVENT.id, run_ref: run.id, started_at: run.at, game: run.game, category: run.category, people, note: '', series: '', genre: '', developer: '' });
   }
   const names = [...unmatched.values()].sort().map((name) => ({ name, suggest: null }));
   return { adds, skipped, need: names.length, bad: 0, unmatched: names, later: 0, event: MOCK_TRACKER_EVENT.name };
@@ -12710,22 +12780,24 @@ route('POST', '/api/runs/import', async (context) => {
   else if (String(body.csv || '').trim()) found = runsImportCsv(body.csv, dryRun);
   else throw new Refused(400, 'nothing_to_import', 'There was nothing to import, so nothing was read. Paste a GDQ tracker event link, or choose a CSV file.');
   const preview = found.adds.slice(0, 200).map((one) => ({ date: one.started_at, event: one.event_name, game: one.game, category: one.category, runners_text: runsLine(runsRunners(one.people)) }));
-  const value = { dry_run: dryRun, would_add: found.adds.length, added: 0, skipped: found.skipped, need_match: found.need, unreadable: found.bad, unmatched: found.unmatched, not_run_yet: found.later, event: found.event, rows: preview };
+  const value = { dry_run: dryRun, would_add: found.adds.length, added: 0, skipped: found.skipped, need_match: found.need, unreadable: found.bad, unmatched: found.unmatched, not_run_yet: found.later, event: found.event, genres_cut: found.cut || 0, rows: preview };
+  const trimmed = found.cut ? ` ${found.cut} game(s) had more than ${runsGenreCap()} genres, so only their first ${runsGenreCap()} were kept.` : '';
   const words = found.event
     ? `**${found.event}**: ${found.adds.length} BaF run(s) ${dryRun ? 'would be added' : 'added'}, ${found.skipped} skipped (already here), ${found.need} runner name(s) match no member, 0 not run yet.`
     : `${found.adds.length} row(s) ${dryRun ? 'would be added' : 'added'}, ${found.skipped} skipped (already here), ${found.need} need a runner match.`;
-  if (dryRun) return { ok: true, message: `${words} Nothing was written.`, value };
+  if (dryRun) return { ok: true, message: `${words} Nothing was written.${trimmed}`, value };
   let id = state.bafRuns.reduce((most, one) => Math.max(most, one.id), 0);
   for (const one of found.adds) {
     id += 1;
-    const { series, genre, ...row } = one;
+    const { series, genre, developer, ...row } = one;
     state.bafRuns.push({ id, how: 'imported', ...row, added_by: STAFF.id });
     if (series && !state.bafSeries[runsKey(one.game)]) runsSeriesSet(one.game, series);
     if (genre && !state.bafGenre[runsKey(one.game)]) runsTagSet('genre', one.game, genre);
+    if (developer && !state.bafDeveloper[runsKey(one.game)]) runsTagSet('developer', one.game, developer);
   }
   value.added = found.adds.length;
   logAction('web.runs.imported', { details: { via: 'website', from: found.event ? 'gdq' : 'csv', added: found.adds.length, skipped: found.skipped } });
-  return { ok: true, message: words, value };
+  return { ok: true, message: `${words}${trimmed}`, value };
 });
 
 function roomRow(row) {
