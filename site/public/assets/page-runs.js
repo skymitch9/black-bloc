@@ -27,6 +27,7 @@ import {
   field,
   filterChip,
   filterSelect,
+  fitScroll,
   idsIn,
   keepSaying,
   memberPicker,
@@ -342,6 +343,7 @@ function paint() {
     : sayNothing(payload.rows.length ? NO_MATCH : NO_RUNS);
   grid.replaceChildren(built);
   pageHolder.replaceChildren(pagerFor(slice, paint));
+  fitScroll(built, { below: pageHolder });
   counter.textContent = pageWords(slice, payload.rows.filter((row) => Boolean(row.removed) === state.removed).length);
   paintFilters();
 }
@@ -421,6 +423,7 @@ function paintGames() {
     ? table(gameColumns(gamesSay), shown, { search: false })
     : sayNothing(games.length ? NO_MATCH : NO_RUNS));
   gamesPager.replaceChildren(pagerFor(slice, paintGames));
+  fitScroll(gamesGrid, { below: gamesPager });
   gamesCounter.textContent = pageWords(slice, games.length);
   gamesPicks.replaceChildren(...pickers(games, TAGS, paintGames));
 }

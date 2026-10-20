@@ -80,6 +80,8 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the post toolbar's fixtures are not green." }
     node site/mock/listfilter.test.mjs
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the shared search/filter fixtures are not green." }
+    node site/mock/tablefit.test.mjs
+    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the table height fixtures are not green." }
     node site/mock/fieldaids.test.mjs
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the shared field aids' fixtures are not green." }
     node site/mock/posts-hash.test.mjs
