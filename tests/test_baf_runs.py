@@ -660,3 +660,17 @@ async def test_a_families_edit_takes_effect_on_the_next_read(bot):
     ]
     with pytest.raises(SettingError, match="Line 2"):
         await bot.store.set(GUILD, RUNS_GENRE_FAMILIES, "brainy: puzzle\nno colon", by=1)
+
+
+async def test_a_word_from_the_note_finds_the_run_in_the_search_and_in_lookup(bot):
+    await seed(bot)
+    added = await runs.add(
+        bot, bot.guild, None, {"game": "Tetris", "event": "BtB", "note": "Played blindfolded"}
+    )
+    assert added.ok
+    every = await runs.view(bot, bot.guild)
+
+    assert [row["game"] for row in runs.filtered(every, q="blindfold")] == ["Tetris"]
+    assert (await runs.find(bot, bot.guild, added.value))["search"].endswith("Played blindfolded")
+    found = await runs.lookup(bot, bot.guild, None, "blindfolded tetris")
+    assert [one["game"] for one in found.games] == ["Tetris"]

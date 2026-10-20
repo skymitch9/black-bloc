@@ -507,6 +507,7 @@ def text_of(row: dict[str, Any], rule: Rule = NO_RULE) -> str:
         *(one["display"] for one in row["runners"]),
         *(one["name"] for one in row["runners"]),
         row["event"],
+        row.get("note") or "",
     ]
     return "\n".join(dict.fromkeys(str(line) for line in lines if line))
 

@@ -12188,7 +12188,7 @@ function runsSearchText(row, families) {
   const familyWords = found ? [found[0], ...found[1]] : [row.genre_family];
   const lines = [
     row.game, row.series, row.genre, ...familyWords, row.category,
-    ...row.runners.map((one) => one.display), ...row.runners.map((one) => one.name), row.event,
+    ...row.runners.map((one) => one.display), ...row.runners.map((one) => one.name), row.event, row.note,
   ];
   return [...new Set(lines.filter(Boolean).map(String))].join('\n');
 }

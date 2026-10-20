@@ -3,7 +3,7 @@
   "haystacks": {
     "Donkey Kong Country 2: Diddy's Kong Quest": "Donkey Kong Country 2: Diddy's Kong Quest\nDonkey Kong\n2D platformer\nplatformer\nplatform\nplatformers\n2d platformer\n3d platformer\nAny%\nKaizo Kat\nkaizo_kat\nAGDQ 2026",
     "Donkey Kong 64": "Donkey Kong 64\nDonkey Kong\n3D platformer\nplatformer\nplatform\nplatformers\n2d platformer\n3d platformer\n101%\nPT\npt_runs\nSGDQ 2025",
-    "Sekiro: Shadows Die Twice": "Sekiro: Shadows Die Twice\n\nAction-adventure\nadventure\naction-adventure\naction adventure\nShura Ending\nCasey\ncaseyfast\nBtB 2025",
+    "Sekiro: Shadows Die Twice": "Sekiro: Shadows Die Twice\n\nAction-adventure\nadventure\naction-adventure\naction adventure\nShura Ending\nCasey\ncaseyfast\nBtB 2025\nPlayed blindfolded on stream",
     "Dr. Robotnik's Ring Racers": "Dr. Robotnik's Ring Racers\nSonic\nKart racer\nracing\nracer\nracers\nrace\nkart racer\nkart racing\nAll Cups\nRivet\nrivetplays\nFrost 2024",
     "Mario Kart 8 Deluxe": "Mario Kart 8 Deluxe\nMario Kart\nKart racer\nracing\nracer\nracers\nrace\nkart racer\nkart racing\n48 Tracks\nCasey\ncaseyfast\nBtB 2025",
     "F-Zero GX": "F-Zero GX\nF-Zero\nRacing\nracing\nracer\nracers\nrace\nkart racer\nkart racing\nStory\nKnightFan\nknightfan\nFrost 2024",
@@ -181,6 +181,12 @@
       [
         "Sekiro: Shadows Die Twice",
         "Mario Kart 8 Deluxe"
+      ]
+    ],
+    [
+      "blindfold",
+      [
+        "Sekiro: Shadows Die Twice"
       ]
     ]
   ]
