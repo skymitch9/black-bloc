@@ -44,6 +44,11 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-19 v241
+
+- 🔨 **Switch-sheet build 1 of 6 — Post to test for weekly questions and stickies, `rehearsal_note` retired, `runs_lookup_seen` (sheet items p1b, p1c, p4h; the audit's P1 slice 1; owner 2026-10-19 18:3x: *"what we need is like post, just a test button to send to the post test channel"*).** Dispatched to Opus 22:5x on branch `post-to-test-more` (427k).
+  ↳ ✅ **LIVE v241** 2026-10-19 23:32 (release `1628212a`, merge `38e02c9a`); one sender `rehearsal_copy.py` for all three Post to test paths; six deviations in `info/weekly-questions-design.md` and `info/sticky-messages-design.md` (*Follow-up 2026-10-19 — Post to test*); see `deploys.log` v241 for what was and was not verified. Carried forward: `pb_feed_no_channel_words` is now a dead key (goes with the dead-switch build); the registry counts 1247 keys while `/api/settings` lists 1246 (the next registry build checks).
+
 ## 2026-10-19 v240
 
 - 📐 **Request #13 — the BaF runs database (PT, Mon 2026-10-19 8:26 PM; owner accepted 8:58 PM; owner to the conductor 21:3x: *"we got a request, lets sit down and do a design doc on the idea"*).** PT's thread answer: *"BaF runs in GDQ events"*, a sortable sheet with the runner, a series tag, and a Discord lookup the owner doubts (*"we CAN but we shouldn't"*). Live data 21:3x: 9 marathons, 108 runs, 5 ours, 0 BaF runs in the three Hotfix shows; the bot has tracked only since late September, so the history (main GDQs, BtB, Hotfix specials) needs importing. ✅ **Design filed 21:4x →** [`info/baf-runs-design.md`](info/baf-runs-design.md) (decisions D1–D8, forks F1 where it lives / F2 how the history gets in / F3 the Discord lookup, the page, schema 97, two keys). ❓ **Forks F1–F3 go to the owner one at a time from 21:5x; the build waits on them.** Request card: `in_progress` on the site, thread `#requests ▸ #13`.
