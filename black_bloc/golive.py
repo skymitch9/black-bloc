@@ -19,7 +19,6 @@ from .settings_store import (
     GOLIVE_BLOCK_TITLE_CHARS,
     GOLIVE_BLOCK_UNTITLED,
     GOLIVE_COSTREAM_AUTHOR,
-    GOLIVE_COSTREAM_ON,
     GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_END_TEMPLATE,
     GOLIVE_LIVE_FIELD,
@@ -633,10 +632,8 @@ def single_embed(
     return alone
 
 
-def joins_session(row: Any, platform: Any, mode: Any) -> bool:
+def joins_session(row: Any, platform: Any) -> bool:
     """True when a second platform joins the open session rather than being held back."""
-    if str(mode or "") != GOLIVE_COSTREAM_ON:
-        return False
     if _text(_row_field(row, "also_source")):
         return False
     open_platform = _text(_row_field(row, "platform"))

@@ -105,10 +105,6 @@ GOLIVE_END_TEMPLATE = "**{name}** was streaming **{game}** — the stream has en
 GOLIVE_END_SUFFIX_RETIRED = "golive_end_suffix"
 GOLIVE_END_MODE_RETIRED = "golive_end_mode"
 GOLIVE_END_AUTHOR = "{name} was live on {platform}"
-GOLIVE_COSTREAM_OFF = "off"
-GOLIVE_COSTREAM_ON = "on"
-GOLIVE_COSTREAM_MODES = (GOLIVE_COSTREAM_OFF, GOLIVE_COSTREAM_ON)
-GOLIVE_COSTREAM_MODE_KEY = "golive_costream_mode"
 GOLIVE_COSTREAM_TEMPLATE_KEY = "golive_costream_template"
 GOLIVE_COSTREAM_AUTHOR_KEY = "golive_costream_author"
 GOLIVE_COSTREAM_TEMPLATE = (
@@ -340,7 +336,6 @@ KEY_TYPES: dict[str, str] = {
     "golive_end_template": "text",
     "golive_end_author": "text",
     "golive_end_keep_mention": "bool",
-    GOLIVE_COSTREAM_MODE_KEY: "enum",
     GOLIVE_COSTREAM_TEMPLATE_KEY: "text",
     GOLIVE_COSTREAM_AUTHOR_KEY: "text",
     "golive_live_role_id": "role",
@@ -446,7 +441,7 @@ KEY_TYPES: dict[str, str] = {
     "chat_staff_can_ping_roles": "bool",
     "chat_escalation_names": "int",
     "chat_greeting_reaction": "bool",
-    "chat_greeting_via_model": "enum",
+    "chat_greeting_via_model": "bool",
     "chat_reply_in_threads": "bool",
     "chat_route_ping_staff": "bool",
     "chat_llm_mode": "enum",
@@ -485,7 +480,6 @@ KEY_TYPES: dict[str, str] = {
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
-    GOLIVE_COSTREAM_MODE_KEY: GOLIVE_COSTREAM_MODES,
     "pings_mode": PINGS_MODES,
     "pings_fan_role_creation": PINGS_CREATORS,
     "pings_fan_role_on_unlink": PINGS_ON_UNLINK,
@@ -510,7 +504,6 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "request_who_can_file": REQUEST_FILERS,
     "chat_mode": CHAT_MODES,
     "chat_llm_mode": CHAT_LLM_MODES,
-    "chat_greeting_via_model": CHAT_LLM_MODES,
     "chat_personality": PERSONALITY_CHOICES,
     "chat_memory_mode": MEMORY_MODES,
     "chat_memory_consent": CONSENT_CHOICES,
@@ -769,12 +762,6 @@ KEY_HELP: dict[str, str] = {
         "whether the role mention stays at the front of the announcement after it is rewritten "
         "to say the stream ended. off — the default — drops it. Nobody is pinged by an edit "
         "either way, so this is only about how the finished post reads"
-    ),
-    GOLIVE_COSTREAM_MODE_KEY: (
-        "what happens when somebody already live on one platform goes live on the other as "
-        "well. on — the default — edits the announcement that is already out so ONE post names "
-        "both platforms; off leaves the first post alone and the second platform is not "
-        "announced at all"
     ),
     GOLIVE_COSTREAM_TEMPLATE_KEY: (
         "the sentence used while somebody is live on two platforms at once. It takes {name} "
@@ -1141,8 +1128,8 @@ KEY_HELP: dict[str, str] = {
         "longer still gets a reply"
     ),
     "chat_greeting_via_model": (
-        "on (a hello is answered by the quick model in the member's tone, with no server notes) "
-        "or off (a hello gets one of the greeting's own written lines). Only used while "
+        "true (a hello is answered by the quick model in the member's tone, with no server notes) "
+        "or false (a hello gets one of the greeting's own written lines). Only used while "
         "chat_llm_mode is on; the cookout voice always uses the written lines, and a model that "
         "fails or is capped falls back to them"
     ),
@@ -1471,14 +1458,11 @@ KEY_HELP.update(
 # block so the parallel branches merge textually; both keys are filed under the `request`
 # namespace through NAMESPACE_OVERRIDE, because `/settings` group select is at its cap of 25.
 # Design: info/send-to-design.md.
-HANDOFF_MODE = "handoff_mode"
 HANDOFF_CONFIRM_HOURS = "handoff_confirm_hours"
-HANDOFF_MODES = ("off", "on")
 HANDOFF_CONFIRM_HOURS_DEFAULT = 24
 HANDOFF_CONFIRM_HOURS_MIN = 1
 HANDOFF_CONFIRM_HOURS_MAX = 168
-KEY_TYPES.update({HANDOFF_MODE: "enum", HANDOFF_CONFIRM_HOURS: "int"})
-KEY_CHOICES[HANDOFF_MODE] = HANDOFF_MODES
+KEY_TYPES.update({HANDOFF_CONFIRM_HOURS: "int"})
 KEY_MIN[HANDOFF_CONFIRM_HOURS] = HANDOFF_CONFIRM_HOURS_MIN
 KEY_MAX[HANDOFF_CONFIRM_HOURS] = HANDOFF_CONFIRM_HOURS_MAX
 KEY_MIN_REASON[HANDOFF_CONFIRM_HOURS] = (
@@ -1491,11 +1475,6 @@ KEY_MAX_REASON[HANDOFF_CONFIRM_HOURS] = (
 )
 KEY_HELP.update(
     {
-        HANDOFF_MODE: (
-            "on draws the Send to... moves for staff -- a request becomes an event, an event "
-            "becomes a request, a ticket becomes either with the member's say-so; off hides "
-            "them and refuses a stale press in words"
-        ),
         HANDOFF_CONFIRM_HOURS: (
             "how long a member has to answer a make-this-a-request/event DM before it counts "
             "as no; the ticket stays open either way"
@@ -2613,29 +2592,19 @@ KEY_HELP[PANEL_EXPIRED_TEXT_KEY] = (
 )
 
 # Boot status (`docs/info/boot-status-design.md`) — red while it boots, green when it is ready.
-BOOT_STATUS_MODE = "boot_status_mode"
 BOOT_STATUS_TEXT_KEY = "boot_status_text"
 SHUTDOWN_STATUS_TEXT_KEY = "shutdown_status_text"
-BOOT_STATUS_MODES = ("off", "on")
-BOOT_STATUS_MODE_DEFAULT = "on"
 BOOT_STATUS_TEXT = "Restarting and booting — back in a moment"
 SHUTDOWN_STATUS_TEXT = "Restarting — back in a moment"
 
 KEY_TYPES.update(
     {
-        BOOT_STATUS_MODE: "enum",
         BOOT_STATUS_TEXT_KEY: "text",
         SHUTDOWN_STATUS_TEXT_KEY: "text",
     }
 )
-KEY_CHOICES[BOOT_STATUS_MODE] = BOOT_STATUS_MODES
 KEY_HELP.update(
     {
-        BOOT_STATUS_MODE: (
-            "on makes Black Bloc read Do Not Disturb with the restarting sentence from the "
-            "moment Discord sees it until every cog is loaded and it is ready, and flip to it "
-            "again on the way down; off is the older behaviour, where it simply appears"
-        ),
         BOOT_STATUS_TEXT_KEY: (
             "the status Black Bloc carries while it is starting up, beside the red Do Not "
             "Disturb dot. It is replaced by the member count the moment it is ready"
@@ -3934,11 +3903,6 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the label of the link button under a personal best post",
     ),
-    "pb_feed_no_channel_words": (
-        "nowhere yet — pb_feed_channel_id is blank",
-        (),
-        "what the rehearsal note names as the real channel while pb_feed_channel_id is blank",
-    ),
     "pb_feed_panel_title": (
         "Personal bests",
         (),
@@ -3963,13 +3927,6 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "A personal best is posted once speedrun.com has verified it.",
         (),
         "what /pb adds for a matched member while pb_feed_mode is on",
-    ),
-    "pb_feed_posting_shadow": (
-        "Staff are still trying this out: a new personal best is not posted in the server's "
-        "personal best channel yet, only copied to where staff rehearse.",
-        (),
-        "what /pb adds for a matched member while pb_feed_mode is test, in place of "
-        "pb_feed_posting_on",
     ),
     "pb_feed_posting_off": (
         "The personal best feed is switched off, so nothing is looked at and nothing is posted.",
@@ -5629,7 +5586,6 @@ CORE_KEYS = (
     ERROR_RETRY_LABEL_KEY,
     ERROR_RETRY_MINUTES_KEY,
     ERROR_RETRY_EXPIRED_KEY,
-    BOOT_STATUS_MODE,
     BOOT_STATUS_TEXT_KEY,
     SHUTDOWN_STATUS_TEXT_KEY,
     PANEL_EXPIRED_TEXT_KEY,
@@ -5665,7 +5621,6 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_SHOW_REQUEST: "modmail",
     FRONTDOOR_SHOW_EVENT: "modmail",
     **{key: "posts" for key in STICKY_KEYS},
-    HANDOFF_MODE: "request",
     HANDOFF_CONFIRM_HOURS: "request",
     "minutes_mode": "events",
     "minutes_channel_id": "events",
@@ -10570,8 +10525,6 @@ class SettingsStore:
             return GOLIVE_END_AUTHOR
         if key == "golive_end_keep_mention":
             return False
-        if key == GOLIVE_COSTREAM_MODE_KEY:
-            return GOLIVE_COSTREAM_ON
         if key == GOLIVE_COSTREAM_TEMPLATE_KEY:
             return GOLIVE_COSTREAM_TEMPLATE
         if key == GOLIVE_COSTREAM_AUTHOR_KEY:
@@ -10842,8 +10795,6 @@ class SettingsStore:
             return False
         if key == "request_post_buttons":
             return True
-        if key == HANDOFF_MODE:
-            return "on"
         if key == HANDOFF_CONFIRM_HOURS:
             return HANDOFF_CONFIRM_HOURS_DEFAULT
         if key == "request_forum_adopts_posts":
@@ -10879,7 +10830,7 @@ class SettingsStore:
         if key == "chat_greeting_reaction":
             return False
         if key == "chat_greeting_via_model":
-            return "on"
+            return True
         if key == "chat_reply_in_threads":
             return True
         if key == "chat_route_ping_staff":
@@ -11052,8 +11003,6 @@ class SettingsStore:
             return ERROR_RETRY_EXPIRED
         if key == PANEL_EXPIRED_TEXT_KEY:
             return PANEL_EXPIRED_TEXT
-        if key == BOOT_STATUS_MODE:
-            return BOOT_STATUS_MODE_DEFAULT
         if key == BOOT_STATUS_TEXT_KEY:
             return BOOT_STATUS_TEXT
         if key == SHUTDOWN_STATUS_TEXT_KEY:

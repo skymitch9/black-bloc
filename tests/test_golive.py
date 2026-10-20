@@ -988,16 +988,15 @@ def test_the_live_sentence_re_rendered_for_an_edit_never_adds_a_mention_of_its_o
     assert kept == "<@&77> " + plain
 
 
-def test_a_second_platform_joins_only_when_the_mode_is_on_and_the_platform_is_new():
+def test_a_second_platform_joins_only_when_the_platform_is_new():
     row = {"platform": "Twitch", "also_source": None}
 
-    assert joins_session(row, "YouTube", "on") is True
-    assert joins_session(row, "Twitch", "on") is False
-    assert joins_session(row, "twitch", "on") is False
-    assert joins_session(row, "YouTube", "off") is False
-    assert joins_session({"platform": None, "also_source": None}, "YouTube", "on") is False
-    assert joins_session(row, None, "on") is False
-    assert joins_session({"platform": "Twitch", "also_source": "youtube"}, "Kick", "on") is False
+    assert joins_session(row, "YouTube") is True
+    assert joins_session(row, "Twitch") is False
+    assert joins_session(row, "twitch") is False
+    assert joins_session({"platform": None, "also_source": None}, "YouTube") is False
+    assert joins_session(row, None) is False
+    assert joins_session({"platform": "Twitch", "also_source": "youtube"}, "Kick") is False
 
 
 # --- The auto-link's pure half: which platform an address is, and the sweep's own report -----

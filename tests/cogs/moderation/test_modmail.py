@@ -1818,7 +1818,7 @@ async def test_a_message_that_starts_by_mentioning_the_bot_is_not_a_reply(
 
 
 CARD_LABELS = ["Reply", "Reply as Staff", "Private note", "Close…"]
-# `handoff_mode` ships on, so an open ticket also carries the two Send to... moves.
+# Send to... is always on, so an open ticket also carries the two Send to... moves.
 HANDOFF_LABELS = [pure_handoff.MAKE_A_REQUEST, pure_handoff.MAKE_AN_EVENT]
 CARD_LABELS_WITH_HANDOFF = [*CARD_LABELS, *HANDOFF_LABELS]
 
@@ -3653,18 +3653,13 @@ async def answer_the_dm(bot, member, ticket, kind, label):
     return interaction
 
 
-async def test_an_open_ticket_carries_both_send_to_moves_only_while_the_key_is_on(
-    cog, bot, member, db
-):
+async def test_an_open_ticket_carries_both_send_to_moves(cog, bot, member, db):
     ticket = await open_one(cog, bot, member)
 
     with_it = await card_for(cog, bot, ticket)
-    await bot.store.set(GUILD, "handoff_mode", "off")
-    without = await card_for(cog, bot, ticket)
 
     labels_on = [one.item.label for one in with_it.kwargs["view"].children]
     assert labels_on == CARD_LABELS_WITH_HANDOFF
-    assert [one.item.label for one in without.kwargs["view"].children] == CARD_LABELS
 
 
 def test_a_practice_ticket_offers_no_hand_off_at_all():

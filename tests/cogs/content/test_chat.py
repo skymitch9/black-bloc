@@ -2516,7 +2516,7 @@ async def test_the_key_off_keeps_the_written_greeting(cog, bot, member, db, monk
     reply, seen = greeting_model()
     monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
     await voice_on_pool(bot)
-    await bot.store.set(GUILD, "chat_greeting_via_model", "off")
+    await bot.store.set(GUILD, "chat_greeting_via_model", False)
     message = pinged(bot, member, "<@55> whats good")
 
     await cog.on_message(message)

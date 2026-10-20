@@ -33,7 +33,6 @@ from black_bloc.settings_store import (
     EVENTS_TEST_RETENTION_MINUTES,
     GOLIVE_COSTREAM_AUTHOR,
     GOLIVE_COSTREAM_AUTHOR_KEY,
-    GOLIVE_COSTREAM_MODE_KEY,
     GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
     GOLIVE_END_TEMPLATE,
@@ -1210,28 +1209,20 @@ async def test_the_two_send_to_decisions_are_keys_both_doors_reach(store):
         HANDOFF_CONFIRM_HOURS,
         HANDOFF_CONFIRM_HOURS_MAX,
         HANDOFF_CONFIRM_HOURS_MIN,
-        HANDOFF_MODE,
-        HANDOFF_MODES,
     )
 
-    assert (HANDOFF_MODE, HANDOFF_CONFIRM_HOURS) == ("handoff_mode", "handoff_confirm_hours")
-    assert KEY_TYPES[HANDOFF_MODE] == "enum" and KEY_CHOICES[HANDOFF_MODE] == HANDOFF_MODES
+    assert HANDOFF_CONFIRM_HOURS == "handoff_confirm_hours"
+    assert "handoff_mode" not in KEY_TYPES
     assert KEY_TYPES[HANDOFF_CONFIRM_HOURS] == "int"
-    assert store.get(7, HANDOFF_MODE) == "on"
     assert store.get(7, HANDOFF_CONFIRM_HOURS) == 24
-    for key in (HANDOFF_MODE, HANDOFF_CONFIRM_HOURS):
-        assert reachable_on_the_panel(key)
-        assert namespace_of(key) == "request"
-        assert KEY_HELP.get(key)
-    with pytest.raises(SettingError):
-        coerce_value(HANDOFF_MODE, "sometimes")
+    assert reachable_on_the_panel(HANDOFF_CONFIRM_HOURS)
+    assert namespace_of(HANDOFF_CONFIRM_HOURS) == "request"
+    assert KEY_HELP.get(HANDOFF_CONFIRM_HOURS)
     with pytest.raises(SettingError):
         coerce_value(HANDOFF_CONFIRM_HOURS, HANDOFF_CONFIRM_HOURS_MAX + 1)
     with pytest.raises(SettingError):
         coerce_value(HANDOFF_CONFIRM_HOURS, HANDOFF_CONFIRM_HOURS_MIN - 1)
-    await store.set(7, HANDOFF_MODE, "off")
     await store.set(7, HANDOFF_CONFIRM_HOURS, 48)
-    assert store.get(7, HANDOFF_MODE) == "off"
     assert store.get(7, HANDOFF_CONFIRM_HOURS) == 48
 
 
@@ -1942,30 +1933,27 @@ def test_no_feature_has_a_test_channel_of_its_own_but_the_structure_notice():
     assert own == ["structure_backup_shadow_channel_id"]
 
 
-async def test_the_three_boot_status_keys_are_core_and_reachable_from_both_doors(store):
+async def test_the_two_boot_status_keys_are_core_and_reachable_from_both_doors(store):
     """Checklist 33, and the 25-group cap: `boot_` and `shutdown_` would each be a group."""
+    assert "boot_status_mode" not in KEY_TYPES
     for key in (
-        settings_store.BOOT_STATUS_MODE,
         settings_store.BOOT_STATUS_TEXT_KEY,
         settings_store.SHUTDOWN_STATUS_TEXT_KEY,
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
         assert key in settings_store.CORE_KEYS
         assert namespace_of(key) == "core"
-    assert KEY_TYPES[settings_store.BOOT_STATUS_MODE] == "enum"
-    assert KEY_CHOICES[settings_store.BOOT_STATUS_MODE] == ("off", "on")
     assert KEY_TYPES[settings_store.BOOT_STATUS_TEXT_KEY] == "text"
     assert KEY_TYPES[settings_store.SHUTDOWN_STATUS_TEXT_KEY] == "text"
 
 
-async def test_the_boot_status_ships_on_with_both_sentences_written(store):
-    assert store.get(7, settings_store.BOOT_STATUS_MODE) == "on"
+async def test_the_boot_status_ships_with_both_sentences_written(store):
     assert store.get(7, settings_store.BOOT_STATUS_TEXT_KEY) == settings_store.BOOT_STATUS_TEXT
     assert (
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 357
+    assert len(settings_store.CORE_KEYS) == 354
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2038,29 +2026,20 @@ def test_the_live_author_may_be_left_blank_so_the_card_keeps_its_own_line():
 # --- co-streaming: the switch and the two wordings (costream-design §B) ------------------------
 
 
-def test_the_three_co_stream_keys_sit_in_the_golive_namespace_with_help_and_a_default():
+def test_the_two_co_stream_wordings_sit_in_the_golive_namespace_with_help_and_a_default():
+    assert "golive_costream_mode" not in KEY_TYPES
     for key in (
-        GOLIVE_COSTREAM_MODE_KEY,
         GOLIVE_COSTREAM_TEMPLATE_KEY,
         GOLIVE_COSTREAM_AUTHOR_KEY,
     ):
         assert namespace_of(key) == "golive" and KEY_HELP[key]
-    assert KEY_TYPES[GOLIVE_COSTREAM_MODE_KEY] == "enum"
     assert KEY_TYPES[GOLIVE_COSTREAM_TEMPLATE_KEY] == "text"
     assert KEY_TYPES[GOLIVE_COSTREAM_AUTHOR_KEY] == "text"
-    assert KEY_CHOICES[GOLIVE_COSTREAM_MODE_KEY] == ("off", "on")
 
 
-async def test_co_streaming_ships_on_and_the_owner_can_turn_it_off_from_either_door(store):
-    assert store.get(7, GOLIVE_COSTREAM_MODE_KEY) == "on"
+async def test_co_streaming_wordings_ship_with_their_defaults(store):
     assert store.get(7, GOLIVE_COSTREAM_TEMPLATE_KEY) == GOLIVE_COSTREAM_TEMPLATE
     assert store.get(7, GOLIVE_COSTREAM_AUTHOR_KEY) == GOLIVE_COSTREAM_AUTHOR
-
-    await store.set(7, GOLIVE_COSTREAM_MODE_KEY, "off")
-
-    assert store.get(7, GOLIVE_COSTREAM_MODE_KEY) == "off"
-    with pytest.raises(SettingError):
-        coerce_value(GOLIVE_COSTREAM_MODE_KEY, "shadow")
 
 
 def test_both_co_stream_wordings_take_the_same_seven_placeholders_and_no_others():
@@ -2149,7 +2128,7 @@ def test_the_golive_page_still_draws_eighty_nine_keys():
     """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
     A key added to one of these namespaces has to be added there too, or it lands in the
     Everything else catch-all with nobody noticing."""
-    assert len(golive_page_keys()) == 89
+    assert len(golive_page_keys()) == 88
 
 
 def test_every_golive_page_key_says_in_words_what_it_does():
@@ -2323,7 +2302,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1230
+    assert len(settings_store.KEY_TYPES) == 1225
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):

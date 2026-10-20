@@ -3,7 +3,6 @@
   "settings": {
     "_": "The registry IS the truth (black_bloc/settings_store.py). This block is the one table both halves read: tests/api/test_contract.py asserts it equals CORE_KEYS / KEY_MIN / KEY_MAX, and site/mock/check.mjs asserts the mock's own /api/settings matches it. A bound invented in the mock, or one added to the registry and not mirrored, fails one half or the other by name. The `help` map is the same guard for the WORDS a settings row carries, scoped to the golive / pings / youtube namespaces the Go-live page draws (owner, 2026-09-21: \"what each of the settings does isnt clear\"). KEY_HELP is the one home; this is the table both halves read. It is namespace-scoped because 59 of the registry's other keys still disagree with the mock — measured 2026-09-21 — and widening it is a follow-up, not a licence to keep two copies.",
     "core_keys": [
-      "boot_status_mode",
       "boot_status_text",
       "bot_bio",
       "brackets_advance_losers_from_default",
@@ -175,7 +174,6 @@
       "pb_feed_max_age_days",
       "pb_feed_max_posts",
       "pb_feed_mode",
-      "pb_feed_no_channel_words",
       "pb_feed_no_post_said",
       "pb_feed_no_runner_said",
       "pb_feed_not_now_said",
@@ -198,7 +196,6 @@
       "pb_feed_posted_again_said",
       "pb_feed_posting_off",
       "pb_feed_posting_on",
-      "pb_feed_posting_shadow",
       "pb_feed_rehearsed_again_said",
       "pb_feed_rematch_days",
       "pb_feed_set_said",
@@ -604,7 +601,6 @@
       "golive_channel_spotlight_default": "whether a channel added through **Add a streamer** with nobody here behind it is spotlighted from the start — its announcement pinned while it streams and a reminder every few hours. off by default: it is announced like any other stream, and its own row's **Spotlight on** adds the pin and the reminders whenever staff want them",
       "golive_cooldown_minutes": "how many minutes must pass before the same person is announced a second time, so a stream that drops and comes back does not get two posts. 60 by default",
       "golive_costream_author": "the small top line of the announcement card while two platforms are live. It takes {name} {game} {title} {url} {platform} {also_url} {also_platform}",
-      "golive_costream_mode": "what happens when somebody already live on one platform goes live on the other as well. on — the default — edits the announcement that is already out so ONE post names both platforms; off leaves the first post alone and the second platform is not announced at all",
       "golive_costream_template": "the sentence used while somebody is live on two platforms at once. It takes {name} {game} {title} {url} {platform} {also_url} {also_platform}. Twitch is always written first and is the only link Discord shows a preview for — the second link is always posted with its preview suppressed",
       "golive_embed": "how the announcement is drawn. on — the default — posts an embed carrying the game's art and the stream's title; off posts the sentence on its own",
       "golive_end_author": "the small top line of the announcement card once the stream is over. It takes {name} {platform} {duration}; blank keeps 'was live on'",

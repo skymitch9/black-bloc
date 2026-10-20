@@ -395,7 +395,7 @@ export const DRAWERS = [
   {
     id: 'costream',
     title: 'Two platforms at once',
-    keys: ['golive_costream_mode', 'golive_costream_template', 'golive_costream_author'],
+    keys: ['golive_costream_template', 'golive_costream_author'],
   },
   {
     id: 'replays',

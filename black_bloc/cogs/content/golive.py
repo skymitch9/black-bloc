@@ -79,7 +79,6 @@ from ...settings_store import (
     GOLIVE_AUTOLINK_PRESENCE_KEY,
     GOLIVE_AUTOLINK_VIDEO_KEY,
     GOLIVE_COSTREAM_AUTHOR_KEY,
-    GOLIVE_COSTREAM_MODE_KEY,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
     GOLIVE_LIVE_AUTHOR_KEY,
     GOLIVE_MODES,
@@ -1148,7 +1147,7 @@ class GoLive(commands.Cog):
         async with self._lock(member.id):
             row = await open_session_for(self.bot.db, member.guild.id, member.id)
             if row is None or not joins_session(
-                row, info.platform, self._costream_mode(member.guild.id)
+                row, info.platform
             ):
                 return
             await self._add_platform_once(member, info, source, row)
@@ -1365,7 +1364,7 @@ class GoLive(commands.Cog):
             return ROLE_FILTER
         open_row = await open_session_for(self.bot.db, guild.id, member.id)
         if open_row is not None:
-            if joins_session(open_row, info.platform, self._costream_mode(guild.id)):
+            if joins_session(open_row, info.platform):
                 await self._add_platform_once(member, info, source, open_row)
             return OPEN_SESSION
         last = await latest_session(self.bot.db, guild.id, member.id)
@@ -1706,9 +1705,6 @@ class GoLive(commands.Cog):
     def _mode(self, guild_id: int) -> str:
         return self.bot.store.get(guild_id, "golive_mode")
 
-    def _costream_mode(self, guild_id: int) -> str:
-        return self.bot.store.get(guild_id, GOLIVE_COSTREAM_MODE_KEY)
-
     def _may_change_roles(self, guild_id: int) -> bool:
         return self._mode(guild_id) == "on" and getattr(self.bot, "guard", None) is None
 
@@ -1850,7 +1846,7 @@ class GoLive(commands.Cog):
             open_row = await open_session_for(self.bot.db, guild_id, user_id)
             if stream is not None:
                 if open_row is None or joins_session(
-                    open_row, TWITCH, self._costream_mode(guild_id)
+                    open_row, TWITCH
                 ):
                     await self._go_live(member, from_twitch(stream), "twitch")
             elif await open_session_on(self.bot.db, guild_id, user_id, "twitch") is not None:

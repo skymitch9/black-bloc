@@ -2474,24 +2474,6 @@ async def test_the_last_platform_ending_is_todays_ended_path(cog, bot, member, d
     assert "golive.end" in await action_kinds(db)
 
 
-async def test_with_the_mode_off_the_second_platform_is_held_back_as_before(
-    cog, bot, member, db
-):
-    await announcing(bot)
-    await bot.store.set(GUILD, "golive_costream_mode", "off")
-    await cog._go_live(member, TWITCH_INFO, "twitch")
-    posted = bot.guild.channel.messages[0]
-
-    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
-    await cog._go_live(member, YOUTUBE_INFO, "youtube")
-
-    row = await only_session(db)
-    assert row["also_source"] is None
-    assert posted.edits == []
-    assert len(bot.guild.channel.messages) == 1
-    assert "golive.costream_added" not in await action_kinds(db)
-
-
 async def test_the_same_platform_twice_is_still_a_duplicate_and_changes_nothing(
     cog, bot, member, db
 ):

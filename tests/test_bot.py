@@ -126,16 +126,6 @@ async def test_the_very_first_thing_discord_sees_is_red_and_says_it_is_restartin
     await bot.close()
 
 
-async def test_the_mode_off_is_the_older_behaviour_of_simply_appearing(settings, monkeypatch):
-    monkeypatch.setattr(settings_store, "BOOT_STATUS_MODE_DEFAULT", "off")
-
-    bot = BlackBlocBot(settings)
-
-    assert bot.activity is None
-    assert bot.status is discord.Status.online
-    await bot.close()
-
-
 async def test_the_stored_sentence_is_the_one_identify_carries(tmp_path, monkeypatch):
     """The database is shut at construct time, so `setup_hook` re-reads it before it connects."""
     from black_bloc.config import load_settings

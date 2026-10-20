@@ -18,10 +18,10 @@ from black_bloc.presence import (
     update_status,
 )
 from black_bloc.settings_store import (
-    BOOT_STATUS_MODE,
     BOOT_STATUS_TEXT,
     BOOT_STATUS_TEXT_KEY,
     BOT_BIO_TEMPLATE,
+    KEY_TYPES,
     SHUTDOWN_STATUS_TEXT,
     SHUTDOWN_STATUS_TEXT_KEY,
     STATUS_PREFIX,
@@ -221,9 +221,12 @@ async def test_both_sentences_are_words_a_lead_can_change(store):
     assert boot_presence(store)["activity"].name == BOOT_STATUS_TEXT
 
 
-async def test_the_mode_off_leaves_the_presence_alone_entirely(store):
-    await store.set(GUILD, BOOT_STATUS_MODE, "off")
+async def test_the_boot_status_is_a_constant_and_no_setting_reads_it(store, monkeypatch):
+    from black_bloc import presence
 
+    assert presence.BOOT_STATUS == "on"
+    assert "boot_status_mode" not in KEY_TYPES
+    monkeypatch.setattr(presence, "BOOT_STATUS", "off")
     assert boot_presence(store, GUILD) == {}
     assert shutdown_presence(store, GUILD) == {}
 

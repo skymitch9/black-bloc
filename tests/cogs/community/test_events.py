@@ -848,7 +848,7 @@ async def test_the_review_card_carries_approve_and_deny_buttons_keyed_by_the_eve
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     posted = bot.guild.created[0].messages[0]
     ids = [item.custom_id for item in posted.kwargs["view"].children]
-    # `handoff_mode` ships on, so the room also carries Not an event — make it a request.
+    # Send to... is always on, so the room also carries Not an event — make it a request.
     assert ids == [
         decision_id(row["id"], "approve"),
         decision_id(row["id"], "deny"),
@@ -4191,16 +4191,6 @@ async def a_pending_event(cog, bot, member, **fields):
     return (await events_by_status(bot.db, GUILD, (PENDING,)))[0]
 
 
-async def test_the_review_room_offers_the_move_only_while_the_key_is_on(cog, bot, member, db):
-    await bot.store.set(GUILD, "handoff_mode", "off")
-
-    await submit(cog, bot, member)
-
-    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
-    ids = [item.custom_id for item in bot.guild.created[0].messages[0].kwargs["view"].children]
-    assert ids == [decision_id(row["id"], "approve"), decision_id(row["id"], "deny")]
-
-
 async def test_making_it_a_request_files_one_in_the_requesters_name_from_the_events_words(
     cog, bot, member, lead, db
 ):
@@ -4299,21 +4289,6 @@ async def test_a_second_press_on_a_card_nobody_refreshed_refuses_rather_than_fil
 
     assert "already" in again.response.messages[-1]["content"]
     assert len(await requests_pure.list_requests(db, GUILD)) == 1
-
-
-async def test_a_press_after_the_key_went_off_refuses_in_words_and_files_nothing(
-    cog, bot, member, lead, db
-):
-    from black_bloc import requests as requests_pure
-
-    row = await a_pending_event(cog, bot, member)
-    await bot.store.set(GUILD, "handoff_mode", "off")
-
-    said = await hand_it_back(bot, lead, row["id"])
-
-    assert "handoff_mode" in said.response.messages[-1]["content"]
-    assert await requests_pure.list_requests(db, GUILD) == []
-    assert (await get_event(db, row["id"]))["status"] == PENDING
 
 
 async def test_a_member_pressing_make_it_a_request_is_told_which_role_it_needs(

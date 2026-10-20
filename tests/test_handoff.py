@@ -5,6 +5,7 @@ import pytest
 from black_bloc import events as events_pure
 from black_bloc import handoff as pure
 from black_bloc import requests as requests_pure
+from black_bloc.settings_store import KEY_TYPES
 
 GUILD = 7
 MEMBER = 900
@@ -18,7 +19,7 @@ class Store:
         return self.values.get(key)
 
 
-ON = Store(handoff_mode="on", handoff_confirm_hours=24)
+ON = Store(handoff_confirm_hours=24)
 
 
 def test_the_three_things_a_hand_off_moves_between_are_named_once():
@@ -31,13 +32,13 @@ def test_the_three_things_a_hand_off_moves_between_are_named_once():
     }
 
 
-def test_the_mode_key_is_read_off_the_registry_and_never_out_of_a_cog():
-    assert pure.MODE_KEY == "handoff_mode"
+def test_send_to_is_a_constant_and_no_setting_reads_it(monkeypatch):
     assert pure.CONFIRM_HOURS_KEY == "handoff_confirm_hours"
-    assert pure.MODES == ("off", "on")
-    assert pure.handoff_on(ON, GUILD) is True
-    assert pure.handoff_on(Store(handoff_mode="off"), GUILD) is False
-    assert pure.handoff_on(Store(), GUILD) is False
+    assert pure.MODE == "on"
+    assert pure.handoff_on(Store(), GUILD) is True
+    assert "handoff_mode" not in KEY_TYPES
+    monkeypatch.setattr(pure, "MODE", "off")
+    assert pure.handoff_on(ON, GUILD) is False
 
 
 def test_the_confirm_window_is_clamped_to_what_the_registry_bounds():
@@ -120,12 +121,13 @@ def test_the_log_kinds_land_on_the_request_feature_and_are_all_loud():
         assert kind in IMPORTANT and is_important(kind), kind
 
 
-def test_a_request_is_refused_in_words_when_the_move_is_off_or_the_row_is_finished():
+def test_a_request_is_refused_in_words_when_the_move_is_off_or_the_row_is_finished(monkeypatch):
     open_row = {"id": 4, "status": requests_pure.OPEN}
 
     assert pure.refusal_for_request(ON, GUILD, open_row) == ""
-    off = pure.refusal_for_request(Store(handoff_mode="off"), GUILD, open_row)
-    assert "handoff_mode" in off and "A setting group" in off
+    monkeypatch.setattr(pure, "MODE", "off")
+    assert pure.refusal_for_request(ON, GUILD, open_row) == pure.HANDOFF_OFF
+    monkeypatch.setattr(pure, "MODE", "on")
     for status in requests_pure.FINAL_STATUSES:
         said = pure.refusal_for_request(ON, GUILD, {"id": 4, "status": status})
         assert "#4" in said and "already" in said
@@ -135,7 +137,7 @@ def test_an_event_is_refused_in_words_once_it_has_been_decided():
     assert pure.refusal_for_event(ON, GUILD, {"id": 2, "status": events_pure.PENDING}) == ""
     said = pure.refusal_for_event(ON, GUILD, {"id": 2, "status": events_pure.CANCELLED})
     assert "#2" in said and events_pure.CANCELLED in said
-    assert pure.refusal_for_event(Store(), GUILD, {"id": 2, "status": events_pure.PENDING})
+    assert pure.refusal_for_event(Store(), GUILD, {"id": 2, "status": events_pure.PENDING}) == ""
 
 
 def test_a_draft_raised_from_a_request_is_filled_in_from_it_and_says_whose_it_was():
@@ -216,10 +218,10 @@ def test_a_ticket_nobody_has_asked_about_can_be_sent_anywhere():
     assert pure.refusal_for_ticket(ON, GUILD, a_ticket()) == ""
 
 
-def test_the_move_being_off_refuses_a_ticket_by_name_too():
-    said = pure.refusal_for_ticket(Store(), GUILD, a_ticket())
+def test_the_move_being_off_refuses_a_ticket_in_words_too(monkeypatch):
+    monkeypatch.setattr(pure, "MODE", "off")
 
-    assert "handoff_mode" in said and "A setting group" in said
+    assert pure.refusal_for_ticket(Store(), GUILD, a_ticket()) == pure.HANDOFF_OFF
 
 
 def test_a_practice_ticket_has_nobody_to_ask_and_says_so():

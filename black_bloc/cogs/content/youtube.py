@@ -29,7 +29,6 @@ from ...panels import (
 from ...panels import site_page_url as library_site_page_url
 from ...settings_store import (
     DB_UNAVAILABLE,
-    GOLIVE_COSTREAM_MODE_KEY,
     GUILD_ONLY,
     YOUTUBE_LIVE_MODES,
     YOUTUBE_LIVE_POLL_MINUTES,
@@ -716,9 +715,7 @@ class YouTube(commands.Cog):
             return
         guild = member.guild
         open_session = await self._any_open_session(guild, member)
-        joins = open_session is not None and joins_session(
-            open_session, YOUTUBE, self.bot.store.get(guild.id, GOLIVE_COSTREAM_MODE_KEY)
-        )
+        joins = open_session is not None and joins_session(open_session, YOUTUBE)
         if open_session is not None and not joins:
             if known is None:
                 await self._live_seen(

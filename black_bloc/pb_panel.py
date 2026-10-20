@@ -121,7 +121,7 @@ def own_line(store: Any, guild_id: int, row: Any, login: str | None) -> str:
             link=row["src_weblink"],
             login=row["twitch_login"] or login or "",
         )
-        return f"{matched} {posting_line(store, guild_id)}"
+        return " ".join(part for part in (matched, posting_line(store, guild_id)) if part)
     if not login:
         return said(store, guild_id, "pb_feed_you_unlinked")
     if state == pb_store.NONE:
@@ -135,9 +135,13 @@ def own_line(store: Any, guild_id: int, row: Any, login: str | None) -> str:
     return said(store, guild_id, "pb_feed_you_waiting")
 
 
+POSTING_KEYS = {"on": "pb_feed_posting_on", OFF: "pb_feed_posting_off"}
+
+
 def posting_line(store: Any, guild_id: int) -> str:
     """Whether a personal best is posted right now; it never promises a post the mode forbids."""
-    return said(store, guild_id, f"pb_feed_posting_{mode_of(store, guild_id)}")
+    key = POSTING_KEYS.get(mode_of(store, guild_id))
+    return said(store, guild_id, key) if key else ""
 
 
 def own_move(row: Any) -> str | None:

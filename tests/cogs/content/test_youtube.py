@@ -1500,17 +1500,14 @@ async def test_the_staff_panel_says_when_a_probe_was_served_the_bot_check(
 # --- a probe that reads live while another source's session is open (the silent path) -------------
 
 
-async def open_twitch_session(db):
+async def open_twitch_session(db, *, also=None):
     await db.conn.execute(
-        "INSERT INTO golive_sessions(guild_id, user_id, source, platform, started_at, mode) "
-        "VALUES (?, ?, 'twitch', 'Twitch', '2026-09-17T18:00:00+00:00', 'on')",
-        (GUILD, STREAMER),
+        "INSERT INTO golive_sessions(guild_id, user_id, source, platform, started_at, mode, "
+        "also_source, also_platform) "
+        "VALUES (?, ?, 'twitch', 'Twitch', '2026-09-17T18:00:00+00:00', 'on', ?, ?)",
+        (GUILD, STREAMER, also, also.title() if also else None),
     )
     await db.conn.commit()
-
-
-async def no_costreaming(bot):
-    await bot.store.set(GUILD, "golive_costream_mode", "off")
 
 
 async def test_a_stream_read_live_while_their_twitch_session_is_open_leaves_a_row_saying_so(
@@ -1518,8 +1515,7 @@ async def test_a_stream_read_live_while_their_twitch_session_is_open_leaves_a_ro
 ):
     """The probe worked; the one-announcement-per-person rule is why nothing was posted."""
     await live_on(bot)
-    await no_costreaming(bot)
-    await open_twitch_session(db)
+    await open_twitch_session(db, also="kick")
     client = await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
 
     await cog.probe_all()
@@ -1540,8 +1536,7 @@ async def test_that_row_is_written_once_per_stream_and_not_once_per_probe(
     bot, cog, golive, db, member
 ):
     await live_on(bot)
-    await no_costreaming(bot)
-    await open_twitch_session(db)
+    await open_twitch_session(db, also="kick")
     await live_linked(
         db, cog, BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, keyed=True
     )
@@ -1557,8 +1552,7 @@ async def test_the_row_shadows_with_the_live_half_exactly_as_the_announcing_one_
     bot, cog, golive, db, member
 ):
     await live_on(bot, mode="shadow")
-    await no_costreaming(bot)
-    await open_twitch_session(db)
+    await open_twitch_session(db, also="kick")
     await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
 
     await cog.probe_all()
@@ -1617,13 +1611,13 @@ async def test_the_staff_panel_says_how_many_channels_read_as_live(bot, cog, gol
     assert "**reading live now** — 1" in embed.description
 
 
-# --- a probe that reads live while a Twitch session is open, with co-streaming on ----------------
+# --- a probe that reads live while a Twitch session is open: co-streaming -----------------------
 
 
 async def test_a_second_platform_joins_the_open_session_instead_of_being_held_back(
     bot, cog, golive, db, member
 ):
-    """`golive_costream_mode` on: the hand-off is `add_platform`, and the row says why."""
+    """Co-streaming: the hand-off is `add_platform`, and the row says why."""
     await live_on(bot)
     await open_twitch_session(db)
     await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)

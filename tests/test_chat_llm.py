@@ -1448,7 +1448,7 @@ async def test_without_the_guild_a_channel_mention_still_matches_nothing(wired):
         ({"chat_llm_mode": "on", "chat_personality": "warm"}, True),
         ({"chat_llm_mode": "on", "chat_personality": "cookout"}, False),
         (
-            {"chat_llm_mode": "on", "chat_personality": "pool", "chat_greeting_via_model": "off"},
+            {"chat_llm_mode": "on", "chat_personality": "pool", "chat_greeting_via_model": False},
             False,
         ),
         ({"chat_llm_mode": "off", "chat_personality": "pool"}, False),
