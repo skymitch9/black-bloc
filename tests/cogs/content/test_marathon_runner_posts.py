@@ -321,3 +321,15 @@ async def test_an_untracked_marathon_posts_no_runner_post(bot, cog):
 
     assert "marathon.runner_post_posted" not in await kinds(bot.db)
     assert all(not one["post_message_id"] for one in await runs_of(bot.db, made.value["id"]))
+
+
+async def test_a_run_whose_only_baf_runner_stopped_every_announcement_gets_no_post(bot, cog):
+    from black_bloc import optouts
+
+    await optouts.set_out(bot.db, GUILD, SKY, optouts.ANNOUNCE)
+    marathon = await tracked(bot)
+    await follow(bot, cog, marathon)
+
+    assert runner_posts(the_thread(bot)) == []
+    assert board_in(the_thread(bot))
+    assert "marathon.runner_post_posted" not in await kinds(bot.db)

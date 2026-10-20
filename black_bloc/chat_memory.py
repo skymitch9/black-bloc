@@ -901,9 +901,17 @@ async def save_profile(db: Any, user_id: Any, guild_id: Any, profile: Profile) -
     return True
 
 
+OUT_ROW = (
+    "EXISTS (SELECT 1 FROM person_optouts WHERE user_id = ? AND guild_id = ? "
+    "AND kind = 'chat_memory')"
+)
+IN_ROW = (
+    "EXISTS (SELECT 1 FROM person_optouts WHERE user_id = ? AND guild_id = ? "
+    "AND kind = 'chat_memory_in')"
+)
 STILL_WANTED = {
-    OPTOUT: "NOT EXISTS (SELECT 1 FROM chat_memory_optout WHERE user_id = ? AND guild_id = ?)",
-    OPTIN: "EXISTS (SELECT 1 FROM chat_memory_optout WHERE user_id = ? AND guild_id = ?)",
+    OPTOUT: f"NOT {OUT_ROW}",
+    OPTIN: f"{IN_ROW} AND NOT {OUT_ROW}",
 }
 
 
@@ -914,6 +922,7 @@ async def write_up(
     who = (int(user_id or 0), int(guild_id or 0))
     at = profile.updated_at or datetime.now(UTC).isoformat()
     wanted = STILL_WANTED.get(str(consent or OPTOUT), STILL_WANTED[OPTOUT])
+    guard = who * (wanted.count("?") // 2)
     lines = json.dumps(
         [
             *(one.as_dict() for one in profile.notes),
@@ -927,7 +936,15 @@ async def write_up(
             cur = await db.conn.execute(
                 "UPDATE chat_profiles SET call_me = ?, notes = ?, threads = ?, turns_seen = ?, "
                 f"updated_at = ? WHERE user_id = ? AND guild_id = ? AND {wanted}",
-                (profile.call_me or None, lines, threads, int(profile.turns_seen), at, *who, *who),
+                (
+                    profile.call_me or None,
+                    lines,
+                    threads,
+                    int(profile.turns_seen),
+                    at,
+                    *who,
+                    *guard,
+                ),
             )
         else:
             cur = await db.conn.execute(
@@ -942,7 +959,7 @@ async def write_up(
                     int(profile.turns_seen),
                     profile.created_at or at,
                     at,
-                    *who,
+                    *guard,
                 ),
             )
         await db.conn.commit()
@@ -1010,32 +1027,43 @@ async def forget_everywhere(db: Any, user_id: Any) -> int:
     return int(cur.rowcount or 0)
 
 
-def remembered(consent: Any, override: Any) -> bool:
-    """A row in `chat_memory_optout` means ONE thing: this person is not on the server default."""
-    if override is None:
-        return False
-    return (not override) if str(consent or OPTOUT) == OPTOUT else bool(override)
+async def choices(db: Any, user_id: Any, guild_id: Any) -> set[str] | None:
+    """This person's chat-memory rows in the one opt-out table; None when it could not be read."""
+    from . import optouts
 
-
-async def overridden(db: Any, user_id: Any, guild_id: Any) -> bool | None:
-    """True, False, or None when the table could not be read — None never means remembered."""
     try:
         cur = await db.conn.execute(
-            "SELECT 1 FROM chat_memory_optout WHERE user_id = ? AND guild_id = ?",
-            (int(user_id or 0), int(guild_id or 0)),
+            "SELECT kind FROM person_optouts WHERE guild_id = ? AND user_id = ? AND kind IN (?, ?)",
+            (
+                int(guild_id or 0),
+                int(user_id or 0),
+                optouts.CHAT_MEMORY,
+                optouts.CHAT_MEMORY_IN,
+            ),
         )
-        row = await cur.fetchone()
+        return {str(row["kind"]) for row in await cur.fetchall()}
     except Exception as exc:
         log.warning("chat memory: the choices were not read — %s: %s", type(exc).__name__, exc)
         return None
-    return row is not None
+
+
+def remembered(consent: Any, found: set[str] | None) -> bool:
+    """Out is out whatever the model; with no row of theirs the server's model decides."""
+    from . import optouts
+
+    if found is None or optouts.CHAT_MEMORY in found:
+        return False
+    if str(consent or OPTOUT) == OPTOUT:
+        return True
+    return optouts.CHAT_MEMORY_IN in found
 
 
 async def remembers(db: Any, user_id: Any, guild_id: Any, *, consent: Any = OPTOUT) -> bool:
-    return remembered(consent, await overridden(db, user_id, guild_id))
+    return remembered(consent, await choices(db, user_id, guild_id))
 
 
 async def set_override(db: Any, user_id: Any, guild_id: Any, *, at: str | None = None) -> bool:
+    """The old table, still written for one release so v244 reads the same people."""
     try:
         await db.conn.execute(
             "INSERT OR REPLACE INTO chat_memory_optout(user_id, guild_id, at) VALUES (?, ?, ?)",
@@ -1065,11 +1093,28 @@ async def set_remembered(
     db: Any, user_id: Any, guild_id: Any, *, consent: Any, wanted: bool
 ) -> bool:
     """Says what the person wants, whichever way round the server's consent model is."""
+    from . import optouts
+
     keeps_row = wanted if str(consent or OPTOUT) != OPTOUT else not wanted
     if keeps_row:
-        return await set_override(db, user_id, guild_id)
-    await clear_override(db, user_id, guild_id)
-    return True
+        saved = await set_override(db, user_id, guild_id)
+    else:
+        await clear_override(db, user_id, guild_id)
+        saved = True
+    try:
+        if wanted:
+            await optouts.clear_out(db, guild_id, user_id, optouts.CHAT_MEMORY)
+            if str(consent or OPTOUT) != OPTOUT:
+                await optouts.set_out(
+                    db, guild_id, user_id, optouts.CHAT_MEMORY_IN, by=user_id
+                )
+        else:
+            await optouts.clear_out(db, guild_id, user_id, optouts.CHAT_MEMORY_IN)
+            await optouts.set_out(db, guild_id, user_id, optouts.CHAT_MEMORY, by=user_id)
+    except Exception as exc:
+        log.warning("chat memory: the choice was not saved — %s: %s", type(exc).__name__, exc)
+        return False
+    return saved
 
 
 async def expire(db: Any, *, days: int = RETENTION_DAYS, now: datetime | None = None) -> int:
@@ -1100,28 +1145,11 @@ async def profile_rows(db: Any, guild_id: Any) -> list[Any]:
         return []
 
 
-async def off_default(db: Any, guild_id: Any, *, consent: Any) -> list[int]:
-    """Everyone whose row puts them out of chat memory under this consent model."""
-    try:
-        cur = await db.conn.execute(
-            "SELECT user_id FROM chat_memory_optout WHERE guild_id = ? ORDER BY user_id",
-            (int(guild_id or 0),),
-        )
-        rows = await cur.fetchall()
-    except Exception as exc:
-        log.warning("chat memory: the opt-outs were not read — %s: %s", type(exc).__name__, exc)
-        return []
-    return [int(row["user_id"]) for row in rows if not remembered(consent, True)]
-
-
 async def optout_count(db: Any, guild_id: Any) -> int:
+    from . import optouts
+
     try:
-        cur = await db.conn.execute(
-            "SELECT COUNT(*) AS found FROM chat_memory_optout WHERE guild_id = ?",
-            (int(guild_id or 0),),
-        )
-        row = await cur.fetchone()
+        return await optouts.count(db, guild_id, optouts.CHAT_MEMORY)
     except Exception as exc:
         log.warning("chat memory: the opt-outs were not counted — %s: %s", type(exc).__name__, exc)
         return 0
-    return int(row["found"]) if row is not None else 0

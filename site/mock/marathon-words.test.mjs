@@ -281,3 +281,11 @@ test('the drawer’s ask bodies and empty line say what happens, not how the dra
   assert.ok(words.SPOTLIGHT_BODY.endsWith('to {slack} h after their last.'));
   assert.ok(words.SPOTLIGHT_SLOT_BODY.endsWith('to {slack} h after it.'));
 });
+
+test('someone who stopped every announcement is never offered Spotlight… (one-optout)', async () => {
+  const { slotMoves } = await import('../public/assets/marathon-words.js');
+  const quiet = { login: 'quietone', user_id: '21', member: true, opted_out: false, announce_optout: true };
+  assert.ok(!slotMoves(quiet, { name: 'Quiet' }).includes('spotlight'));
+  assert.ok(slotMoves({ ...quiet, announce_optout: false }, { name: 'Quiet' }).includes('spotlight'));
+  assert.ok(slotMoves({ ...quiet, spotlight_id: 4 }, { name: 'Quiet' }).includes('unspotlight'));
+});

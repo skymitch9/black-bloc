@@ -494,3 +494,42 @@ async def test_a_failed_shadow_one_meaning_migration_never_stops_the_boot(
 
     assert "shadow one meaning: the boot migration failed" in caplog.text
     await bot.close()
+
+
+async def test_the_one_optout_migration_runs_after_shadow_one_meaning_and_before_cogs(
+    tmp_path, monkeypatch
+):
+    from black_bloc import optouts
+    from black_bloc.config import load_settings
+
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    bot = BlackBlocBot(
+        load_settings(_env_file=None, database_path=tmp_path / "boot.sqlite3", dev_guild_id=7)
+    )
+    await bot.db.connect()
+    await bot.db.conn.execute(
+        "INSERT INTO golive_optout(user_id, at) VALUES (21, '2026-10-10T00:00:00+00:00')"
+    )
+    await bot.db.conn.commit()
+
+    await bot._migrate_one_optout()
+
+    assert await optouts.is_out(bot.db, 7, 21, optouts.ANNOUNCE) is True
+    assert optouts.silenced(bot.db, 7) == frozenset({21})
+    order = bot_module.BlackBlocBot.setup_hook.__code__.co_names
+    assert order.index("_migrate_shadow_one_meaning") < order.index("_migrate_one_optout")
+    assert order.index("_migrate_one_optout") < order.index("_load_cogs")
+    await bot.close()
+
+
+async def test_a_failed_one_optout_migration_never_stops_the_boot(settings, monkeypatch, caplog):
+    async def broken(_bot):
+        raise RuntimeError("disk")
+
+    monkeypatch.setattr(bot_module, "migrate_one_optout", broken)
+    bot = BlackBlocBot(settings)
+
+    await bot._migrate_one_optout()
+
+    assert "one opt-out: the boot migration failed" in caplog.text
+    await bot.close()

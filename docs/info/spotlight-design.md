@@ -540,3 +540,5 @@ accepting `embed=None` on the pinned announcement, the unpin, the real GDQueer r
 (the fixture sheet is the test's source), and what the real title reads at 09:55.
 
 > **Follow-up 2026-10-20 (`shadow-one-meaning`):** `spotlight_mode` is RETIRED: spotlights follow `golive_mode` (test posts the rehearsal copy in the test channel, as spotlight shadow did); the per-channel `announce` field still gates each channel. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).
+
+> **2026-10-20 follow-up (one-optout, branch `one-optout`, not merged):** a spotlit channel linked (Twitch login or YouTube channel) to a member who stopped every announcement is never announced; adding one says so. See [`one-optout-design.md`](one-optout-design.md).

@@ -9,7 +9,7 @@ from black_bloc import chat_feedback as feedback
 from black_bloc import tone_keys
 from black_bloc.chat_feedback import Verdict, parse_verdict
 from black_bloc.chat_llm import CLIENTS_ATTR
-from black_bloc.chat_memory import set_override
+from black_bloc.chat_memory import set_remembered
 from black_bloc.chat_voice import FEEDBACK, ROLLED, SET, heard_for, pin, set_tone, voice_row
 from black_bloc.config import load_settings
 from black_bloc.llm import GROQ, SIMPLE, LLMError, Reply, Usage, record
@@ -21,6 +21,10 @@ CHANNEL = 111
 MEMBER = 900
 NOW = datetime(2026, 10, 5, 19, 0, tzinfo=UTC)
 ANSWER = "Fine, fine, cousin, since you asked nice. The cookout is Saturday at four."
+
+
+async def set_override(db, user_id, guild_id):
+    await set_remembered(db, user_id, guild_id, consent="optout", wanted=False)
 
 
 def verdict(reaction, genuine, cue=None):

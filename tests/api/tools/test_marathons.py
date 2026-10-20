@@ -1172,10 +1172,15 @@ async def test_a_role_holder_reads_not_baf_and_count_as_baf_anyway_moves_both_wa
         "said": "not BaF (Staff)",
         "move": "set",
         "move_label": "Count as BaF anyway",
+        "reason_title": "Why count them as BaF?",
+        "reason_label": "Reason",
     }
     assert (await web_row(wf, web, "web.marathon.role_opted_out"))["members"] == [SKY]
 
-    out = client.post(f"/api/marathons/baf-override/{SKY}")
+    bare = client.post(f"/api/marathons/baf-override/{SKY}")
+    assert bare.status_code == 422 and bare.json()["error"] == "reason_needed"
+
+    out = client.post(f"/api/marathons/baf-override/{SKY}", json={"reason": "runs with us"})
     assert out.status_code == 200, out.text
     assert out.json() == {
         "user_id": str(SKY),

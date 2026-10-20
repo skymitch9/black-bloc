@@ -221,3 +221,5 @@ mock); docs in the commit after.)*
 - **A real GDQ-sized schedule** (≈150 runs, ≈250 people) was not timed: `people_state` reads every channel row once per
   call and walks every guild member per stranger for the near-miss rule; the panel recomputes it on every press.
 - **The merge with `shadow-home-per-feature`** was not tried.
+
+> **2026-10-20 follow-up (one-optout, branch `one-optout`, not merged):** a person out of `announce` is named by no public, host or reminder post (it beats a run's `in`), gets no new runner post when every BaF person on the run is out, and is not offered Spotlight…; the override asks for a reason. See [`one-optout-design.md`](one-optout-design.md).

@@ -1645,3 +1645,21 @@ def test_the_ping_block_says_its_shipped_words_until_staff_change_them():
 
 def test_the_streamer_list_answer_carries_no_how_to_sentence():
     assert "is how" not in pings.HIDDEN_SELF
+
+
+async def test_a_hide_by_hand_is_mirrored_into_the_one_opt_out_table_and_a_prune_is_not(
+    bot, streamer
+):
+    from black_bloc import optouts
+
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+    await pings.set_listed(bot.db, GUILD, STREAMER, listed=False, by=None)
+    assert await optouts.is_out(bot.db, GUILD, STREAMER, optouts.STREAMER_LIST) is False
+    await pings.set_listed(bot.db, GUILD, STREAMER, listed=True, by=None)
+
+    await pings.hide_streamer(bot, bot.guild, STREAMER, by=STREAMER)
+    row = await optouts.row_of(bot.db, GUILD, STREAMER, optouts.STREAMER_LIST)
+    assert row is not None and row["by"] == STREAMER
+
+    await pings.restore_streamer(bot, bot.guild, STREAMER, by=STAFF)
+    assert await optouts.is_out(bot.db, GUILD, STREAMER, optouts.STREAMER_LIST) is False

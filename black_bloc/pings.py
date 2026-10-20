@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
+from . import optouts
 from . import rolemenu_panels as panels
 from .actionlog import log_action
 from .button_block import ButtonLook, Words
@@ -1710,6 +1711,10 @@ async def set_listed(
         ),
     )
     await db.conn.commit()
+    if listed:
+        await optouts.clear_out(db, guild_id, user_id, optouts.STREAMER_LIST)
+    elif by is not None:
+        await optouts.set_out(db, guild_id, user_id, optouts.STREAMER_LIST, by=by)
 
 
 def role_is_worn(guild: Any, role_id: Any) -> bool:

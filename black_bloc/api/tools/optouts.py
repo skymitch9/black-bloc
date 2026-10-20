@@ -1,29 +1,35 @@
-"""Everyone opted out of something, one reader per place they are out of."""
+"""Everyone opted out of something: the one table, the role filters, and who staff count in."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from ... import marathon_announce as ma
-from ... import pb_store
-from ...chat_memory import CONSENT_KEY, off_default
-from ...cogs.community.birthdays import rows_for_guild
-from ...cogs.content.golive import all_optouts
+from ... import optouts
 from ...cogs.content.marathon import baf_overrides, list_marathons
-from ...cogs.content.marathon_announce import baf_rule, words
+from ...cogs.content.marathon_announce import baf_rule, override_reason, words
 from ...cogs.content.spotlight import channels_for
+from ...golive import ignored_by_role
 from ...marathon_channels import takes_marathons
-from ...settings_store import MARATHON_POSTS_OPTED_OUT_WORD_KEY
+from ...settings_store import (
+    GOLIVE_IGNORED_ROLE_WORD_KEY,
+    MARATHON_POSTS_OPTED_OUT_WORD_KEY,
+)
 from ..names import avatar_url
 
 MARATHON_ROLE = "marathon_role"
-MARATHON_OVERRIDE = "marathon_override"
 MARATHON_POSTS = "marathon_posts"
-GOLIVE = "golive"
-CHAT_MEMORY = "chat_memory"
-BIRTHDAYS = "birthdays"
-PBS = "pbs"
-SOURCES = (MARATHON_ROLE, MARATHON_OVERRIDE, MARATHON_POSTS, GOLIVE, CHAT_MEMORY, BIRTHDAYS, PBS)
+GOLIVE_IGNORE_ROLE = "golive_ignore_role"
+SOURCES = (
+    MARATHON_ROLE,
+    MARATHON_POSTS,
+    optouts.ANNOUNCE,
+    GOLIVE_IGNORE_ROLE,
+    optouts.CHAT_MEMORY,
+    optouts.BIRTHDAY,
+    optouts.PBS,
+    optouts.STREAMER_LIST,
+)
 
 
 def chip(source: str, said: Any = None, *, marathons: Any = (), rule: Any = None) -> dict:
@@ -37,9 +43,6 @@ async def marathon_chips(bot: Any, guild: Any) -> list[tuple[int, dict[str, Any]
     for user_id in sorted(held):
         rule = baf_rule(bot, guild, held=user_id)
         found.append((user_id, chip(MARATHON_ROLE, rule["said"], rule=rule)))
-    for user_id in sorted(overrides):
-        rule = baf_rule(bot, guild, user_id=user_id, overrides=overrides)
-        found.append((user_id, chip(MARATHON_OVERRIDE, rule["said"], rule=rule)))
     posts: dict[int, list[dict[str, Any]]] = {}
     for row in await list_marathons(bot.db, guild.id):
         for user_id in sorted(ma.opted_out(row)):
@@ -51,27 +54,25 @@ async def marathon_chips(bot: Any, guild: Any) -> list[tuple[int, dict[str, Any]
     return found
 
 
-async def other_chips(bot: Any, guild: Any) -> list[tuple[int, dict[str, Any]]]:
-    found = [(int(row["user_id"]), chip(GOLIVE)) for row in await all_optouts(bot.db)]
-    consent = bot.store.get(guild.id, CONSENT_KEY)
-    found.extend(
-        (user_id, chip(CHAT_MEMORY))
-        for user_id in await off_default(bot.db, guild.id, consent=consent)
+def role_chips(bot: Any, guild: Any) -> list[tuple[int, dict[str, Any]]]:
+    role_id, holders = ignored_by_role(guild, bot.store)
+    if not holders:
+        return []
+    role = guild.get_role(int(role_id)) if hasattr(guild, "get_role") else None
+    said = optouts.said(
+        bot.store, guild.id, GOLIVE_IGNORED_ROLE_WORD_KEY, role=getattr(role, "name", "")
     )
-    found.extend(
-        (int(row["user_id"]), chip(BIRTHDAYS))
-        for row in await rows_for_guild(bot.db, guild.id)
-        if not row["opted_in"]
-    )
-    found.extend(
-        (int(row["user_id"]), chip(PBS))
-        for row in await pb_store.matches(bot.db, guild.id)
-        if row["state"] == pb_store.OPTED_OUT
-    )
-    return found
+    return [(user_id, chip(GOLIVE_IGNORE_ROLE, said)) for user_id in sorted(holders)]
 
 
-def person_row(guild: Any, user_id: int, chips: list[dict[str, Any]]) -> dict[str, Any]:
+async def table_chips(bot: Any, guild: Any) -> list[tuple[int, dict[str, Any]]]:
+    return [
+        (int(row["user_id"]), chip(str(row["kind"])))
+        for row in await optouts.rows(bot.db, guild.id)
+    ]
+
+
+def person_row(guild: Any, user_id: int, **fields: Any) -> dict[str, Any]:
     member = guild.get_member(int(user_id))
     name = str(getattr(member, "name", "") or "")
     return {
@@ -80,16 +81,57 @@ def person_row(guild: Any, user_id: int, chips: list[dict[str, Any]]) -> dict[st
         "username": name or None,
         "avatar": avatar_url(member) if member is not None else None,
         "here": member is not None,
-        "chips": sorted(chips, key=lambda one: SOURCES.index(one["source"])),
+        **fields,
     }
 
 
+def by_name(guild: Any, user_id: Any) -> str | None:
+    if not user_id:
+        return None
+    member = guild.get_member(int(user_id))
+    return str(getattr(member, "display_name", None) or user_id)
+
+
+async def counted_in(bot: Any, guild: Any) -> list[dict[str, Any]]:
+    """Who staff count as BaF anyway: an opt-in, so never inside the opted-out list."""
+    overrides = await baf_overrides(bot.db)
+    found = []
+    for user_id, row in overrides.items():
+        rule = baf_rule(bot, guild, user_id=user_id, overrides=overrides)
+        found.append(
+            person_row(
+                guild,
+                user_id,
+                said=rule["said"] if rule else None,
+                reason=override_reason(bot, guild, row),
+                by=str(row["by"]) if row["by"] else None,
+                by_name=by_name(guild, row["by"]),
+                at=row["at"],
+                rule=rule,
+            )
+        )
+    found.sort(key=lambda one: (not one["here"], one["name"].lower()))
+    return found
+
+
 async def roll_up(bot: Any, guild: Any) -> dict[str, Any]:
-    """Read-only: every opt-out stays in its own store; this only reads each one."""
+    """Read-only: the one table, the two role filters, and each marathon's own "not this one"."""
     by_person: dict[int, list[dict[str, Any]]] = {}
-    for user_id, one in [*await marathon_chips(bot, guild), *await other_chips(bot, guild)]:
+    gathered = [
+        *await marathon_chips(bot, guild),
+        *role_chips(bot, guild),
+        *await table_chips(bot, guild),
+    ]
+    for user_id, one in gathered:
         by_person.setdefault(int(user_id), []).append(one)
-    people = [person_row(guild, user_id, chips) for user_id, chips in by_person.items()]
+    people = [
+        person_row(
+            guild,
+            user_id,
+            chips=sorted(chips, key=lambda one: SOURCES.index(one["source"])),
+        )
+        for user_id, chips in by_person.items()
+    ]
     people.sort(key=lambda one: (not one["here"], one["name"].lower()))
     channels = [
         {
@@ -100,7 +142,12 @@ async def roll_up(bot: Any, guild: Any) -> dict[str, Any]:
         for row in await channels_for(bot.db, guild.id)
         if not takes_marathons(row)
     ]
-    return {"people": people, "channels": channels, "sources": list(SOURCES)}
+    return {
+        "people": people,
+        "counted_in": await counted_in(bot, guild),
+        "channels": channels,
+        "sources": list(SOURCES),
+    }
 
 
-__all__ = ["SOURCES", "roll_up"]
+__all__ = ["SOURCES", "counted_in", "roll_up"]

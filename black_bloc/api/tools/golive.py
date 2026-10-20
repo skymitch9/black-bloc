@@ -5,12 +5,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ... import pings
+from ... import optouts, pings
 from ... import spotlight as spot
 from ...cogs.content.golive import (
     LINK_TAKEN,
     all_links,
-    all_optouts,
     clean_login,
     get_link,
     link_channel,
@@ -31,6 +30,7 @@ from ...cogs.content.spotlight import (
     forget_spotlight,
     link_youtube,
     open_session,
+    opted_out_clause,
     ping_wording_for,
     remove_ping_window,
     replay_state,
@@ -412,7 +412,7 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         return [
             with_name(guild, row["user_id"]) | {"at": row["at"]}
-            for row in await all_optouts(bot.db)
+            for row in await optouts.rows(bot.db, guild.id, (optouts.ANNOUNCE,))
         ]
 
     @router.post("/optouts")
@@ -518,6 +518,7 @@ def build_router(bot: Any) -> APIRouter:
                 row = fresh
         hours = spot.bump_hours_for(row, bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
         worded = spot.added_said(row, hours, **wording_for(bot, guild.id))
+        worded += await opted_out_clause(bot, guild, row)
         return await one_spotlight(bot, guild, row["id"]) | {
             "message": f"{worded} {said}".strip()
         }

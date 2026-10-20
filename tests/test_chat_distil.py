@@ -6,7 +6,7 @@ import pytest
 
 from black_bloc import chat_distil as run_it
 from black_bloc.chat_llm import CLIENTS_ATTR, remember
-from black_bloc.chat_memory import MEMORY_TIER, profile_for, set_override
+from black_bloc.chat_memory import MEMORY_TIER, profile_for, set_remembered
 from black_bloc.config import load_settings
 from black_bloc.llm import GROQ, Reply, Usage
 from black_bloc.settings_store import SettingsStore
@@ -16,6 +16,7 @@ CHANNEL = 111
 TEST_CHANNEL = 111
 MEMBER = 900
 OTHER = 901
+THIRD = 902
 
 ANSWER = json.dumps(
     {
@@ -89,6 +90,10 @@ class FakeBot:
 
     def get_guild(self, guild_id):
         return self.guild if int(guild_id) == self.guild.id else None
+
+
+async def set_override(db, user_id, guild_id):
+    await set_remembered(db, user_id, guild_id, consent="optout", wanted=False)
 
 
 @pytest.fixture
@@ -763,7 +768,9 @@ async def test_the_write_itself_refuses_a_row_that_went_or_a_person_who_stopped(
     assert await profile_for(db, MEMBER, GUILD) is None
     await set_override(db, MEMBER, GUILD)
     assert await write_up(db, MEMBER, GUILD, fresh, existed=False, consent="optout") is False
-    assert await write_up(db, MEMBER, GUILD, fresh, existed=False, consent="optin") is True
+    assert await write_up(db, MEMBER, GUILD, fresh, existed=False, consent="optin") is False
     assert await write_up(db, OTHER, GUILD, fresh, existed=False, consent="optin") is False
+    await set_remembered(db, THIRD, GUILD, consent="optin", wanted=True)
+    assert await write_up(db, THIRD, GUILD, fresh, existed=False, consent="optin") is True
     assert await write_up(db, OTHER, GUILD, fresh, existed=False, consent="optout") is True
     assert (await profile_for(db, OTHER, GUILD)).call_me == "Sky"

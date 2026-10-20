@@ -18,6 +18,7 @@ from black_bloc import (
     guides,
     knowledge,
     minutes,
+    optouts,
     pings,
     post_blocks,
     posts,
@@ -45,7 +46,7 @@ from black_bloc.cogs.community.polls import (
 )
 from black_bloc.cogs.community.role_menus import add_option, create_menu, get_menu
 from black_bloc.cogs.community.tempvoice import add_channel
-from black_bloc.cogs.content.golive import set_link, set_optout, start_session
+from black_bloc.cogs.content.golive import set_link, start_session
 from black_bloc.cogs.content.marathon import Marathons, create_marathon, runs_of, upsert_pairing
 from black_bloc.cogs.content.marathon_feeds import insert_feed
 from black_bloc.cogs.content.marathon_people import spotlight_runner
@@ -395,7 +396,12 @@ async def seed_world(client, web, guild, wf) -> dict:
     youtube.client = FakeClient()
     web.cogs["YouTube"] = youtube
     await set_youtube_link(db, MEMBER_ID, YT_CHANNEL, "@ada", "Ada Makes")
-    await set_optout(db, MEMBER_ID)
+    await optouts.set_out(db, guild_id, MEMBER_ID, optouts.ANNOUNCE)
+    await db.conn.execute(
+        "INSERT INTO marathon_baf_overrides(user_id, by, at, reason) VALUES (?, 7, ?, ?)",
+        (PING_MEMBER_ID, "2026-10-20T09:00:00+00:00", "runs with us every year"),
+    )
+    await db.conn.commit()
     await start_session(
         db,
         guild_id,
@@ -1591,7 +1597,7 @@ async def test_a_single_use_seed_is_put_back_so_its_route_answers_twice(
     path = fill(spec["path"], seeded)
     back = spec["then"]
     for _ in range(2):
-        response = module_client.request(spec["method"], path, json={})
+        response = module_client.request(spec["method"], path, json=spec.get("body", {}))
         assert response.status_code == 200, response.text
         undone = module_client.request(back["method"], fill(back["path"], seeded), json={})
         assert undone.status_code == 200, undone.text

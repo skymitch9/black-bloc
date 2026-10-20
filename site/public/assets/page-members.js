@@ -1,6 +1,7 @@
 import { api, listOf, send } from './api.js';
 import { start, tabHref } from './app.js';
 import {
+  askReason,
   avatar,
   button,
   card,
@@ -27,26 +28,30 @@ const FILTERS = [
   ['bots', 'Bots'],
   ['new', 'New this week'],
   ['optouts', 'Opted out'],
+  ['counted', 'Counted in'],
 ];
 
 const OPTOUTS = 'optouts';
+const COUNTED = 'counted';
 const SOURCE_WORDS = {
   marathon_role: 'Marathons',
-  marathon_override: 'Marathons',
   marathon_posts: 'Marathons',
-  golive: 'Go-live',
+  announce: 'Announcements',
+  golive_ignore_role: 'Go-live',
   chat_memory: 'Chat memory',
-  birthdays: 'Birthdays',
+  birthday: 'Birthdays',
   pbs: 'Personal bests',
+  streamer_list: 'Streamer list',
 };
 const SOURCE_CHIPS = [
   ['marathon_role', 'Not BaF'],
-  ['marathon_override', 'BaF override'],
   ['marathon_posts', 'Out of marathon posts'],
-  ['golive', 'Go-live'],
+  ['announce', 'Announcements'],
+  ['golive_ignore_role', 'Ignored by role'],
   ['chat_memory', 'Chat memory'],
-  ['birthdays', 'Birthdays'],
+  ['birthday', 'Birthdays'],
   ['pbs', 'Personal bests'],
+  ['streamer_list', 'Streamer list'],
 ];
 const SOURCE_FILTERS = [
   ['all', 'Every source', null],
@@ -57,6 +62,9 @@ const NO_OPTOUTS = 'Nobody is opted out of anything.';
 const NO_OPTOUT_HIT = 'Nobody opted out matches that.';
 const CHANNELS_TITLE = 'Channels out of marathons';
 const OPTOUTS_SAID = 'members.optouts';
+const COUNTED_TITLE = 'Counted in';
+const COUNTED_COLUMNS = ['Member', 'Why', 'By', ''];
+const NO_COUNTED = 'Staff count nobody in.';
 
 const STATS = [
   ['Members', 'total'],
@@ -157,8 +165,16 @@ function memberRow(row) {
 }
 
 function homeOf(source) {
-  if (source === 'marathon_role' || source === 'marathon_override') return `${tabHref('settings')}#marathon_optout_role_ids`;
-  return tabHref({ golive: 'golive', chat_memory: 'chat', birthdays: 'birthdays', pbs: 'pbs' }[source] || 'members');
+  if (source === 'marathon_role') return `${tabHref('settings')}#marathon_optout_role_ids`;
+  const pages = {
+    announce: 'golive',
+    golive_ignore_role: 'golive',
+    streamer_list: 'golive',
+    chat_memory: 'chat',
+    birthday: 'birthdays',
+    pbs: 'pbs',
+  };
+  return tabHref(pages[source] || 'members');
 }
 
 function sourceLink(text, href) {
@@ -168,8 +184,19 @@ function sourceLink(text, href) {
 function ruleMove(rule, say) {
   return button(rule.move_label, async () => {
     const path = `/api/marathons/baf-override/${encodeURIComponent(rule.user_id)}`;
-    const done = await run(say, () => send(path, rule.move === 'set' ? 'POST' : 'DELETE'), (found) => found?.message);
-    if (!done.ok) return;
+    if (rule.move === 'set') {
+      const found = await askReason({
+        title: rule.reason_title,
+        label: rule.reason_label,
+        confirmLabel: rule.move_label,
+        sendIt: (reason) => send(path, 'POST', { reason }),
+      });
+      if (!found) return;
+      say.say(found.message || '', 'ok');
+    } else {
+      const done = await run(say, () => send(path, 'DELETE'), (found) => found?.message);
+      if (!done.ok) return;
+    }
     keepSaying(OPTOUTS_SAID, say);
     refresh();
   }, { tone: 'quiet' });
@@ -209,6 +236,44 @@ function channelsCard(channels) {
   ], { count: channels.length });
 }
 
+function memberCell(row) {
+  const who = String(row.name || row.username || row.user_id);
+  return el('span', { class: 'cell-member' }, [
+    avatar(who, row.avatar),
+    el('span', { class: 'cell-member-text' }, [
+      el('span', { class: 'cell-member-name', text: who }),
+      el('span', { class: 'cell-member-tag', text: row.here ? String(row.username || row.user_id) : 'left the server' }),
+    ]),
+  ]);
+}
+
+function countedRow(row, say) {
+  const when = row.at ? shortWhen(row.at) : null;
+  return el('tr', { title: `Discord id ${row.user_id}` }, [
+    el('td', { 'data-label': COUNTED_COLUMNS[0] }, [memberCell(row)]),
+    el('td', { class: 'wrap', 'data-label': COUNTED_COLUMNS[1] }, [
+      el('span', { class: 'cell-roles' }, [
+        sourceLink(row.said || SOURCE_WORDS.marathon_role, `${tabHref('settings')}#marathon_optout_role_ids`),
+        el('span', { text: row.reason || '' }),
+      ]),
+    ]),
+    el('td', { 'data-label': COUNTED_COLUMNS[2] }, [
+      el('span', { class: 'cell-quiet', title: when ? when.title : '', text: [row.by_name || '', when ? when.text : ''].filter(Boolean).join(' · ') || '—' }),
+    ]),
+    el('td', { 'data-label': COUNTED_COLUMNS[3] }, [row.rule ? ruleMove(row.rule, say) : null]),
+  ]);
+}
+
+function countedCard(payload) {
+  const say = sayAgain(OPTOUTS_SAID, notice());
+  const rows = listOf(payload, 'counted_in');
+  const head = el('tr', {}, COUNTED_COLUMNS.map((label) => el('th', { text: label })));
+  const body = rows.length
+    ? el('div', { class: 'table-scroll' }, [el('table', { class: 'log-table' }, [el('thead', {}, [head]), el('tbody', {}, rows.map((row) => countedRow(row, say)))])])
+    : sayNothing(NO_COUNTED);
+  return card(COUNTED_TITLE, [say, body], { count: rows.length });
+}
+
 function optoutsCard(payload) {
   const say = sayAgain(OPTOUTS_SAID, notice());
   const people = listOf(payload, 'people');
@@ -234,7 +299,15 @@ function optoutsCard(payload) {
       body,
       filter.none,
     ]),
+    countedCard(payload),
     channelsCard(listOf(payload, 'channels')),
+  ]);
+}
+
+function countedOnly(payload) {
+  return el('div', {}, [
+    el('div', { class: 'card' }, [el('div', { class: 'card-head' }, [chipBar(FILTERS, state.filter, pickFilter)])]),
+    countedCard(payload),
   ]);
 }
 
@@ -331,11 +404,12 @@ async function loadOptouts() {
     api('/api/members?filter=all&page=1&per_page=1&sort=joined_desc'),
     api('/api/members/optouts'),
   ]);
-  document.getElementById('dash').replaceChildren(statStrip(stats), optoutsCard(payload));
+  const shown = state.filter === COUNTED ? countedOnly(payload) : optoutsCard(payload);
+  document.getElementById('dash').replaceChildren(statStrip(stats), shown);
 }
 
 async function load() {
-  if (state.filter === OPTOUTS) return loadOptouts();
+  if (state.filter === OPTOUTS || state.filter === COUNTED) return loadOptouts();
   const query = new URLSearchParams({
     filter: state.filter,
     page: String(state.page),

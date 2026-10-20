@@ -685,6 +685,21 @@ def passes_role_filters(
     return True
 
 
+def ignored_by_role(guild: Any, store: Any) -> tuple[int | None, set[int]]:
+    """golive_ignore_role_id and everyone wearing it: a filter on the same people as the opt-out."""
+    role_id = store.get(guild.id, "golive_ignore_role_id")
+    if not role_id:
+        return None, set()
+    found = getattr(guild, "members", None) or ()
+    members = list(found.values() if isinstance(found, dict) else found)
+    return int(role_id), {
+        int(member.id)
+        for member in members
+        if not getattr(member, "bot", False)
+        and int(role_id) in {int(getattr(role, "id", 0) or 0) for role in member.roles}
+    }
+
+
 def end_summary(template: Any = "") -> str:
     """One phrase for the staff panel: what an announcement says once the stream ends."""
     wanted = str(template or "").strip()

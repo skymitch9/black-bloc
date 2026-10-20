@@ -11,7 +11,7 @@ from typing import Any
 
 import discord
 
-from . import pb_match, pb_news, pb_store, shadow
+from . import optouts, pb_match, pb_news, pb_store, shadow
 from .actionlog import log_action
 from .logkinds import VIA_DISCORD, kind_via
 from .pb_feed import (
@@ -58,6 +58,7 @@ TAKEN = "taken"
 RUNNER_GONE = "runner_gone"
 LINK_MOVED = "link_moved"
 TROUBLE = "trouble"
+ANNOUNCE_OPTED_OUT = "announce_opted_out"
 NOT_NEWS = (pb_news.TOO_OLD, pb_news.BEFORE_BASELINE, pb_news.UNDATED)
 
 
@@ -600,6 +601,9 @@ class Feed:
         post_id = await pb_store.claim_post(db, guild.id, user_id, best, row["src_name"], now=now)
         if post_id is None:
             return pb_store.CLAIMED
+        if await optouts.is_out(db, guild.id, user_id, optouts.ANNOUNCE):
+            await pb_store.settle_post(db, post_id, pb_store.DRY, reason=ANNOUNCE_OPTED_OUT)
+            return pb_store.DRY
         if mode_of(store, guild.id) == OFF:
             aimed = aimed_at(store, guild.id)
             await pb_store.settle_post(db, post_id, pb_store.DRY, aimed_at=aimed, reason=OFF)
@@ -612,6 +616,9 @@ class Feed:
     ) -> Sent:
         """A stored post sent again as a new row; the caller holds the lock, the mode is not off."""
         post_id = await pb_store.claim_again(self.bot.db, source, now=now)
+        extra: dict[str, Any] = {"via": via, "again_of": int(source["id"])}
+        if await optouts.is_out(self.bot.db, guild.id, source["user_id"], optouts.ANNOUNCE):
+            extra["overrides_optout"] = optouts.ANNOUNCE
         return await self.deliver(
             guild,
             post_id,
@@ -621,7 +628,7 @@ class Feed:
             kinds=AGAIN,
             actor=actor,
             via=via,
-            extra={"via": via, "again_of": int(source["id"])},
+            extra=extra,
         )
 
     async def logged(

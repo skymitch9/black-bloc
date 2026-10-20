@@ -47,6 +47,7 @@ import { announceMoves, announcedSaid, pingsCard, spotlightCard } from './spotli
 import {
   ask,
   askForm,
+  askReason,
   avatar,
   badge,
   bar,
@@ -643,7 +644,17 @@ async function optMove(marathon, say, entry, runId, out) {
 async function bafRuleMove(marathon, say, rule, runId) {
   shown.focus = runId;
   const path = `/api/marathons/baf-override/${encodeURIComponent(rule.user_id)}`;
-  const done = await run(say, () => send(path, rule.move === 'set' ? 'POST' : 'DELETE'), (found) => found?.message);
+  if (rule.move === 'set') {
+    const found = await askReason({
+      title: rule.reason_title,
+      label: rule.reason_label,
+      confirmLabel: rule.move_label,
+      sendIt: (reason) => send(path, 'POST', { reason }),
+    });
+    if (found) await after(marathon, { ok: true, found });
+    return;
+  }
+  const done = await run(say, () => send(path, 'DELETE'), (found) => found?.message);
   await after(marathon, done);
 }
 

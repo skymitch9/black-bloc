@@ -11,7 +11,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from ... import birthdays as birthday_words
-from ... import button_block
+from ... import button_block, optouts
 from ... import shadow as shadow_home
 from ...actionlog import log_action, send_logs
 from ...birthdays import (
@@ -206,21 +206,37 @@ async def save_birthday(
             datetime.now(UTC).isoformat(),
         ),
     )
+    await optouts.clear_out(db, guild_id, user_id, optouts.BIRTHDAY, commit=False)
     await db.conn.commit()
 
 
 async def delete_birthday(db: Any, user_id: int) -> bool:
+    row = await get_birthday(db, user_id)
     cur = await db.conn.execute("DELETE FROM birthdays WHERE user_id = ?", (int(user_id),))
+    if row is not None:
+        await optouts.clear_out(db, row["guild_id"], user_id, optouts.BIRTHDAY, commit=False)
     await db.conn.commit()
     return bool(cur.rowcount)
 
 
-async def set_opted_in(db: Any, user_id: int, opted_in: bool) -> None:
+async def set_opted_in(db: Any, user_id: int, opted_in: bool, *, by: Any = None) -> None:
+    """The birthdays column stays written for one release; the one opt-out table is read."""
+    row = await get_birthday(db, user_id)
     await db.conn.execute(
         "UPDATE birthdays SET opted_in = ? WHERE user_id = ?",
         (1 if opted_in else 0, int(user_id)),
     )
     await db.conn.commit()
+    if row is None:
+        return
+    if opted_in:
+        await optouts.clear_out(db, row["guild_id"], user_id, optouts.BIRTHDAY)
+    else:
+        await optouts.set_out(db, row["guild_id"], user_id, optouts.BIRTHDAY, by=by)
+
+
+async def wished(db: Any, row: Any) -> bool:
+    return not await optouts.is_out(db, row["guild_id"], row["user_id"], optouts.BIRTHDAY)
 
 
 async def mark_announced(db: Any, user_id: int, day_text: str) -> None:
@@ -375,7 +391,7 @@ async def change_opt(cog: Any, guild: Any, actor: Any, *, opted_in: bool) -> str
     if bool(row["opted_in"]) == opted_in:
         return ALREADY_OPTED.format(state="in" if opted_in else "out")
     async with cog._lock(actor.id):
-        await set_opted_in(bot.db, actor.id, opted_in)
+        await set_opted_in(bot.db, actor.id, opted_in, by=actor.id)
         if not opted_in:
             await cog._return_role(guild, row)
     await log_action(
@@ -1157,7 +1173,7 @@ class Birthdays(commands.Cog):
         today_text = today.isoformat()
         if _row_value(row, "role_added", 0) and row["last_announced_on"] != today_text:
             await self._take_role_back(guild, row, today)
-        if not row["opted_in"] or mode == "off":
+        if mode == "off" or not await wished(self.bot.db, row):
             return
         if not celebrates_today(row["month"], row["day"], today):
             return
@@ -1170,7 +1186,7 @@ class Birthdays(commands.Cog):
     ) -> str | None:
         """Re-read under the lock, so a sweep tick that just wished them is seen."""
         row = await get_birthday(self.bot.db, user_id)
-        if row is None or not row["opted_in"]:
+        if row is None or not await wished(self.bot.db, row):
             return None
         today = local_today(await self._zone_of(user_id), moment)
         if not celebrates_today(row["month"], row["day"], today):

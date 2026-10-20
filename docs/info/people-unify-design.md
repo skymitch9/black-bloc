@@ -179,3 +179,5 @@ AGDQ 2027*. Only the 8921 listener was stopped.
    anywhere.
 4. Only if the owner wants events: Hidden Heroes ▸ Event ▸ *An event per BaF run and host block* → ONE event *anarchy
    hosts Hidden Heroes* Fri 16:00–18:50 (reviewed while `marathon_mode` is shadow — the run events' rule).
+
+> **2026-10-20 follow-up (one-optout, branch `one-optout`, not merged):** the Members ▸ Opted out roll-up now reads the one `person_optouts` table plus the marathon and go-live ignore role filters; streamer-list hides and the ignore role are added; overrides moved to Counted in. See [`one-optout-design.md`](one-optout-design.md).

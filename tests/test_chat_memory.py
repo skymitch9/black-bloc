@@ -28,10 +28,8 @@ from black_bloc.chat_memory import (
     forget_everywhere,
     memory_note,
     merge,
-    off_default,
     optout_count,
     other_names,
-    overridden,
     parse_distilled,
     profile_for,
     profile_rows,
@@ -403,41 +401,31 @@ async def test_a_leaver_is_forgotten_in_every_server_at_once(tmp_path):
         await db.close()
 
 
-def test_a_row_means_the_person_is_off_the_servers_default_whichever_way_round_it_is():
-    """One table, one meaning: they overrode the default. D1 decides what the default is."""
-    assert remembered("optout", False) is True
-    assert remembered("optout", True) is False
-    assert remembered("optin", False) is False
-    assert remembered("optin", True) is True
+def test_out_is_out_whatever_the_model_and_no_row_follows_the_model():
+    """One-optout: a row means one thing in either model; only a person with none follows it."""
+    assert remembered("optout", set()) is True
+    assert remembered("optin", set()) is False
+    assert remembered("optout", {"chat_memory"}) is False
+    assert remembered("optin", {"chat_memory"}) is False
+    assert remembered("optin", {"chat_memory_in"}) is True
+    assert remembered("optin", {"chat_memory", "chat_memory_in"}) is False
     assert remembered("optout", None) is False
     assert remembered("optin", None) is False
 
 
-async def test_a_choice_is_remembered_and_can_be_lifted(tmp_path):
+async def test_the_old_table_is_still_written_for_one_release_and_never_read(tmp_path):
     db = await a_db(tmp_path, "opt.sqlite3")
     try:
-        assert await overridden(db, 9, 7) is False
         assert await remembers(db, 9, 7, consent="optout") is True
         assert await set_override(db, 9, 7, at=AT)
-        assert await overridden(db, 9, 7) is True
-        assert await remembers(db, 9, 7, consent="optout") is False
-        assert await remembers(db, 9, 7, consent="optin") is True
-        assert await optout_count(db, 7) == 1
+        assert await remembers(db, 9, 7, consent="optout") is True
         assert await clear_override(db, 9, 7) is True
         assert await clear_override(db, 9, 7) is False
-        assert await overridden(db, 9, 7) is False
-    finally:
-        await db.close()
-
-
-async def test_off_the_default_lists_a_row_as_out_only_where_the_default_is_on(tmp_path):
-    db = await a_db(tmp_path, "off.sqlite3")
-    try:
-        assert await set_override(db, 9, 7, at=AT)
-        assert await set_override(db, 4, 7, at=AT)
-        assert await set_override(db, 5, 8, at=AT)
-        assert await off_default(db, 7, consent="optout") == [4, 9]
-        assert await off_default(db, 7, consent="optin") == []
+        await set_remembered(db, 9, 7, consent="optout", wanted=False)
+        cur = await db.conn.execute("SELECT COUNT(*) AS n FROM chat_memory_optout")
+        assert (await cur.fetchone())["n"] == 1
+        assert await remembers(db, 9, 7, consent="optout") is False
+        assert await optout_count(db, 7) == 1
     finally:
         await db.close()
 
@@ -454,12 +442,22 @@ async def test_saying_off_and_on_lands_the_same_way_under_either_consent_model(t
         await db.close()
 
 
+async def test_an_out_row_survives_a_flip_of_the_model(tmp_path):
+    """The audit's I9: flipping the model no longer turns an opt-out into an opt-in."""
+    db = await a_db(tmp_path, "flip.sqlite3")
+    try:
+        await set_remembered(db, 9, 7, consent="optout", wanted=False)
+        assert await remembers(db, 9, 7, consent="optin") is False
+        assert await remembers(db, 9, 7, consent="optout") is False
+    finally:
+        await db.close()
+
+
 async def test_an_unreadable_choice_table_means_nobody_is_remembered(tmp_path):
     db = await a_db(tmp_path, "broken.sqlite3")
     try:
-        await db.conn.execute("DROP TABLE chat_memory_optout")
+        await db.conn.execute("DROP TABLE person_optouts")
         await db.conn.commit()
-        assert await overridden(db, 9, 7) is None
         assert await remembers(db, 9, 7, consent="optout") is False
         assert await remembers(db, 9, 7, consent="optin") is False
     finally:

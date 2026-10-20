@@ -301,3 +301,17 @@ async def test_a_repeat_is_a_new_row_that_points_at_its_source_and_leaves_it_alo
     assert pb_store.run_of((await pb_store.post(db, GUILD, two))["run_id"]) == "r9"
     assert await pb_store.post(db, GUILD + 1, first) is None
     assert await pb_store.claim_post(db, GUILD, ADA, best("r9"), "zfg", now=NOW) is None
+
+
+async def test_a_pb_opt_out_is_mirrored_into_the_one_opt_out_table_and_back(db):
+    from black_bloc import optouts
+
+    await pb_store.write_state(
+        db, 7, 21, pb_store.OPTED_OUT, state_by=pb_store.MEMBER, set_by=21, keep_runner=True
+    )
+    assert await optouts.is_out(db, 7, 21, optouts.PBS) is True
+    assert (await optouts.row_of(db, 7, 21, optouts.PBS))["by"] == 21
+
+    await pb_store.restore(db, 7, 21, state_by=pb_store.MEMBER, set_by=21, ends_opt_out=True)
+
+    assert await optouts.is_out(db, 7, 21, optouts.PBS) is False

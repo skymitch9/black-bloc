@@ -16,6 +16,7 @@ from .config import Settings
 from .guard import TestModeGuard
 from .intents import build_intents
 from .invite import invite_url
+from .one_optout import apply as migrate_one_optout
 from .one_test_channel import apply as migrate_test_channel
 from .orphaned import install as install_orphaned
 from .orphaned import mark as mark_orphaned
@@ -103,6 +104,7 @@ class BlackBlocBot(commands.Bot):
         await self._migrate_posts_switch()
         await self._migrate_test_channel()
         await self._migrate_shadow_one_meaning()
+        await self._migrate_one_optout()
         install_rehearsal_home(self)
         self._apply_boot_presence()
         log.info("database ready at %s", self.settings.database_path)
@@ -136,6 +138,13 @@ class BlackBlocBot(commands.Bot):
                 await self.store.load()
         except Exception:
             log.exception("shadow one meaning: the boot migration failed; retired rows stay unread")
+
+    async def _migrate_one_optout(self) -> None:
+        """Before any cog loads, so every announcer's first read finds the one opt-out table."""
+        try:
+            await migrate_one_optout(self)
+        except Exception:
+            log.exception("one opt-out: the boot migration failed; the old stores still hold them")
 
     def _apply_boot_presence(self) -> None:
         """setup_hook runs before IDENTIFY, so the stored sentence is the one Discord is sent."""

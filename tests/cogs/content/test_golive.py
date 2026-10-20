@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import discord
 import pytest
 
-from black_bloc import actionlog
+from black_bloc import actionlog, optouts
 from black_bloc.actionlog import log_action
 from black_bloc.cogs.content import golive as cog_module
 from black_bloc.cogs.content.golive import (
@@ -13,11 +13,9 @@ from black_bloc.cogs.content.golive import (
     PostResult,
     all_links,
     clean_login,
-    clear_optout,
     counts,
     end_session,
     get_link,
-    is_opted_out,
     latest_session,
     link_owner,
     open_session_for,
@@ -25,7 +23,6 @@ from black_bloc.cogs.content.golive import (
     remove_link,
     set_announced,
     set_link,
-    set_optout,
     start_session,
 )
 from black_bloc.cogs.content.youtube import get_link as youtube_get_link
@@ -46,6 +43,18 @@ from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream, TwitchUser
 from black_bloc.youtube import YouTubeError, channel_id_in
 
 GUILD = 7
+
+
+async def set_optout(db, user_id, guild_id=GUILD):
+    await optouts.set_out(db, guild_id, user_id, optouts.ANNOUNCE)
+
+
+async def clear_optout(db, user_id, guild_id=GUILD):
+    return await optouts.clear_out(db, guild_id, user_id, optouts.ANNOUNCE)
+
+
+async def is_opted_out(db, user_id, guild_id=GUILD):
+    return await optouts.is_out(db, guild_id, user_id, optouts.ANNOUNCE)
 YT_CHANNEL = "UCsXVk37bltHxD1rDPwtNM8Q"
 CHANNEL = 111
 LOG_CHANNEL = 222
@@ -2226,7 +2235,7 @@ async def test_staff_opt_somebody_else_out_and_back_in(cog, bot, member, db):
     back = await press(bot, member, out.view, "Opt them back in")
     assert await is_opted_out(db, other.id) is False
     assert "**Bo**'s streams can be announced again" in back.sent
-    assert await action_kinds(db) == ["golive.optout", "golive.optin"]
+    assert await action_kinds(db) == ["golive.optout", "optouts.overridden"]
 
 
 async def test_back_returns_to_the_root_panel(cog, bot, member, db):
@@ -3272,3 +3281,30 @@ async def test_the_live_block_draws_nothing_while_go_live_is_off(bot):
     embed, view, stamp = cog_module.block_parts(bot, guild, [])
 
     assert embed.title == "Live now" and view is None and stamp
+
+
+async def test_the_gate_reads_the_opt_out_first_then_the_role_filters(cog, bot, db):
+    """One documented order (one-optout): opt-out, then require/ignore role, then cooldown."""
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_ignore_role_id", 5)
+    both = FakeMember(bot.guild, user_id=41, roles=(5,))
+    role_only = FakeMember(bot.guild, user_id=42, roles=(5,))
+    await set_optout(db, both.id)
+
+    said_both = await cog._go_live(both, StreamInfo(url="u", game="g"), "presence")
+    said_role = await cog._go_live(role_only, StreamInfo(url="u", game="g"), "presence")
+
+    assert (said_both, said_role) == (cog_module.OPTED_OUT_SKIP, cog_module.ROLE_FILTER)
+    assert bot.guild.channel.messages == []
+
+
+async def test_a_row_only_in_the_old_go_live_table_is_not_read_any_more(cog, bot, db, member):
+    """After the boot migration the old table is a copy kept for a rollback; the one table is
+    the only thing asked. The migration test proves every old row is copied first."""
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await db.conn.execute(
+        "INSERT INTO golive_optout(user_id, at) VALUES (?, ?)", (member.id, "2026-10-20")
+    )
+    await db.conn.commit()
+
+    assert await is_opted_out(db, member.id) is False

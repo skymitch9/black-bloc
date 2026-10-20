@@ -9,6 +9,7 @@ from ... import marathon as mt
 from ... import marathon_announce as ma
 from ... import marathon_hosts as mh
 from ... import marathon_people as mp
+from ... import optouts
 from ... import spotlight as spot
 from ...actionlog import log_action
 from ...command_errors import AnswersErrors, SafeDynamicItem
@@ -468,8 +469,10 @@ def slot_card(
         if entry.get("matched_by") == mp.BY_PAIRING and entry.get("pairing_id"):
             view.add_item(keyed(bot, guild, UNLINK))
             view.add_item(keyed(bot, guild, TWITCH))
+        silent = optouts.silenced(bot.db, guild.id)
         if entry.get("login") and not entry.get("channel_id"):
-            view.add_item(keyed(bot, guild, SPOTLIGHT))
+            if int(chosen.get("user_id") or 0) not in silent:
+                view.add_item(keyed(bot, guild, SPOTLIGHT))
         if entry.get("spotlight_id"):
             view.add_item(keyed(bot, guild, UNSPOTLIGHT))
         for one in announce_moves_for(bot, guild, marathon, run, chosen):

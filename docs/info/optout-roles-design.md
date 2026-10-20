@@ -140,3 +140,5 @@ Read through the operator token (`/api/ref/roles`, every page of `/api/members` 
 - Whether the GDQ `Staff` role can see the staff channel (§7) — not read.
 - An excluded HOST's block post: the block vanishes, so it is left to `sync_host_highlights`' left-behind walk on the next tick; no test covers it.
 - The schema 95 migration on a copy of the live file.
+
+> **2026-10-20 follow-up (one-optout, branch `one-optout`, not merged):** a staff override now needs a reason, and it is cleared (latest act wins, logged, log-channel notice) when the person takes a `marathon_optout_role_ids` role afterwards; overrides show as their own Counted in list on Members. See [`one-optout-design.md`](one-optout-design.md).

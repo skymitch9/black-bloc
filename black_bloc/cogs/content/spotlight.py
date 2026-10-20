@@ -10,7 +10,7 @@ import discord
 from discord.ext import commands, tasks
 
 from ... import golive_replay as replays
-from ... import pings
+from ... import optouts, pings
 from ... import shadow as shadow_home
 from ... import spotlight as words
 from ...actionlog import log_action
@@ -66,6 +66,7 @@ from ...settings_store import (
     GOLIVE_REPLAY_TREAT_LIVE_KEY,
     GOLIVE_REPLAY_TREATED_KEY,
     GOLIVE_REPLAY_WORDS_KEY,
+    GOLIVE_SPOTLIGHT_OPTED_OUT_KEY,
     MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY,
     SPOTLIGHT_BAD_DATE_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
@@ -906,6 +907,8 @@ class Spotlight(commands.Cog):
         """The one announcement, whichever sweep saw it: spotlight only decides the pin, and a
         replay is posted plain or not at all. An opted-out channel stops here — no session."""
         if not words.announces(row):
+            return
+        if await silenced_by(self.bot, guild, row) is not None:
             return
         mode = self._mode(guild.id)
         seen = await self._verdict(guild, row, info, stream_type)
@@ -1844,6 +1847,38 @@ class Spotlight(commands.Cog):
 
 
 # --- the shared moves, which the routes and the panel both come in by -------------------------
+
+
+async def channel_people(db: Any, row: Any) -> list[int]:
+    """The members a spotlit channel belongs to: its Twitch login's link and its YouTube link."""
+    from .golive import link_owner as twitch_owner
+    from .youtube import link_owner as youtube_owner
+
+    found = [await twitch_owner(db, str(_cell(row, "twitch_login") or ""))]
+    youtube = _cell(row, "youtube_channel_id")
+    if youtube:
+        found.append(await youtube_owner(db, str(youtube)))
+    return sorted({int(one) for one in found if one})
+
+
+async def silenced_by(bot: Any, guild: Any, row: Any) -> int | None:
+    """The member who asked not to be announced, when this channel is theirs; None otherwise."""
+    for user_id in await channel_people(bot.db, row):
+        if await optouts.is_out(bot.db, guild.id, user_id, optouts.ANNOUNCE):
+            return user_id
+    return None
+
+
+async def opted_out_clause(bot: Any, guild: Any, row: Any) -> str:
+    """What staff hear after spotlighting a channel whose member asked not to be announced."""
+    if row is None:
+        return ""
+    user_id = await silenced_by(bot, guild, row)
+    if user_id is None:
+        return ""
+    member = guild.get_member(int(user_id)) if hasattr(guild, "get_member") else None
+    name = str(getattr(member, "display_name", None) or user_id)
+    return optouts.said(bot.store, guild.id, GOLIVE_SPOTLIGHT_OPTED_OUT_KEY, name=name)
 
 
 async def drop_fan_role(
@@ -3106,6 +3141,7 @@ class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_CHANNEL_M
             spotlight=wanted,
         )
         said = add_said(bot, interaction.guild, outcome, row, given)
+        said += await opted_out_clause(bot, interaction.guild, row)
         wanted_youtube = str(self.youtube).strip()
         if row is not None and wanted_youtube:
             _, fresh, linked = await link_youtube(

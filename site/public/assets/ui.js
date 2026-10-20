@@ -8,6 +8,7 @@ import {
   refRoles,
   saveSetting,
   send,
+  setConfirmer,
   settings,
   settingsNamespace,
 } from './api.js';
@@ -818,6 +819,15 @@ export function ask({ title, body, confirmLabel = 'Do it', tone = 'danger' }) {
   });
 }
 
+const CHANGE_TITLE = 'Are you sure?';
+const CHANGE_LABEL = 'Change it';
+
+setConfirmer((message) => ask({
+  title: CHANGE_TITLE,
+  body: [el('p', { class: 'ask-body' }, boldParts(message))],
+  confirmLabel: CHANGE_LABEL,
+}));
+
 let formDialog = null;
 const WORKING = 'Working…';
 
@@ -872,6 +882,27 @@ export function askForm({
     formDialog.showModal();
     if (ready) ready({ confirm, say: said });
   });
+}
+
+/**
+ * A move that needs a reason: one box, sent on confirm. A refusal from the bot is
+ * shown inside the dialog with what was typed kept, so a blank reason is answered
+ * in the bot's own words rather than closing on nothing.
+ */
+export async function askReason({ title, label, confirmLabel, sendIt }) {
+  const box = el('textarea', { class: 'input area', rows: '3', id: 'ask-reason', maxlength: '300' });
+  let answered = null;
+  const done = await askForm({
+    title,
+    confirmLabel,
+    tone: 'warn',
+    body: [field(label, box)],
+    onConfirm: async () => {
+      answered = await sendIt(box.value.trim());
+      return null;
+    },
+  });
+  return done ? answered : null;
 }
 
 /**

@@ -667,3 +667,5 @@ the same breath that a stream already running is not announced after the fact â€
   unset guild reads `end` from the default chain.
 
 > **Follow-up 2026-10-20 (`shadow-one-meaning`):** `golive_mode` shadow is called **test**; it now governs spotlights and (with *Also watch YouTube*, `golive_youtube`) YouTube too. Staff get *Also watch YouTube* / *Stop watching YouTube* on row 1, and a **YouTube** status line. The help no longer says "Off by default" â€” the registry default is test (`shadow`). See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).
+
+> **2026-10-20 follow-up (one-optout, branch `one-optout`, not merged):** Stop announcing my streams now silences spotlight, marathons and the PB feed too; staff Opt them back in is unchanged (no reason, no DM, owner's No on i10) and logs `optouts.overridden`. See [`one-optout-design.md`](one-optout-design.md).

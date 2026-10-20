@@ -400,6 +400,7 @@ const SETTING_SPECS = [
   ['golive_live_role_id', 'role', '900000000000000003', null, 'a role Black Bloc puts on somebody while they are streaming and takes off again when the stream ends. Blank — the default — means no role is handed out at all'],
   ['golive_require_role_id', 'role', null, null, 'when this is set, only people wearing that role are ever announced. Blank — the default — announces anybody the bot sees streaming'],
   ['golive_ignore_role_id', 'role', null, null, 'anybody wearing this role is never announced, whatever else would have allowed it. Blank — the default — means nobody is held back this way'],
+  ["golive_ignored_role_word", "text", "ignored by role ({role})", "ignored by role ({role})", "what the Members page's Opted out list says about someone wearing golive_ignore_role_id, whose streams go-live never announces. It takes {role}"],
   ['golive_cooldown_minutes', 'int', 60, 60, 'how many minutes must pass before the same person is announced a second time, so a stream that drops and comes back does not get two posts. 60 by default'],
   ['golive_ping_role_id', 'role', null, null, 'the role mentioned in front of every go-live announcement, so the people who asked for streaming pings get one. Blank — the default — posts the announcement with no mention at all'],
   ['golive_max_session_hours', 'int', 12, 12, 'a safety net: a stream still marked live after this many hours is closed anyway, in case the bot never saw it end. 12 by default'],
@@ -569,6 +570,9 @@ const SETTING_SPECS = [
   ]),
   ['chat_memory_mode', 'enum', 'off', 'off', 'off, or on (Black Bloc keeps a few preferences about each person — what to call them, how they like to be answered — and reads them back next time). Off writes nothing and reads nothing; the profiles already stored stay until somebody clears them', ['off', 'on']],
   ['chat_memory_consent', 'enum', 'optout', 'optout', 'optout means memory is on for everybody until they stop it themselves on the `/memory` panel; optin means nobody is remembered until they start it there', ['optout', 'optin']],
+  ["chat_memory_consent_confirm_out_said", "text", "**{count}** members would stop being remembered. Press again to change it.", "**{count}** members would stop being remembered. Press again to change it.", "what staff are asked before chat_memory_consent changes to optin. It takes {count}"],
+  ["chat_memory_consent_confirm_in_said", "text", "**{count}** members would start being remembered. Press again to change it.", "**{count}** members would start being remembered. Press again to change it.", "what staff are asked before chat_memory_consent changes to optout. It takes {count}"],
+  ["chat_memory_consent_confirm_button", "text", "Yes, change it", "Yes, change it", "the /settings button that confirms a change to chat_memory_consent"],
   ['chat_memory_retention_days', 'int', 180, 180, 'days a profile nobody has added to is kept before it is deleted, up to 3650; 0 keeps them forever. Leaving the server clears one straight away', null, 3650],
   ['chat_memory_dm_scope', 'enum', 'separate', 'separate', 'separate keeps what Black Bloc learns in a DM out of public channels — a name or pronouns set by DM never reach the server; shared lets every note be used anywhere', ['separate', 'shared']],
   ['chat_memory_staff_view', 'enum', 'counts', 'counts', 'counts shows staff only how many profiles there are and when each changed; full lets staff read the notes themselves. The person can always read their own with `/memory`', ['counts', 'full']],
@@ -739,6 +743,7 @@ const SETTING_SPECS = [
   ["spotlight_window_next_words", "text", "next {start} \u2013 {end}", "next {start} \u2013 {end}", "the {window} line while the next ping window is still ahead. It takes {start} and {end}, each like 12 Jan 15:00"],
   ["spotlight_window_none_words", "text", "no window set", "no window set", "the {window} line when a channel pings only during events and has no window ahead of it, so nothing it posts mentions a role"],
   ['golive_channel_spotlight_default', 'bool', false, false, "whether a channel added through **Add a streamer** with nobody here behind it is spotlighted from the start — its announcement pinned while it streams and a reminder every few hours. off by default: it is announced like any other stream, and its own row's **Spotlight on** adds the pin and the reminders whenever staff want them"],
+  ["golive_spotlight_opted_out_said", "text", " **{name}** asked not to be announced, so nothing of this channel's is posted until they opt back in on /golive.", " **{name}** asked not to be announced, so nothing of this channel's is posted until they opt back in on /golive.", "added to what staff are told when they spotlight a channel whose member stopped every announcement of theirs. It takes {name}"],
   ['golive_channel_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a CHANNEL is opted out of announcements mid-stream. end — the default — unpins it and rewrites it to the ended wording, exactly as a real stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so no reminder follows and nothing waits on Twitch", ['end', 'delete', 'leave']],
   ['golive_member_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a MEMBER opts out of announcements mid-stream — the same three treatments the channel key has. end — the default — unpins it and rewrites it to the ended wording; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so their live role comes off and nothing waits on Twitch or on their presence", ['end', 'delete', 'leave']],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -970,6 +975,11 @@ const SETTING_SPECS = [
   ["marathon_baf_override_clear_button", "text", "Undo the override", "Undo the override", "the site's button that puts someone counted as BaF anyway back under marathon_optout_role_ids"],
   ["marathon_baf_override_set_said", "text", "**{name}** counts as BaF on every marathon.", "**{name}** counts as BaF on every marathon.", "what staff are told on the site once someone is counted as BaF anyway. It takes {name}"],
   ["marathon_baf_override_cleared_said", "text", "**{name}** follows the opted-out roles again.", "**{name}** follows the opted-out roles again.", "what staff are told on the site once the override on someone is undone. It takes {name}"],
+  ["marathon_baf_override_reason_title", "text", "Why count them as BaF?", "Why count them as BaF?", "the title of the box that asks staff why someone is counted as BaF anyway"],
+  ["marathon_baf_override_reason_label", "text", "Reason", "Reason", "the label of the reason field in that box"],
+  ["marathon_baf_override_no_reason_word", "text", "no reason given", "no reason given", "what the Members page's Counted in list shows for an override saved before reasons were asked for"],
+  ["marathon_baf_override_needs_reason_said", "text", "Say why **{name}** counts as BaF anyway, so nothing was changed.", "Say why **{name}** counts as BaF anyway, so nothing was changed.", "what staff are told when they count someone as BaF anyway without a reason. It takes {name}"],
+  ["marathon_override_cleared_by_optout_said", "text", "**{name}** put on {role}, so staff no longer count them as BaF. Count them in again on the Members page if that was wrong.", "**{name}** put on {role}, so staff no longer count them as BaF. Count them in again on the Members page if that was wrong.", "the log channel's notice when someone staff counted as BaF anyway puts on a role of marathon_optout_role_ids themselves, which clears the override. It takes {name} {role}"],
   ["marathon_host_announcements_default", "bool", false, false, "whether a marathon announces its BaF HOSTS publicly — a host block's reminders and highlight — when its own Host announcements switch follows this setting. Runners follow Runner announcements; neither switch is over the other. A run's own answer for a host beats this switch either way. off by default"],
   ["marathon_mention_people", "bool", true, true, "whether a public marathon post writes a BaF person as an @ (drawn, never notified). Off, every public post writes their name as the schedule has it, as plain text, instead; one person on one marathon can be set the other way from a run's post. on by default"],
   ["marathon_controls_host_announcements_on", "text", "Host announcements: on · turn off", "Host announcements: on · turn off", "the thread controls' host announcements button while the marathon's BaF hosts are announced publicly"],
@@ -994,6 +1004,7 @@ const SETTING_SPECS = [
   ["marathon_announce_why_default", "text", "the default", "the default", "{why} of that line while nothing but the defaults decides"],
   ["marathon_announce_why_run", "text", "set for this run", "set for this run", "{why} of that line while the run has its own answer for the person"],
   ["marathon_announce_why_marathon", "text", "opted out of every run on this marathon", "opted out of every run on this marathon", "{why} of that line while the person is opted out of the whole marathon"],
+  ["marathon_announce_why_optout", "text", "asked not to be announced anywhere", "asked not to be announced anywhere", "{why} of that line while the person stopped every announcement of theirs on /golive"],
   ["marathon_announce_why_runners_off", "text", "runner announcements are off for this marathon", "runner announcements are off for this marathon", "{why} of that line for a runner while the marathon's Runner announcements switch is off"],
   ["marathon_announce_why_hosts_off", "text", "host announcements are off for this marathon", "host announcements are off for this marathon", "{why} of that line for a host while the marathon's Host announcements switch is off"],
   ["marathon_announce_state_plain", "text", " · written without an @", " · written without an @", "{plain} of that line while the person's name is written as plain text"],
@@ -3471,13 +3482,30 @@ route('GET', '/api/members', (context) => {
   };
 });
 
-// The Members page's Opted out list (black_bloc/api/tools/optouts.py): every place someone is
-// out of, read where it lives; no copy of any opt-out is kept here.
-const OPTOUT_SOURCES = ['marathon_role', 'marathon_override', 'marathon_posts', 'golive', 'chat_memory', 'birthdays', 'pbs'];
+// The Members page's Opted out list (black_bloc/api/tools/optouts.py): the one opt-out table
+// (person_optouts, schema 98), the two role filters, each marathon's own "not this one", and
+// who staff count in as a list of its own.
+const OPTOUT_SOURCES = ['marathon_role', 'marathon_posts', 'announce', 'golive_ignore_role', 'chat_memory', 'birthday', 'pbs', 'streamer_list'];
 
 function chatMemoryOptouts() {
   if (!state.chatMemoryOptouts) state.chatMemoryOptouts = [{ user_id: MEMBERS[4].id, at: minutesAgo(3000) }];
   return state.chatMemoryOptouts;
+}
+
+function optoutPerson(userId, extra = {}) {
+  const member = ROSTER.find((one) => one.id === String(userId) && one.id !== '700000000000000008');
+  return {
+    user_id: String(userId),
+    name: member ? member.display_name : String(userId),
+    username: member ? member.name : null,
+    avatar: member ? member.avatar_url || null : null,
+    here: Boolean(member),
+    ...extra,
+  };
+}
+
+function byName(a, b) {
+  return Number(!a.here) - Number(!b.here) || a.name.toLowerCase().localeCompare(b.name.toLowerCase());
 }
 
 route('GET', '/api/members/optouts', (context) => {
@@ -3492,10 +3520,6 @@ route('GET', '/api/members/optouts', (context) => {
     const rule = marathonBafRule({ held: userId });
     add(userId, 'marathon_role', rule.said, { rule });
   }
-  for (const row of marathonBafOverrides()) {
-    const rule = marathonBafRule({ userId: row.user_id });
-    add(row.user_id, 'marathon_override', rule.said, { rule });
-  }
   const posts = new Map();
   for (const row of state.marathons) {
     for (const userId of [...marathonOptedOut(row)].sort()) {
@@ -3504,27 +3528,37 @@ route('GET', '/api/members/optouts', (context) => {
     }
   }
   for (const [userId, marathons] of posts) add(userId, 'marathon_posts', marathonWords('marathon_posts_opted_out_word'), { marathons });
-  for (const row of state.golive.optouts) add(row.user_id, 'golive');
-  if ((state.settings.get('chat_memory_consent') || 'optout') === 'optout') {
-    for (const row of chatMemoryOptouts()) add(row.user_id, 'chat_memory');
+  for (const row of state.golive.optouts) add(row.user_id, 'announce');
+  const ignored = state.settings.get('golive_ignore_role_id');
+  if (ignored) {
+    const role = ROLES.find((one) => one.id === String(ignored));
+    const said = String(state.settings.get('golive_ignored_role_word') || specOf('golive_ignored_role_word')[3]).split('{role}').join(role ? role.name : '');
+    for (const row of ROSTER.filter((one) => !one.bot && (one.role_ids || []).includes(String(ignored)))) add(row.id, 'golive_ignore_role', said);
   }
-  for (const row of state.birthdays.filter((one) => !one.opted_in)) add(row.user_id, 'birthdays');
+  for (const row of chatMemoryOptouts()) add(row.user_id, 'chat_memory');
+  for (const row of state.birthdays.filter((one) => !one.opted_in)) add(row.user_id, 'birthday');
   for (const row of pbState().people.filter((one) => one.state === 'opted_out')) add(row.user_id, 'pbs');
-  const people = [...found].map(([userId, chips]) => {
-    const member = ROSTER.find((one) => one.id === userId && one.id !== '700000000000000008');
-    return {
-      user_id: userId,
-      name: member ? member.display_name : userId,
-      username: member ? member.name : null,
-      avatar: member ? member.avatar_url || null : null,
-      here: Boolean(member),
-      chips: chips.sort((a, b) => OPTOUT_SOURCES.indexOf(a.source) - OPTOUT_SOURCES.indexOf(b.source)),
-    };
-  }).sort((a, b) => Number(!a.here) - Number(!b.here) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  for (const row of state.golive.streamers.filter((one) => !one.listed && one.hidden_by)) add(row.user_id, 'streamer_list');
+  const people = [...found]
+    .map(([userId, chips]) => optoutPerson(userId, { chips: chips.sort((a, b) => OPTOUT_SOURCES.indexOf(a.source) - OPTOUT_SOURCES.indexOf(b.source)) }))
+    .sort(byName);
+  const countedIn = marathonBafOverrides()
+    .map((row) => {
+      const rule = marathonBafRule({ userId: row.user_id });
+      return optoutPerson(row.user_id, {
+        said: rule ? rule.said : null,
+        reason: row.reason || marathonWords('marathon_baf_override_no_reason_word'),
+        by: row.by ? String(row.by) : null,
+        by_name: row.by ? memberName(row.by) || String(row.by) : null,
+        at: row.at,
+        rule,
+      });
+    })
+    .sort(byName);
   const channels = state.golive.spotlights
     .filter((one) => one.marathons === false)
     .map((one) => ({ id: one.id, login: one.twitch_login, name: one.display_name || one.twitch_login }));
-  return { people, channels, sources: OPTOUT_SOURCES };
+  return { people, counted_in: countedIn, channels, sources: OPTOUT_SOURCES };
 });
 
 route('GET', '/api/ref/names', (context) => {
@@ -5170,12 +5204,46 @@ route('GET', '/api/settings/audit', (context) => {
   };
 });
 
+// one-optout: chat_memory_consent answers with a count first (black_bloc/chat_consent.py).
+const CONSENT_KEY = 'chat_memory_consent';
+
+function consentMoved(to) {
+  const out = new Set(chatMemoryOptouts().map((row) => String(row.user_id)));
+  const humans = ROSTER.filter((row) => !row.bot).map((row) => row.id);
+  if (to === 'optin') return humans.filter((id) => !out.has(id));
+  return humans.filter((id) => !out.has(id) || (state.consentImplicit || []).includes(id));
+}
+
+function consentAsked(to, confirmed) {
+  if (confirmed || to === (state.settings.get(CONSENT_KEY) || 'optout')) return;
+  const key = to === 'optin' ? 'chat_memory_consent_confirm_out_said' : 'chat_memory_consent_confirm_in_said';
+  const said = String(state.settings.get(key) || specOf(key)[3]).split('{count}').join(String(consentMoved(to).length));
+  throw new Refused(409, 'confirm_needed', said);
+}
+
+function consentFlipped(to) {
+  const moved = consentMoved(to);
+  if (to === 'optin') {
+    state.consentImplicit = moved;
+    for (const id of moved) chatMemoryOptouts().push({ user_id: id, at: now() });
+  } else {
+    const implicit = new Set(state.consentImplicit || []);
+    state.chatMemoryOptouts = chatMemoryOptouts().filter((row) => !implicit.has(String(row.user_id)));
+    state.consentImplicit = [];
+  }
+  return { from: to === 'optin' ? 'optout' : 'optin', to, count: moved.length };
+}
+
 route('PUT', '/api/settings/:key', async (context) => {
   requireStaff(context.session);
   if (STRUCTURE_LEADS_KEYS.includes(context.params.key)) requireLeads(context.session);
   const body = await context.body();
   const value = validate(context.params.key, body.value === undefined ? null : body.value);
   armingRefusal(context.params.key, value);
+  if (context.params.key === CONSENT_KEY) {
+    consentAsked(value, body.confirm === true);
+    if (value !== (state.settings.get(CONSENT_KEY) || 'optout')) consentFlipped(value);
+  }
   state.settings.set(context.params.key, value);
   settingChanged(context.params.key);
   state.audit.unshift({ key: context.params.key, value, updated_by: STAFF.id, updated_at: now() });
@@ -5188,6 +5256,10 @@ route('DELETE', '/api/settings/:key', (context) => {
   if (STRUCTURE_LEADS_KEYS.includes(context.params.key)) requireLeads(context.session);
   const spec = specOf(context.params.key);
   if (spec === null) throw new Refused(400, 'unknown_key', `Black Bloc has no setting called ${context.params.key}.`);
+  if (context.params.key === CONSENT_KEY) {
+    consentAsked(spec[3], context.url.searchParams.get('confirm') === 'true');
+    if (spec[3] !== (state.settings.get(CONSENT_KEY) || 'optout')) consentFlipped(spec[3]);
+  }
   state.settings.set(context.params.key, spec[3] ?? null);
   settingChanged(context.params.key);
   state.audit.unshift({ key: context.params.key, value: spec[3] ?? null, updated_by: STAFF.id, updated_at: now() });
@@ -8542,7 +8614,7 @@ function marathonOptoutRoles() {
 }
 
 function marathonBafOverrides() {
-  if (!state.marathonBafOverrides) state.marathonBafOverrides = [{ user_id: MEMBERS[6].id, by: STAFF.id, at: minutesAgo(600) }];
+  if (!state.marathonBafOverrides) state.marathonBafOverrides = [{ user_id: MEMBERS[6].id, by: STAFF.id, at: minutesAgo(600), reason: null }];
   return state.marathonBafOverrides;
 }
 
@@ -8568,6 +8640,8 @@ function marathonBafRule({ held = null, userId = null } = {}) {
       said: marathonWords('marathon_not_baf_role_word').split('{role}').join(role ? role.name : ''),
       move: 'set',
       move_label: marathonWords('marathon_baf_override_button'),
+      reason_title: marathonWords('marathon_baf_override_reason_title'),
+      reason_label: marathonWords('marathon_baf_override_reason_label'),
     };
   }
   if (userId && marathonBafOverrides().some((one) => String(one.user_id) === String(userId))) {
@@ -8607,15 +8681,20 @@ function settingChanged(key) {
   if (key === 'marathon_optout_role_ids') marathonRoleRematch('website');
 }
 
-function marathonOverrideMove(context, on) {
+async function marathonOverrideMove(context, on) {
   requireStaff(context.session);
+  const body = on ? await context.body() : {};
+  const reason = String((body && body.reason) || '').trim().slice(0, 300);
   const userId = String(decodeURIComponent(context.params.user_id));
   if (!/^\d+$/.test(userId)) throw new Refused(400, 'bad_request', `**${userId.slice(0, 40)}** is not a number, so nothing was changed.`);
   if (on && !MEMBERS.some((one) => one.id === userId)) throw new Refused(404, 'not_a_member', `Nobody with the id **${userId}** is in the server, so nothing was changed.`);
   const rows = marathonBafOverrides();
   const was = rows.some((one) => String(one.user_id) === userId);
+  if (on && !was && !reason) {
+    throw new Refused(422, 'reason_needed', marathonSaid('marathon_baf_override_needs_reason_said', { name: memberName(userId) || userId }));
+  }
   if (was !== on) {
-    if (on) rows.push({ user_id: userId, by: STAFF.id, at: now() });
+    if (on) rows.push({ user_id: userId, by: STAFF.id, at: now(), reason });
     else state.marathonBafOverrides = rows.filter((one) => String(one.user_id) !== userId);
     logAction(on ? 'web.marathon.baf_override_set' : 'web.marathon.baf_override_cleared', { target_id: userId, details: { member: userId, via: 'website' } });
     marathonRoleRematch('website');
@@ -9742,6 +9821,7 @@ function marathonBoardRow(row, entry) {
     spotlight_until: spotlit ? channel.expires_at : null,
     looks_like: marathonLooksLike(entry),
     opted_out: entry.user_id ? marathonOptedOut(row).has(String(entry.user_id)) : null,
+    announce_optout: Boolean(entry.user_id) && state.golive.optouts.some((one) => String(one.user_id) === String(entry.user_id)),
     mention: entry.user_id ? marathonMentionState(row, entry.user_id, entry.name) : null,
     part_tag: marathonPartTag(entry.parts),
     baf_rule: marathonBafRule({ held: entry.not_ours_id, userId: entry.user_id }),
