@@ -3885,7 +3885,7 @@ function postNotes() {
   if (postsMode() !== 'off') return [];
   const hidden = postsCommandsHidden();
   if (!hidden.length) return [POSTS_ARE_OFF];
-  return [POSTS_ARE_OFF, POSTS_COMMANDS_HIDDEN.split('{commands}').join(hidden.map((name) => `\`/${name}\``).join(', '))];
+  return [POSTS_ARE_OFF, POSTS_COMMANDS_HIDDEN.split('{commands}').join(hidden.map((name) => `/${name}`).join(', '))];
 }
 
 function postVersionsOf(row) {

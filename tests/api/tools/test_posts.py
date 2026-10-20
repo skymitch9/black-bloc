@@ -115,7 +115,7 @@ async def test_the_page_is_told_in_words_when_posts_are_off(client, sign_in, web
     assert found["mode"] == "off"
     assert found["notes"] == [
         tools_posts.POSTS_ARE_OFF,
-        tools_posts.COMMANDS_HIDDEN.format(commands="`/posts`, `/sticky`, `/questions`"),
+        tools_posts.COMMANDS_HIDDEN.format(commands="/posts, /sticky, /questions"),
     ]
     assert "sticky copy is down" in found["notes"][0]
 

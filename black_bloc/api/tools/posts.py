@@ -182,7 +182,7 @@ def build_router(bot: Any) -> APIRouter:
         hidden = commands_hidden(bot, guild)
         if not hidden:
             return [POSTS_ARE_OFF]
-        named = ", ".join(f"`/{name}`" for name in hidden)
+        named = ", ".join(f"/{name}" for name in hidden)
         return [POSTS_ARE_OFF, COMMANDS_HIDDEN.format(commands=named)]
 
     async def _blocks_by_post(guild: Any) -> tuple[dict[int, list[Any]], list[Any]]:
