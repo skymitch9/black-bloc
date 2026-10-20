@@ -4632,7 +4632,7 @@ async def test_a_schema_96_file_gains_the_baf_run_tables_and_loses_nothing(tmp_p
             row["name"] for row in await cur.fetchall()
         }
         cur = await again.conn.execute("PRAGMA table_info(baf_series)")
-        assert {"guild_id", "game_key", "series", "by", "at"} == {
+        assert {"guild_id", "game_key", "series", "genre", "by", "at"} == {
             row["name"] for row in await cur.fetchall()
         }
         cur = await again.conn.execute("SELECT body FROM weekly_questions")
