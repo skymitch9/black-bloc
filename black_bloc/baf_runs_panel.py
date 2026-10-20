@@ -13,6 +13,7 @@ from .settings_store import (
     RUNS_LOOKUP_LINE,
     RUNS_LOOKUP_NONE,
     RUNS_LOOKUP_SEEN,
+    RUNS_LOOKUP_TAGS,
     RUNS_LOOKUP_TITLE,
 )
 
@@ -31,6 +32,7 @@ NO_DATE = "no date"
 FIELD_NAME_LIMIT = 256
 FIELD_VALUE_LIMIT = 1024
 QUERY_LIMIT = 100
+TAG_JOIN = " · "
 
 
 def date_word(value: Any) -> str:
@@ -42,9 +44,18 @@ def worded(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
     return mt.render(bot.store.get(guild_id, key), RUNS_DEFAULTS[key], **fields).text
 
 
+def tag_fields(game: dict[str, Any]) -> dict[str, str]:
+    series = game.get(runs.SERIES) or ""
+    genre = game.get(runs.GENRE) or ""
+    return {"series": series, "genre": genre, "tags": TAG_JOIN.join(filter(None, (series, genre)))}
+
+
 def game_field(bot: Any, guild_id: int, game: dict[str, Any]) -> tuple[str, str]:
-    name = worded(bot, guild_id, RUNS_LOOKUP_TITLE, game=game["game"])[:FIELD_NAME_LIMIT]
-    lines = [
+    tags = tag_fields(game)
+    name = worded(bot, guild_id, RUNS_LOOKUP_TITLE, game=game["game"], **tags)[:FIELD_NAME_LIMIT]
+    tag_line = worded(bot, guild_id, RUNS_LOOKUP_TAGS, **tags).strip() if tags["tags"] else ""
+    lines = [tag_line] if tag_line else []
+    lines.append(
         worded(
             bot,
             guild_id,
@@ -52,8 +63,9 @@ def game_field(bot: Any, guild_id: int, game: dict[str, Any]) -> tuple[str, str]
             n=game["times"],
             date=date_word(game["last_date"]),
             event=game["last_event"] or "—",
+            **tags,
         )
-    ]
+    )
     for run in game["runs"]:
         lines.append(
             worded(

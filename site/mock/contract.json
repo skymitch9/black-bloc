@@ -2761,6 +2761,7 @@
         "rows",
         "events",
         "series_names",
+        "genre_names",
         "sources",
         "parts"
       ],
@@ -2778,6 +2779,7 @@
           "game",
           "game_key",
           "series",
+          "genre",
           "category",
           "runners",
           "runners_text",
@@ -2812,6 +2814,7 @@
           "game",
           "game_key",
           "series",
+          "genre",
           "times",
           "last_date",
           "last_event",
@@ -12769,6 +12772,7 @@
     "web.runs.restored",
     "web.runs.imported",
     "web.runs.series_set",
+    "web.runs.genre_set",
     "web.question.rehearsed",
     "web.sticky.rehearsed",
     "web.poll.rehearsed"

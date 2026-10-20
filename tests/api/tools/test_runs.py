@@ -17,6 +17,7 @@ ROUTES = [
     ("DELETE", "/api/runs/h1", None),
     ("POST", "/api/runs/t1/restore", None),
     ("PUT", "/api/runs/series/x", {"series": "y"}),
+    ("PUT", "/api/runs/genre/x", {"genre": "y"}),
     ("POST", "/api/runs/import", {"csv": "game\nx\n"}),
 ]
 
@@ -87,6 +88,34 @@ async def test_add_edit_series_remove_from_the_page_each_leave_one_web_row(
         "web.runs.restored",
         "web.runs.removed",
     ]
+
+
+async def test_a_genre_is_set_from_the_page_beside_the_series_with_one_web_row(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await seed_tracked(web, wf, 7)
+
+    assert client.put("/api/runs/series/celeste", json={"series": "Celeste"}).status_code == 200
+    said = client.put("/api/runs/genre/celeste", json={"genre": "Platformer"})
+    assert said.status_code == 200 and said.json()["message"] == (
+        "**Celeste** is in the genre **Platformer**."
+    )
+    again = client.put("/api/runs/genre/celeste", json={"genre": "Platformer"})
+    assert again.status_code == 409 and "nothing was saved" in again.json()["message"]
+
+    found = client.get("/api/runs").json()
+    assert found["genre_names"] == ["Platformer"] and found["series_names"] == ["Celeste"]
+    assert [row["genre"] for row in found["rows"]] == ["Platformer"]
+    assert client.get("/api/runs?genre=platformer").json()["rows"] == found["rows"]
+    assert client.get("/api/runs?genre=rpg").json()["rows"] == []
+    games = client.get("/api/runs/games").json()["games"]
+    assert [(one["series"], one["genre"]) for one in games] == [("Celeste", "Platformer")]
+    head = client.get("/api/runs/export.csv").text.splitlines()[0]
+    assert ",series,genre,category," in head
+
+    kinds = [kind for kind in await wf.kinds_in(web.db) if "runs." in kind]
+    assert kinds == ["web.runs.series_set", "web.runs.genre_set"]
 
 
 async def test_a_refusal_says_what_happened_in_words(client, sign_in):

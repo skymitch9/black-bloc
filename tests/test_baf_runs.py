@@ -247,6 +247,88 @@ async def test_a_series_is_set_cleared_and_logged_per_game(bot):
     assert (await kinds(bot.db)).count("runs.series_set") == 2
 
 
+async def shredder(bot):
+    return next(one for one in await runs.view(bot, bot.guild) if one["game_key"] == SHREDDER)
+
+
+SHREDDER = "shredder's revenge"
+
+
+async def test_a_genre_is_set_beside_the_series_cleared_alone_and_logged_per_game(bot):
+    await seed(bot)
+
+    assert (await runs.set_series(bot, bot.guild, None, "Shredder's Revenge", "TMNT")).ok
+    set_genre = await runs.set_genre(bot, bot.guild, None, "shredder's revenge", "Beat 'em up")
+    assert set_genre.ok and "genre **Beat 'em up**" in set_genre.message
+    row = await shredder(bot)
+    assert (row["series"], row["genre"]) == ("TMNT", "Beat 'em up")
+    every = runs.games(await runs.view(bot, bot.guild))
+    game = next(one for one in every if one["game_key"] == row["game_key"])
+    assert (game["series"], game["genre"]) == ("TMNT", "Beat 'em up")
+    assert not (await runs.set_genre(bot, bot.guild, None, "Shredder's Revenge", "Beat 'em up")).ok
+
+    assert (await runs.set_series(bot, bot.guild, None, "Shredder's Revenge", "")).ok
+    assert await count(bot.db, "baf_series") == 1
+    row = await shredder(bot)
+    assert (row["series"], row["genre"]) == ("", "Beat 'em up")
+    cleared = await runs.set_genre(bot, bot.guild, None, "Shredder's Revenge", " ")
+    assert cleared.ok and cleared.message == "**Shredder's Revenge** has no genre now."
+    assert await count(bot.db, "baf_series") == 0
+    assert (await kinds(bot.db)).count("runs.genre_set") == 2
+
+
+async def test_the_row_editor_writes_genre_and_series_and_a_blank_clears_on_edit(bot):
+    ids = await seed(bot)
+    added = await runs.add(
+        bot,
+        bot.guild,
+        None,
+        {"game": "Ember Knights", "genre": "Roguelite", "series": ""},
+        via=VIA_WEBSITE,
+    )
+    row = await runs.find(bot, bot.guild, added.value)
+    assert (row["series"], row["genre"]) == ("", "Roguelite")
+
+    edited = await runs.edit(bot, bot.guild, None, f"t{ids['ours']}", {"genre": "Beat 'em up"})
+    assert edited.ok
+    tracked = await runs.find(bot, bot.guild, f"t{ids['ours']}")
+    assert tracked["genre"] == "Beat 'em up"
+    assert (await runs.edit(bot, bot.guild, None, added.value, {"genre": ""})).ok
+    assert (await runs.find(bot, bot.guild, added.value))["genre"] == ""
+    assert (await kinds(bot.db)).count("runs.edited") == 2
+
+
+async def test_filters_and_search_reach_the_genre(bot):
+    await seed(bot)
+    await runs.set_genre(bot, bot.guild, None, "Celeste", "Platformer")
+    every = await runs.view(bot, bot.guild)
+
+    assert [row["game"] for row in runs.filtered(every, genre="platformer")] == ["Celeste"]
+    assert [row["game"] for row in runs.filtered(every, q="platf")] == ["Celeste"]
+
+
+GENRE_CSV = """Date,Event,Game,Category,Runners,Series,Genre
+2025-06-30,BtB 2025,Celeste,Any%,Kat,,Platformer
+2025-07-01,BtB 2025,Shredder's Revenge,Any%,Kat,TMNT,Fighting
+"""
+
+
+async def test_a_csv_genre_fills_a_blank_and_never_overwrites_a_set_one(bot):
+    await seed(bot)
+    await runs.set_genre(bot, bot.guild, None, "Shredder's Revenge", "Beat 'em up")
+
+    assert (await runs.import_csv(bot, bot.guild, None, GENRE_CSV, dry_run=False)).ok
+
+    rows = {row["game"]: row for row in await runs.view(bot, bot.guild)}
+    assert rows["Celeste"]["genre"] == "Platformer"
+    assert rows["Shredder's Revenge"]["genre"] == "Beat 'em up"
+    assert rows["Shredder's Revenge"]["series"] == "TMNT"
+    text = runs.export_csv(await runs.view(bot, bot.guild))
+    head = text.splitlines()[0].split(",")
+    assert head[head.index("series") + 1] == "genre"
+    assert "Celeste,,Platformer," in text
+
+
 async def test_filters_match_what_the_page_chips_do(bot):
     ids = await seed(bot)
     every = await runs.view(bot, bot.guild)

@@ -1,8 +1,16 @@
+from pathlib import Path
+
 import discord
 import pytest
 
+from black_bloc import baf_runs as runs
 from black_bloc import baf_runs_panel as panel
-from black_bloc.settings_store import RUNS_LOOKUP_LINE, RUNS_LOOKUP_SEEN, RUNS_LOOKUP_TITLE
+from black_bloc.settings_store import (
+    RUNS_LOOKUP_LINE,
+    RUNS_LOOKUP_SEEN,
+    RUNS_LOOKUP_TAGS,
+    RUNS_LOOKUP_TITLE,
+)
 from tests.baf_runs_fakes import (
     GUILD,
     RUNNER_ID,
@@ -182,3 +190,37 @@ def test_a_long_answer_is_cut_inside_one_embed_field(bot):
     name, value = panel.game_field(bot, GUILD, game)
 
     assert len(name) <= 256 and len(value) <= 1024
+
+
+async def test_a_game_with_a_series_or_genre_shows_them_on_the_tags_line_and_only_then(bot):
+    who = staff_of(bot)
+    modal = panel.SearchModal()
+    modal.typed._value = "shredder"
+    plain = FakeInteraction(bot, who)
+    await modal.on_submit(plain)
+    assert plain.edits[0]["embed"].fields[0].value.split("\n")[0].startswith("seen 2 time(s)")
+
+    await runs.set_genre(bot, bot.guild, None, "Shredder's Revenge", "Beat 'em up")
+    genre_only = FakeInteraction(bot, who)
+    await modal.on_submit(genre_only)
+    assert genre_only.edits[0]["embed"].fields[0].value.split("\n")[0] == "Beat 'em up"
+
+    await runs.set_series(bot, bot.guild, None, "Shredder's Revenge", "TMNT")
+    await bot.store.set(GUILD, RUNS_LOOKUP_TITLE, "{game} [{genre}]", by=1)
+    await bot.store.set(GUILD, RUNS_LOOKUP_SEEN, "{n}x in {series}", by=1)
+    both = FakeInteraction(bot, who)
+    await modal.on_submit(both)
+    field = both.edits[0]["embed"].fields[0]
+    assert field.name == "Shredder's Revenge [Beat 'em up]"
+    assert field.value.split("\n")[:2] == ["TMNT · Beat 'em up", "2x in TMNT"]
+
+    await bot.store.set(GUILD, RUNS_LOOKUP_TAGS, "Series: {series} / Genre: {genre}", by=1)
+    worded = FakeInteraction(bot, who)
+    await modal.on_submit(worded)
+    first = worded.edits[0]["embed"].fields[0].value.split("\n")[0]
+    assert first == "Series: TMNT / Genre: Beat 'em up"
+
+
+def test_no_panel_constant_carries_the_seen_words():
+    text = Path(panel.__file__).read_text(encoding="utf-8")
+    assert "time(s)" not in text and "seen {n}" not in text
