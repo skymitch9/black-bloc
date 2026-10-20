@@ -1810,7 +1810,7 @@ function seedState() {
   bafRuns: seedBafRuns(),
   bafEdits: {},
   bafSeries: { 'super metroid': 'Metroid' },
-  bafGenre: { 'hollow knight': 'Metroidvania', 'mario kart 8 deluxe': 'Kart racer', 'f-zero gx': 'Racing' },
+  bafGenre: { 'hollow knight': 'Metroidvania', 'mario kart 8 deluxe': 'Kart racer', 'f-zero gx': 'Racing', "donkey kong country 2: diddy's kong quest": '2D platformer' },
   marathonPeople: seedMarathonPeople(),
   marathonFeeds: seedMarathonFeeds(),
   marathonSpotlights: seedMarathonSpotlights(),
@@ -12152,6 +12152,8 @@ function seedBafRuns() {
     { id: 2, how: 'imported', event_name: 'Frost 2024', event_source: null, event_ref: null, run_ref: null, started_at: '2024-12-07T22:00:00+00:00', game: 'Hollow Knight', category: 'Any% NMG', people: people('KnightFan'), note: '', added_by: STAFF.id },
     { id: 3, how: 'hand', event_name: 'BtB 2025', event_source: null, event_ref: null, run_ref: null, started_at: '2025-03-16T01:00:00+00:00', game: 'Mario Kart 8 Deluxe', category: '48 Tracks', people: people('Casey', MEMBERS[1].id), note: '', added_by: STAFF.id },
     { id: 4, how: 'imported', event_name: 'Frost 2024', event_source: null, event_ref: null, run_ref: null, started_at: '2024-12-08T03:00:00+00:00', game: 'F-Zero GX', category: 'Story', people: people('KnightFan'), note: '', added_by: STAFF.id },
+    { id: 5, how: 'hand', event_name: 'BtB 2025', event_source: null, event_ref: null, run_ref: null, started_at: '2025-03-16T03:00:00+00:00', game: "Donkey Kong Country 2: Diddy's Kong Quest", category: '102%', people: people('KnightFan'), note: '', added_by: STAFF.id },
+    { id: 6, how: 'imported', event_name: 'Frost 2024', event_source: null, event_ref: null, run_ref: null, started_at: '2024-12-08T05:00:00+00:00', game: 'Sekiro: Shadows Die Twice', category: 'Shura Ending', people: people('rivet.exe', MEMBERS[2].id), note: '', added_by: STAFF.id },
   ];
 }
 
@@ -12181,7 +12183,24 @@ function runsGenreRule() {
   return [genreQualifiers(read('runs_genre_qualifiers', RUNS_GENRE_QUALIFIERS_DEFAULT)), genreFamilies(read('runs_genre_families', RUNS_GENRE_FAMILIES_DEFAULT))];
 }
 
+function runsSearchText(row, families) {
+  const found = families.find(([name]) => name === row.genre_family);
+  const familyWords = found ? [found[0], ...found[1]] : [row.genre_family];
+  const lines = [
+    row.game, row.series, row.genre, ...familyWords, row.category,
+    ...row.runners.map((one) => one.display), ...row.runners.map((one) => one.name), row.event,
+  ];
+  return [...new Set(lines.filter(Boolean).map(String))].join('\n');
+}
+
 function runsShaped(given) {
+  const rule = runsGenreRule();
+  const row = runsRowShaped(given, rule);
+  row.search = runsSearchText(row, rule[1]);
+  return row;
+}
+
+function runsRowShaped(given, rule) {
   const gameKey = runsKey(given.game);
   const genre = state.bafGenre[gameKey] || '';
   return {
@@ -12198,7 +12217,7 @@ function runsShaped(given) {
     game_key: gameKey,
     series: state.bafSeries[gameKey] || '',
     genre,
-    genre_family: genreFamily(genre, ...runsGenreRule()),
+    genre_family: genreFamily(genre, ...rule),
     category: given.category || '',
     runners: given.runners,
     runners_text: runsLine(given.runners),

@@ -11,7 +11,6 @@ import {
   countedChoices,
   el,
   familyLabel,
-  familyTerms,
   field,
   filterChip,
   filterSelect,
@@ -138,17 +137,12 @@ function dimensionRules() {
   ];
 }
 
-function rowText(row) {
-  return [
-    row.game, row.category, row.runners_text, row.event, row.series, row.genre,
-    familyTerms(row.genre_family, payload.genre_families), row.note,
-  ].join(' ');
-}
+const rowText = (row) => row.search;
 
 function shownRows() {
   const rules = dimensionRules();
   return payload.rows.filter((row) => rules.every((rule) => passes(row, rule))
-    && passes(row, { text: rowText, query: state.query }));
+    && passes(row, { text: rowText, query: state.query, match: 'words' }));
 }
 
 function shownGames() {
