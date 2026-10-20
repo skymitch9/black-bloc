@@ -44,6 +44,11 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-19 v239
+
+- 🔨 **Fix "This week" + an out-of-cycle override (owner 2026-10-19 18:1x, verbatim: *"sure fix it, just make sure we have an override since this week we're gonna run an out of cycle question since we're late"*).** Fixes findings (1) and (2) above; adds a "post the next question now" extra that does not consume the scheduled slot. Dispatched to Opus 18:2x on branch `questions-this-week`.
+  ↳ ✅ **LIVE v239** 2026-10-19 18:42 (release `1ac512b0`, merge `2e6592a0`); Deviation 14 in `info/weekly-questions-design.md`; see `deploys.log` v239 for what was and was not verified.
+
 ## 2026-10-19 v238
 
 - 🔨 **Weekly questions move into Posts (owner Mon 2026-10-19 ~17:5x, verbatim: *"where ont he website is questions? can we put the question stuff in post"*).** The Questions page becomes a section of the Posts page (the sticky-desk pattern), `questions.html` redirects to it, the nav entry goes. Dispatched to Opus 17:5x on branch `questions-in-posts`.
