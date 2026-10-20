@@ -97,9 +97,9 @@ the bot.
 - **`/questions`** — one staff command opening an ephemeral panel: next slot (Discord timestamp),
   next question, queued count, buttons Add (modal, multi-line), Queue… (select → edit / remove /
   move), Post now, Skip this week. Buttons render only when valid.
-- **`site/public/questions.html`** — the queue (drag or up/down to reorder, inline edit, remove),
+- **The Weekly questions section of the Posts page** (`posts.html#sect-questions`; was `site/public/questions.html` until the 2026-10-19 move below) — the queue (drag or up/down to reorder, inline edit, remove),
   a paste-many add box, the history (posted by you / by the bot, link to the message), and the
-  feature's settings section. Under the community group of the nav. No explaining blurbs.
+  feature's settings section. No nav entry of its own. No explaining blurbs.
 - **`GET /api/questions/current`** — operator-token readable: `{slot_at, question_id, body,
   rendered, channel_id, guild_id, channel_url, mode}` with `channel_url` the
   `https://discord.com/channels/<guild>/<channel>` link of the TARGET channel (rehearsal home while
@@ -132,3 +132,4 @@ Recorded by the build (branch `weekly-questions`, 2026-10-19). Each is what the 
 10. **`/api/questions/current` adds `state`** (the slot's status) and answers `body: null` whenever the slot is not `pending` (already posted, skipped, taken down) or the mode is `off`, so the owner-side task never posts a duplicate. The page's index uses `state` too (the mock reads a top-level `status` as an HTTP code).
 11. **Take it down** marks the slot `taken_down`: the loop does not re-post that week by itself; Post now still can.
 12. **Reorder** is Up/Down buttons (page and panel), not drag.
+13. **Moved into the Posts page (2026-10-19, owner: *"where on the website is questions? can we put the question stuff in post"*).** Branch `questions-in-posts`. The page module became `site/public/assets/questions-section.js`, mounted by `page-posts.js` after Sticky messages (the sticky-desk pattern); `posts.html#sect-questions` opens it (`posts-hash.js:SECTION_HASHES`). The nav entry is gone; `questions.html` is a redirect to the section. History, Settings and Logs are foldouts inside the one section instead of their own sections. `FEATURE_PAGES["question"]` is `posts.html#sect-questions`, so the guides and log links follow. The `question_warn_template` DEFAULT now says *"Add some under Weekly questions on the Posts page or with /questions."* (a saved override is untouched). `/questions` and every API route are unchanged.

@@ -5539,7 +5539,7 @@ QUESTION_WARN_FIELDS = ("day", "time")
 QUESTION_TEMPLATE_DEFAULT = "{question}"
 QUESTION_WARN_TEMPLATE_DEFAULT = (
     "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add "
-    "some on the Weekly questions page or with /questions."
+    "some under Weekly questions on the Posts page or with /questions."
 )
 QUESTION_TIME_DEFAULT = "09:00"
 QUESTION_CLOCK = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")

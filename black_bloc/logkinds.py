@@ -156,7 +156,7 @@ FEATURE_PAGES: dict[str, str] = {
     "posts": "posts.html",
     "minutes": "minutes.html",
     "points": "leaderboard.html",
-    "question": "questions.html",
+    "question": "posts.html#sect-questions",
 }
 
 IMPORTANT_SUFFIXES = (
