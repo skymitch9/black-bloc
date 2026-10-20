@@ -6,7 +6,10 @@ import pytest
 from black_bloc import baf_runs as runs
 from black_bloc import baf_runs_panel as panel
 from black_bloc.settings_store import (
+    RUNS_LOOKUP_COUNT,
     RUNS_LOOKUP_LINE,
+    RUNS_LOOKUP_MORE,
+    RUNS_LOOKUP_NO_DATE,
     RUNS_LOOKUP_SEEN,
     RUNS_LOOKUP_TAGS,
     RUNS_LOOKUP_TITLE,
@@ -224,3 +227,31 @@ async def test_a_game_with_a_series_or_genre_shows_them_on_the_tags_line_and_onl
 def test_no_panel_constant_carries_the_seen_words():
     text = Path(panel.__file__).read_text(encoding="utf-8")
     assert "time(s)" not in text and "seen {n}" not in text
+
+
+async def test_the_count_more_and_no_date_words_are_settings_keys(bot):
+    await bot.store.set(GUILD, RUNS_LOOKUP_COUNT, "{games} games, {runs} runs", by=1)
+    await bot.store.set(GUILD, RUNS_LOOKUP_MORE, "+{more}", by=1)
+    await bot.store.set(GUILD, RUNS_LOOKUP_NO_DATE, "undated", by=1)
+    await bot.store.set(GUILD, RUNS_LOOKUP_LINE, "{date}", by=1)
+
+    embed, _ = await panel.build_root(bot, bot.guild)
+    run = {"date": None, "event": "e", "category": "c", "runners_text": "r"}
+    game = {"game": "g", "times": 6, "last_date": None, "last_event": "e", "more": 1, "runs": [run]}
+    _, value = panel.game_field(bot, GUILD, game)
+
+    assert embed.description == "2 games, 3 runs"
+    assert value.split("\n") == ["seen 6 time(s), last undated at e", "undated", "+1"]
+    text = Path(panel.__file__).read_text(encoding="utf-8")
+    assert "no date" not in text and "and {more} more" not in text and "game(s)" not in text
+
+
+async def test_the_search_finds_a_game_by_its_genre_family(bot):
+    await runs.set_genre(bot, bot.guild, None, "Celeste", "2D platformer")
+    submitted = FakeInteraction(bot, staff_of(bot))
+    modal = panel.SearchModal()
+    modal.typed._value = "platformers"
+
+    await modal.on_submit(submitted)
+
+    assert [field.name for field in submitted.edits[0]["embed"].fields] == ["Celeste"]

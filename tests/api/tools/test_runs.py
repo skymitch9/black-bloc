@@ -165,3 +165,27 @@ async def test_filters_ride_the_query_string(client, sign_in, web, wf):
 
     assert [row["key"] for row in found] == [f"t{run_id}"]
     assert removed == []
+
+
+async def test_the_genre_filter_reads_the_family_and_the_payload_carries_the_families(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await seed_tracked(web, wf, 7)
+
+    assert client.put("/api/runs/genre/celeste", json={"genre": "Kart racer"}).status_code == 200
+
+    found = client.get("/api/runs").json()
+    assert [(row["genre"], row["genre_family"]) for row in found["rows"]] == [
+        ("Kart racer", "racing")
+    ]
+    assert found["genre_families"][0] == {
+        "family": "racing",
+        "aliases": ["racer", "racers", "race", "kart racer", "kart racing"],
+    }
+    for wanted in ("racing", "Racer", "kart%20racing"):
+        assert client.get(f"/api/runs?genre={wanted}").json()["rows"] == found["rows"]
+    assert client.get("/api/runs?q=racers").json()["rows"] == found["rows"]
+    assert client.get("/api/runs?genre=kart").json()["rows"] == []
+    games = client.get("/api/runs/games").json()["games"]
+    assert [one["genre_family"] for one in games] == ["racing"]

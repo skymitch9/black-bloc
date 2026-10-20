@@ -2,11 +2,20 @@
 //   node site/mock/listfilter.test.mjs
 // Exits 0 when every fixture matched, 1 with a list of what did not.
 
+import { readFileSync } from 'node:fs';
+
 import {
   BLOCK_FILTERS,
   applyFilters,
   blockText,
   countedChoices,
+  familyLabel,
+  familyLines,
+  familyTerms,
+  genreFamilies,
+  genreFamily,
+  genreNormal,
+  genreQualifiers,
   matches,
   passes,
   ruleOf,
@@ -91,10 +100,27 @@ is('choices: a given order wins',
   countedChoices(runs, (run) => [run.event], { order: (a, b) => b.localeCompare(a) }).map(([, label]) => label),
   ['SGDQ 2025 (1)', 'BtB 2025 (2)']);
 is('choices: nothing to choose', countedChoices([], (run) => [run.event]), []);
+is('choices: a label shapes the words, not the value',
+  countedChoices([{ g: 'racing' }, { g: 'racing' }], (one) => [one.g], { label: familyLabel }), [['racing', 'Racing (2)']]);
+
+const genres = JSON.parse(readFileSync(new URL('../../tests/fixtures/runs/genre_families.json', import.meta.url), 'utf8'));
+const qualifiers = genreQualifiers(genres.qualifiers);
+const families = genreFamilies(genres.families);
+for (const [text, family] of genres.cases) is(`genres: ${JSON.stringify(text)} is in ${JSON.stringify(family)}`, genreFamily(text, qualifiers, families), family);
+is('genres: punctuation and spacing are one space', genreNormal('  Third-person/Shooter!! '), 'third person shooter');
+is('genres: qualifiers longest first, each once', genreQualifiers('kart,\nthird-person , KART, '), ['third person', 'kart']);
+is('genres: the full text is tried before the stripped one',
+  genreFamily('Action adventure', ['action'], genreFamilies('adventure:\naction adventure game: action adventure')), 'action adventure game');
+is('genres: a bad line is skipped and named by number',
+  familyLines('racing: racer\nnot a family\n\n: orphan\npuzzle:'),
+  { families: [['racing', ['racer']], ['puzzle', []]], bad: [[2, 'not a family'], [4, ': orphan']] });
+is('genres: terms carry every alias', familyTerms('racing', families), 'racing racer racers race kart racer kart racing');
+is('genres: a family no line names is its own term', familyTerms('puzzle', families), 'puzzle');
+is('genres: a label is capitalised', familyLabel('survival horror'), 'Survival horror');
 
 if (failures.length) {
   console.error('listfilter: not ok');
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log('listfilter: ok - substring search (trimmed, case-insensitive), chips AND search, the Blocks filters, counted select choices');
+console.log('listfilter: ok - substring search (trimmed, case-insensitive), chips AND search, the Blocks filters, counted select choices, the genre family rule on the shared fixture');

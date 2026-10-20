@@ -1,0 +1,62 @@
+{
+  "qualifiers": "action, 2d, 3d, kart, third-person, first-person",
+  "families": "racing: racer, racers, race, kart racer, kart racing\nplatformer: platform, platformers, 2d platformer, 3d platformer\nroguelike: rogue-like, rogue like, roguelite, rogue-lite\nshooter: shooters, fps, tps, shmup, shoot 'em up, third-person shooter, first-person shooter\nadventure: action-adventure, action adventure\nfighting: fighter, fighting game",
+  "cases": [
+    [
+      "Action roguelike",
+      "roguelike"
+    ],
+    [
+      "Roguelite",
+      "roguelike"
+    ],
+    [
+      "Kart racer",
+      "racing"
+    ],
+    [
+      "Racing",
+      "racing"
+    ],
+    [
+      "Action-adventure",
+      "adventure"
+    ],
+    [
+      "Third-person shooter",
+      "shooter"
+    ],
+    [
+      "2D platformer",
+      "platformer"
+    ],
+    [
+      "Puzzle",
+      "puzzle"
+    ],
+    [
+      "",
+      ""
+    ],
+    [
+      "Action",
+      "action"
+    ],
+    [
+      "Shoot 'em up",
+      "shooter"
+    ],
+    [
+      "  RACING  ",
+      "racing"
+    ],
+    [
+      "Action / Platformer",
+      "platformer"
+    ],
+    [
+      "Survival horror",
+      "survival horror"
+    ]
+  ]
+}

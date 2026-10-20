@@ -10,7 +10,10 @@ from .command_errors import AnswersErrors
 from .panels import Panel, opened, retire, still_staff
 from .settings_store import (
     RUNS_DEFAULTS,
+    RUNS_LOOKUP_COUNT,
     RUNS_LOOKUP_LINE,
+    RUNS_LOOKUP_MORE,
+    RUNS_LOOKUP_NO_DATE,
     RUNS_LOOKUP_NONE,
     RUNS_LOOKUP_SEEN,
     RUNS_LOOKUP_TAGS,
@@ -20,28 +23,25 @@ from .settings_store import (
 PANEL_TITLE = "BaF runs"
 PANEL_MINUTES = 10
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /runs again"
-COUNT_LINE = "{runs} run(s) · {games} game(s)"
 SEARCH_LABEL = "Search…"
 AGAIN_LABEL = "Search again"
 SITE_LABEL = "Open on the site"
 MODAL_TITLE = "Search BaF runs"
 FIELD_LABEL = "Game"
 FIELD_HINT = "Shredder's Revenge"
-MORE_LINE = "… and {more} more"
-NO_DATE = "no date"
 FIELD_NAME_LIMIT = 256
 FIELD_VALUE_LIMIT = 1024
 QUERY_LIMIT = 100
 TAG_JOIN = " · "
 
 
-def date_word(value: Any) -> str:
-    stamp = mt.stamp_of(value, "d") if value else NO_DATE
-    return NO_DATE if stamp == "—" else stamp
-
-
 def worded(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
     return mt.render(bot.store.get(guild_id, key), RUNS_DEFAULTS[key], **fields).text
+
+
+def date_word(bot: Any, guild_id: int, value: Any) -> str:
+    stamp = mt.stamp_of(value, "d") if value else "—"
+    return worded(bot, guild_id, RUNS_LOOKUP_NO_DATE) if stamp == "—" else stamp
 
 
 def tag_fields(game: dict[str, Any]) -> dict[str, str]:
@@ -61,7 +61,7 @@ def game_field(bot: Any, guild_id: int, game: dict[str, Any]) -> tuple[str, str]
             guild_id,
             RUNS_LOOKUP_SEEN,
             n=game["times"],
-            date=date_word(game["last_date"]),
+            date=date_word(bot, guild_id, game["last_date"]),
             event=game["last_event"] or "—",
             **tags,
         )
@@ -72,14 +72,14 @@ def game_field(bot: Any, guild_id: int, game: dict[str, Any]) -> tuple[str, str]
                 bot,
                 guild_id,
                 RUNS_LOOKUP_LINE,
-                date=date_word(run["date"]),
+                date=date_word(bot, guild_id, run["date"]),
                 event=run["event"] or "—",
                 category=run["category"] or "—",
                 runners=run["runners_text"] or "—",
             )
         )
     if game["more"]:
-        lines.append(MORE_LINE.format(more=game["more"]))
+        lines.append(worded(bot, guild_id, RUNS_LOOKUP_MORE, more=game["more"]))
     kept: list[str] = []
     spent = 0
     for line in lines:
@@ -124,7 +124,9 @@ async def build_root(bot: Any, guild: Any) -> tuple[Any, RunsPanel]:
     shown = [row for row in every if not row["removed"]]
     embed = discord.Embed(
         title=PANEL_TITLE,
-        description=COUNT_LINE.format(runs=len(shown), games=len(runs.games(every))),
+        description=worded(
+            bot, guild.id, RUNS_LOOKUP_COUNT, runs=len(shown), games=len(runs.games(every))
+        ),
     )
     return embed, RunsPanel(bot)
 

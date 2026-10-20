@@ -23,9 +23,19 @@ from .marathon_sources import (
     utc_iso,
 )
 from .panels import Outcome, refusal
+from .runs_genres import (
+    NO_RULE,
+    Rule,
+    family_terms,
+    genre_family,
+    parse_families,
+    parse_qualifiers,
+)
 from .settings_store import (
     MARATHON_HOSTS_COUNT_AS_OURS_KEY,
     MARATHON_MATCH_HOSTS_KEY,
+    RUNS_GENRE_FAMILIES,
+    RUNS_GENRE_QUALIFIERS,
     RUNS_PARTS,
     RUNS_SOURCES,
 )
@@ -432,6 +442,21 @@ def newest_first(row: dict[str, Any]) -> tuple[str, str]:
     return (str(row["date"] or ""), row["key"])
 
 
+def genre_rule(bot: Any, guild_id: int) -> Rule:
+    return (
+        parse_qualifiers(bot.store.get(guild_id, RUNS_GENRE_QUALIFIERS)),
+        parse_families(bot.store.get(guild_id, RUNS_GENRE_FAMILIES)),
+    )
+
+
+def families_shown(rule: Rule) -> list[dict[str, Any]]:
+    return [{"family": name, "aliases": list(aliases)} for name, aliases in rule[1]]
+
+
+def genre_text(row: dict[str, Any], rule: Rule) -> str:
+    return family_terms(row["genre_family"], rule[1])
+
+
 async def view(bot: Any, guild: Any) -> list[dict[str, Any]]:
     """Every BaF run in a counted source, newest first; removed rows carry `removed`."""
     db = bot.db
@@ -453,6 +478,9 @@ async def view(bot: Any, guild: Any) -> list[dict[str, Any]]:
     marathons = await live_marathons(db, guild.id)
     for row in await _fetch(db, "SELECT * FROM baf_runs WHERE guild_id = ?", (int(guild.id),)):
         found.append(_hand_row(guild, row, parts, tags, marathons))
+    rule = genre_rule(bot, guild.id)
+    for made in found:
+        made["genre_family"] = genre_family(made["genre"], *rule)
     found.sort(key=newest_first, reverse=True)
     return found
 
@@ -461,7 +489,7 @@ def year_of(row: dict[str, Any]) -> str:
     return str(row["date"] or "")[:4]
 
 
-def text_of(row: dict[str, Any]) -> str:
+def text_of(row: dict[str, Any], rule: Rule = NO_RULE) -> str:
     return " ".join(
         [
             row["game"],
@@ -470,6 +498,7 @@ def text_of(row: dict[str, Any]) -> str:
             row["event"],
             row["series"],
             row["genre"],
+            genre_text(row, rule),
         ]
     ).lower()
 
@@ -486,8 +515,10 @@ def filtered(
     how: Any = None,
     q: Any = None,
     removed: bool = False,
+    rule: Rule = NO_RULE,
 ) -> list[dict[str, Any]]:
     kept: list[dict[str, Any]] = []
+    family = genre_family(genre, *rule) if genre else ""
     for row in rows:
         if row["removed"] != removed:
             continue
@@ -497,7 +528,7 @@ def filtered(
             continue
         if series and game_key(series) != game_key(row["series"]):
             continue
-        if genre and game_key(genre) != game_key(row["genre"]):
+        if genre and family != row["genre_family"]:
             continue
         if runner and not any(
             str(runner) == one["user_id"] or game_key(runner) == game_key(one["display"])
@@ -508,7 +539,7 @@ def filtered(
             continue
         if how and row["how"] != how:
             continue
-        if q and game_key(q) not in text_of(row):
+        if q and game_key(q) not in text_of(row, rule):
             continue
         kept.append(row)
     return kept
@@ -537,6 +568,7 @@ def games(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "game_key": key,
                 "series": last["series"],
                 "genre": last["genre"],
+                "genre_family": last["genre_family"],
                 "times": len(runs),
                 "last_date": last["date"],
                 "last_event": last["event"],
@@ -1471,6 +1503,10 @@ def export_csv(rows: list[dict[str, Any]]) -> str:
     return out.getvalue()
 
 
+def text_of_game(game: dict[str, Any], rule: Rule = NO_RULE) -> str:
+    return " ".join((game["genre"], genre_text(game, rule))).lower()
+
+
 def page_url(origin: Any, query: Any = "") -> str | None:
     text = str(origin or "").strip()
     if not text:
@@ -1485,7 +1521,12 @@ async def lookup(
 ) -> list[dict[str, Any]]:
     wanted = game_key(query)
     every = await view(bot, guild)
-    found = [one for one in games(every) if wanted and wanted in one["game_key"]]
+    rule = genre_rule(bot, guild.id)
+    found = [
+        one
+        for one in games(every)
+        if wanted and (wanted in one["game_key"] or wanted in text_of_game(one, rule))
+    ]
     rows = {row["key"]: row for row in every}
     answer: list[dict[str, Any]] = []
     for one in found[:LOOKUP_GAMES]:
