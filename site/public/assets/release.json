@@ -1,23 +1,11 @@
 {
-  "release": "v244",
-  "commit": "57ae8d2b",
+  "release": "v245",
+  "commit": "69830865",
   "changed_features": [
-    "applications",
-    "automod",
     "birthday",
-    "chat",
     "core",
-    "events",
     "golive",
-    "guides",
-    "honeypot",
     "marathon",
-    "mod",
-    "modmail",
-    "points",
-    "raidtrain",
-    "rolemenu",
-    "tempvoice",
-    "youtube"
+    "pings"
   ]
 }
