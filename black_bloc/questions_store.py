@@ -101,7 +101,7 @@ async def back_in_queue(db: Any, guild_id: int, question_id: int, *, top: bool) 
 async def mark_posted(
     db: Any,
     question_id: int,
-    slot_at: str,
+    slot_at: str | None,
     by: str,
     channel_id: int,
     message_id: int,

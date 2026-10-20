@@ -65,17 +65,23 @@ def root_lines(
     return lines
 
 
+def downable(found: dict[str, Any]) -> Any:
+    posted = found["posted"]
+    if found["status"] == rules.POSTED and posted is not None:
+        return posted if posted["posted_by"] == rules.BY_BOT else None
+    return found.get("extra")
+
+
 def root_moves(found: dict[str, Any], queued: list[Any]) -> list[str]:
     status = found["status"]
-    posted = found["posted"]
     shown: list[str] = ["add"]
-    if found["mode"] != rules.OFF and queued and status != rules.POSTED:
+    if found["mode"] != rules.OFF and queued:
         shown.append("post")
     if status in (rules.PENDING, rules.SKIPPED_EMPTY):
         shown.append("skip")
     if status == rules.SKIPPED:
         shown.append("unskip")
-    if status == rules.POSTED and posted is not None and posted["posted_by"] == rules.BY_BOT:
+    if downable(found) is not None:
         shown.append("take_down")
     shown.append("refresh")
     return shown
@@ -284,7 +290,7 @@ class RootButton(discord.ui.Button):
             await run_unskip(interaction, self.view)
             return
         if self.name == "take_down":
-            posted = self.found["posted"]
+            posted = downable(self.found)
             await ask(
                 interaction,
                 rules.TAKE_DOWN_CONFIRM.format(body=str(posted["body"])[:200]),

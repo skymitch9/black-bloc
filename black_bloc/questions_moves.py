@@ -99,7 +99,9 @@ async def find_owner_post(
     return rules.owner_post(messages, owner, body, since), None
 
 
-async def open_thread(bot: Any, guild: Any, message: Any, body: str, slot_at: str) -> None:
+async def open_thread(
+    bot: Any, guild: Any, message: Any, body: str, slot_at: str | None
+) -> None:
     if not rules.threads_on(bot.store, guild.id):
         return
     try:
@@ -303,12 +305,16 @@ async def week(bot: Any, guild: Any, now: datetime | None = None) -> dict[str, A
     posted = None
     if row is not None and row["question_id"]:
         posted = await store.get(bot.db, guild.id, int(row["question_id"]))
+    extra = await store.latest_posted(bot.db, guild.id)
+    if extra is not None and (extra["slot_at"] or extra["posted_by"] != rules.BY_BOT):
+        extra = None
     return {
         "slot": slot,
         "schedule": schedule,
         "status": status,
         "question": question,
         "posted": posted,
+        "extra": extra,
         "mode": rules.mode_of(bot.store, guild.id),
     }
 
@@ -441,38 +447,41 @@ async def _post_now(bot: Any, guild: Any, actor: Any, via: str, now: datetime) -
     mode = rules.mode_of(bot.store, guild.id)
     if mode == rules.OFF:
         return refusal(rules.QUESTIONS_OFF, "questions_off", 409)
-    slot, row = await candidate(bot, guild, now)
-    if row["status"] == rules.POSTED:
-        return refusal(rules.ALREADY_UP, "already_up", 409)
     question = await store.first_queued(bot.db, guild.id)
     if question is None:
         return refusal(rules.QUEUE_EMPTY, "queue_empty", 409)
+    slot, row = await candidate(bot, guild, now)
+    due = slot <= now and row["status"] == rules.PENDING
     channel, message, why = await send_question(bot, guild, mode, question["body"])
     if message is None:
         return refusal(why or rules.POST_REFUSED.format(why="unknown"), "not_posted", 409)
-    key = rules.slot_key(slot)
+    key = rules.slot_key(slot) if due else None
     await store.mark_posted(bot.db, question["id"], key, rules.BY_BOT, channel.id, message.id, now)
-    await store.set_slot(bot.db, guild.id, key, rules.POSTED, now, question_id=int(question["id"]))
-    schedule = rules.schedule_of(bot.store, guild.id)
-    await log_action(
-        bot,
-        guild,
-        kind_via("question.posted_by_bot", via),
-        actor=actor,
-        details=slot_details(slot, schedule, mode)
-        | {
-            "via": via,
-            "question_id": int(question["id"]),
-            "question": question["body"],
-            "channel_id": channel.id,
-            "message_id": message.id,
-            "reason": "posted now by staff",
-        },
-    )
+    details = {
+        "via": via,
+        "question_id": int(question["id"]),
+        "question": question["body"],
+        "channel_id": channel.id,
+        "message_id": message.id,
+        "mode": mode,
+    }
+    if due:
+        await store.set_slot(
+            bot.db, guild.id, key, rules.POSTED, now, question_id=int(question["id"])
+        )
+        schedule = rules.schedule_of(bot.store, guild.id)
+        details = slot_details(slot, schedule, mode) | details | {"reason": "posted now by staff"}
+    if due:
+        await log_action(
+            bot, guild, kind_via("question.posted_by_bot", via), actor=actor, details=details
+        )
+    else:
+        await log_action(
+            bot, guild, kind_via("question.posted_extra", via), actor=actor, details=details
+        )
     await open_thread(bot, guild, message, question["body"], key)
-    return Outcome(
-        True, rules.POSTED_NOW.format(where=f"<#{channel.id}>"), value=int(question["id"])
-    )
+    said = rules.POSTED_NOW if due else rules.POSTED_EXTRA
+    return Outcome(True, said.format(where=f"<#{channel.id}>"), value=int(question["id"]))
 
 
 async def skip(
@@ -503,11 +512,13 @@ async def unskip(
     async with lock_of(bot, guild.id):
         when = moment(now)
         slot, row = await candidate(bot, guild, when)
-        if row["status"] != rules.SKIPPED:
+        schedule = rules.schedule_of(bot.store, guild.id)
+        if slot <= when or row["status"] != rules.SKIPPED:
+            if await skipped_and_passed(bot, guild, schedule, when):
+                return refusal(rules.SKIP_PASSED, "slot_passed", 409)
             return refusal(rules.NOT_SKIPPED, "not_skipped", 409)
         key = rules.slot_key(slot)
         await store.set_slot(bot.db, guild.id, key, rules.PENDING, when)
-        schedule = rules.schedule_of(bot.store, guild.id)
         await log_action(
             bot,
             guild,
@@ -516,6 +527,14 @@ async def unskip(
             details=slot_details(slot, schedule, rules.mode_of(bot.store, guild.id)) | {"via": via},
         )
         return Outcome(True, rules.UNSKIPPED, value=key)
+
+
+async def skipped_and_passed(
+    bot: Any, guild: Any, schedule: rules.Schedule, now: datetime
+) -> bool:
+    last, _ = rules.slots_around(now, schedule)
+    row = await store.get_slot(bot.db, guild.id, rules.slot_key(last))
+    return row is not None and row["status"] == rules.SKIPPED
 
 
 async def take_down(
