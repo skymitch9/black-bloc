@@ -684,6 +684,7 @@ ROUTINE: frozenset[str] = frozenset(
         "poll.draft_saved",
         "poll.opened",
         "poll.pinned",
+        "poll.rehearsed",
         "poll.recur_created",
         "poll.recur_deleted",
         "poll.recur_paused",

@@ -681,3 +681,24 @@ async def test_every_poll_route_is_for_staff_only(client, seeded, sign_in):
         response = client.request(method, path, json={} if method == "POST" else None)
         assert response.status_code == 403, f"{method} {path} answered {response.status_code}"
 
+
+
+async def test_post_to_test_from_the_form_sends_a_copy_and_writes_no_poll(client, seeded, web, wf):
+    await web.store.set(wf.GUILD_ID, "shadow_channel_id", TEST_CHANNEL)
+    before = client.get("/api/polls").json()["polls"]
+    response = client.post(
+        "/api/polls/rehearse", json={"question": "Pizza or tacos?", "options": ["Pizza", "Tacos"]}
+    )
+
+    assert response.status_code == 200, response.json()
+    assert "test copy of the poll" in response.json()["message"]
+    assert "<#" not in response.json()["message"]
+    assert web.guild.get_channel(TEST_CHANNEL).messages[-1].kwargs["poll"] is not None
+    assert client.get("/api/polls").json()["polls"] == before
+    assert "web.poll.rehearsed" in await wf.kinds_in(web.db)
+
+
+async def test_post_to_test_refuses_a_poll_the_form_would_refuse(client, seeded):
+    refused = client.post("/api/polls/rehearse", json={"question": "Only one?", "options": ["a"]})
+
+    assert refused.status_code == 400 and refused.json()["error"] == "poll_refused"

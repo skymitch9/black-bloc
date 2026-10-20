@@ -2929,3 +2929,22 @@ async def test_somebody_who_may_not_create_a_poll_gets_no_where_select(cog, bot,
         item for item in card_view(again).children if isinstance(item, discord.ui.ChannelSelect)
     ]
 
+
+
+async def test_post_to_test_on_the_preview_sends_a_copy_and_leaves_the_draft_unwritten(
+    cog, bot, lead, db
+):
+    opened, _ = await fresh_draft(cog, bot, lead)
+    assert has_item(card_view(opened), "Post to test")
+
+    interaction = await click(bot, lead, find_item(card_view(opened), "Post to test"))
+
+    assert await get_poll(db, 1) is None
+    assert "test copy of the poll" in interaction.sent
+    assert await action_kinds(db) == ["poll.rehearsed"]
+
+
+async def test_a_preview_that_cannot_be_posted_offers_no_post_to_test(cog, bot, lead, db):
+    opened, _ = await fresh_draft(cog, bot, lead, options="Pizza")
+
+    assert not has_item(card_view(opened), "Post to test")

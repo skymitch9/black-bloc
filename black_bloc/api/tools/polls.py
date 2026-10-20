@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
 
+from ... import polls_rehearse as polls_testing
 from ...cogs.community.polls import (
     POLLS_OFF,
     cancel_poll,
@@ -58,7 +59,7 @@ from ...polls import (
 )
 from ...timezones import DEFAULT_TZ
 from ..auth import Refused, staff_dependency
-from ..names import resolve_one
+from ..names import resolve_one, site_words
 from ..writes import (
     actor_for,
     guard_of,
@@ -441,6 +442,35 @@ def build_router(bot: Any) -> APIRouter:
         return CREATED_POSTED.format(
             question=clamp(row["question"], 80), channel_id=channel_id
         )
+
+    @router.post("/rehearse")
+    async def poll_rehearse(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        """Post to test: the form's poll as members would see it, in the rehearsal home."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        plan, refusal = poll_plan(
+            bot.store,
+            guild.id,
+            question=payload.get("question"),
+            kind=payload.get("kind"),
+            options=wanted_options(payload),
+            hours=wanted_int(payload, "hours"),
+            anonymous=bool(payload.get("anonymous")),
+            results=payload.get("results") or LIVE,
+            start=payload.get("start"),
+            slots=wanted_int(payload, "slots"),
+            step=wanted_int(payload, "step"),
+            step_unit=payload.get("step_unit"),
+        )
+        if plan is None:
+            raise Refused(400, "poll_refused", refusal)
+        outcome = await polls_testing.rehearse(
+            bot, guild, actor_for(bot, who, guild), plan, via=VIA_WEBSITE
+        )
+        if not outcome.ok:
+            raise Refused(outcome.status or 409, outcome.code, outcome.message)
+        return {"message": site_words(guild, outcome.message)}
 
     @router.get("/requests")
     async def poll_requests() -> list[dict[str, Any]]:

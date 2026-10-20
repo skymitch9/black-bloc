@@ -13,6 +13,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import polls_rehearse as testing
 from ...actionlog import (
     log_action,
     send_logs,
@@ -2284,6 +2285,8 @@ class PreviewView(PollPanel):
             self.add_item(SaveDraftButton(saved))
         if resumed:
             self.add_item(DiscardDraftButton())
+        if postable and staff:
+            self.add_item(RehearseButton())
 
 
 async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -3024,6 +3027,27 @@ class PostButton(discord.ui.Button):
         await write_draft(
             interaction, self.view.draft, self.view, getattr(self.view, "resumed", False)
         )
+
+
+class RehearseButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=testing.LABEL, style=discord.ButtonStyle.secondary, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=True):
+            return
+        await rehearse_draft(interaction, self.view.draft)
+
+
+async def rehearse_draft(interaction: discord.Interaction, draft: PollDraft) -> None:
+    """Post to test from the preview: the draft stays exactly as it is."""
+    bot = interaction.client
+    plan, trouble = draft_plan(bot.store, interaction.guild.id, draft)
+    if plan is None:
+        await said_to(interaction, str(trouble))
+        return
+    outcome = await testing.rehearse(bot, interaction.guild, interaction.user, plan)
+    await said_to(interaction, outcome.message)
 
 
 class SlotsButton(discord.ui.Button):
