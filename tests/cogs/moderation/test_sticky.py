@@ -6,7 +6,7 @@ import pytest
 
 from black_bloc import sticky as rules
 from black_bloc.bot import COGS
-from black_bloc.cogs.moderation.sticky import MOVES_THE_COPIES, Sticky
+from black_bloc.cogs.moderation.sticky import Sticky
 from black_bloc.command_visibility import HIDDEN_WHEN_OFF, STAFF_ONLY
 from black_bloc.config import load_settings
 from black_bloc.logkinds import feature_of, is_important
@@ -155,7 +155,8 @@ async def kinds(db):
 
 def test_the_cog_is_registered_and_its_command_hides_with_the_mode():
     assert "black_bloc.cogs.moderation.sticky" in COGS
-    assert HIDDEN_WHEN_OFF["sticky_mode"] == ("sticky",)
+    assert "sticky_mode" not in HIDDEN_WHEN_OFF
+    assert "sticky" in HIDDEN_WHEN_OFF["posts_mode"]
     assert Sticky.sticky.default_permissions == STAFF_ONLY
     assert Sticky.sticky.name == "sticky"
 
@@ -185,7 +186,7 @@ async def test_the_command_opens_the_panel_for_staff_only(cog, bot):
 
 
 async def test_people_talking_moves_it_and_the_listener_never_raises(cog, bot):
-    await bot.store.set(GUILD, "sticky_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await bot.store.set(GUILD, "sticky_min_seconds", 5)
     await cog.desk.save(bot.guild, RUNS, WORDS, 1)
     first = channel(bot).messages[0].id
@@ -203,7 +204,7 @@ async def test_people_talking_moves_it_and_the_listener_never_raises(cog, bot):
 
 
 async def test_two_reconciles_at_boot_post_exactly_one_copy(cog, bot, db):
-    await bot.store.set(GUILD, "sticky_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await rules.write_words(db, GUILD, RUNS, WORDS, 1)
 
     await asyncio.gather(cog.on_ready(), cog.reconcile(), cog.desk.settle(bot.guild))
@@ -215,47 +216,11 @@ async def test_two_reconciles_at_boot_post_exactly_one_copy(cog, bot, db):
 
 async def test_changing_the_mode_moves_the_copies_without_waiting_for_anybody_to_talk(cog, bot):
     await cog.desk.save(bot.guild, RUNS, WORDS, 1)
-    assert len(channel(bot, HOME).messages) == 1
-
-    await bot.store.set(GUILD, "sticky_mode", "on")
-    # Owner, 2026-10-10: going live takes the rehearsal down and posts NOTHING until Post it.
-    assert channel(bot, HOME).messages == [] and channel(bot).messages == []
-    assert (await rules.get_row(bot.db, GUILD, RUNS))["trouble"] == rules.HELD_SAID
-    assert (await cog.desk.repost(bot.guild, RUNS, 1)).ok
     assert len(channel(bot).messages) == 1
 
-    await bot.store.set(GUILD, "sticky_mode", "off")
+    await bot.store.set(GUILD, "posts_mode", "off")
     assert channel(bot).messages == []
     assert (await rules.get_row(bot.db, GUILD, RUNS))["text"] == WORDS
-
-
-async def test_moving_the_rehearsal_home_moves_the_rehearsal_copy(cog, bot):
-    await cog.desk.save(bot.guild, RUNS, WORDS, 1)
-
-    await bot.store.set(GUILD, "sticky_shadow_channel_id", OTHER_HOME)
-
-    assert channel(bot, HOME).messages == []
-    assert len(channel(bot, OTHER_HOME).messages) == 1
-    assert set(MOVES_THE_COPIES) == {
-        "sticky_mode",
-        "sticky_shadow_channel_id",
-        "shadow_channel_id",
-        "log_channel_id",
-        "points_mode",
-        "points_shadow_channel_id",
-    }
-
-
-async def test_moving_the_log_channel_moves_a_copy_that_rehearses_in_it(cog, bot):
-    await bot.store.clear(GUILD, "shadow_channel_id")
-    await bot.store.set(GUILD, "log_channel_id", HOME)
-    await cog.desk.save(bot.guild, RUNS, WORDS, 1)
-    assert len(channel(bot, HOME).messages) == 1
-
-    await bot.store.set(GUILD, "log_channel_id", OTHER_HOME)
-
-    assert channel(bot, HOME).messages == []
-    assert len(channel(bot, OTHER_HOME).messages) == 1
 
 
 async def test_a_deleted_channel_takes_its_sticky_with_it(cog, bot, db):

@@ -44,12 +44,11 @@ def actor_id(actor: Any) -> int | None:
 
 
 def target_id(bot: Any, guild: Any, mode: str) -> tuple[int | None, str | None]:
-    """Where a post goes in this mode, or the sentence for why it cannot go anywhere."""
-    if mode == rules.ON:
-        found = rules.real_channel(bot.store, guild.id)
-        return (found, None) if found else (None, rules.NO_CHANNEL)
-    found = shadow_home.channel_id(bot, guild, feature=rules.FEATURE)
-    return (found, None) if found else (None, rules.NO_REHEARSAL)
+    """Where the question goes, or the sentence for why it cannot go anywhere."""
+    if mode != rules.ON:
+        return (None, rules.QUESTIONS_OFF)
+    found = rules.real_channel(bot.store, guild.id)
+    return (found, None) if found else (None, rules.NO_CHANNEL)
 
 
 def channel_for(bot: Any, guild: Any, channel_id: int) -> tuple[Any, str | None]:
@@ -229,11 +228,7 @@ async def warn_if_empty(
 
 
 async def warn_line(bot: Any, guild: Any, mode: str, text: str) -> str:
-    wanted = (
-        bot.store.get(guild.id, shadow_home.LOG_CHANNEL_KEY)
-        if mode == rules.ON
-        else shadow_home.channel_id(bot, guild, feature=rules.FEATURE)
-    )
+    wanted = bot.store.get(guild.id, shadow_home.LOG_CHANNEL_KEY) if mode == rules.ON else None
     if not wanted:
         return "no channel"
     channel, why = channel_for(bot, guild, int(wanted))
@@ -253,7 +248,7 @@ async def warn_owner(bot: Any, guild: Any, mode: str, text: str, slot_at: str) -
     if owner is None:
         return "no owner"
     if mode != rules.ON:
-        return "shadow"
+        return "off"
     user = guild.get_member(owner) or bot.get_user(owner)
     why = None
     if user is None:

@@ -197,18 +197,19 @@ async def write(bot, who, modal, text):
 
 
 async def a_sticky(bot, lead, channel_id=RUNS, mode="on"):
-    await bot.store.set(GUILD, "sticky_mode", mode)
+    await bot.store.set(GUILD, "posts_mode", mode)
     await desk_of(bot).save(bot.guild, channel_id, WORDS, lead)
 
 
-async def test_an_empty_panel_has_the_add_picker_the_mode_and_no_sticky_picker(bot, lead):
+async def test_an_empty_panel_has_the_add_picker_no_mode_picker_and_no_sticky_picker(bot, lead):
     opened = await root(bot, lead)
 
     assert opened.embed.title == rules.PANEL_TITLE
-    assert opened.embed.description == f"**mode** — shadow\n\n{rules.NONE_YET}"
+    assert opened.embed.description == f"**posts_mode** — on\n\n{rules.NONE_YET}"
     kinds = [type(one) for one in opened.view.children]
     assert panel.StickyPick not in kinds
-    assert panel.AddPick in kinds and panel.ModePick in kinds
+    assert panel.AddPick in kinds
+    assert not hasattr(panel, "ModePick"), "the one switch lives on the Posts page"
     assert labels(opened.view) == ["Refresh", "Logs", "Open on the site"]
     assert button(opened.view, "Open on the site").url == "https://bb.test/posts.html#sect-sticky"
     assert control(opened.view, panel.AddPick).channel_types == [
@@ -227,10 +228,10 @@ async def test_adding_is_pick_a_channel_then_type_the_words(bot, lead):
 
     assert (await rules.get_row(bot.db, GUILD, RUNS))["text"] == WORDS
     assert saved.embed.title == "#runs" and saved.embed.description.startswith(WORDS)
-    assert "rehearsing" in saved.embed.description
-    assert "shadow" in saved.sent
-    assert labels(saved.view) == ["Edit…", "Pause", "Remove", "Back"]
-    assert len(bot.guild.get_channel(HOME).messages) == 1
+    assert "live" in saved.embed.description
+    assert f"<#{RUNS}>" in saved.sent
+    assert labels(saved.view) == ["Edit…", "Pause", "Remove", "Back", "Post to test"]
+    assert len(bot.guild.get_channel(RUNS).messages) == 1
 
 
 async def test_picking_a_channel_that_has_one_opens_its_words_to_edit(bot, lead):
@@ -299,21 +300,6 @@ async def test_remove_asks_first_and_keep_it_changes_nothing(bot, lead):
     assert gone.sent == rules.REMOVED_NOW.format(channel_id=RUNS)
 
 
-async def test_the_mode_picker_sets_the_mode_and_redraws_the_list(bot, lead):
-    opened = await root(bot, lead)
-    assert [one.default for one in control(opened.view, panel.ModePick).options] == [
-        False,
-        True,
-        False,
-    ]
-
-    changed = await pick(bot, lead, opened.view, panel.ModePick, ["on"])
-
-    assert bot.store.get(GUILD, "sticky_mode") == "on"
-    assert changed.embed.description.startswith("**mode** — on")
-    assert changed.sent == rules.MODE_SET.format(mode="on")
-
-
 async def test_a_refused_save_is_answered_and_the_card_is_left_alone(bot, lead):
     await a_sticky(bot, lead)
     modal = panel.WordsModal(RUNS, WORDS)
@@ -379,7 +365,7 @@ async def test_more_stickies_than_one_picker_holds_says_so(bot, lead):
 async def test_a_post_is_picked_then_its_channel_and_the_card_swaps_posts_not_words(bot, lead):
     from black_bloc import posts
 
-    await bot.store.set(GUILD, "sticky_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     first = await posts.create_post(
         bot.db, GUILD, slug="rules", title="House rules", body="Be kind."
     )

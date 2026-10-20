@@ -118,6 +118,7 @@ async def test_a_submission_without_proof_is_refused_in_words(client, sign_in, w
 
 
 async def test_a_verifier_and_staff_decide_runs_from_the_site(client, sign_in, wf, web, people):
+    await web.store.set(wf.GUILD_ID, "posts_mode", "off")
     ada_run = submit(as_(client, sign_in, wf, ADA))["run"]["id"]
     bea_run = submit(as_(client, sign_in, wf, BEA), time="10:00")["run"]["id"]
 
@@ -274,7 +275,7 @@ async def test_a_channel_with_another_sticky_is_replaced_only_when_asked(
     client, sign_in, web, guild, wf
 ):
     await web.store.set(wf.GUILD_ID, "points_channel_id", wf.OTHER_CHANNEL_ID)
-    await web.store.set(wf.GUILD_ID, "sticky_mode", "on")
+    await web.store.set(wf.GUILD_ID, "posts_mode", "on")
     sign_in(client)
     client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"text": "Post your runs here."})
 

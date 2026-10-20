@@ -214,3 +214,14 @@ Branch `post-to-test-more` (off `main` `0075473f`), slice 1 of the switch audit'
 2. **Hidden while `rehearsing`.** Live today, `sticky_mode` and `points_mode` are both `shadow`, so the one live sticky (the leaderboard in #speed-and-pbs) reads `rehearsing` and shows no Post to test until slice 2 of P1 pauses it (the audit's migration) or staff pause it by hand.
 3. **No rehearsal note** — `rehearsal_note` is retired by this build (owner sheet item p4h); the shadow-mode rehearsal copies the Desk posts no longer carry one either (live it was blank, so nothing visible changes). `sticky.fit` went with it.
 4. **Words are code constants** (`sticky_rehearse.TESTED`, …, and `TEST_MOVE`'s label), the existing `sticky.py` convention for panel labels and answers; what the copy says is the sticky's stored words or the post.
+
+## Follow-up 2026-10-19 — the Posts page's one switch (branch `posts-one-switch`, NOT merged)
+
+Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole build is [`posts-one-switch-design.md`](posts-one-switch-design.md).
+
+- `sticky_mode` and `sticky_shadow_channel_id` are **retired**; every sticky is placed by `posts_mode` (`sticky_posts.owner_rule` is one line). The leaderboard no longer follows `points_mode` (audit I1).
+- The `/sticky` mode select and the site section's mode segment are gone; the panel shows `**posts_mode** — on|off`.
+- **The boot migration pauses every rehearsing sticky** (one live: the leaderboard in #speed-and-pbs, copy in #post-test) and keeps its copy; Resume takes the copy down and posts for real.
+- Post to test reads `posts_shadow_channel_id` (blank → `shadow_channel_id`).
+
+Deviations: (1) a settle never moves a paused row's copy now (before, a copy that would not delete was retried); (2) Deviation 2 of the 2026-10-19 Post to test follow-up is resolved — the paused leaderboard row shows Post to test; (3) every shadow placement branch of the Desk was removed, not left dead.

@@ -1000,11 +1000,11 @@ def test_an_archive_that_fires_the_same_day_is_refused_with_the_reason():
 
 def test_the_poll_switches_only_take_the_words_they_document():
     assert coerce_value("poll_mode", "on") == "on"
-    assert coerce_value("poll_mode", "shadow") == "shadow"
     assert coerce_value("poll_review_mode", "on") == "on"
     assert coerce_value("poll_who_can_create", "everyone") == "everyone"
     for key, bad in (
         ("poll_mode", "rehearsal"),
+        ("poll_mode", "shadow"),
         ("poll_review_mode", "shadow"),
         ("poll_who_can_create", "role"),
     ):
@@ -1025,7 +1025,6 @@ def test_every_poll_key_is_typed_so_the_dashboard_can_render_it():
         "poll_archive_days",
         "poll_archive_drop_votes",
         "poll_pin",
-        "poll_shadow_note",
     ):
         assert key in KEY_TYPES
 
@@ -1880,41 +1879,36 @@ async def test_a_lead_can_change_all_five_through_the_store_the_settings_page_wr
     assert store.get(7, EVENTS_SCHEDULED_NAME_KEY) == "{title} — Black in a Flash"
 
 
-async def test_the_two_shadow_keys_are_typed_explained_and_defaulted(store):
-    """Checklist 33: both reach the Settings page and the /settings panel from the registry."""
-    for key in ("poll_pin", "poll_shadow_note"):
-        assert key in KEY_TYPES and KEY_HELP.get(key)
-    assert KEY_TYPES["poll_pin"] == "bool" and KEY_TYPES["poll_shadow_note"] == "text"
+async def test_the_pin_key_is_typed_explained_and_defaulted_and_the_shadow_note_is_gone(store):
+    """Checklist 33: it reaches the Settings page and the /settings panel from the registry."""
+    assert KEY_TYPES["poll_pin"] == "bool" and KEY_HELP.get("poll_pin")
     assert store.get(7, "poll_pin") is True
-    assert store.get(7, "poll_shadow_note") == settings_store.POLL_SHADOW_NOTE
-    assert "{channel}" in store.get(7, "poll_shadow_note")
+    assert "poll_shadow_note" not in KEY_TYPES
 
 
-def test_the_poll_mode_help_names_all_three_words_it_takes():
+def test_the_poll_mode_help_names_both_words_and_post_to_test():
     said = KEY_HELP["poll_mode"]
 
-    assert all(word in said for word in ("off", "shadow", "on"))
-    assert KEY_CHOICES["poll_mode"] == ("off", "shadow", "on")
+    assert all(word in said for word in ("off", "on", "Post to test"))
+    assert KEY_CHOICES["poll_mode"] == ("off", "on")
 
 
-def test_the_front_door_mode_takes_all_three_words_and_its_help_names_them():
+def test_the_front_door_mode_takes_off_and_on_and_its_help_names_post_to_test():
     said = KEY_HELP[settings_store.FRONTDOOR_MODE]
 
-    assert KEY_CHOICES[settings_store.FRONTDOOR_MODE] == ("off", "shadow", "on")
-    assert settings_store.FRONTDOOR_MODES == ("off", "shadow", "on")
-    assert all(word in said for word in ("off", "shadow", "on"))
-    assert "shadow_channel_id" in said
+    assert KEY_CHOICES[settings_store.FRONTDOOR_MODE] == ("off", "on")
+    assert settings_store.FRONTDOOR_MODES == ("off", "on")
+    assert all(word in said for word in ("off", "on", "Post to test"))
+    assert "shadow" not in said
 
 
 async def test_the_front_door_still_ships_on_and_stays_in_the_modmail_group(store):
-    """A third mode is a wider choice, never a new default and never a 26th group."""
     assert store.get(7, settings_store.FRONTDOOR_MODE) == "on"
     assert settings_store.FRONTDOOR_MODE_DEFAULT == "on"
     assert namespace_of(settings_store.FRONTDOOR_MODE) == "modmail"
 
-    await store.set(7, settings_store.FRONTDOOR_MODE, "shadow")
-
-    assert store.get(7, settings_store.FRONTDOOR_MODE) == "shadow"
+    with pytest.raises(SettingError):
+        await store.set(7, settings_store.FRONTDOOR_MODE, "shadow")
 
 
 async def test_the_rehearsal_home_is_a_core_key_reachable_from_both_doors(store):
@@ -1941,14 +1935,11 @@ async def test_the_rehearsal_home_ships_blank(store):
 async def test_every_feature_that_rehearses_has_its_own_home_key_shipped_blank(store):
     """A feature's own home is a channel key in its OWN namespace, blank meaning the global one."""
     wanted = {
-        "frontdoor_shadow_channel_id": "modmail",
         "posts_shadow_channel_id": "posts",
         "golive_shadow_channel_id": "golive",
         "marathon_shadow_channel_id": "marathon",
         "marathon_public_shadow_channel_id": "marathon",
-        "poll_shadow_channel_id": "poll",
         "birthday_shadow_channel_id": "birthday",
-        "sticky_shadow_channel_id": "posts",
     }
 
     assert set(settings_store.SHADOW_HOME_KEYS.values()) == set(wanted)
@@ -1982,7 +1973,7 @@ async def test_the_boot_status_ships_on_with_both_sentences_written(store):
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 362
+    assert len(settings_store.CORE_KEYS) == 360
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2340,7 +2331,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1247
+    assert len(settings_store.KEY_TYPES) == 1238
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):

@@ -37,6 +37,7 @@ import {
 } from './ui.js';
 
 const MODE_KEY = 'poll_mode';
+const POST_TO_TEST = 'Post to test';
 const CLOSED_PER_PAGE = 10;
 const SETTLED = 'closed,cancelled,denied';
 const NATIVE_CAP = 10;
@@ -619,7 +620,7 @@ async function createForm(say) {
     seg.addEventListener('click', () => setTimeout(repaint, 0));
   }
 
-  const create = button(CREATE_LABEL, async () => {
+  const bodyNow = () => {
     const body = {
       question: question.value.trim(),
       kind: kind.value,
@@ -649,6 +650,16 @@ async function createForm(say) {
       const named = zone.value.trim();
       if (named) body.tz = named;
     }
+    return body;
+  };
+
+  const test = button(POST_TO_TEST, async () => {
+    await run(say, () => send('/api/polls/rehearse', 'POST', bodyNow()), (found) => found?.message);
+  }, { tone: 'quiet', small: false });
+
+  const create = button(CREATE_LABEL, async () => {
+    const body = bodyNow();
+    const repeating = form.repeating();
     const done = await run(
       say,
       () => send(repeating ? '/api/polls/recurrences' : '/api/polls', 'POST', body),
@@ -684,7 +695,7 @@ async function createForm(say) {
     ]),
     repeatBlock,
     outcome,
-    bar([create]),
+    bar([create, test]),
     say,
   ]);
 }

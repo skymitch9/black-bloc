@@ -150,10 +150,13 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_five_hand_added_rows():
     """Derived, so the mode block and the hide table can never drift apart. `marathon_mode`
     joined the hand-added rows when `/marathon` folded into `/event` ▸ Marathons…;
     `rolemenu_mode` left them 2026-09-25 (owner, "B") when it went back to hiding `/rolemenu`;
-    `pb_feed_mode` joined them 2026-10-09 when `points_mode` took over hiding `/pb`."""
+    `pb_feed_mode` joined them 2026-10-09 when `points_mode` took over hiding `/pb`;
+    `sticky_mode` left with the Posts page's one switch, 2026-10-19 (24 rows)."""
     from black_bloc.settings_panel import FEATURE_MODES
 
-    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 25
+    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 24
+    assert "sticky_mode" not in {row.key for row in FEATURE_MODES}
+    assert "question_mode" not in {row.key for row in FEATURE_MODES}
     assert len(EXTRA_MODES) == 5
     assert "pb_feed_mode" in {row.key for row in EXTRA_MODES}
     assert "marathon_mode" in {row.key for row in EXTRA_MODES}
@@ -171,10 +174,10 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     lines = mode_lines(store, GUILD)
     said = "\n".join(lines)
 
-    assert len(lines) == 25
+    assert len(lines) == 24
     assert "**Personal bests** — None · `/pb` to change" in lines
     assert "**Leaderboard** — None · `/pb` to change" in lines
-    assert "**Sticky messages** — None · `/sticky` to change" in lines
+    assert not any("Sticky messages" in line for line in lines)
     assert "**Structure backup** — None · `/structure` to change" in lines
     assert any(line.startswith("**The front door** —") and "`/ask`" in line for line in lines)
     assert f"**Modmail** — {MODMAIL_ANSWERING} · `/modmail` to change" in lines
@@ -327,7 +330,7 @@ def test_row_two_never_grows_past_the_five_controls_discord_allows():
 
 @pytest.mark.parametrize(
     "hidden,expected",
-    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 20)],
+    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 19)],
 )
 def test_turn_a_feature_back_on_lists_exactly_what_is_hidden_and_never_more(hidden, expected):
     values = {HIDE_COMMANDS_WHEN_OFF: True}

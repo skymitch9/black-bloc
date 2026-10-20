@@ -14,7 +14,6 @@ from .settings_store import (
     QUESTION_CHANNEL,
     QUESTION_CLOCK,
     QUESTION_GRACE,
-    QUESTION_MODE,
     QUESTION_OWNER,
     QUESTION_TEMPLATE,
     QUESTION_TEMPLATE_DEFAULT,
@@ -34,10 +33,9 @@ from .timezones import zone as zone_named
 
 log = logging.getLogger(__name__)
 
-FEATURE = "question"
+FEATURE = "posts"
 PANEL_MINUTES_KEY = "posts_panel_minutes"
 OFF = "off"
-SHADOW = "shadow"
 ON = "on"
 
 QUEUED = "queued"
@@ -213,8 +211,10 @@ def split_lines(text: Any) -> list[str]:
 
 
 def mode_of(store: Any, guild_id: int) -> str:
-    found = str(store.get(guild_id, QUESTION_MODE) or OFF)
-    return found if found in (OFF, SHADOW, ON) else OFF
+    """The Posts page's one switch; weekly questions have no mode of their own."""
+    from .posts import mode_of as posts_mode
+
+    return posts_mode(store, guild_id)
 
 
 def owner_of(store: Any, guild_id: int) -> int | None:
@@ -272,7 +272,7 @@ STATE_LINE = "**This week** — {state}"
 QUESTION_LINE = "**Question** — {body}"
 NO_QUESTION_LINE = "**Question** — the queue is empty"
 QUEUED_LINE = "**Queued** — {count}"
-MODE_LINE = "**Mode** — {mode}"
+MODE_LINE = "**posts_mode** — {mode}"
 WHERE_LINE = "**Goes to** — {where}"
 OWNER_LINE = "**Posted by** — <@{owner}>, Black Bloc after {grace} min"
 NO_OWNER_LINE = "**Posted by** — Black Bloc (question_owner_user_id is not set)"
@@ -331,8 +331,7 @@ NOT_QUEUED = (
 )
 NOT_REMOVED = "Only a removed question can be put back, and that one is {status}."
 QUESTIONS_OFF = (
-    "Weekly questions are off, so nothing was posted. Set question_mode to shadow or on in "
-    "Settings first."
+    "Posts are off, so nothing was posted. Turn posts_mode on on the Posts page first."
 )
 QUEUE_EMPTY = "The queue is empty, so there is nothing to post. Add a question first."
 NOT_SKIPPABLE = "This week's question is already {state}, so there is nothing to skip."
@@ -351,8 +350,8 @@ NO_CHANNEL = (
     "Settings first."
 )
 NO_REHEARSAL = (
-    "There is nowhere to rehearse it: no rehearsal home is set. Pick question_shadow_channel_id "
-    "or shadow_channel_id in Settings first."
+    "There is nowhere to send a test copy: no rehearsal home is set. Pick "
+    "posts_shadow_channel_id or shadow_channel_id in Settings first."
 )
 CHANNEL_GONE = (
     "Black Bloc cannot see channel {channel}, so nothing was posted. Check the channel in Settings."

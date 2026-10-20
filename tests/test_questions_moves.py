@@ -60,22 +60,6 @@ async def seen_before(bot):
     await moves.tick(bot, bot.guild, SLOT - timedelta(days=1))
 
 
-async def test_shadow_ships_by_default_and_rehearses_in_the_home_with_no_note(bot):
-    await queue(bot)
-    await seen_before(bot)
-
-    assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
-
-    assert rules.mode_of(bot.store, GUILD) == rules.SHADOW
-    assert real(bot).sent == []
-    [post] = home(bot).sent
-    assert post.content == BODY
-    row = await store.first_queued(bot.db, GUILD)
-    assert row is None
-    [details] = await details_of(bot.db, "question.posted_by_bot")
-    assert details["mode"] == "shadow" and details["reason"] == "question_owner_user_id is not set"
-
-
 async def test_nothing_is_posted_inside_the_grace_window(bot):
     await queue(bot)
     await seen_before(bot)
@@ -85,7 +69,7 @@ async def test_nothing_is_posted_inside_the_grace_window(bot):
 
 
 async def test_the_owners_own_post_with_extra_words_is_found_and_the_bot_stays_quiet(bot):
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await bot.store.set(GUILD, "question_owner_user_id", str(OWNER))
     await queue(bot)
     await seen_before(bot)
@@ -103,7 +87,7 @@ async def test_the_owners_own_post_with_extra_words_is_found_and_the_bot_stays_q
 
 
 async def test_someone_else_posting_the_same_words_is_not_the_owner_so_the_bot_posts(bot):
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await bot.store.set(GUILD, "question_owner_user_id", str(OWNER))
     await queue(bot)
     await seen_before(bot)
@@ -124,13 +108,13 @@ async def test_two_passes_at_once_post_exactly_one_question(bot):
 
     await asyncio.gather(*(moves.tick(bot, bot.guild, AFTER_GRACE) for _ in range(3)))
 
-    assert [post.content.splitlines()[-1] for post in home(bot).sent] == ["one?"]
+    assert [post.content.splitlines()[-1] for post in real(bot).sent] == ["one?"]
     assert (await kinds(bot.db)).count("question.posted_by_bot") == 1
     assert [row["body"] for row in await store.queued(bot.db, GUILD)] == ["two?"]
 
 
 async def test_an_empty_queue_skips_the_week_and_warns_once_ahead(bot):
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     for days in (5, 3, 2, 2, 1):
         await moves.tick(bot, bot.guild, SLOT - timedelta(days=days))
     for minutes in (6, 7, 30):
@@ -153,7 +137,7 @@ async def test_a_question_added_after_the_warning_still_goes_up(bot):
 
 
 async def test_a_failed_warning_dm_is_an_error_row_never_silent(bot):
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await bot.store.set(GUILD, "question_owner_user_id", str(OWNER))
     owner = FakeMember(OWNER)
     owner.dm_raises = refused()
@@ -168,7 +152,7 @@ async def test_a_failed_warning_dm_is_an_error_row_never_silent(bot):
 
 
 async def test_the_warning_dm_reaches_the_owner_when_it_can(bot):
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await bot.store.set(GUILD, "question_owner_user_id", str(OWNER))
     owner = FakeMember(OWNER)
     bot.guild.members[OWNER] = owner
@@ -207,7 +191,7 @@ async def test_a_slot_the_bot_never_knew_about_is_not_reported_missed(bot):
 
 
 async def test_off_resolves_nothing_and_posts_nothing(bot):
-    await bot.store.set(GUILD, "question_mode", "off")
+    await bot.store.set(GUILD, "posts_mode", "off")
     await queue(bot)
 
     assert await moves.tick(bot, bot.guild, AFTER_GRACE) is None
@@ -216,7 +200,7 @@ async def test_off_resolves_nothing_and_posts_nothing(bot):
 
 
 async def test_on_with_no_channel_says_so_once_and_posts_when_one_is_set(bot):
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await bot.store.clear(GUILD, "question_channel_id")
     await queue(bot)
     await seen_before(bot)
@@ -233,22 +217,22 @@ async def test_take_it_down_deletes_the_bots_post_and_puts_the_question_back_on_
     first, second = await queue(bot, "one?", "two?")
     await seen_before(bot)
     await moves.tick(bot, bot.guild, AFTER_GRACE)
-    [post] = home(bot).sent
+    [post] = real(bot).sent
 
     outcome = await moves.take_down(bot, bot.guild, None, first, via=VIA_WEBSITE, now=AFTER_GRACE)
 
-    assert outcome.ok and home(bot).deleted == [post.id]
+    assert outcome.ok and real(bot).deleted == [post.id]
     assert [row["id"] for row in await store.queued(bot.db, GUILD)] == [first, second]
     slot = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
     assert slot["status"] == rules.TAKEN_DOWN
     assert await moves.tick(bot, bot.guild, AFTER_GRACE + timedelta(minutes=1)) == (
         rules.TAKEN_DOWN
     )
-    assert len(home(bot).sent) == 1
+    assert len(real(bot).sent) == 1
     assert "web.question.taken_down" in await kinds(bot.db)
 
     again = await moves.post_now(bot, bot.guild, None, now=AFTER_GRACE + timedelta(minutes=2))
-    assert again.ok and home(bot).sent[-1].content.endswith("one?")
+    assert again.ok and real(bot).sent[-1].content.endswith("one?")
     slot = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
     assert slot["status"] == rules.TAKEN_DOWN
     assert "question.posted_extra" in await kinds(bot.db)
@@ -258,20 +242,20 @@ async def test_the_owners_own_post_is_never_taken_down(bot):
     await bot.store.set(GUILD, "question_owner_user_id", str(OWNER))
     [first] = await queue(bot)
     await seen_before(bot)
-    home(bot).seen.append(FakeMessage(BODY, author=FakeMember(OWNER), at=SLOT))
+    real(bot).seen.append(FakeMessage(BODY, author=FakeMember(OWNER), at=SLOT))
     await moves.tick(bot, bot.guild, AFTER_GRACE)
 
     outcome = await moves.take_down(bot, bot.guild, None, first, now=AFTER_GRACE)
 
     assert not outcome.ok and outcome.message == rules.NOT_BOTS
-    assert home(bot).deleted == []
+    assert real(bot).deleted == []
 
 
 async def test_a_refused_delete_changes_nothing(bot):
     [first] = await queue(bot)
     await seen_before(bot)
     await moves.tick(bot, bot.guild, AFTER_GRACE)
-    home(bot).delete_raises = refused()
+    real(bot).delete_raises = refused()
 
     outcome = await moves.take_down(bot, bot.guild, None, first, now=AFTER_GRACE)
 
@@ -285,11 +269,11 @@ async def test_post_one_now_inside_the_grace_window_settles_the_due_slot(bot):
 
     outcome = await moves.post_now(bot, bot.guild, None, now=SLOT + timedelta(minutes=2))
 
-    assert outcome.ok and outcome.message == rules.POSTED_NOW.format(where=f"<#{HOME}>")
+    assert outcome.ok and outcome.message == rules.POSTED_NOW.format(where=f"<#{REAL}>")
     slot = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
     assert slot["status"] == rules.POSTED
     assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
-    assert len(home(bot).sent) == 1
+    assert len(real(bot).sent) == 1
     [details] = await details_of(bot.db, "question.posted_by_bot")
     assert details["reason"] == "posted now by staff"
 
@@ -300,7 +284,7 @@ async def test_an_extra_post_ahead_of_the_slot_leaves_the_slot_pending_for_the_n
 
     outcome = await moves.post_now(bot, bot.guild, None, via=VIA_WEBSITE, now=early)
 
-    assert outcome.ok and outcome.message == rules.POSTED_EXTRA.format(where=f"<#{HOME}>")
+    assert outcome.ok and outcome.message == rules.POSTED_EXTRA.format(where=f"<#{REAL}>")
     row = await store.get(bot.db, GUILD, first)
     assert (row["status"], row["posted_by"], row["slot_at"]) == (rules.POSTED, rules.BY_BOT, None)
     slot = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
@@ -310,7 +294,7 @@ async def test_an_extra_post_ahead_of_the_slot_leaves_the_slot_pending_for_the_n
     assert details["question_id"] == first and "slot_at" not in details
 
     assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
-    assert [post.content.splitlines()[-1] for post in home(bot).sent] == ["one?", "two?"]
+    assert [post.content.splitlines()[-1] for post in real(bot).sent] == ["one?", "two?"]
     assert (await store.get(bot.db, GUILD, second))["slot_at"] == rules.slot_key(SLOT)
 
 
@@ -329,23 +313,23 @@ async def test_an_extra_taken_down_goes_back_on_top_and_touches_no_slot(bot):
     await seen_before(bot)
     early = SLOT - timedelta(hours=3)
     await moves.post_now(bot, bot.guild, None, now=early)
-    [post] = home(bot).sent
+    [post] = real(bot).sent
 
     outcome = await moves.take_down(bot, bot.guild, None, first, now=early)
 
-    assert outcome.ok and home(bot).deleted == [post.id]
+    assert outcome.ok and real(bot).deleted == [post.id]
     assert [row["id"] for row in await store.queued(bot.db, GUILD)] == [first, second]
     slot = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
     assert slot["status"] == rules.PENDING
     assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
-    assert home(bot).sent[-1].content.endswith("one?")
+    assert real(bot).sent[-1].content.endswith("one?")
 
 
 async def test_an_extra_post_with_questions_off_or_an_empty_queue_is_refused_in_words(bot):
     early = SLOT - timedelta(days=2)
     assert (await moves.post_now(bot, bot.guild, None, now=early)).message == rules.QUEUE_EMPTY
     await queue(bot)
-    await bot.store.set(GUILD, "question_mode", "off")
+    await bot.store.set(GUILD, "posts_mode", "off")
 
     refused_off = await moves.post_now(bot, bot.guild, None, now=early)
 
@@ -354,7 +338,7 @@ async def test_an_extra_post_with_questions_off_or_an_empty_queue_is_refused_in_
 
 
 async def test_an_extra_in_on_mode_goes_to_the_real_channel_with_the_template(bot):
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await bot.store.set(GUILD, "question_template", "QOTW: {question}")
     await queue(bot)
 
@@ -434,7 +418,7 @@ async def test_this_week_moves_to_the_next_slot_once_the_due_one_is_settled(bot)
 
 
 async def test_a_due_slot_catching_up_after_downtime_is_still_this_week(bot):
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await bot.store.clear(GUILD, "question_channel_id")
     await queue(bot)
     await seen_before(bot)
@@ -452,7 +436,7 @@ async def test_a_thread_opens_on_the_question_when_threads_are_on(bot):
 
     await moves.tick(bot, bot.guild, AFTER_GRACE)
 
-    [post] = home(bot).sent
+    [post] = real(bot).sent
     assert post.threads == ["x" * 100]
 
 

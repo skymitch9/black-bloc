@@ -90,7 +90,6 @@ async def build_root(bot: Any, guild: Any) -> tuple[discord.Embed, StickyPanel]:
     if options:
         view.add_item(StickyPick(options))
     view.add_item(AddPick())
-    view.add_item(ModePick(mode))
     offered = rules.post_options(await posts.list_posts(bot.db, guild.id))
     if offered:
         view.add_item(PostPick(offered, rules.POST_PLACEHOLDER, row=4))
@@ -203,16 +202,6 @@ async def open_card(
     if not await opened(interaction):
         return
     await render_card(interaction, channel_id, previous)
-
-
-async def run_mode(interaction: discord.Interaction, value: str, previous: Any = None) -> None:
-    if not await opened(interaction):
-        return
-    outcome = await desk_of(interaction.client).set_mode(
-        interaction.guild, value, interaction.user
-    )
-    await render_root(interaction, previous)
-    await answer(interaction, outcome.message)
 
 
 async def run_save(
@@ -372,23 +361,6 @@ class AddPick(discord.ui.ChannelSelect):
         await open_words(interaction, int(self.values[0].id), self.view)
 
 
-class ModePick(discord.ui.Select):
-    def __init__(self, current: Any) -> None:
-        super().__init__(
-            placeholder=rules.MODE_PLACEHOLDER,
-            options=[
-                discord.SelectOption(label=label, value=value, default=now)
-                for value, label, now in rules.mode_options(current)
-            ],
-            min_values=1,
-            max_values=1,
-            row=2,
-        )
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_mode(interaction, self.values[0], self.view)
-
-
 class PostPick(discord.ui.Select):
     """On the list: a post, then its channel. On a post's card: the post it keeps instead."""
 
@@ -452,7 +424,6 @@ class WordsModal(AnswersErrors, discord.ui.Modal):
 
 __all__ = [
     "AddPick",
-    "ModePick",
     "MoveButton",
     "PostPick",
     "WherePick",

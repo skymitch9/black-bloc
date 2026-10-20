@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
@@ -14,15 +13,13 @@ from .settings_store import (
     STICKY_AFTER_MESSAGES,
     STICKY_MAX_BURIED_MINUTES,
     STICKY_MIN_SECONDS,
-    STICKY_MODE,
-    STICKY_MODES,
     STICKY_PANEL_MINUTES,
     STICKY_PIN_COPIES,
     STICKY_QUIET_SECONDS,
     STICKY_SILENT,
 )
 
-FEATURE = "sticky"
+FEATURE = "posts"
 LOG_FEATURE = "posts"
 SITE_ANCHOR = "#sect-sticky"
 TEXT_MAX = 1800
@@ -59,7 +56,7 @@ STATE_WORDS: dict[str, str] = {
 PANEL_TITLE = "Sticky messages"
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /sticky again"
 NONE_YET = "No channel has a sticky message."
-MODE_LINE = "**mode** — {mode}"
+MODE_LINE = "**posts_mode** — {mode}"
 ROW_LINE = "<#{channel_id}> — {state}"
 ROW_MOVED = " · moved {n}×"
 ROW_SINCE = " · <t:{at}:R>"
@@ -67,12 +64,6 @@ ROW_TROUBLE = " — {trouble}"
 GONE_CHANNEL = "a channel Discord no longer has ({ident})"
 CARD_TITLE = "#{name}"
 
-MODE_LABELS: dict[str, str] = {
-    "off": "off — every copy is taken down, the words are kept",
-    "shadow": "shadow — copies go to the rehearsal home only",
-    "on": "on — each one is kept at the bottom of its channel",
-}
-MODE_PLACEHOLDER = "What sticky messages do…"
 POST_PLACEHOLDER = "Keep a post at the bottom of a channel…"
 SWAP_PLACEHOLDER = "Keep a different post here…"
 WHERE_PLACEHOLDER = "The channel it stays at the bottom of…"
@@ -115,16 +106,11 @@ SITE_MOVE = StickyMove(SITE, "Open on the site", "link", row=3)
 REMOVE_QUESTION = "Remove the sticky message from <#{channel_id}>? Its words are deleted too."
 REMOVE_YES = "Remove it"
 
-MODE_SET = "Sticky messages are now **{mode}**."
 SAVED_LIVE = "Saved. It is at the bottom of <#{channel_id}> now."
-SAVED_REHEARSED = (
-    "Saved. Sticky messages are in **shadow**, so nothing was posted in <#{channel_id}> — the "
-    "rehearsal copy is in <#{home}>."
-)
 SAVED_PAUSED = "Saved. It is paused, so nothing was posted — press **Resume** when it should run."
 SAVED_OFF = (
-    "Saved. Sticky messages are **off**, so nothing was posted — set `sticky_mode` to shadow or "
-    "on when it should run."
+    "Saved. Posts are **off**, so nothing was posted — set `posts_mode` to on on the Posts "
+    "page when it should run."
 )
 SAVED_TEST_MODE = (
     "Saved. Black Bloc is in test mode, so it refused to post outside the test channel and "
@@ -132,11 +118,6 @@ SAVED_TEST_MODE = (
 )
 SAVED_BUT = "Saved, but it could not be posted: {trouble}"
 SAVED_UNREACHABLE = "Saved, but it is not posted yet: {reason}"
-SAVED_OWN_HOME = (
-    "Saved. Sticky messages are in **shadow** and <#{channel_id}> is the rehearsal home itself, "
-    "so nothing was posted there. Set `sticky_shadow_channel_id` to another channel to see a "
-    "rehearsal copy, or set `sticky_mode` to on."
-)
 # Owner, 2026-10-10: a mode going live never posts a real copy; it waits for a press.
 HELD_SAID = (
     "Waiting for Post it: the mode is on, the rehearsal copy came down, and nothing is posted "
@@ -212,14 +193,6 @@ TROUBLE_POST_EMPTY = (
     "again."
 )
 TROUBLE_CHANNEL_GONE = "Discord no longer has that channel. Remove this sticky message."
-TROUBLE_NO_HOME = (
-    "There is no rehearsal home to post the copy in. Set `shadow_channel_id` or "
-    "`sticky_shadow_channel_id`, then press Try again."
-)
-TROUBLE_HOME_GONE = (
-    "The rehearsal home <#{home}> cannot be found. Set `sticky_shadow_channel_id` to a channel "
-    "Black Bloc can see, then press Try again."
-)
 TROUBLE_PERMISSION = (
     "Black Bloc is missing {missing} in <#{channel_id}>. Give it that permission there, then "
     "press Try again."
@@ -235,12 +208,6 @@ UNREACHABLE_WHY = "Discord could not be reached ({why})"
 UNREACHABLE_ANSWERED = "it answered {status}"
 UNREACHABLE_REASON = (
     UNREACHABLE_WHY + ". Black Bloc tries again by itself at the next message in <#{channel_id}>."
-)
-HOME_TROUBLES = re.compile(
-    "|".join(
-        re.escape(words).replace(re.escape("{home}"), r"\d+")
-        for words in (TROUBLE_NO_HOME, TROUBLE_HOME_GONE)
-    )
 )
 
 
@@ -270,10 +237,6 @@ def text_refusal(text: str) -> str | None:
     if len(text) > TEXT_MAX:
         return TOO_LONG.format(given=len(text), limit=TEXT_MAX)
     return None
-
-
-def is_home_trouble(trouble: Any) -> bool:
-    return bool(trouble) and HOME_TROUBLES.fullmatch(str(trouble)) is not None
 
 
 def message_link(guild_id: Any, channel_id: Any, message_id: Any) -> str:
@@ -354,7 +317,7 @@ def state_of(row: Any, mode: str) -> str:
         return OFF
     if not row["message_id"]:
         return WAITING
-    if mode != "shadow" and int(row["posted_channel_id"] or 0) == int(row["channel_id"]):
+    if int(row["posted_channel_id"] or 0) == int(row["channel_id"]):
         return LIVE
     return REHEARSING
 
@@ -397,15 +360,11 @@ def row_line(row: Any, mode: str) -> str:
 
 
 def root_lines(rows: Any, mode: str, modes: dict[int, str] | None = None) -> list[str]:
-    """Each row is read against its own mode; a post owned by another feature follows that one."""
+    """Every row is read against the one Posts switch."""
     each = modes or {}
     lines = [MODE_LINE.format(mode=mode), ""]
     lines += [row_line(row, each.get(int(row["channel_id"]), mode)) for row in rows] or [NONE_YET]
     return lines
-
-
-def mode_options(current: Any) -> list[tuple[str, str, bool]]:
-    return [(name, MODE_LABELS[name], name == current) for name in STICKY_MODES]
 
 
 def sticky_options(rows: Any, names: dict[int, str]) -> list[tuple[str, int]]:
@@ -462,7 +421,10 @@ def numbers(store: Any, guild_id: int) -> tuple[int, int, bool]:
 
 
 def mode_of(store: Any, guild_id: int) -> str:
-    return str(store.get(guild_id, STICKY_MODE))
+    """The Posts page's one switch; a sticky has no mode of its own."""
+    from .posts import mode_of as posts_mode
+
+    return posts_mode(store, guild_id)
 
 
 async def get_row(db: Any, guild_id: int, channel_id: int) -> Any:

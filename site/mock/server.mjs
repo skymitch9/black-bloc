@@ -357,20 +357,17 @@ const LOG_LEVEL_FEATURES = [
   // F-G1: guides are edited on the website only, so there is no panel to name.
   ['guides', 'guides', null],
   ['posts', 'posts', 'posts'],
+  ['minutes', 'meeting minutes', 'minutes'],
 ];
 
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
   ['shadow_channel_id', 'channel', null, null, 'where every rehearsal goes while a feature is in shadow — the welcome post, the front door, the ticket button, polls; blank means the bot’s own log channel. Setting it is the deliberate act that lets test mode speak in that one channel as well, so pick a channel only the people reviewing can see. A feature’s own …_shadow_channel_id wins over this'],
-  ["frontdoor_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (the front door's copy and the Open a ticket button it replaces); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
-  ["posts_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (posts such as the welcome post and the rules); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
+  ["posts_shadow_channel_id", "channel", null, null, "where Post to test sends its copy of a post, a sticky message or this week's question; blank means shadow_channel_id"],
   ["golive_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (spotlight announcements); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["marathon_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (the marathon board, reminders, shoutouts and staff notices); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["marathon_public_shadow_channel_id", "channel", null, null, "where this feature's rehearsals land while it is in shadow (a marathon's public highlights of BaF runners and its public reminders); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
-  ["poll_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (polls and their results); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["birthday_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (birthday wishes); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
-  ["sticky_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (sticky messages); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
-  ["sticky_mode", "enum", "shadow", "shadow", "off, shadow or on. shadow — the default — posts nothing in the real channel: each copy goes to the rehearsal home with a line naming where it would have gone. on keeps each sticky message at the bottom of its own channel. off takes every copy down and keeps the words", ["off", "shadow", "on"]],
   ["sticky_after_messages", "int", 5, 5, "how many new messages from people it takes before a sticky message is posted again at the bottom; 5 by default, 1 to 100. Black Bloc's own messages and other bots' do not count", null, 100, 1],
   ["sticky_min_seconds", "int", 30, 30, "the shortest gap, in seconds, between two copies of one sticky message; 30 by default, 5 to 3600. Both this and sticky_after_messages have to be met, so a busy channel never gets a copy per message", null, 3600, 5],
   ["sticky_silent", "bool", true, true, "whether a sticky message is posted silently, so moving it to the bottom never lights up anybody's notifications. on by default"],
@@ -461,7 +458,7 @@ const SETTING_SPECS = [
   ['events_review_mode', 'enum', 'room', 'room', 'where a proposed event is reviewed: room makes a text channel per event under events_category_id; forum makes one post per event in events_forum_channel_id (Make the forum on /event first)', ['room', 'forum']],
   ['events_forum_channel_id', 'channel', null, null, 'the forum channel every event is posted in, in forum mode; Make the forum on /event makes one under the BlackMail category'],
   ['events_moved_line', 'text', 'This event now lives in its own post: {post}. This room is being removed.', 'This event now lives in its own post: {post}. This room is being removed.', "the one line left in an event's old review room when staff press Move to the forum; {post} stands for the new post"],
-  ['poll_mode', 'enum', 'on', 'on', 'off, shadow (every poll is posted for real, but into the log channel with a line saying why, so staff can rehearse), or on (polls go where they are pointed)', ['off', 'shadow', 'on']],
+  ["poll_mode", "enum", "on", "on", "off (no new polls, /poll hidden) or on (polls go where they are pointed). Post to test on a poll's preview sends a copy to shadow_channel_id first", ["off", "on"]],
   ['poll_who_can_create', 'enum', 'staff', 'staff', 'who may run /poll create: staff, or everyone', ['staff', 'everyone']],
   ['poll_review_mode', 'enum', 'off', 'off', 'off posts a poll straight away; on holds it for a staff Approve or Deny first', ['off', 'on']],
   ['poll_default_hours', 'int', 24, 24, 'hours a poll stays open when nobody says otherwise, 1 to 768 (32 days)', null, 768, 1],
@@ -470,13 +467,10 @@ const SETTING_SPECS = [
   ['poll_reminder_minutes', 'int', 60, 60, 'minutes before a poll closes that Black Bloc posts a last call, 0 to say nothing', null, 10080],
   ['poll_auto_thread', 'bool', false, false, 'true to open a discussion thread under every poll'],
   ['poll_pin', 'bool', true, true, "true pins a poll's message while it is open and unpins it when it closes"],
-  ['poll_shadow_note', 'text', 'Posted here because polls are in **shadow** — it would have gone to {channel}.', 'Posted here because polls are in **shadow** — it would have gone to {channel}.', 'the line above a poll posted in shadow; {channel} is where it would have gone'],
   ['poll_archive_days', 'int', 365, 365, 'days a closed poll stays on the list before it moves to the archive', null, 3650, 1],
   ['poll_archive_drop_votes', 'bool', true, true, 'true to forget who voted when a poll is archived; the totals are kept either way'],
   ['poll_date_labels', 'enum', 'plain', 'plain', "how a date poll writes its slots: plain (Sat 30 Aug · 7 pm, in the server's zone) or timestamp (each reader sees their own clock, if Discord renders one in an answer)", ['plain', 'timestamp']],
-  ["question_mode", "enum", "shadow", "shadow", "off, shadow or on. off posts nothing and checks nothing; shadow \u2014 the default \u2014 resolves each week's question in the rehearsal home; on posts it in question_channel_id", ["off", "shadow", "on"]],
-  ["question_channel_id", "channel", null, null, "where the weekly question is posted while question_mode is on"],
-  ["question_shadow_channel_id", "channel", null, null, "where the weekly question is rehearsed while question_mode is shadow; blank means shadow_channel_id"],
+  ["question_channel_id", "channel", null, null, "where the weekly question is posted while posts_mode is on"],
   ["question_weekday", "enum", "monday", "monday", "the day of the week the question goes up; monday by default", ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]],
   ["question_time", "text", "09:00", "09:00", "the time the question goes up, as HH:MM on a 24-hour clock in default_timezone; 09:00 by default"],
   ["question_grace_minutes", "int", 5, 5, "minutes after the question's time that Black Bloc waits for the owner's own post before posting the question itself; 5 by default", null, 120, 1],
@@ -528,11 +522,9 @@ const SETTING_SPECS = [
   ['modmail_forum_tags', 'bool', true, true, 'true keeps the open / closed tags on each ticket post in forum mode; false leaves every post untagged and the forum’s own tag list alone'],
   ['modmail_log_on_open', 'bool', true, true, "true posts a New-ticket card to the transcripts channel the moment a ticket opens (what the old ModMail bot's log did); false logs opens only in the action log"],
   ['modmail_panel_follows_post', 'text', 'welcome', 'welcome', 'the slug of the post the Open a ticket button sits under — welcome by default, so the button lands right after the rules and is put back there whenever that post is posted again. none never moves the button for that reason'],
-  ['frontdoor_mode', 'enum', 'on', 'on', 'off hides /ask and takes the door down; shadow posts the rehearsal copy into shadow_channel_id with the rehearsal note and nothing into the real channel; on posts it where it is pointed. /ask answers in both shadow and on, and the three flows behind it (modmail, requests, events) keep their own modes whatever this says. In shadow the Open a ticket button follows the door while frontdoor_replaces_ticket_button is true', ['off', 'shadow', 'on']],
+  ["frontdoor_mode", "enum", "on", "on", "off hides /ask and takes the door down; on posts it where it is pointed. A door carried by a post goes where the post goes, and its wording is checked with the post's Post to test. The three flows behind it (modmail, requests, events) keep their own modes whatever this says", ["off", "on"]],
   ['frontdoor_channel_id', 'channel', null, null, 'where the front-door message is posted; blank posts nothing, and the /ask command still works. Post it from the Modmail page’s Front door card'],
   ['frontdoor_message_id', 'text', null, null, 'the front-door message Black Bloc posted, so it can be moved, taken down and put back after somebody deletes it. Written by the bot as TEXT, because a snowflake does not survive a JavaScript number; there is no reason to set it by hand'],
-  ['frontdoor_shadow_message_id', 'text', null, null, 'the rehearsal copy of the front door Black Bloc posted in the rehearsal home while test mode refuses the real channel, so it can be kept current, moved with shadow_channel_id and taken down. Written by the bot as TEXT; there is no reason to set it by hand'],
-  ['frontdoor_shadow_hash', 'text', null, null, 'a fingerprint of the wording the rehearsal copy is showing, so a sweep edits it only when the heading, the line or a button label has actually changed. Written by the bot; there is no reason to set it by hand'],
   ['frontdoor_title', 'text', 'Need something?', 'Need something?', 'the heading on the posted front-door message and on the /ask panel'],
   ['frontdoor_text', 'text', 'Pick the one that fits and Black Bloc takes it from there. Staff only see what you write.', 'Pick the one that fits and Black Bloc takes it from there. Staff only see what you write.', 'the line under that heading, on both'],
   ['frontdoor_ticket_label', 'text', 'Ask staff privately', 'Ask staff privately', 'what the button that opens a private modmail ticket is called, at most 80 characters, which is Discord’s own cap; blank restores the shipped wording'],
@@ -1388,9 +1380,9 @@ const SETTING_SPECS = [
   ["brackets_pool_tied", "text", "tied", "tied", "the bracket page's mark on a finished pool's row tied across the cut line"],
   ["brackets_pool_raise_label", "text", "Move up", "Move up", "the bracket page's button that moves a tied player up a finished pool's order"],
   // The BaF point system (docs/info/points-design.md); all of it sits under core.
-  ["points_mode", "enum", "shadow", "shadow", "off, shadow or on. off refuses every point system move; shadow \u2014 the default \u2014 takes and approves runs and sends the top-places post to the rehearsal home; on posts it in points_channel_id", ["off", "shadow", "on"]],
-  ["points_channel_id", "channel", "1076003845232148580", "1076003845232148580", "where the post goes when somebody enters, leaves or moves inside the top places while points_mode is on; #speed-and-pbs by default"],
-  ["points_shadow_channel_id", "channel", null, null, "where the top-places post is rehearsed while points_mode is shadow; blank means shadow_channel_id"],
+  ["points_mode","enum","shadow","shadow","off, shadow or on: whether runs are taken. off refuses every point system move; shadow — the default — takes and approves runs and DMs nobody about them; on DMs the runner too. Where the top-places post and the leaderboard sticky go is posts_mode on the Posts page, never this",["off","shadow","on"]],
+  ["points_channel_id","channel","1076003845232148580","1076003845232148580","where the post goes when somebody enters, leaves or moves inside the top places while posts_mode is on; #speed-and-pbs by default"],
+  ["points_shadow_channel_id","channel",null,null,"not read since 2026-10-19: the top-places post and the leaderboard sticky follow posts_mode, and Post to test sends to posts_shadow_channel_id"],
   ["points_ping_role_id", "role", null, null, "a role mentioned above the top-places post; blank \u2014 the default \u2014 pings nobody. A rehearsal copy never pings"],
   ["points_verifier_role_id", "role", null, null, "a role whose holders may approve and reject submitted runs as staff can. Blank \u2014 the default \u2014 leaves approving to staff. A verifier never decides their own run"],
   ["points_xp_tiers", "text", "1:00=5, 10:00=25, 15:00=50, 30:00=100", "1:00=5, 10:00=25, 15:00=50, 30:00=100", "the XP a run earns by its length: each tier is the time it starts at and its XP, like 1:00=5, 10:00=25, 15:00=50, 30:00=100. A run gets the highest tier it reaches, never less than points_xp_min nor more than points_xp_max. A change counts for runs approved after it; Recompute applies it to every approved run"],
@@ -1510,7 +1502,7 @@ const SETTING_SPECS = [
   ["default_timezone", "text", "America/Phoenix", "America/Phoenix", "the `Region/City` zone times are read in for anybody who has never picked their own — the Time zone button on `/event` is how a member changes theirs"],
   ["timezone_choices", "text", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "the zones the Time zone dropdown offers, `Region/City` names separated by commas, up to 24 of them; a name Black Bloc cannot resolve is dropped, and Other — type it… always sits at the bottom of the list for the rest"],
   // Posts (§C7) — black_bloc/settings_store.py owns them; these are the mock's copy.
-  ['posts_mode', 'enum', 'shadow', 'shadow', "off, shadow (Post it sends the real message into the shadow channel — the test channel while test mode is on, otherwise the log channel — and keeps it edited there, whatever channel the post names) or on (Post it goes to the post's own channel, and the first real post removes the shadow copy). Shadow is the default, so nothing reaches members until a Lead turns posts on. Off hides `/posts` and refuses both doors in words; every word already written is kept in all three", ['off', 'shadow', 'on']],
+  ["posts_mode", "enum", "on", "on", "the one switch for the Posts page: posts, sticky messages and weekly questions. off hides /posts, /sticky and /questions, takes every sticky copy down and posts no weekly question; every word already written is kept. on lets Post it, a sticky's Resume and the weekly question reach their own channels. Post to test sends a copy of any of them to posts_shadow_channel_id first", ["off", "on"]],
   ['posts_panel_minutes', 'int', 10, 10, "minutes the /posts panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440, 1],
   ['posts_versions_keep', 'int', 0, 0, 'how many saved versions of a post are kept; 0 (the default) keeps every one of them, and 1 to 500 trims the oldest after each save. History is cheap and a lost version is not, so raise it rather than lower it. The only remaining version is never trimmed, whatever the number says', null, 500, 0],
   ['posts_versions_summary_chars', 'int', 80, 80, 'how many characters of a version’s message are shown on its row in the Versions list, 20 to 300; 80 by default. It is one line beside View and Use this version — the whole message is in View', null, 300, 20],
@@ -2304,9 +2296,9 @@ function seedState() {
     { channel_id: '800000000000000010', owner_id: MEMBERS[1].id, creator_id: '800000000000000009', created_at: minutesAgo(45), user_limit: 0, locked: false, hidden: false },
   ],
   sticky: [
-    { channel_id: '800000000000000002', text: '**How to submit a run** — post the link, the category and your time, and a Lead will add it.', paused: false, trouble: null, message_id: '830000000000000101', posted_channel_id: '800000000000000004', posted_at: minutesAgo(12), reposts: 7, updated_by: STAFF.id, updated_at: minutesAgo(4000) },
+    { channel_id: '800000000000000002', text: '**How to submit a run** — post the link, the category and your time, and a Lead will add it.', paused: false, trouble: null, message_id: '830000000000000101', posted_channel_id: '800000000000000002', posted_at: minutesAgo(12), reposts: 7, updated_by: STAFF.id, updated_at: minutesAgo(4000) },
     { channel_id: '800000000000000003', text: 'Test posts only — nothing here is real.', paused: true, trouble: null, message_id: null, posted_channel_id: null, posted_at: null, reposts: 0, updated_by: STAFF.id, updated_at: minutesAgo(9000) },
-    { channel_id: '1076003845232148580', text: '', post_id: 4, paused: false, trouble: null, message_id: '830000000000000104', posted_channel_id: '800000000000000004', posted_at: minutesAgo(3), reposts: 3, updated_by: STAFF.id, updated_at: minutesAgo(60) },
+    { channel_id: '1076003845232148580', text: '', post_id: 4, paused: true, trouble: null, message_id: '830000000000000104', posted_channel_id: '800000000000000004', posted_at: minutesAgo(3), reposts: 3, updated_by: STAFF.id, updated_at: minutesAgo(60) },
     { channel_id: '800000000000000006', text: 'Announcements are staff-only. Questions go in #general.', paused: false, trouble: 'Black Bloc is missing Send Messages in #bot-log. Give it that permission there, then press Try again.', message_id: null, posted_channel_id: null, posted_at: null, reposts: 2, updated_by: STAFF.id, updated_at: minutesAgo(700) },
   ],
   honeypot: [
@@ -2613,7 +2605,7 @@ const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_shadow_
 CORE_KEYS.push(...BRACKETS_KEYS);
 const POINTS_KEYS = ["points_mode", "points_channel_id", "points_shadow_channel_id", "points_ping_role_id", "points_verifier_role_id", "points_xp_tiers", "points_xp_min", "points_xp_max", "points_per_run", "points_top_n", "points_board_order", "points_bounty_clock", "points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_next_rank_top_said", "points_next_rank_unranked_top_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_modmail_off_said", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 CORE_KEYS.push(...POINTS_KEYS);
-const QUESTION_KEYS = ["question_mode", "question_channel_id", "question_shadow_channel_id", "question_weekday", "question_time", "question_grace_minutes", "question_catchup_hours", "question_owner_user_id", "question_template", "question_thread", "question_thread_name_template", "question_warn_days", "question_warn_dm", "question_warn_template"];
+const QUESTION_KEYS = ["question_channel_id", "question_weekday", "question_time", "question_grace_minutes", "question_catchup_hours", "question_owner_user_id", "question_template", "question_thread", "question_thread_name_template", "question_warn_days", "question_warn_dm", "question_warn_template"];
 CORE_KEYS.push(...QUESTION_KEYS);
 const POINTS_WORD_KEYS = ["points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_next_rank_top_said", "points_next_rank_unranked_top_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_modmail_off_said", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 const NOT_A_FEATURE = [];
@@ -2636,8 +2628,6 @@ const NAMESPACE_OVERRIDE = {
   frontdoor_mode: 'modmail',
   frontdoor_channel_id: 'modmail',
   frontdoor_message_id: 'modmail',
-  frontdoor_shadow_message_id: 'modmail',
-  frontdoor_shadow_hash: 'modmail',
   frontdoor_title: 'modmail',
   frontdoor_text: 'modmail',
   frontdoor_ticket_label: 'modmail',
@@ -2649,8 +2639,6 @@ const NAMESPACE_OVERRIDE = {
   frontdoor_show_ticket: 'modmail',
   frontdoor_show_request: 'modmail',
   frontdoor_show_event: 'modmail',
-  frontdoor_shadow_channel_id: 'modmail',
-  sticky_mode: 'posts',
   sticky_after_messages: 'posts',
   sticky_min_seconds: 'posts',
   sticky_silent: 'posts',
@@ -2658,7 +2646,6 @@ const NAMESPACE_OVERRIDE = {
   sticky_quiet_seconds: 'posts',
   sticky_max_buried_minutes: 'posts',
   sticky_pin_copies: 'posts',
-  sticky_shadow_channel_id: 'posts',
   handoff_mode: 'request',
   handoff_confirm_hours: 'request',
   minutes_mode: 'events',
@@ -3582,12 +3569,11 @@ const POST_UNKNOWN_CHANNEL = '**{given}** is not a channel Black Bloc can see in
 const POST_TITLE_NEEDED = 'A post needs a title, so nothing was saved. Fill it in and save again.';
 const POST_SLUG_TAKEN = 'There is already a post at **{slug}**, so nothing was made. Give this one a different title, or edit the one that is there.';
 const POST_SLUG_NEEDED = 'A post needs a title Black Bloc can turn into a web address, and that one came out empty, so nothing was made. Use some letters or numbers in the title.';
-const POSTS_ARE_OFF = 'Posts are off for this server, so **Post it** and **Take it down** refuse in words and `/posts` is hidden. Every word written here is kept — a Lead turns them back on from the Settings page under **posts**.';
+const POSTS_ARE_OFF = 'Posts are off: every sticky copy is down, no weekly question goes up and **Post it** refuses. Every word written here is kept.';
+const POSTS_COMMANDS_HIDDEN = "{commands} are out of the server's command list until posts are on.";
 const POST_TEST_MODE_NOTE = `Black Bloc is in test mode, so a post only reaches #${TEST_CHANNEL_NAME} or a channel it made itself. **Post it** on anything else writes down what it would have sent and sends nothing.`;
-const POSTS_ARE_SHADOW = 'Posts are in **shadow**: **Post it** sends the real message to {where} and keeps it edited there, whatever channel a post names, so nothing reaches members yet. Turning posts **on** is the go-live — the next **Post it** goes to the post\u2019s own channel and the shadow copy is removed.';
 const POST_NO_SUCH_VERSION = 'There is no version {n} of **{title}**, so nothing was changed. Open **Versions** and pick one from the list.';
 const POST_VERSION_IS_CURRENT = 'Version {n} is already what the post says, so nothing was changed. Pick an older version, or edit the words in the box.';
-const POST_NO_SHADOW_CHANNEL = 'Posts are in **shadow**, so **{title}** goes to the shadow channel rather than its own — and this server has neither a test channel nor a log channel, so there is nowhere to put it. A Lead sets **log_channel_id** on the Settings page, or turns posts on.';
 // The shadow channel: the guard's own while test mode is on, otherwise log_channel_id. The
 // mock has no guard object, so it reads the same two places the bot does.
 const POST_SHADOW_CHANNEL = '800000000000000003';
@@ -3797,23 +3783,33 @@ function doorCarrier() {
 function doorRidesPost(row) {
   state.settings.set('frontdoor_channel_id', row.channel_id || null);
   state.settings.set('frontdoor_message_id', row.message_id || null);
-  state.settings.set('frontdoor_shadow_message_id', row.shadow_message_id || null);
   logAction('web.frontdoor.rides_post', { target_id: row.channel_id, details: { slug: row.slug, post_id: row.id, via: 'website' } });
 }
 
 function doorLeavesPost(keepChannel) {
   state.settings.set('frontdoor_message_id', null);
-  state.settings.set('frontdoor_shadow_message_id', null);
   if (!keepChannel) state.settings.set('frontdoor_channel_id', null);
 }
 
 function postsMode() {
-  const found = String(state.settings.get('posts_mode') || 'shadow');
-  return ['off', 'shadow', 'on'].includes(found) ? found : 'shadow';
+  const found = String(state.settings.get('posts_mode') || 'on');
+  return ['off', 'on'].includes(found) ? found : 'off';
+}
+
+// The twin of shadow.channel_id for the posts home: Post to test for posts, stickies and questions.
+function postsHome() {
+  return state.settings.get('posts_shadow_channel_id') || state.settings.get('shadow_channel_id') || (testMode ? POST_SHADOW_CHANNEL : null) || state.settings.get('log_channel_id') || null;
 }
 
 function postShadowChannel() {
-  return testMode ? POST_SHADOW_CHANNEL : (state.settings.get('log_channel_id') || null);
+  return postsHome();
+}
+
+// The twin of HIDDEN_WHEN_OFF["posts_mode"]: the commands the one switch hides while it is off.
+const POSTS_SWITCH_COMMANDS = ['posts', 'sticky', 'questions'];
+
+function postsCommandsHidden() {
+  return postsMode() === 'off' && state.settings.get('hide_commands_when_off') !== false ? [...POSTS_SWITCH_COMMANDS] : [];
 }
 
 function postTooLong(count, limit, style, doing) {
@@ -3886,12 +3882,10 @@ function postShadow() {
 }
 
 function postNotes() {
-  const mode = postsMode();
-  if (mode === 'off') return [POSTS_ARE_OFF];
-  if (mode !== 'shadow') return [];
-  const where = postShadowChannel();
-  if (!where) return [POST_NO_SHADOW_CHANNEL.split('{title}').join('a post')];
-  return [POSTS_ARE_SHADOW.split('{where}').join(`#${postChannelName(where)}`)];
+  if (postsMode() !== 'off') return [];
+  const hidden = postsCommandsHidden();
+  if (!hidden.length) return [POSTS_ARE_OFF];
+  return [POSTS_ARE_OFF, POSTS_COMMANDS_HIDDEN.split('{commands}').join(hidden.map((name) => `/${name}`).join(', '))];
 }
 
 function postVersionsOf(row) {
@@ -4030,6 +4024,7 @@ function postWhole(row, said) {
     untitled_title: postUntitledTitle(),
     shadow: postShadow(),
     notes: postNotes(),
+    commands_hidden: postsCommandsHidden(),
     read_at: now(),
   };
   return said === undefined ? found : { ...found, message: said };
@@ -4064,6 +4059,7 @@ route('GET', '/api/posts', (context) => {
     guard: postGuard(),
     shadow: postShadow(),
     notes: postNotes(),
+    commands_hidden: postsCommandsHidden(),
     checked_at: now(),
   };
 });
@@ -4187,27 +4183,23 @@ function publishPost(context) {
   const row = wantedPost(context.params.slug);
   const mode = postsMode();
   if (mode === 'off') throw new Refused(409, 'posts_off', POSTS_ARE_OFF);
-  const shadow = mode === 'shadow';
-  if (!shadow && !row.channel_id) throw new Refused(409, 'no_channel', POST_NO_CHANNEL.split('{title}').join(row.title));
+  if (!row.channel_id) throw new Refused(409, 'no_channel', POST_NO_CHANNEL.split('{title}').join(row.title));
   if (!row.body.trim()) throw new Refused(409, 'nothing_to_post', POST_NOTHING_TO_POST.split('{title}').join(row.title));
   if (row.body.length > postCap(row.style)) {
     throw new Refused(400, 'body_too_long', postTooLong(row.body.length, postCap(row.style), row.style, 'posted'));
   }
-  const target = shadow ? postShadowChannel() : row.channel_id;
-  if (shadow && !target) throw new Refused(409, 'no_shadow_channel', POST_NO_SHADOW_CHANNEL.split('{title}').join(row.title));
+  const target = row.channel_id;
   if (testMode && String(target) !== '800000000000000003') {
     logAction('web.post.would_post', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
     throw new Refused(409, 'test_mode', GUARD);
   }
-  const column = shadow ? 'shadow_message_id' : 'message_id';
+  const column = 'message_id';
   const updating = Boolean(row[column]);
   if (!updating) row[column] = String(state.nextPostMessage++);
   row.posted_hash = postHash(row);
   row.posted_at = now();
   row.posted_by = STAFF.id;
-  const kinds = shadow
-    ? ['web.post.shadow_updated', 'web.post.shadow_posted']
-    : ['web.post.updated', 'web.post.posted'];
+  const kinds = ['web.post.updated', 'web.post.posted'];
   const posted = postRecordVersion(row, { because: 'posted' });
   logAction(updating ? kinds[0] : kinds[1], {
     details: {
@@ -4220,7 +4212,7 @@ function publishPost(context) {
   });
   // The first real post takes the rehearsal back down; a failure here would be logged and
   // not abort, which the mock has no way to produce.
-  if (!shadow && row.shadow_message_id) {
+  if (row.shadow_message_id) {
     const was = row.shadow_message_id;
     row.shadow_message_id = null;
     logAction('web.post.shadow_taken_down', {
@@ -4233,14 +4225,6 @@ function publishPost(context) {
   row.door_hash = row.carries_door && doorIsOn() ? 'drawn' : null;
   if (row.door_hash) doorRidesPost(row);
   const where = `#${postChannelName(target)}`;
-  if (shadow) {
-    return postWhole(
-      row,
-      updating
-        ? `**${row.title}** is updated in ${where} — the shadow copy, because posts are in shadow. Nothing went to its own channel.`
-        : `**${row.title}** is posted in ${where} — the shadow copy, because posts are in shadow. Nothing went to its own channel.`,
-    );
-  }
   return postWhole(
     row,
     updating
@@ -4249,15 +4233,13 @@ function publishPost(context) {
   );
 }
 
-// The twins of posts.REHEARSED_SAID / REHEARSAL_UPDATED_SAID / NO_TEST_CHANNEL. Shadow is the
-// publish route itself (the button is hidden there); the mock has no sticky's post to rehearse.
+// The twins of posts.REHEARSED_SAID / REHEARSAL_UPDATED_SAID / NO_TEST_CHANNEL.
 const POST_REHEARSED = 'Sent a test copy of **{title}** to {shadow}. The real post in {where} is untouched; the next Post it takes the test copy down.';
 const POST_REHEARSAL_UPDATED = 'Updated the test copy of **{title}** in {shadow}.';
 const POST_NO_TEST_CHANNEL = 'There is nowhere to send a test copy of **{title}**: this server has neither a test channel nor a log channel, so nothing was sent. A Lead sets **posts_shadow_channel_id** on the Settings page.';
 
 route('POST', '/api/posts/:slug/rehearse', (context) => {
   const mode = postsMode();
-  if (mode === 'shadow') return publishPost(context);
   requireStaff(context.session);
   const row = wantedPost(context.params.slug);
   if (mode === 'off') throw new Refused(409, 'posts_off', POSTS_ARE_OFF);
@@ -6596,7 +6578,6 @@ const PREVIEW_FEATURES = [
   ['post', 'A post', 'posts.html', []],
   ['block_tempvoice', 'The temp voice lobby block', 'posts.html', ['tempvoice_block_title', 'tempvoice_block_text', 'tempvoice_block_lobby_label', 'tempvoice_block_controls_label']],
   ['birthday', 'A birthday announcement', 'birthdays.html', ['birthday_template']],
-  ['poll_card', 'A poll, and the line its rehearsal copy carries', 'polls.html', ['poll_shadow_note']],
   ['minutes_notes', 'What minutes post when a meeting starts and ends', 'minutes.html', ['minutes_start_text', 'minutes_notes_title']],
   ['block_marathonrole', 'The Marathon role block', 'posts.html', ['marathon_block_title', 'marathon_block_text', 'marathon_block_label']],
   ['block_pingsfollow', 'The ping me when they go live block', 'posts.html', ['pings_block_title', 'pings_block_text', 'pings_block_label']],
@@ -6619,7 +6600,6 @@ const PREVIEW_SAMPLES = {
   modmail_relay: { name: '', text: '' },
   post: { style: 'plain', title: '', body: '', carries_door: false, blocks: '', always: '' },
   birthday: { name: 'Casey', age: '' },
-  poll_card: { question: '', channel: '#announcements' },
   minutes_notes: { notes: '' },
   frontdoor: { shows: '' },
   block_tempvoice: { controls: '' },
@@ -6838,18 +6818,6 @@ const PREVIEW_DRAW = {
       .replace('{name}', sample.name || 'Casey')
       .replace('{age}', String(sample.age || ''));
     return previewMade('', [{ description: text, color: 0x4eefff, fields: [] }]);
-  },
-  poll_card(read, sample) {
-    return previewMade(fillWording(read('poll_shadow_note'), { channel: sample.channel || '#announcements' }), [{
-      title: sample.question || 'Which day for the next movie night?',
-      description: '```\nSaturday   #######  7  ( 70%)\nSunday     ###      3  ( 30%)\n```',
-      color: 0x3ba55d,
-      fields: [
-        { name: 'Status', value: 'open', inline: true },
-        { name: 'Voters', value: '10', inline: true },
-      ],
-      footer: { text: 'Poll #3' },
-    }]);
   },
   minutes_notes(read, sample) {
     return previewMade(String(read('minutes_start_text') || ''), [{
@@ -11332,6 +11300,28 @@ route('GET', '/api/polls', (context) => {
   };
 });
 
+// The twin of polls_rehearse.rehearse: the form's poll, as members would see it, in the
+// rehearsal home; nothing is written but the log row.
+route('POST', '/api/polls/rehearse', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const labels = Array.isArray(body.options)
+    ? body.options.map((one) => String(one).trim()).filter(Boolean)
+    : String(body.options || '').split('|').map((one) => one.trim()).filter(Boolean);
+  const kind = String(body.kind || 'single');
+  const generated = kind === 'yesno' ? ['Yes', 'No'] : kind === 'rating' ? ['1', '2', '3', '4', '5'] : null;
+  const found = (kind === 'date' ? dateSlots(body) : null) || generated || labels;
+  if (found.length < 2) {
+    throw new Refused(400, 'poll_refused', 'A poll needs at least 2 options and this one has ' + found.length + ', so nothing was posted. Write them separated by `|` — `Pizza | Tacos | Neither` is three.');
+  }
+  if (state.settings.get('poll_mode') === 'off') throw new Refused(409, 'polls_off', 'Polls are off, so no test copy was sent. Turn poll_mode on in Settings first.');
+  const home = state.settings.get('shadow_channel_id') || (testMode ? POST_SHADOW_CHANNEL : null) || state.settings.get('log_channel_id') || null;
+  if (!home) throw new Refused(409, 'no_shadow_channel', 'There is nowhere to send a test copy: no rehearsal home is set. Pick shadow_channel_id in Settings first.');
+  const messageId = String(920000000000000000n + BigInt(Date.now() % 1000000));
+  logAction('web.poll.rehearsed', { details: { via: 'website', question: String(body.question || ''), shadow_home: String(home), message_id: messageId, url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` } });
+  return { message: `A test copy of the poll is in ${stickyName(home)}. Nothing was posted or saved.` };
+});
+
 route('POST', '/api/polls', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
@@ -11772,8 +11762,7 @@ const questionQueue = () => state.questions
   .sort((a, b) => a.position - b.position || a.id - b.id);
 
 function questionTarget(mode) {
-  if (mode === 'on') return state.settings.get('question_channel_id') || null;
-  return state.settings.get('question_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id') || null;
+  return mode === 'on' ? state.settings.get('question_channel_id') || null : null;
 }
 
 function questionOut(row) {
@@ -11810,13 +11799,13 @@ route('GET', '/api/questions', (context) => {
     .filter((one) => one.status !== 'queued')
     .sort((a, b) => String(b.resolved_at || b.added_at).localeCompare(String(a.resolved_at || a.added_at)));
   return {
-    mode: String(state.settings.get('question_mode') || 'shadow'),
+    mode: postsMode(),
     slot_at: key,
     state: row.status,
     owner_set: Boolean(String(state.settings.get('question_owner_user_id') || '').trim()),
     posted_id: row.question_id,
     test_id: questionShown() ? questionShown().id : null,
-    test_home: questionTarget('shadow') ? String(questionTarget('shadow')) : null,
+    test_home: postsHome() ? String(postsHome()) : null,
     queue: questionQueue(),
     history: history.map(questionOut),
   };
@@ -11825,7 +11814,7 @@ route('GET', '/api/questions', (context) => {
 route('GET', '/api/questions/current', (context) => {
   requireStaff(context.session);
   const { key, row } = questionWeek();
-  const mode = String(state.settings.get('question_mode') || 'shadow');
+  const mode = postsMode();
   const first = mode !== 'off' && row.status === 'pending' ? questionQueue()[0] : null;
   const target = mode === 'off' ? null : questionTarget(mode);
   const template = String(state.settings.get('question_template') || '{question}');
@@ -11916,8 +11905,8 @@ route('POST', '/api/questions/:id/take-down', (context) => {
 
 route('POST', '/api/questions/post-now', (context) => {
   requireStaff(context.session);
-  const mode = String(state.settings.get('question_mode') || 'shadow');
-  if (mode === 'off') throw new Refused(409, 'questions_off', 'Weekly questions are off, so nothing was posted. Set question_mode to shadow or on in Settings first.');
+  const mode = postsMode();
+  if (mode === 'off') throw new Refused(409, 'questions_off', 'Posts are off, so nothing was posted. Turn posts_mode on on the Posts page first.');
   const { key: slot, due } = questionWeek();
   const key = due ? slot : null;
   const first = questionQueue()[0];
@@ -11936,12 +11925,12 @@ route('POST', '/api/questions/post-now', (context) => {
 
 route('POST', '/api/questions/rehearse', (context) => {
   requireStaff(context.session);
-  const mode = String(state.settings.get('question_mode') || 'shadow');
-  if (mode === 'off') throw new Refused(409, 'questions_off', 'Weekly questions are off, so no test copy was sent. Set question_mode to shadow or on in Settings first.');
+  const mode = postsMode();
+  if (mode === 'off') throw new Refused(409, 'questions_off', 'Posts are off, so no test copy was sent. Turn posts_mode on on the Posts page first.');
   const shown = questionShown();
   if (!shown) throw new Refused(409, 'queue_empty', 'There is no question to send a test copy of: the queue is empty. Add a question first.');
-  const home = questionTarget('shadow');
-  if (!home) throw new Refused(409, 'no_shadow_channel', 'There is nowhere to rehearse it: no rehearsal home is set. Pick question_shadow_channel_id or shadow_channel_id in Settings first.');
+  const home = postsHome();
+  if (!home) throw new Refused(409, 'no_shadow_channel', 'There is nowhere to send a test copy: no rehearsal home is set. Pick posts_shadow_channel_id or shadow_channel_id in Settings first.');
   const messageId = String(910000000000000000 + Date.now() % 1000000);
   logAction('web.question.rehearsed', { details: { via: 'website', question_id: shown.id, question: shown.body, shadow_home: String(home), message_id: messageId, url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` } });
   return { ok: true, message: `A test copy of this week's question is in ${stickyName(home)}. Nothing in the queue changed.`, value: shown.id };
@@ -12572,7 +12561,7 @@ route('POST', '/api/tempvoice/forget', async (context) => {
 });
 
 // Sticky messages (docs/info/sticky-messages-design.md). The mock keeps the rows and the state
-// word; it posts nothing, so `on` reads as live and `shadow` as rehearsing in the log channel.
+// word; it posts nothing. posts_mode places every sticky (posts-one-switch-design.md).
 const STICKY_TEXT_MAX = 1800;
 const STICKY_POSTABLE = ['text', 'news'];
 const STICKY_NOT_WORDS = 'The words of a sticky message have to be plain text, so nothing was saved. Type what it should say and save again.';
@@ -12582,33 +12571,20 @@ function stickyName(channelId) {
   return channel ? `#${channel.name}` : `a channel Discord no longer has (${channelId})`;
 }
 
-function stickyHome() {
-  return state.settings.get('sticky_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id');
-}
 
-function stickyOwnHome(row) {
-  return stickyMode(row) === 'shadow' && String(stickyHomeOf(row)) === String(row.channel_id);
-}
 const STICKY_NONE = 'That channel has no sticky message, so nothing was changed. The list on this panel and on the Posts page is every channel that has one.';
 
 function stickyPostOf(row) {
   return row.post_id ? state.posts.find((one) => one.id === Number(row.post_id)) || null : null;
 }
 
-// The twin of sticky_posts.owner_rule: sticky off stops everything; the leaderboard follows points.
-function stickyMode(row) {
-  const mode = String(state.settings.get('sticky_mode') || 'shadow');
-  const post = stickyPostOf(row);
-  if (mode === 'off' || !post || !(post.blocks || []).some((one) => one.kind === 'leaderboard')) return mode;
-  return String(state.settings.get('points_mode') || 'shadow');
+// The twin of sticky_posts.owner_rule: the Posts page's one switch places every sticky.
+function stickyMode() {
+  return postsMode();
 }
 
-function stickyHomeOf(row) {
-  const post = stickyPostOf(row);
-  if (post && (post.blocks || []).some((one) => one.kind === 'leaderboard')) {
-    return state.settings.get('points_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id');
-  }
-  return stickyHome();
+function stickyHomeOf() {
+  return postsHome();
 }
 
 function stickyState(row) {
@@ -12617,13 +12593,13 @@ function stickyState(row) {
   if (row.paused) return 'paused';
   if (mode === 'off') return 'off';
   if (!row.message_id) return 'waiting';
-  return mode !== 'shadow' && String(row.posted_channel_id) === String(row.channel_id) ? 'live' : 'rehearsing';
+  return String(row.posted_channel_id) === String(row.channel_id) ? 'live' : 'rehearsing';
 }
 
 function stickyPlace(row) {
   const mode = stickyMode(row);
   const post = stickyPostOf(row);
-  if (row.paused || mode === 'off' || stickyOwnHome(row)) {
+  if (row.paused || mode === 'off') {
     row.message_id = null;
     row.posted_channel_id = null;
     row.posted_at = null;
@@ -12631,12 +12607,12 @@ function stickyPlace(row) {
     return;
   }
   row.message_id = String(830000000000000000n + BigInt(Date.now()));
-  row.posted_channel_id = mode === 'on' ? row.channel_id : String(stickyHomeOf(row));
+  row.posted_channel_id = row.channel_id;
   row.posted_at = new Date().toISOString();
   if (post) {
     post.channel_id = String(row.channel_id);
-    post.message_id = mode === 'on' ? row.message_id : null;
-    post.shadow_message_id = mode === 'on' ? null : row.message_id;
+    post.message_id = row.message_id;
+    post.shadow_message_id = null;
     post.posted_at = row.posted_at;
   }
 }
@@ -12679,10 +12655,8 @@ function stickyTestable(row) {
 function stickySaid(row) {
   const said = stickyState(row);
   if (said === 'live') return `Saved. It is at the bottom of ${stickyName(row.channel_id)} now.`;
-  if (said === 'rehearsing') return `Saved. Sticky messages are in **shadow**, so nothing was posted in ${stickyName(row.channel_id)} — the rehearsal copy is in ${stickyName(row.posted_channel_id)}.`;
   if (said === 'paused') return 'Saved. It is paused, so nothing was posted — press **Resume** when it should run.';
-  if (stickyOwnHome(row)) return `Saved. Sticky messages are in **shadow** and ${stickyName(row.channel_id)} is the rehearsal home itself, so nothing was posted there. Set sticky_shadow_channel_id to another channel to see a rehearsal copy, or set sticky_mode to on.`;
-  return 'Saved. Sticky messages are **off**, so nothing was posted — set sticky_mode to shadow or on when it should run.';
+  return 'Saved. Posts are **off**, so nothing was posted — set posts_mode to on on the Posts page when it should run.';
 }
 
 function stickyOf(context) {
@@ -12774,8 +12748,7 @@ route('POST', '/api/sticky/:channel_id/rehearse', (context) => {
   requireStaff(context.session);
   const row = stickyOf(context);
   const mode = stickyMode(row);
-  const post = stickyPostOf(row);
-  const feature = post && (post.blocks || []).some((one) => one.kind === 'leaderboard') ? 'points' : 'sticky';
+  const feature = 'posts';
   if (mode === 'off') throw new Refused(409, 'sticky_off', `**${feature}_mode** is off, so no test copy was sent. Turn it on in Settings, or with \`/settings\`, first.`);
   const home = stickyHomeOf(row);
   if (stickyState(row) === 'rehearsing') return { sticky: stickyRow(row), message: `It already rehearses in ${stickyName(row.posted_channel_id || home)} — the copy there is live, so nothing was sent.` };

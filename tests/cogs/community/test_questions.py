@@ -7,7 +7,7 @@ import pytest
 from black_bloc import questions_store as store
 from black_bloc.cogs.community import questions as questions_cog
 from black_bloc.cogs.community.questions import Questions
-from tests.questions_fakes import AFTER_GRACE, GUILD, HOME, SLOT, FakeMember, make_bot
+from tests.questions_fakes import AFTER_GRACE, GUILD, REAL, SLOT, FakeMember, make_bot
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ async def test_two_reconciles_at_boot_post_exactly_one_question(bot):
         cog.reconcile(AFTER_GRACE),
     )
 
-    assert len(bot.guild.get_channel(HOME).sent) == 1
+    assert len(bot.guild.get_channel(REAL).sent) == 1
     assert [row["body"] for row in await store.queued(bot.db, GUILD)] == ["two?"]
 
 
@@ -62,7 +62,7 @@ async def test_an_unavailable_server_is_skipped(bot):
 
     await cog.reconcile(AFTER_GRACE)
 
-    assert bot.guild.get_channel(HOME).sent == []
+    assert bot.guild.get_channel(REAL).sent == []
 
 
 async def test_a_stopped_loop_records_why_and_starts_again(bot, monkeypatch):

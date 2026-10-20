@@ -26,29 +26,8 @@ def test_every_sticky_route_refuses_a_non_staff_visitor(client, sign_in, method,
     assert client.request(method, route, json=payload).status_code == 403
 
 
-async def test_a_save_rehearses_and_answers_the_row_the_page_draws(
-    client, sign_in, web, guild, wf
-):
-    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.TEST_CHANNEL_ID)
-    sign_in(client)
-
-    response = client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"text": WORDS})
-
-    assert response.status_code == 200
-    found = response.json()
-    assert found["sticky"]["channel_id"] == str(wf.OTHER_CHANNEL_ID)
-    assert found["sticky"]["channel_name"] == "general"
-    assert found["sticky"]["state"] == "rehearsing"
-    assert found["sticky"]["posted_channel_id"] == str(wf.TEST_CHANNEL_ID)
-    assert "shadow" in found["message"]
-    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
-    copy = guild.get_channel(wf.TEST_CHANNEL_ID).messages[-1]
-    assert copy.content == WORDS
-    assert await wf.kinds_in(web.db) == ["web.sticky.set", "sticky.would_post"]
-
-
 async def test_on_posts_in_the_channel_and_the_list_says_live(client, sign_in, web, guild, wf):
-    await web.store.set(wf.GUILD_ID, "sticky_mode", "on")
+    await web.store.set(wf.GUILD_ID, "posts_mode", "on")
     sign_in(client)
 
     client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"text": WORDS})
@@ -62,7 +41,7 @@ async def test_on_posts_in_the_channel_and_the_list_says_live(client, sign_in, w
 
 
 async def test_pause_resume_and_remove_each_leave_one_web_row(client, sign_in, web, guild, wf):
-    await web.store.set(wf.GUILD_ID, "sticky_mode", "on")
+    await web.store.set(wf.GUILD_ID, "posts_mode", "on")
     sign_in(client)
     path = f"/api/sticky/{wf.OTHER_CHANNEL_ID}"
     client.put(path, json={"text": WORDS})
@@ -137,15 +116,18 @@ async def test_the_page_is_answered_in_channel_names_never_discord_markup(
     saved = client.put(path, json={"text": WORDS}).json()
     voice = client.put(f"/api/sticky/{wf.VOICE_CHANNEL_ID}", json={"text": WORDS}).json()
     await rules.write_trouble(
-        web.db, wf.GUILD_ID, wf.OTHER_CHANNEL_ID, rules.TROUBLE_HOME_GONE.format(home=424242)
+        web.db,
+        wf.GUILD_ID,
+        wf.OTHER_CHANNEL_ID,
+        rules.TROUBLE_PERMISSION.format(missing="Send Messages", channel_id=wf.OTHER_CHANNEL_ID),
     )
     listed = client.get("/api/sticky").json()[0]
     paused = client.post(f"{path}/pause").json()
     removed = client.delete(path).json()
 
-    assert "#general" in saved["message"] and "**shadow**" in saved["message"]
+    assert "#general" in saved["message"]
     assert "#voice" in voice["message"]
-    assert "424242" in listed["trouble"] and "sticky_shadow_channel_id" in listed["trouble"]
+    assert "#general" in listed["trouble"] and "Send Messages" in listed["trouble"]
     for words in (saved["message"], voice["message"], listed["trouble"], paused["message"]):
         assert "<#" not in words and "`" not in words
     assert removed["message"] == "Removed. #general has no sticky message now."
@@ -166,7 +148,7 @@ async def test_a_sticky_whose_channel_is_gone_still_lists_so_it_can_be_removed(
 async def test_a_post_can_be_the_sticky_and_the_list_names_it(client, sign_in, web, guild, wf):
     from black_bloc import posts
 
-    await web.store.set(wf.GUILD_ID, "sticky_mode", "on")
+    await web.store.set(wf.GUILD_ID, "posts_mode", "on")
     await posts.create_post(
         web.db, wf.GUILD_ID, slug="rules", title="House rules", body="Be kind.", pin=False
     )
@@ -188,7 +170,7 @@ async def test_a_post_can_be_the_sticky_and_the_list_names_it(client, sign_in, w
 async def test_post_to_test_sends_one_copy_and_the_row_reads_the_same(
     client, sign_in, web, guild, wf
 ):
-    await web.store.set(wf.GUILD_ID, "sticky_mode", "on")
+    await web.store.set(wf.GUILD_ID, "posts_mode", "on")
     await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.TEST_CHANNEL_ID)
     sign_in(client)
     client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"text": WORDS})
@@ -206,12 +188,3 @@ async def test_post_to_test_sends_one_copy_and_the_row_reads_the_same(
     assert after == before
     assert "web.sticky.rehearsed" in await wf.kinds_in(web.db)
 
-
-async def test_a_rehearsing_sticky_offers_no_post_to_test(client, sign_in, web, wf):
-    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.TEST_CHANNEL_ID)
-    sign_in(client)
-    client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"text": WORDS})
-
-    [row] = client.get("/api/sticky").json()
-
-    assert row["state"] == "rehearsing" and row["testable"] is False

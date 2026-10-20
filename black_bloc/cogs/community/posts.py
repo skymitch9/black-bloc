@@ -34,10 +34,10 @@ from ...posts import (
     CAPS,
     DO_NOT_PIN_IT,
     EMBED,
-    MODE_SHADOW_SAID,
     MODES,
     NO_SUCH_POST,
     NO_SUCH_VERSION,
+    OFF,
     PANEL_EMPTY,
     PANEL_INTRO,
     PANEL_TIMEOUT_FOOTER,
@@ -64,7 +64,6 @@ from ...posts import (
     get_post,
     get_version,
     has_test_copy,
-    in_shadow,
     is_posted,
     is_seeded,
     is_shipped_version,
@@ -87,9 +86,6 @@ from ...posts import (
     save_post,
     seed_posts,
     set_mode,
-    shadow_channel_id,
-    shadow_words,
-    shows_post_to_test,
     site_page_url,
     status_words,
     summary_chars,
@@ -158,10 +154,6 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         lines.append(PANEL_EMPTY)
     if posts_are_off(bot.store, guild.id):
         lines.append(POSTS_OFF)
-    elif in_shadow(bot.store, guild.id):
-        lines.append(
-            MODE_SHADOW_SAID.format(where=where_words(guild, shadow_channel_id(bot, guild)))
-        )
     embed = discord.Embed(title=PANEL_TITLE, description=clamped(lines))
     view = PostsView(panel_minutes(bot.store, guild.id))
     view.add_item(NewPostButton())
@@ -202,8 +194,6 @@ async def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Pos
             name_of(bot.store, guild.id, BLOCK_KINDS[kind]) for kind in mine if kind in BLOCK_KINDS
         )
         lines.append(BLOCKS_LINE.format(names=names))
-    if in_shadow(bot.store, guild.id):
-        lines.append(shadow_words(bot, guild, row))
     if has_test_copy(row, mode):
         lines.append(copy_line(bot, guild))
     body = preview_of(row)
@@ -221,7 +211,7 @@ async def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Pos
     view.add_item(VersionsButton(slug))
     view.add_item(BackButton())
     removes = REMOVE_CAP
-    if shows_post_to_test(mode):
+    if mode != OFF:
         view.add_item(RehearseButton(slug))
         removes -= 1
     for kind in mine[:removes]:

@@ -18,14 +18,13 @@ from .panels import Outcome, refusal
 LABEL = "Post to test"
 TESTED = "A test copy of this week's question is in <#{where}>. Nothing in the queue changed."
 TEST_OFF = (
-    "Weekly questions are off, so no test copy was sent. Set question_mode to shadow or on in "
-    "Settings first."
+    "Posts are off, so no test copy was sent. Turn posts_mode on on the Posts page first."
 )
 NOTHING_TO_TEST = (
     "There is no question to send a test copy of: the queue is empty. Add a question first."
 )
 NO_HOME_LINE = (
-    "**Post to test** — no rehearsal home is set. Pick question_shadow_channel_id or "
+    "**Post to test** — no rehearsal home is set. Pick posts_shadow_channel_id or "
     "shadow_channel_id in Settings."
 )
 

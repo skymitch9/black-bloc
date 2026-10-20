@@ -483,7 +483,9 @@ async def board_moved(
     if not changes:
         return (), ()
     lines = announce_lines(bot, guild, changes, after, top)
-    event = "top_changed" if mode_of(bot.store, guild.id) == ON else "would_announce"
+    from .points_announce import goes_out
+
+    event = "top_changed" if goes_out(bot.store, guild.id) else "would_announce"
     await note(
         bot,
         guild,

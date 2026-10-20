@@ -13,13 +13,10 @@ from black_bloc.cogs.community.frontdoor import (
     GONE,
     MOVED,
     POSTED,
-    POSTED_SHADOW,
     REDRAWN_ON_POST,
     RIDES_POST,
     TAKEN_DOWN,
-    TAKEN_DOWN_SHADOW,
     TICKET_BUTTON_HIDDEN,
-    UPDATED_SHADOW,
     WOULD_POST,
     DoorButton,
     DoorPanel,
@@ -30,7 +27,6 @@ from black_bloc.cogs.community.frontdoor import (
     TicketDoor,
     build_panel,
     post_door,
-    shadow_words,
     take_door_down,
 )
 from black_bloc.cogs.community.requests import REQUESTS_OFF, FileButton
@@ -40,7 +36,6 @@ from black_bloc.frontdoor import (
     CUSTOM_ID_TEMPLATE,
     DOOR_GUARDED,
     DOOR_NO_CHANNEL,
-    DOOR_NO_HOME,
     DOOR_NOT_UP,
     DOOR_OFF,
     EVENT,
@@ -56,8 +51,6 @@ from black_bloc.settings_store import (
     FRONTDOOR_MESSAGE,
     FRONTDOOR_MODE,
     FRONTDOOR_REPLACES_TICKET_BUTTON,
-    FRONTDOOR_SHADOW_HASH,
-    FRONTDOOR_SHADOW_MESSAGE,
     FRONTDOOR_TEXT,
     FRONTDOOR_TICKET_LABEL,
     FRONTDOOR_TITLE,
@@ -534,162 +527,19 @@ async def test_taking_down_a_door_that_is_not_up_is_refused_in_words(guarded, me
     assert outcome.message == DOOR_NOT_UP
 
 
-async def test_a_channel_test_mode_refuses_is_rehearsed_in_the_home_instead(guarded, member):
-    """The owner's whole ask: the mods review the real card somewhere they can see it."""
+async def test_a_channel_test_mode_refuses_is_refused_in_words_with_a_would_row(guarded, member):
+    """No rehearsal copy of the door any more: its wording is checked with Post to test."""
     other = guarded.guild.add(FakeText(777, name="welcome"))
     home = guarded.guild.get_channel(TEST_CHANNEL)
 
     outcome = await post_door(guarded, guarded.guild, member, other)
 
-    assert outcome.ok and str(TEST_CHANNEL) in outcome.message and "777" in outcome.message
-    assert not other.messages
-    copy = door_message(home)
-    assert door_labels(copy) == [label_for(guarded.store, GUILD, kind) for kind in KINDS]
-    assert not copy.content
-    assert guarded.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
-    assert guarded.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
+    assert not outcome.ok and outcome.code == "test_mode"
+    assert outcome.message == DOOR_GUARDED.format(wanted=777) and "Post to test" in outcome.message
+    assert not other.messages and not home.messages
     assert not guarded.store.get(GUILD, FRONTDOOR_MESSAGE)
-    assert POSTED_SHADOW in await kinds_in(guarded.db)
+    assert WOULD_POST in await kinds_in(guarded.db)
     assert POSTED not in await kinds_in(guarded.db)
-
-
-async def test_the_rehearsal_row_names_both_channels(guarded, member):
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-
-    await post_door(guarded, guarded.guild, member, other)
-
-    cur = await guarded.db.conn.execute(
-        "SELECT details FROM action_log WHERE kind = ? ORDER BY id DESC", (POSTED_SHADOW,)
-    )
-    details = json.loads((await cur.fetchone())["details"])
-    assert details["channel_id"] == TEST_CHANNEL and details["wanted_channel_id"] == 777
-
-
-async def test_with_no_rehearsal_home_at_all_the_door_only_writes_a_would_row(bot, member):
-    bot.guard = FakeGuard(test_channel_id=None)
-    other = bot.guild.add(FakeText(777, name="welcome"))
-
-    outcome = await post_door(bot, bot.guild, member, other)
-
-    assert not outcome.ok and outcome.message == DOOR_GUARDED
-    assert WOULD_POST in await kinds_in(bot.db)
-    assert not other.messages
-    assert not bot.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE)
-
-
-async def test_the_rehearsal_copy_is_left_alone_while_nothing_it_draws_has_changed(
-    guarded, cog, member
-):
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-    home = guarded.guild.get_channel(TEST_CHANNEL)
-    await post_door(guarded, guarded.guild, member, other)
-    before = door_message(home).id
-    stamp = guarded.store.get(GUILD, FRONTDOOR_SHADOW_HASH)
-
-    await cog.reconcile()
-
-    assert len(home.messages) == 1 and door_message(home).id == before
-    assert guarded.store.get(GUILD, FRONTDOOR_SHADOW_HASH) == stamp
-    assert UPDATED_SHADOW not in await kinds_in(guarded.db)
-
-
-async def test_rewording_the_door_edits_the_rehearsal_copy_in_place(guarded, cog, member):
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-    home = guarded.guild.get_channel(TEST_CHANNEL)
-    await post_door(guarded, guarded.guild, member, other)
-    before = door_message(home).id
-    await guarded.store.set(GUILD, FRONTDOOR_TITLE, "Stuck?")
-
-    await cog.reconcile()
-
-    assert len(home.messages) == 1 and door_message(home).id == before
-    assert door_message(home).kwargs["embed"].title == "Stuck?"
-    assert UPDATED_SHADOW in await kinds_in(guarded.db)
-
-
-async def test_a_rehearsal_copy_somebody_deleted_by_hand_is_put_back(guarded, cog, member):
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-    home = guarded.guild.get_channel(TEST_CHANNEL)
-    await post_door(guarded, guarded.guild, member, other)
-    home.messages.clear()
-
-    await cog.reconcile()
-
-    assert home.messages
-    assert guarded.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(door_message(home).id)
-    assert GONE in await kinds_in(guarded.db)
-
-
-async def test_the_rehearsal_copy_follows_the_key_to_a_new_home(guarded, cog, member):
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-    moved = guarded.guild.add(FakeText(888, name="welcome-test"))
-    old_home = guarded.guild.get_channel(TEST_CHANNEL)
-    await post_door(guarded, guarded.guild, member, other)
-    left_behind = door_message(old_home).id
-    await guarded.store.set(GUILD, SHADOW_CHANNEL, 888)
-    guarded.guard.rehearse_in(GUILD, 888)
-
-    await cog.reconcile()
-
-    assert moved.messages and not old_home.messages
-    assert left_behind in old_home.deleted
-    assert guarded.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(door_message(moved).id)
-
-
-async def test_switching_the_door_off_takes_the_rehearsal_copy_down_too(guarded, cog, member):
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-    home = guarded.guild.get_channel(TEST_CHANNEL)
-    await post_door(guarded, guarded.guild, member, other)
-    await guarded.store.set(GUILD, FRONTDOOR_MODE, "off")
-
-    await cog.reconcile()
-
-    assert not home.messages
-    assert not guarded.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE)
-    assert not guarded.store.get(GUILD, FRONTDOOR_SHADOW_HASH)
-    assert TAKEN_DOWN_SHADOW in await kinds_in(guarded.db)
-
-
-async def test_taking_the_door_down_by_hand_takes_the_rehearsal_copy_with_it(guarded, member):
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-    home = guarded.guild.get_channel(TEST_CHANNEL)
-    await post_door(guarded, guarded.guild, member, other)
-
-    outcome = await take_door_down(guarded, guarded.guild, member)
-
-    assert outcome.ok and "rehearsal copy" in outcome.message
-    assert not home.messages
-    assert not guarded.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE)
-
-
-async def test_the_rehearsal_copy_keeps_its_place_under_the_welcome_posts_own_copy(
-    guarded, cog, member
-):
-    """The order rule applies to the rehearsal copies: the welcome copy is what is compared."""
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-    home = guarded.guild.get_channel(TEST_CHANNEL)
-    await post_door(guarded, guarded.guild, member, other)
-    copy_id = door_message(home).id
-    await seed_post(guarded.db, channel_id=777, shadow_message_id=copy_id + 10)
-
-    await cog.reconcile()
-
-    said = await kinds_in(guarded.db)
-    assert BELOW_POST in said
-    assert door_message(home).id > copy_id
-    assert guarded.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(door_message(home).id)
-
-
-async def test_the_buttons_on_the_rehearsal_copy_are_the_real_dynamic_ones(guarded, member):
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-    home = guarded.guild.get_channel(TEST_CHANNEL)
-
-    await post_door(guarded, guarded.guild, member, other)
-
-    copy = door_message(home)
-    assert [one.custom_id for one in copy.view.children] == [
-        custom_id(kind, GUILD) for kind in KINDS
-    ]
 
 
 async def test_a_channel_black_bloc_cannot_see_is_refused_in_words(guarded, member):
@@ -943,239 +793,12 @@ async def aim_the_door(bot, *, channel_id=777, mode="on"):
     await bot.store.set(GUILD, FRONTDOOR_MODE, mode)
 
 
-async def test_shadow_posts_the_copy_in_the_rehearsal_home_and_nothing_in_the_real_channel(
-    live, member
-):
-    """The owner's ask: live, and still not in #welcome."""
-    welcome = live.guild.get_channel(777)
-    home = live.guild.get_channel(888)
-    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    outcome = await post_door(live, live.guild, member, welcome)
-
-    assert outcome.ok and not welcome.messages
-    copy = door_message(home)
-    assert not copy.content
-    assert door_labels(copy) == [label_for(live.store, GUILD, kind) for kind in KINDS]
-    assert live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
-    assert live.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
-    assert not live.store.get(GUILD, FRONTDOOR_MESSAGE)
-    assert POSTED_SHADOW in await kinds_in(live.db)
-    assert POSTED not in await kinds_in(live.db)
-
-
-async def test_the_front_doors_own_home_wins_over_the_global_one(live, member):
-    """Owner, 2026-09-25: the door rehearses in #welcome-test, everything else in the log."""
-    welcome = live.guild.get_channel(777)
-    home = live.guild.get_channel(888)
-    await live.store.set(GUILD, SHADOW_CHANNEL, LOG_CHANNEL)
-    await live.store.set(GUILD, "frontdoor_shadow_channel_id", 888)
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    outcome = await post_door(live, live.guild, member, welcome)
-
-    assert outcome.ok and door_message(home) is not None
-    assert not live.guild.get_channel(LOG_CHANNEL).messages
-    cur = await live.db.conn.execute(
-        "SELECT details FROM action_log WHERE kind = ? ORDER BY id DESC", (POSTED_SHADOW,)
-    )
-    assert json.loads((await cur.fetchone())["details"])["shadow_home"] == 888
-
-
-async def test_the_shadow_sentence_says_shadow_rather_than_test_mode(live, member):
-    welcome = live.guild.get_channel(777)
-    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    outcome = await post_door(live, live.guild, member, welcome)
-
-    assert "shadow" in outcome.message and "test mode" not in outcome.message
-    assert "888" in outcome.message and "777" in outcome.message
-
-
-async def test_turning_the_door_to_shadow_takes_the_real_one_down_and_puts_a_copy_up(
-    live, cog, member
-):
-    welcome = live.guild.get_channel(777)
-    home = live.guild.get_channel(888)
-    await aim_the_door(live)
-    await post_door(live, live.guild, member, welcome)
-    real_id = door_message(welcome).id
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    await cog.reconcile()
-
-    assert real_id in welcome.deleted and not welcome.messages
-    assert not live.store.get(GUILD, FRONTDOOR_MESSAGE)
-    assert live.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
-    assert live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(door_message(home).id)
-    said = await kinds_in(live.db)
-    assert TAKEN_DOWN in said and POSTED_SHADOW in said
-
-
-async def test_turning_it_back_on_takes_the_copy_down_and_posts_the_real_door(
-    live, cog, member
-):
-    welcome = live.guild.get_channel(777)
-    home = live.guild.get_channel(888)
-    await aim_the_door(live, mode="shadow")
-    await cog.reconcile()
-    copy_id = door_message(home).id
-    await live.store.set(GUILD, FRONTDOOR_MODE, "on")
-
-    await cog.reconcile()
-
-    assert copy_id in home.deleted and not home.messages
-    assert not live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE)
-    assert not live.store.get(GUILD, FRONTDOOR_SHADOW_HASH)
-    assert live.store.get(GUILD, FRONTDOOR_MESSAGE) == str(door_message(welcome).id)
-    said = await kinds_in(live.db)
-    assert TAKEN_DOWN_SHADOW in said and POSTED in said
-
-
-async def test_a_blank_rehearsal_home_rehearses_in_the_log_channel(live, cog, member):
-    welcome = live.guild.get_channel(777)
-    log = live.guild.get_channel(LOG_CHANNEL)
-    await live.store.set(GUILD, FRONTDOOR_CHANNEL, 777)
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    await cog.reconcile()
-
-    assert log.messages and not welcome.messages
-    assert live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(door_message(log).id)
-
-
-async def test_shadow_with_nowhere_to_rehearse_at_all_posts_nothing_and_says_why(live, member):
-    welcome = live.guild.get_channel(777)
-    live.settings = load_settings(_env_file=None, test_mode=False, test_channel_id=None)
-    live.store.settings = live.settings
-    await live.store.clear(GUILD, "log_channel_id")
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    outcome = await post_door(live, live.guild, member, welcome)
-
-    assert not outcome.ok and outcome.message == DOOR_NO_HOME
-    assert "shadow_channel_id" in outcome.message and "test mode" not in outcome.message
-    assert not welcome.messages
-    assert WOULD_POST in await kinds_in(live.db)
-
-
-async def test_the_sweep_keeps_the_copy_current_and_leaves_the_real_channel_alone(
-    live, cog, member
-):
-    welcome = live.guild.get_channel(777)
-    home = live.guild.get_channel(888)
-    await aim_the_door(live, mode="shadow")
-    await cog.reconcile()
-    copy_id = door_message(home).id
-    await live.store.set(GUILD, FRONTDOOR_TITLE, "Stuck?")
-
-    await cog.reconcile()
-
-    assert len(home.messages) == 1 and door_message(home).id == copy_id
-    assert door_message(home).kwargs["embed"].title == "Stuck?"
-    assert not welcome.messages
-    assert UPDATED_SHADOW in await kinds_in(live.db)
-
-
-async def test_ask_still_answers_while_the_door_is_rehearsing(live, cog, member):
-    await aim_the_door(live, mode="shadow")
-    interaction = FakeInteraction(live, member)
-
-    await cog.ask.callback(cog, interaction)
-
-    sent = interaction.response.messages[-1]
-    assert sent["ephemeral"] is True and isinstance(sent["view"], DoorPanel)
-    assert interaction.sent != DOOR_OFF
-
-
-async def test_the_ask_panel_tells_a_STAFFER_the_door_is_rehearsing_and_a_member_nothing(
-    live, cog, member, staffer
-):
-    await aim_the_door(live, mode="shadow")
-
-    for_staff, _view = build_panel(live, live.guild, staffer)
-    for_member, _also = build_panel(live, live.guild, member)
-
-    said = (for_staff.footer.text or "") if for_staff.footer else ""
-    assert said.startswith("shadow") and "rehearsing in #welcome-test" in said
-    assert said.endswith("nothing is in #welcome.")
-    assert for_member.footer is None or not for_member.footer.text
-
-
 async def test_the_staff_line_is_empty_while_the_door_is_simply_on(live, staffer):
     await aim_the_door(live)
 
     embed, _view = build_panel(live, live.guild, staffer)
 
     assert embed.footer is None or not embed.footer.text
-    assert shadow_words(live, live.guild) == ""
-
-
-async def test_the_ticket_button_follows_the_door_into_shadow(live, cog, member):
-    welcome = live.guild.get_channel(777)
-    home = live.guild.get_channel(888)
-    button_id = await put_the_ticket_button_up(live, welcome)
-    await aim_the_door(live, mode="shadow")
-
-    await cog.reconcile()
-    await Modmail(live)._repanel(live.guild)
-
-    assert button_id in welcome.deleted and not welcome.messages
-    assert not live.store.get(GUILD, MODMAIL_PANEL_MESSAGE)
-    assert live.store.get(GUILD, MODMAIL_PANEL_CHANNEL) == 777
-    assert len(home.messages) == 1
-    assert TICKET_BUTTON_HIDDEN in await kinds_in(live.db)
-
-
-async def test_a_ticket_button_in_another_channel_follows_the_door_into_shadow_too(
-    live, cog, member
-):
-    """`frontdoor_replaces_ticket_button` is the switch, not the channel it happens to be in."""
-    elsewhere = live.guild.add(FakeText(778, name="help"))
-    button_id = await put_the_ticket_button_up(live, elsewhere)
-    await aim_the_door(live, mode="shadow")
-
-    await cog.reconcile()
-    await Modmail(live)._repanel(live.guild)
-
-    assert button_id in elsewhere.deleted and not elsewhere.messages
-    assert not live.store.get(GUILD, MODMAIL_PANEL_MESSAGE)
-
-
-async def test_the_ticket_button_keeps_its_own_rules_in_shadow_when_the_key_is_off(
-    live, cog, member
-):
-    welcome = live.guild.get_channel(777)
-    button_id = await put_the_ticket_button_up(live, welcome)
-    await aim_the_door(live, mode="shadow")
-    await live.store.set(GUILD, FRONTDOOR_REPLACES_TICKET_BUTTON, False)
-
-    await cog.reconcile()
-    await Modmail(live)._repanel(live.guild)
-
-    assert button_id not in welcome.deleted
-    assert live.store.get(GUILD, MODMAIL_PANEL_MESSAGE) == str(button_id)
-
-
-async def test_coming_out_of_shadow_lets_modmails_own_sweep_put_its_button_back(
-    live, cog, member
-):
-    welcome = live.guild.get_channel(777)
-    elsewhere = live.guild.add(FakeText(778, name="help"))
-    await put_the_ticket_button_up(live, elsewhere)
-    await aim_the_door(live, mode="shadow")
-    await cog.reconcile()
-    await live.store.set(GUILD, FRONTDOOR_MODE, "on")
-
-    await cog.reconcile()
-    await Modmail(live)._repanel(live.guild)
-
-    assert welcome.messages
-    assert live.store.get(GUILD, MODMAIL_PANEL_MESSAGE)
-    assert "modmail.panel_posted" in await kinds_in(live.db)
-# --- the boot double-post, 2026-09-18 16:08 ---------------------------------------------------
 
 
 def yields_before_it_sends(channel, turns=4):
@@ -1475,7 +1098,7 @@ async def test_taking_the_door_down_redraws_the_post_without_it_and_turns_carryi
     assert message.edits[-1]["embeds"] == [] and message.edits[-1]["view"] is None
     fresh = await posts.get_post_by_id(live.db, int(row["id"]))
     assert not posts.carries_door(fresh) and not posts.door_drawn(fresh)
-    for key in (FRONTDOOR_CHANNEL, FRONTDOOR_MESSAGE, FRONTDOOR_SHADOW_MESSAGE):
+    for key in (FRONTDOOR_CHANNEL, FRONTDOOR_MESSAGE):
         assert not live.store.get(GUILD, key)
 
 
@@ -1495,69 +1118,6 @@ async def test_switching_the_door_off_drops_its_part_and_keeps_the_post_carrying
     fresh = await posts.get_post_by_id(live.db, int(row["id"]))
     assert posts.carries_door(fresh) and not posts.door_drawn(fresh)
     assert not live.store.get(GUILD, FRONTDOOR_MESSAGE)
-
-
-async def test_in_shadow_the_one_message_goes_to_the_posts_rehearsal_home(live, member):
-    """Both modes shadow: #welcome-test gets the combined message, #welcome gets nothing."""
-    welcome = live.guild.get_channel(777)
-    home = live.guild.get_channel(888)
-    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
-    await live.store.set(GUILD, "posts_mode", "shadow")
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    await published(live, await a_carrier(live), member)
-
-    assert welcome.messages == [] and len(home.messages) == 1
-    copy = home.messages[0]
-    assert copy.content == RULES
-    assert copy.embeds[-1].footer.text is None
-    assert door_ids(copy) == [custom_id(kind, GUILD) for kind in KINDS]
-    assert live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
-    assert not live.store.get(GUILD, FRONTDOOR_MESSAGE)
-    assert live.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
-
-
-async def test_the_posts_own_rehearsal_home_wins_where_the_one_message_goes(live, member):
-    home = live.guild.get_channel(888)
-    elsewhere = live.guild.add(FakeText(889, name="door-test"))
-    await live.store.set(GUILD, SHADOW_CHANNEL, 889)
-    await live.store.set(GUILD, "posts_shadow_channel_id", 888)
-    await live.store.set(GUILD, "posts_mode", "shadow")
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    await published(live, await a_carrier(live), member)
-
-    assert len(home.messages) == 1 and elsewhere.messages == []
-
-
-async def test_a_shadowed_door_on_a_live_post_rides_it_with_no_note(live, member):
-    """The modes differ: the post's decides where the message goes."""
-    welcome = live.guild.get_channel(777)
-    home = live.guild.get_channel(888)
-    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
-    await live.store.set(GUILD, "posts_mode", "on")
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    await published(live, await a_carrier(live), member)
-
-    assert home.messages == [] and len(welcome.messages) == 1
-    assert welcome.messages[0].embeds[-1].footer.text is None
-
-
-async def test_the_shadow_copy_of_the_door_on_its_own_goes_when_the_post_carries_it(
-    live, member
-):
-    welcome = live.guild.get_channel(777)
-    home = live.guild.get_channel(888)
-    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
-    await live.store.set(GUILD, "posts_mode", "shadow")
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-    await post_door(live, live.guild, member, welcome)
-    alone = home.messages[0].id
-
-    await published(live, await a_carrier(live), member)
-
-    assert len(home.messages) == 1 and alone in home.deleted
 
 
 async def test_the_buttons_on_the_carrying_message_still_open_a_ticket_after_a_restart(

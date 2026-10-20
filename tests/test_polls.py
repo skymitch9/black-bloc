@@ -730,18 +730,17 @@ class ShadowGuild:
         return self.channels.get(channel_id)
 
 
-def test_the_three_poll_modes_are_off_shadow_and_on():
-    assert polls.MODES == ("off", "shadow", "on")
-    assert polls.mode_of(ShadowStore(poll_mode="shadow"), 7) == polls.SHADOW
-    assert polls.in_shadow(ShadowStore(poll_mode="shadow"), 7)
+def test_the_two_poll_modes_are_off_and_on():
+    assert polls.MODES == ("off", "on")
     assert polls.polls_are_off(ShadowStore(poll_mode="off"), 7)
+    assert not polls.polls_are_off(ShadowStore(poll_mode="on"), 7)
 
 
 def test_a_mode_nobody_wrote_reads_as_on_rather_than_silently_off():
     """A row missing or spelled wrong must not turn polls off behind somebody's back."""
     assert polls.mode_of(ShadowStore(), 7) == polls.ON
     assert polls.mode_of(ShadowStore(poll_mode="rehearsal"), 7) == polls.ON
-    assert polls.mode_of(ShadowStore(poll_mode=" SHADOW "), 7) == polls.SHADOW
+    assert polls.mode_of(ShadowStore(poll_mode=" OFF "), 7) == polls.OFF
 
 
 def test_a_rehearsal_goes_where_the_shared_resolution_says():
@@ -753,41 +752,6 @@ def test_a_rehearsal_goes_where_the_shared_resolution_says():
 
     assert polls.shadow_channel_id(bot, SimpleNamespace(id=7)) == 111
     assert polls.shadow_channel_ids(bot, SimpleNamespace(id=7)) == [111, 222]
-
-
-def test_the_shadow_note_names_the_channel_the_poll_would_have_gone_to():
-    guild = ShadowGuild({555: SimpleNamespace(name="announcements")})
-    where = polls.where_words(guild, 555)
-
-    assert where == "#announcements"
-    assert polls.shadow_note(ShadowStore(), 7, where) == polls.SHADOW_NOTE.format(channel=where)
-
-
-def test_staff_may_write_their_own_shadow_note_and_it_still_takes_the_channel():
-    store = ShadowStore(poll_shadow_note="Rehearsing. It was bound for {channel}.")
-
-    assert polls.shadow_note(store, 7, "#announcements") == (
-        "Rehearsing. It was bound for #announcements."
-    )
-
-
-@pytest.mark.parametrize(
-    "written",
-    [
-        pytest.param("It was bound for {nonsense}.", id="checklist-17-bad-placeholder"),
-        pytest.param("   ", id="blank-is-not-an-empty-line"),
-    ],
-)
-def test_a_shadow_note_that_cannot_be_used_falls_back_to_the_default(written):
-    store = ShadowStore(poll_shadow_note=written)
-
-    assert polls.shadow_note(store, 7, "#here") == polls.SHADOW_NOTE.format(channel="#here")
-
-
-def test_the_shadow_line_sits_above_the_usual_open_line_and_never_replaces_it():
-    said = polls.shadow_open_text("Rehearsing.", 900, 5)
-
-    assert said.splitlines() == ["Rehearsing.", "<@&5> <@900> started a poll."]
 
 
 def test_a_channel_black_bloc_cannot_see_is_said_so_and_never_guessed_at():

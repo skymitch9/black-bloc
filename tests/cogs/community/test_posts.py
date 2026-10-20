@@ -244,37 +244,6 @@ async def test_the_panel_says_in_words_when_posts_are_off(bot, staff):
     assert picked(view) == "off"
 
 
-async def test_the_panel_says_where_shadow_puts_it_and_the_select_shows_the_third_value(
-    bot, staff
-):
-    await a_post(bot)
-    await bot.store.set(GUILD, posts.MODE_KEY, "shadow")
-
-    embed, view = await cog.build_panel(bot, bot.guild, staff)
-
-    assert "Posts are in shadow" in embed.description
-    assert "#blackbloc-logs" in embed.description
-    assert posts.POSTS_OFF not in embed.description
-    mode = next(one for one in view.children if getattr(one, "placeholder", None) == cog.MODE_PICK)
-    assert [one.value for one in mode.options] == ["off", "shadow", "on"]
-    assert [one.label for one in mode.options] == [
-        cog.MODE_OPTION.format(mode=one) for one in ("off", "shadow", "on")
-    ]
-    assert picked(view) == "shadow"
-
-
-async def test_the_card_says_where_a_shadow_press_would_actually_go(bot, staff):
-    row = await a_post(bot, slug="welcome-here", channel_id=WELCOME_CHANNEL)
-    await bot.store.set(GUILD, posts.MODE_KEY, "shadow")
-
-    embed, _ = await cog.build_card(bot, bot.guild, row)
-
-    assert posts.SHADOW_LINE.format(shadow="#blackbloc-logs", where="#welcome") in embed.description
-
-
-# --- the card ---------------------------------------------------------------------------------
-
-
 async def test_the_card_offers_post_it_before_it_is_posted_and_update_after(bot, staff):
     row = await a_post(bot)
 
@@ -417,17 +386,16 @@ async def test_the_pin_button_saves_through_the_one_shared_path(bot, staff):
     assert await kinds(bot.db) == ["post.saved"]
 
 
-async def test_the_mode_select_reaches_all_three_and_writes_one_row_each(bot, staff):
-    said = await posts.set_mode(bot, bot.guild, staff, "shadow")
-
-    assert bot.store.get(GUILD, posts.MODE_KEY) == "shadow"
-    assert "#blackbloc-logs" in said
-    assert await kinds(bot.db) == ["post.mode"]
-
+async def test_the_mode_select_reaches_both_and_writes_one_row_each(bot, staff):
     off = await posts.set_mode(bot, bot.guild, staff, "off")
 
     assert bot.store.get(GUILD, posts.MODE_KEY) == "off"
-    assert "`/posts` disappears" in off
+    assert "`/sticky`" in off and "`/questions`" in off
+    assert await kinds(bot.db) == ["post.mode"]
+
+    on = await posts.set_mode(bot, bot.guild, staff, "on")
+
+    assert bot.store.get(GUILD, posts.MODE_KEY) == "on" and on == posts.MODE_ON_SAID
     assert await kinds(bot.db) == ["post.mode", "post.mode"]
 
 
@@ -658,17 +626,15 @@ def rehearse_button(view):
     return next((one for one in view.children if isinstance(one, cog.RehearseButton)), None)
 
 
-async def test_post_to_test_is_hidden_in_shadow_and_beside_post_it_otherwise(bot, staff):
+async def test_post_to_test_sits_beside_post_it_while_posts_are_on_and_goes_when_off(bot, staff):
     row = await a_post(bot)
 
     _, on = await cog.build_card(bot, bot.guild, row)
-    await bot.store.set(GUILD, posts.MODE_KEY, "shadow")
-    _, shadow = await cog.build_card(bot, bot.guild, row)
     await bot.store.set(GUILD, posts.MODE_KEY, "off")
     _, off = await cog.build_card(bot, bot.guild, row)
 
-    assert posts.POST_TO_TEST in labels(on) and posts.POST_TO_TEST in labels(off)
-    assert posts.POST_TO_TEST not in labels(shadow), "Post it already goes to #post-test"
+    assert posts.POST_TO_TEST in labels(on)
+    assert posts.POST_TO_TEST not in labels(off), "a press would only be refused"
     assert rehearse_button(on).row == 1
     assert rehearse_button(on).style == discord.ButtonStyle.secondary
 
@@ -679,13 +645,13 @@ async def test_post_to_test_takes_one_remove_slot_so_no_row_holds_more_than_five
         await post_blocks.attach(bot.db, row, kind)
 
     _, on = await cog.build_card(bot, bot.guild, row)
-    await bot.store.set(GUILD, posts.MODE_KEY, "shadow")
-    _, shadow = await cog.build_card(bot, bot.guild, row)
+    await bot.store.set(GUILD, posts.MODE_KEY, "off")
+    _, off = await cog.build_card(bot, bot.guild, row)
 
     removes_on = [one for one in on.children if isinstance(one, cog.RemoveBlockButton)]
-    removes_shadow = [one for one in shadow.children if isinstance(one, cog.RemoveBlockButton)]
-    assert len(removes_on) == cog.REMOVE_CAP - 1 and len(removes_shadow) == cog.REMOVE_CAP
-    for view in (on, shadow):
+    removes_off = [one for one in off.children if isinstance(one, cog.RemoveBlockButton)]
+    assert len(removes_on) == cog.REMOVE_CAP - 1 and len(removes_off) == cog.REMOVE_CAP
+    for view in (on, off):
         assert all(
             len([c for c in view.children if getattr(c, "row", None) == n]) <= 5
             for n in range(5)

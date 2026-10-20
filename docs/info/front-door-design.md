@@ -414,3 +414,14 @@ S8. **`docs/TODO.md`, `docs/DONE.md`, `docs/deploys.log` and `docs/KNOWN_ISSUES.
   runs the reconcile as normal.
 - **Nothing was merged or deployed**, and the two orphan messages the incident left were
   removed by the conductor by hand before this branch existed.
+
+## Follow-up 2026-10-19 — the Posts page's one switch (branch `posts-one-switch`, NOT merged)
+
+Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole build is [`posts-one-switch-design.md`](posts-one-switch-design.md).
+
+- `frontdoor_mode` is **off / on**. A door carried by a post goes where the post goes; its wording is checked with that post's Post to test.
+- `frontdoor_shadow_channel_id`, `frontdoor_shadow_message_id` and `frontdoor_shadow_hash` are **retired** with every reader (`rehearse_door`, `drop_rehearsal`, `start_rehearsing`, `shadow_words`, `hide_rehearsed_ticket_button`, the rehearsal half of `mirror_the_ride` / `release_the_ride`).
+- Live `frontdoor_shadow_message_id` (`1560105628234420427`, a message in #post-test) is forgotten by the migration; the message is left alone.
+- `modmail_panel_shadow_message_id` / `_hash` are **kept**: the ticket button still rehearses under `TEST_MODE`, now in `shadow_channel_id` (posts-one-switch-design §6).
+
+Deviations: (1) under `TEST_MODE` a standalone door no longer rehearses: `post_door` refuses with `DOOR_GUARDED` (which names Post to test) and writes `frontdoor.would_post`; (2) a stored `frontdoor_mode = shadow` migrates to **off**, not on.

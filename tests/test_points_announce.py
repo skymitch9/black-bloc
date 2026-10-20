@@ -14,26 +14,27 @@ def moved(lines=LINES):
     return Outcome(True, "done", value=Result(1, announce=tuple(lines)))
 
 
-async def test_shadow_posts_one_rehearsal_to_the_home_and_never_pings(bot):
-    await bot.store.set(GUILD, "points_ping_role_id", 777)
+async def test_points_in_shadow_still_post_in_the_points_channel_while_posts_are_on(bot):
+    """Owner, 2026-10-19 (switch audit p1f): the Posts switch places it, never points_mode."""
+    assert bot.store.get(GUILD, "points_mode") == "shadow"
+    await bot.store.set(GUILD, "points_shadow_channel_id", REHEARSAL)
 
     said = await announce_.announce(bot, bot.guild, moved())
 
-    assert said == announce_.REHEARSED
-    [post] = bot.guild.channels[REHEARSAL].messages
-    assert not post.content
+    assert said == announce_.POSTED
+    [post] = bot.guild.channels[SPEED].messages
     assert post.kwargs["embed"].title == "Leaderboard update"
     assert post.kwargs["embed"].description == "\n".join(LINES)
-    assert post.kwargs["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()
+    assert bot.guild.channels[REHEARSAL].messages == []
+
+
+async def test_posts_off_posts_nothing_anywhere(bot):
+    await bot.store.set(GUILD, "posts_mode", "off")
+
+    said = await announce_.announce(bot, bot.guild, moved())
+
+    assert said == announce_.NOT_POSTED
     assert bot.guild.channels[SPEED].messages == []
-
-
-async def test_the_points_own_shadow_home_wins_over_the_global_one(bot):
-    await bot.store.set(GUILD, "points_shadow_channel_id", SPEED)
-
-    await announce_.announce(bot, bot.guild, moved())
-
-    assert len(bot.guild.channels[SPEED].messages) == 1
     assert bot.guild.channels[REHEARSAL].messages == []
 
 

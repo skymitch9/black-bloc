@@ -1,4 +1,3 @@
-import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -2822,120 +2821,6 @@ async def shadow_poll(cog, bot, who, **kwargs):
     return await make(cog, bot, who, channel=elsewhere, **kwargs)
 
 
-async def test_in_shadow_the_real_poll_goes_to_the_shadow_channel_with_a_line_saying_why(
-    cog, bot, lead, db
-):
-    interaction = await shadow_poll(cog, bot, lead)
-
-    rehearsal = bot.guild.get_channel(TEST_CHANNEL)
-    assert bot.guild.get_channel(OTHER_CHANNEL).polls == []
-    assert len(rehearsal.polls) == 1
-    said = rehearsal.polls[0].content
-    assert said.startswith("Posted here because polls are in **shadow**")
-    assert "#general" in said.splitlines()[0]
-    assert said.splitlines()[1] == f"<@{lead.id}> started a poll."
-    assert "is up" in interaction.sent
-
-
-async def test_a_rehearsed_row_keeps_the_channel_it_was_aimed_at_and_remembers_the_copy(
-    cog, bot, lead, db
-):
-    """The card, the site's Where column and the results all read `channel_id`, so the
-    rehearsal must not overwrite it — the copy's id goes in `shadow_message_id`."""
-    await shadow_poll(cog, bot, lead)
-
-    row = await get_poll(db, 1)
-    copy = bot.guild.get_channel(TEST_CHANNEL).polls[0]
-    assert row["channel_id"] == OTHER_CHANNEL
-    assert row["message_id"] == copy.id
-    assert row["shadow_message_id"] == copy.id
-
-
-async def test_a_rehearsal_is_logged_as_opened_shadow_with_both_channel_ids(cog, bot, lead, db):
-    await shadow_poll(cog, bot, lead)
-
-    assert await action_kinds(db) == ["poll.created", "poll.opened_shadow", "poll.pinned"]
-    cur = await db.conn.execute(
-        "SELECT details FROM action_log WHERE kind = 'poll.opened_shadow'"
-    )
-    details = json.loads((await cur.fetchone())["details"])
-    assert details["channel_id"] == OTHER_CHANNEL
-    assert details["shadow_channel_id"] == TEST_CHANNEL
-
-
-async def test_a_poll_rehearses_in_its_own_home_when_one_is_set(cog, bot, lead, db):
-    await bot.store.set(GUILD, "poll_shadow_channel_id", LOG_CHANNEL)
-    bot.guard.own_channel(LOG_CHANNEL)
-
-    await shadow_poll(cog, bot, lead)
-
-    assert len(bot.guild.get_channel(LOG_CHANNEL).polls) == 1
-    assert bot.guild.get_channel(TEST_CHANNEL).polls == []
-    cur = await db.conn.execute(
-        "SELECT details FROM action_log WHERE kind = 'poll.opened_shadow'"
-    )
-    assert json.loads((await cur.fetchone())["details"])["shadow_home"] == LOG_CHANNEL
-
-
-async def test_would_open_is_never_written_in_shadow_because_the_poll_really_opened(
-    cog, bot, lead, db
-):
-    await shadow_poll(cog, bot, lead)
-
-    assert "poll.would_open" not in await action_kinds(db)
-    assert (await get_poll(db, 1))["status"] == pure.OPEN
-
-
-async def test_a_rehearsal_with_nowhere_to_rehearse_says_so_and_writes_no_message(
-    cog, bot, lead, db
-):
-    bot.guard = None
-    await bot.store.set(GUILD, "log_channel_id", 99999)
-    await rehearse(bot)
-
-    await make(cog, bot, lead, channel=bot.guild.get_channel(OTHER_CHANNEL))
-
-    cur = await db.conn.execute("SELECT details FROM action_log WHERE kind = 'poll.open_failed'")
-    assert json.loads((await cur.fetchone())["details"])["reason"] == "no_shadow_channel"
-    assert bot.guild.get_channel(TEST_CHANNEL).polls == []
-    assert bot.guild.get_channel(OTHER_CHANNEL).polls == []
-
-
-async def test_a_vote_on_a_rehearsed_poll_counts_exactly_as_one_on_a_real_poll(
-    cog, bot, lead, db
-):
-    await shadow_poll(cog, bot, lead)
-    row = await get_poll(db, 1)
-    payload = discord.RawPollVoteActionEvent(
-        {
-            "user_id": "10",
-            "channel_id": str(TEST_CHANNEL),
-            "message_id": str(row["message_id"]),
-            "guild_id": str(GUILD),
-            "answer_id": 1,
-        }
-    )
-
-    await cog.on_raw_poll_vote_add(payload)
-
-    assert [(v["user_id"], v["label"]) for v in await votes_of(db, 1)] == [(10, "Pizza")]
-
-
-async def test_ending_a_rehearsed_poll_publishes_the_result_beside_the_rehearsal(
-    cog, bot, lead, db
-):
-    await shadow_poll(cog, bot, lead)
-    rehearsal = bot.guild.get_channel(TEST_CHANNEL)
-    await vote(rehearsal, 0, FakeMember(bot.guild, 10, "Ann"))
-
-    interaction = await end_poll(cog, bot, lead)
-
-    assert (await get_poll(db, 1))["status"] == pure.CLOSED
-    assert "result is posted" in interaction.sent
-    assert rehearsal.messages[-1].kwargs["embed"].title == "Pizza or tacos?"
-    assert bot.guild.get_channel(OTHER_CHANNEL).messages == []
-
-
 async def test_a_poll_is_pinned_when_it_opens_and_unpinned_when_it_closes(cog, bot, lead, db):
     await make(cog, bot, lead)
     posted = bot.guild.get_channel(TEST_CHANNEL).polls[0]
@@ -2964,14 +2849,6 @@ async def test_a_cancelled_poll_does_not_stay_pinned_for_ever(cog, bot, lead, db
 
     assert posted.pinned is False
     assert "poll.unpinned" in await action_kinds(db)
-
-
-async def test_a_rehearsal_is_pinned_in_the_shadow_channel_so_staff_see_the_real_thing(
-    cog, bot, lead, db
-):
-    await shadow_poll(cog, bot, lead)
-
-    assert bot.guild.get_channel(TEST_CHANNEL).polls[0].pinned is True
 
 
 async def test_the_pin_notice_discord_adds_is_taken_away_again(cog, bot, lead, db):
@@ -3053,21 +2930,21 @@ async def test_somebody_who_may_not_create_a_poll_gets_no_where_select(cog, bot,
     ]
 
 
-async def test_flipping_shadow_to_on_leaves_an_open_rehearsal_where_it_is(cog, bot, lead, db):
-    await shadow_poll(cog, bot, lead)
-    copy = bot.guild.get_channel(TEST_CHANNEL).polls[0]
 
-    await bot.store.set(GUILD, "poll_mode", pure.ON)
+async def test_post_to_test_on_the_preview_sends_a_copy_and_leaves_the_draft_unwritten(
+    cog, bot, lead, db
+):
+    opened, _ = await fresh_draft(cog, bot, lead)
+    assert has_item(card_view(opened), "Post to test")
 
-    row = await get_poll(db, 1)
-    assert row["status"] == pure.OPEN
-    assert row["message_id"] == copy.id and row["shadow_message_id"] == copy.id
-    assert bot.guild.get_channel(OTHER_CHANNEL).polls == []
+    interaction = await click(bot, lead, find_item(card_view(opened), "Post to test"))
+
+    assert await get_poll(db, 1) is None
+    assert "test copy of the poll" in interaction.sent
+    assert await action_kinds(db) == ["poll.rehearsed"]
 
 
-async def test_the_staff_block_counts_the_open_polls_that_are_rehearsals(cog, bot, lead, db):
-    await shadow_poll(cog, bot, lead)
+async def test_a_preview_that_cannot_be_posted_offers_no_post_to_test(cog, bot, lead, db):
+    opened, _ = await fresh_draft(cog, bot, lead, options="Pizza")
 
-    panel = await open_panel(cog, bot, lead)
-
-    assert "**1** posted in shadow" in panel_embed(panel).description
+    assert not has_item(card_view(opened), "Post to test")

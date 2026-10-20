@@ -188,15 +188,13 @@
       "faults": [
         {"symptom": "No Create button", "answer": "Creating is staff-only on this server. The panel says who may."},
         {"symptom": "Your poll is waiting on a decision", "answer": "Review is on. Staff approve it from /poll and you are DMed."},
-        {"symptom": "You want to finish later", "answer": "Press **Save for later** on the preview — it reads Save (replaces your draft) when you already have one. /poll offers **Resume draft** next time. One draft per person."},
-        {"symptom": "The poll went to the log channel, not the one you picked", "answer": "Polls are in **shadow**: every poll is posted for real, but into the log channel, with a line saying where it would have gone. It is a rehearsal — staff turn polls **on** when the server is ready."}
+        {"symptom": "You want to finish later", "answer": "Press **Save for later** on the preview — it reads Save (replaces your draft) when you already have one. /poll offers **Resume draft** next time. One draft per person."}
       ],
       "facts": [
         {"kind": "setting", "ref": "poll_mode"},
         {"kind": "setting", "ref": "poll_who_can_create"},
         {"kind": "setting", "ref": "poll_review_mode"},
         {"kind": "setting", "ref": "poll_pin"},
-        {"kind": "setting", "ref": "poll_shadow_note"},
         {"kind": "probe", "ref": "polls.open_count"}
       ]
     },

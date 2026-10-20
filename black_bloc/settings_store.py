@@ -80,7 +80,6 @@ from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
 from .polls import MODES as POLL_MODES
-from .polls import SHADOW_NOTE as POLL_SHADOW_NOTE
 from .shadow import REHEARSAL_KEY as SHADOW_CHANNEL
 from .shadow import feature_key as shadow_feature_key
 from .storage.db import Database
@@ -405,7 +404,6 @@ KEY_TYPES: dict[str, str] = {
     "poll_default_hours": "int",
     "poll_channel_id": "channel",
     "poll_pin": "bool",
-    "poll_shadow_note": "text",
     "poll_ping_role_id": "role",
     "poll_reminder_minutes": "int",
     "poll_auto_thread": "bool",
@@ -1010,8 +1008,8 @@ KEY_HELP: dict[str, str] = {
         ":15, :30 and :45"
     ),
     "poll_mode": (
-        "off, shadow (every poll is posted for real, but into the log channel with a line "
-        "saying why, so staff can rehearse), or on (polls go where they are pointed)"
+        "off (no new polls, /poll hidden) or on (polls go where they are pointed). Post to "
+        "test on a poll's preview sends a copy to shadow_channel_id first"
     ),
     "poll_who_can_create": "who may start a poll from the /poll panel: staff, or everyone",
     "poll_review_mode": (
@@ -1033,9 +1031,6 @@ KEY_HELP: dict[str, str] = {
     "poll_auto_thread": "true to open a discussion thread under every poll",
     "poll_pin": (
         "true pins a poll's message while it is open and unpins it when it closes"
-    ),
-    "poll_shadow_note": (
-        "the line above a poll posted in shadow; {channel} is where it would have gone"
     ),
     "poll_archive_days": (
         f"days a closed poll stays on the list before it moves to the archive, "
@@ -2400,8 +2395,6 @@ KEY_HELP.update(
 FRONTDOOR_MODE = "frontdoor_mode"
 FRONTDOOR_CHANNEL = "frontdoor_channel_id"
 FRONTDOOR_MESSAGE = "frontdoor_message_id"
-FRONTDOOR_SHADOW_MESSAGE = "frontdoor_shadow_message_id"
-FRONTDOOR_SHADOW_HASH = "frontdoor_shadow_hash"
 FRONTDOOR_TITLE = "frontdoor_title"
 FRONTDOOR_TEXT = "frontdoor_text"
 FRONTDOOR_TICKET_LABEL = "frontdoor_ticket_label"
@@ -2414,7 +2407,7 @@ FRONTDOOR_SHOW_TICKET = "frontdoor_show_ticket"
 FRONTDOOR_SHOW_REQUEST = "frontdoor_show_request"
 FRONTDOOR_SHOW_EVENT = "frontdoor_show_event"
 FRONTDOOR_FOLLOWS_NOTHING = "none"
-FRONTDOOR_MODES = ("off", "shadow", "on")
+FRONTDOOR_MODES = ("off", "on")
 FRONTDOOR_MODE_DEFAULT = "on"
 FRONTDOOR_TITLE_DEFAULT = "Need something?"
 FRONTDOOR_TEXT_DEFAULT = (
@@ -2430,8 +2423,6 @@ KEY_TYPES.update(
         FRONTDOOR_MODE: "enum",
         FRONTDOOR_CHANNEL: "channel",
         FRONTDOOR_MESSAGE: "text",
-        FRONTDOOR_SHADOW_MESSAGE: "text",
-        FRONTDOOR_SHADOW_HASH: "text",
         FRONTDOOR_TITLE: "text",
         FRONTDOOR_TEXT: "text",
         FRONTDOOR_TICKET_LABEL: "text",
@@ -2449,12 +2440,10 @@ KEY_CHOICES.update({FRONTDOOR_MODE: FRONTDOOR_MODES})
 KEY_HELP.update(
     {
         FRONTDOOR_MODE: (
-            "off hides /ask and takes the door down; shadow posts the rehearsal copy into "
-            "shadow_channel_id with the rehearsal note and nothing into the real channel; on "
-            "posts it where it is pointed. /ask answers in both shadow and on, and the three "
-            "flows behind it (modmail, requests, events) keep their own modes whatever this "
-            "says. In shadow the Open a ticket button follows the door while "
-            "frontdoor_replaces_ticket_button is true"
+            "off hides /ask and takes the door down; on posts it where it is pointed. A door "
+            "carried by a post goes where the post goes, and its wording is checked with the "
+            "post's Post to test. The three flows behind it (modmail, requests, events) keep "
+            "their own modes whatever this says"
         ),
         FRONTDOOR_CHANNEL: (
             "where the front-door message is posted; blank posts nothing, and the /ask command "
@@ -2464,17 +2453,6 @@ KEY_HELP.update(
             "the front-door message Black Bloc posted, so it can be moved, taken down and put "
             "back after somebody deletes it. Written by the bot as TEXT, because a snowflake "
             "does not survive a JavaScript number; there is no reason to set it by hand"
-        ),
-        FRONTDOOR_SHADOW_MESSAGE: (
-            "the rehearsal copy of the front door Black Bloc posted in the rehearsal home while "
-            "test mode refuses the real channel, so it can be kept current, moved with "
-            "shadow_channel_id and taken down. Written by the bot as TEXT; there is no reason "
-            "to set it by hand"
-        ),
-        FRONTDOOR_SHADOW_HASH: (
-            "a fingerprint of the wording the rehearsal copy is showing, so a sweep edits it "
-            "only when the heading, the line or a button label has actually changed. Written "
-            "by the bot; there is no reason to set it by hand"
         ),
         FRONTDOOR_TITLE: "the heading on the posted front-door message and on the /ask panel",
         FRONTDOOR_TEXT: "the line under that heading, on both",
@@ -2885,8 +2863,8 @@ KEY_HELP.update(
 # Posts (§C7) — the two decisions the Posts page and `/posts` introduce; the third is the log
 # level, generated with every other feature's. Its own block so a parallel branch merges
 # textually.
-POSTS_MODES = ("off", "shadow", "on")
-POSTS_MODE_DEFAULT = "shadow"
+POSTS_MODES = ("off", "on")
+POSTS_MODE_DEFAULT = "on"
 POSTS_PANEL_MINUTES_DEFAULT = 10
 POSTS_PANEL_MIN_MINUTES = 1
 POSTS_PANEL_MAX_MINUTES = 1440
@@ -2905,12 +2883,11 @@ KEY_MAX_REASON["posts_panel_minutes"] = (
 KEY_HELP.update(
     {
         "posts_mode": (
-            "off, shadow (Post it sends the real message into the shadow channel — the test "
-            "channel while test mode is on, otherwise the log channel — and keeps it edited "
-            "there, whatever channel the post names) or on (Post it goes to the post's own "
-            "channel, and the first real post removes the shadow copy). Shadow is the default, "
-            "so nothing reaches members until a Lead turns posts on. Off hides `/posts` and "
-            "refuses both doors in words; every word already written is kept in all three"
+            "the one switch for the Posts page: posts, sticky messages and weekly questions. "
+            "off hides /posts, /sticky and /questions, takes every sticky copy down and posts "
+            "no weekly question; every word already written is kept. on lets Post it, a "
+            "sticky's Resume and the weekly question reach their own channels. Post to test "
+            "sends a copy of any of them to posts_shadow_channel_id first"
         ),
         "posts_panel_minutes": (
             "minutes the /posts panel stays live before its buttons disable themselves; 10 by "
@@ -3427,14 +3404,11 @@ KEY_HELP.update(
 
 # A rehearsal home per feature: blank follows shadow_channel_id, set wins over it.
 SHADOW_HOME_WORDS = {
-    "frontdoor": "the front door's copy and the Open a ticket button it replaces",
-    "posts": "posts such as the welcome post and the rules",
+    "posts": "posts, sticky messages and weekly questions",
     "golive": "spotlight announcements",
     "marathon": "the marathon board, reminders, shoutouts and staff notices",
     "marathon_public": "a marathon's public highlights of BaF runners and its public reminders",
-    "poll": "polls and their results",
     "birthday": "birthday wishes",
-    "sticky": "sticky messages",
 }
 SHADOW_HOME_KEYS = {feature: shadow_feature_key(feature) for feature in SHADOW_HOME_WORDS}
 KEY_TYPES.update({key: "channel" for key in SHADOW_HOME_KEYS.values()})
@@ -3447,6 +3421,10 @@ KEY_HELP.update(
         )
         for feature, words in SHADOW_HOME_WORDS.items()
     }
+)
+KEY_HELP[SHADOW_HOME_KEYS["posts"]] = (
+    "where Post to test sends its copy of a post, a sticky message or this week's question; "
+    "blank means shadow_channel_id"
 )
 
 
@@ -3499,7 +3477,6 @@ KEY_HELP.update(
 
 
 # Sticky messages: one staff-set note per channel that is kept at the bottom.
-STICKY_MODE = "sticky_mode"
 STICKY_AFTER_MESSAGES = "sticky_after_messages"
 STICKY_MIN_SECONDS = "sticky_min_seconds"
 STICKY_SILENT = "sticky_silent"
@@ -3507,8 +3484,6 @@ STICKY_PANEL_MINUTES = "sticky_panel_minutes"
 STICKY_QUIET_SECONDS = "sticky_quiet_seconds"
 STICKY_MAX_BURIED_MINUTES = "sticky_max_buried_minutes"
 STICKY_PIN_COPIES = "sticky_pin_copies"
-STICKY_MODES = ("off", "shadow", "on")
-STICKY_MODE_DEFAULT = "shadow"
 STICKY_AFTER_MESSAGES_DEFAULT = 5
 STICKY_AFTER_MESSAGES_MIN = 1
 STICKY_AFTER_MESSAGES_MAX = 100
@@ -3525,7 +3500,6 @@ STICKY_MAX_BURIED_MINUTES_MIN = 0
 STICKY_MAX_BURIED_MINUTES_MAX = 1440
 STICKY_PIN_COPIES_DEFAULT = True
 STICKY_DEFAULTS: dict[str, Any] = {
-    STICKY_MODE: STICKY_MODE_DEFAULT,
     STICKY_AFTER_MESSAGES: STICKY_AFTER_MESSAGES_DEFAULT,
     STICKY_MIN_SECONDS: STICKY_MIN_SECONDS_DEFAULT,
     STICKY_SILENT: STICKY_SILENT_DEFAULT,
@@ -3539,14 +3513,12 @@ KEY_TYPES.update(
         STICKY_QUIET_SECONDS: "int",
         STICKY_MAX_BURIED_MINUTES: "int",
         STICKY_PIN_COPIES: "bool",
-        STICKY_MODE: "enum",
         STICKY_AFTER_MESSAGES: "int",
         STICKY_MIN_SECONDS: "int",
         STICKY_SILENT: "bool",
         STICKY_PANEL_MINUTES: "int",
     }
 )
-KEY_CHOICES[STICKY_MODE] = STICKY_MODES
 KEY_MIN[STICKY_AFTER_MESSAGES] = STICKY_AFTER_MESSAGES_MIN
 KEY_MAX[STICKY_AFTER_MESSAGES] = STICKY_AFTER_MESSAGES_MAX
 KEY_MIN[STICKY_MIN_SECONDS] = STICKY_MIN_SECONDS_MIN
@@ -3579,12 +3551,6 @@ KEY_MAX_REASON[STICKY_MIN_SECONDS] = (
 )
 KEY_HELP.update(
     {
-        STICKY_MODE: (
-            "off, shadow or on. shadow — the default — posts nothing in the real channel: each "
-            "copy goes to the rehearsal home with a line naming where it would have gone. on "
-            "keeps each sticky message at the bottom of its own channel. off takes every copy "
-            "down and keeps the words"
-        ),
         STICKY_AFTER_MESSAGES: (
             "how many new messages from people it takes before a sticky message is posted "
             "again at the bottom; 5 by default, 1 to 100. Black Bloc's own messages and other "
@@ -3623,7 +3589,7 @@ KEY_HELP.update(
         ),
     }
 )
-STICKY_KEYS = (*STICKY_DEFAULTS, SHADOW_HOME_KEYS["sticky"])
+STICKY_KEYS = tuple(STICKY_DEFAULTS)
 
 
 # Structure backup (docs/info/structure-backup-design.md) — its own block so parallel branches
@@ -5453,17 +5419,18 @@ KEY_MAX.update({key: high for key, (_, _, high) in POINTS_NUMBERS.items()})
 KEY_HELP.update(
     {
         POINTS_MODE: (
-            "off, shadow or on. off refuses every point system move; shadow — the default — "
-            "takes and approves runs and sends the top-places post to the rehearsal home; on "
-            "posts it in points_channel_id"
+            "off, shadow or on: whether runs are taken. off refuses every point system move; "
+            "shadow — the default — takes and approves runs and DMs nobody about them; on DMs "
+            "the runner too. Where the top-places post and the leaderboard sticky go is "
+            "posts_mode on the Posts page, never this"
         ),
         POINTS_CHANNEL: (
             "where the post goes when somebody enters, leaves or moves inside the top places "
-            "while points_mode is on; #speed-and-pbs by default"
+            "while posts_mode is on; #speed-and-pbs by default"
         ),
         POINTS_SHADOW_CHANNEL: (
-            "where the top-places post is rehearsed while points_mode is shadow; blank means "
-            "shadow_channel_id"
+            "not read since 2026-10-19: the top-places post and the leaderboard sticky follow "
+            "posts_mode, and Post to test sends to posts_shadow_channel_id"
         ),
         POINTS_PING_ROLE: (
             "a role mentioned above the top-places post; blank — the default — pings nobody. "
@@ -5502,7 +5469,6 @@ KEY_HELP.update(
 # Weekly questions (docs/info/weekly-questions-design.md) — its own block so parallel branches
 # merge textually. Every key sits under `core`: `question_` would be a 26th setting group.
 QUESTION_FEATURE = "question"
-QUESTION_MODES = ("off", "shadow", "on")
 QUESTION_WEEKDAYS = (
     "monday",
     "tuesday",
@@ -5512,9 +5478,7 @@ QUESTION_WEEKDAYS = (
     "saturday",
     "sunday",
 )
-QUESTION_MODE = "question_mode"
 QUESTION_CHANNEL = "question_channel_id"
-QUESTION_SHADOW_CHANNEL = shadow_feature_key(QUESTION_FEATURE)
 QUESTION_WEEKDAY = "question_weekday"
 QUESTION_TIME = "question_time"
 QUESTION_GRACE = "question_grace_minutes"
@@ -5542,7 +5506,6 @@ QUESTION_NUMBERS: dict[str, tuple[int, int, int]] = {
     QUESTION_WARN_DAYS: (3, 1, 7),
 }
 QUESTION_DEFAULTS: dict[str, Any] = {
-    QUESTION_MODE: "shadow",
     QUESTION_WEEKDAY: "monday",
     QUESTION_TIME: QUESTION_TIME_DEFAULT,
     QUESTION_OWNER: "",
@@ -5554,9 +5517,7 @@ QUESTION_DEFAULTS: dict[str, Any] = {
     **{key: default for key, (default, _, _) in QUESTION_NUMBERS.items()},
 }
 QUESTION_KEYS: tuple[str, ...] = (
-    QUESTION_MODE,
     QUESTION_CHANNEL,
-    QUESTION_SHADOW_CHANNEL,
     QUESTION_WEEKDAY,
     QUESTION_TIME,
     QUESTION_GRACE,
@@ -5571,9 +5532,7 @@ QUESTION_KEYS: tuple[str, ...] = (
 )
 KEY_TYPES.update(
     {
-        QUESTION_MODE: "enum",
         QUESTION_CHANNEL: "channel",
-        QUESTION_SHADOW_CHANNEL: "channel",
         QUESTION_WEEKDAY: "enum",
         QUESTION_TIME: "text",
         QUESTION_OWNER: "text",
@@ -5585,21 +5544,12 @@ KEY_TYPES.update(
         **{key: "int" for key in QUESTION_NUMBERS},
     }
 )
-KEY_CHOICES.update({QUESTION_MODE: QUESTION_MODES, QUESTION_WEEKDAY: QUESTION_WEEKDAYS})
+KEY_CHOICES.update({QUESTION_WEEKDAY: QUESTION_WEEKDAYS})
 KEY_MIN.update({key: low for key, (_, low, _) in QUESTION_NUMBERS.items()})
 KEY_MAX.update({key: high for key, (_, _, high) in QUESTION_NUMBERS.items()})
 KEY_HELP.update(
     {
-        QUESTION_MODE: (
-            "off, shadow or on. off posts nothing and checks nothing; shadow — the default — "
-            "resolves each week's question in the rehearsal home; on posts it in "
-            "question_channel_id"
-        ),
-        QUESTION_CHANNEL: "where the weekly question is posted while question_mode is on",
-        QUESTION_SHADOW_CHANNEL: (
-            "where the weekly question is rehearsed while question_mode is shadow; blank means "
-            "shadow_channel_id"
-        ),
+        QUESTION_CHANNEL: "where the weekly question is posted while posts_mode is on",
         QUESTION_WEEKDAY: "the day of the week the question goes up; monday by default",
         QUESTION_TIME: (
             "the time the question goes up, as HH:MM on a 24-hour clock in default_timezone; "
@@ -5746,8 +5696,6 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_MODE: "modmail",
     FRONTDOOR_CHANNEL: "modmail",
     FRONTDOOR_MESSAGE: "modmail",
-    FRONTDOOR_SHADOW_MESSAGE: "modmail",
-    FRONTDOOR_SHADOW_HASH: "modmail",
     FRONTDOOR_TITLE: "modmail",
     FRONTDOOR_TEXT: "modmail",
     FRONTDOOR_TICKET_LABEL: "modmail",
@@ -5759,7 +5707,6 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_SHOW_TICKET: "modmail",
     FRONTDOOR_SHOW_REQUEST: "modmail",
     FRONTDOOR_SHOW_EVENT: "modmail",
-    SHADOW_HOME_KEYS["frontdoor"]: "modmail",
     **{key: "posts" for key in STICKY_KEYS},
     HANDOFF_MODE: "request",
     HANDOFF_CONFIRM_HOURS: "request",
@@ -10845,8 +10792,6 @@ class SettingsStore:
             return False
         if key == "poll_pin":
             return True
-        if key == "poll_shadow_note":
-            return POLL_SHADOW_NOTE
         if key == "poll_archive_days":
             return POLL_ARCHIVE_DAYS
         if key == "poll_archive_drop_votes":

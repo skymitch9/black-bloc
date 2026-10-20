@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from ... import doc_import, post_blocks, posts
+from ...command_visibility import HIDDEN_WHEN_OFF, hidden_names
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused
 from ..names import resolve_one
@@ -27,21 +28,10 @@ TEST_MODE_NOTE = (
     "nothing."
 )
 POSTS_ARE_OFF = (
-    "Posts are off for this server, so **Post it** and **Take it down** refuse in words and "
-    "`/posts` is hidden. Every word written here is kept — a Lead turns them back on from the "
-    "Settings page under **posts**."
+    "Posts are off: every sticky copy is down, no weekly question goes up and **Post it** "
+    "refuses. Every word written here is kept."
 )
-POSTS_ARE_SHADOW = (
-    "Posts are in **shadow**: **Post it** sends the real message to {where} and keeps it edited "
-    "there, whatever channel a post names, so nothing reaches members yet. Turning posts **on** "
-    "is the go-live — the next **Post it** goes to the post's own channel and the shadow copy "
-    "is removed."
-)
-NO_SHADOW_CHANNEL_NOTE = (
-    "Posts are in **shadow** and there is nowhere to put a shadow copy: this server has neither "
-    "a test channel nor a log channel, so **Post it** refuses. Set **log_channel_id** on the "
-    "Settings page, or turn posts on."
-)
+COMMANDS_HIDDEN = "{commands} are out of the server's command list until posts are on."
 
 
 def now() -> str:
@@ -145,6 +135,12 @@ def shadow_line(bot: Any, guild: Any) -> dict[str, Any]:
     }
 
 
+def commands_hidden(bot: Any, guild: Any) -> list[str]:
+    """The commands the one switch has taken out of the server's list right now."""
+    hidden = hidden_names(bot, guild.id)
+    return [name for name in HIDDEN_WHEN_OFF[posts.MODE_KEY] if name in hidden]
+
+
 def styles() -> list[dict[str, Any]]:
     return [
         {"style": style, "cap": posts.CAPS[style], "label": posts.STYLE_WORDS[style]}
@@ -181,14 +177,13 @@ def build_router(bot: Any) -> APIRouter:
         return row
 
     def _notes(guild: Any) -> list[str]:
-        if posts.posts_are_off(bot.store, guild.id):
-            return [POSTS_ARE_OFF]
-        if not posts.in_shadow(bot.store, guild.id):
+        if not posts.posts_are_off(bot.store, guild.id):
             return []
-        where = posts.shadow_channel_id(bot, guild)
-        if not where:
-            return [NO_SHADOW_CHANNEL_NOTE]
-        return [POSTS_ARE_SHADOW.format(where=posts.where_words(guild, where))]
+        hidden = commands_hidden(bot, guild)
+        if not hidden:
+            return [POSTS_ARE_OFF]
+        named = ", ".join(f"/{name}" for name in hidden)
+        return [POSTS_ARE_OFF, COMMANDS_HIDDEN.format(commands=named)]
 
     async def _blocks_by_post(guild: Any) -> tuple[dict[int, list[Any]], list[Any]]:
         rows = await post_blocks.blocks_in(bot.db, guild.id)
@@ -209,6 +204,7 @@ def build_router(bot: Any) -> APIRouter:
             "untitled_title": posts.untitled_title(bot.store, guild.id),
             "shadow": shadow_line(bot, guild),
             "notes": _notes(guild),
+            "commands_hidden": commands_hidden(bot, guild),
             "read_at": now(),
         }
         return found if said is None else found | {"message": said}
@@ -241,6 +237,7 @@ def build_router(bot: Any) -> APIRouter:
             "guard": guard_line(bot, guild),
             "shadow": shadow_line(bot, guild),
             "notes": _notes(guild),
+            "commands_hidden": commands_hidden(bot, guild),
             "checked_at": now(),
         }
 

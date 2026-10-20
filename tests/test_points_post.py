@@ -96,14 +96,12 @@ def test_a_board_of_twenty_five_fits_one_card():
     assert post_blocks.KINDS[post_blocks.LEADERBOARD].footprint == (1, 0, 0)
 
 
-def test_the_leaderboard_is_a_live_kind_owned_by_the_point_system():
+def test_the_leaderboard_is_a_live_kind_that_no_feature_mode_places():
     found = post_blocks.KINDS[post_blocks.LEADERBOARD]
 
     assert post_blocks.LEADERBOARD in post_blocks.LIVE_KINDS
     assert not found.exclusive and found.load is post_blocks.leaderboard_load
-    assert found.owner == ("points_mode", "points")
-    assert post_blocks.owner_of(["links", "leaderboard"]) == ("points_mode", "points")
-    assert post_blocks.owner_of(["links"]) is None
+    assert not hasattr(found, "owner") and not hasattr(post_blocks, "owner_of")
 
 
 async def test_the_preview_draws_the_sample_board_and_nothing_while_points_are_off(bot, guild):

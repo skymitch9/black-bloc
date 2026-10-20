@@ -14,7 +14,6 @@ import {
   keepSaying,
   limitCounter,
   listFilter,
-  modeSwitch,
   notice,
   readSelect,
   run,
@@ -28,7 +27,6 @@ import {
 
 const TITLE = 'Sticky messages';
 const SLUG = 'sticky';
-const MODE_KEY = 'sticky_mode';
 const TEXT_MAX = 1800;
 const SAID = 'posts.sticky';
 const NOTHING_YET = 'No channel has a sticky message.';
@@ -255,7 +253,6 @@ export async function stickySection(reload) {
   const rows = Array.isArray(found) ? found : [];
   const specs = settingsNamespace(registry, 'posts')
     .filter((spec) => spec.key.startsWith('sticky_'));
-  const mode = specs.find((spec) => spec.key === MODE_KEY);
   const say = sayAgain(SAID, notice());
   const asked = location.hash === `#sect-${SLUG}`;
   const one = section(TITLE, null, { count: rows.length, id: SLUG, open: asked });
@@ -280,22 +277,18 @@ export async function stickySection(reload) {
 
   const add = button('New sticky message', () => addOne(say, reload), { tone: 'warn' });
   add.style.marginLeft = 'auto';
-  const switcher = mode ? modeSwitch(mode, { say, onSaved: () => reload() }) : null;
 
   one.body.append(
     card(null, [
-      el('div', { class: 'card-head' }, [...filter.parts, switcher ? switcher.node : null, add]),
+      el('div', { class: 'card-head' }, [...filter.parts, add]),
       rows.length === 0
         ? sayNothing(NOTHING_YET)
         : el('div', { class: 'card-body flush' }, [...items.map((item) => item.node), filter.none]),
       say,
     ]),
     foldout('Settings', [
-      await settingsPanel(specs.filter((spec) => spec.key !== MODE_KEY), {
-        where: TITLE,
-        onSaved: () => reload(),
-      }),
-    ], { count: specs.length - (mode ? 1 : 0) }),
+      await settingsPanel(specs, { where: TITLE, onSaved: () => reload() }),
+    ], { count: specs.length }),
   );
   one.node.setAttribute('data-span', 'full');
   if (asked) {

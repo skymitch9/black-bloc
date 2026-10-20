@@ -13,6 +13,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import polls_rehearse as testing
 from ...actionlog import (
     log_action,
     send_logs,
@@ -76,7 +77,6 @@ from ...polls import (
     OFF,
     OPEN,
     OPEN_STATUSES,
-    OPENED_SHADOW,
     PANEL,
     PANEL_CLEAR,
     PANEL_COUNTS,
@@ -135,7 +135,6 @@ from ...polls import (
     draft_row,
     drafts,
     drop_draft,
-    in_shadow,
     is_multi,
     load_draft,
     mentions,
@@ -155,15 +154,12 @@ from ...polls import (
     shadow_channel_id,
     shadow_channel_ids,
     shadow_id,
-    shadow_note,
-    shadow_open_text,
     stale_drafts,
     summary_line,
     surface_for,
     thread_name,
     validate,
     voted_text,
-    where_words,
     winners,
 )
 from ...settings_store import (
@@ -1472,19 +1468,15 @@ async def cancel_poll(
 
 async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
     """(the message, the reason there is not one). The one place a poll reaches a channel."""
-    rehearsing = in_shadow(bot.store, guild.id)
-    where = shadow_channel_id(bot, guild) if rehearsing else row["channel_id"]
-    missing = "no_shadow_channel" if rehearsing else "no_channel"
+    where = row["channel_id"]
     channel = bot.get_channel(where) if where else None
     if channel is None:
         await log_action(
-            bot, guild, "poll.open_failed", details={"poll_id": row["id"], "reason": missing}
+            bot, guild, "poll.open_failed", details={"poll_id": row["id"], "reason": "no_channel"}
         )
-        return (None, missing)
+        return (None, "no_channel")
     if not guard_allows(bot, channel):
         details = {"poll_id": row["id"], "reason": "test_mode"}
-        if rehearsing:
-            details["shadow_home"] = where
         await log_action(bot, guild, "poll.would_open", details=details)
         return (None, "test_mode")
     options = await options_of(bot.db, row["id"])
@@ -1492,12 +1484,6 @@ async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
     panel = row["surface"] == PANEL
     finishes = closes_at(int(row["hours"]))
     said = open_text(row["creator_id"], row["ping_role_id"])
-    if rehearsing:
-        said = shadow_open_text(
-            shadow_note(bot.store, guild.id, where_words(guild, row["channel_id"])),
-            row["creator_id"],
-            row["ping_role_id"],
-        )
     try:
         if panel:
             counts, voters = await panel_counts(bot.db, row["id"])
@@ -1526,27 +1512,19 @@ async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
     await set_posted(
         bot.db,
         row["id"],
-        channel_id=row["channel_id"] if rehearsing else channel.id,
+        channel_id=channel.id,
         message_id=message.id,
         finishes_at=finishes if panel else _expiry(message, row),
         thread_id=thread_id,
-        shadow_message_id=message.id if rehearsing else None,
     )
     if not panel:
         await set_answer_ids(bot.db, row["id"], _answer_ids(message, len(labels)))
     await set_status(bot.db, row["id"], OPEN)
-    details = {
-        "poll_id": row["id"],
-        "channel_id": row["channel_id"] if rehearsing else channel.id,
-        "message_id": message.id,
-    }
-    if rehearsing:
-        details["shadow_channel_id"] = channel.id
-        details["shadow_home"] = channel.id
+    details = {"poll_id": row["id"], "channel_id": channel.id, "message_id": message.id}
     await log_action(
         bot,
         guild,
-        OPENED_SHADOW if rehearsing else "poll.opened",
+        "poll.opened",
         target=row["creator_id"],
         details=details,
     )
@@ -2307,6 +2285,8 @@ class PreviewView(PollPanel):
             self.add_item(SaveDraftButton(saved))
         if resumed:
             self.add_item(DiscardDraftButton())
+        if postable and staff:
+            self.add_item(RehearseButton())
 
 
 async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -2522,7 +2502,7 @@ async def write_draft(
         await render_preview(interaction, draft, previous)
         await said_to(interaction, NO_CHANNEL)
         return
-    if not guard_allows(bot, channel) and not in_shadow(bot.store, guild.id):
+    if not guard_allows(bot, channel):
         await render_preview(interaction, draft, previous)
         await said_to(interaction, guard_refusal(bot))
         return
@@ -3047,6 +3027,27 @@ class PostButton(discord.ui.Button):
         await write_draft(
             interaction, self.view.draft, self.view, getattr(self.view, "resumed", False)
         )
+
+
+class RehearseButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=testing.LABEL, style=discord.ButtonStyle.secondary, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=True):
+            return
+        await rehearse_draft(interaction, self.view.draft)
+
+
+async def rehearse_draft(interaction: discord.Interaction, draft: PollDraft) -> None:
+    """Post to test from the preview: the draft stays exactly as it is."""
+    bot = interaction.client
+    plan, trouble = draft_plan(bot.store, interaction.guild.id, draft)
+    if plan is None:
+        await said_to(interaction, str(trouble))
+        return
+    outcome = await testing.rehearse(bot, interaction.guild, interaction.user, plan)
+    await said_to(interaction, outcome.message)
 
 
 class SlotsButton(discord.ui.Button):

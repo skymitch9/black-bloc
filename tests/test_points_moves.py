@@ -227,7 +227,7 @@ async def test_while_off_every_move_refuses_and_nothing_is_written(bot, guild):
     assert (await store_.run(bot.db, GUILD, run_id))["state"] == PENDING
 
 
-async def test_approving_scores_the_run_and_rehearses_the_top_places_post(bot, guild):
+async def test_approving_scores_the_run_and_logs_the_top_places_post_as_going_out(bot, guild):
     run_id = await submitted(bot, guild)
 
     outcome = await moves.approve(bot, guild, who(guild, STAFF), run_id, via=VIA_WEBSITE)
@@ -246,7 +246,7 @@ async def test_approving_scores_the_run_and_rehearses_the_top_places_post(bot, g
     assert await kinds(bot.db) == [
         "points.submitted",
         "web.points.approved",
-        "web.points.would_announce",
+        "web.points.top_changed",
     ]
     announced = (await rows(bot.db))[-1][3]
     assert announced["changes"] == [{"kind": "entered", "user_id": ADA, "was": None, "now": 1}]
