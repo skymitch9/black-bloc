@@ -29,6 +29,17 @@
 > library knowledge, not from an incident here; promote them to a dated
 > incident the first time one bites.
 
+## Importing `black_bloc.__main__` STARTS THE BOT against the real server *(incident 2026-10-19 ~23:4x)*
+
+`black_bloc/__main__.py` runs the bot at import time, with the local `.env` token, and `DEV_GUILD_ID` is the
+real server. A build agent's "does every module import" sweep (`pkgutil.walk_packages` over `black_bloc`)
+imported it: the bot logged in over HTTP, ran `setup_hook`, **synced the branch's command tree to the live
+guild with nothing hidden**, and crashed before the gateway connected. Nothing was changed on the live
+machine, but commands of switched-off features could show in the server until the next boot re-synced them
+(the v242 deploy, 2026-10-20 00:4x). Rule: an import sweep skips `black_bloc.__main__` and `black_bloc.app`;
+the fuller fix is a `__name__ == "__main__"` guard so an import never runs anything (queued in `TODO.md`).
+Record of the incident: [`posts-one-switch-design.md`](posts-one-switch-design.md) §10.
+
 ## Login fails with `PrivilegedIntentsRequired` *(anticipated)*
 
 `intents.py:build_intents` (called from `bot.py`) requests `members` and

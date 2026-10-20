@@ -44,6 +44,11 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-20 v242
+
+- 🔨 **Switch-sheet build 2 of 6 — one Posts switch (sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the audit's P1 slice 2 + P3(a); owner 2026-10-19 18:3x: *"on off shadow should be one button for everything in the post page umbrella i think to keep permissions simple"*).** Dispatched to Opus 23:4x on branch `posts-one-switch` (700k).
+  ↳ ✅ **LIVE v242** 2026-10-20 00:44 (release `9f24ec22`, merge `56a6d49b`); the migration ran at boot exactly as the dry run said (one sticky paused, five rows dropped); design [`info/posts-one-switch-design.md`](info/posts-one-switch-design.md); see `deploys.log` v242 for what was and was not verified. p4j judged KEEP: the ticket button's rehearsal keys still serve the `TEST_MODE` path. ⚠️ Member-visible later: the next approved run that changes the top places posts a *Leaderboard update* in #speed-and-pbs (p1f). Incident during the build: the agent's import sweep started the bot locally and re-synced the command tree to the live guild — `info/gotchas.md`, fix queued for build 6.
+
 ## 2026-10-19 v241
 
 - 🔨 **Switch-sheet build 1 of 6 — Post to test for weekly questions and stickies, `rehearsal_note` retired, `runs_lookup_seen` (sheet items p1b, p1c, p4h; the audit's P1 slice 1; owner 2026-10-19 18:3x: *"what we need is like post, just a test button to send to the post test channel"*).** Dispatched to Opus 22:5x on branch `post-to-test-more` (427k).
