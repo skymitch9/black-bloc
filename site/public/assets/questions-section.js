@@ -34,10 +34,19 @@ const STATE_WORDS = {
   taken_down: 'taken down',
 };
 const BY_WORDS = { owner: 'by the owner', bot: 'by Black Bloc' };
+const POST_ONE = 'Post one now';
+const OUT_OF_CYCLE = 'out of cycle';
 const STATUS_WORDS = { removed: 'removed', skipped: 'skipped' };
 
-let refresh = () => {};
+let reloadPage = async () => {};
+let jumped = false;
 const opened = new Set();
+
+async function refresh() {
+  const at = window.scrollY;
+  await reloadPage();
+  window.scrollTo({ top: at, behavior: 'instant' });
+}
 
 function kept(title, children, count) {
   const fold = foldout(title, children, { count, open: opened.has(title) });
@@ -60,16 +69,16 @@ function weekCard(payload) {
   const say = notice();
   const status = payload.state || 'pending';
   const moves = [];
-  if (payload.mode !== 'off' && listOf(payload, 'queue').length && status !== 'posted') {
-    moves.push(button('Post now', async () => {
+  if (payload.mode !== 'off' && listOf(payload, 'queue').length) {
+    moves.push(button(POST_ONE, async () => {
       const first = listOf(payload, 'queue')[0];
       const sure = await ask({
         title: 'Post it now?',
         body: [first ? first.body : ''],
-        confirmLabel: 'Post now',
+        confirmLabel: POST_ONE,
         tone: null,
       });
-      if (sure) await act(say, 'questions.week', () => send('/api/questions/post-now', 'POST', {}), 'Posted.');
+      if (sure) await act(say, 'questions.week', () => send('/api/questions/post-now', 'POST', {}), (found) => found?.message || 'Posted.');
     }, { small: false }));
   }
   if (status === 'pending' || status === 'skipped_empty') {
@@ -137,12 +146,17 @@ function queueCard(rows) {
   return card('Queue', [list, say, sayAgain('questions.queue', say)], { count: rows.length });
 }
 
+function postedWords(row) {
+  const said = `posted ${BY_WORDS[row.posted_by] || ''}`.trim();
+  return row.slot_at ? said : `${said} · ${OUT_OF_CYCLE}`;
+}
+
 function historyFold(rows) {
   const say = notice();
   const list = table([
     { label: 'When', cell: (row) => (row.resolved_at ? when(row.resolved_at) : null) },
     { label: 'Question', cell: (row) => row.body },
-    { label: 'What happened', cell: (row) => (row.status === 'posted' ? `posted ${BY_WORDS[row.posted_by] || ''}`.trim() : STATUS_WORDS[row.status] || row.status) },
+    { label: 'What happened', cell: (row) => (row.status === 'posted' ? postedWords(row) : STATUS_WORDS[row.status] || row.status) },
     {
       label: '',
       cell: (row) => {
@@ -183,7 +197,7 @@ async function logsFold() {
 
 /** The Weekly questions section of the Posts page; `reload` redraws the page after a write. */
 export async function questionsSection(reload) {
-  refresh = reload;
+  reloadPage = reload;
   const [payload, all] = await Promise.all([api('/api/questions'), settings()]);
   const specs = settingsNamespace(all, 'core').filter((spec) => spec.key.startsWith(KEY_PREFIX));
   const queue = listOf(payload, 'queue');
@@ -198,7 +212,8 @@ export async function questionsSection(reload) {
     await logsFold(),
   );
   one.node.setAttribute('data-span', 'full');
-  if (asked) {
+  if (asked && !jumped) {
+    jumped = true;
     requestAnimationFrame(() => {
       one.details.open = true;
       one.node.scrollIntoView({ block: 'start' });
