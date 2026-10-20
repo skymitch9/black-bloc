@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 97
+SCHEMA_VERSION = 98
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1204,6 +1204,17 @@ CREATE TABLE IF NOT EXISTS marathon_baf_overrides (
     at      TEXT    NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS person_optouts (
+    guild_id INTEGER NOT NULL,
+    user_id  INTEGER NOT NULL,
+    kind     TEXT    NOT NULL,
+    by       INTEGER,
+    reason   TEXT,
+    at       TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, user_id, kind)
+);
+CREATE INDEX IF NOT EXISTS person_optouts_by_kind ON person_optouts(guild_id, kind);
+
 CREATE TABLE IF NOT EXISTS weekly_questions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id    INTEGER NOT NULL,
@@ -1722,6 +1733,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "log_thread_channel_id", "INTEGER"),
     ("marathons", "stale_clock_at", "TEXT"),
     ("marathons", "untracked_alert_at", "TEXT"),
+    ("marathon_baf_overrides", "reason", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {
