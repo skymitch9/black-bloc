@@ -750,6 +750,8 @@ const SETTING_SPECS = [
   ["rolemenu_off_confirm_said", "text", "**{count}** members hold roles the role menus handed out; switching role menus off removes them.", "**{count}** members hold roles the role menus handed out; switching role menus off removes them.", "what staff are asked before rolemenu_mode goes off while members wear menu roles Black Bloc handed out. It takes {count}"],
   ["rolemenu_off_confirm_button", "text", "Yes, switch role menus off", "Yes, switch role menus off", "the button that confirms rolemenu_mode off and takes those roles back"],
   ["rolemenu_off_dm", "text", "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing else changed.", "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing else changed.", "the DM sent when role menus go off to a member whose menu role staff approved (those members were sent a DM when it was given). It takes {guild} {label}"],
+  ["pings_off_takes_roles_back", "bool", true, true, "true \u2014 the default \u2014 makes switching pings_mode off take back every ping role Black Bloc itself put on a member, after staff confirm the count; false switches pings off and leaves every role where it is"],
+  ["rolemenu_off_takes_roles_back", "bool", true, true, "true \u2014 the default \u2014 makes switching rolemenu_mode off take back every menu role a member picked or had approved, after staff confirm the count; false switches role menus off and leaves every role where it is"],
   ['golive_channel_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a CHANNEL is opted out of announcements mid-stream. end — the default — unpins it and rewrites it to the ended wording, exactly as a real stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so no reminder follows and nothing waits on Twitch", ['end', 'delete', 'leave']],
   ['golive_member_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a MEMBER opts out of announcements mid-stream — the same three treatments the channel key has. end — the default — unpins it and rewrites it to the ended wording; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so their live role comes off and nothing waits on Twitch or on their presence", ['end', 'delete', 'leave']],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -1473,7 +1475,7 @@ const SETTING_SPECS = [
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
-  ["birthday_panel_lookup", "bool", true, true, "true to let any member look somebody else's stored birthday up on the /birthday panel; staff always can. Opting out is still the member's own privacy control"],
+  ["birthday_panel_lookup", "bool", true, true, "true to let any member look somebody else's stored birthday up on the /birthday panel; staff always can. A member who opted out is shown as not shared (birthday_not_shared_said), so opting out stays their own privacy control"],
   ["birthday_panel_minutes", "int", 10, 10, "minutes the /birthday panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ["birthday_panel_next_for_members", "bool", true, true, "true to show every member the birthdays coming up on the /birthday panel; staff always see them. False makes the list staff-only and the panel says so in words"],
   ["bot_bio", "text", "Black Bloc \u2014 moderation & content bot for Black in a Flash!. Staff dashboard: https://blackbloc.heygabi.ai", "Black Bloc \u2014 moderation & content bot for Black in a Flash!. Staff dashboard: https://blackbloc.heygabi.ai", "the About Me on Black Bloc's own profile, dashboard link and all"],
@@ -5251,6 +5253,11 @@ function consentFlipped(to) {
 const HANDED_ASKS = { pings_mode: 'pings_off_confirm_said', rolemenu_mode: 'rolemenu_off_confirm_said' };
 const HANDED_KINDS = { pings_mode: 'pings.roles_taken_back', rolemenu_mode: 'role_menu.roles_taken_back' };
 const MENU_PICKED = ['menu', 'approval'];
+const HANDED_TAKES = { pings_mode: 'pings_off_takes_roles_back', rolemenu_mode: 'rolemenu_off_takes_roles_back' };
+
+function handedTakes(key) {
+  return key in HANDED_TAKES && state.settings.get(HANDED_TAKES[key]) !== false;
+}
 
 function handedHeld(key) {
   if (key === 'pings_mode') return state.pingsHanded.map((row) => ({ ...row }));
@@ -5261,7 +5268,7 @@ function handedHeld(key) {
 }
 
 function handedAsked(key, value, confirmed) {
-  if (confirmed || !(key in HANDED_ASKS) || value !== 'off') return;
+  if (confirmed || !handedTakes(key) || value !== 'off') return;
   const members = new Set(handedHeld(key).map((row) => row.user_id)).size;
   if (!members) return;
   const said = String(state.settings.get(HANDED_ASKS[key]) || specOf(HANDED_ASKS[key])[3]).split('{count}').join(String(members));
@@ -5269,7 +5276,7 @@ function handedAsked(key, value, confirmed) {
 }
 
 function handedTaken(key) {
-  if (!(key in HANDED_ASKS) || state.settings.get(key) !== 'off') return;
+  if (!handedTakes(key) || state.settings.get(key) !== 'off') return;
   const held = handedHeld(key);
   if (!held.length) return;
   if (key === 'pings_mode') state.pingsHanded = [];

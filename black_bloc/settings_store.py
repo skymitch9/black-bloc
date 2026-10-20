@@ -1505,7 +1505,8 @@ KEY_HELP.update(
         ),
         "birthday_panel_lookup": (
             "true to let any member look somebody else's stored birthday up on the /birthday "
-            "panel; staff always can. Opting out is still the member's own privacy control"
+            "panel; staff always can. A member who opted out is shown as not shared "
+            "(birthday_not_shared_said), so opting out stays their own privacy control"
         ),
     }
 )
@@ -10046,6 +10047,25 @@ SMALL_FIXES_DEFAULTS: dict[str, Any] = {
     key: default for key, (default, _, _) in SMALL_FIXES_WORDS.items()
 }
 KEY_TYPES.update({key: "text" for key in SMALL_FIXES_WORDS})
+PINGS_OFF_TAKES_KEY = "pings_off_takes_roles_back"
+ROLEMENU_OFF_TAKES_KEY = "rolemenu_off_takes_roles_back"
+SMALL_FIXES_SWITCHES: dict[str, tuple[bool, str]] = {
+    PINGS_OFF_TAKES_KEY: (
+        True,
+        "true — the default — makes switching pings_mode off take back every ping role Black "
+        "Bloc itself put on a member, after staff confirm the count; false switches pings off "
+        "and leaves every role where it is",
+    ),
+    ROLEMENU_OFF_TAKES_KEY: (
+        True,
+        "true — the default — makes switching rolemenu_mode off take back every menu role a "
+        "member picked or had approved, after staff confirm the count; false switches role "
+        "menus off and leaves every role where it is",
+    ),
+}
+SMALL_FIXES_DEFAULTS.update({key: default for key, (default, _) in SMALL_FIXES_SWITCHES.items()})
+KEY_TYPES.update({key: "bool" for key in SMALL_FIXES_SWITCHES})
+KEY_HELP.update({key: said for key, (_, said) in SMALL_FIXES_SWITCHES.items()})
 KEY_HELP.update({key: said for key, (_, _, said) in SMALL_FIXES_WORDS.items()})
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in SMALL_FIXES_WORDS.items()}

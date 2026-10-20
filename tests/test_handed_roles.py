@@ -248,3 +248,28 @@ async def test_a_reset_to_the_off_default_takes_them_back_too(bot):
     await bot.store.clear(GUILD, "pings_mode", by=99)
 
     assert not followed.wears(FAN_ROLE)
+
+
+async def test_with_the_switch_off_pings_go_off_and_every_role_stays(bot):
+    handed_roles.install(bot)
+    await bot.store.set(GUILD, "pings_off_takes_roles_back", False)
+    followed = FakeMember(bot.guild, 1, roles=(FAN_ROLE,))
+    await pinged(bot, "pings.follow", followed.id, FAN_ROLE)
+
+    assert await handed_roles.asked(bot, bot.guild, "pings_mode", "off") is None
+    await bot.store.set(GUILD, "pings_mode", "off", by=99)
+
+    assert followed.wears(FAN_ROLE)
+    assert await taken_rows(bot, "pings.roles_taken_back") == []
+
+
+async def test_in_test_mode_the_take_back_is_only_logged(bot):
+    bot.guard = object()
+    followed = FakeMember(bot.guild, 1, roles=(FAN_ROLE,))
+    await pinged(bot, "pings.follow", followed.id, FAN_ROLE)
+
+    assert await handed_roles.take_back(bot, bot.guild, "pings_mode", 99) is None
+
+    assert followed.wears(FAN_ROLE)
+    [row] = await taken_rows(bot, "pings.would_take_back")
+    assert row["taken"] == [[1, FAN_ROLE]]

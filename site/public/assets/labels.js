@@ -455,6 +455,8 @@ export const LABELS = {
   rolemenu_off_confirm_said: 'What staff are asked before role menus go off',
   rolemenu_off_confirm_button: 'The button that switches role menus off',
   rolemenu_off_dm: 'The DM when role menus go off and an approved role is taken back',
+  pings_off_takes_roles_back: 'Whether switching pings off takes back the ping roles',
+  rolemenu_off_takes_roles_back: 'Whether switching role menus off takes back the picked roles',
   golive_cooldown_minutes: 'How long before the same person is announced again',
   golive_ping_role_id: 'Who is pinged when someone goes live',
   golive_max_session_hours: 'How long a stream may run before it is closed',

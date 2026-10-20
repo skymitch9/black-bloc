@@ -14,9 +14,11 @@ from .actionlog import log_action
 from .settings_store import (
     PINGS_OFF_BUTTON_KEY,
     PINGS_OFF_CONFIRM_KEY,
+    PINGS_OFF_TAKES_KEY,
     ROLEMENU_OFF_BUTTON_KEY,
     ROLEMENU_OFF_CONFIRM_KEY,
     ROLEMENU_OFF_DM_KEY,
+    ROLEMENU_OFF_TAKES_KEY,
 )
 
 log = logging.getLogger(__name__)
@@ -28,6 +30,7 @@ ROLEMENUS = "rolemenu_mode"
 KEYS: tuple[str, ...] = (PINGS, ROLEMENUS)
 ASKS = {PINGS: PINGS_OFF_CONFIRM_KEY, ROLEMENUS: ROLEMENU_OFF_CONFIRM_KEY}
 BUTTONS = {PINGS: PINGS_OFF_BUTTON_KEY, ROLEMENUS: ROLEMENU_OFF_BUTTON_KEY}
+TAKES = {PINGS: PINGS_OFF_TAKES_KEY, ROLEMENUS: ROLEMENU_OFF_TAKES_KEY}
 FEATURE_OFF = "feature_off"
 PINGS_TAKEN = "pings.roles_taken_back"
 MENUS_TAKEN = "role_menu.roles_taken_back"
@@ -113,6 +116,10 @@ def wears(guild: Any, user_id: int, role_id: int) -> bool:
     )
 
 
+def takes_back(store: Any, guild_id: int, key: str) -> bool:
+    return key in TAKES and bool(store.get(guild_id, TAKES[key]))
+
+
 async def held(bot: Any, guild: Any, key: str) -> list[Held]:
     """The dry run: every role this feature handed out that its member still wears."""
     if key == PINGS:
@@ -144,7 +151,7 @@ def members_in(found: list[Held]) -> int:
 
 async def asked(bot: Any, guild: Any, key: str, value: Any) -> str | None:
     """The count sentence staff confirm before an off, or None when nothing would be taken."""
-    if key not in KEYS or str(value) != OFF:
+    if str(value) != OFF or not takes_back(bot.store, guild.id, key):
         return None
     found = await held(bot, guild, key)
     if not found:
@@ -188,10 +195,19 @@ async def _tell(bot: Any, guild: Any, one: Held) -> bool:
 async def take_back(bot: Any, guild: Any, key: str, actor: Any = None) -> dict[str, Any] | None:
     """Every role the dry run names comes off, one log row says how many, and a DM goes only
     where the feature already DM'd on the grant."""
-    if key not in KEYS:
+    if not takes_back(bot.store, guild.id, key):
         return None
     found = await held(bot, guild, key)
     if not found:
+        return None
+    if getattr(bot, "guard", None) is not None:
+        await log_action(
+            bot,
+            guild,
+            "pings.would_take_back" if key == PINGS else "role_menu.would_take_back",
+            actor=actor,
+            details={"key": key, "taken": [[one.user_id, one.role_id] for one in found]},
+        )
         return None
     taken: list[list[int]] = []
     failed = 0
@@ -254,4 +270,5 @@ __all__ = [
     "menu_grants",
     "pings_ledger",
     "take_back",
+    "takes_back",
 ]
