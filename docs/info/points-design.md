@@ -559,3 +559,14 @@ than one bounty on a run; per-game boards; an announcement for the XP view; a sw
 - Concurrency is tested for two approvals of one run at once in one process (`asyncio.gather`), not across processes.
 - The `/settings` panel and the Settings page were not opened to look at the 56 new keys.
 - Pawpette's *"must show livesplit or IGT"* is a human check at approval; nothing reads the image.
+
+## Follow-up 2026-10-19 — the Posts page's one switch (branch `posts-one-switch`, NOT merged)
+
+Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole build is [`posts-one-switch-design.md`](posts-one-switch-design.md).
+
+- **Placement is decoupled from `points_mode`** (p1e, p1f, audit I1): the leaderboard sticky and the top-places post follow `posts_mode`.
+- `points_mode` now governs only whether runs are taken: **off** refuses every move; **shadow** takes and approves runs for real but DMs nobody about them (`points.would_dm`); **on** DMs the runner too. With posts on, the top-places post goes to `points_channel_id` in shadow as in on (⚠️ live: the next top-places change posts in #speed-and-pbs, unpinged).
+- `points.top_changed` vs `points.would_announce` now says whether the post goes out (`points_announce.goes_out`).
+- `points_shadow_channel_id` has no reader any more; its help says so. A removal candidate.
+
+Deviations: (1) with points off, a leaderboard-only sticky stops at its next move with the existing *no words and no block* trouble instead of being taken down quietly.

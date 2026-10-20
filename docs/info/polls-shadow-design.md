@@ -201,3 +201,12 @@ shadow); `docs/access/sweeps.md` rows `PS2-a…`; `docs/info/architecture.md` sc
 - **`ruff format --check` was not run** — it is known to fail repo-wide and is not a gate.
 - **No `TODO.md`, `DONE.md` or `deploys.log` edit**, per the brief.
 - **Nothing was merged, deployed or pushed to `main`.**
+
+## Follow-up 2026-10-19 — the Posts page's one switch (branch `posts-one-switch`, NOT merged)
+
+Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole build is [`posts-one-switch-design.md`](posts-one-switch-design.md).
+
+- `poll_mode` is **off / on**; `poll_shadow_channel_id` and `poll_shadow_note` are **retired** with their readers. Open polls posted in shadow before this build are still found (`shadow_message_id`, global home).
+- **Polls get Post to test** — there was none before (checked `polls-panel-design.md` and this doc): a staff-only button on the `/poll` preview and a button on the site's create form (`POST /api/polls/rehearse`, the create body). It sends the poll as members would see it (a native Discord poll, or the panel card without vote buttons), pinging nobody, to `shadow_channel_id` through `rehearsal_copy.py`; no poll row, vote or draft is written; `poll.rehearsed` is logged.
+
+Deviations: (1) a stored `poll_mode = shadow` migrates to **off**; (2) the `poll_card` preview (only key: `poll_shadow_note`) is removed; (3) the home is the global `shadow_channel_id`, not the Posts home — polls are not in the Posts umbrella.

@@ -159,3 +159,13 @@ Branch `post-to-test-more` (off `main` `0075473f`), slice 1 of the switch audit'
 3. **Not tracked, never taken down** — no column was added (no schema change). The posts Post to test copy is tracked on `shadow_message_id` and taken down by the next Post it; a question copy stays in the test channel.
 4. **The answer on the site names the channel** (`#post-test`) through `names.site_words`; the other `/api/questions` answers still carry Discord markup, unchanged.
 5. **Panel words are code constants** (`questions_rehearse.LABEL`, `TESTED`, …), the existing `questions.py` convention for panel labels and answers; the posted words (`question_template`) are the key they always were.
+
+## Follow-up 2026-10-19 — the Posts page's one switch (branch `posts-one-switch`, NOT merged)
+
+Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole build is [`posts-one-switch-design.md`](posts-one-switch-design.md).
+
+- `question_mode` and `question_shadow_channel_id` are **retired**; the question's mode is `posts_mode` (off: nothing posted, nothing checked; on: posted in `question_channel_id`).
+- Post to test reads `posts_shadow_channel_id` (blank → `shadow_channel_id`).
+- The section's settings fold no longer shows a mode.
+
+Deviations: (1) with no shadow, `questions_moves.target_id` refuses in words while off instead of resolving a rehearsal home; (2) the warning DM's skipped reason reads `off` (was `shadow`).
