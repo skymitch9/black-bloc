@@ -70,6 +70,7 @@ from ...birthdays import (
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
+from ...mode_words import mode_word
 from ...panels import (
     KEEP_IT,
     ConfirmButton,
@@ -389,7 +390,7 @@ async def change_opt(cog: Any, guild: Any, actor: Any, *, opted_in: bool) -> str
 async def set_mode(bot: Any, guild: Any, actor: Any, mode: str) -> str:
     await bot.store.set(guild.id, "birthday_mode", mode, by=actor.id)
     await log_action(bot, guild, "birthday.mode", actor=actor, details={"mode": mode})
-    return MODE_SET.format(mode=mode)
+    return MODE_SET.format(mode=mode_word("birthday_mode", mode))
 
 
 async def clear_role(bot: Any, guild: Any, actor: Any) -> str:
@@ -872,7 +873,9 @@ class MonthSelect(discord.ui.Select):
 class ModeSelect(discord.ui.Select):
     def __init__(self, current: str) -> None:
         options = [
-            discord.SelectOption(label=name, value=name, default=name == current)
+            discord.SelectOption(
+                label=mode_word("birthday_mode", name), value=name, default=name == current
+            )
             for name in BIRTHDAY_MODES
         ]
         super().__init__(

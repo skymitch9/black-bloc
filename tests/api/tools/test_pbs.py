@@ -414,5 +414,5 @@ async def test_post_again_while_the_feed_is_off_is_a_409_naming_the_modes(
 
     response = client.post(f"/api/pbs/posts/{source}/again")
 
-    assert response.status_code == 409 and "shadow or on" in response.text
+    assert response.status_code == 409 and "test or on" in response.text
     assert await wf.kinds_in(web.db) == []

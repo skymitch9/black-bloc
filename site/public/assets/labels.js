@@ -1297,3 +1297,15 @@ export function channelLabel(channel, channels = []) {
   const where = categoryName(channel, channels);
   return where ? `${mark} ${channel.name} · ${where}` : `${mark} ${channel.name}`;
 }
+
+const SHADOW = 'shadow';
+const TEST_WORD = 'test';
+const STAFF_ONLY_WORD = 'staff only';
+const STAFF_ONLY_KEYS = ['tempvoice_mode'];
+
+/** What a stored mode value is called; the same table as black_bloc/mode_words.py. */
+export function modeWord(value, key = '') {
+  const said = value === null || value === undefined ? '' : String(value);
+  if (said !== SHADOW) return said;
+  return STAFF_ONLY_KEYS.includes(String(key || '')) ? STAFF_ONLY_WORD : TEST_WORD;
+}

@@ -15,6 +15,7 @@ from ...actionlog import entity_id, log_action
 from ...command_visibility import STAFF_ONLY
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
+from ...mode_words import mode_word
 from ...panels import Panel, answer, db_up, opened, retire, still_allowed, still_staff
 from ...settings_store import (
     DEFAULT_TIMEZONE_KEY,
@@ -604,7 +605,11 @@ class ModePick(discord.ui.Select):
         super().__init__(
             placeholder=placeholder,
             options=[
-                discord.SelectOption(label=mode, value=mode, default=mode == current)
+                discord.SelectOption(
+                    label=mode_word("structure_backup_mode", mode),
+                    value=mode,
+                    default=mode == current,
+                )
                 for mode in MODES
             ],
             min_values=1,
@@ -681,7 +686,7 @@ async def build_panel(
         title=said(store, guild_id, "structure_backup_panel_title"),
         description=cut(note, DESCRIPTION_CHARS) or None,
     )
-    embed.add_field(name=mode_label, value=mode, inline=False)
+    embed.add_field(name=mode_label, value=mode_word("structure_backup_mode", mode), inline=False)
     if mode != OFF:
         embed.add_field(
             name=said(store, guild_id, "structure_backup_notice_label"),

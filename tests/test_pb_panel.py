@@ -171,7 +171,7 @@ async def test_staff_see_the_feed_and_the_way_in_to_manage_it(bot, guild, feed):
     embed, view = await pb_panel.build_own(bot, guild, guild.get_member(STAFFER))
 
     said = field(embed, pb_panel.FEED_FIELD)
-    assert said.startswith("shadow · 1 matched · 0 with no match · 0 opted out · 1 blocked")
+    assert said.startswith("test · 1 matched · 0 with no match · 0 opted out · 1 blocked")
     assert "last look <t:" in said
     assert labels(view) == ["Do not post my personal bests", "Manage…", "Open on the site"]
     assert item(view, "Open on the site").url.endswith("/pbs.html")

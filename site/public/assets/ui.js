@@ -13,7 +13,7 @@ import {
 } from './api.js';
 import { messageTree, mountTree } from './discordmock.js';
 import { ICONS } from './icons.js';
-import { channelLabel, humanLabel } from './labels.js';
+import { channelLabel, humanLabel, modeWord } from './labels.js';
 import { capState, counterState, insertAt, keepsLines, placeholdersFor } from './fieldaids.js';
 import { applyFilters, matches, passes } from './listfilter.js';
 import * as md from './mdformat.js';
@@ -513,9 +513,9 @@ export function roleChip(name, { color = null, note = null, title = null } = {})
   ]);
 }
 
-export function modeChip(mode) {
+export function modeChip(mode, key = '') {
   const value = mode === null || mode === undefined || mode === '' ? 'not set' : String(mode);
-  return el('span', { class: 'mode-chip', 'data-mode': value, text: value });
+  return el('span', { class: 'mode-chip', 'data-mode': value, text: modeWord(value, key) });
 }
 
 export function badge(text, tone = null) {
@@ -1167,7 +1167,7 @@ function jsonText(value) {
 const SEG_MAX = 3;
 const SEG_FIRST = ['on', 'shadow', 'off'];
 
-/** The mock reads ON · SHADOW · OFF; the registry lists them the other way. */
+/** The mock reads ON · TEST · OFF; the registry lists them the other way. */
 function segOrder(choices) {
   const known = choices.filter((choice) => SEG_FIRST.includes(String(choice)));
   if (known.length !== choices.length) return choices;
@@ -1175,7 +1175,7 @@ function segOrder(choices) {
 }
 
 /**
- * The mock's three-segment control: ON / SHADOW / OFF for a mode key, and the
+ * The mock's three-segment control: ON / TEST / OFF for a mode key, and the
  * same shape for any short enum or a yes/no. Wider enums stay a <select>.
  */
 export function segment(choices, current, { onChange = null } = {}) {
@@ -1240,7 +1240,7 @@ async function control(spec, onChange) {
     const choices = spec.choices || [];
     if (choices.length && choices.length <= SEG_MAX) {
       const node = segment(
-        segOrder(choices).map((choice) => ({ value: choice, label: String(choice) })),
+        segOrder(choices).map((choice) => ({ value: choice, label: modeWord(choice, spec.key) })),
         spec.value,
         { onChange },
       );
@@ -1249,7 +1249,7 @@ async function control(spec, onChange) {
     const select = el('select', { class: 'input' });
     select.append(optionNode('', 'not set', spec.value === null || spec.value === undefined));
     for (const choice of choices) {
-      select.append(optionNode(choice, choice, String(spec.value) === String(choice)));
+      select.append(optionNode(choice, modeWord(choice, spec.key), String(spec.value) === String(choice)));
     }
     return { node: select, read: (n) => (n.value === '' ? null : n.value) };
   }
@@ -1823,7 +1823,7 @@ export function modeSwitch(spec, { onSaved = null, say = null, label = null } = 
   let stored = spec.value === null || spec.value === undefined ? null : String(spec.value);
   const choices = segOrder(spec.choices || []).map((choice) => ({
     value: choice,
-    label: String(choice),
+    label: modeWord(choice, spec.key),
   }));
   const node = segment(choices, stored, {
     onChange: async () => {
@@ -1834,7 +1834,7 @@ export function modeSwitch(spec, { onSaved = null, say = null, label = null } = 
         const reply = await saveSetting(spec.key, wanted);
         stored = String(storedValue(reply, spec.key) ?? wanted);
         node.setValue(stored);
-        voice.say(`${named} is now ${stored}.`, 'ok');
+        voice.say(`${named} is now ${modeWord(stored, spec.key)}.`, 'ok');
         if (onSaved) onSaved(spec.key, stored);
       } catch (error) {
         node.setValue(stored);

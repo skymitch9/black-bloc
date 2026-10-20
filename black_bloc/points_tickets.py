@@ -13,6 +13,7 @@ from .actionlog import log_action
 from .cogs.moderation import modmail as mm
 from .command_errors import AnswersErrors, SafeDynamicItem
 from .logkinds import VIA_DISCORD, kind_via
+from .mode_words import mode_word
 from .modmail import CARD_APPROVE, OPEN, SOURCE_POINTS, closing_dm, is_run
 from .panels import Outcome, answer, db_ready, db_up, opened, refusal, still_staff
 from .pb_feed import plain
@@ -185,7 +186,7 @@ async def tell(
     details = {"via": via, "move": move, "text": text}
     if mode != moves.ON:
         await noted(bot, guild, kind_via("points.would_dm", via), actor, user_id, **details)
-        return NOT_TOLD.format(mode=mode)
+        return NOT_TOLD.format(mode=mode_word("points_mode", mode))
     finder = getattr(bot, "get_user", None)
     user = guild.get_member(int(user_id)) or (finder(int(user_id)) if finder else None)
     why_not = await mm.deliver_dm(user, text)

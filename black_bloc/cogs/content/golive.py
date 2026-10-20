@@ -63,6 +63,7 @@ from ...golive import (
 from ...golive_replay import is_replay
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
+from ...mode_words import mode_word
 from ...panels import (
     SELECT_OPTION_LIMIT,
     Panel,
@@ -153,7 +154,7 @@ LINK_MODAL_PLACEHOLDER = "blackbloc"
 PREVIEW_SELF = "self"
 PREVIEW_PICK = "Preview an announcement…"
 PREVIEW_AS_YOU_ARE = "As you are now"
-MODE_PICK = "Announcements: off / shadow / on"
+MODE_PICK = "Announcements: off / test / on"
 MODE_OPTION = "Announcements: {mode}"
 PICK_A_STREAMER = "Somebody who has linked a channel…"
 STREAMERS_TITLE = "Streamers"
@@ -752,7 +753,7 @@ async def set_mode(
         actor=actor,
         details={"mode": value, "via": via},
     )
-    return MODE_SET.format(mode=value)
+    return MODE_SET.format(mode=mode_word("golive_mode", value))
 
 
 def test_mode_note(bot: Any, guild: Any) -> str | None:
@@ -2170,7 +2171,9 @@ class ModePick(discord.ui.Select):
             placeholder=MODE_PICK,
             options=[
                 discord.SelectOption(
-                    label=MODE_OPTION.format(mode=name), value=name, default=name == current
+                    label=MODE_OPTION.format(mode=mode_word("golive_mode", name)),
+                    value=name,
+                    default=name == current,
                 )
                 for name in GOLIVE_MODES
             ],

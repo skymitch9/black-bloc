@@ -4,6 +4,7 @@ from typing import Any, NamedTuple
 
 from .command_visibility import HIDDEN_WHEN_OFF, hidden_names, hiding_is_on
 from .logkinds import FEATURE_LABELS, FEATURES, LEVEL_DEFAULT, LEVELS, log_level_key
+from .mode_words import mode_word
 from .panels import capped_placeholder
 from .panels import panel_minutes as _panel_minutes
 from .panels import site_page_url as _site_page_url
@@ -450,7 +451,7 @@ def mode_state(store: Any, guild_id: int, row: FeatureMode) -> str:
     value = store.get(guild_id, row.key)
     if row.words:
         return row.words[0] if value else row.words[1]
-    return str(value)
+    return mode_word(row.key, value)
 
 
 def mode_lines(store: Any, guild_id: int) -> list[str]:

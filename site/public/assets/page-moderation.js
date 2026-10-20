@@ -3,6 +3,7 @@ import { start, tabHref } from './app.js';
 import { openSection } from './layout.js';
 import { logsSection } from './logs.js';
 import { memberTally, shellStatus } from './shell.js';
+import { modeWord } from './labels.js';
 import {
   ask,
   badge,
@@ -61,7 +62,7 @@ const STATS = [
 const COLUMNS = [
   ['Case', 'The case number. The same number `/mod` uses.'],
   ['Member', null],
-  ['Type', 'What was done. A "shadow" tag means automod would have done it but did not.'],
+  ['Type', 'What was done. A "test" tag means automod would have done it but did not.'],
   ['Reason', 'What the member was told, word for word.'],
   ['By', null],
   ['When', 'Hover for the exact time.'],
@@ -106,7 +107,7 @@ function modeSwitches(status, payload, say) {
       nodes.push(el('span', {
         class: 'pill',
         'data-mode': blank ? 'off' : String(row.mode),
-        text: blank ? 'not set' : String(row.mode),
+        text: blank ? 'not set' : modeWord(row.mode, row.key),
       }));
     }
   }
@@ -162,7 +163,7 @@ function caseRow(row) {
     el('span', { class: 'cell-kind' }, [
       el('span', { class: 'kind-dot', 'data-kind': String(row.kind) }),
       el('span', { text: String(row.kind) }),
-      row.applied === false ? el('span', { class: 'pill small', 'data-mode': 'shadow', text: 'shadow' }) : null,
+      row.applied === false ? el('span', { class: 'pill small', 'data-mode': 'shadow', text: modeWord('shadow', 'automod_mode') }) : null,
       row.voided_at ? badge('voided', 'danger') : null,
     ]),
     row.voided_at
@@ -332,7 +333,7 @@ async function caseDetail(id) {
     const sure = await ask({
       title: `Apply case ${row.id}?`,
       body: [
-        `This carries out what the shadow run only logged: ${(row.actions || [row.kind]).join(', ')} against ${row.user_name || row.user_id}.`,
+        `This carries out what the test run only logged: ${(row.actions || [row.kind]).join(', ')} against ${row.user_name || row.user_id}.`,
       ],
       confirmLabel: 'Apply it',
     });
@@ -360,7 +361,7 @@ async function caseDetail(id) {
       : null,
     el('p', {}, [
       'Carried out: ',
-      row.applied ? badge('yes', 'ok') : badge('no — shadow only', 'warn'),
+      row.applied ? badge('yes', 'ok') : badge('no — test only', 'warn'),
       ...(Array.isArray(row.failed) && row.failed.length ? [' ', badge(`failed: ${row.failed.join(', ')}`, 'danger')] : []),
     ]),
     row.applied ? null : bar([apply]),

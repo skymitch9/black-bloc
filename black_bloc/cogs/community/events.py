@@ -198,6 +198,7 @@ from ...handoff import TICKET as HANDOFF_TICKET
 from ...linkcheck import LINK_OK, link_answers
 from ...logkinds import VIA_DISCORD
 from ...loops import Reconciler, wait_ready
+from ...mode_words import mode_word
 from ...panels import (
     KEEP_IT,
     Panel,
@@ -1467,7 +1468,9 @@ class ModeSelect(discord.ui.Select):
         super().__init__(
             placeholder=MODE_PLACEHOLDER,
             options=[
-                discord.SelectOption(label=name, value=name, default=name == current)
+                discord.SelectOption(
+                    label=mode_word("events_mode", name), value=name, default=name == current
+                )
                 for name in EVENTS_MODES
             ],
             min_values=1,

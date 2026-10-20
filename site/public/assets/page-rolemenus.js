@@ -2,6 +2,7 @@ import { api, listOf, names, refRoles, saveSetting, send, settings, settingsName
 import { start, tabHref } from './app.js';
 import { openSection } from './layout.js';
 import { logsSection } from './logs.js';
+import { modeWord } from './labels.js';
 import {
   ago,
   ask,
@@ -1031,18 +1032,18 @@ async function panelCard(form, say) {
   ]);
 }
 
-/** Off / shadow / on, saved the moment it is picked. */
+/** Off / test / on, saved the moment it is picked. */
 function applicationsMode(spec) {
   const say = notice();
   let stored = spec.value === null || spec.value === undefined ? 'off' : String(spec.value);
   const picker = segment(
-    (spec.choices || ['off', 'shadow', 'on']).map((one) => ({ value: one, label: one })),
+    (spec.choices || ['off', 'shadow', 'on']).map((one) => ({ value: one, label: modeWord(one, spec.key) })),
     stored,
     {
       onChange: async () => {
         const wanted = picker.readValue();
         if (wanted === stored) return;
-        const done = await run(say, () => saveSetting(APPLICATIONS_MODE_KEY, wanted), `Applications are ${wanted}.`);
+        const done = await run(say, () => saveSetting(APPLICATIONS_MODE_KEY, wanted), `Applications are ${modeWord(wanted, spec.key)}.`);
         if (done.ok) {
           stored = wanted;
           refresh();

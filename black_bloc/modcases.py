@@ -9,6 +9,7 @@ from typing import Any, NamedTuple
 import discord
 
 from .automod import TIMEOUT_MAX_SECONDS
+from .mode_words import mode_word
 
 log = logging.getLogger(__name__)
 
@@ -213,7 +214,10 @@ def case_embed(
     if not applied and not done:
         embed.add_field(
             name="Not done",
-            value=f"Black Bloc is in **{mode or 'shadow'}**, so nothing was done to them.",
+            value=(
+                f"Black Bloc is in **{mode_word('automod_mode', mode or 'shadow')}**, so "
+                "nothing was done to them."
+            ),
             inline=False,
         )
     if str(note or "").strip():

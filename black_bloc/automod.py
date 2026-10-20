@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
+from .mode_words import mode_word
+
 ACTIONS = ("delete", "warn", "timeout")
 AUTOMOD_MODES = ("off", "shadow", "on")
 MOD_DM_STYLES = ("none", "server_action", "server_action_reason")
@@ -464,7 +466,10 @@ RULE_FIELDS = ("enabled", "window_s", "threshold", "actions", "timeout_s", "word
 
 MODE_LABELS: dict[str, str] = {
     "off": "off — nothing is read and nothing is counted",
-    "shadow": "shadow — it logs what it would have done, and does none of it",
+    "shadow": (
+        f"{mode_word('automod_mode', 'shadow')} — it logs what it would have done, and does "
+        "none of it"
+    ),
     "on": "on — it deletes, warns and times people out for real",
 }
 
@@ -524,7 +529,7 @@ PANEL_NUMBERS_MOVE = AutomodMove(PANEL_NUMBERS, "Numbers…", "secondary", modal
 CONFIRM_ON_MOVE = AutomodMove(ARM_CONFIRM, "Stop asking before arming", "secondary")
 CONFIRM_OFF_MOVE = AutomodMove(ARM_CONFIRM, "Ask before arming", "secondary")
 ARM_MOVE = AutomodMove(ARM, "Yes, arm it", "danger")
-KEEP_SHADOW_MOVE = AutomodMove(KEEP, "Keep it in shadow", "secondary")
+KEEP_SHADOW_MOVE = AutomodMove(KEEP, "Keep it in test", "secondary")
 KEEP_OFF_MOVE = AutomodMove(KEEP, "Keep it off", "secondary")
 
 PANEL_MOVES = (

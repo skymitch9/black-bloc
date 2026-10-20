@@ -723,7 +723,7 @@ MODE_LINES = {
         "Linking still counts: raid trains and fan roles read it."
     ),
     "shadow": (
-        "Go-live announcements are in **shadow** right now — the log says what would have been "
+        "Go-live announcements are in **test** right now — the log says what would have been "
         "posted and nothing is."
     ),
 }

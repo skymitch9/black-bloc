@@ -60,6 +60,7 @@ from ...honeypot import (
     trap_options,
 )
 from ...logkinds import VIA_DISCORD, kind_via
+from ...mode_words import mode_word
 from ...panels import (
     Outcome,
     Panel,
@@ -178,7 +179,7 @@ def trimmed(content: Any) -> str:
 
 def offer_text(user_id: int, content: str) -> str:
     return (
-        f"Trap post from <@{user_id}> — shadow mode, so nothing was done to them beyond deleting "
+        f"Trap post from <@{user_id}> — test mode, so nothing was done to them beyond deleting "
         f"it. Ban them with the button if this is a bot.\n> {content or '(no text)'}"
     )
 
@@ -404,7 +405,7 @@ async def make_trap_channel(
     mode = bot.store.get(guild.id, "honeypot_mode")
     return (
         "created",
-        f"{channel.mention} is the trap, and the mode is **{mode}**. "
+        f"{channel.mention} is the trap, and the mode is **{mode_word('honeypot_mode', mode)}**. "
         + ("Its notice is posted and pinned." if posted else NOTICE_NOT_POSTED),
     )
 
@@ -708,7 +709,9 @@ async def set_mode(
         actor=actor,
         details={"mode": value, "via": via},
     )
-    return Outcome(True, MODE_SET.format(mode=value), "set", 200, value)
+    return Outcome(
+        True, MODE_SET.format(mode=mode_word("honeypot_mode", value)), "set", 200, value
+    )
 
 
 async def set_exempt_roles(
@@ -792,7 +795,7 @@ def status_lines(bot: Any, guild: Any, totals: dict[str, int]) -> list[str]:
     staff = store.staff_roles(guild)
     mode = store.get(guild.id, "honeypot_mode")
     lines = [
-        f"**mode** — {mode}",
+        f"**mode** — {mode_word('honeypot_mode', mode)}",
         f"**staff (always exempt)** — {staff_roles_sentence(staff)}",
         "**trap channels** — "
         + (", ".join(f"<#{c}>" for c in channels) if channels else "not set up yet"),
@@ -800,7 +803,7 @@ def status_lines(bot: Any, guild: Any, totals: dict[str, int]) -> list[str]:
         "**exempt roles** — "
         + (", ".join(f"<@&{r}>" for r in roles) if roles else "staff only"),
         f"**caught** — {totals.get('banned', 0)} banned · "
-        f"{totals.get('would_ban', 0)} logged in shadow · "
+        f"{totals.get('would_ban', 0)} logged in test · "
         f"{totals.get('ban_failed', 0)} failed · {totals.get('exempt', 0)} ignored",
     ]
     blocker = arming_refusal(bot, guild)

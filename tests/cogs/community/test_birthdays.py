@@ -801,7 +801,7 @@ async def test_a_member_is_offered_no_staff_control_at_all(cog, bot, birthday_pe
 
 async def test_the_panel_says_in_words_that_nothing_is_posted_yet(cog, bot, birthday_person):
     shadow = panel_embed(await open_panel(cog, bot, birthday_person)).description
-    assert "**shadow**" in shadow and "nothing is posted" in shadow
+    assert "**test**" in shadow and "nothing is posted" in shadow
 
     await bot.store.set(GUILD, "birthday_mode", "off")
     off = panel_embed(await open_panel(cog, bot, birthday_person)).description
@@ -1467,7 +1467,7 @@ async def test_shadow_posts_a_rehearsal_to_the_rehearsal_home_and_not_the_real_c
     assert rehearsal[0]["content"] is None
     assert rehearsal[0]["allowed_mentions"].everyone is False
     assert found.posted == 1
-    assert "**shadow**" in found.said and "#return-of-the-gen" in found.said
+    assert "**test**" in found.said and "#return-of-the-gen" in found.said
     assert await action_kinds(bot.db) == ["birthday.would_announce", "birthday.posted_now"]
     assert json.loads((await details_for(bot.db, "birthday.would_announce"))[0])["rehearsed"]
 

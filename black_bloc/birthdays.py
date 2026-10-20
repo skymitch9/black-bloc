@@ -56,8 +56,8 @@ MODE_WARNINGS: dict[str, str] = {
         "still stored, and staff can turn wishes on."
     ),
     "shadow": (
-        "⚠️ Birthday wishes are in **shadow** — the day is written to the log but nothing is "
-        "posted yet. Staff can turn wishes on."
+        "⚠️ Birthday wishes are in **test** — the day is written to the log but nothing is "
+        "posted here yet. Staff can turn wishes on."
     ),
 }
 DATE_MODAL_TITLE_LIMIT = 45

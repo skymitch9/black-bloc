@@ -137,7 +137,7 @@ def test_the_case_card_never_pings_and_says_when_nothing_was_done():
     names = [field.name for field in embed.fields]
     assert names == ["Member", "Moderator", "For", "What tripped it", "Reason", "Not done"]
     assert embed.fields[1].value == "Black Bloc"
-    assert "shadow" in embed.fields[-1].value
+    assert "test" in embed.fields[-1].value
 
     applied = case_embed(case_id=4, kind="ban", user_id=USER, moderator_id=MOD)
     assert [field.name for field in applied.fields] == ["Member", "Moderator"]

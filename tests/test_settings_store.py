@@ -10,6 +10,7 @@ from black_bloc.automod import validate_rules
 from black_bloc.config import load_settings
 from black_bloc.emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
 from black_bloc.logkinds import FEATURES, LEVELS
+from black_bloc.mode_words import mode_word
 from black_bloc.settings_store import (
     BIRTHDAY_CHANNEL_ID,
     BIRTHDAY_COLOR,
@@ -454,7 +455,7 @@ async def test_golive_settings_round_trip(store):
 
 def test_the_new_value_types_are_checked():
     assert coerce_value("golive_mode", "shadow") == "shadow"
-    with pytest.raises(SettingError, match="off, shadow, on"):
+    with pytest.raises(SettingError, match="off, test, on"):
         coerce_value("golive_mode", "maybe")
     assert coerce_value("golive_live_role_id", _Role(6)) == 6
     with pytest.raises(SettingError, match="takes a role"):
@@ -497,8 +498,9 @@ async def test_tempvoice_has_a_shadow_between_off_and_on(store):
     """The lobby is staff-only in shadow, so the enum has to carry all three."""
     assert TEMPVOICE_MODES == ("off", "shadow", "on")
     assert await store.set(1, "tempvoice_mode", "shadow") == "shadow"
-    with pytest.raises(SettingError, match="off, shadow, on"):
+    with pytest.raises(SettingError, match="off, staff only, on"):
         coerce_value("tempvoice_mode", "sideways")
+    assert coerce_value("tempvoice_mode", "staff only") == "shadow"
 
 
 async def test_role_menus_ship_turned_off(store):
@@ -753,7 +755,7 @@ def test_how_late_an_announcement_may_be_is_a_capped_whole_number():
 
 def test_the_birthday_values_are_checked_and_parsed():
     assert coerce_value("birthday_mode", "on") == "on"
-    with pytest.raises(SettingError, match="off, shadow, on"):
+    with pytest.raises(SettingError, match="off, test, on"):
         coerce_value("birthday_mode", "someday")
     assert coerce_value("birthday_show_age", True) is True
     with pytest.raises(SettingError, match="true or false"):
@@ -2177,7 +2179,7 @@ def test_every_golive_page_choice_is_named_in_its_own_help():
         if not choices:
             continue
         said = KEY_HELP[key].lower()
-        missing = [one for one in choices if one.lower() not in said]
+        missing = [one for one in choices if mode_word(key, one).lower() not in said]
         if missing:
             unsaid[key] = missing
     assert unsaid == {}
@@ -2458,7 +2460,7 @@ BOOL_DECISION_KEYS = [
         "birthday_panel_next_for_members", True, ("staff always see them",), id="F-B1-next"
     ),
     pytest.param("birthday_panel_lookup", True, ("staff always can",), id="F-B1-lookup"),
-    pytest.param("hide_commands_when_off", True, ("shadow does not",), id="hide-when-off"),
+    pytest.param("hide_commands_when_off", True, ("test does not",), id="hide-when-off"),
     pytest.param(
         "applications_roster_shows_left", True, ("marked as gone",), id="roster-shows-left"
     ),

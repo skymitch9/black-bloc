@@ -9,6 +9,7 @@ import discord
 
 from . import pb_moves, pb_store
 from .command_errors import AnswersErrors
+from .mode_words import mode_word
 from .panels import Panel, db_up, opened, retire, still_staff
 from .pb_feed import OFF, PAGE, mode_of, said, time_words
 from .pb_moves import NAME_LIMIT, REASON_LIMIT
@@ -187,7 +188,8 @@ async def feed_lines(bot: Any, guild: Any) -> list[str]:
     for row in rows:
         if row["state"] in counts:
             counts[row["state"]] += 1
-    lines = [FEED_LINE.format(mode=mode_of(bot.store, guild.id), **counts)]
+    mode = mode_word("pb_feed_mode", mode_of(bot.store, guild.id))
+    lines = [FEED_LINE.format(mode=mode, **counts)]
     looked = await pb_store.looks(bot.db, guild.id)
     if looked is not None and looked["outcome"] == "failed":
         lines.append(

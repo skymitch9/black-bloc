@@ -945,7 +945,7 @@ async def test_set_key_refuses_a_bad_value_in_words_and_writes_nothing(bot, db, 
     found = await set_key(bot, bot.guild, "golive_mode", "sideways", member)
 
     assert not found.ok and found.status == 400
-    assert "off, shadow, on" in found.message
+    assert "off, test, on" in found.message
     assert bot.store.get(GUILD, "golive_mode") == "shadow"
     assert await kinds(db) == []
 

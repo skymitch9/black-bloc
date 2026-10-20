@@ -828,7 +828,7 @@ def test_the_card_says_in_words_when_announcements_are_off_or_shadow():
 
     assert "**off** right now" in off[-1]
     assert "Linking still counts" in off[-1]
-    assert "**shadow** right now" in shadow[-1]
+    assert "**test** right now" in shadow[-1]
 
 
 def test_the_card_carries_a_channel_note_last_when_it_is_given_one():

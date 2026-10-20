@@ -731,7 +731,7 @@ async def test_the_command_answers_one_ephemeral_panel_carrying_the_whole_status
     assert said["ephemeral"] is True and said["allowed_mentions"].everyone is False
     embed = said["embed"]
     assert embed.title == automod_cog.PANEL_TITLE
-    for line in ("**mode** — shadow", "**warn threshold**", "**modlog**", "1 logged only"):
+    for line in ("**mode** — test", "**warn threshold**", "**modlog**", "1 logged only"):
         assert line in embed.description
     assert "**mention_spam** — on · 5 in 30s · delete, warn, timeout (300s)" in embed.description
     assert "**caps** — off" in embed.description
@@ -1004,7 +1004,7 @@ async def test_arming_from_the_panel_asks_once_more_and_only_then_writes(cog, bo
 
     assert bot.store.get(GUILD, "automod_mode") == "shadow"
     confirm = interaction.view
-    assert labels(confirm) == ["Yes, arm it", "Keep it in shadow"]
+    assert labels(confirm) == ["Yes, arm it", "Keep it in test"]
     assert "Are you sure?" in [one.name for one in interaction.embed.fields]
 
     await button(confirm, "Yes, arm it").callback(interaction)
@@ -1019,7 +1019,7 @@ async def test_keeping_it_in_shadow_changes_nothing_and_goes_back(cog, bot, lead
     interaction = FakeInteraction(bot, lead)
     await pick(control(root, automod_cog.MODE_PLACEHOLDER), ["on"], interaction)
 
-    await button(interaction.view, "Keep it in shadow").callback(interaction)
+    await button(interaction.view, "Keep it in test").callback(interaction)
 
     assert bot.store.get(GUILD, "automod_mode") == "shadow"
     assert await action_kinds(db) == []
@@ -1078,7 +1078,7 @@ async def test_arming_is_refused_by_the_same_answer_the_picker_read(cog, bot, le
     refused = await automod_cog.set_mode(bot, bot.guild, "sideways", lead)
 
     assert refused.ok is False and (refused.code, refused.status) == ("bad_value", 400)
-    assert "off, shadow, on" in refused.message
+    assert "off, test, on" in refused.message
     assert bot.store.get(GUILD, "automod_mode") == "on"
 
 

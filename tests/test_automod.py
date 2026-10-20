@@ -472,7 +472,7 @@ def test_only_arming_asks_twice():
     assert needs_confirm("shadow", "off", True) is False
     assert needs_confirm("shadow", "on", False) is False
     shadow = [move.label for move in confirm_buttons("shadow")]
-    assert shadow == ["Yes, arm it", "Keep it in shadow"]
+    assert shadow == ["Yes, arm it", "Keep it in test"]
     assert confirm_buttons("off")[1].label == "Keep it off"
 
 
