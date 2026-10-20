@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-20 — one section APPENDED, nothing re-keyed**: *Table height* (branch `runs-table-height`, off `main` `d73e0960`); keyed by LINE at that branch. Before that:
 > **2026-10-20 — one section APPENDED, nothing re-keyed**: *Demo mode and pagination* (branch `runs-demo`, off `main` `7dd74fe0`); keyed by LINE at that branch. Before that:
 > **2026-10-20 — one section APPENDED, two rows MARKED amended/retired in place, nothing re-keyed**: *Loose search* (branch `runs-loose-search`, off `main` `7d6dc025`); keyed by LINE at that branch. Before that:
 > **2026-10-20 — WHOLE FILE RE-KEYED against `small-fixes` HEAD (= `main` `d19dcf51`, v245, plus this branch's code; no code changed after the re-key)**, by `scripts/scan/rekey_code_notes.py --names --write` (gitignored tooling) and a by-definition pass for the `path` `name` rows: **3,390** `path:line` keys checked, **2,049** were stale and moved, **1,289** unchanged, **49** newly marked `(GONE)` (nothing at the anchor any more; the old number kept), **3** ambiguous left as they were; **343** NAME-keyed rows given real line anchors (43 `path:name`, 298 `path` `name` — every section builds 1–5 appended included — and 2 re-pointed to the file the name moved to), **4** more marked retired in place (`rehearsal_payload`, `hide_rehearsed_ticket_button`, `tracker_link`, `baf_controls`), **41** left keyed by name (31 the tool could not place, 6 whose short path `spotlight.py` names two files, 1 with two definitions, 3 that name a call or attribute). Inline `:N` refs in the prose: **131** moved, 35 unchanged, 37 gone, **396 left unresolved** (a confident wrong number is worse than a stale one). Spot check: of 3,485 live keyed rows, 2,642 land on a line naming one of the row's backticked identifiers, 3 land on a blank line, 0 past the end. One section APPENDED: *Small fixes* (keyed by LINE). Before that:
@@ -10819,3 +10820,16 @@ Design: `docs/info/baf-runs-design.md` *Demo mode and pagination*.
 | `site/public/assets/page-runs.js:767` `settingOf` | Reads `runs_page_size` and `runs_demo_refused` (and the genre rule for the demo) from the cached `/api/settings`; `saveSetting` clears that cache, so a Settings save lands on the refresh it triggers. |
 | `black_bloc/baf_runs.py:66` `DEMO_FILE` / `black_bloc/api/tools/runs.py:95` `runs_demo` | The file sits in the package, not `site/public/`: `SiteFiles` serves everything under `site/public/` to anyone, and the gate is the API. The route is on the staff-gated runs router. |
 | `site/mock/server.mjs:12514` `RUNS_DEMO_FILE` | The mock reads the same committed file. |
+
+## Table height — keyed by LINE at `runs-table-height` (branch `runs-table-height`, 2026-10-20; re-key after the merge)
+
+Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
+
+| Where | Why |
+|---|---|
+| `site/public/assets/tablefit.js:9` `tableFit` | The arithmetic alone: window − top − below, floored. Pure so `site/mock/tablefit.test.mjs` proves it without a browser. |
+| `site/public/assets/tablefit.js:19` `scrolledBy` | The site scrolls `main.content`, not the window, so the box's document top is its viewport top plus every ancestor's `scrollTop` plus `scrollY`; without it a scrolled page would grow the fit by the scroll. |
+| `site/public/assets/tablefit.js:25` `measure` | Sets ONLY the `--table-fit` variable, never `height` or an inline `max-height` (the test asserts both), so a short table keeps its natural height. A box not yet in the page is retried for up to 120 frames (the runs page paints before the card is attached); a box replaced by a repaint is dropped after that. |
+| `site/public/assets/tablefit.js:49` `fitScroll` | Opts in only a box that already has `data-long` (more than `ui.js:589` `LONG_FROM` rows), so the sticky-header rule (`site.css`, keyed on `data-long`) always comes with it. One `resize` listener per window re-fits every live box in one frame. |
+| `site/public/assets/site.css:839` `.table-scroll[data-fit="true"]` | Same specificity as the `data-long` cap and BEFORE the `max-width: 900px` block, so the phone rule (no cap) still wins on a phone. |
+| `site/public/assets/page-runs.js:346` / `:426` | Both views re-fit after every paint, with their pager holder as `below` (the holder survives the repaint; the pager inside it does not). |
