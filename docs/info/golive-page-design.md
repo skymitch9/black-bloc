@@ -479,3 +479,5 @@ registry's exact wording (commit `dfda995`).
   rendered the live page against production since; the render above is against the local mock.
 
 > **Follow-up 2026-10-20 (`shadow-one-meaning`):** The header strip is now *Go-live announcements* (off/test/on), *Also watch YouTube* (on/off, `golive_youtube`) and *Ping roles*; the *YouTube announcements* and *Spotlight* switches are gone (a Spotlight count cell stays). See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).
+
+> **2026-10-20 follow-up (one-optout, branch `one-optout`, not merged):** the go-live opt-out is the `announce` kind of `person_optouts` (the old table is still written one release); staff opt-back-in logs `optouts.overridden`; two new keys in the Who gets announced and Spotlighted channels drawers. See [`one-optout-design.md`](one-optout-design.md).
