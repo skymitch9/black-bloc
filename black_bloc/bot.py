@@ -27,6 +27,7 @@ from .rolemenu_panels import panels_on_boot
 from .selftest import on_boot as selftest_on_boot
 from .settings_store import SettingsStore
 from .shadow import install as install_rehearsal_home
+from .shadow_one_meaning import apply as migrate_shadow_one_meaning
 from .storage.db import Database
 
 log = logging.getLogger(__name__)
@@ -101,6 +102,7 @@ class BlackBlocBot(commands.Bot):
         await self.store.load()
         await self._migrate_posts_switch()
         await self._migrate_test_channel()
+        await self._migrate_shadow_one_meaning()
         install_rehearsal_home(self)
         self._apply_boot_presence()
         log.info("database ready at %s", self.settings.database_path)
@@ -126,6 +128,14 @@ class BlackBlocBot(commands.Bot):
                 await self.store.load()
         except Exception:
             log.exception("one test channel: the boot migration failed; the overrides are unread")
+
+    async def _migrate_shadow_one_meaning(self) -> None:
+        """Before any cog loads, so no cog reads a folded or retired switch."""
+        try:
+            if await migrate_shadow_one_meaning(self):
+                await self.store.load()
+        except Exception:
+            log.exception("shadow one meaning: the boot migration failed; retired rows stay unread")
 
     def _apply_boot_presence(self) -> None:
         """setup_hook runs before IDENTIFY, so the stored sentence is the one Discord is sent."""
