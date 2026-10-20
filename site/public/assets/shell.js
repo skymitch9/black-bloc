@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { duration, el, icon } from './ui.js';
+import { modeWord } from './labels.js';
 
 /** The pages a signed-in member who is not staff may use; the first is where they land. */
 export const MEMBER_TABS = ['requests', 'guides', 'brackets', 'leaderboard'];
@@ -159,7 +160,7 @@ function paintDots(status) {
     }
     const shown = String(mode) === 'thread' || String(mode) === 'channel' ? 'on' : String(mode);
     dot.setAttribute('data-mode', shown);
-    dot.setAttribute('title', `${link.querySelector('.nav-label').textContent} is ${mode}`);
+    dot.setAttribute('title', `${link.querySelector('.nav-label').textContent} is ${modeWord(mode)}`);
     dot.hidden = false;
   }
 }

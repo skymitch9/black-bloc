@@ -63,6 +63,7 @@ from ...golive import (
 from ...golive_replay import is_replay
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
+from ...mode_words import mode_word
 from ...panels import (
     SELECT_OPTION_LIMIT,
     Panel,
@@ -78,7 +79,6 @@ from ...settings_store import (
     GOLIVE_AUTOLINK_PRESENCE_KEY,
     GOLIVE_AUTOLINK_VIDEO_KEY,
     GOLIVE_COSTREAM_AUTHOR_KEY,
-    GOLIVE_COSTREAM_MODE_KEY,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
     GOLIVE_LIVE_AUTHOR_KEY,
     GOLIVE_MODES,
@@ -153,7 +153,13 @@ LINK_MODAL_PLACEHOLDER = "blackbloc"
 PREVIEW_SELF = "self"
 PREVIEW_PICK = "Preview an announcement…"
 PREVIEW_AS_YOU_ARE = "As you are now"
-MODE_PICK = "Announcements: off / shadow / on"
+MODE_PICK = "Announcements: off / test / on"
+YOUTUBE_WATCHED = "watched — a linked YouTube channel going live is announced like Twitch"
+YOUTUBE_UNWATCHED = "not watched"
+YOUTUBE_ON_SAID = "YouTube is watched from now on, under the same go-live switch as Twitch."
+YOUTUBE_OFF_SAID = "YouTube is no longer watched; Twitch announcements carry on as they were."
+YOUTUBE_MOVES = {"youtube_on": True, "youtube_off": False}
+GOLIVE_YOUTUBE_KEY = "golive_youtube"
 MODE_OPTION = "Announcements: {mode}"
 PICK_A_STREAMER = "Somebody who has linked a channel…"
 STREAMERS_TITLE = "Streamers"
@@ -752,7 +758,21 @@ async def set_mode(
         actor=actor,
         details={"mode": value, "via": via},
     )
-    return MODE_SET.format(mode=value)
+    return MODE_SET.format(mode=mode_word("golive_mode", value))
+
+
+async def set_youtube(
+    bot: Any, guild: Any, actor: Any, value: bool, *, via: str = VIA_DISCORD
+) -> str:
+    await bot.store.set(guild.id, GOLIVE_YOUTUBE_KEY, bool(value), by=target_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.youtube", via),
+        actor=actor,
+        details={"watch": bool(value), "via": via},
+    )
+    return YOUTUBE_ON_SAID if value else YOUTUBE_OFF_SAID
 
 
 def test_mode_note(bot: Any, guild: Any) -> str | None:
@@ -774,7 +794,9 @@ async def status_lines(bot: Any, cog: Any, guild: Any) -> list[str]:
     ending = end_summary(store.get(guild.id, "golive_end_template"))
     failures = getattr(cog, "poll_failures", 0)
     lines = [
-        f"**mode** — {store.get(guild.id, 'golive_mode')}",
+        f"**mode** — {mode_word('golive_mode', store.get(guild.id, 'golive_mode'))}",
+        "**YouTube** — "
+        + (YOUTUBE_WATCHED if store.get(guild.id, GOLIVE_YOUTUBE_KEY) else YOUTUBE_UNWATCHED),
         f"**stream end** — {ending}",
         f"**channel** — {where}" + (f" — but {note}" if note else ""),
         f"**cooldown** — {store.get(guild.id, 'golive_cooldown_minutes')} minute(s)",
@@ -1147,7 +1169,7 @@ class GoLive(commands.Cog):
         async with self._lock(member.id):
             row = await open_session_for(self.bot.db, member.guild.id, member.id)
             if row is None or not joins_session(
-                row, info.platform, self._costream_mode(member.guild.id)
+                row, info.platform
             ):
                 return
             await self._add_platform_once(member, info, source, row)
@@ -1364,7 +1386,7 @@ class GoLive(commands.Cog):
             return ROLE_FILTER
         open_row = await open_session_for(self.bot.db, guild.id, member.id)
         if open_row is not None:
-            if joins_session(open_row, info.platform, self._costream_mode(guild.id)):
+            if joins_session(open_row, info.platform):
                 await self._add_platform_once(member, info, source, open_row)
             return OPEN_SESSION
         last = await latest_session(self.bot.db, guild.id, member.id)
@@ -1705,9 +1727,6 @@ class GoLive(commands.Cog):
     def _mode(self, guild_id: int) -> str:
         return self.bot.store.get(guild_id, "golive_mode")
 
-    def _costream_mode(self, guild_id: int) -> str:
-        return self.bot.store.get(guild_id, GOLIVE_COSTREAM_MODE_KEY)
-
     def _may_change_roles(self, guild_id: int) -> bool:
         return self._mode(guild_id) == "on" and getattr(self.bot, "guard", None) is None
 
@@ -1849,7 +1868,7 @@ class GoLive(commands.Cog):
             open_row = await open_session_for(self.bot.db, guild_id, user_id)
             if stream is not None:
                 if open_row is None or joins_session(
-                    open_row, TWITCH, self._costream_mode(guild_id)
+                    open_row, TWITCH
                 ):
                     await self._go_live(member, from_twitch(stream), "twitch")
             elif await open_session_on(self.bot.db, guild_id, user_id, "twitch") is not None:
@@ -1906,10 +1925,8 @@ BLOCK_SHOWN_MODE = "on"
 
 
 def block_is_on(store: Any, guild_id: int) -> bool:
-    """The who's-live-now block draws while go-live or spotlight is on at all."""
-    return any(
-        store.get(guild_id, key) not in (None, "off") for key in ("golive_mode", "spotlight_mode")
-    )
+    """The who's-live-now block draws while go-live (spotlights too) is on at all."""
+    return store.get(guild_id, "golive_mode") not in (None, "off")
 
 
 async def block_streams(bot: Any, guild: Any) -> list[LiveLine]:
@@ -2029,7 +2046,10 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         lines.append(STAFF_ONLY_LINE)
     embed = discord.Embed(title=PANEL_TITLE, description="\n".join(lines))
     view = GoLivePanel(minutes_for(bot, guild.id))
-    for move in panel_buttons(linked=bool(login), opted_out=opted_out, staff=staff):
+    youtube = bool(store.get(guild.id, GOLIVE_YOUTUBE_KEY))
+    for move in panel_buttons(
+        linked=bool(login), opted_out=opted_out, staff=staff, youtube=youtube
+    ):
         view.add_item(MoveButton(move))
     add_site_link(view, bot, 2)
     if staff:
@@ -2090,6 +2110,15 @@ async def run_move(interaction: discord.Interaction, move: Any, previous: Any = 
         return
     if action == "refresh":
         await render_panel(interaction, previous)
+        return
+    if action in YOUTUBE_MOVES:
+        if not await still_staff(interaction):
+            return
+        said = await set_youtube(
+            interaction.client, interaction.guild, interaction.user, YOUTUBE_MOVES[action]
+        )
+        await render_panel(interaction, previous)
+        await answer(interaction, said)
         return
     said = await OWN_MOVES[action](interaction.client, interaction.guild, interaction.user)
     await render_panel(interaction, previous)
@@ -2170,7 +2199,9 @@ class ModePick(discord.ui.Select):
             placeholder=MODE_PICK,
             options=[
                 discord.SelectOption(
-                    label=MODE_OPTION.format(mode=name), value=name, default=name == current
+                    label=MODE_OPTION.format(mode=mode_word("golive_mode", name)),
+                    value=name,
+                    default=name == current,
                 )
                 for name in GOLIVE_MODES
             ],

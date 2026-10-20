@@ -540,8 +540,6 @@ MAKE_FORUM = "make_forum"
 TRANSCRIPTS = "transcripts"
 MODE = "mode"
 REPLY_STYLE = "reply_style"
-ENABLE = "enable"
-DISABLE = "disable"
 UNBLOCK = "unblock"
 BLOCK_PICK = "block_pick"
 BLOCK_REASON = "block_reason"
@@ -602,8 +600,6 @@ FORUM_MOVE = ModmailMove(FORUM, "Forum channel…", "secondary", 3)
 MAKE_FORUM_MOVE = ModmailMove(MAKE_FORUM, "Make the forum", "primary", 3)
 TRANSCRIPTS_MOVE = ModmailMove(TRANSCRIPTS, "Transcripts…", "secondary", 1)
 MODE_MOVE = ModmailMove(MODE, "Mode…", "secondary", 1)
-ANSWER_ON_MOVE = ModmailMove(ENABLE, "Answer DMs on", "primary", 1)
-ANSWER_OFF_MOVE = ModmailMove(DISABLE, "Answer DMs off", "secondary", 1)
 REPLY_STYLE_MOVE = ModmailMove(REPLY_STYLE, "Reply style…", "secondary", 2)
 SETUP_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 2)
 SETUP_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 2)
@@ -666,8 +662,6 @@ PANEL_MOVES = (
     MAKE_FORUM_MOVE,
     TRANSCRIPTS_MOVE,
     MODE_MOVE,
-    ANSWER_ON_MOVE,
-    ANSWER_OFF_MOVE,
     REPLY_STYLE_MOVE,
     SETUP_BACK_MOVE,
     SETUP_REFRESH_MOVE,
@@ -734,14 +728,13 @@ def root_buttons(
     )
 
 
-def setup_buttons(*, enabled: bool, has_forum: bool = False) -> tuple[ModmailMove, ...]:
+def setup_buttons(*, has_forum: bool = False) -> tuple[ModmailMove, ...]:
     """One button that names its own effect, never two spellings of the same switch."""
     return (
         CATEGORY_MOVE,
         STAFF_CHANNEL_MOVE,
         TRANSCRIPTS_MOVE,
         MODE_MOVE,
-        ANSWER_OFF_MOVE if enabled else ANSWER_ON_MOVE,
         REPLY_STYLE_MOVE,
         TICKET_BUTTON_MOVE,
         SETUP_BACK_MOVE,

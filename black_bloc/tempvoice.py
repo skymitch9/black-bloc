@@ -72,7 +72,7 @@ MODE_OFF_LINE = (
     "channel. Channels that already exist keep working."
 )
 SHADOW_LINE = (
-    "The lobby is hidden from members while temp voice is in **shadow** — staff can still see "
+    "The lobby is hidden from members while temp voice is **staff only** — staff can still see "
     "it, and a room it makes is hidden the same way."
 )
 ORPHAN_LINE = (

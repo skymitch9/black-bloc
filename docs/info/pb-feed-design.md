@@ -440,3 +440,5 @@ same registry, so the absolute counts will move at merge; this branch's own delt
   added to the self-test's panel doors.
 
 > **Follow-up 2026-10-20 (`one-test-channel`):** `pb_feed_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** `pb_feed_posting_shadow` and `pb_feed_no_channel_words` are RETIRED (the latter had no reader since v241). A matched member reads `pb_feed_posting_on` / `pb_feed_posting_off` and nothing while the feed is in **test** (shadow is now called test everywhere a person reads it). See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

@@ -7,7 +7,6 @@ import discord
 
 from .actionlog import log_action
 from .settings_store import (
-    BOOT_STATUS_MODE,
     BOOT_STATUS_TEXT_KEY,
     SHUTDOWN_STATUS_TEXT_KEY,
 )
@@ -26,6 +25,7 @@ BIO_REFUSED = (
 )
 BOOT_REFUSED = "presence: the shutdown status was not set — %s: %s"
 GREEN_REFUSED = "presence: the boot status could not be cleared — %s: %s"
+BOOT_STATUS = "on"
 
 
 def status_text(prefix: Any, count: int) -> str:
@@ -75,7 +75,7 @@ def _setting(store: Any, guild_id: int | None, key: str) -> Any:
 
 
 def _red(store: Any, guild_id: int | None, key: str) -> dict[str, Any]:
-    if _setting(store, guild_id, BOOT_STATUS_MODE) != "on":
+    if BOOT_STATUS != "on":
         return {}
     said = str(_setting(store, guild_id, key) or "").strip()[:STATUS_LIMIT]
     if not said:

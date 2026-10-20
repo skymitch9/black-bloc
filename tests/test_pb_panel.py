@@ -171,7 +171,7 @@ async def test_staff_see_the_feed_and_the_way_in_to_manage_it(bot, guild, feed):
     embed, view = await pb_panel.build_own(bot, guild, guild.get_member(STAFFER))
 
     said = field(embed, pb_panel.FEED_FIELD)
-    assert said.startswith("shadow · 1 matched · 0 with no match · 0 opted out · 1 blocked")
+    assert said.startswith("test · 1 matched · 0 with no match · 0 opted out · 1 blocked")
     assert "last look <t:" in said
     assert labels(view) == ["Do not post my personal bests", "Manage…", "Open on the site"]
     assert item(view, "Open on the site").url.endswith("/pbs.html")
@@ -364,8 +364,8 @@ async def test_the_command_says_so_when_the_database_is_down(bot, guild, feed, m
 @pytest.mark.parametrize(
     ("mode", "says", "never"),
     [
-        ("on", "A personal best is posted once speedrun.com has verified it.", "trying this out"),
-        ("shadow", "Staff are still trying this out", "is posted once"),
+        ("on", "A personal best is posted once speedrun.com has verified it.", "switched off"),
+        ("shadow", "**speedrun.com**", "is posted once"),
         ("off", "switched off", "is posted once"),
     ],
 )
@@ -393,7 +393,7 @@ async def test_opting_back_in_while_rehearsing_promises_no_post(bot, guild, feed
     said = back["embed"].description
     assert said.startswith("Done — you are back in the personal best feed.")
     assert "will be posted" not in said and "is posted once" not in said
-    assert "Staff are still trying this out" in said
+    assert "switched off" not in said
 
 
 @pytest.mark.parametrize("move", ["Unmatch", "Clear the opt-out"])

@@ -405,7 +405,7 @@ def test_each_count_is_a_line_and_a_zero_count_says_nothing():
 
 def test_shadow_names_the_rehearsal_home_not_the_real_channel():
     said = post_today_said(WordStore(), 1, PostedToday(mode="shadow", posted=1, channel="#t"))
-    assert "**shadow**" in said and "#t" in said and "Posted" not in said
+    assert "**test**" in said and "#t" in said and "Posted" not in said
 
 
 def test_a_blank_or_broken_staff_wording_falls_back_to_the_shipped_one():

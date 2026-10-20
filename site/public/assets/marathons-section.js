@@ -93,7 +93,7 @@ const NOTHING_YET = 'Black Bloc follows no marathon yet. **Add a marathon** with
   + 'schedule link.';
 const GETTING_IT = 'Reading the schedule…';
 const MODE_OFF = 'Marathon posts are **{mode}**. **Marathons** under Settings and logs turns them on.';
-const MODE_SHADOW = 'Marathon posts are in **shadow**: the board, the reminders and the '
+const MODE_SHADOW = 'Marathon posts are in **test**: the board, the reminders and the '
   + 'shoutouts land where shadow_channel_id points, with the rehearsal note.';
 const NO_CHANNEL = 'No channel — each run links its runner';
 const NO_RUNS = 'No runs on this schedule yet — it may not be published. Black Bloc keeps '
@@ -1752,7 +1752,7 @@ function listSection(payload, feeds, say, archive) {
   list.body.append(...[
     switched
       ? el('div', { class: 'bar mx-mode' }, [el('span', { class: 'cell-quiet', text: MODE_LABEL }), switched.node, switched.say])
-      : el('p', { class: 'field-help' }, [el('span', { text: 'Marathon posts are ' }), modeChip(payload.mode), el('span', { text: '.' })]),
+      : el('p', { class: 'field-help' }, [el('span', { text: 'Marathon posts are ' }), modeChip(payload.mode, 'marathon_mode'), el('span', { text: '.' })]),
     payload.mode === 'off' ? el('p', { class: 'field-help' }, boldParts(said(MODE_OFF, { mode: payload.mode }))) : null,
     payload.mode === 'shadow' ? el('p', { class: 'field-help' }, boldParts(MODE_SHADOW)) : null,
     say,

@@ -41,6 +41,7 @@ from ...events import set_zone as store_zone
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
+from ...mode_words import mode_word
 from ...panels import (
     SELECT_OPTION_LIMIT,
     NoteModal,
@@ -147,7 +148,7 @@ CLAIMED = (
     "Slot **#{position}** on **{title}** is yours — <t:{when}:F> (<t:{when}:R>). You will get a "
     "DM before it starts saying who raids into you and who you raid next."
 )
-CLAIMED_SHADOW = " Raid trains are in **shadow** at the moment, so no DM is actually sent."
+CLAIMED_SHADOW = " Raid trains are in **test** at the moment, so no DM is actually sent."
 RELEASED = (
     "Slot **#{position}** on **{title}** is open again, so somebody else can take that hour."
 )
@@ -828,7 +829,9 @@ async def set_mode(
         details={"mode": wanted, "via": via},
     )
     extra = "" if lineup_channel(bot, guild.id) else NO_CHANNEL_YET
-    return Outcome(True, MODE_SET.format(mode=wanted, extra=extra), value=wanted)
+    return Outcome(True, MODE_SET.format(
+            mode=mode_word("raidtrain_mode", wanted), extra=extra
+        ), value=wanted)
 
 
 async def save_setup(
@@ -928,7 +931,7 @@ CLEAR_PLACEHOLDER = "Clear…"
 
 MODE_LINE = "Raid trains are **{mode}**."
 SHADOW_LINE = (
-    "In **shadow** every move is recorded and the lineup post and the DMs are held back."
+    "In **test** every move is recorded and the lineup post and the DMs are held back."
 )
 OFF_LINE = "Raid trains are **off**, so nothing new can be started."
 TRAIN_LINE = (
@@ -1087,7 +1090,7 @@ async def staff_lines(bot: Any, guild: Any) -> list[str]:
 
 
 async def root_lines(bot: Any, guild: Any, rows: Any, *, mode: str, staff: bool) -> list[str]:
-    lines = [MODE_LINE.format(mode=mode)]
+    lines = [MODE_LINE.format(mode=mode_word("raidtrain_mode", mode))]
     if mode == rt.MODE_OFF:
         lines.append(OFF_LINE)
     elif mode == "shadow":
@@ -1984,7 +1987,9 @@ class ModePick(discord.ui.Select):
         super().__init__(
             placeholder=MODE_PLACEHOLDER,
             options=[
-                discord.SelectOption(label=one, value=one, default=(one == current))
+                discord.SelectOption(
+                    label=mode_word("raidtrain_mode", one), value=one, default=(one == current)
+                )
                 for one in RAIDTRAIN_MODES
             ],
             min_values=1,

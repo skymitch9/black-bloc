@@ -58,7 +58,7 @@ def test_the_feature_ships_in_shadow_with_no_channel_and_no_ping(bot):
 
 
 def test_every_key_is_under_core_typed_explained_and_reachable_from_settings():
-    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 57
+    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 55
     for key in PB_FEED_KEYS:
         assert key in CORE_KEYS and namespace_of(key) == "core", key
         assert KEY_TYPES.get(key) and KEY_HELP.get(key), key
@@ -270,7 +270,7 @@ def test_the_shipped_request_cap_covers_300_members_and_stays_far_under_the_limi
 def test_no_sentence_a_member_reads_promises_a_post_unless_the_mode_is_on():
     promise = "is posted once"
     told = [key for key in PB_FEED_WORDS if key.startswith(("pb_feed_you_", "pb_feed_dm_"))]
-    told += ["pb_feed_opted_in_said", "pb_feed_opted_out_said", "pb_feed_posting_shadow"]
+    told += ["pb_feed_opted_in_said", "pb_feed_opted_out_said"]
     told += ["pb_feed_posting_off"]
 
     for key in told:

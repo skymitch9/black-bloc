@@ -10,6 +10,7 @@ from black_bloc.automod import validate_rules
 from black_bloc.config import load_settings
 from black_bloc.emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
 from black_bloc.logkinds import FEATURES, LEVELS
+from black_bloc.mode_words import mode_word
 from black_bloc.settings_store import (
     BIRTHDAY_CHANNEL_ID,
     BIRTHDAY_COLOR,
@@ -32,7 +33,6 @@ from black_bloc.settings_store import (
     EVENTS_TEST_RETENTION_MINUTES,
     GOLIVE_COSTREAM_AUTHOR,
     GOLIVE_COSTREAM_AUTHOR_KEY,
-    GOLIVE_COSTREAM_MODE_KEY,
     GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
     GOLIVE_END_TEMPLATE,
@@ -454,7 +454,7 @@ async def test_golive_settings_round_trip(store):
 
 def test_the_new_value_types_are_checked():
     assert coerce_value("golive_mode", "shadow") == "shadow"
-    with pytest.raises(SettingError, match="off, shadow, on"):
+    with pytest.raises(SettingError, match="off, test, on"):
         coerce_value("golive_mode", "maybe")
     assert coerce_value("golive_live_role_id", _Role(6)) == 6
     with pytest.raises(SettingError, match="takes a role"):
@@ -497,8 +497,9 @@ async def test_tempvoice_has_a_shadow_between_off_and_on(store):
     """The lobby is staff-only in shadow, so the enum has to carry all three."""
     assert TEMPVOICE_MODES == ("off", "shadow", "on")
     assert await store.set(1, "tempvoice_mode", "shadow") == "shadow"
-    with pytest.raises(SettingError, match="off, shadow, on"):
+    with pytest.raises(SettingError, match="off, staff only, on"):
         coerce_value("tempvoice_mode", "sideways")
+    assert coerce_value("tempvoice_mode", "staff only") == "shadow"
 
 
 async def test_role_menus_ship_turned_off(store):
@@ -753,7 +754,7 @@ def test_how_late_an_announcement_may_be_is_a_capped_whole_number():
 
 def test_the_birthday_values_are_checked_and_parsed():
     assert coerce_value("birthday_mode", "on") == "on"
-    with pytest.raises(SettingError, match="off, shadow, on"):
+    with pytest.raises(SettingError, match="off, test, on"):
         coerce_value("birthday_mode", "someday")
     assert coerce_value("birthday_show_age", True) is True
     with pytest.raises(SettingError, match="true or false"):
@@ -818,7 +819,7 @@ async def test_a_change_hook_may_be_async_and_a_broken_one_does_not_stop_the_wri
 
 
 async def test_modmail_defaults_point_nowhere_real_while_test_mode_is_on(store):
-    assert store.get(1, "modmail_enabled") is False
+    assert "modmail_enabled" not in KEY_TYPES
     assert store.get(1, "modmail_mode") == CHANNEL_MODE
     assert store.get(1, "modmail_category_id") is None
     assert store.get(1, "modmail_staff_channel_id") is None
@@ -826,18 +827,14 @@ async def test_modmail_defaults_point_nowhere_real_while_test_mode_is_on(store):
 
 
 def test_the_modmail_keys_are_typed_and_the_mode_is_an_enum():
-    assert coerce_value("modmail_enabled", True) is True
     assert coerce_value("modmail_mode", THREAD_MODE) == THREAD_MODE
     assert coerce_value("modmail_category_id", _Role(5)) == 5
     with pytest.raises(SettingError, match="channel"):
         coerce_value("modmail_log_channel_id", "the log")
     with pytest.raises(SettingError, match="channel, thread"):
         coerce_value("modmail_mode", "email")
-    with pytest.raises(SettingError, match="true or false"):
-        coerce_value("modmail_enabled", "yes")
     assert display_value("modmail_staff_channel_id", 7) == "<#7>"
     assert {
-        "modmail_enabled",
         "modmail_mode",
         "modmail_category_id",
         "modmail_staff_channel_id",
@@ -1208,28 +1205,20 @@ async def test_the_two_send_to_decisions_are_keys_both_doors_reach(store):
         HANDOFF_CONFIRM_HOURS,
         HANDOFF_CONFIRM_HOURS_MAX,
         HANDOFF_CONFIRM_HOURS_MIN,
-        HANDOFF_MODE,
-        HANDOFF_MODES,
     )
 
-    assert (HANDOFF_MODE, HANDOFF_CONFIRM_HOURS) == ("handoff_mode", "handoff_confirm_hours")
-    assert KEY_TYPES[HANDOFF_MODE] == "enum" and KEY_CHOICES[HANDOFF_MODE] == HANDOFF_MODES
+    assert HANDOFF_CONFIRM_HOURS == "handoff_confirm_hours"
+    assert "handoff_mode" not in KEY_TYPES
     assert KEY_TYPES[HANDOFF_CONFIRM_HOURS] == "int"
-    assert store.get(7, HANDOFF_MODE) == "on"
     assert store.get(7, HANDOFF_CONFIRM_HOURS) == 24
-    for key in (HANDOFF_MODE, HANDOFF_CONFIRM_HOURS):
-        assert reachable_on_the_panel(key)
-        assert namespace_of(key) == "request"
-        assert KEY_HELP.get(key)
-    with pytest.raises(SettingError):
-        coerce_value(HANDOFF_MODE, "sometimes")
+    assert reachable_on_the_panel(HANDOFF_CONFIRM_HOURS)
+    assert namespace_of(HANDOFF_CONFIRM_HOURS) == "request"
+    assert KEY_HELP.get(HANDOFF_CONFIRM_HOURS)
     with pytest.raises(SettingError):
         coerce_value(HANDOFF_CONFIRM_HOURS, HANDOFF_CONFIRM_HOURS_MAX + 1)
     with pytest.raises(SettingError):
         coerce_value(HANDOFF_CONFIRM_HOURS, HANDOFF_CONFIRM_HOURS_MIN - 1)
-    await store.set(7, HANDOFF_MODE, "off")
     await store.set(7, HANDOFF_CONFIRM_HOURS, 48)
-    assert store.get(7, HANDOFF_MODE) == "off"
     assert store.get(7, HANDOFF_CONFIRM_HOURS) == 48
 
 
@@ -1301,13 +1290,15 @@ async def test_the_live_half_ships_off_and_is_reachable_from_both_doors(store):
     """Checklist 33: the three decisions youtube-live adds are registry keys, not constants."""
     from black_bloc.settings_panel import reachable_on_the_panel
 
-    assert store.get(7, "youtube_live_mode") == "off"
+    assert "youtube_live_mode" not in KEY_TYPES
+    assert store.get(7, "golive_youtube") is False
+    assert KEY_TYPES["golive_youtube"] == "bool" and namespace_of("golive_youtube") == "golive"
+    assert KEY_HELP["golive_youtube"] and reachable_on_the_panel("golive_youtube")
     assert store.get(7, "youtube_live_poll_minutes") == 5
     assert store.get(7, "youtube_live_end_misses") == 2
-    for key in ("youtube_live_mode", "youtube_live_poll_minutes", "youtube_live_end_misses"):
+    for key in ("youtube_live_poll_minutes", "youtube_live_end_misses"):
         assert KEY_HELP[key] and reachable_on_the_panel(key)
         assert namespace_of(key) == "youtube"
-    assert KEY_CHOICES["youtube_live_mode"] == ("off", "shadow", "on")
 
 
 async def test_the_live_probe_gap_and_the_quiet_probe_count_are_both_bounded(store):
@@ -1940,30 +1931,27 @@ def test_no_feature_has_a_test_channel_of_its_own_but_the_structure_notice():
     assert own == ["structure_backup_shadow_channel_id"]
 
 
-async def test_the_three_boot_status_keys_are_core_and_reachable_from_both_doors(store):
+async def test_the_two_boot_status_keys_are_core_and_reachable_from_both_doors(store):
     """Checklist 33, and the 25-group cap: `boot_` and `shutdown_` would each be a group."""
+    assert "boot_status_mode" not in KEY_TYPES
     for key in (
-        settings_store.BOOT_STATUS_MODE,
         settings_store.BOOT_STATUS_TEXT_KEY,
         settings_store.SHUTDOWN_STATUS_TEXT_KEY,
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
         assert key in settings_store.CORE_KEYS
         assert namespace_of(key) == "core"
-    assert KEY_TYPES[settings_store.BOOT_STATUS_MODE] == "enum"
-    assert KEY_CHOICES[settings_store.BOOT_STATUS_MODE] == ("off", "on")
     assert KEY_TYPES[settings_store.BOOT_STATUS_TEXT_KEY] == "text"
     assert KEY_TYPES[settings_store.SHUTDOWN_STATUS_TEXT_KEY] == "text"
 
 
-async def test_the_boot_status_ships_on_with_both_sentences_written(store):
-    assert store.get(7, settings_store.BOOT_STATUS_MODE) == "on"
+async def test_the_boot_status_ships_with_both_sentences_written(store):
     assert store.get(7, settings_store.BOOT_STATUS_TEXT_KEY) == settings_store.BOOT_STATUS_TEXT
     assert (
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 357
+    assert len(settings_store.CORE_KEYS) == 353
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2036,29 +2024,20 @@ def test_the_live_author_may_be_left_blank_so_the_card_keeps_its_own_line():
 # --- co-streaming: the switch and the two wordings (costream-design §B) ------------------------
 
 
-def test_the_three_co_stream_keys_sit_in_the_golive_namespace_with_help_and_a_default():
+def test_the_two_co_stream_wordings_sit_in_the_golive_namespace_with_help_and_a_default():
+    assert "golive_costream_mode" not in KEY_TYPES
     for key in (
-        GOLIVE_COSTREAM_MODE_KEY,
         GOLIVE_COSTREAM_TEMPLATE_KEY,
         GOLIVE_COSTREAM_AUTHOR_KEY,
     ):
         assert namespace_of(key) == "golive" and KEY_HELP[key]
-    assert KEY_TYPES[GOLIVE_COSTREAM_MODE_KEY] == "enum"
     assert KEY_TYPES[GOLIVE_COSTREAM_TEMPLATE_KEY] == "text"
     assert KEY_TYPES[GOLIVE_COSTREAM_AUTHOR_KEY] == "text"
-    assert KEY_CHOICES[GOLIVE_COSTREAM_MODE_KEY] == ("off", "on")
 
 
-async def test_co_streaming_ships_on_and_the_owner_can_turn_it_off_from_either_door(store):
-    assert store.get(7, GOLIVE_COSTREAM_MODE_KEY) == "on"
+async def test_co_streaming_wordings_ship_with_their_defaults(store):
     assert store.get(7, GOLIVE_COSTREAM_TEMPLATE_KEY) == GOLIVE_COSTREAM_TEMPLATE
     assert store.get(7, GOLIVE_COSTREAM_AUTHOR_KEY) == GOLIVE_COSTREAM_AUTHOR
-
-    await store.set(7, GOLIVE_COSTREAM_MODE_KEY, "off")
-
-    assert store.get(7, GOLIVE_COSTREAM_MODE_KEY) == "off"
-    with pytest.raises(SettingError):
-        coerce_value(GOLIVE_COSTREAM_MODE_KEY, "shadow")
 
 
 def test_both_co_stream_wordings_take_the_same_seven_placeholders_and_no_others():
@@ -2147,7 +2126,7 @@ def test_the_golive_page_still_draws_eighty_nine_keys():
     """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
     A key added to one of these namespaces has to be added there too, or it lands in the
     Everything else catch-all with nobody noticing."""
-    assert len(golive_page_keys()) == 89
+    assert len(golive_page_keys()) == 87
 
 
 def test_every_golive_page_key_says_in_words_what_it_does():
@@ -2177,7 +2156,7 @@ def test_every_golive_page_choice_is_named_in_its_own_help():
         if not choices:
             continue
         said = KEY_HELP[key].lower()
-        missing = [one for one in choices if one.lower() not in said]
+        missing = [one for one in choices if mode_word(key, one).lower() not in said]
         if missing:
             unsaid[key] = missing
     assert unsaid == {}
@@ -2321,7 +2300,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1230
+    assert len(settings_store.KEY_TYPES) == 1222
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2458,7 +2437,7 @@ BOOL_DECISION_KEYS = [
         "birthday_panel_next_for_members", True, ("staff always see them",), id="F-B1-next"
     ),
     pytest.param("birthday_panel_lookup", True, ("staff always can",), id="F-B1-lookup"),
-    pytest.param("hide_commands_when_off", True, ("shadow does not",), id="hide-when-off"),
+    pytest.param("hide_commands_when_off", True, ("test does not",), id="hide-when-off"),
     pytest.param(
         "applications_roster_shows_left", True, ("marked as gone",), id="roster-shows-left"
     ),

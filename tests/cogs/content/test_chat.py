@@ -556,7 +556,6 @@ async def test_a_data_intent_with_nothing_to_report_uses_its_empty_line(cog, bot
 
 
 async def test_asking_for_a_mod_with_modmail_on_says_how_and_logs_the_route(cog, bot, member, db):
-    await bot.store.set(GUILD, "modmail_enabled", True)
 
     message = pinged(bot, member, "<@55> i need a mod")
     await cog.on_message(message)
@@ -564,18 +563,6 @@ async def test_asking_for_a_mod_with_modmail_on_says_how_and_logs_the_route(cog,
     assert "DM me" in message.replies[0]["content"]
     found = await rows(db, "chat.route")
     assert len(found) == 1 and found[0]["actor_id"] == USER
-
-
-async def test_asking_for_a_mod_with_modmail_off_names_the_staff_roles(cog, bot, member, db):
-    bot.guild.roles = [StaffRole(11, "Aunties / Uncles"), StaffRole(GUILD, "@everyone")]
-    bot.guild.channels[LOG_CHANNEL].viewers = {11}
-    await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
-
-    message = pinged(bot, member, "<@55> i need a mod")
-    await cog.on_message(message)
-
-    assert "Aunties / Uncles" in message.replies[0]["content"]
-    assert len(await rows(db, "chat.route")) == 1
 
 
 async def test_the_owners_live_sentence_answers_about_the_person_they_named(cog, bot, member):
@@ -607,7 +594,6 @@ async def test_asking_for_a_mod_names_who_is_about_without_pinging_them(cog, bot
 
 
 async def test_the_staff_note_is_posted_only_when_the_setting_asks_for_it(cog, bot, member):
-    await bot.store.set(GUILD, "modmail_enabled", True)
     await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
     staff = bot.guild.get_channel(LOG_CHANNEL)
 
@@ -624,18 +610,7 @@ async def test_the_staff_note_is_posted_only_when_the_setting_asks_for_it(cog, b
     assert note[0]["kwargs"]["allowed_mentions"].everyone is False
 
 
-async def test_the_staff_note_is_not_posted_while_modmail_is_off(cog, bot, member):
-    await bot.store.set(GUILD, "chat_route_ping_staff", True)
-    await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
-    staff = bot.guild.get_channel(LOG_CHANNEL)
-
-    await cog.on_message(pinged(bot, member, "<@55> i need a mod"))
-
-    assert [m for m in staff.messages if "asked for a mod" in str(m["content"])] == []
-
-
 async def test_the_staff_note_obeys_the_guard(cog, bot, member, caplog):
-    await bot.store.set(GUILD, "modmail_enabled", True)
     await bot.store.set(GUILD, "chat_route_ping_staff", True)
     await bot.store.set(GUILD, "staff_channel_id", LOG_CHANNEL)
     bot.guard = FakeGuard(allowed=CHANNEL)
@@ -2516,7 +2491,7 @@ async def test_the_key_off_keeps_the_written_greeting(cog, bot, member, db, monk
     reply, seen = greeting_model()
     monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
     await voice_on_pool(bot)
-    await bot.store.set(GUILD, "chat_greeting_via_model", "off")
+    await bot.store.set(GUILD, "chat_greeting_via_model", False)
     message = pinged(bot, member, "<@55> whats good")
 
     await cog.on_message(message)

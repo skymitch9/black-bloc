@@ -438,12 +438,12 @@ def test_a_channel_with_no_title_falls_back_to_its_id_rather_than_a_blank():
     assert lines[0] == "**channel** — UC123"
 
 
-@pytest.mark.parametrize("mode", ["off", "shadow"])
-def test_where_words_explains_the_live_mode_rather_than_saying_a_bare_no(mode):
+@pytest.mark.parametrize(("mode", "says"), [("off", "not watched"), ("shadow", "**test**")])
+def test_where_words_explains_the_live_mode_rather_than_saying_a_bare_no(mode, says):
     said = where_words(mode, "on", 5)
 
     assert said.startswith("no —")
-    assert f"**{mode}**" in said
+    assert says in said
 
 
 def test_where_words_with_no_golive_channel_names_the_panel_that_sets_it():

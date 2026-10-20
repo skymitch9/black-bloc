@@ -85,6 +85,7 @@ from ...modcases import (
     set_case_log_message,
     set_case_outcome,
 )
+from ...mode_words import mode_word
 from ...panels import (
     DESCRIPTION_LIMIT,
     SELECT_OPTION_LIMIT,
@@ -195,7 +196,7 @@ SITE_ONLY_LINES = (
 )
 ARM_QUESTION = (
     "Turning automod **on** starts deleting messages, warning people and timing them out for "
-    "real, from the next message. Nothing you have read in shadow is applied retrospectively."
+    "real, from the next message. Nothing you have read in test is applied retrospectively."
 )
 NUMBERS_TITLE = "Change the numbers"
 WORDS_TITLE = "Words that are not allowed"
@@ -758,7 +759,9 @@ async def set_mode(
         actor=actor,
         details={"mode": stored, "via": via},
     )
-    return Outcome(True, MODE_SET.format(mode=stored), "set", 200, stored)
+    return Outcome(
+        True, MODE_SET.format(mode=mode_word("automod_mode", stored)), "set", 200, stored
+    )
 
 
 async def set_exempt(
@@ -838,7 +841,7 @@ def status_lines(bot: Any, guild: Any, totals: dict[int, int]) -> list[str]:
     channels = store.get(guild.id, "automod_exempt_channel_ids") or []
     modlog = store.get(guild.id, "modlog_channel_id")
     lines = [
-        f"**mode** — {mode}",
+        f"**mode** — {mode_word('automod_mode', mode)}",
         f"**staff (always exempt)** — {staff_roles_sentence(staff)}",
         f"**tells the member** — {store.get(guild.id, 'mod_dm_on_action')}",
         f"**warn threshold** — {store.get(guild.id, 'automod_warn_threshold')} (log only)",

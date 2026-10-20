@@ -478,3 +478,5 @@ fakes in `tests/cogs/community/test_birthdays.py`, the route by the TestClient, 
 was clicked through in headless Chrome against the mock (open, **Post them all again**, the
 off refusal) — never against the real API or a real guild. Whether Discord renders the
 rehearsal note plus embed as intended in `#welcome-test` is unseen.
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** `birthday_mode` shadow is called **test** wherever a person reads it; its help now says what the code does: test writes the day's wishes to the log and posts nothing, and a wish staff post by hand goes to the test channel as a rehearsal copy. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

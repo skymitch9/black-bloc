@@ -184,7 +184,7 @@ async def bot(db, monkeypatch):
     await store.set(GUILD, "marathon_mode", "on")
     await store.set(GUILD, "marathon_event_mode_default", "none")
     await store.set(GUILD, "marathon_track_makes_thread", False)
-    await store.set(GUILD, "spotlight_mode", "on")
+    await store.set(GUILD, "golive_mode", "on")
     await db.conn.execute(
         "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",
         (SKY, "skyruns", at(-9999)),

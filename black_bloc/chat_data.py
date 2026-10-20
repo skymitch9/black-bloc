@@ -67,7 +67,6 @@ TOO_MANY_ROLES = "**{asked}** could be {close} — say which one and I will coun
 NOBODY_HOLDS_IT = "**{role}** has nobody in it right now."
 AND_MORE = " …and {count} more"
 ESCALATE_MODMAIL = " Any of them can help — or ask for a mod and I will point you at modmail."
-ESCALATE_STAFF = " Any of them can help — or ask for a mod and I will name the staff to ask."
 
 STAMP = re.compile(r"<t:(-?\d{1,12})(?::[a-zA-Z])?>")
 CLOCK_12 = re.compile(r"(?<![\d:])(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*([ap])\.?m\.?", re.IGNORECASE)
@@ -344,7 +343,7 @@ def escalation(bot: Any, guild: Any, role: Any) -> str:
     staff = {getattr(one, "id", None) for one in staff_roles_of(bot, guild)}
     if getattr(role, "id", None) not in staff:
         return ""
-    return ESCALATE_MODMAIL if bot.store.get(guild.id, "modmail_enabled") else ESCALATE_STAFF
+    return ESCALATE_MODMAIL
 
 
 def is_online(member: Any) -> bool:
@@ -452,10 +451,7 @@ async def need_a_mod(bot: Any, guild: Any, member: Any, text: Any) -> tuple[dict
         return {"roles": SOME_MODS, "extra": ""}, False
     roles = staff_roles_of(bot, guild)
     extra = who_is_about(bot, guild, roles)
-    if bool(bot.store.get(guild.id, "modmail_enabled")):
-        return {"roles": SOME_MODS, "extra": extra}, True
-    names = [f"**{role.name}**" for role in roles]
-    return {"roles": ", ".join(names) or SOME_MODS, "extra": extra}, False
+    return {"roles": SOME_MODS, "extra": extra}, True
 
 
 def mentioned_members(bot: Any, guild: Any, text: Any) -> list[Any]:

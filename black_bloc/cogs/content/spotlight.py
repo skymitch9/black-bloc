@@ -77,7 +77,6 @@ from ...settings_store import (
     SPOTLIGHT_END_BEFORE_START_KEY,
     SPOTLIGHT_END_MISSES_KEY,
     SPOTLIGHT_ENDS_LABEL_KEY,
-    SPOTLIGHT_MODE_KEY,
     SPOTLIGHT_PIN_KEY,
     SPOTLIGHT_PING_MODE_DEFAULT_KEY,
     SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY,
@@ -112,6 +111,7 @@ END_AUTHOR_KEY = "golive_end_author"
 MODE_ON = "on"
 MODE_OFF = "off"
 MODE_SHADOW = "shadow"
+GOLIVE_MODE_KEY = "golive_mode"
 SOURCE = "spotlight"
 EXTEND_DAYS = 7
 SELECT_CAP = 25
@@ -1823,7 +1823,7 @@ class Spotlight(commands.Cog):
         return lock
 
     def _mode(self, guild_id: int) -> str:
-        return self.bot.store.get(guild_id, SPOTLIGHT_MODE_KEY)
+        return self.bot.store.get(guild_id, GOLIVE_MODE_KEY)
 
     def _end_misses(self, guild_id: int) -> int:
         return max(1, int(self.bot.store.get(guild_id, SPOTLIGHT_END_MISSES_KEY)))
@@ -2488,7 +2488,7 @@ class SpotlightPanel(Panel):
 
 def mode_lines(bot: Any, guild: Any) -> list[str]:
     said: list[str] = []
-    mode = bot.store.get(guild.id, SPOTLIGHT_MODE_KEY)
+    mode = bot.store.get(guild.id, GOLIVE_MODE_KEY)
     if mode == MODE_OFF:
         said.append(words.MODE_OFF)
     elif mode == MODE_SHADOW:

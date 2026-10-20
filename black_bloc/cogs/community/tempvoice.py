@@ -16,6 +16,7 @@ from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
+from ...mode_words import mode_word
 from ...panels import (
     SELECT_OPTION_LIMIT,
     Panel,
@@ -163,7 +164,7 @@ LOBBY_FORGOTTEN = (
 MODE_SET = "Join-to-create is now **{mode}**."
 NOT_A_MODE = (
     "**{given}** is not a setting Black Bloc knows for join-to-create, so nothing was changed. "
-    "It is **off**, **shadow** or **on**."
+    "It is **off**, **staff only** or **on**."
 )
 HANDED_OVER_DM = (
     "An Auntie/Uncle handed the temporary voice channel **{channel}** to **{who}**, so it is not "
@@ -201,9 +202,9 @@ LOBBY_INTRO = (
     "The channels Black Bloc treats as join-to-create. Forgetting one leaves the Discord channel "
     "alone; it just stops making anybody a temporary channel."
 )
-HIDE_REASON = "Black Bloc temp voice: shadow — the lobby is staff-only"
-SHOW_REASON = "Black Bloc temp voice: shadow is off — syncing the lobby with its category"
-ALLOW_REASON = "Black Bloc temp voice: shadow is off — giving the allowed role its view back"
+HIDE_REASON = "Black Bloc temp voice: staff only — the lobby is hidden from members"
+SHOW_REASON = "Black Bloc temp voice: staff only is off — syncing the lobby with its category"
+ALLOW_REASON = "Black Bloc temp voice: staff only is off — giving the allowed role its view back"
 LOBBY_GONE = "not on the server any more"
 CHANNEL_LEFT = "gone from the server"
 SITE_BUTTON = "Open on the site"
@@ -1430,7 +1431,7 @@ async def set_mode(who: Any, value: Any) -> Said:
         actor=who.user,
         details={"mode": wanted, "via": via},
     )
-    return Said(MODE_SET.format(mode=wanted))
+    return Said(MODE_SET.format(mode=mode_word("tempvoice_mode", wanted)))
 
 
 async def reset_prefs(who: Any) -> Said:
@@ -2272,7 +2273,7 @@ class ModePick(discord.ui.Select):
             placeholder=helpers.PICK_MODE,
             options=[
                 discord.SelectOption(
-                    label=mode,
+                    label=mode_word("tempvoice_mode", mode),
                     value=mode,
                     description=helpers.MODE_MEANS.get(mode),
                     default=(mode == current),

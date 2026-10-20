@@ -126,16 +126,6 @@ async def test_the_very_first_thing_discord_sees_is_red_and_says_it_is_restartin
     await bot.close()
 
 
-async def test_the_mode_off_is_the_older_behaviour_of_simply_appearing(settings, monkeypatch):
-    monkeypatch.setattr(settings_store, "BOOT_STATUS_MODE_DEFAULT", "off")
-
-    bot = BlackBlocBot(settings)
-
-    assert bot.activity is None
-    assert bot.status is discord.Status.online
-    await bot.close()
-
-
 async def test_the_stored_sentence_is_the_one_identify_carries(tmp_path, monkeypatch):
     """The database is shut at construct time, so `setup_hook` re-reads it before it connects."""
     from black_bloc.config import load_settings
@@ -462,4 +452,45 @@ async def test_a_failed_test_channel_migration_never_stops_the_boot(settings, mo
     await bot._migrate_test_channel()
 
     assert "one test channel: the boot migration failed" in caplog.text
+    await bot.close()
+
+
+async def test_the_shadow_one_meaning_migration_runs_after_the_test_channel_and_before_cogs(
+    tmp_path, monkeypatch
+):
+    import json
+
+    from black_bloc.config import load_settings
+
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    bot = BlackBlocBot(load_settings(_env_file=None, database_path=tmp_path / "boot.sqlite3"))
+    await bot.db.connect()
+    await bot.db.conn.execute(
+        "INSERT INTO settings(guild_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, ?, ?)",
+        (7, "youtube_live_mode", json.dumps("on"), None, "2026-10-10T00:00:00+00:00"),
+    )
+    await bot.db.conn.commit()
+    await bot.store.load()
+
+    await bot._migrate_shadow_one_meaning()
+
+    assert bot.store.get(7, "golive_youtube") is True
+    order = bot_module.BlackBlocBot.setup_hook.__code__.co_names
+    assert order.index("_migrate_test_channel") < order.index("_migrate_shadow_one_meaning")
+    assert order.index("_migrate_shadow_one_meaning") < order.index("_load_cogs")
+    await bot.close()
+
+
+async def test_a_failed_shadow_one_meaning_migration_never_stops_the_boot(
+    settings, monkeypatch, caplog
+):
+    async def broken(_bot):
+        raise RuntimeError("disk")
+
+    monkeypatch.setattr(bot_module, "migrate_shadow_one_meaning", broken)
+    bot = BlackBlocBot(settings)
+
+    await bot._migrate_shadow_one_meaning()
+
+    assert "shadow one meaning: the boot migration failed" in caplog.text
     await bot.close()

@@ -69,8 +69,6 @@ from ...modmail import (
     CATEGORY,
     CLOSED,
     CONTENT_LIMIT,
-    DISABLE,
-    ENABLE,
     FORGET,
     FORGET_TITLE,
     FORUM,
@@ -277,11 +275,6 @@ TICKET_REACTION = "\N{WHITE HEAVY CHECK MARK}"
 NOTE_REACTION = "\N{MEMO}"
 FAILED_REACTION = "\N{WARNING SIGN}"
 
-DISABLED_DM = (
-    "Black Bloc is not handling modmail on **{guild}** yet, so staff have not seen this. Send it "
-    "to the **ModMail** bot instead — it is still the one on duty — and a moderator will pick it "
-    "up there."
-)
 BLOCKED_DM = (
     "Staff on **{guild}** have stopped Black Bloc from opening modmail tickets for you, so this "
     "message was not passed on. Speak to a moderator there directly if you think that is a "
@@ -391,14 +384,6 @@ FORGOTTEN = (
     "points it somewhere new."
 )
 POINTED = "**{key}** is now {place}."
-ANSWERING = (
-    "Black Bloc answers modmail DMs on this server from now on. A member who DMs it gets a "
-    "ticket here rather than nothing."
-)
-NOT_ANSWERING = (
-    "Black Bloc has stopped answering modmail DMs here, so the old ModMail bot keeps them. "
-    "Tickets already open stay open."
-)
 MODE_SET = (
     "New tickets from now on: {what}. The {count} ticket(s) already open keep the mode they were "
     "opened in — that is where their channel or thread already is."
@@ -473,10 +458,6 @@ CANNOT_OPEN_SAID = (
     "minute, and tell a moderator directly if it keeps failing."
 )
 A_BOT_SAID = "**{who}** is a bot, and a bot has no DMs to answer, so no ticket was opened."
-STAFF_DISABLED_SAID = (
-    "Black Bloc is not answering modmail here, so no ticket was opened. **Setup…** → **Answer "
-    "DMs on** hands the inbox over first."
-)
 STAFF_BLOCKED_SAID = (
     "**{who}** is blocked from modmail, so no ticket was opened. **Unblock them** undoes that, "
     "and then this works."
@@ -495,10 +476,6 @@ STAFF_OPENED = (
 STAFF_NOT_REACHED = (
     " ⚠️ The DM did not reach them — their DMs are shut or Black Bloc is blocked. The ticket "
     "holds what you wrote, and the card says so."
-)
-MEMBER_DOOR_OFF = (
-    "Black Bloc is not answering modmail on **{guild}** yet, so there is no ticket to open. A "
-    "moderator can still be reached the way you always have."
 )
 MEMBER_BLOCKED = (
     "Staff here have stopped Black Bloc from opening modmail tickets for you, so there is no "
@@ -1877,15 +1854,6 @@ async def set_mode(
     return Outcome(True, said, value=mode)
 
 
-async def set_enabled(
-    bot: Any, guild: Any, actor: Any, value: bool, *, via: str = VIA_DISCORD
-) -> Outcome:
-    wanted = bool(value)
-    await bot.store.set(guild.id, "modmail_enabled", wanted, by=getattr(actor, "id", actor))
-    await settings_written(bot, guild, actor, {"modmail_enabled": wanted}, via)
-    return Outcome(True, ANSWERING if wanted else NOT_ANSWERING, value=wanted)
-
-
 async def set_reply_style(
     bot: Any, guild: Any, actor: Any, style: str, *, via: str = VIA_DISCORD
 ) -> Outcome:
@@ -2214,9 +2182,6 @@ async def open_a_ticket(
         return await refuse_open(
             bot, guild, user, "a_bot", A_BOT_SAID, status=400, actor=actor, via=via
         )
-    if not bot.store.get(guild.id, "modmail_enabled"):
-        said = STAFF_DISABLED_SAID if staff_door else DISABLED_DM.format(guild=guild.name)
-        return await refuse_open(bot, guild, user, "disabled", said, actor=actor, via=via)
     blocked = await blocked_row(bot.db, user.id)
     if blocked is not None:
         said = (
@@ -2598,11 +2563,7 @@ class Modmail(commands.Cog):
         if guild is None:
             guild = self._home_guild(author.id)
         if guild is None:
-            if self._anywhere_enabled():
-                await self._refuse(author, NO_GUILD_DM)
-            return
-        if not self.bot.store.get(guild.id, "modmail_enabled"):
-            await self._refuse(author, DISABLED_DM.format(guild=guild.name))
+            await self._refuse(author, NO_GUILD_DM)
             return
         blocked = await blocked_row(self.bot.db, author.id)
         if blocked is not None:
@@ -2632,12 +2593,6 @@ class Modmail(commands.Cog):
             if guild.get_member(user_id) is not None:
                 return guild
         return None
-
-    def _anywhere_enabled(self) -> bool:
-        return any(
-            self.bot.store.get(guild.id, "modmail_enabled")
-            for guild in getattr(self.bot, "guilds", ())
-        )
 
     async def _refuse(self, user: Any, text: str) -> None:
         """One refusal DM per member per cooldown: a stranger must not be answered repeatedly."""
@@ -3049,7 +3004,6 @@ class Modmail(commands.Cog):
         log_id = store.get(guild.id, "modmail_log_channel_id")
         parent_id = staff_parent_id(store, guild.id)
         lines = [
-            f"**answering DMs** — {store.get(guild.id, 'modmail_enabled')}",
             f"**mode** — {store.get(guild.id, 'modmail_mode')}",
             "**ticket category** — " + (f"<#{category_id}>" if category_id else "not set"),
             "**thread parent** — " + (f"<#{parent_id}>" if parent_id else "not set"),
@@ -3087,10 +3041,6 @@ FORGET_LABELS = {
     MODMAIL_FORUM_CHANNEL: "The ticket forum",
     "modmail_log_channel_id": "The transcripts channel",
 }
-INCUMBENT_LINE = (
-    "Black Bloc is **not** answering DMs here, so the old ModMail bot still holds the inbox. "
-    "**Setup…** → **Answer DMs on** hands it over."
-)
 NOTHING_BLOCKED_HERE = "Nobody is blocked, so there is nobody to let back in."
 REALLY_PRACTISE = (
     "**Try a fake ticket?** Black Bloc makes a private thread for you, with the ticket card in "
@@ -3165,7 +3115,6 @@ def setup_lines(bot: Any, guild: Any) -> list[str]:
     parent_id = staff_parent_id(store, guild.id)
     forum_id = store.get(guild.id, MODMAIL_FORUM_CHANNEL)
     return [
-        f"**answering DMs** — {store.get(guild.id, 'modmail_enabled')}",
         f"**mode** — {mode} · {modes_sentence(mode)}",
         "**ticket category** — " + (f"<#{category_id}>" if category_id else "not set"),
         "**staff channel** — " + (f"<#{parent_id}>" if parent_id else "not set"),
@@ -3186,8 +3135,6 @@ async def door_lines(bot: Any, guild: Any, actor: Any, *, staff: bool) -> tuple[
             else MEMBER_TICKET_OPEN
         )
         return [said], False
-    if not bot.store.get(guild.id, "modmail_enabled"):
-        return ([] if staff else [MEMBER_DOOR_OFF.format(guild=guild.name)]), False
     if await blocked_row(bot.db, actor.id) is not None:
         return [MEMBER_BLOCKED], False
     return [], True
@@ -3214,8 +3161,6 @@ async def build_root(
             view.add_item(MoveButton(move))
         return (embed, view)
     lines = [*mine, *await cog._status_lines(guild)]
-    if not bot.store.get(guild.id, "modmail_enabled"):
-        lines.append(INCUMBENT_LINE)
     if confirming:
         lines.append(REALLY_PRACTISE)
     if note:
@@ -3301,10 +3246,7 @@ def build_setup(
         view.add_item(ModePick(bot.store.get(guild.id, "modmail_mode")))
     elif picker == REPLY_STYLE:
         view.add_item(ReplyStylePick(bot.store.get(guild.id, REPLY_STYLE_KEY)))
-    for move in setup_buttons(
-        enabled=bool(bot.store.get(guild.id, "modmail_enabled")),
-        has_forum=bool(bot.store.get(guild.id, MODMAIL_FORUM_CHANNEL)),
-    ):
+    for move in setup_buttons(has_forum=bool(bot.store.get(guild.id, MODMAIL_FORUM_CHANNEL))):
         view.add_item(MoveButton(move))
     return (embed, view)
 
@@ -3518,8 +3460,6 @@ async def open_with_refusal(bot: Any, guild: Any, user: Any) -> tuple[str, bool]
         return OPEN_WITH_OFF, False
     if getattr(user, "bot", False):
         return A_BOT_SAID.format(who=who), False
-    if not bot.store.get(guild.id, "modmail_enabled"):
-        return STAFF_DISABLED_SAID, False
     if await blocked_row(bot.db, user.id) is not None:
         return STAFF_BLOCKED_SAID.format(who=who), True
     existing = await open_ticket_for(bot.db, guild.id, user.id)
@@ -3676,15 +3616,6 @@ async def run_reply_style(
     await open_setup_again(interaction, previous, outcome)
 
 
-async def run_enabled(interaction: discord.Interaction, previous: Any = None) -> None:
-    if not await opened(interaction):
-        return
-    bot = interaction.client
-    wanted = not bot.store.get(interaction.guild.id, "modmail_enabled")
-    outcome = await set_enabled(bot, interaction.guild, interaction.user, wanted)
-    await open_setup_again(interaction, previous, outcome)
-
-
 async def run_make_forum(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await opened(interaction):
         return
@@ -3832,9 +3763,6 @@ class MoveButton(discord.ui.Button):
             return
         if action == MAKE_FORUM:
             await run_make_forum(interaction, view)
-            return
-        if action in (ENABLE, DISABLE):
-            await run_enabled(interaction, view)
             return
         if action == BLOCK_PICK:
             await open_blocked(interaction, view, picked=view.picked_block, blocking=0)

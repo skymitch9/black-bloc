@@ -8,7 +8,7 @@
 // Exits 0 when every fixture matched, 1 with a list of what did not.
 // scripts/deploy.ps1 and .github/workflows/ci.yml run it beside check.mjs.
 
-import { channelLabel, humanLabel } from '../public/assets/labels.js';
+import { channelLabel, humanLabel, modeWord } from '../public/assets/labels.js';
 
 const failures = [];
 const is = (where, found, wanted) => {
@@ -36,6 +36,11 @@ is('no list at all', channelLabel(by('2')), '# modmail-log');
 is('a key with a label', humanLabel('staff_channel_id'), 'Which channel decides who counts as staff');
 is('a key with none', humanLabel('modmail_never_heard_of_it'), 'Never heard of it');
 
+is('shadow on a feature reads test', modeWord('shadow', 'automod_mode'), 'test');
+is('shadow on temp voice reads staff only', modeWord('shadow', 'tempvoice_mode'), 'staff only');
+is('on stays on', modeWord('on', 'automod_mode'), 'on');
+is('nothing stays nothing', modeWord(null, 'automod_mode'), '');
+
 if (failures.length) {
   console.error('labels: not ok');
   for (const said of failures) console.error(`  - ${said}`);
@@ -43,5 +48,5 @@ if (failures.length) {
 }
 console.log(
   'labels: ok - a channel in a category reads "# name · Category", one at the top level reads ' +
-  'the name alone, and a category row is unchanged',
+  'the name alone, and a category row is unchanged; shadow reads test (staff only on temp voice)',
 );

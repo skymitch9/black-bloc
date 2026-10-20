@@ -222,3 +222,5 @@ rows `ST-a…`; `architecture.md` schema line (43). NOT `TODO.md` / `DONE.md` / 
   design asked for; it is named here because it is the one thing that is not behind a flip.
 
 19. **Found after the fourth piece (`4af32c4`):** the `/modmail` panel's copy of the ticket card (`panel_card_buttons`) never knew about practice tickets, and `ticket_dm` returns `None` for a practice ticket — the same value a delivered DM returns — so a hand-off pressed there would have said *"@them has been asked by DM"* with nobody asked and written the `asked:` cell. `refusal_for_ticket` now answers in words on the MOVE, whichever button table drew it; a test pins it. Found by reading, not by a test.
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** `handoff_mode` is RETIRED: Send to… is the constant `handoff.MODE = "on"`. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

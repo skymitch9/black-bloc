@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple
 
+from .mode_words import mode_word
 from .panels import SELECT_OPTION_LIMIT
 from .panels import panel_minutes as _panel_minutes
 from .settings_store import HONEYPOT_MODES
@@ -15,7 +16,10 @@ CHANNEL_NAME_MAX = 100
 
 MODE_LABELS: dict[str, str] = {
     "off": "off — nothing posted in the trap is read at all",
-    "shadow": "shadow — it deletes the post and logs it, and bans nobody",
+    "shadow": (
+        f"{mode_word('honeypot_mode', 'shadow')} — it deletes the post and logs it, and bans "
+        "nobody"
+    ),
     "on": "on — it deletes the post and bans the account that made it",
 }
 

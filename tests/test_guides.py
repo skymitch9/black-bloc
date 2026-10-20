@@ -212,7 +212,7 @@ async def test_a_setting_fact_renders_the_way_the_panel_renders_it(bot, db):
     )
 
     assert [one["ref"] for one in found] == ["golive_mode", "golive_channel_id"]
-    assert found[0]["value"] == "shadow" and found[0]["help"]
+    assert found[0]["value"] == "test" and found[0]["help"]
     assert found[1]["value"] == "#general"
     assert all(one["read_at"] for one in found)
 

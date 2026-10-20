@@ -14,9 +14,8 @@ EVENT = "event"
 TICKET = "ticket"
 KINDS = (REQUEST, EVENT, TICKET)
 
-MODE_KEY = "handoff_mode"
 CONFIRM_HOURS_KEY = "handoff_confirm_hours"
-MODES = ("off", "on")
+MODE = "on"
 CONFIRM_HOURS = 24
 CONFIRM_HOURS_MIN = 1
 CONFIRM_HOURS_MAX = 168
@@ -100,11 +99,7 @@ CONFIRM_DM_FAILED = (
     "shut or Black Bloc is blocked — ask them in the ticket instead."
 )
 
-HANDOFF_OFF = (
-    "**Send to…** is switched off on this server, so nothing was moved. It needs `handoff_mode` "
-    "set to **on** — a Lead does that on the dashboard's Settings page under **request**, or "
-    "with `/settings` ▸ **A setting group…** ▸ request."
-)
+HANDOFF_OFF = "**Send to…** is switched off in this build, so nothing was moved."
 ALREADY_FINAL = (
     "Request **#{request_id}** is already **{status}**, so there is nothing left to send "
     "anywhere."
@@ -143,12 +138,8 @@ class Trail(NamedTuple):
     until: str = ""
 
 
-def mode(store: Any, guild_id: int) -> str:
-    return str(store.get(guild_id, MODE_KEY) or "off")
-
-
 def handoff_on(store: Any, guild_id: int) -> bool:
-    return mode(store, guild_id) == "on"
+    return MODE == "on"
 
 
 def confirm_hours(store: Any, guild_id: int) -> int:
@@ -715,8 +706,7 @@ __all__ = [
     "MAKE_AN_EVENT",
     "MAKE_A_REQUEST",
     "MAKE_THE_EVENT",
-    "MODES",
-    "MODE_KEY",
+    "MODE",
     "NOT_AN_EVENT",
     "NO_SUCH_TICKET",
     "OPEN_A_TICKET",
@@ -743,7 +733,6 @@ __all__ = [
     "handoff_kind",
     "handoff_on",
     "log_handoff",
-    "mode",
     "moved_words",
     "prefilled",
     "event_to_request",

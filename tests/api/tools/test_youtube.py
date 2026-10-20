@@ -241,7 +241,8 @@ async def test_status_says_what_the_live_probe_is_doing_when_the_cog_is_loaded(
     client, sign_in, web, guild, wf
 ):
     """§D: the site and the panel read one health function, so they cannot disagree."""
-    await web.store.set(guild.id, "youtube_live_mode", "shadow")
+    await web.store.set(guild.id, "golive_youtube", True)
+    await web.store.set(guild.id, "golive_mode", "shadow")
     web.cogs["YouTube"] = FakeCog(web.db, keyed=True)
     sign_in(client)
 

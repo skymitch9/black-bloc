@@ -739,7 +739,7 @@ async def test_the_command_answers_one_ephemeral_panel_carrying_the_whole_status
     assert said["ephemeral"] is True and said["allowed_mentions"].everyone is False
     embed = said["embed"]
     assert embed.title == PANEL_TITLE
-    for line in ("**mode** — shadow", "**purge** — 1 day(s)", "1 logged in shadow"):
+    for line in ("**mode** — test", "**purge** — 1 day(s)", "1 logged in test"):
         assert line in embed.description
     assert f"<#{TRAP}>" in embed.description
     assert "/honeypot status" not in embed.description

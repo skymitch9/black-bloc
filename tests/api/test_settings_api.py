@@ -108,7 +108,7 @@ def test_a_refused_value_comes_back_as_the_validators_own_sentence(client, sign_
 
     assert response.status_code == 400
     assert response.json()["error"] == "bad_value"
-    assert "off, shadow, on" in response.json()["message"]
+    assert "off, test, on" in response.json()["message"]
     assert web.store.get(wf.GUILD_ID, "golive_mode") == "shadow"
 
 
@@ -360,7 +360,7 @@ def test_a_gated_key_still_refuses_a_value_the_registry_does_not_know(client, si
     refused = client.put("/api/settings/automod_mode", json={"value": "sideways"})
 
     assert refused.status_code == 400 and refused.json()["error"] == "bad_value"
-    assert "off, shadow, on" in refused.json()["message"]
+    assert "off, test, on" in refused.json()["message"]
 
     junk = client.put("/api/settings/honeypot_exempt_role_ids", json={"value": "nonsense"})
 

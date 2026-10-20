@@ -477,3 +477,5 @@ registry's exact wording (commit `dfda995`).
   own comment already flags this as known and out of scope.
 - ✅ **Merged and deployed** — merge `ef7c5fd5`, LIVE as v154 (2026-09-21 20:08). No browser has
   rendered the live page against production since; the render above is against the local mock.
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** The header strip is now *Go-live announcements* (off/test/on), *Also watch YouTube* (on/off, `golive_youtube`) and *Ping roles*; the *YouTube announcements* and *Spotlight* switches are gone (a Spotlight count cell stays). See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

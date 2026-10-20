@@ -490,7 +490,7 @@ def greets_by_model(bot: Any, guild_id: Any) -> bool:
     """A hello reaches the quick model with the models on, the key on and a voice not cookout."""
     if not llm_is_on(bot, guild_id):
         return False
-    if read_setting(bot.store, guild_id, GREETING_VIA_MODEL_KEY, ON) != ON:
+    if read_setting(bot.store, guild_id, GREETING_VIA_MODEL_KEY, True) is not True:
         return False
     return read_setting(bot.store, guild_id, PERSONALITY_KEY, COOKOUT) != COOKOUT
 

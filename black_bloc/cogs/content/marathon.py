@@ -62,6 +62,7 @@ from ...marathon_sources import (
     read_url,
     schedule_page,
 )
+from ...mode_words import mode_word
 from ...panels import (
     Outcome,
     Panel,
@@ -3412,7 +3413,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     rows = await list_marathons(bot.db, guild.id)
     lines = [mt.OURS_NEXT, *(await upcoming_of_ours(bot, guild) or [mt.NOTHING_NEXT])]
     if staff:
-        lines += ["", mt.MODE_LINE.format(mode=mode_of(bot, guild.id))]
+        lines += ["", mt.MODE_LINE.format(mode=mode_word("marathon_mode", mode_of(bot, guild.id)))]
         for row in rows[:SELECT_CAP]:
             lines.append(marathon_line(bot, guild, row, await runs_of(bot.db, row["id"])))
         if not rows:

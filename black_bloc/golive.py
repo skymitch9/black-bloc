@@ -19,7 +19,6 @@ from .settings_store import (
     GOLIVE_BLOCK_TITLE_CHARS,
     GOLIVE_BLOCK_UNTITLED,
     GOLIVE_COSTREAM_AUTHOR,
-    GOLIVE_COSTREAM_ON,
     GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_END_TEMPLATE,
     GOLIVE_LIVE_FIELD,
@@ -633,10 +632,8 @@ def single_embed(
     return alone
 
 
-def joins_session(row: Any, platform: Any, mode: Any) -> bool:
+def joins_session(row: Any, platform: Any) -> bool:
     """True when a second platform joins the open session rather than being held back."""
-    if str(mode or "") != GOLIVE_COSTREAM_ON:
-        return False
     if _text(_row_field(row, "also_source")):
         return False
     open_platform = _text(_row_field(row, "platform"))
@@ -723,7 +720,7 @@ MODE_LINES = {
         "Linking still counts: raid trains and fan roles read it."
     ),
     "shadow": (
-        "Go-live announcements are in **shadow** right now — the log says what would have been "
+        "Go-live announcements are in **test** right now — the log says what would have been "
         "posted and nothing is."
     ),
 }
@@ -772,6 +769,8 @@ LOGS = PanelMove("Logs", "secondary", "logs", row=2)
 STREAMERS = PanelMove("Streamers…", "secondary", "streamers", row=2)
 SPOTLIGHT = PanelMove("Channels…", "secondary", "spotlight", row=2)
 LINK_HISTORY = PanelMove("Link from history", "secondary", "history", row=1)
+WATCH_YOUTUBE = PanelMove("Also watch YouTube", "secondary", "youtube_on", row=1)
+STOP_YOUTUBE = PanelMove("Stop watching YouTube", "secondary", "youtube_off", row=1)
 
 PANEL_BUTTONS: dict[tuple[bool, bool], tuple[PanelMove, ...]] = {
     (False, False): (LINK_CHANNEL, STOP_ANNOUNCING, REFRESH),
@@ -783,11 +782,13 @@ STAFF_BUTTONS: tuple[PanelMove, ...] = (LOGS, STREAMERS, SPOTLIGHT, LINK_HISTORY
 
 
 def panel_buttons(
-    *, linked: bool, opted_out: bool, staff: bool = False
+    *, linked: bool, opted_out: bool, staff: bool = False, youtube: bool = False
 ) -> tuple[PanelMove, ...]:
     """The controls this panel actually offers — never one the shared function would refuse."""
     found = PANEL_BUTTONS[(bool(linked), bool(opted_out))]
-    return found + STAFF_BUTTONS if staff else found
+    if not staff:
+        return found
+    return found + STAFF_BUTTONS + ((STOP_YOUTUBE if youtube else WATCH_YOUTUBE),)
 
 
 def card_lines(

@@ -381,3 +381,5 @@ the conductor's reading, not this build's).**
     card shows *Behind the bot check now*, *Video id — nobody reads as live*, *What a post links*);
     the walled/warn branches of the card were not rendered. Sweeps `YW-a`…`YW-d` are the proof
     that is missing, and like `YL-*` they can only be run on Fly.
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** `youtube_live_mode` is RETIRED and folded into go-live: the bool `golive_youtube` (*Also watch YouTube*, default false, live true after the migration) decides whether YouTube is probed, and `golive_mode` (off / test / on) decides how. The `/youtube` panel's *Live streams are…* select is gone; the toggle is on `/golive`. `/youtube` hides with go-live. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

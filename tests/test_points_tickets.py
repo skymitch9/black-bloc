@@ -51,7 +51,6 @@ async def bot(db, monkeypatch):
     await store.load()
     for key, value in (
         ("log_channel_id", LOG_CHANNEL),
-        ("modmail_enabled", True),
         ("modmail_mode", THREAD_MODE),
         ("modmail_log_channel_id", LOG_CHANNEL),
         ("staff_channel_id", TEST_CHANNEL),
@@ -185,15 +184,6 @@ async def test_an_open_ordinary_ticket_holds_a_run_back_in_words(bot, ada, db):
     assert (await details(db, "modmail.open_refused"))["reason"] == "already_open"
 
 
-async def test_modmail_switched_off_refuses_a_run_in_points_words(bot, ada):
-    await bot.store.set(GUILD, "modmail_enabled", False)
-
-    outcome, ticket = await sent_in(bot, ada)
-
-    assert not outcome.ok and outcome.code == "disabled" and ticket is None
-    assert outcome.message.startswith("Runs reach staff through modmail")
-
-
 async def test_the_card_of_a_run_carries_approve_and_reject_and_no_send_to(bot, ada):
     _, ticket = await sent_in(bot, ada)
 
@@ -234,7 +224,7 @@ async def test_approve_on_the_card_counts_the_run_closes_the_ticket_and_posts_th
     assert closed["status"] == "closed" and closed["close_reason"].startswith("Approved Ada's")
     assert thread_of(bot, ticket).archived is True
     assert pressed.sent.startswith("Approved Ada's **Celeste** run (30:00)")
-    assert "points_mode is **shadow**" in pressed.sent
+    assert "points_mode is **test**" in pressed.sent
     assert ada.dms == []
     posted = bot.guild.channels[SPEED].messages
     assert len(posted) == 1 and not posted[0].content
@@ -309,7 +299,6 @@ async def test_a_member_cannot_approve_and_a_verifier_may_but_not_their_own(bot,
     refused = await press(bot, ada, card, REJECT_MOVE.label)
     assert refused.response.modals == []
 
-    await bot.store.set(GUILD, "modmail_enabled", True)
     own_outcome = await tickets.submit(bot, bot.guild, vera, GIVEN)
     own_ticket = await modmail_cog.open_ticket_for(db, GUILD, vera.id)
     assert own_outcome.ok

@@ -5,6 +5,7 @@ import logging
 import re
 from typing import Any, NamedTuple
 
+from .mode_words import mode_word
 from .panels import KEEP_IT as KEEP_IT
 from .panels import panel_minutes as _panel_minutes
 from .youtube_live import (
@@ -403,8 +404,10 @@ def card_buttons(*, linked: bool, mine: bool, staff: bool) -> tuple[PanelMove, .
 
 def where_words(mode: str, golive_mode: str, channel_id: Any) -> str:
     """Why a live stream would not be announced, in words — never a bare mode name on its own."""
+    if mode == "off":
+        return "no — YouTube is not watched on this server at the moment"
     if mode != "on":
-        return f"no — live-stream announcements are **{mode}** for this server at the moment"
+        return f"no — go-live is in **{mode_word('golive_mode', mode)}** at the moment"
     if not channel_id:
         return (
             "no — a live stream is announced through the go-live feature and no go-live channel "

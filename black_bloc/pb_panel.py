@@ -9,6 +9,7 @@ import discord
 
 from . import pb_moves, pb_store
 from .command_errors import AnswersErrors
+from .mode_words import mode_word
 from .panels import Panel, db_up, opened, retire, still_staff
 from .pb_feed import OFF, PAGE, mode_of, said, time_words
 from .pb_moves import NAME_LIMIT, REASON_LIMIT
@@ -120,7 +121,7 @@ def own_line(store: Any, guild_id: int, row: Any, login: str | None) -> str:
             link=row["src_weblink"],
             login=row["twitch_login"] or login or "",
         )
-        return f"{matched} {posting_line(store, guild_id)}"
+        return " ".join(part for part in (matched, posting_line(store, guild_id)) if part)
     if not login:
         return said(store, guild_id, "pb_feed_you_unlinked")
     if state == pb_store.NONE:
@@ -134,9 +135,13 @@ def own_line(store: Any, guild_id: int, row: Any, login: str | None) -> str:
     return said(store, guild_id, "pb_feed_you_waiting")
 
 
+POSTING_KEYS = {"on": "pb_feed_posting_on", OFF: "pb_feed_posting_off"}
+
+
 def posting_line(store: Any, guild_id: int) -> str:
     """Whether a personal best is posted right now; it never promises a post the mode forbids."""
-    return said(store, guild_id, f"pb_feed_posting_{mode_of(store, guild_id)}")
+    key = POSTING_KEYS.get(mode_of(store, guild_id))
+    return said(store, guild_id, key) if key else ""
 
 
 def own_move(row: Any) -> str | None:
@@ -187,7 +192,8 @@ async def feed_lines(bot: Any, guild: Any) -> list[str]:
     for row in rows:
         if row["state"] in counts:
             counts[row["state"]] += 1
-    lines = [FEED_LINE.format(mode=mode_of(bot.store, guild.id), **counts)]
+    mode = mode_word("pb_feed_mode", mode_of(bot.store, guild.id))
+    lines = [FEED_LINE.format(mode=mode, **counts)]
     looked = await pb_store.looks(bot.db, guild.id)
     if looked is not None and looked["outcome"] == "failed":
         lines.append(

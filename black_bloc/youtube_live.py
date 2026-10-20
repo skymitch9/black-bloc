@@ -6,6 +6,10 @@ from typing import Any
 
 from .golive import YOUTUBE, YOUTUBE_THUMBNAIL, StreamInfo
 
+GOLIVE_MODE_KEY = "golive_mode"
+GOLIVE_YOUTUBE_KEY = "golive_youtube"
+OFF = "off"
+
 LIVE_URL = "https://www.youtube.com/channel/{channel_id}/live"
 WATCH_URL = "https://www.youtube.com/watch?v={video_id}"
 UNREADABLE_EVERY_SECONDS = 3600
@@ -25,6 +29,13 @@ THUMBNAIL_ORDER = ("maxres", "standard", "high", "medium", "default")
 
 PROBE_REFUSED = "YouTube answered {status} for {channel}'s live page."
 CONFIRM_REFUSED = "YouTube's API said nothing about {video_id}."
+
+
+def live_mode(store: Any, guild_id: int) -> str:
+    """off unless go-live also watches YouTube; then go-live's own off / shadow / on."""
+    if not store.get(guild_id, GOLIVE_YOUTUBE_KEY):
+        return OFF
+    return str(store.get(guild_id, GOLIVE_MODE_KEY) or OFF)
 
 
 @dataclass(frozen=True)

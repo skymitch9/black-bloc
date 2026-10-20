@@ -16,6 +16,7 @@ from ..command_visibility import STAFF_ONLY, hidden_names
 from ..logkinds import CORE, SELFTEST, VIA_BOOT, VIA_DISCORD, VIA_WEBSITE, kind_via
 from ..loops import wait_ready
 from ..modcases import pages_under_limit
+from ..mode_words import mode_word
 from ..panels import (
     Outcome,
     Panel,
@@ -542,7 +543,7 @@ def choice_options(key: str, picked: Any) -> list[discord.SelectOption]:
     chosen = picked if isinstance(picked, list | tuple) else [picked]
     return [
         discord.SelectOption(
-            label=str(one)[:OPTION_LABEL_MAX], value=str(one), default=one in chosen
+            label=mode_word(key, one)[:OPTION_LABEL_MAX], value=str(one), default=one in chosen
         )
         for one in KEY_CHOICES.get(key, ())[: sp.SELECT_LIMIT]
     ]

@@ -717,7 +717,7 @@ EXPECTED_BUTTONS = {
     pure.WITHDRAWN: [],
     pure.MOVED: [],
 }
-# `handoff_mode` ships on, so every state a request can still move from also carries the
+# Send to... is always on, so every state a request can still move from also carries the
 # Send to... row; a final one carries none, which is what refuses a stale press.
 HANDOFF_BUTTONS = {
     status: (
@@ -2423,22 +2423,6 @@ async def test_a_final_request_carries_no_send_to_move_at_all(cog, bot, member, 
     assert [one.label for one in view.children] == ["Back"]
 
 
-async def test_the_move_is_not_drawn_at_all_when_the_key_is_off(cog, bot, member, lead):
-    await bot.store.set(GUILD, "handoff_mode", "off")
-    request_id = await request_at(bot, member, lead, pure.OPEN)
-    row = await pure.get_request(bot.db, request_id)
-
-    _embed, view = requests_cog.build_card(bot, bot.guild, row, lead)
-
-    assert pure_handoff.SEND_TO_EVENTS not in [one.label for one in view.children]
-    assert post_labels_of(requests_cog.post_view(bot, bot.guild, row)) == [
-        "Pick up",
-        "Hold",
-        "Decline",
-        pure.SITE_BUTTON,
-    ]
-
-
 def post_labels_of(view):
     return [] if view is None else [getattr(inner(one), "label", None) for one in view.children]
 
@@ -2488,18 +2472,6 @@ async def test_a_member_pressing_send_to_events_is_told_which_role_it_needs(
 
     assert "staff" in pressed.sent.lower()
     assert pressed.response.messages[-1]["ephemeral"] is True
-
-
-async def test_a_stale_press_after_the_key_went_off_refuses_in_words(cog, bot, member, lead):
-    bot.guard = FakeGuard()
-    post = await posted(cog, bot, member)
-    button = post_button(post.messages[0], pure_handoff.SEND_TO_EVENTS)
-    await bot.store.set(GUILD, "handoff_mode", "off")
-
-    pressed = await click(bot, lead, button)
-
-    assert "handoff_mode" in pressed.sent
-    assert "A setting group" in pressed.sent
 
 
 async def test_a_stale_press_on_a_request_that_has_been_decided_refuses_in_words(

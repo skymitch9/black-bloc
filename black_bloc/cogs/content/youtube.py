@@ -29,11 +29,8 @@ from ...panels import (
 from ...panels import site_page_url as library_site_page_url
 from ...settings_store import (
     DB_UNAVAILABLE,
-    GOLIVE_COSTREAM_MODE_KEY,
     GUILD_ONLY,
-    YOUTUBE_LIVE_MODES,
     YOUTUBE_LIVE_POLL_MINUTES,
-    SettingError,
 )
 from ...youtube import (
     BACK,
@@ -68,6 +65,7 @@ from ...youtube_live import (
     after_probe,
     channel_info,
     is_over,
+    live_mode,
     stream_info,
     wall_reading,
 )
@@ -118,28 +116,13 @@ UNLINKED_DM = (
 )
 UNLINKED_DM_WHY = "\n\nWhat they said: {why}"
 LIVE_MODE_OFF_NOTE = (
-    " Live-stream announcements are **off** at the moment, so nothing is posted until a Lead "
-    "sets **Live streams are…** on this panel to shadow or on."
+    " YouTube streams are not watched at the moment, so nothing is posted until a Lead turns on "
+    "**Also watch YouTube** on `/golive`."
 )
 LIVE_MODE_OFF_LINE = (
-    "Live-stream announcements are **off** for this server at the moment, so nothing is posted. "
-    "Linking is still worth doing — it is your own opt-in, and the mode is the server's switch. "
-    "A Lead changes it with **Live streams are…** on this panel."
-)
-LIVE_MODE_SET = "Live-stream announcements are now **{mode}**."
-LIVE_MODE_PLACEHOLDER = "Live streams are…"
-LIVE_MODE_LABELS = {
-    "off": "off — linked channels are not checked for live streams",
-    "shadow": "shadow — the probe runs and logs, nothing else changes",
-    "on": "on — a linked channel going live is announced",
-}
-LIVE_NO_GOLIVE_CHANNEL = (
-    "A live stream is announced through the go-live feature, and `golive_channel_id` is not set, "
-    "so there is nowhere to post one yet. **Setup** on `/golive` picks a channel."
-)
-LIVE_GOLIVE_NOT_ON = (
-    "Go-live announcements are **{mode}** at the moment, and a YouTube stream is announced "
-    "through them — so nothing is posted until `golive_mode` is on."
+    "YouTube streams are not watched on this server at the moment, so nothing is posted. "
+    "Linking is still worth doing — it is your own opt-in. A Lead turns on **Also watch "
+    "YouTube** on `/golive`."
 )
 FEATURE_MISSING = (
     "The YouTube feature is not loaded right now, so nothing was changed. Tell a Lead — the "
@@ -318,7 +301,7 @@ async def link_channel(
     named = title or channel_id
     who = display_of(member)
     said = (LINKED if mine else LINKED_FOR).format(title=named, who=who)
-    if mine and bot.store.get(guild.id, "youtube_live_mode") == "off":
+    if mine and live_mode(bot.store, guild.id) == "off":
         said += LIVE_MODE_OFF_NOTE
     await log_action(
         bot,
@@ -384,31 +367,6 @@ async def unlink_channel(
         details=details,
     )
     return ((UNLINKED if mine else UNLINKED_FOR.format(who=display_of(member))), None)
-
-
-async def set_live_mode(
-    bot: Any, guild: Any, actor: Any, value: str, *, via: str = VIA_DISCORD
-) -> tuple[str, Any]:
-    """The live half's own switch; go-live still decides whether anything is posted."""
-    try:
-        await bot.store.set(guild.id, "youtube_live_mode", value, by=id_of(actor) or None)
-    except SettingError as exc:
-        return (str(exc), None)
-    extra = ""
-    if value != "off":
-        golive_mode = bot.store.get(guild.id, "golive_mode")
-        if not bot.store.get(guild.id, "golive_channel_id"):
-            extra = f" {LIVE_NO_GOLIVE_CHANNEL}"
-        elif golive_mode != "on":
-            extra = f" {LIVE_GOLIVE_NOT_ON.format(mode=golive_mode)}"
-    await log_action(
-        bot,
-        guild,
-        kind_via("youtube.live_mode", via),
-        actor=actor,
-        details={"mode": value, "via": via},
-    )
-    return (LIVE_MODE_SET.format(mode=value) + extra, None)
 
 
 class YouTube(commands.Cog):
@@ -716,9 +674,7 @@ class YouTube(commands.Cog):
             return
         guild = member.guild
         open_session = await self._any_open_session(guild, member)
-        joins = open_session is not None and joins_session(
-            open_session, YOUTUBE, self.bot.store.get(guild.id, GOLIVE_COSTREAM_MODE_KEY)
-        )
+        joins = open_session is not None and joins_session(open_session, YOUTUBE)
         if open_session is not None and not joins:
             if known is None:
                 await self._live_seen(
@@ -896,7 +852,7 @@ class YouTube(commands.Cog):
         return probe.live if probe.readable else None
 
     def _live_mode(self, guild_id: int) -> str:
-        return self.bot.store.get(guild_id, "youtube_live_mode")
+        return live_mode(self.bot.store, guild_id)
 
     def _end_misses(self, guild_id: int) -> int:
         return int(self.bot.store.get(guild_id, "youtube_live_end_misses"))
@@ -975,7 +931,7 @@ async def card_state(bot: Any, member: Any) -> Any:
 
 def member_lines(bot: Any, guild: Any, member: Any, row: Any, *, mine: bool) -> list[str]:
     store = bot.store
-    mode = store.get(guild.id, "youtube_live_mode")
+    mode = live_mode(store, guild.id)
     lines: list[str] = []
     if row is None:
         lines.append(PANEL_INTRO if mine else THEIR_CARD.format(who=display_of(member)))
@@ -1026,7 +982,7 @@ async def live_health(bot: Any, guild: Any) -> dict[str, Any]:
             ]
         )
     return {
-        "mode": store.get(guild.id, "youtube_live_mode"),
+        "mode": live_mode(store, guild.id),
         "minutes": store.get(guild.id, "youtube_live_poll_minutes"),
         "misses": store.get(guild.id, "youtube_live_end_misses"),
         "last_probe_at": getattr(cog, "last_probe_at", None),
@@ -1090,8 +1046,6 @@ async def build_panel(
         view.add_item(LinkedPick(rows[:SELECT_CAP], len(rows), names_of(guild, rows)))
     if staff and picking:
         view.add_item(WhoPick())
-    elif staff:
-        view.add_item(LiveModePick(bot.store.get(guild.id, "youtube_live_mode")))
     return (embed, view)
 
 
@@ -1231,20 +1185,6 @@ async def run_unlink(
     await answer(interaction, said)
 
 
-async def run_live_mode(
-    interaction: discord.Interaction, value: str, previous: Any = None
-) -> None:
-    if not await still_staff(interaction):
-        return
-    if not await opened(interaction, staff=False):
-        return
-    said, _row = await set_live_mode(
-        interaction.client, interaction.guild, interaction.user, value
-    )
-    await render_panel(interaction, previous)
-    await answer(interaction, said)
-
-
 # --- the controls ------------------------------------------------------------------------------
 
 
@@ -1333,27 +1273,6 @@ class LinkedPick(discord.ui.Select):
         await open_card(interaction, int(self.values[0]), self.view)
 
 
-class LiveModePick(discord.ui.Select):
-    """Row 4 is the picker's row, so this stands down while staff are choosing a member."""
-
-    def __init__(self, current: str) -> None:
-        super().__init__(
-            placeholder=LIVE_MODE_PLACEHOLDER,
-            options=[
-                discord.SelectOption(
-                    label=LIVE_MODE_LABELS[name], value=name, default=(name == current)
-                )
-                for name in YOUTUBE_LIVE_MODES
-            ],
-            min_values=1,
-            max_values=1,
-            row=4,
-        )
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_live_mode(interaction, self.values[0], self.view)
-
-
 class WhoPick(discord.ui.UserSelect):
     def __init__(self) -> None:
         super().__init__(placeholder=WHOSE_CHANNEL, min_values=1, max_values=1, row=4)
@@ -1433,7 +1352,6 @@ __all__ = [
     "LinkModal",
     "LinkRefused",
     "LinkedPick",
-    "LiveModePick",
     "MoveButton",
     "UnlinkForModal",
     "WhoPick",
@@ -1451,7 +1369,6 @@ __all__ = [
     "remove_link",
     "render_panel",
     "set_link",
-    "set_live_mode",
     "tell_unlinked",
     "unlink_channel",
 ]

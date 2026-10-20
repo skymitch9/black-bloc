@@ -2091,8 +2091,6 @@ class Chat(commands.Cog):
         """One line in the staff channel, only when modmail is the way in and staff asked for it."""
         if not self.bot.store.get(guild.id, "chat_route_ping_staff"):
             return
-        if not self.bot.store.get(guild.id, "modmail_enabled"):
-            return
         channel_id = self.bot.store.get(guild.id, "staff_channel_id")
         channel = guild.get_channel(channel_id) if channel_id else None
         if channel is None:

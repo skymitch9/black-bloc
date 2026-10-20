@@ -96,12 +96,12 @@ NO_KEY = (
     "working the moment a Lead sets them."
 )
 MODE_OFF = (
-    "Spotlight is **off**, so nothing on this list is watched or announced. The list is kept "
-    "as it is — turning it back on picks up where it left off."
+    "Go-live is **off**, so nothing on this list is watched or announced. The list is kept "
+    "as it is — turning go-live back on picks up where it left off."
 )
 MODE_SHADOW = (
-    "Spotlight is in **shadow**, so announcements, reminders and pins are rehearsed where "
-    "shadow_channel_id points and nothing reaches the go-live channel."
+    "Go-live is in **test**, so announcements, reminders and pins are rehearsed in the test "
+    "channel and nothing reaches the go-live channel."
 )
 NO_CHANNEL = (
     "There is nowhere to announce a spotlight: golive_channel_id is not set. Nothing was "

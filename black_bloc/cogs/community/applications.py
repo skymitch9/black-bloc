@@ -13,6 +13,7 @@ from ... import rolegrants as grants
 from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...logkinds import VIA_DISCORD, kind_via
+from ...mode_words import mode_word
 from ...panels import (
     KEEP_IT,
     NoteModal,
@@ -104,7 +105,7 @@ MODE_SAID = {
         "no form is changed."
     ),
     SHADOW: (
-        "Shadow. Applications are still written down and still show on the dashboard, but no "
+        "Test. Applications are still written down and still show on the dashboard, but no "
         "card is posted, no DM is sent and no role is handed over — the log says what would "
         "have happened."
     ),
@@ -2539,7 +2540,9 @@ class ModePick(discord.ui.Select):
         super().__init__(
             placeholder=SETTINGS_MODE_PICK,
             options=[
-                discord.SelectOption(label=one, value=one, default=one == current)
+                discord.SelectOption(
+                    label=mode_word("applications_mode", one), value=one, default=one == current
+                )
                 for one in forms.MODES
             ],
             min_values=1,

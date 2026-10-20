@@ -153,3 +153,5 @@ unverified:
   [`gotchas.md`](gotchas.md) — *"`Client.activity` gives a different answer the second time you
   read it"*. It cost one confusing test failure here, and it has a production edge worth knowing
   before anyone adds a read of `bot.activity` before `connect()`.
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** `boot_status_mode` is RETIRED: the red boot status is the constant `presence.BOOT_STATUS = "on"`. `boot_status_text` / `shutdown_status_text` stay keys. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

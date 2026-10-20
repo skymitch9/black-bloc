@@ -20,6 +20,7 @@ export const LABELS = {
   logs_count: 'How many lines a Logs button shows to begin with',
   logs_important_only: 'Whether a Logs button opens on the important lines only',
 
+  golive_youtube: 'Also watch YouTube',
   golive_mode: 'Whether the bot announces streams',
   golive_channel_id: 'Where a go-live announcement is posted',
   golive_template: 'What a go-live announcement says',
@@ -28,7 +29,6 @@ export const LABELS = {
   golive_end_template: 'What the announcement says once the stream is over',
   golive_end_author: "What the card's top line says once the stream is over",
   golive_end_keep_mention: 'Whether the role mention stays on the rewritten announcement',
-  golive_costream_mode: 'Whether one announcement names both platforms when somebody co-streams',
   golive_costream_template: 'What the announcement says while two platforms are live',
   golive_replay_action: 'What a replay on a spotlighted channel gets',
   golive_replay_words: 'The title words that mark a replay',
@@ -45,7 +45,6 @@ export const LABELS = {
   golive_replay_midstream_polls: 'How many checks in a row turn a live stream into a replay',
   golive_replay_marathon_runs: 'Whether a marathon overrules a replay word only around its runs',
   golive_costream_author: "What the card's top line says while two platforms are live",
-  spotlight_mode: 'Whether Twitch channels with nobody here behind them are announced',
   spotlight_poll_minutes: 'How often Twitch is asked whether a spotlighted channel is live',
   spotlight_end_misses: 'How many quiet looks end a spotlighted stream',
   spotlight_bump_hours: 'Hours between reminders that a spotlighted stream is still going',
@@ -454,7 +453,6 @@ export const LABELS = {
   youtube_log_level: 'How much of YouTube is repeated into Discord',
   youtube_panel_minutes: 'How long the /youtube panel stays live',
   youtube_unlink_dms_them: 'Whether staff forgetting somebody’s channel DMs them why',
-  youtube_live_mode: 'Whether the bot announces a linked channel going live',
   youtube_live_poll_minutes: 'How often a linked YouTube channel is checked for a live stream',
   youtube_live_end_misses: 'How many quiet checks end a YouTube stream',
 
@@ -495,7 +493,6 @@ export const LABELS = {
   error_retry_label: 'What the Try again button is called',
   error_retry_minutes: 'How long a Try again button keeps working',
   error_retry_expired: 'What a Try again pressed too late says',
-  boot_status_mode: 'Whether the bot reads red while it is restarting',
   boot_status_text: 'What its status says while it is starting up',
   shutdown_status_text: 'What its status says on the way down',
   panel_expired_text: 'What a button on a panel that has gone quiet says',
@@ -516,13 +513,11 @@ export const LABELS = {
   pb_feed_post_author: "The line above a personal best post",
   pb_feed_place_text: "How a personal best post says the leaderboard place",
   pb_feed_link_label: "What the link to the run is called",
-  pb_feed_no_channel_words: "What a rehearsal says while no channel is picked",
   pb_feed_panel_title: "The heading of the /pb panel",
   pb_feed_panel_footer: "What the /pb panel says once it has timed out",
   pb_feed_you_matched: "What a member reads when their Twitch link found their account",
   pb_feed_you_set: "What a member reads when staff set their account",
   pb_feed_posting_on: "What a matched member reads while personal bests are posted",
-  pb_feed_posting_shadow: "What a matched member reads while the feed is rehearsing",
   pb_feed_posting_off: "What a matched member reads while the feed is off",
   pb_feed_you_none: "What a member reads when no account lists their Twitch channel",
   pb_feed_you_waiting: "What a member reads before they have been looked up",
@@ -783,7 +778,6 @@ export const LABELS = {
   points_ticket_body: "The first message of a run's modmail ticket",
   points_close_refused_said: "What staff are told when closing a run's ticket before deciding it",
   points_dm_approved: "What an approved run adds to the ticket-closed DM",
-  points_modmail_off_said: "What a member is told when modmail is off and they submit a run",
   points_blocked_said: "What a member blocked from modmail is told when they submit a run",
   points_ticket_open_said: "What a member with an open ticket is told when they submit a run",
   points_run_waiting_said: "What a member is told when another run of theirs is still waiting",
@@ -931,7 +925,6 @@ export const LABELS = {
   birthday_post_missing: 'How many birthdays belong to somebody not in the member list',
   birthday_post_failed: 'How many wishes could not be posted, in words',
 
-  modmail_enabled: 'Whether the bot answers DMs',
   modmail_mode: 'Whether a ticket is a channel or a thread',
   modmail_category_id: 'Where ticket channels are made',
   modmail_staff_channel_id: 'Where ticket threads are made',
@@ -1164,7 +1157,6 @@ export const LABELS = {
   request_forum_adopts_posts: 'Whether a post started by hand in the requests forum becomes a request',
   request_panel_minutes: 'How long the /request panel stays live',
   request_panel_own_list: 'Whether a member sees their own requests on /request',
-  handoff_mode: 'Whether staff can send a request, event or ticket somewhere else',
   handoff_confirm_hours: 'How long a member has to answer a file-my-ticket DM',
   request_log_level: 'How much of requests is repeated into Discord',
 
@@ -1296,4 +1288,16 @@ export function channelLabel(channel, channels = []) {
   const mark = CHANNEL_KIND[channel.type] || '#';
   const where = categoryName(channel, channels);
   return where ? `${mark} ${channel.name} · ${where}` : `${mark} ${channel.name}`;
+}
+
+const SHADOW = 'shadow';
+const TEST_WORD = 'test';
+const STAFF_ONLY_WORD = 'staff only';
+const STAFF_ONLY_KEYS = ['tempvoice_mode'];
+
+/** What a stored mode value is called; the same table as black_bloc/mode_words.py. */
+export function modeWord(value, key = '') {
+  const said = value === null || value === undefined ? '' : String(value);
+  if (said !== SHADOW) return said;
+  return STAFF_ONLY_KEYS.includes(String(key || '')) ? STAFF_ONLY_WORD : TEST_WORD;
 }

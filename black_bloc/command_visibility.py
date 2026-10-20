@@ -22,7 +22,7 @@ HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "chat_mode": ("chat",),
     "events_mode": ("event",),
     "frontdoor_mode": ("ask",),
-    "golive_mode": ("golive",),
+    "golive_mode": ("golive", "youtube"),
     "honeypot_mode": ("honeypot",),
     "minutes_mode": ("minutes",),
     "pings_mode": ("pings",),
@@ -33,7 +33,6 @@ HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "request_mode": ("request",),
     "rolemenu_mode": ("rolemenu",),
     "tempvoice_mode": ("voice",),
-    "youtube_live_mode": ("youtube",),
 }
 NEVER_HIDDEN: tuple[str, ...] = ("settings", "help", "about", "ping")
 SWITCH_KEY = HIDE_COMMANDS_WHEN_OFF

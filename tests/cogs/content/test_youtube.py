@@ -13,13 +13,11 @@ from black_bloc.cogs.content.golive import GoLive
 from black_bloc.cogs.content.youtube import (
     FEATURE_MISSING,
     LINK_LABEL,
-    LIVE_MODE_PLACEHOLDER,
     NOT_LINKED,
     PICK_A_CHANNEL,
     SITE_BUTTON,
     LinkedPick,
     LinkModal,
-    LiveModePick,
     WhoPick,
     YouTube,
     build_panel,
@@ -27,9 +25,7 @@ from black_bloc.cogs.content.youtube import (
     get_link,
     live_health,
     run_link,
-    run_live_mode,
     set_link,
-    set_live_mode,
     unlink_channel,
 )
 from black_bloc.config import load_settings
@@ -317,7 +313,9 @@ async def linked(db, cog, client=None):
 
 
 async def live_mode(bot, mode="on"):
-    await bot.store.set(GUILD, "youtube_live_mode", mode)
+    await bot.store.set(GUILD, "golive_youtube", mode != "off")
+    if mode != "off":
+        await bot.store.set(GUILD, "golive_mode", mode)
 
 
 # --- one channel, two members ------------------------------------------------------------------
@@ -399,7 +397,7 @@ async def test_staff_see_the_health_lines_who_is_linked_and_every_staff_control(
         "Logs",
         SITE_BUTTON,
     ]
-    assert placeholders(view) == [PICK_A_CHANNEL, LIVE_MODE_PLACEHOLDER]
+    assert placeholders(view) == [PICK_A_CHANNEL]
 
 
 async def test_a_member_is_never_told_who_else_has_a_channel_linked(bot, cog, db, member):
@@ -439,8 +437,8 @@ async def test_with_the_live_mode_off_the_embed_says_so_and_link_my_channel_stil
 
     embed, view = await build_panel(bot, bot.guild, member)
 
-    assert "**off**" in embed.description
-    assert "Live streams are…" in embed.description
+    assert "not watched" in embed.description
+    assert "Also watch YouTube" in embed.description
     assert "Link my channel" in labels(view)
 
 
@@ -773,20 +771,6 @@ async def test_a_staffer_demoted_while_the_panel_is_open_moves_nothing(
     assert interaction.edits == []
 
 
-async def test_the_mode_select_re_asks_whether_the_clicker_is_still_staff(bot, cog, db, member):
-    _staff(bot)
-    _embed, view = await build_panel(bot, bot.guild, member)
-    pick = next(one for one in view.children if isinstance(one, LiveModePick))
-    pick._values = ["on"]
-    _staff(bot, False)
-    interaction = FakeInteraction(bot, member)
-
-    await pick.callback(interaction)
-
-    assert bot.store.get(GUILD, "youtube_live_mode") == "off"
-    assert "staff only" in interaction.sent
-
-
 async def test_every_click_re_checks_the_database_after_it_has_deferred(bot, cog, db, member):
     _embed, view = await build_panel(bot, bot.guild, member)
     await db.close()
@@ -951,9 +935,10 @@ def golive(bot):
     return made
 
 
-async def live_on(bot, mode="on", golive_mode="on"):
-    await bot.store.set(GUILD, "youtube_live_mode", mode)
-    await bot.store.set(GUILD, "golive_mode", golive_mode)
+async def live_on(bot, mode="on", golive_mode=None):
+    """Go-live's own mode governs YouTube; off here means YouTube is not watched."""
+    await bot.store.set(GUILD, "golive_youtube", mode != "off")
+    await bot.store.set(GUILD, "golive_mode", golive_mode or (mode if mode != "off" else "on"))
 
 
 async def live_linked(db, cog, *pages, keyed=False, confirms=None, searches=None):
@@ -1126,7 +1111,7 @@ async def test_with_the_live_half_off_nothing_is_probed_at_all(bot, cog, golive,
 async def test_in_shadow_the_go_live_path_still_runs_and_the_probe_row_is_a_would_row(
     bot, cog, golive, db, member
 ):
-    """C: youtube_live_mode shadows its OWN row; golive_mode decides whether anything posts."""
+    """C: go-live in test shadows the probe row and the announcement alike."""
     await live_on(bot, mode="shadow", golive_mode="shadow")
     await live_linked(db, cog, LIVE_PAGE)
 
@@ -1246,26 +1231,7 @@ async def test_the_staff_panel_says_what_the_live_probe_is_doing(bot, cog, goliv
 
     assert "**live streams** — on" in embed.description
     assert "**last probe** — never" in embed.description
-    assert any(isinstance(one, LiveModePick) for one in view.children)
-
-
-async def test_the_live_mode_select_writes_the_key_and_leaves_one_row(bot, cog, db, member):
-    _staff(bot)
-    interaction = FakeInteraction(bot, member)
-
-    await run_live_mode(interaction, "shadow")
-
-    assert bot.store.get(GUILD, "youtube_live_mode") == "shadow"
-    assert (await kinds_logged(db)).count("youtube.live_mode") == 1
-    assert "**shadow**" in interaction.sent
-
-
-async def test_switching_the_live_half_on_says_when_go_live_would_not_post(bot, cog, db, member):
-    await bot.store.set(GUILD, "golive_mode", "shadow")
-
-    said, _row = await set_live_mode(bot, bot.guild, member, "on")
-
-    assert "shadow" in said and "golive_mode" in said
+    assert view.children
 
 
 async def test_go_lives_reconcile_asks_youtube_before_closing_a_youtube_session(
@@ -1500,17 +1466,14 @@ async def test_the_staff_panel_says_when_a_probe_was_served_the_bot_check(
 # --- a probe that reads live while another source's session is open (the silent path) -------------
 
 
-async def open_twitch_session(db):
+async def open_twitch_session(db, *, also=None):
     await db.conn.execute(
-        "INSERT INTO golive_sessions(guild_id, user_id, source, platform, started_at, mode) "
-        "VALUES (?, ?, 'twitch', 'Twitch', '2026-09-17T18:00:00+00:00', 'on')",
-        (GUILD, STREAMER),
+        "INSERT INTO golive_sessions(guild_id, user_id, source, platform, started_at, mode, "
+        "also_source, also_platform) "
+        "VALUES (?, ?, 'twitch', 'Twitch', '2026-09-17T18:00:00+00:00', 'on', ?, ?)",
+        (GUILD, STREAMER, also, also.title() if also else None),
     )
     await db.conn.commit()
-
-
-async def no_costreaming(bot):
-    await bot.store.set(GUILD, "golive_costream_mode", "off")
 
 
 async def test_a_stream_read_live_while_their_twitch_session_is_open_leaves_a_row_saying_so(
@@ -1518,8 +1481,7 @@ async def test_a_stream_read_live_while_their_twitch_session_is_open_leaves_a_ro
 ):
     """The probe worked; the one-announcement-per-person rule is why nothing was posted."""
     await live_on(bot)
-    await no_costreaming(bot)
-    await open_twitch_session(db)
+    await open_twitch_session(db, also="kick")
     client = await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
 
     await cog.probe_all()
@@ -1540,8 +1502,7 @@ async def test_that_row_is_written_once_per_stream_and_not_once_per_probe(
     bot, cog, golive, db, member
 ):
     await live_on(bot)
-    await no_costreaming(bot)
-    await open_twitch_session(db)
+    await open_twitch_session(db, also="kick")
     await live_linked(
         db, cog, BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, keyed=True
     )
@@ -1557,8 +1518,7 @@ async def test_the_row_shadows_with_the_live_half_exactly_as_the_announcing_one_
     bot, cog, golive, db, member
 ):
     await live_on(bot, mode="shadow")
-    await no_costreaming(bot)
-    await open_twitch_session(db)
+    await open_twitch_session(db, also="kick")
     await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
 
     await cog.probe_all()
@@ -1617,13 +1577,13 @@ async def test_the_staff_panel_says_how_many_channels_read_as_live(bot, cog, gol
     assert "**reading live now** — 1" in embed.description
 
 
-# --- a probe that reads live while a Twitch session is open, with co-streaming on ----------------
+# --- a probe that reads live while a Twitch session is open: co-streaming -----------------------
 
 
 async def test_a_second_platform_joins_the_open_session_instead_of_being_held_back(
     bot, cog, golive, db, member
 ):
-    """`golive_costream_mode` on: the hand-off is `add_platform`, and the row says why."""
+    """Co-streaming: the hand-off is `add_platform`, and the row says why."""
     await live_on(bot)
     await open_twitch_session(db)
     await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
@@ -1696,7 +1656,7 @@ async def channel_sessions(db):
 async def test_the_sweep_probes_a_channel_row_and_announces_it_once(bot, cog, db):
     await live_on(bot)
     a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     row = await a_channel_row(bot)
     cog.client = _Live(LIVE_PAGE)
 
@@ -1724,7 +1684,7 @@ async def test_a_channel_row_with_no_youtube_channel_is_not_probed(bot, cog, db)
 async def test_an_opted_out_channel_row_is_probed_but_never_announced(bot, cog, db):
     await live_on(bot)
     a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     await a_channel_row(bot, announce=False)
     cog.client = _Live(LIVE_PAGE)
 
@@ -1739,7 +1699,7 @@ async def test_a_channel_already_live_on_twitch_joins_rather_than_announcing_twi
 
     await live_on(bot)
     spot = a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     row = await a_channel_row(bot)
     await spot.announce_info(
         bot.guild,
@@ -1761,7 +1721,7 @@ async def test_a_channel_already_live_on_twitch_joins_rather_than_announcing_twi
 async def test_the_youtube_side_ends_the_session_it_opened(bot, cog, db):
     await live_on(bot)
     a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     await bot.store.set(GUILD, "youtube_live_end_misses", 1)
     row = await a_channel_row(bot)
     cog.client = _Live(LIVE_PAGE, OFFLINE_PAGE, OFFLINE_PAGE)
@@ -1783,7 +1743,7 @@ async def test_an_opted_out_channel_row_says_so_on_its_row_and_spends_nothing(bo
     """The live ESA rows read announced=True while its announce cell was off; now they say why."""
     await live_on(bot)
     a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     await a_channel_row(bot, announce=False)
     cog.client = _Live(
         BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, keyed=True, searches=[SEARCHED_VIDEO]
@@ -1802,7 +1762,7 @@ async def test_an_opted_out_channel_row_says_so_on_its_row_and_spends_nothing(bo
 async def test_a_walled_channel_row_is_searched_once_and_announced_with_the_found_id(bot, cog, db):
     await live_on(bot)
     a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     await a_channel_row(bot)
     cog.client = _Live(
         BOTCHECK_LIVE_PAGE,
@@ -1828,7 +1788,7 @@ async def test_a_walled_channel_row_is_searched_once_and_announced_with_the_foun
 async def test_a_walled_channel_row_whose_search_finds_nothing_links_the_live_page(bot, cog, db):
     await live_on(bot)
     a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     await a_channel_row(bot)
     cog.client = _Live(BOTCHECK_LIVE_PAGE, keyed=True, searches=[None])
 
@@ -1844,7 +1804,7 @@ async def test_a_walled_channel_row_with_no_key_links_the_live_page_and_searches
 ):
     await live_on(bot)
     a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     await a_channel_row(bot)
     cog.client = _Live(BOTCHECK_LIVE_PAGE, keyed=False)
 
@@ -1871,7 +1831,7 @@ async def test_a_reboot_forgets_the_broadcast_so_the_next_probe_writes_its_row_a
     """Five of the six live ESA rows landed on a deploy's boot minute: the memory is per process."""
     await live_on(bot)
     a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     await a_channel_row(bot, announce=False)
     cog.client = _Live(BOTCHECK_LIVE_PAGE)
     await cog.probe_all()
@@ -1950,7 +1910,7 @@ async def test_a_page_that_is_not_walled_writes_no_wall_row(bot, cog, golive, db
 async def test_a_walled_channel_row_writes_its_wall_row_too(bot, cog, db):
     await live_on(bot)
     a_spotlight_cog(bot)
-    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "golive_mode", "on")
     await a_channel_row(bot)
     cog.client = _Live(BOTCHECK_LIVE_PAGE, keyed=True, searches=[SEARCHED_VIDEO])
 

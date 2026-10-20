@@ -1,4 +1,5 @@
 import { api, listOf, send, settings, settingsNamespace } from './api.js';
+import { modeWord } from './labels.js';
 import { start } from './app.js';
 import { featureLabel, logsSection } from './logs.js';
 import { guidesIndex } from './shell.js';
@@ -139,7 +140,7 @@ function goTo(slug) {
 
 function modePill(mode) {
   if (mode === null || mode === undefined || mode === '') return null;
-  return el('span', { class: 'pill', 'data-mode': String(mode), text: String(mode) });
+  return el('span', { class: 'pill', 'data-mode': String(mode), text: modeWord(mode) });
 }
 
 function audiencePill(row) {
@@ -193,7 +194,7 @@ function rightNowStrip(payload) {
     ? `Test mode is on — Black Bloc only speaks in #${found.test_channel || 'the test channel'} and in DMs`
     : 'Test mode is off — Black Bloc speaks in the server');
   parts.push(`${found.on ?? 0} features on`);
-  parts.push(`${found.shadow ?? 0} in shadow`);
+  parts.push(`${found.shadow ?? 0} in test`);
   parts.push(`${found.off ?? 0} off`);
   return full(el('div', { class: 'today' }, [
     el('div', { class: 'today-head', text: 'Right now' }),

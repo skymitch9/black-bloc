@@ -542,3 +542,5 @@ client will submit an EMPTY `ChannelSelect`/`RoleSelect` at `min_values=0` is st
 here as it was for events and applications — `Forget…` is the fallback and is built either
 way. The `youtube_mode` flip (F-Y2) was made by the conductor on the Go-live page at 17:42 after
 v71 deployed; the mode is `shadow`.
+
+> **Follow-up 2026-10-20 (`shadow-one-meaning`):** The panel's *Live streams are…* select is gone with `youtube_live_mode`; the switch is *Also watch YouTube* on `/golive`. See [`shadow-one-meaning-design.md`](shadow-one-meaning-design.md).

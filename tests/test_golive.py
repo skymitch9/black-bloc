@@ -15,6 +15,8 @@ from black_bloc.golive import (
     PANEL_MINUTES_KEY,
     PANEL_TIMEOUT_FOOTER,
     STAFF_BUTTONS,
+    STOP_YOUTUBE,
+    WATCH_YOUTUBE,
     StreamInfo,
     again_render,
     announcement_embed,
@@ -795,7 +797,17 @@ def test_the_button_table_offers_one_link_move_and_one_opt_move(linked, opted_ou
     assert "Refresh" in labels
     assert ({"Logs", "Streamers…"} <= set(labels)) is staff
     assert len(labels) == len(set(labels))
-    assert found == PANEL_BUTTONS[(linked, opted_out)] + (STAFF_BUTTONS if staff else ())
+    staff_moves = (*STAFF_BUTTONS, WATCH_YOUTUBE) if staff else ()
+    assert found == PANEL_BUTTONS[(linked, opted_out)] + staff_moves
+
+
+def test_staff_get_the_one_youtube_move_that_flips_it():
+    watching = panel_buttons(linked=True, opted_out=False, staff=True, youtube=True)
+    not_yet = panel_buttons(linked=True, opted_out=False, staff=True, youtube=False)
+
+    assert STOP_YOUTUBE in watching and WATCH_YOUTUBE not in watching
+    assert WATCH_YOUTUBE in not_yet and STOP_YOUTUBE not in not_yet
+    assert WATCH_YOUTUBE not in panel_buttons(linked=True, opted_out=False, staff=False)
 
 
 def test_the_link_moves_open_a_modal_and_nothing_else_does():
@@ -828,7 +840,7 @@ def test_the_card_says_in_words_when_announcements_are_off_or_shadow():
 
     assert "**off** right now" in off[-1]
     assert "Linking still counts" in off[-1]
-    assert "**shadow** right now" in shadow[-1]
+    assert "**test** right now" in shadow[-1]
 
 
 def test_the_card_carries_a_channel_note_last_when_it_is_given_one():
@@ -988,16 +1000,15 @@ def test_the_live_sentence_re_rendered_for_an_edit_never_adds_a_mention_of_its_o
     assert kept == "<@&77> " + plain
 
 
-def test_a_second_platform_joins_only_when_the_mode_is_on_and_the_platform_is_new():
+def test_a_second_platform_joins_only_when_the_platform_is_new():
     row = {"platform": "Twitch", "also_source": None}
 
-    assert joins_session(row, "YouTube", "on") is True
-    assert joins_session(row, "Twitch", "on") is False
-    assert joins_session(row, "twitch", "on") is False
-    assert joins_session(row, "YouTube", "off") is False
-    assert joins_session({"platform": None, "also_source": None}, "YouTube", "on") is False
-    assert joins_session(row, None, "on") is False
-    assert joins_session({"platform": "Twitch", "also_source": "youtube"}, "Kick", "on") is False
+    assert joins_session(row, "YouTube") is True
+    assert joins_session(row, "Twitch") is False
+    assert joins_session(row, "twitch") is False
+    assert joins_session({"platform": None, "also_source": None}, "YouTube") is False
+    assert joins_session(row, None) is False
+    assert joins_session({"platform": "Twitch", "also_source": "youtube"}, "Kick") is False
 
 
 # --- The auto-link's pure half: which platform an address is, and the sweep's own report -----

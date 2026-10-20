@@ -58,6 +58,7 @@ from .logkinds import (
 from .minutes_audio import CHUNK_SECONDS_DEFAULT as MINUTES_CHUNK_SECONDS_DEFAULT
 from .minutes_audio import CHUNK_SECONDS_MAX as MINUTES_CHUNK_SECONDS_MAX
 from .minutes_audio import CHUNK_SECONDS_MIN as MINUTES_CHUNK_SECONDS_MIN
+from .mode_words import mode_word, stored_mode, words_for
 from .personas import (
     BANTER_STYLE,
     BANTER_STYLE_KEY,
@@ -104,10 +105,6 @@ GOLIVE_END_TEMPLATE = "**{name}** was streaming **{game}** — the stream has en
 GOLIVE_END_SUFFIX_RETIRED = "golive_end_suffix"
 GOLIVE_END_MODE_RETIRED = "golive_end_mode"
 GOLIVE_END_AUTHOR = "{name} was live on {platform}"
-GOLIVE_COSTREAM_OFF = "off"
-GOLIVE_COSTREAM_ON = "on"
-GOLIVE_COSTREAM_MODES = (GOLIVE_COSTREAM_OFF, GOLIVE_COSTREAM_ON)
-GOLIVE_COSTREAM_MODE_KEY = "golive_costream_mode"
 GOLIVE_COSTREAM_TEMPLATE_KEY = "golive_costream_template"
 GOLIVE_COSTREAM_AUTHOR_KEY = "golive_costream_author"
 GOLIVE_COSTREAM_TEMPLATE = (
@@ -339,7 +336,6 @@ KEY_TYPES: dict[str, str] = {
     "golive_end_template": "text",
     "golive_end_author": "text",
     "golive_end_keep_mention": "bool",
-    GOLIVE_COSTREAM_MODE_KEY: "enum",
     GOLIVE_COSTREAM_TEMPLATE_KEY: "text",
     GOLIVE_COSTREAM_AUTHOR_KEY: "text",
     "golive_live_role_id": "role",
@@ -415,7 +411,6 @@ KEY_TYPES: dict[str, str] = {
     "birthday_color": "color",
     "birthday_role_id": "role",
     "birthday_show_age": "bool",
-    "modmail_enabled": "bool",
     "modmail_mode": "enum",
     "modmail_category_id": "channel",
     "modmail_staff_channel_id": "channel",
@@ -445,7 +440,7 @@ KEY_TYPES: dict[str, str] = {
     "chat_staff_can_ping_roles": "bool",
     "chat_escalation_names": "int",
     "chat_greeting_reaction": "bool",
-    "chat_greeting_via_model": "enum",
+    "chat_greeting_via_model": "bool",
     "chat_reply_in_threads": "bool",
     "chat_route_ping_staff": "bool",
     "chat_llm_mode": "enum",
@@ -484,7 +479,6 @@ KEY_TYPES: dict[str, str] = {
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
-    GOLIVE_COSTREAM_MODE_KEY: GOLIVE_COSTREAM_MODES,
     "pings_mode": PINGS_MODES,
     "pings_fan_role_creation": PINGS_CREATORS,
     "pings_fan_role_on_unlink": PINGS_ON_UNLINK,
@@ -509,7 +503,6 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "request_who_can_file": REQUEST_FILERS,
     "chat_mode": CHAT_MODES,
     "chat_llm_mode": CHAT_LLM_MODES,
-    "chat_greeting_via_model": CHAT_LLM_MODES,
     "chat_personality": PERSONALITY_CHOICES,
     "chat_memory_mode": MEMORY_MODES,
     "chat_memory_consent": CONSENT_CHOICES,
@@ -732,9 +725,11 @@ KEY_HELP: dict[str, str] = {
     "staff_channel_id": "the channel whose viewers count as staff",
     "role_menu_channel_id": "the channel /rolemenu offers first when a menu is posted",
     "golive_mode": (
-        "whether a stream is announced at all. off watches nobody; shadow watches and logs what "
-        "it would have posted without posting it; on posts the announcement. Off by default, so "
-        "nothing reaches the server until somebody turns it on"
+        "whether a stream is announced at all: members' streams, spotlight channels, and YouTube "
+        "streams while golive_youtube is on. off watches nobody; test watches and logs what it "
+        "would have posted without posting it, and a spotlight posts its rehearsal copy in the "
+        "test channel; on posts the announcement. test by default, so nothing reaches the server "
+        "until somebody turns it on"
     ),
     "golive_channel_id": (
         "the channel every go-live announcement is posted in. Blank — the default — means "
@@ -766,12 +761,6 @@ KEY_HELP: dict[str, str] = {
         "whether the role mention stays at the front of the announcement after it is rewritten "
         "to say the stream ended. off — the default — drops it. Nobody is pinged by an edit "
         "either way, so this is only about how the finished post reads"
-    ),
-    GOLIVE_COSTREAM_MODE_KEY: (
-        "what happens when somebody already live on one platform goes live on the other as "
-        "well. on — the default — edits the announcement that is already out so ONE post names "
-        "both platforms; off leaves the first post alone and the second platform is not "
-        "announced at all"
     ),
     GOLIVE_COSTREAM_TEMPLATE_KEY: (
         "the sentence used while somebody is live on two platforms at once. It takes {name} "
@@ -877,7 +866,7 @@ KEY_HELP: dict[str, str] = {
         "own conservative cap — raise it and Discord refuses in words if it is too high"
     ),
     "tempvoice_mode": (
-        "off, shadow (join-to-create works, but only staff can see the lobby — the rooms it "
+        "off, staff only (join-to-create works, but only staff can see the lobby — the rooms it "
         "spawns follow it), or on (the lobby is visible to whoever its category shows)"
     ),
     "tempvoice_creator_ids": "the join-to-create channels; Setup on /voice fills this in",
@@ -888,14 +877,14 @@ KEY_HELP: dict[str, str] = {
         "what a new room's permissions start from: lobby (the join-to-create channel's own — "
         "a staff-only lobby makes staff-only rooms) or category (the category's, as before)"
     ),
-    "honeypot_mode": "off, shadow (log only) or on (ban whoever posts in the trap)",
+    "honeypot_mode": "off, test (log only) or on (ban whoever posts in the trap)",
     "honeypot_channel_ids": "the trap channels; Setup… on /honeypot fills this in",
     "honeypot_purge_days": (
         f"days of the banned account's messages to delete with it, 0 to "
         f"{HONEYPOT_PURGE_MAX_DAYS}"
     ),
     "honeypot_exempt_role_ids": "roles the trap ignores; staff are always ignored too",
-    "events_mode": "off, shadow (no public announcement) or on (announce approved events)",
+    "events_mode": "off, test (no public announcement) or on (announce approved events)",
     "events_category_id": "the category review channels are made in; /event settings sets it",
     "events_announce_channel_id": "where an approved event is announced and pinged when it starts",
     "events_ping_role_id": "role mentioned when an event is announced and when it starts",
@@ -1042,13 +1031,15 @@ KEY_HELP: dict[str, str] = {
         "how a date poll writes its slots: plain (Sat 30 Aug · 7 pm, in the server's zone) or "
         "timestamp (each reader sees their own clock, if Discord renders one in an answer)"
     ),
-    "birthday_mode": "off, shadow (log only) or on (post birthday wishes)",
+    "birthday_mode": (
+        "off, test or on (post birthday wishes). test writes each day's wishes to the log and "
+        "posts nothing; a wish staff post by hand goes to the test channel as a rehearsal copy"
+    ),
     "birthday_channel_id": "where birthday wishes are posted",
     "birthday_template": "the birthday wording; {name} and {age}",
     "birthday_color": "the birthday embed's colour, as a hex code like #4eefff",
     "birthday_role_id": "role given for the day and taken back the next; none by default",
     "birthday_show_age": "true to put {age} in reach for people who stored a birth year",
-    "modmail_enabled": "true when Black Bloc answers DMs; false leaves them to the old ModMail bot",
     "modmail_mode": (
         "channel (one channel per ticket), thread (private threads in the staff channel) or "
         "forum (one post per ticket in the forum channel — the list never grows past the "
@@ -1057,7 +1048,7 @@ KEY_HELP: dict[str, str] = {
     "modmail_category_id": "the category ticket channels are made in, in channel mode",
     "modmail_staff_channel_id": "the channel ticket threads are made in, in thread mode",
     "modmail_log_channel_id": "where a closed ticket's transcript is posted",
-    "automod_mode": "off, shadow (log what it would do) or on (delete, warn and time out)",
+    "automod_mode": "off, test (log what it would do) or on (delete, warn and time out)",
     "automod_rules": "the automod rule book; /automod then A rule… is what changes it",
     "automod_exempt_role_ids": "roles automod ignores; staff are always ignored too",
     "automod_exempt_channel_ids": "channels automod never reads",
@@ -1135,15 +1126,14 @@ KEY_HELP: dict[str, str] = {
         "longer still gets a reply"
     ),
     "chat_greeting_via_model": (
-        "on (a hello is answered by the quick model in the member's tone, with no server notes) "
-        "or off (a hello gets one of the greeting's own written lines). Only used while "
+        "true (a hello is answered by the quick model in the member's tone, with no server notes) "
+        "or false (a hello gets one of the greeting's own written lines). Only used while "
         "chat_llm_mode is on; the cookout voice always uses the written lines, and a model that "
         "fails or is capped falls back to them"
     ),
     "chat_reply_in_threads": "true to answer @-mentions inside threads as well as channels",
     "chat_route_ping_staff": (
-        "true to drop one line in the staff channel when somebody asks the bot for a mod; only "
-        "used while modmail_enabled is true"
+        "true to drop one line in the staff channel when somebody asks the bot for a mod"
     ),
     "chat_llm_mode": (
         "off, or on (an @-mention no built-in intent recognises is answered by a language model "
@@ -1228,7 +1218,7 @@ KEY_HELP: dict[str, str] = {
         "than claiming hosting is free"
     ),
     "raidtrain_mode": (
-        "off, shadow (log what would be sent and send nothing) or on (post the lineup and DM "
+        "off, test (log what would be sent and send nothing) or on (post the lineup and DM "
         "slot holders before their hour)"
     ),
     "raidtrain_organizer_role_id": (
@@ -1350,7 +1340,7 @@ KEY_MAX_REASON["applications_retry_days"] = (
 KEY_HELP.update(
     {
         "applications_mode": (
-            "off, shadow (log only, nothing posted or DMed) or on (members can apply and staff "
+            "off, test (log only, nothing posted or DMed) or on (members can apply and staff "
             "decide on the card)"
         ),
         "applications_channel_id": (
@@ -1465,14 +1455,11 @@ KEY_HELP.update(
 # block so the parallel branches merge textually; both keys are filed under the `request`
 # namespace through NAMESPACE_OVERRIDE, because `/settings` group select is at its cap of 25.
 # Design: info/send-to-design.md.
-HANDOFF_MODE = "handoff_mode"
 HANDOFF_CONFIRM_HOURS = "handoff_confirm_hours"
-HANDOFF_MODES = ("off", "on")
 HANDOFF_CONFIRM_HOURS_DEFAULT = 24
 HANDOFF_CONFIRM_HOURS_MIN = 1
 HANDOFF_CONFIRM_HOURS_MAX = 168
-KEY_TYPES.update({HANDOFF_MODE: "enum", HANDOFF_CONFIRM_HOURS: "int"})
-KEY_CHOICES[HANDOFF_MODE] = HANDOFF_MODES
+KEY_TYPES.update({HANDOFF_CONFIRM_HOURS: "int"})
 KEY_MIN[HANDOFF_CONFIRM_HOURS] = HANDOFF_CONFIRM_HOURS_MIN
 KEY_MAX[HANDOFF_CONFIRM_HOURS] = HANDOFF_CONFIRM_HOURS_MAX
 KEY_MIN_REASON[HANDOFF_CONFIRM_HOURS] = (
@@ -1485,11 +1472,6 @@ KEY_MAX_REASON[HANDOFF_CONFIRM_HOURS] = (
 )
 KEY_HELP.update(
     {
-        HANDOFF_MODE: (
-            "on draws the Send to... moves for staff -- a request becomes an event, an event "
-            "becomes a request, a ticket becomes either with the member's say-so; off hides "
-            "them and refuses a stale press in words"
-        ),
         HANDOFF_CONFIRM_HOURS: (
             "how long a member has to answer a make-this-a-request/event DM before it counts "
             "as no; the ticket stays open either way"
@@ -1556,12 +1538,12 @@ BIRTHDAY_POST_WORDS: dict[str, str] = {
     ),
     BIRTHDAY_POST_OFF_KEY: (
         "Birthday wishes are **off**, so nothing was posted. Staff can switch them to "
-        "**shadow** or **on** with **Wishes are…** on `/birthday`, or birthday_mode on the "
+        "**test** or **on** with **Wishes are…** on `/birthday`, or birthday_mode on the "
         "Birthdays page, and then post again."
     ),
     BIRTHDAY_POST_POSTED_KEY: "Posted {n} birthday wish(es) in {channel}.",
     BIRTHDAY_POST_REHEARSED_KEY: (
-        "Birthday wishes are in **shadow**, so {n} wish(es) went to the rehearsal home, "
+        "Birthday wishes are in **test**, so {n} wish(es) went to the rehearsal home, "
         "{channel}, and nothing to the real channel."
     ),
     BIRTHDAY_POST_SKIPPED_KEY: (
@@ -1607,7 +1589,7 @@ KEY_HELP.update(
         ),
         BIRTHDAY_POST_REHEARSED_KEY: (
             "the line that says how many wishes went to the rehearsal home because "
-            "birthday_mode is shadow. It takes {n} and {channel}"
+            "birthday_mode is test. It takes {n} and {channel}"
         ),
         BIRTHDAY_POST_SKIPPED_KEY: (
             "the line that says how many birthdays today were already wished and left alone. "
@@ -1738,7 +1720,7 @@ KEY_HELP.update(
 
 # YouTube live (v126) — a linked channel going live is announced through the go-live feature, in
 # its own block so the parallel branches merge textually. Design: info/youtube-live-design.md §C.
-YOUTUBE_LIVE_MODES = ("off", "shadow", "on")
+GOLIVE_YOUTUBE_KEY = "golive_youtube"
 YOUTUBE_LIVE_POLL_MINUTES = 5
 YOUTUBE_LIVE_POLL_MIN_MINUTES = 2
 YOUTUBE_LIVE_POLL_MAX_MINUTES = 60
@@ -1747,12 +1729,11 @@ YOUTUBE_LIVE_END_MISSES_MIN = 1
 YOUTUBE_LIVE_END_MISSES_MAX = 5
 KEY_TYPES.update(
     {
-        "youtube_live_mode": "enum",
+        GOLIVE_YOUTUBE_KEY: "bool",
         "youtube_live_poll_minutes": "int",
         "youtube_live_end_misses": "int",
     }
 )
-KEY_CHOICES["youtube_live_mode"] = YOUTUBE_LIVE_MODES
 KEY_MIN["youtube_live_poll_minutes"] = YOUTUBE_LIVE_POLL_MIN_MINUTES
 KEY_MAX["youtube_live_poll_minutes"] = YOUTUBE_LIVE_POLL_MAX_MINUTES
 KEY_MIN["youtube_live_end_misses"] = YOUTUBE_LIVE_END_MISSES_MIN
@@ -1775,11 +1756,10 @@ KEY_MAX_REASON["youtube_live_end_misses"] = (
 )
 KEY_HELP.update(
     {
-        "youtube_live_mode": (
-            "whether a linked YouTube channel going live is announced. off probes nothing at "
-            "all; shadow probes and logs what it would have posted; on announces it through the "
-            "go-live feature exactly like a Twitch stream — so golive_mode and "
-            "golive_channel_id still decide whether anybody sees it. Off by default"
+        GOLIVE_YOUTUBE_KEY: (
+            "also watch YouTube: true probes every linked YouTube channel and announces a live "
+            "stream through go-live exactly like a Twitch stream, under golive_mode (off, test "
+            "or on) and golive_channel_id; false probes nothing on YouTube. false by default"
         ),
         "youtube_live_poll_minutes": (
             "how many minutes between asking YouTube whether the linked channels are live. 5 by "
@@ -1798,8 +1778,6 @@ KEY_HELP.update(
 # Spotlight (v144) — Twitch channels with no Discord member behind them. Every key is
 # NAMESPACE_OVERRIDE'd onto `golive` below, because a spotlight is a streamer without a member
 # and the go-live page is where staff already look. Design: info/spotlight-design.md §D.
-SPOTLIGHT_MODES = ("off", "shadow", "on")
-SPOTLIGHT_MODE_KEY = "spotlight_mode"
 SPOTLIGHT_POLL_MINUTES_KEY = "spotlight_poll_minutes"
 SPOTLIGHT_END_MISSES_KEY = "spotlight_end_misses"
 SPOTLIGHT_BUMP_HOURS_KEY = "spotlight_bump_hours"
@@ -1892,7 +1870,6 @@ SPOTLIGHT_WINDOW_NEXT_WORDS = "next {start} – {end}"
 SPOTLIGHT_WINDOW_NONE_WORDS = "no window set"
 KEY_TYPES.update(
     {
-        SPOTLIGHT_MODE_KEY: "enum",
         SPOTLIGHT_POLL_MINUTES_KEY: "int",
         SPOTLIGHT_END_MISSES_KEY: "int",
         SPOTLIGHT_BUMP_HOURS_KEY: "int",
@@ -1925,7 +1902,6 @@ KEY_TYPES.update(
         MEMBER_OPTOUT_POST_KEY: "enum",
     }
 )
-KEY_CHOICES[SPOTLIGHT_MODE_KEY] = SPOTLIGHT_MODES
 KEY_CHOICES[SPOTLIGHT_PING_MODE_DEFAULT_KEY] = PING_MODES
 KEY_MIN[SPOTLIGHT_WINDOW_KEEP_DAYS_KEY] = SPOTLIGHT_WINDOW_KEEP_DAYS_MIN
 KEY_MAX[SPOTLIGHT_WINDOW_KEEP_DAYS_KEY] = SPOTLIGHT_WINDOW_KEEP_DAYS_MAX
@@ -1977,11 +1953,6 @@ KEY_MAX_REASON[SPOTLIGHT_EVENT_SLACK_KEY] = (
 )
 KEY_HELP.update(
     {
-        SPOTLIGHT_MODE_KEY: (
-            "whether Twitch channels with nobody here behind them are announced at all. off "
-            "ignores them; shadow posts the rehearsal copy where shadow_channel_id points; on "
-            "announces, pins and reminds in the go-live channel like any other stream"
-        ),
         SPOTLIGHT_POLL_MINUTES_KEY: (
             "how many minutes between asking Twitch whether the spotlighted channels are live. "
             "One batched call covers the whole list, so a shorter gap costs little; 5 by default"
@@ -2173,7 +2144,7 @@ KEY_HELP.update(
         ),
         "automod_arm_needs_confirm": (
             "true to ask a second time before automod is turned on from the panel, naming what "
-            "will start happening; turning it off or back to shadow is always one press"
+            "will start happening; turning it off or back to test is always one press"
         ),
     }
 )
@@ -2607,29 +2578,19 @@ KEY_HELP[PANEL_EXPIRED_TEXT_KEY] = (
 )
 
 # Boot status (`docs/info/boot-status-design.md`) — red while it boots, green when it is ready.
-BOOT_STATUS_MODE = "boot_status_mode"
 BOOT_STATUS_TEXT_KEY = "boot_status_text"
 SHUTDOWN_STATUS_TEXT_KEY = "shutdown_status_text"
-BOOT_STATUS_MODES = ("off", "on")
-BOOT_STATUS_MODE_DEFAULT = "on"
 BOOT_STATUS_TEXT = "Restarting and booting — back in a moment"
 SHUTDOWN_STATUS_TEXT = "Restarting — back in a moment"
 
 KEY_TYPES.update(
     {
-        BOOT_STATUS_MODE: "enum",
         BOOT_STATUS_TEXT_KEY: "text",
         SHUTDOWN_STATUS_TEXT_KEY: "text",
     }
 )
-KEY_CHOICES[BOOT_STATUS_MODE] = BOOT_STATUS_MODES
 KEY_HELP.update(
     {
-        BOOT_STATUS_MODE: (
-            "on makes Black Bloc read Do Not Disturb with the restarting sentence from the "
-            "moment Discord sees it until every cog is loaded and it is ready, and flip to it "
-            "again on the way down; off is the older behaviour, where it simply appears"
-        ),
         BOOT_STATUS_TEXT_KEY: (
             "the status Black Bloc carries while it is starting up, beside the red Do Not "
             "Disturb dot. It is replaced by the member count the moment it is ready"
@@ -2682,7 +2643,7 @@ KEY_HELP.update(
             "that feature is turned off, so nobody is offered a command that cannot do "
             "anything; turning the feature back on brings the command back within about a "
             "minute. false leaves every command showing all the time and an off feature "
-            "explains itself when it is opened. Only off hides a command — shadow does not"
+            "explains itself when it is opened. Only off hides a command — test does not"
         )
     }
 )
@@ -3631,7 +3592,7 @@ STRUCTURE_BACKUP_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     "structure_backup_mode_label": (
         "Mode",
         (),
-        "what the /structure panel calls the line that says off, shadow or on",
+        "what the /structure panel calls the line that says off, test or on",
     ),
     "structure_backup_latest_label": (
         "Latest snapshot",
@@ -3705,7 +3666,7 @@ STRUCTURE_BACKUP_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     "structure_backup_off_said": (
         "Structure backup is **off**, so nothing was captured. Set structure_backup_mode to "
-        "shadow or on — in /settings or on the Settings page — and press it again.",
+        "test or on — in /settings or on the Settings page — and press it again.",
         (),
         "what staff are told when they ask for a snapshot while structure_backup_mode is off",
     ),
@@ -3810,7 +3771,7 @@ KEY_MAX.update({key: high for key, (_, _, high) in STRUCTURE_BACKUP_NUMBERS.item
 KEY_HELP.update(
     {
         STRUCTURE_BACKUP_MODE: (
-            "off, shadow or on. off takes no structure snapshot at all; shadow — the default — "
+            "off, test or on. off takes no structure snapshot at all; test — the default — "
             "takes the daily snapshot silently and sends the structure-changed notice to "
             "structure_backup_shadow_channel_id; on sends that notice to "
             "structure_backup_channel_id. Either one blank means no notice is posted. A "
@@ -3840,7 +3801,7 @@ KEY_HELP.update(
         ),
         STRUCTURE_BACKUP_SHADOW_CHANNEL: (
             "the only place the structure-changed notice goes while structure_backup_mode is "
-            "shadow. Blank means no notice is posted — it never falls back to shadow_channel_id "
+            "test. Blank means no notice is posted — it never falls back to shadow_channel_id "
             "or the log channel, because the notice names private channels. Only the server's "
             "leads can change this"
         ),
@@ -3928,11 +3889,6 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the label of the link button under a personal best post",
     ),
-    "pb_feed_no_channel_words": (
-        "nowhere yet — pb_feed_channel_id is blank",
-        (),
-        "what the rehearsal note names as the real channel while pb_feed_channel_id is blank",
-    ),
     "pb_feed_panel_title": (
         "Personal bests",
         (),
@@ -3957,13 +3913,6 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "A personal best is posted once speedrun.com has verified it.",
         (),
         "what /pb adds for a matched member while pb_feed_mode is on",
-    ),
-    "pb_feed_posting_shadow": (
-        "Staff are still trying this out: a new personal best is not posted in the server's "
-        "personal best channel yet, only copied to where staff rehearse.",
-        (),
-        "what /pb adds for a matched member while pb_feed_mode is shadow, in place of "
-        "pb_feed_posting_on",
     ),
     "pb_feed_posting_off": (
         "The personal best feed is switched off, so nothing is looked at and nothing is posted.",
@@ -4086,7 +4035,7 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     "pb_feed_off_said": (
         "The personal best feed is **off**, so Black Bloc did not ask speedrun.com anything. "
-        "Set pb_feed_mode to shadow or on — in /settings or on the Settings page — and try "
+        "Set pb_feed_mode to test or on — in /settings or on the Settings page — and try "
         "again.",
         (),
         "what staff are told when they ask for a look, or set an account by hand, while "
@@ -4112,7 +4061,7 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     "pb_feed_rehearsed_again_said": (
         "Rehearsed {member}’s **{game}** personal best again in {channel}.",
         ("member", "game", "channel"),
-        "what staff are told after Post again while pb_feed_mode is shadow; {channel} is the "
+        "what staff are told after Post again while pb_feed_mode is test; {channel} is the "
         "rehearsal home it went to",
     ),
     "pb_feed_again_failed_said": (
@@ -4122,7 +4071,7 @@ PB_FEED_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "to do",
     ),
     "pb_feed_again_off_said": (
-        "The personal best feed is **off**, so nothing was posted. Set pb_feed_mode to shadow or "
+        "The personal best feed is **off**, so nothing was posted. Set pb_feed_mode to test or "
         "on — in /settings or on the Settings page — and try again.",
         (),
         "what staff are told when they press Post again while pb_feed_mode is off",
@@ -4208,7 +4157,7 @@ KEY_MIN_REASON[PB_FEED_INTERVAL] = (
 KEY_HELP.update(
     {
         PB_FEED_MODE: (
-            "off, shadow or on. off asks speedrun.com nothing; shadow — the default — looks, "
+            "off, test or on. off asks speedrun.com nothing; test — the default — looks, "
             "and sends each new personal best to the rehearsal home with a line naming where "
             "it would have gone; on posts it in pb_feed_channel_id. A personal best is posted "
             "only once speedrun.com has verified it, and a member's existing ones are never "
@@ -4372,7 +4321,7 @@ BRACKETS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     "brackets_off_said": (
         "Tournament brackets are switched **off**, so nothing was done. Set brackets_mode to "
-        "shadow or on — in /settings or on the Settings page — and try again.",
+        "test or on — in /settings or on the Settings page — and try again.",
         (),
         "what anyone is told when they try a tournament move while brackets_mode is off",
     ),
@@ -4865,7 +4814,7 @@ KEY_MAX.update({key: high for key, (_, _, high) in BRACKETS_NUMBERS.items()})
 KEY_HELP.update(
     {
         BRACKETS_MODE: (
-            "off, shadow or on. off refuses every tournament move; shadow — the default — runs "
+            "off, test or on. off refuses every tournament move; test — the default — runs "
             "tournaments with each one's thread made in the rehearsal home instead of "
             "brackets_channel_id; on makes the threads in brackets_channel_id"
         ),
@@ -5114,7 +5063,7 @@ POINTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     "points_off_said": (
         "The point system is switched **off**, so nothing was done. Staff can set points_mode "
-        "to shadow or on — in /settings or on the Settings page.",
+        "to test or on — in /settings or on the Settings page.",
         (),
         "what anyone is told when they try a point system move while points_mode is off",
     ),
@@ -5308,12 +5257,6 @@ POINTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("game", "time", "xp", "points"),
         "what is added to the ticket-closed DM a member gets when their run is approved",
     ),
-    "points_modmail_off_said": (
-        "Runs reach staff through modmail, and Black Bloc is not answering modmail here yet, "
-        "so nothing was sent.",
-        (),
-        "what a member is told when they submit a run while modmail_enabled is off",
-    ),
     "points_blocked_said": (
         "Staff here have stopped Black Bloc from opening modmail tickets for you, so this run "
         "was not sent.",
@@ -5374,8 +5317,8 @@ KEY_MAX.update({key: high for key, (_, _, high) in POINTS_NUMBERS.items()})
 KEY_HELP.update(
     {
         POINTS_MODE: (
-            "off, shadow or on: whether runs are taken. off refuses every point system move; "
-            "shadow — the default — takes and approves runs and DMs nobody about them; on DMs "
+            "off, test or on: whether runs are taken. off refuses every point system move; "
+            "test — the default — takes and approves runs and DMs nobody about them; on DMs "
             "the runner too. Where the top-places post and the leaderboard sticky go is "
             "posts_mode on the Posts page, never this"
         ),
@@ -5623,7 +5566,6 @@ CORE_KEYS = (
     ERROR_RETRY_LABEL_KEY,
     ERROR_RETRY_MINUTES_KEY,
     ERROR_RETRY_EXPIRED_KEY,
-    BOOT_STATUS_MODE,
     BOOT_STATUS_TEXT_KEY,
     SHUTDOWN_STATUS_TEXT_KEY,
     PANEL_EXPIRED_TEXT_KEY,
@@ -5659,7 +5601,6 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_SHOW_REQUEST: "modmail",
     FRONTDOOR_SHOW_EVENT: "modmail",
     **{key: "posts" for key in STICKY_KEYS},
-    HANDOFF_MODE: "request",
     HANDOFF_CONFIRM_HOURS: "request",
     "minutes_mode": "events",
     "minutes_channel_id": "events",
@@ -5672,7 +5613,6 @@ NAMESPACE_OVERRIDE = {
     "minutes_keep_days": "events",
     "minutes_panel_minutes": "events",
     log_level_key("minutes"): "events",
-    SPOTLIGHT_MODE_KEY: "golive",
     SPOTLIGHT_POLL_MINUTES_KEY: "golive",
     SPOTLIGHT_END_MISSES_KEY: "golive",
     SPOTLIGHT_BUMP_HOURS_KEY: "golive",
@@ -7478,7 +7418,7 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_MODE_KEY: (
         "enum",
         "shadow",
-        "whether marathon schedules post at all. off reads nothing and posts nothing; shadow — "
+        "whether marathon schedules post at all. off reads nothing and posts nothing; test — "
         "the default — posts the board, the reminders and the shoutouts where "
         "shadow_channel_id points with the rehearsal note; on posts them in "
         "marathon_channel_id",
@@ -8000,7 +7940,7 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         None,
         "where the marathon inbox thread is made — the one thread in which every marathon Black "
         "Bloc finds gets a message with Track and Ignore. Blank uses events_announce_channel_id. "
-        "shadow makes it where shadow_channel_id points",
+        "marathon_mode test makes it where shadow_channel_id points",
     ),
     MARATHON_THREAD_CHANNEL_KEY: (
         "channel",
@@ -9141,7 +9081,7 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     MARATHON_INBOX_POST_OFF_KEY: (
         "Marathon posts are off, so **{marathon}**'s inbox message was not posted — set "
-        "marathon_mode to shadow or on first.",
+        "marathon_mode to test or on first.",
         ("marathon",),
         "the refusal when Post it to the inbox now is pressed while marathon posts are off. It "
         "takes {marathon}",
@@ -9443,7 +9383,7 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "The Marathon role is not mentioned while marathon posts rehearse: marathon_mode is "
         "not on, and a rehearsal copy never pings it.",
         (),
-        "the line under a marathon's ping switch while marathon_mode is shadow or off",
+        "the line under a marathon's ping switch while marathon_mode is test or off",
     ),
     MARATHON_ROLE_PING_LINE_UNSET_KEY: (
         "The Marathon role is not mentioned: no role is picked in marathon_role_id.",
@@ -10316,10 +10256,9 @@ def coerce_value(key: str, value: Any) -> Any:
         return ids
     if kind == "enum":
         allowed = KEY_CHOICES.get(key, ())
+        value = stored_mode(key, value, allowed)
         if value not in allowed:
-            raise SettingError(
-                f"{key!r} takes one of {', '.join(allowed)}, not {value!r}."
-            )
+            raise SettingError(f"{key!r} takes one of {words_for(key, allowed)}, not {value!r}.")
         return value
     if kind == "enums":
         allowed = KEY_CHOICES.get(key, ())
@@ -10421,6 +10360,8 @@ def display_value(key: str, value: Any) -> str:
         return f"<#{value}>"
     if kind == "role":
         return f"<@&{value}>"
+    if kind == "enum":
+        return mode_word(key, value)
     return str(value)
 
 
@@ -10563,14 +10504,10 @@ class SettingsStore:
             return GOLIVE_END_AUTHOR
         if key == "golive_end_keep_mention":
             return False
-        if key == GOLIVE_COSTREAM_MODE_KEY:
-            return GOLIVE_COSTREAM_ON
         if key == GOLIVE_COSTREAM_TEMPLATE_KEY:
             return GOLIVE_COSTREAM_TEMPLATE
         if key == GOLIVE_COSTREAM_AUTHOR_KEY:
             return GOLIVE_COSTREAM_AUTHOR
-        if key == SPOTLIGHT_MODE_KEY:
-            return "shadow"
         if key == SPOTLIGHT_POLL_MINUTES_KEY:
             return SPOTLIGHT_POLL_MINUTES
         if key == SPOTLIGHT_END_MISSES_KEY:
@@ -10783,8 +10720,6 @@ class SettingsStore:
             return 10
         if key == "event_panel_own_list":
             return False
-        if key == "modmail_enabled":
-            return False
         if key == "modmail_mode":
             return CHANNEL_MODE
         if key == "modmail_category_id":
@@ -10835,8 +10770,6 @@ class SettingsStore:
             return False
         if key == "request_post_buttons":
             return True
-        if key == HANDOFF_MODE:
-            return "on"
         if key == HANDOFF_CONFIRM_HOURS:
             return HANDOFF_CONFIRM_HOURS_DEFAULT
         if key == "request_forum_adopts_posts":
@@ -10872,7 +10805,7 @@ class SettingsStore:
         if key == "chat_greeting_reaction":
             return False
         if key == "chat_greeting_via_model":
-            return "on"
+            return True
         if key == "chat_reply_in_threads":
             return True
         if key == "chat_route_ping_staff":
@@ -10961,8 +10894,8 @@ class SettingsStore:
             return 10
         if key == "youtube_unlink_dms_them":
             return True
-        if key == "youtube_live_mode":
-            return "off"
+        if key == GOLIVE_YOUTUBE_KEY:
+            return False
         if key == "youtube_live_poll_minutes":
             return YOUTUBE_LIVE_POLL_MINUTES
         if key == "youtube_live_end_misses":
@@ -11045,8 +10978,6 @@ class SettingsStore:
             return ERROR_RETRY_EXPIRED
         if key == PANEL_EXPIRED_TEXT_KEY:
             return PANEL_EXPIRED_TEXT
-        if key == BOOT_STATUS_MODE:
-            return BOOT_STATUS_MODE_DEFAULT
         if key == BOOT_STATUS_TEXT_KEY:
             return BOOT_STATUS_TEXT
         if key == SHUTDOWN_STATUS_TEXT_KEY:

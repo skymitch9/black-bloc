@@ -1,6 +1,7 @@
 import { api, listOf, names, notesOf, send, settings } from './api.js';
 import { FEATURE_TABS, start, tabHref } from './app.js';
 import { GROUPS, shellStatus } from './shell.js';
+import { modeWord } from './labels.js';
 import {
   ask,
   bar,
@@ -75,7 +76,7 @@ function modeNode(row, specs, say) {
   const spec = specs.get(row.key);
   if (!spec || !Array.isArray(spec.choices) || spec.choices.length === 0) {
     const blank = row.mode === null || row.mode === undefined || row.mode === '';
-    return el('span', { class: 'pill', 'data-mode': pillMode(row.mode), text: blank ? 'not set' : String(row.mode) });
+    return el('span', { class: 'pill', 'data-mode': pillMode(row.mode), text: blank ? 'not set' : modeWord(row.mode, row.key) });
   }
   return modeSwitch(spec, { say, label: title(row.feature) }).node;
 }

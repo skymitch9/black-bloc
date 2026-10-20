@@ -337,21 +337,14 @@ async def test_time_for_me_with_no_time_in_the_message_is_the_empty_state(bot, d
 
 
 async def test_need_a_mod_is_filled_when_modmail_is_answering(bot):
-    await bot.store.set(GUILD, "modmail_enabled", True)
     tokens, filled = await asked(bot, "need_a_mod")
     assert filled is True
-
-
-async def test_need_a_mod_names_the_staff_roles_when_modmail_is_off(bot):
-    tokens, filled = await asked(bot, "need_a_mod")
-    assert filled is False
-    assert tokens["roles"] == "**Aunties / Uncles**"
 
 
 async def test_need_a_mod_with_no_staff_channel_still_says_something(bot):
     await bot.store.clear(GUILD, "staff_channel_id")
     tokens, filled = await asked(bot, "need_a_mod")
-    assert filled is False and tokens["roles"] == "the mods"
+    assert filled is True and tokens["roles"] == "the mods"
 
 
 def people(count, first=2000, name="Person {n}"):
@@ -440,10 +433,6 @@ async def test_bots_are_left_out_unless_the_role_is_nothing_but_bots(bot):
 async def test_a_staff_role_gets_the_line_that_points_at_a_mod(bot):
     with_roles(bot, FakeRole(11, "Aunties / Uncles", members=[FakeMember(1, "Kai")]))
 
-    tokens, _ = await asked(bot, "who_has", text="whos an auntie")
-    assert tokens["escalate"].endswith("I will name the staff to ask.")
-
-    await bot.store.set(GUILD, "modmail_enabled", True)
     tokens, _ = await asked(bot, "who_has", text="whos an auntie")
     assert tokens["escalate"].endswith("I will point you at modmail.")
 
@@ -634,7 +623,7 @@ async def test_nobody_online_says_so_and_the_line_still_points_somewhere(bot):
     tokens, filled = await asked(bot, "need_a_mod", text="i need a mod")
 
     assert tokens["extra"] == NOBODY_ONLINE
-    assert filled is False and tokens["roles"] == "**Aunties / Uncles**"
+    assert filled is True and tokens["roles"] == "the mods"
 
 
 async def test_naming_nobody_is_a_setting_and_it_is_respected(bot):

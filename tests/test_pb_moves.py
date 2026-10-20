@@ -574,7 +574,7 @@ async def test_post_again_is_refused_in_words_while_the_feed_is_off(bot, guild, 
     outcome = await pb_moves.post_again(bot, guild, source["id"], staffer(guild))
 
     assert (outcome.ok, outcome.code, outcome.status) == (False, "pb_feed_off", 409)
-    assert "shadow or on" in outcome.message and "nothing was posted" in outcome.message
+    assert "test or on" in outcome.message and "nothing was posted" in outcome.message
     assert len(guild.get_channel(REHEARSAL).sent) == 1
     assert len(await pb_store.posts(bot.db, GUILD)) == 1 and await kinds(bot.db) == logged
 

@@ -675,7 +675,7 @@ async def test_the_panel_opens_with_the_state_and_only_the_moves_that_are_valid(
     shown = interaction.rendered
     assert shown["ephemeral"] is True
     assert shown["embed"].title == "Server structure"
-    assert field(shown["embed"], "Mode") == "shadow"
+    assert field(shown["embed"], "Mode") == "test"
     assert field(shown["embed"], "Latest snapshot") == "No snapshot has been taken yet."
     assert [one.name for one in shown["embed"].fields] == ["Mode", "Notice", "Latest snapshot"]
     assert field(shown["embed"], "Notice") == f"<#{LOGS}>"
@@ -1145,7 +1145,7 @@ async def test_a_template_that_breaks_in_any_way_falls_back_to_the_shipped_wordi
 
 
 def test_settings_lists_structure_backup_with_every_other_feature_mode(bot):
-    assert "**Structure backup** — shadow · `/structure` to change" in mode_lines(
+    assert "**Structure backup** — test · `/structure` to change" in mode_lines(
         bot.store, GUILD
     )
 
@@ -1355,6 +1355,7 @@ ALLOWED_IMPORTS = frozenset(
         "black_bloc.command_visibility",
         "black_bloc.logkinds",
         "black_bloc.loops",
+        "black_bloc.mode_words",
         "black_bloc.panels",
         "black_bloc.settings_store",
         "black_bloc.shadow",
