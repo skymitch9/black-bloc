@@ -85,6 +85,13 @@ def person_row(guild: Any, user_id: int, **fields: Any) -> dict[str, Any]:
     }
 
 
+def by_name(guild: Any, user_id: Any) -> str | None:
+    if not user_id:
+        return None
+    member = guild.get_member(int(user_id))
+    return str(getattr(member, "display_name", None) or user_id)
+
+
 async def counted_in(bot: Any, guild: Any) -> list[dict[str, Any]]:
     """Who staff count as BaF anyway: an opt-in, so never inside the opted-out list."""
     overrides = await baf_overrides(bot.db)
@@ -98,6 +105,7 @@ async def counted_in(bot: Any, guild: Any) -> list[dict[str, Any]]:
                 said=rule["said"] if rule else None,
                 reason=override_reason(bot, guild, row),
                 by=str(row["by"]) if row["by"] else None,
+                by_name=by_name(guild, row["by"]),
                 at=row["at"],
                 rule=rule,
             )

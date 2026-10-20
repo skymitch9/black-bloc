@@ -3175,11 +3175,12 @@
       "method": "GET",
       "path": "/api/members/optouts",
       "read_by": [
-        "page-members.js the Opted out filter"
+        "page-members.js the Opted out filter and its Counted in section"
       ],
       "shape": "object",
       "keys": [
         "people",
+        "counted_in",
         "channels",
         "sources"
       ],
@@ -3191,6 +3192,19 @@
           "avatar",
           "here",
           "chips"
+        ],
+        "counted_in": [
+          "user_id",
+          "name",
+          "username",
+          "avatar",
+          "here",
+          "said",
+          "reason",
+          "by",
+          "by_name",
+          "at",
+          "rule"
         ],
         "channels": [
           "id",
@@ -6726,6 +6740,7 @@
           "looks_like",
           "sheet_login",
           "opted_out",
+          "announce_optout",
           "mention",
           "baf_rule"
         ],

@@ -885,6 +885,27 @@ export function askForm({
 }
 
 /**
+ * A move that needs a reason: one box, sent on confirm. A refusal from the bot is
+ * shown inside the dialog with what was typed kept, so a blank reason is answered
+ * in the bot's own words rather than closing on nothing.
+ */
+export async function askReason({ title, label, confirmLabel, sendIt }) {
+  const box = el('textarea', { class: 'input area', rows: '3', id: 'ask-reason', maxlength: '300' });
+  let answered = null;
+  const done = await askForm({
+    title,
+    confirmLabel,
+    tone: 'warn',
+    body: [field(label, box)],
+    onConfirm: async () => {
+      answered = await sendIt(box.value.trim());
+      return null;
+    },
+  });
+  return done ? answered : null;
+}
+
+/**
  * The control is tagged by name so the CSS can place it in the middle row of
  * the field's grid. Placing it as "the child that is not a label or help"
  * would silently mis-place anything a caller adds to a field later.

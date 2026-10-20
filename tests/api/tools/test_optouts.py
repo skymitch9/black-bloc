@@ -100,7 +100,7 @@ async def test_staff_overrides_are_their_own_counted_in_list_never_an_opt_out(
     assert kept["user_id"] == str(KEPT) and kept["username"] == "kept"
     assert kept["said"] == "BaF (staff override)"
     assert kept["reason"] == "runs with us every year"
-    assert kept["by"] == "7" and kept["at"] == AT
+    assert kept["by"] == "7" and kept["by_name"] == "7" and kept["at"] == AT
     assert kept["rule"]["move"] == "clear" and kept["rule"]["move_label"] == "Undo the override"
 
 

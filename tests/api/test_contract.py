@@ -397,6 +397,11 @@ async def seed_world(client, web, guild, wf) -> dict:
     web.cogs["YouTube"] = youtube
     await set_youtube_link(db, MEMBER_ID, YT_CHANNEL, "@ada", "Ada Makes")
     await optouts.set_out(db, guild_id, MEMBER_ID, optouts.ANNOUNCE)
+    await db.conn.execute(
+        "INSERT INTO marathon_baf_overrides(user_id, by, at, reason) VALUES (?, 7, ?, ?)",
+        (PING_MEMBER_ID, "2026-10-20T09:00:00+00:00", "runs with us every year"),
+    )
+    await db.conn.commit()
     await start_session(
         db,
         guild_id,
