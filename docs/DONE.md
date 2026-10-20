@@ -44,6 +44,11 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-20 v244
+
+- 🔨 **Switch-sheet build 4 of 6 — shadow has one meaning + the dead switches (sheet items p3b, p3c, p3d, p3e, p4a–p4e, p4g, h1, h2; the audit's P3(b)(c) and P4).** Dispatched to Opus 2026-10-20 01:2x on branch `shadow-one-meaning` (512k).
+  ↳ ✅ **LIVE v244** 2026-10-20 02:32 (release `0d4597ae`, merge `57ae8d2b`); the boot migration dropped the retired rows and wrote `golive_youtube = true` exactly as its dry run said; design [`info/shadow-one-meaning-design.md`](info/shadow-one-meaning-design.md); see `deploys.log` v244 for what was and was not verified. The build's calls: `chat_greeting_via_model` kept as a bool (a real tone/cost choice), `golive_costream_mode` removed (its off was the hold-back the owner called silly), `modmail_enabled` retired (every false branch pointed at the old ModMail bot the cut-over plan had the owner disable) — ⚠️ modmail now has no off switch. `points_modmail_off_said` went with it (no other reader).
+
 ## 2026-10-20 v243
 
 - 🔨 **Switch-sheet build 3 of 6 — one test channel (sheet items p2, p4k; the audit's P2; `points_shadow_channel_id` retired with them since v242 left it without a reader).** Dispatched to Opus 2026-10-20 00:5x on branch `one-test-channel` (262k).
