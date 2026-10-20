@@ -20,6 +20,7 @@ export const LABELS = {
   logs_count: 'How many lines a Logs button shows to begin with',
   logs_important_only: 'Whether a Logs button opens on the important lines only',
 
+  golive_youtube: 'Also watch YouTube',
   golive_mode: 'Whether the bot announces streams',
   golive_channel_id: 'Where a go-live announcement is posted',
   golive_template: 'What a go-live announcement says',
@@ -44,7 +45,6 @@ export const LABELS = {
   golive_replay_midstream_polls: 'How many checks in a row turn a live stream into a replay',
   golive_replay_marathon_runs: 'Whether a marathon overrules a replay word only around its runs',
   golive_costream_author: "What the card's top line says while two platforms are live",
-  spotlight_mode: 'Whether Twitch channels with nobody here behind them are announced',
   spotlight_poll_minutes: 'How often Twitch is asked whether a spotlighted channel is live',
   spotlight_end_misses: 'How many quiet looks end a spotlighted stream',
   spotlight_bump_hours: 'Hours between reminders that a spotlighted stream is still going',
@@ -453,7 +453,6 @@ export const LABELS = {
   youtube_log_level: 'How much of YouTube is repeated into Discord',
   youtube_panel_minutes: 'How long the /youtube panel stays live',
   youtube_unlink_dms_them: 'Whether staff forgetting somebody’s channel DMs them why',
-  youtube_live_mode: 'Whether the bot announces a linked channel going live',
   youtube_live_poll_minutes: 'How often a linked YouTube channel is checked for a live stream',
   youtube_live_end_misses: 'How many quiet checks end a YouTube stream',
 

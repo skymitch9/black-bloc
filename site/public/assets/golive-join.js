@@ -305,7 +305,7 @@ export function routeTyped(given) {
   return { where: null, why: `**${value}**${NEITHER}` };
 }
 
-export const STRIP_KEYS = ['golive_mode', 'youtube_live_mode', 'pings_mode', 'spotlight_mode'];
+export const STRIP_KEYS = ['golive_mode', 'golive_youtube', 'pings_mode'];
 
 export const WORDING_KEYS = [
   'golive_template',

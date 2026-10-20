@@ -372,7 +372,8 @@ const SETTING_SPECS = [
   ["sticky_panel_minutes", "int", 10, 10, "minutes the /sticky panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, undefined, 1],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
   ['role_menu_channel_id', 'channel', '800000000000000002', null, 'the channel /rolemenu offers first when a menu is posted'],
-  ["golive_mode", "enum", "shadow", "off", "whether a stream is announced at all: members' streams, spotlight channels, and YouTube streams while golive_youtube is on. off watches nobody; test watches and logs what it would have posted without posting it, and a spotlight posts its rehearsal copy in the test channel; on posts the announcement. test by default, so nothing reaches the server until somebody turns it on", ["off", "shadow", "on"]],
+  ["golive_mode", "enum", "shadow", "shadow", "whether a stream is announced at all: members' streams, spotlight channels, and YouTube streams while golive_youtube is on. off watches nobody; test watches and logs what it would have posted without posting it, and a spotlight posts its rehearsal copy in the test channel; on posts the announcement. test by default, so nothing reaches the server until somebody turns it on", ["off", "shadow", "on"]],
+  ["golive_youtube", "bool", true, false, "also watch YouTube: true probes every linked YouTube channel and announces a live stream through go-live exactly like a Twitch stream, under golive_mode (off, test or on) and golive_channel_id; false probes nothing on YouTube. false by default"],
   ['golive_channel_id', 'channel', '800000000000000006', null, 'the channel every go-live announcement is posted in. Blank — the default — means nothing is posted anywhere however golive_mode is set, so this is the one setting go-live cannot work without'],
   ['golive_template', 'text', '{name} is live playing {game} — {title} {url}', '{name} is live: {url}', 'the sentence a go-live announcement is made of. It takes {name} {game} {title} {url} {platform}, and {platform} fills itself in as Twitch or YouTube so one wording serves both platforms'],
   ['golive_live_author', 'text', '{name} is now live on {platform}!', '{name} is now live on {platform}!', "the small top line of the announcement card while the stream is still running. It takes {name} and {platform} only, because a stream that has not finished has no length yet; blank keeps 'is now live on'"],
@@ -709,10 +710,8 @@ const SETTING_SPECS = [
   ['voice_panel_minutes', 'int', 10, 10, "minutes the /voice panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['chat_panel_minutes', 'int', 10, 10, "minutes the /chat panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['youtube_unlink_dms_them', 'bool', true, true, 'whether a member is told why their YouTube channel was forgotten. on — the default — DMs them the reason when STAFF do it; somebody unlinking their own channel is never DMed'],
-  ['youtube_live_mode', 'enum', 'off', 'off', 'whether a linked YouTube channel going live is announced. off probes nothing at all; shadow probes and logs what it would have posted; on announces it through the go-live feature exactly like a Twitch stream — so golive_mode and golive_channel_id still decide whether anybody sees it. Off by default', ['off', 'shadow', 'on']],
   ['youtube_live_poll_minutes', 'int', 5, 5, 'how many minutes between asking YouTube whether the linked channels are live. 5 by default; a shorter gap notices a stream sooner and spends more of the daily API quota when a YOUTUBE_API_KEY is set', null, 60, 2],
   ['youtube_live_end_misses', 'int', 2, 2, 'how many probes in a row must read offline before a YouTube stream is treated as ended and its announcement rewritten. 2 by default, so one bad answer from YouTube does not end a stream that is still running', null, 5, 1],
-  ['spotlight_mode', 'enum', "shadow", "shadow", "whether Twitch channels with nobody here behind them are announced at all. off ignores them; shadow posts the rehearsal copy where shadow_channel_id points; on announces, pins and reminds in the go-live channel like any other stream", ['off', 'shadow', 'on']],
   ['spotlight_poll_minutes', 'int', 5, 5, "how many minutes between asking Twitch whether the spotlighted channels are live. One batched call covers the whole list, so a shorter gap costs little; 5 by default", null, 30, 1],
   ['spotlight_end_misses', 'int', 2, 2, "how many looks in a row must come back offline before a spotlighted stream is treated as over and its announcement rewritten. 2 by default, so one hiccup on Twitch's side does not end a stream that is still running", null, 5, 1],
   ['spotlight_bump_hours', 'int', 4, 4, "how many hours between reminders that a long spotlighted stream is still going. 4 by default, the owner's number for a GDQ marathon; any one channel's row can set its own instead", null, 48, 1],
@@ -2645,7 +2644,6 @@ const NAMESPACE_OVERRIDE = {
   minutes_keep_days: 'events',
   minutes_panel_minutes: 'events',
   minutes_log_level: 'events',
-  spotlight_mode: 'golive',
   spotlight_poll_minutes: 'golive',
   spotlight_end_misses: 'golive',
   spotlight_bump_hours: 'golive',
@@ -6977,7 +6975,7 @@ const PREVIEW_BLOCK_DRAWS = {
     return PREVIEW_DRAW.block_proposeevent(read);
   },
   livenow(read, sample, always) {
-    const off = ['golive_mode', 'spotlight_mode'].every((key) => String(read(key) || 'off') === 'off');
+    const off = String(read('golive_mode') || 'off') === 'off';
     if (!always && off) return null;
     return PREVIEW_DRAW.block_livenow(read, sample);
   },
@@ -7093,7 +7091,7 @@ route('GET', '/api/youtube/status', (context) => {
   return {
     api_key_set: false,
     links: state.youtube.links.length,
-    live_mode: keyRow('youtube_live_mode').value ?? keyRow('youtube_live_mode').default,
+    live_mode: (keyRow('golive_youtube').value ?? keyRow('golive_youtube').default) ? (keyRow('golive_mode').value ?? keyRow('golive_mode').default) : 'off',
     live_minutes: keyRow('youtube_live_poll_minutes').default,
     live_end_misses: keyRow('youtube_live_end_misses').default,
     live_running: true,

@@ -154,6 +154,12 @@ PREVIEW_SELF = "self"
 PREVIEW_PICK = "Preview an announcement…"
 PREVIEW_AS_YOU_ARE = "As you are now"
 MODE_PICK = "Announcements: off / test / on"
+YOUTUBE_WATCHED = "watched — a linked YouTube channel going live is announced like Twitch"
+YOUTUBE_UNWATCHED = "not watched"
+YOUTUBE_ON_SAID = "YouTube is watched from now on, under the same go-live switch as Twitch."
+YOUTUBE_OFF_SAID = "YouTube is no longer watched; Twitch announcements carry on as they were."
+YOUTUBE_MOVES = {"youtube_on": True, "youtube_off": False}
+GOLIVE_YOUTUBE_KEY = "golive_youtube"
 MODE_OPTION = "Announcements: {mode}"
 PICK_A_STREAMER = "Somebody who has linked a channel…"
 STREAMERS_TITLE = "Streamers"
@@ -755,6 +761,20 @@ async def set_mode(
     return MODE_SET.format(mode=mode_word("golive_mode", value))
 
 
+async def set_youtube(
+    bot: Any, guild: Any, actor: Any, value: bool, *, via: str = VIA_DISCORD
+) -> str:
+    await bot.store.set(guild.id, GOLIVE_YOUTUBE_KEY, bool(value), by=target_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.youtube", via),
+        actor=actor,
+        details={"watch": bool(value), "via": via},
+    )
+    return YOUTUBE_ON_SAID if value else YOUTUBE_OFF_SAID
+
+
 def test_mode_note(bot: Any, guild: Any) -> str | None:
     """The honest answer to 'why was my real stream not announced' — never a stack trace."""
     channel_id = bot.store.get(guild.id, "golive_channel_id")
@@ -774,7 +794,9 @@ async def status_lines(bot: Any, cog: Any, guild: Any) -> list[str]:
     ending = end_summary(store.get(guild.id, "golive_end_template"))
     failures = getattr(cog, "poll_failures", 0)
     lines = [
-        f"**mode** — {store.get(guild.id, 'golive_mode')}",
+        f"**mode** — {mode_word('golive_mode', store.get(guild.id, 'golive_mode'))}",
+        "**YouTube** — "
+        + (YOUTUBE_WATCHED if store.get(guild.id, GOLIVE_YOUTUBE_KEY) else YOUTUBE_UNWATCHED),
         f"**stream end** — {ending}",
         f"**channel** — {where}" + (f" — but {note}" if note else ""),
         f"**cooldown** — {store.get(guild.id, 'golive_cooldown_minutes')} minute(s)",
@@ -1903,10 +1925,8 @@ BLOCK_SHOWN_MODE = "on"
 
 
 def block_is_on(store: Any, guild_id: int) -> bool:
-    """The who's-live-now block draws while go-live or spotlight is on at all."""
-    return any(
-        store.get(guild_id, key) not in (None, "off") for key in ("golive_mode", "spotlight_mode")
-    )
+    """The who's-live-now block draws while go-live (spotlights too) is on at all."""
+    return store.get(guild_id, "golive_mode") not in (None, "off")
 
 
 async def block_streams(bot: Any, guild: Any) -> list[LiveLine]:
@@ -2026,7 +2046,10 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         lines.append(STAFF_ONLY_LINE)
     embed = discord.Embed(title=PANEL_TITLE, description="\n".join(lines))
     view = GoLivePanel(minutes_for(bot, guild.id))
-    for move in panel_buttons(linked=bool(login), opted_out=opted_out, staff=staff):
+    youtube = bool(store.get(guild.id, GOLIVE_YOUTUBE_KEY))
+    for move in panel_buttons(
+        linked=bool(login), opted_out=opted_out, staff=staff, youtube=youtube
+    ):
         view.add_item(MoveButton(move))
     add_site_link(view, bot, 2)
     if staff:
@@ -2087,6 +2110,15 @@ async def run_move(interaction: discord.Interaction, move: Any, previous: Any = 
         return
     if action == "refresh":
         await render_panel(interaction, previous)
+        return
+    if action in YOUTUBE_MOVES:
+        if not await still_staff(interaction):
+            return
+        said = await set_youtube(
+            interaction.client, interaction.guild, interaction.user, YOUTUBE_MOVES[action]
+        )
+        await render_panel(interaction, previous)
+        await answer(interaction, said)
         return
     said = await OWN_MOVES[action](interaction.client, interaction.guild, interaction.user)
     await render_panel(interaction, previous)

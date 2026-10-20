@@ -1294,13 +1294,15 @@ async def test_the_live_half_ships_off_and_is_reachable_from_both_doors(store):
     """Checklist 33: the three decisions youtube-live adds are registry keys, not constants."""
     from black_bloc.settings_panel import reachable_on_the_panel
 
-    assert store.get(7, "youtube_live_mode") == "off"
+    assert "youtube_live_mode" not in KEY_TYPES
+    assert store.get(7, "golive_youtube") is False
+    assert KEY_TYPES["golive_youtube"] == "bool" and namespace_of("golive_youtube") == "golive"
+    assert KEY_HELP["golive_youtube"] and reachable_on_the_panel("golive_youtube")
     assert store.get(7, "youtube_live_poll_minutes") == 5
     assert store.get(7, "youtube_live_end_misses") == 2
-    for key in ("youtube_live_mode", "youtube_live_poll_minutes", "youtube_live_end_misses"):
+    for key in ("youtube_live_poll_minutes", "youtube_live_end_misses"):
         assert KEY_HELP[key] and reachable_on_the_panel(key)
         assert namespace_of(key) == "youtube"
-    assert KEY_CHOICES["youtube_live_mode"] == ("off", "shadow", "on")
 
 
 async def test_the_live_probe_gap_and_the_quiet_probe_count_are_both_bounded(store):
@@ -2128,7 +2130,7 @@ def test_the_golive_page_still_draws_eighty_nine_keys():
     """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
     A key added to one of these namespaces has to be added there too, or it lands in the
     Everything else catch-all with nobody noticing."""
-    assert len(golive_page_keys()) == 88
+    assert len(golive_page_keys()) == 87
 
 
 def test_every_golive_page_key_says_in_words_what_it_does():
@@ -2302,7 +2304,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1225
+    assert len(settings_store.KEY_TYPES) == 1224
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):

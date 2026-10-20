@@ -151,10 +151,11 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_five_hand_added_rows():
     joined the hand-added rows when `/marathon` folded into `/event` ▸ Marathons…;
     `rolemenu_mode` left them 2026-09-25 (owner, "B") when it went back to hiding `/rolemenu`;
     `pb_feed_mode` joined them 2026-10-09 when `points_mode` took over hiding `/pb`;
-    `sticky_mode` left with the Posts page's one switch, 2026-10-19 (24 rows)."""
+    `sticky_mode` left with the Posts page's one switch, 2026-10-19 (24 rows);
+    `youtube_live_mode` folded into go-live, 2026-10-20 (23 rows)."""
     from black_bloc.settings_panel import FEATURE_MODES
 
-    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 24
+    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 23
     assert "sticky_mode" not in {row.key for row in FEATURE_MODES}
     assert "question_mode" not in {row.key for row in FEATURE_MODES}
     assert len(EXTRA_MODES) == 5
@@ -170,18 +171,18 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_five_hand_added_rows():
 
 
 def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
-    store = FakeStore({"modmail_enabled": True, "youtube_live_mode": "shadow"})
+    store = FakeStore({"modmail_enabled": True, "raidtrain_mode": "shadow"})
     lines = mode_lines(store, GUILD)
     said = "\n".join(lines)
 
-    assert len(lines) == 24
+    assert len(lines) == 23
     assert "**Personal bests** — None · `/pb` to change" in lines
     assert "**Leaderboard** — None · `/pb` to change" in lines
     assert not any("Sticky messages" in line for line in lines)
     assert "**Structure backup** — None · `/structure` to change" in lines
     assert any(line.startswith("**The front door** —") and "`/ask`" in line for line in lines)
     assert f"**Modmail** — {MODMAIL_ANSWERING} · `/modmail` to change" in lines
-    assert "**YouTube** — shadow · `/youtube` to change" in lines
+    assert "**Raid trains** — test · `/raidtrain` to change" in lines
 
     store.values["modmail_enabled"] = False
     assert MODMAIL_NOT_ANSWERING in "\n".join(mode_lines(store, GUILD))
@@ -295,7 +296,7 @@ async def test_the_root_counts_what_this_server_has_moved_off_the_default(store)
     lines = root_lines(bot, FakeGuild(), set())
     assert f"**0** of {total} settings" in "\n".join(lines)
 
-    await store.set(GUILD, "youtube_live_mode", "on")
+    await store.set(GUILD, "raidtrain_mode", "on")
     assert stored_count(store, GUILD) == 1
     assert f"**1** of {total} settings" in "\n".join(root_lines(bot, FakeGuild(), set()))
     assert any("A setting group" in line for line in lines)
@@ -330,7 +331,7 @@ def test_row_two_never_grows_past_the_five_controls_discord_allows():
 
 @pytest.mark.parametrize(
     "hidden,expected",
-    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 19)],
+    [(set(), 0), ({"raidtrain"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 18)],
 )
 def test_turn_a_feature_back_on_lists_exactly_what_is_hidden_and_never_more(hidden, expected):
     values = {HIDE_COMMANDS_WHEN_OFF: True}
@@ -402,10 +403,10 @@ async def test_the_rule_book_card_carries_no_editor_at_all_and_says_where_it_is_
 
 
 async def test_put_the_default_back_is_absent_on_a_key_with_nothing_stored(store):
-    unset = key_card_buttons(store, GUILD, "youtube_live_mode", stored=False)
+    unset = key_card_buttons(store, GUILD, "raidtrain_mode", stored=False)
     assert RESET not in actions(unset)
 
-    set_here = key_card_buttons(store, GUILD, "youtube_live_mode", stored=True)
+    set_here = key_card_buttons(store, GUILD, "raidtrain_mode", stored=True)
     assert actions(set_here) == ["edit:one_of", RESET, BACK]
 
 

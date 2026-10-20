@@ -1536,7 +1536,7 @@ async def test_the_panel_renders_exactly_the_row_the_table_says(
     assert bool(staff_only & set(moves(interaction))) is staff
     assert (cog_module.PREVIEW_PICK in interaction.placeholders()) is staff
     assert (cog_module.MODE_PICK in interaction.placeholders()) is staff
-    assert ("**mode** — shadow" in interaction.words) is staff
+    assert ("**mode** — test" in interaction.words) is staff
     assert (cog_module.STAFF_ONLY_LINE in interaction.words) == (not staff)
 
 
@@ -1561,7 +1561,7 @@ async def test_the_staff_panel_is_the_member_panel_plus_the_status_lines(
     interaction = await open_panel(cog, bot, member)
 
     assert "twitch.tv/alice" in interaction.words
-    assert "**mode** — shadow" in interaction.words
+    assert "**mode** — test" in interaction.words
     assert f"**channel** — <#{CHANNEL}>" in interaction.words
     assert (
         '**stream end** — edited (rewritten: "**{name}** was streaming **{game}** — t…")'
@@ -2238,7 +2238,7 @@ async def test_back_returns_to_the_root_panel(cog, bot, member, db):
     said = await press(bot, member, shown.view, "Back")
 
     assert said.embed.title == "Go-live"
-    assert "**mode** — shadow" in said.words
+    assert "**mode** — test" in said.words
 
 
 async def test_a_link_with_twitch_turned_off_never_claims_it_was_checked(
@@ -3261,15 +3261,14 @@ async def test_the_live_block_lists_announced_go_live_and_spotlight_streams_once
     ]
 
 
-async def test_the_live_block_draws_nothing_while_go_live_and_spotlight_are_both_off(bot):
+async def test_the_live_block_draws_nothing_while_go_live_is_off(bot):
     from types import SimpleNamespace
 
     guild = SimpleNamespace(id=GUILD)
     await bot.store.set(GUILD, "golive_mode", "off")
-    await bot.store.set(GUILD, "spotlight_mode", "off")
     assert cog_module.block_parts(bot, guild, []) is None
 
-    await bot.store.set(GUILD, "spotlight_mode", "shadow")
+    await bot.store.set(GUILD, "golive_mode", "shadow")
     embed, view, stamp = cog_module.block_parts(bot, guild, [])
 
     assert embed.title == "Live now" and view is None and stamp

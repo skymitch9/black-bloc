@@ -784,7 +784,6 @@ async def test_the_upcoming_block_lists_approved_events_still_ahead(bot, guild, 
 
 async def test_the_live_pair_draws_nothing_while_its_features_are_off(bot, guild):
     await bot.store.set(GUILD, "golive_mode", "off")
-    await bot.store.set(GUILD, "spotlight_mode", "off")
     await bot.store.set(GUILD, "events_mode", "off")
     await post_blocks.load_kinds(bot, guild, ["livenow", "upcoming"])
 

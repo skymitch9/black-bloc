@@ -267,7 +267,7 @@ async def test_the_nineteen_features_that_hide_each_map_to_their_commands():
         "chat_mode": ("chat",),
         "events_mode": ("event",),
         "frontdoor_mode": ("ask",),
-        "golive_mode": ("golive",),
+        "golive_mode": ("golive", "youtube"),
         "honeypot_mode": ("honeypot",),
         "minutes_mode": ("minutes",),
         "pings_mode": ("pings",),
@@ -278,7 +278,6 @@ async def test_the_nineteen_features_that_hide_each_map_to_their_commands():
         "request_mode": ("request",),
         "rolemenu_mode": ("rolemenu",),
         "tempvoice_mode": ("voice",),
-        "youtube_live_mode": ("youtube",),
     }
     assert "modmail_mode" not in cv.HIDDEN_WHEN_OFF
     assert "rolemenu" not in cv.NEVER_HIDDEN
@@ -309,14 +308,14 @@ async def test_modmail_lost_its_lock_because_anybody_may_open_a_ticket(tmp_path,
 
 
 async def test_shadow_is_not_off_so_a_shadowed_feature_keeps_its_command(bot):
-    """The owner shadows youtube today; only the literal word off takes a command away."""
-    await bot.store.set(GUILD, "youtube_live_mode", "shadow", by=5)
+    """Raid trains are in test today; only the literal word off takes a command away."""
+    await bot.store.set(GUILD, "raidtrain_mode", "shadow", by=5)
 
-    assert "youtube" not in cv.hidden_names(bot, GUILD)
+    assert "raidtrain" not in cv.hidden_names(bot, GUILD)
 
-    await bot.store.set(GUILD, "youtube_live_mode", "off", by=5)
+    await bot.store.set(GUILD, "raidtrain_mode", "off", by=5)
 
-    assert "youtube" in cv.hidden_names(bot, GUILD)
+    assert "raidtrain" in cv.hidden_names(bot, GUILD)
 
 
 async def test_the_switch_turns_the_whole_thing_off_and_nothing_is_hidden(bot):

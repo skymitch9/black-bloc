@@ -15,6 +15,8 @@ from black_bloc.golive import (
     PANEL_MINUTES_KEY,
     PANEL_TIMEOUT_FOOTER,
     STAFF_BUTTONS,
+    STOP_YOUTUBE,
+    WATCH_YOUTUBE,
     StreamInfo,
     again_render,
     announcement_embed,
@@ -795,7 +797,17 @@ def test_the_button_table_offers_one_link_move_and_one_opt_move(linked, opted_ou
     assert "Refresh" in labels
     assert ({"Logs", "Streamers…"} <= set(labels)) is staff
     assert len(labels) == len(set(labels))
-    assert found == PANEL_BUTTONS[(linked, opted_out)] + (STAFF_BUTTONS if staff else ())
+    staff_moves = (*STAFF_BUTTONS, WATCH_YOUTUBE) if staff else ()
+    assert found == PANEL_BUTTONS[(linked, opted_out)] + staff_moves
+
+
+def test_staff_get_the_one_youtube_move_that_flips_it():
+    watching = panel_buttons(linked=True, opted_out=False, staff=True, youtube=True)
+    not_yet = panel_buttons(linked=True, opted_out=False, staff=True, youtube=False)
+
+    assert STOP_YOUTUBE in watching and WATCH_YOUTUBE not in watching
+    assert WATCH_YOUTUBE in not_yet and STOP_YOUTUBE not in not_yet
+    assert WATCH_YOUTUBE not in panel_buttons(linked=True, opted_out=False, staff=False)
 
 
 def test_the_link_moves_open_a_modal_and_nothing_else_does():

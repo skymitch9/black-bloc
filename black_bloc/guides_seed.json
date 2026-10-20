@@ -57,14 +57,14 @@
         {"symptom": "Discord does not show you streaming", "answer": "Reconnect Twitch under Discord's Connections and turn Display on profile on. The bot reads Discord, not Twitch."},
         {"symptom": "You went live twice in a short time", "answer": "The second one waits for the cooldown shown above."},
         {"symptom": "Your game shows as \"something\"", "answer": "Twitch had no category set. Set one and go live again. A YouTube stream always reads something — YouTube has no category to read."},
-        {"symptom": "You went live on YouTube and nothing posted", "answer": "Either that channel is not linked (/youtube ▸ Link my channel) or a Lead has youtube_live_mode off — the /youtube panel's Live streams line says which. It also needs go-live announcements to be on, because a YouTube stream comes out of this feed."}
+        {"symptom": "You went live on YouTube and nothing posted", "answer": "Either that channel is not linked (/youtube ▸ Link my channel) or a Lead has not turned on Also watch YouTube on /golive — the /youtube panel's announced-here line says which. It also needs go-live announcements to be on, because a YouTube stream comes out of this feed."}
       ],
       "facts": [
         {"kind": "setting", "ref": "golive_mode"},
         {"kind": "setting", "ref": "golive_channel_id"},
         {"kind": "setting", "ref": "golive_cooldown_minutes"},
         {"kind": "probe", "ref": "golive.linked_count"},
-        {"kind": "setting", "ref": "youtube_live_mode"}
+        {"kind": "setting", "ref": "golive_youtube"}
       ]
     },
     {

@@ -1820,21 +1820,25 @@ export async function templateEditor(spec, {
 export function modeSwitch(spec, { onSaved = null, say = null, label = null } = {}) {
   const voice = say || notice();
   const named = label || humanLabel(spec.key);
+  const flag = spec.type === 'bool';
   let stored = spec.value === null || spec.value === undefined ? null : String(spec.value);
-  const choices = segOrder(spec.choices || []).map((choice) => ({
-    value: choice,
-    label: modeWord(choice, spec.key),
-  }));
+  const choices = flag
+    ? [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }]
+    : segOrder(spec.choices || []).map((choice) => ({
+      value: choice,
+      label: modeWord(choice, spec.key),
+    }));
+  const word = (value) => (flag ? (value === 'true' ? 'on' : 'off') : modeWord(value, spec.key));
   const node = segment(choices, stored, {
     onChange: async () => {
       const wanted = node.readValue();
       if (wanted === stored) return;
       voice.say('Saving…');
       try {
-        const reply = await saveSetting(spec.key, wanted);
+        const reply = await saveSetting(spec.key, flag ? wanted === 'true' : wanted);
         stored = String(storedValue(reply, spec.key) ?? wanted);
         node.setValue(stored);
-        voice.say(`${named} is now ${modeWord(stored, spec.key)}.`, 'ok');
+        voice.say(`${named} is now ${word(stored)}.`, 'ok');
         if (onSaved) onSaved(spec.key, stored);
       } catch (error) {
         node.setValue(stored);

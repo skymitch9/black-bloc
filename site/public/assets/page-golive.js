@@ -9,6 +9,7 @@ import {
   spotlightCards,
   spotlightSessions,
 } from './golive-join.js';
+import { modeWord } from './labels.js';
 import { logsSection } from './logs.js';
 import {
   SPOTLIGHT_ENDS,
@@ -67,9 +68,8 @@ const END_TEMPLATE_KEY = 'golive_end_template';
 const END_AUTHOR_KEY = 'golive_end_author';
 const END_KEEP_KEY = 'golive_end_keep_mention';
 const GOLIVE_MODE_KEY = 'golive_mode';
-const LIVE_MODE_KEY = 'youtube_live_mode';
+const YOUTUBE_KEY = 'golive_youtube';
 const PINGS_MODE_KEY = 'pings_mode';
-const SPOTLIGHT_MODE_KEY = 'spotlight_mode';
 const CHANNEL_KEY = 'golive_channel_id';
 
 const NOBODY_LIVE = 'Nobody is streaming right now.';
@@ -170,11 +170,10 @@ const NO_EVENTS_ROLE = 'No Events role yet';
 const ONBOARDING_DRIFTED = 'Onboarding has never been written';
 const SETUP_OPEN = 'open Ping roles';
 
-const GOLIVE_MODE_HELP = 'off watches nothing; shadow logs what it would have announced; on '
-  + 'posts it.';
-const LIVE_MODE_HELP = 'off probes nothing at all; shadow probes and logs what it would have '
-  + 'announced; on announces it. The post itself goes wherever go-live posts, so golive_mode and '
-  + 'golive_channel_id still decide whether anybody sees it.';
+const GOLIVE_MODE_HELP = 'off watches nothing; test logs what it would have announced; on '
+  + 'posts it. Spotlight channels and YouTube follow it.';
+const YOUTUBE_HELP = 'on probes every linked YouTube channel and announces a live stream like '
+  + 'Twitch, under the go-live switch; off probes nothing on YouTube.';
 const PINGS_MODE_HELP = 'off stops every opt-in and every fan-role ping; nobody loses a role.';
 
 const LOG_CHIPS = [
@@ -185,9 +184,6 @@ const LOG_CHIPS = [
 ];
 
 const CHANNEL_ONLY = 'channel only';
-const SPOTLIGHT_MODE_HELP = 'off, shadow (rehearse where shadow_channel_id points) or on \u2014 '
-  + 'Twitch channels with nobody here behind them are announced, reminded and pinned in the '
-  + 'go-live channel.';
 const SPOTLIGHT_MEMBER_NOTE = 'Not spotlighted.';
 const SPOTLIGHT_ADD_TITLE = 'Spotlight a channel';
 const SPOTLIGHT_SCHEDULED = 'scheduled';
@@ -292,16 +288,16 @@ function headerStrip({
   const cells = [
     statCell('Live right now', String(cards.length), `${liveTw} Twitch · ${liveYt} YouTube`),
     modeCell(
-      'Twitch announcements',
+      'Go-live announcements',
       golive.find((one) => one.key === GOLIVE_MODE_KEY),
       channelWord(golive),
       GOLIVE_MODE_HELP,
     ),
     modeCell(
-      'YouTube announcements',
-      youtube.find((one) => one.key === LIVE_MODE_KEY),
+      'Also watch YouTube',
+      golive.find((one) => one.key === YOUTUBE_KEY),
       null,
-      LIVE_MODE_HELP,
+      YOUTUBE_HELP,
     ),
     modeCell(
       'Ping roles',
@@ -309,12 +305,7 @@ function headerStrip({
       null,
       PINGS_MODE_HELP,
     ),
-    modeCell(
-      'Spotlight',
-      golive.find((one) => one.key === SPOTLIGHT_MODE_KEY),
-      spotlightWords(rows),
-      SPOTLIGHT_MODE_HELP,
-    ),
+    statCell('Spotlight', String(rows.filter((row) => row.spotlight).length), spotlightWords(rows)),
     statCell('Set up', String(linked), `${tw} Twitch · ${yt} YouTube · ${out} opted out`),
     statCell(
       'Watching',
@@ -1422,7 +1413,7 @@ function onboardingCard(say, found) {
 function probeCard(status) {
   if (!status) return null;
   const rows = [
-    ['Live streams', badge(status.live_mode || 'off', status.live_mode === 'on' ? 'ok' : 'warn')],
+    ['Live streams', badge(modeWord(status.live_mode || 'off', 'golive_mode'), status.live_mode === 'on' ? 'ok' : 'warn')],
     ['Probe', status.live_running ? badge('running', 'ok') : badge('stopped', 'warn')],
     ['Last probe', status.last_probe_at ? when(status.last_probe_at) : 'never'],
     ['Last probe error', status.last_probe_error || 'none'],

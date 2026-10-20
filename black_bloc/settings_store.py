@@ -1723,7 +1723,7 @@ KEY_HELP.update(
 
 # YouTube live (v126) — a linked channel going live is announced through the go-live feature, in
 # its own block so the parallel branches merge textually. Design: info/youtube-live-design.md §C.
-YOUTUBE_LIVE_MODES = ("off", "shadow", "on")
+GOLIVE_YOUTUBE_KEY = "golive_youtube"
 YOUTUBE_LIVE_POLL_MINUTES = 5
 YOUTUBE_LIVE_POLL_MIN_MINUTES = 2
 YOUTUBE_LIVE_POLL_MAX_MINUTES = 60
@@ -1732,12 +1732,11 @@ YOUTUBE_LIVE_END_MISSES_MIN = 1
 YOUTUBE_LIVE_END_MISSES_MAX = 5
 KEY_TYPES.update(
     {
-        "youtube_live_mode": "enum",
+        GOLIVE_YOUTUBE_KEY: "bool",
         "youtube_live_poll_minutes": "int",
         "youtube_live_end_misses": "int",
     }
 )
-KEY_CHOICES["youtube_live_mode"] = YOUTUBE_LIVE_MODES
 KEY_MIN["youtube_live_poll_minutes"] = YOUTUBE_LIVE_POLL_MIN_MINUTES
 KEY_MAX["youtube_live_poll_minutes"] = YOUTUBE_LIVE_POLL_MAX_MINUTES
 KEY_MIN["youtube_live_end_misses"] = YOUTUBE_LIVE_END_MISSES_MIN
@@ -1760,11 +1759,10 @@ KEY_MAX_REASON["youtube_live_end_misses"] = (
 )
 KEY_HELP.update(
     {
-        "youtube_live_mode": (
-            "whether a linked YouTube channel going live is announced. off probes nothing at "
-            "all; test probes and logs what it would have posted; on announces it through the "
-            "go-live feature exactly like a Twitch stream — so golive_mode and "
-            "golive_channel_id still decide whether anybody sees it. Off by default"
+        GOLIVE_YOUTUBE_KEY: (
+            "also watch YouTube: true probes every linked YouTube channel and announces a live "
+            "stream through go-live exactly like a Twitch stream, under golive_mode (off, test "
+            "or on) and golive_channel_id; false probes nothing on YouTube. false by default"
         ),
         "youtube_live_poll_minutes": (
             "how many minutes between asking YouTube whether the linked channels are live. 5 by "
@@ -1783,8 +1781,6 @@ KEY_HELP.update(
 # Spotlight (v144) — Twitch channels with no Discord member behind them. Every key is
 # NAMESPACE_OVERRIDE'd onto `golive` below, because a spotlight is a streamer without a member
 # and the go-live page is where staff already look. Design: info/spotlight-design.md §D.
-SPOTLIGHT_MODES = ("off", "shadow", "on")
-SPOTLIGHT_MODE_KEY = "spotlight_mode"
 SPOTLIGHT_POLL_MINUTES_KEY = "spotlight_poll_minutes"
 SPOTLIGHT_END_MISSES_KEY = "spotlight_end_misses"
 SPOTLIGHT_BUMP_HOURS_KEY = "spotlight_bump_hours"
@@ -1877,7 +1873,6 @@ SPOTLIGHT_WINDOW_NEXT_WORDS = "next {start} – {end}"
 SPOTLIGHT_WINDOW_NONE_WORDS = "no window set"
 KEY_TYPES.update(
     {
-        SPOTLIGHT_MODE_KEY: "enum",
         SPOTLIGHT_POLL_MINUTES_KEY: "int",
         SPOTLIGHT_END_MISSES_KEY: "int",
         SPOTLIGHT_BUMP_HOURS_KEY: "int",
@@ -1910,7 +1905,6 @@ KEY_TYPES.update(
         MEMBER_OPTOUT_POST_KEY: "enum",
     }
 )
-KEY_CHOICES[SPOTLIGHT_MODE_KEY] = SPOTLIGHT_MODES
 KEY_CHOICES[SPOTLIGHT_PING_MODE_DEFAULT_KEY] = PING_MODES
 KEY_MIN[SPOTLIGHT_WINDOW_KEEP_DAYS_KEY] = SPOTLIGHT_WINDOW_KEEP_DAYS_MIN
 KEY_MAX[SPOTLIGHT_WINDOW_KEEP_DAYS_KEY] = SPOTLIGHT_WINDOW_KEEP_DAYS_MAX
@@ -1962,11 +1956,6 @@ KEY_MAX_REASON[SPOTLIGHT_EVENT_SLACK_KEY] = (
 )
 KEY_HELP.update(
     {
-        SPOTLIGHT_MODE_KEY: (
-            "whether Twitch channels with nobody here behind them are announced at all. off "
-            "ignores them; test posts the rehearsal copy where shadow_channel_id points; on "
-            "announces, pins and reminds in the go-live channel like any other stream"
-        ),
         SPOTLIGHT_POLL_MINUTES_KEY: (
             "how many minutes between asking Twitch whether the spotlighted channels are live. "
             "One batched call covers the whole list, so a shorter gap costs little; 5 by default"
@@ -5633,7 +5622,6 @@ NAMESPACE_OVERRIDE = {
     "minutes_keep_days": "events",
     "minutes_panel_minutes": "events",
     log_level_key("minutes"): "events",
-    SPOTLIGHT_MODE_KEY: "golive",
     SPOTLIGHT_POLL_MINUTES_KEY: "golive",
     SPOTLIGHT_END_MISSES_KEY: "golive",
     SPOTLIGHT_BUMP_HOURS_KEY: "golive",
@@ -10529,8 +10517,6 @@ class SettingsStore:
             return GOLIVE_COSTREAM_TEMPLATE
         if key == GOLIVE_COSTREAM_AUTHOR_KEY:
             return GOLIVE_COSTREAM_AUTHOR
-        if key == SPOTLIGHT_MODE_KEY:
-            return "shadow"
         if key == SPOTLIGHT_POLL_MINUTES_KEY:
             return SPOTLIGHT_POLL_MINUTES
         if key == SPOTLIGHT_END_MISSES_KEY:
@@ -10919,8 +10905,8 @@ class SettingsStore:
             return 10
         if key == "youtube_unlink_dms_them":
             return True
-        if key == "youtube_live_mode":
-            return "off"
+        if key == GOLIVE_YOUTUBE_KEY:
+            return False
         if key == "youtube_live_poll_minutes":
             return YOUTUBE_LIVE_POLL_MINUTES
         if key == "youtube_live_end_misses":

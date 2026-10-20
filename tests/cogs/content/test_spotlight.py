@@ -58,13 +58,13 @@ from black_bloc.settings_store import (
     DEFAULT_TIMEZONE_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
     SPOTLIGHT_END_MISSES_KEY,
-    SPOTLIGHT_MODE_KEY,
     SPOTLIGHT_SCHEDULED_WORD_KEY,
     SettingsStore,
 )
 from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream
 
 GUILD = 7
+GOLIVE_MODE_KEY = "golive_mode"
 CHANNEL = 111
 SHADOW_CHANNEL = 333
 LOG_CHANNEL = 222
@@ -361,7 +361,7 @@ async def bot(db, monkeypatch):
     await store.set(GUILD, "log_channel_id", LOG_CHANNEL)
     await store.set(GUILD, "golive_channel_id", CHANNEL)
     await store.set(GUILD, "shadow_channel_id", SHADOW_CHANNEL)
-    await store.set(GUILD, SPOTLIGHT_MODE_KEY, "on")
+    await store.set(GUILD, GOLIVE_MODE_KEY, "on")
     await store.set(GUILD, "marathon_channel_ping_mode_default", "always")
     made = FakeBot(db, store, settings, FakeGuild())
     made.store.is_staff = lambda member: True
@@ -485,7 +485,7 @@ async def test_a_row_with_pin_off_is_announced_and_left_unpinned(bot, cog):
 
 
 async def test_shadow_posts_the_rehearsal_copy_and_says_would(bot, cog):
-    await bot.store.set(GUILD, SPOTLIGHT_MODE_KEY, "shadow")
+    await bot.store.set(GUILD, GOLIVE_MODE_KEY, "shadow")
     await a_row(bot)
     helix_of(bot, twitch_stream())
     await cog.poll_once()
@@ -498,7 +498,7 @@ async def test_shadow_posts_the_rehearsal_copy_and_says_would(bot, cog):
 
 
 async def test_a_spotlight_rehearses_in_the_test_channel(bot, cog):
-    await bot.store.set(GUILD, SPOTLIGHT_MODE_KEY, "shadow")
+    await bot.store.set(GUILD, GOLIVE_MODE_KEY, "shadow")
     await bot.store.set(GUILD, "shadow_channel_id", LOG_CHANNEL)
     await a_row(bot)
     helix_of(bot, twitch_stream())
@@ -511,7 +511,7 @@ async def test_a_spotlight_rehearses_in_the_test_channel(bot, cog):
 
 
 async def test_mode_off_watches_nothing_at_all(bot, cog):
-    await bot.store.set(GUILD, SPOTLIGHT_MODE_KEY, "off")
+    await bot.store.set(GUILD, GOLIVE_MODE_KEY, "off")
     await a_row(bot)
     helix = helix_of(bot, twitch_stream())
     await cog.poll_once()
@@ -1409,7 +1409,7 @@ async def test_the_spotlight_words_stay_while_the_spotlight_is_on(bot, cog):
 
 
 async def test_shadow_on_a_spotlight_off_channel_says_would_channel_announce(bot, cog):
-    await bot.store.set(GUILD, SPOTLIGHT_MODE_KEY, "shadow")
+    await bot.store.set(GUILD, GOLIVE_MODE_KEY, "shadow")
     await a_row(bot, spotlight=False)
     helix_of(bot, twitch_stream())
 
