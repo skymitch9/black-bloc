@@ -193,25 +193,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "frontdoor.would_post",
         "web.frontdoor.would_post",
     ),
-    # The rehearsal copy's three: the door writes them from the sweep and from either door,
-    # so the website spelling is listed beside the bare one.
-    "black_bloc/cogs/community/frontdoor.py::POSTED_SHADOW": (
-        "frontdoor.posted_shadow",
-        "web.frontdoor.posted_shadow",
-    ),
-    "black_bloc/cogs/community/frontdoor.py::UPDATED_SHADOW": (
-        "frontdoor.updated_shadow",
-        "web.frontdoor.updated_shadow",
-    ),
-    "black_bloc/cogs/community/frontdoor.py::TAKEN_DOWN_SHADOW": (
-        "frontdoor.taken_down_shadow",
-        "web.frontdoor.taken_down_shadow",
-    ),
     "black_bloc/cogs/community/frontdoor.py::GONE": ("frontdoor.gone",),
-    "black_bloc/cogs/community/frontdoor.py::moved_or_gone": (
-        "frontdoor.below_post",
-        "frontdoor.gone",
-    ),
     "black_bloc/cogs/community/frontdoor.py::BELOW_POST": ("frontdoor.below_post",),
     # A replay that became live: staff pressed Treat as live, or the stream stopped reading as one.
     "black_bloc/cogs/content/spotlight.py::upgraded_kind": (
@@ -344,12 +326,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "pings.onboarding_took_over",
         "web.pings.onboarding_took_over",
     ),
-    # Polls in shadow: ONE call writes either the rehearsal's kind or the real one, and the
-    # pin's four kinds are module constants with no website door.
-    "black_bloc/cogs/community/polls.py::OPENED_SHADOW": (
-        "poll.opened_shadow",
-        "poll.opened",
-    ),
+    # The pin's four kinds are module constants with no website door.
     "black_bloc/cogs/community/polls.py::PINNED": ("poll.pinned",),
     "black_bloc/cogs/community/polls.py::PIN_FAILED": ("poll.pin_failed",),
     "black_bloc/cogs/community/polls.py::UNPINNED": ("poll.unpinned",),

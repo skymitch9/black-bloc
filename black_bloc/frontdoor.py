@@ -17,8 +17,6 @@ from .settings_store import (
     FRONTDOOR_REPLACES_TICKET_BUTTON,
     FRONTDOOR_REQUEST_LABEL,
     FRONTDOOR_REQUEST_LABEL_DEFAULT,
-    FRONTDOOR_SHADOW_HASH,
-    FRONTDOOR_SHADOW_MESSAGE,
     FRONTDOOR_SHOW_EVENT,
     FRONTDOOR_SHOW_REQUEST,
     FRONTDOOR_SHOW_TICKET,
@@ -36,10 +34,8 @@ EVENT = "event"
 KINDS: tuple[str, ...] = (TICKET, REQUEST, EVENT)
 
 ON = "on"
-SHADOW_FEATURE = "frontdoor"
 OFF = "off"
-SHADOW = "shadow"
-MODES: tuple[str, ...] = (OFF, SHADOW, ON)
+MODES: tuple[str, ...] = (OFF, ON)
 
 LABEL_LIMIT = 80
 TITLE_LIMIT = 256
@@ -76,15 +72,9 @@ DOOR_NOT_UP = (
     "door** on the Modmail page is what puts one up."
 )
 DOOR_GUARDED = (
-    "Black Bloc is in test mode, so it only posts in its own test channel and in the "
-    "rehearsal home — and this server has neither, so the front door was not posted. Set "
-    "**shadow_channel_id** on the Settings page to the channel the mods should review it "
-    "in, or turn test mode off."
-)
-DOOR_NO_HOME = (
-    "The front door is in shadow, so it only posts its rehearsal copy — and this server has "
-    "nowhere to put one, so nothing was posted. Set **shadow_channel_id** on the Settings page "
-    "to the channel the mods should review it in, or set **frontdoor_mode** to on."
+    "Black Bloc is in test mode, so it only posts in its own test channel and the front door "
+    "was not posted in <#{wanted}>. Check its wording with **Post to test** on the post that "
+    "carries it, or turn test mode off."
 )
 DOOR_NO_CHANNEL = (
     "That is not a channel Black Bloc can see, so the front door was not posted. Pick one from "
@@ -95,29 +85,6 @@ DOOR_STUCK = (
     "**Send Messages** and **Embed Links** there — give it those and try again."
 )
 DOOR_POSTED_SAID = "The front door is up in <#{where}>."
-DOOR_REHEARSING_SAID = (
-    "Black Bloc is in test mode, so the front door is rehearsing in <#{where}> instead of "
-    "<#{wanted}> — the real card, the real buttons, in the one channel test mode lets it "
-    "speak in. It moves to <#{wanted}> by itself when test mode is lifted."
-)
-DOOR_SHADOW_SAID = (
-    "The front door is in shadow, so it is rehearsing in <#{where}> instead of <#{wanted}> — "
-    "the real card, the real buttons, where only staff look. Nothing is in <#{wanted}> until "
-    "**frontdoor_mode** is set to on, and then it moves there by itself."
-)
-DOOR_SHADOW_LINE = "shadow — the door is rehearsing in {home}; nothing is in {where}."
-DOOR_SHADOW_LINE_NOWHERE = (
-    "shadow — the door is rehearsing in {home}. It has no channel of its own yet, and nothing "
-    "reaches members until the door is on."
-)
-DOOR_SHADOW_LINE_HOMELESS = (
-    "shadow — the door has nowhere to rehearse, so it is posted nowhere at all. Set "
-    "shadow_channel_id on the Settings page."
-)
-DOOR_REHEARSAL_DOWN_SAID = (
-    "The front door is down, and so is the rehearsal copy. Nothing else changed, and `/ask` "
-    "still works."
-)
 DOOR_MOVED_SAID = "The front door has moved to <#{where}>."
 DOOR_DOWN_SAID = "The front door is down. Nothing else changed, and `/ask` still works."
 DOOR_RIDES_POST_SAID = (
@@ -147,23 +114,14 @@ def custom_id(kind: str, guild_id: Any) -> str:
 
 
 def door_mode(store: Any, guild_id: int) -> str:
-    """off, shadow or on; anything else reads as off."""
+    """off or on; anything else reads as off."""
     found = str(store.get(guild_id, FRONTDOOR_MODE) or OFF).strip().casefold()
     return found if found in MODES else OFF
 
 
 def door_is_on(store: Any, guild_id: int) -> bool:
-    """On or rehearsing: `/ask` answers and a door is kept somewhere."""
+    """`/ask` answers and a door is kept where it is pointed."""
     return door_mode(store, guild_id) != OFF
-
-
-def door_rehearses(store: Any, guild_id: int) -> bool:
-    return door_mode(store, guild_id) == SHADOW
-
-
-def panel_follows_the_door(store: Any, guild_id: int) -> bool:
-    """The ticket button has no mode of its own; in shadow it follows the door's."""
-    return door_rehearses(store, guild_id) and replaces_ticket_button(store, guild_id)
 
 
 def replaces_ticket_button(store: Any, guild_id: int) -> bool:
@@ -231,29 +189,7 @@ def door_takes_over(store: Any, guild_id: int) -> int | None:
     channel_id, message_id = door_where(store, guild_id)
     if not channel_id:
         return None
-    if door_rehearses(store, guild_id):
-        return channel_id
     return channel_id if message_id else None
-
-
-def rehearsal_copy(store: Any, guild_id: int) -> int | None:
-    """The rehearsal copy of the door, if one is up somewhere."""
-    found = store.get(guild_id, FRONTDOOR_SHADOW_MESSAGE)
-    try:
-        return int(found) if found else None
-    except (TypeError, ValueError):
-        return None
-
-
-def rehearsal_stamp(store: Any, guild_id: int) -> str:
-    return str(store.get(guild_id, FRONTDOOR_SHADOW_HASH) or "")
-
-
-def rehearsal_takes_over(store: Any, guild_id: int) -> bool:
-    """One door per channel holds in the rehearsal home too, where both copies land."""
-    if not door_is_on(store, guild_id) or not replaces_ticket_button(store, guild_id):
-        return False
-    return rehearsal_copy(store, guild_id) is not None
 
 
 def door_hash(store: Any, guild_id: int) -> str:
@@ -270,7 +206,6 @@ def door_hash(store: Any, guild_id: int) -> str:
 
 
 __all__ = [
-    "SHADOW_FEATURE",
     "CUSTOM_ID_HEAD",
     "CUSTOM_ID_TEMPLATE",
     "DOOR_COLOUR",
@@ -279,18 +214,11 @@ __all__ = [
     "DOOR_MOVED_SAID",
     "DOOR_NOT_UP",
     "DOOR_NO_CHANNEL",
-    "DOOR_NO_HOME",
     "DOOR_OFF_THE_POST_SAID",
     "DOOR_RIDES_ELSEWHERE",
     "DOOR_RIDES_POST_SAID",
     "DOOR_OFF",
     "DOOR_POSTED_SAID",
-    "DOOR_REHEARSAL_DOWN_SAID",
-    "DOOR_REHEARSING_SAID",
-    "DOOR_SHADOW_LINE",
-    "DOOR_SHADOW_LINE_HOMELESS",
-    "DOOR_SHADOW_LINE_NOWHERE",
-    "DOOR_SHADOW_SAID",
     "DOOR_STUCK",
     "EVENT",
     "EVENT_HANDOFF_TEXT",
@@ -304,7 +232,6 @@ __all__ = [
     "ON",
     "PANEL_TIMEOUT_FOOTER",
     "REQUEST",
-    "SHADOW",
     "SHOW_KEYS",
     "TICKET",
     "custom_id",
@@ -312,7 +239,6 @@ __all__ = [
     "door_hash",
     "door_is_on",
     "door_mode",
-    "door_rehearses",
     "door_takes_over",
     "door_text",
     "door_title",
@@ -320,10 +246,6 @@ __all__ = [
     "followed_slug",
     "label_for",
     "labels",
-    "panel_follows_the_door",
-    "rehearsal_copy",
-    "rehearsal_stamp",
-    "rehearsal_takes_over",
     "replaces_ticket_button",
     "shown_kinds",
     "shows",

@@ -36,7 +36,7 @@ LOG_CHANNEL_KEY = "log_channel_id"
 ON = "on"
 OFF = "off"
 SHADOW = "shadow"
-MODES = (OFF, SHADOW, ON)
+MODES = (OFF, ON)
 CHANNEL = "channel"
 
 PLAIN = "plain"
@@ -119,11 +119,6 @@ NOT_POSTED = (
     "**{title}** is not posted anywhere right now, so there is nothing to take down. Press Post "
     "it first."
 )
-NO_SHADOW_CHANNEL = (
-    "Posts are in **shadow**, so **{title}** goes to the shadow channel rather than its own — "
-    "and this server has neither a test channel nor a log channel, so there is nowhere to put "
-    "it. A Lead sets **log_channel_id** on the Settings page, or turns posts on."
-)
 NO_TEST_CHANNEL = (
     "There is nowhere to send a test copy of **{title}**: this server has neither a test channel "
     "nor a log channel, so nothing was sent. A Lead sets **posts_shadow_channel_id** on the "
@@ -172,31 +167,15 @@ DOOR_CARRIED_ELSEWHERE = (
     "front door block from **{other}** first — one message holds the door."
 )
 
-SHADOW_LINE = "shadow — this goes to {shadow}, not {where}, until posts are on."
-SHADOW_LINE_NOWHERE = (
-    "shadow — this goes to {shadow}. It has no channel of its own yet, and nothing reaches one "
-    "until posts are on."
-)
-SHADOW_LINE_SAME = "shadow — this goes to {shadow}, which is where it was going anyway."
-
 SAVED_SAID = "**{title}** is saved."
 CREATED_SAID = "**{title}** is made. Nothing is in Discord until you press Post it."
 POSTED_SAID = "**{title}** is posted in {where}."
 UPDATED_SAID = "**{title}** is updated where it was already posted, in {where}."
-SHADOW_POSTED_SAID = (
-    "**{title}** is posted in {where} — the shadow copy, because posts are in shadow. Nothing "
-    "went to its own channel."
-)
-SHADOW_UPDATED_SAID = (
-    "**{title}** is updated in {where} — the shadow copy, because posts are in shadow. Nothing "
-    "went to its own channel."
-)
 REHEARSED_SAID = (
     "Sent a test copy of **{title}** to {shadow}. The real post in {where} is untouched; the "
     "next Post it takes the test copy down."
 )
 REHEARSAL_UPDATED_SAID = "Updated the test copy of **{title}** in {shadow}."
-STICKY_ALREADY_REHEARSING = "It already rehearses in {shadow} — the copy there is live."
 ITS_CHANNEL = "its channel"
 TEST_COPY_LINE = "A test copy is in {shadow}."
 TAKEN_DOWN_SAID = "**{title}** is taken down. Every word is still here."
@@ -215,10 +194,9 @@ RESTORED_SAID = (
 )
 DELETED_SAID = "**{title}** is gone."
 MODE_ON_SAID = "Posts are on. Staff can post from the site and from `/posts`."
-MODE_OFF_SAID = "Posts are off. `/posts` disappears within about a minute; the text is all kept."
-MODE_SHADOW_SAID = (
-    "Posts are in shadow. Post it sends the message to {where} and keeps it edited there, "
-    "whatever channel a post names; nothing reaches members until posts are on."
+MODE_OFF_SAID = (
+    "Posts are off. `/posts`, `/sticky` and `/questions` disappear within about a minute, every "
+    "sticky copy comes down and no weekly question goes up; the text is all kept."
 )
 
 PANEL_TITLE = "Posts"
@@ -385,9 +363,9 @@ def refused_title(title: Any, style: str) -> str | None:
 
 
 def mode_of(store: Any, guild_id: int) -> str:
-    """One reading of the three-value key; anything unknown reads as the safe one."""
+    """One reading of the Posts page's switch; anything unknown reads as off."""
     text = str(store.get(guild_id, MODE_KEY) or "").strip().lower()
-    return text if text in MODES else SHADOW
+    return text if text in MODES else OFF
 
 
 def posts_are_on(store: Any, guild_id: int) -> bool:
@@ -396,10 +374,6 @@ def posts_are_on(store: Any, guild_id: int) -> bool:
 
 def posts_are_off(store: Any, guild_id: int) -> bool:
     return mode_of(store, guild_id) == OFF
-
-
-def in_shadow(store: Any, guild_id: int) -> bool:
-    return mode_of(store, guild_id) == SHADOW
 
 
 def panel_minutes(store: Any, guild_id: int) -> int:
@@ -452,11 +426,6 @@ def move_label(row: Any, mode: Any = None) -> str:
     if has_test_copy(row, mode):
         return UPDATE_THE_POST if row_value(row, "message_id") else POST_IT
     return UPDATE_THE_POST if is_posted(row) else POST_IT
-
-
-def shows_post_to_test(mode: Any) -> bool:
-    """Hidden in shadow, where Post it already goes to the rehearsal home."""
-    return mode != SHADOW
 
 
 def copy_line(bot: Any, guild: Any) -> str:
@@ -1309,18 +1278,6 @@ def shadow_channel_ids(bot: Any, guild: Any) -> list[int]:
     return shadow_home.channel_ids(bot, guild, log_key=LOG_CHANNEL_KEY, feature=SHADOW_FEATURE)
 
 
-def shadow_words(bot: Any, guild: Any, row: Any) -> str:
-    """One spelling of what shadow does to this post, for the card, the page and the panel."""
-    channel_id = row_value(row, "channel_id")
-    where = shadow_channel_id(bot, guild)
-    shadow = where_words(guild, where)
-    if not channel_id:
-        return SHADOW_LINE_NOWHERE.format(shadow=shadow)
-    if as_channel_id(channel_id) == where:
-        return SHADOW_LINE_SAME.format(shadow=shadow)
-    return SHADOW_LINE.format(shadow=shadow, where=where_words(guild, channel_id))
-
-
 def channel_of(bot: Any, guild: Any, channel_id: Any) -> Any:
     if not channel_id:
         return None
@@ -1409,8 +1366,7 @@ async def publish_post(
 ) -> Outcome:
     """Post it the first time, edit it in place every time after — never a second copy.
 
-    In shadow the copy goes to the shadow channel whatever the row says; the first real
-    post on `on` takes that copy back down."""
+    The first real post takes any Post to test copy back down."""
     owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
     if owner is not None:
         from .sticky_posts import desk_of
@@ -1419,10 +1375,9 @@ async def publish_post(
     mode = mode_of(bot.store, guild.id)
     if mode == OFF:
         return refusal(POSTS_OFF, "posts_off", 409)
-    shadow = mode == SHADOW
     title = str(row_value(row, "title", ""))
     channel_id = row_value(row, "channel_id")
-    if not shadow and not channel_id:
+    if not channel_id:
         return refusal(NO_CHANNEL_YET.format(title=title), "no_channel", 409)
     body = str(row_value(row, "body", "") or "")
     style = wanted_style(row_value(row, "style", PLAIN))
@@ -1434,12 +1389,7 @@ async def publish_post(
     refused = refused_body(body, style, "posted")
     if refused is not None:
         return refusal(refused, "body_too_long", 400)
-    target = shadow_channel_id(bot, guild) if shadow else channel_id
-    home = {"shadow_home": target} if shadow else {}
-    if shadow and not target:
-        return refusal(
-            NO_SHADOW_CHANNEL.format(title=title), "no_shadow_channel", 409
-        )
+    target = channel_id
     if not guard_allows(bot, target):
         await note(
             bot,
@@ -1449,7 +1399,6 @@ async def publish_post(
             actor,
             via=via,
             channel=where_words(guild, target),
-            **home,
         )
         return refusal(guard_refusal(bot), "test_mode", 409)
     channel = channel_of(bot, guild, target)
@@ -1465,23 +1414,20 @@ async def publish_post(
     drawn, stamps = message_parts(bot, guild, row, carried)
     stamp = stamps.get(FRONTDOOR)
     payload = drawn | {"allowed_mentions": allowed_mentions_for(guild, body, actor)}
-    message = await _existing_message(bot, guild, row, channel, actor, via, shadow=shadow)
+    message = await _existing_message(bot, guild, row, channel, actor, via)
     try:
         if message is not None:
-            kind = SHADOW_UPDATED if shadow else UPDATED
-            said = SHADOW_UPDATED_SAID if shadow else UPDATED_SAID
+            kind, said = UPDATED, UPDATED_SAID
             await message.edit(**payload)
         else:
-            kind = SHADOW_POSTED if shadow else POSTED
-            said = SHADOW_POSTED_SAID if shadow else POSTED_SAID
+            kind, said = POSTED, POSTED_SAID
             message = await channel.send(**payload)
     except discord.HTTPException as exc:
         await note(bot, guild, row, POST_FAILED, actor, via=via, reason=str(exc))
         return refusal(
             POST_FAILED_SAID.format(title=title, reason=str(exc)), "post_failed", 409
         )
-    write = set_shadow_posted if shadow else set_posted
-    await write(bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor))
+    await set_posted(bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor))
     await set_drawn(bot.db, int(row["id"]), stamps)
     made = await record_version(bot, guild, row, actor, via=via, because=BECAUSE_POSTED)
     await note(
@@ -1493,10 +1439,8 @@ async def publish_post(
         via=via,
         message_id=int(message.id),
         version=await version_now(bot, row, made),
-        **home,
     )
-    if not shadow:
-        await drop_shadow(bot, guild, row, actor, via)
+    await drop_shadow(bot, guild, row, actor, via)
     await _pin(bot, guild, row, message, actor, via)
     fresh = await get_post_by_id(bot.db, int(row["id"]))
     if stamp:
@@ -1534,18 +1478,9 @@ async def rehearse_post(
     if mode == OFF:
         return refusal(POSTS_OFF, "posts_off", 409)
     owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
-    if owner is None and mode == SHADOW:
-        return await publish_post(bot, guild, row, actor, via=via)
     title = str(row_value(row, "title", ""))
     target = shadow_channel_id(bot, guild)
     shadow = where_words(guild, target)
-    if owner is not None:
-        from .sticky_posts import owner_rule
-
-        rule, _ = await owner_rule(bot, guild, owner)
-        if rule == SHADOW:
-            fresh = await get_post_by_id(bot.db, int(row["id"]))
-            return Outcome(True, STICKY_ALREADY_REHEARSING.format(shadow=shadow), value=fresh)
     body = str(row_value(row, "body", "") or "")
     style = wanted_style(row_value(row, "style", PLAIN))
     if owner is None and not body.strip():
@@ -1605,10 +1540,9 @@ async def take_down_post(
     """Whichever copies exist go — real, shadow or both; every word stays on the row."""
     owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
     if owner is not None:
-        from .sticky_posts import desk_of, owner_rule
+        from .sticky_posts import desk_of
 
-        rule, _ = await owner_rule(bot, guild, owner)
-        if rule != SHADOW:
+        if not owner["paused"]:
             await drop_shadow(bot, guild, row, actor, via)
         paused = await desk_of(bot).pause(guild, int(owner["channel_id"]), actor, via=via)
         if not paused.ok:
@@ -1747,7 +1681,7 @@ async def set_mode(
     bot: Any, guild: Any, actor: Any, value: Any, *, via: str = VIA_DISCORD
 ) -> str:
     text = str(value or "").strip().lower()
-    wanted = text if text in MODES else SHADOW
+    wanted = text if text in MODES else mode_of(bot.store, guild.id)
     await bot.store.set(guild.id, MODE_KEY, wanted, by=actor_id(actor))
     await log_action(
         bot,
@@ -1758,11 +1692,7 @@ async def set_mode(
     )
     if wanted == ON:
         return MODE_ON_SAID
-    if wanted == OFF:
-        return MODE_OFF_SAID
-    return MODE_SHADOW_SAID.format(
-        where=where_words(guild, shadow_channel_id(bot, guild))
-    )
+    return MODE_OFF_SAID
 
 
 # --- the sweep --------------------------------------------------------------------------------
@@ -1839,14 +1769,12 @@ __all__ = [
     "set_test_copy",
     "drop_shadow",
     "has_test_copy",
-    "shows_post_to_test",
     "copy_line",
     "REHEARSED",
     "REHEARSAL_UPDATED",
     "WOULD_REHEARSE",
     "REHEARSED_SAID",
     "REHEARSAL_UPDATED_SAID",
-    "STICKY_ALREADY_REHEARSING",
     "NO_TEST_CHANNEL",
     "ITS_CHANNEL",
     "TEST_COPY_LINE",
@@ -1897,11 +1825,9 @@ __all__ = [
     "MODE_KEY",
     "MODE_OFF_SAID",
     "MODE_ON_SAID",
-    "MODE_SHADOW_SAID",
     "NOTHING_TO_POST",
     "NOT_POSTED",
     "NO_CHANNEL_YET",
-    "NO_SHADOW_CHANNEL",
     "NO_SUCH_POST",
     "NO_SUCH_VERSION",
     "OFF",
@@ -1928,9 +1854,6 @@ __all__ = [
     "SEEDED_CANNOT_BE_DELETED",
     "SHADOW",
     "SHADOW_FEATURE",
-    "SHADOW_LINE",
-    "SHADOW_LINE_NOWHERE",
-    "SHADOW_LINE_SAME",
     "SHADOW_MESSAGE_GONE",
     "SHADOW_POSTED",
     "SHADOW_TAKEN_DOWN",
@@ -1983,7 +1906,6 @@ __all__ = [
     "guard_allows",
     "guard_refusal",
     "hash_of",
-    "in_shadow",
     "is_posted",
     "is_seeded",
     "is_shipped_version",
@@ -2024,7 +1946,6 @@ __all__ = [
     "shadow_channel_id",
     "shadow_channel_ids",
     "shadow_id",
-    "shadow_words",
     "site_page_url",
     "slugify",
     "status_words",

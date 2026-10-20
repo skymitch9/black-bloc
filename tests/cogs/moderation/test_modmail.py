@@ -2886,25 +2886,6 @@ async def test_a_channel_the_guard_refuses_is_rehearsed_in_the_home_instead(cog,
     assert "modmail.panel_posted_shadow" in await action_kinds(db)
 
 
-async def test_the_ticket_button_rehearses_in_the_front_doors_own_home(cog, bot, lead, db):
-    """The button follows the door, so it lands where frontdoor_shadow_channel_id says."""
-    import json
-
-    bot.guard = FakeGuard()
-    own = FakeText(5555, guild=bot.guild, name="welcome-test")
-    bot.guild.channels[5555] = own
-    bot.guard.own_channel(5555)
-    await bot.store.set(GUILD, "frontdoor_shadow_channel_id", 5555)
-
-    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
-
-    assert own.messages and not bot.guild.channels[TEST_CHANNEL].messages
-    cur = await db.conn.execute(
-        "SELECT details FROM action_log WHERE kind = 'modmail.panel_posted_shadow'"
-    )
-    assert json.loads((await cur.fetchone())["details"])["shadow_home"] == 5555
-
-
 async def test_with_no_rehearsal_home_at_all_the_button_only_writes_a_would_row(
     cog, bot, lead, db
 ):
@@ -2967,39 +2948,6 @@ async def test_taking_the_button_down_takes_its_rehearsal_copy_with_it(cog, bot,
     assert not home.messages
     assert not bot.store.get(GUILD, "modmail_panel_shadow_message_id")
     assert "modmail.panel_taken_down_shadow" in await action_kinds(db)
-
-
-async def test_the_front_doors_rehearsal_copy_takes_the_buttons_rehearsal_copy_down(
-    cog, bot, lead, db
-):
-    """One door per channel holds in the rehearsal home, so the mods see the real order."""
-    from black_bloc.cogs.community.frontdoor import hide_rehearsed_ticket_button
-
-    bot.guard = FakeGuard()
-    home = bot.guild.channels[TEST_CHANNEL]
-    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
-    await bot.store.set(GUILD, "frontdoor_shadow_message_id", "4242")
-
-    gone = await hide_rehearsed_ticket_button(bot, bot.guild)
-
-    assert gone and not home.messages
-    assert not bot.store.get(GUILD, "modmail_panel_shadow_message_id")
-    assert "frontdoor.ticket_button_hidden" in await action_kinds(db)
-
-
-async def test_the_button_stays_down_in_the_home_while_the_door_rehearses_there(
-    cog, bot, lead, db
-):
-    bot.guard = FakeGuard()
-    home = bot.guild.channels[TEST_CHANNEL]
-    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
-    home.messages.clear()
-    await bot.store.clear(GUILD, "modmail_panel_shadow_message_id")
-    await bot.store.set(GUILD, "frontdoor_shadow_message_id", "4242")
-
-    await cog.reconcile_tickets()
-
-    assert not home.messages
 
 
 async def test_the_reconciler_puts_back_a_button_deleted_by_hand(cog, bot, lead, db):

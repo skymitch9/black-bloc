@@ -220,7 +220,7 @@ async def test_close_is_refused_in_words_while_the_run_waits(bot, ada, lead, db)
     assert (await modmail_cog.get_ticket(db, ticket["id"]))["status"] == "open"
 
 
-async def test_approve_on_the_card_counts_the_run_closes_the_ticket_and_rehearses(
+async def test_approve_on_the_card_counts_the_run_closes_the_ticket_and_posts_the_board(
     bot, ada, lead, db
 ):
     _, ticket = await sent_in(bot, ada)
@@ -236,17 +236,17 @@ async def test_approve_on_the_card_counts_the_run_closes_the_ticket_and_rehearse
     assert pressed.sent.startswith("Approved Ada's **Celeste** run (30:00)")
     assert "points_mode is **shadow**" in pressed.sent
     assert ada.dms == []
-    posted = bot.guild.channels[REHEARSAL].messages
+    posted = bot.guild.channels[SPEED].messages
     assert len(posted) == 1 and not posted[0].content
     assert posted[0].kwargs["embed"].description == (
         "Ada is in the top 10 at #1 with 10 speedpoints."
     )
-    assert bot.guild.channels[SPEED].messages == []
+    assert bot.guild.channels[REHEARSAL].messages == []
     logged = await kinds(db, "points.%")
     assert logged == [
         "points.submitted",
         "points.approved",
-        "points.would_announce",
+        "points.top_changed",
         "points.would_dm",
     ]
     decision = thread_of(bot, ticket).messages[-1]

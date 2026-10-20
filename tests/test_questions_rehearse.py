@@ -56,7 +56,7 @@ async def queue(bot, *bodies):
 
 
 async def test_a_test_copy_of_the_top_question_goes_to_the_home_and_nothing_else_moves(bot):
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     await bot.store.set(GUILD, "question_template", "QOTW: {question}")
     await queue(bot, BODY, "second?")
     await moves.tick(bot, bot.guild, EARLY)
@@ -104,10 +104,10 @@ async def test_off_an_empty_queue_and_no_home_are_refused_in_words(bot):
         testing.NOTHING_TO_TEST
     )
     await queue(bot)
-    await bot.store.set(GUILD, "question_mode", "off")
+    await bot.store.set(GUILD, "posts_mode", "off")
     off = await testing.rehearse(bot, bot.guild, None, now=EARLY)
     assert (off.ok, off.code, off.message) == (False, "questions_off", testing.TEST_OFF)
-    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
     for key in ("shadow_channel_id", "log_channel_id"):
         await bot.store.clear(GUILD, key)
 
@@ -120,7 +120,7 @@ async def test_off_an_empty_queue_and_no_home_are_refused_in_words(bot):
 
 async def test_the_feature_home_wins_and_discord_refusing_is_said(bot):
     await queue(bot)
-    await bot.store.set(GUILD, "question_shadow_channel_id", LOG)
+    await bot.store.set(GUILD, "posts_shadow_channel_id", LOG)
     bot.guild.get_channel(LOG).send_raises = refused(403)
 
     outcome = await testing.rehearse(bot, bot.guild, None, now=EARLY)

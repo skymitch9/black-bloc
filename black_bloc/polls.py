@@ -276,16 +276,11 @@ DRAFT_DAYS_KEY = "poll_draft_days"
 MODE_KEY = "poll_mode"
 CHANNEL_KEY = "poll_channel_id"
 PIN_KEY = "poll_pin"
-SHADOW_NOTE_KEY = "poll_shadow_note"
 OFF = "off"
-SHADOW = "shadow"
 ON = "on"
-MODES = (OFF, SHADOW, ON)
-SHADOW_NOTE = "Posted here because polls are in **shadow** — it would have gone to {channel}."
+MODES = (OFF, ON)
 NO_CHANNEL_WORD = "no channel"
 CHANNEL_UNSEEN = "a channel Black Bloc cannot see"
-OPENED_SHADOW = "poll.opened_shadow"
-SHADOW_FEATURE = "poll"
 PINNED = "poll.pinned"
 PIN_FAILED = "poll.pin_failed"
 UNPINNED = "poll.unpinned"
@@ -806,20 +801,16 @@ def polls_are_off(store: Any, guild_id: int) -> bool:
     return mode_of(store, guild_id) == OFF
 
 
-def in_shadow(store: Any, guild_id: int) -> bool:
-    return mode_of(store, guild_id) == SHADOW
-
-
 def pins_are_on(store: Any, guild_id: int) -> bool:
     return bool(store.get(guild_id, PIN_KEY))
 
 
 def shadow_channel_id(bot: Any, guild: Any) -> int | None:
-    return shadow.channel_id(bot, guild, feature=SHADOW_FEATURE)
+    return shadow.channel_id(bot, guild)
 
 
 def shadow_channel_ids(bot: Any, guild: Any) -> list[int]:
-    return shadow.channel_ids(bot, guild, feature=SHADOW_FEATURE)
+    return shadow.channel_ids(bot, guild)
 
 
 def shadow_id(row: Any) -> Any:
@@ -840,20 +831,6 @@ def where_words(guild: Any, channel_id: Any) -> str:
         return NO_CHANNEL_WORD
     name = channel_name(guild, channel_id)
     return f"#{name}" if name else CHANNEL_UNSEEN
-
-
-def shadow_note(store: Any, guild_id: int, where: str) -> str:
-    """Checklist 17: staff may edit the line, and a broken template still says something."""
-    text = str(store.get(guild_id, SHADOW_NOTE_KEY) or "").strip() or SHADOW_NOTE
-    try:
-        return text.format(channel=where)
-    except Exception:
-        log.warning("polls: the shadow note does not render; the default is used instead")
-        return SHADOW_NOTE.format(channel=where)
-
-
-def shadow_open_text(note: str, creator_id: Any, ping_role_id: Any = None) -> str:
-    return f"{note}\n{open_text(creator_id, ping_role_id)}"
 
 
 def reminder_text(question: str, when: Any = None) -> str:

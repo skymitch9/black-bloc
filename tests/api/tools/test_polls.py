@@ -681,36 +681,3 @@ async def test_every_poll_route_is_for_staff_only(client, seeded, sign_in):
         response = client.request(method, path, json={} if method == "POST" else None)
         assert response.status_code == 403, f"{method} {path} answered {response.status_code}"
 
-
-async def test_in_shadow_the_form_accepts_a_real_channel_and_rehearses_it_instead(
-    client, seeded, web, wf
-):
-    """Shadow is the way to rehearse: the poll is taken, and the copy goes to the guard's
-    own channel with a line saying where it would have gone."""
-    web.guard = wf.Guard()
-    await web.store.set(wf.GUILD_ID, "poll_mode", pure.SHADOW)
-
-    response = creating(client, channel_id=str(wf.OTHER_CHANNEL_ID))
-
-    assert response.status_code == 200
-    made = response.json()["poll"]
-    assert made["status"] == pure.OPEN
-    assert made["channel_id"] == str(wf.OTHER_CHANNEL_ID)
-    assert web.guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
-    posted = web.guild.get_channel(TEST_CHANNEL).messages[-1]
-    assert posted.kwargs["content"].startswith(pure.SHADOW_NOTE.split("{channel}")[0])
-    assert "#general" in posted.kwargs["content"].splitlines()[0]
-
-
-async def test_in_shadow_a_rehearsed_poll_can_still_be_ended_from_the_dashboard(
-    client, seeded, web, wf
-):
-    """The guard is asked about the channel the copy is IN, not the one it was aimed at."""
-    web.guard = wf.Guard()
-    await web.store.set(wf.GUILD_ID, "poll_mode", pure.SHADOW)
-    made = creating(client, channel_id=str(wf.OTHER_CHANNEL_ID)).json()["poll"]
-
-    response = client.post(f"/api/polls/{made['id']}/end")
-
-    assert response.status_code == 200
-    assert (await get_poll(web.db, int(made["id"])))["status"] == pure.CLOSED

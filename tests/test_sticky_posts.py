@@ -12,9 +12,7 @@ from black_bloc.settings_store import SettingsStore
 from black_bloc.sticky_posts import (
     FAILED,
     NOT_RUNNING,
-    OWN_HOME,
     POSTED,
-    REHEARSED,
     TEST_MODE,
     TOO_SOON,
     UNREACHABLE,
@@ -227,26 +225,7 @@ async def talk(desk, bot, times, channel_id=RUNS):
 
 
 async def live(bot, desk):
-    await bot.store.set(GUILD, "sticky_mode", "on")
     return await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-
-
-async def test_the_mode_ships_shadow_and_a_save_rehearses_in_the_home(bot, desk, db):
-    assert bot.store.get(GUILD, "sticky_mode") == "shadow"
-
-    outcome = await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-
-    assert outcome.ok and outcome.code == "set"
-    assert channel(bot).messages == []
-    copy = channel(bot, HOME).messages[0]
-    assert copy.content == WORDS
-    assert copy.kwargs["allowed_mentions"].everyone is False
-    assert copy.kwargs["silent"] is True
-    row = await row_of(bot)
-    assert (row["message_id"], row["posted_channel_id"]) == (copy.id, HOME)
-    assert rules.state_of(row, "shadow") == rules.REHEARSING
-    assert await kinds(db) == ["sticky.set", "sticky.would_post"]
-    assert f"<#{HOME}>" in outcome.message and f"<#{RUNS}>" in outcome.message
 
 
 def spoke(channel, clock, times, *, ago=0):
@@ -269,25 +248,25 @@ def spoke(channel, clock, times, *, ago=0):
 async def test_a_boot_moves_a_copy_that_five_people_buried_and_left_quiet(bot, desk, clock):
     """Owner, 2026-10-10: the move is five minutes from the last posted message, boots included."""
     await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    first = channel(bot, HOME).messages[0].id
+    first = channel(bot).messages[0].id
     clock.tick(900)
-    spoke(channel(bot, HOME), clock, 5, ago=600)
+    spoke(channel(bot), clock, 5, ago=600)
     fresh = Desk(bot, now=clock.now, sleep=clock.sleep)
     await fresh.load()
 
     await fresh.catch_up(bot.guild)
 
-    assert channel(bot, HOME).deleted == [first]
-    assert len(channel(bot, HOME).messages) == 1 and channel(bot, HOME).messages[0].id != first
+    assert channel(bot).deleted == [first]
+    assert len(channel(bot).messages) == 1 and channel(bot).messages[0].id != first
     assert (await row_of(bot))["reposts"] == 1 and fresh.waiting == {}
 
 
 async def test_a_boot_arms_the_rest_of_the_quiet_when_the_last_word_was_recent(bot, desk, clock):
     await bot.store.set(GUILD, "sticky_quiet_seconds", 300)
     await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    first = channel(bot, HOME).messages[0].id
+    first = channel(bot).messages[0].id
     clock.tick(900)
-    spoke(channel(bot, HOME), clock, 5, ago=60)
+    spoke(channel(bot), clock, 5, ago=60)
     fresh = Desk(bot, now=clock.now, sleep=clock.sleep)
     await fresh.load()
     clock.gate = asyncio.Event()
@@ -295,89 +274,27 @@ async def test_a_boot_arms_the_rest_of_the_quiet_when_the_last_word_was_recent(b
     await fresh.catch_up(bot.guild)
 
     assert list(fresh.waiting) == [RUNS] and fresh.heard[RUNS] == 5
-    assert [one.id for one in channel(bot, HOME).messages] == [first]
+    assert [one.id for one in channel(bot).messages] == [first]
     clock.gate.set()
     await fresh.waiting[RUNS]
     assert clock.slept == [240.0]
-    assert channel(bot, HOME).deleted == [first]
+    assert channel(bot).deleted == [first]
 
 
 async def test_a_boot_remembers_a_count_short_of_the_mark_and_waits_for_the_rest(bot, desk, clock):
     await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    first = channel(bot, HOME).messages[0].id
+    first = channel(bot).messages[0].id
     clock.tick(900)
-    spoke(channel(bot, HOME), clock, 3, ago=600)
+    spoke(channel(bot), clock, 3, ago=600)
     fresh = Desk(bot, now=clock.now, sleep=clock.sleep)
     await fresh.load()
 
     await fresh.catch_up(bot.guild)
 
     assert fresh.heard[RUNS] == 3 and fresh.waiting == {}
-    assert [one.id for one in channel(bot, HOME).messages] == [first]
-    await talk(fresh, bot, 2, channel_id=HOME)
-    assert channel(bot, HOME).deleted == [first]
-
-
-async def test_a_rehearsing_copy_counts_the_talk_where_it_sits(bot, desk, clock, db):
-    """Owner, 2026-10-10: five messages in #post-test move the rehearsal copy there."""
-    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    first = channel(bot, HOME).messages[0].id
-
-    await talk(desk, bot, 4, channel_id=HOME)
-    clock.tick(600)
-    assert [one.id for one in channel(bot, HOME).messages] == [first]
-
-    await talk(desk, bot, 1, channel_id=HOME)
-
-    assert channel(bot, HOME).deleted == [first]
-    assert len(channel(bot, HOME).messages) == 1 and channel(bot, HOME).messages[0].id != first
-    assert channel(bot).messages == []
-    assert (await row_of(bot))["reposts"] == 1
-    assert desk.homes == {HOME: RUNS}
-
-
-async def test_talk_in_the_stickys_own_channel_still_moves_a_rehearsing_copy(bot, desk, clock):
-    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    first = channel(bot, HOME).messages[0].id
-    clock.tick(600)
-
-    await talk(desk, bot, 5)
-
-    assert channel(bot, HOME).deleted == [first] and len(channel(bot, HOME).messages) == 1
-
-
-async def test_a_boot_learns_where_every_rehearsing_copy_sits(bot, desk, clock):
-    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    first = channel(bot, HOME).messages[0].id
-    fresh = Desk(bot, now=clock.now, sleep=clock.sleep)
-
-    await fresh.load()
-
-    assert fresh.watched == {RUNS} and fresh.homes == {HOME: RUNS}
-    clock.tick(600)
-    await talk(fresh, bot, 5, channel_id=HOME)
-    assert channel(bot, HOME).deleted == [first]
-
-
-async def test_going_live_stops_counting_the_old_rehearsal_home(bot, desk, clock):
-    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    await bot.store.set(GUILD, "sticky_mode", "on")
-    await desk.settle(bot.guild)
-    assert desk.homes == {} and channel(bot).messages == []  # held until Post it
-    clock.tick(600)
-
-    await talk(desk, bot, 5, channel_id=HOME)
-
-    assert desk.heard.get(RUNS, 0) == 0 and (await row_of(bot))["reposts"] == 0
-
-
-async def test_the_features_own_home_wins_over_the_global_one(bot, desk):
-    await bot.store.set(GUILD, "sticky_shadow_channel_id", OTHER_HOME)
-
-    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-
-    assert channel(bot, HOME).messages == []
-    assert len(channel(bot, OTHER_HOME).messages) == 1
+    assert [one.id for one in channel(bot).messages] == [first]
+    await talk(fresh, bot, 2, channel_id=RUNS)
+    assert channel(bot).deleted == [first]
 
 
 async def test_on_posts_the_words_alone_at_the_bottom_of_its_own_channel(bot, desk, db):
@@ -565,15 +482,6 @@ async def test_a_channel_that_vanished_without_the_event_stops_in_words(bot, des
     assert (await kinds(db)).count("sticky.post_failed") == 1
 
 
-async def test_shadow_with_no_home_at_all_says_which_setting_to_set(bot, desk):
-    await bot.store.clear(GUILD, "shadow_channel_id")
-
-    outcome = await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-
-    assert outcome.ok and "shadow_channel_id" in outcome.message
-    assert (await row_of(bot))["trouble"] == rules.TROUBLE_NO_HOME
-
-
 async def test_pause_takes_the_copy_down_and_resume_puts_it_back(bot, desk, clock, db):
     await live(bot, desk)
 
@@ -594,7 +502,7 @@ async def test_pause_takes_the_copy_down_and_resume_puts_it_back(bot, desk, cloc
 
 async def test_remove_takes_the_copy_and_the_words_whatever_the_mode_is_now(bot, desk, db):
     await live(bot, desk)
-    await bot.store.set(GUILD, "sticky_mode", "off")
+    await bot.store.set(GUILD, "posts_mode", "off")
 
     outcome = await desk.remove(bot.guild, RUNS, STAFFER)
 
@@ -637,7 +545,7 @@ async def test_a_website_save_leaves_one_row_under_the_web_head(bot, desk, db):
 
 async def test_the_test_mode_guard_refuses_and_says_so_once(bot, desk, clock, db):
     bot.guard = FakeGuard(LOG)
-    await bot.store.set(GUILD, "sticky_mode", "on")
+    await bot.store.set(GUILD, "posts_mode", "on")
 
     outcome = await desk.save(bot.guild, RUNS, WORDS, STAFFER)
     clock.tick(600)
@@ -651,14 +559,11 @@ async def test_the_test_mode_guard_refuses_and_says_so_once(bot, desk, clock, db
 
 
 async def test_settle_moves_every_copy_to_where_the_mode_says(bot, desk, db):
-    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    rehearsal = channel(bot, HOME).messages[0].id
+    rehearsal = await legacy_rehearsal(bot, desk)
 
-    await bot.store.set(GUILD, "sticky_mode", "on")
     await desk.settle(bot.guild)
     await desk.settle(bot.guild)
 
-    # Owner, 2026-10-10: going live takes the rehearsal down and posts NOTHING until Post it.
     assert channel(bot, HOME).messages == [] and channel(bot, HOME).deleted == [rehearsal]
     assert channel(bot).messages == []
     assert rules.state_of(await row_of(bot), "on") == rules.WAITING
@@ -670,7 +575,7 @@ async def test_settle_moves_every_copy_to_where_the_mode_says(bot, desk, db):
     assert posted.ok and len(channel(bot).messages) == 1
     assert rules.state_of(await row_of(bot), "on") == rules.LIVE
 
-    await bot.store.set(GUILD, "sticky_mode", "off")
+    await bot.store.set(GUILD, "posts_mode", "off")
     await desk.settle(bot.guild)
 
     assert channel(bot).messages == []
@@ -678,29 +583,17 @@ async def test_settle_moves_every_copy_to_where_the_mode_says(bot, desk, db):
     assert row["message_id"] is None and rules.state_of(row, "off") == rules.OFF
     await talk(desk, bot, 20)
     assert channel(bot).messages == []
-
-    await bot.store.set(GUILD, "sticky_mode", "shadow")
-    await desk.settle(bot.guild)
-    assert len(channel(bot, HOME).messages) == 1 and channel(bot).messages == []
-
-
-async def test_set_mode_logs_the_change_and_refuses_a_word_that_is_not_a_mode(bot, desk, db):
-    done = await desk.set_mode(bot.guild, "on", STAFFER)
-    bad = await desk.set_mode(bot.guild, "loud", STAFFER)
-
-    assert done.ok and bot.store.get(GUILD, "sticky_mode") == "on"
-    assert not bad.ok and bad.code == "bad_mode"
-    assert await kinds(db) == ["sticky.mode"]
+    assert channel(bot, HOME).messages == []
 
 
 async def test_a_place_reports_what_it_did(bot, desk, clock):
     assert await desk.place(bot.guild, RUNS) == NOT_RUNNING
     await desk.save(bot.guild, RUNS, WORDS, STAFFER)
     clock.tick(600)
-    assert await desk.place(bot.guild, RUNS) == REHEARSED
-    await bot.store.set(GUILD, "sticky_mode", "on")
-    clock.tick(600)
     assert await desk.place(bot.guild, RUNS) == POSTED
+    await bot.store.set(GUILD, "posts_mode", "off")
+    clock.tick(600)
+    assert await desk.place(bot.guild, RUNS) == NOT_RUNNING
 
 
 def test_the_desk_is_one_per_bot():
@@ -733,7 +626,7 @@ def link_to(channel_id, message_id):
     return f"https://discord.com/channels/{GUILD}/{channel_id}/{message_id}"
 
 
-@pytest.mark.parametrize("mode", ["off", "shadow"])
+@pytest.mark.parametrize("mode", ["off"])
 async def test_a_stopped_stickys_copy_comes_down_when_the_mode_leaves_on(bot, desk, clock, mode):
     await live(bot, desk)
     first = channel(bot).messages[0].id
@@ -742,7 +635,7 @@ async def test_a_stopped_stickys_copy_comes_down_when_the_mode_leaves_on(bot, de
     await talk(desk, bot, 5)
     assert (await row_of(bot))["trouble"] and [one.id for one in channel(bot).messages] == [first]
 
-    await bot.store.set(GUILD, "sticky_mode", mode)
+    await bot.store.set(GUILD, "posts_mode", mode)
     await desk.settle(bot.guild)
 
     assert channel(bot).messages == [] and channel(bot).deleted == [first]
@@ -751,23 +644,66 @@ async def test_a_stopped_stickys_copy_comes_down_when_the_mode_leaves_on(bot, de
     assert channel(bot, HOME).messages == []
 
 
-@pytest.mark.parametrize("mode", ["off", "shadow", "on"])
-async def test_a_paused_sticky_whose_copy_would_not_delete_loses_it_at_the_next_settle(
-    bot, desk, mode
-):
+@pytest.mark.parametrize("mode", ["off", "on"])
+async def test_a_paused_stickys_copy_is_left_where_it_is_until_staff_act(bot, desk, mode):
+    """The boot migration pauses a rehearsing sticky; its copy stays until Resume or Remove."""
     await live(bot, desk)
     channel(bot).delete_raises = forbidden()
     await desk.pause(bot.guild, RUNS, STAFFER)
-    assert len(channel(bot).messages) == 1
     channel(bot).delete_raises = None
+    left = channel(bot).messages[0].id
 
-    await bot.store.set(GUILD, "sticky_mode", mode)
+    await bot.store.set(GUILD, "posts_mode", mode)
+    await desk.settle(bot.guild)
     await desk.settle(bot.guild)
 
-    assert channel(bot).messages == []
+    assert [one.id for one in channel(bot).messages] == [left]
     row = await row_of(bot)
-    assert row["message_id"] is None and row["paused"]
-    assert channel(bot, HOME).messages == []
+    assert row["message_id"] == left and row["paused"]
+    assert rules.state_of(row, mode) == rules.PAUSED
+
+
+async def legacy_rehearsal(bot, desk):
+    """A copy in the rehearsal home from before the one switch: the row the migration pauses."""
+    await bot.store.set(GUILD, "posts_mode", "off")
+    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
+    copy = await channel(bot, HOME).send(WORDS)
+    await rules.write_copy(bot.db, GUILD, RUNS, copy.id, HOME)
+    await bot.store.set(GUILD, "posts_mode", "on")
+    return copy.id
+
+
+async def test_a_rehearsal_left_running_is_held_never_put_live_by_a_settle(bot, desk, db):
+    """The safety net under the migration: a settle never turns an old rehearsal into a post."""
+    rehearsal = await legacy_rehearsal(bot, desk)
+    assert rules.state_of(await row_of(bot), "on") == rules.REHEARSING
+
+    await desk.settle(bot.guild)
+    await desk.settle(bot.guild)
+
+    assert channel(bot, HOME).deleted == [rehearsal] and channel(bot).messages == []
+    assert rules.state_of(await row_of(bot), "on") == rules.WAITING
+    assert (await kinds(db)).count("sticky.held") == 1
+    posted = await desk.repost(bot.guild, RUNS, STAFFER)
+    assert posted.ok and len(channel(bot).messages) == 1
+
+
+async def test_resume_on_a_paused_rehearsal_takes_the_old_copy_down_and_posts_for_real(bot, desk):
+    rehearsal = await legacy_rehearsal(bot, desk)
+    await db_pause(bot)
+
+    resumed = await desk.resume(bot.guild, RUNS, STAFFER)
+
+    assert resumed.ok and channel(bot, HOME).deleted == [rehearsal]
+    assert len(channel(bot).messages) == 1
+    assert rules.state_of(await row_of(bot), "on") == rules.LIVE
+
+
+async def db_pause(bot):
+    await bot.db.conn.execute(
+        "UPDATE sticky_messages SET paused = 1 WHERE guild_id = ? AND channel_id = ?", (GUILD, RUNS)
+    )
+    await bot.db.conn.commit()
 
 
 @pytest.mark.parametrize("outage", [unavailable, TimeoutError, ConnectionResetError])
@@ -864,40 +800,6 @@ async def test_an_old_copy_that_will_not_delete_says_one_sentence_not_two(
     assert ": ." not in trouble and ". —" not in trouble
 
 
-async def test_a_sticky_stopped_for_a_missing_home_comes_back_when_one_is_set(bot, desk, db):
-    del bot.guild.channels[HOME]
-    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    await desk.save(bot.guild, LOG, WORDS, STAFFER)
-    assert (await row_of(bot))["trouble"] == rules.TROUBLE_HOME_GONE.format(home=HOME)
-
-    await bot.store.set(GUILD, "sticky_shadow_channel_id", OTHER_HOME)
-    await desk.settle(bot.guild)
-
-    for channel_id in (RUNS, LOG):
-        row = await row_of(bot, channel_id)
-        assert row["trouble"] is None and row["posted_channel_id"] == OTHER_HOME
-        assert channel_id in desk.watched
-    assert len(channel(bot, OTHER_HOME).messages) == 2
-
-
-async def test_a_sticky_stopped_for_no_home_at_all_comes_back_too_and_no_other_stop_does(
-    bot, desk, clock
-):
-    await bot.store.clear(GUILD, "shadow_channel_id")
-    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    assert (await row_of(bot))["trouble"] == rules.TROUBLE_NO_HOME
-    await rules.write_words(bot.db, GUILD, LOG, WORDS, STAFFER)
-    refused = rules.TROUBLE_REFUSED.format(status=403, text="no")
-    await rules.write_trouble(bot.db, GUILD, LOG, refused)
-
-    await bot.store.set(GUILD, "shadow_channel_id", HOME)
-    await desk.settle(bot.guild)
-
-    assert (await row_of(bot))["trouble"] is None
-    assert len(channel(bot, HOME).messages) == 1
-    assert (await row_of(bot, LOG))["trouble"]
-
-
 async def test_pause_says_the_copy_is_still_up_when_discord_would_not_delete_it(bot, desk, db):
     await live(bot, desk)
     first = channel(bot).messages[0].id
@@ -932,56 +834,14 @@ async def test_remove_names_the_copy_it_could_not_delete_with_a_link(bot, desk, 
     assert "Discord refused (403)" in said["copy_left"]
 
 
-async def test_a_pause_in_shadow_names_the_rehearsal_home_the_copy_was_in(bot, desk):
-    await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-
-    outcome = await desk.pause(bot.guild, RUNS, STAFFER)
-
-    assert f"<#{HOME}>" in outcome.message and f"<#{RUNS}>" not in outcome.message
-    assert outcome.message == rules.PAUSED_NOW.format(where=HOME)
-    assert channel(bot, HOME).messages == []
-
-
 async def test_a_pause_with_no_copy_up_does_not_claim_to_have_taken_one_down(bot, desk):
-    await bot.store.set(GUILD, "sticky_mode", "off")
+    await bot.store.set(GUILD, "posts_mode", "off")
     await desk.save(bot.guild, RUNS, WORDS, STAFFER)
 
     outcome = await desk.pause(bot.guild, RUNS, STAFFER)
 
     assert "taken down" not in outcome.message
     assert outcome.message == rules.PAUSED_NO_COPY
-
-
-async def test_a_rehearsal_home_that_is_the_stickys_own_channel_gets_no_copy_in_shadow(
-    bot, desk, clock, db
-):
-    await bot.store.set(GUILD, "sticky_shadow_channel_id", RUNS)
-
-    outcome = await desk.save(bot.guild, RUNS, WORDS, STAFFER)
-    clock.tick(600)
-    await talk(desk, bot, 10)
-
-    assert channel(bot).messages == []
-    row = await row_of(bot)
-    assert row["trouble"] is None and row["message_id"] is None
-    assert rules.state_of(row, "shadow") == rules.WAITING
-    assert outcome.ok and "rehearsal home itself" in outcome.message
-    assert "rehearsal copy is in" not in outcome.message
-    assert outcome.message == rules.SAVED_OWN_HOME.format(channel_id=RUNS)
-    said = await details_of(db, "sticky.would_post")
-    assert [(one["channel_id"], one["reason"]) for one in said] == [(RUNS, OWN_HOME)]
-
-
-async def test_a_live_copy_comes_down_when_shadow_makes_its_own_channel_the_home(bot, desk):
-    await live(bot, desk)
-    await bot.store.set(GUILD, "sticky_shadow_channel_id", RUNS)
-    await bot.store.set(GUILD, "sticky_mode", "shadow")
-
-    await desk.settle(bot.guild)
-    await desk.settle(bot.guild)
-
-    assert channel(bot).messages == []
-    assert (await row_of(bot))["message_id"] is None
 
 
 async def test_a_copy_sent_but_not_stored_is_deleted_so_the_next_one_is_the_only_one(
@@ -1140,58 +1000,23 @@ async def test_a_text_sticky_is_pinned_too(bot, desk):
     assert channel(bot).pinned == [channel(bot).messages[0].id]
 
 
-async def test_the_points_mode_decides_where_the_leaderboard_goes_not_the_sticky_mode(bot, desk):
-    await bot.store.set(GUILD, "points_shadow_channel_id", OTHER_HOME)
-    post_id = await a_post(bot)
-
-    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
-
-    copy = channel(bot, OTHER_HOME).messages[0]
-    assert channel(bot).messages == [] and channel(bot, HOME).messages == []
-    assert copy.content is None
-    post = await post_row(bot, post_id)
-    assert (post["message_id"], post["shadow_message_id"]) == (None, copy.id)
-
-    await bot.store.set(GUILD, "points_mode", "on")
-    await desk.settle(bot.guild)
-
-    # Owner, 2026-10-10: the flip takes the rehearsal down; the first real copy waits for Post it.
-    assert channel(bot, OTHER_HOME).messages == [] and channel(bot).messages == []
-    post = await post_row(bot, post_id)
-    assert (post["message_id"], post["shadow_message_id"]) == (None, None)
-    assert (await desk.repost(bot.guild, RUNS, STAFFER)).ok
-    assert len(channel(bot).messages) == 1
-    post = await post_row(bot, post_id)
-    assert (post["message_id"], post["shadow_message_id"]) == (channel(bot).messages[0].id, None)
-
-
-async def test_points_off_or_sticky_off_takes_the_leaderboard_down(bot, desk):
-    await points_on(bot)
+@pytest.mark.parametrize("points", ["shadow", "on"])
+async def test_points_mode_never_places_the_leaderboard_only_the_posts_switch_does(
+    bot, desk, points
+):
+    """Owner, 2026-10-19 (switch audit I1): points_mode decides whether runs count, never where."""
+    await bot.store.set(GUILD, "points_mode", points)
     await a_post(bot)
     await desk.save(bot.guild, RUNS, None, STAFFER, post="leaderboard")
+    row = await row_of(bot)
+    assert await desk.rule_of(bot.guild, row) == ("on", rules.FEATURE)
 
-    await bot.store.set(GUILD, "points_mode", "off")
+    await desk.settle(bot.guild)
+    assert len(channel(bot).messages) == 1 and channel(bot, HOME).messages == []
+
+    await bot.store.set(GUILD, "posts_mode", "off")
     await desk.settle(bot.guild)
     assert channel(bot).messages == []
-
-    await points_on(bot)
-    await desk.settle(bot.guild)
-    assert channel(bot).messages == []  # back on: nothing until Post it
-    assert (await desk.repost(bot.guild, RUNS, STAFFER)).ok
-    assert len(channel(bot).messages) == 1
-
-    await bot.store.set(GUILD, "sticky_mode", "off")
-    await desk.settle(bot.guild)
-    assert channel(bot).messages == []
-
-
-async def test_a_post_without_an_owner_follows_the_sticky_mode(bot, desk):
-    await a_post(bot, "rules", body="Be kind.", style="plain", blocks=())
-
-    await desk.save(bot.guild, RUNS, None, STAFFER, post="rules")
-
-    copy = channel(bot, HOME).messages[0]
-    assert copy.content == "Be kind."
 
 
 async def test_a_deleted_post_stops_the_sticky_in_words(bot, desk):
@@ -1386,24 +1211,6 @@ async def test_quiet_zero_is_the_old_rule_and_moves_at_the_count(bot, clock):
 # --- Post to test on a sticky's post (post-to-test-design.md) ---------------------------------
 
 
-async def test_a_rehearsing_sticky_answers_that_it_already_rehearses_and_sends_nothing(bot, desk):
-    from black_bloc import posts
-
-    await bot.store.set(GUILD, posts.MODE_KEY, posts.ON)
-    post_id = await a_post(bot)
-    bot.sticky_desk = desk
-    await desk.save(bot.guild, RUNS, None, STAFFER, post=post_id)
-    before = await post_row(bot, post_id)
-    assert len(channel(bot, HOME).messages) == 1, "the leaderboard rehearses in the home"
-
-    found = await posts.rehearse_post(bot, bot.guild, before, STAFFER)
-
-    assert found.ok
-    assert found.message == posts.STICKY_ALREADY_REHEARSING.format(shadow="#welcome-test")
-    assert len(channel(bot, HOME).messages) == 1 and channel(bot, HOME).messages[0].edits == []
-    assert dict(await post_row(bot, post_id)) == dict(before)
-
-
 async def test_a_live_stickys_test_copy_is_one_plain_message_the_desk_never_counts(
     bot, desk, db, clock
 ):
@@ -1459,3 +1266,15 @@ async def test_taking_a_live_stickys_post_down_takes_its_test_copy_too(bot, desk
     assert taken.ok
     assert channel(bot, HOME).messages == [] and channel(bot).messages == []
     assert not posts.is_posted(await post_row(bot, post_id))
+
+
+async def test_points_off_leaves_a_leaderboard_only_post_empty_so_its_sticky_stops_with_a_reason(
+    bot, desk
+):
+    await bot.store.set(GUILD, "points_mode", "off")
+    await a_post(bot)
+
+    await desk.save(bot.guild, RUNS, None, STAFFER, post="leaderboard")
+
+    row = await row_of(bot)
+    assert channel(bot).messages == [] and row["trouble"] == rules.TROUBLE_POST_EMPTY

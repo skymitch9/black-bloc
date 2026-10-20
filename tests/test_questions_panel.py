@@ -7,7 +7,7 @@ from black_bloc import questions as rules
 from black_bloc import questions_panel as panel
 from black_bloc import questions_rehearse as testing
 from black_bloc import questions_store as store
-from tests.questions_fakes import GUILD, HOME, FakeMember, make_bot
+from tests.questions_fakes import GUILD, HOME, REAL, FakeMember, make_bot
 
 
 class FakeResponse:
@@ -117,7 +117,7 @@ async def test_the_panel_shows_the_slot_the_question_and_the_queue(bot):
 
     assert "**Question** — one?" in embed.description
     assert "**Queued** — 2" in embed.description
-    assert f"<#{HOME}>" in embed.description
+    assert f"<#{REAL}>" in embed.description
     assert rules.NO_OWNER_LINE in embed.description
     assert labels(view) == ["Add", "Post one now", "Skip this week", "Refresh", "Post to test"]
     [test] = [item for item in view.children if getattr(item, "name", "") == "test"]
@@ -162,8 +162,8 @@ async def test_post_now_from_the_panel_posts_and_answers_in_words(bot, staff):
 
     await panel.run_post_now(interaction)
 
-    assert interaction.said == [rules.POSTED_EXTRA.format(where=f"<#{HOME}>")]
-    assert bot.guild.get_channel(HOME).sent[-1].content.endswith("one?")
+    assert interaction.said == [rules.POSTED_EXTRA.format(where=f"<#{REAL}>")]
+    assert bot.guild.get_channel(REAL).sent[-1].content.endswith("one?")
     view = interaction.edits[-1]["view"]
     assert "Take it down" in labels(view)
     assert "**This week** — waiting" in interaction.edits[-1]["embed"].description

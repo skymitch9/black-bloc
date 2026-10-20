@@ -53,7 +53,6 @@ from ...polls import (
     clamp,
     counts_from_options,
     describe_cadence,
-    in_shadow,
     next_occurrence,
     winners,
 )
@@ -341,10 +340,7 @@ def build_router(bot: Any) -> APIRouter:
         )
 
     def _refuse_outside_the_test_channel_id(guild: Any, channel_id: Any) -> None:
-        """In shadow the poll is accepted and rehearsed, so a real channel is not refused."""
         guard = guard_of(bot)
-        if in_shadow(bot.store, guild.id):
-            return
         if guard is not None and channel_id and not guard.allows_channel(int(channel_id)):
             refuse_guarded(guard.refusal_message())
 

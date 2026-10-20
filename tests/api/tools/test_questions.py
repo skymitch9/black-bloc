@@ -43,7 +43,7 @@ async def test_a_pasted_list_queues_one_question_per_line_and_logs_once(client, 
     assert response.json()["message"] == "3 question(s) added to the queue."
     found = client.get("/api/questions").json()
     assert [row["body"] for row in found["queue"]] == ["one?", "two?", "three?"]
-    assert found["mode"] == "shadow" and found["state"] == "pending"
+    assert found["mode"] == "on" and found["state"] == "pending"
     assert found["owner_set"] is False and found["history"] == []
     kinds = await wf.kinds_in(web.db)
     assert kinds.count("web.question.added") == 1 and "question.added" not in kinds
@@ -78,10 +78,10 @@ async def test_move_edit_remove_and_put_back_from_the_page(client, sign_in, web,
     assert client.delete("/api/questions/999").status_code == 404
 
 
-async def test_post_now_rehearses_then_take_it_down_puts_it_back_on_top(
+async def test_post_now_posts_then_take_it_down_puts_it_back_on_top(
     client, sign_in, web, guild, wf
 ):
-    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.OTHER_CHANNEL_ID)
+    await web.store.set(wf.GUILD_ID, "question_channel_id", wf.OTHER_CHANNEL_ID)
     sign_in(client)
     client.post("/api/questions", json={"text": "one?\ntwo?"})
 
@@ -140,7 +140,7 @@ async def test_skip_and_undo_from_the_page(client, sign_in, web, wf):
 
 async def test_the_operator_token_reads_this_weeks_question_and_where_to_post_it(client, web, wf):
     web.settings.operator_read_token = OPERATOR_TOKEN
-    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.OTHER_CHANNEL_ID)
+    await web.store.set(wf.GUILD_ID, "question_channel_id", wf.OTHER_CHANNEL_ID)
     await web.store.set(wf.GUILD_ID, "question_template", "QOTW: {question}")
     from datetime import UTC, datetime
 
@@ -161,7 +161,7 @@ async def test_the_operator_token_reads_this_weeks_question_and_where_to_post_it
         "mode",
     }
     assert body["body"] == "one?" and body["rendered"] == "QOTW: one?"
-    assert body["mode"] == "shadow" and body["channel_id"] == str(wf.OTHER_CHANNEL_ID)
+    assert body["mode"] == "on" and body["channel_id"] == str(wf.OTHER_CHANNEL_ID)
     assert body["channel_url"] == (
         f"https://discord.com/channels/{wf.GUILD_ID}/{wf.OTHER_CHANNEL_ID}"
     )
@@ -173,7 +173,7 @@ async def test_an_empty_queue_or_off_hands_the_owner_nothing_to_post(client, sig
     assert client.get("/api/questions/current").json()["body"] is None
 
     client.post("/api/questions", json={"text": "one?"})
-    await web.store.set(wf.GUILD_ID, "question_mode", "off")
+    await web.store.set(wf.GUILD_ID, "posts_mode", "off")
     found = client.get("/api/questions/current").json()
     assert found["body"] is None and found["channel_url"] is None and found["mode"] == "off"
 

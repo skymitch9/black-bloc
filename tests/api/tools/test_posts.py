@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from black_bloc import doc_import, posts
+from black_bloc.api.tools import posts as tools_posts
 from black_bloc.doc_import import Hop
 
 ROUTES = [
@@ -91,56 +92,6 @@ async def test_the_list_carries_the_pills_the_page_draws(client, sign_in, web, w
     assert found["notes"] == []
 
 
-async def test_shadow_says_where_the_copy_goes_and_names_the_shadow_channel(
-    client, sign_in, web, guild, wf
-):
-    """§C9: the page has to be able to say `not #welcome, #blackbloc-logs` before anybody
-    presses anything."""
-    sign_in(client)
-    await a_post(web, wf)
-    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "shadow")
-    web.guard = wf.Guard()
-
-    found = client.get("/api/posts").json()
-
-    assert found["mode"] == "shadow"
-    assert found["shadow"] == {
-        "channel_id": str(wf.TEST_CHANNEL_ID),
-        "channel_name": "blackbloc-logs",
-    }
-    assert found["notes"] and "#blackbloc-logs" in found["notes"][0]
-    assert "nothing reaches members yet" in found["notes"][0]
-
-
-async def test_a_shadow_publish_names_the_shadow_channel_and_marks_the_row(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await a_post(web, wf, channel=False)
-    await posts.set_post_fields(
-        web.db,
-        int((await posts.get_post(web.db, wf.GUILD_ID, "notice"))["id"]),
-        channel_id=wf.OTHER_CHANNEL_ID,
-    )
-    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "shadow")
-    web.guard = wf.Guard()
-
-    found = client.post("/api/posts/notice/publish", json={}).json()
-
-    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
-    assert len(guild.get_channel(wf.TEST_CHANNEL_ID).messages) == 1
-    assert "#blackbloc-logs" in found["message"] and "shadow copy" in found["message"]
-    assert found["post"]["message_id"] is None
-    assert found["post"]["shadow_message_id"]
-    assert found["post"]["posted_where"] == "shadow"
-    assert found["post"]["status"][0] == "posted (shadow)"
-    assert found["post"]["move"] == "Update the post"
-    assert [kind for kind, _ in await wf.web_rows_in(web.db)] == [
-        "web.post.shadow_posted",
-        "web.post.pinned",
-    ]
-
-
 async def test_posts_off_refuses_the_publish_in_words(client, sign_in, web, wf):
     sign_in(client)
     await a_post(web, wf)
@@ -162,7 +113,8 @@ async def test_the_page_is_told_in_words_when_posts_are_off(client, sign_in, web
     found = client.get("/api/posts").json()
 
     assert found["mode"] == "off"
-    assert found["notes"] and "Settings page under **posts**" in found["notes"][0]
+    assert found["notes"] == [tools_posts.POSTS_ARE_OFF]
+    assert "`/sticky`" in found["notes"][0] and "sticky copy is down" in found["notes"][0]
 
 
 async def test_test_mode_is_said_in_words_rather_than_left_to_be_discovered(
@@ -788,19 +740,6 @@ async def test_post_to_test_beside_a_real_post_leaves_one_web_row_and_marks_the_
     assert again["message"].startswith("Updated the test copy")
     listed = client.get("/api/posts").json()["posts"][0]
     assert listed["test_copy"] is True
-
-
-async def test_post_to_test_in_shadow_is_post_it(client, sign_in, web, guild, wf):
-    sign_in(client)
-    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "shadow")
-    web.guard = wf.Guard()
-    await a_post(web, wf)
-
-    found = client.post("/api/posts/notice/rehearse", json={}).json()
-
-    assert found["post"]["posted_where"] == posts.SHADOW
-    assert found["post"]["test_copy"] is False
-    assert "web.post.shadow_posted" in await wf.kinds_in(web.db)
 
 
 async def test_post_to_test_with_posts_off_is_refused_in_words(client, sign_in, web, wf):

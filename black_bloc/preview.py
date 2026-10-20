@@ -20,7 +20,6 @@ from . import (
     marathon_role,
     minutes,
     modmail,
-    polls,
     posts,
     spotlight,
 )
@@ -651,21 +650,6 @@ def birthday(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Render
     return made(guild, embeds=[embed])
 
 
-def poll_card(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
-    counts = [
-        {"label": "Saturday", "votes": 7, "position": 1},
-        {"label": "Sunday", "votes": 3, "position": 2},
-    ]
-    embed = polls.panel_embed(
-        poll_id=3,
-        question=str(sample.get("question") or "Which day for the next movie night?"),
-        counts=counts,
-        voters=10,
-    )
-    note = polls.shadow_note(store, guild.id, str(sample.get("channel") or "#announcements"))
-    return made(guild, content=note, embeds=[embed])
-
-
 def minutes_notes(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
     row = {
         "channel_id": None,
@@ -795,14 +779,6 @@ RENDERERS: dict[str, Renderer] = {
             birthday,
             keys=(BIRTHDAY_TEMPLATE_KEY,),
             sample={"name": "Casey", "age": ""},
-        ),
-        Renderer(
-            "poll_card",
-            "A poll, and the line its rehearsal copy carries",
-            "polls.html",
-            poll_card,
-            keys=(polls.SHADOW_NOTE_KEY,),
-            sample={"question": "", "channel": "#announcements"},
         ),
         Renderer(
             "minutes_notes",

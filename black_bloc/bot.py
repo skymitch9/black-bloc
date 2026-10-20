@@ -18,6 +18,7 @@ from .intents import build_intents
 from .invite import invite_url
 from .orphaned import install as install_orphaned
 from .orphaned import mark as mark_orphaned
+from .posts_switch import apply as migrate_posts_switch
 from .prefix import no_prefix_commands
 from .presence import boot_presence, shutdown_presence
 from .rolemenu_panels import install as install_panels
@@ -97,6 +98,7 @@ class BlackBlocBot(commands.Bot):
         install_orphaned(self)
         await self.db.connect()
         await self.store.load()
+        await self._migrate_posts_switch()
         install_rehearsal_home(self)
         self._apply_boot_presence()
         log.info("database ready at %s", self.settings.database_path)
@@ -106,6 +108,14 @@ class BlackBlocBot(commands.Bot):
         install_visibility(self)
         install_panels(self)
         self._start_api()
+
+    async def _migrate_posts_switch(self) -> None:
+        """Before any cog loads, so no sticky Desk ever reads a rehearsing row as live."""
+        try:
+            if await migrate_posts_switch(self):
+                await self.store.load()
+        except Exception:
+            log.exception("posts switch: the boot migration failed; stickies fall back to held")
 
     def _apply_boot_presence(self) -> None:
         """setup_hook runs before IDENTIFY, so the stored sentence is the one Discord is sent."""

@@ -48,27 +48,25 @@ async def store(db, monkeypatch):
     return found
 
 
-def test_the_nine_keys_are_posts_keys_with_the_briefed_defaults(store):
+def test_the_seven_keys_are_posts_keys_and_the_mode_is_the_posts_switch(store):
     assert set(settings_store.STICKY_KEYS) == {
-        "sticky_mode",
         "sticky_after_messages",
         "sticky_min_seconds",
         "sticky_silent",
         "sticky_panel_minutes",
-        "sticky_shadow_channel_id",
         "sticky_quiet_seconds",
         "sticky_max_buried_minutes",
         "sticky_pin_copies",
     }
     assert {settings_store.namespace_of(key) for key in settings_store.STICKY_KEYS} == {"posts"}
-    assert KEY_TYPES["sticky_mode"] == "enum"
-    assert KEY_CHOICES["sticky_mode"] == ("off", "shadow", "on")
-    assert rules.mode_of(store, GUILD) == "shadow"
+    for retired in ("sticky_mode", "sticky_shadow_channel_id"):
+        assert retired not in KEY_TYPES
+    assert KEY_CHOICES["posts_mode"] == ("off", "on")
+    assert rules.mode_of(store, GUILD) == "on"
     assert rules.numbers(store, GUILD) == (5, 30, True)
     assert rules.panel_minutes(store, GUILD) == 10
     assert rules.numbers_waiting(store, GUILD) == (300, 60)
     assert rules.pins(store, GUILD) is True
-    assert store.get(GUILD, "sticky_shadow_channel_id") is None
 
 
 @pytest.mark.parametrize(
@@ -79,7 +77,7 @@ def test_the_nine_keys_are_posts_keys_with_the_briefed_defaults(store):
         ("sticky_min_seconds", 4),
         ("sticky_min_seconds", 3601),
         ("sticky_panel_minutes", 0),
-        ("sticky_mode", "loud"),
+        ("posts_mode", "shadow"),
     ],
 )
 async def test_a_number_outside_its_bounds_is_refused_with_the_reason(store, key, bad):
@@ -117,8 +115,6 @@ def test_the_gap_is_measured_from_the_last_copy_and_a_bad_time_never_blocks():
         ({}, "off", rules.OFF),
         ({}, "on", rules.WAITING),
         ({"message_id": 5, "posted_channel_id": RUNS}, "on", rules.LIVE),
-        ({"message_id": 5, "posted_channel_id": 444}, "shadow", rules.REHEARSING),
-        ({"message_id": 5, "posted_channel_id": RUNS}, "shadow", rules.REHEARSING),
         ({"message_id": 5, "posted_channel_id": 444}, "on", rules.REHEARSING),
     ],
 )
@@ -151,10 +147,10 @@ def test_the_list_says_each_stickys_state_and_why_one_stopped():
         "on",
     )
 
-    assert lines[0] == "**mode** — on"
+    assert lines[0] == "**posts_mode** — on"
     assert lines[2] == f"<#{RUNS}> — live · <t:{int(NOW.timestamp())}:R> · moved 3×"
     assert lines[3] == "<#444> — stopped — Discord no longer has that channel."
-    assert rules.root_lines([], "shadow")[-1] == rules.NONE_YET
+    assert rules.root_lines([], "off")[-1] == rules.NONE_YET
 
 
 def test_select_options_name_the_channel_and_say_when_it_is_gone():
@@ -165,8 +161,6 @@ def test_select_options_name_the_channel_and_say_when_it_is_gone():
     assert found[0] == ("#runs · How to submit a run.", RUNS)
     assert found[1][0].startswith("a channel Discord no longer has (444)")
     assert len(found[2][0]) <= 100
-    assert [name for name, _, _ in rules.mode_options("shadow")] == ["off", "shadow", "on"]
-    assert [now for _, _, now in rules.mode_options("shadow")] == [False, True, False]
 
 
 def test_words_are_cleaned_and_refused_in_sentences():

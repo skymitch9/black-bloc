@@ -1,4 +1,4 @@
-"""The top-places post: one post per change batch, in the channel the mode points at."""
+"""The top-places post: one post per change batch, placed by the Posts page's one switch."""
 
 from __future__ import annotations
 
@@ -11,17 +11,21 @@ from . import points_moves as moves
 from . import shadow
 from .actionlog import log_action
 from .logkinds import VIA_DISCORD, kind_via
-from .settings_store import POINTS_CHANNEL, POINTS_FEATURE, POINTS_PING_ROLE
+from .posts import mode_of as posts_mode
+from .settings_store import POINTS_CHANNEL, POINTS_PING_ROLE
 
 log = logging.getLogger(__name__)
 
 POSTED = "posted"
-REHEARSED = "rehearsed"
 NOT_POSTED = "not_posted"
 NO_CHANNEL = "no_channel"
-NO_SHADOW_HOME = "no_shadow_home"
 TEST_MODE_REFUSED = "test_mode"
 DESCRIPTION_LIMIT = 4000
+
+
+def goes_out(store: Any, guild_id: int) -> bool:
+    """Posts on and points not off: points_mode decides whether runs count, never placement."""
+    return posts_mode(store, guild_id) == "on" and moves.mode_of(store, guild_id) != moves.OFF
 
 
 def role_of(store: Any, guild_id: int) -> int | None:
@@ -50,46 +54,33 @@ async def failed(bot: Any, guild: Any, reason: str, home: Any, lines: Any, via: 
 
 
 async def announce(bot: Any, guild: Any, outcome: Any, *, via: str = VIA_DISCORD) -> str:
-    """A move's lines, posted once: the real channel when on, the rehearsal home in shadow."""
+    """A move's lines, posted once in points_channel_id while posts are on."""
     lines = tuple(getattr(getattr(outcome, "value", None), "announce", ()) or ())
     if not getattr(outcome, "ok", False) or not lines:
         return NOT_POSTED
-    mode = moves.mode_of(bot.store, guild.id)
-    if mode == moves.OFF:
+    if not goes_out(bot.store, guild.id):
         return NOT_POSTED
-    rehearsing = mode == moves.SHADOW
-    aimed = shadow.as_channel_id(bot.store.get(guild.id, POINTS_CHANNEL))
-    home = shadow.channel_id(bot, guild, feature=POINTS_FEATURE) if rehearsing else aimed
+    home = shadow.as_channel_id(bot.store.get(guild.id, POINTS_CHANNEL))
     channel = shadow.channel_of(bot, guild, home)
     if channel is None:
-        if rehearsing:
-            return NOT_POSTED
         return await failed(bot, guild, NO_CHANNEL, home, lines, via)
     guard = getattr(bot, "guard", None)
     if guard is not None and not guard.allows_channel(channel.id):
-        if rehearsing:
-            return NOT_POSTED
         return await failed(bot, guild, TEST_MODE_REFUSED, home, lines, via)
-    role = None if rehearsing else role_of(bot.store, guild.id)
-    if rehearsing:
-        content = None
-        allowed = discord.AllowedMentions.none()
-    else:
-        content = f"<@&{role}>" if role else None
-        allowed = (
-            discord.AllowedMentions(everyone=False, users=False, roles=[discord.Object(id=role)])
-            if role
-            else discord.AllowedMentions.none()
-        )
+    role = role_of(bot.store, guild.id)
+    content = f"<@&{role}>" if role else None
+    allowed = (
+        discord.AllowedMentions(everyone=False, users=False, roles=[discord.Object(id=role)])
+        if role
+        else discord.AllowedMentions.none()
+    )
     try:
         await channel.send(content, embed=embed_of(bot, guild, lines), allowed_mentions=allowed)
     except Exception as exc:
         reason = f"{type(exc).__name__}: {exc}"
         log.warning("points: the top-places post did not go out — %s", reason)
-        if rehearsing:
-            return NOT_POSTED
         return await failed(bot, guild, reason, home, lines, via)
-    return REHEARSED if rehearsing else POSTED
+    return POSTED
 
 
-__all__ = ["NOT_POSTED", "POSTED", "REHEARSED", "announce", "embed_of"]
+__all__ = ["NOT_POSTED", "POSTED", "announce", "embed_of", "goes_out"]

@@ -52,8 +52,6 @@ from .settings_store import (
     PINGS_BLOCK_TEXT,
     PINGS_BLOCK_TITLE,
     POINTS_BOARD_ORDER,
-    POINTS_FEATURE,
-    POINTS_MODE,
     POINTS_TOP_N,
     POSTS_BLOCK_BIRTHDAY_NAME,
     POSTS_BLOCK_BIRTHDAY_NAME_DEFAULT,
@@ -159,7 +157,6 @@ class BlockKind:
     redraw: Callable[[Any, Any], Awaitable[bool]]
     footprint: tuple[int, int, int] = (1, 1, 5)
     load: Callable[[Any, Any], Awaitable[Any]] | None = None
-    owner: tuple[str, str] | None = None
 
 
 def door_parts(bot: Any, guild: Any, row: Any) -> Any:
@@ -470,18 +467,8 @@ KINDS: dict[str, BlockKind] = {
         redraw=blocks_redraw,
         footprint=(1, 0, 0),
         load=leaderboard_load,
-        owner=(POINTS_MODE, POINTS_FEATURE),
     ),
 }
-
-
-def owner_of(kinds: Any) -> tuple[str, str] | None:
-    """The feature whose mode and rehearsal home a post carrying these blocks follows."""
-    for kind in kinds or ():
-        found = KINDS.get(str(kind))
-        if found is not None and found.owner is not None:
-            return found.owner
-    return None
 
 
 def kind_of(kind: Any) -> BlockKind | None:
@@ -1015,7 +1002,6 @@ __all__ = [
     "LIVENOW",
     "leaderboard_load",
     "leaderboard_parts",
-    "owner_of",
     "LIVE_KINDS",
     "LOADED",
     "UPCOMING",

@@ -255,9 +255,10 @@ async def test_every_command_in_the_table_is_a_real_top_level_command(real_tree)
     assert named.isdisjoint(cv.NEVER_HIDDEN)
 
 
-async def test_the_twenty_features_that_hide_each_map_to_one_command():
+async def test_the_nineteen_features_that_hide_each_map_to_their_commands():
     """`rolemenu_mode` came back (owner, 2026-09-25 "B") once `/mod` ▸ Role grants… became a
-    door onto the Grants console that no mode hides."""
+    door onto the Grants console that no mode hides. The Posts page's one switch (2026-10-19)
+    hides /posts, /sticky and /questions together."""
     assert cv.HIDDEN_WHEN_OFF == {
         "applications_mode": ("apply",),
         "automod_mode": ("automod",),
@@ -272,11 +273,10 @@ async def test_the_twenty_features_that_hide_each_map_to_one_command():
         "pings_mode": ("pings",),
         "points_mode": ("pb",),
         "poll_mode": ("poll",),
-        "posts_mode": ("posts",),
+        "posts_mode": ("posts", "sticky", "questions"),
         "raidtrain_mode": ("raidtrain",),
         "request_mode": ("request",),
         "rolemenu_mode": ("rolemenu",),
-        "sticky_mode": ("sticky",),
         "tempvoice_mode": ("voice",),
         "youtube_live_mode": ("youtube",),
     }
