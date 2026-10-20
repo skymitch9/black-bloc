@@ -72,7 +72,7 @@ async def announce(bot: Any, guild: Any, outcome: Any, *, via: str = VIA_DISCORD
         return await failed(bot, guild, TEST_MODE_REFUSED, home, lines, via)
     role = None if rehearsing else role_of(bot.store, guild.id)
     if rehearsing:
-        content = shadow.note_line(bot, guild, f"<#{aimed}>" if aimed else "#?") or None
+        content = None
         allowed = discord.AllowedMentions.none()
     else:
         content = f"<@&{role}>" if role else None

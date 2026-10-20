@@ -528,18 +528,18 @@ async def test_marathon_mode_off_edits_nothing(bot, cog):
 # --- a rehearsal ---------------------------------------------------------------------------------
 
 
-async def test_a_rehearsal_copy_keeps_its_note_and_the_row_is_a_would_row(bot, cog):
+async def test_a_rehearsal_copy_has_no_head_and_the_row_is_a_would_row(bot, cog):
     marathon = await ready(bot, cog)
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     await at_fifteen(bot, cog, marathon)
     found = (await posts_of(bot, marathon))[15]
     public = message_of(bot, found["public"])
     assert found["public"]["channel_id"] == SHADOW_CHANNEL
-    assert found["public"]["head"] and public.content == found["public"]["head"] + words(30)
+    assert not found["public"]["head"] and public.content == words(30)
 
     await moved(bot, cog, marathon, 50)
 
-    assert public.content == found["public"]["head"] + words(50)
+    assert public.content == words(50)
     would = await rows(bot, "marathon.would_edit_reminder")
     assert len(would) == len(mrem.standing({15: found}))
     assert would[0]["shadow_home"] == SHADOW_CHANNEL

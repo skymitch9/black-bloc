@@ -362,7 +362,6 @@ const LOG_LEVEL_FEATURES = [
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
   ['shadow_channel_id', 'channel', null, null, 'where every rehearsal goes while a feature is in shadow — the welcome post, the front door, the ticket button, polls; blank means the bot’s own log channel. Setting it is the deliberate act that lets test mode speak in that one channel as well, so pick a channel only the people reviewing can see. A feature’s own …_shadow_channel_id wins over this'],
-  ['rehearsal_note', 'text', 'Rehearsal — this is where it would go: {channel}', 'Rehearsal — this is where it would go: {channel}', 'the line the front door and the ticket button carry at the top of their rehearsal copy; {channel} is replaced with the channel the real one is aimed at. Blank leaves the copy with no note at all'],
   ["frontdoor_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (the front door's copy and the Open a ticket button it replaces); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["posts_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (posts such as the welcome post and the rules); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["golive_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (spotlight announcements); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
@@ -2605,7 +2604,7 @@ function withRunEvents(seeded) {
   return seeded;
 }
 
-const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text', 'quiet_bot_pins'];
+const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text', 'quiet_bot_pins'];
 const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour", "structure_backup_keep", "structure_backup_notify", "structure_backup_channel_id", "structure_backup_shadow_channel_id", "structure_backup_role_id", "structure_backup_notice_lines", "structure_backup_panel_minutes", "structure_backup_notice_title", "structure_backup_notice_text", "structure_backup_notice_more", "structure_backup_notice_label", "structure_backup_notice_nowhere", "structure_backup_notice_off", "structure_backup_panel_title", "structure_backup_panel_footer", "structure_backup_mode_label", "structure_backup_latest_label", "structure_backup_latest_line", "structure_backup_none_yet", "structure_backup_look_label", "structure_backup_look_saved", "structure_backup_look_unchanged", "structure_backup_look_failed", "structure_backup_take_label", "structure_backup_changes_label", "structure_backup_site_label", "structure_backup_saved_said", "structure_backup_unchanged_said", "structure_backup_failed_said", "structure_backup_off_said", "structure_backup_no_changes_said"];
 CORE_KEYS.push(...STRUCTURE_BACKUP_KEYS);
 const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_channel_id", "pb_feed_ping_role_id", "pb_feed_auto_match", "pb_feed_interval_minutes", "pb_feed_cycle_requests", "pb_feed_rematch_days", "pb_feed_max_age_days", "pb_feed_max_posts", "pb_feed_panel_minutes", "pb_feed_post_title", "pb_feed_post_text", "pb_feed_post_author", "pb_feed_place_text", "pb_feed_link_label", "pb_feed_no_channel_words", "pb_feed_panel_title", "pb_feed_panel_footer", "pb_feed_you_matched", "pb_feed_you_set", "pb_feed_posting_on", "pb_feed_posting_shadow", "pb_feed_posting_off", "pb_feed_you_none", "pb_feed_you_waiting", "pb_feed_you_unlinked", "pb_feed_you_opted_out", "pb_feed_you_blocked", "pb_feed_opt_out_label", "pb_feed_opt_in_label", "pb_feed_opted_out_said", "pb_feed_opted_in_said", "pb_feed_set_said", "pb_feed_unmatched_said", "pb_feed_blocked_said", "pb_feed_unblocked_said", "pb_feed_unblocked_opted_out_said", "pb_feed_no_runner_said", "pb_feed_taken_said", "pb_feed_not_now_said", "pb_feed_nothing_to_do_said", "pb_feed_looked_said", "pb_feed_failed_said", "pb_feed_off_said", "pb_feed_post_again_label", "pb_feed_post_again_pick", "pb_feed_posted_again_said", "pb_feed_rehearsed_again_said", "pb_feed_again_failed_said", "pb_feed_again_off_said", "pb_feed_no_post_said", "pb_feed_again_not_in_feed_said", "pb_feed_dm_set", "pb_feed_dm_unmatched", "pb_feed_dm_blocked", "pb_feed_dm_opt_out_cleared", "pb_feed_dm_no_reason"];
@@ -3654,7 +3653,7 @@ const BLOCK_KINDS = [
     name_key: 'posts_block_frontdoor_name',
     name_default: 'Front door',
     exclusive: true,
-    keys: ['frontdoor_title', 'frontdoor_text', 'frontdoor_ticket_label', 'frontdoor_request_label', 'frontdoor_event_label', 'frontdoor_show_ticket', 'frontdoor_show_request', 'frontdoor_show_event', 'rehearsal_note'],
+    keys: ['frontdoor_title', 'frontdoor_text', 'frontdoor_ticket_label', 'frontdoor_request_label', 'frontdoor_event_label', 'frontdoor_show_ticket', 'frontdoor_show_request', 'frontdoor_show_event'],
   },
   {
     kind: 'tempvoice',
@@ -6590,7 +6589,6 @@ const PREVIEW_FEATURES = [
   ['spotlight_bump', 'The spotlight reminder', 'golive.html', ['spotlight_bump_template']],
   ['frontdoor', 'The front door', 'modmail.html', ['frontdoor_title', 'frontdoor_text', 'frontdoor_ticket_label', 'frontdoor_request_label', 'frontdoor_event_label']],
   ['ticket_button', 'The Open a ticket message', 'modmail.html', ['modmail_panel_title', 'modmail_panel_text']],
-  ['rehearsal', 'The line a rehearsal copy carries', 'settings.html', ['rehearsal_note']],
   ['request_filed', 'What a member is told when they file a request', 'requests.html', ['request_filed_line']],
   ['request_card', "A request's card", 'requests.html', []],
   ['event_card', "An event's card", 'events.html', []],
@@ -6756,9 +6754,6 @@ const PREVIEW_DRAW = {
       color: PREVIEW_BLURPLE,
       fields: [],
     }], [[previewButton('Open a ticket', 'primary')]]);
-  },
-  rehearsal(read, sample) {
-    return previewMade(fillWording(read('rehearsal_note'), { channel: sample.channel || '#live-now' }));
   },
   request_filed(read, sample) {
     return previewMade(String(read('request_filed_line') || '').replace('{request_id}', String(sample.request_id || 14)));

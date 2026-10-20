@@ -21,7 +21,7 @@ async def test_shadow_posts_one_rehearsal_to_the_home_and_never_pings(bot):
 
     assert said == announce_.REHEARSED
     [post] = bot.guild.channels[REHEARSAL].messages
-    assert post.content == f"Rehearsal — this is where it would go: <#{SPEED}>"
+    assert not post.content
     assert post.kwargs["embed"].title == "Leaderboard update"
     assert post.kwargs["embed"].description == "\n".join(LINES)
     assert post.kwargs["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()

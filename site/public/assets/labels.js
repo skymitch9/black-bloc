@@ -7,7 +7,6 @@
 export const LABELS = {
   log_channel_id: 'Where the bot writes its log',
   shadow_channel_id: 'Where rehearsals go while a feature is in shadow',
-  rehearsal_note: 'The line a rehearsal copy carries at the top',
   frontdoor_shadow_channel_id: 'Where the front door rehearses',
   posts_shadow_channel_id: 'Where posts rehearse',
   golive_shadow_channel_id: 'Where spotlights rehearse',

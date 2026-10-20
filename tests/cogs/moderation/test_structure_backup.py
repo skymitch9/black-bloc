@@ -561,7 +561,7 @@ async def test_in_shadow_the_notice_goes_to_the_features_own_rehearsal_home(bot,
 
     assert not guild.channels[ALERTS].sent and not guild.channels[LOGS].sent
     (sent,) = guild.channels[REHEARSAL].sent
-    assert sent["content"] == f"Rehearsal — this is where it would go: <#{ALERTS}>"
+    assert sent["content"] is None
     assert sent["embed"].title == "Server structure changed"
     assert "1 change(s) since the snapshot of <t:" in sent["embed"].description
     assert "• Role **Mods** was added." in sent["embed"].description
@@ -1754,17 +1754,6 @@ async def test_a_notice_with_nowhere_to_go_is_said_once_and_is_not_owed(bot, gui
 
     assert (await kinds(db)).count("structure.notice_unsent") == 1
     assert not guild.channels[ALERTS].sent
-
-
-async def test_in_shadow_the_rehearsal_line_says_when_the_real_notice_has_nowhere_to_go(
-    bot, guild
-):
-    await changed_overnight(bot, guild)
-
-    (sent,) = guild.channels[LOGS].sent
-    assert sent["content"] == (
-        "Rehearsal — this is where it would go: Nowhere — structure_backup_channel_id is blank."
-    )
 
 
 async def test_the_panel_states_where_the_notice_goes_or_that_it_goes_nowhere(bot, guild):

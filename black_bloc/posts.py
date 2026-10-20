@@ -1510,27 +1510,19 @@ async def publish_post(
     )
 
 
-def with_note(payload: dict[str, Any], note: str) -> dict[str, Any]:
-    """The rehearsal line rides above the post as content, the way every rehearsal carries it."""
-    if not note:
-        return payload
-    words = str(payload.get("content") or "")
-    return payload | {"content": sticky_rules.fit(note, words) if words else note}
-
-
-async def _test_copy_parts(bot: Any, guild: Any, row: Any, owner: Any, note: str) -> Any:
+async def _test_copy_parts(bot: Any, guild: Any, row: Any, owner: Any) -> Any:
     """What a test copy sends: the post and its blocks fresh, and the stamps when not a sticky."""
     if owner is not None:
         from .sticky_posts import is_empty, post_message
 
-        payload, _ = await post_message(bot, guild, row, note)
+        payload, _ = await post_message(bot, guild, row)
         return (None, {}) if is_empty(payload) else (payload, {})
     from .post_blocks import kinds_on, load_kinds
 
     carried = await kinds_on(bot.db, int(row["id"]))
     await load_kinds(bot, guild, carried)
     drawn, stamps = message_parts(bot, guild, row, carried)
-    return with_note(drawn, note), stamps
+    return drawn, stamps
 
 
 async def rehearse_post(
@@ -1576,10 +1568,7 @@ async def rehearse_post(
             POST_FAILED_SAID.format(title=title, reason=CHANNEL_GONE), "post_failed", 409
         )
     channel_id = row_value(row, "channel_id")
-    aimed = f"<#{int(channel_id)}>" if channel_id else NO_CHANNEL_WORD
-    words, stamps = await _test_copy_parts(
-        bot, guild, row, owner, shadow_home.note_line(bot, guild, aimed)
-    )
+    words, stamps = await _test_copy_parts(bot, guild, row, owner)
     if words is None:
         return refusal(NOTHING_TO_POST.format(title=title), "nothing_to_post", 409)
     payload = words | {"allowed_mentions": allowed_mentions_for(guild, body, actor)}
@@ -1847,7 +1836,6 @@ async def reconcile_posts(bot: Any) -> dict[str, int]:
 
 __all__ = [
     "with_door",
-    "with_note",
     "rehearse_post",
     "set_test_copy",
     "drop_shadow",

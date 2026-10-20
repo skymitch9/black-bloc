@@ -139,7 +139,7 @@ async def edit_one(
         return
     try:
         await message.edit(
-            content=cog._shadowed(guild, text) if shadow else text,
+            content=text,
             view=view_for(marathon, row, button),
             allowed_mentions=discord.AllowedMentions.none(),
         )

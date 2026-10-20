@@ -22,7 +22,6 @@ from . import (
     modmail,
     polls,
     posts,
-    shadow,
     spotlight,
 )
 from . import events as ev
@@ -365,12 +364,6 @@ def ticket_button(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> R
         store.get(guild.id, modmail.PANEL_TEXT_KEY),
     )
     return made(guild, embeds=[embed], components=[[button(modmail.TICKET_MOVE.label, "primary")]])
-
-
-def rehearsal(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
-    where = str(sample.get("channel") or "#live-now")
-    line = shadow.note_line(PreviewBot(bot, store), guild, where)
-    return made(guild, content=line)
 
 
 def request_filed(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
@@ -738,14 +731,6 @@ RENDERERS: dict[str, Renderer] = {
             "modmail.html",
             ticket_button,
             keys=(modmail.PANEL_HEADING_KEY, modmail.PANEL_TEXT_KEY),
-        ),
-        Renderer(
-            "rehearsal",
-            "The line a rehearsal copy carries",
-            "settings.html",
-            rehearsal,
-            keys=(shadow.NOTE_KEY,),
-            sample={"channel": "#live-now"},
         ),
         Renderer(
             "request_filed",

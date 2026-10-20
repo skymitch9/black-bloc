@@ -274,18 +274,6 @@ def is_home_trouble(trouble: Any) -> bool:
     return bool(trouble) and HOME_TROUBLES.fullmatch(str(trouble)) is not None
 
 
-def fit(note: str, words: str, limit: int = DISCORD_LIMIT) -> str:
-    """The note shortens to make room; the words staff wrote are never cut."""
-    if not note:
-        return words
-    room = limit - len(words) - 1
-    if room < len(CUT) + 1:
-        return words
-    if len(note) > room:
-        note = note[: room - len(CUT)].rstrip() + CUT
-    return f"{note}\n{words}"
-
-
 def message_link(guild_id: Any, channel_id: Any, message_id: Any) -> str:
     return MESSAGE_LINK.format(
         guild_id=int(guild_id), channel_id=int(channel_id), message_id=int(message_id)

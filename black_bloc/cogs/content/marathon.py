@@ -2017,8 +2017,6 @@ class Marathons(commands.Cog):
         else:
             text = "~~" + self.next_words(guild, marathon, {**record, "added_marathon_id": None})
             text += "~~"
-        if record.get("notice_home") == NOTICE_SHADOW:
-            text = self._staff_shadowed(guild, text)
         try:
             await message.edit(
                 content=text,
@@ -2027,13 +2025,6 @@ class Marathons(commands.Cog):
             )
         except Exception as exc:
             log.warning("marathon: could not fold a next-event notice — %s", spot.reason_of(exc))
-
-    def _staff_shadowed(self, guild: Any, text: str) -> str:
-        from .marathon_inbox import real_inbox_parent
-
-        home = real_inbox_parent(self.bot, guild)
-        said = shadow_home.note_line(self.bot, guild, f"<#{home}>" if home else "#?")
-        return f"{said}\n{text}" if said else text
 
     async def _send_staff(
         self,
@@ -2060,10 +2051,9 @@ class Marathons(commands.Cog):
             place, why = await ensure_inbox(self.bot, guild)
         if place is None:
             return (None, None, why)
-        body = text if mode == MODE_ON else self._staff_shadowed(guild, text)
         try:
             message = await place.send(
-                body,
+                text,
                 view=view,
                 allowed_mentions=discord.AllowedMentions.none(),
                 **({"embed": embed} if embed is not None else {}),
@@ -2977,7 +2967,7 @@ class Marathons(commands.Cog):
                 return None
             try:
                 await message.edit(
-                    content=self._shadowed(guild, text) if shadow else text,
+                    content=text,
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
             except Exception as exc:
@@ -3106,11 +3096,6 @@ class Marathons(commands.Cog):
             return self._home(guild)
         return rehearsal_home(self.bot, guild)
 
-    def _shadowed(self, guild: Any, text: str) -> str:
-        home = self._home(guild)
-        said = shadow_home.note_line(self.bot, guild, f"<#{home}>" if home else "#?")
-        return f"{said}\n{text}" if said else text
-
     async def _place(self, guild: Any, marathon: Any) -> tuple[int | None, str | None]:
         from .marathon_inbox import post_place
 
@@ -3144,7 +3129,6 @@ class Marathons(commands.Cog):
         channel = shadow_home.channel_of(self.bot, guild, channel_id)
         if channel is None:
             return (None, None, NOT_VISIBLE)
-        body = self._shadowed(guild, text) if mode != MODE_ON else text
         mentions = (
             discord.AllowedMentions.none()
             if quiet or not roles
@@ -3154,7 +3138,7 @@ class Marathons(commands.Cog):
         )
         extra = {"view": view} if view is not None else {}
         try:
-            message = await channel.send(body, allowed_mentions=mentions, **extra)
+            message = await channel.send(text, allowed_mentions=mentions, **extra)
         except Exception as exc:
             return (None, channel_id, spot.reason_of(exc))
         return (message, channel_id, None)

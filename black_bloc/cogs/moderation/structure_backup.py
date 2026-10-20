@@ -413,21 +413,14 @@ def notice_key(bot: Any, guild_id: int) -> str:
     return STRUCTURE_BACKUP_CHANNEL
 
 
-def notice_home(bot: Any, guild: Any) -> tuple[int | None, int | None, str]:
-    """Where the notice goes, only ever where its own key sends it, and the rehearsal line."""
+def notice_home(bot: Any, guild: Any) -> tuple[int | None, int | None]:
+    """Where the notice goes, only ever where its own key sends it, and where it is aimed."""
     store = bot.store
     aimed = shadow.as_channel_id(store.get(guild.id, STRUCTURE_BACKUP_CHANNEL))
     if mode_of(bot, guild.id) != SHADOW:
-        return (aimed, aimed, "")
+        return (aimed, aimed)
     home = shadow.as_channel_id(store.get(guild.id, STRUCTURE_BACKUP_SHADOW_CHANNEL))
-    words = (
-        f"<#{aimed}>"
-        if aimed
-        else said(
-            store, guild.id, "structure_backup_notice_nowhere", setting=STRUCTURE_BACKUP_CHANNEL
-        )
-    )
-    return (home, aimed, shadow.note_line(bot, guild, words))
+    return (home, aimed)
 
 
 def notice_line(bot: Any, guild: Any) -> str:
@@ -468,7 +461,7 @@ async def post_notice(bot: Any, guild: Any, taken: Taken) -> bool:
     if not taken.changes or taken.previous is None:
         return False
     mode = mode_of(bot, guild.id)
-    home, aimed, note = notice_home(bot, guild)
+    home, aimed = notice_home(bot, guild)
     details = {
         "mode": mode,
         "channel_id": home,
@@ -482,7 +475,6 @@ async def post_notice(bot: Any, guild: Any, taken: Taken) -> bool:
         if channel is None:
             raise CaptureError(NO_NOTICE_CHANNEL)
         await channel.send(
-            note or None,
             embed=notice_embed(bot, guild, taken),
             allowed_mentions=discord.AllowedMentions.none(),
         )

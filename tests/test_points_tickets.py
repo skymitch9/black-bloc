@@ -237,7 +237,7 @@ async def test_approve_on_the_card_counts_the_run_closes_the_ticket_and_rehearse
     assert "points_mode is **shadow**" in pressed.sent
     assert ada.dms == []
     posted = bot.guild.channels[REHEARSAL].messages
-    assert len(posted) == 1 and posted[0].content.startswith("Rehearsal")
+    assert len(posted) == 1 and not posted[0].content
     assert posted[0].kwargs["embed"].description == (
         "Ada is in the top 10 at #1 with 10 speedpoints."
     )

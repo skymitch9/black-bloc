@@ -341,7 +341,7 @@ async def test_no_public_channel_posts_nothing_and_the_opt_out_still_works(bot, 
     assert said.ok
 
 
-async def test_shadow_sends_the_highlight_to_its_own_rehearsal_home_with_the_note(bot, cog):
+async def test_shadow_sends_the_highlight_to_its_own_rehearsal_home(bot, cog):
     marathon = await ready(bot, cog)
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     await bot.store.set(GUILD, "marathon_public_shadow_channel_id", LOG_CHANNEL)
@@ -350,7 +350,7 @@ async def test_shadow_sends_the_highlight_to_its_own_rehearsal_home_with_the_not
 
     assert public_posts(bot) == []
     copy = public_posts(bot, LOG_CHANNEL)[0]
-    assert copy.content.startswith("Rehearsal — this is where it would go: <#111>")
+    assert not copy.content.startswith("Rehearsal")
     row = await run_of(bot, marathon, "Super Metroid")
     assert row["public_channel_id"] == LOG_CHANNEL
     logged = await details_of(bot.db, "marathon.would_post_public_highlight")

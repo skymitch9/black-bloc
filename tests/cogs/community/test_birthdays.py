@@ -1464,7 +1464,7 @@ async def test_shadow_posts_a_rehearsal_to_the_rehearsal_home_and_not_the_real_c
     assert party_posts(bot) == []
     rehearsal = party_posts(bot, PARTY_CHANNEL)
     assert len(rehearsal) == 1
-    assert f"<#{TEST_CHANNEL}>" in rehearsal[0]["content"]
+    assert rehearsal[0]["content"] is None
     assert rehearsal[0]["allowed_mentions"].everyone is False
     assert found.posted == 1
     assert "**shadow**" in found.said and "#return-of-the-gen" in found.said

@@ -1409,7 +1409,6 @@ def test_the_carries_pill_shows_only_once_the_door_is_on_the_message():
 
 # --- Post to test (post-to-test-design.md) ------------------------------------------------------
 
-NOTE = f"Rehearsal — this is where it would go: <#{WELCOME_CHANNEL}>"
 
 
 async def real_post_up(bot, guild, **fields):
@@ -1439,7 +1438,7 @@ async def test_a_test_copy_beside_the_real_post_leaves_the_real_posts_stamp_alon
     )
     assert len(bot.channels[WELCOME_CHANNEL].sent) == 1, "the real post was not touched"
     sent = bot.channels[TEST_CHANNEL].sent
-    assert len(sent) == 1 and sent[0]["content"] == f"{NOTE}\nChanged, not yet posted."
+    assert len(sent) == 1 and sent[0]["content"] == "Changed, not yet posted."
     fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
     assert stamp_of(fresh) == before, "message_id and the posted stamp are the real copy's"
     assert fresh["shadow_message_id"] == 9001
@@ -1467,7 +1466,7 @@ async def test_a_second_press_edits_the_test_copy_and_the_next_post_it_takes_it_
     )
     assert len(bot.channels[TEST_CHANNEL].sent) == 1, "one test copy, edited in place"
     copy = bot.channels[TEST_CHANNEL].messages[9001]
-    assert copy.edits[-1]["content"] == f"{NOTE}\nSecond words."
+    assert copy.edits[-1]["content"] == "Second words."
     assert posts.REHEARSAL_UPDATED in await kinds(bot.db)
 
     row = await posts.get_post_by_id(bot.db, int(row["id"]))
@@ -1492,7 +1491,7 @@ async def test_with_no_channel_of_its_own_a_test_copy_still_goes_and_post_it_sti
     assert found.ok
     assert posts.ITS_CHANNEL in found.message
     sent = bot.channels[TEST_CHANNEL].sent
-    assert sent[0]["content"] == "Rehearsal — this is where it would go: no channel yet\nHello."
+    assert sent[0]["content"] == "Hello."
     fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
     assert fresh["shadow_message_id"] == 9001 and fresh["message_id"] is None
     assert posts.status_words(fresh, posts.ON) == [

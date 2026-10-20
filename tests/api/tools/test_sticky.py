@@ -42,7 +42,7 @@ async def test_a_save_rehearses_and_answers_the_row_the_page_draws(
     assert "shadow" in found["message"]
     assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
     copy = guild.get_channel(wf.TEST_CHANNEL_ID).messages[-1]
-    assert copy.content.endswith(WORDS) and f"<#{wf.OTHER_CHANNEL_ID}>" in copy.content
+    assert copy.content == WORDS
     assert await wf.kinds_in(web.db) == ["web.sticky.set", "sticky.would_post"]
 
 

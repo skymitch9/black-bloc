@@ -175,27 +175,6 @@ async def test_a_channel_discord_will_not_answer_about_never_stops_the_hunt():
     assert channel is not None and message.id == 900
 
 
-def test_the_note_names_the_channel_the_real_one_is_aimed_at():
-    bot = bot_with(guard=GUARD_CHANNEL, home=HOME)
-    bot.store.values[shadow.NOTE_KEY] = shadow.NOTE_DEFAULT
-
-    assert shadow.note_line(bot, GUILD, "<#5>") == shadow.NOTE_DEFAULT.replace("{channel}", "<#5>")
-
-
-def test_a_blank_note_is_no_line_at_all():
-    bot = bot_with(guard=GUARD_CHANNEL, home=HOME)
-    bot.store.values[shadow.NOTE_KEY] = "   "
-
-    assert shadow.note_line(bot, GUILD, "<#5>") == ""
-
-
-def test_a_note_whose_braces_are_nonsense_is_used_as_written():
-    bot = bot_with(guard=GUARD_CHANNEL, home=HOME)
-    bot.store.values[shadow.NOTE_KEY] = "look at {oops}"
-
-    assert shadow.note_line(bot, GUILD, "<#5>") == "look at {oops}"
-
-
 async def test_the_guard_is_seeded_from_what_is_stored_and_then_follows_the_key():
     bot = bot_with(guard=GUARD_CHANNEL, home=HOME)
     bot.guard = FakeGuard()
@@ -274,13 +253,6 @@ async def test_a_copy_in_the_features_home_is_found():
     channel, message = await shadow.find_copy(bot, guild, 901, feature="marathon")
 
     assert channel is mine and message.id == 901
-
-
-def test_the_note_line_is_unchanged_by_a_feature_home():
-    bot = bot_with_feature_home(home=HOME)
-    bot.store.values[shadow.NOTE_KEY] = shadow.NOTE_DEFAULT
-
-    assert shadow.note_line(bot, GUILD, "<#5>") == shadow.NOTE_DEFAULT.replace("{channel}", "<#5>")
 
 
 def test_the_key_is_the_feature_word_and_a_fixed_tail():

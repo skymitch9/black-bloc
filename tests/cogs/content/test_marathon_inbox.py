@@ -299,8 +299,8 @@ async def test_shadow_makes_the_inbox_and_the_threads_in_the_shadow_home(bot, co
 
     shadow = room(bot, SHADOW_CHANNEL)
     assert room(bot).threads == [] and len(shadow.threads) == 2
-    assert f"<#{EVENTS}>" in shadow.threads[0].messages[0].content
-    assert f"<#{EVENTS}>" in shadow.threads[1].messages[0].content
+    assert "Rehearsal" not in shadow.threads[0].messages[0].content
+    assert "Rehearsal" not in shadow.threads[1].messages[0].content
     assert (await fresh(bot, marathon))["thread_home"] == "shadow"
 
     await bot.store.set(GUILD, "marathon_mode", "on")

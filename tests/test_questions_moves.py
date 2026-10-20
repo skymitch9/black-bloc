@@ -60,7 +60,7 @@ async def seen_before(bot):
     await moves.tick(bot, bot.guild, SLOT - timedelta(days=1))
 
 
-async def test_shadow_ships_by_default_and_rehearses_in_the_home_with_the_note(bot):
+async def test_shadow_ships_by_default_and_rehearses_in_the_home_with_no_note(bot):
     await queue(bot)
     await seen_before(bot)
 
@@ -69,7 +69,7 @@ async def test_shadow_ships_by_default_and_rehearses_in_the_home_with_the_note(b
     assert rules.mode_of(bot.store, GUILD) == rules.SHADOW
     assert real(bot).sent == []
     [post] = home(bot).sent
-    assert BODY in post.content and f"<#{REAL}>" in post.content
+    assert post.content == BODY
     row = await store.first_queued(bot.db, GUILD)
     assert row is None
     [details] = await details_of(bot.db, "question.posted_by_bot")

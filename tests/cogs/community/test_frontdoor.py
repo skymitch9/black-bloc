@@ -66,7 +66,6 @@ from black_bloc.settings_store import (
     SHADOW_CHANNEL,
     SettingsStore,
 )
-from black_bloc.shadow import NOTE_DEFAULT
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -546,7 +545,7 @@ async def test_a_channel_test_mode_refuses_is_rehearsed_in_the_home_instead(guar
     assert not other.messages
     copy = door_message(home)
     assert door_labels(copy) == [label_for(guarded.store, GUILD, kind) for kind in KINDS]
-    assert copy.content == NOTE_DEFAULT.format(channel="#welcome")
+    assert not copy.content
     assert guarded.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
     assert guarded.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
     assert not guarded.store.get(GUILD, FRONTDOOR_MESSAGE)
@@ -691,16 +690,6 @@ async def test_the_buttons_on_the_rehearsal_copy_are_the_real_dynamic_ones(guard
     assert [one.custom_id for one in copy.view.children] == [
         custom_id(kind, GUILD) for kind in KINDS
     ]
-
-
-async def test_a_blank_note_leaves_the_rehearsal_copy_with_no_line_above_it(guarded, member):
-    other = guarded.guild.add(FakeText(777, name="welcome"))
-    home = guarded.guild.get_channel(TEST_CHANNEL)
-    await guarded.store.set(GUILD, "rehearsal_note", "")
-
-    await post_door(guarded, guarded.guild, member, other)
-
-    assert door_message(home).content == ""
 
 
 async def test_a_channel_black_bloc_cannot_see_is_refused_in_words(guarded, member):
@@ -967,7 +956,7 @@ async def test_shadow_posts_the_copy_in_the_rehearsal_home_and_nothing_in_the_re
 
     assert outcome.ok and not welcome.messages
     copy = door_message(home)
-    assert copy.content == NOTE_DEFAULT.format(channel="#welcome")
+    assert not copy.content
     assert door_labels(copy) == [label_for(live.store, GUILD, kind) for kind in KINDS]
     assert live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
     assert live.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
@@ -1521,7 +1510,7 @@ async def test_in_shadow_the_one_message_goes_to_the_posts_rehearsal_home(live, 
     assert welcome.messages == [] and len(home.messages) == 1
     copy = home.messages[0]
     assert copy.content == RULES
-    assert copy.embeds[-1].footer.text == NOTE_DEFAULT.format(channel="#welcome")
+    assert copy.embeds[-1].footer.text is None
     assert door_ids(copy) == [custom_id(kind, GUILD) for kind in KINDS]
     assert live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
     assert not live.store.get(GUILD, FRONTDOOR_MESSAGE)
@@ -1541,7 +1530,7 @@ async def test_the_posts_own_rehearsal_home_wins_where_the_one_message_goes(live
     assert len(home.messages) == 1 and elsewhere.messages == []
 
 
-async def test_a_shadowed_door_on_a_live_post_rides_it_with_the_rehearsal_note(live, member):
+async def test_a_shadowed_door_on_a_live_post_rides_it_with_no_note(live, member):
     """The modes differ: the post's decides where the message goes."""
     welcome = live.guild.get_channel(777)
     home = live.guild.get_channel(888)
@@ -1552,7 +1541,7 @@ async def test_a_shadowed_door_on_a_live_post_rides_it_with_the_rehearsal_note(l
     await published(live, await a_carrier(live), member)
 
     assert home.messages == [] and len(welcome.messages) == 1
-    assert welcome.messages[0].embeds[-1].footer.text.startswith("Rehearsal")
+    assert welcome.messages[0].embeds[-1].footer.text is None
 
 
 async def test_the_shadow_copy_of_the_door_on_its_own_goes_when_the_post_carries_it(

@@ -99,12 +99,6 @@ def rehearsal_of(bot: Any, guild: Any) -> dict[str, Any]:
     return {"shadow_home": shadow_home.channel_id(bot, guild, feature=mp.SHADOW_FEATURE)}
 
 
-def shadowed(bot: Any, guild: Any, text: str, home: int | None = None) -> str:
-    home = home if home is not None else public_channel(bot, guild.id)
-    said = shadow_home.note_line(bot, guild, f"<#{home}>" if home else "#?")
-    return f"{said}\n{text}" if said else text
-
-
 def button_of(bot: Any, guild: Any, marathon: Any, row: Any) -> tuple:
     """What a run's post carries: each person's own moves for this run."""
     from .marathon_announce import controls_of
@@ -298,7 +292,7 @@ async def send_public(
     channel = shadow_home.channel_of(bot, guild, channel_id)
     if channel is None:
         return (None, None, NOT_VISIBLE)
-    body = text if mode == MODE_ON else shadowed(bot, guild, text, home)
+    body = text
     try:
         message = await channel.send(body, allowed_mentions=mentions_for(roles))
     except Exception as exc:
@@ -323,10 +317,9 @@ async def fetch_public(bot: Any, guild: Any, row: Any) -> tuple[Any, bool]:
 
 
 async def edit_public(bot: Any, guild: Any, message: Any, text: str) -> str | None:
-    shadow = mode_of(bot, guild.id) != MODE_ON
     try:
         await message.edit(
-            content=shadowed(bot, guild, text) if shadow else text,
+            content=text,
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except Exception as exc:

@@ -231,7 +231,7 @@ async def live(bot, desk):
     return await desk.save(bot.guild, RUNS, WORDS, STAFFER)
 
 
-async def test_the_mode_ships_shadow_and_a_save_rehearses_in_the_home_with_the_note(bot, desk, db):
+async def test_the_mode_ships_shadow_and_a_save_rehearses_in_the_home(bot, desk, db):
     assert bot.store.get(GUILD, "sticky_mode") == "shadow"
 
     outcome = await desk.save(bot.guild, RUNS, WORDS, STAFFER)
@@ -239,7 +239,7 @@ async def test_the_mode_ships_shadow_and_a_save_rehearses_in_the_home_with_the_n
     assert outcome.ok and outcome.code == "set"
     assert channel(bot).messages == []
     copy = channel(bot, HOME).messages[0]
-    assert copy.content == f"Rehearsal — this is where it would go: <#{RUNS}>\n{WORDS}"
+    assert copy.content == WORDS
     assert copy.kwargs["allowed_mentions"].everyone is False
     assert copy.kwargs["silent"] is True
     row = await row_of(bot)
@@ -1010,20 +1010,6 @@ async def test_a_copy_sent_but_not_stored_is_deleted_so_the_next_one_is_the_only
     assert (await row_of(bot))["message_id"] == channel(bot).messages[0].id
 
 
-async def test_a_long_rehearsal_note_is_cut_and_the_staff_words_never_are(bot, desk):
-    words = "w" * rules.TEXT_MAX
-    await bot.store.set(GUILD, "rehearsal_note", "N" * 380 + " {channel}")
-
-    await desk.save(bot.guild, RUNS, words, STAFFER)
-
-    copy = channel(bot, HOME).messages[0]
-    assert len(copy.content) <= 2000
-    assert rules.DISCORD_LIMIT == 2000
-    assert copy.content.endswith("\n" + words)
-    assert copy.content.startswith("NNN") and copy.content.split("\n")[0].endswith(rules.CUT)
-    assert (await row_of(bot))["trouble"] is None
-
-
 async def test_six_messages_at_once_make_one_tracked_timer(bot, desk, clock):
     await live(bot, desk)
     clock.tick(10)
@@ -1162,7 +1148,7 @@ async def test_the_points_mode_decides_where_the_leaderboard_goes_not_the_sticky
 
     copy = channel(bot, OTHER_HOME).messages[0]
     assert channel(bot).messages == [] and channel(bot, HOME).messages == []
-    assert copy.content == f"Rehearsal — this is where it would go: <#{RUNS}>"
+    assert copy.content is None
     post = await post_row(bot, post_id)
     assert (post["message_id"], post["shadow_message_id"]) == (None, copy.id)
 
@@ -1205,7 +1191,7 @@ async def test_a_post_without_an_owner_follows_the_sticky_mode(bot, desk):
     await desk.save(bot.guild, RUNS, None, STAFFER, post="rules")
 
     copy = channel(bot, HOME).messages[0]
-    assert copy.content == f"Rehearsal — this is where it would go: <#{RUNS}>\nBe kind."
+    assert copy.content == "Be kind."
 
 
 async def test_a_deleted_post_stops_the_sticky_in_words(bot, desk):
@@ -1440,7 +1426,7 @@ async def test_a_live_stickys_test_copy_is_one_plain_message_the_desk_never_coun
     home = channel(bot, HOME)
     assert len(home.messages) == 1 and home.pinned == []
     copy = home.messages[0]
-    assert copy.content == f"Rehearsal — this is where it would go: <#{RUNS}>"
+    assert copy.content is None
     assert [embed.title for embed in copy.kwargs["embeds"]] == ["Leaderboard"]
     assert [one.id for one in channel(bot).messages] == [real], "the sticky copy is untouched"
     assert dict(await row_of(bot)) == sticky_before, "the Desk's row never learns of it"

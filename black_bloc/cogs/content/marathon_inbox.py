@@ -177,13 +177,6 @@ def thread_parent(bot: Any, guild: Any, home: str) -> int | None:
     return rehearsal_home(bot, guild)
 
 
-def note_for(bot: Any, guild: Any, home: str, real: int | None, text: str) -> str:
-    if home == mi.HOME_ON:
-        return text
-    said = shadow_home.note_line(bot, guild, f"<#{real}>" if real else "#?")
-    return f"{said}\n{text}" if said else text
-
-
 async def find_channel(bot: Any, guild: Any, channel_id: Any) -> tuple[Any, bool]:
     """`(channel, lost)`: an archived thread is not cached, so it is fetched; lost only on a
     NotFound, never on a network hiccup."""
@@ -260,13 +253,7 @@ async def parent_of(bot: Any, guild: Any, channel_id: int | None, missing: str) 
 
 
 async def new_inbox(bot: Any, guild: Any, home: str, parent: Any) -> Any:
-    opening = note_for(
-        bot,
-        guild,
-        home,
-        real_inbox_parent(bot, guild),
-        words(bot, guild.id, MARATHON_INBOX_OPENING_KEY),
-    )
+    opening = words(bot, guild.id, MARATHON_INBOX_OPENING_KEY)
     thread, _first = await make_thread(
         bot,
         parent,
@@ -573,7 +560,7 @@ async def inbox_content(bot: Any, guild: Any, marathon: Any, home: str, feed: An
         text = "\n".join([text, *await marathon_because(bot, guild, marathon)])
     if home == mi.HOME_ON:
         return text
-    return note_for(bot, guild, home, real_inbox_parent(bot, guild), text).strip()
+    return text.strip()
 
 
 def fresh_enough(sent: Any, shown: Any, now: Any) -> bool:
@@ -734,7 +721,7 @@ async def new_thread(bot: Any, guild: Any, fresh: Any, home: str, parent: Any) -
         bot,
         parent,
         words(bot, guild.id, MARATHON_THREAD_NAME_KEY, **fields),
-        note_for(bot, guild, home, real_thread_parent(bot, guild), opening),
+        opening,
         reason=mi.THREAD_REASON,
     )
     await update_marathon(bot.db, fresh["id"], thread_id=int(thread.id), thread_home=home)

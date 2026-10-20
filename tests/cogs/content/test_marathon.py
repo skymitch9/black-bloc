@@ -631,7 +631,7 @@ async def test_staff_shout_a_run_by_hand_and_mark_one_done(bot, cog):
 # --- shadow ---------------------------------------------------------------------------------
 
 
-async def test_shadow_posts_land_in_the_shadow_home_with_the_note_and_log_would(bot, cog):
+async def test_shadow_posts_land_in_the_shadow_home_with_no_note_and_log_would(bot, cog):
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     marathon = await added(bot, cog)
     cog.clock = lambda: NOW + timedelta(minutes=31)
@@ -639,7 +639,7 @@ async def test_shadow_posts_land_in_the_shadow_home_with_the_note_and_log_would(
 
     assert posts(bot) == []
     shadowed = posts(bot, SHADOW_CHANNEL)
-    assert shadowed and all(f"<#{CHANNEL}>" in one.content for one in shadowed)
+    assert shadowed and not any("Rehearsal" in (one.content or "") for one in shadowed)
     assert not any(one.pinned for one in shadowed)
     found = await kinds(bot.db)
     assert "marathon.would_post_board" in found and "marathon.would_shout" in found
@@ -1086,7 +1086,7 @@ async def test_shadow_sends_the_notice_to_the_shadow_home_as_would_suggest(bot, 
     await cog.tick_once()
     assert notices(bot) == []
     shadowed = [one for one in notices(bot, SHADOW_CHANNEL) if "is over" in one.content]
-    assert len(shadowed) == 1 and f"<#{STAFF_ROOM}>" in shadowed[0].content
+    assert len(shadowed) == 1 and "Rehearsal" not in shadowed[0].content
     found = await kinds(bot.db)
     assert "marathon.would_suggest_next" in found and "marathon.next_suggested" not in found
 
