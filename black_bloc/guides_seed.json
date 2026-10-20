@@ -25,7 +25,7 @@
       ],
       "faults": [
         {"symptom": "/ask is not in the picker", "answer": "A Lead has frontdoor_mode off, which hides it. Every other way in still works: DM the bot, or run /modmail, /request or /event."},
-        {"symptom": "A button answered that the feature is switched off", "answer": "That is that feature's own gate, not the door's. A Lead turns request_mode, events_mode or modmail_enabled back on."},
+        {"symptom": "A button answered that the feature is switched off", "answer": "That is that feature's own gate, not the door's. A Lead turns request_mode or events_mode back on."},
         {"symptom": "The posted message has gone", "answer": "Black Bloc puts it back within five minutes, and moves it back under the rules whenever the welcome post is posted again."},
         {"symptom": "The Open a ticket button disappeared from that channel", "answer": "One door per channel: the front door stands in for it. Ask staff privately does the same thing, and the old button comes back if the front door moves elsewhere or comes down."}
       ],
@@ -354,7 +354,6 @@
         {"symptom": "Somebody filed the wrong thing — this ticket should be a request or an event", "answer": "**Make this a request…** / **Make this an event…** on the ticket card. A ticket is private, so nothing is filed until the member says yes to a DM showing exactly what would be filed — no answer in 24 hours counts as no, and No lets you ask again. The ticket stays open either way; closing it is your own move."}
       ],
       "facts": [
-        {"kind": "setting", "ref": "modmail_enabled"},
         {"kind": "setting", "ref": "modmail_mode"},
         {"kind": "setting", "ref": "modmail_reply_style"},
         {"kind": "setting", "ref": "modmail_forum_channel_id"}

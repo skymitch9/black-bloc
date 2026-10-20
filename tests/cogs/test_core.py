@@ -348,7 +348,7 @@ async def test_the_root_reads_every_feature_mode_and_never_offers_to_change_one(
     interaction = await open_panel(cog, bot, lead)
 
     assert "**Raid trains** — test · `/raidtrain` to change" in interaction.said
-    assert "**Modmail** — not answering DMs · `/modmail` to change" in interaction.said
+    assert "**Modmail**" not in interaction.said
     assert not any("mode" in str(one).lower() for one in placeholders(interaction.view))
 
 

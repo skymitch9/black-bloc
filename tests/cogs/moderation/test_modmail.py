@@ -515,7 +515,6 @@ async def bot(db, monkeypatch):
     store = SettingsStore(db, settings)
     await store.load()
     await store.set(GUILD, "log_channel_id", LOG_CHANNEL)
-    await store.set(GUILD, "modmail_enabled", True)
     guild = FakeGuild()
     guild.roles = [FakeRole(STAFF_ROLE, "Lead")]
     category = FakeCategory()
@@ -620,16 +619,6 @@ async def test_a_second_dm_reuses_the_open_ticket_and_says_nothing_new(cog, bot,
     assert len(member.dms) == opening
     ticket = await open_ticket_for(db, GUILD, member.id)
     assert len(await ticket_messages(db, ticket["id"])) == 2
-
-
-async def test_modmail_is_off_by_default_and_points_at_the_incumbent(cog, bot, member, db):
-    bot.guard = FakeGuard()
-    await bot.store.set(GUILD, "modmail_enabled", False)
-
-    await cog.on_message(dm_from(member))
-
-    assert await open_ticket_for(db, GUILD, member.id) is None
-    assert "ModMail" in member.dms[-1]["content"]
 
 
 async def test_a_blocked_member_is_told_once_and_the_log_records_it(cog, bot, member, db):
@@ -1358,19 +1347,6 @@ async def test_changing_the_mode_says_open_tickets_keep_theirs(cog, bot, member,
     assert "**mode** — thread" in changed.embed.description
 
 
-async def test_answer_dms_is_one_button_that_names_what_it_will_do(cog, bot, lead, db):
-    root = await open_panel(cog, bot, lead)
-    setup = await press(root.view, "Setup…", bot, lead)
-
-    assert has(setup.view, "Answer DMs off") and not has(setup.view, "Answer DMs on")
-    turned = await press(setup.view, "Answer DMs off", bot, lead)
-
-    assert bot.store.get(GUILD, "modmail_enabled") is False
-    assert "stopped answering modmail DMs" in turned.sent
-    assert has(turned.view, "Answer DMs on")
-    assert "modmail.settings" in await action_kinds(db)
-
-
 async def test_pointing_the_transcripts_channel_re_renders_setup_with_the_new_value(
     cog, bot, lead, db
 ):
@@ -1467,18 +1443,6 @@ async def test_a_snippet_name_with_spaces_is_refused(cog, bot, lead, db):
     assert (await cur.fetchone())["n"] == 0
 
 
-async def test_a_stranger_is_told_nothing_at_all_while_no_guild_has_modmail_on(cog, bot, db):
-    bot.guard = FakeGuard()
-    await bot.store.set(GUILD, "modmail_enabled", False)
-    stranger = FakeUser(None, user_id=4242, display_name="Stranger")
-
-    await cog.on_message(dm_from(stranger))
-
-    assert stranger.dms == []
-    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets")
-    assert (await cur.fetchone())["n"] == 0
-
-
 class LaterClock(datetime):
     moment: datetime
 
@@ -1492,10 +1456,10 @@ class LaterClock(datetime):
 
 
 async def test_a_refusal_is_sent_once_per_member_until_the_cooldown_is_over(
-    cog, bot, member, monkeypatch
+    cog, bot, member, lead, monkeypatch
 ):
     bot.guard = FakeGuard()
-    await bot.store.set(GUILD, "modmail_enabled", False)
+    await block_member(bot, bot.guild, lead, member, "abuse")
 
     await cog.on_message(dm_from(member, "first"))
     await cog.on_message(dm_from(member, "second"))
@@ -1601,9 +1565,9 @@ async def test_a_demoted_staffer_moves_nothing_from_a_panel_already_open(cog, bo
     lead.guild_permissions = FakePerms(manage_guild=False)
     lead.roles = []
 
-    refused = await press(setup.view, "Answer DMs off", bot, lead)
+    refused = await press(setup.view, "Make the forum", bot, lead)
 
-    assert bot.store.get(GUILD, "modmail_enabled") is True
+    assert bot.store.get(GUILD, "modmail_forum_channel_id") is None
     assert refused.edits == []
     assert refused.sent is not None
     assert "modmail.settings" not in await action_kinds(db)
@@ -2825,17 +2789,10 @@ async def test_a_second_go_links_the_open_ticket_and_opens_nothing(cog, bot, mem
     assert "modmail.open_refused" in await action_kinds(db)
 
 
-async def test_a_member_is_told_why_when_modmail_is_off_or_they_are_blocked(
-    cog, bot, member, lead, db
-):
-    await bot.store.set(GUILD, "modmail_enabled", False)
-    off = await open_panel(cog, bot, member)
-
-    await bot.store.set(GUILD, "modmail_enabled", True)
+async def test_a_member_is_told_why_when_they_are_blocked(cog, bot, member, lead, db):
     await block_member(bot, bot.guild, lead, member, "abuse")
     blocked = await open_panel(cog, bot, member)
 
-    assert labels(off.view) == [] and "not answering modmail" in off.embed.description
     assert labels(blocked.view) == [] and "stopped Black Bloc" in blocked.embed.description
 
 

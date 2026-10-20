@@ -10,8 +10,6 @@ from black_bloc.modmail import (
     CARD_MOVES,
     CARD_ROW_LIMIT,
     COLOURS,
-    DISABLE,
-    ENABLE,
     FORGET,
     IN,
     LOGS,
@@ -413,12 +411,10 @@ def test_the_root_draws_forget_only_where_something_is_pointed():
     assert actions(full) == ["setup", "blocked", "snippets", FORGET, LOGS, REFRESH, SITE]
 
 
-def test_setup_names_the_switchs_own_effect_rather_than_offering_both():
-    on = actions(setup_buttons(enabled=True))
-    off = actions(setup_buttons(enabled=False))
+def test_setup_offers_no_switch_for_answering_dms():
+    on = actions(setup_buttons())
 
-    assert DISABLE in on and ENABLE not in on
-    assert ENABLE in off and DISABLE not in off
+    assert "enable" not in on and "disable" not in on
     assert on[:4] == ["category", "staff_channel", "transcripts", "mode"]
 
 
@@ -453,8 +449,8 @@ def test_a_snippet_card_offers_change_and_remove_only_once_one_is_picked():
         root_buttons(has_forget=True, has_site=True),
         root_buttons(has_forget=False, has_site=True, has_practice=True),
         root_buttons(has_forget=True, has_site=True, has_practice=True),
-        setup_buttons(enabled=True),
-        setup_buttons(enabled=False),
+        setup_buttons(),
+        setup_buttons(has_forum=True),
         blocked_buttons(picked=True, blocking=False),
         blocked_buttons(picked=False, blocking=True),
         snippet_buttons(picked=True, confirming=False),
@@ -479,8 +475,8 @@ def test_every_move_the_panel_can_draw_is_in_one_table():
     drawn: set[str] = set()
     for built in (
         root_buttons(has_forget=True, has_site=True),
-        setup_buttons(enabled=True),
-        setup_buttons(enabled=False),
+        setup_buttons(),
+        setup_buttons(has_forum=True),
         blocked_buttons(picked=True, blocking=True),
         snippet_buttons(picked=True, confirming=False),
         snippet_buttons(picked=True, confirming=True),
@@ -723,7 +719,7 @@ def test_the_ticket_button_offers_post_while_nothing_is_up_and_move_once_it_is()
 
 
 def test_setup_gains_the_ticket_button():
-    labels = [move.label for move in setup_buttons(enabled=True)]
+    labels = [move.label for move in setup_buttons()]
 
     assert "Ticket button…" in labels
 

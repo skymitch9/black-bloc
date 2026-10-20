@@ -42,7 +42,6 @@ NOT_TOLD = " The member was not DM'd: points_mode is **{mode}**."
 DM_SHUT = " ⚠️ The DM did not reach them — their DMs are shut or Black Bloc is blocked."
 NOT_CLOSED = " ⚠️ The ticket could not be closed; the log says why."
 REFUSED_KEYS = {
-    "disabled": "points_modmail_off_said",
     "blocked": "points_blocked_said",
     "already_open": "points_ticket_open_said",
     "cannot_open": "points_cannot_open_said",

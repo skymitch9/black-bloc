@@ -819,7 +819,7 @@ async def test_a_change_hook_may_be_async_and_a_broken_one_does_not_stop_the_wri
 
 
 async def test_modmail_defaults_point_nowhere_real_while_test_mode_is_on(store):
-    assert store.get(1, "modmail_enabled") is False
+    assert "modmail_enabled" not in KEY_TYPES
     assert store.get(1, "modmail_mode") == CHANNEL_MODE
     assert store.get(1, "modmail_category_id") is None
     assert store.get(1, "modmail_staff_channel_id") is None
@@ -827,18 +827,14 @@ async def test_modmail_defaults_point_nowhere_real_while_test_mode_is_on(store):
 
 
 def test_the_modmail_keys_are_typed_and_the_mode_is_an_enum():
-    assert coerce_value("modmail_enabled", True) is True
     assert coerce_value("modmail_mode", THREAD_MODE) == THREAD_MODE
     assert coerce_value("modmail_category_id", _Role(5)) == 5
     with pytest.raises(SettingError, match="channel"):
         coerce_value("modmail_log_channel_id", "the log")
     with pytest.raises(SettingError, match="channel, thread"):
         coerce_value("modmail_mode", "email")
-    with pytest.raises(SettingError, match="true or false"):
-        coerce_value("modmail_enabled", "yes")
     assert display_value("modmail_staff_channel_id", 7) == "<#7>"
     assert {
-        "modmail_enabled",
         "modmail_mode",
         "modmail_category_id",
         "modmail_staff_channel_id",
@@ -1955,7 +1951,7 @@ async def test_the_boot_status_ships_with_both_sentences_written(store):
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 354
+    assert len(settings_store.CORE_KEYS) == 353
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2304,7 +2300,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1224
+    assert len(settings_store.KEY_TYPES) == 1222
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):

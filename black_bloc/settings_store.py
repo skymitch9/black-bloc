@@ -411,7 +411,6 @@ KEY_TYPES: dict[str, str] = {
     "birthday_color": "color",
     "birthday_role_id": "role",
     "birthday_show_age": "bool",
-    "modmail_enabled": "bool",
     "modmail_mode": "enum",
     "modmail_category_id": "channel",
     "modmail_staff_channel_id": "channel",
@@ -1041,7 +1040,6 @@ KEY_HELP: dict[str, str] = {
     "birthday_color": "the birthday embed's colour, as a hex code like #4eefff",
     "birthday_role_id": "role given for the day and taken back the next; none by default",
     "birthday_show_age": "true to put {age} in reach for people who stored a birth year",
-    "modmail_enabled": "true when Black Bloc answers DMs; false leaves them to the old ModMail bot",
     "modmail_mode": (
         "channel (one channel per ticket), thread (private threads in the staff channel) or "
         "forum (one post per ticket in the forum channel — the list never grows past the "
@@ -1135,8 +1133,7 @@ KEY_HELP: dict[str, str] = {
     ),
     "chat_reply_in_threads": "true to answer @-mentions inside threads as well as channels",
     "chat_route_ping_staff": (
-        "true to drop one line in the staff channel when somebody asks the bot for a mod; only "
-        "used while modmail_enabled is true"
+        "true to drop one line in the staff channel when somebody asks the bot for a mod"
     ),
     "chat_llm_mode": (
         "off, or on (an @-mention no built-in intent recognises is answered by a language model "
@@ -5259,12 +5256,6 @@ POINTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "Your **{game}** run ({time}) is approved — {xp} XP and {points} speedpoints.",
         ("game", "time", "xp", "points"),
         "what is added to the ticket-closed DM a member gets when their run is approved",
-    ),
-    "points_modmail_off_said": (
-        "Runs reach staff through modmail, and Black Bloc is not answering modmail here yet, "
-        "so nothing was sent.",
-        (),
-        "what a member is told when they submit a run while modmail_enabled is off",
     ),
     "points_blocked_said": (
         "Staff here have stopped Black Bloc from opening modmail tickets for you, so this run "
@@ -10728,8 +10719,6 @@ class SettingsStore:
         if key == "event_panel_minutes":
             return 10
         if key == "event_panel_own_list":
-            return False
-        if key == "modmail_enabled":
             return False
         if key == "modmail_mode":
             return CHANNEL_MODE

@@ -79,7 +79,6 @@ STATUS_KEY = "status_prefix"
 SKIN_TONE_KEY = "emoji_skin_tone"
 RULES_KEY = "automod_rules"
 MEMORY_MODE_KEY = "chat_memory_mode"
-MODMAIL_ENABLED_KEY = "modmail_enabled"
 PB_FEED_MODE_KEY = "pb_feed_mode"
 
 CORE_CHANNEL_KEYS: tuple[str, ...] = (
@@ -95,8 +94,6 @@ KEY_PURPOSE: dict[str, str] = {
     ROLE_MENU_CHANNEL_KEY: "Where the role menus are posted",
 }
 
-MODMAIL_ANSWERING = "answering DMs"
-MODMAIL_NOT_ANSWERING = "not answering DMs"
 
 
 class FeatureMode(NamedTuple):
@@ -108,9 +105,6 @@ class FeatureMode(NamedTuple):
 
 EXTRA_MODES: tuple[FeatureMode, ...] = (
     FeatureMode(MEMORY_MODE_KEY, "memory", "What Black Bloc remembers"),
-    FeatureMode(
-        MODMAIL_ENABLED_KEY, "modmail", "Modmail", (MODMAIL_ANSWERING, MODMAIL_NOT_ANSWERING)
-    ),
     FeatureMode(MARATHON_MODE_KEY, "event", FEATURE_LABELS["marathon"]),
     FeatureMode(STRUCTURE_BACKUP_MODE, "structure", "Structure backup"),
     FeatureMode(PB_FEED_MODE_KEY, "pb", "Personal bests"),

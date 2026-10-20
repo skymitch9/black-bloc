@@ -778,7 +778,6 @@ export const LABELS = {
   points_ticket_body: "The first message of a run's modmail ticket",
   points_close_refused_said: "What staff are told when closing a run's ticket before deciding it",
   points_dm_approved: "What an approved run adds to the ticket-closed DM",
-  points_modmail_off_said: "What a member is told when modmail is off and they submit a run",
   points_blocked_said: "What a member blocked from modmail is told when they submit a run",
   points_ticket_open_said: "What a member with an open ticket is told when they submit a run",
   points_run_waiting_said: "What a member is told when another run of theirs is still waiting",
@@ -926,7 +925,6 @@ export const LABELS = {
   birthday_post_missing: 'How many birthdays belong to somebody not in the member list',
   birthday_post_failed: 'How many wishes could not be posted, in words',
 
-  modmail_enabled: 'Whether the bot answers DMs',
   modmail_mode: 'Whether a ticket is a channel or a thread',
   modmail_category_id: 'Where ticket channels are made',
   modmail_staff_channel_id: 'Where ticket threads are made',
