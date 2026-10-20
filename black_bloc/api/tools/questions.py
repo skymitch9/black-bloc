@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -10,6 +11,7 @@ from ... import questions_rehearse as testing
 from ... import questions_store as store
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
+from ..names import site_words
 from ..writes import actor_for, require_db, require_guild, wanted_id, writer_dependency
 
 DIRECTIONS = ("up", "down")
@@ -124,7 +126,7 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = ready()
         outcome = await testing.rehearse(bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE)
-        return answered(outcome)
+        return answered(replace(outcome, message=site_words(guild, outcome.message)))
 
     @router.post("/skip")
     async def questions_skip(request: Request) -> dict[str, Any]:

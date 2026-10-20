@@ -191,8 +191,8 @@ async def test_post_to_test_from_the_page_sends_a_copy_and_changes_nothing(
     tested = client.post("/api/questions/rehearse")
 
     assert tested.status_code == 200, tested.json()
-    assert "test copy" in tested.json()["message"]
     channel = guild.get_channel(wf.OTHER_CHANNEL_ID)
+    assert f"is in #{channel.name}." in tested.json()["message"]
     assert channel.messages[-1].content == "one?"
     after = client.get("/api/questions").json()
     assert (after["queue"], after["state"], after["history"]) == (

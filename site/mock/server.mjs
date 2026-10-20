@@ -11943,8 +11943,8 @@ route('POST', '/api/questions/rehearse', (context) => {
   const home = questionTarget('shadow');
   if (!home) throw new Refused(409, 'no_shadow_channel', 'There is nowhere to rehearse it: no rehearsal home is set. Pick question_shadow_channel_id or shadow_channel_id in Settings first.');
   const messageId = String(910000000000000000 + Date.now() % 1000000);
-  logAction('web.question.rehearsed', { details: { via: 'website', question_id: shown.id, question: shown.body, shadow_home: Number(home), message_id: messageId, url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` } });
-  return { ok: true, message: `A test copy of this week's question is in <#${home}>. Nothing in the queue changed.`, value: shown.id };
+  logAction('web.question.rehearsed', { details: { via: 'website', question_id: shown.id, question: shown.body, shadow_home: String(home), message_id: messageId, url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` } });
+  return { ok: true, message: `A test copy of this week's question is in ${stickyName(home)}. Nothing in the queue changed.`, value: shown.id };
 });
 
 route('POST', '/api/questions/skip', (context) => {
@@ -12782,7 +12782,7 @@ route('POST', '/api/sticky/:channel_id/rehearse', (context) => {
   if (!home) throw new Refused(409, 'no_shadow_channel', `There is nowhere to send a test copy: no rehearsal home is set. Pick ${feature}_shadow_channel_id or shadow_channel_id in Settings.`);
   if (String(home) === String(row.channel_id)) throw new Refused(409, 'own_home', `The rehearsal home is ${stickyName(row.channel_id)} itself, so a test copy would land in front of members and nothing was sent. Pick another ${feature}_shadow_channel_id in Settings.`);
   const messageId = String(840000000000000000n + BigInt(Date.now()));
-  const details = { via: 'website', channel_id: Number(row.channel_id), shadow_home: Number(home), message_id: Number(messageId), url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` };
+  const details = { via: 'website', channel_id: String(row.channel_id), shadow_home: String(home), message_id: messageId, url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` };
   if (row.post_id) details.post_id = Number(row.post_id);
   logAction('web.sticky.rehearsed', { details });
   return { sticky: stickyRow(row), message: `A test copy of the sticky message in ${stickyName(row.channel_id)} is in ${stickyName(home)}. The sticky itself is unchanged.` };
