@@ -275,7 +275,7 @@ let pickHolder = null;
 function paintFilters() {
   const kept = payload.rows.filter((row) => Boolean(row.removed) === state.removed);
   const gone = payload.rows.filter((row) => row.removed).length;
-  pickHolder.replaceChildren(
+  pickHolder.replaceChildren(...[
     ...pickers(kept, PICKS, paint),
     gone || state.removed
       ? filterChip(`Removed (${gone})`, state.removed, () => {
@@ -283,7 +283,7 @@ function paintFilters() {
         paint();
       })
       : null,
-  );
+  ].filter(Boolean));
   const years = chipsFrom(distinct(kept.map((row) => String(row.date || '').slice(0, 4))).reverse());
   const yearRow = years.length > 2 || state.year !== ALL
     ? el('div', { class: 'runs-chiprow' }, [
