@@ -2813,6 +2813,44 @@
     },
     {
       "method": "GET",
+      "path": "/api/runs/demo",
+      "read_by": [
+        "page-runs.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "events",
+        "rows"
+      ],
+      "rows": {
+        "rows": [
+          "key",
+          "how",
+          "how_word",
+          "date",
+          "event",
+          "event_source",
+          "event_word",
+          "game",
+          "game_key",
+          "series",
+          "genre",
+          "developer",
+          "category",
+          "runners",
+          "runners_text",
+          "note",
+          "state"
+        ],
+        "events": [
+          "name",
+          "source",
+          "starts_at"
+        ]
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/runs/games",
       "read_by": [
         "page-runs.js"
