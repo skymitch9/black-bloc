@@ -200,3 +200,36 @@ Owner, 2026-10-20 06:4x–07:0x Phoenix: *"We didn't fill in series, I want to a
 16. **`runs_lookup_tags` is a new key** (keys +1), not only placeholders on the existing ones, because *"genre shows only when set"* cannot be done by a template that is always drawn.
 17. **Selects with nothing to choose are not drawn** (the chip rows hid at ≤2 choices); a set value keeps its select drawn, and a value that is no longer a choice shows as `value (0)`.
 18. **No skeleton line was added to `docs/deploys.log`.** `scripts/deploy.ps1` reads the LAST line's column 3 as the live commit (and refuses if it is not a commit) and numbers the release from its `vNNN:`; a pre-written skeleton with blank fields would refuse or mis-number the next deploy (the v221 `4a7c1f3a` incident in `docs/access/deploy.md`). The script appends its own skeleton after the deploy; the conductor fills it.
+
+## Genre families — 2026-10-20
+
+Owner, 2026-10-20 07:1x–07:2x Phoenix: *"We need very tight genres"*, *"Action isn't really a solo genre so I think we don't index by it, we'd index by adventure and rogue like probably but don't remove the word action"*, *"Kart racer and a normal racer should index together if someone searches racer"*. Branch `genre-families`.
+
+**What is shown and what is indexed.** The genre a staffer types stays as typed: the Genre column, the Games-view box, the editor, the datalists, the CSV and the `/runs` tags line all show it (*Action roguelike* keeps *Action*). What the page and the API INDEX by is the game's **genre family**, carried as `genre_family` beside `genre` on every row and every game.
+
+**The rule** — one function, `black_bloc/runs_genres.py:genre_family(text, qualifiers, families)` (exposed as `baf_runs.genre_family`), and its twin `listfilter.js:genreFamily`, both held to `tests/fixtures/runs/genre_families.json`:
+
+1. Normalise: lower case; anything not a letter or digit (hyphens, slashes, apostrophes) is a space; spaces collapse.
+2. Try the FULL normalised text against each family's name and aliases, in file order.
+3. Then the text with the qualifiers taken out (whole words, the longest qualifier first), against the same list.
+4. First match wins. No match: the stripped text is its own family, so nothing disappears (*Puzzle* is the family `puzzle`). If stripping leaves nothing (*Action* alone) the full text is the family.
+5. A family name displays Capitalised (*Racing*).
+
+| Key (Marathons) | Default | Decides |
+|---|---|---|
+| `runs_genre_qualifiers` | `action, 2d, 3d, kart, third-person, first-person` | words left out before step 3; may be blank |
+| `runs_genre_families` | six lines: `racing`, `platformer`, `roguelike`, `shooter`, `adventure`, `fighting`, each `family: alias, alias, …` | the families; a malformed line is skipped on read, and the Settings page refuses it at save naming the line (*Line 7 of the genre families, `…`, is not a family…*) |
+
+Both are read on every request, so an edit lands on the next read.
+
+**Where the family is used.** The Genre drop-down on the Runs sheet and the Games view lists families with counts (*Racing (2)*), filters by family, and writes `genre=<family>` to the hash (`__none` still means no genre; an older `#genre=Metroidvania` link is lowercased onto its family). The search box matches the typed text, the family name and every alias of that family, so *racer* finds a *Kart racer* and a *Racing* row. `GET /api/runs?genre=` takes any text and filters by its family; the payload adds `genre_families` (`[{family, aliases}]`). The `/runs` panel's Search matches a game's name or its genre, family and aliases.
+
+**Also folded in (the v240 owed item):** the `/runs` panel's last three code constants are word keys — `runs_lookup_count` (`{runs} run(s) · {games} game(s)`, `{runs}` `{games}`), `runs_lookup_more` (`… and {more} more`, `{more}`), `runs_lookup_no_date` (`no date`). Keys +5 (1242 → 1247).
+
+### Deviations (continued)
+
+19. **The rule lives in a new leaf module `black_bloc/runs_genres.py`, not in `baf_runs.py`.** The Settings validation must parse `runs_genre_families` with the same parser, `settings_store` cannot import `baf_runs` (which imports `settings_store`), and the repo's pattern for a validator's parser is a leaf module (`points.xp`). `baf_runs` imports `genre_family` and the parsers and is where every caller reaches them.
+20. **The JS twin is `genreFamily`, not `genre_family`** — the site's exported names are camelCase throughout `listfilter.js`. Same arguments, same fixture.
+21. **A genre that is ONLY qualifiers (*Action*) is its own family `action`** rather than blank, so a typed genre never reads as *No genre*.
+22. **The Games view's own table search (the shared `table()` box) is unchanged** and does not reach aliases; the Genre drop-down there filters by family. The search that reaches aliases is the Runs sheet's.
+23. **The mock seeds two more hand rows** (*Mario Kart 8 Deluxe* — *Kart racer*, *F-Zero GX* — *Racing*) so the family has something to show locally.
