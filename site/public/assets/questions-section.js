@@ -36,6 +36,8 @@ const STATE_WORDS = {
 };
 const BY_WORDS = { owner: 'by the owner', bot: 'by Black Bloc' };
 const POST_ONE = 'Post one now';
+const POST_TO_TEST = 'Post to test';
+const NO_TEST_HOME = 'No rehearsal home is set, so Post to test has nowhere to go. Pick question_shadow_channel_id or shadow_channel_id in Settings.';
 const OUT_OF_CYCLE = 'out of cycle';
 const STATUS_WORDS = { removed: 'removed', skipped: 'skipped' };
 
@@ -89,9 +91,16 @@ function weekCard(payload) {
   if (status === 'skipped') {
     moves.push(button('Undo skip', () => act(say, 'questions.week', () => send('/api/questions/unskip', 'POST', {}), (found) => found?.message || 'Back on.'), { tone: 'quiet' }));
   }
+  const testable = payload.mode !== 'off' && payload.test_id;
+  if (testable && payload.test_home) {
+    moves.push(button(POST_TO_TEST, () => act(say, 'questions.week', () => send('/api/questions/rehearse', 'POST', {}), (found) => found?.message || 'Sent.'), { tone: 'quiet' }));
+  }
   const lines = [
     el('p', { class: 'row-detail', text: `${when(payload.slot_at)} · ${STATE_WORDS[status] || status} · ${payload.mode}` }),
   ];
+  if (testable && !payload.test_home) {
+    lines.push(el('p', { class: 'row-note', text: NO_TEST_HOME }));
+  }
   if (!payload.owner_set) {
     lines.push(el('p', { class: 'row-note', text: 'question_owner_user_id is not set, so Black Bloc posts every week itself.' }));
   }

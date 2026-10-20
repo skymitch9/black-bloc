@@ -11781,6 +11781,12 @@ function questionOut(row) {
   return { ...row, url };
 }
 
+function questionShown() {
+  const { row } = questionWeek();
+  const posted = row.status === 'posted' && row.question_id ? state.questions.find((one) => one.id === row.question_id) : null;
+  return posted || questionQueue()[0] || null;
+}
+
 function questionOne(context) {
   const row = state.questions.find((one) => String(one.id) === String(context.params.id));
   if (!row) throw new Refused(404, 'no_question', 'That question is not in the queue any more, so nothing changed. Refresh to see the queue.');
@@ -11809,6 +11815,8 @@ route('GET', '/api/questions', (context) => {
     state: row.status,
     owner_set: Boolean(String(state.settings.get('question_owner_user_id') || '').trim()),
     posted_id: row.question_id,
+    test_id: questionShown() ? questionShown().id : null,
+    test_home: questionTarget('shadow') ? String(questionTarget('shadow')) : null,
     queue: questionQueue(),
     history: history.map(questionOut),
   };
@@ -11924,6 +11932,19 @@ route('POST', '/api/questions/post-now', (context) => {
   }
   logAction('web.question.posted_extra', { details: { via: 'website', question_id: first.id, question: first.body, mode } });
   return { ok: true, message: `The question is up in <#${target}>, out of cycle. The schedule is unchanged.`, value: first.id };
+});
+
+route('POST', '/api/questions/rehearse', (context) => {
+  requireStaff(context.session);
+  const mode = String(state.settings.get('question_mode') || 'shadow');
+  if (mode === 'off') throw new Refused(409, 'questions_off', 'Weekly questions are off, so no test copy was sent. Set question_mode to shadow or on in Settings first.');
+  const shown = questionShown();
+  if (!shown) throw new Refused(409, 'queue_empty', 'There is no question to send a test copy of: the queue is empty. Add a question first.');
+  const home = questionTarget('shadow');
+  if (!home) throw new Refused(409, 'no_shadow_channel', 'There is nowhere to rehearse it: no rehearsal home is set. Pick question_shadow_channel_id or shadow_channel_id in Settings first.');
+  const messageId = String(910000000000000000 + Date.now() % 1000000);
+  logAction('web.question.rehearsed', { details: { via: 'website', question_id: shown.id, question: shown.body, shadow_home: Number(home), message_id: messageId, url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` } });
+  return { ok: true, message: `A test copy of this week's question is in <#${home}>. Nothing in the queue changed.`, value: shown.id };
 });
 
 route('POST', '/api/questions/skip', (context) => {
@@ -12642,10 +12663,17 @@ function stickyRow(row) {
     posted_channel_id: row.posted_channel_id ? String(row.posted_channel_id) : null,
     posted_at: row.posted_at || null,
     reposts: Number(row.reposts || 0),
+    testable: stickyTestable(row),
     updated_by: row.updated_by ? String(row.updated_by) : null,
     updated_by_name: row.updated_by ? memberName(row.updated_by) : null,
     updated_at: row.updated_at,
   };
+}
+
+// The twin of sticky_rehearse.can_test: on, not already rehearsing, a home that is not its own channel.
+function stickyTestable(row) {
+  const home = stickyHomeOf(row);
+  return stickyMode(row) !== 'off' && stickyState(row) !== 'rehearsing' && Boolean(home) && String(home) !== String(row.channel_id);
 }
 
 function stickySaid(row) {
@@ -12740,6 +12768,24 @@ route('POST', '/api/sticky/:channel_id/resume', (context) => {
   stickyPlace(row);
   logAction('web.sticky.resumed', { details: { channel_id: row.channel_id, via: 'website' } });
   return { sticky: stickyRow(row), message: stickySaid(row) };
+});
+
+route('POST', '/api/sticky/:channel_id/rehearse', (context) => {
+  requireStaff(context.session);
+  const row = stickyOf(context);
+  const mode = stickyMode(row);
+  const post = stickyPostOf(row);
+  const feature = post && (post.blocks || []).some((one) => one.kind === 'leaderboard') ? 'points' : 'sticky';
+  if (mode === 'off') throw new Refused(409, 'sticky_off', `**${feature}_mode** is off, so no test copy was sent. Turn it on in Settings, or with \`/settings\`, first.`);
+  const home = stickyHomeOf(row);
+  if (stickyState(row) === 'rehearsing') return { sticky: stickyRow(row), message: `It already rehearses in ${stickyName(row.posted_channel_id || home)} — the copy there is live, so nothing was sent.` };
+  if (!home) throw new Refused(409, 'no_shadow_channel', `There is nowhere to send a test copy: no rehearsal home is set. Pick ${feature}_shadow_channel_id or shadow_channel_id in Settings.`);
+  if (String(home) === String(row.channel_id)) throw new Refused(409, 'own_home', `The rehearsal home is ${stickyName(row.channel_id)} itself, so a test copy would land in front of members and nothing was sent. Pick another ${feature}_shadow_channel_id in Settings.`);
+  const messageId = String(840000000000000000n + BigInt(Date.now()));
+  const details = { via: 'website', channel_id: Number(row.channel_id), shadow_home: Number(home), message_id: Number(messageId), url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` };
+  if (row.post_id) details.post_id = Number(row.post_id);
+  logAction('web.sticky.rehearsed', { details });
+  return { sticky: stickyRow(row), message: `A test copy of the sticky message in ${stickyName(row.channel_id)} is in ${stickyName(home)}. The sticky itself is unchanged.` };
 });
 
 route('DELETE', '/api/sticky/:channel_id', (context) => {

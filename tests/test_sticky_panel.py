@@ -250,15 +250,15 @@ async def test_the_list_opens_a_card_whose_buttons_are_only_the_valid_moves(bot,
     assert [(one.label, one.value) for one in options] == [(f"#runs · {WORDS}", str(RUNS))]
 
     card = await pick(bot, lead, opened.view, panel.StickyPick, [str(RUNS)])
-    assert labels(card.view) == ["Edit…", "Pause", "Remove", "Back"]
+    assert labels(card.view) == ["Edit…", "Pause", "Remove", "Back", "Post to test"]
 
     paused = await press(bot, lead, card.view, "Pause")
-    assert labels(paused.view) == ["Edit…", "Resume", "Remove", "Back"]
+    assert labels(paused.view) == ["Edit…", "Resume", "Remove", "Back", "Post to test"]
     assert bot.guild.get_channel(RUNS).messages == []
     assert paused.sent == rules.PAUSED_NOW.format(where=RUNS)
 
     resumed = await press(bot, lead, paused.view, "Resume")
-    assert labels(resumed.view) == ["Edit…", "Pause", "Remove", "Back"]
+    assert labels(resumed.view) == ["Edit…", "Pause", "Remove", "Back", "Post to test"]
     assert len(bot.guild.get_channel(RUNS).messages) == 1
 
 
@@ -268,11 +268,11 @@ async def test_a_stopped_sticky_offers_try_again_and_says_why(bot, lead):
     opened = await root(bot, lead)
 
     card = await pick(bot, lead, opened.view, panel.StickyPick, [str(RUNS)])
-    assert labels(card.view) == ["Edit…", "Try again", "Remove", "Back"]
+    assert labels(card.view) == ["Edit…", "Try again", "Remove", "Back", "Post to test"]
     assert "missing Send Messages" in card.embed.description
 
     again = await press(bot, lead, card.view, "Try again")
-    assert labels(again.view) == ["Edit…", "Pause", "Remove", "Back"]
+    assert labels(again.view) == ["Edit…", "Pause", "Remove", "Back", "Post to test"]
     assert (await rules.get_row(bot.db, GUILD, RUNS))["trouble"] is None
 
 
@@ -287,7 +287,7 @@ async def test_remove_asks_first_and_keep_it_changes_nothing(bot, lead):
     assert KEEP_IT not in labels(asked.view)
 
     kept = await press(bot, lead, asked.view, "Back")
-    assert labels(kept.view) == ["Edit…", "Pause", "Remove", "Back"]
+    assert labels(kept.view) == ["Edit…", "Pause", "Remove", "Back", "Post to test"]
     assert await rules.get_row(bot.db, GUILD, RUNS) is not None
 
     asked = await press(bot, lead, kept.view, "Remove")
@@ -409,3 +409,16 @@ async def test_a_post_is_picked_then_its_channel_and_the_card_swaps_posts_not_wo
 
     assert "The post **FAQ**" in swapped.embed.description
     assert [one.content for one in bot.guild.get_channel(RUNS).messages] == ["Ask away."]
+
+
+async def test_post_to_test_on_a_card_sends_a_copy_and_the_card_stays(bot, lead):
+    await a_sticky(bot, lead)
+    opened = await root(bot, lead)
+    card = await pick(bot, lead, opened.view, panel.StickyPick, [str(RUNS)])
+    live = list(bot.guild.get_channel(RUNS).messages)
+
+    tested = await press(bot, lead, card.view, "Post to test")
+
+    assert tested.sent.startswith("A test copy of the sticky message in")
+    assert bot.guild.get_channel(RUNS).messages == live
+    assert labels(tested.view) == ["Edit…", "Pause", "Remove", "Back", "Post to test"]

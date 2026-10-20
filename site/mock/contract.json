@@ -2692,8 +2692,28 @@
         "state",
         "owner_set",
         "posted_id",
+        "test_id",
+        "test_home",
         "queue",
         "history"
+      ]
+    },
+    {
+      "_": "Post to test for weekly questions (weekly-questions-design.md, Follow-up 2026-10-19): a copy of this week's question in the rehearsal home; the slot, the queue and posted_by are untouched. The real API's seed queues one question and points question_shadow_channel_id at the test channel for this request.",
+      "method": "POST",
+      "path": "/api/questions/rehearse",
+      "body": {},
+      "settings": {
+        "question_shadow_channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "questions-section.js Post to test"
+      ],
+      "shape": "object",
+      "keys": [
+        "ok",
+        "message",
+        "value"
       ]
     },
     {
@@ -2992,7 +3012,8 @@
         "posted_at",
         "reposts",
         "updated_by_name",
-        "updated_at"
+        "updated_at",
+        "testable"
       ]
     },
     {
@@ -3038,6 +3059,34 @@
           "paused",
           "trouble",
           "state"
+        ]
+      }
+    },
+    {
+      "_": "Post to test for a sticky (sticky-messages-design.md, Follow-up 2026-10-19): one plain, unpinned copy in the rehearsal home; the sticky's row and state are untouched. The entry turns sticky_mode on so the seeded sticky is not rehearsing, and points sticky_shadow_channel_id at the test channel.",
+      "method": "POST",
+      "path": "/api/sticky/{sticky_channel_id}/rehearse",
+      "body": {},
+      "settings": {
+        "sticky_mode": "on",
+        "sticky_shadow_channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "sticky-section.js Post to test"
+      ],
+      "shape": "object",
+      "keys": [
+        "sticky",
+        "message"
+      ],
+      "nested": {
+        "sticky": [
+          "channel_id",
+          "text",
+          "paused",
+          "trouble",
+          "state",
+          "testable"
         ]
       }
     },
@@ -12688,6 +12737,8 @@
     "web.runs.removed",
     "web.runs.restored",
     "web.runs.imported",
-    "web.runs.series_set"
+    "web.runs.series_set",
+    "web.question.rehearsed",
+    "web.sticky.rehearsed"
   ]
 }

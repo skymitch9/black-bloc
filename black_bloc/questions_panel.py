@@ -7,6 +7,7 @@ import discord
 
 from . import questions as rules
 from . import questions_moves as moves
+from . import questions_rehearse as testing
 from . import questions_store as store
 from .command_errors import AnswersErrors
 from .panels import (
@@ -62,6 +63,8 @@ def root_lines(
     lines.append(
         rules.OWNER_LINE.format(owner=owner, grace=grace) if owner else rules.NO_OWNER_LINE
     )
+    if found["mode"] != rules.OFF and shown and testing.home_of(bot, guild) is None:
+        lines.append(testing.NO_HOME_LINE)
     return lines
 
 
@@ -72,7 +75,7 @@ def downable(found: dict[str, Any]) -> Any:
     return found.get("extra")
 
 
-def root_moves(found: dict[str, Any], queued: list[Any]) -> list[str]:
+def root_moves(found: dict[str, Any], queued: list[Any], *, testable: bool = False) -> list[str]:
     status = found["status"]
     shown: list[str] = ["add"]
     if found["mode"] != rules.OFF and queued:
@@ -84,6 +87,8 @@ def root_moves(found: dict[str, Any], queued: list[Any]) -> list[str]:
     if downable(found) is not None:
         shown.append("take_down")
     shown.append("refresh")
+    if testable:
+        shown.append("test")
     return shown
 
 
@@ -103,7 +108,8 @@ async def build_root(bot: Any, guild: Any) -> tuple[discord.Embed, QuestionsPane
     lines = root_lines(bot, guild, found, queued, rules.owner_of(bot.store, guild.id))
     embed = discord.Embed(title=rules.PANEL_TITLE, description=clamped(lines))
     view = QuestionsPanel(minutes_for(bot, guild.id))
-    for name in root_moves(found, queued):
+    testable = testing.can_test(bot, guild, found)
+    for name in root_moves(found, queued, testable=testable):
         view.add_item(RootButton(name, found))
     if queued:
         view.add_item(QueuePick(queued))
@@ -194,6 +200,13 @@ async def run_post_now(interaction: discord.Interaction, previous: Any = None) -
     await after(interaction, outcome, previous)
 
 
+async def run_test(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await testing.rehearse(interaction.client, interaction.guild, interaction.user)
+    await after(interaction, outcome, previous)
+
+
 async def run_skip(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await opened(interaction):
         return
@@ -250,7 +263,9 @@ ROOT_BUTTONS: dict[str, tuple[str, discord.ButtonStyle]] = {
     "unskip": (rules.UNSKIP_LABEL, discord.ButtonStyle.secondary),
     "take_down": (rules.TAKE_DOWN_LABEL, discord.ButtonStyle.danger),
     "refresh": (rules.REFRESH_LABEL, discord.ButtonStyle.secondary),
+    "test": (testing.LABEL, discord.ButtonStyle.secondary),
 }
+ROOT_ROWS = {"test": 2}
 CARD_BUTTONS: dict[str, tuple[str, discord.ButtonStyle]] = {
     "edit": (rules.EDIT_LABEL, discord.ButtonStyle.primary),
     "remove": (rules.REMOVE_LABEL, discord.ButtonStyle.danger),
@@ -263,7 +278,7 @@ CARD_BUTTONS: dict[str, tuple[str, discord.ButtonStyle]] = {
 class RootButton(discord.ui.Button):
     def __init__(self, name: str, found: dict[str, Any]) -> None:
         label, style = ROOT_BUTTONS[name]
-        super().__init__(label=label, style=style, row=0)
+        super().__init__(label=label, style=style, row=ROOT_ROWS.get(name, 0))
         self.name = name
         self.found = found
 
@@ -285,6 +300,9 @@ class RootButton(discord.ui.Button):
             return
         if self.name == "skip":
             await run_skip(interaction, self.view)
+            return
+        if self.name == "test":
+            await run_test(interaction, self.view)
             return
         if self.name == "unskip":
             await run_unskip(interaction, self.view)

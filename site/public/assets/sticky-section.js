@@ -40,6 +40,7 @@ const NEED_WORDS = 'A sticky message needs some words. Type what it should say a
 const NEED_A_POST = 'Pick the post it keeps, then save again.';
 const WORDS_KIND = 'words';
 const POST_KIND = 'post';
+const POST_TO_TEST = 'Post to test';
 const KINDS = [{ value: WORDS_KIND, label: 'Words' }, { value: POST_KIND, label: 'A post' }];
 
 const STATE_TONES = { live: 'ok', rehearsing: 'warn', stopped: 'danger' };
@@ -210,6 +211,7 @@ function actions(row, name, say, reload) {
     ? button('Change the post', () => changePost(row, name, say, reload))
     : button('Edit', () => editOne(row, name, say, reload))];
   moves.push(...stickyMoves(row, say, reload));
+  if (row.testable) moves.push(button(POST_TO_TEST, () => act('POST', '/rehearse'), { tone: 'quiet' }));
   moves.push(button('Remove', async () => {
     const sure = await ask({
       title: `Remove the sticky message from ${name}?`,

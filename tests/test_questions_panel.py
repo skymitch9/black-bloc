@@ -5,6 +5,7 @@ import pytest
 
 from black_bloc import questions as rules
 from black_bloc import questions_panel as panel
+from black_bloc import questions_rehearse as testing
 from black_bloc import questions_store as store
 from tests.questions_fakes import GUILD, HOME, FakeMember, make_bot
 
@@ -97,6 +98,12 @@ def test_the_root_buttons_render_only_when_they_can_be_pressed():
     assert panel.root_moves(extra, []) == ["add", "skip", "take_down", "refresh"]
 
 
+def test_post_to_test_renders_only_when_it_can_send_a_copy():
+    pending = {"status": rules.PENDING, "mode": "on", "posted": None}
+    assert panel.root_moves(pending, [], testable=True)[-1] == "test"
+    assert "test" not in panel.root_moves(pending, [object()])
+
+
 def test_a_card_offers_up_and_down_only_where_there_is_room():
     assert panel.card_moves(0, 1) == ["edit", "remove", "back"]
     assert panel.card_moves(0, 3) == ["edit", "remove", "down", "back"]
@@ -112,7 +119,9 @@ async def test_the_panel_shows_the_slot_the_question_and_the_queue(bot):
     assert "**Queued** — 2" in embed.description
     assert f"<#{HOME}>" in embed.description
     assert rules.NO_OWNER_LINE in embed.description
-    assert labels(view) == ["Add", "Post one now", "Skip this week", "Refresh"]
+    assert labels(view) == ["Add", "Post one now", "Skip this week", "Refresh", "Post to test"]
+    [test] = [item for item in view.children if getattr(item, "name", "") == "test"]
+    assert test.row == 2
     assert any(isinstance(item, panel.QueuePick) for item in view.children)
 
 
@@ -161,3 +170,26 @@ async def test_post_now_from_the_panel_posts_and_answers_in_words(bot, staff):
 
     [down] = [item for item in view.children if getattr(item, "name", "") == "take_down"]
     assert panel.downable(down.found)["body"] == "one?"
+
+
+async def test_post_to_test_from_the_panel_sends_a_copy_and_leaves_the_week_alone(bot, staff):
+    await store.add_many(bot.db, GUILD, ["one?"], 5, datetime(2026, 10, 1, tzinfo=UTC))
+    interaction = FakeInteraction(bot, staff)
+
+    await panel.run_test(interaction)
+
+    assert interaction.said == [testing.TESTED.format(where=HOME)]
+    assert bot.guild.get_channel(HOME).sent[-1].content == "one?"
+    assert [row["body"] for row in await store.queued(bot.db, GUILD)] == ["one?"]
+    assert "**This week** — waiting" in interaction.edits[-1]["embed"].description
+
+
+async def test_with_no_rehearsal_home_the_panel_says_why_and_offers_no_post_to_test(bot):
+    await store.add_many(bot.db, GUILD, ["one?"], 5, datetime(2026, 10, 1, tzinfo=UTC))
+    for key in ("shadow_channel_id", "log_channel_id"):
+        await bot.store.clear(GUILD, key)
+
+    embed, view = await panel.build_root(bot, bot.guild)
+
+    assert testing.NO_HOME_LINE in embed.description
+    assert testing.LABEL not in labels(view)

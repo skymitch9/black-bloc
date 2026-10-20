@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import sticky as rules
+from ... import sticky_rehearse as testing
 from ...logkinds import VIA_WEBSITE
 from ...sticky_posts import desk_of
 from ..auth import Refused, staff_dependency
@@ -15,7 +16,9 @@ from ..writes import actor_for, require_db, require_guild, wanted_id, writer_dep
 log = logging.getLogger(__name__)
 
 
-def sticky_row(bot: Any, guild: Any, row: Any, mode: str | None = None) -> dict[str, Any]:
+def sticky_row(
+    bot: Any, guild: Any, row: Any, mode: str | None = None, testable: bool = False
+) -> dict[str, Any]:
     channel = guild.get_channel(int(row["channel_id"]))
     posted_in = row["posted_channel_id"]
     return {
@@ -36,6 +39,7 @@ def sticky_row(bot: Any, guild: Any, row: Any, mode: str | None = None) -> dict[
         "posted_channel_id": str(posted_in) if posted_in else None,
         "posted_at": row["posted_at"],
         "reposts": int(row["reposts"] or 0),
+        "testable": testable,
         "updated_by": str(row["updated_by"]) if row["updated_by"] else None,
         "updated_by_name": (
             resolve_one(guild, row["updated_by"])["display_name"] if row["updated_by"] else None
@@ -56,8 +60,9 @@ def build_router(bot: Any) -> APIRouter:
         return site_words(guild, outcome.message)
 
     async def shaped(guild: Any, row: Any) -> dict[str, Any]:
-        mode, _ = await desk_of(bot).rule_of(guild, row)
-        return sticky_row(bot, guild, row, mode)
+        mode, feature = await desk_of(bot).rule_of(guild, row)
+        testable = testing.can_test(bot, guild, row, mode, feature)
+        return sticky_row(bot, guild, row, mode, testable)
 
     async def answered(guild: Any, outcome: Any) -> dict[str, Any]:
         message = said(guild, outcome)
@@ -103,6 +108,16 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         outcome = await desk_of(bot).resume(
             guild, wanted_id(channel_id), actor_for(bot, who, guild), via=VIA_WEBSITE
+        )
+        return await answered(guild, outcome)
+
+    @router.post("/{channel_id}/rehearse")
+    async def sticky_rehearse(request: Request, channel_id: str) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await testing.rehearse(
+            bot, guild, wanted_id(channel_id), actor_for(bot, who, guild), via=VIA_WEBSITE
         )
         return await answered(guild, outcome)
 

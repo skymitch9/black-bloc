@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ... import questions as rules
 from ... import questions_moves as moves
+from ... import questions_rehearse as testing
 from ... import questions_store as store
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
@@ -41,12 +42,16 @@ async def index(bot: Any, guild: Any) -> dict[str, Any]:
     queued = await store.queued(bot.db, guild.id)
     history = await store.history(bot.db, guild.id)
     posted = found["posted"]
+    shown = testing.this_weeks_question(found)
+    home = testing.home_of(bot, guild)
     return {
         "mode": found["mode"],
         "slot_at": rules.slot_key(found["slot"]),
         "state": found["status"],
         "owner_set": rules.owner_of(bot.store, guild.id) is not None,
         "posted_id": int(posted["id"]) if posted is not None else None,
+        "test_id": int(shown["id"]) if shown is not None else None,
+        "test_home": str(home) if home else None,
         "queue": [question_row(row) for row in queued],
         "history": [question_row(row) | {"url": message_url(guild, row)} for row in history],
     }
@@ -112,6 +117,13 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = ready()
         outcome = await moves.post_now(bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE)
+        return answered(outcome)
+
+    @router.post("/rehearse")
+    async def questions_rehearse(request: Request) -> dict[str, Any]:
+        who = await writer(request)
+        guild = ready()
+        outcome = await testing.rehearse(bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE)
         return answered(outcome)
 
     @router.post("/skip")

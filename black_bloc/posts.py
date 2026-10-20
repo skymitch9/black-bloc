@@ -11,6 +11,7 @@ from typing import Any
 
 import discord
 
+from . import rehearsal_copy
 from . import shadow as shadow_home
 from . import sticky as sticky_rules
 from .actionlog import log_action
@@ -1558,10 +1559,10 @@ async def rehearse_post(
     if not target:
         return refusal(NO_TEST_CHANNEL.format(title=title), "no_shadow_channel", 409)
     home = {"shadow_home": target}
-    if not guard_allows(bot, target):
+    channel, failure = rehearsal_copy.reach(bot, guild, target)
+    if failure == rehearsal_copy.TEST_MODE:
         await note(bot, guild, row, WOULD_REHEARSE, actor, via=via, channel=shadow, **home)
         return refusal(guard_refusal(bot), "test_mode", 409)
-    channel = channel_of(bot, guild, target)
     if channel is None:
         await note(bot, guild, row, POST_FAILED, actor, via=via, reason=CHANNEL_GONE)
         return refusal(
@@ -1574,12 +1575,7 @@ async def rehearse_post(
     payload = words | {"allowed_mentions": allowed_mentions_for(guild, body, actor)}
     message = await _existing_message(bot, guild, row, channel, actor, via, shadow=True)
     try:
-        if message is not None:
-            kind, said = REHEARSAL_UPDATED, REHEARSAL_UPDATED_SAID
-            await message.edit(**payload)
-        else:
-            kind, said = REHEARSED, REHEARSED_SAID
-            message = await channel.send(**payload)
+        message, edited = await rehearsal_copy.deliver(channel, payload, message)
     except discord.HTTPException as exc:
         await note(bot, guild, row, POST_FAILED, actor, via=via, reason=str(exc))
         return refusal(
@@ -1594,6 +1590,9 @@ async def rehearse_post(
             bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor)
         )
         await set_drawn(bot.db, int(row["id"]), stamps)
+    kind, said = (
+        (REHEARSAL_UPDATED, REHEARSAL_UPDATED_SAID) if edited else (REHEARSED, REHEARSED_SAID)
+    )
     await note(bot, guild, row, kind, actor, via=via, message_id=int(message.id), **home)
     fresh = await get_post_by_id(bot.db, int(row["id"]))
     where = where_words(guild, channel_id) if channel_id else ITS_CHANNEL
