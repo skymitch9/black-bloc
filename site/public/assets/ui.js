@@ -667,7 +667,7 @@ const PAGER_GAP = 8;
  * `document.scrollingElement` never moves — walking up for a real scroller is
  * what makes this work on every page rather than only where the window scrolls.
  */
-function scrollerOf(node) {
+export function scrollerOf(node) {
   let found = node.parentElement;
   while (found && found !== document.documentElement) {
     const how = getComputedStyle(found).overflowY;

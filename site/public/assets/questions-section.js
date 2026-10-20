@@ -12,6 +12,7 @@ import {
   notice,
   run,
   sayAgain,
+  scrollerOf,
   sayNothing,
   section,
   settingsPanel,
@@ -43,9 +44,10 @@ let jumped = false;
 const opened = new Set();
 
 async function refresh() {
-  const at = window.scrollY;
+  const scroller = scrollerOf(document.getElementById('dash'));
+  const at = scroller.scrollTop;
   await reloadPage();
-  window.scrollTo({ top: at, behavior: 'instant' });
+  scroller.scrollTo({ top: at, behavior: 'instant' });
 }
 
 function kept(title, children, count) {
