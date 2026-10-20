@@ -196,6 +196,8 @@ export const LABELS = {
   runs_genre_max: 'Most genres one game may have',
   runs_genre_upper: 'Words a genre always writes in capitals',
   runs_developer_aliases: 'Other names a developer goes by in search',
+  runs_page_size: 'Rows on one page of the runs page',
+  runs_demo_refused: 'What the test data says when a change is tried',
   marathon_archived_word: 'The line an archived marathon carries',
   marathon_stale_archive_reads: 'Failed reads in a row before an unreadable marathon is archived',
   marathon_stale_archive_hours: 'Hours without an answer before an unreadable marathon is archived',
