@@ -44,6 +44,12 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-19 v240
+
+- 📐 **Request #13 — the BaF runs database (PT, Mon 2026-10-19 8:26 PM; owner accepted 8:58 PM; owner to the conductor 21:3x: *"we got a request, lets sit down and do a design doc on the idea"*).** PT's thread answer: *"BaF runs in GDQ events"*, a sortable sheet with the runner, a series tag, and a Discord lookup the owner doubts (*"we CAN but we shouldn't"*). Live data 21:3x: 9 marathons, 108 runs, 5 ours, 0 BaF runs in the three Hotfix shows; the bot has tracked only since late September, so the history (main GDQs, BtB, Hotfix specials) needs importing. ✅ **Design filed 21:4x →** [`info/baf-runs-design.md`](info/baf-runs-design.md) (decisions D1–D8, forks F1 where it lives / F2 how the history gets in / F3 the Discord lookup, the page, schema 97, two keys). ❓ **Forks F1–F3 go to the owner one at a time from 21:5x; the build waits on them.** Request card: `in_progress` on the site, thread `#requests ▸ #13`.
+  ↳ Forks decided 21:4x–21:5x: F1 **A** its own page; F2 **A** the isolated importer; F3 **A** (owner: *"do both the /run look up and the page, let pt have it"*) — the `/runs` panel too, three more word keys. Dispatched to Opus 22:00 on branch `baf-runs` (458k).
+  ↳ ✅ **LIVE v240** 2026-10-19 22:45 (release `a84bc49e`, merge `31d1f85d`); 13 deviations at the design's foot (the GDQ tracker serves ended events; **BtB 2025 is on it as event 54**, so BtB history imports by link); see `deploys.log` v240 for what was and was not verified. Follow-up owed: deviation 12 leaves the panel's *seen N times, last … at …* line a code constant — one more word key.
+
 ## 2026-10-19 v239
 
 - 🔨 **Fix "This week" + an out-of-cycle override (owner 2026-10-19 18:1x, verbatim: *"sure fix it, just make sure we have an override since this week we're gonna run an out of cycle question since we're late"*).** Fixes findings (1) and (2) above; adds a "post the next question now" extra that does not consume the scheduled slot. Dispatched to Opus 18:2x on branch `questions-this-week`.
