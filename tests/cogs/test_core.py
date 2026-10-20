@@ -1843,3 +1843,66 @@ async def test_a_settings_group_lists_its_keys_with_no_intro_line(bot):
     assert embed.description.splitlines()[0].startswith(sp.KEY_LINE.split("{")[0])
     assert first in embed.description.splitlines()[0]
     assert "Pick one to see" not in embed.description
+
+
+# --- the consent model asks with a count first (one-optout, 2026-10-20) --------------------------
+
+
+async def test_the_consent_model_asks_with_a_count_and_changes_on_the_second_press(
+    bot, cog, lead, db
+):
+    from black_bloc import optouts
+
+    FakeMember(bot.guild, user_id=31)
+    FakeMember(bot.guild, user_id=32)
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="chat_memory_consent")
+    asked = FakeInteraction(bot, lead)
+
+    await choose(picker(card.view, "Pick one…"), asked, ["optin"])
+
+    assert "**3** members would stop being remembered. Press again to change it." in asked.said
+    assert bot.store.get(GUILD, "chat_memory_consent") == "optout"
+    assert await kinds(db) == []
+
+    await press(asked.view, "Yes, change it", bot, lead)
+
+    assert bot.store.get(GUILD, "chat_memory_consent") == "optin"
+    assert await kinds(db) == ["settings.set"]
+    assert (await details(db))[0]["flip"] == {"from": "optout", "to": "optin", "count": 3}
+    assert await optouts.count(db, GUILD, optouts.CHAT_MEMORY) == 3
+
+
+async def test_leaving_the_consent_model_as_it_is_changes_nothing(bot, cog, lead, db):
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="chat_memory_consent")
+    asked = FakeInteraction(bot, lead)
+    await choose(picker(card.view, "Pick one…"), asked, ["optin"])
+
+    await press(asked.view, "Leave it as it is", bot, lead)
+
+    assert bot.store.get(GUILD, "chat_memory_consent") == "optout"
+    assert await kinds(db) == []
+
+
+async def test_set_key_holds_a_consent_change_until_it_is_confirmed(bot, db, member):
+    held = await set_key(bot, bot.guild, "chat_memory_consent", "optin", member)
+
+    assert not held.ok and held.status == 409 and held.code == "confirm_needed"
+    assert held.message == "**1** members would stop being remembered. Press again to change it."
+    same = await set_key(bot, bot.guild, "chat_memory_consent", "optout", member)
+    assert same.ok
+    done = await set_key(bot, bot.guild, "chat_memory_consent", "optin", member, confirmed=True)
+    assert done.ok and bot.store.get(GUILD, "chat_memory_consent") == "optin"
+
+
+async def test_putting_the_consent_default_back_asks_too(bot, db, member):
+    await bot.store.set(GUILD, "chat_memory_consent", "optin")
+
+    held = await clear_key(bot, bot.guild, "chat_memory_consent", member)
+
+    assert not held.ok and held.code == "confirm_needed"
+    assert "would start being remembered" in held.message
+    assert bot.store.is_stored(GUILD, "chat_memory_consent")
+    done = await clear_key(bot, bot.guild, "chat_memory_consent", member, confirmed=True)
+    assert done.ok and bot.store.get(GUILD, "chat_memory_consent") == "optout"

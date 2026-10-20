@@ -3142,3 +3142,74 @@ async def test_a_restart_mid_replay_then_the_live_show_is_one_announcement_and_n
 
 def replays_of(session):
     return bool(session["replay_reason"]) and not session["replay_cleared"]
+
+
+# --- one opt-out (one-optout, 2026-10-20) -----------------------------------------------------
+
+
+async def test_a_channel_whose_member_stopped_every_announcement_is_never_announced(bot, cog):
+    from black_bloc import optouts
+    from black_bloc.cogs.content.golive import set_link
+
+    row = await a_row(bot)
+    await set_link(bot.db, 21, GDQ)
+    await optouts.set_out(bot.db, GUILD, 21, optouts.ANNOUNCE)
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    assert bot.guild.channel.messages == []
+    assert await open_session(bot.db, row["id"]) is None
+
+
+async def test_a_youtube_link_silences_its_spotlit_channel_too(bot, cog):
+    from black_bloc import optouts
+    from black_bloc.cogs.content.youtube import set_link as set_youtube_link
+
+    row = await a_row(bot, youtube_channel_id="UCquiet")
+    await set_youtube_link(bot.db, 22, "UCquiet")
+    await optouts.set_out(bot.db, GUILD, 22, optouts.ANNOUNCE)
+
+    await cog.announce_info(
+        bot.guild,
+        row,
+        StreamInfo(url="https://www.youtube.com/watch?v=abc", platform="YouTube", game="Celeste"),
+        "GamesDoneQuick",
+    )
+
+    assert bot.guild.channel.messages == []
+    assert await open_session(bot.db, row["id"]) is None
+
+
+async def test_the_same_channel_is_announced_again_once_the_member_opts_back_in(bot, cog):
+    from black_bloc import optouts
+    from black_bloc.cogs.content.golive import set_link
+
+    await a_row(bot)
+    await set_link(bot.db, 21, GDQ)
+    await optouts.set_out(bot.db, GUILD, 21, optouts.ANNOUNCE)
+    await optouts.clear_out(bot.db, GUILD, 21, optouts.ANNOUNCE)
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    assert len(bot.guild.channel.messages) == 1
+
+
+async def test_spotlighting_an_opted_out_members_channel_says_so_in_words(bot, cog):
+    from black_bloc import optouts
+    from black_bloc.cogs.content.golive import set_link
+    from black_bloc.cogs.content.spotlight import opted_out_clause
+
+    await set_link(bot.db, 21, "adastreams")
+    await optouts.set_out(bot.db, GUILD, 21, optouts.ANNOUNCE)
+    row = await a_row(bot, "adastreams")
+    quiet = await a_row(bot)
+
+    said = await opted_out_clause(bot, bot.guild, row)
+
+    assert said == (
+        " **21** asked not to be announced, so nothing of this channel's is posted until they "
+        "opt back in on /golive."
+    )
+    assert await opted_out_clause(bot, bot.guild, quiet) == ""

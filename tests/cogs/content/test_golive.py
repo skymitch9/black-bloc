@@ -3281,3 +3281,30 @@ async def test_the_live_block_draws_nothing_while_go_live_is_off(bot):
     embed, view, stamp = cog_module.block_parts(bot, guild, [])
 
     assert embed.title == "Live now" and view is None and stamp
+
+
+async def test_the_gate_reads_the_opt_out_first_then_the_role_filters(cog, bot, db):
+    """One documented order (one-optout): opt-out, then require/ignore role, then cooldown."""
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_ignore_role_id", 5)
+    both = FakeMember(bot.guild, user_id=41, roles=(5,))
+    role_only = FakeMember(bot.guild, user_id=42, roles=(5,))
+    await set_optout(db, both.id)
+
+    said_both = await cog._go_live(both, StreamInfo(url="u", game="g"), "presence")
+    said_role = await cog._go_live(role_only, StreamInfo(url="u", game="g"), "presence")
+
+    assert (said_both, said_role) == (cog_module.OPTED_OUT_SKIP, cog_module.ROLE_FILTER)
+    assert bot.guild.channel.messages == []
+
+
+async def test_a_row_only_in_the_old_go_live_table_is_not_read_any_more(cog, bot, db, member):
+    """After the boot migration the old table is a copy kept for a rollback; the one table is
+    the only thing asked. The migration test proves every old row is copied first."""
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await db.conn.execute(
+        "INSERT INTO golive_optout(user_id, at) VALUES (?, ?)", (member.id, "2026-10-20")
+    )
+    await db.conn.commit()
+
+    assert await is_opted_out(db, member.id) is False

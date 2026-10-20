@@ -515,3 +515,55 @@ def test_not_ours_is_everyone_wearing_a_listed_role_less_the_overrides():
 def test_the_role_a_holder_is_named_by_is_the_highest_listed_one_they_wear():
     assert ma.held_role(member(1, 50, 60, 70), {50, 60}).id == 60
     assert ma.held_role(member(1, 70), {50}) is None
+
+
+# --- one opt-out (one-optout, 2026-10-20) -----------------------------------------------------
+
+
+@pytest.mark.parametrize(("role", "runners_on", "hosts_on", "opted", "answer", "wanted"), TRUTH)
+def test_nobody_silent_before_the_one_opt_out_is_announced_after_it(
+    role, runners_on, hosts_on, opted, answer, wanted
+):
+    """Every combination: the new layer only ever turns a yes into a no, never a no into a yes."""
+    for silent in (False, True):
+        said = ma.decide(
+            runners_on=runners_on,
+            opted_out=opted,
+            answer=answer,
+            role=role,
+            hosts_on=hosts_on,
+            silent=silent,
+        )
+        if not wanted[0]:
+            assert said.yes is False
+        if silent:
+            assert (said.yes, said.why) == (False, ma.WHY_ANNOUNCE)
+        else:
+            assert (said.yes, said.why) == wanted
+
+
+def test_a_person_who_stopped_every_announcement_is_named_by_no_run_or_block():
+    row = a_run(1, [SKY, HOSTING], {9001: ma.IN, 8101: ma.IN})
+    silent = ma.Policy(hosts_on=True, silent=frozenset({9001, 8101}))
+    assert ma.run_people(row, silent) == []
+    assert ma.block_people(a_block([row]), silent) == []
+    assert ids(ma.run_people(row, ma.Policy(hosts_on=True))) == [9001, 8101]
+
+
+def test_the_policy_carries_the_silenced_people_and_the_runner_post_skip_reads_them():
+    found = ma.policy(
+        {"id": 1},
+        runners_default=True,
+        hosts_default=False,
+        mention_default=True,
+        silent={"9001"},
+    )
+    assert found.silent == frozenset({9001})
+    assert ma.all_silent(a_run(1, [SKY]), found.silent) is True
+    assert ma.all_silent(a_run(1, [SKY, HOSTING]), found.silent) is False
+    assert ma.all_silent(a_run(1, [{"name": "Nobody", "part": "runner"}]), found.silent) is False
+
+
+def test_a_post_that_names_nobody_because_of_the_opt_out_says_why():
+    row = a_run(1, [SKY])
+    assert ma.run_because(row, ma.Policy(silent=frozenset({9001})), [SKY]) == "announce_optout"

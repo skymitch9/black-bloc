@@ -1271,3 +1271,98 @@ async def test_the_role_rule_reads_in_the_sites_words(bot, cog):
     assert announce.baf_rule(bot, bot.guild, user_id=SKY, overrides=()) is None
     await bot.store.set(GUILD, "marathon_not_baf_role_word", "GDQ crew ({role})")
     assert announce.baf_rule(bot, bot.guild, held=SKY)["said"] == "GDQ crew (Staff)"
+
+
+# --- one opt-out (one-optout, 2026-10-20) -----------------------------------------------------
+
+
+async def test_a_public_post_leaves_out_someone_who_stopped_every_announcement(bot, cog):
+    from black_bloc import optouts
+    from tests.cogs.content.test_marathon_public import ready
+
+    marathon = await ready(bot, cog)
+    row, _ = await sky_on(bot, marathon)
+    assert SKY in [one["user_id"] for one in announce.people_for(bot, bot.guild, marathon, row)]
+
+    await optouts.set_out(bot.db, GUILD, SKY, optouts.ANNOUNCE)
+
+    assert announce.people_for(bot, bot.guild, marathon, row) == []
+    said = announce.person_state(bot, bot.guild, marathon, row, SKY)
+    assert said["announced"] is False and said["why"] == ma.WHY_ANNOUNCE
+    assert said["said"].endswith("asked not to be announced anywhere")
+
+
+async def test_a_run_answer_of_in_does_not_announce_someone_who_stopped_every_announcement(
+    bot, cog
+):
+    from black_bloc import optouts
+    from tests.cogs.content.test_marathon_public import ready
+
+    marathon = await ready(bot, cog)
+    row, _ = await sky_on(bot, marathon)
+    await announce.set_run_answer(bot, bot.guild, FakeActor(), marathon, row["id"], SKY, "in")
+    await optouts.set_out(bot.db, GUILD, SKY, optouts.ANNOUNCE)
+    row, _ = await sky_on(bot, marathon)
+
+    assert announce.people_for(bot, bot.guild, marathon, row) == []
+
+
+async def overridden_then_worn(bot, cog):
+    from tests.cogs.content.test_marathon_public import ready
+
+    marathon = await ready(bot, cog)
+    plain, staff = Holder(SKY, []), Holder(SKY, [STAFF_ROLE])
+    wear(bot, plain)
+    await bot.store.set(GUILD, "log_channel_id", 222)
+    await bot.store.set(GUILD, OPTOUT_KEY, [STAFF_ROLE])
+    said = await announce.set_baf_override(
+        bot, bot.guild, FakeActor(), SKY, True, reason="runs with us"
+    )
+    assert said.ok
+    wear(bot, staff)
+    await cog.on_member_update(plain, staff)
+    return marathon, plain, staff
+
+
+async def test_taking_the_opt_out_role_after_an_override_clears_it_latest_act_wins(bot, cog):
+    marathon, _plain, _staff = await overridden_then_worn(bot, cog)
+
+    assert SKY not in await announce.baf_overrides(bot.db)
+    assert not mt.is_ours((await sky_on(bot, marathon))[0])
+    cur = await bot.db.conn.execute(
+        "SELECT target_id, reason, details FROM action_log WHERE kind = ?",
+        ("marathon.override_cleared_by_optout",),
+    )
+    (row,) = await cur.fetchall()
+    assert row["target_id"] == SKY
+    assert row["reason"] == (
+        "**Sky** put on Staff, so staff no longer count them as BaF. Count them in again on the "
+        "Members page if that was wrong."
+    )
+    assert json.loads(row["details"])["member"] == SKY
+    assert "marathon.role_opted_out" in await kinds(bot.db)
+
+
+async def test_clearing_by_the_role_happens_once_however_often_the_event_arrives(bot, cog):
+    _marathon, plain, staff = await overridden_then_worn(bot, cog)
+
+    await cog.on_member_update(plain, staff)
+    assert await announce.clear_by_optout(bot, bot.guild, staff) is False
+
+    assert (await kinds(bot.db)).count("marathon.override_cleared_by_optout") == 1
+
+
+async def test_taking_the_role_off_while_counted_in_changes_nothing(bot, cog):
+    from tests.cogs.content.test_marathon_public import ready
+
+    await ready(bot, cog)
+    plain, staff = Holder(SKY, []), Holder(SKY, [STAFF_ROLE])
+    wear(bot, staff)
+    await bot.store.set(GUILD, OPTOUT_KEY, [STAFF_ROLE])
+    await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True, reason="r")
+    wear(bot, plain)
+
+    await cog.on_member_update(staff, plain)
+
+    assert SKY in await announce.baf_overrides(bot.db)
+    assert "marathon.override_cleared_by_optout" not in await kinds(bot.db)

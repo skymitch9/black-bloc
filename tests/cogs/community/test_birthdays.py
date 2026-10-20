@@ -2003,3 +2003,16 @@ async def test_a_failure_in_the_block_s_form_is_a_private_sentence_and_a_row(
     assert "error.modal" in await action_kinds(bot.db)
     assert submitted.response.messages[-1]["ephemeral"] is True
     assert submitted.sent and untouched(submitted)
+
+
+async def test_an_opt_out_is_mirrored_into_the_one_table_and_a_new_date_lifts_it(bot):
+    await stored(bot)
+
+    await set_opted_in(bot.db, USER, False, by=USER)
+    assert await optouts.is_out(bot.db, GUILD, USER, optouts.BIRTHDAY) is True
+    assert (await get_birthday(bot.db, USER))["opted_in"] == 0
+
+    await save_birthday(bot.db, GUILD, USER, 3, 4, None, "self")
+
+    assert await optouts.is_out(bot.db, GUILD, USER, optouts.BIRTHDAY) is False
+    assert (await get_birthday(bot.db, USER))["opted_in"] == 1

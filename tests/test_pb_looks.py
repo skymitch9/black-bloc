@@ -1016,3 +1016,24 @@ def test_one_feed_per_bot():
 
     assert feed_of(bot) is feed_of(bot)
     assert "https://example.test" in feed_of(bot).client.agent
+
+
+async def test_a_member_who_stopped_every_announcement_has_no_personal_best_posted(
+    bot, guild, feed, client
+):
+    from black_bloc import optouts
+
+    await matched(bot)
+    await seen(feed, client, [])
+    await optouts.set_out(bot.db, GUILD, ADA, optouts.ANNOUNCE)
+    later = NOW + timedelta(minutes=5)
+    row = await pb_store.match(bot.db, GUILD, ADA)
+
+    said = await feed.post(guild, row, best("r1", verified_at=later), later)
+
+    assert said == pb_store.DRY
+    assert guild.get_channel(REHEARSAL).sent == []
+    cur = await bot.db.conn.execute("SELECT outcome, reason FROM pb_posts WHERE run_id = 'r1'")
+    assert tuple(await cur.fetchone()) == (pb_store.DRY, "announce_opted_out")
+    again = await feed.post(guild, row, best("r1", verified_at=later), later)
+    assert again == pb_store.CLAIMED

@@ -405,3 +405,29 @@ async def test_every_action_row_the_page_reads_carries_a_via(client, sign_in, we
     assert rows
     assert all(row["via"] in ("discord", "website", "operator") for row in rows)
     assert next(row for row in rows if row["kind"] == "web.settings.set")["via"] == "website"
+
+
+async def test_the_consent_model_answers_with_a_count_and_changes_once_confirmed(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    wf.member(web.guild, 21, name="ada")
+    wf.member(web.guild, 22, name="bea")
+
+    asked = client.put("/api/settings/chat_memory_consent", json={"value": "optin"})
+
+    assert asked.status_code == 409 and asked.json()["error"] == "confirm_needed"
+    assert asked.json()["message"].startswith("**")
+    assert "would stop being remembered" in asked.json()["message"]
+    assert web.store.get(wf.GUILD_ID, "chat_memory_consent") == "optout"
+
+    done = client.put(
+        "/api/settings/chat_memory_consent", json={"value": "optin", "confirm": True}
+    )
+
+    assert done.status_code == 200 and done.json()["value"] == "optin"
+    back = client.delete("/api/settings/chat_memory_consent")
+    assert back.status_code == 409 and back.json()["error"] == "confirm_needed"
+    gone = client.delete("/api/settings/chat_memory_consent?confirm=true")
+    assert gone.status_code == 200
+    assert web.store.get(wf.GUILD_ID, "chat_memory_consent") == "optout"
