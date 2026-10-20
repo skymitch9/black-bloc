@@ -258,7 +258,7 @@ async def settle(
         return
     try:
         await message.edit(
-            content=cog._shadowed(guild, text) if row["kind"] == mnm.WOULD_POST else text,
+            content=text,
             view=None,
             allowed_mentions=discord.AllowedMentions.none(),
         )

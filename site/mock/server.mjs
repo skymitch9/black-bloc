@@ -362,7 +362,6 @@ const LOG_LEVEL_FEATURES = [
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
   ['shadow_channel_id', 'channel', null, null, 'where every rehearsal goes while a feature is in shadow — the welcome post, the front door, the ticket button, polls; blank means the bot’s own log channel. Setting it is the deliberate act that lets test mode speak in that one channel as well, so pick a channel only the people reviewing can see. A feature’s own …_shadow_channel_id wins over this'],
-  ['rehearsal_note', 'text', 'Rehearsal — this is where it would go: {channel}', 'Rehearsal — this is where it would go: {channel}', 'the line the front door and the ticket button carry at the top of their rehearsal copy; {channel} is replaced with the channel the real one is aimed at. Blank leaves the copy with no note at all'],
   ["frontdoor_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (the front door's copy and the Open a ticket button it replaces); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["posts_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (posts such as the welcome post and the rules); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["golive_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (spotlight announcements); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
@@ -870,6 +869,7 @@ const SETTING_SPECS = [
   ["runs_lookup_title", "text", "{game}", "{game}", "the heading of one game's answer in the /runs panel; {game}"],
   ["runs_lookup_line", "text", "{date} · {event} · {category} · {runners}", "{date} · {event} · {category} · {runners}", "one run's line under a game in the /runs panel; {date}, {event}, {category} and {runners}"],
   ["runs_lookup_none", "text", "Nothing in the BaF runs database matches **{query}**.", "Nothing in the BaF runs database matches **{query}**.", "what the /runs panel says when no game matches; {query} is what was typed"],
+  ["runs_lookup_seen", "text", "seen {n} time(s), last {date} at {event}", "seen {n} time(s), last {date} at {event}", "the first line under a game in the /runs panel; {n} is how many times it was run, {date} and {event} the latest run"],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_stale_archive_reads", "int", 3, 3, "how many reads of a marathon's schedule in a row must fail before it moves to the archive as unreadable, once marathon_stale_archive_hours have also passed — a schedule that is not published yet never counts, and a paused or ignored marathon never moves. Restore brings it back, and so does its feed listing it again with a schedule that reads. 3 by default; 0 never archives an unreadable marathon", null, 20, 0],
   ["marathon_stale_archive_hours", "int", 24, 24, "how many hours a marathon's schedule must have gone without an answer before marathon_stale_archive_reads failed reads move it to the archive — counted from the last read that worked, or from a Restore or Resume since. 24 by default; 0 needs the failed reads alone", null, 720, 0],
@@ -2604,7 +2604,7 @@ function withRunEvents(seeded) {
   return seeded;
 }
 
-const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text', 'quiet_bot_pins'];
+const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text', 'quiet_bot_pins'];
 const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour", "structure_backup_keep", "structure_backup_notify", "structure_backup_channel_id", "structure_backup_shadow_channel_id", "structure_backup_role_id", "structure_backup_notice_lines", "structure_backup_panel_minutes", "structure_backup_notice_title", "structure_backup_notice_text", "structure_backup_notice_more", "structure_backup_notice_label", "structure_backup_notice_nowhere", "structure_backup_notice_off", "structure_backup_panel_title", "structure_backup_panel_footer", "structure_backup_mode_label", "structure_backup_latest_label", "structure_backup_latest_line", "structure_backup_none_yet", "structure_backup_look_label", "structure_backup_look_saved", "structure_backup_look_unchanged", "structure_backup_look_failed", "structure_backup_take_label", "structure_backup_changes_label", "structure_backup_site_label", "structure_backup_saved_said", "structure_backup_unchanged_said", "structure_backup_failed_said", "structure_backup_off_said", "structure_backup_no_changes_said"];
 CORE_KEYS.push(...STRUCTURE_BACKUP_KEYS);
 const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_shadow_channel_id", "pb_feed_ping_role_id", "pb_feed_auto_match", "pb_feed_interval_minutes", "pb_feed_cycle_requests", "pb_feed_rematch_days", "pb_feed_max_age_days", "pb_feed_max_posts", "pb_feed_panel_minutes", "pb_feed_post_title", "pb_feed_post_text", "pb_feed_post_author", "pb_feed_place_text", "pb_feed_link_label", "pb_feed_no_channel_words", "pb_feed_panel_title", "pb_feed_panel_footer", "pb_feed_you_matched", "pb_feed_you_set", "pb_feed_posting_on", "pb_feed_posting_shadow", "pb_feed_posting_off", "pb_feed_you_none", "pb_feed_you_waiting", "pb_feed_you_unlinked", "pb_feed_you_opted_out", "pb_feed_you_blocked", "pb_feed_opt_out_label", "pb_feed_opt_in_label", "pb_feed_opted_out_said", "pb_feed_opted_in_said", "pb_feed_set_said", "pb_feed_unmatched_said", "pb_feed_blocked_said", "pb_feed_unblocked_said", "pb_feed_unblocked_opted_out_said", "pb_feed_no_runner_said", "pb_feed_taken_said", "pb_feed_not_now_said", "pb_feed_nothing_to_do_said", "pb_feed_looked_said", "pb_feed_failed_said", "pb_feed_off_said", "pb_feed_post_again_label", "pb_feed_post_again_pick", "pb_feed_posted_again_said", "pb_feed_rehearsed_again_said", "pb_feed_again_failed_said", "pb_feed_again_off_said", "pb_feed_no_post_said", "pb_feed_again_not_in_feed_said", "pb_feed_dm_set", "pb_feed_dm_unmatched", "pb_feed_dm_blocked", "pb_feed_dm_opt_out_cleared", "pb_feed_dm_no_reason"];
@@ -2623,6 +2623,7 @@ const NAMESPACE_OVERRIDE = {
   runs_lookup_title: 'marathon',
   runs_lookup_line: 'marathon',
   runs_lookup_none: 'marathon',
+  runs_lookup_seen: 'marathon',
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
   mod_log_level: 'automod',
@@ -3652,7 +3653,7 @@ const BLOCK_KINDS = [
     name_key: 'posts_block_frontdoor_name',
     name_default: 'Front door',
     exclusive: true,
-    keys: ['frontdoor_title', 'frontdoor_text', 'frontdoor_ticket_label', 'frontdoor_request_label', 'frontdoor_event_label', 'frontdoor_show_ticket', 'frontdoor_show_request', 'frontdoor_show_event', 'rehearsal_note'],
+    keys: ['frontdoor_title', 'frontdoor_text', 'frontdoor_ticket_label', 'frontdoor_request_label', 'frontdoor_event_label', 'frontdoor_show_ticket', 'frontdoor_show_request', 'frontdoor_show_event'],
   },
   {
     kind: 'tempvoice',
@@ -6588,7 +6589,6 @@ const PREVIEW_FEATURES = [
   ['spotlight_bump', 'The spotlight reminder', 'golive.html', ['spotlight_bump_template']],
   ['frontdoor', 'The front door', 'modmail.html', ['frontdoor_title', 'frontdoor_text', 'frontdoor_ticket_label', 'frontdoor_request_label', 'frontdoor_event_label']],
   ['ticket_button', 'The Open a ticket message', 'modmail.html', ['modmail_panel_title', 'modmail_panel_text']],
-  ['rehearsal', 'The line a rehearsal copy carries', 'settings.html', ['rehearsal_note']],
   ['request_filed', 'What a member is told when they file a request', 'requests.html', ['request_filed_line']],
   ['request_card', "A request's card", 'requests.html', []],
   ['event_card', "An event's card", 'events.html', []],
@@ -6754,9 +6754,6 @@ const PREVIEW_DRAW = {
       color: PREVIEW_BLURPLE,
       fields: [],
     }], [[previewButton('Open a ticket', 'primary')]]);
-  },
-  rehearsal(read, sample) {
-    return previewMade(fillWording(read('rehearsal_note'), { channel: sample.channel || '#live-now' }));
   },
   request_filed(read, sample) {
     return previewMade(String(read('request_filed_line') || '').replace('{request_id}', String(sample.request_id || 14)));
@@ -11784,6 +11781,12 @@ function questionOut(row) {
   return { ...row, url };
 }
 
+function questionShown() {
+  const { row } = questionWeek();
+  const posted = row.status === 'posted' && row.question_id ? state.questions.find((one) => one.id === row.question_id) : null;
+  return posted || questionQueue()[0] || null;
+}
+
 function questionOne(context) {
   const row = state.questions.find((one) => String(one.id) === String(context.params.id));
   if (!row) throw new Refused(404, 'no_question', 'That question is not in the queue any more, so nothing changed. Refresh to see the queue.');
@@ -11812,6 +11815,8 @@ route('GET', '/api/questions', (context) => {
     state: row.status,
     owner_set: Boolean(String(state.settings.get('question_owner_user_id') || '').trim()),
     posted_id: row.question_id,
+    test_id: questionShown() ? questionShown().id : null,
+    test_home: questionTarget('shadow') ? String(questionTarget('shadow')) : null,
     queue: questionQueue(),
     history: history.map(questionOut),
   };
@@ -11927,6 +11932,19 @@ route('POST', '/api/questions/post-now', (context) => {
   }
   logAction('web.question.posted_extra', { details: { via: 'website', question_id: first.id, question: first.body, mode } });
   return { ok: true, message: `The question is up in <#${target}>, out of cycle. The schedule is unchanged.`, value: first.id };
+});
+
+route('POST', '/api/questions/rehearse', (context) => {
+  requireStaff(context.session);
+  const mode = String(state.settings.get('question_mode') || 'shadow');
+  if (mode === 'off') throw new Refused(409, 'questions_off', 'Weekly questions are off, so no test copy was sent. Set question_mode to shadow or on in Settings first.');
+  const shown = questionShown();
+  if (!shown) throw new Refused(409, 'queue_empty', 'There is no question to send a test copy of: the queue is empty. Add a question first.');
+  const home = questionTarget('shadow');
+  if (!home) throw new Refused(409, 'no_shadow_channel', 'There is nowhere to rehearse it: no rehearsal home is set. Pick question_shadow_channel_id or shadow_channel_id in Settings first.');
+  const messageId = String(910000000000000000 + Date.now() % 1000000);
+  logAction('web.question.rehearsed', { details: { via: 'website', question_id: shown.id, question: shown.body, shadow_home: String(home), message_id: messageId, url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` } });
+  return { ok: true, message: `A test copy of this week's question is in ${stickyName(home)}. Nothing in the queue changed.`, value: shown.id };
 });
 
 route('POST', '/api/questions/skip', (context) => {
@@ -12645,10 +12663,17 @@ function stickyRow(row) {
     posted_channel_id: row.posted_channel_id ? String(row.posted_channel_id) : null,
     posted_at: row.posted_at || null,
     reposts: Number(row.reposts || 0),
+    testable: stickyTestable(row),
     updated_by: row.updated_by ? String(row.updated_by) : null,
     updated_by_name: row.updated_by ? memberName(row.updated_by) : null,
     updated_at: row.updated_at,
   };
+}
+
+// The twin of sticky_rehearse.can_test: on, not already rehearsing, a home that is not its own channel.
+function stickyTestable(row) {
+  const home = stickyHomeOf(row);
+  return stickyMode(row) !== 'off' && stickyState(row) !== 'rehearsing' && Boolean(home) && String(home) !== String(row.channel_id);
 }
 
 function stickySaid(row) {
@@ -12743,6 +12768,24 @@ route('POST', '/api/sticky/:channel_id/resume', (context) => {
   stickyPlace(row);
   logAction('web.sticky.resumed', { details: { channel_id: row.channel_id, via: 'website' } });
   return { sticky: stickyRow(row), message: stickySaid(row) };
+});
+
+route('POST', '/api/sticky/:channel_id/rehearse', (context) => {
+  requireStaff(context.session);
+  const row = stickyOf(context);
+  const mode = stickyMode(row);
+  const post = stickyPostOf(row);
+  const feature = post && (post.blocks || []).some((one) => one.kind === 'leaderboard') ? 'points' : 'sticky';
+  if (mode === 'off') throw new Refused(409, 'sticky_off', `**${feature}_mode** is off, so no test copy was sent. Turn it on in Settings, or with \`/settings\`, first.`);
+  const home = stickyHomeOf(row);
+  if (stickyState(row) === 'rehearsing') return { sticky: stickyRow(row), message: `It already rehearses in ${stickyName(row.posted_channel_id || home)} — the copy there is live, so nothing was sent.` };
+  if (!home) throw new Refused(409, 'no_shadow_channel', `There is nowhere to send a test copy: no rehearsal home is set. Pick ${feature}_shadow_channel_id or shadow_channel_id in Settings.`);
+  if (String(home) === String(row.channel_id)) throw new Refused(409, 'own_home', `The rehearsal home is ${stickyName(row.channel_id)} itself, so a test copy would land in front of members and nothing was sent. Pick another ${feature}_shadow_channel_id in Settings.`);
+  const messageId = String(840000000000000000n + BigInt(Date.now()));
+  const details = { via: 'website', channel_id: String(row.channel_id), shadow_home: String(home), message_id: messageId, url: `https://discord.com/channels/${REVIEW_GUILD_ID}/${home}/${messageId}` };
+  if (row.post_id) details.post_id = Number(row.post_id);
+  logAction('web.sticky.rehearsed', { details });
+  return { sticky: stickyRow(row), message: `A test copy of the sticky message in ${stickyName(row.channel_id)} is in ${stickyName(home)}. The sticky itself is unchanged.` };
 });
 
 route('DELETE', '/api/sticky/:channel_id', (context) => {

@@ -167,14 +167,6 @@ def test_only_an_https_link_becomes_the_embeds_link_and_button():
     )
 
 
-async def test_the_rehearsal_line_names_the_real_channel_or_says_there_is_none(bot, guild):
-    assert "nowhere yet" in pb_feed.rehearsal_line(bot, guild)
-
-    await bot.store.set(GUILD, "pb_feed_channel_id", PBS)
-
-    assert f"<#{PBS}>" in pb_feed.rehearsal_line(bot, guild)
-
-
 def test_a_refused_send_is_worded_with_the_fix_and_no_bare_status():
     response = SimpleNamespace(status=403, reason="Forbidden")
     said = pb_feed.send_reason(discord.Forbidden(response, "Missing Permissions"))

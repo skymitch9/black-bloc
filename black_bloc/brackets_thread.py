@@ -184,7 +184,6 @@ def starter_payload(
     bot: Any, guild: Any, row: Any, people: list[Any], bracket: Any = None
 ) -> dict[str, Any]:
     return {
-        "content": cards.rehearsal_line(bot, guild, row),
         "embed": cards.starter_embed(bot.store, guild.id, row, people, bracket),
         "view": cards.starter_view(bot.store, guild.id, row, origin_of(bot), people),
         "allowed_mentions": discord.AllowedMentions.none(),

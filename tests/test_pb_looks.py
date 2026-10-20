@@ -290,7 +290,7 @@ async def test_a_faster_verified_run_after_the_baseline_is_rehearsed_once_in_sha
     assert list(sent(guild)) == ["rehearsal"]
     copy = guild.get_channel(REHEARSAL).sent
     assert len(copy) == 1
-    assert f"<#{PBS}>" in copy[0]["content"]
+    assert not copy[0]["content"]
     embed = copy[0]["embed"]
     assert embed.title == "New personal best"
     assert embed.description == (
@@ -355,7 +355,7 @@ async def test_a_rehearsal_never_pings_even_with_a_ping_role_set(bot, guild, fee
 
     copy = guild.get_channel(REHEARSAL).sent[0]
     assert f"<@&{PING}>" not in (copy["content"] or "")
-    assert "nowhere yet" in copy["content"]
+    assert not copy["content"]
     assert copy["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()
 
 

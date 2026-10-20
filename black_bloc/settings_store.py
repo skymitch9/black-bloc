@@ -81,8 +81,6 @@ from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
 from .polls import MODES as POLL_MODES
 from .polls import SHADOW_NOTE as POLL_SHADOW_NOTE
-from .shadow import NOTE_DEFAULT as REHEARSAL_NOTE_DEFAULT
-from .shadow import NOTE_KEY as REHEARSAL_NOTE
 from .shadow import REHEARSAL_KEY as SHADOW_CHANNEL
 from .shadow import feature_key as shadow_feature_key
 from .storage.db import Database
@@ -3413,7 +3411,7 @@ KEY_HELP.update(
 
 # The rehearsal home — one channel every shadow copy lands in, so staff review before the
 # cutover. Core, beside `log_channel_id`: the `/settings` group select is at its cap of 25.
-KEY_TYPES.update({SHADOW_CHANNEL: "channel", REHEARSAL_NOTE: "text"})
+KEY_TYPES.update({SHADOW_CHANNEL: "channel"})
 KEY_HELP.update(
     {
         SHADOW_CHANNEL: (
@@ -3422,11 +3420,6 @@ KEY_HELP.update(
             "Setting it is the deliberate act that lets test mode speak in that one channel "
             "as well, so pick a channel only the people reviewing can see. A feature's own "
             "…_shadow_channel_id wins over this"
-        ),
-        REHEARSAL_NOTE: (
-            "the line the front door and the ticket button carry at the top of their rehearsal "
-            "copy; {channel} is replaced with the channel the real one is aimed at. Blank "
-            "leaves the copy with no note at all"
         ),
     }
 )
@@ -5711,7 +5704,6 @@ QUESTION_TEXT_CHECKS: dict[str, Any] = {
 CORE_KEYS = (
     "log_channel_id",
     SHADOW_CHANNEL,
-    REHEARSAL_NOTE,
     "staff_channel_id",
     "role_menu_channel_id",
     "bot_bio",
@@ -6145,7 +6137,6 @@ TEXT_MAY_BE_BLANK = (
     "golive_end_template",
     GOLIVE_LIVE_AUTHOR_KEY,
     "golive_end_author",
-    REHEARSAL_NOTE,
     WHERE_HINT_KEY,
 )
 
@@ -10328,6 +10319,7 @@ RUNS_PARTS = "runs_parts"
 RUNS_LOOKUP_TITLE = "runs_lookup_title"
 RUNS_LOOKUP_LINE = "runs_lookup_line"
 RUNS_LOOKUP_NONE = "runs_lookup_none"
+RUNS_LOOKUP_SEEN = "runs_lookup_seen"
 RUNS_SOURCE_CHOICES = (
     "gdq",
     "gdq_hotfix",
@@ -10341,12 +10333,14 @@ RUNS_PART_CHOICES = ("runner", "host", "commentator")
 RUNS_TITLE_FIELDS = ("game",)
 RUNS_LINE_FIELDS = ("date", "event", "category", "runners")
 RUNS_NONE_FIELDS = ("query",)
+RUNS_SEEN_FIELDS = ("n", "date", "event")
 RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_SOURCES: ["gdq", "gdq_hotfix"],
     RUNS_PARTS: ["runner"],
     RUNS_LOOKUP_TITLE: "{game}",
     RUNS_LOOKUP_LINE: "{date} · {event} · {category} · {runners}",
     RUNS_LOOKUP_NONE: "Nothing in the BaF runs database matches **{query}**.",
+    RUNS_LOOKUP_SEEN: "seen {n} time(s), last {date} at {event}",
 }
 RUNS_KEYS: tuple[str, ...] = tuple(RUNS_DEFAULTS)
 KEY_TYPES.update(
@@ -10356,6 +10350,7 @@ KEY_TYPES.update(
         RUNS_LOOKUP_TITLE: "text",
         RUNS_LOOKUP_LINE: "text",
         RUNS_LOOKUP_NONE: "text",
+        RUNS_LOOKUP_SEEN: "text",
     }
 )
 KEY_CHOICES.update({RUNS_SOURCES: RUNS_SOURCE_CHOICES, RUNS_PARTS: RUNS_PART_CHOICES})
@@ -10377,6 +10372,10 @@ KEY_HELP.update(
         RUNS_LOOKUP_NONE: (
             "what the /runs panel says when no game matches; {query} is what was typed"
         ),
+        RUNS_LOOKUP_SEEN: (
+            "the first line under a game in the /runs panel; {n} is how many times it was run, "
+            "{date} and {event} the latest run"
+        ),
     }
 )
 TEXT_CHECKS.update(
@@ -10384,6 +10383,7 @@ TEXT_CHECKS.update(
         RUNS_LOOKUP_TITLE: checked_fields(RUNS_TITLE_FIELDS),
         RUNS_LOOKUP_LINE: checked_fields(RUNS_LINE_FIELDS),
         RUNS_LOOKUP_NONE: checked_fields(RUNS_NONE_FIELDS),
+        RUNS_LOOKUP_SEEN: checked_fields(RUNS_SEEN_FIELDS),
     }
 )
 NAMESPACE_OVERRIDE.update({key: "marathon" for key in RUNS_KEYS})
@@ -10643,8 +10643,6 @@ class SettingsStore:
         }
 
     def default(self, key: str) -> Any:
-        if key == REHEARSAL_NOTE:
-            return REHEARSAL_NOTE_DEFAULT
         if key == "staff_channel_id":
             return self.settings.test_channel_id
         if key == "structure_backup_role_id":

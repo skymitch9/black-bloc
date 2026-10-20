@@ -89,10 +89,8 @@ def partial(channel: Any, message_id: int) -> Any:
     return channel.get_partial_message(int(message_id))
 
 
-async def post_message(
-    bot: Any, guild: Any, post: Any, note: str = ""
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """The post as it is now and every block under it, fresh; the note rides above as content."""
+async def post_message(bot: Any, guild: Any, post: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The post as it is now and every block under it, fresh."""
     from .post_blocks import kinds_on, load_kinds, parts_of
 
     kinds = await kinds_on(bot.db, int(post["id"]))
@@ -101,9 +99,7 @@ async def post_message(
     base = posts.render_message(post) if has_words else {"content": None, "embed": None}
     drawn = parts_of(bot, guild, post, kinds)
     made = posts.with_blocks(base, list(drawn.values()))
-    words = made["content"] or ""
-    content = rules.fit(note, words) if words else (note or None)
-    payload = {"content": content, "embeds": made["embeds"], "view": made["view"]}
+    payload = {"content": made["content"] or None, "embeds": made["embeds"], "view": made["view"]}
     return payload, {kind: parts[2] for kind, parts in drawn.items()}
 
 
@@ -392,12 +388,11 @@ class Desk:
         undone = await self._take_down(guild, row)
         if undone is not None:
             return await self._failed(guild, row, undone, old_copy=True)
-        note = shadow_home.note_line(self.bot, guild, f"<#{channel_id}>") if home else ""
         stamps: dict[str, Any] = {}
         if post is None:
-            payload: dict[str, Any] = {"content": rules.fit(note, row["text"])}
+            payload: dict[str, Any] = {"content": row["text"]}
         else:
-            payload, stamps = await post_message(self.bot, guild, post, note)
+            payload, stamps = await post_message(self.bot, guild, post)
             if is_empty(payload):
                 return await self._stopped(guild, row, rules.TROUBLE_POST_EMPTY)
         try:

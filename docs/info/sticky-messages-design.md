@@ -194,3 +194,23 @@ characters for that fixture, which is arithmetic, not an observed failure of tha
   Discord, what status a delete answers when the bot cannot see the channel, the message link opening the right
   message, and the Posts page in a browser after the wording change (the mock's answers were read from the API by a
   script, not looked at on the page).
+
+## Follow-up 2026-10-19 — Post to test
+
+Branch `post-to-test-more` (off `main` `0075473f`), slice 1 of the switch audit's P1
+([`switch-audit-2026-10-19.md`](switch-audit-2026-10-19.md) §4). Owner: *"what we need is like post, just a test button to send to the post test channel"*.
+
+- **What it does.** **Post to test** on a sticky sends ONE plain, unpinned copy of what the sticky shows — its words, or for a sticky that keeps a post, that post and its blocks drawn fresh (`sticky_posts.post_message`) — to the home the Desk would rehearse it in: `shadow.channel_id(feature=...)` with the owner rule's feature (`sticky`, or `points` for the leaderboard). No ping.
+- **What it never touches.** The sticky row (words, state `live` / `rehearsing` / `paused` / `stopped`, `message_id`, `posted_channel_id`, `reposts`), the Desk's counts and timers, the pin, and the post's `message_id` / `shadow_message_id`. It never re-sticks.
+- **Log row.** `sticky.rehearsed` (ROUTINE, under Posts; `web.sticky.rehearsed` from the site) with the actor, `channel_id`, `shadow_home`, `message_id`, `url`, and `post_id` for a post sticky.
+- **When it is offered.** Only when a press would send: the owner rule's mode is not off, the sticky is not already `rehearsing` (its copy is already in the home — a press answers *It already rehearses in #… — the copy there is live, so nothing was sent.*), and a home resolves that is not the sticky's own channel. Paused, waiting and stopped stickies can be tested.
+- **Refusals, in words.** `no_sticky`, `sticky_off` (*`sticky_mode` is off* — or `points_mode` for the leaderboard), `no_shadow_channel`, `own_home`, `test_mode`, `channel_gone`, `nothing_to_post`, `post_failed`.
+- **Doors.** `/sticky` ▸ a sticky's card: **Post to test** on row 1 beside Back; with no home the card says so in one line. Posts page ▸ Sticky messages: the same button on the row (quiet). `POST /api/sticky/{channel_id}/rehearse` answers `{sticky, message}` like Pause; every `GET /api/sticky` row gains `testable`.
+- **One sender.** `black_bloc/rehearsal_copy.py` (`reach`, `deliver`), shared with `posts.rehearse_post` and the weekly questions' Post to test.
+
+### Deviations
+
+1. **A post sticky's copy is NOT tracked on the post.** `posts.rehearse_post` (the Posts page's drawer) tracks its copy on `shadow_message_id`; doing that here would let the Desk's next rehearsal copy overwrite the id and orphan the test copy, and `drop_shadow` would clear the Desk's id. So this copy is one-shot, logged, and left in the test channel; the post's own Post to test is unchanged.
+2. **Hidden while `rehearsing`.** Live today, `sticky_mode` and `points_mode` are both `shadow`, so the one live sticky (the leaderboard in #speed-and-pbs) reads `rehearsing` and shows no Post to test until slice 2 of P1 pauses it (the audit's migration) or staff pause it by hand.
+3. **No rehearsal note** — `rehearsal_note` is retired by this build (owner sheet item p4h); the shadow-mode rehearsal copies the Desk posts no longer carry one either (live it was blank, so nothing visible changes). `sticky.fit` went with it.
+4. **Words are code constants** (`sticky_rehearse.TESTED`, …, and `TEST_MOVE`'s label), the existing `sticky.py` convention for panel labels and answers; what the copy says is the sticky's stored words or the post.

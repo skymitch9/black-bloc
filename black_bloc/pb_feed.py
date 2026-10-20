@@ -219,12 +219,6 @@ def ping_role(store: Any, guild_id: int) -> int | None:
     return shadow.as_channel_id(store.get(guild_id, PB_FEED_PING_ROLE))
 
 
-def rehearsal_line(bot: Any, guild: Any) -> str:
-    aimed = aimed_at(bot.store, guild.id)
-    words = f"<#{aimed}>" if aimed else said(bot.store, guild.id, "pb_feed_no_channel_words")
-    return shadow.note_line(bot, guild, words)
-
-
 def send_reason(exc: BaseException) -> str:
     if isinstance(exc, discord.Forbidden):
         return SEND_FORBIDDEN.format(said=exc.text or exc.status)
@@ -345,7 +339,6 @@ __all__ = [
     "population",
     "post_embed",
     "post_fields",
-    "rehearsal_line",
     "said",
     "send_reason",
     "time_words",

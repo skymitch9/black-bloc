@@ -79,7 +79,6 @@ from .settings_store import (
     POSTS_BLOCK_TEMPVOICE_NAME_DEFAULT,
     POSTS_BLOCK_UPCOMING_NAME,
     POSTS_BLOCK_UPCOMING_NAME_DEFAULT,
-    REHEARSAL_NOTE,
     TEMPVOICE_BLOCK_CONTROLS_LABEL,
     TEMPVOICE_BLOCK_LOBBY_LABEL,
     TEMPVOICE_BLOCK_SHOW_CONTROLS,
@@ -310,7 +309,6 @@ KINDS: dict[str, BlockKind] = {
             FRONTDOOR_SHOW_TICKET,
             FRONTDOOR_SHOW_REQUEST,
             FRONTDOOR_SHOW_EVENT,
-            REHEARSAL_NOTE,
         ),
         parts=door_parts,
         turned=door_turned,
@@ -807,18 +805,14 @@ def kept_part(message: Any) -> list[Any]:
 
 
 async def sticky_edit(bot: Any, guild: Any, row: Any) -> dict[str, Any] | None:
-    """A sticky's post is drawn whole again, its rehearsal note too: the sticky reposts it fresh."""
-    from . import shadow
+    """A sticky's post is drawn whole again: the sticky reposts it fresh."""
     from . import sticky as sticky_rules
     from .sticky_posts import post_message
 
     owner = await sticky_rules.row_of_post(bot.db, int(row["id"]))
     if owner is None:
         return None
-    channel_id = int(owner["channel_id"])
-    rehearsing = int(owner["posted_channel_id"] or 0) != channel_id
-    note = shadow.note_line(bot, guild, f"<#{channel_id}>") if rehearsing else ""
-    payload, _ = await post_message(bot, guild, row, note)
+    payload, _ = await post_message(bot, guild, row)
     return payload
 
 

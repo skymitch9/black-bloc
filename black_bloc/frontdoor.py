@@ -256,10 +256,9 @@ def rehearsal_takes_over(store: Any, guild_id: int) -> bool:
     return rehearsal_copy(store, guild_id) is not None
 
 
-def door_hash(store: Any, guild_id: int, note: str = "") -> str:
+def door_hash(store: Any, guild_id: int) -> str:
     """Everything a copy draws, in one string, so a sweep edits only what has changed."""
     drawn = [
-        note,
         door_title(store, guild_id),
         door_text(store, guild_id),
         *(label_for(store, guild_id, kind) for kind in KINDS),

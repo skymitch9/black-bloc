@@ -227,7 +227,7 @@ async def test_look_now_rehearses_the_news_and_the_index_lists_the_post(
     assert response.status_code == 200
     assert "1 new personal best(s)" in response.json()["message"]
     copy = guild.get_channel(wf.TEST_CHANNEL_ID).messages[-1]
-    assert "Rehearsal" in copy.content
+    assert not copy.content
     posts = client.get("/api/pbs").json()["posts"]
     assert [(one["run_id"], one["outcome"]) for one in posts] == [("r9", "rehearsed")]
     assert (posts[0]["name"], posts[0]["game"], posts[0]["seconds"]) == (
@@ -374,7 +374,7 @@ async def test_post_again_rehearses_the_stored_post_and_lists_the_repeat(
     assert "Rehearsed" in found["message"] and found["post"]["again_of"] == source
     assert (found["post"]["outcome"], found["post"]["run_id"]) == ("rehearsed", "r9")
     copy = guild.get_channel(wf.TEST_CHANNEL_ID).messages[-1]
-    assert "Rehearsal" in copy.content
+    assert not copy.content
     posts = client.get("/api/pbs").json()["posts"]
     assert [(one["id"], one["again_of"]) for one in posts] == [
         (found["post"]["id"], source),

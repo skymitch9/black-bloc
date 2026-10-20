@@ -29,8 +29,6 @@ from .brackets.model import (
 )
 from .brackets_moves import said
 from .command_errors import SafeDynamicItem
-from .settings_store import BRACKETS_CHANNEL
-from .shadow import note_line
 
 JOIN = "join"
 LEAVE = "leave"
@@ -316,13 +314,6 @@ def starter_embed(
     )
 
 
-def rehearsal_line(bot: Any, guild: Any, row: Any) -> str | None:
-    if not row["shadow"]:
-        return None
-    real = bot.store.get(guild.id, BRACKETS_CHANNEL)
-    return note_line(bot, guild, f"<#{int(real)}>" if real else "#?") or None
-
-
 def round_words(store: Any, guild_id: int, match: Any) -> str:
     if match.pool:
         return words(
@@ -566,7 +557,6 @@ __all__ = [
     "ping_mentions",
     "player_ids",
     "players_line",
-    "rehearsal_line",
     "result_words",
     "round_words",
     "set_custom_id",

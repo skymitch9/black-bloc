@@ -91,6 +91,7 @@ BACK = "back"
 REFRESH = "refresh"
 LOGS = "logs"
 SITE = "site"
+TEST = "test"
 
 
 class StickyMove(NamedTuple):
@@ -106,6 +107,7 @@ RESUME_MOVE = StickyMove(RESUME, "Resume", "success")
 RETRY_MOVE = StickyMove(RETRY, "Try again", "success")
 REMOVE_MOVE = StickyMove(REMOVE, "Remove", "danger")
 BACK_MOVE = StickyMove(BACK, "Back", row=1)
+TEST_MOVE = StickyMove(TEST, "Post to test", row=1)
 REFRESH_MOVE = StickyMove(REFRESH, "Refresh", row=3)
 LOGS_MOVE = StickyMove(LOGS, "Logs", row=3)
 SITE_MOVE = StickyMove(SITE, "Open on the site", "link", row=3)
@@ -274,18 +276,6 @@ def is_home_trouble(trouble: Any) -> bool:
     return bool(trouble) and HOME_TROUBLES.fullmatch(str(trouble)) is not None
 
 
-def fit(note: str, words: str, limit: int = DISCORD_LIMIT) -> str:
-    """The note shortens to make room; the words staff wrote are never cut."""
-    if not note:
-        return words
-    room = limit - len(words) - 1
-    if room < len(CUT) + 1:
-        return words
-    if len(note) > room:
-        note = note[: room - len(CUT)].rstrip() + CUT
-    return f"{note}\n{words}"
-
-
 def message_link(guild_id: Any, channel_id: Any, message_id: Any) -> str:
     return MESSAGE_LINK.format(
         guild_id=int(guild_id), channel_id=int(channel_id), message_id=int(message_id)
@@ -437,7 +427,7 @@ def post_options(rows: Any, but: Any = None) -> list[tuple[str, int]]:
     ]
 
 
-def card_buttons(row: Any) -> tuple[StickyMove, ...]:
+def card_buttons(row: Any, *, testable: bool = False) -> tuple[StickyMove, ...]:
     """A move the shared function would refuse is absent; a post's words are edited as a post."""
     found = [] if is_post(row) else [EDIT_MOVE]
     if row["trouble"]:
@@ -447,6 +437,8 @@ def card_buttons(row: Any) -> tuple[StickyMove, ...]:
     else:
         found.append(PAUSE_MOVE)
     found += [REMOVE_MOVE, BACK_MOVE]
+    if testable:
+        found.append(TEST_MOVE)
     return tuple(found)
 
 

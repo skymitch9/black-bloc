@@ -308,7 +308,7 @@ async def test_in_shadow_the_thread_is_made_in_the_rehearsal_home_and_never_in_k
     assert (row["channel_id"], row["thread_id"], row["shadow"]) == (REHEARSAL, thread.id, 1)
     starter = thread.messages[0]
     assert row["message_id"] == starter.id and starter.pinned
-    assert starter.content == f"Rehearsal — this is where it would go: <#{KNUCK_UP}>"
+    assert starter.content is None
     assert starter.embed.title == "Knuck Up 12"
     assert "**A draft**" in starter.embed.description
     assert starter.labels == ["Open the bracket"]

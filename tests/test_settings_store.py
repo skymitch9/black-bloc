@@ -1919,12 +1919,12 @@ async def test_the_front_door_still_ships_on_and_stays_in_the_modmail_group(stor
 
 async def test_the_rehearsal_home_is_a_core_key_reachable_from_both_doors(store):
     """Checklist 33, and the 25-group cap: `shadow_` would have been a group of its own."""
-    for key in (settings_store.SHADOW_CHANNEL, settings_store.REHEARSAL_NOTE):
-        assert key in KEY_TYPES and KEY_HELP.get(key)
-        assert key in settings_store.CORE_KEYS
-        assert namespace_of(key) == "core"
-    assert KEY_TYPES[settings_store.SHADOW_CHANNEL] == "channel"
-    assert KEY_TYPES[settings_store.REHEARSAL_NOTE] == "text"
+    key = settings_store.SHADOW_CHANNEL
+    assert key in KEY_TYPES and KEY_HELP.get(key)
+    assert key in settings_store.CORE_KEYS
+    assert namespace_of(key) == "core"
+    assert KEY_TYPES[key] == "channel"
+    assert "rehearsal_note" not in KEY_TYPES
 
 
 def test_the_rehearsal_home_help_says_it_widens_test_mode_and_a_features_own_home_wins():
@@ -1934,10 +1934,8 @@ def test_the_rehearsal_home_help_says_it_widens_test_mode_and_a_features_own_hom
     assert "_shadow_channel_id wins over this" in said
 
 
-async def test_the_rehearsal_home_ships_blank_and_the_note_ships_written(store):
+async def test_the_rehearsal_home_ships_blank(store):
     assert store.get(7, settings_store.SHADOW_CHANNEL) is None
-    assert store.get(7, settings_store.REHEARSAL_NOTE) == settings_store.REHEARSAL_NOTE_DEFAULT
-    assert "{channel}" in store.get(7, settings_store.REHEARSAL_NOTE)
 
 
 async def test_every_feature_that_rehearses_has_its_own_home_key_shipped_blank(store):
@@ -1984,7 +1982,7 @@ async def test_the_boot_status_ships_on_with_both_sentences_written(store):
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 363
+    assert len(settings_store.CORE_KEYS) == 362
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2922,6 +2920,7 @@ def test_the_runs_keys_sit_under_marathons_with_the_sources_the_marathon_feature
         "runs_lookup_title",
         "runs_lookup_line",
         "runs_lookup_none",
+        "runs_lookup_seen",
     )
     assert {settings_store.namespace_of(key) for key in settings_store.RUNS_KEYS} == {"marathon"}
     assert set(settings_store.RUNS_SOURCE_CHOICES) == set(SOURCES)
@@ -2937,3 +2936,4 @@ async def test_the_runs_keys_ship_their_decided_defaults(store):
     assert store.get(7, "runs_sources") == ["gdq", "gdq_hotfix"]
     assert store.get(7, "runs_parts") == ["runner"]
     assert store.get(7, "runs_lookup_title") == "{game}"
+    assert store.get(7, "runs_lookup_seen") == "seen {n} time(s), last {date} at {event}"

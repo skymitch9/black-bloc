@@ -62,15 +62,6 @@ def channel_for(bot: Any, guild: Any, channel_id: int) -> tuple[Any, str | None]
     return found, None
 
 
-def post_text(bot: Any, guild: Any, mode: str, body: str) -> str:
-    text = rules.rendered(bot.store, guild.id, body)
-    if mode != rules.SHADOW:
-        return text
-    real = rules.real_channel(bot.store, guild.id)
-    note = shadow_home.note_line(bot, guild, f"<#{real}>" if real else "#?")
-    return f"{note}\n{text}"[: rules.MESSAGE_LIMIT] if note else text
-
-
 async def send_question(bot: Any, guild: Any, mode: str, body: str) -> tuple[Any, Any, str | None]:
     """(channel, message, None) once posted, or (None, None, why not)."""
     wanted, why = target_id(bot, guild, mode)
@@ -81,7 +72,8 @@ async def send_question(bot: Any, guild: Any, mode: str, body: str) -> tuple[Any
         return None, None, why
     try:
         message = await channel.send(
-            post_text(bot, guild, mode, body), allowed_mentions=discord.AllowedMentions.none()
+            rules.rendered(bot.store, guild.id, body),
+            allowed_mentions=discord.AllowedMentions.none(),
         )
     except discord.HTTPException as exc:
         return None, None, rules.POST_REFUSED.format(why=f"{exc.status} {exc.text}".strip())

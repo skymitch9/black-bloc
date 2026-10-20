@@ -11,8 +11,6 @@ log = logging.getLogger(__name__)
 
 LOG_CHANNEL_KEY = "log_channel_id"
 REHEARSAL_KEY = "shadow_channel_id"
-NOTE_KEY = "rehearsal_note"
-NOTE_DEFAULT = "Rehearsal — this is where it would go: {channel}"
 FEATURE_KEY = "{feature}_shadow_channel_id"
 
 
@@ -121,17 +119,6 @@ async def find_copy(
     return (None, None)
 
 
-def note_line(bot: Any, guild: Any, channel_words: str) -> str:
-    """The one line a rehearsal copy carries above the real thing; blank means no line."""
-    wording = str(bot.store.get(guild_id_of(guild), NOTE_KEY) or "").strip()
-    if not wording:
-        return ""
-    try:
-        return wording.format(channel=channel_words)
-    except (IndexError, KeyError, ValueError):
-        return wording
-
-
 def teach_guard(bot: Any, guild_id: Any, value: Any) -> None:
     """The key is the one deliberate act that widens test mode, by exactly one channel."""
     guard = getattr(bot, "guard", None)
@@ -157,8 +144,6 @@ def install(bot: Any) -> None:
 __all__ = [
     "FEATURE_KEY",
     "LOG_CHANNEL_KEY",
-    "NOTE_DEFAULT",
-    "NOTE_KEY",
     "REHEARSAL_KEY",
     "as_channel_id",
     "channel_id",
@@ -169,6 +154,5 @@ __all__ = [
     "guild_id_of",
     "home_id",
     "install",
-    "note_line",
     "teach_guard",
 ]

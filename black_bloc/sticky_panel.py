@@ -8,6 +8,7 @@ import discord
 
 from . import posts
 from . import sticky as rules
+from . import sticky_rehearse as testing
 from .actionlog import send_logs
 from .command_errors import AnswersErrors
 from .panels import (
@@ -108,12 +109,15 @@ async def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Sti
         if name
         else rules.GONE_CHANNEL.format(ident=channel_id)
     )
-    mode, _ = await desk_of(bot).rule_of(guild, row)
+    mode, feature = await desk_of(bot).rule_of(guild, row)
     state = rules.row_line(row, mode)
+    if mode != rules.OFF and testing.home_of(bot, guild, feature) is None:
+        state = f"{state}\n{testing.NO_HOME.format(feature=feature)}"
     body = rules.words_of(row)[: DESCRIPTION_LIMIT - len(state) - 2]
     embed = discord.Embed(title=title[:256], description=f"{body}\n\n{state}")
     view = StickyPanel(minutes_for(bot, guild.id), channel_id=channel_id)
-    for move in rules.card_buttons(row):
+    testable = testing.can_test(bot, guild, row, mode, feature)
+    for move in rules.card_buttons(row, testable=testable):
         view.add_item(MoveButton(move))
     if rules.is_post(row):
         offered = rules.post_options(await posts.list_posts(bot.db, guild.id), row["post_id"])
@@ -237,6 +241,18 @@ async def run_move(
     await answer(interaction, outcome.message)
 
 
+async def run_test(
+    interaction: discord.Interaction, channel_id: int, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await testing.rehearse(
+        interaction.client, interaction.guild, channel_id, interaction.user
+    )
+    await render_card(interaction, channel_id, previous)
+    await answer(interaction, outcome.message)
+
+
 async def ask_remove(
     interaction: discord.Interaction, channel_id: int, previous: Any = None
 ) -> None:
@@ -310,6 +326,8 @@ class MoveButton(discord.ui.Button):
             await open_words(interaction, channel_id, view)
         elif action == rules.REMOVE:
             await ask_remove(interaction, channel_id, view)
+        elif action == rules.TEST:
+            await run_test(interaction, channel_id, view)
         elif action == rules.PAUSE:
             await run_move(interaction, rules.PAUSE, channel_id, view)
         else:

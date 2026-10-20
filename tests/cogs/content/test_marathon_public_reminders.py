@@ -269,7 +269,7 @@ async def test_shadow_sends_the_public_copy_to_the_public_rehearsal_home(bot, co
 
     assert reminders_in(bot.guild.channels[REMINDERS]) == []
     copy = reminders_in(bot.guild.channels[LOG_CHANNEL])[0]
-    assert copy.content.startswith(f"Rehearsal — this is where it would go: <#{REMINDERS}>")
+    assert not copy.content.startswith("Rehearsal")
     logged = await details_of(bot.db, "marathon.would_remind_public")
     assert logged["shadow_home"] == LOG_CHANNEL
 

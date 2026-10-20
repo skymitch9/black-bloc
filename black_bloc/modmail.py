@@ -1036,10 +1036,10 @@ def panel_rehearsal_copy(store: Any, guild_id: int) -> int | None:
         return None
 
 
-def panel_hash(store: Any, guild_id: int, note: str = "") -> str:
+def panel_hash(store: Any, guild_id: int) -> str:
     """Everything the copy draws, in one string, so a sweep edits only what has changed."""
     drawn = [
-        note,
+        "",
         str(store.get(guild_id, PANEL_HEADING_KEY) or ""),
         str(store.get(guild_id, PANEL_TEXT_KEY) or ""),
     ]

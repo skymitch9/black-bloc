@@ -1028,8 +1028,7 @@ class Spotlight(commands.Cog):
     ) -> None:
         if message is None:
             return
-        head, _ = self._shadow_head(guild, session, message.content)
-        text = head + render(
+        text = render(
             self.bot.store.get(guild.id, GOLIVE_REPLAY_TEMPLATE_KEY),
             info,
             name=words.display_for(row),
@@ -1471,10 +1470,9 @@ class Spotlight(commands.Cog):
             return
         store = self.bot.store
         name = words.display_for(row)
-        head, body = self._shadow_head(guild, session, message.content)
         replay = replays.is_replay(session)
         template = store.get(guild.id, GOLIVE_REPLAY_TEMPLATE_KEY if replay else TEMPLATE_KEY)
-        text = head + again_render(template, info, name, content=body)
+        text = again_render(template, info, name, content=str(message.content or ""))
         embed = None if replay else self._card_again(guild, info, name, message)
         details = {
             "spotlight_id": row["id"],
@@ -1505,15 +1503,6 @@ class Spotlight(commands.Cog):
         await log_action(
             self.bot, guild, "golive.spotlight_announcement_refreshed", details=details
         )
-
-    def _shadow_head(self, guild: Any, session: Any, content: Any) -> tuple[str, str]:
-        text = str(content or "")
-        if str(_cell(session, "mode") or MODE_ON) == MODE_ON:
-            return "", text
-        channel_id = self.bot.store.get(guild.id, CHANNEL_KEY)
-        note = shadow_home.note_line(self.bot, guild, f"<#{int(channel_id or 0)}>")
-        head = f"{note}\n" if note else ""
-        return (head, text[len(head) :]) if head and text.startswith(head) else ("", text)
 
     def _card_again(self, guild: Any, info: Any, name: str, message: Any) -> Any:
         store = self.bot.store
@@ -1755,12 +1744,10 @@ class Spotlight(commands.Cog):
         if not channel_id:
             log.warning("spotlight: not posted — %s is not set", CHANNEL_KEY)
             return (None, NO_CHANNEL)
-        said = ""
         if mode != MODE_ON:
             where = shadow_home.channel_id(self.bot, guild, feature=SHADOW_FEATURE)
             if not where:
                 return (None, NO_CHANNEL)
-            said = shadow_home.note_line(self.bot, guild, f"<#{int(channel_id)}>")
             channel_id = where
         guard = getattr(self.bot, "guard", None)
         if guard is not None and not guard.allows_channel(channel_id):
@@ -1772,7 +1759,7 @@ class Spotlight(commands.Cog):
             return (None, NOT_VISIBLE)
         try:
             message = await channel.send(
-                f"{said}\n{text}" if said else text,
+                text,
                 allowed_mentions=self._mentions(
                     guild.id, fan_role_id, pinging=pinging
                 ),

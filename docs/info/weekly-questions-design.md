@@ -139,3 +139,23 @@ Recorded by the build (branch `weekly-questions`, 2026-10-19). Each is what the 
     - **Post one now** (owner, verbatim: *"make sure we have an override since this week we're gonna run an out of cycle question since we're late"*). The slot-bound Post now is FOLDED into it, one button on the section and the panel: if This week is a passed slot still `pending`, the post settles that slot (as before, `question.posted_by_bot`); otherwise it is an EXTRA — the top queued question goes up now, the question row is `posted` / `posted_by=bot` / `slot_at` NULL, no slot row changes, `question.posted_extra` (IMPORTANT) is logged, and the next scheduled slot takes the following question. Same mode (off refuses in words), template, thread setting and send path as the scheduled post; confirm first. History says *posted by Black Bloc · out of cycle*; Take it down works on it (site History, and the panel offers it on the latest extra) and puts it back at the top of the queue without touching any slot.
     - **Why folded:** once This week points at the upcoming slot, a slot-bound "Post now" would mean "post next week's early and leave next week empty", which two buttons side by side ("Post now" / "Post one now") could not make clear. The extra covers the real need (late this week); posting next week's early is Post one now + Skip this week.
     - **The Posts page keeps its scroll** across the section's redraws after every write (add, edit, remove, move, skip, post, take down, settings), and the `#sect-questions` jump happens on the first draw only.
+
+## Follow-up 2026-10-19 — Post to test
+
+Branch `post-to-test-more` (off `main` `0075473f`), slice 1 of the switch audit's P1
+([`switch-audit-2026-10-19.md`](switch-audit-2026-10-19.md) §4). Owner: *"what we need is like post, just a test button to send to the post test channel"*.
+
+- **What it does.** **Post to test** sends one copy of the question *This week* shows — the question the shown slot was posted with, otherwise the top of the queue — to the rehearsal home (`question_shadow_channel_id`, blank meaning `shadow_channel_id`, then the guard's channel, then the log channel: `shadow.channel_id(feature="question")`). The copy is `question_template` filled, exactly what Post one now would send, with no ping.
+- **What it never touches.** No slot row (it reads `questions_moves.week`, which never writes), no queue order, no `status` / `posted_by` / `channel_id` / `message_id` on any question. It is not tracked: every press sends a new copy and the bot never takes one down.
+- **Log row.** `question.rehearsed` (ROUTINE; `web.question.rehearsed` from the site) with the actor, `question_id`, `question`, `shadow_home`, `message_id` and `url` (the message link).
+- **Refusals, in words.** Mode `off` (`questions_off`), nothing queued and nothing posted this week (`queue_empty`), no rehearsal home (`no_shadow_channel`, the existing `NO_REHEARSAL` sentence), test mode (`test_mode`), the home gone (`channel_gone`), Discord refusing (`not_posted`).
+- **Doors.** `/questions` panel: a **Post to test** button on row 2, drawn only when the mode is not off, there is a question and a home resolves; with no home the panel says so in one line (`NO_HOME_LINE`). Posts page ▸ Weekly questions ▸ This week: the same button (quiet), the same one-line state when no home. `POST /api/questions/rehearse`; `GET /api/questions` gains `test_id` and `test_home`.
+- **One sender.** The copy goes through `black_bloc/rehearsal_copy.py` (`reach`, `deliver`), the helper `posts.rehearse_post` now uses too.
+
+### Deviations
+
+1. **Shown in `shadow` as well as `on`.** The posts Post to test hides in shadow because Post it already goes to the test channel; here Post one now in shadow still consumes the queue, so a copy that touches nothing is still worth having.
+2. **No rehearsal note.** The audit's P1 text says the copy carries the note; this same build retires `rehearsal_note` (owner sheet item p4h), so no copy carries one.
+3. **Not tracked, never taken down** — no column was added (no schema change). The posts Post to test copy is tracked on `shadow_message_id` and taken down by the next Post it; a question copy stays in the test channel.
+4. **The answer on the site names the channel** (`#post-test`) through `names.site_words`; the other `/api/questions` answers still carry Discord markup, unchanged.
+5. **Panel words are code constants** (`questions_rehearse.LABEL`, `TESTED`, …), the existing `questions.py` convention for panel labels and answers; the posted words (`question_template`) are the key they always were.

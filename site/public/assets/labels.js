@@ -7,7 +7,6 @@
 export const LABELS = {
   log_channel_id: 'Where the bot writes its log',
   shadow_channel_id: 'Where rehearsals go while a feature is in shadow',
-  rehearsal_note: 'The line a rehearsal copy carries at the top',
   frontdoor_shadow_channel_id: 'Where the front door rehearses',
   posts_shadow_channel_id: 'Where posts rehearse',
   golive_shadow_channel_id: 'Where spotlights rehearse',
@@ -195,6 +194,7 @@ export const LABELS = {
   runs_lookup_title: 'The heading of one game in /runs',
   runs_lookup_line: 'One run’s line in /runs',
   runs_lookup_none: 'What /runs says when no game matches',
+  runs_lookup_seen: 'How often a game was run, in /runs',
   marathon_archived_word: 'The line an archived marathon carries',
   marathon_stale_archive_reads: 'Failed reads in a row before an unreadable marathon is archived',
   marathon_stale_archive_hours: 'Hours without an answer before an unreadable marathon is archived',

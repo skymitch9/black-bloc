@@ -29,8 +29,6 @@ from .marathon import (
 from .marathon_inbox import (
     ensure_inbox,
     home_now,
-    note_for,
-    real_inbox_parent,
     words,
 )
 
@@ -124,7 +122,7 @@ async def alert_if_due(cog: Any, guild: Any, marathon: Any) -> bool:
             ),
         ),
     )
-    body = note_for(bot, guild, home, real_inbox_parent(bot, guild), text)
+    body = text
     mentions = (
         discord.AllowedMentions.none()
         if shadow

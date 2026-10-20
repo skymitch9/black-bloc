@@ -482,7 +482,7 @@ async def test_shadow_adds_the_marathon_but_notices_the_shadow_home(bot, cog):  
     assert len(await list_marathons(bot.db, GUILD)) == 4
     assert inbox(bot) == []
     shadowed = [one for one in inbox(bot, SHADOW_CHANNEL) if "new event" in one.content]
-    assert len(shadowed) == 4 and f"<#{STAFF_ROOM}>" in shadowed[0].content
+    assert len(shadowed) == 4 and "Rehearsal" not in shadowed[0].content
     found = await kinds(bot.db)
     assert "marathon.would_feed_add" in found and "marathon.feed_added" not in found
 
@@ -934,7 +934,7 @@ async def test_the_schedule_out_edit_rehearses_in_the_shadow_inbox(bot, cog):  #
 
     shadowed = inbox(bot, SHADOW_CHANNEL)
     assert len(shadowed) == 1 and inbox(bot) == []
-    assert f"<#{STAFF_ROOM}>" in shadowed[0].content
+    assert "Rehearsal" not in shadowed[0].content
     agdq = (await by_ref(bot))[AGDQ]
     message = next(one for one in shadowed if one.id == agdq["inbox_message_id"])
     assert field_map(message.embeds[0])["Schedule"] == "2 runs · 0 BaF"

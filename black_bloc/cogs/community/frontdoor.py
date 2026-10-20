@@ -367,19 +367,12 @@ async def start_rehearsing(bot: Any, guild: Any, actor: Any = None, *, via: str 
 
 
 def rehearsal_payload(bot: Any, guild: Any, wanted: Any) -> dict[str, Any]:
-    """The real card, with one line above it saying where the real one is aimed."""
-    note = shadow.note_line(bot, guild, where_words(guild, getattr(wanted, "id", wanted)))
+    """The real card, as the rehearsal home gets it."""
     return {
-        "content": note or None,
         "embed": door_embed(bot.store, guild.id),
         "view": door_view(bot, guild),
         "allowed_mentions": discord.AllowedMentions.none(),
     }
-
-
-def rehearsal_hash(bot: Any, guild: Any, wanted: Any) -> str:
-    note = shadow.note_line(bot, guild, where_words(guild, getattr(wanted, "id", wanted)))
-    return door_hash(bot.store, guild.id, note)
 
 
 async def drop_rehearsal(bot: Any, guild: Any, actor: Any = None, *, via: str = VIA_DISCORD):
@@ -432,7 +425,7 @@ async def rehearse_door(
         else None
     )
     payload = rehearsal_payload(bot, guild, wanted)
-    stamp = rehearsal_hash(bot, guild, wanted)
+    stamp = door_hash(bot.store, guild.id)
     said = (DOOR_SHADOW_SAID if rehearsing else DOOR_REHEARSING_SAID).format(
         where=home.id, wanted=getattr(wanted, "id", wanted)
     )
@@ -517,24 +510,12 @@ async def _rehearsal_stuck(
     return refusal(DOOR_STUCK, "door_stuck", 500)
 
 
-def carried_note(bot: Any, guild: Any, row: Any) -> str:
-    """The rehearsal note rides the door's own card while the door is in shadow."""
-    if not door_rehearses(bot.store, guild.id):
-        return ""
-    wanted = row_value(row, "channel_id") or bot.store.get(guild.id, FRONTDOOR_CHANNEL)
-    return shadow.note_line(bot, guild, where_words(guild, wanted))
-
-
 def carried_parts(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Any, str] | None:
     """The door's card, its buttons and the stamp of both, for a post that carries it."""
     store = bot.store
     if not door_is_on(store, guild.id):
         return None
-    note = carried_note(bot, guild, row)
-    embed = door_embed(store, guild.id)
-    if note:
-        embed.set_footer(text=note)
-    return embed, door_view(bot, guild), door_hash(store, guild.id, note)
+    return door_embed(store, guild.id), door_view(bot, guild), door_hash(store, guild.id)
 
 
 def ours(row: Any) -> set[int]:
@@ -1075,7 +1056,6 @@ __all__ = [
     "RequestDoor",
     "TicketDoor",
     "build_panel",
-    "carried_note",
     "carried_parts",
     "carrier_up",
     "door_follows_post",
@@ -1099,7 +1079,6 @@ __all__ = [
     "open_the_request",
     "open_the_ticket",
     "post_door",
-    "rehearsal_hash",
     "rehearsal_payload",
     "rehearse_door",
     "shadow_words",

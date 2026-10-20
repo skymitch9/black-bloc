@@ -475,7 +475,7 @@ async def test_shadow_rehearses_the_notice_in_an_inbox_in_the_shadow_home(bot, c
     shadow = bot.guild.channels[SHADOW_CHANNEL]
     assert forum.posts == [] and len(shadow.threads) == 1
     said = shadow.threads[0].messages[-1].content
-    assert said.endswith("rehearsed") and f"<#{FORUM}>" in said
+    assert said == "rehearsed"
     assert (await details_of(bot.db, "marathon.notice_posted"))["home"] == "shadow"
 
 

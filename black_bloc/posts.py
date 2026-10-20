@@ -11,6 +11,7 @@ from typing import Any
 
 import discord
 
+from . import rehearsal_copy
 from . import shadow as shadow_home
 from . import sticky as sticky_rules
 from .actionlog import log_action
@@ -1510,27 +1511,19 @@ async def publish_post(
     )
 
 
-def with_note(payload: dict[str, Any], note: str) -> dict[str, Any]:
-    """The rehearsal line rides above the post as content, the way every rehearsal carries it."""
-    if not note:
-        return payload
-    words = str(payload.get("content") or "")
-    return payload | {"content": sticky_rules.fit(note, words) if words else note}
-
-
-async def _test_copy_parts(bot: Any, guild: Any, row: Any, owner: Any, note: str) -> Any:
+async def _test_copy_parts(bot: Any, guild: Any, row: Any, owner: Any) -> Any:
     """What a test copy sends: the post and its blocks fresh, and the stamps when not a sticky."""
     if owner is not None:
         from .sticky_posts import is_empty, post_message
 
-        payload, _ = await post_message(bot, guild, row, note)
+        payload, _ = await post_message(bot, guild, row)
         return (None, {}) if is_empty(payload) else (payload, {})
     from .post_blocks import kinds_on, load_kinds
 
     carried = await kinds_on(bot.db, int(row["id"]))
     await load_kinds(bot, guild, carried)
     drawn, stamps = message_parts(bot, guild, row, carried)
-    return with_note(drawn, note), stamps
+    return drawn, stamps
 
 
 async def rehearse_post(
@@ -1566,31 +1559,23 @@ async def rehearse_post(
     if not target:
         return refusal(NO_TEST_CHANNEL.format(title=title), "no_shadow_channel", 409)
     home = {"shadow_home": target}
-    if not guard_allows(bot, target):
+    channel, failure = rehearsal_copy.reach(bot, guild, target)
+    if failure == rehearsal_copy.TEST_MODE:
         await note(bot, guild, row, WOULD_REHEARSE, actor, via=via, channel=shadow, **home)
         return refusal(guard_refusal(bot), "test_mode", 409)
-    channel = channel_of(bot, guild, target)
     if channel is None:
         await note(bot, guild, row, POST_FAILED, actor, via=via, reason=CHANNEL_GONE)
         return refusal(
             POST_FAILED_SAID.format(title=title, reason=CHANNEL_GONE), "post_failed", 409
         )
     channel_id = row_value(row, "channel_id")
-    aimed = f"<#{int(channel_id)}>" if channel_id else NO_CHANNEL_WORD
-    words, stamps = await _test_copy_parts(
-        bot, guild, row, owner, shadow_home.note_line(bot, guild, aimed)
-    )
+    words, stamps = await _test_copy_parts(bot, guild, row, owner)
     if words is None:
         return refusal(NOTHING_TO_POST.format(title=title), "nothing_to_post", 409)
     payload = words | {"allowed_mentions": allowed_mentions_for(guild, body, actor)}
     message = await _existing_message(bot, guild, row, channel, actor, via, shadow=True)
     try:
-        if message is not None:
-            kind, said = REHEARSAL_UPDATED, REHEARSAL_UPDATED_SAID
-            await message.edit(**payload)
-        else:
-            kind, said = REHEARSED, REHEARSED_SAID
-            message = await channel.send(**payload)
+        message, edited = await rehearsal_copy.deliver(channel, payload, message)
     except discord.HTTPException as exc:
         await note(bot, guild, row, POST_FAILED, actor, via=via, reason=str(exc))
         return refusal(
@@ -1605,6 +1590,9 @@ async def rehearse_post(
             bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor)
         )
         await set_drawn(bot.db, int(row["id"]), stamps)
+    kind, said = (
+        (REHEARSAL_UPDATED, REHEARSAL_UPDATED_SAID) if edited else (REHEARSED, REHEARSED_SAID)
+    )
     await note(bot, guild, row, kind, actor, via=via, message_id=int(message.id), **home)
     fresh = await get_post_by_id(bot.db, int(row["id"]))
     where = where_words(guild, channel_id) if channel_id else ITS_CHANNEL
@@ -1847,7 +1835,6 @@ async def reconcile_posts(bot: Any) -> dict[str, int]:
 
 __all__ = [
     "with_door",
-    "with_note",
     "rehearse_post",
     "set_test_copy",
     "drop_shadow",

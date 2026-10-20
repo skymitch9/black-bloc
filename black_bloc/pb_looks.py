@@ -40,7 +40,6 @@ from .pb_feed import (
     ping_role,
     population,
     post_embed,
-    rehearsal_line,
     send_reason,
     work_list,
 )
@@ -683,7 +682,7 @@ class Feed:
             )
         try:
             role = None if rehearsing else ping_role(store, guild.id)
-            content = rehearsal_line(bot, guild) if rehearsing else (f"<@&{role}>" if role else "")
+            content = f"<@&{role}>" if role else ""
             allowed = (
                 discord.AllowedMentions(
                     everyone=False, users=False, roles=[discord.Object(id=role)]

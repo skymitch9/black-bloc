@@ -492,7 +492,7 @@ async def test_shadow_posts_the_rehearsal_copy_and_says_would(bot, cog):
 
     assert bot.guild.channel.messages == []
     rehearsed = bot.guild.shadow.messages
-    assert len(rehearsed) == 1 and f"<#{CHANNEL}>" in rehearsed[0].content
+    assert len(rehearsed) == 1 and "Rehearsal" not in rehearsed[0].content
     assert "golive.would_spotlight_announce" in await kinds(bot.db)
     assert "golive.spotlight_announced" not in await kinds(bot.db)
 
@@ -868,20 +868,6 @@ async def test_a_spotlight_off_announcement_follows_the_game_too(bot, cog):
     assert "Hollow Knight" in announcement.content and announcement.pinned is False
     assert announcement.pins == []
     assert (await open_session(bot.db, row["id"]))["game"] == "Hollow Knight"
-
-
-async def test_a_shadow_announcement_keeps_its_rehearsal_line_when_re_worded(bot, cog):
-    await bot.store.set(GUILD, SPOTLIGHT_MODE_KEY, "shadow")
-    _row, helix = await a_live_session(bot, cog)
-    announcement = bot.guild.shadow.messages[0]
-    first_line = announcement.content.split("\n", 1)[0]
-    helix.streams = [twitch_stream(game="Hollow Knight")]
-
-    await cog.poll_once()
-
-    assert "Hollow Knight" in announcement.content
-    assert announcement.content.startswith(first_line + "\n")
-    assert announcement.content.count(first_line) == 1
 
 
 async def test_the_twitch_poller_leaves_a_youtube_sessions_announcement_alone(bot, cog):

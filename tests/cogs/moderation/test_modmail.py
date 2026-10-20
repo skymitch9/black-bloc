@@ -2905,15 +2905,6 @@ async def test_the_ticket_button_rehearses_in_the_front_doors_own_home(cog, bot,
     assert json.loads((await cur.fetchone())["details"])["shadow_home"] == 5555
 
 
-async def test_the_rehearsal_copy_carries_the_note_naming_the_real_channel(cog, bot, lead):
-    bot.guard = FakeGuard()
-    home = bot.guild.channels[TEST_CHANNEL]
-
-    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
-
-    assert home.messages[-1].content.startswith("Rehearsal \u2014 this is where it would go:")
-
-
 async def test_with_no_rehearsal_home_at_all_the_button_only_writes_a_would_row(
     cog, bot, lead, db
 ):

@@ -19,6 +19,7 @@ ROUTES = [
     ("POST", "/api/questions/post-now", None),
     ("POST", "/api/questions/skip", None),
     ("POST", "/api/questions/unskip", None),
+    ("POST", "/api/questions/rehearse", None),
 ]
 
 
@@ -175,3 +176,38 @@ async def test_an_empty_queue_or_off_hands_the_owner_nothing_to_post(client, sig
     await web.store.set(wf.GUILD_ID, "question_mode", "off")
     found = client.get("/api/questions/current").json()
     assert found["body"] is None and found["channel_url"] is None and found["mode"] == "off"
+
+
+async def test_post_to_test_from_the_page_sends_a_copy_and_changes_nothing(
+    client, sign_in, web, guild, wf
+):
+    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.OTHER_CHANNEL_ID)
+    sign_in(client)
+    client.post("/api/questions", json={"text": "one?\ntwo?"})
+    before =client.get("/api/questions").json()
+    assert before["test_id"] == before["queue"][0]["id"]
+    assert before["test_home"] == str(wf.OTHER_CHANNEL_ID)
+
+    tested = client.post("/api/questions/rehearse")
+
+    assert tested.status_code == 200, tested.json()
+    channel = guild.get_channel(wf.OTHER_CHANNEL_ID)
+    assert f"is in #{channel.name}." in tested.json()["message"]
+    assert channel.messages[-1].content == "one?"
+    after = client.get("/api/questions").json()
+    assert (after["queue"], after["state"], after["history"]) == (
+        before["queue"],
+        before["state"],
+        before["history"],
+    )
+    kinds = await wf.kinds_in(web.db)
+    assert "web.question.rehearsed" in kinds and "web.question.posted_extra" not in kinds
+
+
+def test_post_to_test_with_nothing_queued_is_refused_in_words(client, sign_in):
+    sign_in(client)
+
+    refused = client.post("/api/questions/rehearse")
+
+    assert refused.status_code == 409
+    assert "queue is empty" in refused.json()["message"]

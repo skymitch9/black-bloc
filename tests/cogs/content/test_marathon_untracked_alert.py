@@ -250,7 +250,7 @@ async def test_shadow_posts_in_the_rehearsal_inbox_and_pings_nobody(bot, cog):
     await found(bot, cog, schedule(10, SKY_RUN))
     await cog.tick_once()
     said = alerts(bot, SHADOW_CHANNEL)
-    assert len(said) == 1 and f"<#{EVENTS}>" in said[0].content
+    assert len(said) == 1 and "Rehearsal" not in said[0].content
     assert said[0].kwargs["allowed_mentions"].roles is False
     details = await details_of(bot.db, KIND)
     assert details["shadow"] is True and details["shadow_home"] == SHADOW_CHANNEL

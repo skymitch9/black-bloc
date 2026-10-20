@@ -1261,13 +1261,11 @@ class Birthdays(commands.Cog):
         if not channel_id:
             log.warning("birthdays: not posted — birthday_channel_id is not set")
             return "no_channel_configured"
-        note = ""
         if rehearse:
             home = shadow_home.channel_id(self.bot, guild, feature=SHADOW_FEATURE)
             if not home:
                 log.warning("birthdays: not rehearsed — there is no rehearsal home")
                 return "no_rehearsal_home"
-            note = shadow_home.note_line(self.bot, guild, f"<#{int(channel_id)}>")
             channel_id = home
         guard = getattr(self.bot, "guard", None)
         if guard is not None and not guard.allows_channel(channel_id):
@@ -1278,9 +1276,7 @@ class Birthdays(commands.Cog):
             log.warning("birthdays: not posted — channel %s is not visible", channel_id)
             return "channel_not_visible"
         try:
-            await channel.send(
-                note or None, embed=embed, allowed_mentions=discord.AllowedMentions.none()
-            )
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         except Exception as exc:
             log.warning("birthdays: not posted — %s: %s", type(exc).__name__, exc)
             return f"{type(exc).__name__}: {exc}"

@@ -11,6 +11,7 @@ ROUTES = [
     ("POST", "/api/sticky/501/pause", None),
     ("POST", "/api/sticky/501/resume", None),
     ("DELETE", "/api/sticky/501", None),
+    ("POST", "/api/sticky/501/rehearse", None),
 ]
 
 
@@ -42,7 +43,7 @@ async def test_a_save_rehearses_and_answers_the_row_the_page_draws(
     assert "shadow" in found["message"]
     assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
     copy = guild.get_channel(wf.TEST_CHANNEL_ID).messages[-1]
-    assert copy.content.endswith(WORDS) and f"<#{wf.OTHER_CHANNEL_ID}>" in copy.content
+    assert copy.content == WORDS
     assert await wf.kinds_in(web.db) == ["web.sticky.set", "sticky.would_post"]
 
 
@@ -182,3 +183,35 @@ async def test_a_post_can_be_the_sticky_and_the_list_names_it(client, sign_in, w
     ]
     assert rows[0]["words"] == "The post **House rules**" and rows[0]["state"] == "live"
     assert missing.status_code == 404 and missing.json()["error"] == "no_such_post"
+
+
+async def test_post_to_test_sends_one_copy_and_the_row_reads_the_same(
+    client, sign_in, web, guild, wf
+):
+    await web.store.set(wf.GUILD_ID, "sticky_mode", "on")
+    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.TEST_CHANNEL_ID)
+    sign_in(client)
+    client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"text": WORDS})
+    [before] = client.get("/api/sticky").json()
+    assert before["testable"] is True
+
+    tested = client.post(f"/api/sticky/{wf.OTHER_CHANNEL_ID}/rehearse")
+
+    assert tested.status_code == 200, tested.json()
+    assert "test copy" in tested.json()["message"]
+    assert tested.json()["sticky"]["state"] == "live"
+    assert guild.get_channel(wf.TEST_CHANNEL_ID).messages[-1].content == WORDS
+    assert [one.content for one in guild.get_channel(wf.OTHER_CHANNEL_ID).messages] == [WORDS]
+    [after] = client.get("/api/sticky").json()
+    assert after == before
+    assert "web.sticky.rehearsed" in await wf.kinds_in(web.db)
+
+
+async def test_a_rehearsing_sticky_offers_no_post_to_test(client, sign_in, web, wf):
+    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.TEST_CHANNEL_ID)
+    sign_in(client)
+    client.put(f"/api/sticky/{wf.OTHER_CHANNEL_ID}", json={"text": WORDS})
+
+    [row] = client.get("/api/sticky").json()
+
+    assert row["state"] == "rehearsing" and row["testable"] is False

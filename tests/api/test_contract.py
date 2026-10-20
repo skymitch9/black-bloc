@@ -21,6 +21,7 @@ from black_bloc import (
     pings,
     post_blocks,
     posts,
+    questions_store,
     sticky,
 )
 from black_bloc import rolegrants as grants
@@ -1031,6 +1032,7 @@ async def seed_world(client, web, guild, wf) -> dict:
     )
     await post_blocks.attach(db, await posts.get_post_by_id(db, board_id), "leaderboard")
     await sticky.write_words(db, guild_id, wf.VOICE_CHANNEL_ID, "", 7, post_id=board_id)
+    await questions_store.add_many(db, guild_id, ["Contract question?"], 7, datetime.now(UTC))
     structure_old, structure_new = await seed_structure(db, guild_id)
     brackets = await seed_brackets(db, guild_id)
     points = await seed_points(db, guild_id)

@@ -222,7 +222,6 @@ from ...panels import (
     still_staff,
 )
 from ...posted import drop_message, duplicates_near, message_is_there, overtaken_by
-from ...posts import where_words
 from ...settings_store import (
     CHANNEL_MODE,
     DB_UNAVAILABLE,
@@ -2330,22 +2329,15 @@ async def post_below_button(bot: Any, guild: Any, channel: Any, message_id: Any)
 
 
 def panel_rehearsal_payload(bot: Any, guild: Any, wanted: Any) -> dict[str, Any]:
-    """The real Open-a-ticket card, with one line above it saying where it is aimed."""
+    """The real Open-a-ticket card, as the rehearsal home gets it."""
     store = bot.store
-    note = shadow.note_line(bot, guild, where_words(guild, getattr(wanted, "id", wanted)))
     return {
-        "content": note or None,
         "embed": ticket_button_embed(
             store.get(guild.id, PANEL_HEADING_KEY), store.get(guild.id, PANEL_TEXT_KEY)
         ),
         "view": ticket_panel_view(guild.id),
         "allowed_mentions": discord.AllowedMentions.none(),
     }
-
-
-def panel_rehearsal_hash(bot: Any, guild: Any, wanted: Any) -> str:
-    note = shadow.note_line(bot, guild, where_words(guild, getattr(wanted, "id", wanted)))
-    return panel_hash(bot.store, guild.id, note)
 
 
 async def drop_panel_rehearsal(bot: Any, guild: Any, actor: Any = None, *, via: str = VIA_DISCORD):
@@ -2392,7 +2384,7 @@ async def rehearse_panel(
         await post_below_button(bot, guild, home, copy_id) if here else None
     )
     payload = panel_rehearsal_payload(bot, guild, wanted)
-    stamp = panel_rehearsal_hash(bot, guild, wanted)
+    stamp = panel_hash(bot.store, guild.id)
     said = PANEL_REHEARSING_SAID.format(where=home.id, wanted=getattr(wanted, "id", wanted))
     by = getattr(actor, "id", actor)
     if here and overtaken is None:

@@ -10,7 +10,6 @@ const WORD_KEYS = {
   ticket: 'frontdoor_ticket_label',
   request: 'frontdoor_request_label',
   event: 'frontdoor_event_label',
-  note: 'rehearsal_note',
 };
 const SHOW_KEYS = {
   ticket: 'frontdoor_show_ticket',
@@ -28,7 +27,6 @@ const NOTHING_CHANGED = 'Nothing has changed, so nothing was saved.';
 const SAVED_FALLBACK = 'Saved.';
 const NO_BUTTONS = 'Every button is switched off, so the card goes out with nothing to press. '
   + 'Tick at least one to keep it a door.';
-const NOTE_LABEL = 'Rehearsal note — shared by every rehearsal copy';
 
 function aided(label, input, spec) {
   return field(label, input, wordAids(input, spec));
@@ -53,7 +51,7 @@ function isOn(spec) {
   return value === null || value === undefined ? true : Boolean(value);
 }
 
-/** The front door block's words: heading, line, three labels, which buttons show, the note. */
+/** The front door block's words: heading, line, three labels, which buttons show. */
 export async function frontDoorWords({ onSaved = null, say = null } = {}) {
   const specs = specsByKey(await settings(true));
   const was = {};
@@ -66,7 +64,6 @@ export async function frontDoorWords({ onSaved = null, say = null } = {}) {
     inputs[key].value = was[key];
   }
   inputs.frontdoor_text.removeAttribute('maxlength');
-  inputs.rehearsal_note.removeAttribute('maxlength');
   const ticks = {};
   for (const [kind, key] of Object.entries(SHOW_KEYS)) {
     was[key] = isOn(specs[key]);
@@ -140,7 +137,6 @@ export async function frontDoorWords({ onSaved = null, say = null } = {}) {
       ]))),
       warn,
     ]),
-    aided(NOTE_LABEL, inputs.rehearsal_note, specs.rehearsal_note),
     el('div', { class: 'blockwords-preview' }, [mock.node, mock.say]),
     bar([save]),
     voice,
