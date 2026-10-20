@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 98
+SCHEMA_VERSION = 99
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1282,6 +1282,7 @@ CREATE TABLE IF NOT EXISTS baf_series (
     guild_id INTEGER NOT NULL,
     game_key TEXT    NOT NULL,
     series   TEXT    NOT NULL,
+    genre    TEXT    NOT NULL DEFAULT '',
     by       INTEGER,
     at       TEXT    NOT NULL,
     PRIMARY KEY (guild_id, game_key)
@@ -1734,6 +1735,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "stale_clock_at", "TEXT"),
     ("marathons", "untracked_alert_at", "TEXT"),
     ("marathon_baf_overrides", "reason", "TEXT"),
+    ("baf_series", "genre", "TEXT NOT NULL DEFAULT ''"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

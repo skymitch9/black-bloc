@@ -25,6 +25,10 @@ def answered(outcome: Any) -> dict[str, Any]:
     return {"ok": True, "message": outcome.message, "value": outcome.value}
 
 
+def names_of(rows: list[dict[str, Any]], tag: str) -> list[str]:
+    return sorted({row[tag] for row in rows if row[tag]}, key=str.lower)
+
+
 def build_router(bot: Any) -> APIRouter:
     writer = writer_dependency(bot)
     router = APIRouter(
@@ -41,6 +45,7 @@ def build_router(bot: Any) -> APIRouter:
         game: str = "",
         event: str = "",
         series: str = "",
+        genre: str = "",
         runner: str = "",
         year: str = "",
         how: str = "",
@@ -53,6 +58,7 @@ def build_router(bot: Any) -> APIRouter:
             "game": game,
             "event": event,
             "series": series,
+            "genre": genre,
             "runner": runner,
             "year": year,
             "how": how,
@@ -65,9 +71,8 @@ def build_router(bot: Any) -> APIRouter:
         return {
             "rows": rows,
             "events": await runs.counted_events(bot.db, guild.id, sources),
-            "series_names": sorted(
-                {row["series"] for row in every if row["series"]}, key=str.lower
-            ),
+            "series_names": names_of(every, runs.SERIES),
+            "genre_names": names_of(every, runs.GENRE),
             "sources": sources,
             "parts": list(bot.store.get(guild.id, RUNS_PARTS) or ()),
         }
@@ -128,6 +133,22 @@ def build_router(bot: Any) -> APIRouter:
             actor_for(bot, who, guild),
             game_key,
             payload.get("series"),
+            via=VIA_WEBSITE,
+        )
+        return answered(outcome)
+
+    @router.put("/genre/{game_key:path}")
+    async def runs_genre(
+        request: Request, game_key: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = ready()
+        outcome = await runs.set_genre(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            game_key,
+            payload.get("genre"),
             via=VIA_WEBSITE,
         )
         return answered(outcome)

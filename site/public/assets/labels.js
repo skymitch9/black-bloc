@@ -186,6 +186,7 @@ export const LABELS = {
   runs_lookup_line: 'One run’s line in /runs',
   runs_lookup_none: 'What /runs says when no game matches',
   runs_lookup_seen: 'How often a game was run, in /runs',
+  runs_lookup_tags: 'A game’s series and genre, in /runs',
   marathon_archived_word: 'The line an archived marathon carries',
   marathon_stale_archive_reads: 'Failed reads in a row before an unreadable marathon is archived',
   marathon_stale_archive_hours: 'Hours without an answer before an unreadable marathon is archived',

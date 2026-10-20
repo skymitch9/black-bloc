@@ -803,6 +803,7 @@ a.rowlist-main:focus-visible,
 
 .table-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .table-gap { flex-grow: 1; }
+.input.filter-select { width: 12rem; max-width: 100%; text-overflow: ellipsis; }
 .table-count { color: var(--et-muted); font-size: var(--et-ui-xs); white-space: nowrap; }
 .table-block { display: grid; gap: .45rem; }
 /* The row-count footer, Cloudflare's "Showing 1-17 of 17". One home for the
@@ -2937,6 +2938,8 @@ body[data-show-was="1"] .preview-was { display: block; }
 .runs-chiprow { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
 .runs-chiplabel { flex: 0 0 4.5rem; padding-top: 5px; font-size: var(--et-ui-xs); color: var(--et-muted); }
 .runs-chiprow > .chipbar { min-width: 0; }
+.runs-picks { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; max-width: 100%; }
+.runs-picks > .input.filter-select { flex: 1 1 10rem; }
 .runs-how { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
 .log-table th.th-sort { cursor: pointer; user-select: none; }
 .runs-page, .runs-grid { min-width: 0; }

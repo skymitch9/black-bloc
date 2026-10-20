@@ -19,6 +19,16 @@ export function applyFilters(items, options = {}) {
   return { hits, shown: hits.filter(Boolean).length, total: hits.length };
 }
 
+const byName = (a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' });
+
+export function countedChoices(items, valuesOf, { order = byName } = {}) {
+  const counts = new Map();
+  for (const item of items || []) {
+    for (const value of new Set((valuesOf(item) || []).filter(Boolean))) counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return [...counts.keys()].sort(order).map((value) => [value, `${value} (${counts.get(value)})`]);
+}
+
 export const BLOCK_FILTERS = [
   ['all', 'All', null],
   ['on_post', 'On a post', (kind) => (kind.on || []).length > 0],

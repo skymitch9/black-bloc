@@ -863,10 +863,11 @@ const SETTING_SPECS = [
   ["marathon_archive_after_days", "int", 7, 7, "days after a marathon's last run ends that it moves to the archive, with its runs and people — kept, browsable under Archive on the Events page, and Restore brings it back paused. 7 by default; 0 moves it the same day. A marathon with no dates never moves by itself", null, 365, 0],
   ["runs_sources", "enums", ["gdq", "gdq_hotfix"], ["gdq", "gdq_hotfix"], "which marathon sources count towards the BaF runs page and /runs; gdq and gdq_hotfix by default, so a run in a horaro or Oengus marathon is left out", ["gdq", "gdq_hotfix", "rpglb", "horaro", "oengus", "fastestfurs", "ladyarcaders"]],
   ["runs_parts", "enums", ["runner"], ["runner"], "which part a BaF member must play on a run for it to count as a BaF run; runner by default, so hosting or commentary alone does not count", ["runner", "host", "commentator"]],
-  ["runs_lookup_title", "text", "{game}", "{game}", "the heading of one game's answer in the /runs panel; {game}"],
+  ["runs_lookup_title", "text", "{game}", "{game}", "the heading of one game's answer in the /runs panel; {game}, {series}, {genre}, and {tags} (the series and genre that are set, joined by ·)"],
   ["runs_lookup_line", "text", "{date} · {event} · {category} · {runners}", "{date} · {event} · {category} · {runners}", "one run's line under a game in the /runs panel; {date}, {event}, {category} and {runners}"],
   ["runs_lookup_none", "text", "Nothing in the BaF runs database matches **{query}**.", "Nothing in the BaF runs database matches **{query}**.", "what the /runs panel says when no game matches; {query} is what was typed"],
-  ["runs_lookup_seen", "text", "seen {n} time(s), last {date} at {event}", "seen {n} time(s), last {date} at {event}", "the first line under a game in the /runs panel; {n} is how many times it was run, {date} and {event} the latest run"],
+  ["runs_lookup_seen", "text", "seen {n} time(s), last {date} at {event}", "seen {n} time(s), last {date} at {event}", "the first line under a game in the /runs panel; {n} is how many times it was run, {date} and {event} the latest run; {series}, {genre} and {tags} too"],
+  ["runs_lookup_tags", "text", "{tags}", "{tags}", "the line under a game's heading in the /runs panel, drawn only when the game has a series or a genre; {series}, {genre}, and {tags} (the ones set, joined by ·)"],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_stale_archive_reads", "int", 3, 3, "how many reads of a marathon's schedule in a row must fail before it moves to the archive as unreadable, once marathon_stale_archive_hours have also passed — a schedule that is not published yet never counts, and a paused or ignored marathon never moves. Restore brings it back, and so does its feed listing it again with a schedule that reads. 3 by default; 0 never archives an unreadable marathon", null, 20, 0],
   ["marathon_stale_archive_hours", "int", 24, 24, "how many hours a marathon's schedule must have gone without an answer before marathon_stale_archive_reads failed reads move it to the archive — counted from the last read that worked, or from a Restore or Resume since. 24 by default; 0 needs the failed reads alone", null, 720, 0],
@@ -1793,6 +1794,7 @@ function seedState() {
   bafRuns: seedBafRuns(),
   bafEdits: {},
   bafSeries: { 'super metroid': 'Metroid' },
+  bafGenre: { 'hollow knight': 'Metroidvania' },
   marathonPeople: seedMarathonPeople(),
   marathonFeeds: seedMarathonFeeds(),
   marathonSpotlights: seedMarathonSpotlights(),
@@ -2626,6 +2628,7 @@ const NAMESPACE_OVERRIDE = {
   runs_lookup_line: 'marathon',
   runs_lookup_none: 'marathon',
   runs_lookup_seen: 'marathon',
+  runs_lookup_tags: 'marathon',
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
   mod_log_level: 'automod',
@@ -12098,7 +12101,7 @@ route('POST', '/api/questions/unskip', (context) => {
 const RUNS_HOW_WORDS = { tracked: 'tracked', imported: 'imported', hand: 'by hand' };
 const RUNS_EVENT_WORDS = { gdq: 'GDQ', gdq_hotfix: 'GDQ Hotfix' };
 const RUNS_FIELDS = ['date', 'event', 'game', 'category', 'runners', 'note'];
-const RUNS_CSV_COLUMNS = ['key', 'date', 'event', 'event_source', 'event_ref', 'game', 'series', 'category', 'runners', 'runner_names', 'runner_ids', 'how', 'note'];
+const RUNS_CSV_COLUMNS = ['key', 'date', 'event', 'event_source', 'event_ref', 'game', 'series', 'genre', 'category', 'runners', 'runner_names', 'runner_ids', 'how', 'note'];
 const MOCK_TRACKER_EVENT = {
   id: '51',
   name: 'SGDQ 2025',
@@ -12151,6 +12154,7 @@ function runsShaped(given) {
     game: given.game,
     game_key: gameKey,
     series: state.bafSeries[gameKey] || '',
+    genre: state.bafGenre[gameKey] || '',
     category: given.category || '',
     runners: given.runners,
     runners_text: runsLine(given.runners),
@@ -12242,6 +12246,7 @@ function runsGames(rows) {
       game: last.game,
       game_key: key,
       series: last.series,
+      genre: last.genre,
       times: runs.length,
       last_date: last.date,
       last_event: last.event,
@@ -12292,11 +12297,18 @@ function runsEvent(body) {
 const RUNS_NO_GAME = 'A run needs a game, so nothing was saved. Type the game’s name in the Game box and save again.';
 const RUNS_NO_RUN = 'That run is not in the BaF runs database any more, so nothing was changed. Refresh the page to see the runs as they are now.';
 
-function runsSeriesSet(game, series) {
+const RUNS_TAG_STORES = { series: 'bafSeries', genre: 'bafGenre' };
+
+function runsTagSet(tag, game, value) {
+  const store = state[RUNS_TAG_STORES[tag]];
   const key = runsKey(game);
-  const text = String(series || '').trim().slice(0, 100);
-  if (text) state.bafSeries[key] = text;
-  else delete state.bafSeries[key];
+  const text = String(value || '').trim().slice(0, 100);
+  if (text) store[key] = text;
+  else delete store[key];
+}
+
+function runsSeriesSet(game, series) {
+  runsTagSet('series', game, series);
 }
 
 function runsTrackedRun(key) {
@@ -12319,6 +12331,7 @@ route('GET', '/api/runs', (context) => {
     rows: every,
     events: runsEvents(),
     series_names: [...new Set(every.map((row) => row.series).filter(Boolean))].sort(),
+    genre_names: [...new Set(every.map((row) => row.genre).filter(Boolean))].sort(),
     sources: runsSetting('runs_sources', ['gdq', 'gdq_hotfix']),
     parts: runsSetting('runs_parts', ['runner']),
   };
@@ -12337,7 +12350,7 @@ function runsCsv(rows) {
   const lines = [RUNS_CSV_COLUMNS.join(',')];
   for (const row of rows.filter((one) => !one.removed)) {
     lines.push([
-      row.key, row.date || '', row.event, row.event_source || '', row.event_ref || '', row.game, row.series, row.category,
+      row.key, row.date || '', row.event, row.event_source || '', row.event_ref || '', row.game, row.series, row.genre, row.category,
       row.runners_text, row.runners.map((one) => one.name).join('; '), row.runners.map((one) => one.user_id || '').join('; '), row.how, row.note,
     ].map(cell).join(','));
   }
@@ -12365,22 +12378,25 @@ route('POST', '/api/runs', async (context) => {
   const id = state.bafRuns.reduce((most, one) => Math.max(most, one.id), 0) + 1;
   state.bafRuns.push({ id, how: 'hand', ...event, run_ref: null, started_at: when.value, game, category: String(body.category || '').trim(), people: runsPeople(body), note: String(body.note || '').trim(), added_by: STAFF.id });
   if (body.series) runsSeriesSet(game, body.series);
+  if (body.genre) runsTagSet('genre', game, body.genre);
   logAction('web.runs.added', { details: { via: 'website', key: `h${id}`, game, event: event.event_name } });
   return { ok: true, message: `**${game}** is in the BaF runs database.`, value: `h${id}` };
 });
 
-route('PUT', '/api/runs/series/:game_key', async (context) => {
-  requireStaff(context.session);
-  const body = await context.body();
-  const key = runsKey(context.params.game_key);
-  const before = state.bafSeries[key] || '';
-  const text = String(body.series || '').trim();
-  if (before === text) throw new Refused(409, 'no_change', 'Nothing in that run changed, so nothing was saved.');
-  runsSeriesSet(key, text);
-  logAction('web.runs.series_set', { details: { via: 'website', game_key: key, before, after: text } });
-  const game = (runsGames(runsView()).find((one) => one.game_key === key) || { game: key }).game;
-  return { ok: true, message: text ? `**${game}** is in the series **${text}**.` : `**${game}** has no series now.`, value: key };
-});
+for (const tag of Object.keys(RUNS_TAG_STORES)) {
+  route('PUT', `/api/runs/${tag}/:game_key`, async (context) => {
+    requireStaff(context.session);
+    const body = await context.body();
+    const key = runsKey(context.params.game_key);
+    const before = state[RUNS_TAG_STORES[tag]][key] || '';
+    const text = String(body[tag] || '').trim();
+    if (before === text) throw new Refused(409, 'no_change', 'Nothing in that run changed, so nothing was saved.');
+    runsTagSet(tag, key, text);
+    logAction(`web.runs.${tag}_set`, { details: { via: 'website', game_key: key, before, after: text } });
+    const game = (runsGames(runsView()).find((one) => one.game_key === key) || { game: key }).game;
+    return { ok: true, message: text ? `**${game}** is in the ${tag} **${text}**.` : `**${game}** has no ${tag} now.`, value: key };
+  });
+}
 
 route('PUT', '/api/runs/:key', async (context) => {
   requireStaff(context.session);
@@ -12402,6 +12418,7 @@ route('PUT', '/api/runs/:key', async (context) => {
     if ('runners' in body || 'runner_names' in body) row.people = runsPeople(body);
     if ('event' in body || 'marathon_id' in body) Object.assign(row, runsEvent(body));
     if ('series' in body) runsSeriesSet(row.game, body.series);
+    if ('genre' in body) runsTagSet('genre', row.game, body.genre);
     logAction('web.runs.edited', { details: { via: 'website', key, game: row.game, after: body } });
     return { ok: true, message: `**${row.game}** is saved.`, value: key };
   }
@@ -12421,6 +12438,7 @@ route('PUT', '/api/runs/:key', async (context) => {
   if ('runners' in body || 'runner_names' in body) held.runners = JSON.stringify(runsPeople(body));
   state.bafEdits[slot] = held;
   if ('series' in body) runsSeriesSet(held.game || run.game, body.series);
+  if ('genre' in body) runsTagSet('genre', held.game || run.game, body.genre);
   logAction('web.runs.edited', { details: { via: 'website', key, game: held.game || run.game, after: body } });
   return { ok: true, message: `**${held.game || run.game}** is saved.`, value: key };
 });
@@ -12509,7 +12527,7 @@ function runsImportCsv(text, dryRun) {
     const ids = String(row.runner_ids || '').split(/\s*;\s*/);
     const people = names.map((name, at) => ({ name, login: null, part: 'runner', user_id: /^\d+$/.test(ids[at] || '') ? ids[at] : runsMember(name) }));
     if (people.some((one) => !one.user_id)) need += 1;
-    adds.push({ event_name: String(row.event || '').trim(), event_source: row.event_source || null, event_ref: row.event_ref || null, run_ref: null, started_at: when.value, game, category: String(row.category || '').trim(), people, note: String(row.note || '').trim(), series: String(row.series || '').trim() });
+    adds.push({ event_name: String(row.event || '').trim(), event_source: row.event_source || null, event_ref: row.event_ref || null, run_ref: null, started_at: when.value, game, category: String(row.category || '').trim(), people, note: String(row.note || '').trim(), series: String(row.series || '').trim(), genre: String(row.genre || '').trim() });
   }
   return { adds, skipped, need, bad, unmatched: [], later: 0, event: null };
 }
@@ -12533,7 +12551,7 @@ function runsImportEvent(url, pairs) {
     });
     if (!people.some((one) => one.user_id)) continue;
     if (here.has(run.id)) { skipped += 1; continue; }
-    adds.push({ event_name: MOCK_TRACKER_EVENT.name, event_source: 'gdq', event_ref: MOCK_TRACKER_EVENT.id, run_ref: run.id, started_at: run.at, game: run.game, category: run.category, people, note: '', series: '' });
+    adds.push({ event_name: MOCK_TRACKER_EVENT.name, event_source: 'gdq', event_ref: MOCK_TRACKER_EVENT.id, run_ref: run.id, started_at: run.at, game: run.game, category: run.category, people, note: '', series: '', genre: '' });
   }
   const names = [...unmatched.values()].sort().map((name) => ({ name, suggest: null }));
   return { adds, skipped, need: names.length, bad: 0, unmatched: names, later: 0, event: MOCK_TRACKER_EVENT.name };
@@ -12556,9 +12574,10 @@ route('POST', '/api/runs/import', async (context) => {
   let id = state.bafRuns.reduce((most, one) => Math.max(most, one.id), 0);
   for (const one of found.adds) {
     id += 1;
-    const { series, ...row } = one;
+    const { series, genre, ...row } = one;
     state.bafRuns.push({ id, how: 'imported', ...row, added_by: STAFF.id });
     if (series && !state.bafSeries[runsKey(one.game)]) runsSeriesSet(one.game, series);
+    if (genre && !state.bafGenre[runsKey(one.game)]) runsTagSet('genre', one.game, genre);
   }
   value.added = found.adds.length;
   logAction('web.runs.imported', { details: { via: 'website', from: found.event ? 'gdq' : 'csv', added: found.adds.length, skipped: found.skipped } });

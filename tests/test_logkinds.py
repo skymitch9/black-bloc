@@ -49,6 +49,7 @@ ROOT = PACKAGE.parent
 # A call site the table does not cover fails `test_every_dynamic_kind_is_enumerated`
 # by name, which is what stops a new kind going quietly unclassified.
 KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
+    "black_bloc/baf_runs.py::f'runs.{tag}_set'": ("runs.series_set", "runs.genre_set"),
     "black_bloc/brackets_thread.py::kind": (
         "brackets.thread_made",
         "brackets.thread_failed",

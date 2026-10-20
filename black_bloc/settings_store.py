@@ -10324,6 +10324,7 @@ RUNS_LOOKUP_TITLE = "runs_lookup_title"
 RUNS_LOOKUP_LINE = "runs_lookup_line"
 RUNS_LOOKUP_NONE = "runs_lookup_none"
 RUNS_LOOKUP_SEEN = "runs_lookup_seen"
+RUNS_LOOKUP_TAGS = "runs_lookup_tags"
 RUNS_SOURCE_CHOICES = (
     "gdq",
     "gdq_hotfix",
@@ -10334,10 +10335,11 @@ RUNS_SOURCE_CHOICES = (
     "ladyarcaders",
 )
 RUNS_PART_CHOICES = ("runner", "host", "commentator")
-RUNS_TITLE_FIELDS = ("game",)
+RUNS_TAG_FIELDS = ("series", "genre", "tags")
+RUNS_TITLE_FIELDS = ("game", *RUNS_TAG_FIELDS)
 RUNS_LINE_FIELDS = ("date", "event", "category", "runners")
 RUNS_NONE_FIELDS = ("query",)
-RUNS_SEEN_FIELDS = ("n", "date", "event")
+RUNS_SEEN_FIELDS = ("n", "date", "event", *RUNS_TAG_FIELDS)
 RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_SOURCES: ["gdq", "gdq_hotfix"],
     RUNS_PARTS: ["runner"],
@@ -10345,6 +10347,7 @@ RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_LOOKUP_LINE: "{date} · {event} · {category} · {runners}",
     RUNS_LOOKUP_NONE: "Nothing in the BaF runs database matches **{query}**.",
     RUNS_LOOKUP_SEEN: "seen {n} time(s), last {date} at {event}",
+    RUNS_LOOKUP_TAGS: "{tags}",
 }
 RUNS_KEYS: tuple[str, ...] = tuple(RUNS_DEFAULTS)
 KEY_TYPES.update(
@@ -10355,6 +10358,7 @@ KEY_TYPES.update(
         RUNS_LOOKUP_LINE: "text",
         RUNS_LOOKUP_NONE: "text",
         RUNS_LOOKUP_SEEN: "text",
+        RUNS_LOOKUP_TAGS: "text",
     }
 )
 KEY_CHOICES.update({RUNS_SOURCES: RUNS_SOURCE_CHOICES, RUNS_PARTS: RUNS_PART_CHOICES})
@@ -10368,7 +10372,10 @@ KEY_HELP.update(
             "which part a BaF member must play on a run for it to count as a BaF run; runner by "
             "default, so hosting or commentary alone does not count"
         ),
-        RUNS_LOOKUP_TITLE: "the heading of one game's answer in the /runs panel; {game}",
+        RUNS_LOOKUP_TITLE: (
+            "the heading of one game's answer in the /runs panel; {game}, {series}, {genre}, "
+            "and {tags} (the series and genre that are set, joined by ·)"
+        ),
         RUNS_LOOKUP_LINE: (
             "one run's line under a game in the /runs panel; {date}, {event}, {category} and "
             "{runners}"
@@ -10378,7 +10385,11 @@ KEY_HELP.update(
         ),
         RUNS_LOOKUP_SEEN: (
             "the first line under a game in the /runs panel; {n} is how many times it was run, "
-            "{date} and {event} the latest run"
+            "{date} and {event} the latest run; {series}, {genre} and {tags} too"
+        ),
+        RUNS_LOOKUP_TAGS: (
+            "the line under a game's heading in the /runs panel, drawn only when the game has a "
+            "series or a genre; {series}, {genre}, and {tags} (the ones set, joined by ·)"
         ),
     }
 )
@@ -10388,6 +10399,7 @@ TEXT_CHECKS.update(
         RUNS_LOOKUP_LINE: checked_fields(RUNS_LINE_FIELDS),
         RUNS_LOOKUP_NONE: checked_fields(RUNS_NONE_FIELDS),
         RUNS_LOOKUP_SEEN: checked_fields(RUNS_SEEN_FIELDS),
+        RUNS_LOOKUP_TAGS: checked_fields(RUNS_TAG_FIELDS),
     }
 )
 NAMESPACE_OVERRIDE.update({key: "marathon" for key in RUNS_KEYS})
