@@ -865,6 +865,11 @@ const SETTING_SPECS = [
   ["marathon_role_ping_line_gone", "text", "The Marathon role is not mentioned: the role in marathon_role_id is no longer in this server.", "The Marathon role is not mentioned: the role in marathon_role_id is no longer in this server.", "the line under a marathon's ping switch while the picked Marathon role has been deleted"],
   ["marathon_role_ping_line_not_mentionable", "text", "The Marathon role is not mentioned: {role} is not mentionable and Black Bloc may not mention every role, so a mention would notify nobody.", "The Marathon role is not mentioned: {role} is not mentionable and Black Bloc may not mention every role, so a mention would notify nobody.", "the line under a marathon's ping switch while Discord would not notify the Marathon role: it is not set mentionable and the bot lacks Mention Everyone. It takes {role}"],
   ["marathon_archive_after_days", "int", 7, 7, "days after a marathon's last run ends that it moves to the archive, with its runs and people — kept, browsable under Archive on the Events page, and Restore brings it back paused. 7 by default; 0 moves it the same day. A marathon with no dates never moves by itself", null, 365, 0],
+  ["runs_sources", "enums", ["gdq", "gdq_hotfix"], ["gdq", "gdq_hotfix"], "which marathon sources count towards the BaF runs page and /runs; gdq and gdq_hotfix by default, so a run in a horaro or Oengus marathon is left out", ["gdq", "gdq_hotfix", "rpglb", "horaro", "oengus", "fastestfurs", "ladyarcaders"]],
+  ["runs_parts", "enums", ["runner"], ["runner"], "which part a BaF member must play on a run for it to count as a BaF run; runner by default, so hosting or commentary alone does not count", ["runner", "host", "commentator"]],
+  ["runs_lookup_title", "text", "{game}", "{game}", "the heading of one game's answer in the /runs panel; {game}"],
+  ["runs_lookup_line", "text", "{date} · {event} · {category} · {runners}", "{date} · {event} · {category} · {runners}", "one run's line under a game in the /runs panel; {date}, {event}, {category} and {runners}"],
+  ["runs_lookup_none", "text", "Nothing in the BaF runs database matches **{query}**.", "Nothing in the BaF runs database matches **{query}**.", "what the /runs panel says when no game matches; {query} is what was typed"],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_stale_archive_reads", "int", 3, 3, "how many reads of a marathon's schedule in a row must fail before it moves to the archive as unreadable, once marathon_stale_archive_hours have also passed — a schedule that is not published yet never counts, and a paused or ignored marathon never moves. Restore brings it back, and so does its feed listing it again with a schedule that reads. 3 by default; 0 never archives an unreadable marathon", null, 20, 0],
   ["marathon_stale_archive_hours", "int", 24, 24, "how many hours a marathon's schedule must have gone without an answer before marathon_stale_archive_reads failed reads move it to the archive — counted from the last read that worked, or from a Restore or Resume since. 24 by default; 0 needs the failed reads alone", null, 720, 0],
@@ -1790,6 +1795,9 @@ function seedState() {
   marathons: seedMarathons(),
   marathonArchive: seedMarathonArchive(),
   marathonRuns: seedMarathonRuns(),
+  bafRuns: seedBafRuns(),
+  bafEdits: {},
+  bafSeries: { 'super metroid': 'Metroid' },
   marathonPeople: seedMarathonPeople(),
   marathonFeeds: seedMarathonFeeds(),
   marathonSpotlights: seedMarathonSpotlights(),
@@ -2610,6 +2618,11 @@ CORE_KEYS.push(...QUESTION_KEYS);
 const POINTS_WORD_KEYS = ["points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_next_rank_top_said", "points_next_rank_unranked_top_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_modmail_off_said", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
+  runs_sources: 'marathon',
+  runs_parts: 'marathon',
+  runs_lookup_title: 'marathon',
+  runs_lookup_line: 'marathon',
+  runs_lookup_none: 'marathon',
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
   mod_log_level: 'automod',
@@ -11935,6 +11948,480 @@ route('POST', '/api/questions/unskip', (context) => {
   state.questionSlots[key] = { status: 'pending', question_id: null };
   logAction('web.question.unskipped', { details: { via: 'website', slot_at: key } });
   return { ok: true, message: 'This week is back on.', value: key };
+});
+
+// The BaF runs database (docs/info/baf-runs-design.md). The view is black_bloc/baf_runs.py:view
+// read over the mock's marathons: done or live runs of a counted source with a member of ours in
+// a counted part, staff edits laid over them, the hand and imported rows beside them. The GDQ
+// event import answers from MOCK_TRACKER_EVENT instead of the tracker.
+const RUNS_HOW_WORDS = { tracked: 'tracked', imported: 'imported', hand: 'by hand' };
+const RUNS_EVENT_WORDS = { gdq: 'GDQ', gdq_hotfix: 'GDQ Hotfix' };
+const RUNS_FIELDS = ['date', 'event', 'game', 'category', 'runners', 'note'];
+const RUNS_CSV_COLUMNS = ['key', 'date', 'event', 'event_source', 'event_ref', 'game', 'series', 'category', 'runners', 'runner_names', 'runner_ids', 'how', 'note'];
+const MOCK_TRACKER_EVENT = {
+  id: '51',
+  name: 'SGDQ 2025',
+  runs: [
+    { id: '9101', game: 'Mega Man X', category: 'Any%', at: '2025-06-29T18:00:00+00:00', runners: ['rivetplays'] },
+    { id: '9102', game: 'Celeste', category: 'Any%', at: '2025-06-30T02:00:00+00:00', runners: ['caseyfast'] },
+    { id: '9103', game: 'Portal', category: 'Inbounds', at: '2025-07-01T05:00:00+00:00', runners: ['Gamer2025'] },
+    { id: '9104', game: 'Tetris', category: 'Race', at: '2025-07-02T05:00:00+00:00', runners: ['Somebody', 'Stranger'] },
+  ],
+};
+
+function seedBafRuns() {
+  const people = (name, userId = null) => [{ name, login: null, part: 'runner', user_id: userId }];
+  return [
+    { id: 1, how: 'hand', event_name: 'BtB 2025', event_source: null, event_ref: null, run_ref: null, started_at: '2025-03-15T20:00:00+00:00', game: 'Super Metroid', category: 'Any%', people: people('Casey', MEMBERS[1].id), note: 'Couch run', added_by: STAFF.id },
+    { id: 2, how: 'imported', event_name: 'Frost 2024', event_source: null, event_ref: null, run_ref: null, started_at: '2024-12-07T22:00:00+00:00', game: 'Hollow Knight', category: 'Any% NMG', people: people('KnightFan'), note: '', added_by: STAFF.id },
+  ];
+}
+
+const runsKey = (text) => String(text || '').split(/\s+/).filter(Boolean).join(' ').toLowerCase();
+
+function runsSetting(key, fallback) {
+  const found = state.settings.get(key);
+  return Array.isArray(found) ? found : fallback;
+}
+
+function runsRunners(people) {
+  return people.map((one) => {
+    const display = one.user_id ? memberName(one.user_id) || one.name : one.name;
+    return { name: one.name, user_id: one.user_id ? String(one.user_id) : null, display, linked: Boolean(one.user_id) };
+  });
+}
+
+function runsLine(runners) {
+  return runners.map((one) => (one.linked && one.name && one.name.toLowerCase() !== one.display.toLowerCase() ? `${one.display} (${one.name})` : one.display)).join(', ');
+}
+
+function runsShaped(given) {
+  const gameKey = runsKey(given.game);
+  return {
+    key: given.key,
+    how: given.how,
+    how_word: RUNS_HOW_WORDS[given.how],
+    date: given.date || null,
+    event: given.event || '',
+    event_source: given.source || null,
+    event_word: given.source ? RUNS_EVENT_WORDS[given.source] || given.source : '',
+    event_ref: given.ref || null,
+    marathon_id: given.marathon_id || null,
+    game: given.game,
+    game_key: gameKey,
+    series: state.bafSeries[gameKey] || '',
+    category: given.category || '',
+    runners: given.runners,
+    runners_text: runsLine(given.runners),
+    note: given.note || '',
+    removed: Boolean(given.removed),
+    edited: given.edited || [],
+    tracked: given.tracked || {},
+    state: given.state || 'done',
+  };
+}
+
+function runsTracked() {
+  const sources = runsSetting('runs_sources', ['gdq', 'gdq_hotfix']);
+  const parts = runsSetting('runs_parts', ['runner']);
+  const live = new Map(state.marathons.map((one) => [one.id, one]));
+  const old = new Map(state.marathonArchive.filter((one) => one.archived_why !== 'removed').map((one) => [one.id, one]));
+  const found = [];
+  for (const run of state.marathonRuns) {
+    const marathon = live.get(run.marathon_id) || old.get(run.marathon_id);
+    if (!marathon || !sources.includes(marathon.source) || !['done', 'live'].includes(run.state)) continue;
+    const counted = run.people.filter((one) => marathonCounts(one) && parts.includes(one.part));
+    if (!counted.length) continue;
+    const edits = state.bafEdits[`${run.marathon_id}:${run.external_id}`] || {};
+    const source = {
+      date: run.actual_started_at || run.scheduled_at,
+      event: marathon.name,
+      game: run.game,
+      category: run.category || '',
+      runners: JSON.stringify(counted),
+      note: '',
+    };
+    const shown = { ...source };
+    const edited = [];
+    for (const field of RUNS_FIELDS) {
+      if (field in edits && edits[field] !== source[field]) {
+        shown[field] = edits[field];
+        edited.push(field);
+      }
+    }
+    const tracked = Object.fromEntries(edited.map((field) => [field, field === 'runners' ? runsLine(runsRunners(counted)) : source[field]]));
+    found.push(runsShaped({
+      key: `t${run.id}`,
+      how: 'tracked',
+      date: shown.date,
+      event: shown.event,
+      source: marathon.source,
+      ref: marathon.source_ref,
+      marathon_id: live.has(run.marathon_id) ? run.marathon_id : null,
+      game: shown.game,
+      category: shown.category,
+      runners: runsRunners(JSON.parse(shown.runners)),
+      note: shown.note,
+      removed: edits.excluded,
+      edited,
+      tracked,
+      state: run.state,
+    }));
+  }
+  return found;
+}
+
+function runsView() {
+  const live = new Map(state.marathons.map((one) => [`${one.source}:${one.source_ref}`, one.id]));
+  const hand = state.bafRuns.map((row) => runsShaped({
+    key: `h${row.id}`,
+    how: row.how,
+    date: row.started_at,
+    event: row.event_name,
+    source: row.event_source,
+    ref: row.event_ref,
+    marathon_id: row.event_source ? live.get(`${row.event_source}:${row.event_ref}`) || null : null,
+    game: row.game,
+    category: row.category,
+    runners: runsRunners(row.people),
+    note: row.note,
+  }));
+  return [...runsTracked(), ...hand].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b.key.localeCompare(a.key));
+}
+
+function runsGames(rows) {
+  const grouped = new Map();
+  for (const row of rows.filter((one) => !one.removed)) {
+    if (!grouped.has(row.game_key)) grouped.set(row.game_key, []);
+    grouped.get(row.game_key).push(row);
+  }
+  return [...grouped.entries()].map(([key, runs]) => {
+    const last = runs[0];
+    return {
+      game: last.game,
+      game_key: key,
+      series: last.series,
+      times: runs.length,
+      last_date: last.date,
+      last_event: last.event,
+      runners: [...new Set(runs.flatMap((run) => run.runners.map((one) => one.display)))],
+      categories: [...new Set(runs.map((run) => run.category).filter(Boolean))],
+      keys: runs.map((run) => run.key),
+    };
+  }).sort((a, b) => String(b.last_date || '').localeCompare(String(a.last_date || '')));
+}
+
+function runsEvents() {
+  const sources = runsSetting('runs_sources', ['gdq', 'gdq_hotfix']);
+  const shape = (one, archived) => ({ marathon_id: one.id, name: one.name, source: one.source, word: RUNS_EVENT_WORDS[one.source] || one.source, starts_at: one.starts_at, archived });
+  return [
+    ...state.marathons.filter((one) => sources.includes(one.source)).map((one) => shape(one, false)),
+    ...state.marathonArchive.filter((one) => sources.includes(one.source) && one.archived_why !== 'removed').map((one) => shape(one, true)),
+  ];
+}
+
+function runsDate(given) {
+  const text = String(given || '').trim();
+  if (!text) return { ok: true, value: null };
+  const at = new Date(/^\d{4}-\d\d-\d\d$/.test(text) ? `${text}T00:00:00Z` : text);
+  return Number.isNaN(at.getTime()) ? { ok: false } : { ok: true, value: at.toISOString().replace('.000Z', '+00:00') };
+}
+
+function runsPeople(body) {
+  const found = [];
+  for (const one of body.runners || []) {
+    const id = String(one.user_id || one || '').trim();
+    if (/^\d+$/.test(id)) found.push({ name: one.name || memberName(id) || id, login: null, part: 'runner', user_id: id });
+  }
+  for (const name of String(body.runner_names || '').split(/\s*[;,&/]\s*/)) {
+    if (name.trim()) found.push({ name: name.trim(), login: null, part: 'runner', user_id: null });
+  }
+  return found;
+}
+
+function runsEvent(body) {
+  if (body.marathon_id !== undefined && body.marathon_id !== null && body.marathon_id !== '') {
+    const found = [...state.marathons, ...state.marathonArchive].find((one) => String(one.id) === String(body.marathon_id));
+    if (!found) throw new Refused(404, 'no_such_event', 'That marathon is not one Black Bloc follows any more, so nothing was saved. Pick another event, or choose Other… and type its name.');
+    return { event_name: found.name, event_source: found.source, event_ref: found.source_ref };
+  }
+  return { event_name: String(body.event || '').trim(), event_source: null, event_ref: null };
+}
+
+const RUNS_NO_GAME = 'A run needs a game, so nothing was saved. Type the game’s name in the Game box and save again.';
+const RUNS_NO_RUN = 'That run is not in the BaF runs database any more, so nothing was changed. Refresh the page to see the runs as they are now.';
+
+function runsSeriesSet(game, series) {
+  const key = runsKey(game);
+  const text = String(series || '').trim().slice(0, 100);
+  if (text) state.bafSeries[key] = text;
+  else delete state.bafSeries[key];
+}
+
+function runsTrackedRun(key) {
+  const id = Number(String(key).slice(1));
+  const run = state.marathonRuns.find((one) => one.id === id);
+  if (!String(key).startsWith('t') || !run) throw new Refused(404, 'no_such_run', RUNS_NO_RUN);
+  return run;
+}
+
+function runsHand(key) {
+  const row = state.bafRuns.find((one) => `h${one.id}` === String(key));
+  if (!row) throw new Refused(404, 'no_such_run', RUNS_NO_RUN);
+  return row;
+}
+
+route('GET', '/api/runs', (context) => {
+  requireStaff(context.session);
+  const every = runsView();
+  return {
+    rows: every,
+    events: runsEvents(),
+    series_names: [...new Set(every.map((row) => row.series).filter(Boolean))].sort(),
+    sources: runsSetting('runs_sources', ['gdq', 'gdq_hotfix']),
+    parts: runsSetting('runs_parts', ['runner']),
+  };
+});
+
+route('GET', '/api/runs/games', (context) => {
+  requireStaff(context.session);
+  return { games: runsGames(runsView()) };
+});
+
+function runsCsv(rows) {
+  const cell = (value) => {
+    const text = value === null || value === undefined ? '' : String(value);
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const lines = [RUNS_CSV_COLUMNS.join(',')];
+  for (const row of rows.filter((one) => !one.removed)) {
+    lines.push([
+      row.key, row.date || '', row.event, row.event_source || '', row.event_ref || '', row.game, row.series, row.category,
+      row.runners_text, row.runners.map((one) => one.name).join('; '), row.runners.map((one) => one.user_id || '').join('; '), row.how, row.note,
+    ].map(cell).join(','));
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+route('GET', '/api/runs/export.csv', (context) => {
+  // NOT in contract.json: check.mjs reads JSON shapes, and this one answers text/csv.
+  requireStaff(context.session);
+  return {
+    status: 200,
+    headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="baf-runs.csv"' },
+    body: runsCsv(runsView()),
+  };
+});
+
+route('POST', '/api/runs', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const game = String(body.game || '').trim();
+  if (!game) throw new Refused(400, 'no_game', RUNS_NO_GAME);
+  const when = runsDate(body.date);
+  if (!when.ok) throw new Refused(400, 'bad_date', `**${String(body.date).slice(0, 40)}** is not a date Black Bloc can read, so nothing was saved. Pick it in the date box, or write it as YYYY-MM-DD.`);
+  const event = runsEvent(body);
+  const id = state.bafRuns.reduce((most, one) => Math.max(most, one.id), 0) + 1;
+  state.bafRuns.push({ id, how: 'hand', ...event, run_ref: null, started_at: when.value, game, category: String(body.category || '').trim(), people: runsPeople(body), note: String(body.note || '').trim(), added_by: STAFF.id });
+  if (body.series) runsSeriesSet(game, body.series);
+  logAction('web.runs.added', { details: { via: 'website', key: `h${id}`, game, event: event.event_name } });
+  return { ok: true, message: `**${game}** is in the BaF runs database.`, value: `h${id}` };
+});
+
+route('PUT', '/api/runs/series/:game_key', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const key = runsKey(context.params.game_key);
+  const before = state.bafSeries[key] || '';
+  const text = String(body.series || '').trim();
+  if (before === text) throw new Refused(409, 'no_change', 'Nothing in that run changed, so nothing was saved.');
+  runsSeriesSet(key, text);
+  logAction('web.runs.series_set', { details: { via: 'website', game_key: key, before, after: text } });
+  const game = (runsGames(runsView()).find((one) => one.game_key === key) || { game: key }).game;
+  return { ok: true, message: text ? `**${game}** is in the series **${text}**.` : `**${game}** has no series now.`, value: key };
+});
+
+route('PUT', '/api/runs/:key', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const key = String(context.params.key);
+  if (key.startsWith('h')) {
+    const row = runsHand(key);
+    if ('date' in body) {
+      const when = runsDate(body.date);
+      if (!when.ok) throw new Refused(400, 'bad_value', 'That is not a date Black Bloc can read, so nothing was saved.');
+      row.started_at = when.value;
+    }
+    if ('game' in body) {
+      if (!String(body.game || '').trim()) throw new Refused(400, 'bad_value', RUNS_NO_GAME);
+      row.game = String(body.game).trim();
+    }
+    if ('category' in body) row.category = String(body.category || '').trim();
+    if ('note' in body) row.note = String(body.note || '').trim();
+    if ('runners' in body || 'runner_names' in body) row.people = runsPeople(body);
+    if ('event' in body || 'marathon_id' in body) Object.assign(row, runsEvent(body));
+    if ('series' in body) runsSeriesSet(row.game, body.series);
+    logAction('web.runs.edited', { details: { via: 'website', key, game: row.game, after: body } });
+    return { ok: true, message: `**${row.game}** is saved.`, value: key };
+  }
+  const run = runsTrackedRun(key);
+  const slot = `${run.marathon_id}:${run.external_id}`;
+  if (body.clear) {
+    const held = state.bafEdits[slot] || {};
+    const kept = held.excluded ? { excluded: true } : {};
+    if (Object.keys(held).length === Object.keys(kept).length) throw new Refused(409, 'no_edits', 'That run has no staff edits, so there was nothing to clear.');
+    state.bafEdits[slot] = kept;
+    logAction('web.runs.edited', { details: { via: 'website', key, game: run.game, cleared: true } });
+    return { ok: true, message: `**${run.game}** is back to what the schedule says.`, value: key };
+  }
+  const held = { ...(state.bafEdits[slot] || {}) };
+  if ('date' in body) held.date = runsDate(body.date).value || '';
+  for (const field of ['event', 'game', 'category', 'note']) if (field in body) held[field] = String(body[field] || '').trim();
+  if ('runners' in body || 'runner_names' in body) held.runners = JSON.stringify(runsPeople(body));
+  state.bafEdits[slot] = held;
+  if ('series' in body) runsSeriesSet(held.game || run.game, body.series);
+  logAction('web.runs.edited', { details: { via: 'website', key, game: held.game || run.game, after: body } });
+  return { ok: true, message: `**${held.game || run.game}** is saved.`, value: key };
+});
+
+route('DELETE', '/api/runs/:key', (context) => {
+  requireStaff(context.session);
+  const key = String(context.params.key);
+  if (key.startsWith('h')) {
+    const row = runsHand(key);
+    state.bafRuns = state.bafRuns.filter((one) => one !== row);
+    logAction('web.runs.removed', { details: { via: 'website', key, game: row.game, deleted: true } });
+    return { ok: true, message: `**${row.game}** is deleted.`, value: key };
+  }
+  const run = runsTrackedRun(key);
+  const slot = `${run.marathon_id}:${run.external_id}`;
+  if ((state.bafEdits[slot] || {}).excluded) throw new Refused(409, 'already_removed', 'That run is already removed. Restore puts it back.');
+  state.bafEdits[slot] = { ...(state.bafEdits[slot] || {}), excluded: true };
+  logAction('web.runs.removed', { details: { via: 'website', key, game: run.game, deleted: false } });
+  return { ok: true, message: `**${run.game}** is off the BaF runs page.`, value: key };
+});
+
+route('POST', '/api/runs/:key/restore', (context) => {
+  requireStaff(context.session);
+  const key = String(context.params.key);
+  if (key.startsWith('h')) throw new Refused(409, 'not_restorable', 'A run added by hand is deleted when it is removed, so there is nothing to restore. Add it again with Add a run….');
+  const run = runsTrackedRun(key);
+  const slot = `${run.marathon_id}:${run.external_id}`;
+  if (!(state.bafEdits[slot] || {}).excluded) throw new Refused(409, 'not_removed', 'That run is not removed, so there is nothing to restore.');
+  delete state.bafEdits[slot].excluded;
+  logAction('web.runs.restored', { details: { via: 'website', key, game: run.game } });
+  return { ok: true, message: `**${run.game}** is back on the BaF runs page.`, value: key };
+});
+
+function runsParseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  const body = String(text || '').replace(/^﻿/, '');
+  for (let at = 0; at < body.length; at += 1) {
+    const char = body[at];
+    if (quoted) {
+      if (char === '"' && body[at + 1] === '"') { cell += '"'; at += 1; } else if (char === '"') quoted = false;
+      else cell += char;
+    } else if (char === '"') quoted = true;
+    else if (char === ',') { row.push(cell); cell = ''; } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && body[at + 1] === '\n') at += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = '';
+    } else cell += char;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((one) => one.some((value) => value.trim()));
+}
+
+function runsMember(name) {
+  const wanted = String(name || '').trim().toLowerCase();
+  const found = MEMBERS.find((one) => one.name.toLowerCase() === wanted || one.display_name.toLowerCase() === wanted);
+  return found ? found.id : null;
+}
+
+function runsImportCsv(text, dryRun) {
+  const table = runsParseCsv(text);
+  if (!table.length) throw new Refused(400, 'bad_csv', 'That CSV has no rows Black Bloc can read, so nothing was imported. The first line names the columns; game is the one every row needs.');
+  const head = table[0].map((one) => one.trim().toLowerCase());
+  if (!head.includes('game')) throw new Refused(400, 'bad_csv', 'That CSV has no game column, so nothing was imported. The first line names the columns, and one of them must be game. Export CSV shows the full set.');
+  const every = runsView();
+  const keys = new Set(every.map((row) => row.key));
+  const seen = new Set(every.map((row) => [runsKey(row.event), row.game_key, runsKey(row.category), String(row.date || '').slice(0, 10)].join('|')));
+  const adds = [];
+  let skipped = 0;
+  let need = 0;
+  let bad = 0;
+  for (const values of table.slice(1)) {
+    const row = Object.fromEntries(head.map((name, at) => [name === 'runner(s)' ? 'runners' : name, values[at] || '']));
+    const game = row.game.trim();
+    const when = runsDate(row.date);
+    if (!game || !when.ok) { bad += 1; continue; }
+    if (keys.has(String(row.key || '').trim())) { skipped += 1; continue; }
+    const natural = [runsKey(row.event), runsKey(game), runsKey(row.category), String(when.value || '').slice(0, 10)].join('|');
+    if (seen.has(natural)) { skipped += 1; continue; }
+    seen.add(natural);
+    const names = String(row.runner_names || row.runners || '').split(/\s*[;,]\s*/).filter(Boolean);
+    const ids = String(row.runner_ids || '').split(/\s*;\s*/);
+    const people = names.map((name, at) => ({ name, login: null, part: 'runner', user_id: /^\d+$/.test(ids[at] || '') ? ids[at] : runsMember(name) }));
+    if (people.some((one) => !one.user_id)) need += 1;
+    adds.push({ event_name: String(row.event || '').trim(), event_source: row.event_source || null, event_ref: row.event_ref || null, run_ref: null, started_at: when.value, game, category: String(row.category || '').trim(), people, note: String(row.note || '').trim(), series: String(row.series || '').trim() });
+  }
+  return { adds, skipped, need, bad, unmatched: [], later: 0, event: null };
+}
+
+function runsImportEvent(url, pairs) {
+  if (!/^https?:\/\/tracker\.gamesdonequick\.com\/tracker\/(?:event|runs|index)\/[A-Za-z0-9_-]+\/?$/i.test(String(url || '').trim())) {
+    throw new Refused(400, 'not_gdq', `**${String(url || '').slice(0, 120) || '(nothing)'}** is not a GDQ tracker event link, so nothing was read. Paste the link of the event from tracker.gamesdonequick.com, like https://tracker.gamesdonequick.com/tracker/event/50.`);
+  }
+  const here = new Set([
+    ...state.bafRuns.filter((one) => one.event_source === 'gdq' && one.event_ref === MOCK_TRACKER_EVENT.id).map((one) => one.run_ref),
+  ]);
+  const adds = [];
+  const unmatched = new Map();
+  let skipped = 0;
+  for (const run of MOCK_TRACKER_EVENT.runs) {
+    const people = run.runners.map((name) => {
+      const paired = pairs && /^\d+$/.test(String(pairs[name] || '')) ? String(pairs[name]) : null;
+      const found = paired || (MEMBERS.find((one) => one.name === name || (name === 'rivetplays' && one.id === MEMBERS[2].id)) || {}).id || null;
+      if (!found) unmatched.set(name.toLowerCase(), name);
+      return { name, login: null, part: 'runner', user_id: found };
+    });
+    if (!people.some((one) => one.user_id)) continue;
+    if (here.has(run.id)) { skipped += 1; continue; }
+    adds.push({ event_name: MOCK_TRACKER_EVENT.name, event_source: 'gdq', event_ref: MOCK_TRACKER_EVENT.id, run_ref: run.id, started_at: run.at, game: run.game, category: run.category, people, note: '', series: '' });
+  }
+  const names = [...unmatched.values()].sort().map((name) => ({ name, suggest: null }));
+  return { adds, skipped, need: names.length, bad: 0, unmatched: names, later: 0, event: MOCK_TRACKER_EVENT.name };
+}
+
+route('POST', '/api/runs/import', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const dryRun = body.dry_run !== false;
+  let found;
+  if (String(body.event_url || '').trim()) found = runsImportEvent(body.event_url, body.pairs || {});
+  else if (String(body.csv || '').trim()) found = runsImportCsv(body.csv, dryRun);
+  else throw new Refused(400, 'nothing_to_import', 'There was nothing to import, so nothing was read. Paste a GDQ tracker event link, or choose a CSV file.');
+  const preview = found.adds.slice(0, 200).map((one) => ({ date: one.started_at, event: one.event_name, game: one.game, category: one.category, runners_text: runsLine(runsRunners(one.people)) }));
+  const value = { dry_run: dryRun, would_add: found.adds.length, added: 0, skipped: found.skipped, need_match: found.need, unreadable: found.bad, unmatched: found.unmatched, not_run_yet: found.later, event: found.event, rows: preview };
+  const words = found.event
+    ? `**${found.event}**: ${found.adds.length} BaF run(s) ${dryRun ? 'would be added' : 'added'}, ${found.skipped} skipped (already here), ${found.need} runner name(s) match no member, 0 not run yet.`
+    : `${found.adds.length} row(s) ${dryRun ? 'would be added' : 'added'}, ${found.skipped} skipped (already here), ${found.need} need a runner match.`;
+  if (dryRun) return { ok: true, message: `${words} Nothing was written.`, value };
+  let id = state.bafRuns.reduce((most, one) => Math.max(most, one.id), 0);
+  for (const one of found.adds) {
+    id += 1;
+    const { series, ...row } = one;
+    state.bafRuns.push({ id, how: 'imported', ...row, added_by: STAFF.id });
+    if (series && !state.bafSeries[runsKey(one.game)]) runsSeriesSet(one.game, series);
+  }
+  value.added = found.adds.length;
+  logAction('web.runs.imported', { details: { via: 'website', from: found.event ? 'gdq' : 'csv', added: found.adds.length, skipped: found.skipped } });
+  return { ok: true, message: words, value };
 });
 
 function roomRow(row) {

@@ -94,6 +94,7 @@ HEADS: dict[str, str] = {
     "pings": "pings",
     "raidtrain": "raidtrain",
     "marathon": "marathon",
+    "runs": "marathon",
     "application": "applications",
     "applications": "applications",
     "selftest": "selftest",
@@ -293,6 +294,13 @@ IMPORTANT: frozenset[str] = frozenset(
 
 ROUTINE: frozenset[str] = frozenset(
     {
+        "runs.added",
+        "runs.edited",
+        "runs.removed",
+        "runs.restored",
+        "runs.imported",
+        "runs.series_set",
+        "runs.lookup",
         "question.added",
         "question.edited",
         "question.moved",

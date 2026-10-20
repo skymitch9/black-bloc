@@ -31,6 +31,7 @@ export const TABS = [
   { tab: 'pbs', href: '/pbs.html', label: 'Personal bests' },
   { tab: 'brackets', href: '/brackets.html', label: 'Brackets' },
   { tab: 'leaderboard', href: '/leaderboard.html', label: 'Leaderboard' },
+  { tab: 'runs', href: '/runs.html', label: 'BaF runs' },
 ];
 
 export const FEATURE_TABS = {

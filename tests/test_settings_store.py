@@ -2342,7 +2342,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1242
+    assert len(settings_store.KEY_TYPES) == 1247
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2911,3 +2911,29 @@ async def test_a_point_system_word_takes_only_its_own_placeholders(store):
     await store.set(7, "points_announce_up", "{name} climbs to #{place}!")
     with pytest.raises(settings_store.SettingError):
         await store.set(7, "points_announce_up", "{name} climbs to {rank}")
+
+
+def test_the_runs_keys_sit_under_marathons_with_the_sources_the_marathon_feature_reads():
+    from black_bloc.marathon_sources import SOURCES
+
+    assert settings_store.RUNS_KEYS == (
+        "runs_sources",
+        "runs_parts",
+        "runs_lookup_title",
+        "runs_lookup_line",
+        "runs_lookup_none",
+    )
+    assert {settings_store.namespace_of(key) for key in settings_store.RUNS_KEYS} == {"marathon"}
+    assert set(settings_store.RUNS_SOURCE_CHOICES) == set(SOURCES)
+    assert settings_store.coerce_value("runs_sources", ["gdq_hotfix", "gdq"]) == [
+        "gdq",
+        "gdq_hotfix",
+    ]
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value("runs_lookup_line", "{date} {nope}")
+
+
+async def test_the_runs_keys_ship_their_decided_defaults(store):
+    assert store.get(7, "runs_sources") == ["gdq", "gdq_hotfix"]
+    assert store.get(7, "runs_parts") == ["runner"]
+    assert store.get(7, "runs_lookup_title") == "{game}"

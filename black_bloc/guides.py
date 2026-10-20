@@ -277,6 +277,11 @@ FEATURE_PATHS: dict[str, tuple[str, ...]] = {
         "black_bloc/api/tools/marathons.py",
         "site/public/events.html",
         "site/public/assets/marathons-section.js",
+        "black_bloc/baf_runs",
+        "black_bloc/cogs/content/runs.py",
+        "black_bloc/api/tools/runs.py",
+        "site/public/runs.html",
+        "site/public/assets/page-runs.js",
     ),
     "applications": (
         "black_bloc/applications.py",

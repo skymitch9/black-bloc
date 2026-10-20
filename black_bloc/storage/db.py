@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 96
+SCHEMA_VERSION = 97
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1230,6 +1230,50 @@ CREATE TABLE IF NOT EXISTS weekly_question_slots (
     seen_at     TEXT    NOT NULL,
     resolved_at TEXT,
     PRIMARY KEY (guild_id, slot_at)
+);
+
+CREATE TABLE IF NOT EXISTS baf_runs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id     INTEGER NOT NULL,
+    how          TEXT    NOT NULL DEFAULT 'hand',
+    event_name   TEXT    NOT NULL DEFAULT '',
+    event_source TEXT,
+    event_ref    TEXT,
+    run_ref      TEXT,
+    started_at   TEXT,
+    game         TEXT    NOT NULL,
+    category     TEXT    NOT NULL DEFAULT '',
+    runners_text TEXT    NOT NULL DEFAULT '',
+    people       TEXT    NOT NULL DEFAULT '[]',
+    note         TEXT    NOT NULL DEFAULT '',
+    added_by     INTEGER,
+    added_at     TEXT    NOT NULL,
+    edited_by    INTEGER,
+    edited_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS baf_runs_by_guild ON baf_runs(guild_id, started_at);
+CREATE UNIQUE INDEX IF NOT EXISTS baf_runs_one_per_source_run
+    ON baf_runs(guild_id, event_source, event_ref, run_ref) WHERE run_ref IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS baf_run_edits (
+    guild_id    INTEGER NOT NULL,
+    marathon_id INTEGER NOT NULL,
+    external_id TEXT    NOT NULL,
+    field       TEXT    NOT NULL,
+    value       TEXT,
+    excluded    INTEGER NOT NULL DEFAULT 0,
+    by          INTEGER,
+    at          TEXT    NOT NULL,
+    PRIMARY KEY (marathon_id, external_id, field)
+);
+
+CREATE TABLE IF NOT EXISTS baf_series (
+    guild_id INTEGER NOT NULL,
+    game_key TEXT    NOT NULL,
+    series   TEXT    NOT NULL,
+    by       INTEGER,
+    at       TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, game_key)
 );
 
 CREATE TABLE IF NOT EXISTS sticky_messages (

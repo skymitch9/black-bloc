@@ -45,6 +45,7 @@ from .tools import (
     requests,
     rolemenus,
     roles,
+    runs,
     sticky,
     structure,
     tempvoice,
@@ -213,6 +214,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(brackets.build_router(bot))
     app.include_router(points.build_router(bot))
     app.include_router(questions.build_router(bot))
+    app.include_router(runs.build_router(bot))
     app.include_router(selftest_api.build_router(bot))
     app.include_router(bot_api.build_router(bot))
 
