@@ -233,3 +233,32 @@ Both are read on every request, so an edit lands on the next read.
 21. **A genre that is ONLY qualifiers (*Action*) is its own family `action`** rather than blank, so a typed genre never reads as *No genre*.
 22. **The Games view's own table search (the shared `table()` box) is unchanged** and does not reach aliases; the Genre drop-down there filters by family. The search that reaches aliases is the Runs sheet's.
 23. **The mock seeds two more hand rows** (*Mario Kart 8 Deluxe* — *Kart racer*, *F-Zero GX* — *Racing*) so the family has something to show locally.
+
+## Loose search — 2026-10-20
+
+Owner, 2026-10-20 08:1x Phoenix: *"so /runs is gonna be an issue because if you dont know the exact name it doesnt work"*. Branch `runs-loose-search`.
+
+**The defect.** `lookup` kept a game only when the typed text was a SUBSTRING of its key or genre text, and the page and `?q=` were the same substring test over `text_of`. *DKC2*, *donkey 2*, *kong country donkey*, *sekiro shadow die*, *Sonic* (a series), a runner, a category or an event word all answered *nothing matches* in `/runs`.
+
+**The rule** — one function each side on one fixture, the `genre_family` pattern: `black_bloc/runs_search.py:matches(query, haystack)` and `site/public/assets/listfilter.js:runsMatches(query, haystack)`, both held to `tests/fixtures/runs/search.json` (`tests/test_runs_search.py`, `site/mock/listfilter.test.mjs`).
+
+1. Normalise both sides the way `runs_genres.normal` does (lower case, anything not a letter or digit is a space, spaces collapse, digits kept).
+2. Every query word must hit the haystack, in any order.
+3. A word hits a haystack word when it is (a) a prefix of it; (b) within ONE edit of it (insert, delete, replace, adjacent swap) and the query word has 5+ letters; or (c) letters then optional digits where the letters are the initials of a run of consecutive haystack words on ONE line and the digits are the word right after that run (*dkc2* = *Donkey Kong Country 2*, *jfg*, *sdt*; *dkc3* is not DKC2). Initials need 2+ letters.
+4. A digits-only word matches a whole number only (*2* finds *Country 2*, never *2025* or *2D*).
+5. An empty query matches nothing; the page and `?q=` skip the filter on a blank query, so they still show everything.
+
+**The haystack** is built in ONE place, `baf_runs.text_of(row, rule)`: one field per line — game, series, genre, the genre family and every alias, category, each runner's display and source name, event, note. `view` ships it on every row as `search`; `filtered(q=)` (the API) and the page (`row.search`, `match: 'words'`) search it, and `lookup` matches a game by the union of its runs' haystacks (`text_of_game`).
+
+**The `/runs` panel.** When nothing matches, the answer offers up to three nearest game names (`difflib.get_close_matches` over the game names, cutoff 0.5) through the new `{suggestions}` placeholder of `runs_lookup_none` (default `Nothing in the BaF runs database matches **{query}**.\n{suggestions}`; the names joined by ` · `; blank renders nothing extra). The `runs.lookup` row gains `suggested: N`. Search again opens the form with the query already typed. No new key (still 1247).
+
+**Other pages.** `listfilter.matches` / `passes` take `match: 'words'`; only `page-runs.js` passes it. Every other page's search is the unchanged substring test.
+
+### Deviations (continued)
+
+24. **`lookup` returns `Found(games, suggestions)`** (a NamedTuple) instead of a bare list, so the suggestions travel with the answer; the panel is its only caller.
+25. **Note kept in the haystack.** The brief's list left the note out and the first draft dropped it from the page; the conductor reversed that (2026-10-20): the note is the haystack's last line, so the page, `?q=` and `/runs` all reach it (the Python side had never searched it before this).
+26. **`?q=rogue-lite` now finds an *Action roguelike* game** (`tests/test_baf_runs.py` asserted none): hyphen and space are the same now, and *rogue-lite* is an alias of the roguelike family.
+27. **`{suggestions}` carries names only, no words of its own.** A lead-in like *Did you mean* would be a code constant; the default puts the names on their own line under the sentence instead, and staff can word it (`No {query}. Closest: {suggestions}`).
+28. **The mock seeds two more hand rows** (*Donkey Kong Country 2: Diddy's Kong Quest* by KnightFan, genre *2D platformer*; *Sekiro: Shadows Die Twice* by Rivet) so *dkc2*, *donkey 2* and a typo have something to find locally; the mock mirrors `text_of` as `runsSearchText`.
+29. **The Games view's own table box is unchanged** (still the shared substring search, like Deviation 22); the loose search is the Runs sheet's and `/runs`.

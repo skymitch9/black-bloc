@@ -2782,6 +2782,7 @@
           "series",
           "genre",
           "genre_family",
+          "search",
           "category",
           "runners",
           "runners_text",

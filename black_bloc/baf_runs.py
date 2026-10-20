@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import csv
+import difflib
 import io
 import json
 import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import quote
 
 from . import marathon as mt
@@ -26,11 +27,11 @@ from .panels import Outcome, refusal
 from .runs_genres import (
     NO_RULE,
     Rule,
-    family_terms,
     genre_family,
     parse_families,
     parse_qualifiers,
 )
+from .runs_search import matches
 from .settings_store import (
     MARATHON_HOSTS_COUNT_AS_OURS_KEY,
     MARATHON_MATCH_HOSTS_KEY,
@@ -61,6 +62,8 @@ CSV_LIMIT = 2000
 PREVIEW_LIMIT = 200
 LOOKUP_GAMES = 5
 LOOKUP_RUNS = 5
+SUGGESTIONS = 3
+SUGGESTION_CUTOFF = 0.5
 NAME_SPLIT = re.compile(r"\s*(?:;|,|&|/|\s\+\s)\s*")
 CSV_COLUMNS = (
     "key",
@@ -453,8 +456,11 @@ def families_shown(rule: Rule) -> list[dict[str, Any]]:
     return [{"family": name, "aliases": list(aliases)} for name, aliases in rule[1]]
 
 
-def genre_text(row: dict[str, Any], rule: Rule) -> str:
-    return family_terms(row["genre_family"], rule[1])
+def family_words(family: Any, rule: Rule) -> list[str]:
+    for name, aliases in rule[1]:
+        if name == family:
+            return [name, *aliases]
+    return [family] if family else []
 
 
 async def view(bot: Any, guild: Any) -> list[dict[str, Any]]:
@@ -481,6 +487,7 @@ async def view(bot: Any, guild: Any) -> list[dict[str, Any]]:
     rule = genre_rule(bot, guild.id)
     for made in found:
         made["genre_family"] = genre_family(made["genre"], *rule)
+        made["search"] = text_of(made, rule)
     found.sort(key=newest_first, reverse=True)
     return found
 
@@ -490,17 +497,19 @@ def year_of(row: dict[str, Any]) -> str:
 
 
 def text_of(row: dict[str, Any], rule: Rule = NO_RULE) -> str:
-    return " ".join(
-        [
-            row["game"],
-            row["category"],
-            row["runners_text"],
-            row["event"],
-            row["series"],
-            row["genre"],
-            genre_text(row, rule),
-        ]
-    ).lower()
+    """One field per line: the one haystack the panel, the API and the page search."""
+    lines = [
+        row["game"],
+        row["series"],
+        row["genre"],
+        *family_words(row.get("genre_family") or genre_family(row["genre"], *rule), rule),
+        row["category"],
+        *(one["display"] for one in row["runners"]),
+        *(one["name"] for one in row["runners"]),
+        row["event"],
+        row.get("note") or "",
+    ]
+    return "\n".join(dict.fromkeys(str(line) for line in lines if line))
 
 
 def filtered(
@@ -539,7 +548,7 @@ def filtered(
             continue
         if how and row["how"] != how:
             continue
-        if q and game_key(q) not in text_of(row, rule):
+        if q and not matches(q, text_of(row, rule)):
             continue
         kept.append(row)
     return kept
@@ -1503,8 +1512,27 @@ def export_csv(rows: list[dict[str, Any]]) -> str:
     return out.getvalue()
 
 
-def text_of_game(game: dict[str, Any], rule: Rule = NO_RULE) -> str:
-    return " ".join((game["genre"], genre_text(game, rule))).lower()
+def text_of_game(
+    game: dict[str, Any], rows: dict[str, dict[str, Any]], rule: Rule = NO_RULE
+) -> str:
+    lines: list[str] = []
+    for key in game["keys"]:
+        if key in rows:
+            lines.extend(text_of(rows[key], rule).splitlines())
+    return "\n".join(dict.fromkeys(lines))
+
+
+def suggestions(query: Any, every_game: list[dict[str, Any]]) -> list[str]:
+    names = {one["game_key"]: one["game"] for one in every_game}
+    near = difflib.get_close_matches(
+        game_key(query), list(names), n=SUGGESTIONS, cutoff=SUGGESTION_CUTOFF
+    )
+    return [names[key] for key in near]
+
+
+class Found(NamedTuple):
+    games: list[dict[str, Any]]
+    suggestions: list[str]
 
 
 def page_url(origin: Any, query: Any = "") -> str | None:
@@ -1518,25 +1546,27 @@ def page_url(origin: Any, query: Any = "") -> str | None:
 
 async def lookup(
     bot: Any, guild: Any, actor: Any, query: Any, *, via: str = VIA_DISCORD
-) -> list[dict[str, Any]]:
-    wanted = game_key(query)
+) -> Found:
     every = await view(bot, guild)
     rule = genre_rule(bot, guild.id)
-    found = [
-        one
-        for one in games(every)
-        if wanted and (wanted in one["game_key"] or wanted in text_of_game(one, rule))
-    ]
     rows = {row["key"]: row for row in every}
+    grouped = games(every)
+    found = [one for one in grouped if matches(query, text_of_game(one, rows, rule))]
     answer: list[dict[str, Any]] = []
     for one in found[:LOOKUP_GAMES]:
         runs = [rows[key] for key in one["keys"] if key in rows]
         answer.append(one | {"runs": runs[:LOOKUP_RUNS], "more": max(0, len(runs) - LOOKUP_RUNS)})
+    near = [] if found or not game_key(query) else suggestions(query, grouped)
     await log_action(
         bot,
         guild,
         kind_via("runs.lookup", via),
         actor=actor,
-        details={"query": clean(query, 100), "games": len(found), "via": via},
+        details={
+            "query": clean(query, 100),
+            "games": len(found),
+            "suggested": len(near),
+            "via": via,
+        },
     )
-    return answer
+    return Found(answer, near)

@@ -10,6 +10,7 @@ from black_bloc.settings_store import (
     RUNS_LOOKUP_LINE,
     RUNS_LOOKUP_MORE,
     RUNS_LOOKUP_NO_DATE,
+    RUNS_LOOKUP_NONE,
     RUNS_LOOKUP_SEEN,
     RUNS_LOOKUP_TAGS,
     RUNS_LOOKUP_TITLE,
@@ -255,3 +256,46 @@ async def test_the_search_finds_a_game_by_its_genre_family(bot):
     await modal.on_submit(submitted)
 
     assert [field.name for field in submitted.edits[0]["embed"].fields] == ["Celeste"]
+
+
+async def test_the_search_takes_words_in_any_order_and_initials(bot):
+    submitted = FakeInteraction(bot, staff_of(bot))
+    modal = panel.SearchModal()
+    modal.typed._value = "revenge shredders"
+
+    await modal.on_submit(submitted)
+
+    assert [field.name for field in submitted.edits[0]["embed"].fields] == ["Shredder's Revenge"]
+
+
+async def test_nothing_found_offers_the_closest_names_through_the_none_key(bot):
+    who = staff_of(bot)
+    near = FakeInteraction(bot, who)
+    modal = panel.SearchModal()
+    modal.typed._value = "shredding reverb"
+    await modal.on_submit(near)
+    assert near.edits[0]["embed"].description == (
+        "Nothing in the BaF runs database matches **shredding reverb**.\nShredder's Revenge"
+    )
+
+    await bot.store.set(GUILD, RUNS_LOOKUP_NONE, "No {query}. Closest: {suggestions}", by=1)
+    worded = FakeInteraction(bot, who)
+    await modal.on_submit(worded)
+    assert worded.edits[0]["embed"].description == (
+        "No shredding reverb. Closest: Shredder's Revenge"
+    )
+
+
+async def test_search_again_opens_the_form_with_the_query_already_typed(bot):
+    who = staff_of(bot)
+    submitted = FakeInteraction(bot, who)
+    modal = panel.SearchModal()
+    modal.typed._value = "celeste"
+    await modal.on_submit(submitted)
+    answer = submitted.edits[0]["view"]
+
+    pressed = FakeInteraction(bot, who)
+    await answer.children[0].callback(pressed)
+
+    assert pressed.response.modals[0].typed.default == "celeste"
+    assert panel.SearchModal().typed.default is None
