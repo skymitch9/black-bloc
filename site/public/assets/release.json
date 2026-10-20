@@ -1,7 +1,8 @@
 {
-  "release": "v239",
-  "commit": "2e6592a0",
+  "release": "v240",
+  "commit": "31d1f85d",
   "changed_features": [
-    "question"
+    "guides",
+    "marathon"
   ]
 }
