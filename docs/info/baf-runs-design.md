@@ -377,3 +377,32 @@ It caches every speedrun.com answer in `scripts/scan/runs_demo_cache/` (gitignor
 49. **Genres and developers of the popular games are hand-written, the long tail has none, and the tail has no series** — see *What the file holds*. speedrun.com had none to give; the brief allowed only what speedrun.com has, and a demo with no genres at all would leave the Genre drop-down nothing to teach.
 50. **The popular head is 32 games, not ~80.** Each name lookup is one call and Cloudflare allowed about ten calls per window; 32 popular + 88 long-tail keeps the weighting (the popular games carry 2–6× the weight, five of them 30×) at a cost of 50 calls.
 51. **No `docs/deploys.log` line, no TODO/DONE edit** (brief).
+
+## Table height — 2026-10-20
+
+Owner, 2026-10-20 11:5x Phoenix: *"too much scrolling, we need to make the table show more rows before scrolling, use more of the page. keep this size if the table is short though"*. Branch `runs-table-height`.
+
+**What it does.** `fitScroll(node, { below })` (`site/public/assets/tablefit.js`, re-exported by `ui.js`) takes a long `.table-scroll` box (`data-long`, more than 12 rows) and sets `--table-fit` on it to *window height − the top of the scrolling shell (`main.content`, under the topbar) − (the pager's height + 16 px)*, never below the old **26rem**. So the table may be as tall as the window under the topbar: one page scroll past the page head, the tools and the chips puts the whole table and its pager on screen. CSS `.table-scroll[data-fit="true"] { max-height: var(--table-fit, 26rem); }` caps the box at it. It is a max-height only: a table shorter than the fit keeps its natural height, and a table of 12 rows or fewer is never touched. The sticky header stays. The runs page calls it after every paint of both views (Runs sheet and Games view), with the pager holder as `below`; every window resize re-fits every fitted box. The phone-width rule (`max-width: 900px`, no cap at all) is unchanged and still wins.
+
+**Only the runs page opts in.** Every other `.table-scroll` keeps the plain 26rem cap; another page opts in with one `fitScroll` call after it paints.
+
+**No settings key.** The fit is a measurement of the window, not a decision; the 26rem floor is the old cap, not a new number.
+
+**Measured 2026-10-20 12:2x (local mock, `runs.html#demo`, 100 rows a page, a Chrome popup sized 1512×802, inner viewport 1506×796):**
+
+| View | Before (26rem) | After | Page scroll to see the pager |
+|---|---|---|---|
+| Runs sheet | 7 rows, 416 px | **13 rows, 676 px** | 271 px (pager bottom then at 792 of 796) |
+| Games view | 7 rows, 416 px | **12 rows, 676 px** | 170 px (pager bottom then at 792) |
+| Runs sheet, popup 1512×1100 | 7 rows | fit 973 px | — |
+
+`runs.html` (the mock's 11 real rows): no `data-long`, no fit, natural height 584 px, unchanged. Paging, the view switch and a resize to 1100 and back (676 px again) raised no page errors.
+
+### Deviations (continued)
+
+52. **The helper lives in `tablefit.js`, re-exported by `ui.js`**, not written inside `ui.js`: `ui.js` touches `document` on import, so `site/mock/tablefit.test.mjs` could not load it. One implementation, one import path for pages (`ui.js`).
+53. **`fitScroll` sets `data-fit` itself** and only on a box that already has `data-long`, so a short table is never opted in and the sticky header (keyed on `data-long`) always comes with the fit.
+54. **A floor at the old 26rem**, for a window too short to give more.
+55. **The first measure waits** up to 120 frames for the box to land in the page (the first paint runs before the card is attached).
+56. **`tablefit.test.mjs` runs in CI and the deploy gate** (`ci.yml`, `scripts/deploy.ps1`), beside `listfilter.test.mjs`.
+57. **Fit to the window, not to the box's own top** — the owner's call via the conductor, 2026-10-20 12:1x. The brief asked for *window − the box's top − below* with the pager visible without a page scroll; measured at 1506×795 that left the Runs sheet at 404 px, under the 26rem floor, so 7 rows and no gain. The owner's words were *"show more rows before scrolling, use more of the page"*: a page scroll that hides the page head and chips is fine, a 7-row box is not. The fit is now measured from the top of the nearest scrolling ancestor (`main.content`, 56 px down, under the topbar), or the window top when there is none.

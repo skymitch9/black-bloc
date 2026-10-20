@@ -18,8 +18,9 @@ import { channelLabel, humanLabel, modeWord } from './labels.js';
 import { capState, counterState, insertAt, keepsLines, placeholdersFor } from './fieldaids.js';
 import { applyFilters, countedChoices, familyLabel, familyTerms, matches, passes } from './listfilter.js';
 import * as md from './mdformat.js';
+import { fitScroll } from './tablefit.js';
 
-export { applyFilters, channelLabel, countedChoices, familyLabel, familyTerms, humanLabel, matches, passes };
+export { applyFilters, channelLabel, countedChoices, familyLabel, familyTerms, fitScroll, humanLabel, matches, passes };
 
 const OUTAGE_WRITE = 'Black Bloc did not answer, so nothing was changed. That is an outage, not a ' +
   'permission problem — try again in a minute.';

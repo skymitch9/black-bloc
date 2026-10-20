@@ -66,6 +66,8 @@ jobs:
         run: node site/mock/listfilter.test.mjs
       - name: Runs page paging and demo
         run: node site/mock/runs-state.test.mjs
+      - name: Table height fit
+        run: node site/mock/tablefit.test.mjs
       - name: Shared field aids
         run: node site/mock/fieldaids.test.mjs
       - name: Posts page hashes

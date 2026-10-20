@@ -836,6 +836,7 @@ th[title] { cursor: help; }
   box-shadow: var(--et-card-shadow);
 }
 .table-scroll[data-long="true"] { max-height: 26rem; overflow-y: auto; }
+.table-scroll[data-fit="true"] { max-height: var(--table-fit, 26rem); }
 .card .table-scroll { border: 0; border-radius: 0; box-shadow: none; }
 .log-table { width: 100%; border-collapse: collapse; font-size: var(--et-ui-md); }
 .log-table th,
