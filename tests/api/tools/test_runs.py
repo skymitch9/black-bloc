@@ -211,3 +211,29 @@ async def test_the_search_box_matches_words_in_any_order_initials_and_typos(
     assert games_for("dkc3") == []
     rows = client.get("/api/runs").json()["rows"]
     assert all(row["search"].splitlines()[0] == row["game"] for row in rows)
+
+
+async def test_a_renamed_tracked_run_is_one_row_carrying_its_folded_keys(client, sign_in, web, wf):
+    sign_in(client)
+    marathon_id, first = await seed_tracked(web, wf, 7)
+    people = [{"name": "kat", "login": None, "part": "runner", "user_id": 7}]
+    cur = await web.db.conn.execute(
+        "INSERT INTO marathon_runs(marathon_id, external_id, game, category, people, state, "
+        "scheduled_at, first_seen_at, last_seen_at) VALUES (?, '2', 'Celeste', '100%', ?, "
+        "'done', '2026-10-01T00:40:00+00:00', ?, ?)",
+        (marathon_id, json.dumps(people), AT, AT),
+    )
+    await web.db.conn.commit()
+    second = cur.lastrowid
+
+    rows = client.get("/api/runs").json()["rows"]
+    assert [(row["key"], row["category"], row["folded"]) for row in rows] == [
+        (f"t{second}", "100%", [f"t{first}"])
+    ]
+    assert [one["times"] for one in client.get("/api/runs/games").json()["games"]] == [1]
+    assert client.get("/api/runs/export.csv").text.count("Celeste") == 1
+    assert len(client.get("/api/runs?q=celeste").json()["rows"]) == 1
+
+    saved = client.put("/api/settings/runs_same_run_minutes", json={"value": 0})
+    assert saved.status_code == 200
+    assert len(client.get("/api/runs").json()["rows"]) == 2

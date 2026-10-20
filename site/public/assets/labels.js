@@ -192,6 +192,7 @@ export const LABELS = {
   runs_lookup_no_date: 'The word for a run with no date, in /runs',
   runs_genre_qualifiers: 'Words left out when grouping genres',
   runs_genre_families: 'Genre families the runs page filters by',
+  runs_same_run_minutes: 'Minutes apart two tracked rows are still one run',
   marathon_archived_word: 'The line an archived marathon carries',
   marathon_stale_archive_reads: 'Failed reads in a row before an unreadable marathon is archived',
   marathon_stale_archive_hours: 'Hours without an answer before an unreadable marathon is archived',

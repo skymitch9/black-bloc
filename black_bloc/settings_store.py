@@ -10346,6 +10346,7 @@ RUNS_LOOKUP_COUNT = "runs_lookup_count"
 RUNS_LOOKUP_NO_DATE = "runs_lookup_no_date"
 RUNS_GENRE_QUALIFIERS = "runs_genre_qualifiers"
 RUNS_GENRE_FAMILIES = "runs_genre_families"
+RUNS_SAME_RUN_MINUTES = "runs_same_run_minutes"
 RUNS_SOURCE_CHOICES = (
     "gdq",
     "gdq_hotfix",
@@ -10385,6 +10386,7 @@ RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_LOOKUP_NO_DATE: "no date",
     RUNS_GENRE_QUALIFIERS: "action, 2d, 3d, kart, third-person, first-person",
     RUNS_GENRE_FAMILIES: RUNS_GENRE_FAMILIES_DEFAULT,
+    RUNS_SAME_RUN_MINUTES: 90,
 }
 RUNS_KEYS: tuple[str, ...] = tuple(RUNS_DEFAULTS)
 KEY_TYPES.update(
@@ -10401,6 +10403,7 @@ KEY_TYPES.update(
         RUNS_LOOKUP_NO_DATE: "text",
         RUNS_GENRE_QUALIFIERS: "text",
         RUNS_GENRE_FAMILIES: "text",
+        RUNS_SAME_RUN_MINUTES: "int",
     }
 )
 KEY_CHOICES.update({RUNS_SOURCES: RUNS_SOURCE_CHOICES, RUNS_PARTS: RUNS_PART_CHOICES})
@@ -10457,6 +10460,12 @@ KEY_HELP.update(
             "words in runs_genre_qualifiers; the first family that matches wins, and a genre "
             "no family names is its own family"
         ),
+        RUNS_SAME_RUN_MINUTES: (
+            "how many minutes apart two tracked runs of one marathon may start and still be one "
+            "run on the BaF runs page and in /runs, when they have the same game and the same "
+            "runners; runs whose times overlap are one run too. The newest wins, so a run the "
+            "schedule renamed mid-show counts once. 90 by default; 0 shows every tracked row"
+        ),
     }
 )
 TEXT_CHECKS.update(
@@ -10474,6 +10483,8 @@ TEXT_CHECKS.update(
 )
 TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, RUNS_GENRE_QUALIFIERS)
 NAMESPACE_OVERRIDE.update({key: "marathon" for key in RUNS_KEYS})
+KEY_MIN[RUNS_SAME_RUN_MINUTES] = 0
+KEY_MAX[RUNS_SAME_RUN_MINUTES] = 1440
 
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
