@@ -1,6 +1,6 @@
 {
-  "release": "v249",
-  "commit": "1af0a2d1",
+  "release": "v250",
+  "commit": "d104ebeb",
   "changed_features": [
     "marathon"
   ]
