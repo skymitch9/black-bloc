@@ -10669,3 +10669,31 @@ Design: [`posts-one-switch-design.md`](posts-one-switch-design.md).
 | `site/public/assets/ui.js` `askReason` | One box, sent on confirm; the bot's refusal shows inside the dialog. Used by the override on the Members page and on the People card. |
 | `black_bloc/api/tools/optouts.py` `roll_up` / `counted_in` | Reads the one table, the two role filters (`marathon_optout_role_ids` less overrides, `golive_ignore_role_id`) and each marathon's own "not this one". Overrides are `counted_in`, never a chip. |
 | `black_bloc/golive.py` `ignored_by_role` | The ignore role's holders, for the roll-up. The gate still filters with `passes_role_filters`, after the opt-out and before the cooldown. |
+
+## Small fixes — keyed by LINE at `small-fixes` (branch `small-fixes`, 2026-10-20)
+
+| Where | Why |
+|---|---|
+| `black_bloc/block_look.py:30` | `shows`: the one rule for a live block: drawn only while its feature's mode is `on`. Test and off both hide it, because test lists nothing a member should read as "nobody is live" / "nothing is on" (switch-audit i3). |
+| `black_bloc/cogs/community/events.py:2564` | `upcoming_shown` gates the load and the draw, so the two can no longer disagree, which is what drew the empty card in test. |
+| `black_bloc/cogs/content/golive.py:1911` | `block_is_on` was "not off"; the sessions it lists were already `on`-only, so test drew an empty Live now card. Now the same rule. |
+| `black_bloc/tempvoice.py:217` | `shows_block` keeps its name (the preview and the cog call it) and asks the shared rule. |
+| `black_bloc/cogs/community/birthdays.py:558` | `not_shared_said` is what a member reads instead of the date when the person opted out; it falls back to the shipped words like every opt-out word (`optouts.said`). |
+| `black_bloc/cogs/community/birthdays.py:570` | `build_card`: the date shows to the person themselves, to staff (with the *opted out* line) and to anyone while the person is wished; the opt-out is the `birthday` kind, not the old column. |
+| `black_bloc/cogs/community/birthdays.py:810` | `send_month` is staff-only twice (added only for staff, re-checked by `still_staff`); its *opted out* mark comes from the kind. |
+| `black_bloc/birthdays.py:375` | `month_lines(rows, out)`: the opted-out set is passed in, so the pure module never reads a store. |
+| `black_bloc/preview.py:654` | `birthday_lookup` draws the member's lookup card with the draft words, so the key has a preview on the Settings and Birthdays pages. |
+| `black_bloc/handed_roles.py:70` | `pings_ledger`: pings records no grants table, but every follow and Events toggle it makes logs `pings.follow` / `pings.events_on` with the role and the member, and the log is never pruned. Newest row wins; a `pings.roles_taken_back` row closes every pair it lists, so a role worn again later from onboarding is not pings' to take. |
+| `black_bloc/handed_roles.py:94` | `menu_grants`: only `menu` (self-pick) and `approval` (a request) sources, only roles that are options on this guild's menus, never a grant an application links. Staff-handed and timed roles stay: they are staff decisions and the mode's help promised they stay. |
+| `black_bloc/handed_roles.py:123` | `held` is the dry run the confirm counts and the take-back walks; a role no longer worn is not counted. |
+| `black_bloc/handed_roles.py:152` | `asked` answers nothing when nobody would lose a role or the take-back switch is off, so the confirm only stands in front of a real bulk action. |
+| `black_bloc/handed_roles.py:195` | `take_back`: under `TEST_MODE` only a `*.would_take_back` row (checklist 1). A refusal is counted `failed` and stays on the ledger. The DM goes only where the grant DM'd (an approved request). |
+| `black_bloc/handed_roles.py:243` | `install`: a store hook, so every write that leaves the key `off` takes back, from the site, `/settings`, either panel or a reset. The confirm lives in front of each of those writers. |
+| `black_bloc/cogs/core.py:107` | `unconfirmed` now gates the consent model and the two take-back modes with the same 409; `reset_value` (`:123`) is the value a reset would write, since both modes default to `off`. |
+| `black_bloc/cogs/content/pings.py:936` | `asked_off`: the `/pings` ▸ Settings mode select asks on the settings card itself; the yes re-runs `run_settings` with `confirmed`. |
+| `black_bloc/cogs/community/role_menus.py:2476` | `run_mode` asks before an off; the yes (`MODE_OFF_YES`) writes `off` explicitly instead of toggling, so a flip by someone else in between cannot turn it on. |
+| `black_bloc/__main__.py:3` | The guard: importing the entry point runs nothing (the 2026-10-19 import-sweep incident, `gotchas.md`). |
+| `black_bloc/shadow_one_meaning.py:21` | `rehearsal_note` joined the drop list (retired v241, its blank row was logged as ignored at every boot). |
+| `black_bloc/settings_store.py:10007` | `SMALL_FIXES_WORDS`: every word this build posts; `SMALL_FIXES_SWITCHES` (`:10052`) are the two take-back switches, default true. |
+| `black_bloc/bot.py:117` | `install_handed_roles` after the cogs load, beside the other store hooks. |
+| `site/mock/server.mjs:5270` | `handedAsked` / `handedTaken`: the mock's twin, with `pingsHanded` standing in for the action-log ledger. |
