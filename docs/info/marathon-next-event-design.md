@@ -222,3 +222,5 @@ start: SGDQ 2026 (66) is `2026-07-05T12:30:00-04:00`, exactly run order 1's `sta
 - **Schema 61** was proven on a fresh file and a file downgraded to 60, not on the live volume.
 - **Shadow** was tested against the fake shadow channel, not `#welcome-test`.
 - **Discord's rendering** of `<t:…:D>`, a struck-through notice, and disabled buttons after an edit were not seen.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `marathon_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

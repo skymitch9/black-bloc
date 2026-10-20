@@ -1291,3 +1291,5 @@ site/mock/check.mjs`: *ok - 25 pages, 344 routes, 171 core settings, all keys pr
   through `asyncio.gather` in one process — not across two processes (there is only one bot process).
 - The card id columns (`message_id`, `card_at`) have no writer yet — layer 2 writes them; only the store round-trip
   is tested.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `brackets_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

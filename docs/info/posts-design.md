@@ -429,3 +429,5 @@ Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole buil
 - `/api/posts` adds `commands_hidden` and, while off, a second note naming the hidden commands.
 
 Deviations: (1) the Post to test button on a `/posts` card is hidden while posts are off (it only refused there); (2) an unknown stored mode reads as **off** (was shadow); (3) the boot migration maps a stored `shadow` to **on**.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `posts_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

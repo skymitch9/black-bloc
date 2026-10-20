@@ -169,3 +169,5 @@ Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole buil
 - The section's settings fold no longer shows a mode.
 
 Deviations: (1) with no shadow, `questions_moves.target_id` refuses in words while off instead of resolving a rehearsal home; (2) the warning DM's skipped reason reads `off` (was `shadow`).
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `posts_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

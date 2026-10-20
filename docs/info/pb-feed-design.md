@@ -438,3 +438,5 @@ same registry, so the absolute counts will move at merge; this branch's own delt
 - TEST_MODE with a guard installed: one test, fakes.
 - `ruff format --check` was not run. No guide was added to `guides_seed.json`. `/pb` was not
   added to the self-test's panel doors.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `pb_feed_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

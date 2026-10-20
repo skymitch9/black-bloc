@@ -225,3 +225,5 @@ Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole buil
 - Post to test reads `posts_shadow_channel_id` (blank → `shadow_channel_id`).
 
 Deviations: (1) a settle never moves a paused row's copy now (before, a copy that would not delete was retried); (2) Deviation 2 of the 2026-10-19 Post to test follow-up is resolved — the paused leaderboard row shows Post to test; (3) every shadow placement branch of the Desk was removed, not left dead.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `posts_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).

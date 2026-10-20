@@ -197,3 +197,5 @@ branch's command tree to `DEV_GUILD_ID` (the real server) with nothing hidden**,
 boot, i.e. the next deploy): commands whose feature is off live (`/rolemenu`, `/minutes`, …) may show
 in the server's command list. No command definition differs from v241. Lesson: never import
 `black_bloc.__main__` (or `app`) in a sweep.
+
+> **Follow-up 2026-10-20 (`one-test-channel`):** `points_shadow_channel_id`, `posts_shadow_channel_id` are RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names those keys, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).
