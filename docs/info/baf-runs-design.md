@@ -167,4 +167,19 @@ One Opus build, ~300k (core + db + api + web + cog), branch `baf-runs`: schema 9
 
 ## Deviations
 
-(none yet — filled by the build)
+Filled by the build (branch `baf-runs`, 2026-10-19). Numbered; each says why.
+
+1. **`baf_runs` has one more column, `run_ref`** (the tracker run's id), with a partial unique index on `(guild_id, event_source, event_ref, run_ref)`. §5.5 had no per-run reference on an imported row, and "a second import of the same event adds 0" needs one; the index makes it hold under two clicks too (checklist 6).
+2. **Clear edits is `PUT /api/runs/{key}` with `{"clear": true}`**, not its own route; §5.6's route list is otherwise as written.
+3. **`GET /api/runs` answers an object** `{rows, events, series_names, sources, parts}` rather than a bare list: the editor's Event select needs every GDQ-source marathon incl. archived, and the Series box needs the existing series as suggestions, in the same read.
+4. **The importer's *Pair…* is a member picker whose answer applies to that import only** (`pairs` in the request), not the marathon pairing modal. The existing pairing route (`pair_runner`) needs a marathon, rematches it and re-syncs its board, and writes `marathon_people` — the brief's hard rule is that this feature never writes the marathon feature's tables and never calls anything that posts. A pairing made on the Events page (*everywhere*) IS read by the importer.
+5. **`runs_sources` and `runs_parts` are type `enums`** (the registry has no plain `list` type), with choices = every marathon source / every part. Same defaults as §5.7.
+6. **A tracked run's Remove is an override row with `field = 'excluded'`** in `baf_run_edits` (the PK is per field, so exclusion is its own field). Restore deletes it.
+7. **Rows the importers write are `how = imported`** (CSV and GDQ alike), and Remove on any `baf_runs` row — hand or imported — deletes it after an *Are you sure*; only a tracked run has Restore.
+8. **The GDQ importer leaves out a run that has not started** (counted as *not run yet* in the dry-run line), per D3 — only completed runs count.
+9. **A CSV `series` cell only fills a game that has no series yet**; it never overwrites a tag staff set.
+10. **A hand or imported row whose event matches a live marathon** (same source and ref) links to `schedule.html#marathon-<id>` too, not only tracked rows.
+11. **Phone width (390 px): the shared `table()` restacks each row into a labelled card** instead of scrolling sideways — that is the site-wide table's own phone layout, and the page does not scroll sideways (measured in headless Chrome at 390 px: `scrollWidth` 390 = viewport, table 324/324).
+12. **The `/runs` panel's timeout (10 min), button labels and the *seen N time(s), last … at …* line are code constants**; the three words that build the answer are the `runs_lookup_*` keys exactly as §5.7 lists (five keys, no more).
+13. **Finding, not a change — §2/§4's assumptions measured 2026-10-19:** the GDQ tracker DOES serve an ended event's runs (BtB 2025, event 54: 46 runs read; SGDQ 2025 by short link `sgdq2025`: 155 runs). And **Back to Black is on the tracker** (`BTB2025` = event 54, February 2025), so BtB history from 2025 on comes in by *Import a GDQ event…*, not only by CSV as §4 F2 assumed. Hotfix specials were not checked.
+
