@@ -38,6 +38,7 @@ from .settings_store import (
     RUNS_GENRE_FAMILIES,
     RUNS_GENRE_QUALIFIERS,
     RUNS_PARTS,
+    RUNS_SAME_RUN_MINUTES,
     RUNS_SOURCES,
 )
 
@@ -50,6 +51,7 @@ EVENT_WORDS = {GDQ: "GDQ", "gdq_hotfix": "GDQ Hotfix"}
 COUNTED_STATES = (mt.DONE, mt.LIVE)
 EXCLUDED = "excluded"
 FIELDS = ("date", "event", "game", "category", "runners", "note")
+CARRIED = ("category", "runners", "note")
 RUNS_PAGE = "runs.html"
 MARATHONS_COG = "Marathons"
 TEXT_LIMIT = 200
@@ -278,7 +280,8 @@ async def _fetch(db: Any, sql: str, args: tuple[Any, ...] = ()) -> list[Any]:
 
 TRACKED_SQL = """
 SELECT r.id AS run_id, r.marathon_id, r.external_id, r.game, r.category, r.people, r.state,
-       r.actual_started_at, r.scheduled_at, m.name AS marathon_name, m.source, m.source_ref,
+       r.actual_started_at, r.scheduled_at, r.actual_ended_at, r.ends_at,
+       m.name AS marathon_name, m.source, m.source_ref,
        {live} AS live_row
 FROM {runs} r JOIN {marathons} m ON m.id = r.marathon_id
 WHERE m.guild_id = ? AND m.source IN ({marks}) AND r.state IN ({states})
@@ -438,6 +441,8 @@ def _shaped(**given: Any) -> dict[str, Any]:
         "edited": given["edited"],
         "tracked": given["tracked"],
         "state": given["state"],
+        "folded": [],
+        "carried": [],
     }
 
 
@@ -471,16 +476,15 @@ async def view(bot: Any, guild: Any) -> list[dict[str, Any]]:
     edits = await edits_of(db, guild.id)
     tags = await tags_of(db, guild.id)
     found: list[dict[str, Any]] = []
+    facts: dict[str, Fact] = {}
     for run in await tracked_runs(db, guild.id, sources):
-        made = _tracked_row(
-            guild,
-            run,
-            edits.get((int(run["marathon_id"]), str(run["external_id"])), {}),
-            parts,
-            tags,
-        )
+        own = edits.get((int(run["marathon_id"]), str(run["external_id"])), {})
+        made = _tracked_row(guild, run, own, parts, tags)
         if made is not None:
             found.append(made)
+            facts[made["key"]] = _fact_of(run, made, own)
+    minutes = int(bot.store.get(guild.id, RUNS_SAME_RUN_MINUTES) or 0)
+    found = fold(found, facts, minutes)
     marathons = await live_marathons(db, guild.id)
     for row in await _fetch(db, "SELECT * FROM baf_runs WHERE guild_id = ?", (int(guild.id),)):
         found.append(_hand_row(guild, row, parts, tags, marathons))
@@ -490,6 +494,105 @@ async def view(bot: Any, guild: Any) -> list[dict[str, Any]]:
         made["search"] = text_of(made, rule)
     found.sort(key=newest_first, reverse=True)
     return found
+
+
+class Fact(NamedTuple):
+    marathon_id: int
+    run_id: int
+    starts: datetime | None
+    ends: datetime | None
+    edits: dict[str, Any]
+
+
+def _fact_of(run: Any, row: dict[str, Any], own: dict[str, Any]) -> Fact:
+    starts = mt.parse_ts(row["date"])
+    ends = mt.parse_ts(run["actual_ended_at"] or run["ends_at"])
+    return Fact(
+        int(run["marathon_id"]),
+        int(run["run_id"]),
+        starts,
+        ends if ends is not None and starts is not None and ends >= starts else starts,
+        own,
+    )
+
+
+def runner_set(row: dict[str, Any]) -> frozenset[str]:
+    return frozenset(one["user_id"] or one["name"].lower() for one in row["runners"])
+
+
+def same_run(one: Fact, other: Fact, minutes: int) -> bool:
+    if one.starts is None or other.starts is None:
+        return False
+    if one.starts <= (other.ends or other.starts) and other.starts <= (one.ends or one.starts):
+        return True
+    return abs((one.starts - other.starts).total_seconds()) <= minutes * 60
+
+
+def _groups(rows: list[dict[str, Any]], facts: dict[str, Fact], minutes: int) -> list[list[str]]:
+    buckets: dict[tuple[Any, ...], list[str]] = {}
+    for row in rows:
+        fact = facts.get(row["key"])
+        if fact is not None and fact.starts is not None:
+            wanted = (fact.marathon_id, row["game_key"], runner_set(row))
+            buckets.setdefault(wanted, []).append(row["key"])
+    found: list[list[str]] = []
+    for keys in buckets.values():
+        parent = {key: key for key in keys}
+        for at, key in enumerate(keys):
+            for other in keys[at + 1 :]:
+                if same_run(facts[key], facts[other], minutes):
+                    parent[_top(parent, other)] = _top(parent, key)
+        joined: dict[str, list[str]] = {}
+        for key in keys:
+            joined.setdefault(_top(parent, key), []).append(key)
+        found.extend(group for group in joined.values() if len(group) > 1)
+    return found
+
+
+def _top(parent: dict[str, str], key: str) -> str:
+    while parent[key] != key:
+        key = parent[key]
+    return key
+
+
+def _carry(kept: dict[str, Any], hidden: list[dict[str, Any]], own: dict[str, Any]) -> None:
+    for field in CARRIED:
+        if field in own:
+            continue
+        donor = next((one for one in hidden if field in one["edited"]), None)
+        if donor is None:
+            continue
+        if field == "runners":
+            kept["tracked"].setdefault(field, kept["runners_text"])
+            kept["runners"], kept["runners_text"] = donor["runners"], donor["runners_text"]
+        else:
+            kept["tracked"].setdefault(field, kept[field])
+            kept[field] = donor[field]
+        kept["carried"].append(field)
+
+
+def fold(
+    rows: list[dict[str, Any]], facts: dict[str, Fact], minutes: int
+) -> list[dict[str, Any]]:
+    """Tracked rows that are one run under several sheet names become the newest of them."""
+    if minutes <= 0:
+        return rows
+    by_key = {row["key"]: row for row in rows}
+    gone: set[str] = set()
+    for group in _groups(rows, facts, minutes):
+        members = sorted(group, key=lambda key: facts[key].run_id, reverse=True)
+        kept = by_key[members[0]]
+        hidden = [
+            by_key[key]
+            for key in members[1:]
+            if kept["removed"] or not by_key[key]["removed"]
+        ]
+        if not hidden:
+            continue
+        _carry(kept, [one for one in hidden if not one["removed"]], facts[kept["key"]].edits)
+        kept["folded"] = [one["key"] for one in hidden]
+        gone.update(kept["folded"])
+    return [row for row in rows if row["key"] not in gone]
 
 
 def year_of(row: dict[str, Any]) -> str:
@@ -966,7 +1069,7 @@ async def _edit_tracked(
     held = current.get((int(run["marathon_id"]), str(run["external_id"])), {})
     for field, value in wanted.items():
         was = held.get(field)
-        if value == source.get(field):
+        if value == source.get(field) and field not in shown["carried"]:
             if was is not None:
                 await _drop_edit(bot.db, run, field)
                 before[field], after[field] = was, None

@@ -262,3 +262,49 @@ Owner, 2026-10-20 08:1x Phoenix: *"so /runs is gonna be an issue because if you 
 27. **`{suggestions}` carries names only, no words of its own.** A lead-in like *Did you mean* would be a code constant; the default puts the names on their own line under the sentence instead, and staff can word it (`No {query}. Closest: {suggestions}`).
 28. **The mock seeds two more hand rows** (*Donkey Kong Country 2: Diddy's Kong Quest* by KnightFan, genre *2D platformer*; *Sekiro: Shadows Die Twice* by Rivet) so *dkc2*, *donkey 2* and a typo have something to find locally; the mock mirrors `text_of` as `runsSearchText`.
 29. **The Games view's own table box is unchanged** (still the shared substring search, like Deviation 22); the loose search is the Runs sheet's and `/runs`.
+
+## Folding renamed tracked runs — 2026-10-20
+
+Owner, 2026-10-20 08:5x Phoenix: *"fix the duplicate"*. Branch `runs-renamed-collapse`.
+
+**The defect.** Game Masters (marathon 12, a Hotfix show, 2026-10-10 02:00–04:22Z) showed *Donkey Kong Country 2* twice on the sheet and *times featured 2* on the Games view. It was one run by Ryan Ford. The Hotfix sheet renamed the row's category during the show (a misread time cell `12:28:48 AM`, then *True Ending*, then *102%*). A Hotfix run's `external_id` is `game/category` (`marathon_hotfix._runs`), so each rename became its own `marathon_runs` row: 171 (dropped), 172 (done), 173 (done). The view counts every `done`/`live` tracked row, so it counted 172 and 173 both. The conductor removed t172 by hand at 09:1x (a `baf_run_edits` exclusion, restorable).
+
+**The rule.** One place, `baf_runs.fold` (called by `view` after the tracked rows are shaped and the edits overlaid, before the hand rows are added). Tracked rows of ONE marathon with the same `game_key` and the same runner set (each counted person's `user_id`, else the lowercased name) are ONE run when their windows overlap, or their starts are at most `runs_same_run_minutes` apart. A window runs from the shown date to `actual_ended_at`, else `ends_at`; with no end, or an end before the start, it is the start alone. Groups chain: A near B and B near C is one run.
+
+| Key (Marathons) | Type | Default | Decides |
+|---|---|---|---|
+| `runs_same_run_minutes` | int, 0–1440 | `90` | how far apart two starts may be and still be one run; **0 folds nothing** (every tracked row shows, as before this build) |
+
+Keys 1247 → 1248.
+
+**Inside a group:**
+
+1. **The newest run id wins.** Its key, date, event, category, runners and state are the row. The older rows are gone from the sheet, the Games counts, `filtered` (`?q=` and every filter), `export_csv`, `lookup` and so the `/runs` panel. All of those read `view`, so the one fold serves them all (tests: `test_games_export_and_lookup_count_a_renamed_run_once`, `test_a_renamed_tracked_run_is_one_row_carrying_its_folded_keys`).
+2. **The surviving row carries `folded`**: the keys it absorbed, newest first. Every row has `folded` (empty when nothing folded) and `carried` (below).
+3. **A row staff removed stays removed.** An older row with an exclusion is NOT folded. It stays its own removed row under *Removed (N)*, where Restore reaches it; restored, it folds. The live t172 is this case, so on the live page DKC2 shows once with no pill.
+4. **Removing the surviving row removes the run.** When the newest row is removed, every older row of the group folds into it, so the whole group shows as ONE removed row and Restore brings the run back. Without this, Remove on the survivor would bring the next-newest rename back as the run.
+5. **Staff edits.** The survivor's own edits apply as they always did. A staff edit on an OLDER row's *category*, *runners* or *note* is carried onto the survivor only if the survivor has no stored edit of its own for that field. The newest older edit wins. The survivor lists the fields in `carried`, and `tracked` holds the survivor's source value, so the editor still shows *tracked value: …*. Carried fields are not in `edited`, so *Clear edits* clears only the survivor's own edits. An older row's *date*, *event* or *game* edit is not carried: those decide the grouping itself.
+6. **Staff can override a carried value back to the sheet's.** Saving the source value on a field that is `carried` stores it as an edit, even though it equals the source. That edit blocks the carry, so staff keep the final say.
+
+**The page.** In the How cell, a folded row gets a small pill, *2 rows*, whose tooltip lists the keys. The row editor shows *Folded rows: t172* under the Date. Nothing else changes, and nothing explains it.
+
+**Hidden rows cannot be edited.** `find("t172")` answers nothing while t172 is folded, so an edit, removal or restore by its key refuses *not in the database any more*. The rows to act on are the visible ones. Set `runs_same_run_minutes` to 0 to reach every tracked row one by one.
+
+### The tracker: should it pair a renamed sheet row with the existing run? (recommendation, not built)
+
+**It already tries to, and here that pairing failed.** The tracker does not need new pairing logic. The 2026-10-04 `run-identity` build ([`marathon-hotfix-design.md`](marathon-hotfix-design.md) *a renamed run keeps its identity*) made `marathon.diff` pair a lost row with a fresh run in the same slot (`marathon.renames` / `same_slot` / `rekeys`, logged as `marathon.run_renamed`). That keeps the row id and with it the held counts, `reminders_sent`, shout and thread ids, `live_at` and damping state. For DKC2 it did not fire, so the first step is a diagnosis, not a build. Read the `marathon.run_renamed` and `marathon.schedule_changed` rows for marathon 12 on 2026-10-10, and the stored `sheet_at`, `order_no` and `people` of runs 171–173 (read-only, through the operator token). The likely misses can each be named in the code:
+
+- (a) The planned start moved by more than `marathon_move_minutes` (5) AND the order changed. A Hotfix start is a running cursor over the earlier rows' estimates, so a misread time cell shifts every later start. `same_slot` then needs the same `order_no` within 12 h.
+- (b) More than one lost row carried Ryan Ford's runner set in one read. Then `_candidates` also demands `same_words` at 0.93 or more, and *Donkey Kong Country 2 / 102%* against */ True Ending* is **0.759**. The run-identity design names exactly this pair as one it refuses.
+- (c) The misread row's runner column was shifted too, so the runner sets differed.
+
+If (a) or (b), a narrow change is possible. One idea: a lost row whose game is equal and whose runners are equal pairs on order alone, even when a second lost row shares the runner. But that rule lives in the one reconcile path that moves persisted ids (`rekey_runs`). The pair's held move counts and `marathon.member_run_moved` damping, its posted reminders, the runner's thread links and the board all follow the row id, and a wrong pair would merge two real runs, rewording one runner's live highlight onto another game. That is why the existing rule pairs nothing when it is ambiguous. My recommendation: diagnose first. Change `same_slot` / `_candidates` only if the diagnosis names (a) or (b), and only with a fixture of this show's three reads. Keep this view fold either way: it also repairs history that is already split, which a tracker change would not touch.
+
+The 2026-10-19 FOUND item (*run ids drift on RGLtv's A Fistful of Brawlers*, marathon 14) is a **horaro** marathon. Its `external_id` is the source's id, not a `game/category` slug, so it is the same symptom from a different cause. The fold here does not reach it either way: horaro is not in `runs_sources`.
+
+### Deviations (continued)
+
+30. **A removed survivor takes its whole group with it**, and a removed OLDER row is kept out of the group (rules 3–4). The brief said only that a removed row "still counts as removed"; these two rules are how that holds without Remove on the survivor bringing a rename back.
+31. **`carried` is a second payload field beside `folded`.** The brief named only `folded`. `carried` exists so that saving the sheet's value over a carried one is stored (rule 6) rather than refused as *nothing changed*. Without it, staff could not undo a carry.
+32. **The mock seeds Game Masters as an ARCHIVED marathon** (id 12, runs 171–173, Ryan Ford paired to the mock member Dax), so the seed does not add a live marathon to the Events page. The mock folds with its own `runsFold` (a mock, not a second implementation the site runs).
+33. **No `docs/deploys.log` line, no TODO/DONE edit** (brief).

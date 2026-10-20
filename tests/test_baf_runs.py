@@ -10,6 +10,7 @@ from black_bloc.settings_store import (
     RUNS_GENRE_FAMILIES,
     RUNS_GENRE_QUALIFIERS,
     RUNS_PARTS,
+    RUNS_SAME_RUN_MINUTES,
     RUNS_SOURCES,
     SettingError,
 )
@@ -674,3 +675,151 @@ async def test_a_word_from_the_note_finds_the_run_in_the_search_and_in_lookup(bo
     assert (await runs.find(bot, bot.guild, added.value))["search"].endswith("Played blindfolded")
     found = await runs.lookup(bot, bot.guild, None, "blindfolded tetris")
     assert [one["game"] for one in found.games] == ["Tetris"]
+
+
+DKC2 = "Donkey Kong Country 2"
+
+
+async def game_masters(bot, *, second=None, gap_hours=0):
+    db = bot.db
+    show = await add_marathon(db, "Game Masters", "gdq_hotfix", "game-masters", mid=12)
+    ryan = [person("ryan_ford", user_id=RUNNER_ID)]
+    shape = (
+        (171, "dkc2/12:28:48-am", "12:28:48 AM", "dropped", "2026-10-10T02:28:00+00:00",
+         "2026-10-10T03:35:00+00:00"),
+        (172, "dkc2/true-ending", "True Ending", "done", "2026-10-10T02:30:00+00:00",
+         "2026-10-10T03:22:05+00:00"),
+        (173, "dkc2/102%", "102%", "done", "2026-10-10T02:33:00+00:00",
+         "2026-10-10T03:25:33+00:00"),
+    )
+    for rid, external, category, state, at, ends in shape:
+        if rid == 173 and gap_hours:
+            at, ends = f"2026-10-10T{2 + gap_hours:02d}:33:00+00:00", None
+        people = second if rid == 173 and second else ryan
+        await add_run(
+            db, show, external, DKC2, people, state=state, at=at, category=category, rid=rid
+        )
+        await db.conn.execute(
+            "UPDATE marathon_runs SET actual_ended_at = ?, ends_at = ? WHERE id = ?",
+            (ends, ends, rid),
+        )
+    await db.conn.commit()
+    return show
+
+
+def dkc2_rows(rows):
+    return [row for row in rows if row["game_key"] == DKC2.lower()]
+
+
+async def test_a_run_the_sheet_renamed_mid_show_is_one_row_and_the_newest_id_wins(bot):
+    await game_masters(bot)
+
+    rows = dkc2_rows(await runs.view(bot, bot.guild))
+
+    assert [row["key"] for row in rows] == ["t173"]
+    assert rows[0]["category"] == "102%" and rows[0]["state"] == "done"
+    assert rows[0]["folded"] == ["t172"] and rows[0]["carried"] == []
+    assert await runs.find(bot, bot.guild, "t172") is None
+    refused = await runs.edit(bot, bot.guild, None, "t172", {"note": "x"})
+    assert not refused.ok and refused.status == 404
+
+
+async def test_the_same_game_by_different_runners_stays_two_rows(bot):
+    await game_masters(bot, second=[person("hostess", user_id=HOST_ID)])
+
+    rows = dkc2_rows(await runs.view(bot, bot.guild))
+
+    assert sorted(row["key"] for row in rows) == ["t172", "t173"]
+    assert all(row["folded"] == [] for row in rows)
+
+
+async def test_the_same_runner_three_hours_later_is_a_second_run(bot):
+    await game_masters(bot, gap_hours=3)
+
+    rows = dkc2_rows(await runs.view(bot, bot.guild))
+
+    assert sorted(row["key"] for row in rows) == ["t172", "t173"]
+
+
+async def test_runs_same_run_minutes_at_0_folds_nothing(bot):
+    await game_masters(bot)
+    await bot.store.set(GUILD, RUNS_SAME_RUN_MINUTES, 0, by=1)
+
+    rows = dkc2_rows(await runs.view(bot, bot.guild))
+
+    assert sorted(row["key"] for row in rows) == ["t172", "t173"]
+    assert runs.games(rows)[0]["times"] == 2
+
+
+async def test_starts_within_the_minutes_fold_even_when_the_windows_do_not_overlap(bot):
+    await game_masters(bot, gap_hours=1)
+    await bot.db.conn.execute("UPDATE marathon_runs SET actual_ended_at = NULL, ends_at = NULL")
+    await bot.db.conn.commit()
+
+    assert [row["key"] for row in dkc2_rows(await runs.view(bot, bot.guild))] == ["t173"]
+    await bot.store.set(GUILD, RUNS_SAME_RUN_MINUTES, 30, by=1)
+    assert len(dkc2_rows(await runs.view(bot, bot.guild))) == 2
+
+
+async def test_an_older_row_staff_removed_stays_removed_and_restorable(bot):
+    await game_masters(bot)
+    await bot.store.set(GUILD, RUNS_SAME_RUN_MINUTES, 0, by=1)
+    assert (await runs.remove(bot, bot.guild, None, "t172", via=VIA_WEBSITE)).ok
+    await bot.store.set(GUILD, RUNS_SAME_RUN_MINUTES, 90, by=1)
+
+    rows = dkc2_rows(await runs.view(bot, bot.guild))
+
+    shown = {row["key"]: row for row in rows}
+    assert set(shown) == {"t172", "t173"}
+    assert shown["t172"]["removed"] is True and shown["t173"]["removed"] is False
+    assert shown["t173"]["folded"] == []
+    assert runs.games(rows)[0]["times"] == 1
+    assert (await runs.restore(bot, bot.guild, None, "t172", via=VIA_WEBSITE)).ok
+    assert [row["key"] for row in dkc2_rows(await runs.view(bot, bot.guild))] == ["t173"]
+
+
+async def test_removing_the_surviving_row_removes_the_whole_run(bot):
+    await game_masters(bot)
+
+    assert (await runs.remove(bot, bot.guild, None, "t173", via=VIA_WEBSITE)).ok
+    rows = dkc2_rows(await runs.view(bot, bot.guild))
+
+    assert [(row["key"], row["removed"], row["folded"]) for row in rows] == [
+        ("t173", True, ["t172"])
+    ]
+    assert runs.games(rows) == []
+    assert (await runs.restore(bot, bot.guild, None, "t173", via=VIA_WEBSITE)).ok
+    assert [row["removed"] for row in dkc2_rows(await runs.view(bot, bot.guild))] == [False]
+
+
+async def test_a_hand_edit_on_the_older_row_carries_only_where_the_newer_has_none(bot):
+    await game_masters(bot)
+    await bot.store.set(GUILD, RUNS_SAME_RUN_MINUTES, 0, by=1)
+    older = {"category": "True Ending (glitchless)", "note": "from the VOD"}
+    assert (await runs.edit(bot, bot.guild, None, "t172", older, via=VIA_WEBSITE)).ok
+    assert (await runs.edit(bot, bot.guild, None, "t173", {"note": "mine"})).ok
+    await bot.store.set(GUILD, RUNS_SAME_RUN_MINUTES, 90, by=1)
+
+    row = (dkc2_rows(await runs.view(bot, bot.guild)))[0]
+
+    assert row["key"] == "t173" and row["folded"] == ["t172"]
+    assert row["category"] == "True Ending (glitchless)" and row["note"] == "mine"
+    assert row["carried"] == ["category"] and row["tracked"]["category"] == "102%"
+    assert row["edited"] == ["note"]
+    pinned = await runs.edit(bot, bot.guild, None, "t173", {"category": "102%"})
+    assert pinned.ok
+    row = (dkc2_rows(await runs.view(bot, bot.guild)))[0]
+    assert row["category"] == "102%" and row["carried"] == []
+
+
+async def test_games_export_and_lookup_count_a_renamed_run_once(bot):
+    await game_masters(bot)
+    every = await runs.view(bot, bot.guild)
+
+    game = next(one for one in runs.games(every) if one["game_key"] == DKC2.lower())
+    found = await runs.lookup(bot, bot.guild, None, "dkc2")
+
+    assert game["times"] == 1 and game["keys"] == ["t173"] and game["categories"] == ["102%"]
+    assert [(one["game"], len(one["runs"])) for one in found.games] == [(DKC2, 1)]
+    assert [row["key"] for row in runs.filtered(every, q="dkc2")] == ["t173"]
+    assert runs.export_csv(every).count(DKC2) == 1

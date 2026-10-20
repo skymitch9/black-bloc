@@ -255,6 +255,7 @@ function runColumns() {
       sort: 'how',
       cell: (row) => el('span', { class: 'runs-how' }, [
         el('span', { text: row.removed ? 'removed' : row.edited.length ? `${row.how_word} · edited` : row.how_word }),
+        row.folded && row.folded.length ? el('span', { class: 'pill small', title: row.folded.join(' · '), text: `${row.folded.length + 1} rows` }) : null,
         el('button', {
           class: 'btn small quiet',
           type: 'button',
@@ -474,6 +475,7 @@ function openEditor(row = null) {
   const when = whenField({ label: 'Date', value: localValue(row ? row.date : ''), zoned: false });
   const wasDate = was(row, 'date');
   if (wasDate) when.node.append(el('p', { class: 'field-help' }, [wasDate]));
+  if (row && row.folded && row.folded.length) when.node.append(el('p', { class: 'field-help', text: `Folded rows: ${row.folded.join(' · ')}` }));
   const game = el('input', { class: 'input', value: row ? row.game : undefined });
   const category = el('input', { class: 'input', value: row ? row.category || undefined : undefined });
   const series = el('input', { class: 'input', list: 'runs-editor-series', value: row ? row.series || undefined : undefined });

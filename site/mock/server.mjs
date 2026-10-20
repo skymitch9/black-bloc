@@ -884,6 +884,7 @@ const SETTING_SPECS = [
   ["runs_lookup_no_date", "text", "no date", "no date", "the date word in the /runs panel for a run with no date"],
   ["runs_genre_qualifiers", "text", RUNS_GENRE_QUALIFIERS_DEFAULT, RUNS_GENRE_QUALIFIERS_DEFAULT, "words left out of a genre before the BaF runs page groups it into a family, separated by commas; capitals, hyphens and slashes do not matter, so Action-adventure groups as adventure and Third-person shooter as shooter. The genre itself keeps every word"],
   ["runs_genre_families", "text", RUNS_GENRE_FAMILIES_DEFAULT, RUNS_GENRE_FAMILIES_DEFAULT, "the genre families the BaF runs page and /runs filter and search by, one per line as the family, a colon and the other genres that belong to it separated by commas — racing: racer, kart racer. A genre is matched whole first, then without the words in runs_genre_qualifiers; the first family that matches wins, and a genre no family names is its own family"],
+  ["runs_same_run_minutes", "int", 90, 90, "how many minutes apart two tracked runs of one marathon may start and still be one run on the BaF runs page and in /runs, when they have the same game and the same runners; runs whose times overlap are one run too. The newest wins, so a run the schedule renamed mid-show counts once. 90 by default; 0 shows every tracked row", null, 1440, 0],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_stale_archive_reads", "int", 3, 3, "how many reads of a marathon's schedule in a row must fail before it moves to the archive as unreadable, once marathon_stale_archive_hours have also passed — a schedule that is not published yet never counts, and a paused or ignored marathon never moves. Restore brings it back, and so does its feed listing it again with a schedule that reads. 3 by default; 0 never archives an unreadable marathon", null, 20, 0],
   ["marathon_stale_archive_hours", "int", 24, 24, "how many hours a marathon's schedule must have gone without an answer before marathon_stale_archive_reads failed reads move it to the archive — counted from the last read that worked, or from a Restore or Resume since. 24 by default; 0 needs the failed reads alone", null, 720, 0],
@@ -2650,6 +2651,7 @@ const NAMESPACE_OVERRIDE = {
   runs_lookup_no_date: 'marathon',
   runs_genre_qualifiers: 'marathon',
   runs_genre_families: 'marathon',
+  runs_same_run_minutes: 'marathon',
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
   mod_log_level: 'automod',
@@ -7542,6 +7544,13 @@ function seedMarathonRuns() {
     run(51, 50, 2, 0, 'Hamtaro: Ham-Hams Unite!', 'Any%', [marathonPerson('PumpkinPower14', 'pumpkinpower14', 'runner')], hotfixRun('18:08', '19:00', '2', ['18:28', '19:20'])),
     run(52, 50, 3, 0, 'Bombun', 'Any% NG+', [marathonPerson('debeaunairVT', 'debeaunairvt', 'runner')], hotfixRun('19:00', '19:46', null, ['19:20', '20:06'])),
     ...trackerSeed(MEMBERS, STAFF.id).runs,
+    // Game Masters (archived marathon 12): the Hotfix sheet renamed DKC2's category mid-show, so
+    // one run is three rows; the runs page folds 172 into 173 (baf-runs-design.md, folding).
+    ...[
+      [171, '12:28:48-am', '12:28:48 AM', 'dropped', '02:28', '03:35:00'],
+      [172, 'true-ending', 'True Ending', 'done', '02:30', '03:22:05'],
+      [173, '102%', '102%', 'done', '02:33', '03:25:33'],
+    ].map(([id, slug, category, state, start, end]) => run(id, 12, 1, 0, 'Donkey Kong Country 2', category, [marathonPerson('Ryan Ford', 'ryan_ford522', 'runner', MEMBERS[6].id), marathonPerson('Kiara_TV', 'kiara_tv', 'host')], { external_id: `donkey-kong-country-2/${slug}`, state, scheduled_at: `2026-10-10T${start}:00+00:00`, actual_started_at: `2026-10-10T${start}:00+00:00`, ends_at: `2026-10-10T${end}+00:00`, actual_ended_at: `2026-10-10T${end}+00:00` })),
   ];
 }
 
@@ -7579,6 +7588,7 @@ function marathonInboxSeed() {
 function seedMarathonArchive() {
   const base = { poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetch_ok: 1, last_error: null, fetch_failures: 0, suggested_next: null, event_id: null, event_wanted: false, feed_id: null, spotlight_id: null };
   return [
+    { ...base, id: 12, name: 'Game Masters', schedule_url: 'https://gamesdonequick.com/hotfix/schedule#game-masters/2026-10-09', source: 'gdq_hotfix', source_ref: 'game-masters/2026-10-09', starts_at: '2026-10-10T02:00:00+00:00', ends_at: '2026-10-10T04:22:00+00:00', active: true, last_fetched_at: '2026-10-10T04:30:00+00:00', added_by: null, added_at: '2026-10-09T20:00:00+00:00', archived_at: '2026-10-17T05:00:00+00:00', archived_by: null, archived_why: 'ended' },
     { ...base, id: 40, name: 'SGDQ 2026', schedule_url: 'https://gamesdonequick.com/schedule/70', source: 'gdq', source_ref: '70', starts_at: minutesAgo(130000), ends_at: minutesAgo(128340), active: true, last_fetched_at: minutesAgo(128000), added_by: STAFF.id, added_at: minutesAgo(140000), archived_at: minutesAgo(118000), archived_by: null, archived_why: 'ended' },
     { ...base, id: 41, name: 'ESA Winter 2026', schedule_url: 'https://horaro.net/esa/2026-winter1', source: 'horaro', source_ref: 'esa/2026-winter1', starts_at: minutesAgo(60000), ends_at: minutesAgo(59940), active: false, last_fetched_at: minutesAgo(59000), added_by: STAFF.id, added_at: minutesAgo(70000), archived_at: minutesAgo(50000), archived_by: STAFF.id, archived_why: 'staff' },
     { ...base, id: 42, name: 'Speed Stuff at InfernaLAN 2026', schedule_url: 'https://oengus.io/marathon/infernalan26', source: 'oengus', source_ref: 'infernalan26', starts_at: minutesAgo(-20000), ends_at: minutesAgo(-17000), active: true, last_fetched_at: minutesAgo(30), last_fetch_ok: 0, last_error: 'oengus.io answered 401', fetch_failures: 5, added_by: STAFF.id, added_at: minutesAgo(40000), archived_at: minutesAgo(30), archived_by: null, archived_why: 'stale' },
@@ -12226,10 +12236,73 @@ function runsRowShaped(given, rule) {
     edited: given.edited || [],
     tracked: given.tracked || {},
     state: given.state || 'done',
+    folded: [],
+    carried: [],
   };
 }
 
-function runsTracked() {
+const RUNS_CARRIED = ['category', 'runners', 'note'];
+
+function runsSameRun(one, other, minutes) {
+  if (one.starts === null || other.starts === null) return false;
+  if (one.starts <= other.ends && other.starts <= one.ends) return true;
+  return Math.abs(one.starts - other.starts) <= minutes * 60000;
+}
+
+function runsFold(rows, facts) {
+  const minutes = Number(state.settings.get('runs_same_run_minutes') ?? 90);
+  if (!(minutes > 0)) return rows;
+  const buckets = new Map();
+  for (const row of rows) {
+    const fact = facts.get(row.key);
+    if (!fact || fact.starts === null) continue;
+    const people = [...new Set(row.runners.map((one) => one.user_id || one.name.toLowerCase()))].sort().join('|');
+    const bucket = `${fact.marathon} / ${row.game_key} / ${people}`;
+    if (!buckets.has(bucket)) buckets.set(bucket, []);
+    buckets.get(bucket).push(row.key);
+  }
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  const gone = new Set();
+  for (const keys of buckets.values()) {
+    const parent = new Map(keys.map((key) => [key, key]));
+    const top = (key) => { while (parent.get(key) !== key) key = parent.get(key); return key; };
+    keys.forEach((key, at) => keys.slice(at + 1).forEach((other) => {
+      if (runsSameRun(facts.get(key), facts.get(other), minutes)) parent.set(top(other), top(key));
+    }));
+    const joined = new Map();
+    for (const key of keys) {
+      if (!joined.has(top(key))) joined.set(top(key), []);
+      joined.get(top(key)).push(key);
+    }
+    for (const group of joined.values()) {
+      if (group.length < 2) continue;
+      const members = group.sort((a, b) => facts.get(b).id - facts.get(a).id);
+      const kept = byKey.get(members[0]);
+      const hidden = members.slice(1).map((key) => byKey.get(key)).filter((one) => kept.removed || !one.removed);
+      if (!hidden.length) continue;
+      const own = facts.get(kept.key).edits;
+      for (const field of RUNS_CARRIED) {
+        if (field in own) continue;
+        const donor = hidden.find((one) => !one.removed && one.edited.includes(field));
+        if (!donor) continue;
+        if (field === 'runners') {
+          if (!('runners' in kept.tracked)) kept.tracked.runners = kept.runners_text;
+          kept.runners = donor.runners;
+          kept.runners_text = donor.runners_text;
+        } else {
+          if (!(field in kept.tracked)) kept.tracked[field] = kept[field];
+          kept[field] = donor[field];
+        }
+        kept.carried.push(field);
+      }
+      kept.folded = hidden.map((one) => one.key);
+      kept.folded.forEach((key) => gone.add(key));
+    }
+  }
+  return rows.filter((row) => !gone.has(row.key));
+}
+
+function runsTracked(facts = new Map()) {
   const sources = runsSetting('runs_sources', ['gdq', 'gdq_hotfix']);
   const parts = runsSetting('runs_parts', ['runner']);
   const live = new Map(state.marathons.map((one) => [one.id, one]));
@@ -12258,6 +12331,9 @@ function runsTracked() {
       }
     }
     const tracked = Object.fromEntries(edited.map((field) => [field, field === 'runners' ? runsLine(runsRunners(counted)) : source[field]]));
+    const starts = shown.date ? new Date(shown.date).getTime() : null;
+    const ends = run.actual_ended_at || run.ends_at ? new Date(run.actual_ended_at || run.ends_at).getTime() : null;
+    facts.set(`t${run.id}`, { marathon: run.marathon_id, id: run.id, starts, ends: ends !== null && starts !== null && ends >= starts ? ends : starts, edits });
     found.push(runsShaped({
       key: `t${run.id}`,
       how: 'tracked',
@@ -12294,7 +12370,10 @@ function runsView() {
     runners: runsRunners(row.people),
     note: row.note,
   }));
-  return [...runsTracked(), ...hand].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b.key.localeCompare(a.key));
+  const facts = new Map();
+  const tracked = runsFold(runsTracked(facts), facts);
+  for (const row of tracked) row.search = runsSearchText(row, runsGenreRule()[1]);
+  return [...tracked, ...hand].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b.key.localeCompare(a.key));
 }
 
 function runsGames(rows) {
