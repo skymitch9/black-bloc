@@ -405,7 +405,7 @@ const SETTING_SPECS = [
   ['golive_ping_role_id', 'role', null, null, 'the role mentioned in front of every go-live announcement, so the people who asked for streaming pings get one. Blank — the default — posts the announcement with no mention at all'],
   ['golive_max_session_hours', 'int', 12, 12, 'a safety net: a stream still marked live after this many hours is closed anyway, in case the bot never saw it end. 12 by default'],
   ['golive_panel_minutes', 'int', 10, 10, "minutes the /golive panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
-  ['pings_mode', 'enum', 'off', 'off', 'whether members can opt in to pings at all. off — the default — stops every opt-in and every ping, though nobody loses a role they already wear; on lets members take the shared Events role and follow individual streamers', ['off', 'on']],
+  ['pings_mode', 'enum', 'off', 'off', 'whether members can opt in to pings at all. off — the default — stops every opt-in and every ping, and takes back every ping role Black Bloc itself put on a member (asked first, with how many); a role worn from anywhere else stays. on lets members take the shared Events role and follow individual streamers; switching back on gives nothing back', ['off', 'on']],
   ['pings_events_role_name', 'text', 'Events', 'Events', 'what **Set up the Events role** on `/pings` calls the one shared opt-in role for go-live and event pings when it has to make it. *Events* by default; a role of that name that already exists is reused rather than duplicated'],
   ['pings_fan_role_creation', 'enum', 'follow', 'follow', 'who can bring a streamer\'s own follower role into being. follow — the default — makes it the first time somebody follows them on `/pings`, so a role exists only where somebody wants one; self lets the streamer make their own with **Start my own ping role**; staff means only an Auntie or Uncle can, from `/pings` ▸ **Streamers…**; auto makes one the moment a Twitch channel is linked. Staff can always do it for anybody, whichever this says', ['self', 'staff', 'auto', 'follow']],
   ['pings_fan_role_template', 'text', '{name} pings', '{name} pings', 'what a streamer\'s own follower role is called. {name} is their display name at the moment the role is made and is the only field there is; *{name} pings* by default'],
@@ -540,7 +540,7 @@ const SETTING_SPECS = [
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
   ['rolemenu_approval_channel_id', 'channel', '800000000000000005', null, 'where a role request card is posted for staff to answer; defaults to staff_channel_id'],
   ['rolemenu_approver_role_id', 'role', null, null, 'role mentioned when a role request needs answering'],
-  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down, on posts them again; /rolemenu itself stays either way', ['off', 'on']],
+  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the posted panels, and takes back every menu role Black Bloc handed out from a panel, a request or the staff picker (asked first, with how many); a role given anywhere else stays. on posts them again and gives nothing back; off also hides /rolemenu while hiding is on, and the timed roles stay under /mod ▸ Role grants…', ['off', 'on']],
   ['chat_mode', 'enum', 'on', 'on', 'off, or on (Black Bloc answers when somebody @-mentions it)', ['off', 'on']],
   ['chat_cooldown_seconds', 'int', 20, 20, 'seconds before the same person gets another @-mention reply, 5 to 600', null, 600, 5],
   ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
@@ -744,6 +744,12 @@ const SETTING_SPECS = [
   ["spotlight_window_none_words", "text", "no window set", "no window set", "the {window} line when a channel pings only during events and has no window ahead of it, so nothing it posts mentions a role"],
   ['golive_channel_spotlight_default', 'bool', false, false, "whether a channel added through **Add a streamer** with nobody here behind it is spotlighted from the start — its announcement pinned while it streams and a reminder every few hours. off by default: it is announced like any other stream, and its own row's **Spotlight on** adds the pin and the reminders whenever staff want them"],
   ["golive_spotlight_opted_out_said", "text", " **{name}** asked not to be announced, so nothing of this channel's is posted until they opt back in on /golive.", " **{name}** asked not to be announced, so nothing of this channel's is posted until they opt back in on /golive.", "added to what staff are told when they spotlight a channel whose member stopped every announcement of theirs. It takes {name}"],
+  ["birthday_not_shared_said", "text", "**{name}** keeps their birthday to themselves.", "**{name}** keeps their birthday to themselves.", "what a member sees on /birthday when they look up someone who opted out; staff still see the date. It takes {name}"],
+  ["pings_off_confirm_said", "text", "**{count}** members hold ping roles Black Bloc handed out; switching pings off removes them.", "**{count}** members hold ping roles Black Bloc handed out; switching pings off removes them.", "what staff are asked before pings_mode goes off while members wear ping roles Black Bloc put on them. It takes {count}"],
+  ["pings_off_confirm_button", "text", "Yes, switch pings off", "Yes, switch pings off", "the button that confirms pings_mode off and takes those roles back"],
+  ["rolemenu_off_confirm_said", "text", "**{count}** members hold roles the role menus handed out; switching role menus off removes them.", "**{count}** members hold roles the role menus handed out; switching role menus off removes them.", "what staff are asked before rolemenu_mode goes off while members wear menu roles Black Bloc handed out. It takes {count}"],
+  ["rolemenu_off_confirm_button", "text", "Yes, switch role menus off", "Yes, switch role menus off", "the button that confirms rolemenu_mode off and takes those roles back"],
+  ["rolemenu_off_dm", "text", "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing else changed.", "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing else changed.", "the DM sent when role menus go off to a member whose menu role staff approved (those members were sent a DM when it was given). It takes {guild} {label}"],
   ['golive_channel_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a CHANNEL is opted out of announcements mid-stream. end — the default — unpins it and rewrites it to the ended wording, exactly as a real stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so no reminder follows and nothing waits on Twitch", ['end', 'delete', 'leave']],
   ['golive_member_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a MEMBER opts out of announcements mid-stream — the same three treatments the channel key has. end — the default — unpins it and rewrites it to the ended wording; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so their live role comes off and nothing waits on Twitch or on their presence", ['end', 'delete', 'leave']],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -6632,6 +6638,7 @@ const PREVIEW_FEATURES = [
   ['post', 'A post', 'posts.html', []],
   ['block_tempvoice', 'The temp voice lobby block', 'posts.html', ['tempvoice_block_title', 'tempvoice_block_text', 'tempvoice_block_lobby_label', 'tempvoice_block_controls_label']],
   ['birthday', 'A birthday announcement', 'birthdays.html', ['birthday_template']],
+  ['birthday_lookup', 'Looking up someone who opted out', 'birthdays.html', ['birthday_not_shared_said']],
   ['minutes_notes', 'What minutes post when a meeting starts and ends', 'minutes.html', ['minutes_start_text', 'minutes_notes_title']],
   ['block_marathonrole', 'The Marathon role block', 'posts.html', ['marathon_block_title', 'marathon_block_text', 'marathon_block_label']],
   ['block_pingsfollow', 'The ping me when they go live block', 'posts.html', ['pings_block_title', 'pings_block_text', 'pings_block_label']],
@@ -6654,6 +6661,7 @@ const PREVIEW_SAMPLES = {
   modmail_relay: { name: '', text: '' },
   post: { style: 'plain', title: '', body: '', carries_door: false, blocks: '', always: '' },
   birthday: { name: 'Casey', age: '' },
+  birthday_lookup: { name: 'Nadia' },
   minutes_notes: { notes: '' },
   frontdoor: { shows: '' },
   block_tempvoice: { controls: '' },
@@ -6872,6 +6880,11 @@ const PREVIEW_DRAW = {
       .replace('{name}', sample.name || 'Casey')
       .replace('{age}', String(sample.age || ''));
     return previewMade('', [{ description: text, color: 0x4eefff, fields: [] }]);
+  },
+  birthday_lookup(read, sample) {
+    const name = sample.name || 'Nadia';
+    const text = String(read('birthday_not_shared_said') || '').split('{name}').join(name);
+    return previewMade('', [{ title: `${name} — birthday`, description: text, color: 0x4eefff, fields: [] }]);
   },
   minutes_notes(read, sample) {
     return previewMade(String(read('minutes_start_text') || ''), [{

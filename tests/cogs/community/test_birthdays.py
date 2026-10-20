@@ -31,6 +31,7 @@ from black_bloc.cogs.community.birthdays import (
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
     BIRTHDAY_MODES,
+    BIRTHDAY_NOT_SHARED_KEY,
     BIRTHDAY_POST_NOBODY_KEY,
     BIRTHDAY_POST_OFF_KEY,
     BIRTHDAY_POST_WORDS,
@@ -1176,6 +1177,64 @@ async def test_a_member_can_never_forget_or_set_somebody_elses_birthday(
     assert labels(card) == ["Back"]
 
 
+async def test_a_member_looking_up_an_opted_out_person_is_not_shown_the_date(
+    cog, bot, birthday_person
+):
+    other = FakeMember(bot.guild, user_id=1001, display_name="Nadia")
+    await stored(bot, user_id=other.id)
+    await set_opted_in(bot.db, other.id, False, by=other.id)
+
+    embed, _ = await birthdays_cog.build_card(bot, bot.guild, birthday_person, other)
+
+    assert embed.description == "**Nadia** keeps their birthday to themselves."
+    await bot.store.set(GUILD, BIRTHDAY_NOT_SHARED_KEY, "{name} said no.")
+    embed, _ = await birthdays_cog.build_card(bot, bot.guild, birthday_person, other)
+    assert embed.description == "Nadia said no."
+
+
+async def test_staff_still_see_an_opted_out_date_with_the_opted_out_note(
+    cog, bot, birthday_person
+):
+    give_staff(bot, birthday_person)
+    other = FakeMember(bot.guild, user_id=1001, display_name="Nadia")
+    await stored(bot, user_id=other.id)
+    await set_opted_in(bot.db, other.id, False, by=other.id)
+
+    embed, _ = await birthdays_cog.build_card(bot, bot.guild, birthday_person, other)
+
+    assert "**Nadia** — " in embed.description
+    assert "They are **opted out**" in embed.description
+
+
+async def test_an_opted_in_date_is_shown_to_any_member_and_your_own_always_is(
+    cog, bot, birthday_person
+):
+    other = FakeMember(bot.guild, user_id=1001, display_name="Nadia")
+    await stored(bot, user_id=other.id)
+    await stored(bot, user_id=birthday_person.id)
+    await set_opted_in(bot.db, birthday_person.id, False, by=birthday_person.id)
+
+    theirs, _ = await birthdays_cog.build_card(bot, bot.guild, birthday_person, other)
+    mine, _ = await birthdays_cog.build_card(
+        bot, bot.guild, birthday_person, birthday_person
+    )
+
+    assert "**Nadia** — " in theirs.description
+    assert "You are **opted out**" in mine.description
+
+
+async def test_the_opt_out_is_read_from_the_one_table_not_the_old_column(
+    cog, bot, birthday_person
+):
+    other = FakeMember(bot.guild, user_id=1001, display_name="Nadia")
+    await stored(bot, user_id=other.id)
+    await optouts.set_out(bot.db, GUILD, other.id, optouts.BIRTHDAY, by=other.id)
+
+    embed, _ = await birthdays_cog.build_card(bot, bot.guild, birthday_person, other)
+
+    assert "keeps their birthday to themselves" in embed.description
+
+
 # --- the staff controls -----------------------------------------------------------------
 
 
@@ -1348,8 +1407,7 @@ async def test_stored_counts_split_self_from_imported_and_count_only_the_opted_i
 
 
 async def set_opted_out(db, user_id):
-    await db.conn.execute("UPDATE birthdays SET opted_in = 0 WHERE user_id = ?", (user_id,))
-    await db.conn.commit()
+    await set_opted_in(db, user_id, False, by=user_id)
 
 
 async def test_the_loops_are_registered_on_load_and_cancelled_on_unload(bot, cog):

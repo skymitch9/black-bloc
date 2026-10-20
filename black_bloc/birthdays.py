@@ -372,14 +372,14 @@ def upcoming_lines(entries: list[dict[str, Any]], items: list[Upcoming]) -> list
     ]
 
 
-def month_lines(rows: Any) -> list[str]:
+def month_lines(rows: Any, out: Any = ()) -> list[str]:
     lines: list[str] = []
     seen: int | None = None
     for row in rows or ():
         if row["month"] != seen:
             seen = row["month"]
             lines.append(f"**{MONTH_NAMES[seen - 1]}**")
-        marks = "" if row["opted_in"] else " · opted out"
+        marks = " · opted out" if int(row["user_id"]) in out else ""
         lines.append(f"· {row['day']} — <@{row['user_id']}> ({row['source']}{marks})")
     return lines
 

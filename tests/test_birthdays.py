@@ -301,11 +301,11 @@ def test_the_upcoming_lines_name_each_person_and_their_own_date():
 def test_the_month_list_groups_by_month_and_marks_the_opted_out():
     rows = [
         {"month": 1, "day": 2, "user_id": 5, "source": "import", "opted_in": 1},
-        {"month": 1, "day": 9, "user_id": 6, "source": "self", "opted_in": 0},
+        {"month": 1, "day": 9, "user_id": 6, "source": "self", "opted_in": 1},
         {"month": 8, "day": 10, "user_id": 7, "source": "self", "opted_in": 1},
     ]
 
-    lines = month_lines(rows)
+    lines = month_lines(rows, {6})
 
     assert lines[0] == "**January**"
     assert lines[2].endswith("(self · opted out)")

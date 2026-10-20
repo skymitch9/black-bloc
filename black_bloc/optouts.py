@@ -8,7 +8,7 @@ from typing import Any
 
 from .actionlog import log_action
 from .logkinds import VIA_DISCORD, kind_via
-from .settings_store import OPTOUT_DEFAULTS
+from .settings_store import OPTOUT_DEFAULTS, SMALL_FIXES_DEFAULTS
 
 log = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ def said(store: Any, guild_id: Any, key: str, **fields: Any) -> str:
     try:
         return str(store.get(guild_id, key)).format_map(fields)
     except Exception:
-        return str(OPTOUT_DEFAULTS[key]).format_map(fields)
+        return str({**OPTOUT_DEFAULTS, **SMALL_FIXES_DEFAULTS}[key]).format_map(fields)
 
 
 async def overridden(
