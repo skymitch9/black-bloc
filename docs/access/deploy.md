@@ -160,6 +160,10 @@ flyctl logs --app black-bloc --no-tail        # boot log: cogs loaded, "commands
 flyctl releases --app black-bloc              # a NEW version number = it landed
 ```
 
+### ⚠️ "deploy.ps1 died at `git add -- release.json` with a CRLF warning" — the run's output was redirected (incident 2026-10-19 17:0x)
+
+Symptom: every gate green, then `NativeCommandError` on `git add -- $releaseFile` (*CRLF will be replaced by LF*), release.json left staged, nothing pushed or launched. Cause: running `.\scripts\deploy.ps1 *> file` in PowerShell 5.1 turns git's stderr warning into an error record. Fix: `git restore --staged --worktree site/public/assets/release.json` (it is the script's own write) and re-run WITHOUT redirecting; a backgrounded run captures output by itself.
+
 ### ⚠️ "The release is named by a hash (Release 4a7c1f3a), not v221" — the previous deploys.log line was still unfilled (incident 2026-10-09 21:58)
 
 Symptom: `site/public/assets/release.json` and the release commit read `Release 4a7c1f3a` (changed_features ["posts"]) and the site footer shows that label. Cause: `scripts/deploy.ps1` derives the next version number from the text `vNNN:` of the LAST `deploys.log` line, and the v220 line had been committed as an unfilled `<EDIT>` skeleton. Rule: fill the previous deploy's line (and commit it) BEFORE launching the next deploy. The label corrects itself at the next deploy.
