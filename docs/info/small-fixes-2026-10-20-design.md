@@ -1,4 +1,4 @@
-﻿# Small fixes, 2026-10-20 — Upcoming follows its mode, birthday privacy, off takes roles back, the `__main__` guard, the stale row
+# Small fixes, 2026-10-20 — Upcoming follows its mode, birthday privacy, off takes roles back, the `__main__` guard, the stale row
 
 > **Audience:** the conductor (merge + deploy), reviewers, and later sessions. **Status:** TRACKED ·
 > 🔨 **BUILT on branch `small-fixes`** (off `main` `d19dcf51`, v245), **NOT merged, NOT deployed**.
