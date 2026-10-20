@@ -1,11 +1,13 @@
 {
-  "release": "v245",
-  "commit": "69830865",
+  "release": "v246",
+  "commit": "005cb145",
   "changed_features": [
     "birthday",
     "core",
+    "events",
     "golive",
-    "marathon",
-    "pings"
+    "pings",
+    "rolemenu",
+    "tempvoice"
   ]
 }
