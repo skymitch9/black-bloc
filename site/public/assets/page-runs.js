@@ -1,4 +1,17 @@
 import { api, apiHref, listOf, names, send, settings, settingsNamespace } from './api.js';
+import { genreFamilies, genreQualifiers, pageOf, pageWords, runsCsv } from './listfilter.js';
+import {
+  ALL,
+  NO_TAG,
+  PICKS,
+  demoPayload,
+  filterKey,
+  freshState,
+  readRunsHash,
+  runsHashText,
+  settledPage,
+  writeGuard,
+} from './runs-state.js';
 import { start } from './app.js';
 import { logsTable } from './logs.js';
 import {
@@ -19,6 +32,7 @@ import {
   memberPicker,
   notice,
   openDrawer,
+  pager,
   passes,
   run,
   sayAgain,
@@ -37,25 +51,17 @@ const NO_LOGS = 'Nothing has happened to the BaF runs yet.';
 const NO_RUNS = 'No BaF runs in GDQ events yet.';
 const NO_MATCH = 'Nothing here matches.';
 const OTHER = '__other';
-const ALL = 'all';
-const NO_TAG = '__none';
 const VIEWS = [['runs', 'Runs'], ['games', 'Games']];
-const PICKS = ['event', 'runner', 'series', 'genre', 'developer'];
 const TAGS = ['series', 'genre', 'developer'];
 const FIELD_WORDS = { date: 'Date', event: 'Event', game: 'Game', category: 'Category', runners: 'Runner(s)', note: 'Note' };
 
-const state = {
-  view: 'runs',
-  query: '',
-  year: ALL,
-  event: '',
-  runner: '',
-  series: '',
-  genre: '',
-  developer: '',
-  removed: false,
-  sort: { key: 'date', dir: -1 },
-};
+const PAGE_SIZE = 100;
+const DEMO_CSV = 'baf-runs-demo.csv';
+
+const state = freshState();
+let lastKey = filterKey(state);
+let pageSize = PAGE_SIZE;
+let refusal = '';
 let payload = { rows: [], events: [], series_names: [], genre_names: [], developer_names: [], genre_families: [] };
 let games = [];
 let refresh = () => {};
@@ -63,29 +69,43 @@ let showView = () => {};
 
 const rowPath = (key, tail = '') => `/api/runs/${encodeURIComponent(key)}${tail}`;
 
+const writes = writeGuard({ isDemo: () => state.demo, refusal: () => refusal, send, api });
+
 function readHash() {
-  const found = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
-  state.query = String(found.get('q') || '').trim().toLowerCase();
-  state.view = found.get('view') === 'games' ? 'games' : 'runs';
-  state.year = found.get('year') || ALL;
-  for (const name of PICKS) state[name] = found.get(name) || '';
-  if (state.genre !== NO_TAG) state.genre = state.genre.toLowerCase();
-  state.removed = found.get('removed') === '1';
+  Object.assign(state, readRunsHash(location.hash), { sort: state.sort });
+  lastKey = filterKey(state);
 }
 
 function hashState() {
-  return JSON.stringify([state.view, state.query, state.year, state.removed, ...PICKS.map((name) => state[name])]);
+  return runsHashText(state);
 }
 
 function writeHash() {
-  const parts = new URLSearchParams();
-  if (state.query) parts.set('q', state.query);
-  if (state.view === 'games') parts.set('view', 'games');
-  if (state.year !== ALL) parts.set('year', state.year);
-  for (const name of PICKS) if (state[name]) parts.set(name, state[name]);
-  if (state.removed) parts.set('removed', '1');
-  const text = parts.toString().replace(/\+/g, '%20');
+  const text = runsHashText(state);
   history.replaceState(null, '', text ? `#${text}` : location.pathname);
+}
+
+function settle() {
+  const found = settledPage(state, lastKey);
+  state.page = found.page;
+  lastKey = found.key;
+}
+
+function onePage(items) {
+  const slice = pageOf(items.length, pageSize, state.page);
+  state.page = slice.page;
+  return { slice, shown: items.slice(slice.from, slice.to) };
+}
+
+function pagerFor(slice, again) {
+  return pager({
+    page: slice.page,
+    pages: slice.pages,
+    onPage: (to) => {
+      state.page = to;
+      again();
+    },
+  });
 }
 
 function dateWord(iso) {
@@ -146,9 +166,12 @@ function shownRows() {
     && passes(row, { text: rowText, query: state.query, match: 'words' }));
 }
 
+const gameText = (game) => [game.game, game.series, game.genre, game.developer, game.times, game.last_event, ...game.runners, ...game.categories].join(' ');
+
 function shownGames() {
   const rules = tagRules();
-  return games.filter((game) => rules.every((rule) => passes(game, rule)));
+  return games.filter((game) => rules.every((rule) => passes(game, rule))
+    && passes(game, { text: gameText, query: state.gamesQuery }));
 }
 
 function latestFirst(rows) {
@@ -277,6 +300,7 @@ let grid = null;
 let counter = null;
 let chipHolder = null;
 let pickHolder = null;
+let pageHolder = null;
 
 function paintFilters() {
   const kept = payload.rows.filter((row) => Boolean(row.removed) === state.removed);
@@ -304,15 +328,21 @@ function paintFilters() {
 }
 
 function paint() {
-  writeHash();
-  if (!grid) return;
+  settle();
+  if (!grid) {
+    writeHash();
+    return;
+  }
   const rows = sorted(shownRows());
+  const { slice, shown } = onePage(rows);
+  writeHash();
   const columns = runColumns();
   const built = rows.length
-    ? sortable(table(columns, rows, { search: false }), columns)
+    ? sortable(table(columns, shown, { search: false }), columns)
     : sayNothing(payload.rows.length ? NO_MATCH : NO_RUNS);
   grid.replaceChildren(built);
-  counter.textContent = `${rows.length} of ${payload.rows.filter((row) => Boolean(row.removed) === state.removed).length}`;
+  pageHolder.replaceChildren(pagerFor(slice, paint));
+  counter.textContent = pageWords(slice, payload.rows.filter((row) => Boolean(row.removed) === state.removed).length);
   paintFilters();
 }
 
@@ -321,6 +351,7 @@ function runsView() {
   counter = el('span', { class: 'table-count' });
   chipHolder = el('div', { class: 'runs-chips' });
   pickHolder = el('div', { class: 'runs-picks' });
+  pageHolder = el('div');
   const search = searchField({
     label: 'Search runs',
     placeholder: 'game, category, runner, event',
@@ -331,7 +362,7 @@ function runsView() {
     },
   });
   const tools = el('div', { class: 'table-tools' }, [search, pickHolder, el('span', { class: 'table-gap' }), counter]);
-  const node = card(null, [tools, chipHolder, grid], { flush: false });
+  const node = card(null, [tools, chipHolder, grid, pageHolder], { flush: false });
   paint();
   return node;
 }
@@ -343,7 +374,7 @@ function tagBox(game, say, tag) {
   input.addEventListener('change', async () => {
     const done = await run(
       say,
-      () => send(`/api/runs/${tag}/${encodeURIComponent(game.game_key)}`, 'PUT', { [tag]: input.value }),
+      () => writes.send(`/api/runs/${tag}/${encodeURIComponent(game.game_key)}`, 'PUT', { [tag]: input.value }),
       (found) => found?.message || 'Saved.',
     );
     if (done.ok) {
@@ -354,13 +385,18 @@ function tagBox(game, say, tag) {
   return input;
 }
 
-function gamesView() {
-  const say = sayAgain('runs.games', notice());
-  const columns = [
+let gamesGrid = null;
+let gamesCounter = null;
+let gamesPicks = null;
+let gamesPager = null;
+let gamesSay = null;
+
+function gameColumns(say) {
+  return [
     {
       label: 'Game',
       cell: (game) => textAction(game.game, () => {
-        location.hash = `#q=${encodeURIComponent(game.game_key)}`;
+        location.hash = `#${runsHashText(freshState({ demo: state.demo, query: game.game_key }))}`;
       }),
     },
     { label: 'Series', cell: (game) => tagBox(game, say, 'series') },
@@ -371,15 +407,44 @@ function gamesView() {
     { label: 'Runners', cell: (game) => game.runners.join(', ') },
     { label: 'Categories', cell: (game) => game.categories.join(', ') },
   ];
+}
+
+function paintGames() {
+  settle();
+  if (!gamesGrid) {
+    writeHash();
+    return;
+  }
+  const { slice, shown } = onePage(shownGames());
+  writeHash();
+  gamesGrid.replaceChildren(shown.length
+    ? table(gameColumns(gamesSay), shown, { search: false })
+    : sayNothing(games.length ? NO_MATCH : NO_RUNS));
+  gamesPager.replaceChildren(pagerFor(slice, paintGames));
+  gamesCounter.textContent = pageWords(slice, games.length);
+  gamesPicks.replaceChildren(...pickers(games, TAGS, paintGames));
+}
+
+function gamesView() {
+  gamesSay = sayAgain('runs.games', notice());
+  gamesGrid = el('div', { class: 'runs-grid' });
+  gamesCounter = el('span', { class: 'table-count' });
+  gamesPicks = el('div', { class: 'runs-picks' });
+  gamesPager = el('div');
   const lists = TAGS.map((tag) => el('datalist', { id: `runs-${tag}-names` }, payload[`${tag}_names`].map((name) => el('option', { value: name }))));
-  const picks = pickers(games, TAGS, showView);
-  const shown = shownGames();
-  return card(null, [
-    ...lists,
-    picks.length ? el('div', { class: 'table-tools runs-picks' }, picks) : null,
-    table(columns, shown, { empty: games.length ? NO_MATCH : NO_RUNS, search: true, searchLabel: 'Search games' }),
-    say,
-  ].filter(Boolean));
+  const search = searchField({
+    label: 'Search games',
+    placeholder: 'filter these rows',
+    value: state.gamesQuery,
+    onQuery: (value) => {
+      state.gamesQuery = String(value || '').trim().toLowerCase();
+      paintGames();
+    },
+  });
+  const tools = el('div', { class: 'table-tools' }, [search, gamesPicks, el('span', { class: 'table-gap' }), gamesCounter]);
+  const node = card(null, [...lists, tools, gamesGrid, gamesPager, gamesSay]);
+  paintGames();
+  return node;
 }
 
 function localValue(iso) {
@@ -521,13 +586,13 @@ function openEditor(row = null) {
       say.say('Nothing changed, so there is nothing to save.', 'warn');
       return;
     }
-    return after(() => (row ? send(rowPath(row.key), 'PUT', wanted) : send('/api/runs', 'POST', wanted)));
+    return after(() => (row ? writes.send(rowPath(row.key), 'PUT', wanted) : writes.send('/api/runs', 'POST', wanted)));
   }, { small: false });
   const moves = [save];
   if (row && row.how === 'tracked' && row.edited.length) {
-    moves.push(button('Clear edits', () => after(() => send(rowPath(row.key), 'PUT', { clear: true })), { tone: 'quiet' }));
+    moves.push(button('Clear edits', () => after(() => writes.send(rowPath(row.key), 'PUT', { clear: true })), { tone: 'quiet' }));
   }
-  if (row && row.removed) moves.push(button('Restore', () => after(() => send(rowPath(row.key, '/restore'), 'POST', {})), { tone: 'quiet' }));
+  if (row && row.removed) moves.push(button('Restore', () => after(() => writes.send(rowPath(row.key, '/restore'), 'POST', {})), { tone: 'quiet' }));
   if (row && !row.removed) {
     const word = row.how === 'tracked' ? 'Remove' : 'Delete';
     moves.push(button(word, async () => {
@@ -535,7 +600,7 @@ function openEditor(row = null) {
         const sure = await ask({ title: `Delete ${row.game}?`, body: [`${dateWord(row.date)} · ${row.event || '—'}`], confirmLabel: 'Delete' });
         if (!sure) return;
       }
-      await after(() => api(rowPath(row.key), { method: 'DELETE' }));
+      await after(() => writes.remove(rowPath(row.key)));
     }, { tone: 'danger' }));
   }
 
@@ -580,12 +645,12 @@ function openCsvImport() {
   const check = async () => {
     preview.replaceChildren();
     go.replaceChildren();
-    const done = await run(say, () => send('/api/runs/import', 'POST', { csv: text, dry_run: true }), (found) => found?.message || '');
+    const done = await run(say, () => writes.send('/api/runs/import', 'POST', { csv: text, dry_run: true }), (found) => found?.message || '');
     if (!done.ok) return;
     preview.replaceChildren(summaryOf(done.found));
     if (done.found.value.would_add) {
       go.replaceChildren(button(`Import ${done.found.value.would_add} row(s)`, async () => {
-        const real = await run(say, () => send('/api/runs/import', 'POST', { csv: text, dry_run: false }), (found) => found?.message || 'Imported.');
+        const real = await run(say, () => writes.send('/api/runs/import', 'POST', { csv: text, dry_run: false }), (found) => found?.message || 'Imported.');
         if (real.ok) {
           closeDrawer();
           keepSaying('runs.page', say);
@@ -635,7 +700,7 @@ function openEventImport() {
 
   const check = async () => {
     go.replaceChildren();
-    const done = await run(say, () => send('/api/runs/import', 'POST', { ...body(), dry_run: true }), (found) => found?.message || '');
+    const done = await run(say, () => writes.send('/api/runs/import', 'POST', { ...body(), dry_run: true }), (found) => found?.message || '');
     if (!done.ok) return;
     preview.replaceChildren(summaryOf(done.found));
     paintUnmatched(listOf(done.found.value, 'unmatched'));
@@ -643,7 +708,7 @@ function openEventImport() {
       button('Check again', check, { tone: 'quiet' }),
       done.found.value.would_add || Object.keys(pairs).length
         ? button('Import', async () => {
-          const real = await run(say, () => send('/api/runs/import', 'POST', { ...body(), dry_run: false }), (found) => found?.message || 'Imported.');
+          const real = await run(say, () => writes.send('/api/runs/import', 'POST', { ...body(), dry_run: false }), (found) => found?.message || 'Imported.');
           if (real.ok) {
             closeDrawer();
             keepSaying('runs.page', say);
@@ -684,17 +749,45 @@ async function logsSectionNode() {
   return one.node;
 }
 
+function exportLink() {
+  if (!state.demo) return el('a', { class: 'btn small quiet', href: apiHref('/api/runs/export.csv'), download: 'baf-runs.csv', text: 'Export CSV' });
+  const href = URL.createObjectURL(new Blob([runsCsv(payload.rows)], { type: 'text/csv' }));
+  return el('a', { class: 'btn small quiet', href, download: DEMO_CSV, text: 'Export CSV' });
+}
+
 function asideButtons() {
   return [
     button('Add a run…', () => openEditor(null), { tone: 'warn' }),
     button('Import CSV…', openCsvImport, { tone: 'quiet' }),
     button('Import a GDQ event…', openEventImport, { tone: 'quiet' }),
-    el('a', { class: 'btn small quiet', href: apiHref('/api/runs/export.csv'), download: 'baf-runs.csv', text: 'Export CSV' }),
+    exportLink(),
   ];
 }
 
-async function load() {
+function settingOf(all, key, fallback) {
+  const spec = settingsNamespace(all, 'marathon').find((one) => one.key === key);
+  return spec ? spec.value ?? spec.default ?? fallback : fallback;
+}
+
+async function demoData(all) {
+  const file = await api('/api/runs/demo');
+  return demoPayload(file, {
+    qualifiers: genreQualifiers(settingOf(all, 'runs_genre_qualifiers', '')),
+    families: genreFamilies(settingOf(all, 'runs_genre_families', '')),
+    developers: genreFamilies(settingOf(all, 'runs_developer_aliases', '')),
+  });
+}
+
+async function realData() {
   const [found, grouped] = await Promise.all([api('/api/runs'), api('/api/runs/games')]);
+  return { found, grouped };
+}
+
+async function load() {
+  const all = await settings();
+  pageSize = Number(settingOf(all, 'runs_page_size', PAGE_SIZE)) || PAGE_SIZE;
+  refusal = String(settingOf(all, 'runs_demo_refused', ''));
+  const { found, grouped } = state.demo ? await demoData(all) : await realData();
   payload = {
     rows: listOf(found, 'rows'),
     events: listOf(found, 'events'),
@@ -709,16 +802,18 @@ async function load() {
   const say = sayAgain('runs.page', notice());
   const holder = el('div');
   showView = () => {
-    writeHash();
+    grid = null;
+    gamesGrid = null;
     holder.replaceChildren(state.view === 'games' ? gamesView() : runsView());
   };
   const views = chipBar(VIEWS, state.view, (key) => {
     state.view = key;
     showView();
   }, { className: 'runs-views' });
+  const pill = state.demo ? el('span', { class: 'pill', 'data-mode': 'shadow', text: 'Test data' }) : null;
   showView();
   document.getElementById('dash').replaceChildren(
-    el('div', { class: 'runs-page' }, [views, say, holder]),
+    el('div', { class: 'runs-page' }, [el('div', { class: 'runs-viewbar' }, [views, pill].filter(Boolean)), say, holder]),
     await settingsSection(),
     await logsSectionNode(),
   );

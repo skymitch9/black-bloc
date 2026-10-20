@@ -2933,7 +2933,8 @@ body[data-show-was="1"] .preview-was { display: block; }
 }
 
 /* BaF runs page (runs.html). */
-.runs-views { margin-bottom: 12px; }
+.runs-viewbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.runs-views { margin-bottom: 0; }
 .runs-chips { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
 .runs-chiprow { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
 .runs-chiplabel { flex: 0 0 4.5rem; padding-top: 5px; font-size: var(--et-ui-xs); color: var(--et-muted); }

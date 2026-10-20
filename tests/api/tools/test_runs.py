@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from black_bloc import baf_runs
+
 OPERATOR_TOKEN = "operator-read-token-long-enough-to-be-taken"
 BEARER = {"Authorization": f"Bearer {OPERATOR_TOKEN}"}
 AT = "2026-10-01T00:00:00+00:00"
@@ -12,6 +14,7 @@ ROUTES = [
     ("GET", "/api/runs", None),
     ("GET", "/api/runs/games", None),
     ("GET", "/api/runs/export.csv", None),
+    ("GET", "/api/runs/demo", None),
     ("POST", "/api/runs", {"game": "x"}),
     ("PUT", "/api/runs/h1", {"game": "y"}),
     ("DELETE", "/api/runs/h1", None),
@@ -296,3 +299,33 @@ async def test_a_genre_list_carries_a_family_per_entry_and_a_third_is_refused_in
         "on the Settings page."
     )
     assert client.get("/api/runs").json()["rows"][0]["genre"] == "Soulslike, Action adventure"
+
+
+async def test_the_demo_file_is_served_to_staff_whole_and_writes_nothing(client, sign_in, web, wf):
+    sign_in(client)
+    before = await wf.kinds_in(web.db)
+
+    found = client.get("/api/runs/demo")
+
+    assert found.status_code == 200
+    assert found.headers["content-type"].startswith("application/json")
+    assert found.json() == json.loads(baf_runs.DEMO_FILE.read_text(encoding="utf-8"))
+    assert await wf.kinds_in(web.db) == before
+
+
+async def test_a_missing_demo_file_is_refused_in_words(client, sign_in, monkeypatch, tmp_path):
+    sign_in(client)
+    monkeypatch.setattr(baf_runs, "DEMO_FILE", tmp_path / "gone.json")
+
+    found = client.get("/api/runs/demo")
+
+    assert found.status_code == 404
+    assert found.json()["error"] == "no_demo"
+    assert "Open the real sheet" in found.json()["message"]
+
+
+def test_the_demo_file_is_not_a_static_file_the_site_serves():
+    site = baf_runs.DEMO_FILE.resolve().parents[1] / "site" / "public"
+    assert baf_runs.DEMO_FILE.is_file()
+    assert site not in baf_runs.DEMO_FILE.resolve().parents
+    assert not list(site.rglob("runs_demo*.json")) and not list(site.rglob("runs-demo*.json"))

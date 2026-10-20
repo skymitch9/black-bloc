@@ -10364,6 +10364,8 @@ RUNS_SAME_RUN_MINUTES = "runs_same_run_minutes"
 RUNS_GENRE_MAX = "runs_genre_max"
 RUNS_GENRE_UPPER = "runs_genre_upper"
 RUNS_DEVELOPER_ALIASES = "runs_developer_aliases"
+RUNS_PAGE_SIZE = "runs_page_size"
+RUNS_DEMO_REFUSED = "runs_demo_refused"
 RUNS_SOURCE_CHOICES = (
     "gdq",
     "gdq_hotfix",
@@ -10411,6 +10413,10 @@ RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_GENRE_MAX: 2,
     RUNS_GENRE_UPPER: "2d, 3d, fps, tps, rpg, jrpg, mmo, rts",
     RUNS_DEVELOPER_ALIASES: RUNS_DEVELOPER_ALIASES_DEFAULT,
+    RUNS_PAGE_SIZE: 100,
+    RUNS_DEMO_REFUSED: (
+        "This is test data, so nothing is saved. Open the real sheet to change a run."
+    ),
 }
 RUNS_KEYS: tuple[str, ...] = tuple(RUNS_DEFAULTS)
 KEY_TYPES.update(
@@ -10431,6 +10437,8 @@ KEY_TYPES.update(
         RUNS_GENRE_MAX: "int",
         RUNS_GENRE_UPPER: "text",
         RUNS_DEVELOPER_ALIASES: "text",
+        RUNS_PAGE_SIZE: "int",
+        RUNS_DEMO_REFUSED: "text",
     }
 )
 KEY_CHOICES.update({RUNS_SOURCES: RUNS_SOURCE_CHOICES, RUNS_PARTS: RUNS_PART_CHOICES})
@@ -10509,6 +10517,14 @@ KEY_HELP.update(
             "its games under any of them; one per line as the developer, a colon and its other "
             "names separated by commas — FromSoftware: fromsoft, from software"
         ),
+        RUNS_PAGE_SIZE: (
+            "how many rows one page of the BaF runs page shows, on the Runs sheet and the Games "
+            "view; Previous and Next walk the rest. 100 by default, 25 to 500"
+        ),
+        RUNS_DEMO_REFUSED: (
+            "what the BaF runs page says when someone tries to change a row of the test data "
+            "(runs.html#demo); its last sentence links back to the real sheet"
+        ),
     }
 )
 TEXT_CHECKS.update(
@@ -10523,6 +10539,7 @@ TEXT_CHECKS.update(
         RUNS_LOOKUP_NO_DATE: checked_fields(()),
         RUNS_GENRE_FAMILIES: checked_genre_families,
         RUNS_DEVELOPER_ALIASES: checked_developer_aliases,
+        RUNS_DEMO_REFUSED: checked_fields(()),
     }
 )
 TEXT_MAY_BE_BLANK = (
@@ -10536,6 +10553,8 @@ KEY_MIN[RUNS_SAME_RUN_MINUTES] = 0
 KEY_MAX[RUNS_SAME_RUN_MINUTES] = 1440
 KEY_MIN[RUNS_GENRE_MAX] = 1
 KEY_MAX[RUNS_GENRE_MAX] = 5
+KEY_MIN[RUNS_PAGE_SIZE] = 25
+KEY_MAX[RUNS_PAGE_SIZE] = 500
 
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""

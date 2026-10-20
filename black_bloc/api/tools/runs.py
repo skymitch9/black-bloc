@@ -17,6 +17,10 @@ NOTHING_TO_IMPORT = (
     "There was nothing to import, so nothing was read. Paste a GDQ tracker event link, or "
     "choose a CSV file."
 )
+NO_DEMO = (
+    "The test data is not on this server, so there is nothing to show. Open the real sheet, "
+    "runs.html, instead."
+)
 
 
 def answered(outcome: Any) -> dict[str, Any]:
@@ -86,6 +90,12 @@ def build_router(bot: Any) -> APIRouter:
     async def runs_games() -> dict[str, Any]:
         guild = ready()
         return {"games": runs.games(await runs.view(bot, guild))}
+
+    @router.get("/demo")
+    async def runs_demo() -> Response:
+        if not runs.DEMO_FILE.is_file():
+            raise Refused(404, "no_demo", NO_DEMO)
+        return Response(content=runs.DEMO_FILE.read_bytes(), media_type="application/json")
 
     @router.get("/export.csv")
     async def runs_export() -> Response:

@@ -2300,7 +2300,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1251
+    assert len(settings_store.KEY_TYPES) == 1253
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2890,6 +2890,8 @@ def test_the_runs_keys_sit_under_marathons_with_the_sources_the_marathon_feature
         "runs_genre_max",
         "runs_genre_upper",
         "runs_developer_aliases",
+        "runs_page_size",
+        "runs_demo_refused",
     )
     assert {settings_store.namespace_of(key) for key in settings_store.RUNS_KEYS} == {"marathon"}
     assert set(settings_store.RUNS_SOURCE_CHOICES) == set(SOURCES)
@@ -2971,6 +2973,34 @@ async def test_runs_same_run_minutes_is_a_marathon_int_from_0_to_1440_defaulting
     for wrong in (-1, 1441):
         with pytest.raises(settings_store.SettingError):
             await store.set(7, key, wrong, by=1)
+
+
+async def test_runs_page_size_is_a_marathon_int_from_25_to_500_defaulting_to_100(store):
+    key = settings_store.RUNS_PAGE_SIZE
+    assert key == "runs_page_size"
+    assert settings_store.KEY_TYPES[key] == "int"
+    assert settings_store.namespace_of(key) == "marathon"
+    assert store.get(7, key) == 100
+    await store.set(7, key, 25, by=1)
+    assert store.get(7, key) == 25
+    for wrong in (24, 501):
+        with pytest.raises(settings_store.SettingError):
+            await store.set(7, key, wrong, by=1)
+    assert (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) == (25, 500)
+
+
+async def test_runs_demo_refused_ships_its_sentence_and_takes_no_placeholders(store):
+    key = settings_store.RUNS_DEMO_REFUSED
+    assert key == "runs_demo_refused"
+    assert settings_store.KEY_TYPES[key] == "text"
+    assert settings_store.namespace_of(key) == "marathon"
+    assert store.get(7, key) == (
+        "This is test data, so nothing is saved. Open the real sheet to change a run."
+    )
+    with pytest.raises(settings_store.SettingError):
+        await store.set(7, key, "Nope {game}", by=1)
+    await store.set(7, key, "Test rows only. Go back.", by=1)
+    assert store.get(7, key) == "Test rows only. Go back."
 
 
 def test_the_genre_families_refuse_a_line_they_cannot_read_by_its_number():

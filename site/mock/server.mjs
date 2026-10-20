@@ -5,7 +5,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { clockMoment, clockNear, clockOf, mountTracker, trackerSeed, zoneOr } from './schedule.mjs';
 import * as mockBrackets from './brackets.mjs';
-import { aliasWords, familyLines, genreEntries, genreFamilies, genreFamiliesOf, genreFamily, genreFormat, genreQualifiers, genreUpper } from '../public/assets/listfilter.js';
+import { familyLines, genreEntries, genreFamilies, genreFamiliesOf, genreFamily, genreFormat, genreQualifiers, genreUpper, runsCsv, runsGames, runsSearchText } from '../public/assets/listfilter.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = resolve(HERE, '..', 'public');
@@ -891,6 +891,8 @@ const SETTING_SPECS = [
   ["runs_genre_upper", "text", RUNS_GENRE_UPPER_DEFAULT, RUNS_GENRE_UPPER_DEFAULT, "words written in capitals wherever they appear in a genre, separated by commas, so 2d platformer is saved as 2D platformer. Every genre saved is spelled one way: each entry starts with a capital, the rest lower case, hyphens become spaces, except these"],
   ["runs_developer_aliases", "text", RUNS_DEVELOPER_ALIASES_DEFAULT, RUNS_DEVELOPER_ALIASES_DEFAULT, "other names a developer goes by, so a search on the BaF runs page and in /runs finds its games under any of them; one per line as the developer, a colon and its other names separated by commas — FromSoftware: fromsoft, from software"],
   ["runs_same_run_minutes", "int", 90, 90, "how many minutes apart two tracked runs of one marathon may start and still be one run on the BaF runs page and in /runs, when they have the same game and the same runners; runs whose times overlap are one run too. The newest wins, so a run the schedule renamed mid-show counts once. 90 by default; 0 shows every tracked row", null, 1440, 0],
+  ["runs_page_size", "int", 100, 100, "how many rows one page of the BaF runs page shows, on the Runs sheet and the Games view; Previous and Next walk the rest. 100 by default, 25 to 500", null, 500, 25],
+  ["runs_demo_refused", "text", "This is test data, so nothing is saved. Open the real sheet to change a run.", "This is test data, so nothing is saved. Open the real sheet to change a run.", "what the BaF runs page says when someone tries to change a row of the test data (runs.html#demo); its last sentence links back to the real sheet"],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_stale_archive_reads", "int", 3, 3, "how many reads of a marathon's schedule in a row must fail before it moves to the archive as unreadable, once marathon_stale_archive_hours have also passed — a schedule that is not published yet never counts, and a paused or ignored marathon never moves. Restore brings it back, and so does its feed listing it again with a schedule that reads. 3 by default; 0 never archives an unreadable marathon", null, 20, 0],
   ["marathon_stale_archive_hours", "int", 24, 24, "how many hours a marathon's schedule must have gone without an answer before marathon_stale_archive_reads failed reads move it to the archive — counted from the last read that worked, or from a Restore or Resume since. 24 by default; 0 needs the failed reads alone", null, 720, 0],
@@ -2662,6 +2664,8 @@ const NAMESPACE_OVERRIDE = {
   runs_genre_max: 'marathon',
   runs_genre_upper: 'marathon',
   runs_developer_aliases: 'marathon',
+  runs_page_size: 'marathon',
+  runs_demo_refused: 'marathon',
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
   mod_log_level: 'automod',
@@ -12164,7 +12168,6 @@ route('POST', '/api/questions/unskip', (context) => {
 const RUNS_HOW_WORDS = { tracked: 'tracked', imported: 'imported', hand: 'by hand' };
 const RUNS_EVENT_WORDS = { gdq: 'GDQ', gdq_hotfix: 'GDQ Hotfix' };
 const RUNS_FIELDS = ['date', 'event', 'game', 'category', 'runners', 'note'];
-const RUNS_CSV_COLUMNS = ['key', 'date', 'event', 'event_source', 'event_ref', 'game', 'series', 'genre', 'developer', 'category', 'runners', 'runner_names', 'runner_ids', 'how', 'note'];
 const MOCK_TRACKER_EVENT = {
   id: '51',
   name: 'SGDQ 2025',
@@ -12219,23 +12222,14 @@ function runsTextSetting(key, fallback) {
   return typeof found === 'string' ? found : fallback;
 }
 
-function runsSearchText(row, families) {
-  const familyWords = row.genre_families.flatMap((family) => {
-    const found = families.find(([name]) => name === family);
-    return found ? [found[0], ...found[1]] : [family];
-  });
-  const developers = genreFamilies(runsTextSetting('runs_developer_aliases', RUNS_DEVELOPER_ALIASES_DEFAULT));
-  const lines = [
-    row.game, row.series, row.genre, ...familyWords, row.developer, ...aliasWords(row.developer, developers), row.category,
-    ...row.runners.map((one) => one.display), ...row.runners.map((one) => one.name), row.event, row.note,
-  ];
-  return [...new Set(lines.filter(Boolean).map(String))].join('\n');
+function runsSearch(row, families) {
+  return runsSearchText(row, families, genreFamilies(runsTextSetting('runs_developer_aliases', RUNS_DEVELOPER_ALIASES_DEFAULT)));
 }
 
 function runsShaped(given) {
   const rule = runsGenreRule();
   const row = runsRowShaped(given, rule);
-  row.search = runsSearchText(row, rule[1]);
+  row.search = runsSearch(row, rule[1]);
   return row;
 }
 
@@ -12403,34 +12397,8 @@ function runsView() {
   }));
   const facts = new Map();
   const tracked = runsFold(runsTracked(facts), facts);
-  for (const row of tracked) row.search = runsSearchText(row, runsGenreRule()[1]);
+  for (const row of tracked) row.search = runsSearch(row, runsGenreRule()[1]);
   return [...tracked, ...hand].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b.key.localeCompare(a.key));
-}
-
-function runsGames(rows) {
-  const grouped = new Map();
-  for (const row of rows.filter((one) => !one.removed)) {
-    if (!grouped.has(row.game_key)) grouped.set(row.game_key, []);
-    grouped.get(row.game_key).push(row);
-  }
-  return [...grouped.entries()].map(([key, runs]) => {
-    const last = runs[0];
-    return {
-      game: last.game,
-      game_key: key,
-      series: last.series,
-      genre: last.genre,
-      genre_family: last.genre_family,
-      genre_families: last.genre_families,
-      developer: last.developer,
-      times: runs.length,
-      last_date: last.date,
-      last_event: last.event,
-      runners: [...new Set(runs.flatMap((run) => run.runners.map((one) => one.display)))],
-      categories: [...new Set(runs.map((run) => run.category).filter(Boolean))],
-      keys: runs.map((run) => run.key),
-    };
-  }).sort((a, b) => String(b.last_date || '').localeCompare(String(a.last_date || '')));
 }
 
 function runsEvents() {
@@ -12543,20 +12511,12 @@ route('GET', '/api/runs/games', (context) => {
   return { games: runsGames(runsView()) };
 });
 
-function runsCsv(rows) {
-  const cell = (value) => {
-    const text = value === null || value === undefined ? '' : String(value);
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
-  const lines = [RUNS_CSV_COLUMNS.join(',')];
-  for (const row of rows.filter((one) => !one.removed)) {
-    lines.push([
-      row.key, row.date || '', row.event, row.event_source || '', row.event_ref || '', row.game, row.series, row.genre, row.developer, row.category,
-      row.runners_text, row.runners.map((one) => one.name).join('; '), row.runners.map((one) => one.user_id || '').join('; '), row.how, row.note,
-    ].map(cell).join(','));
-  }
-  return `${lines.join('\n')}\n`;
-}
+const RUNS_DEMO_FILE = resolve(HERE, '..', '..', 'black_bloc', 'runs_demo.json');
+
+route('GET', '/api/runs/demo', async (context) => {
+  requireStaff(context.session);
+  return JSON.parse(await readFile(RUNS_DEMO_FILE, 'utf8'));
+});
 
 route('GET', '/api/runs/export.csv', (context) => {
   // NOT in contract.json: check.mjs reads JSON shapes, and this one answers text/csv.

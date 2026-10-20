@@ -342,3 +342,38 @@ Owner, 2026-10-20 09:2x–09:4x Phoenix: *"Do developer, 2 genres maxed, though 
 40. **A refused genre stays typed in the Games-view box** until the page refreshes, as a refused series always did; the stored value is unchanged and the refusal shows under the table.
 41. **`filtered(q=)` and `text_of_game` read the row's `search`** (built once in `view` with the alias map) instead of rebuilding the haystack without the aliases.
 42. **The mock seeds** Sekiro as *Soulslike, Action adventure* by FromSoftware, DKC2 by Rare and Mario Kart 8 Deluxe by Nintendo, so the two-family counts and the alias search have something to show locally.
+
+## Demo mode and pagination — 2026-10-20
+
+Owner, 2026-10-20 10:5x Phoenix: *"Can we make a fake/test page with like 500 randomly generated entries so PT can attempt to parse through it. Have it paginate by pages of 100 so it's not overwhelming by default. Use random games and categories maybe from speedrun.com."* Branch `runs-demo`.
+
+**Pagination on the real page.** The Runs sheet and the Games view each draw one page of their filtered, sorted rows. Under the table, the one shared `ui.js` `pager` (its client-side form, `pages` given): *Previous* · *page N of M* · *Next*, Previous only past page 1, Next only before the last, nothing drawn when everything fits. The count reads *1–100 of 487* on a paged view and the old *N of M* otherwise. The page rides the hash (`page=3`, written only above 1). Any filter, either search, the sort or the view going back to page 1 is one rule (`runs-state.js` `filterKey` / `settledPage`); a link that carries `page=` keeps it.
+
+| Key (Marathons) | Type | Default | Decides |
+|---|---|---|---|
+| `runs_page_size` | int, 25–500 | `100` | rows on one page, both views |
+| `runs_demo_refused` | text, no placeholders | *This is test data, so nothing is saved. Open the real sheet to change a run.* | what a write in demo mode says; its LAST sentence becomes the link to `/runs.html` |
+
+Keys 1251 → 1253.
+
+**Demo mode.** `runs.html#demo` (the flag leads the hash: `#demo&q=…&page=2`; it survives every filter, the view switch and the Games-view game links). The page loads `GET /api/runs/demo` instead of `/api/runs` + `/api/runs/games` and `runs-state.js` `demoPayload` turns the file into the same two payloads: `genre_families` / `genre_family` with the live Settings genre rule, `search` through `listfilter.js` `runsSearchText` (moved there from the mock, which now imports it; so are `runsGames` and `runsCsv`), the games view through `runsGames`, `series_names` / `genre_names` / `developer_names` from the rows, `events` from the file's event list, `sources` `gdq, gdq_hotfix`, `parts` `runner`. The renderer is the real one. A **Test data** pill sits beside the Runs/Games switch. Every write — Add, Save, Clear edits, Remove/Delete, Restore, the three Games-view boxes, CSV import, GDQ import — goes through one `writeGuard` and is refused before any request in the words of `runs_demo_refused`. Export CSV downloads the demo rows (`baf-runs-demo.csv`, built in the browser). Settings and Logs are the real ones.
+
+**The data.** `black_bloc/runs_demo.json`, made by `scripts/scan/make_runs_demo.py` (gitignored, never committed — only its output is), seed **20261020**. Regenerate from the repo root:
+
+```
+.venv/Scripts/python scripts/scan/make_runs_demo.py
+```
+
+It caches every speedrun.com answer in `scripts/scan/runs_demo_cache/` (gitignored), so a re-run with the cache gives the same file byte for byte; delete the cache to read speedrun.com afresh (and expect its rate limit, below). Games, categories, series and the genres/developers speedrun.com has are real; runners are INVENTED handles (60, from two word lists; never a name the API returned); events are real event NAMES with real-ish windows (AGDQ early January, SGDQ late June/July, Frost Fatales March, Flame Fatales August, Frame Fatales October, BtB February, the six Hotfix shows one episode a year 2021–2026 as `gdq_hotfix`). **What the file holds (measured 2026-10-20 11:2x):** 500 runs, 120 games, 60 runners, 76 events, 255,073 bytes, dates 2015-01-05 to 2026-09-07; six games at the cap of 12 runs; the busiest handles at 47, 46, 27, 23 and 22 runs; 15 rows (3 %) with a note. speedrun.com WAS reached: 50 API calls over three runs of the generator (32 popular games looked up by name, two bulk pages of 200 recent games for the long tail, 16 series), and its Cloudflare limit refused it three times (error 1015, `Retry-After` 395–605 s; the generator waits it out and paces 4 s a call). ⚠️ **speedrun.com returned NO genre and NO developer for any of the 120 games** (its `genres` / `developers` embeds were empty for every one), so the 32 popular games carry a HAND-WRITTEN genre and developer from the generator's `HAND_TAGS` (real-world facts, listed in the file's `hand_tagged`), and the 88 long-tail games have none — the Genre and Developer drop-downs show *No genre (88)*-style counts. Series are speedrun.com's, for the 32 popular games only (the tail's series were not looked up, to save calls).
+
+### Deviations (continued)
+
+43. **The file is `black_bloc/runs_demo.json`, not `site/public/demo/runs-demo.json`, served by `GET /api/runs/demo`.** `SiteFiles` (`black_bloc/api/assets.py`) serves everything under `site/public/` to anyone; the site's gate is the API (`staff_dependency` on the runs router). A file under `site/public/` would be public. It is package data (`pyproject.toml`) beside `guides_seed.json`; the mock reads the same file.
+44. **The Games view's search is no longer the shared `table()` box.** That box hides drawn rows, so on a paged view it would search only the page on screen. It is a state search over the games (still a substring test, Deviation 22), in the hash as `gq=`. Checklist item 47.
+45. **The sort is a filter for the page rule** (a sort change goes back to page 1) but is still not in the hash, as before.
+46. **The demo file stores the row shape minus what the live rule decides** (`genre_family`, `genre_families`, `search`, plus the always-empty `tracked` / `carried` / `event_ref` / `marathon_id`): they are filled on load, so the file stays small and a Settings edit to the genre families reaches the demo.
+47. **Demo events carry index ids** (1…N, `archived: true`) so the row editor's Event select can show them; no demo row links to a schedule.
+48. **`ui.js` `notice().say` takes `{href}` and `sentenceFor` passes an error's `tone` / `href`.** That is how the refusal's last sentence becomes the link without a second string; no other page passes either.
+49. **Genres and developers of the popular games are hand-written, the long tail has none, and the tail has no series** — see *What the file holds*. speedrun.com had none to give; the brief allowed only what speedrun.com has, and a demo with no genres at all would leave the Genre drop-down nothing to teach.
+50. **The popular head is 32 games, not ~80.** Each name lookup is one call and Cloudflare allowed about ten calls per window; 32 popular + 88 long-tail keeps the weighting (the popular games carry 2–6× the weight, five of them 30×) at a cost of 50 calls.
+51. **No `docs/deploys.log` line, no TODO/DONE edit** (brief).

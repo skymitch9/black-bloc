@@ -26,7 +26,7 @@ const OUTAGE_WRITE = 'Black Bloc did not answer, so nothing was changed. That is
 
 export function sentenceFor(error) {
   if (error instanceof Outage) return { text: OUTAGE_WRITE, tone: 'danger' };
-  return { text: error.message, tone: error.isPermission ? 'warn' : 'danger' };
+  return { text: error.message, tone: error.tone || (error.isPermission ? 'warn' : 'danger'), href: error.href || null };
 }
 
 export function el(tag, props = {}, children = []) {
@@ -458,11 +458,20 @@ export function boldParts(text) {
   return parts;
 }
 
+const LAST_SENTENCE = /[.!?]\s+(?=\S[^.!?]*[.!?]?\s*$)/g;
+
+function linkedParts(said, href) {
+  if (!href) return boldParts(said);
+  const cuts = [...said.matchAll(LAST_SENTENCE)];
+  const at = cuts.length ? cuts[cuts.length - 1].index + cuts[cuts.length - 1][0].length : 0;
+  return [...boldParts(said.slice(0, at)), el('a', { href, text: said.slice(at) })];
+}
+
 export function notice(text = '', tone = null) {
   const node = el('p', { class: 'notice' });
-  const say = (message, messageTone = null) => {
+  const say = (message, messageTone = null, { href = null } = {}) => {
     const said = message || '';
-    node.replaceChildren(...boldParts(said));
+    node.replaceChildren(...linkedParts(said, href));
     node.said = said;
     node.hidden = !said;
     if (messageTone) node.setAttribute('data-tone', messageTone);
@@ -737,8 +746,9 @@ async function backToTop({ scroller, block, at }) {
   place(scroller, block.isConnected ? offsetIn(scroller, block) : at);
 }
 
-export function pager({ page, hasMore, onPage, count = null }) {
+export function pager({ page, hasMore, onPage, count = null, pages = null }) {
   const at = Number(page) || 1;
+  if (pages !== null && pages <= 1) return document.createDocumentFragment();
   if (at <= 1 && !hasMore && count === 0) return document.createDocumentFragment();
   const node = el('div', { class: 'pager' });
   const go = async (to) => {
@@ -746,6 +756,14 @@ export function pager({ page, hasMore, onPage, count = null }) {
     await onPage(to);
     await backToTop(where);
   };
+  if (pages !== null) {
+    node.append(...[
+      at > 1 ? button('Previous', () => go(at - 1), { tone: 'quiet' }) : null,
+      el('span', { class: 'pager-at', text: `page ${at} of ${pages}` }),
+      at < pages ? button('Next', () => go(at + 1), { tone: 'quiet' }) : null,
+    ].filter(Boolean));
+    return node;
+  }
   node.append(
     button('Previous', () => go(at - 1), { tone: 'quiet', disabled: at <= 1 }),
     el('span', { class: 'pager-at', text: count === null ? `Page ${at}` : `Page ${at} · ${count} shown` }),
@@ -1903,7 +1921,7 @@ export async function run(say, work, okText) {
     return { ok: true, found };
   } catch (error) {
     const said = sentenceFor(error);
-    say.say(said.text, said.tone);
+    say.say(said.text, said.tone, { href: said.href });
     return { ok: false, found: null };
   }
 }
