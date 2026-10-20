@@ -1,6 +1,7 @@
-export function matches(text, query) {
+export function matches(text, query, { match = 'text' } = {}) {
   const wanted = String(query ?? '').trim().toLowerCase();
-  return !wanted || String(text ?? '').toLowerCase().includes(wanted);
+  if (!wanted) return true;
+  return match === 'words' ? runsMatches(wanted, text) : String(text ?? '').toLowerCase().includes(wanted);
 }
 
 export function ruleOf(filters, key) {
@@ -9,9 +10,9 @@ export function ruleOf(filters, key) {
   return found ? found[2] || null : null;
 }
 
-export function passes(item, { text = () => '', filters = null, filter = null, query = '' } = {}) {
+export function passes(item, { text = () => '', filters = null, filter = null, query = '', match = 'text' } = {}) {
   const rule = ruleOf(filters, filter);
-  return (!rule || Boolean(rule(item))) && matches(text(item), query);
+  return (!rule || Boolean(rule(item))) && matches(text(item), query, { match });
 }
 
 export function applyFilters(items, options = {}) {
@@ -102,6 +103,65 @@ export function familyLabel(family) {
 export function familyTerms(family, families = []) {
   const found = families.find(([name]) => name === family);
   return found ? [found[0], ...found[1]].join(' ') : String(family ?? '');
+}
+
+const LETTERS_THEN_DIGITS = /^(\p{L}+)(\p{N}*)$/u;
+const FUZZY_LETTERS = 5;
+const INITIALS_LETTERS = 2;
+const preparedHaystacks = new Map();
+
+function preparedHaystack(haystack) {
+  const text = String(haystack ?? '');
+  let lines = preparedHaystacks.get(text);
+  if (lines) return lines;
+  lines = text.split(/\r?\n/).map((line) => genreNormal(line).split(' ').filter(Boolean))
+    .filter((words) => words.length)
+    .map((words) => ({ words, initials: words.map((word) => word[0]).join('') }));
+  if (preparedHaystacks.size > 8192) preparedHaystacks.clear();
+  preparedHaystacks.set(text, lines);
+  return lines;
+}
+
+export function oneEdit(a, b) {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) {
+    const diff = [];
+    for (let at = 0; at < a.length; at += 1) if (a[at] !== b[at]) diff.push(at);
+    if (diff.length === 1) return true;
+    return diff.length === 2 && diff[1] === diff[0] + 1 && a[diff[0]] === b[diff[1]] && a[diff[1]] === b[diff[0]];
+  }
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  let at = 0;
+  while (at < short.length && short[at] === long[at]) at += 1;
+  return short.slice(at) === long.slice(at + 1);
+}
+
+function initialsHit(word, words, initials) {
+  const found = LETTERS_THEN_DIGITS.exec(word);
+  if (!found || found[1].length < INITIALS_LETTERS) return false;
+  const [, letters, digits] = found;
+  let start = initials.indexOf(letters);
+  while (start >= 0) {
+    const after = start + letters.length;
+    if (!digits || (after < words.length && words[after] === digits)) return true;
+    start = initials.indexOf(letters, start + 1);
+  }
+  return false;
+}
+
+function wordHits(word, lines) {
+  if (/^\p{N}+$/u.test(word)) return lines.some(({ words }) => words.includes(word));
+  const fuzzy = (word.match(/\p{L}/gu) || []).length >= FUZZY_LETTERS;
+  return lines.some(({ words, initials }) => words.some((one) => one.startsWith(word) || (fuzzy && oneEdit(word, one)))
+    || initialsHit(word, words, initials));
+}
+
+export function runsMatches(query, haystack) {
+  const wanted = genreNormal(query).split(' ').filter(Boolean);
+  if (!wanted.length) return false;
+  const lines = preparedHaystack(haystack);
+  return wanted.every((word) => wordHits(word, lines));
 }
 
 export const BLOCK_FILTERS = [

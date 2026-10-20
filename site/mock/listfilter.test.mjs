@@ -19,6 +19,8 @@ import {
   matches,
   passes,
   ruleOf,
+  oneEdit,
+  runsMatches,
 } from '../public/assets/listfilter.js';
 
 const failures = [];
@@ -118,9 +120,21 @@ is('genres: terms carry every alias', familyTerms('racing', families), 'racing r
 is('genres: a family no line names is its own term', familyTerms('puzzle', families), 'puzzle');
 is('genres: a label is capitalised', familyLabel('survival horror'), 'Survival horror');
 
+const search = JSON.parse(readFileSync(new URL('../../tests/fixtures/runs/search.json', import.meta.url), 'utf8'));
+for (const [query, wanted] of search.cases) {
+  const found = Object.entries(search.haystacks).filter(([, haystack]) => runsMatches(query, haystack)).map(([name]) => name);
+  is(`runs search: ${JSON.stringify(query)}`, found, wanted);
+}
+is('runs search: one edit is a swap, an insert, a delete or a replace', ['ab|ba', 'abc|abxc', 'abc|ac', 'abc|abd', 'abcd|badc'].map((pair) => oneEdit(...pair.split('|'))), [true, true, true, true, false]);
+is('runs search: the words option is the runs rule', matches('Donkey Kong Country 2', 'dkc2', { match: 'words' }), true);
+is('runs search: the words option still lets a blank query through', matches('anything', '  ', { match: 'words' }), true);
+is('runs search: without the option a search stays a substring', matches('Donkey Kong Country 2', 'dkc2'), false);
+is('runs search: passes carries the option', passes({ t: 'Jet Force Gemini' }, { text: (one) => one.t, query: 'jfg', match: 'words' }), true);
+is('runs search: applyFilters without it is unchanged', applyFilters([{ t: 'Jet Force Gemini' }], { text: (one) => one.t, query: 'jfg' }).shown, 0);
+
 if (failures.length) {
   console.error('listfilter: not ok');
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log('listfilter: ok - substring search (trimmed, case-insensitive), chips AND search, the Blocks filters, counted select choices, the genre family rule on the shared fixture');
+console.log('listfilter: ok - substring search (trimmed, case-insensitive), chips AND search, the Blocks filters, counted select choices, the genre family rule on the shared fixture, the runs search rule on its shared fixture');
