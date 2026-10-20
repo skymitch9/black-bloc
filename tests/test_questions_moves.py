@@ -249,6 +249,9 @@ async def test_take_it_down_deletes_the_bots_post_and_puts_the_question_back_on_
 
     again = await moves.post_now(bot, bot.guild, None, now=AFTER_GRACE + timedelta(minutes=2))
     assert again.ok and home(bot).sent[-1].content.endswith("one?")
+    slot = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
+    assert slot["status"] == rules.TAKEN_DOWN
+    assert "question.posted_extra" in await kinds(bot.db)
 
 
 async def test_the_owners_own_post_is_never_taken_down(bot):
@@ -276,19 +279,89 @@ async def test_a_refused_delete_changes_nothing(bot):
     assert (await store.get(bot.db, GUILD, first))["status"] == rules.POSTED
 
 
-async def test_post_now_goes_up_ahead_of_the_slot_and_the_slot_then_rests(bot):
+async def test_post_one_now_inside_the_grace_window_settles_the_due_slot(bot):
     await queue(bot, "one?", "two?")
-    early = SLOT - timedelta(days=2)
+    await seen_before(bot)
 
-    outcome = await moves.post_now(bot, bot.guild, None, now=early)
-    assert outcome.ok
-    again = await moves.post_now(bot, bot.guild, None, now=early)
-    assert again.message == rules.ALREADY_UP
+    outcome = await moves.post_now(bot, bot.guild, None, now=SLOT + timedelta(minutes=2))
 
+    assert outcome.ok and outcome.message == rules.POSTED_NOW.format(where=f"<#{HOME}>")
+    slot = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
+    assert slot["status"] == rules.POSTED
     assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
     assert len(home(bot).sent) == 1
     [details] = await details_of(bot.db, "question.posted_by_bot")
     assert details["reason"] == "posted now by staff"
+
+
+async def test_an_extra_post_ahead_of_the_slot_leaves_the_slot_pending_for_the_next_question(bot):
+    first, second = await queue(bot, "one?", "two?")
+    early = SLOT - timedelta(days=2)
+
+    outcome = await moves.post_now(bot, bot.guild, None, via=VIA_WEBSITE, now=early)
+
+    assert outcome.ok and outcome.message == rules.POSTED_EXTRA.format(where=f"<#{HOME}>")
+    row = await store.get(bot.db, GUILD, first)
+    assert (row["status"], row["posted_by"], row["slot_at"]) == (rules.POSTED, rules.BY_BOT, None)
+    slot = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
+    assert slot["status"] == rules.PENDING
+    assert [one["id"] for one in await store.queued(bot.db, GUILD)] == [second]
+    [details] = await details_of(bot.db, "web.question.posted_extra")
+    assert details["question_id"] == first and "slot_at" not in details
+
+    assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
+    assert [post.content.splitlines()[-1] for post in home(bot).sent] == ["one?", "two?"]
+    assert (await store.get(bot.db, GUILD, second))["slot_at"] == rules.slot_key(SLOT)
+
+
+async def test_two_extras_in_a_row_both_go_up(bot):
+    await queue(bot, "one?", "two?", "three?")
+    early = SLOT - timedelta(days=2)
+
+    assert (await moves.post_now(bot, bot.guild, None, now=early)).ok
+    assert (await moves.post_now(bot, bot.guild, None, now=early)).ok
+
+    assert [row["body"] for row in await store.queued(bot.db, GUILD)] == ["three?"]
+
+
+async def test_an_extra_taken_down_goes_back_on_top_and_touches_no_slot(bot):
+    first, second = await queue(bot, "one?", "two?")
+    await seen_before(bot)
+    early = SLOT - timedelta(hours=3)
+    await moves.post_now(bot, bot.guild, None, now=early)
+    [post] = home(bot).sent
+
+    outcome = await moves.take_down(bot, bot.guild, None, first, now=early)
+
+    assert outcome.ok and home(bot).deleted == [post.id]
+    assert [row["id"] for row in await store.queued(bot.db, GUILD)] == [first, second]
+    slot = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
+    assert slot["status"] == rules.PENDING
+    assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
+    assert home(bot).sent[-1].content.endswith("one?")
+
+
+async def test_an_extra_post_with_questions_off_or_an_empty_queue_is_refused_in_words(bot):
+    early = SLOT - timedelta(days=2)
+    assert (await moves.post_now(bot, bot.guild, None, now=early)).message == rules.QUEUE_EMPTY
+    await queue(bot)
+    await bot.store.set(GUILD, "question_mode", "off")
+
+    refused_off = await moves.post_now(bot, bot.guild, None, now=early)
+
+    assert refused_off.message == rules.QUESTIONS_OFF and home(bot).sent == []
+    assert len(await store.queued(bot.db, GUILD)) == 1
+
+
+async def test_an_extra_in_on_mode_goes_to_the_real_channel_with_the_template(bot):
+    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.set(GUILD, "question_template", "QOTW: {question}")
+    await queue(bot)
+
+    assert (await moves.post_now(bot, bot.guild, None, now=SLOT - timedelta(days=2))).ok
+
+    assert [post.content for post in real(bot).sent] == [f"QOTW: {BODY}"]
+    assert home(bot).sent == []
 
 
 async def test_skip_leaves_the_question_queued_and_undo_brings_the_week_back(bot):
@@ -296,13 +369,80 @@ async def test_skip_leaves_the_question_queued_and_undo_brings_the_week_back(bot
     await seen_before(bot)
 
     assert (await moves.skip(bot, bot.guild, None, now=SLOT - timedelta(hours=1))).ok
-    assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.SKIPPED
-    assert home(bot).sent == [] and len(await store.queued(bot.db, GUILD)) == 1
-    assert not (await moves.skip(bot, bot.guild, None, now=AFTER_GRACE)).ok
-
-    assert (await moves.unskip(bot, bot.guild, None, now=AFTER_GRACE)).ok
+    assert not (await moves.skip(bot, bot.guild, None, now=SLOT - timedelta(minutes=30))).ok
+    assert (await moves.unskip(bot, bot.guild, None, now=SLOT - timedelta(minutes=20))).ok
+    assert not (await moves.unskip(bot, bot.guild, None, now=SLOT - timedelta(minutes=10))).ok
     assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
-    assert not (await moves.unskip(bot, bot.guild, None, now=AFTER_GRACE)).ok
+
+
+async def test_a_skipped_week_whose_time_has_passed_cannot_be_put_back_on(bot):
+    await queue(bot)
+    await seen_before(bot)
+    assert (await moves.skip(bot, bot.guild, None, now=SLOT - timedelta(hours=1))).ok
+    assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.SKIPPED
+
+    undone = await moves.unskip(bot, bot.guild, None, now=AFTER_GRACE)
+
+    assert not undone.ok and undone.code == "slot_passed" and undone.message == rules.SKIP_PASSED
+    assert await moves.tick(bot, bot.guild, AFTER_GRACE + timedelta(minutes=1)) == rules.SKIPPED
+    assert home(bot).sent == []
+    found = await moves.week(bot, bot.guild, AFTER_GRACE)
+    assert found["slot"] == SLOT + timedelta(days=7) and found["status"] == rules.PENDING
+
+
+async def test_the_live_scenario_empty_week_then_skip_then_undo_never_posts(bot):
+    """2026-10-19: skipped_empty at 09:05, a question added, Skip, Undo skip, nothing went up."""
+    await seen_before(bot)
+    assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.SKIPPED_EMPTY
+    await queue(bot)
+    later = AFTER_GRACE + timedelta(hours=2)
+
+    found = await moves.week(bot, bot.guild, later)
+    assert found["slot"] == SLOT + timedelta(days=7) and found["status"] == rules.PENDING
+    assert (await moves.skip(bot, bot.guild, None, now=later)).ok
+    assert (await moves.unskip(bot, bot.guild, None, now=later)).ok
+
+    for minutes in (1, 30, 120):
+        assert await moves.tick(bot, bot.guild, later + timedelta(minutes=minutes)) == (
+            rules.SKIPPED_EMPTY
+        )
+    assert not [post for post in home(bot).sent if BODY in post.content]
+    assert len(await store.queued(bot.db, GUILD)) == 1
+    this_one = await store.get_slot(bot.db, GUILD, rules.slot_key(SLOT))
+    assert this_one["status"] == rules.SKIPPED_EMPTY
+
+
+async def test_a_passed_slot_already_skipped_by_the_old_build_is_not_reopened(bot):
+    await queue(bot)
+    await seen_before(bot)
+    await moves.tick(bot, bot.guild, AFTER_GRACE)
+    await store.set_slot(bot.db, GUILD, rules.slot_key(SLOT), rules.SKIPPED, AFTER_GRACE)
+
+    assert (await moves.unskip(bot, bot.guild, None, now=AFTER_GRACE)).code == "slot_passed"
+
+
+async def test_this_week_moves_to_the_next_slot_once_the_due_one_is_settled(bot):
+    await queue(bot)
+    await seen_before(bot)
+    inside = await moves.week(bot, bot.guild, SLOT + timedelta(minutes=2))
+    assert inside["slot"] == SLOT and inside["status"] == rules.PENDING
+
+    await moves.tick(bot, bot.guild, AFTER_GRACE)
+
+    after = await moves.week(bot, bot.guild, AFTER_GRACE)
+    assert after["slot"] == SLOT + timedelta(days=7) and after["status"] == rules.PENDING
+
+
+async def test_a_due_slot_catching_up_after_downtime_is_still_this_week(bot):
+    await bot.store.set(GUILD, "question_mode", "on")
+    await bot.store.clear(GUILD, "question_channel_id")
+    await queue(bot)
+    await seen_before(bot)
+    assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.PENDING
+
+    found = await moves.week(bot, bot.guild, SLOT + timedelta(hours=3))
+
+    assert found["slot"] == SLOT and found["status"] == rules.PENDING
 
 
 async def test_a_thread_opens_on_the_question_when_threads_are_on(bot):

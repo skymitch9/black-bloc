@@ -11728,7 +11728,6 @@ route('DELETE', '/api/birthdays/:user_id', (context) => {
 // Weekly questions (docs/info/weekly-questions-design.md). The slot maths is the bot's, read in
 // a fixed Phoenix offset: the mock has no zone database to follow default_timezone through DST.
 const QUESTION_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-const QUESTION_OPEN = ['pending', 'skipped', 'skipped_empty', 'taken_down'];
 const PHOENIX_MS = 7 * 3600000;
 
 function questionSlots() {
@@ -11753,9 +11752,9 @@ function questionWeek() {
   const { last, next, nowMs } = questionSlots();
   const lastRow = state.questionSlots[slotKey(last)];
   const catchup = Number(state.settings.get('question_catchup_hours') || 24) * 3600000;
-  const open = lastRow && QUESTION_OPEN.includes(lastRow.status) && nowMs < last.getTime() + catchup;
+  const open = lastRow && lastRow.status === 'pending' && nowMs < last.getTime() + catchup;
   const key = slotKey(open ? last : next);
-  return { key, row: state.questionSlots[key] || { status: 'pending', question_id: null } };
+  return { key, due: Boolean(open), lastRow, row: state.questionSlots[key] || { status: 'pending', question_id: null } };
 }
 
 const questionQueue = () => state.questions
@@ -11901,16 +11900,20 @@ route('POST', '/api/questions/post-now', (context) => {
   requireStaff(context.session);
   const mode = String(state.settings.get('question_mode') || 'shadow');
   if (mode === 'off') throw new Refused(409, 'questions_off', 'Weekly questions are off, so nothing was posted. Set question_mode to shadow or on in Settings first.');
-  const { key, row } = questionWeek();
-  if (row.status === 'posted') throw new Refused(409, 'already_up', 'This week’s question is already up, so nothing was posted. Take it down first to post another.');
+  const { key: slot, due } = questionWeek();
+  const key = due ? slot : null;
   const first = questionQueue()[0];
   if (!first) throw new Refused(409, 'queue_empty', 'The queue is empty, so there is nothing to post. Add a question first.');
   const target = questionTarget(mode);
   if (!target) throw new Refused(409, 'not_posted', 'There is nowhere to post it: question_channel_id is not set. Pick the channel in Settings first.');
   Object.assign(first, { status: 'posted', slot_at: key, posted_by: 'bot', channel_id: String(target), message_id: String(900000000000000000 + first.id), resolved_at: now() });
-  state.questionSlots[key] = { status: 'posted', question_id: first.id };
-  logAction('web.question.posted_by_bot', { details: { via: 'website', question_id: first.id, question: first.body, slot_at: key, mode, reason: 'posted now by staff' } });
-  return { ok: true, message: `The question is up in <#${target}>.`, value: first.id };
+  if (due) {
+    state.questionSlots[key] = { status: 'posted', question_id: first.id };
+    logAction('web.question.posted_by_bot', { details: { via: 'website', question_id: first.id, question: first.body, slot_at: key, mode, reason: 'posted now by staff' } });
+    return { ok: true, message: `The question is up in <#${target}>.`, value: first.id };
+  }
+  logAction('web.question.posted_extra', { details: { via: 'website', question_id: first.id, question: first.body, mode } });
+  return { ok: true, message: `The question is up in <#${target}>, out of cycle. The schedule is unchanged.`, value: first.id };
 });
 
 route('POST', '/api/questions/skip', (context) => {
@@ -11924,8 +11927,11 @@ route('POST', '/api/questions/skip', (context) => {
 
 route('POST', '/api/questions/unskip', (context) => {
   requireStaff(context.session);
-  const { key, row } = questionWeek();
-  if (row.status !== 'skipped') throw new Refused(409, 'not_skipped', 'This week is not skipped, so there is nothing to undo.');
+  const { key, row, due, lastRow } = questionWeek();
+  if (due || row.status !== 'skipped') {
+    if (lastRow && lastRow.status === 'skipped') throw new Refused(409, 'slot_passed', 'That week’s time has passed, so it stays skipped. Post one now puts a question up out of cycle.');
+    throw new Refused(409, 'not_skipped', 'This week is not skipped, so there is nothing to undo.');
+  }
   state.questionSlots[key] = { status: 'pending', question_id: null };
   logAction('web.question.unskipped', { details: { via: 'website', slot_at: key } });
   return { ok: true, message: 'This week is back on.', value: key };

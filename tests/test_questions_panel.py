@@ -89,9 +89,12 @@ def test_the_root_buttons_render_only_when_they_can_be_pressed():
     skipped = pending | {"status": rules.SKIPPED}
     assert panel.root_moves(skipped, [object()]) == ["add", "post", "unskip", "refresh"]
     by_bot = {"status": rules.POSTED, "mode": "on", "posted": {"posted_by": rules.BY_BOT}}
-    assert panel.root_moves(by_bot, [object()]) == ["add", "take_down", "refresh"]
+    assert panel.root_moves(by_bot, [object()]) == ["add", "post", "take_down", "refresh"]
+    assert panel.root_moves(by_bot, []) == ["add", "take_down", "refresh"]
     by_owner = by_bot | {"posted": {"posted_by": rules.BY_OWNER}}
-    assert panel.root_moves(by_owner, [object()]) == ["add", "refresh"]
+    assert panel.root_moves(by_owner, []) == ["add", "refresh"]
+    extra = pending | {"extra": {"posted_by": rules.BY_BOT}}
+    assert panel.root_moves(extra, []) == ["add", "skip", "take_down", "refresh"]
 
 
 def test_a_card_offers_up_and_down_only_where_there_is_room():
@@ -109,7 +112,7 @@ async def test_the_panel_shows_the_slot_the_question_and_the_queue(bot):
     assert "**Queued** — 2" in embed.description
     assert f"<#{HOME}>" in embed.description
     assert rules.NO_OWNER_LINE in embed.description
-    assert labels(view) == ["Add", "Post now", "Skip this week", "Refresh"]
+    assert labels(view) == ["Add", "Post one now", "Skip this week", "Refresh"]
     assert any(isinstance(item, panel.QueuePick) for item in view.children)
 
 
@@ -150,6 +153,11 @@ async def test_post_now_from_the_panel_posts_and_answers_in_words(bot, staff):
 
     await panel.run_post_now(interaction)
 
-    assert interaction.said == [f"The question is up in <#{HOME}>."]
+    assert interaction.said == [rules.POSTED_EXTRA.format(where=f"<#{HOME}>")]
     assert bot.guild.get_channel(HOME).sent[-1].content.endswith("one?")
-    assert "Take it down" in labels(interaction.edits[-1]["view"])
+    view = interaction.edits[-1]["view"]
+    assert "Take it down" in labels(view)
+    assert "**This week** — waiting" in interaction.edits[-1]["embed"].description
+
+    [down] = [item for item in view.children if getattr(item, "name", "") == "take_down"]
+    assert panel.downable(down.found)["body"] == "one?"

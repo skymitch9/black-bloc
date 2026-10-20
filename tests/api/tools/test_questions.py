@@ -89,12 +89,14 @@ async def test_post_now_rehearses_then_take_it_down_puts_it_back_on_top(
     assert posted.status_code == 200, posted.json()
     channel = guild.get_channel(wf.OTHER_CHANNEL_ID)
     assert channel.messages[-1].content.endswith("one?")
+    assert "out of cycle" in posted.json()["message"]
     found = client.get("/api/questions").json()
-    assert found["state"] == "posted"
+    assert found["state"] == "pending"
     [history] = found["history"]
-    assert history["posted_by"] == "bot" and history["url"].startswith("https://discord.com/")
-    again = client.post("/api/questions/post-now")
-    assert again.status_code == 409 and "already up" in again.json()["message"]
+    assert history["posted_by"] == "bot" and history["slot_at"] is None
+    assert history["url"].startswith("https://discord.com/")
+    current = client.get("/api/questions/current").json()
+    assert current["state"] == "pending" and current["body"] == "two?"
 
     down = client.post(f"/api/questions/{history['id']}/take-down")
 
@@ -102,7 +104,27 @@ async def test_post_now_rehearses_then_take_it_down_puts_it_back_on_top(
     queue = client.get("/api/questions").json()["queue"]
     assert [row["body"] for row in queue] == ["one?", "two?"]
     kinds = await wf.kinds_in(web.db)
-    assert "web.question.posted_by_bot" in kinds and "web.question.taken_down" in kinds
+    assert "web.question.posted_extra" in kinds and "web.question.taken_down" in kinds
+
+
+async def test_undo_skip_on_a_week_whose_time_has_passed_is_refused_in_words(
+    client, sign_in, web, wf
+):
+    from datetime import UTC, datetime
+
+    from black_bloc import questions as rules
+
+    now = datetime.now(UTC)
+    last, _ = rules.slots_around(now, rules.schedule_of(web.store, wf.GUILD_ID))
+    await store.ensure_slot(web.db, wf.GUILD_ID, rules.slot_key(last), now)
+    await store.set_slot(web.db, wf.GUILD_ID, rules.slot_key(last), rules.SKIPPED, now)
+    sign_in(client)
+
+    refused = client.post("/api/questions/unskip")
+
+    assert refused.status_code == 409
+    assert refused.json()["message"] == rules.SKIP_PASSED
+    assert client.get("/api/questions").json()["slot_at"] != rules.slot_key(last)
 
 
 async def test_skip_and_undo_from_the_page(client, sign_in, web, wf):

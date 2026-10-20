@@ -153,15 +153,24 @@ def test_many_questions_split_one_per_line_and_blank_lines_are_dropped():
     assert rules.split_lines("   \n") == []
 
 
-def test_the_current_slot_is_last_weeks_only_while_it_is_open():
+def test_the_current_slot_is_last_weeks_only_while_it_is_still_pending():
     found = schedule()
     nine = datetime(2026, 10, 19, 16, 0, tzinfo=UTC)
     soon = nine + timedelta(hours=1)
     assert rules.current_slot(soon, found, {"status": rules.PENDING}) == nine
-    assert rules.current_slot(soon, found, {"status": rules.POSTED}) == nine + timedelta(days=7)
     assert rules.current_slot(soon, found, None) == nine + timedelta(days=7)
     late = nine + timedelta(hours=25)
     assert rules.current_slot(late, found, {"status": rules.PENDING}) == nine + timedelta(days=7)
+
+
+@pytest.mark.parametrize(
+    "status",
+    [rules.POSTED, rules.SKIPPED, rules.SKIPPED_EMPTY, rules.MISSED, rules.TAKEN_DOWN],
+)
+def test_a_settled_slot_hands_this_week_to_the_next_one(status):
+    nine = datetime(2026, 10, 19, 16, 0, tzinfo=UTC)
+    soon = nine + timedelta(hours=1)
+    assert rules.current_slot(soon, schedule(), {"status": status}) == nine + timedelta(days=7)
 
 
 def test_the_channel_url_is_the_discord_link():

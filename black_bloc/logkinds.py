@@ -184,6 +184,7 @@ IMPORTANT: frozenset[str] = frozenset(
         *ERROR_KINDS,
         "error.dm",
         "question.posted_by_bot",
+        "question.posted_extra",
         "question.skipped",
         "question.unskipped",
         "question.skipped_empty",

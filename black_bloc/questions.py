@@ -49,7 +49,6 @@ PENDING = "pending"
 SKIPPED_EMPTY = "skipped_empty"
 MISSED = "missed"
 TAKEN_DOWN = "taken_down"
-OPEN_SLOT = (PENDING, SKIPPED, SKIPPED_EMPTY, TAKEN_DOWN)
 
 BY_OWNER = "owner"
 BY_BOT = "bot"
@@ -255,12 +254,12 @@ def stamp(when: datetime, style: str = "F") -> str:
 
 
 def current_slot(now: datetime, schedule: Schedule, last_row: Any) -> datetime:
-    """This week's slot: the last one while it is still open, otherwise the next one."""
+    """This week's slot: the last one only while it is still pending, otherwise the next one."""
     last, following = slots_around(now, schedule)
     if (
         last_row is not None
         and now < last + schedule.catchup
-        and str(last_row["status"]) in OPEN_SLOT
+        and str(last_row["status"]) == PENDING
     ):
         return last
     return following
@@ -290,7 +289,7 @@ BY_WORDS = {BY_OWNER: "by the owner", BY_BOT: "by Black Bloc"}
 
 ADD_LABEL = "Add"
 QUEUE_PLACEHOLDER = "Queue…"
-POST_NOW_LABEL = "Post now"
+POST_NOW_LABEL = "Post one now"
 SKIP_LABEL = "Skip this week"
 UNSKIP_LABEL = "Undo skip"
 TAKE_DOWN_LABEL = "Take it down"
@@ -320,6 +319,7 @@ MOVED = "The question moved {direction}."
 NOT_MOVED = "The question is already at the {end} of the queue, so nothing moved."
 REQUEUED = "The question is back at the end of the queue."
 POSTED_NOW = "The question is up in {where}."
+POSTED_EXTRA = "The question is up in {where}, out of cycle. The schedule is unchanged."
 SKIPPED_SAID = "This week is skipped. The next question stays at the top of the queue."
 UNSKIPPED = "This week is back on."
 TAKEN_DOWN_SAID = "Black Bloc's post is deleted and the question is back at the top of the queue."
@@ -335,11 +335,12 @@ QUESTIONS_OFF = (
     "Settings first."
 )
 QUEUE_EMPTY = "The queue is empty, so there is nothing to post. Add a question first."
-ALREADY_UP = (
-    "This week's question is already up, so nothing was posted. Take it down first to post another."
-)
 NOT_SKIPPABLE = "This week's question is already {state}, so there is nothing to skip."
 NOT_SKIPPED = "This week is not skipped, so there is nothing to undo."
+SKIP_PASSED = (
+    "That week's time has passed, so it stays skipped. Post one now puts a question up "
+    "out of cycle."
+)
 NOT_BOTS = (
     "Only a question Black Bloc posted can be taken down. The owner's own post is never "
     "deleted by the bot."
