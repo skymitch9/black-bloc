@@ -6,6 +6,7 @@ import io
 import json
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, NamedTuple
 from urllib.parse import quote
 
@@ -62,6 +63,7 @@ EXCLUDED = "excluded"
 FIELDS = ("date", "event", "game", "category", "runners", "note")
 CARRIED = ("category", "runners", "note")
 RUNS_PAGE = "runs.html"
+DEMO_FILE = Path(__file__).with_name("runs_demo.json")
 MARATHONS_COG = "Marathons"
 TEXT_LIMIT = 200
 NOTE_LIMIT = 1000

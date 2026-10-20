@@ -5,7 +5,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { clockMoment, clockNear, clockOf, mountTracker, trackerSeed, zoneOr } from './schedule.mjs';
 import * as mockBrackets from './brackets.mjs';
-import { aliasWords, familyLines, genreEntries, genreFamilies, genreFamiliesOf, genreFamily, genreFormat, genreQualifiers, genreUpper } from '../public/assets/listfilter.js';
+import { familyLines, genreEntries, genreFamilies, genreFamiliesOf, genreFamily, genreFormat, genreQualifiers, genreUpper, runsCsv, runsGames, runsSearchText } from '../public/assets/listfilter.js';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = resolve(HERE, '..', 'public');
@@ -12168,7 +12168,6 @@ route('POST', '/api/questions/unskip', (context) => {
 const RUNS_HOW_WORDS = { tracked: 'tracked', imported: 'imported', hand: 'by hand' };
 const RUNS_EVENT_WORDS = { gdq: 'GDQ', gdq_hotfix: 'GDQ Hotfix' };
 const RUNS_FIELDS = ['date', 'event', 'game', 'category', 'runners', 'note'];
-const RUNS_CSV_COLUMNS = ['key', 'date', 'event', 'event_source', 'event_ref', 'game', 'series', 'genre', 'developer', 'category', 'runners', 'runner_names', 'runner_ids', 'how', 'note'];
 const MOCK_TRACKER_EVENT = {
   id: '51',
   name: 'SGDQ 2025',
@@ -12223,23 +12222,14 @@ function runsTextSetting(key, fallback) {
   return typeof found === 'string' ? found : fallback;
 }
 
-function runsSearchText(row, families) {
-  const familyWords = row.genre_families.flatMap((family) => {
-    const found = families.find(([name]) => name === family);
-    return found ? [found[0], ...found[1]] : [family];
-  });
-  const developers = genreFamilies(runsTextSetting('runs_developer_aliases', RUNS_DEVELOPER_ALIASES_DEFAULT));
-  const lines = [
-    row.game, row.series, row.genre, ...familyWords, row.developer, ...aliasWords(row.developer, developers), row.category,
-    ...row.runners.map((one) => one.display), ...row.runners.map((one) => one.name), row.event, row.note,
-  ];
-  return [...new Set(lines.filter(Boolean).map(String))].join('\n');
+function runsSearch(row, families) {
+  return runsSearchText(row, families, genreFamilies(runsTextSetting('runs_developer_aliases', RUNS_DEVELOPER_ALIASES_DEFAULT)));
 }
 
 function runsShaped(given) {
   const rule = runsGenreRule();
   const row = runsRowShaped(given, rule);
-  row.search = runsSearchText(row, rule[1]);
+  row.search = runsSearch(row, rule[1]);
   return row;
 }
 
@@ -12407,34 +12397,8 @@ function runsView() {
   }));
   const facts = new Map();
   const tracked = runsFold(runsTracked(facts), facts);
-  for (const row of tracked) row.search = runsSearchText(row, runsGenreRule()[1]);
+  for (const row of tracked) row.search = runsSearch(row, runsGenreRule()[1]);
   return [...tracked, ...hand].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || b.key.localeCompare(a.key));
-}
-
-function runsGames(rows) {
-  const grouped = new Map();
-  for (const row of rows.filter((one) => !one.removed)) {
-    if (!grouped.has(row.game_key)) grouped.set(row.game_key, []);
-    grouped.get(row.game_key).push(row);
-  }
-  return [...grouped.entries()].map(([key, runs]) => {
-    const last = runs[0];
-    return {
-      game: last.game,
-      game_key: key,
-      series: last.series,
-      genre: last.genre,
-      genre_family: last.genre_family,
-      genre_families: last.genre_families,
-      developer: last.developer,
-      times: runs.length,
-      last_date: last.date,
-      last_event: last.event,
-      runners: [...new Set(runs.flatMap((run) => run.runners.map((one) => one.display)))],
-      categories: [...new Set(runs.map((run) => run.category).filter(Boolean))],
-      keys: runs.map((run) => run.key),
-    };
-  }).sort((a, b) => String(b.last_date || '').localeCompare(String(a.last_date || '')));
 }
 
 function runsEvents() {
@@ -12547,20 +12511,12 @@ route('GET', '/api/runs/games', (context) => {
   return { games: runsGames(runsView()) };
 });
 
-function runsCsv(rows) {
-  const cell = (value) => {
-    const text = value === null || value === undefined ? '' : String(value);
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
-  const lines = [RUNS_CSV_COLUMNS.join(',')];
-  for (const row of rows.filter((one) => !one.removed)) {
-    lines.push([
-      row.key, row.date || '', row.event, row.event_source || '', row.event_ref || '', row.game, row.series, row.genre, row.developer, row.category,
-      row.runners_text, row.runners.map((one) => one.name).join('; '), row.runners.map((one) => one.user_id || '').join('; '), row.how, row.note,
-    ].map(cell).join(','));
-  }
-  return `${lines.join('\n')}\n`;
-}
+const RUNS_DEMO_FILE = resolve(HERE, '..', '..', 'black_bloc', 'runs_demo.json');
+
+route('GET', '/api/runs/demo', async (context) => {
+  requireStaff(context.session);
+  return JSON.parse(await readFile(RUNS_DEMO_FILE, 'utf8'));
+});
 
 route('GET', '/api/runs/export.csv', (context) => {
   // NOT in contract.json: check.mjs reads JSON shapes, and this one answers text/csv.

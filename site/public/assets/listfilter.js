@@ -207,6 +207,75 @@ export function runsMatches(query, haystack) {
   return wanted.every((word) => wordHits(word, lines));
 }
 
+export function runsSearchText(row, families = [], developers = []) {
+  const familyWords = (row.genre_families || []).flatMap((family) => {
+    const found = families.find(([name]) => name === family);
+    return found ? [found[0], ...found[1]] : [family];
+  });
+  const lines = [
+    row.game, row.series, row.genre, ...familyWords, row.developer, ...aliasWords(row.developer, developers), row.category,
+    ...row.runners.map((one) => one.display), ...row.runners.map((one) => one.name), row.event, row.note,
+  ];
+  return [...new Set(lines.filter(Boolean).map(String))].join('\n');
+}
+
+export function runsGames(rows) {
+  const grouped = new Map();
+  for (const row of rows.filter((one) => !one.removed)) {
+    if (!grouped.has(row.game_key)) grouped.set(row.game_key, []);
+    grouped.get(row.game_key).push(row);
+  }
+  return [...grouped.entries()].map(([key, runs]) => {
+    const newest = [...runs].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.key).localeCompare(String(a.key)));
+    const last = newest[0];
+    return {
+      game: last.game,
+      game_key: key,
+      series: last.series,
+      genre: last.genre,
+      genre_family: last.genre_family,
+      genre_families: last.genre_families,
+      developer: last.developer,
+      times: runs.length,
+      last_date: last.date,
+      last_event: last.event,
+      runners: [...new Set(newest.flatMap((run) => run.runners.map((one) => one.display)).filter(Boolean))],
+      categories: [...new Set(newest.map((run) => run.category).filter(Boolean))],
+      keys: newest.map((run) => run.key),
+    };
+  }).sort((a, b) => String(b.last_date || '').localeCompare(String(a.last_date || '')) || b.game_key.localeCompare(a.game_key));
+}
+
+export const RUNS_CSV_COLUMNS = ['key', 'date', 'event', 'event_source', 'event_ref', 'game', 'series', 'genre', 'developer', 'category', 'runners', 'runner_names', 'runner_ids', 'how', 'note'];
+
+export function runsCsv(rows) {
+  const cell = (value) => {
+    const text = value === null || value === undefined ? '' : String(value);
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const lines = [RUNS_CSV_COLUMNS.join(',')];
+  for (const row of rows.filter((one) => !one.removed)) {
+    lines.push([
+      row.key, row.date || '', row.event, row.event_source || '', row.event_ref || '', row.game, row.series, row.genre, row.developer, row.category,
+      row.runners_text, row.runners.map((one) => one.name).join('; '), row.runners.map((one) => one.user_id || '').join('; '), row.how, row.note,
+    ].map(cell).join(','));
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+export function pageOf(total, size, page) {
+  const per = Math.max(1, Math.floor(Number(size)) || 1);
+  const pages = Math.max(1, Math.ceil(Math.max(0, total) / per));
+  const at = Math.min(pages, Math.max(1, Math.floor(Number(page)) || 1));
+  const from = total ? (at - 1) * per : 0;
+  return { page: at, pages, from, to: Math.min(total, from + per), total };
+}
+
+export function pageWords({ pages, from, to, total }, whole = total) {
+  if (pages > 1) return `${from + 1}–${to} of ${total}`;
+  return `${total} of ${whole}`;
+}
+
 export const BLOCK_FILTERS = [
   ['all', 'All', null],
   ['on_post', 'On a post', (kind) => (kind.on || []).length > 0],
