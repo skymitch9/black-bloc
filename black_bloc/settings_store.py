@@ -81,6 +81,7 @@ from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
 from .polls import MODES as POLL_MODES
+from .runs_genres import family_lines as genre_family_lines
 from .shadow import REHEARSAL_KEY as SHADOW_CHANNEL
 from .storage.db import Database
 from .structure import MODE_DEFAULT as STRUCTURE_MODE_DEFAULT
@@ -10318,6 +10319,21 @@ NAMESPACE_OVERRIDE.update(
 
 
 # The BaF runs database (docs/info/baf-runs-design.md §5.7), filed under Marathons.
+RUNS_BAD_FAMILY = (
+    "Line {n} of the genre families, `{line}`, is not a family Black Bloc can read, so nothing "
+    "was changed. Write each family as its name, a colon and the genres that belong to it, "
+    "separated by commas — `racing: racer, kart racer`."
+)
+
+
+def checked_genre_families(given: Any) -> str:
+    _, bad = genre_family_lines(given)
+    if bad:
+        number, line = bad[0]
+        raise SettingError(RUNS_BAD_FAMILY.format(n=number, line=line[:60]))
+    return "\n".join(line.strip() for line in str(given).splitlines() if line.strip())
+
+
 RUNS_SOURCES = "runs_sources"
 RUNS_PARTS = "runs_parts"
 RUNS_LOOKUP_TITLE = "runs_lookup_title"
@@ -10325,6 +10341,11 @@ RUNS_LOOKUP_LINE = "runs_lookup_line"
 RUNS_LOOKUP_NONE = "runs_lookup_none"
 RUNS_LOOKUP_SEEN = "runs_lookup_seen"
 RUNS_LOOKUP_TAGS = "runs_lookup_tags"
+RUNS_LOOKUP_MORE = "runs_lookup_more"
+RUNS_LOOKUP_COUNT = "runs_lookup_count"
+RUNS_LOOKUP_NO_DATE = "runs_lookup_no_date"
+RUNS_GENRE_QUALIFIERS = "runs_genre_qualifiers"
+RUNS_GENRE_FAMILIES = "runs_genre_families"
 RUNS_SOURCE_CHOICES = (
     "gdq",
     "gdq_hotfix",
@@ -10340,6 +10361,17 @@ RUNS_TITLE_FIELDS = ("game", *RUNS_TAG_FIELDS)
 RUNS_LINE_FIELDS = ("date", "event", "category", "runners")
 RUNS_NONE_FIELDS = ("query",)
 RUNS_SEEN_FIELDS = ("n", "date", "event", *RUNS_TAG_FIELDS)
+RUNS_MORE_FIELDS = ("more",)
+RUNS_COUNT_FIELDS = ("runs", "games")
+RUNS_GENRE_FAMILIES_DEFAULT = (
+    "racing: racer, racers, race, kart racer, kart racing\n"
+    "platformer: platform, platformers, 2d platformer, 3d platformer\n"
+    "roguelike: rogue-like, rogue like, roguelite, rogue-lite\n"
+    "shooter: shooters, fps, tps, shmup, shoot 'em up, third-person shooter, "
+    "first-person shooter\n"
+    "adventure: action-adventure, action adventure\n"
+    "fighting: fighter, fighting game"
+)
 RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_SOURCES: ["gdq", "gdq_hotfix"],
     RUNS_PARTS: ["runner"],
@@ -10348,6 +10380,11 @@ RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_LOOKUP_NONE: "Nothing in the BaF runs database matches **{query}**.",
     RUNS_LOOKUP_SEEN: "seen {n} time(s), last {date} at {event}",
     RUNS_LOOKUP_TAGS: "{tags}",
+    RUNS_LOOKUP_MORE: "… and {more} more",
+    RUNS_LOOKUP_COUNT: "{runs} run(s) · {games} game(s)",
+    RUNS_LOOKUP_NO_DATE: "no date",
+    RUNS_GENRE_QUALIFIERS: "action, 2d, 3d, kart, third-person, first-person",
+    RUNS_GENRE_FAMILIES: RUNS_GENRE_FAMILIES_DEFAULT,
 }
 RUNS_KEYS: tuple[str, ...] = tuple(RUNS_DEFAULTS)
 KEY_TYPES.update(
@@ -10359,6 +10396,11 @@ KEY_TYPES.update(
         RUNS_LOOKUP_NONE: "text",
         RUNS_LOOKUP_SEEN: "text",
         RUNS_LOOKUP_TAGS: "text",
+        RUNS_LOOKUP_MORE: "text",
+        RUNS_LOOKUP_COUNT: "text",
+        RUNS_LOOKUP_NO_DATE: "text",
+        RUNS_GENRE_QUALIFIERS: "text",
+        RUNS_GENRE_FAMILIES: "text",
     }
 )
 KEY_CHOICES.update({RUNS_SOURCES: RUNS_SOURCE_CHOICES, RUNS_PARTS: RUNS_PART_CHOICES})
@@ -10391,6 +10433,28 @@ KEY_HELP.update(
             "the line under a game's heading in the /runs panel, drawn only when the game has a "
             "series or a genre; {series}, {genre}, and {tags} (the ones set, joined by ·)"
         ),
+        RUNS_LOOKUP_MORE: (
+            "the last line under a game in the /runs panel when it has more runs than are listed; "
+            "{more} is how many more"
+        ),
+        RUNS_LOOKUP_COUNT: (
+            "the line the /runs panel opens with; {runs} is how many BaF runs there are, {games} "
+            "how many games"
+        ),
+        RUNS_LOOKUP_NO_DATE: "the date word in the /runs panel for a run with no date",
+        RUNS_GENRE_QUALIFIERS: (
+            "words left out of a genre before the BaF runs page groups it into a family, "
+            "separated by commas; capitals, hyphens and slashes do not matter, so Action-adventure "
+            "groups as adventure and Third-person shooter as shooter. The genre itself keeps "
+            "every word"
+        ),
+        RUNS_GENRE_FAMILIES: (
+            "the genre families the BaF runs page and /runs filter and search by, one per line "
+            "as the family, a colon and the other genres that belong to it separated by commas — "
+            "racing: racer, kart racer. A genre is matched whole first, then without the "
+            "words in runs_genre_qualifiers; the first family that matches wins, and a genre "
+            "no family names is its own family"
+        ),
     }
 )
 TEXT_CHECKS.update(
@@ -10400,8 +10464,13 @@ TEXT_CHECKS.update(
         RUNS_LOOKUP_NONE: checked_fields(RUNS_NONE_FIELDS),
         RUNS_LOOKUP_SEEN: checked_fields(RUNS_SEEN_FIELDS),
         RUNS_LOOKUP_TAGS: checked_fields(RUNS_TAG_FIELDS),
+        RUNS_LOOKUP_MORE: checked_fields(RUNS_MORE_FIELDS),
+        RUNS_LOOKUP_COUNT: checked_fields(RUNS_COUNT_FIELDS),
+        RUNS_LOOKUP_NO_DATE: checked_fields(()),
+        RUNS_GENRE_FAMILIES: checked_genre_families,
     }
 )
+TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, RUNS_GENRE_QUALIFIERS)
 NAMESPACE_OVERRIDE.update({key: "marathon" for key in RUNS_KEYS})
 
 def coerce_value(key: str, value: Any) -> Any:

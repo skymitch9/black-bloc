@@ -1,11 +1,18 @@
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
 from black_bloc import baf_runs as runs
 from black_bloc.logkinds import VIA_WEBSITE
-from black_bloc.settings_store import RUNS_PARTS, RUNS_SOURCES
+from black_bloc.settings_store import (
+    RUNS_GENRE_FAMILIES,
+    RUNS_GENRE_QUALIFIERS,
+    RUNS_PARTS,
+    RUNS_SOURCES,
+    SettingError,
+)
 from tests.baf_runs_fakes import (
     GUILD,
     HOST_ID,
@@ -521,3 +528,74 @@ def test_keys_dates_and_the_page_address_parse_the_way_the_page_writes_them():
 def test_the_people_json_of_a_hand_row_reads_like_a_marathon_run():
     assert runs.people_json(json.dumps([person("a")])) == [person("a")]
     assert runs.people_json("not json") == []
+
+
+GENRE_FIXTURE = json.loads(
+    (Path(__file__).parent / "fixtures" / "runs" / "genre_families.json").read_text(
+        encoding="utf-8"
+    )
+)
+
+
+@pytest.mark.parametrize(("text", "family"), GENRE_FIXTURE["cases"])
+def test_the_family_rule_answers_the_fixture_the_page_shares(text, family):
+    rule = (
+        runs.parse_qualifiers(GENRE_FIXTURE["qualifiers"]),
+        runs.parse_families(GENRE_FIXTURE["families"]),
+    )
+    assert runs.genre_family(text, *rule) == family
+
+
+async def add_genre(bot, game, genre):
+    added = await runs.add(bot, bot.guild, None, {"game": game, "genre": genre, "event": "BtB"})
+    assert added.ok
+    return added.value
+
+
+async def test_rows_and_games_carry_the_family_beside_the_genre_as_typed(bot):
+    await seed(bot)
+    await runs.set_genre(bot, bot.guild, None, "Celeste", "2D platformer")
+    every = await runs.view(bot, bot.guild)
+
+    row = next(one for one in every if one["game"] == "Celeste")
+    game = next(one for one in runs.games(every) if one["game_key"] == "celeste")
+    assert (row["genre"], row["genre_family"]) == ("2D platformer", "platformer")
+    assert (game["genre"], game["genre_family"]) == ("2D platformer", "platformer")
+    assert {one["genre_family"] for one in every if not one["genre"]} == {""}
+    assert "genre_family" not in runs.export_csv(every).splitlines()[0]
+
+
+async def test_racer_finds_a_kart_racer_and_a_racer_by_family_search_and_lookup(bot):
+    await seed(bot)
+    await add_genre(bot, "Mario Kart 8", "Kart racer")
+    await add_genre(bot, "F-Zero GX", "Racing")
+    await add_genre(bot, "Hades", "Action roguelike")
+    every = await runs.view(bot, bot.guild)
+    rule = runs.genre_rule(bot, GUILD)
+
+    racing = {"Mario Kart 8", "F-Zero GX"}
+    for wanted in ("racing", "Kart racer", "RACER"):
+        assert {one["game"] for one in runs.filtered(every, genre=wanted, rule=rule)} == racing
+    assert {one["game"] for one in runs.filtered(every, q="racer", rule=rule)} == racing
+    assert {one["game"] for one in runs.filtered(every, q="rogue-lite", rule=rule)} == set()
+    assert {one["game"] for one in runs.filtered(every, q="roguelite", rule=rule)} == {"Hades"}
+    assert {one["genre"] for one in every if one["game"] in racing} == {"Kart racer", "Racing"}
+    found = await runs.lookup(bot, bot.guild, None, "racer")
+    assert {one["game"] for one in found} == racing
+
+
+async def test_a_families_edit_takes_effect_on_the_next_read(bot):
+    await seed(bot)
+    await add_genre(bot, "Tetris", "Puzzle")
+    assert {one["genre_family"] for one in await runs.view(bot, bot.guild)} >= {"puzzle"}
+
+    await bot.store.set(GUILD, RUNS_GENRE_FAMILIES, "brainy: puzzle, logic", by=1)
+    await bot.store.set(GUILD, RUNS_GENRE_QUALIFIERS, "", by=1)
+
+    every = await runs.view(bot, bot.guild)
+    assert next(one for one in every if one["game"] == "Tetris")["genre_family"] == "brainy"
+    assert runs.families_shown(runs.genre_rule(bot, GUILD)) == [
+        {"family": "brainy", "aliases": ["puzzle", "logic"]}
+    ]
+    with pytest.raises(SettingError, match="Line 2"):
+        await bot.store.set(GUILD, RUNS_GENRE_FAMILIES, "brainy: puzzle\nno colon", by=1)

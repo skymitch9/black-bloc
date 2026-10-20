@@ -10718,3 +10718,23 @@ Design: [`posts-one-switch-design.md`](posts-one-switch-design.md).
 | `site/public/assets/page-runs.js:123` `ruleFor` / `tagRules` | Every dimension still goes through the shared `passes`; a select value of `''` means All, `__none` means No series / No genre. |
 | `site/public/assets/page-runs.js:176` `pickers` | Builds the four selects from the rows of the current removed state; a select with nothing to choose is not drawn; focus returns to the select that changed after the repaint. |
 | `site/public/assets/page-runs.js:275` `paintFilters` | The How chip row is gone; the *Removed (N)* chip is how a removed run is reached (and restored). The array is `filter(Boolean)`ed: `replaceChildren(null)` prints the word *null*. |
+
+## Genre families — keyed by LINE at `genre-families` (branch `genre-families`, 2026-10-20; re-key after the merge)
+
+| Where | Why |
+|---|---|
+| `black_bloc/runs_genres.py:64` `genre_family` | THE rule (`docs/info/baf-runs-design.md` *Genre families*): normalise, try the FULL text against every family's name and aliases, then the qualifier-stripped text; first match in file order wins; no match is its own family (the stripped text, or the full text when stripping leaves nothing — so *Action* alone is the family `action`, never blank). Its twin is `site/public/assets/listfilter.js:85` `genreFamily`; both answer `tests/fixtures/runs/genre_families.json`. |
+| `black_bloc/runs_genres.py:1` (the module) | A leaf module, not `baf_runs.py`, because `settings_store` validates `runs_genre_families` with the same parser and `baf_runs` already imports `settings_store` (a cycle). `baf_runs` imports the rule and re-exposes it as `runs.genre_family`. |
+| `black_bloc/runs_genres.py:9` `NOT_A_WORD` | Anything not a letter or digit is a space (`[\W_]+`), so hyphens, slashes, apostrophes and doubled spaces cannot split a family. The JS twin uses `[^\p{L}\p{N}]+`; they agree on every fixture, and only on exotic Unicode (combining marks) could they differ. |
+| `black_bloc/runs_genres.py:18` `parse_qualifiers` | Longest (most words) first, so `third-person` comes off before a one-word qualifier could split it. Removal is by whole words (`without_qualifiers`), so `kart` never eats `kartography`. |
+| `black_bloc/runs_genres.py:27` `family_lines` | A line with no colon or an empty name is SKIPPED and returned in `bad` by line number: a read never crashes on a bad stored value; the registry check refuses one at save time. |
+| `black_bloc/baf_runs.py:445` `genre_rule` | Read from the store on every `view` / API call, so a Settings edit takes effect on the next read with no restart. |
+| `black_bloc/baf_runs.py:483` `made["genre_family"]` | Every row carries `genre_family` beside the typed `genre`; `games` copies it from the latest row. The export, the column, the editor and the datalists keep the typed text. |
+| `black_bloc/baf_runs.py:492` `text_of(row, rule)` / `:521` `family = genre_family(genre, *rule)` | Search matches the typed text plus the family's name and every alias (`family_terms`), so *racer* finds a *Racing* row. The `genre` filter takes any text and compares FAMILIES, so `?genre=Kart racer`, `racing` and `Racer` select the same rows. |
+| `black_bloc/baf_runs.py:1506` `text_of_game` / `:1528` | The `/runs` lookup matches a game by name OR by its genre and family terms. |
+| `black_bloc/baf_runs_panel.py:42` `date_word` | `runs_lookup_no_date`, `runs_lookup_more` (`:82`) and `runs_lookup_count` (`:128`) were the code constants `NO_DATE`, `MORE_LINE` and `COUNT_LINE` (the v240 owed item). |
+| `black_bloc/settings_store.py:10329` `checked_genre_families` | Names the FIRST bad line by number and text; a good value is stored trimmed with blank lines dropped. `runs_genre_qualifiers` may be blank (`:10473`): no qualifiers at all is a real choice. |
+| `black_bloc/api/tools/runs.py:77` `genre_families` | The parsed families, so the page's search reaches the aliases without a second copy of the settings. |
+| `site/public/assets/listfilter.js:24` `countedChoices(..., { label })` | The label shapes only the words (`Racing (2)`); the value stays the family key the hash carries. |
+| `site/public/assets/page-runs.js:127` `TAG_VALUES` | The Genre select filters and counts by `genre_family`; *No genre* (`__none`) still means a blank typed genre. `readHash` (`:72`) lowercases `genre=` so an older `#genre=Metroidvania` link still lands on its family. |
+| `site/mock/server.mjs:12176` `runsGenreRule` / `:2961` `checkedGenreFamilies` | The mock imports the same `listfilter.js` functions, so mock and page cannot disagree; the Python side is held to them by the shared fixture. |

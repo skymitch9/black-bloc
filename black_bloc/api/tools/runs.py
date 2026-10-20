@@ -64,15 +64,17 @@ def build_router(bot: Any) -> APIRouter:
             "how": how,
             "q": q,
         }
+        rule = runs.genre_rule(bot, guild.id)
         rows = every
         if any(wanted.values()) or removed is not None:
-            rows = runs.filtered(every, **wanted, removed=bool(removed))
+            rows = runs.filtered(every, **wanted, removed=bool(removed), rule=rule)
         sources = list(bot.store.get(guild.id, RUNS_SOURCES) or ())
         return {
             "rows": rows,
             "events": await runs.counted_events(bot.db, guild.id, sources),
             "series_names": names_of(every, runs.SERIES),
             "genre_names": names_of(every, runs.GENRE),
+            "genre_families": runs.families_shown(rule),
             "sources": sources,
             "parts": list(bot.store.get(guild.id, RUNS_PARTS) or ()),
         }

@@ -2300,7 +2300,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1242
+    assert len(settings_store.KEY_TYPES) == 1247
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2881,6 +2881,11 @@ def test_the_runs_keys_sit_under_marathons_with_the_sources_the_marathon_feature
         "runs_lookup_none",
         "runs_lookup_seen",
         "runs_lookup_tags",
+        "runs_lookup_more",
+        "runs_lookup_count",
+        "runs_lookup_no_date",
+        "runs_genre_qualifiers",
+        "runs_genre_families",
     )
     assert {settings_store.namespace_of(key) for key in settings_store.RUNS_KEYS} == {"marathon"}
     assert set(settings_store.RUNS_SOURCE_CHOICES) == set(SOURCES)
@@ -2898,3 +2903,21 @@ async def test_the_runs_keys_ship_their_decided_defaults(store):
     assert store.get(7, "runs_lookup_title") == "{game}"
     assert store.get(7, "runs_lookup_seen") == "seen {n} time(s), last {date} at {event}"
     assert store.get(7, "runs_lookup_tags") == "{tags}"
+    assert store.get(7, "runs_lookup_more") == "… and {more} more"
+    assert store.get(7, "runs_lookup_count") == "{runs} run(s) · {games} game(s)"
+    assert store.get(7, "runs_lookup_no_date") == "no date"
+    assert store.get(7, "runs_genre_qualifiers") == (
+        "action, 2d, 3d, kart, third-person, first-person"
+    )
+    assert store.get(7, "runs_genre_families").splitlines()[0] == (
+        "racing: racer, racers, race, kart racer, kart racing"
+    )
+
+
+def test_the_genre_families_refuse_a_line_they_cannot_read_by_its_number():
+    with pytest.raises(settings_store.SettingError, match=r"Line 3 .*`racer kart`"):
+        settings_store.coerce_value("runs_genre_families", "a: b\n\nracer kart\nc:")
+    assert settings_store.coerce_value("runs_genre_families", " a: b \n\n c:\n") == "a: b\nc:"
+    assert settings_store.coerce_value("runs_genre_qualifiers", "") == ""
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value("runs_lookup_more", "{nope}")
