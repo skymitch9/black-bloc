@@ -10359,7 +10359,7 @@ RUNS_PART_CHOICES = ("runner", "host", "commentator")
 RUNS_TAG_FIELDS = ("series", "genre", "tags")
 RUNS_TITLE_FIELDS = ("game", *RUNS_TAG_FIELDS)
 RUNS_LINE_FIELDS = ("date", "event", "category", "runners")
-RUNS_NONE_FIELDS = ("query",)
+RUNS_NONE_FIELDS = ("query", "suggestions")
 RUNS_SEEN_FIELDS = ("n", "date", "event", *RUNS_TAG_FIELDS)
 RUNS_MORE_FIELDS = ("more",)
 RUNS_COUNT_FIELDS = ("runs", "games")
@@ -10377,7 +10377,7 @@ RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_PARTS: ["runner"],
     RUNS_LOOKUP_TITLE: "{game}",
     RUNS_LOOKUP_LINE: "{date} · {event} · {category} · {runners}",
-    RUNS_LOOKUP_NONE: "Nothing in the BaF runs database matches **{query}**.",
+    RUNS_LOOKUP_NONE: "Nothing in the BaF runs database matches **{query}**.\n{suggestions}",
     RUNS_LOOKUP_SEEN: "seen {n} time(s), last {date} at {event}",
     RUNS_LOOKUP_TAGS: "{tags}",
     RUNS_LOOKUP_MORE: "… and {more} more",
@@ -10423,7 +10423,9 @@ KEY_HELP.update(
             "{runners}"
         ),
         RUNS_LOOKUP_NONE: (
-            "what the /runs panel says when no game matches; {query} is what was typed"
+            "what the /runs panel says when no game matches; {query} is what was typed, "
+            "{suggestions} up to three game names closest to it joined by · (blank when none is "
+            "close)"
         ),
         RUNS_LOOKUP_SEEN: (
             "the first line under a game in the /runs panel; {n} is how many times it was run, "

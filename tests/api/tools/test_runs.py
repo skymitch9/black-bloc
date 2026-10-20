@@ -189,3 +189,25 @@ async def test_the_genre_filter_reads_the_family_and_the_payload_carries_the_fam
     assert client.get("/api/runs?genre=kart").json()["rows"] == []
     games = client.get("/api/runs/games").json()["games"]
     assert [one["genre_family"] for one in games] == ["racing"]
+
+
+async def test_the_search_box_matches_words_in_any_order_initials_and_typos(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    for game in ("Donkey Kong Country 2", "Donkey Kong 64", "Sekiro: Shadows Die Twice"):
+        assert client.post("/api/runs", json={"game": game, "event": "BtB 2025"}).status_code == 200
+
+    def games_for(query):
+        return sorted(row["game"] for row in client.get(f"/api/runs?q={query}").json()["rows"])
+
+    assert games_for("dkc2") == ["Donkey Kong Country 2"]
+    assert games_for("donkey%202") == ["Donkey Kong Country 2"]
+    assert games_for("kong") == ["Donkey Kong 64", "Donkey Kong Country 2"]
+    assert games_for("sekrio%20die") == ["Sekiro: Shadows Die Twice"]
+    assert games_for("btb") == sorted(
+        ("Donkey Kong Country 2", "Donkey Kong 64", "Sekiro: Shadows Die Twice")
+    )
+    assert games_for("dkc3") == []
+    rows = client.get("/api/runs").json()["rows"]
+    assert all(row["search"].splitlines()[0] == row["game"] for row in rows)

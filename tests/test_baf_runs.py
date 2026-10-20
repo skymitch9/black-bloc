@@ -504,10 +504,71 @@ async def test_lookup_finds_games_by_part_of_their_name_and_logs_one_row(bot):
     found = await runs.lookup(bot, bot.guild, bot.guild.members[2], "shredder")
     none = await runs.lookup(bot, bot.guild, None, "zelda")
 
-    assert [one["game_key"] for one in found] == ["shredder's revenge"]
-    assert found[0]["times"] == 2 and len(found[0]["runs"]) == 2 and found[0]["more"] == 0
-    assert none == []
+    assert [one["game_key"] for one in found.games] == ["shredder's revenge"]
+    first = found.games[0]
+    assert first["times"] == 2 and len(first["runs"]) == 2 and first["more"] == 0
+    assert found.suggestions == []
+    assert none.games == []
     assert (await kinds(bot.db)).count("runs.lookup") == 2
+
+
+async def lookup_details(bot):
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'runs.lookup' ORDER BY id DESC LIMIT 1"
+    )
+    return json.loads((await cur.fetchone())["details"])
+
+
+async def test_lookup_finds_a_game_by_initials_words_in_any_order_runner_and_event(bot):
+    await seed(bot)
+    await add_genre(bot, "Donkey Kong Country 2", "Platformer")
+    await add_genre(bot, "Sekiro: Shadows Die Twice", "Action-adventure")
+
+    async def games_for(query):
+        return [one["game"] for one in (await runs.lookup(bot, bot.guild, None, query)).games]
+
+    assert await games_for("DKC2") == ["Donkey Kong Country 2"]
+    assert await games_for("donkey 2") == ["Donkey Kong Country 2"]
+    assert await games_for("kong country donkey") == ["Donkey Kong Country 2"]
+    assert await games_for("dkc3") == []
+    assert await games_for("sekiro shadow die") == ["Sekiro: Shadows Die Twice"]
+    assert await games_for("sekrio") == ["Sekiro: Shadows Die Twice"]
+    assert set(await games_for("kaizo")) == {"Shredder's Revenge", "Celeste"}
+    assert await games_for("hidden heroes") == ["Celeste"]
+    assert await games_for("") == []
+
+
+async def test_nothing_found_suggests_up_to_three_close_names_and_logs_how_many(bot):
+    await seed(bot)
+
+    near = await runs.lookup(bot, bot.guild, None, "shredding reverb")
+    assert near.games == [] and near.suggestions == ["Shredder's Revenge"]
+    assert (await lookup_details(bot))["suggested"] == 1
+
+    far = await runs.lookup(bot, bot.guild, None, "qqqqqq")
+    assert far == runs.Found([], [])
+    assert (await lookup_details(bot)) | {"query": ""} == {
+        "query": "",
+        "games": 0,
+        "suggested": 0,
+        "via": "discord",
+    }
+
+
+async def test_one_haystack_carries_every_searchable_field_one_per_line(bot):
+    ids = await seed(bot)
+    await runs.set_series(bot, bot.guild, None, "Celeste", "Celeste")
+    await runs.set_genre(bot, bot.guild, None, "Celeste", "Kart racer")
+    row = await runs.find(bot, bot.guild, f"t{ids['hotfix']}")
+    rule = runs.genre_rule(bot, GUILD)
+
+    lines = runs.text_of(row, rule).splitlines()
+    assert lines[:3] == ["Celeste", "Kart racer", "racing"]
+    assert {"racer", "kart racing", "Any%", "kaizo_kat", "Hidden Heroes"} <= set(lines)
+    every = await runs.view(bot, bot.guild)
+    assert next(one for one in every if one["key"] == row["key"])["search"] == runs.text_of(
+        row, rule
+    )
 
 
 def test_keys_dates_and_the_page_address_parse_the_way_the_page_writes_them():
@@ -577,11 +638,11 @@ async def test_racer_finds_a_kart_racer_and_a_racer_by_family_search_and_lookup(
     for wanted in ("racing", "Kart racer", "RACER"):
         assert {one["game"] for one in runs.filtered(every, genre=wanted, rule=rule)} == racing
     assert {one["game"] for one in runs.filtered(every, q="racer", rule=rule)} == racing
-    assert {one["game"] for one in runs.filtered(every, q="rogue-lite", rule=rule)} == set()
+    assert {one["game"] for one in runs.filtered(every, q="rogue-lite", rule=rule)} == {"Hades"}
     assert {one["game"] for one in runs.filtered(every, q="roguelite", rule=rule)} == {"Hades"}
     assert {one["genre"] for one in every if one["game"] in racing} == {"Kart racer", "Racing"}
     found = await runs.lookup(bot, bot.guild, None, "racer")
-    assert {one["game"] for one in found} == racing
+    assert {one["game"] for one in found.games} == racing
 
 
 async def test_a_families_edit_takes_effect_on_the_next_read(bot):

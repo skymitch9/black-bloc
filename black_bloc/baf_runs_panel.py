@@ -90,12 +90,14 @@ def game_field(bot: Any, guild_id: int, game: dict[str, Any]) -> tuple[str, str]
     return (name or game["game"][:FIELD_NAME_LIMIT], "\n".join(kept) or "—")
 
 
-def answer_embed(bot: Any, guild_id: int, query: str, found: list[dict[str, Any]]) -> Any:
+def answer_embed(bot: Any, guild_id: int, query: str, found: runs.Found) -> Any:
     embed = discord.Embed(title=PANEL_TITLE)
-    if not found:
-        embed.description = worded(bot, guild_id, RUNS_LOOKUP_NONE, query=query)[:4000]
+    if not found.games:
+        near = TAG_JOIN.join(found.suggestions)
+        said = worded(bot, guild_id, RUNS_LOOKUP_NONE, query=query, suggestions=near)
+        embed.description = said.strip()[:4000]
         return embed
-    for game in found:
+    for game in found.games:
         name, value = game_field(bot, guild_id, game)
         embed.add_field(name=name, value=value, inline=False)
     return embed
@@ -150,15 +152,18 @@ class SearchButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.send_modal(SearchModal(previous=self.view))
+        await interaction.response.send_modal(
+            SearchModal(previous=self.view, query=getattr(self.view, "query", ""))
+        )
 
 
 class SearchModal(AnswersErrors, discord.ui.Modal):
     typed = discord.ui.TextInput(label=FIELD_LABEL, placeholder=FIELD_HINT, max_length=QUERY_LIMIT)
 
-    def __init__(self, previous: Any = None) -> None:
+    def __init__(self, previous: Any = None, query: str = "") -> None:
         super().__init__(title=MODAL_TITLE)
         self.previous = previous
+        self.typed.default = query[:QUERY_LIMIT] or None
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction):
