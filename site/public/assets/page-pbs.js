@@ -31,7 +31,6 @@ const AGAIN_KEY = 'pb_feed_post_again_label';
 const AGAIN_SAID = 'pbs.again';
 const OPERATIONAL = [
   'pb_feed_channel_id',
-  'pb_feed_shadow_channel_id',
   'pb_feed_ping_role_id',
   'pb_feed_auto_match',
   'pb_feed_interval_minutes',

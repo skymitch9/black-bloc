@@ -16,6 +16,7 @@ from .config import Settings
 from .guard import TestModeGuard
 from .intents import build_intents
 from .invite import invite_url
+from .one_test_channel import apply as migrate_test_channel
 from .orphaned import install as install_orphaned
 from .orphaned import mark as mark_orphaned
 from .posts_switch import apply as migrate_posts_switch
@@ -99,6 +100,7 @@ class BlackBlocBot(commands.Bot):
         await self.db.connect()
         await self.store.load()
         await self._migrate_posts_switch()
+        await self._migrate_test_channel()
         install_rehearsal_home(self)
         self._apply_boot_presence()
         log.info("database ready at %s", self.settings.database_path)
@@ -116,6 +118,14 @@ class BlackBlocBot(commands.Bot):
                 await self.store.load()
         except Exception:
             log.exception("posts switch: the boot migration failed; stickies fall back to held")
+
+    async def _migrate_test_channel(self) -> None:
+        """Before the guard learns the test channel, so it learns the one the migration wrote."""
+        try:
+            if await migrate_test_channel(self):
+                await self.store.load()
+        except Exception:
+            log.exception("one test channel: the boot migration failed; the overrides are unread")
 
     def _apply_boot_presence(self) -> None:
         """setup_hook runs before IDENTIFY, so the stored sentence is the one Discord is sent."""

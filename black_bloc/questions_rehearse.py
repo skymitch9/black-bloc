@@ -24,13 +24,13 @@ NOTHING_TO_TEST = (
     "There is no question to send a test copy of: the queue is empty. Add a question first."
 )
 NO_HOME_LINE = (
-    "**Post to test** — no rehearsal home is set. Pick posts_shadow_channel_id or "
-    "shadow_channel_id in Settings."
+    "**Post to test** — no test channel is set. Pick the test channel (shadow_channel_id) "
+    "in Settings."
 )
 
 
 def home_of(bot: Any, guild: Any) -> int | None:
-    return shadow_home.channel_id(bot, guild, feature=rules.FEATURE)
+    return shadow_home.channel_id(bot, guild)
 
 
 def this_weeks_question(found: dict[str, Any]) -> Any:

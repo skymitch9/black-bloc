@@ -54,7 +54,6 @@ SAVED = "post.saved"
 POSTED = "post.posted"
 UPDATED = "post.updated"
 WOULD_POST = "post.would_post"
-SHADOW_FEATURE = "posts"
 POST_FAILED = "post.post_failed"
 TAKEN_DOWN = "post.taken_down"
 WOULD_TAKE_DOWN = "post.would_take_down"
@@ -119,8 +118,8 @@ NOT_POSTED = (
 )
 NO_TEST_CHANNEL = (
     "There is nowhere to send a test copy of **{title}**: this server has neither a test channel "
-    "nor a log channel, so nothing was sent. A Lead sets **posts_shadow_channel_id** on the "
-    "Settings page."
+    "nor a log channel, so nothing was sent. A Lead sets the **Test channel** "
+    "(shadow_channel_id) on the Settings page."
 )
 CHANNEL_GONE = "the channel is not one Black Bloc can see any more"
 NO_CHANNEL_WORD = "no channel yet"
@@ -1268,12 +1267,12 @@ def as_channel_id(value: Any) -> int | None:
 
 def shadow_channel_id(bot: Any, guild: Any) -> int | None:
     """Where a rehearsal GOES — one home, `black_bloc/shadow.py`."""
-    return shadow_home.channel_id(bot, guild, log_key=LOG_CHANNEL_KEY, feature=SHADOW_FEATURE)
+    return shadow_home.channel_id(bot, guild, log_key=LOG_CHANNEL_KEY)
 
 
 def shadow_channel_ids(bot: Any, guild: Any) -> list[int]:
     """Where a rehearsal already IS — one home, `black_bloc/shadow.py`."""
-    return shadow_home.channel_ids(bot, guild, log_key=LOG_CHANNEL_KEY, feature=SHADOW_FEATURE)
+    return shadow_home.channel_ids(bot, guild, log_key=LOG_CHANNEL_KEY)
 
 
 def channel_of(bot: Any, guild: Any, channel_id: Any) -> Any:
@@ -1318,7 +1317,7 @@ async def _existing_message(
 async def _shadow_message(bot: Any, guild: Any, message_id: Any) -> Any:
     """The rehearsal, hunted through every channel it could be sitting in — one home."""
     _, message = await shadow_home.find_copy(
-        bot, guild, message_id, log_key=LOG_CHANNEL_KEY, feature=SHADOW_FEATURE
+        bot, guild, message_id, log_key=LOG_CHANNEL_KEY
     )
     return message
 
@@ -1851,7 +1850,6 @@ __all__ = [
     "SAVED",
     "SEEDED_CANNOT_BE_DELETED",
     "SHADOW",
-    "SHADOW_FEATURE",
     "SHADOW_MESSAGE_GONE",
     "SHADOW_TAKEN_DOWN",
     "SHIPPED_WORD",

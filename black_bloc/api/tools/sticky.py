@@ -60,8 +60,8 @@ def build_router(bot: Any) -> APIRouter:
         return site_words(guild, outcome.message)
 
     async def shaped(guild: Any, row: Any) -> dict[str, Any]:
-        mode, feature = await desk_of(bot).rule_of(guild, row)
-        testable = testing.can_test(bot, guild, row, mode, feature)
+        mode, _ = await desk_of(bot).rule_of(guild, row)
+        testable = testing.can_test(bot, guild, row, mode)
         return sticky_row(bot, guild, row, mode, testable)
 
     async def answered(guild: Any, outcome: Any) -> dict[str, Any]:

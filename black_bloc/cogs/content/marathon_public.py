@@ -96,7 +96,7 @@ def details_of(marathon: Any, row: Any) -> dict[str, Any]:
 def rehearsal_of(bot: Any, guild: Any) -> dict[str, Any]:
     if mode_of(bot, guild.id) == MODE_ON:
         return {}
-    return {"shadow_home": shadow_home.channel_id(bot, guild, feature=mp.SHADOW_FEATURE)}
+    return {"shadow_home": shadow_home.channel_id(bot, guild)}
 
 
 def button_of(bot: Any, guild: Any, marathon: Any, row: Any) -> tuple:
@@ -282,7 +282,7 @@ async def send_public(
     if home is None:
         return (None, None, NO_CHANNEL)
     channel_id = (
-        home if mode == MODE_ON else shadow_home.channel_id(bot, guild, feature=mp.SHADOW_FEATURE)
+        home if mode == MODE_ON else shadow_home.channel_id(bot, guild)
     )
     if channel_id is None:
         return (None, None, NO_CHANNEL)
@@ -355,7 +355,7 @@ async def post_highlight(
     shadow = mode_of(bot, guild.id) != MODE_ON
     if mp.message_id(row) and mp.is_removed(row):
         wanted = (
-            shadow_home.channel_id(bot, guild, feature=mp.SHADOW_FEATURE)
+            shadow_home.channel_id(bot, guild)
             if shadow
             else public_channel(bot, guild.id)
         )

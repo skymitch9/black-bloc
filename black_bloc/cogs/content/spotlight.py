@@ -110,7 +110,6 @@ EMBED_KEY = "golive_embed"
 END_TEMPLATE_KEY = "golive_end_template"
 END_AUTHOR_KEY = "golive_end_author"
 MODE_ON = "on"
-SHADOW_FEATURE = "golive"
 MODE_OFF = "off"
 MODE_SHADOW = "shadow"
 SOURCE = "spotlight"
@@ -1745,7 +1744,7 @@ class Spotlight(commands.Cog):
             log.warning("spotlight: not posted — %s is not set", CHANNEL_KEY)
             return (None, NO_CHANNEL)
         if mode != MODE_ON:
-            where = shadow_home.channel_id(self.bot, guild, feature=SHADOW_FEATURE)
+            where = shadow_home.channel_id(self.bot, guild)
             if not where:
                 return (None, NO_CHANNEL)
             channel_id = where
@@ -1776,7 +1775,7 @@ class Spotlight(commands.Cog):
         channel_id = (
             self.bot.store.get(guild.id, CHANNEL_KEY)
             if mode == MODE_ON
-            else shadow_home.channel_id(self.bot, guild, feature=SHADOW_FEATURE)
+            else shadow_home.channel_id(self.bot, guild)
         )
         return shadow_home.channel_of(self.bot, guild, channel_id)
 

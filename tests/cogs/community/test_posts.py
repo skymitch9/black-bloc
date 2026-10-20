@@ -659,7 +659,7 @@ async def test_post_to_test_takes_one_remove_slot_so_no_row_holds_more_than_five
 
 
 async def test_the_card_button_sends_a_test_copy_and_the_card_says_one_is_up(bot, staff):
-    await bot.store.set(GUILD, "posts_shadow_channel_id", TEST_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", TEST_CHANNEL)
     row = await a_post(bot, channel_id=WELCOME_CHANNEL)
     await posts.publish_post(bot, bot.guild, row, staff)
     interaction = FakeInteraction(bot, staff)

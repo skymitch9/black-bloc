@@ -344,7 +344,7 @@ async def test_no_public_channel_posts_nothing_and_the_opt_out_still_works(bot, 
 async def test_shadow_sends_the_highlight_to_its_own_rehearsal_home(bot, cog):
     marathon = await ready(bot, cog)
     await bot.store.set(GUILD, "marathon_mode", "shadow")
-    await bot.store.set(GUILD, "marathon_public_shadow_channel_id", LOG_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", LOG_CHANNEL)
 
     await highlighted(bot, cog, marathon)
 

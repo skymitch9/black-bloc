@@ -123,11 +123,11 @@ async def test_refusals_are_worded_and_send_nothing(bot, desk):
     assert (off.code, off.message) == ("sticky_off", testing.SWITCHED_OFF.format(key="posts_mode"))
 
     await bot.store.set(GUILD, "posts_mode", "on")
-    await bot.store.set(GUILD, "posts_shadow_channel_id", RUNS)
+    await bot.store.set(GUILD, "shadow_channel_id", RUNS)
     own = await testing.rehearse(bot, bot.guild, RUNS, STAFFER)
     assert own.code == "own_home" and f"<#{RUNS}>" in own.message
 
-    await bot.store.set(GUILD, "posts_shadow_channel_id", OTHER_HOME)
+    await bot.store.set(GUILD, "shadow_channel_id", OTHER_HOME)
     channel(bot, OTHER_HOME).send_raises = forbidden()
     failed = await testing.rehearse(bot, bot.guild, RUNS, STAFFER)
     assert failed.code == "post_failed" and "403" in failed.message
@@ -145,10 +145,10 @@ async def test_the_button_shows_only_when_a_press_would_send(bot, desk):
     await a_live_words_sticky(bot, desk)
     row = await row_of(bot)
 
-    assert testing.can_test(bot, bot.guild, row, "on", "posts")
-    assert not testing.can_test(bot, bot.guild, row, "off", "posts")
-    await bot.store.set(GUILD, "posts_shadow_channel_id", RUNS)
-    assert not testing.can_test(bot, bot.guild, row, "on", "posts")
+    assert testing.can_test(bot, bot.guild, row, "on")
+    assert not testing.can_test(bot, bot.guild, row, "off")
+    await bot.store.set(GUILD, "shadow_channel_id", RUNS)
+    assert not testing.can_test(bot, bot.guild, row, "on")
     moves = [move.action for move in rules.card_buttons(row, testable=True)]
     assert moves[-1] == rules.TEST and rules.TEST_MOVE.row == 1
     assert rules.TEST not in [move.action for move in rules.card_buttons(row)]

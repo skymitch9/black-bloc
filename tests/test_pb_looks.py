@@ -408,13 +408,13 @@ async def test_shadow_with_no_home_at_all_is_a_dry_run_not_a_failure(bot, guild,
     await feed.look(guild, ADA, now=NOW + timedelta(minutes=10))
 
     found = await details_of(bot.db, "pbfeed.would_post")
-    assert found["rehearsed"] is False and "rehearsal home" in found["reason"]
+    assert found["rehearsed"] is False and "no test channel" in found["reason"]
     assert "pbfeed.post_failed" not in await kinds(bot.db)
     assert (await pb_store.posts(bot.db, GUILD))[0]["outcome"] == pb_store.DRY
 
 
-async def test_the_features_own_rehearsal_home_wins(bot, guild, feed, client):
-    await bot.store.set(GUILD, "pb_feed_shadow_channel_id", LOGS)
+async def test_personal_bests_rehearse_in_the_test_channel(bot, guild, feed, client):
+    await bot.store.set(GUILD, "shadow_channel_id", LOGS)
     await matched(bot)
     await seen(feed, client, [])
     client.bests[ZFG.id] = [best("r1", verified_at=NOW + timedelta(minutes=5))]

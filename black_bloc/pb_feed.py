@@ -55,8 +55,8 @@ CHANNEL_GONE = (
     "again on the Personal bests page; this run is recorded and will not be posted later."
 )
 NO_SHADOW_HOME = (
-    "there is no rehearsal home: shadow_channel_id, pb_feed_shadow_channel_id and "
-    "log_channel_id are all blank or gone. Set one of them to see rehearsal copies."
+    "there is no test channel: shadow_channel_id and log_channel_id are both blank or "
+    "gone. Set the Test channel in Settings to see rehearsal copies."
 )
 TEST_MODE_REFUSED = "test mode keeps Black Bloc out of that channel"
 FAULT = (

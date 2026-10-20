@@ -311,9 +311,9 @@ async def test_shadow_makes_the_inbox_and_the_threads_in_the_shadow_home(bot, co
     assert (await details_of(bot.db, "marathon.thread_made"))["replaced"] == shadow.threads[1].id
 
 
-async def test_a_feature_shadow_home_takes_the_inbox(bot, cog):
+async def test_the_test_channel_takes_the_inbox(bot, cog):
     await bot.store.set(GUILD, "marathon_mode", "shadow")
-    await bot.store.set(GUILD, "marathon_shadow_channel_id", LOG_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", LOG_CHANNEL)
     log_room = threading(bot, LOG_CHANNEL)
     await found(bot, cog)
     assert len(log_room.threads) == 1 and room(bot, SHADOW_CHANNEL).threads == []

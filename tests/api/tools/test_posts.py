@@ -718,7 +718,7 @@ async def test_post_to_test_beside_a_real_post_leaves_one_web_row_and_marks_the_
     client, sign_in, web, guild, wf
 ):
     sign_in(client)
-    await web.store.set(wf.GUILD_ID, "posts_shadow_channel_id", wf.OTHER_CHANNEL_ID)
+    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.OTHER_CHANNEL_ID)
     await a_post(web, wf)
     client.post("/api/posts/notice/publish", json={})
     real = guild.get_channel(wf.TEST_CHANNEL_ID)

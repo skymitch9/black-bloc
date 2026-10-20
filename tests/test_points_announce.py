@@ -17,7 +17,7 @@ def moved(lines=LINES):
 async def test_points_in_shadow_still_post_in_the_points_channel_while_posts_are_on(bot):
     """Owner, 2026-10-19 (switch audit p1f): the Posts switch places it, never points_mode."""
     assert bot.store.get(GUILD, "points_mode") == "shadow"
-    await bot.store.set(GUILD, "points_shadow_channel_id", REHEARSAL)
+    await bot.store.set(GUILD, "shadow_channel_id", REHEARSAL)
 
     said = await announce_.announce(bot, bot.guild, moved())
 

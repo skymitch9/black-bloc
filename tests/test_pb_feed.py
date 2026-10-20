@@ -51,7 +51,6 @@ def test_the_feature_ships_in_shadow_with_no_channel_and_no_ping(bot):
     assert KEY_CHOICES["pb_feed_mode"] == ("off", "shadow", "on")
     assert bot.store.get(GUILD, "pb_feed_channel_id") is None
     assert bot.store.get(GUILD, "pb_feed_ping_role_id") is None
-    assert bot.store.get(GUILD, "pb_feed_shadow_channel_id") is None
     assert bot.store.get(GUILD, "pb_feed_auto_match") is True
     assert pb_feed.mode_of(bot.store, GUILD) == "shadow"
     for key, shipped in PB_FEED_DEFAULTS.items():
@@ -59,12 +58,12 @@ def test_the_feature_ships_in_shadow_with_no_channel_and_no_ping(bot):
 
 
 def test_every_key_is_under_core_typed_explained_and_reachable_from_settings():
-    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 58
+    assert len(PB_FEED_KEYS) == len(set(PB_FEED_KEYS)) == 57
     for key in PB_FEED_KEYS:
         assert key in CORE_KEYS and namespace_of(key) == "core", key
         assert KEY_TYPES.get(key) and KEY_HELP.get(key), key
         assert reachable_on_the_panel(key), key
-    assert KEY_TYPES["pb_feed_channel_id"] == KEY_TYPES["pb_feed_shadow_channel_id"] == "channel"
+    assert KEY_TYPES["pb_feed_channel_id"] == "channel"
     assert KEY_TYPES["pb_feed_ping_role_id"] == "role"
 
 

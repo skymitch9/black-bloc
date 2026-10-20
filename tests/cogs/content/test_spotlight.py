@@ -497,9 +497,9 @@ async def test_shadow_posts_the_rehearsal_copy_and_says_would(bot, cog):
     assert "golive.spotlight_announced" not in await kinds(bot.db)
 
 
-async def test_a_spotlight_rehearses_in_go_lives_own_home_when_one_is_set(bot, cog):
+async def test_a_spotlight_rehearses_in_the_test_channel(bot, cog):
     await bot.store.set(GUILD, SPOTLIGHT_MODE_KEY, "shadow")
-    await bot.store.set(GUILD, "golive_shadow_channel_id", LOG_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", LOG_CHANNEL)
     await a_row(bot)
     helix_of(bot, twitch_stream())
     await cog.poll_once()

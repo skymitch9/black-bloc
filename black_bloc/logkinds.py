@@ -744,6 +744,7 @@ ROUTINE: frozenset[str] = frozenset(
         "role_menu.update",
         "settings.clear",
         "settings.migrated",
+        "settings.migration_skipped",
         "settings.set",
         "tempvoice.adopt",
         "tempvoice.ban",

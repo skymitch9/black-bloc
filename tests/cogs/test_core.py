@@ -465,7 +465,7 @@ async def test_a_setting_group_reaches_a_key_card_with_its_value_default_and_hel
 
     opened = FakeInteraction(bot, lead)
     await choose(groups, opened, ["birthday"])
-    keys = picker(opened.view, "25 of 28 — the rest are on the site")
+    keys = picker(opened.view, "25 of 27 — the rest are on the site")
 
     card = FakeInteraction(bot, lead)
     await choose(keys, card, ["birthday_color"])

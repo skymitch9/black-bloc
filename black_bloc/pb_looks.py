@@ -19,7 +19,6 @@ from .pb_feed import (
     BACKING_OFF,
     CHANNEL_GONE,
     FAULT,
-    FEATURE,
     LOOKUP,
     MISSED_ONCE,
     MISSED_STAFF,
@@ -667,7 +666,7 @@ class Feed:
         aimed = aimed_at(store, guild.id)
         details = self.details(runner, best, mode) | {"aimed_at": aimed} | (extra or {})
         rehearsing = mode == SHADOW
-        home = shadow.channel_id(bot, guild, feature=FEATURE) if rehearsing else aimed
+        home = shadow.channel_id(bot, guild) if rehearsing else aimed
         channel = shadow.channel_of(bot, guild, home)
         who: dict[str, Any] = {"actor": actor, "via": via}
         if channel is None:

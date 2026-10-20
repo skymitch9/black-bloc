@@ -27,7 +27,6 @@ TEMPLATE = (
     r":(?P<to>post|remove|optout|optin)"
 )
 CUSTOM_ID = "marathon:highlight:{marathon_id}:{run_id}:{to}"
-SHADOW_FEATURE = "marathon_public"
 LABEL_LIMIT = 80
 DONE_PARTS = {
     MARATHON_PART_RUNNER_KEY: MARATHON_PART_RUNNER_DONE_KEY,
@@ -201,7 +200,6 @@ __all__ = [
     "OPT_OUT",
     "POST",
     "REMOVE",
-    "SHADOW_FEATURE",
     "TEMPLATE",
     "auto_wanted",
     "channel_of",

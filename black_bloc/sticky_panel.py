@@ -110,12 +110,12 @@ async def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Sti
     )
     mode, feature = await desk_of(bot).rule_of(guild, row)
     state = rules.row_line(row, mode)
-    if mode != rules.OFF and testing.home_of(bot, guild, feature) is None:
-        state = f"{state}\n{testing.NO_HOME.format(feature=feature)}"
+    if mode != rules.OFF and testing.home_of(bot, guild) is None:
+        state = f"{state}\n{testing.NO_HOME}"
     body = rules.words_of(row)[: DESCRIPTION_LIMIT - len(state) - 2]
     embed = discord.Embed(title=title[:256], description=f"{body}\n\n{state}")
     view = StickyPanel(minutes_for(bot, guild.id), channel_id=channel_id)
-    testable = testing.can_test(bot, guild, row, mode, feature)
+    testable = testing.can_test(bot, guild, row, mode)
     for move in rules.card_buttons(row, testable=testable):
         view.add_item(MoveButton(move))
     if rules.is_post(row):

@@ -1004,8 +1004,8 @@ async def shadow_post(bot, guild, **fields):
     return await posts.get_post_by_id(bot.db, int(row["id"]))
 
 
-async def test_a_post_rehearses_in_its_own_home_over_the_global_one(bot, guild):
-    await bot.store.set(GUILD, "posts_shadow_channel_id", LOG_CHANNEL)
+async def test_a_post_rehearses_in_the_test_channel(bot, guild):
+    await bot.store.set(GUILD, "shadow_channel_id", LOG_CHANNEL)
     bot.guard = FakeGuard(allowed=LOG_CHANNEL)
     row = await a_post(bot, guild, channel_id=WELCOME_CHANNEL)
 
@@ -1259,7 +1259,7 @@ def test_the_carries_pill_shows_only_once_the_door_is_on_the_message():
 
 async def real_post_up(bot, guild, **fields):
     """Posts are on, the post is up in #welcome, and the rehearsal home is the test channel."""
-    await bot.store.set(GUILD, "posts_shadow_channel_id", TEST_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", TEST_CHANNEL)
     row = await a_post(bot, guild, channel_id=WELCOME_CHANNEL, **fields)
     assert (await posts.publish_post(bot, guild, row, STAFF)).ok
     return await posts.get_post_by_id(bot.db, int(row["id"]))
@@ -1329,7 +1329,7 @@ async def test_a_second_press_edits_the_test_copy_and_the_next_post_it_takes_it_
 async def test_with_no_channel_of_its_own_a_test_copy_still_goes_and_post_it_still_refuses(
     bot, guild
 ):
-    await bot.store.set(GUILD, "posts_shadow_channel_id", TEST_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", TEST_CHANNEL)
     row = await a_post(bot, guild, channel_id=None)
 
     found = await posts.rehearse_post(bot, guild, row, STAFF)
@@ -1372,7 +1372,7 @@ async def test_with_no_rehearsal_home_a_test_copy_is_refused_in_words(bot, guild
 
 
 async def test_the_guard_writes_would_rehearse_and_sends_nothing(bot, guild):
-    await bot.store.set(GUILD, "posts_shadow_channel_id", WELCOME_CHANNEL)
+    await bot.store.set(GUILD, "shadow_channel_id", WELCOME_CHANNEL)
     bot.guard = FakeGuard()
     row = await a_post(bot, guild)
 

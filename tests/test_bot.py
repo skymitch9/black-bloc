@@ -425,3 +425,41 @@ async def test_a_failed_posts_switch_migration_never_stops_the_boot(settings, mo
 
     assert "posts switch: the boot migration failed" in caplog.text
     await bot.close()
+
+
+async def test_the_test_channel_migration_runs_before_the_guard_learns_the_key(
+    tmp_path, monkeypatch
+):
+    import json
+
+    from black_bloc.config import load_settings
+
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    bot = BlackBlocBot(load_settings(_env_file=None, database_path=tmp_path / "boot.sqlite3"))
+    await bot.db.connect()
+    await bot.db.conn.execute(
+        "INSERT INTO settings(guild_id, key, value, updated_by, updated_at) VALUES (?, ?, ?, ?, ?)",
+        (7, "posts_shadow_channel_id", json.dumps(55), None, "2026-10-10T00:00:00+00:00"),
+    )
+    await bot.db.conn.commit()
+    await bot.store.load()
+
+    await bot._migrate_test_channel()
+
+    assert bot.store.get(7, "shadow_channel_id") == 55
+    order = bot_module.BlackBlocBot.setup_hook.__code__.co_names
+    assert order.index("_migrate_test_channel") < order.index("install_rehearsal_home")
+    await bot.close()
+
+
+async def test_a_failed_test_channel_migration_never_stops_the_boot(settings, monkeypatch, caplog):
+    async def broken(_bot):
+        raise RuntimeError("disk")
+
+    monkeypatch.setattr(bot_module, "migrate_test_channel", broken)
+    bot = BlackBlocBot(settings)
+
+    await bot._migrate_test_channel()
+
+    assert "one test channel: the boot migration failed" in caplog.text
+    await bot.close()

@@ -25,12 +25,12 @@ SWITCHED_OFF = (
     "first."
 )
 NO_HOME = (
-    "There is nowhere to send a test copy: no rehearsal home is set. Pick "
-    "{feature}_shadow_channel_id or shadow_channel_id in Settings."
+    "There is nowhere to send a test copy: no test channel is set. Pick the test channel "
+    "(shadow_channel_id) in Settings."
 )
 OWN_HOME = (
-    "The rehearsal home is <#{channel_id}> itself, so a test copy would land in front of members "
-    "and nothing was sent. Pick another {feature}_shadow_channel_id in Settings."
+    "The test channel is <#{channel_id}> itself, so a test copy would land in front of members "
+    "and nothing was sent. Pick another test channel (shadow_channel_id) in Settings."
 )
 HOME_GONE = "Black Bloc cannot see the rehearsal home <#{home}>, so nothing was sent."
 NOTHING = "That sticky message has nothing to show, so no test copy was sent."
@@ -41,15 +41,15 @@ def mode_key(feature: str) -> str:
     return f"{feature}_mode"
 
 
-def home_of(bot: Any, guild: Any, feature: str) -> int | None:
-    return shadow_home.channel_id(bot, guild, feature=feature)
+def home_of(bot: Any, guild: Any) -> int | None:
+    return shadow_home.channel_id(bot, guild)
 
 
-def can_test(bot: Any, guild: Any, row: Any, mode: str, feature: str) -> bool:
+def can_test(bot: Any, guild: Any, row: Any, mode: str) -> bool:
     """Rendered only when a press would send: on, not already rehearsing, a home elsewhere."""
     if mode == rules.OFF or rules.state_of(row, mode) == rules.REHEARSING:
         return False
-    home = home_of(bot, guild, feature)
+    home = home_of(bot, guild)
     return home is not None and int(home) != int(row["channel_id"])
 
 
@@ -74,14 +74,14 @@ async def rehearse(
     mode, feature = await desk_of(bot).rule_of(guild, row)
     if mode == rules.OFF:
         return refusal(SWITCHED_OFF.format(key=mode_key(feature)), "sticky_off", 409)
-    home = home_of(bot, guild, feature)
+    home = home_of(bot, guild)
     if rules.state_of(row, mode) == rules.REHEARSING:
         where = row["posted_channel_id"] or home
         return Outcome(True, ALREADY.format(home=where), "already_rehearsing", 200, row)
     if home is None:
-        return refusal(NO_HOME.format(feature=feature), "no_shadow_channel", 409)
+        return refusal(NO_HOME, "no_shadow_channel", 409)
     if int(home) == int(channel_id):
-        return refusal(OWN_HOME.format(channel_id=channel_id, feature=feature), "own_home", 409)
+        return refusal(OWN_HOME.format(channel_id=channel_id), "own_home", 409)
     channel, failure = rehearsal_copy.reach(bot, guild, home)
     if failure == rehearsal_copy.TEST_MODE:
         return refusal(posts.guard_refusal(bot), "test_mode", 409)

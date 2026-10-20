@@ -103,7 +103,6 @@ log = logging.getLogger(__name__)
 
 LOOP_MINUTES = 5
 ROLE_REASON = "Black Bloc birthday"
-SHADOW_FEATURE = "birthday"
 COG_NAME = "Birthdays"
 POSTED_NOW = "birthday.posted_now"
 CANCEL = "Cancel"
@@ -422,7 +421,7 @@ async def post_today(
     where = (
         bot.store.get(guild.id, "birthday_channel_id")
         if mode == "on"
-        else shadow_home.channel_id(bot, guild, feature=SHADOW_FEATURE)
+        else shadow_home.channel_id(bot, guild)
     )
     found = PostedToday(
         mode=mode,
@@ -1243,7 +1242,7 @@ class Birthdays(commands.Cog):
                 {
                     "rehearsed": True,
                     "shadow_home": shadow_home.channel_id(
-                        self.bot, guild, feature=SHADOW_FEATURE
+                        self.bot, guild
                     ),
                 }
                 if rehearsed
@@ -1262,7 +1261,7 @@ class Birthdays(commands.Cog):
             log.warning("birthdays: not posted — birthday_channel_id is not set")
             return "no_channel_configured"
         if rehearse:
-            home = shadow_home.channel_id(self.bot, guild, feature=SHADOW_FEATURE)
+            home = shadow_home.channel_id(self.bot, guild)
             if not home:
                 log.warning("birthdays: not rehearsed — there is no rehearsal home")
                 return "no_rehearsal_home"
