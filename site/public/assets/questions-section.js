@@ -37,6 +37,13 @@ const BY_WORDS = { owner: 'by the owner', bot: 'by Black Bloc' };
 const STATUS_WORDS = { removed: 'removed', skipped: 'skipped' };
 
 let refresh = () => {};
+const opened = new Set();
+
+function kept(title, children, count) {
+  const fold = foldout(title, children, { count, open: opened.has(title) });
+  fold.addEventListener('toggle', () => (fold.open ? opened.add(title) : opened.delete(title)));
+  return fold;
+}
 
 const path = (id, tail = '') => `/api/questions/${encodeURIComponent(id)}${tail}`;
 
@@ -154,24 +161,24 @@ function historyFold(rows) {
       },
     },
   ], rows, { empty: 'Nothing has gone up yet.' });
-  return foldout('History', [list, say, sayAgain('questions.history', say)], { count: rows.length });
+  return kept('History', [list, say, sayAgain('questions.history', say)], rows.length);
 }
 
 async function settingsFold(specs) {
-  if (!specs.length) return foldout('Settings', [sayNothing('The bot reported no question_ settings.')], { count: 0 });
+  if (!specs.length) return kept('Settings', [sayNothing('The bot reported no question_ settings.')], 0);
   const wording = specs.filter((spec) => WORDING_KEYS.includes(spec.key));
   const operational = specs.filter((spec) => !WORDING_KEYS.includes(spec.key));
-  return foldout('Settings', [
+  return kept('Settings', [
     await settingsPanel(operational, { where: TITLE, onSaved: () => refresh() }),
     await settingsPanel(wording, { where: 'Wording' }),
-  ], { count: specs.length });
+  ], specs.length);
 }
 
 async function logsFold() {
   const payload = await api(`/api/actions?feature=core&q=question&per_page=${LOG_ROWS}`);
   const rows = listOf(payload, 'actions').filter((row) => /^(web\.)?question\./.test(String(row.kind)));
   await names(idsIn(rows, ['actor_id', 'target_id']));
-  return foldout('Logs', [logsTable(rows, NO_LOGS)], { count: rows.length });
+  return kept('Logs', [logsTable(rows, NO_LOGS)], rows.length);
 }
 
 /** The Weekly questions section of the Posts page; `reload` redraws the page after a write. */
