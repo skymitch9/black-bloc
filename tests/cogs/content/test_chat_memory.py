@@ -5,16 +5,16 @@ from types import SimpleNamespace
 import discord
 import pytest
 
+from black_bloc import optouts
 from black_bloc.chat_memory import (
     Note,
     Profile,
     fact_key,
     facts_of,
-    overridden,
     profile_for,
     remembers,
     save_profile,
-    set_override,
+    set_remembered,
 )
 from black_bloc.cogs.content import chat_memory as cog_module
 from black_bloc.cogs.content.chat_memory import (
@@ -215,6 +215,10 @@ class FakeInteraction:
                 if getattr(one, "placeholder", None) is not None
             ]
         )
+
+
+async def set_override(db, user_id, guild_id):
+    await set_remembered(db, user_id, guild_id, consent="optout", wanted=False)
 
 
 @pytest.fixture
@@ -611,7 +615,7 @@ async def test_remember_me_again_needs_no_confirm_and_brings_the_writing_back(bo
     await button(opening.view, "Remember me again").callback(clicking)
 
     assert await remembers(db, MEMBER, GUILD, consent="optout") is True
-    assert await overridden(db, MEMBER, GUILD) is False
+    assert await optouts.is_out(db, GUILD, MEMBER, optouts.CHAT_MEMORY) is False
     assert "never what you said" in clicking.sent
     rows = await action_rows(db)
     assert [kind for kind, _ in rows] == ["chat.memory_optin"]
@@ -626,7 +630,7 @@ async def test_an_optin_server_writes_the_row_rather_than_removing_one(bot, memb
 
     await button(opening.view, "Remember me again").callback(clicking)
 
-    assert await overridden(db, MEMBER, GUILD) is True
+    assert await optouts.is_out(db, GUILD, MEMBER, optouts.CHAT_MEMORY_IN) is True
     assert await remembers(db, MEMBER, GUILD, consent="optin") is True
 
 

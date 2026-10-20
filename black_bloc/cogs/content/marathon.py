@@ -543,7 +543,7 @@ async def links_of(db: Any) -> dict[str, int]:
 
 
 async def baf_overrides(db: Any) -> dict[int, Any]:
-    cur = await db.conn.execute("SELECT user_id, by, at FROM marathon_baf_overrides")
+    cur = await db.conn.execute("SELECT user_id, by, at, reason FROM marathon_baf_overrides")
     return {int(row["user_id"]): row for row in await cur.fetchall()}
 
 

@@ -8,6 +8,7 @@ import {
   refRoles,
   saveSetting,
   send,
+  setConfirmer,
   settings,
   settingsNamespace,
 } from './api.js';
@@ -817,6 +818,15 @@ export function ask({ title, body, confirmLabel = 'Do it', tone = 'danger' }) {
     dialog.showModal();
   });
 }
+
+const CHANGE_TITLE = 'Are you sure?';
+const CHANGE_LABEL = 'Change it';
+
+setConfirmer((message) => ask({
+  title: CHANGE_TITLE,
+  body: [el('p', { class: 'ask-body' }, boldParts(message))],
+  confirmLabel: CHANGE_LABEL,
+}));
 
 let formDialog = null;
 const WORKING = 'Working…';

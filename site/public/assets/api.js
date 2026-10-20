@@ -150,14 +150,32 @@ export function settingsNamespace(payload, namespace) {
   return Array.isArray(group) ? group : [];
 }
 
+const CONFIRM_NEEDED = 'confirm_needed';
+let confirmer = null;
+
+/** The page's way to ask "are you sure?" when the bot answers a change with a count first. */
+export function setConfirmer(ask) {
+  confirmer = ask;
+}
+
+async function againIfConfirmed(error, retry) {
+  if (error?.status !== 409 || error?.code !== CONFIRM_NEEDED || !confirmer) throw error;
+  if (!(await confirmer(error.message))) throw error;
+  return retry();
+}
+
 export async function saveSetting(key, value) {
-  const stored = await send(`/api/settings/${encodeURIComponent(key)}`, 'PUT', { value });
+  const path = `/api/settings/${encodeURIComponent(key)}`;
+  const stored = await send(path, 'PUT', { value })
+    .catch((error) => againIfConfirmed(error, () => send(path, 'PUT', { value, confirm: true })));
   settingsCache = null;
   return stored;
 }
 
 export async function clearSetting(key) {
-  const stored = await api(`/api/settings/${encodeURIComponent(key)}`, { method: 'DELETE' });
+  const path = `/api/settings/${encodeURIComponent(key)}`;
+  const stored = await api(path, { method: 'DELETE' })
+    .catch((error) => againIfConfirmed(error, () => api(`${path}?confirm=true`, { method: 'DELETE' })));
   settingsCache = null;
   return stored;
 }

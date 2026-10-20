@@ -437,7 +437,8 @@ export function slotMoves(entry, person, { archived = false } = {}) {
   const moves = held ? ['baf_rule'] : ['link'];
   if (!found.member && found.looks_like) moves.push('link_near');
   if (found.member && found.matched_by === 'pairing' && found.pairing_id) moves.push('unlink', 'twitch');
-  if (found.login) moves.push(found.spotlight_id ? 'unspotlight' : (found.channel_id ? 'on_golive' : 'spotlight'));
+  const channelMove = found.spotlight_id ? 'unspotlight' : (found.channel_id ? 'on_golive' : 'spotlight');
+  if (found.login && !(channelMove === 'spotlight' && found.announce_optout)) moves.push(channelMove);
   if (found.user_id && found.opted_out !== null && found.opted_out !== undefined) moves.push(found.opted_out ? 'opt_in' : 'opt_out');
   if (found.user_id && found.mention) moves.push('mention');
   if (!held && found.baf_rule) moves.push('baf_rule');

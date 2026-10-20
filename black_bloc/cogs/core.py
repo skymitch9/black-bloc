@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import logging
 from functools import partial
-from typing import Any
+from typing import Any, NamedTuple
 
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from .. import __version__, guides, selftest
+from .. import __version__, chat_consent, guides, selftest
 from .. import settings_panel as sp
 from ..actionlog import log_action, send_logs
+from ..chat_memory import CONSENT_KEY
+from ..chat_memory import OPTOUT as CONSENT_DEFAULT
 from ..command_errors import AnswersErrors
 from ..command_visibility import STAFF_ONLY, hidden_names
 from ..logkinds import CORE, SELFTEST, VIA_BOOT, VIA_DISCORD, VIA_WEBSITE, kind_via
@@ -29,6 +31,7 @@ from ..panels import (
     still_staff,
 )
 from ..settings_store import (
+    CHAT_MEMORY_CONSENT_CONFIRM_BUTTON_KEY,
     GUILD_ONLY,
     KEY_CHOICES,
     KEY_HELP,
@@ -39,6 +42,7 @@ from ..settings_store import (
     SITE_ONLY_SAID,
     TEXT_MAY_BE_BLANK,
     SettingError,
+    coerce_value,
     display_value,
     is_staff_command,
     namespace_of,
@@ -97,47 +101,76 @@ def leads_only(
     return None
 
 
+async def unconfirmed(bot: Any, guild: Any, key: str, value: Any, confirmed: bool) -> Any:
+    """A consent-model change answers with how many people it moves before it is made."""
+    if confirmed or key != CONSENT_KEY:
+        return None
+    try:
+        wanted = coerce_value(key, value)
+    except SettingError:
+        return None
+    asked = await chat_consent.asked(bot, guild, wanted)
+    return refusal(asked, chat_consent.CONFIRM_CODE, 409) if asked else None
+
+
 async def set_key(
-    bot: Any, guild: Any, key: str, value: Any, actor: Any, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    key: str,
+    value: Any,
+    actor: Any,
+    *,
+    via: str = VIA_DISCORD,
+    confirmed: bool = False,
 ) -> Outcome:
     """One write and one `settings.set` row, whatever control on the panel made the change."""
     refused = leads_only(bot, guild, key, actor, via)
     if refused is not None:
         return refused
+    held = await unconfirmed(bot, guild, key, value, confirmed)
+    if held is not None:
+        return held
+    was = bot.store.get(guild.id, key) if key == CONSENT_KEY else None
     try:
         stored = await bot.store.set(guild.id, key, value, by=actor_id(actor))
     except SettingError as exc:
         return refusal(str(exc), BAD_VALUE, 400)
-    await log_action(
-        bot,
-        guild,
-        kind_via("settings.set", via),
-        actor=actor,
-        details={"key": key, "value": stored, "via": via},
-    )
+    details = {"key": key, "value": stored, "via": via}
+    if key == CONSENT_KEY:
+        details["flip"] = await chat_consent.flipped(bot, guild, was, stored, actor)
+    await log_action(bot, guild, kind_via("settings.set", via), actor=actor, details=details)
     return Outcome(True, SAVED.format(key=key, value=display_value(key, stored)), value=stored)
 
 
 async def clear_key(
-    bot: Any, guild: Any, key: str, actor: Any, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    key: str,
+    actor: Any,
+    *,
+    via: str = VIA_DISCORD,
+    confirmed: bool = False,
 ) -> Outcome:
     """One delete and one `settings.clear` row; `value` is whether a row was actually there."""
     refused = leads_only(bot, guild, key, actor, via)
     if refused is not None:
         return refused
+    held = await unconfirmed(bot, guild, key, CONSENT_DEFAULT, confirmed)
+    if held is not None:
+        return held
+    was = bot.store.get(guild.id, key) if key == CONSENT_KEY else None
     try:
         cleared = await bot.store.clear(guild.id, key, by=actor_id(actor))
     except SettingError as exc:
         return refusal(str(exc), BAD_VALUE, 400)
     if not cleared:
         return refusal(NOT_SET.format(key=key), NOTHING_STORED, 409)
-    await log_action(
-        bot,
-        guild,
-        kind_via("settings.clear", via),
-        actor=actor,
-        details={"key": key, "via": via},
-    )
+    details: dict[str, Any] = {"key": key, "via": via}
+    if key == CONSENT_KEY:
+        details["flip"] = await chat_consent.flipped(
+            bot, guild, was, bot.store.get(guild.id, key), actor
+        )
+    await log_action(bot, guild, kind_via("settings.clear", via), actor=actor, details=details)
     return Outcome(True, CLEARED.format(key=key), value=True)
 
 
@@ -748,7 +781,7 @@ def build_group(bot: Any, guild: Any, group: str, needle: str = "") -> tuple[Any
 
 
 def build_key(
-    bot: Any, guild: Any, key: str, *, confirming: bool = False
+    bot: Any, guild: Any, key: str, *, confirming: bool = False, asking: Any = None
 ) -> tuple[discord.Embed, SettingsPanel]:
     store = bot.store
     group = namespace_of(key)
@@ -758,9 +791,17 @@ def build_key(
         lines.append(sp.default_sentence(store, guild.id, key))
     if confirming:
         lines = [sp.CONFIRM_TITLE, *sp.confirm_lines(store, guild.id, key)] + lines
+    if asking is not None:
+        lines = [sp.CONFIRM_TITLE, asking.said, *lines]
     view = SettingsPanel(minutes_for(bot, guild.id), back=partial(render_group, group=group))
     value = store.get(guild.id, key)
+    if asking is not None:
+        label = str(store.get(guild.id, CHAT_MEMORY_CONSENT_CONFIRM_BUTTON_KEY))
+        view.add_item(ConfirmValueButton(label, key, asking))
+        view.add_item(MoveButton(sp.CANCEL_MOVE, key=key, group=group))
     for move in sp.key_card_buttons(store, guild.id, key, stored=stored, confirming=confirming):
+        if asking is not None:
+            break
         view.add_item(editor_control(move, key, value) or MoveButton(move, key=key, group=group))
     view.rerender = partial(render_key, key=key)
     return (
@@ -854,12 +895,32 @@ async def render_key(
     *,
     key: str = "",
     confirming: bool = False,
+    asking: Any = None,
 ) -> None:
     await show(
         interaction,
-        build_key(interaction.client, interaction.guild, key, confirming=confirming),
+        build_key(
+            interaction.client, interaction.guild, key, confirming=confirming, asking=asking
+        ),
         previous,
     )
+
+
+class Asking(NamedTuple):
+    """A change held for a second press: the value, or a reset, and the count sentence."""
+
+    value: Any
+    said: str
+    clear: bool = False
+
+
+async def asked_first(
+    interaction: discord.Interaction, view: Any, key: str, outcome: Any, asking: Asking
+) -> bool:
+    if outcome.ok or outcome.code != chat_consent.CONFIRM_CODE:
+        return False
+    await render_key(interaction, view, key=key, asking=asking._replace(said=outcome.message))
+    return True
 
 
 # --- the moves ------------------------------------------------------------------------------------
@@ -904,6 +965,8 @@ async def run_set(
     if not await opened(interaction):
         return
     outcome = await set_key(interaction.client, interaction.guild, key, value, interaction.user)
+    if await asked_first(interaction, view, key, outcome, Asking(value, "")):
+        return
     if not outcome.ok:
         await answer(interaction, outcome.message)
         return
@@ -969,6 +1032,8 @@ async def run_clear(interaction: discord.Interaction, view: Any, key: str) -> No
     if not await opened(interaction):
         return
     outcome = await clear_key(interaction.client, interaction.guild, key, interaction.user)
+    if await asked_first(interaction, view, key, outcome, Asking(None, "", clear=True)):
+        return
     if not outcome.ok:
         await answer(interaction, outcome.message)
         return
@@ -986,6 +1051,8 @@ async def run_typed(interaction: discord.Interaction, view: Any, key: str, raw: 
         await answer(interaction, str(exc))
         return
     outcome = await set_key(interaction.client, interaction.guild, key, value, interaction.user)
+    if await asked_first(interaction, view, key, outcome, Asking(value, "")):
+        return
     if not outcome.ok:
         await answer(interaction, outcome.message)
         return
@@ -1176,6 +1243,28 @@ class MoveButton(discord.ui.Button):
         key = MODAL_KEYS.get(action, self.key)
         current = interaction.client.store.get(interaction.guild.id, key)
         await open_modal(interaction, KeyModal(key, sp.control_for(key), current, view))
+
+
+class ConfirmValueButton(discord.ui.Button):
+    def __init__(self, label: str, key: str, asking: Asking) -> None:
+        super().__init__(
+            label=(label or " ")[:BUTTON_LABEL_MAX], style=discord.ButtonStyle.danger, row=0
+        )
+        self.key = key
+        self.asking = asking
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        bot, guild, actor = interaction.client, interaction.guild, interaction.user
+        if self.asking.clear:
+            outcome = await clear_key(bot, guild, self.key, actor, confirmed=True)
+        else:
+            outcome = await set_key(
+                bot, guild, self.key, self.asking.value, actor, confirmed=True
+            )
+        await render_key(interaction, self.view, key=self.key)
+        await answer(interaction, outcome.message)
 
 
 class SiteButton(discord.ui.Button):

@@ -7098,6 +7098,12 @@ MARATHON_BAF_OVERRIDE_BUTTON_KEY = "marathon_baf_override_button"
 MARATHON_BAF_OVERRIDE_CLEAR_BUTTON_KEY = "marathon_baf_override_clear_button"
 MARATHON_BAF_OVERRIDE_SET_SAID_KEY = "marathon_baf_override_set_said"
 MARATHON_BAF_OVERRIDE_CLEARED_SAID_KEY = "marathon_baf_override_cleared_said"
+MARATHON_BAF_OVERRIDE_REASON_TITLE_KEY = "marathon_baf_override_reason_title"
+MARATHON_BAF_OVERRIDE_REASON_LABEL_KEY = "marathon_baf_override_reason_label"
+MARATHON_BAF_OVERRIDE_NO_REASON_KEY = "marathon_baf_override_no_reason_word"
+MARATHON_BAF_OVERRIDE_NEEDS_REASON_KEY = "marathon_baf_override_needs_reason_said"
+MARATHON_OVERRIDE_CLEARED_BY_OPTOUT_KEY = "marathon_override_cleared_by_optout_said"
+MARATHON_ANNOUNCE_WHY_OPTOUT_KEY = "marathon_announce_why_optout"
 SITE_ONLY_KEYS = frozenset({MARATHON_OPTOUT_ROLE_IDS_KEY})
 SITE_ONLY_SAID = (
     "**{key}** is changed on the Black Bloc website only, so nothing was changed. Open the "
@@ -8011,6 +8017,35 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("name",),
         "what staff are told on the site once the override on someone is undone. It takes {name}",
     ),
+    MARATHON_BAF_OVERRIDE_REASON_TITLE_KEY: (
+        "Why count them as BaF?",
+        (),
+        "the title of the box that asks staff why someone is counted as BaF anyway",
+    ),
+    MARATHON_BAF_OVERRIDE_REASON_LABEL_KEY: (
+        "Reason",
+        (),
+        "the label of the reason field in that box",
+    ),
+    MARATHON_BAF_OVERRIDE_NO_REASON_KEY: (
+        "no reason given",
+        (),
+        "what the Members page's Counted in list shows for an override saved before reasons "
+        "were asked for",
+    ),
+    MARATHON_BAF_OVERRIDE_NEEDS_REASON_KEY: (
+        "Say why **{name}** counts as BaF anyway, so nothing was changed.",
+        ("name",),
+        "what staff are told when they count someone as BaF anyway without a reason. It takes "
+        "{name}",
+    ),
+    MARATHON_OVERRIDE_CLEARED_BY_OPTOUT_KEY: (
+        "**{name}** put on {role}, so staff no longer count them as BaF. Count them in again "
+        "on the Members page if that was wrong.",
+        ("name", "role"),
+        "the log channel's notice when someone staff counted as BaF anyway puts on a role of "
+        "marathon_optout_role_ids themselves, which clears the override. It takes {name} {role}",
+    ),
     MARATHON_SPOTLIGHT_HOST_NOTE_KEY: (
         "{name} hosting {marathon}",
         ("name", "marathon"),
@@ -8655,6 +8690,11 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "opted out of every run on this marathon",
         (),
         "{why} of that line while the person is opted out of the whole marathon",
+    ),
+    MARATHON_ANNOUNCE_WHY_OPTOUT_KEY: (
+        "asked not to be announced anywhere",
+        (),
+        "{why} of that line while the person stopped every announcement of theirs on /golive",
     ),
     MARATHON_ANNOUNCE_WHY_OFF_KEY: (
         "runner announcements are off for this marathon",
@@ -9906,6 +9946,52 @@ GOLIVE_REPLAY_DEFAULTS: dict[str, Any] = {
 }
 
 
+# One opt-out (one-optout, 2026-10-20): the words the one per-person opt-out table brings.
+GOLIVE_IGNORED_ROLE_WORD_KEY = "golive_ignored_role_word"
+GOLIVE_SPOTLIGHT_OPTED_OUT_KEY = "golive_spotlight_opted_out_said"
+CHAT_MEMORY_CONSENT_CONFIRM_OUT_KEY = "chat_memory_consent_confirm_out_said"
+CHAT_MEMORY_CONSENT_CONFIRM_IN_KEY = "chat_memory_consent_confirm_in_said"
+CHAT_MEMORY_CONSENT_CONFIRM_BUTTON_KEY = "chat_memory_consent_confirm_button"
+OPTOUT_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    GOLIVE_IGNORED_ROLE_WORD_KEY: (
+        "ignored by role ({role})",
+        ("role",),
+        "what the Members page's Opted out list says about someone wearing golive_ignore_role_id, "
+        "whose streams go-live never announces. It takes {role}",
+    ),
+    GOLIVE_SPOTLIGHT_OPTED_OUT_KEY: (
+        " **{name}** asked not to be announced, so nothing of this channel's is posted until "
+        "they opt back in on /golive.",
+        ("name",),
+        "added to what staff are told when they spotlight a channel whose member stopped every "
+        "announcement of theirs. It takes {name}",
+    ),
+    CHAT_MEMORY_CONSENT_CONFIRM_OUT_KEY: (
+        "**{count}** members would stop being remembered. Press again to change it.",
+        ("count",),
+        "what staff are asked before chat_memory_consent changes to optin. It takes {count}",
+    ),
+    CHAT_MEMORY_CONSENT_CONFIRM_IN_KEY: (
+        "**{count}** members would start being remembered. Press again to change it.",
+        ("count",),
+        "what staff are asked before chat_memory_consent changes to optout. It takes {count}",
+    ),
+    CHAT_MEMORY_CONSENT_CONFIRM_BUTTON_KEY: (
+        "Yes, change it",
+        (),
+        "the /settings button that confirms a change to chat_memory_consent",
+    ),
+}
+OPTOUT_DEFAULTS: dict[str, Any] = {
+    key: default for key, (default, _, _) in OPTOUT_WORDS.items()
+}
+KEY_TYPES.update({key: "text" for key in OPTOUT_WORDS})
+KEY_HELP.update({key: said for key, (_, _, said) in OPTOUT_WORDS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in OPTOUT_WORDS.items()}
+)
+
+
 # Blocks live (blocks-live, 2026-09-28) — who's live now, upcoming events and link buttons. Every
 # word the three blocks post is one of these. Filed under posts, except the upcoming words
 # (events, by prefix): the Go-live page's drawers are pinned by golive-join.test.mjs.
@@ -10788,6 +10874,8 @@ class SettingsStore:
             return MARATHON_DEFAULTS[key]
         if key in GOLIVE_REPLAY_DEFAULTS:
             return GOLIVE_REPLAY_DEFAULTS[key]
+        if key in OPTOUT_DEFAULTS:
+            return OPTOUT_DEFAULTS[key]
         if key in TEMPVOICE_BLOCK_DEFAULTS:
             return TEMPVOICE_BLOCK_DEFAULTS[key]
         if key in BUTTON_BLOCK_DEFAULTS:

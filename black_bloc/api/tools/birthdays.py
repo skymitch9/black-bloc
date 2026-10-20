@@ -139,7 +139,7 @@ def build_router(bot: Any) -> APIRouter:
         if not any(int(row["user_id"]) == wanted for row in rows):
             raise Refused(404, "no_birthday", NO_BIRTHDAY.format(user_id=wanted))
         opted = payload.get("opted_in", True) is not False
-        await set_opted_in(bot.db, wanted, opted)
+        await set_opted_in(bot.db, wanted, opted, by=int(who["id"]))
         await note(
             bot, guild, "web.birthday.optin", who, target=wanted, details={"opted_in": opted}
         )

@@ -12,7 +12,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from ... import block_look as look
-from ... import pings
+from ... import optouts, pings
 from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors
 from ...golive import (
@@ -216,6 +216,7 @@ ANNOUNCED = "announced"
 OPEN_SESSION = "open_session"
 MODE_OFF = "mode_off"
 OPTED_OUT_SKIP = "opted_out"
+OPT_BACK_IN = "golive_opt_back_in"
 ROLE_FILTER = "role_filter"
 COOLDOWN = "cooldown"
 NO_SESSION = "no_session"
@@ -292,29 +293,6 @@ async def remove_link(db: Any, user_id: int) -> bool:
     cur = await db.conn.execute("DELETE FROM golive_links WHERE user_id = ?", (user_id,))
     await db.conn.commit()
     return cur.rowcount > 0
-
-
-async def set_optout(db: Any, user_id: int) -> None:
-    await db.conn.execute(
-        "INSERT OR REPLACE INTO golive_optout(user_id, at) VALUES (?, ?)", (user_id, now_iso())
-    )
-    await db.conn.commit()
-
-
-async def clear_optout(db: Any, user_id: int) -> bool:
-    cur = await db.conn.execute("DELETE FROM golive_optout WHERE user_id = ?", (user_id,))
-    await db.conn.commit()
-    return cur.rowcount > 0
-
-
-async def all_optouts(db: Any) -> list[Any]:
-    cur = await db.conn.execute("SELECT * FROM golive_optout ORDER BY at DESC")
-    return list(await cur.fetchall())
-
-
-async def is_opted_out(db: Any, user_id: int) -> bool:
-    cur = await db.conn.execute("SELECT 1 FROM golive_optout WHERE user_id = ?", (user_id,))
-    return await cur.fetchone() is not None
 
 
 async def start_session(
@@ -462,7 +440,7 @@ async def counts(db: Any, guild_id: int) -> dict[str, int]:
 
     return {
         "links": await scalar("SELECT COUNT(*) AS n FROM golive_links"),
-        "optouts": await scalar("SELECT COUNT(*) AS n FROM golive_optout"),
+        "optouts": await optouts.count(db, guild_id, optouts.ANNOUNCE),
         "open_sessions": await scalar(
             "SELECT COUNT(*) AS n FROM golive_sessions WHERE guild_id = ? AND ended_at IS NULL",
             (guild_id,),
@@ -648,7 +626,7 @@ async def link_from_history(
             found["left"].append(str(user_id))
             continue
         name = display_name_of(guild, user_id)
-        if await is_opted_out(bot.db, user_id):
+        if await optouts.is_out(bot.db, guild.id, user_id, optouts.ANNOUNCE):
             found["opted_out"].append(name)
             continue
         for url in urls.values():
@@ -709,7 +687,7 @@ async def opt_out(
 ) -> tuple[str, str | None]:
     """(the fan-role sentence, what an OPEN announcement had done to it)."""
     user_id = target_id(target)
-    await set_optout(bot.db, user_id)
+    await optouts.set_out(bot.db, guild.id, user_id, optouts.ANNOUNCE, by=target_id(actor))
     extra = await fan_role_after_leaving(bot, guild, target, by=target_id(actor))
     await log_action(
         bot,
@@ -734,17 +712,23 @@ async def settle_open_session(bot: Any, guild: Any, user_id: int) -> str | None:
 async def opt_in(
     bot: Any, guild: Any, actor: Any, target: Any, *, via: str = VIA_DISCORD
 ) -> bool:
-    cleared = await clear_optout(bot.db, target_id(target))
-    if cleared:
-        await log_action(
-            bot,
-            guild,
-            kind_via("golive.optin", via),
-            actor=actor,
-            target=target,
-            details={"via": via},
+    cleared = await optouts.clear_out(bot.db, guild.id, target_id(target), optouts.ANNOUNCE)
+    if not cleared:
+        return False
+    if target_id(actor) != target_id(target):
+        await optouts.overridden(
+            bot, guild, actor, target, kind=optouts.ANNOUNCE, move=OPT_BACK_IN, via=via
         )
-    return cleared
+        return True
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.optin", via),
+        actor=actor,
+        target=target,
+        details={"via": via},
+    )
+    return True
 
 
 async def set_mode(
@@ -1375,7 +1359,7 @@ class GoLive(commands.Cog):
         if mode == "off" or member.bot or not self.bot.db.is_connected:
             return MODE_OFF
         await self._note_streaming(member, info)
-        if await is_opted_out(self.bot.db, member.id):
+        if await optouts.is_out(self.bot.db, guild.id, member.id, optouts.ANNOUNCE):
             return OPTED_OUT_SKIP
         store = self.bot.store
         if not passes_role_filters(
@@ -2030,7 +2014,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     staff = bool(store.is_staff(actor))
     row = await get_link(bot.db, actor.id)
     login = _row_value(row, "twitch_login")
-    opted_out = await is_opted_out(bot.db, actor.id)
+    opted_out = await optouts.is_out(bot.db, guild.id, actor.id, optouts.ANNOUNCE)
     note = test_mode_note(bot, guild)
     mode = store.get(guild.id, "golive_mode")
     lines = card_lines(
@@ -2245,7 +2229,7 @@ async def build_streamers(
     if rows:
         view.add_item(StreamerPick(guild, rows[:SELECT_CAP], len(rows), chosen))
     if chosen is not None:
-        away = await is_opted_out(bot.db, chosen["user_id"])
+        away = await optouts.is_out(bot.db, guild.id, chosen["user_id"], optouts.ANNOUNCE)
         lines += streamer_lines(guild, chosen, away)
         view.add_item(TheirMoveButton("unlink", chosen["user_id"]))
         view.add_item(TheirMoveButton("optin" if away else "optout", chosen["user_id"]))

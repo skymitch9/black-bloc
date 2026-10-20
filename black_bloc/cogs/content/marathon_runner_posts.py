@@ -7,9 +7,11 @@ from typing import Any
 import discord
 
 from ... import marathon as mt
+from ... import marathon_announce as ma
 from ... import marathon_inbox as mi
 from ... import marathon_public as mp
 from ... import marathon_runner_posts as mrp
+from ... import optouts
 from ...actionlog import log_action
 from ...settings_store import (
     MARATHON_RUNNER_POST_TEMPLATE_KEY,
@@ -68,7 +70,10 @@ async def sync_posts(cog: Any, guild: Any, marathon: Any) -> None:
 
     words = words_for(bot, guild.id)
     login = await channel_login(bot, marathon)
+    silent = optouts.silenced(bot.db, guild.id)
     for row in rows:
+        if not mrp.post_id(row) and ma.all_silent(row, silent):
+            continue
         text = mrp.post_text(
             row,
             marathon,

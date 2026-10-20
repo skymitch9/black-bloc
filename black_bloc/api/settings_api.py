@@ -198,7 +198,15 @@ def build_router(bot: Any) -> APIRouter:
         wanted = from_json(key, payload["value"])
         guarded = gated_writers().get(key)
         if guarded is None:
-            outcome = await set_key(bot, guild, key, wanted, actor, via=VIA_WEBSITE)
+            outcome = await set_key(
+                bot,
+                guild,
+                key,
+                wanted,
+                actor,
+                via=VIA_WEBSITE,
+                confirmed=payload.get("confirm") is True,
+            )
         else:
             try:
                 wanted = coerce_value(key, wanted)
@@ -210,13 +218,15 @@ def build_router(bot: Any) -> APIRouter:
         return key_row(bot.store, guild.id, key)
 
     @router.delete("/{key}")
-    async def settings_clear(request: Request, key: str) -> dict[str, Any]:
+    async def settings_clear(request: Request, key: str, confirm: bool = False) -> dict[str, Any]:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
         if key not in KEY_TYPES:
             raise Refused(400, "unknown_setting", UNKNOWN_KEY.format(key=key))
-        outcome = await clear_key(bot, guild, key, actor_for(bot, who, guild), via=VIA_WEBSITE)
+        outcome = await clear_key(
+            bot, guild, key, actor_for(bot, who, guild), via=VIA_WEBSITE, confirmed=confirm
+        )
         if not outcome.ok and outcome.code != NOTHING_STORED:
             raise Refused(outcome.status or 400, outcome.code or "bad_value", outcome.message)
         return key_row(bot.store, guild.id, key) | {"cleared": bool(outcome.ok)}

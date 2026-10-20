@@ -1157,7 +1157,13 @@ async def test_count_as_baf_anyway_puts_the_same_highlight_back_and_undoing_it_t
 ):
     marathon, post = await role_out(bot, cog)
 
-    said = await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True, via="website")
+    bare = await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True, via="website")
+    assert not bare.ok and bare.status == 422 and bare.code == "reason_needed"
+    assert bare.message == "Say why **Sky** counts as BaF anyway, so nothing was changed."
+
+    said = await announce.set_baf_override(
+        bot, bot.guild, FakeActor(), SKY, True, reason="runs with us", via="website"
+    )
 
     assert said.ok and said.message == "**Sky** counts as BaF on every marathon."
     row, sky = await sky_on(bot, marathon)
@@ -1167,6 +1173,7 @@ async def test_count_as_baf_anyway_puts_the_same_highlight_back_and_undoing_it_t
     assert (await details_of(bot.db, "web.marathon.role_opted_in"))["members"] == [SKY]
 
     again = await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True, via="website")
+    assert (await announce.baf_overrides(bot.db))[SKY]["reason"] == "runs with us"
     assert again.ok and (await kinds(bot.db)).count("web.marathon.baf_override_set") == 1
 
     back = await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, False, via="website")
@@ -1182,7 +1189,7 @@ async def test_an_override_needs_a_member_and_a_hand_opt_out_still_applies_on_to
     assert not stranger.ok and stranger.status == 404 and stranger.code == "not_a_member"
     assert "4242" in stranger.message
 
-    await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True)
+    await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True, reason="r")
     out = await announce.set_opt_out(bot, bot.guild, FakeActor(), marathon, [SKY], True)
 
     assert out.ok and mt.is_ours((await sky_on(bot, marathon))[0])

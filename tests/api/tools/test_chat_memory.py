@@ -2,12 +2,16 @@ import json
 
 import pytest
 
-from black_bloc.chat_memory import Note, Profile, profile_for, save_profile, set_override
+from black_bloc.chat_memory import Note, Profile, profile_for, save_profile, set_remembered
 
 LEAD = 7
 ASKER = 21
 STRANGER = 22
 AT = "2026-09-02T00:00:00+00:00"
+
+
+async def set_override(db, user_id, guild_id):
+    await set_remembered(db, user_id, guild_id, consent="optout", wanted=False)
 
 
 @pytest.fixture

@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from black_bloc import optouts
 from black_bloc import rolegrants as grants
 from black_bloc.api.tools.members import PER_PAGE, PER_PAGE_MAX
 from black_bloc.modcases import add_case
@@ -276,21 +277,15 @@ async def test_the_opted_out_list_is_one_row_a_person_with_a_chip_a_source(
     client, sign_in, web, wf, roster
 ):
     sign_in(client)
-    await web.db.conn.execute(
-        "INSERT INTO golive_optout(user_id, at) VALUES (?, ?)", (21, "2026-10-18T00:00:00+00:00")
-    )
-    await web.db.conn.execute(
-        "INSERT INTO chat_memory_optout(user_id, guild_id, at) VALUES (?, ?, ?)",
-        (21, wf.GUILD_ID, "2026-10-18T00:00:00+00:00"),
-    )
-    await web.db.conn.commit()
+    for kind in (optouts.ANNOUNCE, optouts.CHAT_MEMORY):
+        await optouts.set_out(web.db, wf.GUILD_ID, 21, kind)
 
     found = client.get(OPTOUTS)
 
     assert found.status_code == 200, found.text
     body = found.json()
-    assert set(body) == {"people", "channels", "sources"}
+    assert set(body) == {"people", "counted_in", "channels", "sources"}
     (ada,) = body["people"]
     assert (ada["user_id"], ada["name"], ada["username"], ada["here"]) == ("21", "Ada", "ada", True)
-    assert [one["source"] for one in ada["chips"]] == ["golive", "chat_memory"]
-    assert body["channels"] == []
+    assert [one["source"] for one in ada["chips"]] == ["announce", "chat_memory"]
+    assert body["channels"] == [] and body["counted_in"] == []

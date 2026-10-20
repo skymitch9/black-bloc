@@ -144,7 +144,19 @@ async def write_match(
     except sqlite3.IntegrityError as exc:
         await db.conn.rollback()
         raise RunnerTaken(await holder_of(db, guild_id, runner.id) or 0) from exc
-    return await match(db, guild_id, user_id)
+    return await settled(db, guild_id, user_id)
+
+
+async def settled(db: Any, guild_id: int, user_id: int) -> Any:
+    """The row after a state write; an opt-out is copied to the one opt-out table, and back."""
+    from . import optouts
+
+    row = await match(db, guild_id, user_id)
+    if row is not None and row["state"] == OPTED_OUT:
+        await optouts.set_out(db, guild_id, user_id, optouts.PBS, by=row["set_by"])
+    else:
+        await optouts.clear_out(db, guild_id, user_id, optouts.PBS)
+    return row
 
 
 async def write_state(
@@ -195,7 +207,7 @@ async def write_state(
         ),
     )
     await db.conn.commit()
-    return await match(db, guild_id, user_id)
+    return await settled(db, guild_id, user_id)
 
 
 async def runner_gone(
@@ -211,7 +223,7 @@ async def runner_gone(
         (NONE, AUTO, reason, at, at, guild_id, user_id),
     )
     await db.conn.commit()
-    return await match(db, guild_id, user_id)
+    return await settled(db, guild_id, user_id)
 
 
 async def restore(
@@ -239,7 +251,7 @@ async def restore(
         (state, state_by, set_by, state, stamp(), 1 if ends_opt_out else 0, guild_id, user_id),
     )
     await db.conn.commit()
-    return await match(db, guild_id, user_id)
+    return await settled(db, guild_id, user_id)
 
 
 async def baseline(db: Any, guild_id: int, user_id: int) -> dict[str, Any]:

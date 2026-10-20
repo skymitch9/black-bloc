@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import discord
 import pytest
 
-from black_bloc import logs_panel
+from black_bloc import logs_panel, optouts
 from black_bloc.birthdays import (
     DEFAULT_COLOR_VALUE,
     PANEL_TIMEOUT_FOOTER,
@@ -25,6 +25,7 @@ from black_bloc.cogs.community.birthdays import (
     members_of,
     post_today,
     save_birthday,
+    set_opted_in,
     stored_counts,
 )
 from black_bloc.config import load_settings
@@ -470,13 +471,25 @@ async def test_the_sweep_touches_nothing_while_off_or_while_the_server_is_unavai
 async def test_an_opted_out_row_is_left_alone(bot, cog, birthday_person):
     await bot.store.set(GUILD, "birthday_mode", "on")
     await stored(bot)
-    await bot.db.conn.execute("UPDATE birthdays SET opted_in = 0")
-    await bot.db.conn.commit()
+    await set_opted_in(bot.db, USER, False)
 
     await cog.run_once(MORNING)
 
     assert party_posts(bot) == []
     assert await action_kinds(bot.db) == []
+
+
+async def test_the_birthday_sweep_reads_the_one_opt_out_table_not_the_old_column(
+    bot, cog, birthday_person
+):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot)
+    await optouts.set_out(bot.db, GUILD, USER, optouts.BIRTHDAY)
+
+    await cog.run_once(MORNING)
+
+    assert party_posts(bot) == []
+    assert (await get_birthday(bot.db, USER))["opted_in"] == 1
 
 
 async def test_a_post_that_fails_is_named_a_failure_and_tried_again(bot, cog, birthday_person):

@@ -14,6 +14,7 @@ from ... import marathon_overlay as mo
 from ... import marathon_people as mt_people
 from ... import marathon_signals as sig
 from ... import marathon_thread_controls as mtc
+from ... import optouts
 from ...cogs.content.marathon import (
     add_next,
     baf_overrides,
@@ -262,6 +263,7 @@ def entry_row(
     words: dict[str, str] | None = None,
     mention: Any = None,
     rule: Any = None,
+    silent: Any = frozenset(),
 ) -> dict[str, Any]:
     """One person on the People card: who they are here, how they matched, their Go-live row,
     and — for a BaF person — whether they are opted out of the marathon's public posts."""
@@ -298,6 +300,7 @@ def entry_row(
             {"username": near["username"], "user_id": _id(near["user_id"])} if near else None
         ),
         "opted_out": (int(user_id) in opted) if user_id and opted is not None else None,
+        "announce_optout": bool(user_id) and int(user_id) in silent,
         "mention": (
             mention(int(user_id), str(entry.get("name") or user_id))
             if user_id and mention is not None
@@ -604,6 +607,7 @@ def build_router(bot: Any) -> APIRouter:
         opted = ma.opted_out(marathon)
         words = words_for(bot, guild.id)
         overrides = await baf_overrides(bot.db)
+        silent = optouts.silenced(bot.db, guild.id)
 
         def mention(user_id: int, name: str) -> Any:
             return mention_state(bot, guild, marathon, user_id, name)
@@ -621,12 +625,19 @@ def build_router(bot: Any) -> APIRouter:
             "marathon_id": marathon["id"],
             "timezone": zone_of(bot, guild),
             "pairings": await people(guild, marathon),
-            "baf": [entry_row(guild, one, opted, words, mention, rule) for one in state["baf"]],
-            "others": [entry_row(guild, one, None, words, None, rule) for one in state["others"]],
+            "baf": [
+                entry_row(guild, one, opted, words, mention, rule, silent)
+                for one in state["baf"]
+            ],
+            "others": [
+                entry_row(guild, one, None, words, None, rule, silent) for one in state["others"]
+            ],
             "labels": stored_labels(bot, guild, PEOPLE_LABELS),
         }
 
-    async def override_move(request: Request, user_id: str, on: bool) -> dict[str, Any]:
+    async def override_move(
+        request: Request, user_id: str, on: bool, reason: Any = None
+    ) -> dict[str, Any]:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
@@ -634,7 +645,13 @@ def build_router(bot: Any) -> APIRouter:
         member_id = wanted_id(user_id)
         done = answered(
             await set_baf_override(
-                bot, guild, actor_for(bot, who, guild), member_id, on, via=VIA_WEBSITE
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                member_id,
+                on,
+                reason=reason,
+                via=VIA_WEBSITE,
             )
         )
         return {
@@ -644,8 +661,10 @@ def build_router(bot: Any) -> APIRouter:
         }
 
     @router.post("/baf-override/{user_id}")
-    async def marathon_baf_override(request: Request, user_id: str) -> dict[str, Any]:
-        return await override_move(request, user_id, True)
+    async def marathon_baf_override(
+        request: Request, user_id: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        return await override_move(request, user_id, True, (payload or {}).get("reason"))
 
     @router.delete("/baf-override/{user_id}")
     async def marathon_baf_override_clear(request: Request, user_id: str) -> dict[str, Any]:

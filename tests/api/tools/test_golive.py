@@ -4,12 +4,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from black_bloc import optouts
 from black_bloc.cogs.content.golive import (
     end_session,
     get_link,
-    is_opted_out,
     set_link,
-    set_optout,
 )
 from black_bloc.cogs.content.golive import (
     start_session as start_golive_session,
@@ -37,6 +36,15 @@ from black_bloc.settings_store import (
     SPOTLIGHT_WINDOW_OPEN_WORDS,
 )
 from black_bloc.spotlight import WINDOW_FROM_MARATHON, WINDOW_MARATHON, WINDOW_SOURCES
+
+
+async def set_optout(db, user_id, guild_id=4242):
+    await optouts.set_out(db, guild_id, user_id, optouts.ANNOUNCE)
+
+
+async def is_opted_out(db, user_id, guild_id=4242):
+    return await optouts.is_out(db, guild_id, user_id, optouts.ANNOUNCE)
+
 
 ROUTES = [
     ("GET", "/api/golive/links"),
@@ -260,9 +268,9 @@ async def test_opting_a_member_out_and_back_in_again(client, sign_in, web, guild
     assert await is_opted_out(web.db, 21) is False
 
     rows = await wf.web_rows_in(web.db)
-    assert [kind for kind, _ in rows] == ["web.golive.optout", "web.golive.optin"]
+    assert [kind for kind, _ in rows] == ["web.golive.optout", "web.optouts.overridden"]
     assert [found["via"] for _, found in rows] == [wf.VIA_WEBSITE, wf.VIA_WEBSITE]
-    assert await wf.kinds_in(web.db) == ["web.golive.optout", "web.golive.optin"]
+    assert await wf.kinds_in(web.db) == ["web.golive.optout", "web.optouts.overridden"]
 
 
 async def test_opting_a_live_member_out_ends_the_announcement_that_is_already_out(

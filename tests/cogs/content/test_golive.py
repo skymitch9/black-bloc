@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import discord
 import pytest
 
-from black_bloc import actionlog
+from black_bloc import actionlog, optouts
 from black_bloc.actionlog import log_action
 from black_bloc.cogs.content import golive as cog_module
 from black_bloc.cogs.content.golive import (
@@ -13,11 +13,9 @@ from black_bloc.cogs.content.golive import (
     PostResult,
     all_links,
     clean_login,
-    clear_optout,
     counts,
     end_session,
     get_link,
-    is_opted_out,
     latest_session,
     link_owner,
     open_session_for,
@@ -25,7 +23,6 @@ from black_bloc.cogs.content.golive import (
     remove_link,
     set_announced,
     set_link,
-    set_optout,
     start_session,
 )
 from black_bloc.cogs.content.youtube import get_link as youtube_get_link
@@ -46,6 +43,18 @@ from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream, TwitchUser
 from black_bloc.youtube import YouTubeError, channel_id_in
 
 GUILD = 7
+
+
+async def set_optout(db, user_id, guild_id=GUILD):
+    await optouts.set_out(db, guild_id, user_id, optouts.ANNOUNCE)
+
+
+async def clear_optout(db, user_id, guild_id=GUILD):
+    return await optouts.clear_out(db, guild_id, user_id, optouts.ANNOUNCE)
+
+
+async def is_opted_out(db, user_id, guild_id=GUILD):
+    return await optouts.is_out(db, guild_id, user_id, optouts.ANNOUNCE)
 YT_CHANNEL = "UCsXVk37bltHxD1rDPwtNM8Q"
 CHANNEL = 111
 LOG_CHANNEL = 222
@@ -2226,7 +2235,7 @@ async def test_staff_opt_somebody_else_out_and_back_in(cog, bot, member, db):
     back = await press(bot, member, out.view, "Opt them back in")
     assert await is_opted_out(db, other.id) is False
     assert "**Bo**'s streams can be announced again" in back.sent
-    assert await action_kinds(db) == ["golive.optout", "golive.optin"]
+    assert await action_kinds(db) == ["golive.optout", "optouts.overridden"]
 
 
 async def test_back_returns_to_the_root_panel(cog, bot, member, db):

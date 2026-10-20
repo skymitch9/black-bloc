@@ -8,7 +8,7 @@ from black_bloc import chat_review as review
 from black_bloc.chat import create_intent, lines_for, list_intents, named_intent, read_triggers
 from black_bloc.chat import seed_defaults as seed_chat
 from black_bloc.chat_llm import CLIENTS_ATTR
-from black_bloc.chat_memory import set_override
+from black_bloc.chat_memory import set_remembered
 from black_bloc.config import load_settings
 from black_bloc.knowledge import add_section, list_sections
 from black_bloc.llm import GROQ, IMPORTANT, SIMPLE, LLMError, Reply, Usage, record
@@ -83,6 +83,10 @@ class FakeBot:
 
     def get_guild(self, guild_id):
         return self.guild if int(guild_id) == self.guild.id else None
+
+
+async def set_override(db, user_id, guild_id):
+    await set_remembered(db, user_id, guild_id, consent="optout", wanted=False)
 
 
 @pytest.fixture

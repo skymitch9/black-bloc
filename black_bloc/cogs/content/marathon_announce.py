@@ -9,6 +9,7 @@ import discord
 
 from ... import marathon as mt
 from ... import marathon_announce as ma
+from ... import optouts
 from ...actionlog import log_action
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, VIA_WEBSITE, kind_via
@@ -34,11 +35,16 @@ from ...settings_store import (
     MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY,
     MARATHON_ANNOUNCE_WHY_MARATHON_KEY,
     MARATHON_ANNOUNCE_WHY_OFF_KEY,
+    MARATHON_ANNOUNCE_WHY_OPTOUT_KEY,
     MARATHON_ANNOUNCE_WHY_RUN_KEY,
     MARATHON_ANNOUNCEMENTS_DEFAULT_KEY,
     MARATHON_BAF_OVERRIDE_BUTTON_KEY,
     MARATHON_BAF_OVERRIDE_CLEAR_BUTTON_KEY,
     MARATHON_BAF_OVERRIDE_CLEARED_SAID_KEY,
+    MARATHON_BAF_OVERRIDE_NEEDS_REASON_KEY,
+    MARATHON_BAF_OVERRIDE_NO_REASON_KEY,
+    MARATHON_BAF_OVERRIDE_REASON_LABEL_KEY,
+    MARATHON_BAF_OVERRIDE_REASON_TITLE_KEY,
     MARATHON_BAF_OVERRIDE_SET_SAID_KEY,
     MARATHON_BAF_OVERRIDE_WORD_KEY,
     MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY,
@@ -46,6 +52,7 @@ from ...settings_store import (
     MARATHON_MENTION_PEOPLE_KEY,
     MARATHON_MENTION_PLAIN_SAID_KEY,
     MARATHON_NOT_BAF_ROLE_WORD_KEY,
+    MARATHON_OVERRIDE_CLEARED_BY_OPTOUT_KEY,
 )
 from .marathon import (
     NO_SUCH,
@@ -77,6 +84,7 @@ STATE_KEYS = {
     ma.WHY_DEFAULT: MARATHON_ANNOUNCE_WHY_DEFAULT_KEY,
     ma.WHY_RUN: MARATHON_ANNOUNCE_WHY_RUN_KEY,
     ma.WHY_MARATHON: MARATHON_ANNOUNCE_WHY_MARATHON_KEY,
+    ma.WHY_ANNOUNCE: MARATHON_ANNOUNCE_WHY_OPTOUT_KEY,
     ma.WHY_RUNNERS_OFF: MARATHON_ANNOUNCE_WHY_OFF_KEY,
     ma.WHY_HOSTS_OFF: MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY,
 }
@@ -95,6 +103,9 @@ OVERRIDE_SAID = {
 }
 NOT_A_MEMBER = "Nobody with the id **{given}** is in the server, so nothing was changed."
 NOT_A_MEMBER_CODE = "not_a_member"
+NEEDS_REASON_CODE = "reason_needed"
+REASON_MAX = 300
+CLEARED_BY_OPTOUT = "marathon.override_cleared_by_optout"
 
 
 def announces(bot: Any, guild_id: int, marathon: Any) -> bool:
@@ -112,6 +123,7 @@ def policy_of(bot: Any, guild_id: int, marathon: Any) -> ma.Policy:
         runners_default=bot.store.get(guild_id, MARATHON_ANNOUNCEMENTS_DEFAULT_KEY),
         hosts_default=bot.store.get(guild_id, MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY),
         mention_default=bot.store.get(guild_id, MARATHON_MENTION_PEOPLE_KEY),
+        silent=optouts.silenced(getattr(bot, "db", None), guild_id),
     )
 
 
@@ -541,8 +553,37 @@ async def member_roles_changed(bot: Any, before: Any, after: Any) -> None:
     if not wanted or bool(was) == bool(now):
         return
     if int(after.id) in await baf_overrides(bot.db):
-        return
+        if not now or not await clear_by_optout(bot, guild, after):
+            return
     await role_rematch(bot, guild, via=VIA_DISCORD)
+
+
+async def clear_by_optout(bot: Any, guild: Any, member: Any) -> bool:
+    """Latest act wins: the person put the opt-out role on after staff counted them in."""
+    cur = await bot.db.conn.execute(
+        "DELETE FROM marathon_baf_overrides WHERE user_id = ?", (int(member.id),)
+    )
+    await bot.db.conn.commit()
+    if not cur.rowcount:
+        return False
+    role = ma.held_role(member, ma.optout_roles(guild, bot.store))
+    name = display_name(guild, int(member.id), str(member.id))
+    await log_action(
+        bot,
+        guild,
+        "marathon.override_cleared_by_optout",
+        target=member,
+        reason=words(
+            bot,
+            guild.id,
+            MARATHON_OVERRIDE_CLEARED_BY_OPTOUT_KEY,
+            name=name,
+            role=getattr(role, "name", ""),
+        ),
+        details={"member": int(member.id), "role_id": getattr(role, "id", None)},
+        notify=True,
+    )
+    return True
 
 
 RULE_ROLE = "role"
@@ -568,6 +609,8 @@ def baf_rule(
             ),
             "move": MOVE_SET,
             "move_label": words(bot, guild.id, MARATHON_BAF_OVERRIDE_BUTTON_KEY),
+            "reason_title": words(bot, guild.id, MARATHON_BAF_OVERRIDE_REASON_TITLE_KEY),
+            "reason_label": words(bot, guild.id, MARATHON_BAF_OVERRIDE_REASON_LABEL_KEY),
         }
     if user_id and int(user_id) in {int(one) for one in overrides or ()}:
         return {
@@ -581,21 +624,39 @@ def baf_rule(
     return None
 
 
+def override_reason(bot: Any, guild: Any, row: Any) -> str:
+    reason = str(mt._cell(row, "reason") or "").strip()
+    return reason or words(bot, guild.id, MARATHON_BAF_OVERRIDE_NO_REASON_KEY)
+
+
 async def set_baf_override(
-    bot: Any, guild: Any, actor: Any, user_id: Any, on: bool, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    user_id: Any,
+    on: bool,
+    *,
+    reason: Any = None,
+    via: str = VIA_DISCORD,
 ) -> Outcome:
     """The one writer of who counts as BaF anyway, on every marathon; the marathons still ahead
-    are matched again at once."""
+    are matched again at once. Counting someone in needs a reason."""
     member_id = int(user_id)
     member = guild.get_member(member_id)
     if on and member is None:
         return refusal(NOT_A_MEMBER.format(given=member_id), NOT_A_MEMBER_CODE, 404)
+    why = str(reason or "").strip()[:REASON_MAX]
     was = member_id in await baf_overrides(bot.db)
+    if on and not was and not why:
+        name = display_name(guild, member_id, str(member_id))
+        said = words(bot, guild.id, MARATHON_BAF_OVERRIDE_NEEDS_REASON_KEY, name=name)
+        return refusal(said, NEEDS_REASON_CODE, 422)
     if was != bool(on):
         if on:
             await bot.db.conn.execute(
-                "INSERT OR REPLACE INTO marathon_baf_overrides(user_id, by, at) VALUES (?, ?, ?)",
-                (member_id, int(getattr(actor, "id", 0) or 0) or None, now_iso()),
+                "INSERT OR REPLACE INTO marathon_baf_overrides(user_id, by, at, reason) "
+                "VALUES (?, ?, ?, ?)",
+                (member_id, int(getattr(actor, "id", 0) or 0) or None, now_iso(), why),
             )
         else:
             await bot.db.conn.execute(
@@ -608,6 +669,7 @@ async def set_baf_override(
             kind_via("marathon.baf_override_set" if on else "marathon.baf_override_cleared", via),
             actor=actor,
             target=member_id,
+            reason=why if on else None,
             details={"member": member_id, "via": via},
         )
         await role_rematch(bot, guild, actor=actor, via=via)
@@ -639,6 +701,8 @@ __all__ = [
     "NOT_A_MEMBER",
     "NOT_A_MEMBER_CODE",
     "baf_rule",
+    "clear_by_optout",
+    "override_reason",
     "ours_and_held",
     "member_roles_changed",
     "role_rematch",

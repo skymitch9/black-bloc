@@ -169,7 +169,7 @@ async def apply(bot: Any) -> list[dict[str, Any]]:
             await log_action(
                 bot,
                 discord.Object(id=plan["guild_id"]),
-                MIGRATED_KIND,
+                "optouts.migrated",
                 details={"build": BUILD, "counts": plan["counts"], "notes": plan["notes"]},
             )
         except Exception as exc:

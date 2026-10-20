@@ -327,6 +327,7 @@ export const DRAWERS = [
       'golive_max_session_hours',
       'golive_channel_optout_post',
       'golive_member_optout_post',
+      'golive_ignored_role_word',
     ],
   },
   {
@@ -361,6 +362,7 @@ export const DRAWERS = [
       'spotlight_event_slack_hours',
       'golive_expiry_keeps_marathon_channels',
       'golive_channel_spotlight_default',
+      'golive_spotlight_opted_out_said',
     ],
   },
   {

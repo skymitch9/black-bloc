@@ -607,6 +607,7 @@
       "golive_end_template": "the announcement once the stream is over, and the only place that wording lives. {live} is the sentence exactly as it was posted, so {live} — stream ended appends and a wording without {live} rewrites the whole post; the other fields are {name} {game} {title} {url} {platform} {duration}. Blank keeps the posted sentence and adds nothing; wording that cannot be rendered falls back to the default",
       "golive_expiry_keeps_marathon_channels": "whether a spotlight whose date passes KEEPS its channel row when the row carries a marathon — a marathon feed, a marathon on the list, or a spotlight a marathon turned on. on by default: the row turns its spotlight off and is kept for ever, with its ping role and its feed; off deletes it with its role and feed like any other row. A row with no marathon on it is deleted either way",
       "golive_ignore_role_id": "anybody wearing this role is never announced, whatever else would have allowed it. Blank — the default — means nobody is held back this way",
+      "golive_ignored_role_word": "what the Members page's Opted out list says about someone wearing golive_ignore_role_id, whose streams go-live never announces. It takes {role}",
       "golive_live_author": "the small top line of the announcement card while the stream is still running. It takes {name} and {platform} only, because a stream that has not finished has no length yet; blank keeps 'is now live on'",
       "golive_live_role_id": "a role Black Bloc puts on somebody while they are streaming and takes off again when the stream ends. Blank — the default — means no role is handed out at all",
       "golive_log_level": "which go-live log lines reach the Discord log channel: off, important (anything that acted on a member, or failed) or all. Every line is kept on the dashboard and in `/golive` ▸ **Logs** either way",
@@ -630,6 +631,7 @@
       "golive_replay_treated_said": "what staff are told after Treat as live; {login} is the channel",
       "golive_replay_words": "the words that make a stream title read as a replay, separated by commas. Each is matched as a whole word in any case — [REPLAY], Replay:, (Rerun) all match, and a longer word that merely contains one does not. Blank leaves only Twitch's own rerun mark",
       "golive_require_role_id": "when this is set, only people wearing that role are ever announced. Blank — the default — announces anybody the bot sees streaming",
+      "golive_spotlight_opted_out_said": "added to what staff are told when they spotlight a channel whose member stopped every announcement of theirs. It takes {name}",
       "golive_template": "the sentence a go-live announcement is made of. It takes {name} {game} {title} {url} {platform}, and {platform} fills itself in as Twitch or YouTube so one wording serves both platforms",
       "golive_youtube": "also watch YouTube: true probes every linked YouTube channel and announces a live stream through go-live exactly like a Twitch stream, under golive_mode (off, test or on) and golive_channel_id; false probes nothing on YouTube. false by default",
       "pings_block_label": "what the ping me when they go live block's button says, at most 80 characters; the button opens the same /pings panel and its picker. Blank restores the shipped wording",
@@ -7039,13 +7041,15 @@
     {
       "method": "POST",
       "path": "/api/marathons/baf-override/{member_id}",
-      "body": {},
+      "body": {
+        "reason": "runs with us every year"
+      },
       "then": {
         "method": "DELETE",
         "path": "/api/marathons/baf-override/{member_id}"
       },
       "read_by": [
-        "marathons-section.js People card and page-members.js Opted out — Count as BaF anyway"
+        "marathons-section.js People card and page-members.js Opted out — Count as BaF anyway, with a reason"
       ],
       "shape": "object",
       "keys": [

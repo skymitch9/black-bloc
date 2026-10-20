@@ -8,6 +8,7 @@ from typing import Any
 
 from .actionlog import log_action
 from .logkinds import VIA_DISCORD, kind_via
+from .settings_store import OPTOUT_DEFAULTS
 
 log = logging.getLogger(__name__)
 
@@ -125,7 +126,9 @@ async def set_out(
     return bool(cur.rowcount)
 
 
-async def clear_out(db: Any, guild_id: Any, user_id: Any, kind: str, *, commit: bool = True) -> bool:
+async def clear_out(
+    db: Any, guild_id: Any, user_id: Any, kind: str, *, commit: bool = True
+) -> bool:
     cur = await db.conn.execute(
         "DELETE FROM person_optouts WHERE guild_id = ? AND user_id = ? AND kind = ?",
         (int(guild_id or 0), int(user_id or 0), _known(kind)),
@@ -159,6 +162,14 @@ def silenced(db: Any, guild_id: Any) -> frozenset[int]:
     return held.get(int(guild_id or 0), frozenset())
 
 
+def said(store: Any, guild_id: Any, key: str, **fields: Any) -> str:
+    """Checklist 17: words staff edited that will not fill fall back to the shipped ones."""
+    try:
+        return str(store.get(guild_id, key)).format_map(fields)
+    except Exception:
+        return str(OPTOUT_DEFAULTS[key]).format_map(fields)
+
+
 async def overridden(
     bot: Any,
     guild: Any,
@@ -174,7 +185,7 @@ async def overridden(
     await log_action(
         bot,
         guild,
-        kind_via(OVERRIDDEN, via),
+        kind_via("optouts.overridden", via),
         actor=actor,
         target=target,
         details={"kind": kind, "move": move, "reason": reason or None, "via": via},
@@ -201,6 +212,7 @@ __all__ = [
     "overridden",
     "row_of",
     "rows",
+    "said",
     "set_out",
     "silenced",
 ]

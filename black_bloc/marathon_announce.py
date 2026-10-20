@@ -74,11 +74,13 @@ WHY_MARATHON = "opted_out"
 WHY_RUN = "run"
 WHY_DEFAULT = "default"
 WHY_HOSTS_OFF = "hosts_off"
-WHYS = (WHY_RUNNERS_OFF, WHY_MARATHON, WHY_RUN, WHY_DEFAULT, WHY_HOSTS_OFF)
+WHY_ANNOUNCE = "announce_optout"
+WHYS = (WHY_RUNNERS_OFF, WHY_MARATHON, WHY_RUN, WHY_DEFAULT, WHY_HOSTS_OFF, WHY_ANNOUNCE)
 
 NAMED = "public_people"
 GONE = "not_on_run"
 BECAUSE = {
+    WHY_ANNOUNCE: "announce_optout",
     WHY_MARATHON: "opted_out",
     WHY_HOSTS_OFF: "hosts_off",
     WHY_RUN: "run_answer",
@@ -115,6 +117,7 @@ class Policy(NamedTuple):
     opted: frozenset[int] = frozenset()
     mentions: Any = None
     mention_default: bool = True
+    silent: frozenset[int] = frozenset()
 
     def plain(self, user_id: Any) -> bool:
         answer = (self.mentions or {}).get(int(user_id))
@@ -147,11 +150,19 @@ def announces_hosts(marathon: Any, default: Any) -> bool:
 
 
 def decide(
-    *, runners_on: bool, opted_out: bool, answer: Any, role: str, hosts_on: bool
+    *,
+    runners_on: bool,
+    opted_out: bool,
+    answer: Any,
+    role: str,
+    hosts_on: bool,
+    silent: bool = False,
 ) -> Verdict:
     """Whether one person is announced for one run: the run's own answer, then their
     marathon-wide opt-out, then the switch for their part as the default (Runner or Host
     announcements, neither over the other)."""
+    if silent:
+        return Verdict(False, WHY_ANNOUNCE)
     if answer == IN:
         return Verdict(True, WHY_RUN)
     if answer == OUT:
@@ -243,7 +254,12 @@ def dump_answers(found: dict[int, str]) -> str | None:
 
 
 def policy(
-    marathon: Any, *, runners_default: Any, hosts_default: Any, mention_default: Any
+    marathon: Any,
+    *,
+    runners_default: Any,
+    hosts_default: Any,
+    mention_default: Any,
+    silent: Any = frozenset(),
 ) -> Policy:
     return Policy(
         runners_on=announces(marathon, runners_default),
@@ -251,6 +267,7 @@ def policy(
         opted=frozenset(opted_out(marathon)),
         mentions=mentions(marathon),
         mention_default=bool(mention_default),
+        silent=frozenset(int(one) for one in silent or ()),
     )
 
 
@@ -291,6 +308,7 @@ def verdict(found: Policy, row: Any, user_id: Any, role: str) -> Verdict:
         answer=run_answers(row).get(int(user_id)),
         role=role,
         hosts_on=found.hosts_on,
+        silent=int(user_id) in found.silent,
     )
 
 
@@ -307,6 +325,7 @@ def host_verdict(found: Policy, row: Any, user_id: Any) -> Verdict:
         answer=None if runs_it(row, user_id) else run_answers(row).get(int(user_id)),
         role=HOST,
         hosts_on=found.hosts_on,
+        silent=int(user_id) in found.silent,
     )
 
 
@@ -434,10 +453,15 @@ def block_because(block: Any, found: Policy, named: Any, moved: Any = ()) -> str
         if member not in hosting:
             return GONE
         whys = {said.why for said in (host_verdict(held, row, member) for row in block.runs)}
-        for why in (WHY_MARATHON, WHY_HOSTS_OFF, WHY_RUN):
+        for why in (WHY_ANNOUNCE, WHY_MARATHON, WHY_HOSTS_OFF, WHY_RUN):
             if why in whys:
                 return BECAUSE[why]
     return BECAUSE[WHY_HOSTS_OFF] if not found.hosts_on else GONE
+
+
+def all_silent(row: Any, silent: Any) -> bool:
+    """Everyone of ours on a run asked not to be announced anywhere."""
+    return all_out([one["user_id"] for one in baf_on(row)], set(silent or ()))
 
 
 def all_out(user_ids: Any, opted: set[int]) -> bool:
@@ -672,6 +696,7 @@ __all__ = [
     "moves",
     "opted_out",
     "optout_roles",
+    "all_silent",
     "not_ours",
     "role_holders",
     "held_role",
