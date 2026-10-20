@@ -26,17 +26,26 @@ from .marathon_sources import (
 from .panels import Outcome, refusal
 from .runs_genres import (
     NO_RULE,
+    Family,
     Rule,
+    alias_words,
+    genre_entries,
+    genre_families,
     genre_family,
+    genre_format,
     parse_families,
     parse_qualifiers,
+    parse_upper,
 )
 from .runs_search import matches
 from .settings_store import (
     MARATHON_HOSTS_COUNT_AS_OURS_KEY,
     MARATHON_MATCH_HOSTS_KEY,
+    RUNS_DEVELOPER_ALIASES,
     RUNS_GENRE_FAMILIES,
+    RUNS_GENRE_MAX,
     RUNS_GENRE_QUALIFIERS,
+    RUNS_GENRE_UPPER,
     RUNS_PARTS,
     RUNS_SAME_RUN_MINUTES,
     RUNS_SOURCES,
@@ -59,7 +68,8 @@ NOTE_LIMIT = 1000
 TAG_LIMIT = 100
 SERIES = "series"
 GENRE = "genre"
-TAGS = (SERIES, GENRE)
+DEVELOPER = "developer"
+TAGS = (SERIES, GENRE, DEVELOPER)
 CSV_LIMIT = 2000
 PREVIEW_LIMIT = 200
 LOOKUP_GAMES = 5
@@ -76,6 +86,7 @@ CSV_COLUMNS = (
     "game",
     "series",
     "genre",
+    "developer",
     "category",
     "runners",
     "runner_names",
@@ -153,7 +164,19 @@ SERIES_SET = "**{game}** is in the series **{series}**."
 SERIES_CLEARED = "**{game}** has no series now."
 GENRE_SET = "**{game}** is in the genre **{genre}**."
 GENRE_CLEARED = "**{game}** has no genre now."
-TAG_WORDS = {SERIES: (SERIES_SET, SERIES_CLEARED), GENRE: (GENRE_SET, GENRE_CLEARED)}
+DEVELOPER_SET = "**{game}** is by **{developer}**."
+DEVELOPER_CLEARED = "**{game}** has no developer now."
+TAG_WORDS = {
+    SERIES: (SERIES_SET, SERIES_CLEARED),
+    GENRE: (GENRE_SET, GENRE_CLEARED),
+    DEVELOPER: (DEVELOPER_SET, DEVELOPER_CLEARED),
+}
+TOO_MANY_GENRES = (
+    "**{genre}** is {n} genres and a game may have {cap}, so nothing was saved. Keep the {cap} "
+    "that fit best, separated by commas, or raise the most genres a game may have on the "
+    "Settings page."
+)
+GENRES_CUT = " {cut} game(s) had more than {cap} genres, so only their first {cap} were kept."
 DRY_SAID = (
     "{would} row(s) would be added, {skipped} skipped (already here), {need} need a runner "
     "match. Nothing was written."
@@ -331,7 +354,9 @@ async def edits_of(db: Any, guild_id: int) -> dict[tuple[int, str], dict[str, An
 
 async def tags_of(db: Any, guild_id: int) -> dict[str, dict[str, str]]:
     rows = await _fetch(
-        db, "SELECT game_key, series, genre FROM baf_series WHERE guild_id = ?", (int(guild_id),)
+        db,
+        "SELECT game_key, series, genre, developer FROM baf_series WHERE guild_id = ?",
+        (int(guild_id),),
     )
     return {str(row["game_key"]): {tag: str(row[tag] or "") for tag in TAGS} for row in rows}
 
@@ -433,6 +458,7 @@ def _shaped(**given: Any) -> dict[str, Any]:
         "game_key": key_of_game,
         "series": tags.get(SERIES, ""),
         "genre": tags.get(GENRE, ""),
+        "developer": tags.get(DEVELOPER, ""),
         "category": given["category"] or "",
         "runners": given["runners"],
         "runners_text": runners_line(given["runners"]),
@@ -455,6 +481,39 @@ def genre_rule(bot: Any, guild_id: int) -> Rule:
         parse_qualifiers(bot.store.get(guild_id, RUNS_GENRE_QUALIFIERS)),
         parse_families(bot.store.get(guild_id, RUNS_GENRE_FAMILIES)),
     )
+
+
+class Tagging(NamedTuple):
+    rule: Rule
+    upper: tuple[str, ...]
+    cap: int
+    developers: tuple[Family, ...]
+
+
+def tagging(bot: Any, guild_id: int) -> Tagging:
+    return Tagging(
+        genre_rule(bot, guild_id),
+        parse_upper(bot.store.get(guild_id, RUNS_GENRE_UPPER)),
+        max(1, int(bot.store.get(guild_id, RUNS_GENRE_MAX) or 1)),
+        parse_families(bot.store.get(guild_id, RUNS_DEVELOPER_ALIASES)),
+    )
+
+
+def tag_text(tag: str, value: Any, rules: Tagging) -> str:
+    if tag != GENRE:
+        return clean(value, TAG_LIMIT)
+    return clean(genre_format(value, *rules.rule, rules.upper), TAG_LIMIT)
+
+
+def tag_problem(tag: str, text: str, rules: Tagging) -> str | None:
+    found = len(genre_entries(text)) if tag == GENRE else 0
+    if found <= rules.cap:
+        return None
+    return TOO_MANY_GENRES.format(genre=text, n=found, cap=rules.cap)
+
+
+def capped(text: str, rules: Tagging) -> str:
+    return ", ".join(genre_entries(text)[: rules.cap])
 
 
 def families_shown(rule: Rule) -> list[dict[str, Any]]:
@@ -488,10 +547,11 @@ async def view(bot: Any, guild: Any) -> list[dict[str, Any]]:
     marathons = await live_marathons(db, guild.id)
     for row in await _fetch(db, "SELECT * FROM baf_runs WHERE guild_id = ?", (int(guild.id),)):
         found.append(_hand_row(guild, row, parts, tags, marathons))
-    rule = genre_rule(bot, guild.id)
+    rules = tagging(bot, guild.id)
     for made in found:
-        made["genre_family"] = genre_family(made["genre"], *rule)
-        made["search"] = text_of(made, rule)
+        made["genre_families"] = genre_families(made["genre"], *rules.rule)
+        made["genre_family"] = next(iter(made["genre_families"]), "")
+        made["search"] = text_of(made, rules.rule, rules.developers)
     found.sort(key=newest_first, reverse=True)
     return found
 
@@ -599,13 +659,16 @@ def year_of(row: dict[str, Any]) -> str:
     return str(row["date"] or "")[:4]
 
 
-def text_of(row: dict[str, Any], rule: Rule = NO_RULE) -> str:
+def text_of(row: dict[str, Any], rule: Rule = NO_RULE, developers: Any = ()) -> str:
     """One field per line: the one haystack the panel, the API and the page search."""
+    families = row.get("genre_families") or genre_families(row["genre"], *rule)
     lines = [
         row["game"],
         row["series"],
         row["genre"],
-        *family_words(row.get("genre_family") or genre_family(row["genre"], *rule), rule),
+        *(word for family in families for word in family_words(family, rule)),
+        row.get(DEVELOPER) or "",
+        *alias_words(row.get(DEVELOPER), developers),
         row["category"],
         *(one["display"] for one in row["runners"]),
         *(one["name"] for one in row["runners"]),
@@ -622,6 +685,7 @@ def filtered(
     event: Any = None,
     series: Any = None,
     genre: Any = None,
+    developer: Any = None,
     runner: Any = None,
     year: Any = None,
     how: Any = None,
@@ -640,7 +704,9 @@ def filtered(
             continue
         if series and game_key(series) != game_key(row["series"]):
             continue
-        if genre and family != row["genre_family"]:
+        if genre and family not in row["genre_families"]:
+            continue
+        if developer and game_key(developer) != game_key(row[DEVELOPER]):
             continue
         if runner and not any(
             str(runner) == one["user_id"] or game_key(runner) == game_key(one["display"])
@@ -651,7 +717,7 @@ def filtered(
             continue
         if how and row["how"] != how:
             continue
-        if q and not matches(q, text_of(row, rule)):
+        if q and not matches(q, row.get("search") or text_of(row, rule)):
             continue
         kept.append(row)
     return kept
@@ -681,6 +747,8 @@ def games(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "series": last["series"],
                 "genre": last["genre"],
                 "genre_family": last["genre_family"],
+                "genre_families": last["genre_families"],
+                "developer": last[DEVELOPER],
                 "times": len(runs),
                 "last_date": last["date"],
                 "last_event": last["event"],
@@ -813,42 +881,51 @@ async def _event_fields(bot: Any, guild: Any, payload: dict[str, Any]) -> Any:
     )
 
 
-async def _write_tag(bot: Any, guild_id: int, game: str, tag: str, value: Any, actor: Any) -> bool:
-    text = clean(value, TAG_LIMIT)
+async def _write_tag(bot: Any, guild_id: int, game: str, tag: str, text: str, actor: Any) -> bool:
     key = game_key(game)
     if tag not in TAGS or not key:
         return False
     await bot.db.conn.execute(
-        f"INSERT INTO baf_series(guild_id, game_key, series, genre, by, at) "
-        f"VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(guild_id, game_key) DO UPDATE SET "
+        f"INSERT INTO baf_series(guild_id, game_key, series, genre, developer, by, at) "
+        f"VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(guild_id, game_key) DO UPDATE SET "
         f"{tag} = excluded.{tag}, by = excluded.by, at = excluded.at",
         (
             int(guild_id),
             key,
-            text if tag == SERIES else "",
-            text if tag == GENRE else "",
+            *(text if one == tag else "" for one in TAGS),
             actor_id(actor),
             now_iso(),
         ),
     )
     await bot.db.conn.execute(
         "DELETE FROM baf_series WHERE guild_id = ? AND game_key = ? AND series = '' "
-        "AND genre = ''",
+        "AND genre = '' AND developer = ''",
         (int(guild_id), key),
     )
     return True
 
 
-async def _write_given_tags(
-    bot: Any, guild_id: int, game: str, payload: dict[str, Any], actor: Any, *, blank: bool
-) -> dict[str, Any]:
-    written: dict[str, Any] = {}
+def given_tags(
+    payload: dict[str, Any], rules: Tagging, *, blank: bool
+) -> tuple[dict[str, str], str | None]:
+    found: dict[str, str] = {}
     for tag in TAGS:
         if tag not in payload or (not blank and payload.get(tag) in (None, "")):
             continue
-        await _write_tag(bot, guild_id, game, tag, payload.get(tag), actor)
-        written[tag] = payload.get(tag)
-    return written
+        text = tag_text(tag, payload.get(tag), rules)
+        problem = tag_problem(tag, text, rules)
+        if problem:
+            return ({}, problem)
+        found[tag] = text
+    return (found, None)
+
+
+async def _write_given_tags(
+    bot: Any, guild_id: int, game: str, tags: dict[str, str], actor: Any
+) -> dict[str, Any]:
+    for tag, text in tags.items():
+        await _write_tag(bot, guild_id, game, tag, text, actor)
+    return tags
 
 
 async def add(
@@ -863,6 +940,9 @@ async def add(
     event = await _event_fields(bot, guild, payload)
     if event is None:
         return refusal(NO_SUCH_EVENT, "no_such_event", 404)
+    tags, problem = given_tags(payload, tagging(bot, guild.id), blank=False)
+    if problem:
+        return refusal(problem, "too_many_genres", 400)
     people = people_from(guild, payload)
     cur = await bot.db.conn.execute(
         "INSERT INTO baf_runs(guild_id, how, event_name, event_source, event_ref, started_at, "
@@ -885,7 +965,7 @@ async def add(
         ),
     )
     key = f"h{int(cur.lastrowid)}"
-    await _write_given_tags(bot, guild.id, game, payload, actor, blank=False)
+    await _write_given_tags(bot, guild.id, game, tags, actor)
     await bot.db.conn.commit()
     await log_action(
         bot,
@@ -952,6 +1032,9 @@ async def _edit_hand(
     wanted, problem = _wanted_fields(guild, payload)
     if problem:
         return refusal(problem, "bad_value", 400)
+    tags, problem = given_tags(payload, tagging(bot, guild.id), blank=True)
+    if problem:
+        return refusal(problem, "too_many_genres", 400)
     columns: dict[str, Any] = {}
     if "date" in wanted:
         columns["started_at"] = wanted["date"] or None
@@ -977,7 +1060,7 @@ async def _edit_hand(
             (*changed.values(), actor_id(actor), now_iso(), int(row_id)),
         )
     game = columns.get("game", row["game"])
-    written = await _write_given_tags(bot, guild.id, game, payload, actor, blank=True)
+    written = await _write_given_tags(bot, guild.id, game, tags, actor)
     await bot.db.conn.commit()
     await log_action(
         bot,
@@ -991,6 +1074,7 @@ async def _edit_hand(
             "after": changed,
             "series": written.get(SERIES),
             "genre": written.get(GENRE),
+            "developer": written.get(DEVELOPER),
             "via": via,
         },
     )
@@ -1060,6 +1144,9 @@ async def _edit_tracked(
     wanted, problem = _wanted_fields(guild, payload)
     if problem:
         return refusal(problem, "bad_value", 400)
+    tags, problem = given_tags(payload, tagging(bot, guild.id), blank=True)
+    if problem:
+        return refusal(problem, "too_many_genres", 400)
     if "event" in payload:
         wanted["event"] = clean(payload.get("event"))
     source = await _source_values(bot, guild, run_id)
@@ -1080,7 +1167,7 @@ async def _edit_tracked(
     game = wanted.get("game") or held.get("game") or run["game"]
     if not after and not any(tag in payload for tag in TAGS):
         return refusal(NO_CHANGE, "no_change", 409)
-    written = await _write_given_tags(bot, guild.id, game, payload, actor, blank=True)
+    written = await _write_given_tags(bot, guild.id, game, tags, actor)
     await bot.db.conn.commit()
     await log_action(
         bot,
@@ -1094,6 +1181,7 @@ async def _edit_tracked(
             "after": after,
             "series": written.get(SERIES),
             "genre": written.get(GENRE),
+            "developer": written.get(DEVELOPER),
             "via": via,
         },
     )
@@ -1192,7 +1280,11 @@ async def set_tag(
     shown = next((one for one in games(await view(bot, guild)) if one["game_key"] == wanted), None)
     game = shown["game"] if shown else wanted
     before = (await tags_of(bot.db, guild.id)).get(wanted, {}).get(tag, "")
-    text = clean(value, TAG_LIMIT)
+    rules = tagging(bot, guild.id)
+    text = tag_text(tag, value, rules)
+    problem = tag_problem(tag, text, rules)
+    if problem:
+        return refusal(problem, "too_many_genres", 400)
     if text == before:
         return refusal(NO_CHANGE, "no_change", 409)
     await _write_tag(bot, guild.id, game, tag, text, actor)
@@ -1219,6 +1311,12 @@ async def set_genre(
     bot: Any, guild: Any, actor: Any, key: Any, genre: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     return await set_tag(bot, guild, actor, key, GENRE, genre, via=via)
+
+
+async def set_developer(
+    bot: Any, guild: Any, actor: Any, key: Any, developer: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    return await set_tag(bot, guild, actor, key, DEVELOPER, developer, via=via)
 
 
 def natural_key(event: Any, game: Any, category: Any, when: Any) -> tuple[str, str, str, str]:
@@ -1355,10 +1453,12 @@ async def import_csv(
     }
     known_tags = await tags_of(bot.db, guild.id)
     matcher = await _matcher(bot, guild)
+    rules = tagging(bot, guild.id)
     adds: list[dict[str, Any]] = []
     skipped = 0
     need = 0
     bad = 0
+    cut: set[str] = set()
     for row in rows:
         game = clean(row.get("game"))
         ok, started = parse_date(row.get("date"))
@@ -1378,6 +1478,10 @@ async def import_csv(
         people = _csv_people(row, guild, matcher)
         if any(one["user_id"] is None for one in people):
             need += 1
+        tags = {tag: tag_text(tag, row.get(tag), rules) for tag in TAGS}
+        if tag_problem(GENRE, tags[GENRE], rules):
+            tags[GENRE] = capped(tags[GENRE], rules)
+            cut.add(game_key(game))
         adds.append(
             {
                 "event": event,
@@ -1388,7 +1492,7 @@ async def import_csv(
                 "category": category,
                 "people": people,
                 "note": clean(row.get("note"), NOTE_LIMIT),
-                **{tag: clean(row.get(tag), TAG_LIMIT) for tag in TAGS},
+                **tags,
             }
         )
     summary = {
@@ -1401,11 +1505,13 @@ async def import_csv(
         "unmatched": [],
         "not_run_yet": 0,
         "event": None,
+        "genres_cut": len(cut),
         "rows": [_preview(one, guild) for one in adds[:PREVIEW_LIMIT]],
     }
+    trimmed = GENRES_CUT.format(cut=len(cut), cap=rules.cap) if cut else ""
     if dry_run:
         said = DRY_SAID.format(would=len(adds), skipped=skipped, need=need)
-        return Outcome(True, said, value=summary)
+        return Outcome(True, said + trimmed, value=summary)
     for one in adds:
         await _insert_imported(bot.db, guild.id, one, actor)
         known = known_tags.setdefault(game_key(one["game"]), {})
@@ -1426,12 +1532,12 @@ async def import_csv(
             "skipped": skipped,
             "need_match": need,
             "unreadable": bad,
+            "genres_cut": len(cut),
             "via": via,
         },
     )
-    return Outcome(
-        True, IMPORT_SAID.format(added=len(adds), skipped=skipped, need=need), value=summary
-    )
+    said = IMPORT_SAID.format(added=len(adds), skipped=skipped, need=need)
+    return Outcome(True, said + trimmed, value=summary)
 
 
 def tracker_ref(url: Any) -> str | None:
@@ -1604,6 +1710,7 @@ def export_csv(rows: list[dict[str, Any]]) -> str:
                 row["game"],
                 row["series"],
                 row["genre"],
+                row[DEVELOPER],
                 row["category"],
                 row["runners_text"],
                 "; ".join(one["name"] for one in row["runners"]),
@@ -1621,7 +1728,7 @@ def text_of_game(
     lines: list[str] = []
     for key in game["keys"]:
         if key in rows:
-            lines.extend(text_of(rows[key], rule).splitlines())
+            lines.extend((rows[key].get("search") or text_of(rows[key], rule)).splitlines())
     return "\n".join(dict.fromkeys(lines))
 
 

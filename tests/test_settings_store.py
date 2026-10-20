@@ -2300,7 +2300,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1248
+    assert len(settings_store.KEY_TYPES) == 1251
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2887,6 +2887,9 @@ def test_the_runs_keys_sit_under_marathons_with_the_sources_the_marathon_feature
         "runs_genre_qualifiers",
         "runs_genre_families",
         "runs_same_run_minutes",
+        "runs_genre_max",
+        "runs_genre_upper",
+        "runs_developer_aliases",
     )
     assert {settings_store.namespace_of(key) for key in settings_store.RUNS_KEYS} == {"marathon"}
     assert set(settings_store.RUNS_SOURCE_CHOICES) == set(SOURCES)
@@ -2912,6 +2915,48 @@ async def test_the_runs_keys_ship_their_decided_defaults(store):
     )
     assert store.get(7, "runs_genre_families").splitlines()[0] == (
         "racing: racer, racers, race, kart racer, kart racing"
+    )
+
+
+async def test_runs_genre_max_is_a_marathon_int_from_1_to_5_defaulting_to_2(store):
+    key = settings_store.RUNS_GENRE_MAX
+    assert key == "runs_genre_max"
+    assert settings_store.KEY_TYPES[key] == "int"
+    assert settings_store.namespace_of(key) == "marathon"
+    assert store.get(7, key) == 2
+    await store.set(7, key, 5, by=1)
+    assert store.get(7, key) == 5
+    for wrong in (0, 6):
+        with pytest.raises(settings_store.SettingError):
+            await store.set(7, key, wrong, by=1)
+    assert (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) == (1, 5)
+
+
+async def test_runs_genre_upper_ships_the_capitals_words_and_may_be_blank(store):
+    key = settings_store.RUNS_GENRE_UPPER
+    assert key == "runs_genre_upper"
+    assert settings_store.KEY_TYPES[key] == "text"
+    assert store.get(7, key) == "2d, 3d, fps, tps, rpg, jrpg, mmo, rts"
+    await store.set(7, key, "", by=1)
+    assert store.get(7, key) == ""
+
+
+async def test_runs_developer_aliases_ship_fromsoftware_and_refuse_a_line_with_no_name(store):
+    key = settings_store.RUNS_DEVELOPER_ALIASES
+    assert key == "runs_developer_aliases"
+    assert settings_store.KEY_TYPES[key] == "text"
+    assert store.get(7, key) == (
+        "FromSoftware: fromsoft, from software\nNintendo: nintendo ead, nintendo epd"
+    )
+    with pytest.raises(settings_store.SettingError, match="Line 2 of the developer aliases"):
+        await store.set(7, key, "Capcom: crapcom\nno colon here", by=1)
+    await store.set(7, key, "", by=1)
+    assert store.get(7, key) == ""
+
+
+async def test_the_genre_families_default_names_soulslike(store):
+    assert store.get(7, "runs_genre_families").splitlines()[-1] == (
+        "soulslike: souls, soulsborne, dark souls, souls-like, souls like"
     )
 
 

@@ -304,6 +304,8 @@ ROUTINE: frozenset[str] = frozenset(
         "runs.imported",
         "runs.series_set",
         "runs.genre_set",
+        "runs.developer_set",
+        "runs.migrated",
         "runs.lookup",
         "question.added",
         "question.edited",

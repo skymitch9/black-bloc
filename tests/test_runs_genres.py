@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 
 from black_bloc import runs_genres as rg
-from black_bloc.settings_store import RUNS_DEFAULTS, RUNS_GENRE_FAMILIES, RUNS_GENRE_QUALIFIERS
+from black_bloc.settings_store import (
+    RUNS_DEFAULTS,
+    RUNS_GENRE_FAMILIES,
+    RUNS_GENRE_QUALIFIERS,
+    RUNS_GENRE_UPPER,
+)
 
 FIXTURE = json.loads(
     (Path(__file__).parent / "fixtures" / "runs" / "genre_families.json").read_text(
@@ -61,3 +66,52 @@ def test_a_family_label_is_capitalised_and_its_terms_carry_every_alias():
     assert rg.family_label("") == ""
     assert rg.family_terms("racing", FAMILIES) == "racing racer racers race kart racer kart racing"
     assert rg.family_terms("puzzle", FAMILIES) == "puzzle"
+
+
+SHAPES = json.loads(
+    (Path(__file__).parent / "fixtures" / "runs" / "genre_format.json").read_text(encoding="utf-8")
+)
+SHAPE_RULE = (
+    rg.parse_qualifiers(SHAPES["qualifiers"]),
+    rg.parse_families(SHAPES["families"]),
+    rg.parse_upper(SHAPES["upper"]),
+)
+
+
+def test_the_format_fixture_reads_the_shipped_defaults():
+    assert SHAPES["qualifiers"] == RUNS_DEFAULTS[RUNS_GENRE_QUALIFIERS]
+    assert SHAPES["families"] == RUNS_DEFAULTS[RUNS_GENRE_FAMILIES]
+    assert SHAPES["upper"] == RUNS_DEFAULTS[RUNS_GENRE_UPPER]
+    assert rg.parse_upper(SHAPES["upper"]) == rg.UPPER_WORDS
+
+
+@pytest.mark.parametrize(("text", "shown"), SHAPES["cases"])
+def test_every_fixture_genre_is_spelled_the_house_way(text, shown):
+    assert rg.genre_format(text, *SHAPE_RULE) == shown
+    assert rg.genre_format(shown, *SHAPE_RULE) == shown
+
+
+def test_a_list_splits_on_commas_and_each_entry_has_its_own_family():
+    assert rg.genre_entries(" Soulslike ,, Action  adventure ") == ["Soulslike", "Action adventure"]
+    assert rg.genre_entries(None) == []
+    assert rg.genre_families("Soulslike, Action adventure", *SHAPE_RULE[:2]) == [
+        "soulslike",
+        "adventure",
+    ]
+    assert rg.genre_families("Kart racer, Racing", *SHAPE_RULE[:2]) == ["racing"]
+    assert rg.genre_families("", *SHAPE_RULE[:2]) == []
+
+
+def test_without_a_rule_only_the_same_spelling_is_one_entry():
+    assert rg.genre_format("Roguelike, roguelite") == "Roguelike, Roguelite"
+    assert rg.genre_format("roguelike, ROGUELIKE") == "Roguelike"
+    assert rg.genre_format("fps", upper=()) == "Fps"
+
+
+def test_a_developer_alias_line_is_found_by_its_name_or_any_alias():
+    lines = rg.parse_families("FromSoftware: fromsoft, from software\nNintendo: nintendo ead")
+    wanted = ["fromsoftware", "fromsoft", "from software"]
+    assert rg.alias_words("FromSoftware", lines) == wanted
+    assert rg.alias_words("From Software", lines) == wanted
+    assert rg.alias_words("Capcom", lines) == []
+    assert rg.alias_words("", lines) == []

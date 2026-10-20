@@ -7,7 +7,9 @@ import pytest
 from black_bloc import baf_runs as runs
 from black_bloc.logkinds import VIA_WEBSITE
 from black_bloc.settings_store import (
+    RUNS_DEVELOPER_ALIASES,
     RUNS_GENRE_FAMILIES,
+    RUNS_GENRE_MAX,
     RUNS_GENRE_QUALIFIERS,
     RUNS_PARTS,
     RUNS_SAME_RUN_MINUTES,
@@ -823,3 +825,159 @@ async def test_games_export_and_lookup_count_a_renamed_run_once(bot):
     assert [(one["game"], len(one["runs"])) for one in found.games] == [(DKC2, 1)]
     assert [row["key"] for row in runs.filtered(every, q="dkc2")] == ["t173"]
     assert runs.export_csv(every).count(DKC2) == 1
+
+
+async def test_a_developer_is_set_beside_series_and_genre_cleared_alone_and_logged(bot):
+    await seed(bot)
+
+    said = await runs.set_developer(bot, bot.guild, None, SHREDDER, "  Tribute   Games ")
+    assert said.ok and said.message == "**Shredder's Revenge** is by **Tribute Games**."
+    await runs.set_genre(bot, bot.guild, None, "Shredder's Revenge", "Beat 'em up")
+    row = await shredder(bot)
+    assert (row["developer"], row["genre"]) == ("Tribute Games", "Beat 'em up")
+    every = runs.games(await runs.view(bot, bot.guild))
+    assert next(one for one in every if one["game_key"] == SHREDDER)["developer"] == (
+        "Tribute Games"
+    )
+    assert not (await runs.set_developer(bot, bot.guild, None, SHREDDER, "Tribute Games")).ok
+    assert (await runs.set_developer(bot, bot.guild, None, SHREDDER, "tribute games")).ok
+    assert (await shredder(bot))["developer"] == "tribute games"
+
+    assert (await runs.set_genre(bot, bot.guild, None, SHREDDER, "")).ok
+    assert await count(bot.db, "baf_series") == 1
+    cleared = await runs.set_developer(bot, bot.guild, None, SHREDDER, "")
+    assert cleared.ok and cleared.message == "**Shredder's Revenge** has no developer now."
+    assert await count(bot.db, "baf_series") == 0
+    assert (await kinds(bot.db)).count("runs.developer_set") == 3
+
+
+async def test_the_developer_filter_and_its_aliases_reach_search_and_lookup(bot):
+    await seed(bot)
+    await runs.add(bot, bot.guild, None, {"game": "Sekiro", "developer": "FromSoftware"})
+    await runs.add(bot, bot.guild, None, {"game": "Dark Souls", "developer": "FromSoftware"})
+    await runs.set_developer(bot, bot.guild, None, "Celeste", "Maddy Makes Games")
+    every = await runs.view(bot, bot.guild)
+    rule = runs.genre_rule(bot, GUILD)
+    from_soft = {"Sekiro", "Dark Souls"}
+
+    assert {row["game"] for row in runs.filtered(every, developer="fromsoftware")} == from_soft
+    for query in ("fromsoft", "from software", "FromSoftware"):
+        assert {row["game"] for row in runs.filtered(every, q=query, rule=rule)} == from_soft
+    sekiro = next(row for row in every if row["game"] == "Sekiro")
+    assert {"FromSoftware", "fromsoftware", "fromsoft", "from software"} <= set(
+        sekiro["search"].splitlines()
+    )
+    found = await runs.lookup(bot, bot.guild, None, "fromsoft")
+    assert {one["game"] for one in found.games} == from_soft
+
+    await bot.store.set(GUILD, RUNS_DEVELOPER_ALIASES, "Maddy Makes Games: exok", by=1)
+    every = await runs.view(bot, bot.guild)
+    assert [row["game"] for row in runs.filtered(every, q="exok", rule=rule)] == ["Celeste"]
+    assert runs.filtered(every, q="from software", rule=rule) == []
+
+
+async def test_a_genre_list_is_capped_and_a_third_genre_is_refused_in_words(bot):
+    ids = await seed(bot)
+
+    three = "Platformer, Puzzle, Roguelike"
+    refused = await runs.set_genre(bot, bot.guild, None, "Celeste", three)
+    assert not refused.ok and refused.code == "too_many_genres" and refused.status == 400
+    assert refused.message == (
+        "**Platformer, Puzzle, Roguelike** is 3 genres and a game may have 2, so nothing was "
+        "saved. Keep the 2 that fit best, separated by commas, or raise the most genres a game "
+        "may have on the Settings page."
+    )
+    assert await count(bot.db, "baf_series") == 0
+    added = await runs.add(bot, bot.guild, None, {"game": "Tetris", "genre": "a, b, c"})
+    assert not added.ok and added.code == "too_many_genres"
+    assert await count(bot.db, "baf_runs") == 0
+    edited = await runs.edit(bot, bot.guild, None, f"t{ids['ours']}", {"genre": "a, b, c"})
+    assert not edited.ok and edited.code == "too_many_genres"
+    assert "runs.edited" not in await kinds(bot.db)
+
+    assert (await runs.set_genre(bot, bot.guild, None, "Celeste", "Platformer, Puzzle")).ok
+    await bot.store.set(GUILD, RUNS_GENRE_MAX, 3, by=1)
+    assert (await runs.set_genre(bot, bot.guild, None, "Celeste", "Platformer, Puzzle, x")).ok
+
+
+async def test_every_save_path_stores_the_house_spelling(bot):
+    ids = await seed(bot)
+
+    said = await runs.set_genre(bot, bot.guild, None, "Celeste", "Action-Adventure")
+    assert said.ok and said.message == "**Celeste** is in the genre **Action adventure**."
+    added = await runs.add(bot, bot.guild, None, {"game": "Tetris", "genre": "2d puzzle"})
+    await runs.edit(bot, bot.guild, None, f"t{ids['ours']}", {"genre": "third-person shooter"})
+    csv_text = "game,genre\nHades,action_ROGUELIKE\n"
+    await runs.import_csv(bot, bot.guild, None, csv_text, dry_run=False)
+    rows = {row["game"]: row["genre"] for row in await runs.view(bot, bot.guild)}
+
+    assert rows["Celeste"] == "Action adventure"
+    assert rows[(await runs.find(bot, bot.guild, added.value))["game"]] == "2D puzzle"
+    assert rows["Shredder's Revenge"] == "Third person shooter"
+    assert rows["Hades"] == "Action roguelike"
+    assert not (await runs.set_genre(bot, bot.guild, None, "Celeste", "action adventure")).ok
+
+
+async def test_each_genre_of_a_list_has_its_own_family_in_rows_games_filters_and_search(bot):
+    await seed(bot)
+    await runs.set_genre(bot, bot.guild, None, "Celeste", "Soulslike, Action adventure")
+    await runs.set_genre(bot, bot.guild, None, "Shredder's Revenge", "Fighting")
+    every = await runs.view(bot, bot.guild)
+    rule = runs.genre_rule(bot, GUILD)
+
+    celeste = next(row for row in every if row["game"] == "Celeste")
+    assert celeste["genre_families"] == ["soulslike", "adventure"]
+    assert celeste["genre_family"] == "soulslike"
+    assert next(row for row in every if row["game_key"] == SHREDDER)["genre_families"] == [
+        "fighting"
+    ]
+    for wanted in ("adventure", "Soulslike", "dark souls"):
+        assert [row["game"] for row in runs.filtered(every, genre=wanted, rule=rule)] == ["Celeste"]
+    for query in ("souls", "soulsborne", "adventure"):
+        assert [row["game"] for row in runs.filtered(every, q=query, rule=rule)] == ["Celeste"]
+    game = next(one for one in runs.games(every) if one["game"] == "Celeste")
+    assert game["genre_families"] == ["soulslike", "adventure"]
+    assert all(row["genre_families"] == [] for row in every if not row["genre"])
+
+
+async def test_a_csv_developer_fills_a_blank_and_a_long_genre_list_is_cut_and_said(bot):
+    await seed(bot)
+    await runs.set_developer(bot, bot.guild, None, "Shredder's Revenge", "Tribute Games")
+    text = (
+        "Date,Event,Game,Category,Runners,Genre,Developer\n"
+        "2025-06-30,BtB 2025,Celeste,Any%,Kat,\"Platformer, Puzzle, Indie\",Maddy Makes Games\n"
+        "2025-07-01,BtB 2025,Shredder's Revenge,Any%,Kat,Fighting,Someone Else\n"
+    )
+
+    dry = await runs.import_csv(bot, bot.guild, None, text, dry_run=True)
+    assert dry.value["genres_cut"] == 1
+    assert dry.message.endswith(
+        " 1 game(s) had more than 2 genres, so only their first 2 were kept."
+    )
+    real = await runs.import_csv(bot, bot.guild, None, text, dry_run=False)
+    assert "only their first 2 were kept" in real.message
+    rows = {row["game"]: row for row in await runs.view(bot, bot.guild)}
+    assert (rows["Celeste"]["genre"], rows["Celeste"]["developer"]) == (
+        "Platformer, Puzzle",
+        "Maddy Makes Games",
+    )
+    assert rows["Shredder's Revenge"]["developer"] == "Tribute Games"
+    head = runs.export_csv(await runs.view(bot, bot.guild)).splitlines()[0].split(",")
+    assert head[head.index("genre") + 1] == "developer"
+    assert '"Platformer, Puzzle",Maddy Makes Games' in runs.export_csv(
+        await runs.view(bot, bot.guild)
+    )
+
+
+async def test_a_folded_run_keeps_the_games_genres_and_developer(bot):
+    await game_masters(bot)
+    await runs.set_genre(bot, bot.guild, None, DKC2, "2D platformer, Action adventure")
+    await runs.set_developer(bot, bot.guild, None, DKC2, "Rare")
+
+    rows = dkc2_rows(await runs.view(bot, bot.guild))
+
+    assert [row["key"] for row in rows] == ["t173"] and rows[0]["folded"] == ["t172"]
+    assert rows[0]["genre_families"] == ["platformer", "adventure"]
+    assert (rows[0]["genre"], rows[0]["developer"]) == ("2D platformer, Action adventure", "Rare")
+    game = next(one for one in runs.games(await runs.view(bot, bot.guild)) if one["game"] == DKC2)
+    assert game["times"] == 1 and game["genre_families"] == ["platformer", "adventure"]

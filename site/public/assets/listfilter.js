@@ -95,6 +95,49 @@ export function genreFamily(text, qualifiers = [], families = []) {
   return stripped;
 }
 
+export const UPPER_WORDS = ['2d', '3d', 'fps', 'tps', 'rpg', 'jrpg', 'mmo', 'rts'];
+
+export function genreEntries(text) {
+  return String(text ?? '').split(',').map((part) => part.split(/\s+/).filter(Boolean).join(' ')).filter(Boolean);
+}
+
+export function genreUpper(text) {
+  return [...new Set(String(text ?? '').split(/[,\n]/).map(genreNormal).filter(Boolean))];
+}
+
+function formatEntry(entry, upper) {
+  const text = entry.replace(/[-_]/g, ' ').split(/\s+/).filter(Boolean).join(' ').toLowerCase();
+  if (!text) return '';
+  const wanted = new Set(upper);
+  return (text.slice(0, 1).toUpperCase() + text.slice(1)).split(' ')
+    .map((word) => (wanted.has(word.toLowerCase()) ? word.toUpperCase() : word)).join(' ');
+}
+
+export function genreFormat(text, qualifiers = [], families = [], upper = UPPER_WORDS) {
+  const kept = [];
+  const seen = new Set();
+  for (const entry of genreEntries(text)) {
+    const shown = formatEntry(entry, upper);
+    const family = genreFamily(shown, qualifiers, families) || genreNormal(shown);
+    if (shown && !seen.has(family)) {
+      seen.add(family);
+      kept.push(shown);
+    }
+  }
+  return kept.join(', ');
+}
+
+export function genreFamiliesOf(text, qualifiers = [], families = []) {
+  return [...new Set(genreEntries(text).map((entry) => genreFamily(entry, qualifiers, families)).filter(Boolean))];
+}
+
+export function aliasWords(name, aliases = []) {
+  const wanted = genreNormal(name);
+  if (!wanted) return [];
+  const found = aliases.find(([key, more]) => wanted === key || more.includes(wanted));
+  return found ? [found[0], ...found[1]] : [];
+}
+
 export function familyLabel(family) {
   const text = String(family ?? '');
   return text.slice(0, 1).toUpperCase() + text.slice(1);
