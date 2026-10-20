@@ -1,13 +1,7 @@
 {
-  "release": "v246",
-  "commit": "005cb145",
+  "release": "v247",
+  "commit": "bab32f9d",
   "changed_features": [
-    "birthday",
-    "core",
-    "events",
-    "golive",
-    "pings",
-    "rolemenu",
-    "tempvoice"
+    "marathon"
   ]
 }
