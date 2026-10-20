@@ -55,9 +55,9 @@ Live right now: 9 marathons (4 `gdq`, 3 `gdq_hotfix`, 2 `horaro`), 108 runs, **5
 
 | Fork | Options | Recommendation |
 |---|---|---|
-| **F1 — where it lives** | (A) its own page `runs.html` — *BaF runs* — linked from the Events page's marathons section and the nav; (B) a fourth section on `events.html` | **A.** A sortable table with filters, a per-game view, import/export and a staff editor is a page's worth; Events is already three sections and the owner just moved weekly questions *into* Posts to keep page count down, but this is a different question (history, not what is coming) and nothing on Events owns it. |
-| **F2 — how the history gets in** | (A) an **isolated importer**: *Import a GDQ event…* on the runs page takes a tracker event link, reads its runs through the same `marathon_sources` reader and the same pairing helper, and writes them straight into the runs store with `how = imported` — never creating a marathon row, so no board, thread, event, reminder, ping or shoutout can fire for a past event; (B) staff add the past event as a marathon by its link and let the normal machinery read it, with every announcer taught to skip an ended event | **A.** B touches eleven marathon modules to make "ended before we saw it" safe; A touches none of them. Hotfix specials and BtB before the bot are NOT on the tracker — those come in by CSV or by hand (D6) either way. |
-| **F3 — the Discord lookup** | (A) build `/runs` now: one command → an ephemeral panel with a game search box, answering *"Shredder's Revenge — seen 2 times: BtB 2026 (runner), SGDQ 2025 (runner); last 2026-06-30"* with a *Open on the site* button; (B) ship the page first, add the lookup only if PT still wants it after a month with the page; (C) never | **B.** The owner's *"we CAN but we shouldn't"* and the panels rule both point at the site; PT's wish was *"just the info"*, which the per-game view answers in one search. If built later it is a panel, not a text reply, and its answer template is a settings key. |
+| **F1 — where it lives** ✅ **DECIDED A (owner, 21:4x: "A")** | (A) its own page `runs.html` — *BaF runs* — linked from the Events page's marathons section and the nav; (B) a fourth section on `events.html` | **A.** A sortable table with filters, a per-game view, import/export and a staff editor is a page's worth; Events is already three sections and the owner just moved weekly questions *into* Posts to keep page count down, but this is a different question (history, not what is coming) and nothing on Events owns it. |
+| **F2 — how the history gets in** ✅ **DECIDED A (owner, 21:5x: "a")** | (A) an **isolated importer**: *Import a GDQ event…* on the runs page takes a tracker event link, reads its runs through the same `marathon_sources` reader and the same pairing helper, and writes them straight into the runs store with `how = imported` — never creating a marathon row, so no board, thread, event, reminder, ping or shoutout can fire for a past event; (B) staff add the past event as a marathon by its link and let the normal machinery read it, with every announcer taught to skip an ended event | **A.** B touches eleven marathon modules to make "ended before we saw it" safe; A touches none of them. Hotfix specials and BtB before the bot are NOT on the tracker — those come in by CSV or by hand (D6) either way. |
+| **F3 — the Discord lookup** ✅ **DECIDED A (owner, 21:5x: "do both the /run look up and the page, let pt have it")** — section 5.8 | (A) build `/runs` now: one command → an ephemeral panel with a game search box, answering *"Shredder's Revenge — seen 2 times: BtB 2026 (runner), SGDQ 2025 (runner); last 2026-06-30"* with a *Open on the site* button; (B) ship the page first, add the lookup only if PT still wants it after a month with the page; (C) never | **B.** The owner's *"we CAN but we shouldn't"* and the panels rule both point at the site; PT's wish was *"just the info"*, which the per-game view answers in one search. If built later it is a panel, not a text reply, and its answer template is a settings key. |
 
 ## 5. The page — `runs.html` (under F1-A)
 
@@ -112,14 +112,27 @@ The **Runs view is one query**: `marathon_runs ∪ marathon_runs_archive` joined
 
 `GET /api/runs` (filters as query params, the rows as the page shows them) · `GET /api/runs/games` · `GET /api/runs/export.csv` · `POST /api/runs` · `PUT /api/runs/{key}` · `DELETE /api/runs/{key}` · `POST /api/runs/{key}/restore` · `PUT /api/runs/series/{game_key}` · `POST /api/runs/import` (`dry_run` flag; body = CSV or `{event_url}`). Reads are operator-token readable; writes are staff, each refusing in words (what happened, what it needs, how to get it).
 
-### 5.7 Settings keys (all under the Marathons group; keys 1242 → 1244)
+### 5.7 Settings keys (all under the Marathons group; keys 1242 → 1247)
 
 | Key | Type | Default | Decides |
 |---|---|---|---|
 | `runs_sources` | list | `gdq, gdq_hotfix` | which marathon sources count (D1) |
 | `runs_parts` | list | `runner` | which `part` values make a run a BaF run (D2) |
+| `runs_lookup_title` | text | `{game}` | the heading of one game's answer in the `/runs` panel (5.8) |
+| `runs_lookup_line` | text | `{date} · {event} · {category} · {runners}` | one run's line under a game |
+| `runs_lookup_none` | text | `Nothing in the BaF runs database matches **{query}**.` | the panel's answer when no game matches |
 
-No word keys: nothing here is posted by the bot. If F3 is ever built, its answer template and its *nothing found* line become keys then.
+The three word keys exist because the panel posts them (every word the bot posts is editable on the site). The page's own labels are site strings, not bot posts.
+
+### 5.8 The `/runs` lookup panel (F3-A)
+
+One command, one panel, staff-visible like the marathon controls (`command_visibility`): `/runs` opens an ephemeral panel whose first move is **Search…**, a modal with one box (*game*). The answer is one ephemeral embed built from the SAME `baf_runs.py` query the page uses (5.5), never a second implementation:
+
+- games whose key contains the typed text (case-insensitive), at most 5, each a field: title = `runs_lookup_title`, body = *seen {n} times, last {date} at {event}*, then one `runs_lookup_line` per run newest first, at most 5 lines per game and *… and {more} more* after;
+- no match → `runs_lookup_none`;
+- buttons: **Search again** (the modal), **Open on the site** (link to `runs.html` with the query in the hash, so the page opens on that filter).
+
+Nothing is posted publicly; the panel is ephemeral and writes nothing. One log row `runs.lookup` with the actor and the query.
 
 ## 6. The history — what the page will say on day one
 
@@ -135,7 +148,7 @@ With nothing imported the page shows the 1 BaF run in a GDQ event the bot has se
 - No automatic series detection; the tag is staff-set.
 - No Discord post of any kind, no mode switch (D7).
 - No per-marathon "counts / does not count" switch: the source filter plus per-run *Remove* covers *"I don't care if its on regular hotfix programming"*.
-- The Discord lookup (F3) unless the owner picks A.
+- No public Discord post from the lookup: the `/runs` panel is ephemeral (5.8).
 
 ## 8. Verification the build owes
 
@@ -150,7 +163,7 @@ With nothing imported the page shows the 1 BaF run in a GDQ event the bot has se
 
 ## 9. Build shape
 
-One Opus build, ~250k (core + db + api + web), branch `baf-runs`: schema 97, `baf_runs.py`, the API module, `runs.html` + `runs.js`, tests mirroring each. Then the importer against a real past event on the local mock, then merge-test-deploy with the pre-deploy snapshot, per the standing order. The request card moves to *ready to check* with `how_to_test` = the page link, so PT checks it himself.
+One Opus build, ~300k (core + db + api + web + cog), branch `baf-runs`: schema 97, `baf_runs.py`, the API module, `runs.html` + `runs.js`, the `/runs` panel as a cog under `cogs/content/`, tests mirroring each. Then the importer against a real past event on the local mock, then merge-test-deploy with the pre-deploy snapshot, per the standing order. The request card moves to *ready to check* with `how_to_test` = the page link, so PT checks it himself.
 
 ## Deviations
 
