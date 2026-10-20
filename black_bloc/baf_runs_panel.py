@@ -12,6 +12,7 @@ from .settings_store import (
     RUNS_DEFAULTS,
     RUNS_LOOKUP_LINE,
     RUNS_LOOKUP_NONE,
+    RUNS_LOOKUP_SEEN,
     RUNS_LOOKUP_TITLE,
 )
 
@@ -25,7 +26,6 @@ SITE_LABEL = "Open on the site"
 MODAL_TITLE = "Search BaF runs"
 FIELD_LABEL = "Game"
 FIELD_HINT = "Shredder's Revenge"
-SEEN_LINE = "seen {times} time(s), last {date} at {event}"
 MORE_LINE = "… and {more} more"
 NO_DATE = "no date"
 FIELD_NAME_LIMIT = 256
@@ -45,8 +45,13 @@ def worded(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
 def game_field(bot: Any, guild_id: int, game: dict[str, Any]) -> tuple[str, str]:
     name = worded(bot, guild_id, RUNS_LOOKUP_TITLE, game=game["game"])[:FIELD_NAME_LIMIT]
     lines = [
-        SEEN_LINE.format(
-            times=game["times"], date=date_word(game["last_date"]), event=game["last_event"] or "—"
+        worded(
+            bot,
+            guild_id,
+            RUNS_LOOKUP_SEEN,
+            n=game["times"],
+            date=date_word(game["last_date"]),
+            event=game["last_event"] or "—",
         )
     ]
     for run in game["runs"]:

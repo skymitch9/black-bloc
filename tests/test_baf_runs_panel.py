@@ -2,7 +2,7 @@ import discord
 import pytest
 
 from black_bloc import baf_runs_panel as panel
-from black_bloc.settings_store import RUNS_LOOKUP_LINE, RUNS_LOOKUP_TITLE
+from black_bloc.settings_store import RUNS_LOOKUP_LINE, RUNS_LOOKUP_SEEN, RUNS_LOOKUP_TITLE
 from tests.baf_runs_fakes import (
     GUILD,
     RUNNER_ID,
@@ -121,6 +121,18 @@ async def test_search_answers_from_the_shared_view_with_the_word_keys(bot):
     ]
     assert shown["allowed_mentions"].everyone is False
     assert (await kinds(bot.db)).count("runs.lookup") == 1
+
+
+async def test_the_seen_line_is_the_runs_lookup_seen_key(bot):
+    await bot.store.set(GUILD, RUNS_LOOKUP_SEEN, "{n}x, latest {event}", by=1)
+    who = staff_of(bot)
+    submitted = FakeInteraction(bot, who)
+    modal = panel.SearchModal()
+    modal.typed._value = "shredder"
+
+    await modal.on_submit(submitted)
+
+    assert submitted.edits[0]["embed"].fields[0].value.split("\n")[0] == "2x, latest SGDQ 2026"
 
 
 async def test_no_match_says_the_none_words_with_what_was_typed(bot):

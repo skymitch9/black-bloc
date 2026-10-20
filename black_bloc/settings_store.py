@@ -10328,6 +10328,7 @@ RUNS_PARTS = "runs_parts"
 RUNS_LOOKUP_TITLE = "runs_lookup_title"
 RUNS_LOOKUP_LINE = "runs_lookup_line"
 RUNS_LOOKUP_NONE = "runs_lookup_none"
+RUNS_LOOKUP_SEEN = "runs_lookup_seen"
 RUNS_SOURCE_CHOICES = (
     "gdq",
     "gdq_hotfix",
@@ -10341,12 +10342,14 @@ RUNS_PART_CHOICES = ("runner", "host", "commentator")
 RUNS_TITLE_FIELDS = ("game",)
 RUNS_LINE_FIELDS = ("date", "event", "category", "runners")
 RUNS_NONE_FIELDS = ("query",)
+RUNS_SEEN_FIELDS = ("n", "date", "event")
 RUNS_DEFAULTS: dict[str, Any] = {
     RUNS_SOURCES: ["gdq", "gdq_hotfix"],
     RUNS_PARTS: ["runner"],
     RUNS_LOOKUP_TITLE: "{game}",
     RUNS_LOOKUP_LINE: "{date} · {event} · {category} · {runners}",
     RUNS_LOOKUP_NONE: "Nothing in the BaF runs database matches **{query}**.",
+    RUNS_LOOKUP_SEEN: "seen {n} time(s), last {date} at {event}",
 }
 RUNS_KEYS: tuple[str, ...] = tuple(RUNS_DEFAULTS)
 KEY_TYPES.update(
@@ -10356,6 +10359,7 @@ KEY_TYPES.update(
         RUNS_LOOKUP_TITLE: "text",
         RUNS_LOOKUP_LINE: "text",
         RUNS_LOOKUP_NONE: "text",
+        RUNS_LOOKUP_SEEN: "text",
     }
 )
 KEY_CHOICES.update({RUNS_SOURCES: RUNS_SOURCE_CHOICES, RUNS_PARTS: RUNS_PART_CHOICES})
@@ -10377,6 +10381,10 @@ KEY_HELP.update(
         RUNS_LOOKUP_NONE: (
             "what the /runs panel says when no game matches; {query} is what was typed"
         ),
+        RUNS_LOOKUP_SEEN: (
+            "the first line under a game in the /runs panel; {n} is how many times it was run, "
+            "{date} and {event} the latest run"
+        ),
     }
 )
 TEXT_CHECKS.update(
@@ -10384,6 +10392,7 @@ TEXT_CHECKS.update(
         RUNS_LOOKUP_TITLE: checked_fields(RUNS_TITLE_FIELDS),
         RUNS_LOOKUP_LINE: checked_fields(RUNS_LINE_FIELDS),
         RUNS_LOOKUP_NONE: checked_fields(RUNS_NONE_FIELDS),
+        RUNS_LOOKUP_SEEN: checked_fields(RUNS_SEEN_FIELDS),
     }
 )
 NAMESPACE_OVERRIDE.update({key: "marathon" for key in RUNS_KEYS})
