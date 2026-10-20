@@ -1,8 +1,8 @@
 {
-  "release": "v237",
-  "commit": "ad4edac0",
+  "release": "v238",
+  "commit": "0175c4fb",
   "changed_features": [
-    "guides",
+    "posts",
     "question"
   ]
 }
