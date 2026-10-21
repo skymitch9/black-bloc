@@ -1,8 +1,12 @@
 # Small fixes, 2026-10-20 — Upcoming follows its mode, birthday privacy, off takes roles back, the `__main__` guard, the stale row
 
 > **Audience:** the conductor (merge + deploy), reviewers, and later sessions. **Status:** TRACKED ·
-> 🔨 **BUILT on branch `small-fixes`** (off `main` `d19dcf51`, v245), **NOT merged, NOT deployed**.
-> **Last verified: 2026-10-20 04:0x Phoenix.** Measured on the branch: `pytest -n auto` and `ruff check .`
+> ✅ **LIVE as v246** (merged `005cb145`, release `a69947b6`, 2026-10-20 04:25 — `deploys.log` v246; the
+> *BUILT, NOT merged* status below it is history). Deviation 1 (applications out of the take-back) was
+> DECIDED by the owner 2026-10-20 18:2x — see §7.
+> **Last verified: 2026-10-20 18:2x Phoenix** (the header status and §7 deviation 1 only; the live forms,
+> applications and grants read through `scripts/read.ps1` that hour; nothing else re-measured).
+> Before that, **2026-10-20 04:0x Phoenix.** Measured on the branch: `pytest -n auto` and `ruff check .`
 > (figures in the merge report), `node site/mock/check.mjs` ok against a FRESH mock (port 8862, nonce
 > `sfix-2`: 28 pages, 375 routes, 353 core settings, all keys present), every `site/mock/*.test.mjs` ok,
 > registry `len(KEY_TYPES)` **1241** (was 1233, read live through `scripts/read.ps1 -Path /api/settings`
@@ -152,7 +156,10 @@ back from `/rolemenu` or `/pings`.
    reason). No member self-service button is lost when `/apply` hides, so i7's "no way out" does not apply,
    and switching applications off to pause new ones would strip every approved member. Staff-handed menu
    roles (source `staff`, including timed roles) are left out for the same reason, and the `rolemenu_mode`
-   help already promised timed roles stay. **Owner call if he wants them in.**
+   help already promised timed roles stay. **Owner call if he wants them in.** → **DECIDED 2026-10-20 18:2x
+   Phoenix, owner verbatim: *"Leave it off"*.** Applications stay out; this deviation is the rule. Live at the
+   decision (read through `scripts/read.ps1`): two open forms (Mentor-app, BaF Stream Team Application),
+   neither names a role, `/api/applications` empty, `/api/roles/grants` empty.
 2. **Live now changed too.** The audit said live-now already hid outside `on`. It did not: it drew in test
    with no streams (same empty card). It now follows the same rule.
 3. **Two bool switches were added** (`*_off_takes_roles_back`, not in the brief) for checklist 33 and staff
