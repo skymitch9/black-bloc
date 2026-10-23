@@ -1,7 +1,5 @@
 {
-  "release": "v253",
-  "commit": "92fcfa47",
-  "changed_features": [
-    "marathon"
-  ]
+  "release": "v254",
+  "commit": "33bc3114",
+  "changed_features": []
 }
