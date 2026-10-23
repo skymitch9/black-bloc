@@ -156,8 +156,13 @@ function restoreTab(current) {
 }
 
 function returnedFromDiscord() {
-  const outcome = new URLSearchParams(location.search).get('signin');
-  if (outcome) history.replaceState(null, '', location.pathname);
+  const params = new URLSearchParams(location.search);
+  const outcome = params.get('signin');
+  if (outcome) {
+    params.delete('signin');
+    const rest = params.toString();
+    history.replaceState(null, '', `${location.pathname}${rest ? `?${rest}` : ''}${location.hash}`);
+  }
   return outcome && outcome !== 'ok' ? RETURNED[outcome] || RETURNED.failed : null;
 }
 
@@ -315,6 +320,7 @@ export function start(page) {
   };
 
   el('signin').setAttribute('href', signInHref());
+  el('signin').addEventListener('click', () => el('signin').setAttribute('href', signInHref()));
   el('retry').addEventListener('click', boot);
   el('refresh').addEventListener('click', reload);
   el('signout').addEventListener('click', async () => {

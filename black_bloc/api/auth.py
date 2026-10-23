@@ -28,6 +28,9 @@ REQUEST_TIMEOUT_SECONDS = 15
 
 SESSION_COOKIE = "__Host-bb_session"
 STATE_COOKIE = "__Host-bb_state"
+NEXT_COOKIE = "__Host-bb_next"
+NEXT_MAX_CHARS = 512
+SIGNIN_PARAM = "signin"
 STATE_TTL_SECONDS = 600
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 LOGIN_RATE = 10
@@ -511,6 +514,41 @@ class TokenBucket:
         return allowed
 
 
+def safe_next(raw: Any) -> str | None:
+    """A path on this site to come back to after sign-in, or None."""
+    text = str(raw or "")
+    if not text.startswith("/") or text.startswith("//") or len(text) > NEXT_MAX_CHARS:
+        return None
+    if "\\" in text or text.startswith("/api/"):
+        return None
+    if any(ord(ch) <= 32 or ord(ch) == 127 for ch in text):
+        return None
+    return text
+
+
+def next_cookie_value(path: str) -> str:
+    return _b64e(path.encode("utf-8"))
+
+
+def next_from_cookie(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    try:
+        return safe_next(_b64d(raw).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def return_to(origin: str, path: str | None, outcome: str) -> str:
+    """Where the callback sends someone: their page, `signin=` added, the hash kept last."""
+    page, _, fragment = (path or "/").partition("#")
+    bare, _, query = page.partition("?")
+    params = [one for one in query.split("&") if one and not one.startswith(f"{SIGNIN_PARAM}=")]
+    params.append(f"{SIGNIN_PARAM}={outcome}")
+    tail = f"#{fragment}" if fragment else ""
+    return f"{origin}{bare}?{'&'.join(params)}{tail}"
+
+
 def state_matches(given: str | None, expected: str | None) -> bool:
     if not given or not expected:
         return False
@@ -545,8 +583,11 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
             request=oauth_request,
         )
 
-    def _home(outcome: str) -> RedirectResponse:
-        return RedirectResponse(f"{settings.origin}/?signin={outcome}", status_code=303)
+    def _home(request: Request, outcome: str) -> RedirectResponse:
+        back = next_from_cookie(request.cookies.get(NEXT_COOKIE))
+        response = RedirectResponse(return_to(settings.origin, back, outcome), status_code=303)
+        response.delete_cookie(NEXT_COOKIE, **cookie_kwargs(settings))
+        return response
 
     @router.get("/login")
     async def login(request: Request) -> Any:
@@ -568,6 +609,16 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
         response.set_cookie(
             STATE_COOKIE, state, max_age=STATE_TTL_SECONDS, **cookie_kwargs(settings)
         )
+        wanted = safe_next(request.query_params.get("next"))
+        if wanted:
+            response.set_cookie(
+                NEXT_COOKIE,
+                next_cookie_value(wanted),
+                max_age=STATE_TTL_SECONDS,
+                **cookie_kwargs(settings),
+            )
+        else:
+            response.delete_cookie(NEXT_COOKIE, **cookie_kwargs(settings))
         return response
 
     @router.get("/callback")
@@ -581,10 +632,10 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
         if not settings.site_login_configured:
             raise Refused(503, "login_unavailable", LOGIN_UNAVAILABLE)
         if error or not code:
-            return _home("denied")
+            return _home(request, "denied")
         if not state_matches(state, request.cookies.get(STATE_COOKIE)):
             log.warning("auth: callback rejected — the state cookie did not match")
-            rejected = _home("state")
+            rejected = _home(request, "state")
             rejected.delete_cookie(STATE_COOKIE, **cookie_kwargs(settings))
             return rejected
 
@@ -602,7 +653,7 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
                     log.warning("auth: the guild member lookup failed — %s", exc)
         except OAuthError as exc:
             log.warning("auth: sign-in failed — %s", exc)
-            return _home("failed")
+            return _home(request, "failed")
         finally:
             await client.close()
 
@@ -621,7 +672,7 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
             "exp": int(time.time()) + SESSION_TTL_SECONDS,
         }
         log.info("auth: signed in %s (staff=%s)", user_id, staff)
-        response = _home("ok")
+        response = _home(request, "ok")
         response.set_cookie(
             SESSION_COOKIE,
             sign_session(str(settings.session_secret), payload),
@@ -667,6 +718,7 @@ __all__ = [
     "BAD_OPERATOR_TOKEN",
     "MEMBER_NOT_STAFF",
     "MEMBER_UNKNOWN",
+    "NEXT_COOKIE",
     "NOT_A_MEMBER",
     "NOT_STAFF",
     "OPERATOR_RATE",
@@ -691,6 +743,7 @@ __all__ = [
     "build_router",
     "client_ip",
     "current_session",
+    "next_from_cookie",
     "note_operator_read",
     "operator_bucket_for",
     "operator_session",
@@ -702,6 +755,8 @@ __all__ = [
     "member_state",
     "read_session",
     "refused_handler",
+    "return_to",
+    "safe_next",
     "sees_structure",
     "session_dependency",
     "sign_session",

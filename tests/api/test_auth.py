@@ -10,6 +10,7 @@ from black_bloc.api import sessions
 from black_bloc.api.auth import (
     BUCKET_MAX_KEYS,
     LOGIN_RATE,
+    NEXT_COOKIE,
     OPERATOR_BUCKET_ATTR,
     OPERATOR_RATE,
     OPERATOR_WHO,
@@ -23,7 +24,9 @@ from black_bloc.api.auth import (
     is_admitted,
     read_bucket_for,
     read_session,
+    return_to,
     role_ids_from,
+    safe_next,
     sign_session,
 )
 from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER, create_app
@@ -731,3 +734,72 @@ def test_a_member_who_owns_nothing_and_an_operator_never_see_structure_backup(cl
     guild.owner_id = int(OPERATOR_WHO["id"])
 
     assert client.get("/api/auth/me", headers=BEARER).json()["structure"] is False
+
+
+def sign_in_from(bot, guild, fakes, page: str):
+    guild.members[USER_ID] = fakes.Member(
+        USER_ID, [fakes.Role(fakes.STAFF_ROLE_ID, "Aunties / Uncles")]
+    )
+    client = client_for(bot, FakeDiscord(member={"roles": [str(fakes.STAFF_ROLE_ID)]}))
+    from urllib.parse import parse_qs, urlparse
+
+    login = client.get("/api/auth/login", params={"next": page})
+    state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+    return login, client.get("/api/auth/callback", params={"code": "abc", "state": state})
+
+
+def test_signing_in_from_a_deep_link_comes_back_to_that_page_and_section(bot, guild, fakes):
+    login, done = sign_in_from(bot, guild, fakes, "/posts.html#sect-questions")
+    assert login.cookies.get(NEXT_COOKIE)
+    assert done.headers["location"] == f"{fakes.ORIGIN}/posts.html?signin=ok#sect-questions"
+    assert done.cookies.get(SESSION_COOKIE)
+    assert any(
+        h.startswith(f"{NEXT_COOKIE}=") and "Max-Age=0" in h
+        for h in done.headers.get_list("set-cookie")
+    )
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        "//evil.example/x",
+        "https://evil.example/",
+        "/api/auth/logout",
+        "/\\evil",
+        "/a b",
+        "",
+        "/" + "x" * 600,
+    ],
+)
+def test_a_return_page_off_this_site_is_ignored_and_lands_home(bot, guild, fakes, page):
+    login, done = sign_in_from(bot, guild, fakes, page)
+    assert not login.cookies.get(NEXT_COOKIE)
+    assert done.headers["location"] == f"{fakes.ORIGIN}/?signin=ok"
+
+
+def test_declining_at_discord_still_comes_back_to_the_page(bot):
+    client = client_for(bot)
+    client.get("/api/auth/login", params={"next": "/events.html#marathon-3"})
+    done = client.get("/api/auth/callback", params={"error": "access_denied"})
+    assert done.headers["location"].endswith("/events.html?signin=denied#marathon-3")
+
+
+def test_a_tampered_return_cookie_lands_home(bot):
+    client = client_for(bot)
+    client.cookies.set(NEXT_COOKIE, "!!not-base64!!")
+    done = client.get("/api/auth/callback", params={"error": "access_denied"})
+    assert done.headers["location"].endswith("/?signin=denied")
+
+
+def test_return_to_keeps_the_query_drops_an_old_signin_and_puts_the_hash_last():
+    assert return_to("https://o", "/runs.html?view=games&signin=state#demo", "ok") == (
+        "https://o/runs.html?view=games&signin=ok#demo"
+    )
+    assert return_to("https://o", None, "failed") == "https://o/?signin=failed"
+
+
+def test_safe_next_takes_only_a_plain_path_on_this_site():
+    assert safe_next("/posts.html#sect-questions") == "/posts.html#sect-questions"
+    assert safe_next("/x?y=1") == "/x?y=1"
+    for bad in (None, "", "posts.html", "//x", "/\\x", "/api/status", "/a\tb", "/" + "x" * 600):
+        assert safe_next(bad) is None
