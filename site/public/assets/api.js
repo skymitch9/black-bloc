@@ -7,7 +7,8 @@ const NAME_BATCH = 80;
 export class Outage extends Error {}
 
 export function signInHref() {
-  return `${API}/api/auth/login`;
+  const here = `${location.pathname}${location.search}${location.hash}`;
+  return `${API}/api/auth/login?next=${encodeURIComponent(here)}`;
 }
 
 /** For the handful of links a person follows rather than the page fetching. */

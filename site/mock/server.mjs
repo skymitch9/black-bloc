@@ -3105,11 +3105,19 @@ route('POST', '/api/mock/guard', async (context) => {
 
 route('GET', '/api/auth/me', (context) => meBody(context.session));
 
-route('GET', '/api/auth/login', (context) => ({
-  status: 302,
-  headers: { location: '/index.html?signin=ok', 'set-cookie': 'mock_as=staff; Path=/; SameSite=Lax' },
-  body: null,
-}));
+route('GET', '/api/auth/login', (context) => {
+  const wanted = String(context.url.searchParams.get('next') || '');
+  const safe = wanted.startsWith('/') && !wanted.startsWith('//') && !wanted.startsWith('/api/') && !wanted.includes('\\');
+  const [page, fragment = ''] = (safe ? wanted : '/index.html').split('#');
+  const [bare, query = ''] = page.split('?');
+  const params = new URLSearchParams(query);
+  params.set('signin', 'ok');
+  return {
+    status: 302,
+    headers: { location: `${bare}?${params}${fragment ? `#${fragment}` : ''}`, 'set-cookie': 'mock_as=staff; Path=/; SameSite=Lax' },
+    body: null,
+  };
+});
 
 route('POST', '/api/auth/logout', () => ({
   status: 200,
