@@ -10833,3 +10833,13 @@ Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
 | `site/public/assets/tablefit.js:50` `fitScroll` | Opts in only a box that already has `data-long` (more than `ui.js:589` `LONG_FROM` rows), so the sticky-header rule (`site.css`, keyed on `data-long`) always comes with it. One `resize` listener per window re-fits every live box in one frame. |
 | `site/public/assets/site.css:839` `.table-scroll[data-fit="true"]` | Same specificity as the `data-long` cap and BEFORE the `max-width: 900px` block, so the phone rule (no cap) still wins on a phone. |
 | `site/public/assets/page-runs.js:346` / `:426` | Both views re-fit after every paint, with their pager holder as `below` (the holder survives the repaint; the pager inside it does not). |
+
+## Sign-in comes back to the page it started on (branch `signin-return`, v254 2026-10-23; keyed against `41d63f95`)
+
+| Where | Why |
+|---|---|
+| `black_bloc/api/auth.py:517` `safe_next` | The only gate on the return page: a path starting with ONE `/`, no backslash, no whitespace or control character, not under `/api/`, at most 512 characters. The redirect is always built as `settings.origin + path`, so even a path that slipped through could not leave the site; the checks keep a crafted link from landing on an API route. |
+| `black_bloc/api/auth.py:542` `return_to` | `signin=` goes into the query BEFORE the hash (a parameter after `#` never reaches `location.search`), an older `signin=` is dropped, other parameters are kept. With no page it is exactly the old `/?signin=<outcome>`, so every earlier test still holds. |
+| `black_bloc/api/auth.py:586` `_home` | Every callback outcome (ok, denied, state, failed) returns to the page, so a refusal sentence shows where the person was; the `__Host-bb_next` cookie is cleared on every one. It is base64url because `#`, `?` and `;` are not cookie-safe. |
+| `black_bloc/api/auth.py:612` | A login with no usable `next` DELETES any older return cookie, so an abandoned sign-in from another page cannot redirect a later one. |
+| `site/public/assets/app.js` `returnedFromDiscord` / the `signin` click | The marker is stripped but the hash and other parameters are kept, so a section deep link (`#sect-questions`) or a drawer slug still opens. The link's `next` is re-read on click because the hash can change after the page loads. |
