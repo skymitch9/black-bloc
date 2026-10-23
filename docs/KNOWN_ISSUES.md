@@ -172,6 +172,16 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
+## KI-45 — A GDQ Hotfix show the sheet drops (renamed or moved) is never stale-archived; staff archive it by hand — `WATCHING`
+
+**Symptom:** when the Hotfix sheet stops listing a show's day, `black_bloc/marathon_hotfix.py` raises *the Hotfix sheet does not list <show> on <day> any more* as `unpublished=True`, and `black_bloc/marathon_stale.py` `failed_fields` restarts the stale clock on every unpublished read, so the v231 stale archive never takes it. The marathon sits on the staff list with a *could not be read* line and one read a day. Seen twice: *Special Event* (marathon 18, renamed to *GDQueer* on the sheet) and *Hidden Heroes (Oct 2026)* (marathon 16); both archived by hand 2026-10-22 22:3x.
+
+**Status:** `WATCHING` since 2026-10-22 (owner: *"It's hard to see the value, is it a gap or overkill"*, then *"Archive them"*).
+
+**Why tolerated:** no member effect — both shows were over with 0 BaF runs, nothing posted, and the feed boards the renamed show as a new marathon by itself. Staff clear it in two clicks (Archive; Restore brings it back).
+
+**What would change it:** **1** stuck show that has a BaF runner, or **more than 3** stuck Hotfix shows in one month — then split *no longer listed* from *not published yet* in `marathon_hotfix.py` so the first counts as a failed read.
+
 ## KI-44 — Modmail's one-open-ticket-per-member rule now covers RUN tickets too, so a run and a support ticket wait on each other — `WATCHING`
 
 **Symptom:** a run submitted on `/pb` is a modmail ticket (source `points`, [`info/points-design.md`](info/points-design.md) §G), and modmail allows one open ticket per member (the `modmail_open_ticket` partial unique index). So, until staff decide the run: a member with a pending run who presses **Open a ticket** (panel, `/modmail`, the posted button) is told they already have a ticket open; a DM they send the bot is NOT refused — it is relayed INTO the run ticket (`any_open_ticket_for`), so their support question lands on the run's card; a member with a support ticket open is refused **Submit a run** (`points_ticket_open_said`); and a second run waits for the first decision (`points_run_waiting_said`). Every one of these refusals writes a `modmail.open_refused` row whose `reason` is `already_open` or `run_waiting`.
