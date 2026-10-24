@@ -211,3 +211,27 @@ def test_post_to_test_with_nothing_queued_is_refused_in_words(client, sign_in):
 
     assert refused.status_code == 409
     assert "queue is empty" in refused.json()["message"]
+
+
+async def test_each_queued_question_carries_the_slot_it_goes_up_in(client, sign_in, web, wf):
+    from datetime import timedelta
+
+    from black_bloc import questions as rules
+
+    sign_in(client)
+    client.post("/api/questions", json={"text": "one?\ntwo?\nthree?"})
+
+    found = client.get("/api/questions").json()
+    first = rules.slot_from(found["slot_at"])
+    week = timedelta(days=7)
+    assert [row["publish_at"] for row in found["queue"]] == [
+        rules.slot_key(first + week * n) for n in range(3)
+    ]
+
+    assert client.post("/api/questions/skip").status_code == 200
+    skipped = client.get("/api/questions").json()["queue"]
+    assert skipped[0]["publish_at"] == rules.slot_key(first + week)
+
+    await web.store.set(wf.GUILD_ID, "posts_mode", "off")
+    off = client.get("/api/questions").json()["queue"]
+    assert [row["publish_at"] for row in off] == [None, None, None]

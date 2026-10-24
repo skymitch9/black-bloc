@@ -10843,3 +10843,14 @@ Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
 | `black_bloc/api/auth.py:586` `_home` | Every callback outcome (ok, denied, state, failed) returns to the page, so a refusal sentence shows where the person was; the `__Host-bb_next` cookie is cleared on every one. It is base64url because `#`, `?` and `;` are not cookie-safe. |
 | `black_bloc/api/auth.py:612` | A login with no usable `next` DELETES any older return cookie, so an abandoned sign-in from another page cannot redirect a later one. |
 | `site/public/assets/app.js` `returnedFromDiscord` / the `signin` click | The marker is stripped but the hash and other parameters are kept, so a section deep link (`#sect-questions`) or a drawer slug still opens. The link's `next` is re-read on click because the hash can change after the page loads. |
+
+## The queue's Goes up column (branch `questions-publish-date`, 2026-10-23; keyed by LINE at that branch)
+
+| Where | Note |
+|---|---|
+| `black_bloc/questions.py:122` `slot_after` | One week on by LOCAL date, then back through `slot_on`, so a zone with DST keeps 9:00 local rather than drifting an hour (a flat +7 days would not). |
+| `black_bloc/questions.py:126` `planned` | Walks forward from This week's slot and hands each queued question the next slot NOT in `taken`. The loop bound is `count + len(taken)`: each settled slot can cost one extra step and no more. |
+| `black_bloc/questions_store.py:126` `settled_from` | Every slot row at or after the start whose status is not `pending` — in practice a future **Skip this week**, or This week itself once it is posted, skipped or taken down. Keys compare as strings: every `slot_at` is written by `slot_key`, one format. |
+| `black_bloc/questions_moves.py:309` `plan` | Starts at `week()`'s slot, so a passed slot still catching up (pending inside `question_catchup_hours`) is the first date shown. Off → every date None ("—" on the page): nothing will go up. An out-of-cycle **Post one now** never moves a slot, so it only shifts which question is on top. |
+| `black_bloc/api/tools/questions.py:59` | `publish_at` rides on each `queue` row of `GET /api/questions`; the panel and `/api/questions/current` are unchanged. It is a projection "as things stand" — a reorder, skip or extra post changes it on the next read; nothing stores it. |
+| `site/public/assets/questions-section.js:146` | Shown in the viewer's own clock (`toLocaleString`, weekday + date + time). The mock (`questionPlan`) steps a flat 7 days because it reads slots in a fixed Phoenix offset already. |

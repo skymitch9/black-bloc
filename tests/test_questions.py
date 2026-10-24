@@ -176,3 +176,23 @@ def test_a_settled_slot_hands_this_week_to_the_next_one(status):
 def test_the_channel_url_is_the_discord_link():
     assert rules.channel_url(1, 2) == "https://discord.com/channels/1/2"
     assert rules.channel_url(1, None) is None
+
+
+def test_the_plan_is_one_slot_a_week_passing_over_settled_ones():
+    found = schedule()
+    start = datetime(2026, 10, 26, 16, 0, tzinfo=UTC)
+    taken = {rules.slot_key(start + timedelta(days=14))}
+
+    plan = rules.planned(start, found, 3, taken)
+
+    assert plan == [start, start + timedelta(days=7), start + timedelta(days=21)]
+    assert rules.planned(start, found, 0, taken) == []
+
+
+def test_the_plan_keeps_the_local_clock_across_dst():
+    found = schedule(weekday="sunday", clock="09:00", tz="America/New_York")
+    start = datetime(2026, 10, 25, 13, 0, tzinfo=UTC)
+
+    plan = rules.planned(start, found, 2, set())
+
+    assert [one.hour for one in plan] == [13, 14]

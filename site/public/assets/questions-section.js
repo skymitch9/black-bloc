@@ -40,6 +40,9 @@ const POST_TO_TEST = 'Post to test';
 const NO_TEST_HOME = 'No test channel is set, so Post to test has nowhere to go. Pick the Test channel in Settings.';
 const OUT_OF_CYCLE = 'out of cycle';
 const STATUS_WORDS = { removed: 'removed', skipped: 'skipped' };
+const PUBLISH_FORMAT = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+
+const publishWords = (iso) => (iso ? new Date(iso).toLocaleString([], PUBLISH_FORMAT) : '—');
 
 let reloadPage = async () => {};
 let jumped = false;
@@ -140,6 +143,7 @@ function queueCard(rows) {
   };
   const list = table([
     { label: '#', cell: (row, at) => String(at + 1), className: 'mono' },
+    { label: 'Goes up', cell: (row) => publishWords(row.publish_at) },
     { label: 'Question', cell: (row) => el('div', { 'data-question': String(row.id) }, [editInPlace(row, say)]) },
     {
       label: '',

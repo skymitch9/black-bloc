@@ -119,6 +119,23 @@ def slots_around(now: datetime, schedule: Schedule) -> tuple[datetime, datetime]
     return last, following
 
 
+def slot_after(when: datetime, schedule: Schedule) -> datetime:
+    return slot_on(when.astimezone(schedule.tz).date() + timedelta(days=7), schedule)
+
+
+def planned(start: datetime, schedule: Schedule, count: int, taken: set[str]) -> list[datetime]:
+    """The slots the next `count` queued questions go up in, passing over settled ones."""
+    found: list[datetime] = []
+    slot = start
+    for _ in range(count + len(taken)):
+        if len(found) == count:
+            break
+        if slot_key(slot) not in taken:
+            found.append(slot)
+        slot = slot_after(slot, schedule)
+    return found
+
+
 def slot_key(when: datetime) -> str:
     return when.astimezone(UTC).isoformat(timespec="seconds")
 

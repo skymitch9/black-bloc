@@ -11973,6 +11973,19 @@ const questionQueue = () => state.questions
   .filter((one) => one.status === 'queued')
   .sort((a, b) => a.position - b.position || a.id - b.id);
 
+function questionPlan(count) {
+  if (postsMode() === 'off') return Array(count).fill(null);
+  const { key } = questionWeek();
+  const found = [];
+  let at = new Date(key);
+  while (found.length < count) {
+    const row = state.questionSlots[slotKey(at)];
+    if (!row || row.status === 'pending') found.push(slotKey(at));
+    at = new Date(at.getTime() + 7 * 86400000);
+  }
+  return found;
+}
+
 function questionTarget(mode) {
   return mode === 'on' ? state.settings.get('question_channel_id') || null : null;
 }
@@ -12018,7 +12031,7 @@ route('GET', '/api/questions', (context) => {
     posted_id: row.question_id,
     test_id: questionShown() ? questionShown().id : null,
     test_home: postsHome() ? String(postsHome()) : null,
-    queue: questionQueue(),
+    queue: questionQueue().map((one, at, all) => ({ ...one, publish_at: questionPlan(all.length)[at] })),
     history: history.map(questionOut),
   };
 });
