@@ -46,6 +46,7 @@ async def index(bot: Any, guild: Any) -> dict[str, Any]:
     posted = found["posted"]
     shown = testing.this_weeks_question(found)
     home = testing.home_of(bot, guild)
+    dates = await moves.plan(bot, guild, found, len(queued))
     return {
         "mode": found["mode"],
         "slot_at": rules.slot_key(found["slot"]),
@@ -54,7 +55,10 @@ async def index(bot: Any, guild: Any) -> dict[str, Any]:
         "posted_id": int(posted["id"]) if posted is not None else None,
         "test_id": int(shown["id"]) if shown is not None else None,
         "test_home": str(home) if home else None,
-        "queue": [question_row(row) for row in queued],
+        "queue": [
+            question_row(row) | {"publish_at": rules.slot_key(at) if at else None}
+            for row, at in zip(queued, dates, strict=True)
+        ],
         "history": [question_row(row) | {"url": message_url(guild, row)} for row in history],
     }
 

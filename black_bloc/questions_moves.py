@@ -306,6 +306,15 @@ async def week(bot: Any, guild: Any, now: datetime | None = None) -> dict[str, A
     }
 
 
+async def plan(bot: Any, guild: Any, found: dict[str, Any], count: int) -> list[datetime | None]:
+    """When each queued question goes up as things stand; None for all while off."""
+    if found["mode"] == rules.OFF:
+        return [None] * count
+    start = found["slot"]
+    taken = await store.settled_from(bot.db, guild.id, rules.slot_key(start))
+    return rules.planned(start, found["schedule"], count, taken)
+
+
 async def add(
     bot: Any,
     guild: Any,

@@ -171,3 +171,8 @@ Owner sheet items p1a, p1d, p1e, p1f, i1, i2, p3a, p4f, p4i, p4j; the whole buil
 Deviations: (1) with no shadow, `questions_moves.target_id` refuses in words while off instead of resolving a rehearsal home; (2) the warning DM's skipped reason reads `off` (was `shadow`).
 
 > **Follow-up 2026-10-20 (`one-test-channel`):** `posts_shadow_channel_id` is RETIRED — every rehearsal and every Post to test copy now goes to the one **Test channel**, `shadow_channel_id`. Where this doc names that key, read `shadow_channel_id`. See [`one-test-channel-design.md`](one-test-channel-design.md).
+
+## Follow-up 2026-10-23 — the queue shows when each question goes up
+
+Owner: *"can we add the date of publish as it currently stands as a queue column"*. Branch `questions-publish-date`. The Queue table gains a **Goes up** column: the first queued question gets This week's slot (or the next one if This week is already settled), each later one the following week, passing over any future week already skipped. `posts_mode` off shows "—". It is computed on every read (`GET /api/questions` → `queue[].publish_at`), never stored; the panel is unchanged. Notes: [`code-notes.md`](code-notes.md) *The queue's Goes up column*.
+

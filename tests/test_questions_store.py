@@ -61,3 +61,18 @@ async def test_a_slot_row_is_made_once_and_keeps_its_first_sighting(db):
 
     await store.set_slot(db, GUILD, "s1", rules.PENDING, NOW)
     assert (await store.get_slot(db, GUILD, "s1"))["resolved_at"] is None
+
+
+async def test_settled_from_names_the_non_pending_slots_from_a_slot_on(db):
+    for slot, status in (
+        ("2026-10-19T16:00:00+00:00", rules.SKIPPED),
+        ("2026-10-26T16:00:00+00:00", rules.PENDING),
+        ("2026-11-02T16:00:00+00:00", rules.SKIPPED),
+    ):
+        await store.ensure_slot(db, GUILD, slot, NOW)
+        await store.set_slot(db, GUILD, slot, status, NOW)
+
+    found = await store.settled_from(db, GUILD, "2026-10-26T16:00:00+00:00")
+
+    assert found == {"2026-11-02T16:00:00+00:00"}
+    assert await store.settled_from(db, GUILD + 1, "2026-10-26T16:00:00+00:00") == set()

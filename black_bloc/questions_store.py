@@ -123,6 +123,15 @@ async def get_slot(db: Any, guild_id: int, slot_at: str) -> Any:
     return await cur.fetchone()
 
 
+async def settled_from(db: Any, guild_id: int, slot_at: str) -> set[str]:
+    cur = await db.conn.execute(
+        "SELECT slot_at FROM weekly_question_slots WHERE guild_id = ? AND slot_at >= ? "
+        "AND status != ?",
+        (int(guild_id), slot_at, PENDING),
+    )
+    return {str(row["slot_at"]) for row in await cur.fetchall()}
+
+
 async def ensure_slot(db: Any, guild_id: int, slot_at: str, now: datetime) -> Any:
     await db.conn.execute(
         "INSERT OR IGNORE INTO weekly_question_slots(guild_id, slot_at, status, seen_at) "
