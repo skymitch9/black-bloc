@@ -288,10 +288,6 @@ docs bookkeeping lands with the work, not after.
 - ⏳ **Late tracking: the next late-tracked marathon with a live BaF run is the live proof owed** (v220 is live; the pinned tests and the boot columns are all that is verified; see [`DONE.md`](DONE.md) 2026-10-09 v220).
 - **QUEUED 2026-10-09 22:3x - guides follow-ups (found by the point-system guides pass, not built):** (1) points has no entry in `FEATURE_PAGES` / `FEATURE_PATHS` (`black_bloc/guides.py`), so the five guides are filed under `core`: *Where it happens* reads Dashboard instead of the Leaderboard page, and NO deploy will ever mark their pictures stale because `FEATURE_PATHS["core"]` lists no points module - a `points` feature entry is a small code change; (2) 19 guide pictures sitewide are still stale (v166 and older), unchanged by this pass; (3) the one-published-guide-per-command index was dropped 2026-09-25 (schema 66) - docs that still describe it (the capture doc's *would refuse a second*) need a dated correction line; (4) the capture doc's site screenshots needed the page zoomed to 1.4 because the page is 2498 px wide at 1x - a capture gotcha. Details: [`info/guides-design.md`](info/guides-design.md).
 
-## 📋 Session 2026-10-23
-
-- [ ] **Weekly questions: a publish-date column in the queue** (owner, 16:0x: *"can we add the date of publish as it currently stands as a queue column"*). Each queued question shows the slot it goes up in as things stand: weekly from This week (or the next slot once This week is settled), skipping future weeks already skipped; blank when posts_mode is off. Branch `questions-publish-date`.
-
 ## 📋 Session 2026-10-19
 
 

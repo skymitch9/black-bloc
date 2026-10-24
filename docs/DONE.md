@@ -44,6 +44,12 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-10-23 v255 — the weekly questions queue shows when each question goes up
+
+- [ ] **Weekly questions: a publish-date column in the queue** (owner, 16:0x: *"can we add the date of publish as it currently stands as a queue column"*). Each queued question shows the slot it goes up in as things stand: weekly from This week (or the next slot once This week is settled), skipping future weeks already skipped; blank when posts_mode is off. Branch `questions-publish-date`.
+
+- **Shipped v255** (`adc2cb7c`, merge `d63533fb`) 17:20; details, rollback and what was verified are on the v255 line of [`deploys.log`](deploys.log). Live: Oct 26 → Dec 28, Mondays 9:00 AM. Notes: [`info/code-notes.md`](info/code-notes.md) *The queue's Goes up column*; design follow-up in [`info/weekly-questions-design.md`](info/weekly-questions-design.md).
+
 ## 2026-10-23 — Weekly questions: #qotw read, 8 questions queued through Dec 28
 
 - [ ] **Weekly questions: read #qotw, then fill the queue** (owner, 15:3x: *"can you read everything in qotw and the questions uploaded by people into qotw. after that lets generate some topics then questions to fill the rest of the list"*). Read the whole #qotw channel (Feb 21 2026 onward) and the live queue (2 queued: ids 2 and 3). Next: topics for the owner to pick, then questions, then add the chosen ones to the queue on the site.
