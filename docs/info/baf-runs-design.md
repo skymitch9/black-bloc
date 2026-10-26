@@ -300,6 +300,24 @@ Keys 1247 → 1248.
 
 If (a) or (b), a narrow change is possible. One idea: a lost row whose game is equal and whose runners are equal pairs on order alone, even when a second lost row shares the runner. But that rule lives in the one reconcile path that moves persisted ids (`rekey_runs`). The pair's held move counts and `marathon.member_run_moved` damping, its posted reminders, the runner's thread links and the board all follow the row id, and a wrong pair would merge two real runs, rewording one runner's live highlight onto another game. That is why the existing rule pairs nothing when it is ambiguous. My recommendation: diagnose first. Change `same_slot` / `_candidates` only if the diagnosis names (a) or (b), and only with a fixture of this show's three reads. Keep this view fold either way: it also repairs history that is already split, which a tracker change would not touch.
 
+**Diagnosis, 2026-10-26 08:0x (Opus 5.5 conductor, read-only through the operator token; owner: *"find out why the tracker missed marathon 12s runs"*).** **None of (a), (b) or (c): the rename happened before the pairing code existed.** Measured from the `marathon.fetched` / `marathon.schedule_changed` rows for marathon 12 (1720 `marathon.fetched` rows paged 2026-10-01 → 10-10) and `/api/marathons/12`:
+
+| When (UTC) | Read | Rows |
+|---|---|---|
+| 2026-10-03 04:01 | first read, `added=2` | 171 `…/12:28:48-am` order 1, 172 `…/true-ending` order 2 |
+| 2026-10-03 12:11 | `added=1, dropped=1, renamed` not yet a field | 171 dropped, 173 `…/102%` order 1 inserted |
+| 2026-10-04 04:29 | `moved=1` | — |
+| **2026-10-05 04:59** | **v204 `run-identity` deployed** (`deploys.log` line 203) | — |
+| 2026-10-10 01:50 → 04:19 | the show: 173 live 01:50 (early, by title), done 02:42; 172 live 02:42 (title), done 04:19 (replay) | — |
+
+So the 12:28:48 AM → 102% rename landed **41 hours before** `marathon.renames` shipped, and the old diff did what it did then: drop one, insert one. No `marathon.run_renamed` row exists for marathon 12 because the code that writes it was not live yet.
+
+**Today's code pairs it.** `marathon.diff([171, 172], [102%, True Ending], move_minutes=5)` run in the venv against the stored rows returns `renamed = [(171, …/102%)]`, no insert and no drop. It still pairs with 171's planned start moved by 5½ hours, because the order stayed 1 (`same_slot`: same `order_no` within 12 h). Only one lost row carried Ryan Ford, so `_candidates` never asked for `same_words`. ⚠️ The stored `sheet_at` of the 10-03 rows was not logged, so the planned starts in that run are reconstructed (02:00 from `early_match_held.planned_at`); the order numbers are measured.
+
+**The account above is wrong on one point.** *True Ending* was never a rename of the DKC2 row. 172 was its **own sheet row, at order 2, from the first read**, beside the row that became 102%. The sheet listed DKC2 twice for Ryan Ford, and the tracker followed the stream title from one to the other at 02:42. Whether that was one run or two segments is staff's call. The owner's 2026-10-20 *"fix the duplicate"* treats it as one run, and the view fold (`runs_same_run_minutes`) is the tool that serves that. No tracker change can, because both rows were real sheet rows.
+
+**Recommendation: no change to `same_slot` / `_candidates`.** The history split before v204 stays repaired by the fold plus the hand exclusion on t172. A sheet that lists one game twice for one runner is a fold question, not a pairing question.
+
 The 2026-10-19 FOUND item (*run ids drift on RGLtv's A Fistful of Brawlers*, marathon 14) is a **horaro** marathon. Its `external_id` is the source's id, not a `game/category` slug, so it is the same symptom from a different cause. The fold here does not reach it either way: horaro is not in `runs_sources`.
 
 ### Deviations (continued)
