@@ -1039,6 +1039,7 @@ async def seed_world(client, web, guild, wf) -> dict:
     await post_blocks.attach(db, await posts.get_post_by_id(db, board_id), "leaderboard")
     await sticky.write_words(db, guild_id, wf.VOICE_CHANNEL_ID, "", 7, post_id=board_id)
     await questions_store.add_many(db, guild_id, ["Contract question?"], 7, datetime.now(UTC))
+    await seed_bluesky(db, guild_id)
     structure_old, structure_new = await seed_structure(db, guild_id)
     brackets = await seed_brackets(db, guild_id)
     points = await seed_points(db, guild_id)
@@ -1407,6 +1408,15 @@ async def order_of(db, tournament_id: int) -> list[int]:
     from black_bloc import brackets_store as store_
 
     return [one["id"] for one in await store_.entrants(db, tournament_id)]
+
+
+async def seed_bluesky(db, guild_id: int) -> None:
+    """One seen post, so the section's recent rows have a shape to check."""
+    from black_bloc import bluesky, bluesky_store
+
+    path = Path(__file__).resolve().parents[1] / "fixtures" / "bluesky" / "author_feed.json"
+    [first, *_] = bluesky.items_of(json.loads(path.read_text(encoding="utf-8"))["feed"])
+    await bluesky_store.record(db, guild_id, first, bluesky.SKIPPED_OLD, datetime.now(UTC))
 
 
 async def seed_structure(db, guild_id: int) -> tuple[int, int]:

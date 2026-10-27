@@ -359,6 +359,10 @@
       "structure_backup_unchanged_said"
     ],
     "min": {
+      "bluesky_interval_minutes": 1,
+      "bluesky_keep": 100,
+      "bluesky_max_age_hours": 1,
+      "bluesky_seed_count": 1,
       "brackets_advance_losers_from_default": 2,
       "brackets_advance_per_pool_default": 1,
       "brackets_best_of_from_round": 2,
@@ -473,6 +477,10 @@
     "max": {
       "applications_retry_days": 3650,
       "automod_warn_threshold": 100,
+      "bluesky_interval_minutes": 60,
+      "bluesky_keep": 5000,
+      "bluesky_max_age_hours": 168,
+      "bluesky_seed_count": 10,
       "brackets_advance_losers_from_default": 16,
       "brackets_advance_per_pool_default": 16,
       "brackets_best_of_from_round": 1024,
@@ -2755,6 +2763,98 @@
         "guild_id",
         "channel_url",
         "mode"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/bluesky",
+      "read_by": [
+        "bluesky-section.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "handle",
+        "channel_id",
+        "test_home",
+        "seed_count",
+        "last_read_at",
+        "last_ok_at",
+        "failures",
+        "last_error",
+        "next_read_at",
+        "recent"
+      ],
+      "rows": {
+        "recent": [
+          "uri",
+          "kind",
+          "status",
+          "text",
+          "url",
+          "channel_id",
+          "message_url",
+          "seen_at",
+          "posted_at"
+        ]
+      }
+    },
+    {
+      "_": "Read now (bluesky-mirror-design.md): one read of the account whatever the clock says. The real API's WebBot answers from tests/fixtures/bluesky/author_feed.json, never the network; bluesky_mode ships test, so the test channel is pointed at for this request.",
+      "method": "POST",
+      "path": "/api/bluesky/read",
+      "body": {},
+      "settings": {
+        "shadow_channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "bluesky-section.js Read now"
+      ],
+      "shape": "object",
+      "keys": [
+        "ok",
+        "message",
+        "value"
+      ]
+    },
+    {
+      "_": "Post to test: Post the latest with one post, the test channel and no note.",
+      "method": "POST",
+      "path": "/api/bluesky/rehearse",
+      "body": {},
+      "settings": {
+        "shadow_channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "bluesky-section.js Post to test"
+      ],
+      "shape": "object",
+      "keys": [
+        "ok",
+        "message",
+        "value"
+      ]
+    },
+    {
+      "_": "Post the latest… (bluesky-mirror-design.md ▸ Post the latest…): to the test channel here, so the entry needs no bluesky_channel_id.",
+      "method": "POST",
+      "path": "/api/bluesky/post-latest",
+      "body": {
+        "count": 2,
+        "where": "test",
+        "note": ""
+      },
+      "settings": {
+        "shadow_channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "bluesky-section.js Post the latest…"
+      ],
+      "shape": "object",
+      "keys": [
+        "ok",
+        "message",
+        "value"
       ]
     },
     {
@@ -12830,6 +12930,9 @@
     "web.runs.developer_set",
     "web.question.rehearsed",
     "web.sticky.rehearsed",
-    "web.poll.rehearsed"
+    "web.poll.rehearsed",
+    "web.bluesky.read_now",
+    "web.bluesky.rehearsed",
+    "web.bluesky.posted_latest"
   ]
 }

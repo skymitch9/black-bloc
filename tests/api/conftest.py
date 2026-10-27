@@ -17,6 +17,8 @@ from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 from tests.conftest import put, take
 
+BLUESKY_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "bluesky" / "author_feed.json"
+
 SECRET = "test-session-secret-long-enough-to-sign"
 ORIGIN = "https://testserver"
 SAME_SITE = {SAME_SITE_HEADER: SAME_ORIGIN}
@@ -393,6 +395,11 @@ class WebGuard:
         )
 
 
+async def recorded_bluesky_feed(url: str, headers: Any, seconds: int) -> tuple[int, bytes]:
+    """The AppView answered from the recorded fixture: no test reaches the network."""
+    return 200, BLUESKY_FIXTURE.read_bytes()
+
+
 class WebBot:
     def __init__(self, settings: Any, guild: Any, db: Any, store: Any) -> None:
         self.settings = settings
@@ -406,6 +413,7 @@ class WebBot:
         self.started_at = datetime.now(UTC)
         self.views: list[Any] = []
         self.user = SimpleNamespace(id=1)
+        self.bluesky_fetch = recorded_bluesky_feed
 
     def is_ready(self) -> bool:
         return True
