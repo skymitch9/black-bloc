@@ -132,3 +132,15 @@ Set `bluesky_channel_id` to #bsky-feed on the Posts page (Claude cannot write se
 test copy or two in #post-test, then flip `bluesky_mode` to on.
 
 ## Deviations (build) — the agent appends here, numbered
+
+1. **The keys file under `posts`, not a `bluesky` group.** `/settings`' group select is at Discord's cap of 25 and `bluesky_` would be the 26th (`tests/test_settings_store.py` pins 25), so `NAMESPACE_OVERRIDE` files all thirteen under `posts` — the sticky precedent, and the page they live on. CORE_KEYS is unchanged (354); KEY_TYPES 1254 → 1267. The section reads `settingsNamespace(all, 'posts')` filtered by the `bluesky_` prefix.
+2. **aiohttp, not httpx.** httpx is a dev-only dependency here (`pyproject.toml`); discord.py already ships aiohttp. `bluesky_feed.read_feed` takes a `fetch` so tests (and the api tests' `WebBot`) answer from the recorded fixture. **No `read_profile`:** a repost item carries the account in `reason.by`, which is what `{account}` needs.
+3. **`bluesky_posts` gains `text`** (the post's text, for the section's Recent table) and an index on `(guild_id, seen_at)` for the prune. Two statuses beyond the design's: `claimed` (taken, send in flight) and `retry` (one failed send, taken back by the next read).
+4. **`skipped_old` / `skipped_kind` are one log row per read** carrying `count` and `uris`, not one row per post — the first read after the deploy would otherwise write ~30 rows.
+5. **No `bluesky.settings` kind.** A setting change is already logged by the shared settings path (`settings.*`), checklist 34.
+6. **On with no channel (or test with no test channel) reads nothing** and logs `bluesky.post_failed` once (the reason is stored in `bluesky_reads.last_error` and logged only when it changes). Nothing is recorded as unsent, so once the channel is set the next read posts what is still inside `bluesky_max_age_hours`.
+7. **Two kinds off the one Post the latest… implementation:** to the test channel (and Post to test) logs `bluesky.rehearsed`; to the channel logs `bluesky.posted_latest`. Same details either way. A test-channel press claims no row.
+8. **The test copy's home is `shadow.channel_id`** (the one test channel, else the guard's, else the log channel) — the home every Post to test uses — rather than `shadow_channel_id` alone.
+9. **Read now is refused in words while `bluesky_mode` is off**, and a failed read answers 502 with Bluesky's reason in a sentence. `GET /api/bluesky` also carries `test_home` and `seed_count` so the page can draw Post to test and the ask's default.
+10. **Post the latest… to the channel retakes any row not already `posted`/`claimed`** (a test copy, too old, not mirrored, failed) — an explicit staff press overrides the loop's decisions; already-up posts are skipped and counted in the reply.
+

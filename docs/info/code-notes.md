@@ -10854,3 +10854,18 @@ Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
 | `black_bloc/questions_moves.py:309` `plan` | Starts at `week()`'s slot, so a passed slot still catching up (pending inside `question_catchup_hours`) is the first date shown. Off → every date None ("—" on the page): nothing will go up. An out-of-cycle **Post one now** never moves a slot, so it only shifts which question is on top. |
 | `black_bloc/api/tools/questions.py:59` | `publish_at` rides on each `queue` row of `GET /api/questions`; the panel and `/api/questions/current` are unchanged. It is a projection "as things stand" — a reorder, skip or extra post changes it on the next read; nothing stores it. |
 | `site/public/assets/questions-section.js:146` | Shown in the viewer's own clock (`toLocaleString`, weekday + date + time). The mock (`questionPlan`) steps a flat 7 days because it reads slots in a fixed Phoenix offset already. |
+
+## The Bluesky mirror (branch `bluesky-mirror`, 2026-10-27; keyed by LINE at that branch)
+
+| Where | Note |
+|---|---|
+| `black_bloc/bluesky.py:155` `parsed` | Bluesky stamps carry up to nine fractional digits (`2026-10-23T16:55:12.804653830Z`, seen on reposts of GDQ posts in the recorded feed); `fromisoformat` takes six, so the fraction is cut, not rejected. An unreadable stamp makes `too_old` true: a post whose age cannot be read is recorded and never posted. |
+| `black_bloc/bluesky.py:205` `expanded_text` | Facet indexes are UTF-8 BYTE offsets, not characters; spans are replaced from the last to the first so earlier offsets stay valid. A span outside the text is ignored rather than raised. |
+| `black_bloc/bluesky.py:299` `oldest_first` | The dedupe key is the post uri, and a repost item carries the ORIGINAL post's uri, so walking from the bottom keeps the first sighting (BaF's own post) and drops its later repost. `items_of` is the newest-first twin for Post the latest…. |
+| `black_bloc/bluesky_store.py:41` `claim` | The once-guard (checklist 12/37): one `INSERT ... ON CONFLICT DO UPDATE ... WHERE status IN (over)`; `rowcount == 1` only when this call inserted the row or took it from a status it named. With no `over` an existing row is never taken. |
+| `black_bloc/bluesky_store.py:96` `let_go` | A failed send puts the row back to `retry` once (the next read takes it back with `over=(retry,)`), then `failed`. A row left `claimed` by a crash mid-send is never posted again — a missing post beats a doubled one. |
+| `black_bloc/bluesky_store.py:158` `set_error` | "Says so once in the log": a standing reason (no channel, no test channel, test mode) is logged only when it differs from the one stored; a good read clears it. |
+| `black_bloc/bluesky_moves.py:24` `RECLAIM_FOR_CHANNEL` | Post the latest… to the channel may post anything not already `posted`/`claimed` — a test copy, a too-old or not-mirrored row, a failed one — because it is an explicit staff press; to the test channel it claims nothing, so a rehearsal never stops the loop posting the real thing. |
+| `black_bloc/bluesky_moves.py:68` `target_of` | A test copy goes where `shadow.channel_id` says (the one test channel, then the guard's, then the log channel) — the same home Post to test uses everywhere. |
+| `black_bloc/bluesky_moves.py:120` `_tick` | Mode on with no channel (or test with no test channel) reads NOTHING, rather than recording the window as unsent: once the channel is set, the next read posts whatever is still inside `bluesky_max_age_hours`. |
+| `tests/api/conftest.py` `recorded_bluesky_feed` | Every api test's WebBot answers the AppView from `tests/fixtures/bluesky/author_feed.json` (the live feed recorded 2026-10-27), so the contract entries for Read now / Post the latest… never reach the network. |
