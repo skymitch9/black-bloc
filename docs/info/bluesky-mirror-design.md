@@ -1,6 +1,6 @@
 # Bluesky mirror — BaF's Bluesky posts land in #bsky-feed
 
-> **Audience:** the build agent, then future sessions. **Status:** TRACKED. **Last verified: 2026-10-27 16:3x**
+> **Audience:** the build agent, then future sessions. **Status:** TRACKED. **Last verified: 2026-10-27 16:4x**
 > (the owner's decisions, the live channel ids read through the operator token 16:2x, the feed shape read from
 > the Fly machine 16:0x). ⚠️ NOT verified: nothing is built yet.
 
@@ -110,6 +110,21 @@ every word the bot posts is a key; shadow first (`bluesky_mode` default shadow);
 feature has no member interaction, the site is its door; `git add` by name, `pull --rebase --autostash`, never
 `git stash`; only bot code committed; `docs/info/review-checklist.md` items 12 (claim before send), 33 (configurable
 both ways), the shadow-first and the allowed-mentions items.
+
+## Post the latest… (owner, 2026-10-27 16:3x)
+
+Owner, verbatim: *"Can we pull the most recent 2 post from the account and post them, then @pawpette so she can see
+it"*. A staff move on the section, **Post the latest…**: an ask for how many (1–10, default `bluesky_seed_count` = 2),
+where (**the channel** or **the test channel**; the channel choice needs `bluesky_channel_id` set and is refused in
+words otherwise — it does NOT need the mode on, it is an explicit staff press), and an optional note posted after
+them as its own plain message (typed by staff; a member mention like `<@id>` pings that one person — `allowed_mentions`
+users only, no roles, no everyone). Route `POST /api/bluesky/post-latest` `{count, where: "channel"|"test", note}`.
+The newest `count` eligible items of the feed (kind rules apply, the age guard does NOT — this is the one path that
+posts old items on purpose), oldest first so they read in order; items already `posted` are posted again only when
+`where` is `test` (a rehearsal), otherwise skipped and the reply says how many were already up. Each real post is
+claimed in `bluesky_posts` like a loop post, so the loop never repeats it. Action `bluesky.posted_latest` with
+`count`, `where`, `posted`, `skipped`, `note: true|false`. The Post to test button is this move with count 1 /
+where test / no note — keep one implementation.
 
 ## What the owner does after the deploy
 
