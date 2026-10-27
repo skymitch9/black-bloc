@@ -5452,7 +5452,9 @@ KEY_MAX.update({key: high for key, (_, _, high) in QUESTION_NUMBERS.items()})
 KEY_HELP.update(
     {
         QUESTION_CHANNEL: "where the weekly question is posted while posts_mode is on",
-        QUESTION_ROLE: "role mentioned when Black Bloc posts the weekly question; blank pings nobody",
+        QUESTION_ROLE: (
+            "role mentioned when Black Bloc posts the weekly question; blank pings nobody"
+        ),
         QUESTION_WEEKDAY: "the day of the week the question goes up; monday by default",
         QUESTION_TIME: (
             "the time the question goes up, as HH:MM on a 24-hour clock in default_timezone; "
