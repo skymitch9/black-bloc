@@ -132,6 +132,8 @@ never run `fly launch` — it rewrites the file.
 > only fall back to a plain rebase when there are no local merges. Recorded here because the deploy runbook is where
 > the next session will look when a merge hash cited in `DONE.md` cannot be found.
 
+> ⚠️ **flyctl must be signed in to the account that OWNS black-bloc (2026-10-27).** `flyctl auth whoami` answering an email is not enough: nbaslamking@gmail.com signs in fine but has no apps (`Could not find App "black-bloc"`); the app lives on **mitchlandtv@gmail.com**. Check `flyctl apps list` shows black-bloc before the snapshot. Claude's shell cannot run the login, but it can open a real window for it: `Start-Process powershell -ArgumentList "-NoExit","-Command","& '<flyctl.exe>' auth login"`.
+
 > ⚠️ **flyctl can lose its login mid-day (2026-09-25 19:14, the v166 launch).** `flyctl auth whoami` began answering *no access token available* at 19:14:49, when `~/.fly/config.yml` was rewritten during the pre-deploy snapshot's `flyctl ssh console` (the 16:12 v165 deploy had worked). Run `flyctl auth whoami` before launching. The owner's `flyctl auth login` needs a real window, and a token from the Fly page works when the terminal callback does not — never paste a token into a Claude session.
 
 ## Every later deploy — `scripts/deploy.ps1`, nothing else
