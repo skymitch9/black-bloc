@@ -101,6 +101,34 @@ async def test_someone_else_posting_the_same_words_is_not_the_owner_so_the_bot_p
     assert details["reason"] == "the owner's post was not seen by 09:05"
 
 
+async def test_the_bots_post_pings_the_question_role_and_only_that_role(bot):
+    await bot.store.set(GUILD, "posts_mode", "on")
+    await bot.store.set(GUILD, "question_ping_role_id", 1474849344644710441)
+    await queue(bot)
+    await seen_before(bot)
+
+    assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
+
+    [post] = real(bot).sent
+    assert post.content == f"<@&1474849344644710441> {BODY}"
+    [mentions] = real(bot).mentions
+    assert [role.id for role in mentions.roles] == [1474849344644710441]
+    assert mentions.everyone is False and mentions.users is False
+
+
+async def test_with_no_question_role_the_post_pings_nobody(bot):
+    await bot.store.set(GUILD, "posts_mode", "on")
+    await queue(bot)
+    await seen_before(bot)
+
+    assert await moves.tick(bot, bot.guild, AFTER_GRACE) == rules.POSTED
+
+    [post] = real(bot).sent
+    assert post.content == BODY
+    [mentions] = real(bot).mentions
+    assert mentions.roles is False
+
+
 async def test_two_passes_at_once_post_exactly_one_question(bot):
     """Checklist 37: the boot's on_ready and the loop's first tick both land in the window."""
     await queue(bot, "one?", "two?")

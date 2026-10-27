@@ -302,6 +302,7 @@
       "question_channel_id",
       "question_grace_minutes",
       "question_owner_user_id",
+      "question_ping_role_id",
       "question_template",
       "question_thread",
       "question_thread_name_template",

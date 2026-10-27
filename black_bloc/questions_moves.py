@@ -71,8 +71,8 @@ async def send_question(bot: Any, guild: Any, mode: str, body: str) -> tuple[Any
         return None, None, why
     try:
         message = await channel.send(
-            rules.rendered(bot.store, guild.id, body),
-            allowed_mentions=discord.AllowedMentions.none(),
+            rules.posted_text(bot.store, guild.id, body),
+            allowed_mentions=rules.posted_mentions(bot.store, guild.id),
         )
     except discord.HTTPException as exc:
         return None, None, rules.POST_REFUSED.format(why=f"{exc.status} {exc.text}".strip())

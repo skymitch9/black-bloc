@@ -15,6 +15,7 @@ from .settings_store import (
     QUESTION_CLOCK,
     QUESTION_GRACE,
     QUESTION_OWNER,
+    QUESTION_ROLE,
     QUESTION_TEMPLATE,
     QUESTION_TEMPLATE_DEFAULT,
     QUESTION_THREAD,
@@ -253,6 +254,26 @@ def warn_dm(store: Any, guild_id: int) -> bool:
 def real_channel(store: Any, guild_id: int) -> int | None:
     found = store.get(guild_id, QUESTION_CHANNEL)
     return int(found) if found else None
+
+
+def ping_role(store: Any, guild_id: int) -> int | None:
+    found = store.get(guild_id, QUESTION_ROLE)
+    return int(found) if found else None
+
+
+def posted_text(store: Any, guild_id: int, body: Any) -> str:
+    role = ping_role(store, guild_id)
+    text = rendered(store, guild_id, body)
+    return f"<@&{role}> {text}"[:MESSAGE_LIMIT] if role else text
+
+
+def posted_mentions(store: Any, guild_id: int) -> discord.AllowedMentions:
+    role = ping_role(store, guild_id)
+    if not role:
+        return discord.AllowedMentions.none()
+    return discord.AllowedMentions(
+        everyone=False, users=False, roles=[discord.Object(id=role)], replied_user=False
+    )
 
 
 def panel_minutes(store: Any, guild_id: int) -> int:

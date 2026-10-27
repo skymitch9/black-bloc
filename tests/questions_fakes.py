@@ -63,6 +63,7 @@ class FakeChannel:
         self.id = channel_id
         self.name = name
         self.sent = []
+        self.mentions = []
         self.seen = []
         self.deleted = []
         self.send_raises = None
@@ -75,6 +76,7 @@ class FakeChannel:
         await asyncio.sleep(0)
         message = FakeMessage(content, channel=self)
         self.sent.append(message)
+        self.mentions.append(kwargs.get("allowed_mentions"))
         return message
 
     def history(self, limit=100, after=None):

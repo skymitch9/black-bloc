@@ -914,6 +914,7 @@ export const LABELS = {
   poll_log_level: 'How much of polls is repeated into Discord',
 
   question_channel_id: 'Where the weekly question is posted',
+  question_ping_role_id: 'Which role the weekly question pings',
   question_weekday: 'Which day the weekly question goes up',
   question_time: 'What time the weekly question goes up',
   question_grace_minutes: 'How long the bot waits for the owner’s own post',

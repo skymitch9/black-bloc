@@ -5378,6 +5378,7 @@ QUESTION_WEEKDAYS = (
     "sunday",
 )
 QUESTION_CHANNEL = "question_channel_id"
+QUESTION_ROLE = "question_ping_role_id"
 QUESTION_WEEKDAY = "question_weekday"
 QUESTION_TIME = "question_time"
 QUESTION_GRACE = "question_grace_minutes"
@@ -5417,6 +5418,7 @@ QUESTION_DEFAULTS: dict[str, Any] = {
 }
 QUESTION_KEYS: tuple[str, ...] = (
     QUESTION_CHANNEL,
+    QUESTION_ROLE,
     QUESTION_WEEKDAY,
     QUESTION_TIME,
     QUESTION_GRACE,
@@ -5432,6 +5434,7 @@ QUESTION_KEYS: tuple[str, ...] = (
 KEY_TYPES.update(
     {
         QUESTION_CHANNEL: "channel",
+        QUESTION_ROLE: "role",
         QUESTION_WEEKDAY: "enum",
         QUESTION_TIME: "text",
         QUESTION_OWNER: "text",
@@ -5449,6 +5452,7 @@ KEY_MAX.update({key: high for key, (_, _, high) in QUESTION_NUMBERS.items()})
 KEY_HELP.update(
     {
         QUESTION_CHANNEL: "where the weekly question is posted while posts_mode is on",
+        QUESTION_ROLE: "role mentioned when Black Bloc posts the weekly question; blank pings nobody",
         QUESTION_WEEKDAY: "the day of the week the question goes up; monday by default",
         QUESTION_TIME: (
             "the time the question goes up, as HH:MM on a 24-hour clock in default_timezone; "
