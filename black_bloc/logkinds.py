@@ -104,6 +104,7 @@ HEADS: dict[str, str] = {
     "post": "posts",
     "posts": "posts",
     "sticky": "posts",
+    "bluesky": "posts",
     "minutes": "minutes",
 }
 
@@ -193,6 +194,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "question.missed",
         "question.warned_empty",
         "question.taken_down",
+        "bluesky.posted_latest",
         "pbfeed.match_refused",
         "pings.roles_taken_back",
         "role_menu.roles_taken_back",
@@ -313,6 +315,11 @@ ROUTINE: frozenset[str] = frozenset(
         "question.requeued",
         "question.posted_by_owner",
         "question.rehearsed",
+        "bluesky.posted",
+        "bluesky.skipped_old",
+        "bluesky.skipped_kind",
+        "bluesky.read_now",
+        "bluesky.rehearsed",
         "golive.replay_detected",
         "golive.replay_overruled",
         "golive.replay_announced",

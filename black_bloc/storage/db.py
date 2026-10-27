@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 100
+SCHEMA_VERSION = 101
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1241,6 +1241,31 @@ CREATE TABLE IF NOT EXISTS weekly_question_slots (
     seen_at     TEXT    NOT NULL,
     resolved_at TEXT,
     PRIMARY KEY (guild_id, slot_at)
+);
+
+CREATE TABLE IF NOT EXISTS bluesky_posts (
+    guild_id      INTEGER NOT NULL,
+    uri           TEXT    NOT NULL,
+    cid           TEXT,
+    kind          TEXT    NOT NULL,
+    author_handle TEXT,
+    indexed_at    TEXT,
+    text          TEXT,
+    status        TEXT    NOT NULL,
+    channel_id    INTEGER,
+    message_id    INTEGER,
+    seen_at       TEXT    NOT NULL,
+    posted_at     TEXT,
+    PRIMARY KEY (guild_id, uri)
+);
+CREATE INDEX IF NOT EXISTS bluesky_posts_by_seen ON bluesky_posts(guild_id, seen_at);
+
+CREATE TABLE IF NOT EXISTS bluesky_reads (
+    guild_id     INTEGER PRIMARY KEY,
+    last_read_at TEXT,
+    last_ok_at   TEXT,
+    failures     INTEGER NOT NULL DEFAULT 0,
+    last_error   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS baf_runs (

@@ -5555,6 +5555,129 @@ QUESTION_TEXT_CHECKS: dict[str, Any] = {
 }
 
 
+# The Bluesky mirror (docs/info/bluesky-mirror-design.md) — its own block so parallel branches
+# merge textually. Filed under `posts` through NAMESPACE_OVERRIDE: `bluesky_` would be a 26th
+# setting group.
+BLUESKY_FEATURE = "bluesky"
+BLUESKY_MODES = ("off", "shadow", "on")
+BLUESKY_MODE = "bluesky_mode"
+BLUESKY_HANDLE = "bluesky_handle"
+BLUESKY_CHANNEL = "bluesky_channel_id"
+BLUESKY_PING_ROLE = "bluesky_ping_role_id"
+BLUESKY_REPOSTS = "bluesky_reposts"
+BLUESKY_REPLIES = "bluesky_replies"
+BLUESKY_INTERVAL = "bluesky_interval_minutes"
+BLUESKY_MAX_AGE = "bluesky_max_age_hours"
+BLUESKY_KEEP = "bluesky_keep"
+BLUESKY_SEED_COUNT = "bluesky_seed_count"
+BLUESKY_TEMPLATE = "bluesky_template"
+BLUESKY_REPOST_LINE = "bluesky_repost_line"
+BLUESKY_REHEARSAL_LINE = "bluesky_rehearsal_line"
+BLUESKY_HANDLE_DEFAULT = "blackinaflash.bsky.social"
+BLUESKY_HANDLE_SHAPE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*$")
+BLUESKY_NUMBERS: dict[str, tuple[int, int, int]] = {
+    BLUESKY_INTERVAL: (5, 1, 60),
+    BLUESKY_MAX_AGE: (24, 1, 168),
+    BLUESKY_KEEP: (500, 100, 5000),
+    BLUESKY_SEED_COUNT: (2, 1, 10),
+}
+BLUESKY_POST_FIELDS = ("text", "url", "author", "handle")
+BLUESKY_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    BLUESKY_TEMPLATE: (
+        "{text}\n{url}",
+        BLUESKY_POST_FIELDS,
+        "what the message says; {text} is the post, {url} its address on bsky.app, {author} "
+        "its author's display name and {handle} their handle",
+    ),
+    BLUESKY_REPOST_LINE: (
+        "🔁 {account} reposted",
+        ("account",),
+        "the line above a repost; {account} is the mirrored account's display name",
+    ),
+    BLUESKY_REHEARSAL_LINE: (
+        "Test copy · while bluesky_mode is on this goes to {channel}",
+        ("channel",),
+        "the line on a test-channel copy naming where the post would have gone; {channel}",
+    ),
+}
+BLUESKY_DEFAULTS: dict[str, Any] = {
+    BLUESKY_MODE: "shadow",
+    BLUESKY_HANDLE: BLUESKY_HANDLE_DEFAULT,
+    BLUESKY_REPOSTS: True,
+    BLUESKY_REPLIES: False,
+    **{key: default for key, (default, _, _) in BLUESKY_NUMBERS.items()},
+    **{key: default for key, (default, _, _) in BLUESKY_WORDS.items()},
+}
+BLUESKY_KEYS: tuple[str, ...] = (
+    BLUESKY_MODE,
+    BLUESKY_HANDLE,
+    BLUESKY_CHANNEL,
+    BLUESKY_PING_ROLE,
+    BLUESKY_REPOSTS,
+    BLUESKY_REPLIES,
+    *BLUESKY_NUMBERS,
+    *BLUESKY_WORDS,
+)
+KEY_TYPES.update(
+    {
+        BLUESKY_MODE: "enum",
+        BLUESKY_HANDLE: "text",
+        BLUESKY_CHANNEL: "channel",
+        BLUESKY_PING_ROLE: "role",
+        BLUESKY_REPOSTS: "bool",
+        BLUESKY_REPLIES: "bool",
+        **{key: "int" for key in BLUESKY_NUMBERS},
+        **{key: "text" for key in BLUESKY_WORDS},
+    }
+)
+KEY_CHOICES[BLUESKY_MODE] = BLUESKY_MODES
+KEY_MIN.update({key: low for key, (_, low, _) in BLUESKY_NUMBERS.items()})
+KEY_MAX.update({key: high for key, (_, _, high) in BLUESKY_NUMBERS.items()})
+KEY_HELP.update(
+    {
+        BLUESKY_MODE: (
+            "off, test or on. off reads nothing; test — the default — reads the account and "
+            "sends each new post to the test channel with a line naming where it would have "
+            "gone; on posts it in bluesky_channel_id"
+        ),
+        BLUESKY_HANDLE: "the Bluesky account mirrored, without the @",
+        BLUESKY_CHANNEL: (
+            "where posts land while bluesky_mode is on; blank posts nothing and says so once "
+            "in the log"
+        ),
+        BLUESKY_PING_ROLE: (
+            "a role mentioned above each post; blank pings nobody; a rehearsal copy never pings"
+        ),
+        BLUESKY_REPOSTS: "whether the account's reposts are mirrored too; on by default",
+        BLUESKY_REPLIES: "whether the account's replies are mirrored too; off by default",
+        BLUESKY_INTERVAL: "minutes between two reads of the account; 5 by default, 1 to 60",
+        BLUESKY_MAX_AGE: (
+            "a post first seen older than this many hours is recorded and not posted; 24 by "
+            "default. It is what stops the account's history being posted after the deploy or "
+            "a long outage"
+        ),
+        BLUESKY_KEEP: (
+            "how many seen posts are remembered per server; older ones are forgotten after "
+            "each read. 500 by default"
+        ),
+        BLUESKY_SEED_COUNT: "how many posts Post the latest… offers by default; 2, at most 10",
+        **{key: said for key, (_, _, said) in BLUESKY_WORDS.items()},
+    }
+)
+BLUESKY_BAD_HANDLE = (
+    "**{given}** is not a Bluesky handle, so nothing was changed. Write it the way the profile "
+    "shows it without the @, like `blackinaflash.bsky.social`."
+)
+
+
+def checked_bluesky_handle(given: Any) -> str:
+    """A lower-case handle with no @."""
+    text = str(given or "").strip().lstrip("@").lower()
+    if not BLUESKY_HANDLE_SHAPE.match(text):
+        raise SettingError(BLUESKY_BAD_HANDLE.format(given=text[:60] or "(nothing)"))
+    return text
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -5612,6 +5735,7 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_SHOW_REQUEST: "modmail",
     FRONTDOOR_SHOW_EVENT: "modmail",
     **{key: "posts" for key in STICKY_KEYS},
+    **{key: "posts" for key in BLUESKY_KEYS},
     HANDOFF_CONFIRM_HOURS: "request",
     "minutes_mode": "events",
     "minutes_channel_id": "events",
@@ -6182,6 +6306,10 @@ def checked_point_tiers(given: Any) -> str:
 
 TEXT_CHECKS[POINTS_XP_TIERS] = checked_point_tiers
 TEXT_CHECKS.update(QUESTION_TEXT_CHECKS)
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in BLUESKY_WORDS.items()}
+)
+TEXT_CHECKS[BLUESKY_HANDLE] = checked_bluesky_handle
 
 VOICE_SHEET_CHARS = 4000
 TONE_CLAUSE_CHARS = 600
@@ -11384,6 +11512,8 @@ class SettingsStore:
             return POINTS_DEFAULTS[key]
         if key in QUESTION_DEFAULTS:
             return QUESTION_DEFAULTS[key]
+        if key in BLUESKY_DEFAULTS:
+            return BLUESKY_DEFAULTS[key]
         if key in RUNS_DEFAULTS:
             value = RUNS_DEFAULTS[key]
             return list(value) if isinstance(value, list) else value
