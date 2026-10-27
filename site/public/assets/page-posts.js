@@ -2,6 +2,7 @@ import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespa
 import { start } from './app.js';
 import { docTitle as titleInDoc, htmlToDiscordMarkdown, mentionChannels } from './clipmd.js';
 import { blockPreview } from './blockpreview.js';
+import { blueskySection } from './bluesky-section.js';
 import { BLOCK_EDITORS } from './blockwords.js';
 import { BLOCK_FILTERS, blockText } from './listfilter.js';
 import { logsSection } from './logs.js';
@@ -1264,6 +1265,7 @@ async function load() {
     await blocksSection(payload),
     await stickySection(() => refresh()),
     await questionsSection(() => refresh()),
+    await blueskySection(() => refresh()),
     await machinerySection(specs),
   );
 

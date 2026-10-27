@@ -607,6 +607,11 @@ async function checkActionKinds() {
   await post(`/api/minutes/${IDS.meeting_id}/post`, {});
   await send('DELETE', `/api/minutes/${IDS.meeting_id}`, undefined);
   await post('/api/runs', { game: 'Contract run', event: 'BtB 2025' });
+  // The three web.bluesky.* kinds: Read now, Post to test and Post the latest… to the channel.
+  await post('/api/bluesky/read', {});
+  await post('/api/bluesky/rehearse', {});
+  await send('PUT', '/api/settings/bluesky_channel_id', { value: IDS.sticky_channel_id });
+  await post('/api/bluesky/post-latest', { count: 1, where: 'channel', note: '' });
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);
@@ -785,6 +790,49 @@ async function checkPostsModes() {
   }
 }
 
+// The Bluesky mirror (bluesky-mirror-design.md): test mode reads into the test channel, Post the
+// latest… needs the channel only for a real press and never posts one twice, and every refusal
+// is words with its status.
+async function checkBluesky() {
+  await setGuard(false);
+  await seed();
+  const mode = (value) => send('PUT', '/api/settings/bluesky_mode', { value });
+  const status = async () => (await (await send('GET', '/api/bluesky', undefined)).json());
+  const said = async (response) => String((await response.json()).message || '');
+
+  const read = await post('/api/bluesky/read', {});
+  if (read.status !== 200) fail('POST /api/bluesky/read [test]', `answered ${read.status}`);
+  const rows = (await status()).recent;
+  if (!rows.some((row) => row.status === 'would_post')) fail('POST /api/bluesky/read [test]', 'left no would_post row');
+  if (rows.some((row) => row.status === 'posted')) fail('POST /api/bluesky/read [test]', 'posted for real in test mode');
+
+  const nowhere = await post('/api/bluesky/post-latest', { count: 2, where: 'channel', note: '' });
+  if (nowhere.status !== 409) fail('POST post-latest [no channel]', `answered ${nowhere.status}, not 409`);
+  else if (!(await said(nowhere)).includes('bluesky_channel_id is blank')) fail('POST post-latest [no channel]', 'did not say why in words');
+
+  await send('PUT', '/api/settings/bluesky_channel_id', { value: IDS.sticky_channel_id });
+  const first = await post('/api/bluesky/post-latest', { count: 2, where: 'channel', note: '<@700000000000000002> look' });
+  if (first.status !== 200) fail('POST post-latest [channel]', `answered ${first.status}`);
+  else {
+    const body = await first.json();
+    if (body.value.posted !== 2) fail('POST post-latest [channel]', `posted ${body.value.posted}, not 2`);
+    if (!body.message.endsWith('The note followed.')) fail('POST post-latest [channel]', 'did not say the note followed');
+  }
+  const again = await post('/api/bluesky/post-latest', { count: 2, where: 'channel', note: '' });
+  if (again.status !== 200 || (await again.json()).value.skipped !== 2) {
+    fail('POST post-latest [twice]', 'a second press posted what was already up');
+  }
+  const test = await post('/api/bluesky/rehearse', {});
+  if (test.status !== 200 || (await test.json()).value.where !== 'test') fail('POST /api/bluesky/rehearse', 'was not one copy to the test channel');
+
+  const tooMany = await post('/api/bluesky/post-latest', { count: 11, where: 'test', note: '' });
+  if (tooMany.status !== 400) fail('POST post-latest [11]', `answered ${tooMany.status}, not 400`);
+  await mode('off');
+  const off = await post('/api/bluesky/read', {});
+  if (off.status !== 409) fail('POST /api/bluesky/read [off]', `answered ${off.status}, not 409`);
+  if ((await status()).next_read_at !== null) fail('GET /api/bluesky [off]', 'still names a next read');
+}
+
 function refusedConnection(error) {
   const code = error?.cause?.code || error?.code;
   return ['ECONNREFUSED', 'ECONNRESET', 'EHOSTUNREACH', 'ETIMEDOUT'].includes(code);
@@ -807,6 +855,7 @@ await checkPages();
 await checkGuard();
 await checkRetired();
 await checkPostsModes();
+await checkBluesky();
 await checkEventsMove();
 await checkRoutes();
 await checkSettings();

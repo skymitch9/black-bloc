@@ -493,6 +493,19 @@ const SETTING_SPECS = [
   ["question_warn_days", "int", 3, 3, "how many days before the question's time an empty queue is warned about; 3 by default", null, 7, 1],
   ["question_warn_dm", "bool", true, true, "true to DM question_owner_user_id the empty-queue warning as well as the log channel line"],
   ["question_warn_template", "text", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some under Weekly questions on the Posts page or with /questions.", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some under Weekly questions on the Posts page or with /questions.", "the empty-queue warning, sent once per week to the log channel and the owner; {day} and {time} are when the question would have gone up"],
+  ["bluesky_mode", "enum", "shadow", "shadow", "off, test or on. off reads nothing; test — the default — reads the account and sends each new post to the test channel with a line naming where it would have gone; on posts it in bluesky_channel_id", ["off", "shadow", "on"]],
+  ["bluesky_handle", "text", "blackinaflash.bsky.social", "blackinaflash.bsky.social", "the Bluesky account mirrored, without the @"],
+  ["bluesky_channel_id", "channel", null, null, "where posts land while bluesky_mode is on; blank posts nothing and says so once in the log"],
+  ["bluesky_ping_role_id", "role", null, null, "a role mentioned above each post; blank pings nobody; a rehearsal copy never pings"],
+  ["bluesky_reposts", "bool", true, true, "whether the account's reposts are mirrored too; on by default"],
+  ["bluesky_replies", "bool", false, false, "whether the account's replies are mirrored too; off by default"],
+  ["bluesky_interval_minutes", "int", 5, 5, "minutes between two reads of the account; 5 by default, 1 to 60", null, 60, 1],
+  ["bluesky_max_age_hours", "int", 24, 24, "a post first seen older than this many hours is recorded and not posted; 24 by default. It is what stops the account's history being posted after the deploy or a long outage", null, 168, 1],
+  ["bluesky_keep", "int", 500, 500, "how many seen posts are remembered per server; older ones are forgotten after each read. 500 by default", null, 5000, 100],
+  ["bluesky_seed_count", "int", 2, 2, "how many posts Post the latest… offers by default; 2, at most 10", null, 10, 1],
+  ["bluesky_template", "text", "{text}\n{url}", "{text}\n{url}", "what the message says; {text} is the post, {url} its address on bsky.app, {author} its author's display name and {handle} their handle"],
+  ["bluesky_repost_line", "text", "🔁 {account} reposted", "🔁 {account} reposted", "the line above a repost; {account} is the mirrored account's display name"],
+  ["bluesky_rehearsal_line", "text", "Test copy · while bluesky_mode is on this goes to {channel}", "Test copy · while bluesky_mode is on this goes to {channel}", "the line on a test-channel copy naming where the post would have gone; {channel}"],
   ["birthday_mode", "enum", "shadow", "off", "off, test or on (post birthday wishes). test writes each day's wishes to the log and posts nothing; a wish staff post by hand goes to the test channel as a rehearsal copy", ["off", "shadow", "on"]],
   ['birthday_channel_id', 'channel', '800000000000000002', null, 'where birthday wishes are posted'],
   ['birthday_template', 'text', 'Happy birthday {name}!', 'Happy birthday {name}!', 'the birthday wording; {name} and {age}'],
@@ -2322,6 +2335,10 @@ function seedState() {
     { id: 5, position: 0, body: 'Favourite glitch?', status: 'removed', slot_at: null, posted_by: null, channel_id: null, message_id: null, added_by: STAFF.id, added_at: minutesAgo(20000), resolved_at: minutesAgo(12000) },
   ],
   questionSlots: {},
+  blueskyPosts: [
+    { uri: 'at://did:plc:4lijy65gdkw6gwwctvm6kxoc/app.bsky.feed.post/3mockown00002', kind: 'own', status: 'skipped_old', text: 'Thank you to every runner from Fall Fest.', url: 'https://bsky.app/profile/blackinaflash.bsky.social/post/3mockown00002', channel_id: null, message_id: null, seen_at: minutesAgo(90), posted_at: null },
+  ],
+  blueskyRead: { last_read_at: minutesAgo(3), last_ok_at: minutesAgo(3), failures: 0, last_error: null },
   birthdays: [
     { user_id: MEMBERS[1].id, month: 2, day: 14, year: 1996, opted_in: true, source: 'self', set_at: minutesAgo(9000) },
     { user_id: MEMBERS[2].id, month: 2, day: 27, year: null, opted_in: true, source: 'import', set_at: minutesAgo(12000) },
@@ -2697,6 +2714,19 @@ const NAMESPACE_OVERRIDE = {
   sticky_quiet_seconds: 'posts',
   sticky_max_buried_minutes: 'posts',
   sticky_pin_copies: 'posts',
+  bluesky_mode: 'posts',
+  bluesky_handle: 'posts',
+  bluesky_channel_id: 'posts',
+  bluesky_ping_role_id: 'posts',
+  bluesky_reposts: 'posts',
+  bluesky_replies: 'posts',
+  bluesky_interval_minutes: 'posts',
+  bluesky_max_age_hours: 'posts',
+  bluesky_keep: 'posts',
+  bluesky_seed_count: 'posts',
+  bluesky_template: 'posts',
+  bluesky_repost_line: 'posts',
+  bluesky_rehearsal_line: 'posts',
   handoff_confirm_hours: 'request',
   minutes_mode: 'events',
   minutes_channel_id: 'events',
@@ -12181,6 +12211,147 @@ route('POST', '/api/questions/unskip', (context) => {
   state.questionSlots[key] = { status: 'pending', question_id: null };
   logAction('web.question.unskipped', { details: { via: 'website', slot_at: key } });
   return { ok: true, message: 'This week is back on.', value: key };
+});
+
+// The Bluesky mirror (docs/info/bluesky-mirror-design.md). The feed is a fixed sample in the
+// shape bluesky_moves reads; the age guard, the claim and the shadow copy are the bot's rules.
+const BLUESKY_DID = 'did:plc:4lijy65gdkw6gwwctvm6kxoc';
+const BLUESKY_SAMPLE = [
+  { rkey: '3mockown00001', kind: 'own', handle: 'blackinaflash.bsky.social', text: 'Black in a Flash is live tonight with a Celeste relay. https://twitch.tv/blackinaflash', minutes: 40 },
+  { rkey: '3mockrepost01', kind: 'repost', handle: 'gamesdonequick.com', text: 'AGDQ 2027 submissions are open!', minutes: 300 },
+  { rkey: '3mockreply001', kind: 'reply', handle: 'blackinaflash.bsky.social', text: 'seriously though', minutes: 600 },
+  { rkey: '3mockown00002', kind: 'own', handle: 'blackinaflash.bsky.social', text: 'Thank you to every runner from Fall Fest.', minutes: 4000 },
+];
+
+function blueskyFeed() {
+  return BLUESKY_SAMPLE.map((one) => ({
+    uri: `at://${BLUESKY_DID}/app.bsky.feed.post/${one.rkey}`,
+    kind: one.kind,
+    handle: one.handle,
+    text: one.text,
+    seen_at: minutesAgo(one.minutes),
+    url: `https://bsky.app/profile/${one.handle}/post/${one.rkey}`,
+  }));
+}
+
+function blueskyMode() {
+  const found = String(state.settings.get('bluesky_mode') || 'shadow');
+  return ['off', 'shadow', 'on'].includes(found) ? found : 'off';
+}
+
+function blueskyWanted(kind) {
+  if (kind === 'repost') return state.settings.get('bluesky_reposts') !== false;
+  if (kind === 'reply') return state.settings.get('bluesky_replies') === true;
+  return true;
+}
+
+function blueskyTarget(rehearsing) {
+  const channel = rehearsing ? postsHome() : state.settings.get('bluesky_channel_id');
+  if (!channel) {
+    throw new Refused(409, 'no_channel', rehearsing
+      ? 'No test channel is set, so there is nowhere to send a test copy. Pick the Test channel (shadow_channel_id) in Settings.'
+      : 'bluesky_channel_id is blank, so there is nowhere to post. Pick the channel under Bluesky on the Posts page.');
+  }
+  return String(channel);
+}
+
+function blueskyRow(item, status, channel = null) {
+  const messageId = channel ? String(930000000000000000 + state.blueskyPosts.length + 1) : null;
+  const row = { uri: item.uri, kind: item.kind, status, text: item.text.slice(0, 80), url: item.url, channel_id: channel, message_id: messageId, seen_at: now(), posted_at: channel ? now() : null };
+  const at = state.blueskyPosts.findIndex((one) => one.uri === item.uri);
+  if (at >= 0) state.blueskyPosts.splice(at, 1);
+  state.blueskyPosts.unshift(row);
+  return row;
+}
+
+route('GET', '/api/bluesky', (context) => {
+  requireStaff(context.session);
+  const mode = blueskyMode();
+  const read = state.blueskyRead;
+  const minutes = Number(state.settings.get('bluesky_interval_minutes') || 5);
+  const next = read ? new Date(new Date(read.last_read_at).getTime() + minutes * 60000).toISOString() : now();
+  const channel = state.settings.get('bluesky_channel_id');
+  return {
+    mode,
+    handle: String(state.settings.get('bluesky_handle') || 'blackinaflash.bsky.social'),
+    channel_id: channel ? String(channel) : null,
+    test_home: postsHome() ? String(postsHome()) : null,
+    seed_count: Number(state.settings.get('bluesky_seed_count') || 2),
+    last_read_at: read ? read.last_read_at : null,
+    last_ok_at: read ? read.last_ok_at : null,
+    failures: read ? read.failures : 0,
+    last_error: read ? read.last_error : null,
+    next_read_at: mode === 'off' ? null : next,
+    recent: state.blueskyPosts.slice(0, 30).map((row) => ({
+      ...row,
+      message_url: row.channel_id && row.message_id ? `https://discord.com/channels/${REVIEW_GUILD_ID}/${row.channel_id}/${row.message_id}` : null,
+    })),
+  };
+});
+
+route('POST', '/api/bluesky/read', (context) => {
+  requireStaff(context.session);
+  const mode = blueskyMode();
+  if (mode === 'off') throw new Refused(409, 'bluesky_off', 'bluesky_mode is off, so Bluesky is not read. Turn it to test or on first.');
+  const rehearsing = mode === 'shadow';
+  const channel = blueskyTarget(rehearsing);
+  const age = Number(state.settings.get('bluesky_max_age_hours') || 24) * 3600000;
+  let fresh = 0;
+  let sent = 0;
+  for (const item of blueskyFeed().reverse()) {
+    if (state.blueskyPosts.some((one) => one.uri === item.uri)) continue;
+    fresh += 1;
+    if (!blueskyWanted(item.kind)) blueskyRow(item, 'skipped_kind');
+    else if (Date.now() - new Date(item.seen_at).getTime() > age) blueskyRow(item, 'skipped_old');
+    else {
+      blueskyRow(item, rehearsing ? 'would_post' : 'posted', channel);
+      sent += 1;
+    }
+  }
+  const stamp = now();
+  state.blueskyRead = { last_read_at: stamp, last_ok_at: stamp, failures: 0, last_error: null };
+  const counts = { new: fresh, sent, seen: BLUESKY_SAMPLE.length };
+  logAction('web.bluesky.read_now', { details: { via: 'website', mode, ...counts } });
+  const handle = String(state.settings.get('bluesky_handle') || 'blackinaflash.bsky.social');
+  return { ok: true, message: `Read ${counts.seen} post(s) from @${handle}: ${fresh} new, ${sent} sent.`, value: counts };
+});
+
+function blueskyPostLatest(count, where, note) {
+  const most = 10;
+  const wanted = Number.parseInt(count, 10);
+  if (!(wanted >= 1 && wanted <= most)) throw new Refused(400, 'bad_count', `Post the latest takes 1 to ${most} posts, so nothing was posted.`);
+  if (!['channel', 'test'].includes(where)) throw new Refused(400, 'bad_where', 'Post the latest goes to the channel or the test channel, so nothing was posted.');
+  const rehearsing = where === 'test';
+  const channel = blueskyTarget(rehearsing);
+  const picked = blueskyFeed().filter((item) => blueskyWanted(item.kind)).slice(0, wanted).reverse();
+  let posted = 0;
+  let skipped = 0;
+  for (const item of picked) {
+    const known = state.blueskyPosts.find((one) => one.uri === item.uri);
+    if (!rehearsing && known && known.status === 'posted') {
+      skipped += 1;
+      continue;
+    }
+    if (!rehearsing) blueskyRow(item, 'posted', channel);
+    posted += 1;
+  }
+  const details = { via: 'website', count: wanted, where, channel, posted, skipped, failed: 0, note: Boolean(note) };
+  logAction(rehearsing ? 'web.bluesky.rehearsed' : 'web.bluesky.posted_latest', { details });
+  let said = `${posted} post(s) are up in ${stickyName(channel)}.`;
+  if (skipped) said += ` ${skipped} were already up, so they were not posted again.`;
+  if (note) said += ' The note followed.';
+  return { ok: true, message: said, value: details };
+}
+
+route('POST', '/api/bluesky/post-latest', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  return blueskyPostLatest(body.count, body.where, String(body.note || '').trim());
+});
+
+route('POST', '/api/bluesky/rehearse', (context) => {
+  requireStaff(context.session);
+  return blueskyPostLatest(1, 'test', '');
 });
 
 // The BaF runs database (docs/info/baf-runs-design.md). The view is black_bloc/baf_runs.py:view
