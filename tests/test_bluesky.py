@@ -129,7 +129,7 @@ def test_images_video_and_quotes_become_embed_parts():
     quote = rules.embed_of(by_rkey("3myap2igkxk2o")["post"]["embed"])
 
     assert images["image"].startswith("https://")
-    assert video["image"].startswith("https://")
+    assert video == {"image": video["image"]} and video["image"].startswith("https://")
     assert quote["quote"]["handle"] and "text" in quote["quote"]
 
 
@@ -178,17 +178,103 @@ def test_newest_first_keeps_feed_order():
     assert len({item.uri for item in items}) == len(items)
 
 
-def test_a_repost_carries_the_repost_line_with_the_accounts_name():
-    entry = by_rkey("3mylf6l7byz2q")
+def test_a_repost_names_the_account_and_the_original_author():
+    entry = by_rkey("3mykng2umee2q")
     item = rules.item_of(entry)
 
     content, embed = rules.message_of(Store(), 7, item)
 
-    first = content.splitlines()[0]
-    assert first == f"🔁 {entry['reason']['by']['displayName']} reposted"
-    assert content.endswith(item.url)
-    assert embed.author.name.endswith(f"@{item.handle}")
-    assert embed.url == item.url
+    by = entry["reason"]["by"]["displayName"]
+    assert content == f"🔁 **{by}** reposted **@gamesdonequick.com**"
+    assert embed.author.name == "@gamesdonequick.com"
+    assert embed.author.url == "https://bsky.app/profile/gamesdonequick.com"
+    assert embed.title == item.author and embed.url == item.url
+
+
+def test_an_own_post_says_who_posted_it_and_keeps_the_link_off_the_content():
+    item = rules.item_of(feed()[0])
+
+    content, embed = rules.message_of(Store(), 7, item, icon="https://site/assets/bluesky.png")
+
+    assert content == "🦋 **Black in a Flash!** posted on Bluesky"
+    assert embed.title == "Black in a Flash!" and embed.url == item.url
+    assert embed.author.name == "@blackinaflash.bsky.social"
+    assert embed.author.url == "https://bsky.app/profile/blackinaflash.bsky.social"
+    assert embed.author.icon_url == item.avatar
+    assert embed.description == item.text
+    assert embed.footer.text == "Bluesky"
+    assert embed.footer.icon_url == "https://site/assets/bluesky.png"
+    assert embed.colour.value == rules.EMBED_COLOUR
+    assert embed.image.url
+
+
+def test_a_video_post_is_the_same_message_as_a_picture_post():
+    item = rules.item_of(by_rkey("3myisto7wfc2y"))
+
+    content, embed = rules.message_of(Store(), 7, item)
+
+    assert content == "🦋 **Black in a Flash!** posted on Bluesky"
+    assert "fxbsky" not in content
+    assert embed.image.url == item.embed["image"]
+
+
+def test_a_reposted_video_carries_only_the_repost_line():
+    item = rules.item_of(by_rkey("3mylf6l7byz2q"))
+
+    content, _ = rules.message_of(Store(), 7, item, role=555)
+
+    assert content.splitlines() == [
+        "<@&555>",
+        "🔁 **Black in a Flash!** reposted **@gamesdonequick.com**",
+    ]
+
+
+def test_a_blank_key_says_nothing():
+    video = rules.item_of(by_rkey("3mylf6l7byz2q"))
+    store = Store(
+        bluesky_template="",
+        bluesky_repost_line=" ",
+        bluesky_footer="",
+        bluesky_open_label="",
+        bluesky_profile_label="",
+    )
+
+    content, embed = rules.message_of(store, 7, video, role=555)
+    own, _ = rules.message_of(store, 7, rules.item_of(feed()[0]))
+
+    assert content == "<@&555>"
+    assert own == ""
+    assert embed.footer.text is None
+    assert rules.view_for(store, 7, video) is None
+
+
+def test_the_template_takes_the_post_fields():
+    item = rules.item_of(by_rkey("3myisto7wfc2y"))
+    store = Store(bluesky_template="{account}|{author}|{handle}|{url}")
+
+    content, _ = rules.message_of(store, 7, item)
+
+    assert content == f"Black in a Flash!|Black in a Flash!|blackinaflash.bsky.social|{item.url}"
+
+
+def test_the_buttons_open_the_post_and_the_authors_profile():
+    item = rules.item_of(by_rkey("3mylf6l7byz2q"))
+
+    view = rules.view_for(Store(), 7, item)
+
+    [row] = view.to_components()
+    assert [(one["label"], one["url"], one["style"]) for one in row["components"]] == [
+        ("Open on Bluesky", item.url, 5),
+        ("@gamesdonequick.com on Bluesky", "https://bsky.app/profile/gamesdonequick.com", 5),
+    ]
+
+
+def test_a_long_button_label_is_cut_to_discords_eighty():
+    item = rules.item_of(feed()[0])
+
+    view = rules.view_for(Store(bluesky_open_label="x" * 120), 7, item)
+
+    assert [len(one.label) for one in view.children] == [80, 37]
 
 
 def test_a_rehearsal_names_where_it_would_have_gone_and_never_pings():
@@ -218,14 +304,14 @@ def test_staff_wording_that_cannot_be_filled_falls_back_to_the_shipped_one():
 
     content, _ = rules.message_of(store, 7, item)
 
-    assert content == f"{item.text}\n{item.url}"
+    assert content == "🦋 **Black in a Flash!** posted on Bluesky"
 
 
 def test_a_long_post_is_cut_to_discords_limit():
     item = rules.item_of(feed()[0])
     long = rules.Item(**{**item.__dict__, "text": "x" * 5000})
 
-    content, embed = rules.message_of(Store(), 7, long)
+    content, embed = rules.message_of(Store(bluesky_template="{text}"), 7, long)
 
     assert len(content) == rules.MESSAGE_LIMIT
     assert len(embed.description) == rules.DESCRIPTION_LIMIT

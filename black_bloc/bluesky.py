@@ -10,16 +10,20 @@ from typing import Any
 
 import discord
 
+from .block_look import LABEL_MAX
 from .settings_store import (
     BLUESKY_CHANNEL,
     BLUESKY_DEFAULTS,
+    BLUESKY_FOOTER,
     BLUESKY_HANDLE,
     BLUESKY_INTERVAL,
     BLUESKY_KEEP,
     BLUESKY_MAX_AGE,
     BLUESKY_MODE,
     BLUESKY_MODES,
+    BLUESKY_OPEN_LABEL,
     BLUESKY_PING_ROLE,
+    BLUESKY_PROFILE_LABEL,
     BLUESKY_REHEARSAL_LINE,
     BLUESKY_REPLIES,
     BLUESKY_REPOST_LINE,
@@ -59,10 +63,14 @@ RECENT_ROWS = 30
 MESSAGE_LIMIT = 2000
 DESCRIPTION_LIMIT = 4096
 AUTHOR_LIMIT = 256
+TITLE_LIMIT = 256
+FOOTER_LIMIT = 2048
 FIELD_NAME_LIMIT = 256
 FIELD_VALUE_LIMIT = 1024
 EMBED_COLOUR = 0x1185FE
 POST_URL = "https://bsky.app/profile/{handle}/post/{rkey}"
+PROFILE_URL = "https://bsky.app/profile/{handle}"
+FOOTER_ICON = "/assets/bluesky.png"
 FRACTION = re.compile(r"\.(\d+)")
 
 NO_CHANNEL = (
@@ -90,6 +98,8 @@ BAD_WHERE = "Post the latest goes to the channel or the test channel, so nothing
 NOTHING_ELIGIBLE = "@{handle} has no post Black Bloc may mirror right now, so nothing was posted."
 POSTED_LATEST = "{posted} post(s) are up in <#{channel}>."
 ALREADY_UP = " {skipped} were already up, so they were not posted again."
+NOT_SEEN = "Black Bloc has not seen that post, so nothing was posted. Press Read now first."
+GONE = "Bluesky no longer has that post, so nothing was posted."
 POST_FAILED_PART = " {failed} could not be posted ({why})."
 
 
@@ -317,6 +327,21 @@ def said(store: Any, guild_id: int, key: str, **fields: Any) -> str:
     return str(BLUESKY_DEFAULTS[key]).format(**fields)
 
 
+def worded(store: Any, guild_id: int, key: str, **fields: Any) -> str:
+    """A blank key says nothing; anything else is filled like `said`."""
+    if not str(store.get(guild_id, key) or "").strip():
+        return ""
+    return said(store, guild_id, key, **fields)
+
+
+def profile_url(handle: str) -> str:
+    return PROFILE_URL.format(handle=handle)
+
+
+def account_of(item: Item) -> str:
+    return item.account or item.author
+
+
 def message_of(
     store: Any,
     guild_id: int,
@@ -325,6 +350,7 @@ def message_of(
     rehearsal_for: Any = None,
     rehearsing: bool = False,
     role: int | None = None,
+    icon: str | None = None,
 ) -> tuple[str, discord.Embed]:
     """The content line(s) and the embed for one post."""
     lines: list[str] = []
@@ -333,32 +359,39 @@ def message_of(
         lines.append(said(store, guild_id, BLUESKY_REHEARSAL_LINE, channel=where))
     elif role:
         lines.append(f"<@&{int(role)}>")
+    account = account_of(item)
     if item.kind == REPOST:
-        lines.append(said(store, guild_id, BLUESKY_REPOST_LINE, account=item.account or "Bluesky"))
-    lines.append(
-        said(
-            store,
-            guild_id,
-            BLUESKY_TEMPLATE,
-            text=item.text,
-            url=item.url,
-            author=item.author,
-            handle=item.handle,
+        lines.append(
+            worded(store, guild_id, BLUESKY_REPOST_LINE, account=account, handle=item.handle)
         )
-    )
+    else:
+        lines.append(
+            worded(
+                store,
+                guild_id,
+                BLUESKY_TEMPLATE,
+                text=item.text,
+                url=item.url,
+                author=item.author,
+                handle=item.handle,
+                account=account,
+            )
+        )
     content = "\n".join(line for line in lines if line.strip())[:MESSAGE_LIMIT]
-    return content, embed_for(item)
+    footer = worded(store, guild_id, BLUESKY_FOOTER)
+    return content, embed_for(item, footer=footer, icon=icon)
 
 
-def embed_for(item: Item) -> discord.Embed:
+def embed_for(item: Item, *, footer: str = "", icon: str | None = None) -> discord.Embed:
     embed = discord.Embed(
+        title=item.author[:TITLE_LIMIT],
         description=item.text[:DESCRIPTION_LIMIT] or None,
         url=item.url,
         colour=EMBED_COLOUR,
         timestamp=parsed(item.indexed_at),
     )
     embed.set_author(
-        name=f"{item.author} · @{item.handle}"[:AUTHOR_LIMIT], url=item.url, icon_url=item.avatar
+        name=f"@{item.handle}"[:AUTHOR_LIMIT], url=profile_url(item.handle), icon_url=item.avatar
     )
     found = item.embed
     if found.get("image"):
@@ -377,7 +410,31 @@ def embed_for(item: Item) -> discord.Embed:
             value=external["uri"][:FIELD_VALUE_LIMIT],
             inline=False,
         )
+    if footer:
+        embed.set_footer(text=footer[:FOOTER_LIMIT], icon_url=icon)
     return embed
+
+
+def view_for(store: Any, guild_id: int, item: Item) -> discord.ui.View | None:
+    """The link buttons under a post: the post, then its author's profile."""
+    buttons = [
+        (worded(store, guild_id, BLUESKY_OPEN_LABEL), item.url),
+        (
+            worded(store, guild_id, BLUESKY_PROFILE_LABEL, handle=item.handle),
+            profile_url(item.handle),
+        ),
+    ]
+    shown = [(label.strip()[:LABEL_MAX], url) for label, url in buttons if label.strip()]
+    if not shown:
+        return None
+    view = discord.ui.View(timeout=None)
+    for label, url in shown:
+        view.add_item(discord.ui.Button(style=discord.ButtonStyle.link, label=label, url=url))
+    return view
+
+
+def icon_of(origin: str) -> str:
+    return str(origin or "").rstrip("/") + FOOTER_ICON
 
 
 def post_mentions(role: int | None) -> discord.AllowedMentions:
@@ -432,6 +489,7 @@ __all__ = [
     "backoff_minutes",
     "embed_of",
     "expanded_text",
+    "icon_of",
     "is_due",
     "item_of",
     "items_of",
@@ -441,7 +499,9 @@ __all__ = [
     "next_read",
     "oldest_first",
     "post_url",
+    "profile_url",
     "seed_count",
     "too_old",
+    "view_for",
     "wanted",
 ]

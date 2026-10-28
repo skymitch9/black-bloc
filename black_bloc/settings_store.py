@@ -5573,6 +5573,9 @@ BLUESKY_SEED_COUNT = "bluesky_seed_count"
 BLUESKY_TEMPLATE = "bluesky_template"
 BLUESKY_REPOST_LINE = "bluesky_repost_line"
 BLUESKY_REHEARSAL_LINE = "bluesky_rehearsal_line"
+BLUESKY_FOOTER = "bluesky_footer"
+BLUESKY_OPEN_LABEL = "bluesky_open_label"
+BLUESKY_PROFILE_LABEL = "bluesky_profile_label"
 BLUESKY_HANDLE_DEFAULT = "blackinaflash.bsky.social"
 BLUESKY_HANDLE_SHAPE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*$")
 BLUESKY_NUMBERS: dict[str, tuple[int, int, int]] = {
@@ -5581,18 +5584,36 @@ BLUESKY_NUMBERS: dict[str, tuple[int, int, int]] = {
     BLUESKY_KEEP: (500, 100, 5000),
     BLUESKY_SEED_COUNT: (2, 1, 10),
 }
-BLUESKY_POST_FIELDS = ("text", "url", "author", "handle")
+BLUESKY_POST_FIELDS = ("text", "url", "author", "handle", "account")
 BLUESKY_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     BLUESKY_TEMPLATE: (
-        "{text}\n{url}",
+        "🦋 **{account}** posted on Bluesky",
         BLUESKY_POST_FIELDS,
-        "what the message says; {text} is the post, {url} its address on bsky.app, {author} "
-        "its author's display name and {handle} their handle",
+        "the line above a post; {account} is the mirrored account's display name, {text} the "
+        "post, {url} its address on bsky.app, {author} its author's display name and {handle} "
+        "their handle; blank says nothing",
     ),
     BLUESKY_REPOST_LINE: (
-        "🔁 {account} reposted",
-        ("account",),
-        "the line above a repost; {account} is the mirrored account's display name",
+        "🔁 **{account}** reposted **@{handle}**",
+        ("account", "handle"),
+        "the line above a repost in place of bluesky_template; {account} is the mirrored "
+        "account's display name, {handle} the original author's handle; blank says nothing",
+    ),
+    BLUESKY_FOOTER: (
+        "Bluesky",
+        (),
+        "the footer under each mirrored post, beside the Bluesky butterfly; blank leaves it out",
+    ),
+    BLUESKY_OPEN_LABEL: (
+        "Open on Bluesky",
+        (),
+        "the button that opens the post on bsky.app; blank leaves the button out",
+    ),
+    BLUESKY_PROFILE_LABEL: (
+        "@{handle} on Bluesky",
+        ("handle",),
+        "the button that opens the author's profile on bsky.app; {handle} is their handle; "
+        "blank leaves the button out",
     ),
     BLUESKY_REHEARSAL_LINE: (
         "Test copy · while bluesky_mode is on this goes to {channel}",
