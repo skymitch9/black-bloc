@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-27 — one section APPENDED, nothing re-keyed**: *The Bluesky post's look* (branch `bluesky-look`, off `main` `72dc7271`); keyed by LINE at that branch. Before that:
 > **2026-10-20 — one section APPENDED, nothing re-keyed**: *Table height* (branch `runs-table-height`, off `main` `d73e0960`); keyed by LINE at that branch. Before that:
 > **2026-10-20 — one section APPENDED, nothing re-keyed**: *Demo mode and pagination* (branch `runs-demo`, off `main` `7dd74fe0`); keyed by LINE at that branch. Before that:
 > **2026-10-20 — one section APPENDED, two rows MARKED amended/retired in place, nothing re-keyed**: *Loose search* (branch `runs-loose-search`, off `main` `7d6dc025`); keyed by LINE at that branch. Before that:
@@ -10870,3 +10871,16 @@ Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
 | `black_bloc/bluesky_moves.py:68` `target_of` | A test copy goes where `shadow.channel_id` says (the one test channel, then the guard's, then the log channel) — the same home Post to test uses everywhere. |
 | `black_bloc/bluesky_moves.py:120` `_tick` | Mode on with no channel (or test with no test channel) reads NOTHING, rather than recording the window as unsent: once the channel is set, the next read posts whatever is still inside `bluesky_max_age_hours`. |
 | `tests/api/conftest.py` `recorded_bluesky_feed` | Every api test's WebBot answers the AppView from `tests/fixtures/bluesky/author_feed.json` (the live feed recorded 2026-10-27), so the contract entries for Read now / Post the latest… never reach the network. |
+
+## The Bluesky post's look (branch `bluesky-look`, 2026-10-27; keyed by LINE at that branch)
+
+| Where | Note |
+|---|---|
+| `black_bloc/bluesky.py:330` `worded` | The content lines, the footer and the button labels go through `worded`: a key staff blanked says nothing (no line, no footer, no button). `said` keeps the older rule for the rehearsal line, so a test copy can never lose the line that says it is one. |
+| `black_bloc/bluesky.py:345` `message_of` | Order: the rehearsal line (test copies) or the ping role (real posts only), then ONE of `bluesky_repost_line` (reposts) or `bluesky_template` (everything else). The post's link is no longer in the content by default — the title and the Open on Bluesky button carry it — but `{url}` still fills if staff put it back. A video post is not special: its thumbnail is the embed image and the button opens the clip (the fxbsky hybrid was dropped 18:1x, design Deviation 11). Cut to 2000. |
+| `black_bloc/bluesky.py:385` `embed_for` | Author line = `@handle` → the author's profile, title = display name → the post (the welcome post's bold title). The footer is drawn only when `bluesky_footer` has words: Discord shows no footer icon without footer text. |
+| `black_bloc/bluesky.py:418` `view_for` | Two link buttons (style 5, no custom_id, so no callback and nothing to re-register after a restart), labels cut to `block_look.LABEL_MAX` (80). `send_item` passes `view=` only when there is one, so fakes and old call shapes see no `view=None`. |
+| `black_bloc/bluesky.py:436` `icon_of` | The footer icon is `config.site_origin` + `/assets/bluesky.png`; the static mount serves it without a session, which is what Discord's image proxy needs. |
+| `black_bloc/bluesky_moves.py:374` `_rehearse_one` | Post to test on one Recent row: the row must exist (any status), the copy goes to the one test home through `send_item`, and the row is left as it was — a test copy never claims or settles a row. |
+| `black_bloc/bluesky_moves.py:405` `item_for` | A row stores no embed or avatar, so the post is read back: from the feed first (keeps a repost's reason, preferring the entry whose kind matches the row), else `getPosts` by uri for a post older than the newest 30. |
+| `black_bloc/bluesky_feed.py:57` `read_post` | getPosts answers `{"posts": [postView]}`; each is wrapped as `{"post": view}` so `item_of` reads it like a feed entry. An empty list is a good read with nothing in it (the post was deleted), not a failure. |
