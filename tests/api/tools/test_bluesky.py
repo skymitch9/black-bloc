@@ -6,6 +6,7 @@ ROUTES = [
     ("GET", "/api/bluesky", None),
     ("POST", "/api/bluesky/read", None),
     ("POST", "/api/bluesky/rehearse", None),
+    ("POST", "/api/bluesky/rehearse", {"uri": "at://x/app.bsky.feed.post/y"}),
     ("POST", "/api/bluesky/post-latest", {"count": 2, "where": "test"}),
 ]
 
@@ -104,3 +105,37 @@ async def test_post_to_test_sends_one_copy_to_the_test_channel(client, sign_in, 
     assert response.json()["message"] == "1 post(s) are up in #blackbloc-logs."
     assert guild.get_channel(wf.TEST_CHANNEL_ID).messages[-1].content.startswith("Test copy ·")
     assert client.get("/api/bluesky").json()["recent"] == []
+
+
+VIDEO_URI = "at://did:plc:4lijy65gdkw6gwwctvm6kxoc/app.bsky.feed.post/3myisto7wfc2y"
+
+
+async def test_post_to_test_on_one_row_sends_that_post_with_its_buttons(
+    client, sign_in, web, guild, wf
+):
+    await web.store.set(wf.GUILD_ID, "shadow_channel_id", wf.TEST_CHANNEL_ID)
+    sign_in(client)
+    client.post("/api/bluesky/read")
+    before = len(guild.get_channel(wf.TEST_CHANNEL_ID).messages)
+
+    response = client.post("/api/bluesky/rehearse", json={"uri": VIDEO_URI})
+
+    assert response.status_code == 200, response.json()
+    assert response.json()["value"]["uri"] == VIDEO_URI
+    sent = guild.get_channel(wf.TEST_CHANNEL_ID).messages
+    assert len(sent) == before + 1
+    assert sent[-1].content.splitlines()[-1] == "🦋 **Black in a Flash!** posted on Bluesky"
+    assert sent[-1].kwargs["view"] is not None
+    kinds = await wf.kinds_in(web.db)
+    assert kinds.count("web.bluesky.rehearsed") == 1
+
+
+def test_post_to_test_on_a_post_never_seen_is_refused_in_words(client, sign_in, web, wf):
+    sign_in(client)
+
+    response = client.post(
+        "/api/bluesky/rehearse", json={"uri": "at://nobody/app.bsky.feed.post/x"}
+    )
+
+    assert response.status_code == 404
+    assert "has not seen that post" in response.json()["message"]

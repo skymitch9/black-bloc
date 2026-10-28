@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 FEED_URL = (
     "https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor={actor}&limit={limit}"
 )
+POSTS_URL = "https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts?uris={uris}"
 AGENT = "BlackBloc/{version} (Discord bot for a speedrunning community)"
 REQUEST_TIMEOUT_SECONDS = 20
 MAX_BODY_BYTES = 8_000_000
@@ -50,6 +51,18 @@ def headers() -> dict[str, str]:
 async def read_feed(handle: str, limit: int, *, fetch: Any = None) -> Read:
     """`(status, feed, why)`: `why` is None only for a readable 200."""
     url = FEED_URL.format(actor=quote(str(handle), safe=""), limit=int(limit))
+    return await read_list(url, "feed", fetch)
+
+
+async def read_post(uri: str, *, fetch: Any = None) -> Read:
+    """One post by its at:// uri, as a one-entry feed; an empty feed when Bluesky has none."""
+    found = await read_list(POSTS_URL.format(uris=quote(str(uri), safe="")), "posts", fetch)
+    if not found.ok:
+        return found
+    return Read(found.status, [{"post": post} for post in found.feed])
+
+
+async def read_list(url: str, key: str, fetch: Any) -> Read:
     request = fetch or aiohttp_fetch
     try:
         status, body = await request(url, headers(), REQUEST_TIMEOUT_SECONDS)
@@ -63,10 +76,19 @@ async def read_feed(handle: str, limit: int, *, fetch: Any = None) -> Read:
         payload = json.loads(body)
     except (TypeError, ValueError) as exc:
         return Read(int(status), why=f"the answer was not JSON ({type(exc).__name__})")
-    feed = payload.get("feed") if isinstance(payload, dict) else None
-    if not isinstance(feed, list):
-        return Read(int(status), why="the answer had no feed list")
-    return Read(int(status), [one for one in feed if isinstance(one, dict)])
+    found = payload.get(key) if isinstance(payload, dict) else None
+    if not isinstance(found, list):
+        return Read(int(status), why=f"the answer had no {key} list")
+    return Read(int(status), [one for one in found if isinstance(one, dict)])
 
 
-__all__ = ["AGENT", "FEED_URL", "Read", "aiohttp_fetch", "headers", "read_feed"]
+__all__ = [
+    "AGENT",
+    "FEED_URL",
+    "POSTS_URL",
+    "Read",
+    "aiohttp_fetch",
+    "headers",
+    "read_feed",
+    "read_post",
+]

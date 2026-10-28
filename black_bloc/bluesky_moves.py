@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,7 +12,7 @@ from . import bluesky as rules
 from . import bluesky_store as store
 from . import shadow as shadow_home
 from .actionlog import log_action
-from .bluesky_feed import read_feed
+from .bluesky_feed import read_feed, read_post
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
 from .settings_store import BLUESKY_SEED_COUNT, KEY_MAX
@@ -97,10 +97,13 @@ async def send_item(
         rehearsal_for=target.aimed,
         rehearsing=target.rehearsing,
         role=role,
+        icon=rules.icon_of(bot.settings.site_origin),
     )
+    view = rules.view_for(bot.store, guild.id, item)
+    extra = {"view": view} if view is not None else {}
     try:
         message = await target.channel.send(
-            content, embed=embed, allowed_mentions=rules.post_mentions(role)
+            content, embed=embed, allowed_mentions=rules.post_mentions(role), **extra
         )
     except (discord.HTTPException, AttributeError, TypeError, ValueError) as exc:
         return None, send_why(exc)
@@ -353,10 +356,70 @@ async def _post_latest(
 
 
 async def rehearse(
-    bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD, now: datetime | None = None
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    uri: Any = None,
+    *,
+    via: str = VIA_DISCORD,
+    now: datetime | None = None,
 ) -> Outcome:
-    """Post to test: Post the latest with one post, the test channel."""
-    return await post_latest(bot, guild, actor, 1, rules.TEST, via=via, now=now)
+    """Post to test: one seen post by its uri, else Post the latest with one post."""
+    if not uri:
+        return await post_latest(bot, guild, actor, 1, rules.TEST, via=via, now=now)
+    async with lock_of(bot, guild.id):
+        return await _rehearse_one(bot, guild, actor, str(uri), via)
+
+
+async def _rehearse_one(bot: Any, guild: Any, actor: Any, uri: str, via: str) -> Outcome:
+    row = await store.get(bot.db, guild.id, uri)
+    if row is None:
+        return refusal(rules.NOT_SEEN, "not_seen", 404)
+    target = target_of(bot, guild, True)
+    if target.channel is None:
+        return refusal(target.why or rules.NO_TEST_HOME, "no_channel", 409)
+    item, why = await item_for(bot, guild, row)
+    if why is not None:
+        return refusal(why, "read_failed", 502)
+    if item is None:
+        return refusal(rules.GONE, "gone", 404)
+    message, why_not = await send_item(bot, guild, item, target, ping=False)
+    if message is None:
+        return refusal(rules.POST_REFUSED.format(why=why_not), "not_posted", 502)
+    details = item_details(item) | {
+        "via": via,
+        "count": 1,
+        "where": rules.TEST,
+        "channel": int(target.channel.id),
+        "message_id": int(message.id),
+        "posted": 1,
+        "skipped": 0,
+        "failed": 0,
+        "uris": [item.uri],
+    }
+    await log_action(bot, guild, kind_via("bluesky.rehearsed", via), actor=actor, details=details)
+    said = rules.POSTED_LATEST.format(posted=1, channel=int(target.channel.id))
+    return Outcome(True, said, value=details)
+
+
+async def item_for(bot: Any, guild: Any, row: Any) -> tuple[rules.Item | None, str | None]:
+    """A seen row read back into a post: from the feed, else Bluesky by its uri."""
+    uri = str(row["uri"])
+    found = await fetch_feed(bot, guild)
+    if not found.ok:
+        return None, rules.READ_FAILED.format(why=found.why)
+    matches = [one for one in map(rules.item_of, found.feed) if one is not None and one.uri == uri]
+    same = [one for one in matches if one.kind == row["kind"]]
+    if same or matches:
+        return (same or matches)[0], None
+    single = await read_post(uri, fetch=getattr(bot, FETCH_ATTR, None))
+    if not single.ok:
+        return None, rules.READ_FAILED.format(why=single.why)
+    items = [one for one in map(rules.item_of, single.feed) if one is not None]
+    if not items:
+        return None, None
+    account = rules.handle_of(bot.store, guild.id) if row["kind"] == rules.REPOST else ""
+    return replace(items[0], kind=str(row["kind"] or items[0].kind), account=account), None
 
 
 async def status(bot: Any, guild: Any, now: datetime | None = None) -> dict[str, Any]:

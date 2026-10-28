@@ -44,10 +44,13 @@ def build_router(bot: Any) -> APIRouter:
         return answered(guild, outcome)
 
     @router.post("/rehearse")
-    async def bluesky_rehearse(request: Request) -> dict[str, Any]:
+    async def bluesky_rehearse(
+        request: Request, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         who = await writer(request)
         guild = ready()
-        outcome = await moves.rehearse(bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE)
+        uri = (payload or {}).get("uri") or None
+        outcome = await moves.rehearse(bot, guild, actor_for(bot, who, guild), uri, via=VIA_WEBSITE)
         return answered(guild, outcome)
 
     @router.post("/post-latest")

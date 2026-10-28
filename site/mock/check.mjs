@@ -201,6 +201,8 @@ const IDS = {
   // every notes move reaches it; 2 is still recording, which /write and /post refuse from.
   meeting_id: '1',
   recording_meeting_id: '2',
+  // Bluesky: the one seen row the seed carries, so a per-row Post to test has a post.
+  bluesky_uri: 'at://did:plc:4lijy65gdkw6gwwctvm6kxoc/app.bsky.feed.post/3mockown00002',
 };
 
 const failures = [];
@@ -823,6 +825,13 @@ async function checkBluesky() {
   }
   const test = await post('/api/bluesky/rehearse', {});
   if (test.status !== 200 || (await test.json()).value.where !== 'test') fail('POST /api/bluesky/rehearse', 'was not one copy to the test channel');
+  const row = (await status()).recent[0];
+  const one = await post('/api/bluesky/rehearse', { uri: row.uri });
+  if (one.status !== 200) fail('POST /api/bluesky/rehearse [uri]', `answered ${one.status}`);
+  else if ((await one.json()).value.uri !== row.uri) fail('POST /api/bluesky/rehearse [uri]', 'sent another post than the row pressed');
+  const unseen = await post('/api/bluesky/rehearse', { uri: 'at://nobody/app.bsky.feed.post/x' });
+  if (unseen.status !== 404) fail('POST /api/bluesky/rehearse [unseen]', `answered ${unseen.status}, not 404`);
+  else if (!(await said(unseen)).includes('has not seen that post')) fail('POST /api/bluesky/rehearse [unseen]', 'did not say why in words');
 
   const tooMany = await post('/api/bluesky/post-latest', { count: 11, where: 'test' });
   if (tooMany.status !== 400) fail('POST post-latest [11]', `answered ${tooMany.status}, not 400`);

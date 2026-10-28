@@ -79,6 +79,14 @@ def test_the_page_is_served_from_this_app_at_the_root(bot):
     assert client_for(bot).get("/assets/app.js").status_code == 200
 
 
+def test_the_bluesky_footer_icon_is_served_as_a_png_without_a_session(bot):
+    r = client_for(bot).get("/assets/bluesky.png")
+
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"
+    assert r.content[:4] == bytes([0x89, 0x50, 0x4E, 0x47])
+
+
 def test_every_page_asks_for_the_favicon_this_app_can_actually_serve(bot):
     """The log was a `GET /favicon.ico 404` on every page load."""
     pages = sorted(Path(bot.settings.site_root).glob("*.html"))

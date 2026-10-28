@@ -29,7 +29,14 @@ const SLUG = 'bluesky';
 const KEY_PREFIX = 'bluesky_';
 const LOG_ROWS = 50;
 const NO_LOGS = 'Nothing has happened to the Bluesky mirror yet.';
-const WORDING_KEYS = ['bluesky_template', 'bluesky_repost_line', 'bluesky_rehearsal_line'];
+const WORDING_KEYS = [
+  'bluesky_template',
+  'bluesky_repost_line',
+  'bluesky_rehearsal_line',
+  'bluesky_footer',
+  'bluesky_open_label',
+  'bluesky_profile_label',
+];
 const READ_NOW = 'Read now';
 const POST_TO_TEST = 'Post to test';
 const POST_LATEST = 'Post the latest…';
@@ -66,10 +73,10 @@ function kept(title, children, count) {
   return fold;
 }
 
-async function act(say, work) {
+async function act(say, work, where = 'bluesky.status') {
   const done = await run(say, work, (found) => found?.message || 'Done.');
   if (done.ok) {
-    keepSaying('bluesky.status', say);
+    keepSaying(where, say);
     refresh();
   }
   return done;
@@ -129,7 +136,8 @@ function statusCard(payload) {
   return card('Status', [...lines, bar(moves), say, sayAgain('bluesky.status', say)]);
 }
 
-function recentFold(rows) {
+function recentFold(rows, payload) {
+  const say = notice();
   const list = table([
     { label: 'When', cell: (row) => when(row.posted_at || row.seen_at) },
     { label: 'Kind', cell: (row) => KIND_WORDS[row.kind] || row.kind },
@@ -142,10 +150,13 @@ function recentFold(rows) {
         row.message_url
           ? el('a', { class: 'btn quiet small', href: row.message_url, target: '_blank', rel: 'noopener', text: 'Discord' })
           : null,
+        payload.test_home
+          ? button(POST_TO_TEST, () => act(say, () => send('/api/bluesky/rehearse', 'POST', { uri: row.uri }), 'bluesky.recent'), { tone: 'quiet' })
+          : null,
       ].filter(Boolean)),
     },
   ], rows, { empty: 'Nothing has been read yet.' });
-  return kept('Recent', [list], rows.length);
+  return kept('Recent', [list, say, sayAgain('bluesky.recent', say)], rows.length);
 }
 
 async function settingsFold(specs) {
@@ -175,7 +186,7 @@ export async function blueskySection(reload) {
   const one = section(TITLE, null, { id: SLUG, open: asked });
   one.body.append(
     statusCard(payload),
-    recentFold(recent),
+    recentFold(recent, payload),
     await settingsFold(specs),
     await logsFold(),
   );
