@@ -2836,6 +2836,34 @@
       ]
     },
     {
+      "_": "Post to test on one row of Recent: that seen post, whatever its status, to the test channel. {bluesky_uri} is the one row the seed carries.",
+      "method": "POST",
+      "path": "/api/bluesky/rehearse",
+      "body": {
+        "uri": "{bluesky_uri}"
+      },
+      "settings": {
+        "shadow_channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "bluesky-section.js Recent ▸ Post to test"
+      ],
+      "shape": "object",
+      "keys": [
+        "ok",
+        "message",
+        "value"
+      ],
+      "nested": {
+        "value": [
+          "uri",
+          "where",
+          "channel",
+          "message_id"
+        ]
+      }
+    },
+    {
       "_": "Post the latest… (bluesky-mirror-design.md ▸ Post the latest…): to the test channel here, so the entry needs no bluesky_channel_id.",
       "method": "POST",
       "path": "/api/bluesky/post-latest",

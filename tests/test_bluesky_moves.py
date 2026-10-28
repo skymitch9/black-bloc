@@ -98,9 +98,14 @@ async def test_on_posts_a_new_post_in_the_channel_with_the_ping_role_only(bot):
     [post] = real(bot).sent
     assert post.content.splitlines() == [
         f"<@&{ROLE}>",
-        "Fresh off the stream",
-        post.kwargs["embed"].url,
+        "🦋 **Black in a Flash!** posted on Bluesky",
     ]
+    assert post.kwargs["embed"].description == "Fresh off the stream"
+    assert post.kwargs["embed"].footer.icon_url == (
+        f"{bot.settings.site_origin.rstrip('/')}/assets/bluesky.png"
+    )
+    labels = [one.label for one in post.kwargs["view"].children]
+    assert labels == ["Open on Bluesky", "@blackinaflash.bsky.social on Bluesky"]
     allowed = post.kwargs["allowed_mentions"]
     assert [role.id for role in allowed.roles] == [ROLE]
     assert allowed.everyone is False and allowed.users is False
@@ -191,7 +196,7 @@ async def test_a_reply_is_mirrored_only_once_replies_are_on(bot):
 
     await moves.tick(bot, bot.guild, NOW)
 
-    assert [one.content.splitlines()[1] for one in home(bot).sent][-1] == "seriously though"
+    assert home(bot).sent[-1].kwargs["embed"].description == "seriously though"
 
 
 async def test_post_the_latest_two_in_the_channel(bot):
@@ -264,6 +269,99 @@ async def test_post_to_test_is_one_post_in_the_test_channel(bot):
     assert await store.recent(bot.db, GUILD, 5) == []
     [logged] = await details_of(bot.db, "web.bluesky.rehearsed")
     assert logged["count"] == 1 and logged["where"] == "test" and logged["via"] == "website"
+    assert home(bot).sent[0].kwargs["view"] is not None
+
+
+VIDEO_URI = "at://did:plc:4lijy65gdkw6gwwctvm6kxoc/app.bsky.feed.post/3myisto7wfc2y"
+REPOST_RKEY = "3mykng2umee2q"
+
+
+async def test_post_to_test_by_uri_sends_that_seen_post_whatever_its_status(bot):
+    await moves.tick(bot, bot.guild, NOW)
+    assert (await store.get(bot.db, GUILD, VIDEO_URI))["status"] == rules.SKIPPED_OLD
+
+    done = await moves.rehearse(bot, bot.guild, 5, VIDEO_URI, via=VIA_WEBSITE, now=NOW)
+
+    assert done.ok, done.message
+    copy_ = home(bot).sent[-1]
+    assert copy_.content.splitlines() == [
+        f"Test copy · while bluesky_mode is on this goes to <#{REAL}>",
+        "🦋 **Black in a Flash!** posted on Bluesky",
+    ]
+    assert copy_.kwargs["allowed_mentions"].roles is False
+    assert copy_.kwargs["view"].children[0].url.endswith("/post/3myisto7wfc2y")
+    assert real(bot).sent == []
+    assert (await store.get(bot.db, GUILD, VIDEO_URI))["status"] == rules.SKIPPED_OLD
+    [logged] = await details_of(bot.db, "web.bluesky.rehearsed")
+    assert logged["uri"] == VIDEO_URI and logged["message_id"] == copy_.id
+
+
+async def test_post_to_test_by_uri_keeps_a_reposts_line(bot):
+    await moves.tick(bot, bot.guild, NOW)
+    [uri] = [
+        entry["post"]["uri"]
+        for entry in recorded()["feed"]
+        if entry["post"]["uri"].endswith(REPOST_RKEY)
+    ]
+
+    done = await moves.rehearse(bot, bot.guild, 5, uri, now=NOW)
+
+    assert done.ok
+    assert home(bot).sent[-1].content.splitlines()[1] == (
+        "🔁 **Black in a Flash!** reposted **@gamesdonequick.com**"
+    )
+
+
+async def test_post_to_test_by_uri_refuses_a_post_never_seen(bot):
+    done = await moves.rehearse(bot, bot.guild, 5, "at://nobody/app.bsky.feed.post/x", now=NOW)
+
+    assert not done.ok and done.code == "not_seen" and done.status == 404
+    assert "has not seen" in done.message and home(bot).sent == []
+
+
+class RoutedFetch(FakeFetch):
+    def __init__(self, posts):
+        super().__init__({"feed": []})
+        self.posts = posts
+
+    async def __call__(self, url, headers, seconds):
+        self.urls.append((url, headers))
+        if "getPosts" in url:
+            return 200, json.dumps({"posts": self.posts}).encode()
+        return 200, json.dumps(self.payload).encode()
+
+
+async def test_post_to_test_by_uri_asks_bluesky_for_a_post_gone_from_the_feed(bot):
+    entry = copy.deepcopy(recorded()["feed"][0])
+    item = rules.item_of(entry)
+    await store.record(bot.db, GUILD, item, rules.POSTED, NOW)
+    bot.bluesky_fetch = RoutedFetch([entry["post"]])
+
+    done = await moves.rehearse(bot, bot.guild, 5, item.uri, now=NOW)
+
+    assert done.ok, done.message
+    assert "getPosts" in bot.bluesky_fetch.urls[-1][0]
+    assert home(bot).sent[-1].kwargs["embed"].url == item.url
+
+
+async def test_post_to_test_by_uri_says_so_when_bluesky_has_lost_the_post(bot):
+    item = rules.item_of(recorded()["feed"][0])
+    await store.record(bot.db, GUILD, item, rules.POSTED, NOW)
+    bot.bluesky_fetch = RoutedFetch([])
+
+    done = await moves.rehearse(bot, bot.guild, 5, item.uri, now=NOW)
+
+    assert not done.ok and done.code == "gone" and home(bot).sent == []
+
+
+async def test_post_to_test_by_uri_says_why_when_bluesky_cannot_be_read(bot):
+    await moves.tick(bot, bot.guild, NOW)
+    bot.bluesky_fetch.status = 403
+
+    done = await moves.rehearse(bot, bot.guild, 5, NEWEST_URI, now=NOW)
+
+    assert not done.ok and done.code == "read_failed" and done.status == 502
+    assert "Bluesky answered 403" in done.message
 
 
 @pytest.mark.parametrize(
