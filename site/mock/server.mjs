@@ -503,9 +503,12 @@ const SETTING_SPECS = [
   ["bluesky_max_age_hours", "int", 24, 24, "a post first seen older than this many hours is recorded and not posted; 24 by default. It is what stops the account's history being posted after the deploy or a long outage", null, 168, 1],
   ["bluesky_keep", "int", 500, 500, "how many seen posts are remembered per server; older ones are forgotten after each read. 500 by default", null, 5000, 100],
   ["bluesky_seed_count", "int", 2, 2, "how many posts Post the latest… offers by default; 2, at most 10", null, 10, 1],
-  ["bluesky_template", "text", "{text}\n{url}", "{text}\n{url}", "what the message says; {text} is the post, {url} its address on bsky.app, {author} its author's display name and {handle} their handle"],
-  ["bluesky_repost_line", "text", "🔁 {account} reposted", "🔁 {account} reposted", "the line above a repost; {account} is the mirrored account's display name"],
+  ["bluesky_template", "text", "🦋 **{account}** posted on Bluesky", "🦋 **{account}** posted on Bluesky", "the line above a post; {account} is the mirrored account's display name, {text} the post, {url} its address on bsky.app, {author} its author's display name and {handle} their handle; blank says nothing"],
+  ["bluesky_repost_line", "text", "🔁 **{account}** reposted **@{handle}**", "🔁 **{account}** reposted **@{handle}**", "the line above a repost in place of bluesky_template; {account} is the mirrored account's display name, {handle} the original author's handle; blank says nothing"],
   ["bluesky_rehearsal_line", "text", "Test copy · while bluesky_mode is on this goes to {channel}", "Test copy · while bluesky_mode is on this goes to {channel}", "the line on a test-channel copy naming where the post would have gone; {channel}"],
+  ["bluesky_footer", "text", "Bluesky", "Bluesky", "the footer under each mirrored post, beside the Bluesky butterfly; blank leaves it out"],
+  ["bluesky_open_label", "text", "Open on Bluesky", "Open on Bluesky", "the button that opens the post on bsky.app; blank leaves the button out"],
+  ["bluesky_profile_label", "text", "@{handle} on Bluesky", "@{handle} on Bluesky", "the button that opens the author's profile on bsky.app; {handle} is their handle; blank leaves the button out"],
   ["birthday_mode", "enum", "shadow", "off", "off, test or on (post birthday wishes). test writes each day's wishes to the log and posts nothing; a wish staff post by hand goes to the test channel as a rehearsal copy", ["off", "shadow", "on"]],
   ['birthday_channel_id', 'channel', '800000000000000002', null, 'where birthday wishes are posted'],
   ['birthday_template', 'text', 'Happy birthday {name}!', 'Happy birthday {name}!', 'the birthday wording; {name} and {age}'],
@@ -2727,6 +2730,9 @@ const NAMESPACE_OVERRIDE = {
   bluesky_template: 'posts',
   bluesky_repost_line: 'posts',
   bluesky_rehearsal_line: 'posts',
+  bluesky_footer: 'posts',
+  bluesky_open_label: 'posts',
+  bluesky_profile_label: 'posts',
   handoff_confirm_hours: 'request',
   minutes_mode: 'events',
   minutes_channel_id: 'events',
@@ -12348,8 +12354,22 @@ route('POST', '/api/bluesky/post-latest', async (context) => {
   return blueskyPostLatest(body.count, body.where);
 });
 
-route('POST', '/api/bluesky/rehearse', (context) => {
+function blueskyRehearseOne(uri) {
+  const row = state.blueskyPosts.find((one) => one.uri === uri);
+  if (!row) throw new Refused(404, 'not_seen', 'Black Bloc has not seen that post, so nothing was posted. Press Read now first.');
+  const channel = blueskyTarget(true);
+  const item = blueskyFeed().find((one) => one.uri === uri);
+  if (!item) throw new Refused(404, 'gone', 'Bluesky no longer has that post, so nothing was posted.');
+  const messageId = String(940000000000000000 + Date.now() % 1000000);
+  const details = { via: 'website', uri, kind: item.kind, url: item.url, count: 1, where: 'test', channel, message_id: messageId, posted: 1, skipped: 0, failed: 0, uris: [uri] };
+  logAction('web.bluesky.rehearsed', { details });
+  return { ok: true, message: `1 post(s) are up in ${stickyName(channel)}.`, value: details };
+}
+
+route('POST', '/api/bluesky/rehearse', async (context) => {
   requireStaff(context.session);
+  const body = await context.body();
+  if (body && body.uri) return blueskyRehearseOne(String(body.uri));
   return blueskyPostLatest(1, 'test');
 });
 
