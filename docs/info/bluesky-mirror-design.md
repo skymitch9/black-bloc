@@ -163,6 +163,32 @@ Every word a key (`bluesky_headline`, `bluesky_repost_line`, `bluesky_open_label
 can put it back. A video shows its thumbnail + the button (a bot's embed cannot play video); the alternative — post
 the fxbsky.app link for video posts so Discord plays it inline — is the owner's call (a mixed look).
 
+### DECIDED 2026-10-27 18:0x — the look, build 2 (branch `bluesky-look`)
+
+Owner: **(a) the hybrid** for video. The build:
+
+- **Content** (above the embed), in this order, each line a key and blank = no line: the ping role (real posts only);
+  `bluesky_template` — default changes to `🦋 **{account}** posted on Bluesky` ({account} = the display name,
+  {text} {url} {author} {handle} still fill) — for a repost `bluesky_repost_line` instead, default
+  `🔁 **{account}** reposted **@{handle}**` ({handle} = the original author); for a VIDEO post (`embed.$type ==
+  app.bsky.embed.video#view`) `bluesky_video_line`, default `{fxurl}`, where `{fxurl}` is the post url with the host
+  `fxbsky.app` — Discord's crawler builds a playable card from it under ours. The rehearsal line stays first.
+- **Embed**: author = the avatar + `@{handle}` → the profile url (`https://bsky.app/profile/{handle}`); title = the
+  display name → the post url; description = the text (links expanded); image = the first picture, a video's
+  thumbnail; a quote post as a field (author · text); an external link card as a field; footer `bluesky_footer`
+  default `Bluesky` with the Bluesky butterfly as icon (`site/public/assets/bluesky.png`, served by the bot at
+  `https://blackbloc.heygabi.ai/assets/bluesky.png` — add the file, 64×64, the official blue butterfly);
+  timestamp = `indexedAt`; colour 0x1185FE.
+- **Buttons** (a `discord.ui.View`, link buttons the `block_look.py:94` way): `bluesky_open_label` default
+  `Open on Bluesky` → the post url; `bluesky_profile_label` default `@{handle} on Bluesky` → the profile url.
+  Rehearsal copies carry the same buttons.
+- **Post to test, per row**: the Recent table on the section gains a **Post to test** button per row;
+  `POST /api/bluesky/rehearse` takes an optional `uri` (a row the bot has seen, any status) and sends THAT post to the
+  test channel; without `uri` it is the newest eligible, as today. This is how the hybrid is PROVED live: the
+  2026-10-22 own video post (*Throwback … FIRST TRY*) is in the seen rows.
+- NOT verified until seen in #post-test: whether Discord draws its card from the fxbsky link beside a bot-drawn
+  embed. If it does not, the fallback is Deviation-logged: the video line goes to a second message of its own.
+
 ## What the owner does after the deploy
 
 Set `bluesky_channel_id` to #bsky-feed on the Posts page (Claude cannot write settings — `access/site.md`), watch a
