@@ -38,8 +38,9 @@ async def aiohttp_fetch(url: str, headers: dict[str, str], seconds: int) -> tupl
 
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=seconds)) as session:
         async with session.get(url, headers=headers) as response:
-            body = await response.content.read(MAX_BODY_BYTES + 1)
-            return int(response.status), body
+            if (response.content_length or 0) > MAX_BODY_BYTES:
+                return int(response.status), bytes(MAX_BODY_BYTES + 1)
+            return int(response.status), await response.read()
 
 
 def headers() -> dict[str, str]:

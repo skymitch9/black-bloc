@@ -6,7 +6,7 @@ ROUTES = [
     ("GET", "/api/bluesky", None),
     ("POST", "/api/bluesky/read", None),
     ("POST", "/api/bluesky/rehearse", None),
-    ("POST", "/api/bluesky/post-latest", {"count": 2, "where": "test", "note": ""}),
+    ("POST", "/api/bluesky/post-latest", {"count": 2, "where": "test"}),
 ]
 
 
@@ -55,7 +55,7 @@ async def test_read_now_while_off_is_refused_in_words(client, sign_in, web, wf):
     assert "bluesky_mode is off" in response.json()["message"]
 
 
-async def test_post_the_latest_two_then_the_note_land_in_the_channel(
+async def test_post_the_latest_two_land_in_the_channel_and_a_note_field_is_ignored(
     client, sign_in, web, guild, wf
 ):
     await web.store.set(wf.GUILD_ID, "bluesky_channel_id", wf.OTHER_CHANNEL_ID)
@@ -67,9 +67,9 @@ async def test_post_the_latest_two_then_the_note_land_in_the_channel(
     )
 
     assert response.status_code == 200, response.json()
-    assert response.json()["message"] == "2 post(s) are up in #general. The note followed."
+    assert response.json()["message"] == "2 post(s) are up in #general."
     channel = guild.get_channel(wf.OTHER_CHANNEL_ID)
-    assert channel.messages[-1].content == "<@123456789012345678> look"
+    assert all("<@123456789012345678>" not in message.content for message in channel.messages)
     kinds = await wf.kinds_in(web.db)
     assert kinds.count("web.bluesky.posted_latest") == 1
 
@@ -79,9 +79,7 @@ async def test_post_the_latest_to_the_channel_with_none_set_is_refused_in_words(
 ):
     sign_in(client)
 
-    response = client.post(
-        "/api/bluesky/post-latest", json={"count": 2, "where": "channel", "note": ""}
-    )
+    response = client.post("/api/bluesky/post-latest", json={"count": 2, "where": "channel"})
 
     assert response.status_code == 409
     assert "bluesky_channel_id is blank" in response.json()["message"]

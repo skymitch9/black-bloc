@@ -231,13 +231,6 @@ def test_a_long_post_is_cut_to_discords_limit():
     assert len(embed.description) == rules.DESCRIPTION_LIMIT
 
 
-def test_the_note_lets_one_member_be_mentioned_and_nothing_else():
-    allowed = rules.note_mentions()
-
-    assert allowed.users is True
-    assert allowed.roles is False and allowed.everyone is False
-
-
 @pytest.mark.parametrize(
     ("minutes", "failures", "wanted"),
     [(5, 0, 5), (5, 1, 10), (5, 2, 20), (5, 4, 60), (5, 30, 60), (60, 1, 60)],

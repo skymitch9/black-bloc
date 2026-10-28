@@ -116,15 +116,15 @@ both ways), the shadow-first and the allowed-mentions items.
 Owner, verbatim: *"Can we pull the most recent 2 post from the account and post them, then @pawpette so she can see
 it"*. A staff move on the section, **Post the latest…**: an ask for how many (1–10, default `bluesky_seed_count` = 2),
 where (**the channel** or **the test channel**; the channel choice needs `bluesky_channel_id` set and is refused in
-words otherwise — it does NOT need the mode on, it is an explicit staff press), and an optional note posted after
-them as its own plain message (typed by staff; a member mention like `<@id>` pings that one person — `allowed_mentions`
-users only, no roles, no everyone). Route `POST /api/bluesky/post-latest` `{count, where: "channel"|"test", note}`.
+words otherwise — it does NOT need the mode on, it is an explicit staff press). Route `POST /api/bluesky/post-latest`
+`{count, where: "channel"|"test"}`.
+No note: the owner handles any mention by hand (2026-10-27 17:0x)
 The newest `count` eligible items of the feed (kind rules apply, the age guard does NOT — this is the one path that
 posts old items on purpose), oldest first so they read in order; items already `posted` are posted again only when
 `where` is `test` (a rehearsal), otherwise skipped and the reply says how many were already up. Each real post is
 claimed in `bluesky_posts` like a loop post, so the loop never repeats it. Action `bluesky.posted_latest` with
-`count`, `where`, `posted`, `skipped`, `note: true|false`. The Post to test button is this move with count 1 /
-where test / no note — keep one implementation.
+`count`, `where`, `posted`, `skipped`. The Post to test button is this move with count 1 /
+where test — keep one implementation.
 
 ## What the owner does after the deploy
 

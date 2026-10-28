@@ -60,7 +60,6 @@ def build_router(bot: Any) -> APIRouter:
             actor_for(bot, who, guild),
             payload.get("count"),
             payload.get("where"),
-            payload.get("note"),
             via=VIA_WEBSITE,
         )
         return answered(guild, outcome)

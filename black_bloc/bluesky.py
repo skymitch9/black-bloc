@@ -61,7 +61,6 @@ DESCRIPTION_LIMIT = 4096
 AUTHOR_LIMIT = 256
 FIELD_NAME_LIMIT = 256
 FIELD_VALUE_LIMIT = 1024
-NOTE_LIMIT = 2000
 EMBED_COLOUR = 0x1185FE
 POST_URL = "https://bsky.app/profile/{handle}/post/{rkey}"
 FRACTION = re.compile(r"\.(\d+)")
@@ -91,8 +90,6 @@ BAD_WHERE = "Post the latest goes to the channel or the test channel, so nothing
 NOTHING_ELIGIBLE = "@{handle} has no post Black Bloc may mirror right now, so nothing was posted."
 POSTED_LATEST = "{posted} post(s) are up in <#{channel}>."
 ALREADY_UP = " {skipped} were already up, so they were not posted again."
-NOTE_SENT = " The note followed."
-NOTE_FAILED = " The note was not sent ({why})."
 POST_FAILED_PART = " {failed} could not be posted ({why})."
 
 
@@ -389,10 +386,6 @@ def post_mentions(role: int | None) -> discord.AllowedMentions:
     return discord.AllowedMentions(
         everyone=False, users=False, roles=[discord.Object(id=int(role))], replied_user=False
     )
-
-
-def note_mentions() -> discord.AllowedMentions:
-    return discord.AllowedMentions(everyone=False, users=True, roles=False, replied_user=False)
 
 
 def backoff_minutes(minutes: int, failures: int) -> int:
