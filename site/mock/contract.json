@@ -2841,8 +2841,7 @@
       "path": "/api/bluesky/post-latest",
       "body": {
         "count": 2,
-        "where": "test",
-        "note": ""
+        "where": "test"
       },
       "settings": {
         "shadow_channel_id": "{test_channel_id}"

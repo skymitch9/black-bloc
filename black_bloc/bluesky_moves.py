@@ -262,12 +262,11 @@ async def post_latest(
     actor: Any,
     count: Any,
     where: Any,
-    note: Any = "",
     *,
     via: str = VIA_DISCORD,
     now: datetime | None = None,
 ) -> Outcome:
-    """The newest `count` mirrorable posts, oldest first, then the note; one staff press."""
+    """The newest `count` mirrorable posts, oldest first; one staff press."""
     most = int(KEY_MAX[BLUESKY_SEED_COUNT])
     try:
         wanted = int(count)
@@ -278,13 +277,11 @@ async def post_latest(
     if where not in rules.WHERES:
         return refusal(rules.BAD_WHERE, "bad_where", 400)
     async with lock_of(bot, guild.id):
-        return await _post_latest(
-            bot, guild, actor, wanted, str(where), str(note or "").strip(), via, moment(now)
-        )
+        return await _post_latest(bot, guild, actor, wanted, str(where), via, moment(now))
 
 
 async def _post_latest(
-    bot: Any, guild: Any, actor: Any, count: int, where: str, note: str, via: str, now: datetime
+    bot: Any, guild: Any, actor: Any, count: int, where: str, via: str, now: datetime
 ) -> Outcome:
     rehearsing = where == rules.TEST
     target = target_of(bot, guild, rehearsing)
@@ -327,7 +324,6 @@ async def _post_latest(
                 channel_id=target.channel.id,
                 message_id=message.id,
             )
-    note_why = await send_note(target.channel, note) if note else None
     details = {
         "via": via,
         "count": count,
@@ -337,10 +333,7 @@ async def _post_latest(
         "skipped": len(skipped),
         "failed": len(failed),
         "uris": posted,
-        "note": bool(note),
     }
-    if note and note_why:
-        details["note_failed"] = note_why
     if rehearsing:
         await log_action(
             bot, guild, kind_via("bluesky.rehearsed", via), actor=actor, details=details
@@ -356,24 +349,14 @@ async def _post_latest(
         said += rules.ALREADY_UP.format(skipped=len(skipped))
     if failed:
         said += rules.POST_FAILED_PART.format(failed=len(failed), why=why)
-    if note:
-        said += rules.NOTE_FAILED.format(why=note_why) if note_why else rules.NOTE_SENT
     return Outcome(True, said, value=details)
-
-
-async def send_note(channel: Any, note: str) -> str | None:
-    try:
-        await channel.send(note[: rules.NOTE_LIMIT], allowed_mentions=rules.note_mentions())
-    except (discord.HTTPException, AttributeError, TypeError, ValueError) as exc:
-        return send_why(exc)
-    return None
 
 
 async def rehearse(
     bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD, now: datetime | None = None
 ) -> Outcome:
-    """Post to test: Post the latest with one post, the test channel and no note."""
-    return await post_latest(bot, guild, actor, 1, rules.TEST, "", via=via, now=now)
+    """Post to test: Post the latest with one post, the test channel."""
+    return await post_latest(bot, guild, actor, 1, rules.TEST, via=via, now=now)
 
 
 async def status(bot: Any, guild: Any, now: datetime | None = None) -> dict[str, Any]:

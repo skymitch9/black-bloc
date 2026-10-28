@@ -12316,7 +12316,7 @@ route('POST', '/api/bluesky/read', (context) => {
   return { ok: true, message: `Read ${counts.seen} post(s) from @${handle}: ${fresh} new, ${sent} sent.`, value: counts };
 });
 
-function blueskyPostLatest(count, where, note) {
+function blueskyPostLatest(count, where) {
   const most = 10;
   const wanted = Number.parseInt(count, 10);
   if (!(wanted >= 1 && wanted <= most)) throw new Refused(400, 'bad_count', `Post the latest takes 1 to ${most} posts, so nothing was posted.`);
@@ -12335,23 +12335,22 @@ function blueskyPostLatest(count, where, note) {
     if (!rehearsing) blueskyRow(item, 'posted', channel);
     posted += 1;
   }
-  const details = { via: 'website', count: wanted, where, channel, posted, skipped, failed: 0, note: Boolean(note) };
+  const details = { via: 'website', count: wanted, where, channel, posted, skipped, failed: 0 };
   logAction(rehearsing ? 'web.bluesky.rehearsed' : 'web.bluesky.posted_latest', { details });
   let said = `${posted} post(s) are up in ${stickyName(channel)}.`;
   if (skipped) said += ` ${skipped} were already up, so they were not posted again.`;
-  if (note) said += ' The note followed.';
   return { ok: true, message: said, value: details };
 }
 
 route('POST', '/api/bluesky/post-latest', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
-  return blueskyPostLatest(body.count, body.where, String(body.note || '').trim());
+  return blueskyPostLatest(body.count, body.where);
 });
 
 route('POST', '/api/bluesky/rehearse', (context) => {
   requireStaff(context.session);
-  return blueskyPostLatest(1, 'test', '');
+  return blueskyPostLatest(1, 'test');
 });
 
 // The BaF runs database (docs/info/baf-runs-design.md). The view is black_bloc/baf_runs.py:view

@@ -87,18 +87,16 @@ async function postLatest(payload, say) {
   });
   count.value = String(payload.seed_count || 2);
   const where = segment(WHERE_CHOICES, payload.channel_id ? 'channel' : 'test');
-  const note = el('textarea', { class: 'input area', rows: '2', id: 'bluesky-note', maxlength: '2000' });
   let said = null;
   const done = await askForm({
     title: POST_LATEST,
     confirmLabel: 'Post',
     tone: 'warn',
-    body: [field('How many', count), field('Where', where), field('Note after', note)],
+    body: [field('How many', count), field('Where', where)],
     onConfirm: async () => {
       const found = await send('/api/bluesky/post-latest', 'POST', {
         count: Number(count.value),
         where: where.readValue(),
-        note: note.value,
       });
       said = found?.message || 'Posted.';
       return null;

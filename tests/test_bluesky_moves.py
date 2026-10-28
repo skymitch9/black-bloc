@@ -23,8 +23,6 @@ from tests.bluesky_fakes import (
     with_feed,
 )
 
-PAWPETTE = 123456789012345678
-
 
 @pytest.fixture
 async def bot(db, monkeypatch):
@@ -196,22 +194,16 @@ async def test_a_reply_is_mirrored_only_once_replies_are_on(bot):
     assert [one.content.splitlines()[1] for one in home(bot).sent][-1] == "seriously though"
 
 
-async def test_post_the_latest_two_then_the_note_in_the_channel(bot):
-    note = f"<@{PAWPETTE}> these are up"
-
-    done = await moves.post_latest(bot, bot.guild, 5, 2, "channel", note, now=NOW)
+async def test_post_the_latest_two_in_the_channel(bot):
+    done = await moves.post_latest(bot, bot.guild, 5, 2, "channel", now=NOW)
 
     assert done.ok, done.message
-    first, second, said = real(bot).sent
+    first, second = real(bot).sent
     assert first.kwargs["embed"].url.endswith("/post/3mydhiqbers2w")
     assert second.kwargs["embed"].url.endswith("/post/3myuptyegac23")
     assert first.kwargs["allowed_mentions"].roles is False
     assert first.kwargs["allowed_mentions"].users is False
-    assert said.content == note
-    assert said.kwargs["allowed_mentions"].users is True
-    assert said.kwargs["allowed_mentions"].roles is False
-    assert said.kwargs["allowed_mentions"].everyone is False
-    assert done.message == f"2 post(s) are up in <#{REAL}>. The note followed."
+    assert done.message == f"2 post(s) are up in <#{REAL}>."
     [logged] = await details_of(bot.db, "bluesky.posted_latest")
     assert logged | {"uris": None} == {
         "via": "discord",
@@ -222,12 +214,11 @@ async def test_post_the_latest_two_then_the_note_in_the_channel(bot):
         "skipped": 0,
         "failed": 0,
         "uris": None,
-        "note": True,
     }
 
 
 async def test_what_post_the_latest_put_up_the_loop_never_repeats(bot):
-    await moves.post_latest(bot, bot.guild, 5, 2, "channel", "", now=NOW)
+    await moves.post_latest(bot, bot.guild, 5, 2, "channel", now=NOW)
     await bot.store.set(GUILD, "bluesky_mode", "on")
 
     await moves.tick(bot, bot.guild, NOW)
@@ -237,9 +228,9 @@ async def test_what_post_the_latest_put_up_the_loop_never_repeats(bot):
 
 
 async def test_a_second_press_skips_what_is_already_up_and_says_so(bot):
-    await moves.post_latest(bot, bot.guild, 5, 2, "channel", "", now=NOW)
+    await moves.post_latest(bot, bot.guild, 5, 2, "channel", now=NOW)
 
-    again = await moves.post_latest(bot, bot.guild, 5, 2, "channel", "", now=NOW)
+    again = await moves.post_latest(bot, bot.guild, 5, 2, "channel", now=NOW)
 
     assert len(real(bot).sent) == 2
     assert again.message.endswith("2 were already up, so they were not posted again.")
@@ -248,21 +239,20 @@ async def test_a_second_press_skips_what_is_already_up_and_says_so(bot):
 async def test_post_the_latest_takes_a_test_copy_over_a_rehearsal_row(bot):
     await moves.tick(bot, bot.guild, NOW)
 
-    done = await moves.post_latest(bot, bot.guild, 5, 1, "channel", "", now=NOW)
+    done = await moves.post_latest(bot, bot.guild, 5, 1, "channel", now=NOW)
 
     assert done.ok and len(real(bot).sent) == 1
     assert (await store.get(bot.db, GUILD, NEWEST_URI))["status"] == rules.POSTED
 
 
 async def test_to_the_test_channel_posts_again_and_touches_no_row(bot):
-    await moves.post_latest(bot, bot.guild, 5, 1, "channel", "", now=NOW)
+    await moves.post_latest(bot, bot.guild, 5, 1, "channel", now=NOW)
 
-    done = await moves.post_latest(bot, bot.guild, 5, 1, "test", "hello", now=NOW)
+    done = await moves.post_latest(bot, bot.guild, 5, 1, "test", now=NOW)
 
     assert done.ok
-    copy_, note = home(bot).sent
+    [copy_] = home(bot).sent
     assert copy_.content.startswith("Test copy ·")
-    assert note.content == "hello"
     assert (await store.get(bot.db, GUILD, NEWEST_URI))["status"] == rules.POSTED
     assert "bluesky.rehearsed" in await kinds(bot.db)
 
@@ -286,7 +276,7 @@ async def test_post_to_test_is_one_post_in_the_test_channel(bot):
     ],
 )
 async def test_a_bad_ask_is_refused_in_words(bot, count, where, code):
-    done = await moves.post_latest(bot, bot.guild, 5, count, where, "", now=NOW)
+    done = await moves.post_latest(bot, bot.guild, 5, count, where, now=NOW)
 
     assert not done.ok and done.code == code and done.status == 400
     assert real(bot).sent == [] and home(bot).sent == []
@@ -294,10 +284,10 @@ async def test_a_bad_ask_is_refused_in_words(bot, count, where, code):
 
 async def test_the_channel_choice_needs_the_channel_but_not_the_mode(bot):
     await bot.store.set(GUILD, "bluesky_mode", "off")
-    assert (await moves.post_latest(bot, bot.guild, 5, 1, "channel", "", now=NOW)).ok
+    assert (await moves.post_latest(bot, bot.guild, 5, 1, "channel", now=NOW)).ok
     await bot.store.clear(GUILD, "bluesky_channel_id")
 
-    done = await moves.post_latest(bot, bot.guild, 5, 1, "channel", "", now=NOW)
+    done = await moves.post_latest(bot, bot.guild, 5, 1, "channel", now=NOW)
 
     assert not done.ok and done.message == rules.NO_CHANNEL
 
@@ -305,7 +295,7 @@ async def test_the_channel_choice_needs_the_channel_but_not_the_mode(bot):
 async def test_an_unreadable_feed_posts_nothing_and_says_why(bot):
     bot.bluesky_fetch.status = 403
 
-    done = await moves.post_latest(bot, bot.guild, 5, 2, "channel", "note", now=NOW)
+    done = await moves.post_latest(bot, bot.guild, 5, 2, "channel", now=NOW)
 
     assert not done.ok and "Bluesky answered 403" in done.message
     assert real(bot).sent == []
@@ -314,7 +304,7 @@ async def test_an_unreadable_feed_posts_nothing_and_says_why(bot):
 async def test_nothing_eligible_is_refused(bot):
     bot.bluesky_fetch = with_feed([recorded()["feed"][4]])
 
-    done = await moves.post_latest(bot, bot.guild, 5, 2, "channel", "", now=NOW)
+    done = await moves.post_latest(bot, bot.guild, 5, 2, "channel", now=NOW)
 
     assert not done.ok and done.code == "nothing"
 
