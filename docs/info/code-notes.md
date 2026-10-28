@@ -10859,6 +10859,7 @@ Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
 
 | Where | Note |
 |---|---|
+| `black_bloc/bluesky_feed.py:38` `aiohttp_fetch` | The body is `await response.read()`, the WHOLE payload. v257 used `response.content.read(n)`, which returns the first available chunk, not n bytes: a 3-item probe fit in one chunk and passed, the 30-item feed did not, and the first live read logged `bluesky.read_failed` *status=200, the answer was not JSON* (2026-10-28 00:08:29Z). The size cap is checked on `Content-Length` before the read and on `len(body)` after. |
 | `black_bloc/bluesky.py:155` `parsed` | Bluesky stamps carry up to nine fractional digits (`2026-10-23T16:55:12.804653830Z`, seen on reposts of GDQ posts in the recorded feed); `fromisoformat` takes six, so the fraction is cut, not rejected. An unreadable stamp makes `too_old` true: a post whose age cannot be read is recorded and never posted. |
 | `black_bloc/bluesky.py:205` `expanded_text` | Facet indexes are UTF-8 BYTE offsets, not characters; spans are replaced from the last to the first so earlier offsets stay valid. A span outside the text is ignored rather than raised. |
 | `black_bloc/bluesky.py:299` `oldest_first` | The dedupe key is the post uri, and a repost item carries the ORIGINAL post's uri, so walking from the bottom keeps the first sighting (BaF's own post) and drops its later repost. `items_of` is the newest-first twin for Post the latest…. |
