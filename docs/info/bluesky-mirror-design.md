@@ -165,7 +165,7 @@ the fxbsky.app link for video posts so Discord plays it inline — is the owner'
 
 ### DECIDED 2026-10-27 18:0x — the look, build 2 (branch `bluesky-look`)
 
-Owner: **(a) the hybrid** for video. The build:
+~~Owner: **(a) the hybrid** for video.~~ **REVERSED 18:1x after the mock** (owner, verbatim: *"i think having it twice is dumb, i think we just do the black in a flash post and they can click int to see the video"*): **no fxbsky line, no `bluesky_video_line`, no `{fxurl}`** — a video post is the card with the clip's thumbnail and the buttons; the viewer taps Open on Bluesky to watch. The agent was told mid-build (a narrowing). The build, as it stands:
 
 - **Content** (above the embed), in this order, each line a key and blank = no line: the ping role (real posts only);
   `bluesky_template` — default changes to `🦋 **{account}** posted on Bluesky` ({account} = the display name,
