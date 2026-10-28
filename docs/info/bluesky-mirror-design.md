@@ -1,6 +1,6 @@
 # Bluesky mirror — BaF's Bluesky posts land in #bsky-feed
 
-> **Audience:** the build agent, then future sessions. **Status:** TRACKED. **Last verified: 2026-10-27 16:4x**
+> **Audience:** the build agent, then future sessions. **Status:** TRACKED. **Last verified: 2026-10-27 17:5x**
 > (the owner's decisions, the live channel ids read through the operator token 16:2x, the feed shape read from
 > the Fly machine 16:0x). ⚠️ NOT verified: nothing is built yet.
 
@@ -125,6 +125,43 @@ posts old items on purpose), oldest first so they read in order; items already `
 claimed in `bluesky_posts` like a loop post, so the loop never repeats it. Action `bluesky.posted_latest` with
 `count`, `where`, `posted`, `skipped`. The Post to test button is this move with count 1 /
 where test — keep one implementation.
+
+## The post's look — research and proposal (2026-10-27 17:5x)
+
+Owner, verbatim: *"do some research on another bot that links twitter post and blue sky post and lets mimic their
+format. Also include a link to blue sky"* … *"Kinda like our formatting with the welcome post"*.
+
+**What the bridge bots do (web, 17:4x; none documents its exact embed, so this is read off READMEs and listings):**
+
+| Bot | Shape of a mirrored post |
+|---|---|
+| TweetShift (X → Discord, the best-known) | a custom embed: author line = name + @handle with the avatar, the text as the description, the first image, a footer naming the platform with its logo, the post time as the embed timestamp; help.tweetshift.com would not load (empty page) so the content line above the embed is NOT confirmed |
+| bskydsbot (imherv, Bluesky → Discord) | `set_author` name + avatar, the text as the description, `set_image`, a footer with a link to the post on Bluesky |
+| Bsky2Discord (HeyItsJustFelix), LinkFix | no embed of their own: they post an **fxbsky.app** link and let Discord draw the card (FxEmbed, the FixTweet family) — video plays inline, but the look is Discord's generic card, and fxbsky serves its tags only to Discord's crawler (a browser is redirected to bsky.app) |
+| SkyCord, Orchid | listings say nothing about the layout; Orchid has a "text prepended to links" option |
+
+**The welcome post's shape** (`/api/posts/welcome`, style `embed`): a bold title, a markdown body, and a button row
+under it (the front door's three buttons, `block_look.py:94` draws link buttons the same way).
+
+**Proposal — one look for every post, an embed with a button row, the TweetShift conventions inside it:**
+
+```
+[content]  🦋 **Black in a Flash!** posted on Bluesky            ← bluesky_headline  {account}
+           🔁 **Black in a Flash!** reposted **@gamesdonequick.com**   ← bluesky_repost_line (reposts)
+[embed]    author: avatar · @blackinaflash.bsky.social → the profile
+           title: Black in a Flash!  → the post                    ← like the welcome post's bold title
+           description: the post's text, links expanded
+           image: the first picture, or a video's thumbnail
+           field: a quoted post (author · text)
+           footer: 🦋 Bluesky · (the post time as the embed timestamp)
+           colour: Bluesky blue 0x1185FE
+[buttons]  [ Open on Bluesky ]  [ @blackinaflash on Bluesky ]      ← link buttons; labels are keys
+```
+
+Every word a key (`bluesky_headline`, `bluesky_repost_line`, `bluesky_open_label`, `bluesky_profile_label`,
+`bluesky_footer`); `bluesky_template` keeps `{url}` out of the content by default (the buttons carry the link) but
+can put it back. A video shows its thumbnail + the button (a bot's embed cannot play video); the alternative — post
+the fxbsky.app link for video posts so Discord plays it inline — is the owner's call (a mixed look).
 
 ## What the owner does after the deploy
 
