@@ -18,6 +18,7 @@ def a_marathon(start=-60, end=240, **extra):
         "active": 1,
         "spotlight_id": 3,
         "spotlight_mode": None,
+        "tracked_at": at(-9999),
         **extra,
     }
 
@@ -202,3 +203,36 @@ def test_the_discord_line_turns_the_moments_into_timestamps():
     unix = int(datetime.fromisoformat(at(300)).timestamp())
     assert f"until <t:{unix}:f>" in ms.discord_line(held)
     assert "{" not in ms.discord_line(stated(a_row(), a_marathon(start=120, end=400)))
+
+
+def test_only_a_tracked_marathon_follows_and_a_found_one_plans_nothing():
+    assert ms.follows(a_marathon(), enabled=True)
+    for one in (
+        a_marathon(tracked_at=None),
+        a_marathon(ignored_at=at(-5)),
+        a_marathon(archived_at=at(-5)),
+    ):
+        assert not ms.follows(one, enabled=True)
+        assert planned(marathon=one) is None
+
+
+def test_a_held_spotlight_goes_back_once_its_marathon_stops_following_and_says_why():
+    held = a_row(spotlight=1, expires_at=at(300), spotlit_by_marathon=7)
+    assert ms.gives_back(held, a_marathon()) is None
+    assert ms.gives_back(held, a_marathon(tracked_at=None)) == ms.BECAUSE_NOT_TRACKED
+    assert ms.gives_back(held, a_marathon(ignored_at=at(-5))) == ms.BECAUSE_NOT_TRACKED
+    assert ms.gives_back(held, a_marathon(archived_at=at(-5))) == ms.BECAUSE_NOT_TRACKED
+    assert ms.gives_back(held, a_marathon(active=0)) == ms.BECAUSE_PAUSED
+    assert ms.gives_back(held, a_marathon(spotlight_mode="off")) == ms.BECAUSE_MODE_OFF
+    found = a_marathon(tracked_at=None)
+    other = a_row(spotlight=1, expires_at=at(300), spotlit_by_marathon=8)
+    assert ms.gives_back(other, found) is None
+    assert ms.gives_back(a_row(spotlight=1, expires_at=at(300)), found) is None
+    assert ms.gives_back(a_row(), found) is None and ms.gives_back(None, found) is None
+
+
+def test_a_found_marathon_says_tracking_it_spotlights_the_channel():
+    found = stated(a_row(), a_marathon(start=120, end=400, tracked_at=None))
+    assert found["state"] == ms.DARK and not found["follows"]
+    assert found["line"] == ms.STATE_LINES[ms.DARK] + ms.NOT_TRACKED_CLAUSE
+    assert stated(a_row(), a_marathon(start=120, end=400))["follows"]

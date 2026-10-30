@@ -18,6 +18,7 @@ from black_bloc.cogs.content.spotlight import (
 )
 from tests.cogs.content.test_marathon import (  # noqa: F401
     NOW,
+    URL,
     a_run,
     added,
     at,
@@ -309,3 +310,62 @@ async def added_bare(bot, cog):  # noqa: F811
         bot, bot.guild, FakeActor(), name="GDQx", url="https://gamesdonequick.com/schedule/75"
     )
     return made.value
+
+
+# --- found marathons do not follow; the give-back on the tick (2026-10-30) --------------------
+
+
+async def held_then(bot, cog, **fields):  # noqa: F811
+    row = await quiet_row(bot)
+    marathon = await added(bot, cog, channel=row)
+    assert (await channel_by_id(bot.db, row["id"]))["spotlit_by_marathon"] == marathon["id"]
+    await update_marathon(bot.db, marathon["id"], **fields)
+    return row, await get_marathon(bot.db, GUILD, marathon["id"])
+
+
+async def test_a_found_marathon_in_reach_never_spotlights_its_channel(bot, cog):  # noqa: F811
+    from black_bloc.cogs.content.marathon import create_marathon
+
+    row = await quiet_row(bot)
+    made = await create_marathon(
+        bot, bot.guild, FakeActor(), name="ESA 2026-Halloween", url=URL, spotlight_id=row["id"]
+    )
+    await cog.tick_marathon(bot.guild, await get_marathon(bot.db, GUILD, made.value["id"]))
+
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 0
+    assert await count(bot, "marathon.spotlight_set") == 0
+    _, state = await state_for(bot, bot.guild, made.value)
+    assert "Not tracked yet" in state["line"] and state["follows"] is False
+
+
+async def test_the_tick_gives_back_a_spotlight_whose_marathon_is_not_tracked_any_more(bot, cog):  # noqa: F811
+    row, marathon = await held_then(bot, cog, tracked_at=None)
+
+    await cog.tick_marathon(bot.guild, marathon)
+
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert (fresh["spotlight"], fresh["expires_at"], fresh["spotlit_by_marathon"]) == (
+        0,
+        None,
+        None,
+    )
+    lifted = await details_of(bot.db, "marathon.spotlight_lifted")
+    assert lifted["marathon_id"] == marathon["id"] and lifted["because"] == "not_tracked"
+
+
+async def test_the_tick_gives_back_a_spotlight_whose_marathon_is_paused(bot, cog):  # noqa: F811
+    row, marathon = await held_then(bot, cog, active=0)
+
+    await cog.tick_marathon(bot.guild, marathon)
+
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 0
+    assert (await details_of(bot.db, "marathon.spotlight_lifted"))["because"] == "paused"
+
+
+async def test_settle_held_gives_back_an_untracked_holder_before_its_date(bot, cog):  # noqa: F811
+    row, _ = await held_then(bot, cog, ignored_at=at(-5), tracked_at=None)
+
+    assert await settle_held(bot, bot.guild, await channel_by_id(bot.db, row["id"])) == "lifted"
+
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 0
+    assert (await details_of(bot.db, "marathon.spotlight_lifted"))["because"] == "not_tracked"

@@ -1114,13 +1114,14 @@ async def a_running_marathon(web, wf, spotlight_id):
     now = datetime.now(UTC)
     cur = await web.db.conn.execute(
         "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
-        "starts_at, ends_at, added_at) "
-        "VALUES (?, 'AGDQ 2027', 'https://x', 'gdq', '74', ?, ?, ?, ?)",
+        "starts_at, ends_at, added_at, tracked_at) "
+        "VALUES (?, 'AGDQ 2027', 'https://x', 'gdq', '74', ?, ?, ?, ?, ?)",
         (
             wf.GUILD_ID,
             spotlight_id,
             (now - timedelta(hours=1)).isoformat(),
             (now + timedelta(hours=5)).isoformat(),
+            now.isoformat(),
             now.isoformat(),
         ),
     )

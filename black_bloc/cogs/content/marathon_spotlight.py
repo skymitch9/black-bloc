@@ -81,7 +81,7 @@ async def state_for(bot: Any, guild: Any, marathon: Any) -> tuple[Any, dict[str,
 async def follow_spotlight(
     bot: Any, guild: Any, marathon: Any, now: datetime | None = None
 ) -> str | None:
-    """`set`, `extended`, or None when the row was left alone."""
+    """`set`, `extended`, `lifted`, or None when the row was left alone."""
     if marathon is None or mode_of(bot, guild.id) == MODE_OFF:
         return None
     row = await _row_of(bot, guild, marathon)
@@ -96,7 +96,11 @@ async def follow_spotlight(
         tail_minutes=tail,
     )
     if fields is None:
-        return None
+        because = ms.gives_back(row, marathon)
+        if because is None:
+            return None
+        await lift(bot, guild, row, marathon["id"], because)
+        return "lifted"
     await update_channel(bot.db, int(row["id"]), **fields)
     fresh = await channel_by_id(bot.db, int(row["id"]))
     await row_changed(bot, guild, row["id"])
@@ -153,8 +157,9 @@ async def settle_held(bot: Any, guild: Any, row: Any) -> str:
     if cog is not None and holder is not None:
         async with locked(cog, holder):
             marathon = await get_marathon(bot.db, guild.id, holder)
-            if await follow_spotlight(bot, guild, marathon) == "extended":
-                return "extended"
+            moved = await follow_spotlight(bot, guild, marathon)
+            if moved in ("extended", "lifted"):
+                return moved
             fresh = await channel_by_id(bot.db, int(row["id"]))
             if fresh is None or not is_spotlit(fresh) or ms.held_by(fresh) != holder:
                 return "gone"

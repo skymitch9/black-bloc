@@ -86,6 +86,7 @@ from .marathon import (
     source_of,
     update_marathon,
 )
+from .marathon_spotlight import follow_spotlight
 from .spotlight import channel_by_id
 
 log = logging.getLogger(__name__)
@@ -953,6 +954,7 @@ async def track_held(
         )
     fresh = await get_marathon(bot.db, guild.id, fresh["id"])
     where, _why = await post_place(bot, guild, fresh)
+    await follow_spotlight(bot, guild, await get_marathon(bot.db, guild.id, fresh["id"]))
     fresh = await get_marathon(bot.db, guild.id, fresh["id"])
     await sync_inbox(bot, guild, fresh, force=True)
     return Outcome(
@@ -976,9 +978,11 @@ async def track(
 
 
 async def stop_posting(bot: Any, guild: Any, marathon: Any) -> None:
-    """The in-flight effects end with the tracking: the pin comes off, the thread is archived."""
+    """The in-flight effects end with the tracking: the pin comes off, the thread is archived,
+    a spotlight it holds is given back."""
     await cog_of(bot).unpin_board(guild, marathon, because=mi.UNTRACK_BECAUSE)
     await archive_thread(bot, guild, marathon)
+    await follow_spotlight(bot, guild, await get_marathon(bot.db, guild.id, marathon["id"]))
 
 
 async def untrack(

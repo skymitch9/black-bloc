@@ -232,7 +232,9 @@ async def added(bot, cog, *, channel=None):
         spotlight_id=channel["id"] if channel is not None else None,
     )
     assert outcome.ok, outcome.message
-    return await tracked(bot, outcome.value)
+    marathon = await tracked(bot, outcome.value)
+    await cog.follow_spotlight(bot.guild, marathon["id"])
+    return await get_marathon(bot.db, GUILD, marathon["id"])
 
 
 async def tracked(bot, marathon):
