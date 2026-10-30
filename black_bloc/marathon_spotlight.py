@@ -6,6 +6,7 @@ from typing import Any
 from .golive import parse_ts
 from .marathon_channels import takes_marathons
 from .marathon_feeds import SEEDS
+from .marathon_inbox import is_tracked
 from .settings_store import PING_MODES
 from .spotlight import WINDOW_MARATHON, is_spotlit, keeps_forever
 
@@ -36,6 +37,8 @@ STAFF_OFF_CLAUSE = "**{name}** will not spotlight it again."
 BECAUSE_STAFF_OFF = "staff_turned_the_spotlight_off"
 BECAUSE_MARATHON_OVER = "marathon_over"
 BECAUSE_MODE_OFF = "mode_off"
+BECAUSE_NOT_TRACKED = "not_tracked"
+BECAUSE_PAUSED = "paused"
 
 
 def _cell(row: Any, key: str, fallback: Any = None) -> Any:
@@ -101,8 +104,23 @@ def follows(marathon: Any, *, enabled: bool) -> bool:
         bool(enabled)
         and marathon is not None
         and bool(_cell(marathon, "active", 1))
+        and is_tracked(marathon)
+        and not _cell(marathon, "archived_at")
         and mode_of(marathon) == FOLLOW
     )
+
+
+def gives_back(row: Any, marathon: Any) -> str | None:
+    """Why a spotlight this marathon holds goes back now, or None while it still follows."""
+    if row is None or marathon is None or not is_spotlit(row):
+        return None
+    if held_by(row) != int(marathon["id"]) or follows(marathon, enabled=True):
+        return None
+    if not is_tracked(marathon) or _cell(marathon, "archived_at"):
+        return BECAUSE_NOT_TRACKED
+    if not bool(_cell(marathon, "active", 1)):
+        return BECAUSE_PAUSED
+    return BECAUSE_MODE_OFF
 
 
 def plan(
@@ -194,6 +212,7 @@ STATE_LINES = {
     "under Settings.",
 }
 FOLLOW_OFF_CLAUSE = " Following is off, so this marathon leaves the channel to staff."
+NOT_TRACKED_CLAUSE = " Not tracked yet — Track it and it spotlights while it runs."
 OPTED_OUT_CLAUSE = " This channel is off for marathons."
 
 
@@ -240,12 +259,14 @@ def state_of(
         state = WAITING if waits else DARK
         found |= {"state": state, "starts": opening.isoformat() if waits else None}
         line = STATE_LINES[state]
-        if not waits and mode_of(marathon) == OFF:
+        if not waits and not is_tracked(marathon):
+            line += NOT_TRACKED_CLAUSE
+        elif not waits and mode_of(marathon) == OFF:
             line += FOLLOW_OFF_CLAUSE
         elif not waits and not takes_marathons(row):
             line += OPTED_OUT_CLAUSE
     line = line.replace("{tail}", str(int(tail_minutes))).replace("{lead}", str(int(lead_minutes)))
-    return found | {"line": line, "follows": mode_of(marathon) == FOLLOW}
+    return found | {"line": line, "follows": mode_of(marathon) == FOLLOW and is_tracked(marathon)}
 
 
 def discord_line(state: dict[str, Any]) -> str:
@@ -265,6 +286,8 @@ __all__ = [
     "OFF",
     "clean_mode",
     "dimmed_during",
+    "follows",
+    "gives_back",
     "held_by",
     "in_reach",
     "is_kept",

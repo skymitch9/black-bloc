@@ -856,6 +856,8 @@ async def test_following_again_spotlights_a_channel_whose_marathon_is_in_reach(
     )
     sign_in(client)
     marathon_id = add(client, spotlight_id=str(spotlight_id)).json()["id"]
+    assert (await channel_by_id(web.db, spotlight_id))["spotlight"] == 0
+    assert client.post(f"/api/marathons/{marathon_id}/track", json={}).status_code == 200
     row = await channel_by_id(web.db, spotlight_id)
     assert row["spotlight"] == 1 and row["spotlit_by_marathon"] == marathon_id
 

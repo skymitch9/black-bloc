@@ -67,7 +67,7 @@ The owner's three criteria are **`ping_mode = events` on a channel whose maratho
 **The follow** (`black_bloc/marathon_spotlight.py:plan`, pure; written by
 `cogs/content/marathon_spotlight.py:follow_spotlight`). Runs after every successful schedule read (`refresh`, beside
 `sync_window`) and on every minute tick of an active marathon. It acts when the key is on, `marathon_mode` is not
-`off`, the marathon is active and following, the row takes marathons, and the span (first run's start → last run's
+`off`, the marathon is active, **tracked** (Deviation 19) and following, the row takes marathons, and the span (first run's start → last run's
 end) holds now or starts within the lead:
 
 | The row | What happens | Log |
@@ -75,13 +75,17 @@ end) holds now or starts within the lead:
 | spotlight ON, no expiry (*kept* — GDQ) | nothing | nothing |
 | spotlight ON, expiry at or after the span end | nothing | nothing |
 | spotlight ON, expiry before the span end | `expires_at` = span end (not marked — staff's row) | `marathon.spotlight_extended` (routine) |
+| any row, marathon *found* or *ignored* (not tracked, Deviation 19) | nothing — a found marathon posts nothing | nothing |
+| spotlight ON and held by this marathon, which no longer follows (untracked, ignored, paused) | given back: off, `expires_at` NULL, holder NULL, a live post unpinned (Deviation 19) | `marathon.spotlight_lifted` (`because: not_tracked` / `paused` / `mode_off`) |
 | spotlight OFF | `spotlight = 1`, `expires_at` = span end (**+ `marathon_spotlight_tail_minutes`, 60, since `marathon-controls`**), `spotlit_by_marathon` = the marathon; a live stream is pinned | `marathon.spotlight_set` (**important**) with the marathon and the span |
 
 ⚠️ **2026-09-26, `marathon-controls` (off `70edbad9`) changed this** — see [`marathon-controls-design.md`](marathon-controls-design.md): the sweep no longer lifts on the stored date alone: a held row goes through `settle_held`, which re-reads the marathon's CURRENT span and extends instead when span end + tail is still ahead.
 
 **The end.** The ONE expiry sweep (`cogs/content/spotlight.py:sweep_expiries`) lifts a held row — spotlight off,
 `expires_at` NULL, holder NULL, a live post unpinned, `marathon.spotlight_lifted` (`because: marathon_over`) — and
-purges every other expired row as before.
+purges every other expired row as before. The reasons a held spotlight is lifted, every door: `marathon_over`
+(the sweep), `mode_off` (the per-marathon switch), `staff_turned_the_spotlight_off` (staff dimmed the row),
+`not_tracked` and `paused` (the give-back, Deviation 19).
 
 **Staff final say.**
 - **Spotlight off** on the row (Go-live PATCH or `/golive` ▸ Channels…) while a following marathon on it is in reach
@@ -132,8 +136,8 @@ other row keeps `spotlight_ping_mode_default`. No existing row is changed by cod
     ⚠️ **2026-09-26, `marathon-controls` (off `70edbad9`) changed this** — see [`marathon-controls-design.md`](marathon-controls-design.md): the spotlight now runs to span end + `marathon_spotlight_tail_minutes` (60) — owner 17:3x, *"if the events get extended make sure we extend the spotlight, maybe by like an extra hour"*. Still no window slack; the tail is its own key, and 0 restores this bullet exactly.
 11. **Staff turning off a held row clears its dates**, so a later **Spotlight on** is an ordinary kept spotlight,
     not a hidden purge date.
-12. **Removing, pausing or re-channelling a marathon mid-span leaves the spotlight it set** until the span end, when
-    the sweep lifts it. The per-marathon switch (Off) lifts it at once.
+12. **Removing, ~~pausing~~ or re-channelling a marathon mid-span leaves the spotlight it set** until the span end, when
+    the sweep lifts it. ⚠️ **2026-10-30: pausing now gives it back on the next tick** (Deviation 19). The per-marathon switch (Off) lifts it at once.
 13. **The key turned off does not lift** spotlights already set; they run to their end.
 14. **The answer sentences are constants** in `black_bloc/marathon_spotlight.py` (panel and page words, the repo's
     pattern); the one sentence shown ON a row, the Pings help line, is the key. Nothing new is posted to a channel.
@@ -145,6 +149,20 @@ other row keeps `spotlight_ping_mode_default`. No existing row is changed by cod
     fixtures add `gamesdonequick`, which is now a seeded marathon login; the tests are about the general default.
 18. **A race is closed, not tested concurrently**: a tick could re-spotlight between the staff write and the hook;
     the hook re-reads under the marathon lock and lifts. The sequential tests cover the hook, not the interleaving.
+19. ⚠️ **2026-10-30 — found marathons do not follow; the give-back on the tick; Track follows at once** (branch
+    `spotlight-tracked-only`, off `main` `a8498538`; owner approved 07:3x Phoenix). **Measured live 2026-10-30
+    13:45:53Z:** action 25164 `marathon.spotlight_set` for marathon 20 *ESA 2026-Halloween* — inbox state *found*,
+    `tracked_at` NULL — on channel row 4 `esamarathon`, whose spotlight was off. `follows()` checked only `active`
+    and `spotlight_mode`; this build predates the inbox, whose §B2 says an untracked marathon posts NOTHING.
+    Built: `follows()` also needs `marathon_inbox.is_tracked` (tracked, not ignored) and no `archived_at`.
+    `follow_spotlight` gives back a spotlight THIS marathon holds once it no longer follows (`gives_back`:
+    `not_tracked` for found / ignored / archived, `paused` for an inactive one, `mode_off` otherwise) and returns
+    `lifted`; the tick now runs the follow BEFORE its `not active` early return, so a paused holder is given back too;
+    `settle_held` returns that `lifted` instead of `kept`. **Track** (the inbox button, the panel, the site, a feed's
+    auto-track — all `track_held`) runs the follow at once, so a tracked marathon in reach spotlights the moment it is
+    tracked; **Untrack** and **Ignore** of a tracked marathon give it back at once (`stop_posting`). The state line
+    of a found marathon ends *Not tracked yet — Track it and it spotlights while it runs.* (a constant, like
+    `FOLLOW_OFF_CLAUSE`) and `follows` reads false. Unchanged: staff Off (Deviation 11) and the key off (13).
 
 ## What was NOT verified
 

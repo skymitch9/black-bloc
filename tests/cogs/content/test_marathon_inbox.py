@@ -19,7 +19,7 @@ from black_bloc.cogs.content.marathon import (
     runs_of,
 )
 from black_bloc.cogs.content.marathon_archive import archive_marathon, restore_marathon
-from black_bloc.cogs.content.spotlight import windows_for
+from black_bloc.cogs.content.spotlight import channel_by_id, spotlight_channel, windows_for
 from black_bloc.marathon_sources import ScheduleError
 from tests.cogs.content.test_marathon import (
     NOW,
@@ -806,3 +806,31 @@ async def test_a_parent_that_cannot_take_threads_keeps_the_old_ones_and_logs_onc
     assert (await fresh(bot, marathon))["thread_id"] == old_thread.id
     failed = await logged(bot, "marathon.inbox_failed")
     assert [one["reason"] for one in failed] == [mi.CANNOT_THREAD]
+
+
+async def quiet_channel(bot):
+    _, row = await spotlight_channel(
+        bot, bot.guild, FakeActor(), "rpglimitbreak", keep=True, spotlight=False
+    )
+    return row
+
+
+async def test_track_in_reach_spotlights_at_once_and_untrack_or_ignore_gives_it_back(bot, cog):
+    channel = await quiet_channel(bot)
+    marathon = await found(bot, cog, channel=channel)
+    assert (await channel_by_id(bot.db, channel["id"]))["spotlight"] == 0
+
+    await inbox.track(bot, bot.guild, FakeActor(), marathon)
+    held = await channel_by_id(bot.db, channel["id"])
+    assert held["spotlight"] == 1 and held["spotlit_by_marathon"] == marathon["id"]
+    assert (await details_of(bot.db, "marathon.spotlight_set"))["marathon_id"] == marathon["id"]
+
+    await inbox.untrack(bot, bot.guild, FakeActor(), await fresh(bot, marathon))
+    assert (await channel_by_id(bot.db, channel["id"]))["spotlight"] == 0
+    assert (await details_of(bot.db, "marathon.spotlight_lifted"))["because"] == "not_tracked"
+
+    await inbox.track(bot, bot.guild, FakeActor(), await fresh(bot, marathon))
+    assert (await channel_by_id(bot.db, channel["id"]))["spotlight"] == 1
+    await inbox.ignore(bot, bot.guild, FakeActor(), await fresh(bot, marathon), True)
+    assert (await channel_by_id(bot.db, channel["id"]))["spotlight"] == 0
+    assert (await kinds(bot.db)).count("marathon.spotlight_lifted") == 2

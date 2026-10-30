@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-10-30 — one section APPENDED, nothing re-keyed**: *Found marathons do not spotlight* (branch `spotlight-tracked-only`, off `main` `a8498538`); keyed by LINE at that branch. Rows below the edits in `marathon_spotlight.py` (pure and cog) and `cogs/content/marathon_inbox.py` sit a few lines lower — trust the anchor text. Before that:
 > **2026-10-27 — one section APPENDED, nothing re-keyed**: *The Bluesky post's look* (branch `bluesky-look`, off `main` `72dc7271`); keyed by LINE at that branch. Before that:
 > **2026-10-20 — one section APPENDED, nothing re-keyed**: *Table height* (branch `runs-table-height`, off `main` `d73e0960`); keyed by LINE at that branch. Before that:
 > **2026-10-20 — one section APPENDED, nothing re-keyed**: *Demo mode and pagination* (branch `runs-demo`, off `main` `7dd74fe0`); keyed by LINE at that branch. Before that:
@@ -10884,3 +10885,13 @@ Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
 | `black_bloc/bluesky_moves.py:374` `_rehearse_one` | Post to test on one Recent row: the row must exist (any status), the copy goes to the one test home through `send_item`, and the row is left as it was — a test copy never claims or settles a row. |
 | `black_bloc/bluesky_moves.py:405` `item_for` | A row stores no embed or avatar, so the post is read back: from the feed first (keeps a repost's reason, preferring the entry whose kind matches the row), else `getPosts` by uri for a post older than the newest 30. |
 | `black_bloc/bluesky_feed.py:57` `read_post` | getPosts answers `{"posts": [postView]}`; each is wrapped as `{"post": view}` so `item_of` reads it like a feed entry. An empty list is a good read with nothing in it (the post was deleted), not a failure. |
+
+## Found marathons do not spotlight (branch `spotlight-tracked-only`, 2026-10-30; keyed by LINE at that branch)
+
+| Where | Note |
+|---|---|
+| `black_bloc/marathon_spotlight.py:102` `follows` | Tracked (not ignored) and not archived, as well as active and following: the inbox's rule that a found marathon posts nothing (marathon-inbox §B2). Measured 2026-10-30 13:45:53Z, action 25164: marathon 20, found, spotlit row 4 `esamarathon` (design Deviation 19). |
+| `black_bloc/marathon_spotlight.py:113` `gives_back` | The give-back's whole decision, pure: only a row THIS marathon holds (`spotlit_by_marathon`), only once it no longer follows; the reason is `not_tracked` (found / ignored / archived), `paused` (inactive), else `mode_off`. The key and `marathon_mode` are not asked: turning the key off still does not lift (design Deviation 13). |
+| `black_bloc/cogs/content/marathon_spotlight.py:99` | The give-back step: when `plan` leaves the row alone, `follow_spotlight` lifts a spotlight its marathon still holds but no longer follows, and answers `lifted`. Every follow door gets it — the tick, a read, Track, Untrack/Ignore (`stop_posting`), and `settle_held`, which returns that `lifted` (a held row is never `kept` for a marathon that stopped following). |
+| `black_bloc/cogs/content/marathon.py:1875` | The follow runs BEFORE the tick's `not active` return, so a paused marathon's held spotlight is given back on the next tick (`paused`); for an inactive marathon `plan` is always None, so nothing is ever turned ON there. |
+| `black_bloc/cogs/content/marathon_inbox.py:957` · `:985` | Track runs the follow at once (a no-op out of reach); `stop_posting` (Untrack, Ignore of a tracked marathon) runs it on the re-read row, so the spotlight comes off with the tracking. Both are inside the marathon lock the move already holds. |

@@ -1872,10 +1872,10 @@ class Marathons(commands.Cog):
         await inbox_sync(self.bot, guild, marathon)
         marathon = await get_marathon(self.bot.db, guild.id, marathon["id"])
         await sync_controls(self.bot, guild, marathon)
+        await self.follow_spotlight(guild, marathon["id"])
         if not marathon["active"]:
             return
         await alert_if_due(self, guild, marathon)
-        await self.follow_spotlight(guild, marathon["id"])
         if mt.is_near(marathon, now, lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY))):
             await signals.resolve_categories(self, guild, marathon)
             await self.follow(guild, marathon)
