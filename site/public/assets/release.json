@@ -1,7 +1,8 @@
 {
-  "release": "v260",
-  "commit": "8cd5e2b7",
+  "release": "v261",
+  "commit": "e129da89",
   "changed_features": [
-    "marathon"
+    "chat",
+    "question"
   ]
 }
