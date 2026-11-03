@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 REF_ROUTES = [
@@ -7,6 +9,7 @@ REF_ROUTES = [
     "/api/ref/roles",
     "/api/ref/members",
     "/api/ref/names",
+    "/api/ref/emojis",
 ]
 
 
@@ -82,3 +85,25 @@ def test_a_malformed_limit_is_a_sentence(client, sign_in):
     response = client.get("/api/ref/members", params={"limit": "lots"})
     assert response.status_code == 400
     assert set(response.json()) == {"error", "message"}
+
+
+def test_the_servers_emotes_come_back_as_the_strings_a_reaction_setting_takes(
+    client, sign_in, guild
+):
+    guild.emojis.append(SimpleNamespace(id=223456789012345678, name="Spin", animated=True))
+    sign_in(client)
+    rows = client.get("/api/ref/emojis").json()
+    assert rows == [
+        {
+            "id": "123456789012345678",
+            "name": "bloc",
+            "animated": False,
+            "string": "<:bloc:123456789012345678>",
+        },
+        {
+            "id": "223456789012345678",
+            "name": "Spin",
+            "animated": True,
+            "string": "<a:Spin:223456789012345678>",
+        },
+    ]

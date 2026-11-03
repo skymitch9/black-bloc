@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 101
+SCHEMA_VERSION = 102
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1243,6 +1243,23 @@ CREATE TABLE IF NOT EXISTS weekly_question_slots (
     resolved_at TEXT,
     PRIMARY KEY (guild_id, slot_at)
 );
+
+CREATE TABLE IF NOT EXISTS ninja_marks (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id      INTEGER NOT NULL,
+    user_id       INTEGER NOT NULL,
+    channel_id    INTEGER NOT NULL,
+    emoji         TEXT    NOT NULL,
+    posts_left    INTEGER,
+    until         TEXT,
+    made_by       INTEGER,
+    made_at       TEXT    NOT NULL,
+    ended_at      TEXT,
+    ended_because TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ninja_marks_one_active
+    ON ninja_marks(guild_id, user_id, channel_id) WHERE ended_at IS NULL;
+CREATE INDEX IF NOT EXISTS ninja_marks_by_guild ON ninja_marks(guild_id, ended_at);
 
 CREATE TABLE IF NOT EXISTS bluesky_posts (
     guild_id      INTEGER NOT NULL,

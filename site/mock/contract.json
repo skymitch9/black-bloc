@@ -153,6 +153,43 @@
       "error_retry_minutes",
       "error_sentence",
       "log_channel_id",
+      "ninja_already_said",
+      "ninja_back_label",
+      "ninja_bad_number_said",
+      "ninja_default_minutes",
+      "ninja_default_posts",
+      "ninja_emoji",
+      "ninja_end_confirm",
+      "ninja_end_label",
+      "ninja_end_placeholder",
+      "ninja_ended_said",
+      "ninja_left_both",
+      "ninja_left_posts",
+      "ninja_left_until",
+      "ninja_mark_label",
+      "ninja_mark_line",
+      "ninja_marked_said",
+      "ninja_minutes_field",
+      "ninja_modal_title",
+      "ninja_mode",
+      "ninja_mode_said",
+      "ninja_next_label",
+      "ninja_no_channel_said",
+      "ninja_no_limit_placeholder",
+      "ninja_no_limit_said",
+      "ninja_no_one_said",
+      "ninja_none_line",
+      "ninja_not_active_said",
+      "ninja_off_label",
+      "ninja_on_label",
+      "ninja_panel_footer",
+      "ninja_panel_title",
+      "ninja_pick_line",
+      "ninja_posts_field",
+      "ninja_refresh_label",
+      "ninja_state_line",
+      "ninja_where_placeholder",
+      "ninja_who_placeholder",
       "operator_read_log",
       "panel_expired_text",
       "pb_feed_again_failed_said",
@@ -429,6 +466,8 @@
       "minutes_keep_days": 1,
       "minutes_max_hours": 1,
       "minutes_panel_minutes": 1,
+      "ninja_default_minutes": 0,
+      "ninja_default_posts": 0,
       "pb_feed_cycle_requests": 1,
       "pb_feed_interval_minutes": 15,
       "pb_feed_max_age_days": 1,
@@ -558,6 +597,8 @@
       "minutes_keep_days": 365,
       "minutes_max_hours": 6,
       "minutes_panel_minutes": 1440,
+      "ninja_default_minutes": 43200,
+      "ninja_default_posts": 1000,
       "pb_feed_cycle_requests": 600,
       "pb_feed_interval_minutes": 1440,
       "pb_feed_max_age_days": 60,
@@ -2765,6 +2806,52 @@
         "guild_id",
         "channel_url",
         "mode"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/ninja",
+      "read_by": [
+        "ninja-section.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "emoji",
+        "default_channel_id",
+        "default_posts",
+        "default_minutes",
+        "active",
+        "ended"
+      ],
+      "rows": {
+        "active": [
+          "id",
+          "user_id",
+          "user_name",
+          "channel_id",
+          "channel_name",
+          "emoji",
+          "posts_left",
+          "until",
+          "made_by",
+          "made_by_name",
+          "made_at"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/ref/emojis",
+      "read_by": [
+        "ninja-section.js"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "name",
+        "animated",
+        "string"
       ]
     },
     {
@@ -12962,6 +13049,8 @@
     "web.poll.rehearsed",
     "web.bluesky.read_now",
     "web.bluesky.rehearsed",
-    "web.bluesky.posted_latest"
+    "web.bluesky.posted_latest",
+    "web.ninja.marked",
+    "web.ninja.ended"
   ]
 }

@@ -4,9 +4,8 @@ import logging
 import re
 from typing import Any
 
-import discord
-
 from . import questions_store
+from .emoji import TEST_MODE, react_with
 from .settings_store import QUESTION_ANSWER_REACT, QUESTION_ANSWER_REACTION, QUESTION_CHANNEL
 
 log = logging.getLogger(__name__)
@@ -61,14 +60,12 @@ async def react(bot: Any, message: Any) -> bool:
     emoji = reaction_of(bot.store, guild_id)
     if not emoji:
         return False
-    guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_channel(message.channel):
+    why = await react_with(bot, message, emoji)
+    if why == TEST_MODE:
         log.debug("questions: test mode, so the answer in %s was not reacted to", guild_id)
         return False
-    try:
-        await message.add_reaction(discord.PartialEmoji.from_str(emoji))
-    except Exception as exc:
-        log.warning("questions: an answer was not reacted to — %s: %s", type(exc).__name__, exc)
+    if why is not None:
+        log.warning("questions: an answer was not reacted to — %s", why)
         return False
     log.debug("questions: reacted to answer %s", getattr(message, "id", "?"))
     return True

@@ -71,6 +71,7 @@ HEADS: dict[str, str] = {
     "brackets": CORE,
     "points": CORE,
     "question": CORE,
+    "ninja": CORE,
     "optouts": CORE,
     "automod": "automod",
     "honeypot": "honeypot",
@@ -133,6 +134,7 @@ FEATURE_LABELS: dict[str, str] = {
     "minutes": "Meeting minutes",
     "points": "Leaderboard",
     "question": "Weekly questions",
+    "ninja": "Ninja marks",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -160,6 +162,7 @@ FEATURE_PAGES: dict[str, str] = {
     "minutes": "minutes.html",
     "points": "leaderboard.html",
     "question": "posts.html#sect-questions",
+    "ninja": "posts.html#sect-ninja",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -194,6 +197,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "question.missed",
         "question.warned_empty",
         "question.taken_down",
+        "ninja.marked",
         "bluesky.posted_latest",
         "pbfeed.match_refused",
         "pings.roles_taken_back",
@@ -315,6 +319,8 @@ ROUTINE: frozenset[str] = frozenset(
         "question.requeued",
         "question.posted_by_owner",
         "question.rehearsed",
+        "ninja.reacted",
+        "ninja.ended",
         "bluesky.posted",
         "bluesky.skipped_old",
         "bluesky.skipped_kind",

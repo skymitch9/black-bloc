@@ -18,6 +18,7 @@ from black_bloc import (
     guides,
     knowledge,
     minutes,
+    ninja_store,
     optouts,
     pings,
     post_blocks,
@@ -1039,6 +1040,9 @@ async def seed_world(client, web, guild, wf) -> dict:
     await post_blocks.attach(db, await posts.get_post_by_id(db, board_id), "leaderboard")
     await sticky.write_words(db, guild_id, wf.VOICE_CHANNEL_ID, "", 7, post_id=board_id)
     await questions_store.add_many(db, guild_id, ["Contract question?"], 7, datetime.now(UTC))
+    await ninja_store.add(
+        db, guild_id, MEMBER_ID, wf.OTHER_CHANNEL_ID, "🥷🏿", 1, None, 7, "x"
+    )
     bluesky_uri = await seed_bluesky(db, guild_id)
     structure_old, structure_new = await seed_structure(db, guild_id)
     brackets = await seed_brackets(db, guild_id)

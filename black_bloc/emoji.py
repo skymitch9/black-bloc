@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import discord
+
 SKIN_TONES: dict[str, str] = {
     "none": "",
     "light": "\U0001f3fb",
@@ -15,6 +17,8 @@ SKIN_TONE_NAMES: tuple[str, ...] = tuple(SKIN_TONES)
 SKIN_TONE_DEFAULT = "dark"
 MODIFIERS = frozenset(value for value in SKIN_TONES.values() if value)
 VARIATION = "️"
+TEST_MODE = "test mode"
+NO_EMOJI = "no emoji"
 
 MODIFIER_BASE = (
     "261D 26F9 270A 270B 270C 270D "
@@ -67,3 +71,17 @@ def tone_for(bot: Any, guild_id: int | None) -> str:
     except Exception:
         return SKIN_TONE_DEFAULT
     return chosen if chosen in SKIN_TONES else SKIN_TONE_DEFAULT
+
+
+async def react_with(bot: Any, message: Any, emoji: str) -> str | None:
+    """None once the reaction is on; otherwise why not. Never raises."""
+    if not emoji:
+        return NO_EMOJI
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(message.channel):
+        return TEST_MODE
+    try:
+        await message.add_reaction(discord.PartialEmoji.from_str(emoji))
+    except Exception as exc:
+        return f"{type(exc).__name__}: {exc}"
+    return None

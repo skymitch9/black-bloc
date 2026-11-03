@@ -16,10 +16,11 @@ is('a post whose slug starts with sect- opens the post', postSlugOf('#sect-rules
 is('the sticky section is a section', postSlugOf('#sect-sticky'), null);
 is('the weekly questions section is a section', postSlugOf('#sect-questions'), null);
 is('the bluesky section is a section', postSlugOf('#sect-bluesky'), null);
+is('the ninja section is a section', postSlugOf('#sect-ninja'), null);
 is(
   'every section of the page is a section',
   SECTION_HASHES.map((one) => postSlugOf(`#${one}`)),
-  [null, null, null, null, null, null],
+  [null, null, null, null, null, null, null],
 );
 is('no hash is no post', [postSlugOf(''), postSlugOf('#'), postSlugOf(null)], [null, null, null]);
 is('a hash without its mark still reads', postSlugOf('sect-rules'), 'sect-rules');

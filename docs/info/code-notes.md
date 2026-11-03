@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-11-02 — one section APPENDED, nothing re-keyed**: *Ninja marks* (branch `ninja`, off `main` `665a4219`); keyed by LINE at that branch. Before that:
 > **2026-11-02 — one section APPENDED, nothing re-keyed**: *Replies to the weekly question* (branch `qotw-replies`, off `main` `d6edddde`); keyed by LINE at that branch. Before that:
 > **2026-10-30 — one section APPENDED, nothing re-keyed**: *Found marathons do not spotlight* (branch `spotlight-tracked-only`, off `main` `a8498538`); keyed by LINE at that branch. Rows below the edits in `marathon_spotlight.py` (pure and cog) and `cogs/content/marathon_inbox.py` sit a few lines lower — trust the anchor text. Before that:
 > **2026-10-27 — one section APPENDED, nothing re-keyed**: *The Bluesky post's look* (branch `bluesky-look`, off `main` `72dc7271`); keyed by LINE at that branch. Before that:
@@ -10907,3 +10908,22 @@ Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
 | `black_bloc/questions_store.py:197` `posted_message` | `status = 'posted'` only: Take it down puts the row back in the queue and nulls `message_id`, so a reply to a taken-down post is not an answer. Served by `weekly_questions_by_message` (`storage/db.py:1233`). |
 | `black_bloc/cogs/content/chat.py:1971` | The answer check runs after the bot/webhook/type filters and BEFORE `follow_up`, `chat_feedback.schedule` and `mentions_bot`: an answer without a typed mention is not weighed, reviewed or answered. With a typed mention it falls through unchanged (and was reacted to first). |
 | `black_bloc/settings_store.py:5553` `checked_question_reaction` | Accepts a custom emoji string, or up to 16 characters with no whitespace and no ASCII letters (keycaps like 1️⃣ pass); a word like `music` is refused in a sentence. Blank is allowed through `TEXT_MAY_BE_BLANK` (`:6363`). |
+
+## Ninja marks (branch `ninja`, 2026-11-02; keyed by LINE at that branch)
+
+| Where | Note |
+|---|---|
+| `black_bloc/ninja.py:184` `might_be_marked` | Author (not a bot, not a webhook), message type (default/reply, checklist 23), guild and channel are read before anything else, then the in-memory `(guild, user) -> {channel}` map — so a post nobody marked never touches the database. |
+| `black_bloc/ninja.py:171` `reload` | The map is rebuilt from the active rows on `cog_load`, every sweep, and after every mark/end; the API writes in the same process, so a page mark is live at once. A stale hit (map says marked, no row) reloads. |
+| `black_bloc/ninja.py:356` `on_post` | Order: mode → active row → `is_due` (a passed clock ends the mark here, no emote) → `claim_post` → `react_with` → on refusal `give_back` (and `ninja.react_failed` unless it was the test-mode guard) → `ninja.reacted` → end at 0 posts. The mark's own stored `emoji` is used, never the current `ninja_emoji`. |
+| `black_bloc/ninja_store.py:94` `claim_post` | One conditional UPDATE (live, posts left > 0 or NULL, `until` > now) instead of a lock: two posts cannot share the last one (checklist 6, with the partial unique index `storage/db.py:1260`). Times are ISO UTC to the second so they compare as text. |
+| `black_bloc/ninja_store.py:115` `end` | Ends only an active row and answers whether THIS call ended it, so the sweep, a post and a staff End racing write one `ninja.ended`. |
+| `black_bloc/ninja.py:414` `settle` | Ends spent (`posts_left <= 0`, a crash between claim and end) and timed-out marks whatever `ninja_mode` says (design Deviation 2); skips unavailable guilds (checklist 32). |
+| `black_bloc/ninja.py:201` `mark` | Refusals in order: nobody, no channel, a bad number, neither limit; then per member, a duplicate is reported as "already marked" and the rest are still made; all duplicates is a 409. The website door names members `@display` and channels become `#name` through `site_words` (`api/tools/ninja.py:49`). |
+| `black_bloc/ninja.py:106` `until_words` | Discord gets `<t:…:t>` within 20 hours, `:f` beyond; the website gets `YYYY-MM-DD HH:MM` in `default_timezone`. |
+| `black_bloc/emoji.py:76` `react_with` | The one reaction path (`PartialEmoji.from_str`, the guard, never raises); returns why not. `question_answers.react` keeps its own log lines on top of it. |
+| `black_bloc/settings_store.py:5376` `checked_emoji` | Was `checked_question_reaction`; shared by `question_answer_reaction` (may be blank) and `ninja_emoji` (may not — not in `TEXT_MAY_BE_BLANK`). |
+| `black_bloc/ninja_panel.py:343` `LimitsModal` | Titles and labels cut to 45, placeholders to 100 (checklist 39), because staff can edit the words. A no-limit or bad-number refusal re-draws the Mark someone card, not the list. |
+| `black_bloc/ninja_panel.py:197` `run_mode` | Turn on/off writes through `cogs.core.set_key`, so it leaves the one `settings.set` row every other settings door leaves. |
+| `black_bloc/ninja_panel.py:278` `WherePick` | Defaults to `question_channel_id` through `SelectDefaultValue`; the owner's ask was the QOTW channel. |
+| `site/public/assets/posts-hash.js` `SECTION_HASHES` | `sect-ninja` is a section; without it `#sect-ninja` opened an empty post drawer (seen on the mock). |
