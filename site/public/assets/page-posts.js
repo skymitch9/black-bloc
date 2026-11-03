@@ -7,6 +7,7 @@ import { BLOCK_EDITORS } from './blockwords.js';
 import { BLOCK_FILTERS, blockText } from './listfilter.js';
 import { logsSection } from './logs.js';
 import { remember, remembered } from './layout.js';
+import { ninjaSection } from './ninja-section.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
 import { postSlugOf } from './posts-hash.js';
 import { questionsSection } from './questions-section.js';
@@ -1265,6 +1266,7 @@ async function load() {
     await blocksSection(payload),
     await stickySection(() => refresh()),
     await questionsSection(() => refresh()),
+    await ninjaSection(() => refresh()),
     await blueskySection(() => refresh()),
     await machinerySection(specs),
   );

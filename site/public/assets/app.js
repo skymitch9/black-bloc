@@ -44,6 +44,7 @@ export const FEATURE_TABS = {
   marathon: 'events',
   birthday: 'birthdays',
   question: 'posts',
+  ninja: 'posts',
   modmail: 'modmail',
   automod: 'automod',
   rolemenu: 'rolemenus',
