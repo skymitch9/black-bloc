@@ -121,6 +121,23 @@ def roles(guild: Any) -> list[dict[str, Any]]:
     return sorted((role_row(role) for role in found), key=lambda row: -row["position"])
 
 
+def emoji_row(emoji: Any) -> dict[str, Any]:
+    animated = bool(getattr(emoji, "animated", False))
+    name = str(getattr(emoji, "name", "") or "")
+    return {
+        "id": str(emoji.id),
+        "name": name,
+        "animated": animated,
+        "string": f"<{'a' if animated else ''}:{name}:{int(emoji.id)}>",
+    }
+
+
+def emojis(guild: Any) -> list[dict[str, Any]]:
+    """The server's own emotes, as the strings a reaction setting takes."""
+    found = [emoji_row(one) for one in getattr(guild, "emojis", None) or ()]
+    return sorted(found, key=lambda row: row["name"].lower())
+
+
 def _matches(member: Any, query: str) -> bool:
     if not query:
         return True
@@ -200,6 +217,8 @@ __all__ = [
     "channel_kind",
     "channel_row",
     "channels",
+    "emoji_row",
+    "emojis",
     "member_row",
     "named",
     "parse_ids",

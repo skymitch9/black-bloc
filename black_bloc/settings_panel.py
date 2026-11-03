@@ -15,6 +15,7 @@ from .settings_store import (
     KEY_MIN,
     KEY_TYPES,
     MARATHON_MODE_KEY,
+    NINJA_MODE,
     SELFTEST_CHANNEL_ID,
     SELFTEST_ON_BOOT,
     SELFTEST_PURGE_MINUTES,
@@ -108,6 +109,7 @@ EXTRA_MODES: tuple[FeatureMode, ...] = (
     FeatureMode(MARATHON_MODE_KEY, "event", FEATURE_LABELS["marathon"]),
     FeatureMode(STRUCTURE_BACKUP_MODE, "structure", "Structure backup"),
     FeatureMode(PB_FEED_MODE_KEY, "pb", "Personal bests"),
+    FeatureMode(NINJA_MODE, "ninja", FEATURE_LABELS["ninja"]),
 )
 
 

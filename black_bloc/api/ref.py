@@ -9,6 +9,7 @@ from .auth import guild_of
 from .names import (
     MEMBER_SEARCH_LIMIT,
     channels,
+    emojis,
     parse_ids,
     resolve,
     roles,
@@ -38,6 +39,11 @@ def build_router(bot: Any) -> APIRouter:
     async def ref_members(q: str = "", limit: int = MEMBER_SEARCH_LIMIT) -> list[dict[str, Any]]:
         guild = guild_of(bot)
         return search_members(guild, q, limit) if guild is not None else []
+
+    @router.get("/emojis")
+    async def ref_emojis() -> list[dict[str, Any]]:
+        guild = guild_of(bot)
+        return emojis(guild) if guild is not None else []
 
     @router.get("/names")
     async def ref_names(ids: str = "") -> dict[str, dict[str, Any]]:

@@ -20,6 +20,7 @@ STAFF_COMMANDS = {
     "kick",
     "minutes",
     "mod",
+    "ninja",
     "posts",
     "questions",
     "runs",

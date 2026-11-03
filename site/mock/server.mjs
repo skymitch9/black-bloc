@@ -495,6 +495,43 @@ const SETTING_SPECS = [
   ["question_warn_template", "text", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some under Weekly questions on the Posts page or with /questions.", "The weekly question queue is empty, so nothing will be posted on {day} at {time}. Add some under Weekly questions on the Posts page or with /questions.", "the empty-queue warning, sent once per week to the log channel and the owner; {day} and {time} are when the question would have gone up"],
   ["question_answer_reaction", "text", "\ud83c\udfb5", "\ud83c\udfb5", "the reaction Black Bloc puts on a Reply to the weekly question in question_channel_id: an emoji, or a server emoji as <:name:id>; blank reacts with nothing"],
   ["question_answer_react", "bool", true, true, "true to react to every Reply to the weekly question with question_answer_reaction"],
+  ["ninja_mode", "enum", "on", "on", "off or on. on \u2014 the default \u2014 puts ninja_emoji on the posts of every member /ninja marked, in the channel they were marked in; off reacts to nothing and counts no post", ["off", "on"]],
+  ["ninja_emoji", "text", "\ud83e\udd77\ud83c\udfff", "\ud83e\udd77\ud83c\udfff", "the emote a new mark puts on a marked member's posts: an emoji, or a server emoji as <:name:id>; a mark keeps the emote it was made with"],
+  ["ninja_default_posts", "int", 1, 1, "how many posts the /ninja form and the Posts page offer for a new mark; 1 by default, 0 leaves it blank", null, 1000, 0],
+  ["ninja_default_minutes", "int", 0, 0, "how many minutes the /ninja form and the Posts page offer for a new mark; 0 \u2014 the default \u2014 leaves it blank", null, 43200, 0],
+  ["ninja_panel_title", "text", "Ninja marks", "Ninja marks", "the heading of the /ninja panel"],
+  ["ninja_panel_footer", "text", "This panel has gone quiet \u2014 run /ninja again", "This panel has gone quiet \u2014 run /ninja again", "the footer a /ninja panel wears once it times out"],
+  ["ninja_state_line", "text", "**Emote** \u2014 {emoji} \u00b7 **ninja_mode** \u2014 {mode}", "**Emote** \u2014 {emoji} \u00b7 **ninja_mode** \u2014 {mode}", "the first line of the /ninja panel; {emoji} is ninja_emoji, {mode} is ninja_mode"],
+  ["ninja_mark_line", "text", "<@{user}> \u00b7 <#{channel}> \u00b7 {left} \u00b7 by <@{by}> {made}", "<@{user}> \u00b7 <#{channel}> \u00b7 {left} \u00b7 by <@{by}> {made}", "one active mark's line in the /ninja panel; {user} and {by} are ids, {channel} an id, {left} what is left of it, {made} when it was made"],
+  ["ninja_none_line", "text", "Nobody is marked.", "Nobody is marked.", "the /ninja panel's line when no mark is active"],
+  ["ninja_left_posts", "text", "{posts} post(s)", "{posts} post(s)", "what is left of a mark counted in posts; {posts} is how many"],
+  ["ninja_left_until", "text", "until {until}", "until {until}", "what is left of a mark counted in time; {until} is when it ends"],
+  ["ninja_left_both", "text", "{posts} post(s) or until {until}", "{posts} post(s) or until {until}", "what is left of a mark with both limits, ending at whichever comes first"],
+  ["ninja_mark_label", "text", "Mark someone", "Mark someone", "the /ninja button that starts a mark"],
+  ["ninja_refresh_label", "text", "Refresh", "Refresh", "the /ninja button that reads the marks again"],
+  ["ninja_back_label", "text", "Back", "Back", "the /ninja button back to the list of marks"],
+  ["ninja_next_label", "text", "Next", "Next", "the /ninja button that opens the posts and minutes form"],
+  ["ninja_on_label", "text", "Turn on", "Turn on", "the /ninja button that sets ninja_mode to on"],
+  ["ninja_off_label", "text", "Turn off", "Turn off", "the /ninja button that sets ninja_mode to off"],
+  ["ninja_end_label", "text", "End", "End", "the /ninja button that ends a mark"],
+  ["ninja_end_placeholder", "text", "End a mark\u2026", "End a mark\u2026", "the /ninja dropdown of active marks to end"],
+  ["ninja_end_confirm", "text", "End the mark on <@{user}> in <#{channel}>?", "End the mark on <@{user}> in <#{channel}>?", "the /ninja question before a mark is ended; {user} and {channel} are ids"],
+  ["ninja_who_placeholder", "text", "Who\u2026", "Who\u2026", "the /ninja member picker"],
+  ["ninja_where_placeholder", "text", "Where\u2026", "Where\u2026", "the /ninja channel picker"],
+  ["ninja_pick_line", "text", "{who} in {where}", "{who} in {where}", "the line on the Mark someone card naming who was picked and where"],
+  ["ninja_modal_title", "text", "How long", "How long", "the title of the posts and minutes form (45 characters at most)"],
+  ["ninja_posts_field", "text", "Posts", "Posts", "the form's posts field (45 characters at most)"],
+  ["ninja_minutes_field", "text", "Minutes", "Minutes", "the form's minutes field (45 characters at most)"],
+  ["ninja_no_limit_placeholder", "text", "No limit", "No limit", "the faint words in an empty posts or minutes field (100 characters at most)"],
+  ["ninja_marked_said", "text", "{who} marked in {channel} \u00b7 {left}.", "{who} marked in {channel} \u00b7 {left}.", "what staff are told once members are marked; {who}, {channel}, {left}"],
+  ["ninja_already_said", "text", "{who} already marked in {channel}, so left as they are. End that mark first.", "{who} already marked in {channel}, so left as they are. End that mark first.", "what staff are told about members who already have an active mark in that channel"],
+  ["ninja_no_one_said", "text", "Nobody was picked, so nobody was marked.", "Nobody was picked, so nobody was marked.", "the refusal when a mark names no member"],
+  ["ninja_no_channel_said", "text", "No channel was picked, so nobody was marked.", "No channel was picked, so nobody was marked.", "the refusal when a mark names no channel"],
+  ["ninja_no_limit_said", "text", "Neither posts nor minutes is set, so nobody was marked. Set one or both.", "Neither posts nor minutes is set, so nobody was marked. Set one or both.", "the refusal when a mark has neither limit"],
+  ["ninja_bad_number_said", "text", "**{given}** is not a number of {what} from 1 to {most}, so nobody was marked.", "**{given}** is not a number of {what} from 1 to {most}, so nobody was marked.", "the refusal for a posts or minutes value that is not a whole number in range; {given}, {what} (the field's name), {most}"],
+  ["ninja_ended_said", "text", "The mark on {who} in {channel} is ended.", "The mark on {who} in {channel} is ended.", "what staff are told once a mark is ended"],
+  ["ninja_not_active_said", "text", "That mark has already ended, so nothing changed.", "That mark has already ended, so nothing changed.", "the refusal when a mark to end is no longer active"],
+  ["ninja_mode_said", "text", "ninja_mode is {mode} now.", "ninja_mode is {mode} now.", "what staff are told after Turn on or Turn off; {mode}"],
   ["bluesky_mode", "enum", "shadow", "shadow", "off, test or on. off reads nothing; test — the default — reads the account and sends each new post to the test channel with a line naming where it would have gone; on posts it in bluesky_channel_id", ["off", "shadow", "on"]],
   ["bluesky_handle", "text", "blackinaflash.bsky.social", "blackinaflash.bsky.social", "the Bluesky account mirrored, without the @"],
   ["bluesky_channel_id", "channel", null, null, "where posts land while bluesky_mode is on; blank posts nothing and says so once in the log"],
@@ -2340,6 +2377,11 @@ function seedState() {
     { id: 5, position: 0, body: 'Favourite glitch?', status: 'removed', slot_at: null, posted_by: null, channel_id: null, message_id: null, added_by: STAFF.id, added_at: minutesAgo(20000), resolved_at: minutesAgo(12000) },
   ],
   questionSlots: {},
+  ninjaMarks: [
+    { id: 1, user_id: MEMBERS[1].id, channel_id: '800000000000000003', emoji: '🥷🏿', posts_left: 1, until: null, made_by: STAFF.id, made_at: minutesAgo(30), ended_at: null, ended_because: null },
+    { id: 2, user_id: MEMBERS[2].id, channel_id: '800000000000000003', emoji: '🥷🏿', posts_left: null, until: new Date(Date.now() + 45 * 60000).toISOString(), made_by: STAFF.id, made_at: minutesAgo(15), ended_at: null, ended_because: null },
+    { id: 3, user_id: MEMBERS[3].id, channel_id: '800000000000000003', emoji: '🥷🏿', posts_left: 0, until: null, made_by: STAFF.id, made_at: minutesAgo(400), ended_at: minutesAgo(380), ended_because: 'posts' },
+  ],
   blueskyPosts: [
     { uri: 'at://did:plc:4lijy65gdkw6gwwctvm6kxoc/app.bsky.feed.post/3mockown00002', kind: 'own', status: 'skipped_old', text: 'Thank you to every runner from Fall Fest.', url: 'https://bsky.app/profile/blackinaflash.bsky.social/post/3mockown00002', channel_id: null, message_id: null, seen_at: minutesAgo(90), posted_at: null },
   ],
@@ -2668,6 +2710,8 @@ const POINTS_KEYS = ["points_mode", "points_channel_id", "points_ping_role_id", 
 CORE_KEYS.push(...POINTS_KEYS);
 const QUESTION_KEYS = ["question_channel_id", "question_ping_role_id", "question_weekday", "question_time", "question_grace_minutes", "question_catchup_hours", "question_owner_user_id", "question_template", "question_thread", "question_thread_name_template", "question_warn_days", "question_warn_dm", "question_warn_template", "question_answer_reaction", "question_answer_react"];
 CORE_KEYS.push(...QUESTION_KEYS);
+const NINJA_KEYS = ["ninja_mode", "ninja_emoji", "ninja_default_posts", "ninja_default_minutes", "ninja_panel_title", "ninja_panel_footer", "ninja_state_line", "ninja_mark_line", "ninja_none_line", "ninja_left_posts", "ninja_left_until", "ninja_left_both", "ninja_mark_label", "ninja_refresh_label", "ninja_back_label", "ninja_next_label", "ninja_on_label", "ninja_off_label", "ninja_end_label", "ninja_end_placeholder", "ninja_end_confirm", "ninja_who_placeholder", "ninja_where_placeholder", "ninja_pick_line", "ninja_modal_title", "ninja_posts_field", "ninja_minutes_field", "ninja_no_limit_placeholder", "ninja_marked_said", "ninja_already_said", "ninja_no_one_said", "ninja_no_channel_said", "ninja_no_limit_said", "ninja_bad_number_said", "ninja_ended_said", "ninja_not_active_said", "ninja_mode_said"];
+CORE_KEYS.push(...NINJA_KEYS);
 const POINTS_WORD_KEYS = ["points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_next_rank_top_said", "points_next_rank_unranked_top_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
@@ -3512,6 +3556,14 @@ route('GET', '/api/ref/channels', (context) => {
 route('GET', '/api/ref/roles', (context) => {
   requireStaff(context.session);
   return everyRole();
+});
+
+route('GET', '/api/ref/emojis', (context) => {
+  requireStaff(context.session);
+  return [
+    { id: '810000000000000001', name: 'blackbloc', animated: false, string: '<:blackbloc:810000000000000001>' },
+    { id: '810000000000000002', name: 'ninjaspin', animated: true, string: '<a:ninjaspin:810000000000000002>' },
+  ];
 });
 
 route('GET', '/api/ref/members', (context) => {
@@ -12055,6 +12107,99 @@ function questionQueued(context) {
 function questionLines(text) {
   return String(text || '').split(/\r?\n/).map((one) => one.trim()).filter(Boolean);
 }
+
+const NINJA_MOST = { posts: 1000, minutes: 43200 };
+const ninjaWords = (key, fields = {}) => Object.entries(fields)
+  .reduce((text, [name, value]) => text.split(`{${name}}`).join(String(value)), String(state.settings.get(key) ?? specOf(key)[3]));
+
+function ninjaRow(row) {
+  return {
+    ...row,
+    user_name: memberName(row.user_id),
+    channel_name: nameFor(String(row.channel_id)).display_name,
+    made_by_name: row.made_by ? memberName(row.made_by) : null,
+  };
+}
+
+function ninjaNumber(given, what) {
+  if (given === null || given === undefined) return null;
+  const text = String(given).trim();
+  if (!text || text === '0') return null;
+  if (!/^\d+$/.test(text) || Number(text) < 1 || Number(text) > NINJA_MOST[what]) {
+    const field = ninjaWords(what === 'posts' ? 'ninja_posts_field' : 'ninja_minutes_field').toLowerCase();
+    throw new Refused(400, 'bad_number', ninjaWords('ninja_bad_number_said', { given: text.slice(0, 20), what: field, most: NINJA_MOST[what] }));
+  }
+  return Number(text);
+}
+
+const ninjaWho = (ids) => ids.map((id) => `@${memberName(id) || id}`).join(', ');
+const ninjaWhere = (id) => nameFor(String(id)).display_name || `#${id}`;
+
+function ninjaLeft(posts, until) {
+  const when = until ? new Date(until).toISOString().slice(0, 16).replace('T', ' ') : null;
+  if (!when) return ninjaWords('ninja_left_posts', { posts });
+  if (posts === null) return ninjaWords('ninja_left_until', { until: when });
+  return ninjaWords('ninja_left_both', { posts, until: when });
+}
+
+route('GET', '/api/ninja', (context) => {
+  requireStaff(context.session);
+  const posts = Number(state.settings.get('ninja_default_posts') ?? 1);
+  const minutes = Number(state.settings.get('ninja_default_minutes') ?? 0);
+  const channel = state.settings.get('question_channel_id');
+  return {
+    mode: String(state.settings.get('ninja_mode') || 'on'),
+    emoji: String(state.settings.get('ninja_emoji') || ''),
+    default_channel_id: channel ? String(channel) : null,
+    default_posts: posts ? String(posts) : '',
+    default_minutes: minutes ? String(minutes) : '',
+    active: state.ninjaMarks.filter((one) => !one.ended_at).map(ninjaRow),
+    ended: state.ninjaMarks.filter((one) => one.ended_at)
+      .sort((a, b) => String(b.ended_at).localeCompare(String(a.ended_at))).map(ninjaRow),
+  };
+});
+
+route('POST', '/api/ninja', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const ids = [...new Set((Array.isArray(body.user_ids) ? body.user_ids : []).map(String).filter((one) => /^\d+$/.test(one)))];
+  if (!ids.length) throw new Refused(400, 'no_one', ninjaWords('ninja_no_one_said'));
+  const where = String(body.channel_id || '').trim();
+  if (!/^\d+$/.test(where)) throw new Refused(400, 'no_channel', ninjaWords('ninja_no_channel_said'));
+  const posts = ninjaNumber(body.posts, 'posts');
+  const minutes = ninjaNumber(body.minutes, 'minutes');
+  if (posts === null && minutes === null) throw new Refused(400, 'no_limit', ninjaWords('ninja_no_limit_said'));
+  const until = minutes ? new Date(Date.now() + minutes * 60000).toISOString() : null;
+  const emoji = String(state.settings.get('ninja_emoji') || '');
+  const made = [];
+  const kept = [];
+  let id = state.ninjaMarks.reduce((most, one) => Math.max(most, one.id), 0);
+  for (const userId of ids) {
+    if (state.ninjaMarks.some((one) => !one.ended_at && one.user_id === userId && one.channel_id === where)) {
+      kept.push(userId);
+      continue;
+    }
+    id += 1;
+    state.ninjaMarks.push({ id, user_id: userId, channel_id: where, emoji, posts_left: posts, until, made_by: STAFF.id, made_at: now(), ended_at: null, ended_because: null });
+    made.push(userId);
+    logAction('web.ninja.marked', { target_id: userId, details: { via: 'website', mark_id: id, user_id: userId, channel_id: where, posts, minutes, until, emoji } });
+  }
+  const lines = [];
+  if (made.length) lines.push(ninjaWords('ninja_marked_said', { who: ninjaWho(made), channel: ninjaWhere(where), left: ninjaLeft(posts, until) }));
+  if (kept.length) lines.push(ninjaWords('ninja_already_said', { who: ninjaWho(kept), channel: ninjaWhere(where) }));
+  if (!made.length) throw new Refused(409, 'already_marked', lines.join('\n'));
+  return { ok: true, message: lines.join('\n'), value: made };
+});
+
+route('DELETE', '/api/ninja/:id', (context) => {
+  requireStaff(context.session);
+  const row = state.ninjaMarks.find((one) => String(one.id) === String(context.params.id));
+  if (!row || row.ended_at) throw new Refused(409, 'not_active', ninjaWords('ninja_not_active_said'));
+  row.ended_at = now();
+  row.ended_because = 'staff';
+  logAction('web.ninja.ended', { target_id: row.user_id, details: { via: 'website', mark_id: row.id, user_id: row.user_id, channel_id: row.channel_id, because: 'staff' } });
+  return { ok: true, message: ninjaWords('ninja_ended_said', { who: ninjaWho([row.user_id]), channel: ninjaWhere(row.channel_id) }), value: row.id };
+});
 
 route('GET', '/api/questions', (context) => {
   requireStaff(context.session);

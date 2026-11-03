@@ -1310,6 +1310,8 @@ def test_like_patterns_cover_every_head_of_a_feature():
         "web.points.%",
         "question.%",
         "web.question.%",
+        "ninja.%",
+        "web.ninja.%",
         "optouts.%",
         "web.optouts.%",
     )

@@ -30,6 +30,7 @@ TEST_CHANNEL_ID = 500
 OTHER_CHANNEL_ID = 501
 CATEGORY_ID = 490
 VOICE_CHANNEL_ID = 502
+EMOJI_ID = 123456789012345678
 BASELINE = "_test_baseline"
 
 
@@ -273,6 +274,7 @@ class WebGuild:
         self.created: list[Any] = []
         self.made_roles: list[Any] = []
         self.default_role = WebRole(GUILD_ID, "@everyone")
+        self.emojis = [SimpleNamespace(id=EMOJI_ID, name="bloc", animated=False)]
 
     async def create_role(self, name=None, mentionable=False, reason=None):
         role = WebRole(950 + len(self.made_roles), name, position=1)

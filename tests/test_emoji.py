@@ -3,10 +3,13 @@ from types import SimpleNamespace
 import pytest
 
 from black_bloc.emoji import (
+    NO_EMOJI,
     SKIN_TONE_DEFAULT,
     SKIN_TONE_NAMES,
     SKIN_TONES,
+    TEST_MODE,
     TONEABLE,
+    react_with,
     tone_for,
     toned,
     toned_text,
@@ -109,3 +112,34 @@ def test_a_store_that_answers_with_nonsense_does_not_break_a_reply():
         tone_for(SimpleNamespace(store=SimpleNamespace(get=lambda g, k: "teal")), 1)
         == SKIN_TONE_DEFAULT
     )
+
+
+class Reactable:
+    def __init__(self, raises=None):
+        self.channel = SimpleNamespace(id=1)
+        self.reactions = []
+        self.raises = raises
+
+    async def add_reaction(self, emoji):
+        if self.raises is not None:
+            raise self.raises
+        self.reactions.append(emoji)
+
+
+async def test_react_with_puts_a_unicode_or_server_emoji_on_and_answers_none():
+    bot = SimpleNamespace(guard=None)
+    message = Reactable()
+    assert await react_with(bot, message, "🥷🏿") is None
+    assert await react_with(bot, message, "<:bloc:123456789012345678>") is None
+    assert str(message.reactions[0]) == "🥷🏿"
+    assert message.reactions[1].id == 123456789012345678
+
+
+async def test_react_with_says_why_not_and_never_raises():
+    message = Reactable(raises=RuntimeError("refused"))
+    assert await react_with(SimpleNamespace(guard=None), message, "x") == "RuntimeError: refused"
+    assert await react_with(SimpleNamespace(guard=None), Reactable(), "") == NO_EMOJI
+    held = SimpleNamespace(guard=SimpleNamespace(allows_channel=lambda channel: False))
+    quiet = Reactable()
+    assert await react_with(held, quiet, "🎵") == TEST_MODE
+    assert quiet.reactions == []

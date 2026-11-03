@@ -5365,6 +5365,24 @@ KEY_HELP.update(
 )
 
 
+# One emoji a reaction carries, shared by every key that names one.
+CUSTOM_EMOJI = re.compile(r"^<a?:[A-Za-z0-9_]{2,32}:\d{15,21}>$")
+BAD_EMOJI = (
+    "**{given}** is not an emoji Black Bloc can react with, so nothing was changed. Use one "
+    "emoji like 🎵 or 🥷🏿, or a server emoji as `<:name:id>`."
+)
+
+
+def checked_emoji(given: Any) -> str:
+    """One unicode emoji or one custom emoji string, or blank."""
+    text = str(given or "").strip()
+    if not text or CUSTOM_EMOJI.match(text):
+        return text
+    if len(text) > 16 or any(ch.isspace() or ch.isascii() and ch.isalpha() for ch in text):
+        raise SettingError(BAD_EMOJI.format(given=text[:30]))
+    return text
+
+
 # Weekly questions (docs/info/weekly-questions-design.md) — its own block so parallel branches
 # merge textually. Every key sits under `core`: `question_` would be a 26th setting group.
 QUESTION_FEATURE = "question"
@@ -5393,7 +5411,6 @@ QUESTION_WARN_TEMPLATE = "question_warn_template"
 QUESTION_ANSWER_REACTION = "question_answer_reaction"
 QUESTION_ANSWER_REACT = "question_answer_react"
 QUESTION_ANSWER_REACTION_DEFAULT = "🎵"
-QUESTION_CUSTOM_EMOJI = re.compile(r"^<a?:[A-Za-z0-9_]{2,32}:\d{15,21}>$")
 QUESTION_FIELD = "question"
 QUESTION_FIELDS = (QUESTION_FIELD,)
 QUESTION_WARN_FIELDS = ("day", "time")
@@ -5521,10 +5538,6 @@ QUESTION_BAD_OWNER = (
     "**{given}** is not a Discord user id, so nothing was changed. Copy the id from the "
     "member's profile (Developer Mode ▸ Copy User ID), or leave it blank."
 )
-QUESTION_BAD_REACTION = (
-    "**{given}** is not an emoji Black Bloc can react with, so nothing was changed. Use one "
-    "emoji like 🎵, a server emoji as `<:name:id>`, or leave it blank."
-)
 QUESTION_BAD_PLACEHOLDER = (
     "**{{{found}}}** is not something this wording can fill, so nothing was changed. It takes "
     "{allowed}; write any other braces out as words."
@@ -5547,16 +5560,6 @@ def checked_question_owner(given: Any) -> str:
         return ""
     if not text.isdigit() or not 15 <= len(text) <= 21:
         raise SettingError(QUESTION_BAD_OWNER.format(given=text[:30]))
-    return text
-
-
-def checked_question_reaction(given: Any) -> str:
-    """One unicode emoji or one custom emoji string, or blank."""
-    text = str(given or "").strip()
-    if not text or QUESTION_CUSTOM_EMOJI.match(text):
-        return text
-    if len(text) > 16 or any(ch.isspace() or ch.isascii() and ch.isalpha() for ch in text):
-        raise SettingError(QUESTION_BAD_REACTION.format(given=text[:30]))
     return text
 
 
@@ -5584,8 +5587,181 @@ QUESTION_TEXT_CHECKS: dict[str, Any] = {
     QUESTION_TEMPLATE: checked_question_words(QUESTION_FIELDS),
     QUESTION_THREAD_NAME: checked_question_words(QUESTION_FIELDS),
     QUESTION_WARN_TEMPLATE: checked_question_words(QUESTION_WARN_FIELDS),
-    QUESTION_ANSWER_REACTION: checked_question_reaction,
+    QUESTION_ANSWER_REACTION: checked_emoji,
 }
+
+
+# Ninja marks (docs/info/ninja-design.md) — its own block so parallel branches merge textually.
+# Every key sits under `core`: `ninja_` would be a 26th setting group.
+NINJA_FEATURE = "ninja"
+NINJA_MODES = ("off", "on")
+NINJA_MODE = "ninja_mode"
+NINJA_EMOJI = "ninja_emoji"
+NINJA_DEFAULT_POSTS = "ninja_default_posts"
+NINJA_DEFAULT_MINUTES = "ninja_default_minutes"
+NINJA_EMOJI_DEFAULT = "\U0001f977\U0001f3ff"
+NINJA_NUMBERS: dict[str, tuple[int, int, int]] = {
+    NINJA_DEFAULT_POSTS: (1, 0, 1000),
+    NINJA_DEFAULT_MINUTES: (0, 0, 43200),
+}
+NINJA_LINE_FIELDS = ("user", "channel", "left", "by", "made")
+NINJA_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "ninja_panel_title": ("Ninja marks", (), "the heading of the /ninja panel"),
+    "ninja_panel_footer": (
+        "This panel has gone quiet — run /ninja again",
+        (),
+        "the footer a /ninja panel wears once it times out",
+    ),
+    "ninja_state_line": (
+        "**Emote** — {emoji} · **ninja_mode** — {mode}",
+        ("emoji", "mode"),
+        "the first line of the /ninja panel; {emoji} is ninja_emoji, {mode} is ninja_mode",
+    ),
+    "ninja_mark_line": (
+        "<@{user}> · <#{channel}> · {left} · by <@{by}> {made}",
+        NINJA_LINE_FIELDS,
+        "one active mark's line in the /ninja panel; {user} and {by} are ids, {channel} an id, "
+        "{left} what is left of it, {made} when it was made",
+    ),
+    "ninja_none_line": ("Nobody is marked.", (), "the /ninja panel's line when no mark is active"),
+    "ninja_left_posts": (
+        "{posts} post(s)",
+        ("posts",),
+        "what is left of a mark counted in posts; {posts} is how many",
+    ),
+    "ninja_left_until": (
+        "until {until}",
+        ("until",),
+        "what is left of a mark counted in time; {until} is when it ends",
+    ),
+    "ninja_left_both": (
+        "{posts} post(s) or until {until}",
+        ("posts", "until"),
+        "what is left of a mark with both limits, ending at whichever comes first",
+    ),
+    "ninja_mark_label": ("Mark someone", (), "the /ninja button that starts a mark"),
+    "ninja_refresh_label": ("Refresh", (), "the /ninja button that reads the marks again"),
+    "ninja_back_label": ("Back", (), "the /ninja button back to the list of marks"),
+    "ninja_next_label": ("Next", (), "the /ninja button that opens the posts and minutes form"),
+    "ninja_on_label": ("Turn on", (), "the /ninja button that sets ninja_mode to on"),
+    "ninja_off_label": ("Turn off", (), "the /ninja button that sets ninja_mode to off"),
+    "ninja_end_label": ("End", (), "the /ninja button that ends a mark"),
+    "ninja_end_placeholder": ("End a mark…", (), "the /ninja dropdown of active marks to end"),
+    "ninja_end_confirm": (
+        "End the mark on <@{user}> in <#{channel}>?",
+        ("user", "channel"),
+        "the /ninja question before a mark is ended; {user} and {channel} are ids",
+    ),
+    "ninja_who_placeholder": ("Who…", (), "the /ninja member picker"),
+    "ninja_where_placeholder": ("Where…", (), "the /ninja channel picker"),
+    "ninja_pick_line": (
+        "{who} in {where}",
+        ("who", "where"),
+        "the line on the Mark someone card naming who was picked and where",
+    ),
+    "ninja_modal_title": (
+        "How long",
+        (),
+        "the title of the posts and minutes form (45 characters at most)",
+    ),
+    "ninja_posts_field": ("Posts", (), "the form's posts field (45 characters at most)"),
+    "ninja_minutes_field": ("Minutes", (), "the form's minutes field (45 characters at most)"),
+    "ninja_no_limit_placeholder": (
+        "No limit",
+        (),
+        "the faint words in an empty posts or minutes field (100 characters at most)",
+    ),
+    "ninja_marked_said": (
+        "{who} marked in {channel} · {left}.",
+        ("who", "channel", "left"),
+        "what staff are told once members are marked; {who}, {channel}, {left}",
+    ),
+    "ninja_already_said": (
+        "{who} already marked in {channel}, so left as they are. End that mark first.",
+        ("who", "channel"),
+        "what staff are told about members who already have an active mark in that channel",
+    ),
+    "ninja_no_one_said": (
+        "Nobody was picked, so nobody was marked.",
+        (),
+        "the refusal when a mark names no member",
+    ),
+    "ninja_no_channel_said": (
+        "No channel was picked, so nobody was marked.",
+        (),
+        "the refusal when a mark names no channel",
+    ),
+    "ninja_no_limit_said": (
+        "Neither posts nor minutes is set, so nobody was marked. Set one or both.",
+        (),
+        "the refusal when a mark has neither limit",
+    ),
+    "ninja_bad_number_said": (
+        "**{given}** is not a number of {what} from 1 to {most}, so nobody was marked.",
+        ("given", "what", "most"),
+        "the refusal for a posts or minutes value that is not a whole number in range; "
+        "{given}, {what} (the field's name), {most}",
+    ),
+    "ninja_ended_said": (
+        "The mark on {who} in {channel} is ended.",
+        ("who", "channel"),
+        "what staff are told once a mark is ended",
+    ),
+    "ninja_not_active_said": (
+        "That mark has already ended, so nothing changed.",
+        (),
+        "the refusal when a mark to end is no longer active",
+    ),
+    "ninja_mode_said": (
+        "ninja_mode is {mode} now.",
+        ("mode",),
+        "what staff are told after Turn on or Turn off; {mode}",
+    ),
+}
+NINJA_DEFAULTS: dict[str, Any] = {
+    NINJA_MODE: "on",
+    NINJA_EMOJI: NINJA_EMOJI_DEFAULT,
+    **{key: default for key, (default, _, _) in NINJA_NUMBERS.items()},
+    **{key: default for key, (default, _, _) in NINJA_WORDS.items()},
+}
+NINJA_KEYS: tuple[str, ...] = (
+    NINJA_MODE,
+    NINJA_EMOJI,
+    *NINJA_NUMBERS,
+    *NINJA_WORDS,
+)
+KEY_TYPES.update(
+    {
+        NINJA_MODE: "enum",
+        NINJA_EMOJI: "text",
+        **{key: "int" for key in NINJA_NUMBERS},
+        **{key: "text" for key in NINJA_WORDS},
+    }
+)
+KEY_CHOICES[NINJA_MODE] = NINJA_MODES
+KEY_MIN.update({key: low for key, (_, low, _) in NINJA_NUMBERS.items()})
+KEY_MAX.update({key: high for key, (_, _, high) in NINJA_NUMBERS.items()})
+KEY_HELP.update(
+    {
+        NINJA_MODE: (
+            "off or on. on — the default — puts ninja_emoji on the posts of every member /ninja "
+            "marked, in the channel they were marked in; off reacts to nothing and counts no post"
+        ),
+        NINJA_EMOJI: (
+            "the emote a new mark puts on a marked member's posts: an emoji, or a server emoji as "
+            "<:name:id>; a mark keeps the emote it was made with"
+        ),
+        NINJA_DEFAULT_POSTS: (
+            "how many posts the /ninja form and the Posts page offer for a new mark; 1 by default, "
+            "0 leaves it blank"
+        ),
+        NINJA_DEFAULT_MINUTES: (
+            "how many minutes the /ninja form and the Posts page offer for a new mark; 0 — the "
+            "default — leaves it blank"
+        ),
+        **{key: said for key, (_, _, said) in NINJA_WORDS.items()},
+    }
+)
 
 
 # The Bluesky mirror (docs/info/bluesky-mirror-design.md) — its own block so parallel branches
@@ -5763,6 +5939,7 @@ CORE_KEYS = (
     *BRACKETS_KEYS,
     *POINTS_KEYS,
     *QUESTION_KEYS,
+    *NINJA_KEYS,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -6365,6 +6542,8 @@ TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in BLUESKY_WORDS.items()}
 )
 TEXT_CHECKS[BLUESKY_HANDLE] = checked_bluesky_handle
+TEXT_CHECKS.update({key: checked_fields(fields) for key, (_, fields, _) in NINJA_WORDS.items()})
+TEXT_CHECKS[NINJA_EMOJI] = checked_emoji
 
 VOICE_SHEET_CHARS = 4000
 TONE_CLAUSE_CHARS = 600
@@ -11567,6 +11746,8 @@ class SettingsStore:
             return POINTS_DEFAULTS[key]
         if key in QUESTION_DEFAULTS:
             return QUESTION_DEFAULTS[key]
+        if key in NINJA_DEFAULTS:
+            return NINJA_DEFAULTS[key]
         if key in BLUESKY_DEFAULTS:
             return BLUESKY_DEFAULTS[key]
         if key in RUNS_DEFAULTS:

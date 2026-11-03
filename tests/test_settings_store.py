@@ -1951,7 +1951,7 @@ async def test_the_boot_status_ships_with_both_sentences_written(store):
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 356
+    assert len(settings_store.CORE_KEYS) == 393
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2300,7 +2300,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1272
+    assert len(settings_store.KEY_TYPES) == 1309
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -3031,3 +3031,38 @@ async def test_the_answer_reaction_takes_one_emoji_a_server_emoji_or_blank(store
     for wrong in ("music", "\U0001f3b5 \U0001f525", "<:bloc:12>"):
         with pytest.raises(settings_store.SettingError, match="not an emoji"):
             settings_store.coerce_value(key, wrong)
+
+
+async def test_ninja_marks_are_on_with_the_dark_skinned_ninja_and_one_post_by_default(store):
+    assert store.get(7, settings_store.NINJA_MODE) == "on"
+    assert store.get(7, settings_store.NINJA_EMOJI) == "🥷🏿"
+    assert store.get(7, settings_store.NINJA_DEFAULT_POSTS) == 1
+    assert store.get(7, settings_store.NINJA_DEFAULT_MINUTES) == 0
+    assert settings_store.KEY_CHOICES[settings_store.NINJA_MODE] == ("off", "on")
+    for key in settings_store.NINJA_KEYS:
+        assert key in settings_store.CORE_KEYS and settings_store.KEY_HELP.get(key), key
+        assert settings_store.namespace_of(key) == "core", key
+    assert settings_store.NINJA_MODE in mode_keys()
+
+
+async def test_the_ninja_emote_takes_one_emoji_or_a_server_emoji_and_never_blank(store):
+    key = settings_store.NINJA_EMOJI
+    for given in ("🔥", "<:bloc:123456789012345678>", "<a:spin:123456789012345678>"):
+        assert settings_store.coerce_value(key, given) == given
+    for wrong in ("ninja", "🥷 🔥", "<:bloc:12>", "  "):
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(key, wrong)
+    assert settings_store.checked_emoji is settings_store.TEXT_CHECKS[
+        settings_store.QUESTION_ANSWER_REACTION
+    ]
+
+
+async def test_every_ninja_word_takes_only_its_own_placeholders(store):
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value("ninja_left_posts", "{minutes} left")
+    assert settings_store.coerce_value("ninja_left_posts", "{posts} to go") == "{posts} to go"
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value("ninja_ended_said", "")
+    for key in ("ninja_default_posts", "ninja_default_minutes"):
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(key, -1)
