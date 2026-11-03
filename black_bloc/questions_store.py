@@ -192,3 +192,12 @@ async def latest_posted(db: Any, guild_id: int) -> Any:
         (int(guild_id),),
     )
     return await cur.fetchone()
+
+
+async def posted_message(db: Any, guild_id: int, message_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM weekly_questions WHERE guild_id = ? AND message_id = ? "
+        "AND status = 'posted' LIMIT 1",
+        (int(guild_id), int(message_id)),
+    )
+    return await cur.fetchone()

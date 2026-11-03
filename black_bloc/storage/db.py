@@ -1230,6 +1230,7 @@ CREATE TABLE IF NOT EXISTS weekly_questions (
     resolved_at TEXT
 );
 CREATE INDEX IF NOT EXISTS weekly_questions_queue ON weekly_questions(guild_id, status, position);
+CREATE INDEX IF NOT EXISTS weekly_questions_by_message ON weekly_questions(guild_id, message_id);
 
 CREATE TABLE IF NOT EXISTS weekly_question_slots (
     guild_id    INTEGER NOT NULL,

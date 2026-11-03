@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-11-02 — one section APPENDED, nothing re-keyed**: *Replies to the weekly question* (branch `qotw-replies`, off `main` `d6edddde`); keyed by LINE at that branch. Before that:
 > **2026-10-30 — one section APPENDED, nothing re-keyed**: *Found marathons do not spotlight* (branch `spotlight-tracked-only`, off `main` `a8498538`); keyed by LINE at that branch. Rows below the edits in `marathon_spotlight.py` (pure and cog) and `cogs/content/marathon_inbox.py` sit a few lines lower — trust the anchor text. Before that:
 > **2026-10-27 — one section APPENDED, nothing re-keyed**: *The Bluesky post's look* (branch `bluesky-look`, off `main` `72dc7271`); keyed by LINE at that branch. Before that:
 > **2026-10-20 — one section APPENDED, nothing re-keyed**: *Table height* (branch `runs-table-height`, off `main` `d73e0960`); keyed by LINE at that branch. Before that:
@@ -10895,3 +10896,14 @@ Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
 | `black_bloc/cogs/content/marathon_spotlight.py:99` | The give-back step: when `plan` leaves the row alone, `follow_spotlight` lifts a spotlight its marathon still holds but no longer follows, and answers `lifted`. Every follow door gets it — the tick, a read, Track, Untrack/Ignore (`stop_posting`), and `settle_held`, which returns that `lifted` (a held row is never `kept` for a marathon that stopped following). |
 | `black_bloc/cogs/content/marathon.py:1875` | The follow runs BEFORE the tick's `not active` return, so a paused marathon's held spotlight is given back on the next tick (`paused`); for an inactive marathon `plan` is always None, so nothing is ever turned ON there. |
 | `black_bloc/cogs/content/marathon_inbox.py:957` · `:985` | Track runs the follow at once (a no-op out of reach); `stop_posting` (Untrack, Ignore of a tracked marathon) runs it on the re-read row, so the spotlight comes off with the tracking. Both are inside the marathon lock the move already holds. |
+
+## Replies to the weekly question (branch `qotw-replies`, 2026-11-02; keyed by LINE at that branch)
+
+| Where | Note |
+|---|---|
+| `black_bloc/question_answers.py:26` `names_bot` | The raw `message.content` decides whether the member addressed the bot: Discord's Reply with *mention author* on fills `message.mentions` without any `<@id>` in the text, which is how five QOTW answers were chatted at on 2026-11-02. |
+| `black_bloc/question_answers.py:34` `is_answer` | Guild, reference and channel are checked before the database, so only a Reply in `question_channel_id` costs a read; a closed database or a failed read is "not an answer" with a warning. |
+| `black_bloc/question_answers.py:58` `react` | `PartialEmoji.from_str` takes a unicode emoji or `<:name:id>` (checklist 14); the guard check is checklist 1; every failure is a warning and `False`; only a debug line on success, no action-log row (one per answer would flood the log). |
+| `black_bloc/questions_store.py:197` `posted_message` | `status = 'posted'` only: Take it down puts the row back in the queue and nulls `message_id`, so a reply to a taken-down post is not an answer. Served by `weekly_questions_by_message` (`storage/db.py:1233`). |
+| `black_bloc/cogs/content/chat.py:1971` | The answer check runs after the bot/webhook/type filters and BEFORE `follow_up`, `chat_feedback.schedule` and `mentions_bot`: an answer without a typed mention is not weighed, reviewed or answered. With a typed mention it falls through unchanged (and was reacted to first). |
+| `black_bloc/settings_store.py:5553` `checked_question_reaction` | Accepts a custom emoji string, or up to 16 characters with no whitespace and no ASCII letters (keycaps like 1️⃣ pass); a word like `music` is refused in a sentence. Blank is allowed through `TEXT_MAY_BE_BLANK` (`:6363`). |

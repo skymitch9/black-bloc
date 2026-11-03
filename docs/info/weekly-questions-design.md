@@ -176,3 +176,19 @@ Deviations: (1) with no shadow, `questions_moves.target_id` refuses in words whi
 
 Owner: *"can we add the date of publish as it currently stands as a queue column"*. Branch `questions-publish-date`. The Queue table gains a **Goes up** column: the first queued question gets This week's slot (or the next one if This week is already settled), each later one the following week, passing over any future week already skipped. `posts_mode` off shows "—". It is computed on every read (`GET /api/questions` → `queue[].publish_at`), never stored; the panel is unchanged. Notes: [`code-notes.md`](code-notes.md) *The queue's Goes up column*.
 
+
+## Follow-up 2026-11-02 — replies to the question (branch `qotw-replies`, off `main` `d6edddde`)
+
+Measured live 2026-11-02 (`docs/TODO.md`): members answered question 3 with Discord's Reply on the bot's post; *mention author* puts the bot in `message.mentions`, so the chat cog answered five of them and the chat review opened and tagged one. Owner, verbatim: *"a and e"*, then *"but for e only in the qotw channel when its replied to and the base message is the question"*.
+
+- **One check, `question_answers.is_answer`.** A message is an answer when its channel is `question_channel_id`, it is a Reply (`reference.message_id` set), and that id is the `message_id` of a `posted` row in `weekly_questions` for the guild — any posted question, by the bot or by the owner (`mark_posted` records both). Channel and reference are checked before the one database read (`questions_store.posted_message`, index `weekly_questions_by_message`).
+- **(a) Chat stays quiet.** The chat cog's `on_message` returns for an answer before `follow_up` (chat review), the feedback scheduler and the mention gate, unless the TEXT types the bot's mention (`<@id>` / `<@!id>`; `question_answers.names_bot`). A typed mention is answered exactly as before.
+- **(e) The bot reacts.** Every answer, typed mention or not, gets `question_answer_reaction` (default 🎵; a unicode emoji or `<:name:id>` / `<a:name:id>`; blank reacts with nothing), switched by `question_answer_react` (bool, default true). A refused reaction is a warning log and nothing else; no action-log row per reaction.
+
+### Deviations
+
+1. **The switch is `question_answer_react` (bool), not `question_answer_reaction_mode` (on/off).** The brief asked for the `question_thread` bool pattern if one existed, and it does; a `*_mode` key is read by `api/status.py:mode_keys` as a feature mode, so a bool named `_mode` would surface on the status page as a feature.
+2. **The check lives in the chat cog's `on_message`, not a listener of its own.** Quiet needs the same answer in the same handler, so one call gives both halves one database read; a second listener would read it twice and race the chat cog.
+3. **The reaction honours `bot.guard`** (checklist item 1: a reaction is a side effect the HTTP guard cannot see). It does not follow `posts_mode`: posts off stops the bot posting, while an owner-posted question can still be answered; `question_answer_react` is the reaction's own switch.
+4. **An index was added without a `SCHEMA_VERSION` bump.** `CREATE INDEX IF NOT EXISTS` runs on every connect, so an old database gains it at boot; no column or table changed.
+5. **Replies inside a question thread are not answers** (`question_thread` on): the owner's words name the question channel, and a thread is its own channel id.

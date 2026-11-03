@@ -298,6 +298,8 @@
       "points_xp_max",
       "points_xp_min",
       "points_xp_tiers",
+      "question_answer_react",
+      "question_answer_reaction",
       "question_catchup_hours",
       "question_channel_id",
       "question_grace_minutes",

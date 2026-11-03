@@ -9,7 +9,15 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ... import channel_drafts, chat_feedback, chat_panel, chat_review, chat_tones, tone_keys
+from ... import (
+    channel_drafts,
+    chat_feedback,
+    chat_panel,
+    chat_review,
+    chat_tones,
+    question_answers,
+    tone_keys,
+)
 from ...actionlog import log_action, send_logs, stamp
 from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
@@ -1960,6 +1968,10 @@ class Chat(commands.Cog):
             return
         if getattr(message, "type", None) not in MESSAGE_TYPES:
             return
+        if await question_answers.is_answer(self.bot, message):
+            await question_answers.react(self.bot, message)
+            if not question_answers.names_bot(message, me):
+                return
         await self.follow_up(message)
         if not mentions_bot(message, me):
             chat_feedback.schedule(self.bot, message)

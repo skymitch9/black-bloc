@@ -1951,7 +1951,7 @@ async def test_the_boot_status_ships_with_both_sentences_written(store):
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 354
+    assert len(settings_store.CORE_KEYS) == 356
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2300,7 +2300,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1270
+    assert len(settings_store.KEY_TYPES) == 1272
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -3010,3 +3010,24 @@ def test_the_genre_families_refuse_a_line_they_cannot_read_by_its_number():
     assert settings_store.coerce_value("runs_genre_qualifiers", "") == ""
     with pytest.raises(settings_store.SettingError):
         settings_store.coerce_value("runs_lookup_more", "{nope}")
+
+
+async def test_answers_to_the_weekly_question_get_a_music_note_by_default(store):
+    assert store.get(7, settings_store.QUESTION_ANSWER_REACTION) == "\U0001f3b5"
+    assert store.get(7, settings_store.QUESTION_ANSWER_REACT) is True
+    for key in (settings_store.QUESTION_ANSWER_REACTION, settings_store.QUESTION_ANSWER_REACT):
+        assert key in settings_store.CORE_KEYS and settings_store.KEY_HELP.get(key)
+    assert settings_store.KEY_TYPES[settings_store.QUESTION_ANSWER_REACT] == "bool"
+    assert not settings_store.QUESTION_ANSWER_REACT.endswith("_mode")
+
+
+async def test_the_answer_reaction_takes_one_emoji_a_server_emoji_or_blank(store):
+    key = settings_store.QUESTION_ANSWER_REACTION
+    custom = ("<:bloc:123456789012345678>", "<a:spin:123456789012345678>")
+    for given in ("\U0001f525", "1\ufe0f\u20e3", *custom):
+        assert settings_store.coerce_value(key, given) == given
+    await store.set(7, key, "  ")
+    assert store.get(7, key) == ""
+    for wrong in ("music", "\U0001f3b5 \U0001f525", "<:bloc:12>"):
+        with pytest.raises(settings_store.SettingError, match="not an emoji"):
+            settings_store.coerce_value(key, wrong)
