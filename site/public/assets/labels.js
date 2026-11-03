@@ -926,6 +926,8 @@ export const LABELS = {
   question_warn_days: 'How many days ahead an empty queue is warned about',
   question_warn_dm: 'Whether the owner is DMed about an empty queue',
   question_warn_template: 'What the empty-queue warning says',
+  question_answer_reaction: 'The reaction on a reply to the weekly question',
+  question_answer_react: 'Whether replies to the weekly question get a reaction',
   bluesky_mode: 'Whether Bluesky posts are mirrored, tested or left alone',
   bluesky_handle: 'Which Bluesky account is mirrored',
   bluesky_channel_id: 'Where Bluesky posts land',

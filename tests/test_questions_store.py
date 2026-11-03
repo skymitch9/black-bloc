@@ -76,3 +76,18 @@ async def test_settled_from_names_the_non_pending_slots_from_a_slot_on(db):
 
     assert found == {"2026-11-02T16:00:00+00:00"}
     assert await store.settled_from(db, GUILD + 1, "2026-10-26T16:00:00+00:00") == set()
+
+
+async def test_a_posted_question_is_found_by_its_message_whoever_posted_it(db):
+    by_bot, by_owner, waiting = await store.add_many(db, GUILD, ["a?", "b?", "c?"], 5, NOW)
+    await store.mark_posted(db, by_bot, None, rules.BY_BOT, 10, 1001, NOW)
+    await store.mark_posted(db, by_owner, "s1", rules.BY_OWNER, 10, 1002, NOW)
+
+    assert (await store.posted_message(db, GUILD, 1001))["id"] == by_bot
+    assert (await store.posted_message(db, GUILD, 1002))["id"] == by_owner
+    assert await store.posted_message(db, GUILD, 1003) is None
+    assert await store.posted_message(db, GUILD + 1, 1001) is None
+
+    await store.back_in_queue(db, GUILD, by_bot, top=True)
+    assert await store.posted_message(db, GUILD, 1001) is None
+    assert waiting

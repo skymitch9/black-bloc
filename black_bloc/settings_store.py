@@ -5390,6 +5390,10 @@ QUESTION_THREAD_NAME = "question_thread_name_template"
 QUESTION_WARN_DAYS = "question_warn_days"
 QUESTION_WARN_DM = "question_warn_dm"
 QUESTION_WARN_TEMPLATE = "question_warn_template"
+QUESTION_ANSWER_REACTION = "question_answer_reaction"
+QUESTION_ANSWER_REACT = "question_answer_react"
+QUESTION_ANSWER_REACTION_DEFAULT = "🎵"
+QUESTION_CUSTOM_EMOJI = re.compile(r"^<a?:[A-Za-z0-9_]{2,32}:\d{15,21}>$")
 QUESTION_FIELD = "question"
 QUESTION_FIELDS = (QUESTION_FIELD,)
 QUESTION_WARN_FIELDS = ("day", "time")
@@ -5414,6 +5418,8 @@ QUESTION_DEFAULTS: dict[str, Any] = {
     QUESTION_THREAD_NAME: QUESTION_TEMPLATE_DEFAULT,
     QUESTION_WARN_DM: True,
     QUESTION_WARN_TEMPLATE: QUESTION_WARN_TEMPLATE_DEFAULT,
+    QUESTION_ANSWER_REACTION: QUESTION_ANSWER_REACTION_DEFAULT,
+    QUESTION_ANSWER_REACT: True,
     **{key: default for key, (default, _, _) in QUESTION_NUMBERS.items()},
 }
 QUESTION_KEYS: tuple[str, ...] = (
@@ -5430,6 +5436,8 @@ QUESTION_KEYS: tuple[str, ...] = (
     QUESTION_WARN_DAYS,
     QUESTION_WARN_DM,
     QUESTION_WARN_TEMPLATE,
+    QUESTION_ANSWER_REACTION,
+    QUESTION_ANSWER_REACT,
 )
 KEY_TYPES.update(
     {
@@ -5443,6 +5451,8 @@ KEY_TYPES.update(
         QUESTION_THREAD_NAME: "text",
         QUESTION_WARN_DM: "bool",
         QUESTION_WARN_TEMPLATE: "text",
+        QUESTION_ANSWER_REACTION: "text",
+        QUESTION_ANSWER_REACT: "bool",
         **{key: "int" for key in QUESTION_NUMBERS},
     }
 )
@@ -5492,6 +5502,14 @@ KEY_HELP.update(
             "the empty-queue warning, sent once per week to the log channel and the owner; "
             "{day} and {time} are when the question would have gone up"
         ),
+        QUESTION_ANSWER_REACTION: (
+            "the reaction Black Bloc puts on a Reply to the weekly question in "
+            "question_channel_id: an emoji, or a server emoji as <:name:id>; blank reacts with "
+            "nothing"
+        ),
+        QUESTION_ANSWER_REACT: (
+            "true to react to every Reply to the weekly question with question_answer_reaction"
+        ),
     }
 )
 
@@ -5502,6 +5520,10 @@ QUESTION_BAD_TIME = (
 QUESTION_BAD_OWNER = (
     "**{given}** is not a Discord user id, so nothing was changed. Copy the id from the "
     "member's profile (Developer Mode ▸ Copy User ID), or leave it blank."
+)
+QUESTION_BAD_REACTION = (
+    "**{given}** is not an emoji Black Bloc can react with, so nothing was changed. Use one "
+    "emoji like 🎵, a server emoji as `<:name:id>`, or leave it blank."
 )
 QUESTION_BAD_PLACEHOLDER = (
     "**{{{found}}}** is not something this wording can fill, so nothing was changed. It takes "
@@ -5525,6 +5547,16 @@ def checked_question_owner(given: Any) -> str:
         return ""
     if not text.isdigit() or not 15 <= len(text) <= 21:
         raise SettingError(QUESTION_BAD_OWNER.format(given=text[:30]))
+    return text
+
+
+def checked_question_reaction(given: Any) -> str:
+    """One unicode emoji or one custom emoji string, or blank."""
+    text = str(given or "").strip()
+    if not text or QUESTION_CUSTOM_EMOJI.match(text):
+        return text
+    if len(text) > 16 or any(ch.isspace() or ch.isascii() and ch.isalpha() for ch in text):
+        raise SettingError(QUESTION_BAD_REACTION.format(given=text[:30]))
     return text
 
 
@@ -5552,6 +5584,7 @@ QUESTION_TEXT_CHECKS: dict[str, Any] = {
     QUESTION_TEMPLATE: checked_question_words(QUESTION_FIELDS),
     QUESTION_THREAD_NAME: checked_question_words(QUESTION_FIELDS),
     QUESTION_WARN_TEMPLATE: checked_question_words(QUESTION_WARN_FIELDS),
+    QUESTION_ANSWER_REACTION: checked_question_reaction,
 }
 
 
@@ -6327,6 +6360,7 @@ def checked_point_tiers(given: Any) -> str:
 
 TEXT_CHECKS[POINTS_XP_TIERS] = checked_point_tiers
 TEXT_CHECKS.update(QUESTION_TEXT_CHECKS)
+TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, QUESTION_ANSWER_REACTION)
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in BLUESKY_WORDS.items()}
 )

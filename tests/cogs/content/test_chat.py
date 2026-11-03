@@ -2639,3 +2639,125 @@ async def test_the_full_ingest_still_writes_memory_up_first(cog, monkeypatch):
     await cog.ingest_once()
 
     assert ran == ["memory"]
+
+
+QOTW_CHANNEL = 333
+QUESTION_POST = 4444
+
+
+async def a_posted_question(bot, *, by="bot", message_id=QUESTION_POST):
+    from datetime import UTC, datetime
+
+    from black_bloc import questions_store
+
+    await bot.store.set(GUILD, "question_channel_id", QOTW_CHANNEL)
+    bot.guild.channels[QOTW_CHANNEL] = FakeChannel(QOTW_CHANNEL)
+    now = datetime.now(UTC)
+    [found] = await questions_store.add_many(bot.db, GUILD, ["What song?"], 1, now)
+    await questions_store.mark_posted(bot.db, found, None, by, QOTW_CHANNEL, message_id, now)
+
+
+def a_reply(bot, member, content, *, channel_id=QOTW_CHANNEL, to=QUESTION_POST):
+    message = FakeMessage(
+        member,
+        content,
+        guild=bot.guild,
+        channel=bot.guild.channels.get(channel_id) or FakeChannel(channel_id),
+        mentions=[bot.user],
+    )
+    message.id = 9001
+    message.reference = SimpleNamespace(message_id=to) if to is not None else None
+    return message
+
+
+@pytest.fixture
+def weighed(monkeypatch):
+    seen = []
+
+    async def heard(bot, message, **kwargs):
+        seen.append(("review", message))
+
+    def schedule(bot, message):
+        seen.append(("feedback", message))
+
+    monkeypatch.setattr(cog_module.chat_review, "heard", heard)
+    monkeypatch.setattr(cog_module.chat_feedback, "schedule", schedule)
+    return seen
+
+
+async def test_a_reply_to_the_weekly_question_is_reacted_to_and_never_chatted_at(
+    cog, bot, member, weighed
+):
+    await a_posted_question(bot)
+    message = a_reply(bot, member, "https://youtu.be/dQw4w9WgXcQ")
+
+    await cog.on_message(message)
+
+    assert message.replies == []
+    assert [str(one) for one in message.reactions] == ["\U0001f3b5"]
+    assert weighed == []
+
+
+async def test_a_reply_to_the_question_that_types_the_bots_name_is_still_answered(
+    cog, bot, member, weighed
+):
+    await a_posted_question(bot)
+    message = a_reply(bot, member, "<@55> hi there")
+
+    await cog.on_message(message)
+
+    assert len(message.replies) == 1
+    assert [str(one) for one in message.reactions] == ["\U0001f3b5"]
+    assert [kind for kind, _ in weighed] == ["review", "feedback"]
+
+
+async def test_a_reply_to_the_owners_own_question_post_is_reacted_to_as_well(cog, bot, member):
+    await a_posted_question(bot, by="owner", message_id=5555)
+    message = a_reply(bot, member, "this one", to=5555)
+
+    await cog.on_message(message)
+
+    assert message.replies == [] and len(message.reactions) == 1
+
+
+async def test_replies_that_are_not_answers_to_the_question_are_left_to_chat(cog, bot):
+    await a_posted_question(bot)
+    one, two, three = (FakeMember(bot.guild, user_id=950 + n) for n in range(3))
+    elsewhere = a_reply(bot, one, "<@55> hi there", channel_id=CHANNEL)
+    not_a_reply = a_reply(bot, two, "<@55> hi there", to=None)
+    other_post = a_reply(bot, three, "<@55> hi there", to=7777)
+
+    for message in (elsewhere, not_a_reply, other_post):
+        await cog.on_message(message)
+        assert len(message.replies) == 1 and message.reactions == []
+
+
+async def test_with_the_reaction_off_an_answer_is_still_left_quiet(cog, bot, member):
+    await a_posted_question(bot)
+    await bot.store.set(GUILD, "question_answer_react", False)
+    switched_off = a_reply(bot, member, "a song")
+    await cog.on_message(switched_off)
+    await bot.store.set(GUILD, "question_answer_react", True)
+    await bot.store.set(GUILD, "question_answer_reaction", "")
+    blank = a_reply(bot, member, "a song")
+    await cog.on_message(blank)
+
+    for message in (switched_off, blank):
+        assert message.replies == [] and message.reactions == []
+
+
+async def test_a_reaction_that_fails_is_a_warning_and_the_answer_stays_quiet(
+    cog, bot, member, caplog
+):
+    await a_posted_question(bot)
+    message = a_reply(bot, member, "a song")
+
+    async def refused(emoji):
+        raise discord.HTTPException(SimpleNamespace(status=403, reason="Forbidden"), "no")
+
+    message.add_reaction = refused
+    with caplog.at_level("WARNING"):
+        await cog.on_message(message)
+
+    assert message.replies == []
+    assert "not reacted to" in caplog.text
