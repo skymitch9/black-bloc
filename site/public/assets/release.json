@@ -1,8 +1,8 @@
 {
-  "release": "v261",
-  "commit": "e129da89",
+  "release": "v262",
+  "commit": "63183338",
   "changed_features": [
-    "chat",
-    "question"
+    "core",
+    "posts"
   ]
 }
