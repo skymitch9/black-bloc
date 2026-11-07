@@ -277,3 +277,46 @@ button.bk-set:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px
   .bk-you-go { display: inline-block; min-height: 40px; line-height: 40px; }
   .drawer .say-nothing-do { display: inline-flex; align-items: center; min-height: 40px; }
 }
+
+.bk-tabs { margin-bottom: 10px; }
+.bk-pickhead { display: grid; gap: 2px; margin-bottom: 8px; }
+.bk-pickhead .bk-meta { margin: 0; }
+.bk-picktree .bk-pickcard { gap: 4px; padding: 4px 6px; }
+.bk-pick { width: 100%; min-height: 40px; padding: 0 8px; font-size: var(--et-ui-sm); }
+.bk-pick:disabled { cursor: default; }
+.bk-pick:disabled:not([aria-pressed="true"]) { color: var(--et-muted); }
+.bk-pick[data-mark="hit"] { border-color: var(--et-ok); color: var(--et-ok); }
+.bk-pick[data-mark="miss"] { border-color: var(--et-danger); color: var(--et-danger); text-decoration: line-through; }
+.bk-yourpick { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--et-accent); }
+.bk-yourpick[data-mark="hit"] { color: var(--et-ok); }
+.bk-yourpick[data-mark="miss"] { color: var(--et-danger); }
+.bk-saved[data-tone="ok"] { color: var(--et-ok); }
+.bk-saved[data-tone="danger"] { color: var(--et-danger); }
+.bk-edited { color: var(--et-muted); font-weight: normal; }
+.bk-tiebreak { max-width: 140px; }
+.bk-board-row { display: flex; align-items: center; gap: 10px; }
+.bk-board-row[data-mine="true"] {
+  border-radius: var(--et-radius);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--et-accent) 55%, transparent);
+}
+.bk-board-row[data-mine="true"] .rowlist-name { color: var(--et-accent); }
+.bk-board-open {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bk-board-open:hover .rowlist-name { text-decoration: underline; }
+.bk-board-open:focus-visible { outline: var(--et-focus-ring); }
+.bk-board-row > .rowlist-main { flex: 1; min-width: 0; }
+.bk-set-top > .mono { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bk-set-top > .bk-yourpick { flex-shrink: 0; max-width: 60%; }
+.bk-saved { min-height: 1.3em; }
