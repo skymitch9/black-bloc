@@ -63,6 +63,7 @@
       "brackets_dropped_said",
       "brackets_edit_entrant_label",
       "brackets_edit_set_label",
+      "brackets_edit_sheet_label",
       "brackets_entrant_cap_default",
       "brackets_entrant_edited_said",
       "brackets_ext_unknown_said",
@@ -85,6 +86,9 @@
       "brackets_kind_has_no_signups_said",
       "brackets_kind_list_words",
       "brackets_kind_sports_words",
+      "brackets_leaderboard_heading",
+      "brackets_leaderboard_line",
+      "brackets_leaderboard_rows",
       "brackets_league_mlb_words",
       "brackets_league_nba_words",
       "brackets_league_ncaam_words",
@@ -95,6 +99,9 @@
       "brackets_left_said",
       "brackets_mode",
       "brackets_moved_line",
+      "brackets_my_picks_label",
+      "brackets_my_picks_line",
+      "brackets_my_picks_open_line",
       "brackets_names_refresh_hour",
       "brackets_no_role_words",
       "brackets_no_score_words",
@@ -116,8 +123,21 @@
       "brackets_panel_line",
       "brackets_panel_minutes",
       "brackets_panel_title",
+      "brackets_pick_game_placeholder",
+      "brackets_pick_inconsistent_said",
       "brackets_pick_placeholder",
+      "brackets_pick_points",
+      "brackets_pick_round_placeholder",
+      "brackets_pick_saved",
       "brackets_pick_set_placeholder",
+      "brackets_pick_tiebreak",
+      "brackets_pick_too_late",
+      "brackets_picks_default",
+      "brackets_picks_link_label",
+      "brackets_picks_lock_line",
+      "brackets_picks_locked_line",
+      "brackets_picks_off_said",
+      "brackets_picks_open_line",
       "brackets_ping_role_id",
       "brackets_pool_count_default",
       "brackets_pool_raise_label",
@@ -158,6 +178,9 @@
       "brackets_set_disputed_said",
       "brackets_set_final_said",
       "brackets_set_reported_said",
+      "brackets_sheet_edited_note",
+      "brackets_sheet_private_said",
+      "brackets_sheet_saved_said",
       "brackets_sign_up_label",
       "brackets_source_own_words",
       "brackets_start_ping",
@@ -174,6 +197,7 @@
       "brackets_sync_label",
       "brackets_sync_seconds",
       "brackets_third_place_default",
+      "brackets_tiebreak_label",
       "brackets_to_role_id",
       "brackets_typed_entrant_note",
       "brackets_use_typed_label",
@@ -198,6 +222,7 @@
       "brackets_waiting_to_decides",
       "brackets_waiting_waits",
       "brackets_wrong_state_said",
+      "brackets_your_pick_words",
       "brackets_your_sets_title",
       "error_retry_expired",
       "error_retry_label",
@@ -459,6 +484,7 @@
       "brackets_check_in_minutes": 5,
       "brackets_confirm_minutes": 1,
       "brackets_entrant_cap_default": 2,
+      "brackets_leaderboard_rows": 0,
       "brackets_names_refresh_hour": 0,
       "brackets_panel_minutes": 1,
       "brackets_pool_count_default": 1,
@@ -583,6 +609,7 @@
       "brackets_check_in_minutes": 1440,
       "brackets_confirm_minutes": 1440,
       "brackets_entrant_cap_default": 1024,
+      "brackets_leaderboard_rows": 25,
       "brackets_names_refresh_hour": 23,
       "brackets_panel_minutes": 14,
       "brackets_pool_count_default": 16,
@@ -12730,6 +12757,224 @@
     },
     {
       "method": "GET",
+      "path": "/api/brackets/{bracket_picks_id}/picks",
+      "read_by": [
+        "page-brackets.js My picks"
+      ],
+      "shape": "object",
+      "keys": [
+        "user_id",
+        "on",
+        "locked",
+        "lock_at",
+        "may_edit",
+        "points_table",
+        "round_points",
+        "tree",
+        "picks",
+        "tiebreak",
+        "tiebreak_on",
+        "marks",
+        "points",
+        "correct",
+        "played",
+        "possible",
+        "rank",
+        "sheets",
+        "edited",
+        "name"
+      ],
+      "nested": {
+        "tree": [
+          "sets",
+          "seeds"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/brackets/{bracket_picks_id}/picks",
+      "body": {
+        "picks": {}
+      },
+      "read_by": [
+        "page-brackets.js My picks (saved)"
+      ],
+      "shape": "object",
+      "keys": [
+        "sheet",
+        "message"
+      ],
+      "nested": {
+        "sheet": [
+          "user_id",
+          "on",
+          "locked",
+          "lock_at",
+          "may_edit",
+          "points_table",
+          "round_points",
+          "tree",
+          "picks",
+          "tiebreak",
+          "tiebreak_on",
+          "marks",
+          "points",
+          "correct",
+          "played",
+          "possible",
+          "rank",
+          "sheets",
+          "edited",
+          "name"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/brackets/{bracket_picks_id}/leaderboard",
+      "read_by": [
+        "page-brackets.js Leaderboard"
+      ],
+      "shape": "object",
+      "keys": [
+        "locked",
+        "sheets",
+        "tiebreak_on",
+        "rows"
+      ],
+      "rows": {
+        "rows": [
+          "user_id",
+          "name",
+          "rank",
+          "points",
+          "correct",
+          "played",
+          "possible",
+          "picks",
+          "edited",
+          "mine",
+          "may_open"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/brackets/{bracket_picks_id}/sheets/{bracket_picks_member_id}",
+      "read_by": [
+        "page-brackets.js Leaderboard row"
+      ],
+      "shape": "object",
+      "keys": [
+        "user_id",
+        "on",
+        "locked",
+        "lock_at",
+        "may_edit",
+        "points_table",
+        "round_points",
+        "tree",
+        "picks",
+        "tiebreak",
+        "tiebreak_on",
+        "marks",
+        "points",
+        "correct",
+        "played",
+        "possible",
+        "rank",
+        "sheets",
+        "edited",
+        "name"
+      ],
+      "nested": {
+        "tree": [
+          "sets",
+          "seeds"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/brackets/{bracket_picks_id}/sheets/{bracket_picks_member_id}",
+      "body": {
+        "picks": {},
+        "reason": "contract"
+      },
+      "read_by": [
+        "page-brackets.js Edit sheet"
+      ],
+      "shape": "object",
+      "keys": [
+        "sheet",
+        "message"
+      ],
+      "nested": {
+        "sheet": [
+          "user_id",
+          "on",
+          "locked",
+          "lock_at",
+          "may_edit",
+          "points_table",
+          "round_points",
+          "tree",
+          "picks",
+          "tiebreak",
+          "tiebreak_on",
+          "marks",
+          "points",
+          "correct",
+          "played",
+          "possible",
+          "rank",
+          "sheets",
+          "edited",
+          "name"
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/brackets/{bracket_picks_id}",
+      "body": {
+        "picks_points": "1,2,4,8"
+      },
+      "read_by": [
+        "page-brackets.js Options (picks)"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "picks_on",
+          "picks_lock_at",
+          "picks_points"
+        ]
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/ref/sports?kind=team&league=nba&q=bos",
       "read_by": [
         "page-brackets.js Add entrant typeahead"
@@ -13663,6 +13908,7 @@
     "web.brackets.set_disputed",
     "web.brackets.set_overridden",
     "web.brackets.set_reset",
+    "web.brackets.sheet_edited",
     "web.points.submitted",
     "web.points.approved",
     "web.points.rejected",
