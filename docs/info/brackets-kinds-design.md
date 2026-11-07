@@ -1,6 +1,6 @@
 # Brackets beyond fighting games — kinds, plain-list votes, sports feeds, predictions
 
-> **Audience:** Claude sessions (the build agents first) and the owner. **Status:** TRACKED. Design, not yet built.
+> **Audience:** Claude sessions (the build agents first) and the owner. **Status:** TRACKED. K1–K4 built (see each *as built* delta and gate).
 > **Last verified: 2026-11-06 18:1x Phoenix** — the decisions below are the owner's answers of this evening, verbatim; the
 > data-source facts are the measured probes in [`brackets-sports-research-2026-11-06.md`](brackets-sports-research-2026-11-06.md)
 > (from the owner's machine and from the Fly machine). The code facts (tables, moves, files) were read from `main` at
@@ -346,6 +346,55 @@ picks tab (`brackets_picks_link_label`), and — only while unlocked — a per-r
 ≤25 for a 32-game round). The full sheet is a page job; the panel is the quick path. *(Decision beyond the brief,
 flag to the owner: picks live mainly on the site because a 63-pick sheet is bad UX in Discord selects.)*
 
+### K4 as built (branch `brackets-picks`, 2026-11-06) — the delta from the spec above
+
+- **The tree is slot rules.** A member's predicted bracket is computed from rules, not stored: a slot is one
+  entrant, or *the k-th best seed among the predicted winners of these sets* (a plain link is rank 0 of one set).
+  The bot (`brackets/picks.py`) and the page (`bracket-layout.js` `pickSlots` / `cleanedPicks`) evaluate the same
+  rules, sent as `tree` on every sheet. **The NFL reseed** is `nfl.reseed_rules()` beside the builder that applies
+  it to results; a test proves the two pair every round alike on all 128 AFC/Super Bowl outcomes. The brief said
+  "run the pure reseed on the member's own wild-card picks"; the rule form is that reseed, written so the page can
+  run it live too (flagged, decision 12's companion).
+- **Scoring is by (round, winning entrant), not by set key** — decision 12 below. `possible` is points still
+  reachable (picks not yet decided whose entrant is alive), not a maximum total.
+- **One column beyond the brief: `tournaments.picks_locked_at`** (decision 13). The sweep stamps it, every sheet's
+  `locked_at`, and logs `brackets.picks_locked` once; it is the idempotence guard, so a bracket with no sheets
+  locks (and logs `sheets: 0`) once too. Moves do not wait for the sweep: a lock time passed or a round ≥ 1 set
+  with a result or `live_status` live/final refuses at once.
+- **Lock moved later reopens** (staff final say): moving `picks_lock_at` into the future clears
+  `picks_locked_at` and every sheet's lock, unless a game past the play-ins has already started.
+- **Picks settings reach a running bracket.** `PATCH /api/brackets/{id}` goes through
+  `brackets_picks.edit_with_picks`: the picks fields (`picks_lock_at`, `picks_points`, `picks_on`) are accepted in
+  draft, seeding and running; any other field still needs a bracket before its start (a mixed edit of a running
+  bracket refuses whole). Picks on/off refuses once locked (`picks_on_locked`).
+- **Fixed sets are nobody's pick**: a bye, and a play-in already decided (play-ins are played before the lock,
+  so the real winner fills its slot). An undecided play-in is an optional pick that feeds its slot. Outside the
+  NFL a pending slot (a feeder the feed has not named) fills only when the feed names it; there is nothing to
+  predict it from.
+- **Empty sheets** (no picks) are not counted in *N sheets in*, not ranked and not listed.
+- **The starter card** shows **My picks** whenever the bracket takes sheets and has sets (sports only); the lines
+  are `brackets_picks_lock_line` / `brackets_picks_open_line` (beyond the brief: no lock time set) /
+  `brackets_picks_locked_line`, then `brackets_leaderboard_heading` and `brackets_leaderboard_line` rows.
+- **The My picks panel**: a round select, the round's games in selects of ≤ 25 split evenly (32 → 16 + 16), a game
+  opens its two teams as buttons; each press is saved at once (`brackets_pick_saved`) and drops later picks it
+  breaks. The link opens `brackets.html#{id}/picks` (the page reads that hash as the tab).
+- **Organiser doors:** the edit drawer (before the start) and a *Pick sheets* fold in the My picks tab (until the
+  tournament is complete) carry picks on, lock time, points; the `/bracket` tournament view has **Picks off / Picks
+  on** and **Picks…** (a modal with lock time and points), placed beside the pinned `legal_to_moves`. Organiser-only
+  words there are constants (the owner's "bb").
+- **The page:** the Bracket section gets a Bracket · My picks (· a member's name) switch; the leaderboard is its
+  own section (rank, member, points, *n/m right · k still possible*, *edited by staff*; the viewer's row outlined;
+  a row opens that sheet when the lock has passed, it is yours, or you run the bracket; staff **Edit sheet** opens
+  it editable with a reason box). The *your pick* mark sits in each real card's top line once locked, coloured by
+  hit or miss (the score words in that line give way to it; the slot lines keep the score).
+- **Keys:** 25 (CORE_KEYS 444 → 469) — the 16 named in the brief plus `brackets_picks_open_line`,
+  `brackets_leaderboard_line`, `brackets_sheet_saved_said`, `brackets_sheet_private_said`, `brackets_my_picks_line`,
+  `brackets_my_picks_open_line`, `brackets_pick_round_placeholder`, `brackets_pick_game_placeholder` (the K2
+  `brackets_pick_set_placeholder` already existed), `brackets_picks_off_said`. Organiser answers `sheet_edited`,
+  `reason_needed`, `picks_on_locked` are `TO_WORDS` constants.
+- **Log kinds:** `brackets.picks_locked` (ROUTINE), `brackets.sheet_edited` / `web.brackets.sheet_edited`
+  (IMPORTANT), through `note` → `kind_via`. Picks settings changes log as the existing `brackets.edited`.
+
 **Keys.** `brackets_pick_points` ("1,2,4,8,16,32"), `brackets_pick_tiebreak` (off), `brackets_leaderboard_rows` (5,
 0–25), words: `brackets_picks_lock_line`, `_locked_line`, `_my_picks_label`, `_leaderboard_heading`,
 `_sheet_edited_note`, `_picks_link_label`, `_pick_saved`, `_pick_too_late`. Log kinds `brackets.picks_locked` (one per
@@ -367,6 +416,20 @@ are not logged.
     the feed would have named (NFL reseed, NBA play-in).
 11. (K3) A set decided with no score reads "(no score)" (`brackets_no_score_words`), on list sets too, rather than
     "by forfeit".
+12. (K4) A sheet scores by (round, winning entrant), not by set: a member earns round r's points for every entrant
+    they had winning in round r who won a round-r set, wherever the real bracket drew it. Needed because the NFL
+    reseeds (a member's divisional pairings are built from their own wild-card picks and differ from the real ones),
+    and it is the same answer for every fixed bracket. The pick still stores the member's own set key, for drawing.
+13. (K4) `tournaments.picks_locked_at` beyond the brief: the lock is stamped once (idempotent log, a redraw once),
+    and moving the lock time into the future clears it and reopens the sheets (staff final say).
+14. (K4) `possible` is points still reachable (undecided picks whose team is alive), not points plus that.
+15. (K4) A decided play-in or a bye is nobody's pick; an undecided play-in is an optional pick worth 0 and counts in
+    neither *right* nor *played*. An empty sheet is not counted, ranked or listed.
+16. (K4) Staff may edit any sheet with a reason until the tournament is complete, before the lock too; a sheet staff
+    make after the lock is born locked. The picks settings (lock, points, on/off) stay editable on a running bracket
+    until complete; on/off only until the lock.
+17. (K4) The *your pick* mark takes the top line of a real card once locked; that line's score words are clipped
+    to make room (the slot lines keep the scores).
 
 ## Not built (unless asked)
 
@@ -461,3 +524,30 @@ in a probe, so how they import is reasoned, not seen (pending feeders should hol
 exercised from the recorded 2025 postseason only; the 60 s cadence's load on ESPN during an NFL playoff weekend (six
 requests a tick for the NFL bracket) was not measured; the phone width of the new drawer was not looked at; a series
 league's live line shows series words (*TBL leads 3-2*), not the game in progress.
+
+## Gate — K4 (2026-11-06, branch `brackets-picks`, code at the commit before this section)
+
+| Check | Result |
+|---|---|
+| `pytest -q -n 4` | **14,456 passed, 1 skipped, 0 failed** (baseline: K3's gate, 14,378 passed, 1 skipped; +78) |
+| existing tests | untouched except literal bumps: `tests/storage/test_db.py` schema 105 → 106 (21 literals), `tests/test_settings_store.py` (444 → 469, 1360 → 1385), `tests/test_logkinds.py` (`picks_locked`, `sheet_edited` in the `brackets_moves` dynamic list). New tests were added to existing files (`tests/storage/test_db.py`, `tests/sports/test_nfl.py`, `tests/test_brackets_cards.py`, `tests/test_brackets_thread.py`, `tests/test_brackets_panel.py`, `tests/api/tools/test_brackets.py`) without changing a line of an existing test; `tests/api/test_contract.py`'s sports seed gained the picks bracket |
+| schema 105 → 106 | `tests/storage/test_db.py::test_a_schema_105_file_gains_the_picks_tables_and_columns_and_loses_nothing` (twice-connect) and `::test_one_pick_per_member_and_set_and_one_sheet_per_member_are_the_databases_rule` |
+| `ruff check .` | clean |
+| every `site/public/assets/*.js` parses as a module; the 17 `site/mock/*.test.mjs` | all ok (`brackets.test.mjs` + the pick-sheet cases) |
+| `MOCK_PORT=8931 node site/mock/check.mjs` | ok — 28 pages, 404 routes (+6), 469 core settings |
+| the page on the mock, by eye (1512 px) | `#22/picks` (locked): *Locked · 5 sheet(s)*, *1 pts · 1/1 right · 3 still possible · rank 1 of 5*, DUKE green (hit), the decided play-in fixed; leaderboard Nick/Rivet/Moth 1, Casey/Dax 4, Nick's row outlined, *edited by staff* on Moth; Rivet's row opens his sheet as a third tab; Edit sheet on Casey, a pick, Save without a reason → *Changing Casey's sheet needs a reason, so nothing was saved.*, with one → *Saved Casey's sheet.* and the row *edited by staff*. `#26/picks` (open NFL): *2 sheet(s) in · locks Sun 8 Nov · 10:44 PM*; LAC/JAX/PIT through → DEN v LAC and JAX v PIT (the reseed), *Saved.*, survives a reload; changing LAC to NE drops the LAC divisional pick and redraws DEN v PIT, NE v JAX. No console errors |
+
+**Checklist items that bit:** 6 (every sheet write, the lock and every rescore under `lock_for`; the unique indexes), 15
+(one writer of the scores: `rescore`, from the single set-saving path `kept`), 33 (points, tiebreak, board rows and
+picks-by-default are keys; a bracket's own points, lock and on/off are editable on the page AND on Discord), 34 (one
+`sheet_edited` row per edit through `note`; member saves log nothing), 36 (the My picks panel is a `Panel` with
+`again`), 37/38 (the lock runs in the existing `Reconciler` tick and gates only its own start), 39 (the Picks modal's
+labels ≤ 45, title clipped), 40 (game selects ≤ 25, split evenly), 45 (the leaderboard search is `listFilter`), 5 (an
+unreadable lock time never locks by time; a started game still locks).
+
+**NOT verified:** nothing ran against real Discord (the My picks panel, its selects and buttons, the Picks… modal, the
+starter card's board) or a live feed; the phone width (~400 px) was NOT looked at — the Chrome window would not resize
+below the desktop width and the page refuses to be framed, so the tree's horizontal scroll and the 40 px buttons on a
+phone are reasoned from the CSS, not seen; the sweep locking a real bracket was exercised through tests only
+(`test_the_sweep_locks_the_pick_sheets_and_the_starter_card_shows_the_board`); an NBA bracket's play-in slot (pending
+until the feed fills it) was never in a probe, so how its sheet reads before the play-in is reasoned.
