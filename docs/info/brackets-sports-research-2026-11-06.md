@@ -251,3 +251,20 @@ fires on every keystroke. **Serve it from a local table, never from a live call 
    ESPN fallback?
 6. Is a $9/mo TheSportsDB key acceptable as a paid fallback if the free sources break, or is the rule "free only, staff
    enter results by hand when a feed dies"?
+
+## From the Fly machine (measured 2026-11-06 18:0x Phoenix, read-only `python3 urllib` via `flyctl ssh console`, machine 85e744c4d959d8, lax)
+
+Open question 4 answered: the conductor ran one probe per endpoint from inside the live container, `User-Agent: Mozilla/5.0`
+plus `Referer`/`Origin: https://www.nba.com` on every request, 15 s timeout.
+
+| Endpoint | Status | Bytes | Seconds |
+|---|---|---|---|
+| ESPN `basketball/nba/scoreboard` | 200 | 136,933 | 0.13 |
+| henrygd `/brackets/basketball-men/d1/2026` | 200 | 91,471 | 0.61 |
+| NHL `/v1/playoff-bracket/2026` | 200 | 15,838 | 0.22 |
+| MLB `/schedule/postseason/series?season=2026` | 200 | 57,625 | 0.23 |
+| NBA `stats.nba.com/stats/playoffbracket` | 200 | 14,172 | 0.20 |
+| NBA `cdn.nba.com/.../todaysScoreboard_00.json` | **403** even with the headers | — | — |
+
+So from a datacentre IP: ESPN, henrygd, NHL, MLB and `stats.nba.com` answer; `cdn.nba.com` refuses. NBA live scores come from
+ESPN; the NBA series structure from `stats.nba.com/stats/playoffbracket`. One sample each, not polled over time.
