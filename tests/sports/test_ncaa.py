@@ -74,7 +74,7 @@ async def test_the_bracket_asks_for_the_tournament_year():
 
 async def test_a_missing_bracket_is_worded_with_the_source():
     answer = await ncaa.bracket("ncaam", "2026-27", fetch=Recorded({}))
-    assert answer.why == "NCAA (ncaa-api) answered 404 for the 2027 bracket"
+    assert answer.why == "NCAA (ncaa-api) had nothing at that address for the 2027 bracket"
 
 
 async def test_scores_and_schools_answer_found():

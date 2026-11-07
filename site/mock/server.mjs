@@ -16694,13 +16694,148 @@ const BK_PAGE_WORDS = [
   'brackets_decide_votes_words', 'brackets_decide_organiser_words', 'brackets_vote_open_line',
   'brackets_vote_hidden_line', 'brackets_vote_closed_line', 'brackets_vote_tied_line',
   'brackets_vote_button_change', 'brackets_close_vote_label',
+  'brackets_league_nfl_words', 'brackets_league_nba_words', 'brackets_league_mlb_words',
+  'brackets_league_nhl_words', 'brackets_league_ncaam_words', 'brackets_league_ncaaw_words',
+  'brackets_typed_entrant_note', 'brackets_edit_entrant_label', 'brackets_use_typed_label',
 ];
 
 function bkEntrant(id, user_id, name, extra = {}) {
   return {
     id, user_id, name, guest: user_id === null, seed: null, checked_in: false, dropped: false,
-    dropped_why: null, dq: false, placement: null, final_rank: null, ...extra,
+    dropped_why: null, dq: false, placement: null, final_rank: null,
+    ext_source: null, ext_id: null, short: null, ...extra,
   };
+}
+
+// The sports names cache (black_bloc/sports_names.py): a few rows per list, from the trimmed
+// fixtures in tests/sports/fixtures/. Ranked like `sports_names.rank`.
+const SPORTS_NAMES = [
+  ['team', 'nba', 'espn', '2', 'Boston Celtics', 'BOS', 'Celtics | Boston'],
+  ['team', 'nba', 'espn', '24', 'San Antonio Spurs', 'SA', 'Spurs | San Antonio'],
+  ['team', 'nba', 'espn', '18', 'New York Knicks', 'NY', 'Knicks | New York'],
+  ['team', 'nfl', 'espn', '12', 'Kansas City Chiefs', 'KC', 'Chiefs | Kansas City'],
+  ['team', 'nfl', 'espn', '26', 'Seattle Seahawks', 'SEA', 'Seahawks | Seattle'],
+  ['team', 'nfl', 'espn', '17', 'New England Patriots', 'NE', 'Patriots | New England'],
+  ['team', 'mlb', 'mlb', '158', 'Milwaukee Brewers', 'MIL', 'Brewers | Milwaukee'],
+  ['team', 'mlb', 'mlb', '139', 'Tampa Bay Rays', 'TB', 'Rays | Tampa Bay'],
+  ['team', 'nhl', 'espn', '7', 'Carolina Hurricanes', 'CAR', 'Hurricanes | Carolina'],
+  ['team', 'nhl', 'espn', '2', 'Buffalo Sabres', 'BUF', 'Sabres | Buffalo'],
+  ['team', 'ncaam', 'espn', '150', 'Duke Blue Devils', 'DUKE', 'Duke | Blue Devils'],
+  ['team', 'ncaam', 'espn', '2250', 'Gonzaga Bulldogs', 'GONZ', 'Gonzaga | Bulldogs'],
+  ['team', 'ncaam', 'espn', '153', 'North Carolina Tar Heels', 'UNC', 'North Carolina | Tar Heels'],
+  ['team', 'ncaaw', 'espn', '41', 'UConn Huskies', 'CONN', 'UConn | Huskies'],
+  ['team', 'ncaaw', 'espn', '2579', 'South Carolina Gamecocks', 'SC', 'South Carolina | Gamecocks'],
+  ['school', '', 'ncaa', 'duke', 'Duke', null, 'Duke University'],
+  ['school', '', 'ncaa', 'gonzaga', 'Gonzaga', null, 'Gonzaga University'],
+  ['school', '', 'ncaa', 'uconn', 'Connecticut', null, 'University of Connecticut'],
+  ['school', '', 'ncaa', 'michigan', 'Michigan', null, 'University of Michigan'],
+  ['player', 'nba', 'espn', '3195', 'Mike Conley', 'M. Conley', null, '2'],
+  ['player', 'nba', 'espn', '4433188', 'Devin Carter', 'D. Carter', null, '2'],
+  ['player', 'nfl', 'espn', '3139477', 'Patrick Mahomes', 'P. Mahomes', null, '12'],
+  ['player', 'mlb', 'mlb', '592450', 'Aaron Judge', 'A Judge', null, '147'],
+].map(([kind, league, source, ext_id, name, short, aliases, team_ext_id = null]) => ({ kind, league, source, ext_id, name, short, aliases, team_ext_id }));
+const SPORTS_LISTS = [
+  ...['nfl', 'nba', 'mlb', 'nhl', 'ncaam', 'ncaaw'].map((league) => ['team', league]),
+  ['school', ''],
+  ...['nfl', 'nba', 'mlb', 'nhl'].map((league) => ['player', league]),
+];
+const SPORTS_SOURCE_NAMES = { espn: 'ESPN', ncaa: 'NCAA (ncaa-api)', nhl: 'NHL', nba: 'NBA', mlb: 'MLB' };
+
+function sportsState() {
+  if (!state.sports) {
+    state.sports = {
+      updated_at: minutesAgo(60 * 9),
+      failures: { 'player:nhl': { why: 'ESPN had a server error for the NHL roster of team 2', at: minutesAgo(60 * 9) } },
+    };
+  }
+  return state.sports;
+}
+
+function sportsKnown(source, extId) {
+  return SPORTS_NAMES.find((one) => one.source === String(source) && one.ext_id === String(extId)) || null;
+}
+
+function sportsRank(one, wanted) {
+  const name = one.name.toLowerCase();
+  const aliases = String(one.aliases || '').toLowerCase().split(' | ').filter(Boolean);
+  if (name.startsWith(wanted)) return 0;
+  if (name.split(/\s+/).some((word) => word.startsWith(wanted))) return 1;
+  if (String(one.short || '').toLowerCase().startsWith(wanted) || aliases.some((alias) => alias.startsWith(wanted))) return 2;
+  return 3;
+}
+
+function sportsSearch(kind, league, query, limit = 25) {
+  const wanted = String(query || '').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+  if (!wanted || !['team', 'school', 'player'].includes(kind)) return [];
+  const teamOf = (one) => (SPORTS_NAMES.find((team) => team.kind === 'team' && team.source === one.source && team.league === one.league && team.ext_id === one.team_ext_id) || {}).name || null;
+  return SPORTS_NAMES
+    .filter((one) => one.kind === kind && (!league || kind === 'school' || one.league === league))
+    .filter((one) => [one.name, one.short || '', one.aliases || ''].some((text) => text.toLowerCase().includes(wanted)))
+    .sort((a, b) => sportsRank(a, wanted) - sportsRank(b, wanted) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+    .slice(0, Math.max(1, Math.min(Number(limit) || 25, 25)))
+    .map((one) => ({ ext_id: one.ext_id, name: one.name, short: one.short, league: one.league, team: teamOf(one), source: one.source, kind: one.kind }));
+}
+
+function sportsStatus() {
+  const held = sportsState();
+  return {
+    running: false,
+    lists: SPORTS_LISTS.map(([kind, league]) => {
+      const list = league ? `${kind}:${league}` : kind;
+      const rows = SPORTS_NAMES.filter((one) => one.kind === kind && one.league === league);
+      const failing = held.failures[list] || null;
+      return {
+        list, kind, league, rows: rows.length, updated_at: rows.length ? held.updated_at : null,
+        sources: [...new Set(rows.map((one) => SPORTS_SOURCE_NAMES[one.source] || one.source))].sort(),
+        failed_at: failing ? failing.at : null, why: failing ? failing.why : null,
+      };
+    }),
+    checked_at: now(),
+  };
+}
+
+route('GET', '/api/ref/sports', (context) => {
+  requireMember(context.session);
+  const params = context.url.searchParams;
+  return sportsSearch(params.get('kind') || 'team', params.get('league') || '', params.get('q') || '', params.get('limit') || 25);
+});
+
+route('GET', '/api/sports', (context) => {
+  requireStaff(context.session);
+  return sportsStatus();
+});
+
+route('POST', '/api/sports/refresh', (context) => {
+  requireStaff(context.session);
+  sportsState().updated_at = now();
+  logAction('web.sports.refresh', { actor_id: actorOf(context.session), details: { via: 'website' } });
+  const found = sportsStatus();
+  const answered = found.lists.filter((one) => !one.why).length;
+  logAction('sports.names_refreshed', { actor_id: actorOf(context.session), details: { via: 'website', failed: found.lists.filter((one) => one.why).map((one) => one.list) } });
+  return { ...found, message: `Names refreshed: ${answered} of ${found.lists.length} lists answered.` };
+});
+
+function bkExt(body, t) {
+  const source = String(body.ext_source ?? '').trim();
+  const extId = String(body.ext_id ?? '').trim();
+  if (!source && !extId) return null;
+  if (!source || !extId) {
+    throw new Refused(400, 'bad_option', bkSay('bad_option', { field: source ? 'ext_id' : 'ext_source', given: String((source ? body.ext_id : body.ext_source) ?? '').slice(0, 40), allowed: 'both or neither' }));
+  }
+  const found = sportsKnown(source, extId);
+  if (!found) throw new Refused(400, 'ext_unknown', bkSay('brackets_ext_unknown_said', { source: SPORTS_SOURCE_NAMES[source] || source, ext_id: extId }));
+  return found;
+}
+
+function bkShort(body) {
+  const short = String(body.short ?? '').replace(/\s+/g, ' ').trim();
+  if (short.length > 20) throw new Refused(400, 'bad_option', bkSay('bad_option', { field: 'short', given: short.slice(0, 40), allowed: '1 to 20 characters' }));
+  return short || null;
+}
+
+function bkEntrantView(one) {
+  const named = one.ext_id ? sportsKnown(one.ext_source, one.ext_id) : null;
+  return { ...one, ext_league: named ? named.league : null, ext_name: named ? named.name : null };
 }
 
 function bkTournament(id, name, state_, entrants, extra = {}) {
@@ -16916,6 +17051,13 @@ function seedBrackets() {
       game: null, kind: 'list', decide_by: 'organiser', vote_minutes: 1440, starts_at: null,
       options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
     }),
+    bkTournament(21, 'NBA Playoffs 2027', 'seeding', [
+      bkEntrant(251, null, 'Boston Celtics', { ext_source: 'espn', ext_id: '2', short: 'BOS' }),
+      bkEntrant(252, null, 'Bobcats'),
+    ], {
+      game: null, kind: 'sports', starts_at: null,
+      options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
+    }),
   ];
 }
 
@@ -16988,7 +17130,7 @@ function bkSignups(t) {
 }
 
 function bkState() {
-  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 21, nextEntrant: 200 };
+  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 22, nextEntrant: 300 };
   return state.brackets;
 }
 
@@ -17175,6 +17317,7 @@ function bkView(t, context) {
     rounds_to_play: t.format === 'swiss' ? mockBrackets.swissRounds(t.sets.length ? new Set(t.sets.flatMap((one) => [one.slot_a, one.slot_b]).filter((id) => id !== null)).size : bkPlaying(t).length, t.options) : null,
     may_run: bkMayRun(context),
     mine: mine ? mine.id : null,
+    entrants: t.entrants.map(bkEntrantView),
     sets: t.sets.map((one) => bkSetRow(one, names, me)),
     standings: bkStandings(t),
     waiting_on: pooled ? mockBrackets.poolWaiting(t) : mockBrackets.waitingOn(t),
@@ -17396,14 +17539,53 @@ route('POST', '/api/brackets/:tournament_id/entrants', async (context) => {
   bkRuns(context);
   bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
   const body = await context.body();
-  const user = body.user_id ? String(body.user_id) : null;
-  const name = String(body.name || (user ? memberName(user) : '') || '').trim();
+  const user = body.user_id && !['list', 'sports'].includes(t.kind) ? String(body.user_id) : null;
+  const matched = bkExt(body, t);
+  const short = bkShort(body);
+  const name = String(body.name || (matched ? matched.name : '') || (user ? memberName(user) : '') || '').trim();
   if (!name || name.length > 100) throw new Refused(400, 'no_name', bkSay('no_name', { limit: 100 }));
   const back = user ? t.entrants.find((one) => one.user_id === user) : null;
   if (back && !back.dropped) throw new Refused(409, 'already_in', bkSay('brackets_already_in_said', { entrant: back.name, name: t.name }));
+  const ext = matched ? { ext_source: matched.source, ext_id: matched.ext_id, short: short || matched.short } : { short };
   if (back) Object.assign(back, { dropped: false, dropped_why: null });
-  else t.entrants.push(bkEntrant(bkState().nextEntrant++, user, name, { seed: t.entrants.length + 1, checked_in: !user && t.state === 'check_in' }));
-  return bkAnswer(context, t, 'entrant_added', 'entrant_added', { entrant: name }, { guest: !user });
+  else t.entrants.push(bkEntrant(bkState().nextEntrant++, user, name, { seed: t.entrants.length + 1, checked_in: !user && t.state === 'check_in', ...ext }));
+  return bkAnswer(context, t, 'entrant_added', 'entrant_added', { entrant: name }, { guest: !user, ...(matched ? { ext: `${matched.source}:${matched.ext_id}` } : {}) });
+});
+
+route('PATCH', '/api/brackets/:tournament_id/entrants/:entrant_id', async (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  const one = bkEntrantOf(t, context);
+  const body = await context.body();
+  const values = {};
+  if ('name' in body) {
+    const name = String(body.name || '').replace(/\s+/g, ' ').trim();
+    if (!name || name.length > 100) throw new Refused(400, 'no_name', bkSay('no_name', { limit: 100 }));
+    values.name = name;
+  }
+  if ('seed' in body) {
+    const seed = body.seed;
+    if (seed !== null && seed !== '' && !(Number.isInteger(seed) && seed >= 1 && seed <= 1024)) {
+      throw new Refused(400, 'bad_option', bkSay('bad_option', { field: 'seed', given: String(seed).slice(0, 40), allowed: 'a whole number from 1 to 1024' }));
+    }
+    values.seed = seed === '' ? null : seed;
+  }
+  if ('short' in body) values.short = bkShort(body);
+  if ('ext_source' in body || 'ext_id' in body) {
+    const matched = bkExt(body, t);
+    values.ext_source = matched ? matched.source : null;
+    values.ext_id = matched ? matched.ext_id : null;
+    if (matched && !('short' in body) && !one.short) values.short = matched.short;
+  }
+  const changed = Object.keys(values).filter((key) => one[key] !== values[key]).sort();
+  for (const key of changed) one[key] = values[key];
+  if (changed.length) {
+    t.updated_at = now();
+    logAction('web.brackets.entrant_edited', { actor_id: actorOf(context.session), details: { via: 'website', tournament: t.id, entrant: one.id, changed } });
+  }
+  return { tournament: bkView(t, context), message: bkSay('brackets_entrant_edited_said', { entrant: one.name, name: t.name }) };
 });
 
 route('DELETE', '/api/brackets/:tournament_id/entrants/:entrant_id', async (context) => {

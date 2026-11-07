@@ -81,7 +81,7 @@ async def test_one_roster_that_does_not_answer_fails_the_whole_list():
     fetch = Recorded({"teams/2/roster": "espn_roster_nba", "teams/24/roster": (503, b"")})
     answer = await espn.players("nba", ["2", "24"], fetch=fetch)
     assert answer.ok is False
-    assert answer.why == "ESPN answered 503 for the NBA roster of team 24"
+    assert answer.why == "ESPN had a server error for the NBA roster of team 24"
 
 
 async def test_scores_of_a_day_ask_for_that_date():

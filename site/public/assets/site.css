@@ -1399,6 +1399,17 @@ a.btn { text-decoration: none; }
   border-radius: var(--et-radius);
   background: var(--et-surface);
 }
+.remote-search { display: grid; gap: 8px; max-width: 40rem; }
+.remote-results .remote-row {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  min-height: 40px;
+  border-radius: var(--et-radius);
+  cursor: pointer;
+}
+.remote-results .remote-row[aria-selected="true"] { background: var(--et-nav-active); }
+.remote-note { color: var(--et-muted); font-size: var(--et-ui-xs); }
 .picker-picked {
   margin: 4px 0 0;
   font-family: var(--et-font-mono);

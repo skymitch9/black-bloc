@@ -105,7 +105,7 @@ async def test_a_refresh_writes_every_list_that_answered_and_keeps_the_rest(db, 
     assert found["refreshed"]["school"] == 6
     assert found["refreshed"]["player:nba"] == 6
     assert found["refreshed"]["player:mlb"] == 3
-    assert found["failed"]["team:nfl"] == "ESPN answered 404 for the NFL teams"
+    assert found["failed"]["team:nfl"] == "ESPN had nothing at that address for the NFL teams"
     assert (await names.known(db, "espn", "12"))["name"] == "Kansas City Chiefs"
     assert (await names.known(db, "mlb", "592450"))["name"] == "Aaron Judge"
 
@@ -118,7 +118,7 @@ async def test_a_failing_list_is_logged_once_a_streak_and_again_after_it_recover
     rows = await logged(db)
     nfl = [details for kind, details in rows if details.get("list") == "team:nfl"]
     assert len(nfl) == 1
-    assert nfl[0]["why"] == "ESPN answered 404 for the NFL teams"
+    assert nfl[0]["why"] == "ESPN had nothing at that address for the NFL teams"
     assert [kind for kind, _ in rows].count("sports.names_refreshed") == 2
     fetch.routes["football/nfl/teams"] = "espn_teams_nba"
     await names.refresh(bot, [bot.guild], fetch=fetch, today=NOVEMBER)
@@ -138,7 +138,7 @@ async def test_status_names_each_list_with_its_count_and_its_failure(db, monkeyp
     assert lists["team:nba"]["why"] is None
     assert lists["player:mlb"]["sources"] == ["MLB"]
     assert lists["team:nfl"]["rows"] == 0
-    assert lists["team:nfl"]["why"] == "ESPN answered 404 for the NFL teams"
+    assert lists["team:nfl"]["why"] == "ESPN had nothing at that address for the NFL teams"
     assert lists["team:nfl"]["failed_at"]
     assert shown["running"] is False
 

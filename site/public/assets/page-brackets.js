@@ -1,4 +1,4 @@
-import { api, listOf, names, Outage, send, settings, settingsNamespace } from './api.js';
+import { api, listOf, names, Outage, refSports, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import {
   BEFORE_START,
@@ -30,6 +30,7 @@ import {
 import { logsTable } from './logs.js';
 import { clockTime, dayLabel, viewerZone } from './timezone.js';
 import {
+  ago,
   ask,
   badge,
   bar,
@@ -46,6 +47,7 @@ import {
   modeSwitch,
   notice,
   openDrawer,
+  remoteSearch,
   run,
   sayNothing,
   section,
@@ -199,6 +201,22 @@ const WORDS = {
   decideBy: 'Decided by',
   voteMinutes: 'Vote minutes',
   nameToAdd: 'Name',
+  short: 'Short name',
+  seed: 'Seed',
+  match: 'Match',
+  clearMatch: 'Clear match',
+  findName: 'Team, school or player',
+  teams: 'Teams',
+  schools: 'Schools',
+  players: 'Players',
+  sportsNames: 'Sports names',
+  refreshNames: 'Refresh now',
+  namesList: 'List',
+  namesCount: 'Names',
+  namesUpdated: 'Updated',
+  namesFailure: 'Last failure',
+  namesTeams: '{league} teams',
+  namesPlayers: '{league} players',
   pickFirst: 'Pick the score first.',
   wins: '{name} wins',
   votes: '{count} votes',
@@ -269,6 +287,21 @@ function stateBadge(state) {
 function wantedId() {
   const found = /^#(\d+)$/.exec(location.hash || '');
   return found ? found[1] : null;
+}
+
+const LEAGUES = ['nfl', 'nba', 'mlb', 'nhl', 'ncaam', 'ncaaw'];
+const NAME_KINDS = [['team', WORDS.teams], ['school', WORDS.schools], ['player', WORDS.players]];
+
+function isSports(t) {
+  return Boolean(t) && t.kind === 'sports';
+}
+
+function leagueWord(code) {
+  return code ? w(`brackets_league_${code}_words`) || code.toUpperCase() : '';
+}
+
+function matchWords(one) {
+  return [one.short, leagueWord(one.league), one.team].filter(Boolean).join(' · ');
 }
 
 function base(id) {
@@ -535,12 +568,72 @@ async function entrantMove(path, body = {}, method = 'POST') {
   return done;
 }
 
+function sportsNotes(t, one) {
+  if (!isSports(t)) return [];
+  if (!one.ext_id) return [one.short, w('brackets_typed_entrant_note')].filter(Boolean);
+  const matched = [leagueWord(one.ext_league), one.ext_name !== one.name ? one.ext_name : null];
+  return [one.short, ...matched].filter(Boolean);
+}
+
+function editRow(t, one, holder) {
+  const say = notice();
+  const name = el('input', { class: 'input', type: 'text', maxlength: '100', value: one.name, 'aria-label': WORDS.name });
+  const short = el('input', { class: 'input bk-short', type: 'text', maxlength: '20', value: one.short || '', 'aria-label': WORDS.short });
+  const seed = el('input', { class: 'input bk-seedbox', type: 'number', min: '1', max: '1024', value: one.seed ?? '', 'aria-label': WORDS.seed });
+  const ext = { source: one.ext_source || null, id: one.ext_id || null, words: one.ext_id ? [leagueWord(one.ext_league), one.ext_name].filter(Boolean).join(' · ') : '' };
+  const matchLine = el('span', { class: 'rowlist-note bk-match' });
+  const paintMatch = () => {
+    matchLine.replaceChildren(...[
+      el('span', { text: ext.id ? ext.words || `${ext.source} ${ext.id}` : w('brackets_typed_entrant_note') }),
+      ext.id ? button(WORDS.clearMatch, () => {
+        Object.assign(ext, { source: null, id: null, words: '' });
+        paintMatch();
+      }, { tone: 'quiet' }) : null,
+    ].filter(Boolean));
+  };
+  paintMatch();
+  const finder = isSports(t) ? sportsFinder({
+    onPick: (found) => {
+      if (!found) return;
+      Object.assign(ext, { source: found.source, id: found.ext_id, words: [leagueWord(found.league), found.name].filter(Boolean).join(' · ') });
+      if (!short.value.trim() && found.short) short.value = found.short;
+      paintMatch();
+      finder.clear();
+    },
+  }) : null;
+  const saveIt = async () => {
+    const body = {};
+    if (name.value.trim() !== one.name) body.name = name.value.trim();
+    if (short.value.trim() !== (one.short || '')) body.short = short.value.trim();
+    const wanted = seed.value === '' ? null : Number(seed.value);
+    if (wanted !== (one.seed ?? null)) body.seed = wanted;
+    if (ext.id !== (one.ext_id || null)) Object.assign(body, { ext_source: ext.source, ext_id: ext.id });
+    const done = await act(`${base(t.id)}/entrants/${one.id}`, body, 'PATCH', say);
+    if (done.ok) {
+      view.say.say(done.found.message, 'ok');
+      paintEntrants(true);
+    }
+  };
+  const was = [...holder.childNodes];
+  holder.replaceChildren(el('div', { class: 'bk-edit' }, [
+    field(WORDS.name, name),
+    field(WORDS.short, short),
+    field(WORDS.seed, seed),
+    isSports(t) ? field(WORDS.match, matchLine) : null,
+    finder ? finder.node : null,
+    bar([button(WORDS.save, saveIt, { tone: 'warn' }), button(WORDS.keep, () => holder.replaceChildren(...was), { tone: 'quiet' })]),
+    say,
+  ]));
+  name.focus();
+}
+
 function entrantActions(t, one) {
   if (!t.may_run || mode() === 'off') return null;
   const holder = el('span', { class: 'bar bk-acts' });
   const path = `${base(t.id)}/entrants/${one.id}`;
   const out = one.dropped || one.dq;
   const parts = [];
+  if (isSports(t) || isList(t)) parts.push(button(w('brackets_edit_entrant_label'), () => editRow(t, one, holder), { tone: 'quiet' }));
   if (out) {
     const back = BEFORE_START.includes(t.state) || (PLAYING.includes(t.state) && (one.dq || one.dropped_why === 'dropped'));
     if (back && t.state !== 'complete') parts.push(button(WORDS.restore, () => entrantMove(`${path}/restore`), { tone: 'quiet' }));
@@ -564,7 +657,8 @@ function entrantLine(t, one, { handle = null, seed = null, placed = false } = {}
   const lead = placed ? placeWords(one.placement) || '—' : seed ?? (one.seed ?? '—');
   const notes = [
     placed && one.seed ? said(WORDS.seedNote, { seed: one.seed }) : null,
-    one.guest && !isList(t) ? WORDS.guest : null,
+    one.guest && !isList(t) && !isSports(t) ? WORDS.guest : null,
+    ...sportsNotes(t, one),
     t.state === 'check_in' && !one.dropped ? (one.checked_in ? WORDS.checkedIn : WORDS.notCheckedIn) : null,
     waiting && t.may_run ? w(`brackets_waiting_${waiting.what}`, { set: waiting.set || '', opponent: opponent || '' }) : null,
   ].filter(Boolean);
@@ -685,7 +779,48 @@ function addName(t) {
   ], { open: true });
 }
 
+function sportsFinder({ onPick, typed = false }) {
+  const leagues = [['', WORDS.all], ...LEAGUES.map((code) => [code, leagueWord(code)])];
+  return remoteSearch({
+    label: WORDS.findName,
+    placeholder: WORDS.findName,
+    className: 'bk-sports-add',
+    groups: [
+      { choices: NAME_KINDS, current: 'team', chipClass: 'bk-kinds' },
+      { choices: leagues, current: '', chipClass: 'bk-leagues' },
+    ],
+    fetch: (query, [kind, league]) => refSports(kind, kind === 'school' ? '' : league, query),
+    row: (one) => [
+      el('span', { class: 'remote-name', text: one.name }),
+      el('span', { class: 'remote-note', text: matchWords(one) }),
+    ],
+    typedRow: typed ? (text) => [
+      el('span', { class: 'remote-name', text: w('brackets_use_typed_label', { typed: text }) }),
+      el('span', { class: 'remote-note', text: w('brackets_typed_entrant_note') }),
+    ] : null,
+    onPick,
+  });
+}
+
+function addSports(t) {
+  const say = notice();
+  const finder = sportsFinder({
+    typed: true,
+    onPick: async (one, text) => {
+      const body = one ? { name: one.name, ext_source: one.source, ext_id: one.ext_id, short: one.short } : { name: text };
+      const done = await act(`${base(t.id)}/entrants`, body, 'POST', say);
+      if (!done.ok) return;
+      view.say.say(done.found.message, 'ok');
+      paintEntrants(true);
+      const again = view.holders.entrants && view.holders.entrants.querySelector('.bk-sports-add input');
+      if (again) again.focus();
+    },
+  });
+  return foldout(WORDS.addEntrant, [finder.node, say], { open: true });
+}
+
 function addEntrant(t) {
+  if (isSports(t)) return addSports(t);
   if (isList(t)) return addName(t);
   const say = notice();
   const guest = el('input', { class: 'input', type: 'text', maxlength: '100', id: 'bk-guest' });
@@ -1405,6 +1540,42 @@ async function logsNode(tournamentId) {
   return one.node;
 }
 
+function namesListWords(row) {
+  if (row.kind === 'school') return WORDS.schools;
+  return said(row.kind === 'player' ? WORDS.namesPlayers : WORDS.namesTeams, { league: leagueWord(row.league) });
+}
+
+function namesTable(found) {
+  return table([
+    { key: 'list', label: WORDS.namesList, cell: (row) => namesListWords(row) },
+    { key: 'rows', label: WORDS.namesCount, className: 'mono' },
+    { key: 'updated_at', label: WORDS.namesUpdated, cell: (row) => (row.updated_at ? ago(row.updated_at).text : null) },
+    { key: 'why', label: WORDS.namesFailure, cell: (row) => (row.why ? `${row.why} · ${ago(row.failed_at).text}` : null) },
+  ], found.lists || [], { search: false });
+}
+
+async function sportsNode() {
+  const one = section(WORDS.sportsNames, null, { id: 'sports-names' });
+  const say = notice();
+  const holder = el('div');
+  const shown = (found) => {
+    one.count((found.lists || []).reduce((total, row) => total + (row.rows || 0), 0));
+    holder.replaceChildren(namesTable(found));
+  };
+  const refreshIt = async () => {
+    const done = await run(say, () => send('/api/sports/refresh', 'POST', {}), (found) => found.message);
+    if (done.ok) shown(done.found);
+  };
+  one.body.append(bar([button(WORDS.refreshNames, refreshIt, { tone: 'warn' })]), say, holder);
+  try {
+    shown(await api('/api/sports'));
+  } catch (error) {
+    const found = sentenceFor(error);
+    say.say(found.text, found.tone);
+  }
+  return one.node;
+}
+
 async function settingsNode() {
   const one = section(WORDS.settings, null, { id: 'settings' });
   try {
@@ -1526,7 +1697,7 @@ async function listView() {
   view.holders.list = list;
   view.parts.set('list', sig(view.index.tournaments));
   const blocks = [one.node];
-  if (staff()) blocks.push(await logsNode(null), await settingsNode());
+  if (staff()) blocks.push(await logsNode(null), await sportsNode(), await settingsNode());
   return blocks;
 }
 

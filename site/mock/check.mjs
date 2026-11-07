@@ -66,7 +66,7 @@ const IDS = {
   bracket_vote_id: '19',
   // A sports bracket in seeding with one matched entrant, the Celtics (ESPN 2).
   bracket_sports_id: '21',
-  bracket_sports_entrant_id: '211',
+  bracket_sports_entrant_id: '251',
   // The point system: run 1 is pending, 2 approved, 3 rejected; bounty 1 is live.
   points_pending_id: '1',
   points_approved_id: '2',

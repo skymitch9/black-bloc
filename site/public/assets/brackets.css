@@ -53,6 +53,9 @@
 .bk-handle:active { cursor: grabbing; }
 .bk-handle:focus-visible { outline: var(--et-focus-ring); }
 .bk-acts { margin-left: auto; flex-wrap: wrap; }
+.bk-edit { display: grid; gap: 8px; flex: 1 0 100%; max-width: 40rem; }
+.bk-edit .bk-short, .bk-edit .bk-seedbox { max-width: 12ch; }
+.bk-match { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bk-reason { width: min(220px, 100%); }
 .bk-add { display: grid; grid-template-columns: minmax(0, 26ch) auto; justify-content: start; align-items: center; gap: 4px 12px; }
 .bk-add + .bk-add { margin-top: 12px; }

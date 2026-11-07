@@ -11,7 +11,7 @@ async def test_a_200_answers_the_parsed_body():
 
 async def test_a_refusal_is_worded_with_its_status():
     answer = await http.get_json("https://x.test/a", fetch=Recorded({"/a": (403, b"no")}))
-    assert (answer.ok, answer.why) == (False, "answered 403")
+    assert (answer.ok, answer.why) == (False, "refused the request")
 
 
 async def test_a_body_that_is_not_json_is_a_failure():
@@ -22,7 +22,9 @@ async def test_a_body_that_is_not_json_is_a_failure():
 async def test_a_transport_error_is_a_failure_and_never_raises():
     answer = await http.get_json("https://x.test/a", fetch=Recorded({"/a": TimeoutError()}))
     assert answer.ok is False
-    assert answer.why == "did not answer (TimeoutError)"
+    assert answer.why == "did not answer in time"
+    lost = await http.get_json("https://x.test/a", fetch=Recorded({"/a": OSError("refused")}))
+    assert lost.why == "could not be reached"
 
 
 async def test_a_body_over_the_cap_is_not_read():
@@ -61,3 +63,10 @@ async def test_the_pacer_keeps_a_hosts_minimum_gap():
 async def test_the_suite_never_reaches_the_network():
     with pytest.raises(BaseException, match="a test asked a sports feed"):
         await http.get_json("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams")
+
+
+def test_every_refusal_is_words_and_never_a_bare_status():
+    assert http.refusal(404) == "had nothing at that address"
+    assert http.refusal(429) == "asked Black Bloc to slow down"
+    assert http.refusal(502) == "had a server error"
+    assert http.refusal(418) == "answered in a way Black Bloc cannot read"

@@ -70,7 +70,7 @@ async def test_refresh_runs_now_and_leaves_one_web_row(client, sign_in, wf, web,
     assert body["running"] is False
     lists = {one["list"]: one for one in body["lists"]}
     assert lists["team:nba"]["rows"] == 2
-    assert lists["team:nfl"]["why"] == "ESPN answered 404 for the NFL teams"
+    assert lists["team:nfl"]["why"] == "ESPN had nothing at that address for the NFL teams"
     kinds = await wf.kinds_in(web.db)
     assert kinds.count("web.sports.refresh") == 1
     assert kinds.count("sports.names_refreshed") == 1

@@ -603,6 +603,7 @@ async def test_a_sports_entrant_is_added_by_its_feed_id_and_shown_with_it(
         "espn",
         "24",
     )
+    assert (spurs["ext_league"], spurs["ext_name"]) == ("nba", "San Antonio Spurs")
     lakers = {"name": "Lakers", "ext_source": "espn", "ext_id": "13"}
     unknown = organiser.post(f"/api/brackets/{tid}/entrants", json=lakers)
     assert (unknown.status_code, unknown.json()["error"]) == (400, "ext_unknown")

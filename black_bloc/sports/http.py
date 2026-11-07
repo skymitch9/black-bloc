@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlsplit
 
 from .model import Found, failed, found
+
+log = logging.getLogger(__name__)
 
 AGENT = "Mozilla/5.0 (Black Bloc)"
 TIMEOUT_SECONDS = 15
@@ -21,6 +24,13 @@ GAPS: dict[str, float] = {
     "stats.nba.com": 0.6,
 }
 NBA_HEADERS = {"Referer": "https://www.nba.com/", "Origin": "https://www.nba.com"}
+REFUSALS: dict[int, str] = {
+    401: "refused the request",
+    403: "refused the request",
+    404: "had nothing at that address",
+    429: "asked Black Bloc to slow down",
+}
+SERVER_ERROR = "had a server error"
 
 Fetch = Callable[[str, dict[str, str], int], Awaitable[tuple[int, bytes]]]
 
@@ -85,16 +95,25 @@ def headers_for(url: str) -> dict[str, str]:
     return found_headers
 
 
+def refusal(status: int) -> str:
+    """A refusal in words, never a bare status (the owner's rule)."""
+    if status in REFUSALS:
+        return REFUSALS[status]
+    return SERVER_ERROR if status >= 500 else "answered in a way Black Bloc cannot read"
+
+
 async def get_json(url: str, *, fetch: Fetch | None = None) -> Found:
     """The parsed body of a 200, or why not in words; any transport error is a `why`."""
     request = fetch or network
     try:
         status, body = await request(url, headers_for(url), TIMEOUT_SECONDS)
+    except TimeoutError:
+        return failed("did not answer in time")
     except Exception as exc:
-        named = type(exc).__name__
-        return failed(f"did not answer ({named}{': ' + str(exc) if str(exc) else ''})")
+        log.warning("sports: %s could not be reached — %s: %s", url, type(exc).__name__, exc)
+        return failed("could not be reached")
     if int(status) != OK:
-        return failed(f"answered {int(status)}")
+        return failed(refusal(int(status)))
     if len(body) > MAX_BODY_BYTES:
         return failed("sent more than Black Bloc reads")
     try:
@@ -115,5 +134,6 @@ __all__ = [
     "get_json",
     "headers_for",
     "network",
+    "refusal",
     "session",
 ]

@@ -31,7 +31,10 @@ async def test_both_failing_names_both_reasons():
     answer = await feeds.teams("mlb", fetch=Recorded({}))
     assert answer.ok is False
     assert answer.via == "espn"
-    assert answer.why == "ESPN answered 404 for the MLB teams; then MLB answered 404 for the teams"
+    assert answer.why == (
+        "ESPN had nothing at that address for the MLB teams; "
+        "then MLB had nothing at that address for the teams"
+    )
 
 
 async def test_a_feed_with_no_fallback_answers_the_primary():

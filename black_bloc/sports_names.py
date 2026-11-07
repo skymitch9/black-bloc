@@ -120,6 +120,23 @@ async def known(db: Any, source: Any, ext_id: Any) -> Any:
     return await cur.fetchone()
 
 
+async def labels(db: Any, pairs: list[tuple[Any, Any]]) -> dict[tuple[str, str], Any]:
+    """The names rows a set of `(source, ext_id)` pairs point at, for the page to show."""
+    wanted = list(dict.fromkeys((str(s), str(e)) for s, e in pairs if s and e))
+    if not wanted:
+        return {}
+    marks = ", ".join("(?, ?)" for _ in wanted)
+    cur = await db.conn.execute(
+        f"SELECT source, ext_id, kind, league, name FROM sports_names "
+        f"WHERE (source, ext_id) IN (VALUES {marks}) ORDER BY kind",
+        tuple(value for pair in wanted for value in pair),
+    )
+    found: dict[tuple[str, str], Any] = {}
+    for row in await cur.fetchall():
+        found.setdefault((row["source"], row["ext_id"]), row)
+    return found
+
+
 def escaped(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
@@ -326,6 +343,7 @@ __all__ = [
     "local_now",
     "stale",
     "known",
+    "labels",
     "list_key",
     "newest",
     "refresh",

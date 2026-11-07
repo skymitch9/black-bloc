@@ -11092,7 +11092,11 @@
           "brackets_pool_raise_label",
           "brackets_kind_list_words",
           "brackets_vote_open_line",
-          "brackets_close_vote_label"
+          "brackets_close_vote_label",
+          "brackets_use_typed_label",
+          "brackets_typed_entrant_note",
+          "brackets_league_nba_words",
+          "brackets_edit_entrant_label"
         ],
         "defaults": [
           "format",
@@ -11174,7 +11178,9 @@
           "placement",
           "ext_source",
           "ext_id",
-          "short"
+          "short",
+          "ext_league",
+          "ext_name"
         ],
         "sets": [
           "key",

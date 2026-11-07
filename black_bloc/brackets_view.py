@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import brackets_store as store_
+from . import sports_names
 from .brackets import play, pools, standings, swiss
 from .brackets.model import ELIMINATION, FINAL, POOLS, SWISS
 from .settings_store import BRACKETS_DEFAULTS
@@ -207,7 +208,9 @@ def options(row: Any) -> dict[str, Any]:
     return found
 
 
-def entrant_row(row: Any) -> dict[str, Any]:
+def entrant_row(row: Any, matched: dict | None = None) -> dict[str, Any]:
+    ext = (store_.column(row, "ext_source"), store_.column(row, "ext_id"))
+    named = (matched or {}).get(ext)
     return {
         "id": row["id"],
         "user_id": as_id(row["user_id"]),
@@ -223,6 +226,8 @@ def entrant_row(row: Any) -> dict[str, Any]:
         "ext_source": store_.column(row, "ext_source"),
         "ext_id": store_.column(row, "ext_id"),
         "short": store_.column(row, "short"),
+        "ext_league": named["league"] if named is not None else None,
+        "ext_name": named["name"] if named is not None else None,
     }
 
 
@@ -367,6 +372,9 @@ async def full(
     db: Any, row: Any, *, viewer: int | None = None, runs: bool = False, visible: bool = True
 ) -> dict:
     people = await store_.entrants(db, row["id"])
+    matched = await sports_names.labels(
+        db, [(store_.column(one, "ext_source"), store_.column(one, "ext_id")) for one in people]
+    )
     held_votes = await store_.ballots(db, row["id"]) if store_.votes_decide(row) else {}
     mine_votes = await store_.my_votes(db, row["id"], viewer) if held_votes else {}
     bracket = await store_.bracket(db, row)
@@ -388,7 +396,7 @@ async def full(
         "rounds_to_play": rounds_to_play(row, bracket, people),
         "may_run": runs,
         "mine": mine,
-        "entrants": [entrant_row(one) for one in people],
+        "entrants": [entrant_row(one, matched) for one in people],
         "sets": [
             set_row(match, names, row["confirm_minutes"], held.get(match.key))
             | vote_fields(held_votes.get(match.key), mine_votes.get(match.key), visible=visible)
