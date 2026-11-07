@@ -70,6 +70,9 @@ const IDS = {
   // Sports brackets live: 22 runs fed with a live set, 23 has its feed down and W1-1 held,
   // 24 is an empty fed bracket to Import into and 25 is run by hand with three teams to Build.
   bracket_sports_live_id: '22',
+  // Pick sheets: 26 is the open NFL bracket; the member is the mock's own session, Nick.
+  bracket_picks_id: '26',
+  bracket_picks_member_id: '700000000000000001',
   bracket_sports_held_id: '23',
   bracket_sports_import_id: '24',
   bracket_sports_build_id: '25',
