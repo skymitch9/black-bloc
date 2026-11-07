@@ -185,6 +185,25 @@ button.bk-set:focus-visible { outline: var(--et-focus-ring); outline-offset: 1px
 }
 .bk-score[aria-pressed="true"] { border-color: var(--et-accent); color: var(--et-accent); font-weight: var(--et-weight-strong); }
 .bk-score:focus-visible { outline: var(--et-focus-ring); }
+.bk-votes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bk-vote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius);
+  background: var(--et-surface);
+  color: var(--et-fg);
+  font-size: var(--et-ui-md);
+  cursor: pointer;
+  min-width: 0;
+}
+.bk-vote-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-vote[aria-pressed="true"] { border-color: var(--et-accent); color: var(--et-accent); font-weight: var(--et-weight-strong); }
+.bk-vote:focus-visible { outline: var(--et-focus-ring); }
 .bk-organiser { display: grid; gap: 8px; padding-top: 10px; border-top: var(--et-hairline-w) solid var(--et-hairline); }
 .bk-organiser .bar { flex-wrap: wrap; }
 .bk-label {

@@ -16976,7 +16976,7 @@ function bkSignups(t) {
 }
 
 function bkState() {
-  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 20, nextEntrant: 200 };
+  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 21, nextEntrant: 200 };
   return state.brackets;
 }
 
