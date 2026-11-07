@@ -1,0 +1,84 @@
+{
+ "currentDate": "2026-11-05",
+ "games": [
+  {
+   "id": 2026020251,
+   "season": 20262027,
+   "gameType": 2,
+   "gameDate": "2026-11-05",
+   "startTimeUTC": "2026-11-06T00:00:00Z",
+   "gameState": "OFF",
+   "period": 4,
+   "periodDescriptor": {
+    "number": 4,
+    "periodType": "OT",
+    "maxRegulationPeriods": 3
+   },
+   "clock": {
+    "timeRemaining": "04:30",
+    "secondsRemaining": 270,
+    "running": false,
+    "inIntermission": false
+   },
+   "gameOutcome": {
+    "lastPeriodType": "OT",
+    "otPeriods": 1
+   },
+   "awayTeam": {
+    "id": 68,
+    "abbrev": "UTA",
+    "score": 4,
+    "name": {
+     "default": "Mammoth"
+    }
+   },
+   "homeTeam": {
+    "id": 8,
+    "abbrev": "MTL",
+    "score": 5,
+    "name": {
+     "default": "Canadiens"
+    }
+   }
+  },
+  {
+   "id": 2026020252,
+   "season": 20262027,
+   "gameType": 2,
+   "gameDate": "2026-11-05",
+   "startTimeUTC": "2026-11-06T00:00:00Z",
+   "gameState": "OFF",
+   "period": 3,
+   "periodDescriptor": {
+    "number": 3,
+    "periodType": "REG",
+    "maxRegulationPeriods": 3
+   },
+   "clock": {
+    "timeRemaining": "00:00",
+    "secondsRemaining": 0,
+    "running": false,
+    "inIntermission": false
+   },
+   "gameOutcome": {
+    "lastPeriodType": "REG"
+   },
+   "awayTeam": {
+    "id": 54,
+    "abbrev": "VGK",
+    "score": 2,
+    "name": {
+     "default": "Golden Knights"
+    }
+   },
+   "homeTeam": {
+    "id": 17,
+    "abbrev": "DET",
+    "score": 1,
+    "name": {
+     "default": "Red Wings"
+    }
+   }
+  }
+ ]
+}

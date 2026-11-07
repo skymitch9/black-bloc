@@ -1,0 +1,60 @@
+{
+ "sports": [
+  {
+   "id": "40",
+   "name": "Basketball",
+   "slug": "basketball",
+   "leagues": [
+    {
+     "id": "41",
+     "abbreviation": "NCAAM",
+     "name": "NCAA Men's Basketball",
+     "slug": "mens-college-basketball",
+     "season": {
+      "displayName": "2026-27",
+      "year": 2027
+     },
+     "year": 2027,
+     "teams": [
+      {
+       "team": {
+        "id": "150",
+        "abbreviation": "DUKE",
+        "displayName": "Duke Blue Devils",
+        "shortDisplayName": "Duke",
+        "name": "Blue Devils",
+        "location": "Duke",
+        "slug": "duke-blue-devils",
+        "isActive": true
+       }
+      },
+      {
+       "team": {
+        "id": "2250",
+        "abbreviation": "GONZ",
+        "displayName": "Gonzaga Bulldogs",
+        "shortDisplayName": "Gonzaga",
+        "name": "Bulldogs",
+        "location": "Gonzaga",
+        "slug": "gonzaga-bulldogs",
+        "isActive": true
+       }
+      },
+      {
+       "team": {
+        "id": "153",
+        "abbreviation": "UNC",
+        "displayName": "North Carolina Tar Heels",
+        "shortDisplayName": "North Carolina",
+        "name": "Tar Heels",
+        "location": "North Carolina",
+        "slug": "north-carolina-tar-heels",
+        "isActive": true
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

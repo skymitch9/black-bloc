@@ -1,0 +1,32 @@
+[
+ {
+  "slug": "abilene-christian",
+  "name": "Abilene Christian",
+  "long": "Abilene Christian University"
+ },
+ {
+  "slug": "duke",
+  "name": "Duke",
+  "long": "Duke University"
+ },
+ {
+  "slug": "gonzaga",
+  "name": "Gonzaga",
+  "long": "Gonzaga University"
+ },
+ {
+  "slug": "michigan",
+  "name": "Michigan",
+  "long": "University of Michigan"
+ },
+ {
+  "slug": "north-carolina",
+  "name": "North Carolina",
+  "long": "University of North Carolina"
+ },
+ {
+  "slug": "uconn",
+  "name": "Connecticut",
+  "long": "University of Connecticut"
+ }
+]

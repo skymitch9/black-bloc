@@ -1,0 +1,44 @@
+{
+ "copyright": "Copyright 2026 MLB Advanced Media, L.P.  Use of any content on this page acknowledges agreement to the terms posted here http://gdx.mlb.com/components/copyright.txt",
+ "people": [
+  {
+   "id": 592450,
+   "fullName": "Aaron Judge",
+   "firstName": "Aaron",
+   "lastName": "Judge",
+   "useName": "Aaron",
+   "boxscoreName": "Judge",
+   "initLastName": "A Judge",
+   "active": true,
+   "currentTeam": {
+    "id": 147
+   }
+  },
+  {
+   "id": 660271,
+   "fullName": "Shohei Ohtani",
+   "firstName": "Shohei",
+   "lastName": "Ohtani",
+   "useName": "Shohei",
+   "boxscoreName": "Ohtani",
+   "initLastName": "S Ohtani",
+   "active": true,
+   "currentTeam": {
+    "id": 119
+   }
+  },
+  {
+   "id": 671096,
+   "fullName": "Andrew Abbott",
+   "firstName": "Andrew",
+   "lastName": "Abbott",
+   "useName": "Andrew",
+   "boxscoreName": "Abbott, A",
+   "initLastName": "A Abbott",
+   "active": true,
+   "currentTeam": {
+    "id": 113
+   }
+  }
+ ]
+}

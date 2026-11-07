@@ -1,0 +1,48 @@
+{
+ "sports": [
+  {
+   "id": "40",
+   "name": "Basketball",
+   "slug": "basketball",
+   "leagues": [
+    {
+     "id": "46",
+     "abbreviation": "NBA",
+     "name": "National Basketball Association",
+     "slug": "nba",
+     "season": {
+      "displayName": "2026-27",
+      "year": 2027
+     },
+     "year": 2027,
+     "teams": [
+      {
+       "team": {
+        "id": "2",
+        "abbreviation": "BOS",
+        "displayName": "Boston Celtics",
+        "shortDisplayName": "Celtics",
+        "name": "Celtics",
+        "location": "Boston",
+        "slug": "boston-celtics",
+        "isActive": true
+       }
+      },
+      {
+       "team": {
+        "id": "24",
+        "abbreviation": "SA",
+        "displayName": "San Antonio Spurs",
+        "shortDisplayName": "Spurs",
+        "name": "Spurs",
+        "location": "San Antonio",
+        "slug": "san-antonio-spurs",
+        "isActive": true
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

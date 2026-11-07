@@ -1,0 +1,35 @@
+{
+ "copyright": "Copyright 2026 MLB Advanced Media, L.P.  Use of any content on this page acknowledges agreement to the terms posted here http://gdx.mlb.com/components/copyright.txt",
+ "teams": [
+  {
+   "id": 133,
+   "name": "Athletics",
+   "abbreviation": "ATH",
+   "teamName": "Athletics",
+   "locationName": "Sacramento",
+   "shortName": "Athletics",
+   "clubName": "Athletics",
+   "active": true
+  },
+  {
+   "id": 134,
+   "name": "Pittsburgh Pirates",
+   "abbreviation": "PIT",
+   "teamName": "Pirates",
+   "locationName": "Pittsburgh",
+   "shortName": "Pittsburgh",
+   "clubName": "Pirates",
+   "active": true
+  },
+  {
+   "id": 135,
+   "name": "San Diego Padres",
+   "abbreviation": "SD",
+   "teamName": "Padres",
+   "locationName": "San Diego",
+   "shortName": "San Diego",
+   "clubName": "Padres",
+   "active": true
+  }
+ ]
+}

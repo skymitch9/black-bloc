@@ -1,0 +1,484 @@
+{
+ "series": [
+  {
+   "seriesTitle": "1st Round",
+   "seriesAbbrev": "R1",
+   "seriesLetter": "A",
+   "playoffRound": 1,
+   "topSeedRank": 1,
+   "topSeedWins": 4,
+   "bottomSeedRank": 4,
+   "bottomSeedWins": 2,
+   "winningTeamId": 7,
+   "losingTeamId": 6,
+   "topSeedTeam": {
+    "id": 7,
+    "abbrev": "BUF",
+    "name": {
+     "default": "Buffalo Sabres"
+    },
+    "commonName": {
+     "default": "Sabres"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 6,
+    "abbrev": "BOS",
+    "name": {
+     "default": "Boston Bruins"
+    },
+    "commonName": {
+     "default": "Bruins"
+    }
+   }
+  },
+  {
+   "seriesTitle": "1st Round",
+   "seriesAbbrev": "R1",
+   "seriesLetter": "B",
+   "playoffRound": 1,
+   "topSeedRank": 2,
+   "topSeedWins": 3,
+   "bottomSeedRank": 3,
+   "bottomSeedWins": 4,
+   "winningTeamId": 8,
+   "losingTeamId": 14,
+   "topSeedTeam": {
+    "id": 14,
+    "abbrev": "TBL",
+    "name": {
+     "default": "Tampa Bay Lightning"
+    },
+    "commonName": {
+     "default": "Lightning"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 8,
+    "abbrev": "MTL",
+    "name": {
+     "default": "Montréal Canadiens"
+    },
+    "commonName": {
+     "default": "Canadiens"
+    }
+   }
+  },
+  {
+   "seriesTitle": "1st Round",
+   "seriesAbbrev": "R1",
+   "seriesLetter": "C",
+   "playoffRound": 1,
+   "topSeedRank": 1,
+   "topSeedWins": 4,
+   "bottomSeedRank": 4,
+   "bottomSeedWins": 0,
+   "winningTeamId": 12,
+   "losingTeamId": 9,
+   "topSeedTeam": {
+    "id": 12,
+    "abbrev": "CAR",
+    "name": {
+     "default": "Carolina Hurricanes"
+    },
+    "commonName": {
+     "default": "Hurricanes"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 9,
+    "abbrev": "OTT",
+    "name": {
+     "default": "Ottawa Senators"
+    },
+    "commonName": {
+     "default": "Senators"
+    }
+   }
+  },
+  {
+   "seriesTitle": "1st Round",
+   "seriesAbbrev": "R1",
+   "seriesLetter": "D",
+   "playoffRound": 1,
+   "topSeedRank": 2,
+   "topSeedWins": 2,
+   "bottomSeedRank": 3,
+   "bottomSeedWins": 4,
+   "winningTeamId": 4,
+   "losingTeamId": 5,
+   "topSeedTeam": {
+    "id": 5,
+    "abbrev": "PIT",
+    "name": {
+     "default": "Pittsburgh Penguins"
+    },
+    "commonName": {
+     "default": "Penguins"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 4,
+    "abbrev": "PHI",
+    "name": {
+     "default": "Philadelphia Flyers"
+    },
+    "commonName": {
+     "default": "Flyers"
+    }
+   }
+  },
+  {
+   "seriesTitle": "1st Round",
+   "seriesAbbrev": "R1",
+   "seriesLetter": "E",
+   "playoffRound": 1,
+   "topSeedRank": 1,
+   "topSeedWins": 4,
+   "bottomSeedRank": 4,
+   "bottomSeedWins": 0,
+   "winningTeamId": 21,
+   "losingTeamId": 26,
+   "topSeedTeam": {
+    "id": 21,
+    "abbrev": "COL",
+    "name": {
+     "default": "Colorado Avalanche"
+    },
+    "commonName": {
+     "default": "Avalanche"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 26,
+    "abbrev": "LAK",
+    "name": {
+     "default": "Los Angeles Kings"
+    },
+    "commonName": {
+     "default": "Kings"
+    }
+   }
+  },
+  {
+   "seriesTitle": "1st Round",
+   "seriesAbbrev": "R1",
+   "seriesLetter": "F",
+   "playoffRound": 1,
+   "topSeedRank": 2,
+   "topSeedWins": 2,
+   "bottomSeedRank": 3,
+   "bottomSeedWins": 4,
+   "winningTeamId": 30,
+   "losingTeamId": 25,
+   "topSeedTeam": {
+    "id": 25,
+    "abbrev": "DAL",
+    "name": {
+     "default": "Dallas Stars"
+    },
+    "commonName": {
+     "default": "Stars"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 30,
+    "abbrev": "MIN",
+    "name": {
+     "default": "Minnesota Wild"
+    },
+    "commonName": {
+     "default": "Wild"
+    }
+   }
+  },
+  {
+   "seriesTitle": "1st Round",
+   "seriesAbbrev": "R1",
+   "seriesLetter": "G",
+   "playoffRound": 1,
+   "topSeedRank": 1,
+   "topSeedWins": 4,
+   "bottomSeedRank": 4,
+   "bottomSeedWins": 2,
+   "winningTeamId": 54,
+   "losingTeamId": 68,
+   "topSeedTeam": {
+    "id": 54,
+    "abbrev": "VGK",
+    "name": {
+     "default": "Vegas Golden Knights"
+    },
+    "commonName": {
+     "default": "Golden Knights"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 68,
+    "abbrev": "UTA",
+    "name": {
+     "default": "Utah Mammoth"
+    },
+    "commonName": {
+     "default": "Mammoth"
+    }
+   }
+  },
+  {
+   "seriesTitle": "1st Round",
+   "seriesAbbrev": "R1",
+   "seriesLetter": "H",
+   "playoffRound": 1,
+   "topSeedRank": 2,
+   "topSeedWins": 2,
+   "bottomSeedRank": 3,
+   "bottomSeedWins": 4,
+   "winningTeamId": 24,
+   "losingTeamId": 22,
+   "topSeedTeam": {
+    "id": 22,
+    "abbrev": "EDM",
+    "name": {
+     "default": "Edmonton Oilers"
+    },
+    "commonName": {
+     "default": "Oilers"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 24,
+    "abbrev": "ANA",
+    "name": {
+     "default": "Anaheim Ducks"
+    },
+    "commonName": {
+     "default": "Ducks"
+    }
+   }
+  },
+  {
+   "seriesTitle": "2nd Round",
+   "seriesAbbrev": "R2",
+   "seriesLetter": "I",
+   "playoffRound": 2,
+   "topSeedRank": 1,
+   "topSeedWins": 3,
+   "bottomSeedRank": 3,
+   "bottomSeedWins": 4,
+   "winningTeamId": 8,
+   "losingTeamId": 7,
+   "topSeedTeam": {
+    "id": 7,
+    "abbrev": "BUF",
+    "name": {
+     "default": "Buffalo Sabres"
+    },
+    "commonName": {
+     "default": "Sabres"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 8,
+    "abbrev": "MTL",
+    "name": {
+     "default": "Montréal Canadiens"
+    },
+    "commonName": {
+     "default": "Canadiens"
+    }
+   }
+  },
+  {
+   "seriesTitle": "2nd Round",
+   "seriesAbbrev": "R2",
+   "seriesLetter": "J",
+   "playoffRound": 2,
+   "topSeedRank": 1,
+   "topSeedWins": 4,
+   "bottomSeedRank": 3,
+   "bottomSeedWins": 0,
+   "winningTeamId": 12,
+   "losingTeamId": 4,
+   "topSeedTeam": {
+    "id": 12,
+    "abbrev": "CAR",
+    "name": {
+     "default": "Carolina Hurricanes"
+    },
+    "commonName": {
+     "default": "Hurricanes"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 4,
+    "abbrev": "PHI",
+    "name": {
+     "default": "Philadelphia Flyers"
+    },
+    "commonName": {
+     "default": "Flyers"
+    }
+   }
+  },
+  {
+   "seriesTitle": "2nd Round",
+   "seriesAbbrev": "R2",
+   "seriesLetter": "K",
+   "playoffRound": 2,
+   "topSeedRank": 1,
+   "topSeedWins": 4,
+   "bottomSeedRank": 3,
+   "bottomSeedWins": 1,
+   "winningTeamId": 21,
+   "losingTeamId": 30,
+   "topSeedTeam": {
+    "id": 21,
+    "abbrev": "COL",
+    "name": {
+     "default": "Colorado Avalanche"
+    },
+    "commonName": {
+     "default": "Avalanche"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 30,
+    "abbrev": "MIN",
+    "name": {
+     "default": "Minnesota Wild"
+    },
+    "commonName": {
+     "default": "Wild"
+    }
+   }
+  },
+  {
+   "seriesTitle": "2nd Round",
+   "seriesAbbrev": "R2",
+   "seriesLetter": "L",
+   "playoffRound": 2,
+   "topSeedRank": 1,
+   "topSeedWins": 4,
+   "bottomSeedRank": 3,
+   "bottomSeedWins": 2,
+   "winningTeamId": 54,
+   "losingTeamId": 24,
+   "topSeedTeam": {
+    "id": 54,
+    "abbrev": "VGK",
+    "name": {
+     "default": "Vegas Golden Knights"
+    },
+    "commonName": {
+     "default": "Golden Knights"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 24,
+    "abbrev": "ANA",
+    "name": {
+     "default": "Anaheim Ducks"
+    },
+    "commonName": {
+     "default": "Ducks"
+    }
+   }
+  },
+  {
+   "seriesTitle": "Eastern Conference Finals",
+   "seriesAbbrev": "ECF",
+   "seriesLetter": "M",
+   "playoffRound": 3,
+   "topSeedRank": 1,
+   "topSeedWins": 4,
+   "bottomSeedRank": 3,
+   "bottomSeedWins": 1,
+   "winningTeamId": 12,
+   "losingTeamId": 8,
+   "topSeedTeam": {
+    "id": 12,
+    "abbrev": "CAR",
+    "name": {
+     "default": "Carolina Hurricanes"
+    },
+    "commonName": {
+     "default": "Hurricanes"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 8,
+    "abbrev": "MTL",
+    "name": {
+     "default": "Montréal Canadiens"
+    },
+    "commonName": {
+     "default": "Canadiens"
+    }
+   }
+  },
+  {
+   "seriesTitle": "Western Conference Finals",
+   "seriesAbbrev": "WCF",
+   "seriesLetter": "N",
+   "playoffRound": 3,
+   "topSeedRank": 1,
+   "topSeedWins": 0,
+   "bottomSeedRank": 1,
+   "bottomSeedWins": 4,
+   "winningTeamId": 54,
+   "losingTeamId": 21,
+   "topSeedTeam": {
+    "id": 21,
+    "abbrev": "COL",
+    "name": {
+     "default": "Colorado Avalanche"
+    },
+    "commonName": {
+     "default": "Avalanche"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 54,
+    "abbrev": "VGK",
+    "name": {
+     "default": "Vegas Golden Knights"
+    },
+    "commonName": {
+     "default": "Golden Knights"
+    }
+   }
+  },
+  {
+   "seriesTitle": "Stanley Cup Final",
+   "seriesAbbrev": "SCF",
+   "seriesLetter": "O",
+   "playoffRound": 4,
+   "topSeedRank": 1,
+   "topSeedWins": 4,
+   "bottomSeedRank": 1,
+   "bottomSeedWins": 2,
+   "winningTeamId": 12,
+   "losingTeamId": 54,
+   "topSeedTeam": {
+    "id": 12,
+    "abbrev": "CAR",
+    "name": {
+     "default": "Carolina Hurricanes"
+    },
+    "commonName": {
+     "default": "Hurricanes"
+    }
+   },
+   "bottomSeedTeam": {
+    "id": 54,
+    "abbrev": "VGK",
+    "name": {
+     "default": "Vegas Golden Knights"
+    },
+    "commonName": {
+     "default": "Golden Knights"
+    }
+   }
+  }
+ ]
+}
