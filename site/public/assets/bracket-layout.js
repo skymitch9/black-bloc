@@ -439,3 +439,59 @@ export function treeSize(cols, room, size = TREE) {
   const width = Math.max(size.tight, Math.min(size.width, squeezed));
   return { width, gap: size.tightGap, fits: cols * (width + size.tightGap) - size.tightGap <= room };
 }
+
+function pickOrder(tree) {
+  return Object.entries((tree && tree.sets) || {})
+    .map(([key, node]) => ({ key, ...node }))
+    .sort((a, b) => a.round - b.round || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+function seedOf(tree, id) {
+  const found = ((tree && tree.seeds) || {})[String(id)];
+  return found ? Number(found) : 1e6;
+}
+
+function slotFrom(tree, rule, winners) {
+  if (!rule) return null;
+  if (!rule.from) return rule.entrant ?? null;
+  const known = rule.from.map((key) => winners[key] ?? null);
+  if (known.some((one) => one === null)) return null;
+  const ranked = known.slice().sort((a, b) => seedOf(tree, a) - seedOf(tree, b) || a - b);
+  return ranked[rule.rank ?? 0] ?? null;
+}
+
+/** A member's predicted bracket from the bot's slot rules: each set's two entrants and its winner. */
+export function pickSlots(tree, picks = {}) {
+  const slots = {};
+  const winners = {};
+  for (const node of pickOrder(tree)) {
+    const pair = [slotFrom(tree, node.a, winners), slotFrom(tree, node.b, winners)];
+    slots[node.key] = pair;
+    if (node.fixed !== null && node.fixed !== undefined) {
+      winners[node.key] = node.fixed;
+      continue;
+    }
+    const pick = picks[node.key];
+    winners[node.key] = pick !== undefined && pick !== null && pair.includes(pick) ? pick : null;
+  }
+  return { slots, winners };
+}
+
+/** What is left of a sheet once every pick its own earlier picks no longer allow is dropped. */
+export function cleanedPicks(tree, picks = {}) {
+  const sets = (tree && tree.sets) || {};
+  const known = Object.fromEntries(Object.entries(picks || {}).filter(([key]) => key in sets));
+  const { winners } = pickSlots(tree, known);
+  return Object.fromEntries(Object.entries(known).filter(([key, value]) => {
+    const node = sets[key];
+    return (node.fixed === null || node.fixed === undefined) && winners[key] === value;
+  }));
+}
+
+/** The sheet after pressing `entrant` on set `key`: a second press on the pick takes it back. */
+export function pickedSheet(tree, picks, key, entrant) {
+  const next = { ...(picks || {}) };
+  if (next[key] === entrant) delete next[key];
+  else next[key] = entrant;
+  return cleanedPicks(tree, next);
+}
