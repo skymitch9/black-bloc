@@ -5008,6 +5008,11 @@ BRACKETS_LIVE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "how a sports set staff decided or edited says so on the page",
     ),
+    "brackets_no_score_words": (
+        "(no score)",
+        (),
+        "what {result} becomes in brackets_set_final_said when a set was decided with no score",
+    ),
 }
 BRACKETS_WORDS.update(BRACKETS_KIND_WORDS)
 BRACKETS_WORDS.update(BRACKETS_SPORTS_WORDS)

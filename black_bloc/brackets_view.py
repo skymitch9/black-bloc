@@ -106,6 +106,7 @@ PAGE_WORDS = (
     "brackets_held_note",
     "brackets_decided_by_feed_words",
     "brackets_decided_by_staff_words",
+    "brackets_no_score_words",
 )
 
 SUMMARY_FIELDS = (

@@ -306,3 +306,52 @@ async def test_the_starter_cards_pool_line_never_lists_a_withdrawn_leader(bot):
     pooled = row(state="pools", pools_format="round_robin")
     lines = cards.starter_lines(bot.store, GUILD, pooled, people, bracket)
     assert "Pool A · P4, P5" in lines
+
+
+def sports_row(**given):
+    return row(kind="sports", league="nba", season="2025-26", source="nba", format="single") | {
+        "feed_ok_at": None,
+        "feed_failed_at": None,
+        **given,
+    }
+
+
+async def test_a_sports_score_line_reads_final_live_or_its_time(bot):
+    store = bot.store
+    done = match(state="complete", score_a=78, score_b=71, winner=1)
+    assert cards.score_line(store, GUILD, done, {}) == "Final 78–71"
+    live = match(state="ready", score_a=55, score_b=51)
+    shown = cards.score_line(store, GUILD, live, {"live_status": "live", "period_words": "Q3 4:12"})
+    assert shown == "Q3 4:12 · 55–51"
+    later = {"scheduled_at": "2026-03-21T01:10:00+00:00"}
+    assert cards.score_line(store, GUILD, match(state="ready"), later) == "<t:1774055400:f>"
+    assert cards.score_line(store, GUILD, match(state="waiting"), {}) is None
+
+
+async def test_the_starter_names_the_league_and_where_results_come_from(bot):
+    store = bot.store
+    fed = sports_row(state="running", feed_ok_at="2026-03-21T01:10:00+00:00")
+    lines = cards.starter_lines(store, GUILD, fed, [])
+    assert "Sports · Single elimination" in lines
+    assert "NBA · 2025-26" in lines
+    assert "via NBA · synced <t:1774055400:R>" in lines
+    down = sports_row(state="running", feed_failed_at="2026-03-21T01:10:00+00:00")
+    assert "feed down since <t:1774055400:f> — results by hand" in cards.starter_lines(
+        store, GUILD, down, []
+    )
+    assert "By hand" in cards.starter_lines(store, GUILD, sports_row(source="own"), [])
+
+
+def test_a_sports_set_offers_no_player_moves_and_release_only_while_held():
+    running = sports_row(state="running")
+    assert cards.sports_moves(running, match(state="ready")) == ("pick_a", "pick_b", "edit_set")
+    assert cards.sports_moves(running, match(state="complete"), {"held": 1}) == (
+        "pick_a",
+        "pick_b",
+        "reset",
+        "edit_set",
+        "release",
+    )
+    assert cards.sports_moves(sports_row(state="seeding"), match(state="ready")) == ()
+    for action in cards.SPORTS_TO_ACTIONS:
+        assert re.fullmatch(cards.SET_TEMPLATE, cards.set_custom_id(3, "W0-12", action))

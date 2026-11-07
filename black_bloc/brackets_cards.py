@@ -368,7 +368,7 @@ def score_line(store: Any, guild_id: int, match: Any, meta: Any) -> str | None:
             period=meta.get("period_words") or "",
             a_score=a_score,
             b_score=b_score,
-        )
+        ).strip(" ·")
     starts = when_words(meta.get("scheduled_at"))
     if starts:
         return words(store, guild_id, "brackets_score_scheduled_line", when=starts)
@@ -480,7 +480,9 @@ def round_words(store: Any, guild_id: int, match: Any) -> str:
 
 
 def result_words(store: Any, guild_id: int, match: Any, people: dict[int, Any]) -> str:
-    if match.score_a is None or match.forfeit:
+    if match.score_a is None and not match.forfeit and match.winner is not None:
+        result = words(store, guild_id, "brackets_no_score_words")
+    elif match.score_a is None or match.forfeit:
         result = words(store, guild_id, "brackets_forfeit_words")
     else:
         result = f"{max(match.score_a, match.score_b)}–{min(match.score_a, match.score_b)}"

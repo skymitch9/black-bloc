@@ -386,3 +386,41 @@ async def test_the_organisers_pick_form_decides_the_set_with_the_counts_kept(bot
     ]
     assert (match.state, match.score_a, match.score_b) == ("complete", 1, 0)
     assert match.winner == match.slot_b
+
+
+async def test_a_sports_card_edits_by_hand_then_releases_the_hold(bot, guild):
+    from tests.test_brackets_thread import sports_running
+
+    tid = await sports_running(bot, guild)
+    stranger = pressing(bot, ADA)
+    await buttons_.set_pressed(stranger, tid, "W1-1", cards.EDIT_SET)
+    assert stranger.modal is None and "Tournament Organiser" in stranger.said[0]
+
+    press = pressing(bot, TO)
+    await buttons_.set_pressed(press, tid, "W1-1", cards.EDIT_SET)
+    form = press.modal
+    assert isinstance(form, buttons_.SportsEditModal) and form.title == "Edit W1-1"
+    fill(form, starts="", status="live", score_a="3", score_b="", reason="radio")
+    submit = pressing(bot, TO)
+    await form.on_submit(submit)
+    assert submit.said == ["Saved W1-1; the feed leaves it alone until Release hold."]
+    meta = (await store_.sports_rows(bot.db, tid))["W1-1"]
+    assert (meta["live_status"], meta["held"]) == ("live", 1)
+
+    release = pressing(bot, TO)
+    await buttons_.set_pressed(release, tid, "W1-1", cards.RELEASE)
+    assert release.said == ["W1-1 is back under the feed."]
+
+
+async def test_a_sports_pick_takes_an_optional_score(bot, guild):
+    from tests.test_brackets_thread import sports_running
+
+    tid = await sports_running(bot, guild)
+    press = pressing(bot, TO)
+    await buttons_.set_pressed(press, tid, "W1-1", cards.PICK_B)
+    form = press.modal
+    assert isinstance(form, buttons_.SportsPickModal) and form.title == "Leafs wins…"
+    fill(form, score_a="", score_b="", reason="")
+    submit = pressing(bot, TO)
+    await form.on_submit(submit)
+    assert submit.said == ["W1-1 is final: Leafs wins (no score)."]

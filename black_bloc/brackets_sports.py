@@ -228,9 +228,13 @@ def entrant_map(people: list[Any], via: str | None) -> dict[str, int]:
     }
 
 
-def ext_of(people: dict[int, Any], entrant: int | None) -> str | None:
+def ext_of(people: dict[int, Any], entrant: int | None, via: str | None = None) -> str | None:
     found = people.get(entrant) if entrant is not None else None
-    return str(found["ext_id"]) if found is not None and found["ext_id"] else None
+    if found is None or not found["ext_id"]:
+        return None
+    if via is not None and store_.column(found, "ext_source") != via:
+        return None
+    return str(found["ext_id"])
 
 
 def oriented(game: Any, a_ext: str | None, b_ext: str | None) -> tuple[Any, Any] | None:
@@ -446,8 +450,8 @@ async def applied(
                 on = local_day(bot, guild, meta[key]["scheduled_at"])
                 game = paired(
                     scores.value,
-                    ext_of(people, match.slot_a),
-                    ext_of(people, match.slot_b),
+                    ext_of(people, match.slot_a, scores.via),
+                    ext_of(people, match.slot_b, scores.via),
                     on,
                 )
                 if game is None:

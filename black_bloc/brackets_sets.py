@@ -72,11 +72,12 @@ def entrant_name(people: dict, entrant: int | None) -> str:
 
 
 def final_words(bot: Any, guild: Any, people: dict, match: Any) -> str:
-    result = (
-        said(bot.store, guild.id, "brackets_forfeit_words")
-        if match.score_a is None or match.forfeit
-        else f"{max(match.score_a, match.score_b)}–{min(match.score_a, match.score_b)}"
-    )
+    if match.score_a is None and not match.forfeit and match.winner is not None:
+        result = said(bot.store, guild.id, "brackets_no_score_words")
+    elif match.score_a is None or match.forfeit:
+        result = said(bot.store, guild.id, "brackets_forfeit_words")
+    else:
+        result = f"{max(match.score_a, match.score_b)}–{min(match.score_a, match.score_b)}"
     return said(
         bot.store,
         guild.id,

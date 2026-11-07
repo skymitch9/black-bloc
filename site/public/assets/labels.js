@@ -774,6 +774,7 @@ export const LABELS = {
   brackets_held_note: "The note on a sports set held by hand",
   brackets_decided_by_feed_words: "How a set the feed decided says so",
   brackets_decided_by_staff_words: "How a set staff decided says so",
+  brackets_no_score_words: "What a result reads when a set was decided with no score",
   points_mode: "Whether the point system takes runs, and where its top-places post goes",
   points_channel_id: "Where the top-places post goes",
   points_ping_role_id: "The role pinged on the top-places post",
