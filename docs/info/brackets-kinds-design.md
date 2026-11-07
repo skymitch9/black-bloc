@@ -365,3 +365,29 @@ title is clipped to 45), 11 (list cards ping nobody: entrants have no user id).
 vote edits its card on every press and leans on the existing `card_failed` retry for rate limits); the phone width
 (< 700 px) of the drawer was not looked at; the real server's sweep closing a vote was exercised only through tests
 (`test_the_sweep_closes_a_due_vote_and_the_card_reads_the_result`), never on Fly.
+
+## Gate — K2 (2026-11-06, branch `brackets-sports-names`, code at `743f61b6`)
+
+| Check | Result |
+|---|---|
+| `pytest -q -n auto` | **14,305 passed, 1 skipped, 0 failed** (baseline on `main` `481a509b`: 14,182 passed, 1 skipped) |
+| existing tests | untouched except literal bumps: `tests/storage/test_db.py` schema 103 → 104 (19 literals), `tests/test_settings_store.py` key counts (413 → 425, 1329 → 1341), `tests/test_logkinds.py` (`entrant_edited` in the bracket kinds, `web.sports.refresh` in the route-note list, `sports.%` / `web.sports.%` in the core heads). Support added, nothing removed: the network guard in `tests/conftest.py`, `WebBot.sports_fetch` in `tests/api/conftest.py`, a sports seed in `tests/api/test_contract.py` |
+| schema 103 → 104 | `tests/storage/test_db.py::test_a_schema_103_file_gains_sports_names_and_entrant_ext_ids_and_loses_nothing` (twice-connect) and `::test_one_name_per_source_kind_league_and_id_is_the_databases_rule` |
+| `ruff check .` | clean |
+| every `site/public/assets/*.js` parses as a module; the deploy gate's 14 `site/mock/*.test.mjs` | all ok |
+| `node site/mock/check.mjs` against the mock (port 8917) | ok — 28 pages, 391 routes (+5), 425 core settings |
+| fixtures | 19 trimmed real responses under `tests/sports/fixtures/`, fetched once 2026-11-06 ~19:30 Phoenix from the owner's machine (ESPN teams/rosters/scoreboards/NFL standings and the whole 2025 NFL postseason, henrygd 2026 men's bracket/schools/scoreboard, NHL 2026 bracket/scores, NBA 2025-26 bracket and player index, MLB 2026 postseason/teams/players/schedule); the largest is 16 KB |
+| the page on the mock, by eye (1512 px) | `/brackets.html#21`: *sp* offers the Spurs and *Use "sp" as typed*; Enter adds the Spurs (SA · NBA) and the box keeps focus; *Zorbs* + Enter adds it typed with the note; Edit entrant on *Bobcats* re-picked *car* → Carolina Hurricanes, short filled CAR, Save; the list view's Sports names table and Refresh now |
+
+**Checklist items that bit:** 5 (an unreadable names stamp is stale), 6 (one refresh at a time — the lock and the task —
+and the `sports_names` unique index), 7 (transport errors become words at `sports/http.py`, explicit 15 s timeout), 9
+(`/api/sports` shows per list the last success and the standing failure), 34 (`web.sports.refresh` is the press;
+`sports.names_*` keep their bare kind; one `brackets.entrant_edited` row per edit), 37 (the sweep runs in a
+`Reconciler` and marks the day before refreshing), 39/40 (the edit modal's title clipped to 45; 24 matches + 1 typed
+choice = Discord's 25), 45 (the names search is word-based, in any order — found in review, fixed before the gate),
+33 (`brackets_names_refresh_hour` is a key). The owner's no-bare-status rule: every feed refusal is a sentence.
+
+**NOT verified:** nothing ran against the live feeds from this code (the fixtures are real, the requests are not);
+the 124 roster calls a nightly refresh makes were not timed; nothing ran against real Discord (the SportsPick select,
+the Edit entrant modal); the phone width (< 700 px) of the typeahead and the inline editor was not looked at; NBA
+play-in series were empty in the probe, so their parse is unexercised; MLB's fallback links are the 2026 shape only.
