@@ -549,3 +549,10 @@ Owner, verbatim, asked how he gets in when he is neither server owner nor admini
 - Pinned by `tests/test_settings_store.py::test_the_structure_role_follows_the_config_until_a_lead_stores_one`.
 - NOT verified: that the owner holds that role in Discord and can open the page; nothing here has met Discord.
 
+
+## Found 2026-11-07 - a channel type discord.py does not know
+
+- **What broke (live Fly log, 2026-11-07 19:20:22Z, three times that day):** `structure: no snapshot of guild 1073710702776299640 — InvalidData: Unknown channel type 20 for channel ID 1568419963948236818.` The action log row was `structure.capture_failed` with "something unexpected went wrong (InvalidData)". The channel was created 2026-11-07T00:20:59Z. discord.py 2.7.1's `ChannelType` stops at `media = 16`, and `Guild.fetch_channels()` raises for the whole list when any one channel is unknown, so no snapshot was taken at all.
+- **What changed (branch `structure-unknown-channels`):** on `InvalidData` only, `read_structure` reads the same channel list raw and builds the known channels with discord.py's own factory; a channel of an unknown type is kept as a row with `type` `unknown-<number>` (e.g. `unknown-20`), its id, name, position, category and permission overwrites, so the diff shows it added, removed or renamed like any other. One warning per capture names the unknown types. No cadence, wording key or posted word changed.
+- **The read-only guard** in `tests/cogs/moderation/test_structure_backup.py` now allows exactly one HTTP read, `<x>.http.get_all_guild_channels(...)` called on the spot; every other use of `http` still trips it.
+- **NOT verified:** nothing ran against the live server. The fix is exercised against a fake HTTP answer holding two type-20 channels beside a category and a text channel; what Discord's real payload for type 20 carries beyond id, name, type, position and parent is not known.

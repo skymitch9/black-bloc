@@ -1380,6 +1380,7 @@ STRUCTURE_MODULES = (
     "api/tools/structure.py",
 )
 COG = "cogs/moderation/structure_backup.py"
+HTTP_READS = frozenset({"get_all_guild_channels"})
 
 
 def is_write(name):
@@ -1402,10 +1403,31 @@ def named_badly(name):
     return name in NEVER_NAMED or is_write(name)
 
 
+def parents_of(tree):
+    return {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+
+
+def an_http_read(node, parents):
+    """`<x>.http.get_all_guild_channels(...)` called on the spot, and nothing else."""
+    reader = parents.get(node)
+    call = parents.get(reader)
+    return (
+        node.attr == "http"
+        and isinstance(reader, ast.Attribute)
+        and reader.attr in HTTP_READS
+        and isinstance(call, ast.Call)
+        and call.func is reader
+    )
+
+
 def write_paths(source, module=COG):
     """Every way this source could reach a write: by name, by reflection, by http, by import."""
     found = []
-    for node in ast.walk(ast.parse(source)):
+    tree = ast.parse(source)
+    parents = parents_of(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and an_http_read(node, parents):
+            continue
         if isinstance(node, ast.Attribute) and named_badly(node.attr):
             found.append(f"line {node.lineno}: .{node.attr}")
         elif isinstance(node, ast.Name) and named_badly(node.id):
@@ -1464,6 +1486,10 @@ SPELLINGS = [
     "getattr(role, name)()",
     "setattr(role, name, 1)",
     "getattr(bot, 'http')",
+    "guild._state.http.edit_role(1, 2, name='x')",
+    "read = guild._state.http.get_all_guild_channels",
+    "guild._state.http.get_all_guild_channels(guild.http)",
+    "client = guild._state.http",
     "vars(role)['edit']()",
     "member.timeout(None)",
 ]
@@ -1836,3 +1862,98 @@ async def test_no_structure_log_row_carries_a_role_or_channel_name_or_a_change_l
         said = f"{row['details']} {row['reason']}".lower()
         assert "zebra" not in said, row["kind"]
         assert not [one for one in details.values() if isinstance(one, list | dict)], row["kind"]
+
+
+# ------------------------------------------------------------- unknown channel types (2026-11-07)
+
+ODD = 1568419963948236818
+
+
+class RawHTTP:
+    def __init__(self, answer):
+        self.answer = answer
+        self.asked = []
+
+    async def get_all_guild_channels(self, guild_id):
+        self.asked.append(guild_id)
+        return [dict(one) for one in self.answer]
+
+
+class NewerGuild(FakeGuild):
+    """A server holding a channel type discord.py 2.7.1 raises InvalidData on."""
+
+    def __init__(self, answer):
+        super().__init__()
+        self._state = SimpleNamespace(http=RawHTTP(answer))
+
+    async def fetch_channels(self):
+        for one in self._state.http.answer:
+            if discord.channel._guild_channel_factory(one["type"])[0] is None:
+                raise discord.InvalidData(
+                    "Unknown channel type {type} for channel ID {id}.".format_map(one)
+                )
+        raise AssertionError("every channel was known")
+
+
+def raw(ident, name, kind, parent=None, **extra):
+    return dict(id=str(ident), type=kind, name=name, position=0, parent_id=parent, **extra)
+
+
+def newer_answer():
+    return [
+        raw(40, "Lobby", 4),
+        raw(STAFF, "staff", 0, "40"),
+        raw(
+            ODD,
+            "new-kind",
+            20,
+            "40",
+            permission_overwrites=[{"id": str(LEADS), "type": 0, "allow": "1024", "deny": "0"}],
+        ),
+        raw(ODD + 1, "new-kind-2", 20, "40"),
+    ]
+
+
+async def test_a_channel_type_discord_py_does_not_know_no_longer_stops_the_snapshot(
+    bot, db, caplog
+):
+    newer = NewerGuild(newer_answer())
+    bot.guild, bot.guilds = newer, [newer]
+
+    with caplog.at_level("WARNING", logger=sb.__name__):
+        taken = await sb.take_snapshot(bot, newer)
+
+    assert taken.outcome == SAVED, taken.said
+    rows = {one["id"]: one for one in structure_rules.body_of(taken.row)["channels"]}
+    assert rows[str(ODD)]["type"] == rows[str(ODD + 1)]["type"] == "unknown-20"
+    assert rows[str(ODD)]["parent_id"] == "40" and rows[str(ODD)]["name"] == "new-kind"
+    assert rows[str(ODD)]["overwrites"] == [
+        {"target_id": str(LEADS), "target_type": "role", "allow": 1024, "deny": 0}
+    ]
+    assert (rows["40"]["type"], rows[str(STAFF)]["type"]) == ("category", "text")
+    warned = [one for one in caplog.records if "does not know" in one.getMessage()]
+    assert len(warned) == 1 and "type 20 (2)" in warned[0].getMessage()
+    assert await kinds(db) == ["structure.captured"]
+
+
+async def test_a_renamed_channel_of_an_unknown_type_is_a_change_like_any_other(bot):
+    newer = NewerGuild(newer_answer())
+    bot.guild, bot.guilds = newer, [newer]
+    await sb.take_snapshot(bot, newer)
+    newer._state.http.answer[2] = newer._state.http.answer[2] | {"name": "renamed-kind"}
+    newer._state.http.answer.pop(3)
+
+    taken = await sb.take_snapshot(bot, newer)
+
+    assert taken.outcome == SAVED, taken.said
+    texts = [one["text"] for one in taken.changes]
+    assert any("new-kind" in text and "renamed-kind" in text for text in texts), texts
+    assert any("new-kind-2" in text for text in texts), texts
+
+
+async def test_a_server_discord_py_reads_whole_is_never_asked_twice(bot, guild):
+    guild._state = SimpleNamespace(http=RawHTTP([]))
+
+    taken = await sb.take_snapshot(bot, guild)
+
+    assert taken.outcome == SAVED and guild._state.http.asked == []

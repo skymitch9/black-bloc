@@ -186,3 +186,43 @@ def test_an_overwrites_kind_is_discords_own_and_not_a_guess_from_the_role_list()
 
     kinds = {one["target_id"]: one["target_type"] for one in found["channels"][0]["overwrites"]}
     assert kinds == {"77": "role", "900": "member"}
+
+
+def test_a_channel_discord_py_has_no_class_for_is_a_row_with_its_type_number():
+    raw = {
+        "id": "1568419963948236818",
+        "type": 20,
+        "name": "new-kind",
+        "parent_id": "40",
+        "position": 3,
+        "rate_limit_per_user": 5,
+        "permission_overwrites": [
+            {"id": str(LEADS), "type": 0, "allow": "1024", "deny": "2048"},
+            {"id": str(MEMBER), "type": 1, "allow": "0", "deny": "1024"},
+        ],
+        "available_tags": [{"id": "9", "name": "help", "emoji_name": "?", "emoji_id": None}],
+    }
+
+    found = channel_row(raw, {str(LEADS)})
+
+    assert found["id"] == "1568419963948236818" and found["name"] == "new-kind"
+    assert found["type"] == "unknown-20" and found["parent_id"] == "40"
+    assert found["position"] == 3 and found["slowmode"] == 5
+    assert found["overwrites"] == [
+        {"target_id": str(LEADS), "target_type": "role", "allow": 1024, "deny": 2048},
+        {"target_id": str(MEMBER), "target_type": "member", "allow": 0, "deny": 1024},
+    ]
+    assert found["tags"] == [{"id": "9", "name": "help", "moderated": False, "emoji": "?"}]
+
+
+def test_a_raw_channel_sits_in_a_capture_beside_discord_py_channels():
+    body = capture(
+        SimpleNamespace(id=GUILD, name="Black Bloc"),
+        [role(GUILD, "@everyone")],
+        [channel(1, "general"), {"id": "2", "type": 20, "name": "odd", "position": 0}],
+    )
+
+    assert [(one["name"], one["type"]) for one in body["channels"]] == [
+        ("general", "text"),
+        ("odd", "unknown-20"),
+    ]

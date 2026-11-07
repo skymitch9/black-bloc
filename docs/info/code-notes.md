@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-11-07 — one section APPENDED, nothing re-keyed**: *Unknown channel types in the structure backup* (branch `structure-unknown-channels`, off `main` `ed2d9424`); keyed by LINE at that branch. Before that:
 > **2026-11-02 — one section APPENDED, nothing re-keyed**: *Ninja marks* (branch `ninja`, off `main` `665a4219`); keyed by LINE at that branch. Before that:
 > **2026-11-02 — one section APPENDED, nothing re-keyed**: *Replies to the weekly question* (branch `qotw-replies`, off `main` `d6edddde`); keyed by LINE at that branch. Before that:
 > **2026-10-30 — one section APPENDED, nothing re-keyed**: *Found marathons do not spotlight* (branch `spotlight-tracked-only`, off `main` `a8498538`); keyed by LINE at that branch. Rows below the edits in `marathon_spotlight.py` (pure and cog) and `cogs/content/marathon_inbox.py` sit a few lines lower — trust the anchor text. Before that:
@@ -11034,3 +11035,13 @@ Design: [`brackets-kinds-design.md`](brackets-kinds-design.md) ▸ K4 and its *K
 | `black_bloc/brackets_panel.py:1078` `PicksToggle` · `:1124` `PicksModal` | Organiser picks controls on the `/bracket` tournament view, added beside (not inside) `legal_to_moves`, which K3's tests pin. |
 | `site/public/assets/page-brackets.js:1805` `picksTree` · `:1872` `queueSave` · `:2017` `boardBody` · `:1038` `yourPick` | My picks draws the real tree's positions through `eliminationLayout` with taller cards (two 40 px buttons); a press runs the cascade locally, keeps the horizontal scroll, and saves 600 ms later (optimistic; a refusal reloads the sheet). The leaderboard searches through `listFilter`. |
 | `site/mock/brackets.mjs:753` `pickTree` · `:785` `scoreSheet` · `site/mock/server.mjs:18358` `bkPicksOf` · `:18310` `bkNflReseeds` | The mock scores on every read (the bot stores scores); 22 is locked with five sheets, 26 the open NFL bracket. |
+
+## Unknown channel types in the structure backup (branch `structure-unknown-channels`, 2026-11-07; keyed by LINE at that branch)
+
+Design: [`structure-backup-design.md`](structure-backup-design.md) ▸ *Found 2026-11-07*.
+
+| Where | Why |
+|---|---|
+| `black_bloc/cogs/moderation/structure_backup.py:205` `channels_of` | `Guild.fetch_channels()` (discord.py 2.7.1) raises `InvalidData` for the WHOLE list when one channel has a type its `ChannelType` lacks (it stops at `media = 16`; the live server had a type 20). Only on that error, the same endpoint is read raw (`guild._state.http.get_all_guild_channels`, the call `fetch_channels` itself makes) and each known entry is built with discord.py's own `discord.channel._guild_channel_factory`, so known channels are the same objects as before; unknown ones stay dicts. One warning per capture names the types and counts. A server discord.py reads whole is asked once, as before. Private API on purpose: it is the only read that returns the unknown channel at all (the gateway cache drops unknown types too). |
+| `black_bloc/structure_capture.py:158` `raw_channel_row` · `:177` | A raw dict becomes the same row shape as a typed channel, `type` = `unknown-<number>` (`UNKNOWN_TYPE`), overwrites from `permission_overwrites` (`type` 0 role, 1 member; the role list only when neither), tags from `available_tags`. `structure_diff.py` compares it like any channel (added / removed / renamed). |
+| `tests/cogs/moderation/test_structure_backup.py` `an_http_read` | The read-only guard still bans every `http` name except the exact on-the-spot call `<x>.http.get_all_guild_channels(...)`; holding the client, holding the bound reader, or any other method on it still trips (`SPELLINGS`). |

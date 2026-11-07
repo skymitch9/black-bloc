@@ -14,6 +14,8 @@ NO_CHANNELS = (
     "always has at least one, so this is Discord answering badly; try again in a few minutes"
 )
 MEMBER_TYPES = (discord.Member, discord.User)
+UNKNOWN_TYPE = "unknown-{number}"
+RAW_TARGETS = {0: ROLE, "0": ROLE, ROLE: ROLE, 1: MEMBER, "1": MEMBER, MEMBER: MEMBER}
 
 
 class CaptureError(RuntimeError):
@@ -119,7 +121,61 @@ def overwrite_rows(channel: Any, role_ids: set[str]) -> list[dict[str, Any]]:
     return found
 
 
+def raw_emoji(tag: dict[str, Any]) -> str | None:
+    name, ident = tag.get("emoji_name"), text_id(tag.get("emoji_id"))
+    if ident is not None:
+        return f"<:{name or '_'}:{ident}>"
+    return name or None
+
+
+def raw_tag_row(tag: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": text_id(tag.get("id")),
+        "name": named(tag.get("name")),
+        "moderated": bool(tag.get("moderated", False)),
+        "emoji": raw_emoji(tag),
+    }
+
+
+def raw_overwrite_rows(data: dict[str, Any], role_ids: set[str]) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    for one in data.get("permission_overwrites") or ():
+        target_id = text_id(one.get("id"))
+        if target_id is None:
+            continue
+        kind = RAW_TARGETS.get(one.get("type"))
+        found.append(
+            {
+                "target_id": target_id,
+                "target_type": kind or (ROLE if target_id in role_ids else MEMBER),
+                "allow": whole(one.get("allow")) or 0,
+                "deny": whole(one.get("deny")) or 0,
+            }
+        )
+    return found
+
+
+def raw_channel_row(data: dict[str, Any], role_ids: set[str]) -> dict[str, Any]:
+    """A channel discord.py has no class for, read from Discord's own answer."""
+    return {
+        "id": text_id(data.get("id")),
+        "name": named(data.get("name")),
+        "type": UNKNOWN_TYPE.format(number=data.get("type")),
+        "parent_id": text_id(data.get("parent_id")),
+        "position": whole(data.get("position")) or 0,
+        "topic": data.get("topic") or None,
+        "slowmode": whole(data.get("rate_limit_per_user")),
+        "nsfw": flag(data.get("nsfw")),
+        "bitrate": whole(data.get("bitrate")),
+        "user_limit": whole(data.get("user_limit")),
+        "tags": [raw_tag_row(tag) for tag in data.get("available_tags") or ()],
+        "overwrites": raw_overwrite_rows(data, role_ids),
+    }
+
+
 def channel_row(channel: Any, role_ids: set[str]) -> dict[str, Any]:
+    if isinstance(channel, dict):
+        return raw_channel_row(channel, role_ids)
     return {
         "id": text_id(channel),
         "name": named(getattr(channel, "name", None)),
@@ -154,11 +210,13 @@ def capture(guild: Any, roles: Any, channels: Any) -> dict[str, Any]:
 __all__ = [
     "NO_CHANNELS",
     "NO_ROLES",
+    "UNKNOWN_TYPE",
     "CaptureError",
     "capture",
     "channel_row",
     "guild_row",
     "overwrite_rows",
+    "raw_channel_row",
     "role_row",
     "tag_row",
 ]
