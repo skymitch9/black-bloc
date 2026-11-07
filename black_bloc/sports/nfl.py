@@ -136,6 +136,24 @@ class Builder:
         return self.bracket
 
 
+Reseeds = dict[str, dict[str, tuple[tuple[str, ...], int]]]
+
+
+def reseed_rules() -> Reseeds:
+    """The reseed as slot rules by feed key: a later slot is the k-th best seed (0 = best) among
+    the winners of the games named, as `Builder.conference` pairs them once results exist."""
+    found: Reseeds = {}
+    for conf in CONFERENCES:
+        wild = tuple(wc_key(conf, at) for at in range(1, len(WILD_CARD) + 1))
+        found[div_key(conf, 1)] = {SLOT_B: (wild, len(WILD_CARD) - 1)}
+        found[div_key(conf, 2)] = {SLOT_A: (wild, 0), SLOT_B: (wild, 1)}
+        divisional = (div_key(conf, 1), div_key(conf, 2))
+        found[conf_key(conf)] = {SLOT_A: (divisional, 0), SLOT_B: (divisional, 1)}
+    first, second = (conf_key(conf) for conf in CONFERENCES)
+    found[SUPER_BOWL] = {SLOT_A: ((first,), 0), SLOT_B: ((second,), 0)}
+    return found
+
+
 def build(seeds: dict[str, list[str]], results: list[Game], season: str) -> Bracket:
     """The bracket as far as the results reach; a round not yet decided has open slots."""
     return Builder(seeds, results, season).build()
@@ -185,6 +203,7 @@ __all__ = [
     "conf_key",
     "div_key",
     "postseason",
+    "reseed_rules",
     "wc_key",
     "winner_of",
 ]

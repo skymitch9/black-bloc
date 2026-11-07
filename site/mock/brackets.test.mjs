@@ -6,6 +6,9 @@
 import {
   TREE,
   allSets,
+  cleanedPicks,
+  pickSlots,
+  pickedSheet,
   drawnInTree,
   finalUntouched,
   poolTable,
@@ -27,7 +30,7 @@ import {
   treeSize,
   unplayedSets,
 } from '../public/assets/bracket-layout.js';
-import { advance, build, buildFed, buildPools, decide, playOut, poolPlacements, poolTableRows, settle, snake, standardOrder, standings, tableRows } from './brackets.mjs';
+import { advance, build, buildFed, buildPools, decide, finalTotal, pickTree, playOut, pointsTable, poolPlacements, poolTableRows, rankSheets, roundPoints, scoreSheet, settle, snake, standardOrder, standings, tableRows } from './brackets.mjs';
 
 const failures = [];
 const is = (where, found, wanted) => {
@@ -309,10 +312,58 @@ is('sports: where results come from', [
   feedState({ kind: 'list' }),
 ], ['own', 'down', 'via', null]);
 
+const fourTree = {
+  sets: {
+    'W1-1': { round: 1, a: { entrant: 1 }, b: { entrant: 4 }, fixed: null },
+    'W1-2': { round: 1, a: { entrant: 2 }, b: { entrant: 3 }, fixed: null },
+    'W2-1': { round: 2, a: { from: ['W1-1'], rank: 0 }, b: { from: ['W1-2'], rank: 0 }, fixed: null },
+  },
+  seeds: { 1: 1, 2: 2, 3: 3, 4: 4 },
+};
+is('picks: a final is fed by the members own picks', pickSlots(fourTree, { 'W1-1': 4, 'W1-2': 3 }).slots['W2-1'], [4, 3]);
+is('picks: an unpicked feeder leaves the slot empty', pickSlots(fourTree, { 'W1-1': 4 }).slots['W2-1'], [4, null]);
+is('picks: changing an early pick clears the later one', cleanedPicks(fourTree, { 'W1-1': 1, 'W1-2': 3, 'W2-1': 1 }), { 'W1-1': 1, 'W1-2': 3, 'W2-1': 1 });
+is('picks: pressing the other team cascades', pickedSheet(fourTree, { 'W1-1': 1, 'W1-2': 3, 'W2-1': 1 }, 'W1-1', 4), { 'W1-1': 4, 'W1-2': 3 });
+is('picks: a second press takes the pick back', pickedSheet(fourTree, { 'W1-1': 1 }, 'W1-1', 1), {});
+const reseed = {
+  sets: {
+    'W1-1': { round: 1, a: { entrant: 2 }, b: { entrant: 7 }, fixed: null },
+    'W1-2': { round: 1, a: { entrant: 3 }, b: { entrant: 6 }, fixed: null },
+    'W1-3': { round: 1, a: { entrant: 4 }, b: { entrant: 5 }, fixed: null },
+    'W2-1': { round: 2, a: { entrant: 1 }, b: { from: ['W1-1', 'W1-2', 'W1-3'], rank: 2 }, fixed: null },
+    'W2-2': { round: 2, a: { from: ['W1-1', 'W1-2', 'W1-3'], rank: 0 }, b: { from: ['W1-1', 'W1-2', 'W1-3'], rank: 1 }, fixed: null },
+  },
+  seeds: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7 },
+};
+is('picks: the one seed hosts the lowest seed the member sent through', pickSlots(reseed, { 'W1-1': 7, 'W1-2': 3, 'W1-3': 4 }).slots, {
+  'W1-1': [2, 7], 'W1-2': [3, 6], 'W1-3': [4, 5], 'W2-1': [1, 7], 'W2-2': [3, 4],
+});
+is('picks: a decided play-in is nobodys pick', cleanedPicks({ sets: { 'W0-1': { round: 0, a: { entrant: 5 }, b: { entrant: 6 }, fixed: 6 } }, seeds: {} }, { 'W0-1': 6 }), {});
+const scored = [
+  { key: 'W1-1', round: 1, state: 'complete', slot_a: 1, slot_b: 4, winner: 1, loser: 4, winner_to: 'W2-1', winner_slot: 'a' },
+  { key: 'W1-2', round: 1, state: 'ready', slot_a: 2, slot_b: 3, winner: null, loser: null, winner_to: 'W2-1', winner_slot: 'b' },
+  { key: 'W2-1', round: 2, state: 'waiting', slot_a: 1, slot_b: null, winner: null, loser: null, winner_to: null, score_a: null, score_b: null },
+];
+const mockTree = pickTree(scored, [1, 2, 3, 4].map((id) => ({ id, seed: id })));
+is('mock picks: the tree follows the links', mockTree.sets['W2-1'].a, { from: ['W1-1'], rank: 0 });
+is('mock picks: hits, misses and what is still reachable', [
+  scoreSheet(mockTree, { 'W1-1': 1, 'W1-2': 3, 'W2-1': 3 }, scored, [1, 2]),
+  scoreSheet(mockTree, { 'W1-1': 4, 'W1-2': 3, 'W2-1': 4 }, scored, [1, 2]),
+], [
+  { points: 1, correct: 1, played: 1, possible: 3, marks: { 'W1-1': 'hit' } },
+  { points: 0, correct: 0, played: 2, possible: 1, marks: { 'W1-1': 'miss', 'W2-1': 'miss' } },
+]);
+is('mock picks: points per round repeat the last value', [pointsTable('1, 2,4'), pointsTable('1,x'), roundPoints([1, 2], 5), roundPoints([1, 2], 0)], [[1, 2, 4], null, 2, 0]);
+is('mock picks: level sheets share a rank unless the tiebreak parts them', [
+  rankSheets({ 5: { points: 4 }, 6: { points: 4 }, 7: { points: 9 } }, {}, null),
+  rankSheets({ 5: { points: 4 }, 6: { points: 4 }, 7: { points: 9 } }, { 5: 140, 6: 151 }, 149),
+], [{ 7: 1, 5: 2, 6: 2 }, { 7: 1, 6: 2, 5: 3 }]);
+is('mock picks: the final total waits for the final', finalTotal(scored), null);
+
 if (failures.length) {
   console.error('brackets: not ok');
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log('brackets: ok - layout for single and double elimination at 4, 8 and 16, byes and void sets at 5, 6, 7 and 12, the reset, round robin, Swiss, standings, scores, seeding, the tree size, the moves, and pools into a bracket, and sports brackets');
+console.log('brackets: ok - layout for single and double elimination at 4, 8 and 16, byes and void sets at 5, 6, 7 and 12, the reset, round robin, Swiss, standings, scores, seeding, the tree size, the moves, and pools into a bracket, sports brackets, and pick sheets');
 

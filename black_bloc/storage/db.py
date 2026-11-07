@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 105
+SCHEMA_VERSION = 106
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1496,6 +1496,10 @@ CREATE TABLE IF NOT EXISTS tournaments (
     feed_failed_at     TEXT,
     feed_failures      INTEGER NOT NULL DEFAULT 0,
     feed_error         TEXT,
+    picks_lock_at      TEXT,
+    picks_points       TEXT,
+    picks_on           INTEGER NOT NULL DEFAULT 1,
+    picks_locked_at    TEXT,
     channel_id         INTEGER,
     thread_id          INTEGER,
     message_id         INTEGER,
@@ -1616,6 +1620,33 @@ CREATE TABLE IF NOT EXISTS sports_names (
 CREATE UNIQUE INDEX IF NOT EXISTS sports_names_one_each
     ON sports_names(source, kind, league, ext_id);
 CREATE INDEX IF NOT EXISTS sports_names_by_name ON sports_names(kind, league, name);
+
+CREATE TABLE IF NOT EXISTS tournament_picks (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    user_id       INTEGER NOT NULL,
+    key           TEXT    NOT NULL,
+    pick          INTEGER NOT NULL,
+    at            TEXT    NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tournament_picks_one_each
+    ON tournament_picks(tournament_id, user_id, key);
+
+CREATE TABLE IF NOT EXISTS tournament_sheets (
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    user_id       INTEGER NOT NULL,
+    tiebreak      INTEGER,
+    points        INTEGER NOT NULL DEFAULT 0,
+    correct       INTEGER NOT NULL DEFAULT 0,
+    possible      INTEGER NOT NULL DEFAULT 0,
+    rank          INTEGER,
+    locked_at     TEXT,
+    edited_by     INTEGER,
+    edited_at     TEXT,
+    updated_at    TEXT    NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tournament_sheets_one_each
+    ON tournament_sheets(tournament_id, user_id);
 
 CREATE TABLE IF NOT EXISTS points_runs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1850,6 +1881,10 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tournament_sets", "period_words", "TEXT"),
     ("tournament_sets", "decided_by", "TEXT"),
     ("tournament_sets", "held", "INTEGER NOT NULL DEFAULT 0"),
+    ("tournaments", "picks_lock_at", "TEXT"),
+    ("tournaments", "picks_points", "TEXT"),
+    ("tournaments", "picks_on", "INTEGER NOT NULL DEFAULT 1"),
+    ("tournaments", "picks_locked_at", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

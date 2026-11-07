@@ -8,6 +8,8 @@ import {
   PLAYING,
   allSets,
   eliminationLayout,
+  pickSlots,
+  pickedSheet,
   feedState,
   fill,
   isList,
@@ -240,6 +242,21 @@ const WORDS = {
   rebuildAsks: 'Building again replaces every set in {name}, hand edits included.',
   wins: '{name} wins',
   votes: '{count} votes',
+  pointsWord: '{points} pts',
+  ptWord: '{points} pt',
+  playedWord: '{correct}/{played} right',
+  possibleWord: '{possible} still possible',
+  rankWord: 'rank {rank} of {sheets}',
+  saving: 'Saving…',
+  saveSheet: 'Save sheet',
+  picksMissing: 'The sheet could not be read just now.',
+  noSheets: 'No sheets yet.',
+  searchMembers: 'Search members…',
+  noMember: 'No member matches this.',
+  picksSettings: 'Pick sheets',
+  picksOn: 'Members fill in pick sheets',
+  lockAt: 'Picks lock',
+  pointsPer: 'Points per round',
 };
 
 const view = {
@@ -259,6 +276,12 @@ const view = {
   clock: null,
   filter: { query: '', filter: 'all', kind: 'all' },
   pending: null,
+  tab: 'bracket',
+  picks: null,
+  board: null,
+  other: null,
+  picksTimer: null,
+  picksSaving: null,
 };
 let refresh = () => {};
 
@@ -305,8 +328,12 @@ function stateBadge(state) {
 }
 
 function wantedId() {
-  const found = /^#(\d+)$/.exec(location.hash || '');
+  const found = /^#(\d+)(?:\/picks)?$/.exec(location.hash || '');
   return found ? found[1] : null;
+}
+
+function wantedTab() {
+  return /^#\d+\/picks$/.test(location.hash || '') ? 'picks' : 'bracket';
 }
 
 const LEAGUES = ['nfl', 'nba', 'mlb', 'nhl', 'ncaam', 'ncaaw'];
@@ -1001,10 +1028,20 @@ function setCard(t, set, style = null) {
     el('span', { class: 'bk-set-top' }, [
       el('span', { class: 'mono', text: top }),
       stateWord ? el('span', { class: 'bk-set-state', 'data-tone': SET_TONES[set.state], text: stateWord }) : null,
+      yourPick(t, set),
     ]),
     slotLine(t, set, 'a'),
     slotLine(t, set, 'b'),
   ]);
+}
+
+function yourPick(t, set) {
+  const sheet = view.picks;
+  if (!isSports(t) || !sheet || !sheet.locked) return null;
+  const pick = (sheet.picks || {})[set.key];
+  if (pick === undefined || pick === null) return null;
+  const mark = (sheet.marks || {})[set.key];
+  return el('span', { class: 'bk-yourpick', 'data-mark': mark || undefined, text: w('brackets_your_pick_words', { name: entrantName(t, pick) }) });
 }
 
 function treeRoom() {
@@ -1125,6 +1162,7 @@ function gridNode(t, sets = t.sets) {
 
 function bracketBody(t) {
   if (!t.sets.length) return [sayNothing(WORDS.bracketEmpty)];
+  if (picksShown(t)) return picksBody(t);
   if (ELIMINATION.includes(t.format)) return [treeNode(t)];
   if (t.format === 'round_robin') return [gridNode(t)];
   return [roundsNode(t)];
@@ -1581,9 +1619,14 @@ async function optionsDrawer(t) {
   only.listed = el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.decideBy, decide), field(WORDS.voteMinutes, voteMinutes)]);
   only.fighting = el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.bestOf, bestOf), field(WORDS.cap, cap), field(WORDS.checkIn, checkIn)]);
   only.game = field(WORDS.game, game);
+  const picksOn = el('input', { type: 'checkbox', id: 'bk-edit-picks-on', checked: t ? Boolean(t.picks_on) || undefined : undefined });
+  const picksLock = el('input', { class: 'input', type: 'datetime-local', id: 'bk-edit-picks-lock', value: t ? localValue(t.picks_lock_at) || undefined : undefined });
+  const picksPoints = el('input', { class: 'input', type: 'text', id: 'bk-edit-picks-points', maxlength: '200', value: t ? t.picks_points || undefined : undefined });
   only.sports = el('div', { class: 'bk-fields' }, [
     field(WORDS.league, league),
     el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.season, season), field(WORDS.results, source)]),
+    t ? el('label', { class: 'bk-tick' }, [picksOn, el('span', { text: WORDS.picksOn })]) : null,
+    t ? el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.lockAt, picksLock), field(WORDS.pointsPer, picksPoints)]) : null,
   ]);
   only.format = field(WORDS.format, format);
   const shapeFor = () => {
@@ -1651,6 +1694,11 @@ async function optionsDrawer(t) {
     if (kind.readValue() === 'sports') {
       for (const field of ['game', 'format', 'best_of', 'entrant_cap', 'check_in_minutes', 'best_of_late', 'best_of_finals', 'best_of_from_round', 'pools_format', 'pool_count', 'advance_per_pool', 'pools_best_of', 'advance_losers_from', 'pools_swiss_rounds', 'third_place', 'grand_final_reset', 'swiss_rounds']) delete body[field];
       Object.assign(body, { league: league.readValue(), season: season.value.trim(), source: source.readValue() });
+      if (t) {
+        body.picks_on = picksOn.checked;
+        body.picks_lock_at = picksLock.value ? new Date(picksLock.value).toISOString() : null;
+        if (picksPoints.value.trim()) body.picks_points = picksPoints.value.trim();
+      }
     }
     if (!t) body.kind = kind.readValue();
     const done = await run(say, () => (t ? send(base(t.id), 'PATCH', body) : send('/api/brackets', 'POST', body)), (found) => found.message);
@@ -1686,6 +1734,345 @@ async function optionsDrawer(t) {
     bar([button(t ? WORDS.save : WORDS.create, save, { tone: 'warn', small: false })]),
   ]);
   name.focus();
+}
+
+/* ---------- picks ---------- */
+
+const PICK_H = 114;
+const PICK_U = 132;
+const SAVE_MS = 600;
+
+function picksShown(t) {
+  return isSports(t) && Boolean(t.picks_on) && t.sets.length > 0;
+}
+
+function entrantName(t, id) {
+  const found = (t.entrants || []).find((one) => one.id === id);
+  return found ? found.short || found.name : '';
+}
+
+function fullName(t, id) {
+  const found = (t.entrants || []).find((one) => one.id === id);
+  return found ? found.name : '';
+}
+
+function lockLine(sheet) {
+  if (!sheet) return null;
+  if (sheet.locked) return w('brackets_picks_locked_line', { count: sheet.sheets });
+  if (sheet.lock_at) return w('brackets_picks_lock_line', { count: sheet.sheets, when: closesIn(sheet.lock_at) });
+  return w('brackets_picks_open_line', { count: sheet.sheets });
+}
+
+function scoreLineOf(sheet, always = false) {
+  if (!sheet || (!always && !Object.keys(sheet.picks || {}).length)) return null;
+  const parts = [said(WORDS.pointsWord, { points: sheet.points })];
+  if (sheet.locked) {
+    parts.push(said(WORDS.playedWord, { correct: sheet.correct, played: sheet.played }));
+    parts.push(said(WORDS.possibleWord, { possible: sheet.possible }));
+    if (sheet.rank) parts.push(said(WORDS.rankWord, { rank: sheet.rank, sheets: sheet.sheets }));
+  }
+  return parts.join(' · ');
+}
+
+function pickButton(t, sheet, set, pair, side, { editable, onPick }) {
+  const id = pair[side === 'a' ? 0 : 1];
+  const node = ((sheet.tree || {}).sets || {})[set.key] || {};
+  const fixed = node.fixed ?? null;
+  const picked = id !== null && (fixed !== null ? fixed === id : sheet.picks[set.key] === id);
+  editable = editable && fixed === null;
+  const mark = picked ? (sheet.marks || {})[set.key] : null;
+  return el('button', {
+    class: 'bk-vote bk-pick',
+    type: 'button',
+    disabled: !editable || id === null || undefined,
+    'aria-pressed': picked ? 'true' : 'false',
+    'data-mark': mark || undefined,
+    title: id !== null ? fullName(t, id) : undefined,
+    on: editable && id !== null ? { click: () => onPick(set.key, id) } : undefined,
+  }, [el('span', { class: 'bk-vote-name', text: id !== null ? entrantName(t, id) : '' })]);
+}
+
+function pickCard(t, sheet, set, pair, style, options) {
+  const worth = (sheet.round_points || {})[String(set.round)];
+  const top = [set.key, worth ? said(WORDS.ptWord, { points: worth }) : null].filter(Boolean).join(' · ');
+  return el('div', { class: 'bk-set bk-pickcard', style, 'data-key': set.key }, [
+    el('span', { class: 'bk-set-top' }, [el('span', { class: 'mono', text: top })]),
+    pickButton(t, sheet, set, pair, 'a', options),
+    pickButton(t, sheet, set, pair, 'b', options),
+  ]);
+}
+
+function picksTree(t, sheet, options) {
+  const tree = sheet.tree || { sets: {} };
+  const sets = t.sets.filter((one) => one.key in (tree.sets || {}));
+  const drawn = eliminationLayout(sets);
+  const byKey = new Map(sets.map((one) => [one.key, one]));
+  const at = new Map(drawn.nodes.map((one) => [one.key, one]));
+  const { slots } = pickSlots(tree, sheet.picks || {});
+  const size = treeSize(drawn.cols, treeRoom());
+  view.treeSize = sig(size);
+  const W = size.width;
+  const GAP = size.gap;
+  const width = drawn.cols * (W + GAP) - GAP;
+  const height = HEAD + drawn.height * PICK_U + 8;
+  const x = (node) => node.col * (W + GAP);
+  const y = (node) => HEAD + node.y * PICK_U;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'bk-lines');
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('aria-hidden', 'true');
+  for (const line of drawn.links) {
+    const from = at.get(line.from);
+    const to = at.get(line.to);
+    const x1 = x(from) + W;
+    const x2 = x(to);
+    const mid = x1 + Math.min(GAP / 2, (x2 - x1) / 2);
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M${x1} ${y(from)} H${mid} V${y(to)} H${x2}`);
+    if (sheet.picks[line.from] !== undefined) path.setAttribute('data-done', 'true');
+    svg.append(path);
+  }
+  const labels = [];
+  const seen = new Set();
+  for (const node of drawn.nodes) {
+    if (seen.has(node.col)) continue;
+    seen.add(node.col);
+    labels.push(el('span', { class: 'bk-round', style: `left:${x(node)}px;top:${HEAD - 22}px;width:${W}px`, text: roundWords(byKey.get(node.key)) }));
+  }
+  const cards = drawn.nodes.map((node) => pickCard(t, sheet, byKey.get(node.key), slots[node.key] || [null, null], `left:${x(node)}px;top:${y(node) - PICK_H / 2}px;width:${W}px;height:${PICK_H}px`, options));
+  return scrollHints(el('div', { class: 'bk-scroll' }, [
+    el('div', { class: 'bk-tree bk-picktree', 'data-tight': size.width < TREE.width ? 'true' : undefined, style: `width:${width}px;height:${height}px` }, [svg, ...labels, ...cards]),
+  ]));
+}
+
+function savedLine() {
+  const found = view.picksSaving || { text: '', tone: null };
+  return el('p', { class: 'bk-meta bk-saved', role: 'status', 'data-tone': found.tone || undefined, text: found.text });
+}
+
+async function savePicks() {
+  const t = view.t;
+  const sheet = view.picks;
+  if (!t || !sheet) return;
+  const body = { picks: sheet.picks };
+  if (sheet.tiebreak_on) body.tiebreak = sheet.tiebreak;
+  try {
+    const found = await send(`${base(t.id)}/picks`, 'PUT', body);
+    if (view.picksTimer) return;
+    view.picks = found.sheet;
+    view.picksSaving = { text: found.message, tone: 'ok' };
+  } catch (error) {
+    view.picksSaving = { text: error instanceof Outage ? WORDS.outage : String(error.message || WORDS.outage), tone: 'danger' };
+    await loadPicks(t);
+  }
+  keptScroll(paint);
+}
+
+function queueSave() {
+  clearTimeout(view.picksTimer);
+  view.picksSaving = { text: WORDS.saving, tone: null };
+  view.picksTimer = setTimeout(() => {
+    view.picksTimer = null;
+    savePicks();
+  }, SAVE_MS);
+}
+
+function keptScroll(change) {
+  const box = view.holders.bracket ? view.holders.bracket.querySelector('.bk-scroll') : null;
+  const left = box ? box.scrollLeft : 0;
+  change();
+  const fresh = view.holders.bracket ? view.holders.bracket.querySelector('.bk-scroll') : null;
+  if (fresh) fresh.scrollLeft = left;
+}
+
+function pickMine(key, entrant) {
+  const sheet = view.picks;
+  keptScroll(() => {
+    sheet.picks = pickedSheet(sheet.tree, sheet.picks, key, entrant);
+    queueSave();
+    paint();
+  });
+}
+
+function tiebreakBox(sheet, editable, onChange) {
+  if (!sheet.tiebreak_on) return null;
+  const box = el('input', { class: 'input bk-tiebreak', type: 'number', min: '0', max: '9999', id: 'bk-tiebreak', value: sheet.tiebreak ?? undefined, disabled: !editable || undefined });
+  box.addEventListener('input', () => onChange(box.value.trim() === '' ? null : Number(box.value)));
+  return field(w('brackets_tiebreak_label'), box);
+}
+
+function myPicksBody(t) {
+  const sheet = view.picks;
+  if (!sheet) return [sayNothing(WORDS.picksMissing)];
+  const editable = Boolean(sheet.may_edit);
+  return [
+    el('div', { class: 'bk-pickhead' }, [
+      el('p', { class: 'bk-meta', text: lockLine(sheet) }),
+      el('p', { class: 'bk-meta mono', text: scoreLineOf(sheet, true) }),
+      editable ? savedLine() : null,
+    ]),
+    tiebreakBox(sheet, editable, (value) => {
+      sheet.tiebreak = value;
+      queueSave();
+    }),
+    picksTree(t, sheet, { editable, onPick: pickMine }),
+    picksSettings(t),
+  ];
+}
+
+function otherBody(t) {
+  const found = view.other;
+  if (!found) return [sayNothing(WORDS.picksMissing)];
+  const sheet = found.sheet;
+  const editing = Boolean(found.editing);
+  const say = notice();
+  const parts = [
+    el('div', { class: 'bk-pickhead' }, [
+      el('p', { class: 'bk-meta' }, [el('strong', { text: sheet.name || sheet.user_id }), sheet.edited ? el('span', { class: 'bk-edited', text: ` · ${w('brackets_sheet_edited_note')}` }) : null]),
+      scoreLineOf(sheet) ? el('p', { class: 'bk-meta mono', text: scoreLineOf(sheet) }) : null,
+    ]),
+  ];
+  if (editing) {
+    const reason = el('input', { class: 'input', type: 'text', maxlength: '300', id: 'bk-sheet-reason' });
+    const save = async () => {
+      const body = { picks: sheet.picks, reason: reason.value.trim() };
+      if (sheet.tiebreak_on) body.tiebreak = sheet.tiebreak;
+      const done = await run(say, () => send(`${base(t.id)}/sheets/${encodeURIComponent(sheet.user_id)}`, 'PUT', body), (got) => got.message);
+      if (!done.ok) return;
+      view.other = { sheet: done.found.sheet, editing: false };
+      view.say.say(done.found.message, 'ok');
+      await loadBoard(t);
+      paint();
+    };
+    parts.push(el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.reason, reason), bar([button(WORDS.saveSheet, save, { tone: 'warn', small: false })])]), say);
+  }
+  parts.push(tiebreakBox(sheet, editing, (value) => {
+    sheet.tiebreak = value;
+  }));
+  parts.push(picksTree(t, sheet, {
+    editable: editing,
+    onPick: (key, entrant) => keptScroll(() => {
+      sheet.picks = pickedSheet(sheet.tree, sheet.picks, key, entrant);
+      view.other = { ...found };
+      paint();
+    }),
+  }));
+  return parts;
+}
+
+function tabsBar(t) {
+  const choices = [{ value: 'bracket', label: WORDS.bracket }, { value: 'picks', label: w('brackets_my_picks_label') }];
+  if (view.other) choices.push({ value: 'sheet', label: view.other.sheet.name || view.other.sheet.user_id });
+  const tabs = segment(choices, view.tab, {
+    onChange: () => {
+      view.tab = tabs.readValue();
+      const wanted = view.tab === 'picks' ? `#${t.id}/picks` : `#${t.id}`;
+      if (location.hash !== wanted) history.replaceState(null, '', wanted);
+      paint();
+    },
+  });
+  tabs.classList.add('bk-tabs');
+  return tabs;
+}
+
+function picksBody(t) {
+  const shown = view.tab === 'picks' ? myPicksBody(t) : view.tab === 'sheet' ? otherBody(t) : [treeNode(t)];
+  return [tabsBar(t), ...shown];
+}
+
+async function openSheet(t, row, editing = false) {
+  try {
+    const sheet = await api(`${base(t.id)}/sheets/${encodeURIComponent(row.user_id)}`);
+    view.other = { sheet, editing };
+    view.tab = 'sheet';
+  } catch (error) {
+    view.say.say(error instanceof Outage ? WORDS.outage : String(error.message || WORDS.outage), 'warn');
+  }
+  paint();
+}
+
+function boardRow(t, row) {
+  const board = view.board || {};
+  const name = row.name || row.user_id;
+  const record = [said(WORDS.playedWord, { correct: row.correct, played: row.played }), said(WORDS.possibleWord, { possible: row.possible })];
+  if (row.edited) record.push(w('brackets_sheet_edited_note'));
+  const main = el('span', { class: 'rowlist-main' }, [
+    el('span', { class: 'rowlist-name', text: name }),
+    el('span', { class: 'rowlist-note', text: record.join(' · ') }),
+  ]);
+  const opener = row.may_open
+    ? el('button', { class: 'bk-board-open', type: 'button', on: { click: () => openSheet(t, row) } }, [main])
+    : main;
+  return el('div', { class: 'rowlist-row bk-board-row', 'data-mine': row.mine ? 'true' : undefined }, [
+    el('span', { class: 'bk-seed mono', 'data-place': 'true', text: row.rank ? String(row.rank) : '—' }),
+    opener,
+    el('span', { class: 'mono bk-record', text: String(row.points) }),
+    t.may_run && board.rows && t.state !== 'complete' && t.state !== 'cancelled'
+      ? button(w('brackets_edit_sheet_label'), () => openSheet(t, row, true), { tone: 'quiet' })
+      : null,
+  ]);
+}
+
+function boardBody(t) {
+  const board = view.board;
+  if (!board) return [sayNothing(WORDS.picksMissing)];
+  const rows = board.rows || [];
+  if (!rows.length) return [sayNothing(WORDS.noSheets)];
+  const items = rows.map((row) => ({ row, node: boardRow(t, row) }));
+  const filter = listFilter({
+    items,
+    value: (item) => item.row,
+    text: (row) => row.name || row.user_id,
+    label: WORDS.searchMembers,
+    placeholder: WORDS.searchMembers,
+    empty: WORDS.noMember,
+  });
+  filter.apply();
+  return [
+    rows.length > 8 ? el('div', { class: 'table-tools' }, filter.parts) : null,
+    el('div', { class: 'rowlist bk-board' }, items.map((one) => one.node)),
+    filter.none,
+  ];
+}
+
+async function loadPicks(t) {
+  try {
+    view.picks = await api(`${base(t.id)}/picks`);
+  } catch (error) {
+    if (!(error instanceof Outage)) view.picks = null;
+  }
+}
+
+async function loadBoard(t) {
+  try {
+    view.board = await api(`${base(t.id)}/leaderboard`);
+  } catch (error) {
+    if (!(error instanceof Outage)) view.board = null;
+  }
+}
+
+function picksSettings(t) {
+  if (!t.may_run || !['draft', 'seeding', 'running'].includes(t.state)) return null;
+  const on = el('input', { type: 'checkbox', id: 'bk-picks-on', checked: Boolean(t.picks_on) || undefined });
+  const lock = el('input', { class: 'input', type: 'datetime-local', id: 'bk-picks-lock', value: localValue(t.picks_lock_at) || undefined });
+  const points = el('input', { class: 'input', type: 'text', id: 'bk-picks-points', maxlength: '200', value: t.picks_points || undefined });
+  const say = notice();
+  const save = async () => {
+    const body = { picks_on: on.checked, picks_lock_at: lock.value ? new Date(lock.value).toISOString() : null };
+    if (points.value.trim()) body.picks_points = points.value.trim();
+    const done = await act(base(t.id), body, 'PATCH', say);
+    if (done.ok) {
+      await Promise.all([loadPicks(view.t), loadBoard(view.t)]);
+      paint();
+    }
+  };
+  return foldout(WORDS.picksSettings, [
+    el('label', { class: 'bk-tick' }, [on, el('span', { text: WORDS.picksOn })]),
+    el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.lockAt, lock), field(WORDS.pointsPer, points)]),
+    say,
+    bar([button(WORDS.save, save, { tone: 'warn' })]),
+  ]);
 }
 
 /* ---------- logs and settings ---------- */
@@ -1790,7 +2177,8 @@ function paint() {
   update('head', sig([t, mode()]), view.holders.head, () => headBody(t));
   paintEntrants();
   if (view.holders.pools) update('pools', sig([t.pools, t.mine, t.may_run, t.state, t.phase, mode(), view.ties]), view.holders.pools, () => poolsBody(t));
-  if (view.holders.bracket) update('bracket', sig([t.sets, t.mine, t.may_run, t.state, mode()]), view.holders.bracket, () => bracketBody(t));
+  if (view.holders.bracket) update('bracket', sig([t.sets, t.mine, t.may_run, t.state, mode(), t.picks_on, t.picks_lock_at, t.picks_points, view.tab, view.picks, view.other, view.picksSaving]), view.holders.bracket, () => bracketBody(t));
+  if (view.holders.board) update('board', sig([view.board, t.may_run, t.state]), view.holders.board, () => boardBody(t));
   if (view.holders.standings) update('standings', sig(t.standings), view.holders.standings, () => standingsBody(t));
   paintStatus();
 }
@@ -1809,6 +2197,12 @@ async function tournamentView(id) {
   }
   view.t = t;
   view.seedOrder = null;
+  view.tab = wantedTab();
+  view.other = null;
+  view.picks = null;
+  view.board = null;
+  view.picksSaving = null;
+  if (picksShown(t)) await Promise.all([loadPicks(t), loadBoard(t)]);
   view.shape = sig([t.id, t.state, t.sets.length > 0, t.format, t.phase || null]);
   view.ties = {};
   view.parts = new Map();
@@ -1836,6 +2230,14 @@ async function tournamentView(id) {
     blocks.push(one.node);
   } else {
     view.holders.bracket = null;
+  }
+  if (picksShown(t)) {
+    const one = section(w('brackets_leaderboard_heading'), null, { id: 'leaderboard', open: true });
+    one.node.setAttribute('data-span', 'full');
+    view.holders.board = one.body;
+    blocks.push(one.node);
+  } else {
+    view.holders.board = null;
   }
   if (hasStandings(t)) {
     const one = section(WORDS.standings, null, { id: 'standings', open: true });
@@ -1880,6 +2282,10 @@ async function poll() {
     if (view.t) {
       const found = await api(base(view.t.id));
       view.t = found;
+      if (picksShown(found)) {
+        const editing = view.picksTimer || typing(view.holders.bracket);
+        await Promise.all([editing ? null : loadPicks(found), loadBoard(found)]);
+      }
       view.readAt = Date.now();
       view.failed = null;
       paint();
@@ -1937,7 +2343,7 @@ async function load(me) {
 }
 
 window.addEventListener('hashchange', () => {
-  if (/^#?\d*$/.test(location.hash || '')) {
+  if (/^#?\d*(\/picks)?$/.test(location.hash || '')) {
     closeDrawer();
     refresh();
   }

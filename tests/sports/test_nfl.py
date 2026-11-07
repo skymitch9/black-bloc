@@ -67,3 +67,76 @@ async def test_no_seeds_yet_is_worded():
     fetch = Recorded({"standings": {"children": []}})
     answer = await nfl.bracket("2026", fetch=fetch)
     assert answer.why == "ESPN sent no 2026 NFL playoff seeds"
+
+
+def played_out(seeds_by_conf, choose):
+    """The bracket nfl.build makes when each game's winner is the side `choose` names."""
+    from black_bloc.sports.model import Game
+
+    games = []
+    while True:
+        built = nfl.build(seeds_by_conf, games, "2025")
+        fresh = [
+            one for one in built.games if one.a_ext_id and one.b_ext_id and one.status != FINAL
+        ]
+        if not fresh:
+            return built
+        for one in fresh:
+            a_wins = choose(one.source_key) == "a"
+            games.append(
+                Game(
+                    f"x{len(games)}",
+                    one.source_key,
+                    one.a_ext_id,
+                    one.b_ext_id,
+                    1 if a_wins else 0,
+                    0 if a_wins else 1,
+                    FINAL,
+                    None,
+                    None,
+                    one.round,
+                )
+            )
+
+
+def test_the_reseed_rules_pair_every_round_as_the_builder_does():
+    from black_bloc.brackets.picks import Node, Rule, Tree, predicted
+
+    conferences = {conf: [f"{conf}{at}" for at in range(1, 8)] for conf in nfl.CONFERENCES}
+    ids = {ext: at for at, ext in enumerate(sum(conferences.values(), []), start=1)}
+    seeds_of = {ids[ext]: int(ext[3:]) for ext in ids}
+    blank = nfl.build(conferences, [], "2025")
+    rules = nfl.reseed_rules()
+    afc = [one.source_key for one in blank.games if one.source_key.startswith("AFC")]
+    nodes = {}
+    for one in blank.games:
+        held = rules.get(one.source_key, {})
+        slots = {}
+        for slot, ext in (("a", one.a_ext_id), ("b", one.b_ext_id)):
+            if slot in held:
+                slots[slot] = Rule(sources=held[slot][0], rank=held[slot][1])
+            else:
+                slots[slot] = Rule(entrant=ids.get(ext) if ext else None)
+        nodes[one.source_key] = Node(one.source_key, one.round, slots["a"], slots["b"])
+    tree = Tree(nodes, seeds_of)
+    checked = 0
+    for bits in range(2 ** len(afc)):
+        for final in ("a", "b"):
+
+            def choose(key, bits=bits, final=final):
+                if key in afc:
+                    return "a" if (bits >> afc.index(key)) & 1 == 0 else "b"
+                return final if key == nfl.SUPER_BOWL else "a"
+
+            built = played_out(conferences, choose)
+            sheet = {
+                one.source_key: ids[nfl.winner_of(one)]
+                for one in built.games
+                if nfl.winner_of(one)
+            }
+            slots, _ = predicted(tree, sheet)
+            for one in built.games:
+                wanted = (ids[one.a_ext_id], ids[one.b_ext_id])
+                assert slots[one.source_key] == wanted, (bits, final, one.source_key)
+            checked += 1
+    assert checked == 2 ** len(afc) * 2

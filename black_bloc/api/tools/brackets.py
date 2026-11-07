@@ -9,12 +9,14 @@ from fastapi import APIRouter, Body, Request
 from ... import brackets_cards, brackets_store, brackets_thread, brackets_view
 from ... import brackets_moves as moves
 from ... import brackets_people as people
+from ... import brackets_picks as picks_
 from ... import brackets_sets as sets
 from ... import brackets_sports as sports
 from ... import brackets_votes as votes
 from ...brackets import access
 from ...logkinds import VIA_WEBSITE
-from ...settings_store import BRACKETS_VOTES_VISIBLE
+from ...panels import Outcome
+from ...settings_store import BRACKETS_PICK_TIEBREAK, BRACKETS_VOTES_VISIBLE
 from ..auth import Refused
 from ..names import site_words
 from ..writes import (
@@ -194,7 +196,114 @@ def build_router(bot: Any) -> APIRouter:
     async def brackets_edit(
         request: Request, tournament_id: str, payload: Any = OPTIONAL
     ) -> dict[str, Any]:
-        return await answered(request, tournament_id, moves.edit, body_of(payload))
+        return await answered(request, tournament_id, picks_.edit_with_picks, body_of(payload))
+
+    async def picks_of(guild: Any, tournament_id: Any) -> Any:
+        row = await brackets_store.tournament(bot.db, guild.id, wanted_id(tournament_id))
+        if row is None:
+            raise Refused(
+                404,
+                "no_tournament",
+                moves.said(
+                    bot.store, guild.id, "brackets_no_tournament_said", id=str(tournament_id)[:20]
+                ),
+            )
+        return await picks_.read(bot, row)
+
+    def sheet_of(guild: Any, found: Any, user_id: int, viewer: int) -> dict[str, Any]:
+        return picks_.sheet_fields(found, user_id, mine=user_id == viewer) | {
+            "name": name_of(guild, user_id),
+            "tiebreak_on": bool(bot.store.get(guild.id, BRACKETS_PICK_TIEBREAK)),
+        }
+
+    async def sheet_saved(
+        guild: Any, tournament_id: Any, outcome: Any, user_id: int, viewer: int
+    ) -> dict[str, Any]:
+        if not outcome.ok:
+            raise Refused(outcome.status or 400, outcome.code, site_words(guild, outcome.message))
+        if outcome.changed:
+            following = brackets_thread.follow_later(
+                bot, guild, outcome.value, Outcome(True, "", value=outcome.value)
+            )
+            if following is not None:
+                await asyncio.wait({following}, timeout=FOLLOW_GRACE_SECONDS)
+        found = await picks_of(guild, tournament_id)
+        return {
+            "sheet": sheet_of(guild, found, user_id, viewer),
+            "message": site_words(guild, outcome.message),
+        }
+
+    @router.get("/{tournament_id}/picks")
+    async def brackets_my_picks(request: Request, tournament_id: str) -> dict[str, Any]:
+        who = await reader(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        found = await picks_of(guild, tournament_id)
+        return sheet_of(guild, found, int(who["id"]), int(who["id"]))
+
+    @router.put("/{tournament_id}/picks")
+    async def brackets_save_picks(
+        request: Request, tournament_id: str, payload: Any = OPTIONAL
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        actor = actor_for(bot, who, guild)
+        wanted = wanted_id(tournament_id)
+        outcome = await picks_.save_sheet(
+            bot, guild, actor, wanted, body_of(payload), via=VIA_WEBSITE
+        )
+        return await sheet_saved(guild, wanted, outcome, int(who["id"]), int(who["id"]))
+
+    @router.get("/{tournament_id}/leaderboard")
+    async def brackets_leaderboard(request: Request, tournament_id: str) -> dict[str, Any]:
+        who = await reader(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        found = await picks_of(guild, tournament_id)
+        rows = picks_.leaderboard_rows(found, int(who["id"]), runs(guild, who))
+        return {
+            "locked": found.locked,
+            "sheets": found.count(),
+            "tiebreak_on": bool(bot.store.get(guild.id, BRACKETS_PICK_TIEBREAK)),
+            "rows": [one | {"name": name_of(guild, int(one["user_id"]))} for one in rows],
+        }
+
+    @router.get("/{tournament_id}/sheets/{user_id}")
+    async def brackets_sheet(request: Request, tournament_id: str, user_id: str) -> dict[str, Any]:
+        who = await reader(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        found = await picks_of(guild, tournament_id)
+        wanted, viewer = wanted_id(user_id), int(who["id"])
+        if not (found.locked or wanted == viewer or runs(guild, who)):
+            raise Refused(
+                403,
+                "sheet_private",
+                moves.said(bot.store, guild.id, "brackets_sheet_private_said"),
+            )
+        return sheet_of(guild, found, wanted, viewer)
+
+    @router.put("/{tournament_id}/sheets/{user_id}")
+    async def brackets_edit_sheet(
+        request: Request, tournament_id: str, user_id: str, payload: Any = OPTIONAL
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        actor = actor_for(bot, who, guild)
+        wanted, member = wanted_id(tournament_id), wanted_id(user_id)
+        outcome = await picks_.edit_sheet(
+            bot,
+            guild,
+            actor,
+            wanted,
+            member,
+            body_of(payload),
+            member=name_of(guild, member),
+            via=VIA_WEBSITE,
+        )
+        return await sheet_saved(guild, wanted, outcome, member, int(who["id"]))
 
     def plain(path: str, move: Any) -> None:
         async def route(request: Request, tournament_id: str) -> dict[str, Any]:

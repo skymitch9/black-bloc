@@ -745,3 +745,88 @@ export function buildFed(games, links = {}) {
   }
   return sets.sort((a, b) => a.round - b.round || a.position - b.position);
 }
+
+// Pick sheets (docs/info/brackets-kinds-design.md K4): the tree a sheet fills, its score by
+// (round, winner), and the leaderboard's ranks. black_bloc/brackets/picks.py is the truth.
+export const PICK_POINTS = [1, 2, 4, 8, 16, 32];
+
+export function pickTree(sets, entrants, reseeds = null) {
+  const shown = new Map(sets.filter((one) => one.state !== 'void').map((one) => [one.key, one]));
+  const feeders = new Map();
+  for (const one of shown.values()) {
+    if (one.winner_to && shown.has(one.winner_to)) feeders.set(`${one.winner_to}:${one.winner_slot || 'a'}`, one.key);
+  }
+  const tree = { sets: {}, seeds: {} };
+  for (const one of entrants) if (one.seed) tree.seeds[String(one.id)] = one.seed;
+  for (const one of shown.values()) {
+    const rule = (slot) => {
+      const wanted = reseeds && reseeds[one.key] && reseeds[one.key][slot];
+      if (wanted && wanted[0].every((key) => shown.has(key))) return { from: wanted[0], rank: wanted[1] };
+      const feeder = feeders.get(`${one.key}:${slot}`);
+      return feeder ? { from: [feeder], rank: 0 } : { entrant: one[`slot_${slot}`] ?? null };
+    };
+    const fixed = one.state === 'bye' || (one.round <= 0 && one.state === 'complete') ? one.winner ?? null : null;
+    tree.sets[one.key] = { round: one.round, a: rule('a'), b: rule('b'), fixed };
+  }
+  return tree;
+}
+
+export function pointsTable(text) {
+  const parts = String(text ?? '').split(',').map((one) => one.trim()).filter(Boolean);
+  if (!parts.length || parts.some((one) => !/^\d+$/.test(one) || Number(one) > 1000)) return null;
+  return parts.map(Number);
+}
+
+export function roundPoints(table, round) {
+  if (round <= 0 || !table.length) return 0;
+  return table[Math.min(round, table.length) - 1];
+}
+
+export function scoreSheet(tree, picks, sets, table) {
+  const won = new Set();
+  const out = new Set();
+  for (const one of sets) {
+    if (one.state !== 'complete') continue;
+    if (one.winner !== null && one.winner !== undefined) won.add(`${one.round}:${one.winner}`);
+    if (one.loser !== null && one.loser !== undefined) out.add(one.loser);
+  }
+  const found = { points: 0, correct: 0, played: 0, possible: 0, marks: {} };
+  for (const [key, entrant] of Object.entries(picks)) {
+    const round = tree.sets[key].round;
+    if (round <= 0) continue;
+    const worth = roundPoints(table, round);
+    if (won.has(`${round}:${entrant}`)) {
+      Object.assign(found, { points: found.points + worth, correct: found.correct + 1, played: found.played + 1 });
+      found.marks[key] = 'hit';
+    } else if (out.has(entrant)) {
+      found.played += 1;
+      found.marks[key] = 'miss';
+    } else {
+      found.possible += worth;
+    }
+  }
+  return found;
+}
+
+export function finalTotal(sets) {
+  const last = sets.filter((one) => one.state !== 'void' && one.round >= 1 && !one.winner_to);
+  if (last.length !== 1) return null;
+  const final = last[0];
+  if (final.state !== 'complete' || final.score_a === null || final.score_b === null) return null;
+  return Number(final.score_a) + Number(final.score_b);
+}
+
+export function rankSheets(scores, tiebreaks, total) {
+  const order = (user) => {
+    const guess = tiebreaks[user];
+    const gap = total !== null && guess !== null && guess !== undefined ? Math.abs(guess - total) : 1e6;
+    return [-scores[user].points, gap];
+  };
+  const same = (a, b) => order(a)[0] === order(b)[0] && order(a)[1] === order(b)[1];
+  const users = Object.keys(scores).sort((a, b) => order(a)[0] - order(b)[0] || order(a)[1] - order(b)[1] || Number(a) - Number(b));
+  const ranks = {};
+  users.forEach((user, at) => {
+    ranks[user] = at > 0 && same(users[at - 1], user) ? ranks[users[at - 1]] : at + 1;
+  });
+  return ranks;
+}

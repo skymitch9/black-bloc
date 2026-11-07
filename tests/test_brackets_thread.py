@@ -1062,3 +1062,27 @@ async def test_a_sports_card_has_no_player_buttons_and_carries_the_score_line(bo
     assert card.labels == ["Bruins wins…", "Leafs wins…", "Edit…", "Release hold"]
     await moved(bot, guild, tid, sets.override, "W1-1", winner="a", score_a=4, score_b=1)
     assert card.embed.description.startswith("Final 4–1\nW1-1 is final: Bruins wins 4–1.")
+
+
+async def test_the_sweep_locks_the_pick_sheets_and_the_starter_card_shows_the_board(bot, guild):
+    from black_bloc import brackets_picks as picks_
+    from black_bloc import brackets_sports as sports
+
+    tid = await created(bot, guild, kind="sports", league="nba", source="own")
+    for name in ("Ants", "Bees", "Cats", "Dogs"):
+        await moved(bot, guild, tid, people.add_entrant, name=name)
+    await moved(bot, guild, tid, sports.build)
+    await moved(bot, guild, tid, moves.start)
+    team = {one["name"]: one["id"] for one in await store_.entrants(bot.db, tid)}
+    given = {"picks": {"W1-1": team["Ants"]}}
+    saved = await picks_.save_sheet(bot, guild, who(guild, ADA), tid, given)
+    await thread_.follow(bot, guild, tid, saved)
+    starter = the_thread(bot).messages[0]
+    assert "1 sheet(s) in" in starter.embed.description
+    assert "My picks" in starter.labels
+    await store_.update(bot.db, tid, {"picks_lock_at": "2020-01-01T00:00:00+00:00"})
+
+    await thread_.sweep(bot, guild)
+
+    assert "Locked · 1 sheet(s)" in starter.embed.description
+    assert f"1. <@{ADA}> — 0" in starter.embed.description

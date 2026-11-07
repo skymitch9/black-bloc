@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
+from . import brackets_picks as picks_
 from . import brackets_store as store_
 from .brackets import play, sports_shape
 from .brackets.model import COMPLETE, DONE, OPEN, WAITING, A, B
@@ -160,6 +161,7 @@ async def import_bracket(
             values = {"source_key": source_key, **live_values(by_key[source_key])}
             await store_.write_sports(bot.db, row["id"], key, values)
         await store_.update(bot.db, row["id"], {**feed_ok(stamp), "source": answer.via})
+        await picks_.lock_from_games(bot, row)
         await note(
             bot,
             guild,
@@ -210,6 +212,7 @@ async def build(
         built = engine(bot, guild, row, names, play.build, ids, store_.options_of(row), now_stamp())
         gone = await store_.clear_sets(bot.db, row["id"])
         await store_.save(bot.db, row["id"], built.bracket, built.changed, [])
+        await picks_.lock_from_games(bot, row)
         await note(bot, guild, "built", actor, row["id"], via, entrants=len(ids))
         sets = sum(1 for one in built.bracket.matches.values() if one.state not in DONE)
         outcome = done(bot, guild, "built", row["id"], name=row["name"], sets=sets)

@@ -4252,6 +4252,10 @@ BRACKETS_VOTES_VISIBLE = "brackets_votes_visible"
 BRACKETS_NAMES_REFRESH_HOUR = "brackets_names_refresh_hour"
 BRACKETS_SYNC_SECONDS = "brackets_sync_seconds"
 BRACKETS_SYNC_IDLE_MINUTES = "brackets_sync_idle_minutes"
+BRACKETS_PICK_POINTS = "brackets_pick_points"
+BRACKETS_PICK_TIEBREAK = "brackets_pick_tiebreak"
+BRACKETS_LEADERBOARD_ROWS = "brackets_leaderboard_rows"
+BRACKETS_PICKS_DEFAULT = "brackets_picks_default"
 BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_CONFIRM_MINUTES: (12, 1, 1440),
     BRACKETS_CHECK_IN_MINUTES: (30, 5, 1440),
@@ -4267,6 +4271,7 @@ BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_NAMES_REFRESH_HOUR: (4, 0, 23),
     BRACKETS_SYNC_SECONDS: (60, 30, 600),
     BRACKETS_SYNC_IDLE_MINUTES: (60, 5, 1440),
+    BRACKETS_LEADERBOARD_ROWS: (5, 0, 25),
 }
 BRACKETS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
     BRACKETS_MODE: ("shadow", BRACKETS_MODES),
@@ -4283,6 +4288,8 @@ BRACKETS_BOOLS: dict[str, bool] = {
     BRACKETS_GRAND_FINAL_RESET: True,
     BRACKETS_THIRD_PLACE: False,
     BRACKETS_VOTES_VISIBLE: True,
+    BRACKETS_PICK_TIEBREAK: False,
+    BRACKETS_PICKS_DEFAULT: True,
 }
 BRACKETS_NAMED = ("name",)
 BRACKETS_SET = ("set",)
@@ -4925,6 +4932,121 @@ BRACKETS_SPORTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "typed",
     ),
 }
+BRACKETS_PICKS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    BRACKETS_PICK_POINTS: (
+        "1,2,4,8,16,32",
+        (),
+        "the points a correct pick earns, round by round from the first round after any play-in, "
+        "copied onto a new sports bracket; a round past the end of the list takes its last value "
+        "and a play-in scores nothing. Whole numbers from 0 to 1000, separated by commas",
+    ),
+    "brackets_picks_lock_line": (
+        "{count} sheet(s) in · locks {when}",
+        ("count", "when"),
+        "the starter card's picks line before the sheets lock",
+    ),
+    "brackets_picks_open_line": (
+        "{count} sheet(s) in",
+        ("count",),
+        "the starter card's picks line before the sheets lock while no lock time is set",
+    ),
+    "brackets_picks_locked_line": (
+        "Locked · {count} sheet(s)",
+        ("count",),
+        "the starter card's picks line once the sheets are locked",
+    ),
+    "brackets_my_picks_label": (
+        "My picks",
+        (),
+        "the starter card's button that opens a member's pick sheet, and the page's tab of it",
+    ),
+    "brackets_leaderboard_heading": (
+        "Leaderboard",
+        (),
+        "the heading over a sports bracket's pick leaderboard, on the starter card and the page",
+    ),
+    "brackets_leaderboard_line": (
+        "{rank}. {name} — {points}",
+        ("rank", "name", "points"),
+        "one member's row of the starter card's pick leaderboard",
+    ),
+    "brackets_sheet_edited_note": (
+        "edited by staff",
+        (),
+        "the note on a pick sheet staff changed",
+    ),
+    "brackets_picks_link_label": (
+        "Fill in my sheet",
+        (),
+        "the link button in the My picks panel that opens the sheet on the site",
+    ),
+    "brackets_pick_saved": (
+        "Saved: {name} to win {set}.",
+        ("name", "set"),
+        "what a member is told after a quick pick in the My picks panel",
+    ),
+    "brackets_sheet_saved_said": (
+        "Saved.",
+        (),
+        "what a member is told after their pick sheet is saved on the site",
+    ),
+    "brackets_pick_too_late": (
+        "Picks for **{name}** are locked, so your sheet stays as it is.",
+        ("name",),
+        "what a member is told who tries to pick after the sheets lock",
+    ),
+    "brackets_pick_inconsistent_said": (
+        "{set} needs the pick of the game that feeds it, so nothing was saved. Pick the earlier "
+        "games first.",
+        ("set",),
+        "what is said when a sheet names a winner its own earlier picks do not send to that game",
+    ),
+    "brackets_edit_sheet_label": (
+        "Edit sheet",
+        (),
+        "staff's button on a leaderboard row that changes that member's pick sheet",
+    ),
+    "brackets_tiebreak_label": (
+        "Final's total points",
+        (),
+        "the box on a pick sheet for the tiebreak guess, while brackets_pick_tiebreak is on",
+    ),
+    "brackets_your_pick_words": (
+        "your pick: {name}",
+        ("name",),
+        "the mark on a real set, once the sheets lock, of who the viewer picked to win it",
+    ),
+    "brackets_sheet_private_said": (
+        "Sheets stay private until picks lock, so only your own opens before then.",
+        (),
+        "what a member is told who opens someone else's sheet before the lock",
+    ),
+    "brackets_my_picks_line": (
+        "{points} point(s) · rank {rank} of {sheets}",
+        ("points", "rank", "sheets"),
+        "the My picks panel's line of a member's points and rank once the sheets lock",
+    ),
+    "brackets_my_picks_open_line": (
+        "{count} of {total} picked · locks {when}",
+        ("count", "total", "when"),
+        "the My picks panel's line before the sheets lock",
+    ),
+    "brackets_pick_round_placeholder": (
+        "Pick a round",
+        (),
+        "the round dropdown in the My picks panel",
+    ),
+    "brackets_pick_game_placeholder": (
+        "Pick a game",
+        (),
+        "the game dropdown in the My picks panel",
+    ),
+    "brackets_picks_off_said": (
+        "**{name}** has no pick sheets.",
+        ("name",),
+        "what a member is told who opens picks on a bracket that has none",
+    ),
+}
 BRACKETS_LIVE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     "brackets_score_final_line": (
         "Final {a_score}–{b_score}",
@@ -5017,6 +5139,7 @@ BRACKETS_LIVE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
 BRACKETS_WORDS.update(BRACKETS_KIND_WORDS)
 BRACKETS_WORDS.update(BRACKETS_SPORTS_WORDS)
 BRACKETS_WORDS.update(BRACKETS_LIVE_WORDS)
+BRACKETS_WORDS.update(BRACKETS_PICKS_WORDS)
 BRACKETS_DEFAULTS: dict[str, Any] = {
     BRACKETS_CHANNEL: BRACKETS_CHANNEL_ID,
     **{key: default for key, (default, _) in BRACKETS_ENUMS.items()},
@@ -5170,6 +5293,18 @@ KEY_HELP.update(
         BRACKETS_SYNC_IDLE_MINUTES: (
             "minutes between reads of a sports bracket's feed while nothing is being played; 60 "
             "by default"
+        ),
+        BRACKETS_PICK_TIEBREAK: (
+            "whether a pick sheet asks for the final's total points, so the closest guess breaks "
+            "a tie on the leaderboard; off by default"
+        ),
+        BRACKETS_LEADERBOARD_ROWS: (
+            "how many leaderboard rows a sports bracket's starter card shows once its sheets "
+            "lock; 5 by default, 0 shows none"
+        ),
+        BRACKETS_PICKS_DEFAULT: (
+            "whether a new sports bracket takes pick sheets; on by default. Its organiser can "
+            "turn them off until the sheets lock"
         ),
         **{key: said for key, (_, _, said) in BRACKETS_WORDS.items()},
     }

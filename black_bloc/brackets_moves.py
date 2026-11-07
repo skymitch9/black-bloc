@@ -11,7 +11,7 @@ from typing import Any
 
 from . import brackets_store as store_
 from .actionlog import log_action
-from .brackets import access, bestof, play, pools, seeding
+from .brackets import access, bestof, picks, play, pools, seeding
 from .brackets.model import (
     DONE,
     DOUBLE,
@@ -39,6 +39,8 @@ from .settings_store import (
     BRACKETS_MODE,
     BRACKETS_MODES,
     BRACKETS_NUMBERS,
+    BRACKETS_PICK_POINTS,
+    BRACKETS_PICKS_DEFAULT,
     BRACKETS_POOL_COUNT,
     BRACKETS_POOLS_BEST_OF,
     BRACKETS_POOLS_FORMAT,
@@ -171,6 +173,9 @@ TO_WORDS = {
     "not_held": "{set} is not held, so there is nothing to release.",
     "hold_released": "{set} is back under the feed.",
     "pick_winner": "The counts are level, so pick who wins {set}.",
+    "sheet_edited": "Saved {member}'s sheet.",
+    "reason_needed": "Changing {member}'s sheet needs a reason, so nothing was saved.",
+    "picks_on_locked": "Picks for **{name}** are locked, so they stay as they are.",
 }
 
 PLAYER_CODES = (
@@ -532,6 +537,17 @@ def sports_values(bot: Any, guild: Any, given: dict[str, Any], row: Any, values:
     values.update({"format": "single", "third_place": 0, "pools_format": store_.NO_POOLS})
     values.update({"best_of": 1, "best_of_late": 1, "best_of_finals": 1})
     values.update({"best_of_from_round": None, "check_in_minutes": 0, "entrant_cap": None})
+    if row is None:
+        values.update(picks_defaults(bot.store, guild.id))
+
+
+def picks_defaults(store: Any, guild_id: int) -> dict[str, Any]:
+    """A new sports bracket's points per round and whether it takes sheets, from the registry."""
+    found = picks.points_table(store.get(guild_id, BRACKETS_PICK_POINTS)) or picks.DEFAULT_POINTS
+    return {
+        "picks_points": ",".join(str(one) for one in found),
+        "picks_on": int(bool(store.get(guild_id, BRACKETS_PICKS_DEFAULT))),
+    }
 
 
 def option_values(bot: Any, guild: Any, given: dict[str, Any], *, creating: bool) -> dict:

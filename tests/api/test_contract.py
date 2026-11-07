@@ -1373,7 +1373,16 @@ async def seed_sports_live(db, guild_id: int, made) -> dict:
     await store_.write_sports(db, held, "W1-1", {"held": 1, "decided_by": "staff"})
     into, _ = await made("seeding", "single", [], source="nhl", **nhl)
     by_hand, _ = await made("seeding", "single", teams[:2], source="own", **nhl)
+    pool, picked = await made(
+        "running", "single", teams, source="own", picks_on=1, picks_points="1,2", **nhl
+    )
+    built = play.build(picked, store_.options_of(await store_.tournament(db, guild_id, pool)))
+    await store_.save(db, pool, built.bracket, list(built.bracket.matches), [])
+    first = built.bracket.matches["W1-1"]
+    await store_.write_sheet(db, pool, 7, {"W1-1": first.slot_a}, None)
     return {
+        "bracket_picks_id": str(pool),
+        "bracket_picks_member_id": "7",
         "bracket_sports_live_id": str(live),
         "bracket_sports_held_id": str(held),
         "bracket_sports_import_id": str(into),
