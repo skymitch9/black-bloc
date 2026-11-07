@@ -9,7 +9,14 @@ from typing import Any
 import discord
 
 from . import brackets_cards as cards
-from . import brackets_people, brackets_picks, brackets_sets, brackets_votes, shadow
+from . import (
+    brackets_people,
+    brackets_picks,
+    brackets_picture,
+    brackets_sets,
+    brackets_votes,
+    shadow,
+)
 from . import brackets_store as store_
 from .actionlog import log_action
 from .brackets import access
@@ -191,10 +198,11 @@ def starter_payload(
 
 
 async def starter_of(
-    bot: Any, guild: Any, row: Any, people: list[Any], bracket: Any = None
+    bot: Any, guild: Any, row: Any, people: list[Any], bracket: Any = None, *, editing: bool = False
 ) -> dict[str, Any]:
     board = await brackets_picks.board(bot, row)
-    return starter_payload(bot, guild, row, people, bracket, board)
+    payload = starter_payload(bot, guild, row, people, bracket, board)
+    return await brackets_picture.dressed(bot, guild, row, people, payload, editing=editing)
 
 
 async def built(bot: Any, guild: Any, row: Any) -> tuple[Any, str]:
@@ -358,7 +366,7 @@ async def edit_starter(bot: Any, guild: Any, row: Any, thread: Any, people: list
     key = (int(row["id"]), STARTER)
     try:
         await thread.get_partial_message(int(row["message_id"])).edit(
-            **await starter_of(bot, guild, row, people, await pooled(bot, row))
+            **await starter_of(bot, guild, row, people, await pooled(bot, row), editing=True)
         )
     except discord.NotFound:
         stale(bot).discard(key)
@@ -741,7 +749,7 @@ async def leave_word(bot: Any, guild: Any, row: Any, thread: Any) -> None:
     if row["message_id"]:
         try:
             await old.get_partial_message(int(row["message_id"])).edit(
-                content=text, embed=None, view=None, allowed_mentions=quiet
+                content=text, embed=None, view=None, attachments=[], allowed_mentions=quiet
             )
             return
         except discord.NotFound:

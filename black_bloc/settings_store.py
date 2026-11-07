@@ -4256,6 +4256,8 @@ BRACKETS_PICK_POINTS = "brackets_pick_points"
 BRACKETS_PICK_TIEBREAK = "brackets_pick_tiebreak"
 BRACKETS_LEADERBOARD_ROWS = "brackets_leaderboard_rows"
 BRACKETS_PICKS_DEFAULT = "brackets_picks_default"
+BRACKETS_PICTURE = "brackets_picture"
+BRACKETS_PICTURE_MAX = "brackets_picture_max_entrants"
 BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_CONFIRM_MINUTES: (12, 1, 1440),
     BRACKETS_CHECK_IN_MINUTES: (30, 5, 1440),
@@ -4272,6 +4274,7 @@ BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_SYNC_SECONDS: (60, 30, 600),
     BRACKETS_SYNC_IDLE_MINUTES: (60, 5, 1440),
     BRACKETS_LEADERBOARD_ROWS: (5, 0, 25),
+    BRACKETS_PICTURE_MAX: (64, 4, 256),
 }
 BRACKETS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
     BRACKETS_MODE: ("shadow", BRACKETS_MODES),
@@ -4290,6 +4293,7 @@ BRACKETS_BOOLS: dict[str, bool] = {
     BRACKETS_VOTES_VISIBLE: True,
     BRACKETS_PICK_TIEBREAK: False,
     BRACKETS_PICKS_DEFAULT: True,
+    BRACKETS_PICTURE: True,
 }
 BRACKETS_NAMED = ("name",)
 BRACKETS_SET = ("set",)
@@ -5140,6 +5144,25 @@ BRACKETS_WORDS.update(BRACKETS_KIND_WORDS)
 BRACKETS_WORDS.update(BRACKETS_SPORTS_WORDS)
 BRACKETS_WORDS.update(BRACKETS_LIVE_WORDS)
 BRACKETS_WORDS.update(BRACKETS_PICKS_WORDS)
+BRACKETS_PICTURE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "brackets_picture_too_big_line": (
+        "No picture past {most} entrants: {count} are in",
+        ("count", "most"),
+        "the starter card's line instead of the bracket picture when the field is bigger than "
+        "brackets_picture_max_entrants",
+    ),
+    "brackets_picture_champion_line": (
+        "Champion: {name}",
+        ("name",),
+        "the bracket picture's line naming the winner once the tournament is complete",
+    ),
+    "brackets_picture_standings_head": (
+        "#|Name|W-L|Pts",
+        (),
+        "the four column headings of a round robin or Swiss picture's table, split by |",
+    ),
+}
+BRACKETS_WORDS.update(BRACKETS_PICTURE_WORDS)
 BRACKETS_DEFAULTS: dict[str, Any] = {
     BRACKETS_CHANNEL: BRACKETS_CHANNEL_ID,
     **{key: default for key, (default, _) in BRACKETS_ENUMS.items()},
@@ -5305,6 +5328,14 @@ KEY_HELP.update(
         BRACKETS_PICKS_DEFAULT: (
             "whether a new sports bracket takes pick sheets; on by default. Its organiser can "
             "turn them off until the sheets lock"
+        ),
+        BRACKETS_PICTURE: (
+            "whether the starter card carries a picture of the bracket, redrawn as sets are "
+            "decided; on by default. Off shows no picture anywhere"
+        ),
+        BRACKETS_PICTURE_MAX: (
+            "the most entrants a bracket picture is drawn for; 64 by default (4-256). Past it the "
+            "starter card says so in one line"
         ),
         **{key: said for key, (_, _, said) in BRACKETS_WORDS.items()},
     }
