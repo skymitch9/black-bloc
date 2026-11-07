@@ -91,6 +91,10 @@ noise, the command ran; a `discord.ui.View` replaced on a message is NOT stopped
 (`ui/view.py:940–968`); `commands synced` counts TOP-LEVEL commands — a `Group` is one slot,
 so collapsing subcommands into a panel does not change it.
 
+## 📋 Session 2026-11-06
+
+- 🏀 **Brackets beyond fighting games (owner Fri 2026-11-06 ~17:4x Phoenix, verbatim: *"Our bracket is cool but fighting game focused. Can we add to it, I want a way to make and compare sports brackets too for final 4 basket ball, playoffs etc. Maybe a way to dynamically get the scores for the brackets and auto complete team names for sports and schools. Maybe players too. Do research, this will exist in bracket but another option for sports or fighters. Also make this a template so we can do other brackets like best candy bar"*).** Three asks in one: (1) a bracket KIND inside the existing feature — fighters (as built), sports (teams/schools, live scores filled in from a feed, a "compare" view = members' predicted brackets scored against the real one), and a plain template kind (any list: candy bars, …, votes decide); (2) autocomplete for team / school / player names from a data source; (3) scores pulled dynamically so the real bracket completes itself. ⏳ **RESEARCH FIRST** (his word): data sources for live scores + team/school/player lookups → `docs/info/brackets-sports-research-2026-11-06.md`; then the design decisions go to him one at a time before any build.
+
 ## 🎯 Feature asks — the first list (owner, 2026-08-26, verbatim then expanded)
 
 Owner's words: *"Go live message for #live-now channel / Twitch activity
