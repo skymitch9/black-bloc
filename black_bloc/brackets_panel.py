@@ -43,7 +43,11 @@ from .panels import (
     refusal,
     retire,
 )
-from .settings_store import BRACKETS_LENGTHS, BRACKETS_PANEL_MINUTES
+from .settings_store import (
+    BRACKETS_LENGTHS,
+    BRACKETS_PANEL_MINUTES,
+    BRACKETS_VOTES_VISIBLE,
+)
 
 HOME = "home"
 TOURNAMENT = "tournament"
@@ -121,6 +125,13 @@ CONFIRMED = {
     ADVANCE: "Build **{name}**'s final from the pools?",
     UNADVANCE: "Send **{name}** back to its pools? The final's sets are cleared.",
 }
+LIST_TO_MOVES: dict[str, tuple[str, ...]] = {
+    store_.DRAFT: (SEED, SHUFFLE, START, ADD_ENTRANT, CANCEL),
+    store_.SEEDING: (SEED, SHUFFLE, START, ADD_ENTRANT, CANCEL),
+    store_.RUNNING: (COMPLETE_MOVE, UNSTART, CANCEL),
+    store_.COMPLETE: (REOPEN, CANCEL),
+    store_.CANCELLED: (RESTORE,),
+}
 MEMBER_LISTED = (store_.SIGNUPS, store_.CHECK_IN, store_.SEEDING, *store_.PLAYING)
 
 CREATE_PICK = "Create…"
@@ -138,6 +149,8 @@ FORMAT_LINES = {
     ROUND_ROBIN: "Everyone plays everyone",
     SWISS: "Paired by record each round",
 }
+ADD_NAME = "Add a name…"
+ADD_NAME_TITLE = "Add a name"
 FORMAT_EXTRAS = {
     SINGLE: ("third_place",),
     DOUBLE: ("grand_final_reset",),
@@ -264,6 +277,11 @@ async def build_home(
 
 
 def legal_to_moves(row: Any, current: Any) -> list[str]:
+    if store_.kind_of(row) == store_.LIST:
+        found = list(LIST_TO_MOVES.get(row["state"], ()))
+        if COMPLETE_MOVE in found and (current is None or not pools.finished(current)):
+            found.remove(COMPLETE_MOVE)
+        return found
     found = list(TO_MOVES.get(row["state"], ()))
     if row["state"] in store_.PLAYING:
         if current is None or not any(one.state == READY for one in current.matches.values()):
@@ -290,6 +308,8 @@ def may_unadvance(current: Any) -> bool:
 
 def member_moves(row: Any, mine: Any) -> list[str]:
     """Leave wherever it is legal — in, before the start — as the starter card offers it."""
+    if store_.kind_of(row) == store_.LIST:
+        return []
     state = row["state"]
     inside = mine is not None and not mine["dropped"] and not mine["dq"]
     if state == store_.SIGNUPS and not inside:
@@ -449,7 +469,13 @@ async def build_entrant(
     return (embed, view)
 
 
-def set_moves_for(row: Any, seat: Any, runs: bool) -> list[str]:
+def set_moves_for(row: Any, seat: Any, runs: bool, ballot: Any = None) -> list[str]:
+    if store_.kind_of(row) == store_.LIST:
+        return [
+            one
+            for one in cards.list_moves(row, seat.match, ballot)
+            if runs or one in cards.VOTE_ACTIONS
+        ]
     state = seat.match.state
     found: list[str] = []
     if row["state"] not in store_.PLAYING:
@@ -482,12 +508,22 @@ async def build_set(
     if isinstance(seat, Outcome):
         return await build_tournament(bot, guild, user, tournament_id, note=note or seat.message)
     row, match, people = seat.row, seat.match, seat.people
-    embed = cards.set_embed(bot.store, guild.id, match, people, row["confirm_minutes"])
+    ballot = await thread_.ballot_of(bot, row, match.key)
+    embed = cards.set_embed(
+        bot.store,
+        guild.id,
+        match,
+        people,
+        row["confirm_minutes"],
+        listed=store_.kind_of(row) == store_.LIST,
+        ballot=ballot,
+        visible=bool(bot.store.get(guild.id, BRACKETS_VOTES_VISIBLE)),
+    )
     players = cards.players_line(bot.store, guild.id, match, people)
     body = f"{players}\n{embed.description or ''}"
     embed.description = with_note("" if note in body.split("\n") else note, body)
     view = BracketPanel(bot, guild.id, (SET, row["id"], match.key))
-    for move in set_moves_for(row, seat, organiser(bot, guild, user)):
+    for move in set_moves_for(row, seat, organiser(bot, guild, user), ballot):
         view.add_item(SetMoveButton(row["id"], match.key, move, seat_label(bot, guild, seat, move)))
     view.add_item(BackButton(bot, guild, (TOURNAMENT, row["id"])))
     return (embed, view)
@@ -498,6 +534,8 @@ def seat_label(bot: Any, guild: Any, seat: Any, move: str) -> str:
         return LET_STAND
     if move in ("forfeit_a", "forfeit_b"):
         return FORFEIT_LABEL.format(name=seat.name(move[-1]))[:80]
+    if move in (*cards.VOTE_ACTIONS, *cards.LIST_TO_ACTIONS):
+        return cards.list_label(bot.store, guild.id, move, seat.match, seat.people)
     return cards.label(bot.store, guild.id, move)
 
 
@@ -509,8 +547,11 @@ async def build_add(
         return await build_home(bot, guild, user, note=note)
     embed = discord.Embed(title=text(row["name"], 256), description=note or None)
     view = BracketPanel(bot, guild.id, (ADD, row["id"]))
-    view.add_item(AddMemberPick(row["id"]))
-    view.add_item(GuestButton(row["id"]))
+    if store_.kind_of(row) == store_.LIST:
+        view.add_item(GuestButton(row["id"], ADD_NAME))
+    else:
+        view.add_item(AddMemberPick(row["id"]))
+        view.add_item(GuestButton(row["id"]))
     view.add_item(BackButton(bot, guild, (TOURNAMENT, row["id"])))
     return (embed, view)
 
@@ -703,6 +744,7 @@ class CreateModal(AnswersErrors, discord.ui.Modal):
         found: dict[str, Any] = {
             "name": self.name.value,
             "game": self.game.value,
+            "kind": store_.FIGHTERS,
             "format": self.chosen,
             "entrant_cap": whole(self.cap.value),
         }
@@ -1084,7 +1126,7 @@ class EntrantReasonModal(AnswersErrors, discord.ui.Modal):
 
 class SetMoveButton(discord.ui.Button):
     def __init__(self, tournament_id: int, key: str, move: str, shown: str) -> None:
-        player = move in cards.PLAYER_ACTIONS
+        player = move in (*cards.PLAYER_ACTIONS, *cards.VOTE_ACTIONS)
         super().__init__(
             label=text(shown, 80),
             style=cards.STYLES.get(move, discord.ButtonStyle.secondary),
@@ -1147,12 +1189,16 @@ class AddMemberPick(discord.ui.UserSelect):
 
 
 class GuestButton(discord.ui.Button):
-    def __init__(self, tournament_id: int) -> None:
-        super().__init__(label=GUEST_LABEL, style=discord.ButtonStyle.secondary, row=0)
+    def __init__(self, tournament_id: int, shown: str = GUEST_LABEL) -> None:
+        super().__init__(label=shown, style=discord.ButtonStyle.secondary, row=0)
         self.tournament_id = int(tournament_id)
+        self.plain = shown != GUEST_LABEL
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await form_opened(interaction, GuestModal(self.tournament_id, self.view))
+        modal = GuestModal(self.tournament_id, self.view)
+        if self.plain:
+            modal.title = ADD_NAME_TITLE
+        await form_opened(interaction, modal)
 
 
 class GuestModal(AnswersErrors, discord.ui.Modal, title=GUEST_TITLE):

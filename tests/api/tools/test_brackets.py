@@ -503,3 +503,72 @@ async def test_pools_then_the_final_through_the_website(client, sign_in, wf, web
     back = organiser.post(f"/api/brackets/{tid}/unadvance", json={}).json()
     assert back["message"] == "**Knuck Up 12** is back in its pools; the final's sets are cleared."
     assert (back["tournament"]["state"], back["tournament"]["sets"]) == ("pools", [])
+
+
+def listed_running(client, sign_in, wf, **given):
+    organiser = as_(client, sign_in, wf, TO)
+    row = made(organiser, kind="list", format="single", decide_by="votes", **given)
+    for name in ("Snickers", "Twix"):
+        added = organiser.post(f"/api/brackets/{row['id']}/entrants", json={"name": name})
+        assert added.status_code == 200, added.text
+    started = organiser.post(f"/api/brackets/{row['id']}/start", json={})
+    assert started.status_code == 200, started.text
+    return started.json()["tournament"]
+
+
+async def test_a_list_bracket_reads_its_kind_and_each_sets_vote(client, sign_in, wf, people):
+    row = listed_running(client, sign_in, wf)
+    assert (row["kind"], row["decide_by"], row["vote_minutes"]) == ("list", "votes", 1440)
+    [one] = row["sets"]
+    assert (one["votes_a"], one["votes_b"], one["my_vote"], one["vote_open"]) == (0, 0, None, True)
+    assert one["vote_closes_at"]
+    listed = as_(client, sign_in, wf, ADA).get("/api/brackets").json()
+    assert listed["tournaments"][0]["kind"] == "list"
+    assert listed["kind_defaults"] == {
+        "kind": "fighters",
+        "decide_by": "votes",
+        "vote_minutes": 1440,
+    }
+
+
+async def test_a_member_votes_and_sees_their_vote_and_an_organiser_closes_it(
+    client, sign_in, wf, people
+):
+    row = listed_running(client, sign_in, wf)
+    member = as_(client, sign_in, wf, ADA)
+    voted = member.post(f"/api/brackets/{row['id']}/sets/W1-1/vote", json={"slot": "b"})
+    assert voted.status_code == 200, voted.text
+    assert voted.json()["message"].startswith("You voted for Twix · change any time until ")
+    [one] = voted.json()["tournament"]["sets"]
+    assert (one["votes_b"], one["my_vote"]) == (1, "b")
+    refused = member.post(f"/api/brackets/{row['id']}/sets/W1-1/close-vote", json={})
+    assert refused.status_code == 403 and refused.json()["message"]
+    bad = member.post(f"/api/brackets/{row['id']}/sets/W1-1/vote", json={"slot": "x"})
+    assert (bad.status_code, bad.json()["error"]) == (400, "bad_slot")
+    organiser = as_(client, sign_in, wf, TO)
+    closed = organiser.post(f"/api/brackets/{row['id']}/sets/W1-1/close-vote", json={})
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["message"] == "W1-1 is final: Twix wins 1–0."
+    late = as_(client, sign_in, wf, BEA).post(
+        f"/api/brackets/{row['id']}/sets/W1-1/vote", json={"slot": "a"}
+    )
+    assert (late.status_code, late.json()["error"]) == (409, "vote_closed")
+
+
+async def test_hidden_counts_read_none_until_the_vote_closes(client, sign_in, wf, web, people):
+    await web.store.set(wf.GUILD_ID, "brackets_votes_visible", False)
+    row = listed_running(client, sign_in, wf)
+    [one] = row["sets"]
+    assert (one["votes_a"], one["votes_b"], one["vote_count"]) == (None, None, 0)
+
+
+async def test_a_sports_bracket_is_refused_in_words_and_the_kind_cannot_change(
+    client, sign_in, wf, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    sports = organiser.post("/api/brackets", json={"name": "March", "kind": "sports"})
+    assert (sports.status_code, sports.json()["error"]) == (409, "sports_not_yet")
+    row = made(organiser)
+    changed = organiser.patch(f"/api/brackets/{row['id']}", json={"kind": "list"})
+    assert (changed.status_code, changed.json()["error"]) == (409, "kind_fixed")
+    assert row["kind"] == "fighters"

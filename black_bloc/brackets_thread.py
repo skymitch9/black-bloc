@@ -9,7 +9,7 @@ from typing import Any
 import discord
 
 from . import brackets_cards as cards
-from . import brackets_people, brackets_sets, shadow
+from . import brackets_people, brackets_sets, brackets_votes, shadow
 from . import brackets_store as store_
 from .actionlog import log_action
 from .brackets import access
@@ -18,7 +18,7 @@ from .brackets_moves import OFF, ON, SHADOW, Stop, answered, loaded, mode_of
 from .brackets_moves import note as move_note
 from .logkinds import VIA_DISCORD
 from .panels import Outcome, refusal
-from .settings_store import BRACKETS_CHANNEL, BRACKETS_PING_ROLE
+from .settings_store import BRACKETS_CHANNEL, BRACKETS_PING_ROLE, BRACKETS_VOTES_VISIBLE
 
 log = logging.getLogger(__name__)
 
@@ -395,12 +395,35 @@ async def sync_starter(
     await post_starter(bot, guild, await fresh(bot, guild, row["id"]), thread, people)
 
 
-def set_payload(bot: Any, guild: Any, row: Any, match: Any, people: dict) -> dict[str, Any]:
+def set_payload(
+    bot: Any, guild: Any, row: Any, match: Any, people: dict, ballot: Any = None
+) -> dict[str, Any]:
+    if store_.kind_of(row) == store_.LIST:
+        embed = cards.set_embed(
+            bot.store,
+            guild.id,
+            match,
+            people,
+            row["confirm_minutes"],
+            listed=True,
+            ballot=ballot,
+            visible=bool(bot.store.get(guild.id, BRACKETS_VOTES_VISIBLE)),
+        )
+        view = cards.set_view(bot.store, guild.id, row, match, people=people, ballot=ballot)
+    else:
+        embed = cards.set_embed(bot.store, guild.id, match, people, row["confirm_minutes"])
+        view = cards.set_view(bot.store, guild.id, row, match)
     return {
         "content": cards.players_line(bot.store, guild.id, match, people),
-        "embed": cards.set_embed(bot.store, guild.id, match, people, row["confirm_minutes"]),
-        "view": cards.set_view(bot.store, guild.id, row, match),
+        "embed": embed,
+        "view": view,
     }
+
+
+async def ballot_of(bot: Any, row: Any, key: str) -> Any:
+    if not store_.votes_decide(row):
+        return None
+    return await store_.ballot(bot.db, row["id"], key)
 
 
 async def adopt(bot: Any, row: Any, thread: Any, key: str) -> Any:
@@ -435,7 +458,7 @@ async def post_card(
         return
     stamp = store_.stamp()
     await store_.set_card(bot.db, row["id"], match.key, None, stamp)
-    payload = set_payload(bot, guild, row, match, people)
+    payload = set_payload(bot, guild, row, match, people, await ballot_of(bot, row, match.key))
     users = cards.winner_ids(match, people) if match.state == COMPLETE else None
     users = cards.player_ids(match, people) if users is None else users
     try:
@@ -456,9 +479,10 @@ async def edit_card(
 ) -> bool:
     """False only on a 404; any other failure keeps the card and is tried again next pass."""
     key = (int(row["id"]), match.key)
+    ballot = await ballot_of(bot, row, match.key)
     try:
         await thread.get_partial_message(int(message_id)).edit(
-            **set_payload(bot, guild, row, match, people),
+            **set_payload(bot, guild, row, match, people, ballot),
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except discord.NotFound:
@@ -650,12 +674,14 @@ async def sweep(bot: Any, guild: Any, *, full: bool = False) -> None:
         return
     confirmed = await brackets_sets.confirm_due(bot, guild)
     closed = await brackets_people.close_due_check_ins(bot, guild)
+    voted = await brackets_votes.close_due_votes(bot, guild)
     budget = Budget()
-    for tournament_id in dict.fromkeys([*(one for one, _ in confirmed), *closed]):
+    for tournament_id in dict.fromkeys([*(one for one, _ in confirmed), *closed, *voted]):
         row = await fresh(bot, guild, tournament_id)
         if row is None:
             continue
         keys = tuple(key for one, key in confirmed if one == tournament_id)
+        keys += voted.get(tournament_id, ())
         try:
             await sync(bot, guild, row, keys=keys, budget=budget)
         except Exception:

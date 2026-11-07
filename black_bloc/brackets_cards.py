@@ -41,9 +41,16 @@ DISPUTE = "dispute"
 CALL = "call"
 DECIDE = "decide"
 RESET = "reset"
+VOTE_A = "vote_a"
+VOTE_B = "vote_b"
+PICK_A = "pick_a"
+PICK_B = "pick_b"
+CLOSE_VOTE = "close_vote"
 PLAYER_ACTIONS = (REPORT, CONFIRM, DISPUTE)
+VOTE_ACTIONS = (VOTE_A, VOTE_B)
 TO_ACTIONS = (CALL, DECIDE, RESET)
-SET_ACTIONS = (*PLAYER_ACTIONS, *TO_ACTIONS)
+LIST_TO_ACTIONS = (PICK_A, PICK_B, CLOSE_VOTE)
+SET_ACTIONS = (*PLAYER_ACTIONS, *TO_ACTIONS, *VOTE_ACTIONS, *LIST_TO_ACTIONS)
 
 PREFIX = "brackets"
 KEY_PATTERN = r"(?:[A-Z]\.)?[A-Z][0-9]+-[0-9]+"
@@ -81,6 +88,7 @@ LABEL_KEYS = {
     DISPUTE: "brackets_dispute_label",
 }
 TO_LABELS = {CALL: "Call", DECIDE: "Decide…", RESET: "Reset…"}
+PICK_LABEL = "{name} wins…"
 STYLES = {
     JOIN: discord.ButtonStyle.success,
     LEAVE: discord.ButtonStyle.secondary,
@@ -91,6 +99,20 @@ STYLES = {
     CALL: discord.ButtonStyle.secondary,
     DECIDE: discord.ButtonStyle.secondary,
     RESET: discord.ButtonStyle.secondary,
+    VOTE_A: discord.ButtonStyle.primary,
+    VOTE_B: discord.ButtonStyle.primary,
+    PICK_A: discord.ButtonStyle.secondary,
+    PICK_B: discord.ButtonStyle.secondary,
+    CLOSE_VOTE: discord.ButtonStyle.secondary,
+}
+KIND_KEYS = {
+    store_.FIGHTERS: "brackets_kind_fighters_words",
+    store_.SPORTS: "brackets_kind_sports_words",
+    store_.LIST: "brackets_kind_list_words",
+}
+DECIDE_KEYS = {
+    store_.VOTES: "brackets_decide_votes_words",
+    store_.ORGANISER: "brackets_decide_organiser_words",
 }
 FORMAT_KEYS = {
     SINGLE: "brackets_format_single_words",
@@ -191,8 +213,25 @@ def state_words(store: Any, guild_id: int, state: str) -> str:
     return words(store, guild_id, f"brackets_state_{state}")
 
 
+def list_line(store: Any, guild_id: int, row: Any) -> str:
+    found = [
+        words(store, guild_id, KIND_KEYS[store_.LIST]),
+        words(store, guild_id, FORMAT_KEYS.get(row["format"], FORMAT_KEYS[SINGLE])),
+    ]
+    decide = DECIDE_KEYS.get(store_.column(row, "decide_by"))
+    if decide:
+        found.append(words(store, guild_id, decide))
+    if row["format"] == DOUBLE and row["grand_final_reset"]:
+        found.append(words(store, guild_id, "brackets_card_reset_words"))
+    if row["format"] == SINGLE and row["third_place"]:
+        found.append(words(store, guild_id, "brackets_card_third_words"))
+    return " · ".join(part for part in found if part)
+
+
 def format_line(store: Any, guild_id: int, row: Any) -> str:
     gid = guild_id
+    if store_.kind_of(row) == store_.LIST:
+        return list_line(store, gid, row)
     found = [
         words(
             store,
@@ -390,14 +429,55 @@ def status_line(
     return [words(store, gid, "brackets_set_card_cleared", set=match.key)]
 
 
+def vote_lines(
+    store: Any, guild_id: int, match: Any, people: dict[int, Any], ballot: Any, visible: bool
+) -> list[str]:
+    """A voted list set: the counts (or how many voted) while open, tied, or the result."""
+    counts = {
+        "a": name_of(people, match.slot_a),
+        "b": name_of(people, match.slot_b),
+        "votes_a": ballot["a"],
+        "votes_b": ballot["b"],
+    }
+    if match.state in store_.VOTE_OPEN and not ballot["closed_at"]:
+        closes = when_words(ballot["closes_at"], "R") or ""
+        if visible:
+            return [words(store, guild_id, "brackets_vote_open_line", closes=closes, **counts)]
+        total = ballot["a"] + ballot["b"]
+        return [words(store, guild_id, "brackets_vote_hidden_line", count=total, closes=closes)]
+    if match.state == REPORTED:
+        return [words(store, guild_id, "brackets_vote_tied_line", **counts)]
+    if match.state == COMPLETE:
+        return [
+            result_words(store, guild_id, match, people),
+            words(store, guild_id, "brackets_vote_closed_line", **counts),
+        ]
+    return status_line(store, guild_id, match, people, 0)
+
+
 def set_embed(
-    store: Any, guild_id: int, match: Any, people: dict[int, Any], confirm_minutes: int
+    store: Any,
+    guild_id: int,
+    match: Any,
+    people: dict[int, Any],
+    confirm_minutes: int,
+    *,
+    listed: bool = False,
+    ballot: Any = None,
+    visible: bool = True,
 ) -> discord.Embed:
+    """A list set (`listed`) has no best-of; a voted one (`ballot`) reads its vote."""
     gid = guild_id
-    head = [words(store, gid, "brackets_set_card_best_of", best_of=match.best_of)]
+    head = [] if listed else [words(store, gid, "brackets_set_card_best_of", best_of=match.best_of)]
     if match.rematch:
         head.append(words(store, gid, "brackets_set_card_rematch"))
-    lines = [" · ".join(head), *status_line(store, gid, match, people, confirm_minutes)]
+    if ballot is not None:
+        status = vote_lines(store, gid, match, people, ballot, visible)
+    elif listed and match.state == COMPLETE:
+        status = [result_words(store, gid, match, people)]
+    else:
+        status = status_line(store, gid, match, people, confirm_minutes)
+    lines = [" · ".join(head), *status] if head else status
     return discord.Embed(
         title=words(
             store,
@@ -485,7 +565,7 @@ class SetButton(SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], temp
                 style=STYLES[action],
                 custom_id=set_custom_id(tournament_id, key, action),
             ),
-            row=0 if action in PLAYER_ACTIONS else 1,
+            row=0 if action in (*PLAYER_ACTIONS, *VOTE_ACTIONS) else 1,
         )
 
     @classmethod
@@ -517,8 +597,45 @@ def starter_view(
     return view
 
 
-def set_view(store: Any, guild_id: int, row: Any, match: Any) -> discord.ui.View:
+def list_moves(row: Any, match: Any, ballot: Any = None) -> tuple[str, ...]:
+    """A list set: the two vote buttons while its vote is open, the organiser's picks always."""
+    if row["state"] != store_.RUNNING or match.state not in (*OPEN_CARD, COMPLETE):
+        return ()
+    voting = ballot is not None and match.state in store_.VOTE_OPEN and not ballot["closed_at"]
+    found = [VOTE_A, VOTE_B] if voting else []
+    found += [PICK_A, PICK_B]
+    if voting:
+        found.append(CLOSE_VOTE)
+    if match.state not in (READY,):
+        found.append(RESET)
+    return tuple(found)
+
+
+def list_label(store: Any, guild_id: int, action: str, match: Any, people: dict) -> str:
+    if action in VOTE_ACTIONS:
+        return name_of(people, match.slot(action[-1]))[:LABEL_LIMIT] or "—"
+    if action in (PICK_A, PICK_B):
+        return PICK_LABEL.format(name=name_of(people, match.slot(action[-1])))[:LABEL_LIMIT]
+    if action == CLOSE_VOTE:
+        return words(store, guild_id, "brackets_close_vote_label")[:LABEL_LIMIT] or action
+    return label(store, guild_id, action)
+
+
+def set_view(
+    store: Any,
+    guild_id: int,
+    row: Any,
+    match: Any,
+    *,
+    people: dict | None = None,
+    ballot: Any = None,
+) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
+    if store_.kind_of(row) == store_.LIST:
+        for action in list_moves(row, match, ballot):
+            text = list_label(store, guild_id, action, match, people or {})
+            view.add_item(SetButton(row["id"], match.key, action, text))
+        return view
     for action in set_moves(row["state"], match.state, match.pool):
         view.add_item(SetButton(row["id"], match.key, action, label(store, guild_id, action)))
     return view
@@ -532,6 +649,14 @@ def carries(message: Any, prefix: str) -> bool:
 __all__ = [
     "CALL",
     "CHECK_IN",
+    "CLOSE_VOTE",
+    "PICK_A",
+    "PICK_B",
+    "VOTE_A",
+    "VOTE_B",
+    "list_label",
+    "list_moves",
+    "vote_lines",
     "CLEARED",
     "CONFIRM",
     "DECIDE",

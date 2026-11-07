@@ -12,6 +12,7 @@ from . import brackets_people as people_
 from . import brackets_sets as sets_
 from . import brackets_store as store_
 from . import brackets_thread as thread_
+from . import brackets_votes as votes_
 from .brackets import access
 from .brackets_moves import NOTE_LIMIT, WRONG_STATE, Stop, require_on, role_words, said
 from .command_errors import AnswersErrors
@@ -185,6 +186,30 @@ async def set_move(
     """Who may press is asked on every press; a form opens only for someone it would serve."""
     bot, guild, user = interaction.client, interaction.guild, interaction.user
     if not await db_up(interaction):
+        return
+    if action in cards.VOTE_ACTIONS:
+        await land.begin(interaction)
+        outcome = await votes_.vote(bot, guild, user, tournament_id, key, action[-1])
+        await land.end(interaction, tournament_id, outcome, action)
+        return
+    if action in (cards.CLOSE_VOTE, cards.PICK_A, cards.PICK_B) and not may_run(interaction):
+        await answer(interaction, not_organiser(bot, guild).message)
+        return
+    if action == cards.CLOSE_VOTE:
+        await land.begin(interaction)
+        outcome = await votes_.close_vote(bot, guild, user, tournament_id, key)
+        await land.end(interaction, tournament_id, outcome, action)
+        return
+    if action in (cards.PICK_A, cards.PICK_B):
+        seat = await seat_of(bot, guild, user, tournament_id, key)
+        if isinstance(seat, Outcome):
+            await answer(interaction, seat.message)
+            return
+        refused = off_now(bot, guild)
+        if refused:
+            await answer(interaction, refused)
+            return
+        await interaction.response.send_modal(PickModal(bot, guild, seat, land, action[-1]))
         return
     if action in (cards.CONFIRM, cards.CALL):
         await land.begin(interaction)
@@ -460,8 +485,32 @@ class ForfeitModal(SetForm):
         await self.landed(interaction, outcome, cards.DECIDE)
 
 
+class PickModal(SetForm):
+    """The organiser picks a list set's winner; a voted set keeps its counts as the score."""
+
+    def __init__(self, bot: Any, guild: Any, seat: Seat, land: Any, side: str) -> None:
+        super().__init__(cards.PICK_LABEL.format(name=seat.name(side)), bot, guild, seat, land)
+        self.side = side
+        self.reason = reason_input()
+        self.add_item(self.reason)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await self.started(interaction):
+            return
+        outcome = await sets_.override(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.seat.row["id"],
+            self.seat.match.key,
+            winner=self.side,
+        )
+        await self.landed(interaction, outcome, cards.DECIDE)
+
+
 __all__ = [
     "ON_CARD",
+    "PickModal",
     "CardLanding",
     "DecideModal",
     "DisputeModal",

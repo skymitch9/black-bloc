@@ -344,3 +344,45 @@ async def test_leave_from_the_starter_card_works_while_seeding(bot, guild):
 
     assert (await store_.entrant_of(bot.db, tid, ADA))["dropped"]
     assert starter.labels == ["Open the bracket"]
+
+
+async def test_a_vote_press_answers_privately_and_the_card_counts_it(bot, guild):
+    from tests.test_brackets_thread import listed_running
+
+    tid = await listed_running(bot, guild, "Snickers", "Twix")
+    press = pressing(bot, CY)
+
+    await buttons_.set_pressed(press, tid, "W1-1", cards.VOTE_B)
+
+    assert press.said[0].startswith("You voted for Twix · change any time until <t:")
+    assert all(one["ephemeral"] for one in press.response.messages)
+    card = await card_of(bot, "W1-1")
+    assert card.embed.description.startswith("Snickers 0 · Twix 1 · closes")
+
+
+async def test_close_now_and_a_pick_are_refused_to_a_member_in_words(bot, guild):
+    from tests.test_brackets_thread import listed_running
+
+    tid = await listed_running(bot, guild, "Snickers", "Twix")
+    for action in (cards.CLOSE_VOTE, cards.PICK_A):
+        press = pressing(bot, ADA)
+        await buttons_.set_pressed(press, tid, "W1-1", action)
+        assert press.modal is None
+        assert "organiser" in press.said[0].lower() or "Tournament Organiser" in press.said[0]
+
+
+async def test_the_organisers_pick_form_decides_the_set_with_the_counts_kept(bot, guild):
+    from tests.test_brackets_thread import listed_running
+
+    tid = await listed_running(bot, guild, "Snickers", "Twix")
+    await buttons_.set_pressed(pressing(bot, ADA), tid, "W1-1", cards.VOTE_A)
+    press = pressing(bot, TO)
+    await buttons_.set_pressed(press, tid, "W1-1", cards.PICK_B)
+    assert isinstance(press.modal, buttons_.PickModal)
+    fill(press.modal, reason="")
+    await press.modal.on_submit(press)
+    match = (await store_.bracket(bot.db, await store_.tournament(bot.db, GUILD, tid))).matches[
+        "W1-1"
+    ]
+    assert (match.state, match.score_a, match.score_b) == ("complete", 1, 0)
+    assert match.winner == match.slot_b
