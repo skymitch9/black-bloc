@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 104
+SCHEMA_VERSION = 105
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1490,6 +1490,12 @@ CREATE TABLE IF NOT EXISTS tournaments (
     kind               TEXT    NOT NULL DEFAULT 'fighters',
     decide_by          TEXT,
     vote_minutes       INTEGER,
+    league             TEXT,
+    season             TEXT,
+    feed_ok_at         TEXT,
+    feed_failed_at     TEXT,
+    feed_failures      INTEGER NOT NULL DEFAULT 0,
+    feed_error         TEXT,
     channel_id         INTEGER,
     thread_id          INTEGER,
     message_id         INTEGER,
@@ -1575,6 +1581,12 @@ CREATE TABLE IF NOT EXISTS tournament_sets (
     vote_opens_at    TEXT,
     vote_closes_at   TEXT,
     vote_closed_at   TEXT,
+    source_key       TEXT,
+    scheduled_at     TEXT,
+    live_status      TEXT,
+    period_words     TEXT,
+    decided_by       TEXT,
+    held             INTEGER NOT NULL DEFAULT 0,
     UNIQUE (tournament_id, key)
 );
 
@@ -1826,6 +1838,18 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tournament_entrants", "ext_source", "TEXT"),
     ("tournament_entrants", "ext_id", "TEXT"),
     ("tournament_entrants", "short", "TEXT"),
+    ("tournaments", "league", "TEXT"),
+    ("tournaments", "season", "TEXT"),
+    ("tournaments", "feed_ok_at", "TEXT"),
+    ("tournaments", "feed_failed_at", "TEXT"),
+    ("tournaments", "feed_failures", "INTEGER NOT NULL DEFAULT 0"),
+    ("tournaments", "feed_error", "TEXT"),
+    ("tournament_sets", "source_key", "TEXT"),
+    ("tournament_sets", "scheduled_at", "TEXT"),
+    ("tournament_sets", "live_status", "TEXT"),
+    ("tournament_sets", "period_words", "TEXT"),
+    ("tournament_sets", "decided_by", "TEXT"),
+    ("tournament_sets", "held", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {
