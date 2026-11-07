@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 
 SEARCH_LIMIT = 25
 CANDIDATES = 400
+WORDS_LIMIT = 6
 ALIAS_JOIN = " | "
 LISTS: tuple[tuple[str, str], ...] = (
     *((TEAM, league) for league in LEAGUES),
@@ -142,15 +143,17 @@ def escaped(text: str) -> str:
 
 
 def rank(row: Any, wanted: str) -> tuple[int, str]:
-    """Prefix of the name, then a word of it, then the short name or an alias, then anywhere."""
+    """The whole text as a name prefix, then the first word as a prefix of a word of the name,
+    then of the short name or an alias, then anywhere (checklist 45: words, in any order)."""
     name = str(row["name"]).lower()
     short = str(row["short"] or "").lower()
     aliases = [one.lower() for one in str(row["aliases"] or "").split(ALIAS_JOIN) if one]
+    first = wanted.split()[0]
     if name.startswith(wanted):
         place = 0
-    elif any(word.startswith(wanted) for word in name.split()):
+    elif any(word.startswith(first) for word in name.split()):
         place = 1
-    elif short.startswith(wanted) or any(one.startswith(wanted) for one in aliases):
+    elif short.startswith(first) or any(one.startswith(first) for one in aliases):
         place = 2
     else:
         place = 3
@@ -176,17 +179,18 @@ async def search(
     wanted = " ".join(str(query or "").lower().split())
     if not wanted or kind not in (TEAM, SCHOOL, PLAYER):
         return []
-    like = f"%{escaped(wanted)}%"
     where = ["n.kind = ?"]
     given: list[Any] = [kind]
     if league and kind != SCHOOL:
         where.append("n.league = ?")
         given.append(league)
-    where.append(
-        "(lower(n.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(n.short, '')) LIKE ? ESCAPE '\\' "
-        "OR lower(COALESCE(n.aliases, '')) LIKE ? ESCAPE '\\')"
-    )
-    given += [like, like, like]
+    for word in wanted.split()[:WORDS_LIMIT]:
+        like = f"%{escaped(word)}%"
+        where.append(
+            "(lower(n.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(n.short, '')) LIKE ? "
+            "ESCAPE '\\' OR lower(COALESCE(n.aliases, '')) LIKE ? ESCAPE '\\')"
+        )
+        given += [like, like, like]
     cur = await db.conn.execute(
         "SELECT n.*, t.name AS team_name FROM sports_names n LEFT JOIN sports_names t "
         "ON t.kind = 'team' AND t.source = n.source AND t.league = n.league "

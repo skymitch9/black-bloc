@@ -181,6 +181,45 @@ typed name. Discord: the organiser's **Add entrant** on the panel opens a modal 
 ephemeral select of the closest 25 matches plus *Use "{typed}" as typed*. No new slash command (the panels rule;
 Discord modals have no autocomplete).
 
+### K2 as built (branch `brackets-sports-names`, 2026-11-06) — the delta from the spec above
+
+- **Shapes beyond the table:** `Team` carries `aliases` (ESPN's short name, location and nickname; henrygd's long
+  school name) so a search for *Celtics* or *University of Connecticut* finds the row; `Player` carries `short`
+  (ESPN `shortName`); `Bracket` carries `names` (ext id → display name) for K3's Import; `Game` carries `round`.
+  `Found` has `via`. Sources are `espn`, `ncaa` (henrygd), `nhl`, `nba`, `mlb`.
+- **Which source answers what (`feeds.FEEDS`):** teams — ESPN for all six (MLB falls back to statsapi); players —
+  ESPN rosters for the four pro leagues (NBA falls back to `playerindex`, MLB to `sports/1/players`; NFL and NHL have
+  none); schools — henrygd; brackets — henrygd (NCAA), NHL, stats.nba.com, statsapi, the NFL builder over ESPN, with
+  **no fallback** (assembling an NCAA bracket from ESPN's `groups=100` scoreboard is left to K3); scores — ESPN for
+  all six, falling back to henrygd (NCAA), NHL `score/{day}` and statsapi (MLB); none for NBA (cdn.nba.com is 403
+  from Fly) or the NFL. ESPN's live player search was **not built** (nothing calls it; the local cache is the design).
+- **Words, not statuses:** a feed refusal reads *had nothing at that address* / *refused the request* / *asked Black
+  Bloc to slow down* / *had a server error*, a timeout *did not answer in time*, else *could not be reached*, each
+  prefixed with the source and suffixed with what was asked (*ESPN had a server error for the NHL roster of team 2*).
+- **Lists and refresh:** 11 lists (teams × 6, schools, players × 4). A list is replaced only when every call for it
+  answers; names a feed stops sending are kept (an entrant may point at one). The sweep is the new `Sports` cog
+  (10-minute `Reconciler` tick): never while `brackets_mode` is off; at once when the table is empty (a fresh deploy
+  does not wait for 4 am); else once a local day from the hour when the newest row is 20 h old — so a bot that was down
+  at 4 catches up, and a failing day is tried once, not every tick. The failure streak lives in memory on the bot.
+- **Website refresh:** runs behind the answer (one at a time); the route waits 8 s and says either *Names refreshed:
+  N of 11 lists answered.* or that it is running. Log rows: `web.sports.refresh` (the press), `sports.names_refreshed`
+  and `sports.names_failed` (consequences, bare kind — checklist 34). A new head `sports` (core).
+- **Entrants:** list AND sports entrants never keep a member id. `GET /api/brackets/{id}` adds `ext_source`,
+  `ext_id`, `short`, and `ext_league` / `ext_name` (the names row the id points at). A matched add with no name takes
+  the feed's name and short. `PATCH …/entrants/{id}` takes any of name / short / seed / ext pair, at any state.
+- **Search answer** carries `kind` beside `{ext_id, name, short, league, team, source}`; schools have `league` `''`.
+- **Discord:** the closest **24** names (across teams, schools and players) plus *Use "…" as typed* — 25, Discord's
+  option cap (checklist 40); no match adds the typed name at once. **Edit entrant** shows on sports and list entrants
+  only — the fighters entrant view's buttons are pinned by the existing panel tests (flag to the owner).
+- **Page:** the typeahead is `ui.js` `remoteSearch` (the shared module's server-backed sibling of `listFilter`); the
+  inline **Edit entrant** is on sports and list rows; a staff **Sports names** section on the tournament list (per
+  list: names, updated, last failure; **Refresh now**). The mock seeds sports bracket **21** (*NBA Playoffs 2027*,
+  seeding, one matched and one typed entrant). `sports` create stays refused (`sports_not_yet`) until K3.
+- **Keys:** 12 (CORE_KEYS 413 → 425): `brackets_names_refresh_hour`, the six `brackets_league_*_words`,
+  `brackets_typed_entrant_note`, `brackets_edit_entrant_label`, `brackets_entrant_edited_said`,
+  `brackets_ext_unknown_said`, `brackets_use_typed_label`. The page's own organiser labels (Teams / Schools / Players,
+  Short name, Clear match, Sports names, Refresh now) are constants (the owner's "bb").
+
 ## K3 — sports brackets live
 
 **Storage (schema 105).** `tournament_sets` gains `source_key TEXT`, `scheduled_at TEXT`, `live_status TEXT`,

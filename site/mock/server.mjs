@@ -16759,8 +16759,9 @@ function sportsRank(one, wanted) {
   const name = one.name.toLowerCase();
   const aliases = String(one.aliases || '').toLowerCase().split(' | ').filter(Boolean);
   if (name.startsWith(wanted)) return 0;
-  if (name.split(/\s+/).some((word) => word.startsWith(wanted))) return 1;
-  if (String(one.short || '').toLowerCase().startsWith(wanted) || aliases.some((alias) => alias.startsWith(wanted))) return 2;
+  const first = wanted.split(' ')[0];
+  if (name.split(/\s+/).some((word) => word.startsWith(first))) return 1;
+  if (String(one.short || '').toLowerCase().startsWith(first) || aliases.some((alias) => alias.startsWith(first))) return 2;
   return 3;
 }
 
@@ -16770,7 +16771,7 @@ function sportsSearch(kind, league, query, limit = 25) {
   const teamOf = (one) => (SPORTS_NAMES.find((team) => team.kind === 'team' && team.source === one.source && team.league === one.league && team.ext_id === one.team_ext_id) || {}).name || null;
   return SPORTS_NAMES
     .filter((one) => one.kind === kind && (!league || kind === 'school' || one.league === league))
-    .filter((one) => [one.name, one.short || '', one.aliases || ''].some((text) => text.toLowerCase().includes(wanted)))
+    .filter((one) => wanted.split(' ').every((word) => [one.name, one.short || '', one.aliases || ''].some((text) => text.toLowerCase().includes(word))))
     .sort((a, b) => sportsRank(a, wanted) - sportsRank(b, wanted) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
     .slice(0, Math.max(1, Math.min(Number(limit) || 25, 25)))
     .map((one) => ({ ext_id: one.ext_id, name: one.name, short: one.short, league: one.league, team: teamOf(one), source: one.source, kind: one.kind }));

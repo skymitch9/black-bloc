@@ -173,3 +173,11 @@ async def test_mlb_players_keep_their_team_link_for_the_answer(db):
     await names.upsert(db, "player", "mlb", "mlb", mlb.parse_players(payload("mlb_players")))
     (abbott,) = await names.search(db, "player", "mlb", "abbott")
     assert (abbott["team"], abbott["short"]) == (None, "A Abbott")
+
+
+async def test_typed_words_match_in_any_order_across_name_and_aliases(db):
+    await seeded(db)
+    found = await names.search(db, "team", "ncaam", "heels carolina")
+    assert [one["ext_id"] for one in found] == ["153"]
+    assert [one["ext_id"] for one in await names.search(db, "team", "nba", "san spurs")] == ["24"]
+    assert await names.search(db, "team", "nba", "boston spurs") == []
