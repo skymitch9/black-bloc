@@ -145,6 +145,12 @@ is('runs search: the words option still lets a blank query through', matches('an
 is('runs search: without the option a search stays a substring', matches('Donkey Kong Country 2', 'dkc2'), false);
 is('runs search: passes carries the option', passes({ t: 'Jet Force Gemini' }, { text: (one) => one.t, query: 'jfg', match: 'words' }), true);
 is('runs search: applyFilters without it is unchanged', applyFilters([{ t: 'Jet Force Gemini' }], { text: (one) => one.t, query: 'jfg' }).shown, 0);
+const KINDS = [['all', 'All', null], ['list', 'List', (one) => one.kind === 'list']];
+const STATES = [['all', 'All', null], ['live', 'Live', (one) => one.state === 'running']];
+const brackets = [{ name: 'Candy', kind: 'list', state: 'running' }, { name: 'Knuck', kind: 'fighters', state: 'running' }, { name: 'Snack', kind: 'list', state: 'complete' }];
+is('groups: a second chip row ANDs with the first', applyFilters(brackets, { text: (one) => one.name, filters: STATES, filter: 'live', groups: [{ filters: KINDS, filter: 'list' }] }).hits, [true, false, false]);
+is('groups: a group left on its first chip lets everything through', applyFilters(brackets, { text: (one) => one.name, groups: [{ filters: KINDS, filter: 'all' }] }).shown, 3);
+is('groups: none given is unchanged', passes(brackets[1], { text: (one) => one.name, filters: STATES, filter: 'live' }), true);
 
 if (failures.length) {
   console.error('listfilter: not ok');

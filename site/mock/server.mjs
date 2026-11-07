@@ -16678,6 +16678,10 @@ const BK_PAGE_WORDS = [
   'brackets_card_finals_words', 'brackets_state_pools', 'brackets_round_pool', 'brackets_pool_title',
   'brackets_card_pools_words', 'brackets_card_losers_words', 'brackets_waiting_final',
   'brackets_pool_tied', 'brackets_pool_raise_label',
+  'brackets_kind_fighters_words', 'brackets_kind_sports_words', 'brackets_kind_list_words',
+  'brackets_decide_votes_words', 'brackets_decide_organiser_words', 'brackets_vote_open_line',
+  'brackets_vote_hidden_line', 'brackets_vote_closed_line', 'brackets_vote_tied_line',
+  'brackets_vote_button_change', 'brackets_close_vote_label',
 ];
 
 function bkEntrant(id, user_id, name, extra = {}) {
@@ -16691,6 +16695,7 @@ function bkTournament(id, name, state_, entrants, extra = {}) {
   const { options: given = {}, format = 'single', ...rest } = extra;
   return {
     id, name, game: 'Tekken 8', format, state: state_, starts_at: daysAhead(3),
+    kind: 'fighters', decide_by: null, vote_minutes: null,
     created_at: minutesAgo(60 * 24), updated_at: minutesAgo(30), rules_text: null,
     check_in_opened_at: null, check_in_closes_at: null, started_at: null, completed_at: null,
     cancelled_at: null, source: 'own', source_ref: null, created_by: STAFF.id, to_user_id: STAFF.id,
@@ -16846,6 +16851,16 @@ function seedBrackets() {
   ], { format: 'single', options: { pools_format: 'round_robin', pool_count: 2, advance_per_pool: 1 } }));
   bkPoolPlay(ready);
 
+  const candy = bkBuild(bkTournament(19, 'Best candy bar', 'running', [
+    ...guests(181, ['Snickers', 'Twix', 'Reese\'s', 'Kit Kat']),
+  ], {
+    game: null, kind: 'list', decide_by: 'votes', vote_minutes: 1440, started_at: minutesAgo(20), starts_at: null,
+    options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
+  }));
+  bkSyncVotes(candy, new Date(Date.now() - 20 * 60000));
+  Object.assign(bkSetIn(candy, 'W1-1'), { votes: { [casey]: 'a', [rivet]: 'a', [moth]: 'b' } });
+  Object.assign(bkSetIn(candy, 'W1-2'), { votes: { [nick]: 'b', [dax]: 'b' } });
+
   const unplayed = bkBuild(bkTournament(18, 'Contract Final', 'running', [
     ...guests(171, ['A1', 'B1', 'B2', 'A2']),
   ], { format: 'single', options: { pools_format: 'round_robin', pool_count: 2, advance_per_pool: 1 } }));
@@ -16884,7 +16899,80 @@ function seedBrackets() {
     advanced,
     ready,
     unplayed,
+    candy,
+    bkTournament(20, 'Best snack', 'draft', guests(191, ['Popcorn', 'Pretzels', 'Nachos']), {
+      game: null, kind: 'list', decide_by: 'organiser', vote_minutes: 1440, starts_at: null,
+      options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
+    }),
   ];
+}
+
+const BK_VOTE_OPEN = ['ready', 'called'];
+
+function bkVoted(t) {
+  return t.kind === 'list' && t.decide_by === 'votes';
+}
+
+function bkSyncVotes(t, at = new Date()) {
+  if (!bkVoted(t)) return;
+  for (const one of t.sets) {
+    if (BK_VOTE_OPEN.includes(one.state)) {
+      if (one.vote_opens_at && !one.vote_closed_at) continue;
+      Object.assign(one, {
+        votes: {}, vote_opens_at: at.toISOString(), vote_closed_at: null,
+        vote_closes_at: new Date(at.getTime() + Number(t.vote_minutes || 1) * 60000).toISOString(),
+      });
+    } else if (['waiting', 'bye', 'void'].includes(one.state)) {
+      if (one.vote_opens_at) Object.assign(one, { votes: {}, vote_opens_at: null, vote_closes_at: null, vote_closed_at: null });
+    } else if (one.vote_opens_at && !one.vote_closed_at) {
+      one.vote_closed_at = at.toISOString();
+    }
+  }
+}
+
+function bkTally(one) {
+  const cast = Object.values(one.votes || {});
+  return [cast.filter((slot) => slot === 'a').length, cast.filter((slot) => slot === 'b').length];
+}
+
+function bkVoteOpen(one) {
+  return Boolean(one.vote_opens_at) && !one.vote_closed_at && BK_VOTE_OPEN.includes(one.state);
+}
+
+function bkCloseVote(t, one, context = null) {
+  const [a, b] = bkTally(one);
+  const names = bkNames(t);
+  if (a === b) {
+    Object.assign(one, { state: 'reported', score_a: a, score_b: b, reported_side: null, reported_at: now(), vote_closed_at: now() });
+    return bkSay('brackets_vote_tied_line', { a: names[one.slot_a], b: names[one.slot_b], votes_a: a, votes_b: b });
+  }
+  bkDecide(t, one, a, b, 'votes', context);
+  one.vote_closed_at = now();
+  bkSyncVotes(t);
+  return bkFinal(t, one);
+}
+
+function bkCloseDue(t) {
+  if (!bkVoted(t) || t.state !== 'running') return;
+  bkSyncVotes(t);
+  for (const one of t.sets.slice()) {
+    if (bkVoteOpen(one) && new Date(one.vote_closes_at).getTime() <= Date.now()) bkCloseVote(t, one);
+  }
+}
+
+function bkVoteRow(one, me) {
+  if (!one.vote_opens_at) return { votes_a: null, votes_b: null, vote_count: null, my_vote: null, vote_opens_at: null, vote_closes_at: null, vote_open: false };
+  const [a, b] = bkTally(one);
+  const open = !one.vote_closed_at;
+  const shown = (state.settings.get('brackets_votes_visible') ?? true) !== false || !open;
+  return {
+    votes_a: shown ? a : null, votes_b: shown ? b : null, vote_count: a + b, my_vote: (one.votes || {})[me] ?? null,
+    vote_opens_at: one.vote_opens_at, vote_closes_at: one.vote_closes_at, vote_open: open,
+  };
+}
+
+function bkSignups(t) {
+  if (t.kind === 'list') throw new Refused(409, 'no_signups', bkSay('brackets_kind_has_no_signups_said', { name: t.name }));
 }
 
 function bkState() {
@@ -16893,6 +16981,9 @@ function bkState() {
 }
 
 const BK_TO_WORDS = {
+  kind_fixed: "A bracket's kind is set when it is made, so **{name}** stays as it is.",
+  sports_not_yet: "Sports brackets are not ready yet, so nothing was made. Make a fighting game or a list bracket for now.",
+  pick_winner: "The counts are level, so pick who wins {set}.",
   created: "Created **{name}**.",
   edited: "Saved **{name}**.",
   created_losers_blank: "Created **{name}**. Losers-side entry is only for a double elimination final, so it was left blank.",
@@ -17018,9 +17109,9 @@ function bkSiteWords(text, threads = {}) {
   }).replace(/`/g, '');
 }
 
-function bkSetRow(one, names) {
-  const { _feed, _place, reset_of, ...rest } = one;
-  return { ...rest, phase: one.phase ?? null, pool: one.pool ?? null, a_name: names[one.slot_a] ?? null, b_name: names[one.slot_b] ?? null };
+function bkSetRow(one, names, me = null) {
+  const { _feed, _place, reset_of, votes, ...rest } = one;
+  return { ...rest, phase: one.phase ?? null, pool: one.pool ?? null, a_name: names[one.slot_a] ?? null, b_name: names[one.slot_b] ?? null, ...bkVoteRow(one, me) };
 }
 
 function bkPoolRows(t, names) {
@@ -17055,6 +17146,7 @@ function bkStandings(t) {
 }
 
 function bkView(t, context) {
+  bkCloseDue(t);
   const names = bkNames(t);
   const me = actorOf(context.session);
   const mine = t.entrants.find((one) => one.user_id === me);
@@ -17071,7 +17163,7 @@ function bkView(t, context) {
     rounds_to_play: t.format === 'swiss' ? mockBrackets.swissRounds(t.sets.length ? new Set(t.sets.flatMap((one) => [one.slot_a, one.slot_b]).filter((id) => id !== null)).size : bkPlaying(t).length, t.options) : null,
     may_run: bkMayRun(context),
     mine: mine ? mine.id : null,
-    sets: t.sets.map((one) => bkSetRow(one, names)),
+    sets: t.sets.map((one) => bkSetRow(one, names, me)),
     standings: bkStandings(t),
     waiting_on: pooled ? mockBrackets.poolWaiting(t) : mockBrackets.waitingOn(t),
   };
@@ -17123,11 +17215,16 @@ route('GET', '/api/brackets', (context) => {
     may_run: bkMayRun(context),
     words: Object.fromEntries(BK_PAGE_WORDS.map((key) => [key, String(state.settings.get(key) ?? '')])),
     defaults: bkDefaults(),
+    kind_defaults: {
+      kind: state.settings.get('brackets_kind_default') ?? 'fighters',
+      decide_by: state.settings.get('brackets_decide_default') ?? 'votes',
+      vote_minutes: Number(state.settings.get('brackets_vote_minutes') ?? 1440),
+    },
     tournaments: bkState().tournaments.map((t) => ({
       id: t.id, name: t.name, game: t.game, format: t.format, state: t.state, starts_at: t.starts_at,
       created_at: t.created_at, updated_at: t.updated_at, to_user_id: t.to_user_id, to_name: memberName(t.to_user_id),
       entrant_cap: t.options.entrant_cap, entrant_count: t.entrants.filter((one) => !one.dropped).length,
-      pools_format: t.options.pools_format ?? 'none',
+      pools_format: t.options.pools_format ?? 'none', kind: t.kind || 'fighters', decide_by: t.decide_by ?? null,
     })).sort((a, b) => b.id - a.id),
   };
 });
@@ -17171,10 +17268,19 @@ route('POST', '/api/brackets', async (context) => {
   const name = String(body.name || '').replace(/\s+/g, ' ').trim();
   if (!name || name.length > 100) throw new Refused(400, 'no_name', bkSay('no_name', { limit: 100 }));
   const held = bkState();
+  const kind = body.kind ?? state.settings.get('brackets_kind_default') ?? 'fighters';
+  if (!['fighters', 'sports', 'list'].includes(kind)) throw new Refused(400, 'bad_option', bkSay('bad_option', { field: 'kind', given: String(kind).slice(0, 40), allowed: 'fighters, sports, list' }));
+  if (kind === 'sports') throw new Refused(409, 'sports_not_yet', bkSay('sports_not_yet'));
   const format = body.format || state.settings.get('brackets_format_default') || 'double';
   const t = bkTournament(held.next++, name, 'draft', [], { format, starts_at: null, to_user_id: actorOf(context.session), created_by: actorOf(context.session) });
+  const listed = kind === 'list' ? { best_of: 1, best_of_late: 1, best_of_finals: 1, pools_format: 'none' } : {};
   const pools = body.pools_format ?? (['single', 'double'].includes(format) ? bkDefaults().pools_format : 'none');
-  const blanked = bkOptions(t, { ...bkDefaults(), ...body, format, pools_format: pools }) && (body.advance_losers_from ?? null) !== null;
+  const blanked = bkOptions(t, { ...bkDefaults(), ...body, format, pools_format: pools, ...listed }) && (body.advance_losers_from ?? null) !== null;
+  if (kind === 'list') {
+    const decide = body.decide_by ?? state.settings.get('brackets_decide_default') ?? 'votes';
+    if (!['votes', 'organiser'].includes(decide)) throw new Refused(400, 'bad_option', bkSay('bad_option', { field: 'decide_by', given: String(decide).slice(0, 40), allowed: 'votes, organiser' }));
+    Object.assign(t, { kind, decide_by: decide, vote_minutes: Number(body.vote_minutes ?? state.settings.get('brackets_vote_minutes') ?? 1440) });
+  }
   held.tournaments.push(t);
   return bkAnswer(context, t, 'created', blanked ? 'created_losers_blank' : 'created');
 });
@@ -17186,7 +17292,13 @@ route('PATCH', '/api/brackets/:tournament_id', async (context) => {
   bkRuns(context);
   bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
   const body = await context.body();
-  const blanked = bkOptions(t, body);
+  if ('kind' in body && body.kind !== (t.kind || 'fighters')) throw new Refused(409, 'kind_fixed', bkSay('kind_fixed', { name: t.name }));
+  const listed = t.kind === 'list' ? { best_of: 1, best_of_late: 1, best_of_finals: 1, pools_format: 'none' } : {};
+  if (t.kind === 'list') {
+    if ('decide_by' in body) t.decide_by = body.decide_by === 'organiser' ? 'organiser' : 'votes';
+    if (Number.isInteger(body.vote_minutes)) t.vote_minutes = body.vote_minutes;
+  }
+  const blanked = bkOptions(t, { ...body, ...listed });
   return bkAnswer(context, t, 'edited', blanked ? 'edited_losers_blank' : 'edited', {}, { changed: Object.keys(body).sort() });
 });
 
@@ -17196,6 +17308,7 @@ function bkStateMove(path, from, to, event, key, extra = () => ({})) {
     bkOff();
     const t = bkOf(context);
     bkRuns(context);
+    if (path.startsWith('signups') || path.startsWith('checkin')) bkSignups(t);
     bkIn(t, ...from);
     const was = t.state;
     Object.assign(t, { state: typeof to === 'function' ? to(t) : to }, extra(t));
@@ -17239,6 +17352,7 @@ route('POST', '/api/brackets/:tournament_id/checkin/close', (context) => {
   bkOff();
   const t = bkOf(context);
   bkRuns(context);
+  bkSignups(t);
   bkIn(t, 'check_in');
   const gone = t.entrants.filter((one) => !one.dropped && !one.checked_in);
   for (const one of gone) Object.assign(one, { dropped: true, dropped_why: 'no_show' });
@@ -17250,6 +17364,7 @@ route('POST', '/api/brackets/:tournament_id/join', (context) => {
   requireMember(context.session);
   bkOff();
   const t = bkOf(context);
+  bkSignups(t);
   bkIn(t, 'signups');
   const me = actorOf(context.session);
   const found = t.entrants.find((one) => one.user_id === me);
@@ -17307,6 +17422,7 @@ route('POST', '/api/brackets/:tournament_id/entrants/:entrant_id/checkin', async
   requireMember(context.session);
   bkOff();
   const t = bkOf(context);
+  bkSignups(t);
   bkIn(t, 'check_in');
   const one = bkEntrantOf(t, context);
   bkSelfOr(t, context, one);
@@ -17398,6 +17514,7 @@ route('POST', '/api/brackets/:tournament_id/start', (context) => {
   }
   bkBuild(t);
   Object.assign(t, { state: bkPooled(t) ? 'pools' : 'running', started_at: now() });
+  bkSyncVotes(t);
   const playable = mockBrackets.allSets(t).filter((one) => !['bye', 'void'].includes(one.state) && !one.reset_of).length;
   return bkAnswer(context, t, 'started', 'started', { sets: playable }, { entrants: playing.length });
 });
@@ -17491,7 +17608,7 @@ function bkDecide(t, set, score_a, score_b, how, context, forfeitSide = null) {
     const flips = (side === 'a' ? set.slot_a : set.slot_b) !== set.winner;
     if (flips) mockBrackets.reset(owner, set.key);
   }
-  mockBrackets.decide(set, side, { score_a, score_b, how, forfeit: forfeitSide ? 'to' : null, by: actorOf(context.session), at: now() });
+  mockBrackets.decide(set, side, { score_a, score_b, how, forfeit: forfeitSide ? 'to' : null, by: context ? actorOf(context.session) : null, at: now() });
   mockBrackets.settle(owner);
   if (set.pool) mockBrackets.tagPool(owner, set.pool);
 }
@@ -17512,6 +17629,31 @@ function bkSetLog(context, t, event, set, extra = {}) {
   t.updated_at = now();
   logAction(`web.brackets.${event}`, { actor_id: actorOf(context.session), details: { via: 'website', tournament: t.id, set: set.key, rematch: Boolean(set.rematch), ...extra } });
 }
+
+route('POST', '/api/brackets/:tournament_id/sets/:key/vote', async (context) => {
+  const [t, set] = bkRunning(context);
+  if (!bkVoted(t)) throw new Refused(409, 'not_votes', bkSay('brackets_not_votes_said', { set: set.key }));
+  const body = await context.body();
+  const slot = body && body.slot;
+  if (!['a', 'b'].includes(slot) || (slot === 'a' ? set.slot_a : set.slot_b) === null) throw new Refused(400, 'bad_slot', bkSay('brackets_vote_pick_said', { set: set.key }));
+  bkCloseDue(t);
+  if (!bkVoteOpen(set)) throw new Refused(409, 'vote_closed', bkSay('brackets_vote_not_open_said', { set: set.key }));
+  set.votes = { ...(set.votes || {}), [actorOf(context.session)]: slot };
+  t.updated_at = now();
+  const names = bkNames(t);
+  return { tournament: bkView(t, context), message: bkSay('brackets_vote_said', { name: names[slot === 'a' ? set.slot_a : set.slot_b], closes: bkClock(set.vote_closes_at) }) };
+});
+
+route('POST', '/api/brackets/:tournament_id/sets/:key/close-vote', (context) => {
+  const [t, set] = bkRunning(context);
+  bkRuns(context);
+  if (!bkVoted(t)) throw new Refused(409, 'not_votes', bkSay('brackets_not_votes_said', { set: set.key }));
+  if (!bkVoteOpen(set)) throw new Refused(409, 'vote_closed', bkSay('brackets_vote_not_open_said', { set: set.key }));
+  const [a, b] = bkTally(set);
+  const message = bkCloseVote(t, set, context);
+  bkSetLog(context, t, 'vote_closed', set, { votes_a: a, votes_b: b, tied: a === b });
+  return { tournament: bkView(t, context), message };
+});
 
 route('POST', '/api/brackets/:tournament_id/sets/:key/call', (context) => {
   const [t, set] = bkRunning(context);
@@ -17590,6 +17732,14 @@ route('POST', '/api/brackets/:tournament_id/sets/:key/override', async (context)
   if (body.forfeit === true) {
     if (!['a', 'b'].includes(body.winner)) throw new Refused(400, 'forfeit_needs_winner', bkSay('forfeit_needs_winner'));
     bkDecide(t, set, null, null, 'to', context, body.winner);
+  } else if (t.kind === 'list') {
+    const given = Number.isInteger(body.score_a) && Number.isInteger(body.score_b);
+    const [a, b] = given ? [body.score_a, body.score_b] : bkVoted(t) ? bkTally(set) : [null, null];
+    const side = ['a', 'b'].includes(body.winner) ? body.winner : a !== null && a !== b ? (a > b ? 'a' : 'b') : null;
+    if (!side) throw new Refused(400, 'pick_winner', bkSay('pick_winner', { set: set.key }));
+    bkDecide(t, set, a, b, 'to', context, side);
+    set.forfeit = null;
+    bkSyncVotes(t);
   } else {
     bkFits(set, body.score_a, body.score_b);
     bkDecide(t, set, body.score_a, body.score_b, 'to', context);
@@ -17610,6 +17760,10 @@ route('POST', '/api/brackets/:tournament_id/sets/:key/reset', async (context) =>
   const owner = mockBrackets.ownerOf(t, set);
   mockBrackets.reset(owner, set.key);
   if (set.pool) mockBrackets.tagPool(owner, set.pool);
+  if (bkVoted(t)) {
+    if (BK_VOTE_OPEN.includes(set.state)) set.vote_closed_at = set.vote_closed_at || now();
+    bkSyncVotes(t);
+  }
   bkWouldDm(context, t, players, 'brackets_dm_reset', bkReason(await context.body()), { set: set.key });
   return bkAnswer(context, t, 'set_reset', 'set_reset', { set: set.key }, { set: set.key });
 });

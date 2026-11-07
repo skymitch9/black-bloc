@@ -188,6 +188,14 @@ const set = { slot_a: 5, slot_b: 6, state: 'reported', reported_side: 'a' };
 is('the reporter may report again, the opponent confirms or disputes', [setMoves({ state: 'running', mine: 5, may_run: false }, set), setMoves({ state: 'running', mine: 6, may_run: false }, set)], [['report'], ['confirm', 'dispute']]);
 is('an organiser outside the set lets it stand, decides or resets', setMoves({ state: 'running', mine: null, may_run: true }, set), ['accept', 'decide', 'forfeit', 'reset']);
 is('a stranger gets nothing', setMoves({ state: 'running', mine: 9, may_run: false }, set), []);
+
+const candy = { kind: 'list', state: 'running', mine: null, may_run: false, finished: false };
+const open = { key: 'W1-1', state: 'ready', vote_open: true };
+is('a list set: anyone votes while it is open', setMoves(candy, open), ['vote']);
+is('a list set: the organiser picks and closes the vote; no Report or Call', setMoves({ ...candy, may_run: true }, open), ['vote', 'pick', 'close_vote']);
+is('a closed list set: the organiser picks again or resets', setMoves({ ...candy, may_run: true }, { ...open, state: 'complete', vote_open: false }), ['pick', 'reset']);
+is('a list bracket has no member moves', memberMoves({ ...candy, state: 'running' }, 'shadow'), []);
+is('a list draft starts without sign-ups or check-in', organiserMoves({ ...candy, state: 'draft', may_run: true }), ['start', 'edit', 'cancel']);
 is('nothing once the tournament is complete', setMoves({ state: 'complete', mine: 5, may_run: true }, set), []);
 
 // Pools into a bracket: the mock's stand-in agrees with black_bloc/brackets/pools.py on the

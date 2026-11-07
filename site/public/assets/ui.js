@@ -255,24 +255,28 @@ export function listFilter({
   empty = null,
   chipClass = null,
   onChange = null,
+  groups = [],
 } = {}) {
   const chosen = filters && filters.length ? filters : null;
   const firstKey = chosen ? chosen[0][0] : null;
+  const more = (groups || []).filter((group) => group.filters && group.filters.length);
   const state = {
     query: String(query || '').trim().toLowerCase(),
     filter: chosen && chosen.some(([key]) => key === filter) ? filter : firstKey,
+    groups: more.map((group) => (group.filters.some(([key]) => key === group.filter) ? group.filter : group.filters[0][0])),
   };
+  const grouped = () => more.map((group, at) => ({ filters: group.filters, filter: state.groups[at] }));
   const none = typeof empty === 'string' ? sayNothing(empty) : empty;
   if (none) none.hidden = true;
 
   const apply = () => {
-    const found = applyFilters(items.map(value), { text, filters: chosen, filter: state.filter, query: state.query });
+    const found = applyFilters(items.map(value), { text, filters: chosen, filter: state.filter, query: state.query, groups: grouped() });
     items.forEach((item, at) => {
       const target = node(item);
       if (target) target.hidden = !found.hits[at];
     });
     if (none) none.hidden = found.total === 0 || found.shown > 0;
-    if (onChange) onChange({ query: state.query, filter: state.filter, ...found });
+    if (onChange) onChange({ query: state.query, filter: state.filter, groups: state.groups.slice(), ...found });
     return found;
   };
 
@@ -289,16 +293,24 @@ export function listFilter({
     state.filter = key;
     apply();
   }, { className: chipClass }) : null;
+  const groupChips = more.map((group, at) => chipBar(group.filters, state.groups[at], (key) => {
+    state.groups[at] = key;
+    apply();
+  }, { className: group.chipClass || chipClass }));
 
   const clear = () => {
     state.query = '';
     state.filter = firstKey;
     search.querySelector('input').value = '';
     if (chips) chips.setValue(firstKey);
+    more.forEach((group, at) => {
+      state.groups[at] = group.filters[0][0];
+      groupChips[at].setValue(state.groups[at]);
+    });
     return apply();
   };
 
-  return { search, chips, none, parts: [search, chips].filter(Boolean), state, apply, clear };
+  return { search, chips, groupChips, none, parts: [search, chips, ...groupChips].filter(Boolean), state, apply, clear };
 }
 export function filterRows(root, query) {
   let shown = 0;
