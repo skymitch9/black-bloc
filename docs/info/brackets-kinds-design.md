@@ -274,6 +274,47 @@ bracket, Sync now, Edit, Release hold). Log kinds `brackets.imported`, `brackets
 `brackets.feed_result`, `brackets.feed_failed`, `brackets.feed_back`, `brackets.set_edited`, `brackets.hold_released`,
 `web.brackets.*` mirrors.
 
+### K3 as built (branch `brackets-sports-live`, 2026-11-06) — the delta from the spec above
+
+- **The first question, answered:** `brackets/play.py` advances ONLY by the stored `winner_to` / `winner_slot`
+  (`feeds` → `deliver` → `wake`); shape is computed once, in `build`, never again. So a feed's sets are written
+  directly with explicit links by a small pure `brackets/sports_shape.py` (positions, keys, places) and the engine is
+  untouched. **One gap the spec did not foresee:** the engine byes a waiting set whose empty slot has no feeder, which
+  would have advanced the NFL 1 seed and every NBA 1/2 seed before their opponent existed. A slot the feed has not named
+  gets a *pending* feeder (a `BYE` set `pending-{key}-{slot}` with no slots, never carded, never sent to the page);
+  the feed (or a staff Edit) filling the slot removes it.
+- **Sync reads `feeds.bracket` for every league**, not the scores feed: the bracket call carries series wins (NHL,
+  NBA, MLB), henrygd's scores (NCAA, keyed by its own slugs — ESPN's ids would not match an imported entrant), and
+  for the NFL it IS the builder's resolve step (standings + every playoff week, about six HTTP requests a tick).
+  `feeds.scores` is called only when a running bracket has sets with no feed key (Build by hand on a fed league),
+  matched by the unordered ext-id pair on the guild's local day, and only for entrants from the answering source.
+- **The poller** is a second 30 s loop on the `Sports` cog with its own `Reconciler` and `loop_health("_sync")`; the
+  last read per (league, season) lives in memory, so a restart reads at once.
+- **Edit after the start:** the spec allows slot edits before the start only; built, slots may also be set on a set
+  with no result after the start (decision 10 below) — without it a feed that dies mid-NFL-playoffs leaves the
+  divisional round unfillable. Emptying a slot gives it a pending feeder again.
+- **Words:** 19 keys (CORE_KEYS 425 → 444): the 18 of the spec (`brackets_sync_seconds`, `brackets_sync_idle_minutes`,
+  three score lines, three feed lines, `brackets_source_own_words`, five move labels, `brackets_reimport_asks`,
+  `brackets_held_note`, the two decided-by words) plus **`brackets_no_score_words`** ("(no score)"): a set decided
+  with no score read "by forfeit", which is false for a sports pick (and for a list pick with no votes — that line
+  changes too). Organiser-only answers (imported, built, synced, set_edited, the refusals) are constants (`TO_WORDS`).
+- **Create:** a sports create needs `league` (six codes; none → `bad_option` 400 naming them — this replaces K1's
+  `sports_not_yet`, so the two K1 tests that pinned that refusal now pin this one); `season` defaults to
+  `feeds.current_season`; `source` is the league's BRACKET feed (`espn` for the NFL, `nba`, `mlb`, `nhl`, `ncaa`) or
+  `own`. The edit drawer can change league / season / source before the start.
+- **Start** on a sports bracket with stored sets keeps them (a removed team forfeits); with none it builds through the
+  engine as Build does. Set cards are not posted before the start (Import and Build write sets in draft/seeding).
+- **Discord:** a sports card has `{name} wins…` x2 (optional scores), Reset… once played, Edit… (time, status, two
+  scores, reason — Discord's 5 inputs; teams are edited on the site only), Release hold while held. The panel offers
+  Import / Build bracket / Sync now, asking first over teams or sets. No player buttons, no DMs (teams have no member).
+- **Page:** league badge, season, the feed line (*via NCAA (ncaa-api) · synced 1m ago* / *feed down since …* / *By
+  hand*), Import / Build bracket / Sync now, the score line on every card's top line, a held tag, the sports set drawer
+  (pick with optional scores, Reset, Release hold, an Edit fold with time / status / scores / slots). A round-0
+  play-in draws in its own first column beside the slot it feeds (`bracket-layout.js` `playIn`).
+- **Log kinds:** `brackets.imported`, `built`, `synced`, `feed_result`, `feed_failed`, `feed_back`, `set_edited`,
+  `hold_released` (+ `web.` twins through `kind_via`); feed_back / set_edited / hold_released are IMPORTANT,
+  imported / built / synced / feed_result ROUTINE, feed_failed IMPORTANT by suffix.
+
 ## K4 — predictions
 
 **Storage (schema 106).** `tournament_picks(id, tournament_id, user_id, key, pick INTEGER (entrant id), at)` UNIQUE
@@ -322,6 +363,10 @@ are not logged.
 7. Round-0 games (play-in, First Four) score 0 by default.
 8. NBA live scores come from ESPN (cdn.nba.com is 403 from Fly, measured); NBA series shape from stats.nba.com.
 9. No paid feed; the by-hand path is the fallback of last resort (owner's Q4).
+10. (K3) A set's teams may be edited after the start while it has no result, so a dead feed never strands a round
+    the feed would have named (NFL reseed, NBA play-in).
+11. (K3) A set decided with no score reads "(no score)" (`brackets_no_score_words`), on list sets too, rather than
+    "by forfeit".
 
 ## Not built (unless asked)
 
@@ -391,3 +436,28 @@ choice = Discord's 25), 45 (the names search is word-based, in any order — fou
 the 124 roster calls a nightly refresh makes were not timed; nothing ran against real Discord (the SportsPick select,
 the Edit entrant modal); the phone width (< 700 px) of the typeahead and the inline editor was not looked at; NBA
 play-in series were empty in the probe, so their parse is unexercised; MLB's fallback links are the 2026 shape only.
+
+## Gate — K3 (2026-11-06, branch `brackets-sports-live`, code at `0e9d93af`)
+
+| Check | Result |
+|---|---|
+| `pytest -q -n 4` | **14,378 passed, 1 skipped, 0 failed** (baseline: K2's gate, 14,305 passed, 1 skipped) |
+| existing tests | untouched except literal bumps: `tests/storage/test_db.py` schema 104 → 105 (20 literals), `tests/test_settings_store.py` (425 → 444, 1341 → 1360), `tests/test_logkinds.py` (8 bracket kinds in the `brackets_moves` dynamic list), and the two tests that pinned K1's `sports_not_yet` (`tests/test_brackets_votes.py`, `tests/api/tools/test_brackets.py`) now pin the no-league refusal (`bad_option`, 400). `tests/sports_fakes.py` gained the NHL bracket route |
+| schema 104 → 105 | `tests/storage/test_db.py::test_a_schema_104_file_gains_the_sports_live_columns_and_loses_nothing` (twice-connect) |
+| `ruff check .` | clean |
+| every `site/public/assets/*.js` parses as a module; the 14 `site/mock/*.test.mjs` | all ok (`brackets.test.mjs` + the sports cases) |
+| `node site/mock/check.mjs` (port 8931) | ok — 28 pages, 398 routes (+7), 444 core settings |
+| the page on the mock, by eye (1512 px) | `#22` live bracket (play-in column, *Final 78–71*, *2nd 4:12 · 55–51*, *via NCAA (ncaa-api) · synced 1m ago*, Sync now); `#23` feed down (*feed down since … — results by hand*, W1-1 *held by hand*, the drawer, Release hold → *W1-1 is back under the feed.*); `#24` Import fills four teams and three sets |
+
+**Checklist items that bit:** 6 (every write under `lock_for`, the feed call never inside it; Import re-checks after
+the call), 7 (feeds already answer `Found`), 9 (`loop_health("_sync")`, the feed line on page and card), 15 (one
+winner-writer: the feed decides through `overridden`), 28 (`_sync.error` restarts the loop), 33 (both cadences are
+keys), 34 (the feed's rows go through `note` with `via`), 37 (the poller runs in a `Reconciler`), 39 (the Edit
+modal's labels ≤ 45), 41 (a corrected final from the feed re-decides a feed-decided set), 43 (`feed_failed_at` is set
+only when a streak starts, never overwritten by the next failure).
+
+**NOT verified:** nothing ran against a live feed or real Discord; the NBA play-in and the MLB bye teams were never
+in a probe, so how they import is reasoned, not seen (pending feeders should hold their slots); the NFL reseed was
+exercised from the recorded 2025 postseason only; the 60 s cadence's load on ESPN during an NFL playoff weekend (six
+requests a tick for the NFL bracket) was not measured; the phone width of the new drawer was not looked at; a series
+league's live line shows series words (*TBL leads 3-2*), not the game in progress.

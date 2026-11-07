@@ -29,6 +29,7 @@ from .brackets.model import (
 )
 from .brackets_moves import said
 from .command_errors import SafeDynamicItem
+from .sports.model import SOURCE_NAMES
 
 JOIN = "join"
 LEAVE = "leave"
@@ -46,11 +47,20 @@ VOTE_B = "vote_b"
 PICK_A = "pick_a"
 PICK_B = "pick_b"
 CLOSE_VOTE = "close_vote"
+EDIT_SET = "edit_set"
+RELEASE = "release"
 PLAYER_ACTIONS = (REPORT, CONFIRM, DISPUTE)
 VOTE_ACTIONS = (VOTE_A, VOTE_B)
 TO_ACTIONS = (CALL, DECIDE, RESET)
 LIST_TO_ACTIONS = (PICK_A, PICK_B, CLOSE_VOTE)
-SET_ACTIONS = (*PLAYER_ACTIONS, *TO_ACTIONS, *VOTE_ACTIONS, *LIST_TO_ACTIONS)
+SPORTS_TO_ACTIONS = (EDIT_SET, RELEASE)
+SET_ACTIONS = (
+    *PLAYER_ACTIONS,
+    *TO_ACTIONS,
+    *VOTE_ACTIONS,
+    *LIST_TO_ACTIONS,
+    *SPORTS_TO_ACTIONS,
+)
 
 PREFIX = "brackets"
 KEY_PATTERN = r"(?:[A-Z]\.)?[A-Z][0-9]+-[0-9]+"
@@ -104,7 +114,14 @@ STYLES = {
     PICK_A: discord.ButtonStyle.secondary,
     PICK_B: discord.ButtonStyle.secondary,
     CLOSE_VOTE: discord.ButtonStyle.secondary,
+    EDIT_SET: discord.ButtonStyle.secondary,
+    RELEASE: discord.ButtonStyle.secondary,
 }
+SPORTS_LABEL_KEYS = {
+    EDIT_SET: "brackets_edit_set_label",
+    RELEASE: "brackets_release_hold_label",
+}
+LEAGUE_KEY = "brackets_league_{league}_words"
 KIND_KEYS = {
     store_.FIGHTERS: "brackets_kind_fighters_words",
     store_.SPORTS: "brackets_kind_sports_words",
@@ -232,6 +249,10 @@ def format_line(store: Any, guild_id: int, row: Any) -> str:
     gid = guild_id
     if store_.kind_of(row) == store_.LIST:
         return list_line(store, gid, row)
+    if store_.is_sports(row):
+        return " · ".join(
+            words(store, gid, key) for key in (KIND_KEYS[store_.SPORTS], FORMAT_KEYS[SINGLE])
+        )
     found = [
         words(
             store,
@@ -305,6 +326,89 @@ def pool_lines(store: Any, guild_id: int, bracket: Any, people: list[Any]) -> li
     return found
 
 
+def league_line(store: Any, guild_id: int, row: Any) -> str | None:
+    league = store_.column(row, "league")
+    if not store_.is_sports(row) or not league:
+        return None
+    found = [words(store, guild_id, LEAGUE_KEY.format(league=league))]
+    if store_.column(row, "season"):
+        found.append(str(row["season"]))
+    return " · ".join(part for part in found if part)
+
+
+def feed_line(store: Any, guild_id: int, row: Any, *, discord_time: bool = True) -> str | None:
+    """Where a sports bracket's results come from: the feed and when it last answered, the
+    feed down since when, or by hand."""
+    if not store_.is_sports(row):
+        return None
+    if not store_.fed(row):
+        return words(store, guild_id, "brackets_source_own_words")
+    if store_.column(row, "feed_failed_at"):
+        when = when_words(row["feed_failed_at"]) if discord_time else row["feed_failed_at"]
+        return words(store, guild_id, "brackets_feed_down_line", when=when or "")
+    if not store_.column(row, "feed_ok_at"):
+        return None
+    ago = when_words(row["feed_ok_at"], "R") if discord_time else row["feed_ok_at"]
+    source = SOURCE_NAMES.get(row["source"], str(row["source"]))
+    return words(store, guild_id, "brackets_feed_via_line", source=source, ago=ago or "")
+
+
+def score_line(store: Any, guild_id: int, match: Any, meta: Any) -> str | None:
+    """A sports set's line: Final a–b, the period and the score while live, else its time."""
+    meta = meta or {}
+    a_score = "–" if match.score_a is None else match.score_a
+    b_score = "–" if match.score_b is None else match.score_b
+    if match.state == COMPLETE and match.score_a is not None:
+        return words(store, guild_id, "brackets_score_final_line", a_score=a_score, b_score=b_score)
+    if meta.get("live_status") == "live":
+        return words(
+            store,
+            guild_id,
+            "brackets_score_live_line",
+            period=meta.get("period_words") or "",
+            a_score=a_score,
+            b_score=b_score,
+        ).strip(" ·")
+    starts = when_words(meta.get("scheduled_at"))
+    if starts:
+        return words(store, guild_id, "brackets_score_scheduled_line", when=starts)
+    return None
+
+
+def sports_embed(
+    store: Any, guild_id: int, match: Any, people: dict[int, Any], meta: Any
+) -> discord.Embed:
+    gid = guild_id
+    lines = [one for one in (score_line(store, gid, match, meta),) if one]
+    if match.state == COMPLETE:
+        lines.append(result_words(store, gid, match, people))
+    if (meta or {}).get("held"):
+        lines.append(words(store, gid, "brackets_held_note"))
+    return discord.Embed(
+        title=words(
+            store,
+            gid,
+            "brackets_set_card_title",
+            set=match.key,
+            round=round_words(store, gid, match),
+        )[:TITLE_LIMIT],
+        description="\n".join(lines)[:4000] or None,
+    )
+
+
+def sports_moves(row: Any, match: Any, meta: Any = None) -> tuple[str, ...]:
+    """A sports set: no player buttons; the organiser's pick, reset, edit and release."""
+    if row["state"] != store_.RUNNING or match.state not in (*OPEN_CARD, COMPLETE):
+        return ()
+    found = [PICK_A, PICK_B]
+    if match.state != READY:
+        found.append(RESET)
+    found.append(EDIT_SET)
+    if (meta or {}).get("held"):
+        found.append(RELEASE)
+    return tuple(found)
+
+
 def starter_lines(
     store: Any, guild_id: int, row: Any, people: list[Any], bracket: Any = None
 ) -> list[str]:
@@ -312,6 +416,7 @@ def starter_lines(
     count = sum(1 for one in people if not one["dropped"])
     lines = [str(row["game"])] if row["game"] else []
     lines.append(format_line(store, gid, row))
+    lines += [one for one in (league_line(store, gid, row), feed_line(store, gid, row)) if one]
     state = capitalised(state_words(store, gid, row["state"]))
     lines.append(words(store, gid, "brackets_card_state_line", state=state))
     if row["entrant_cap"]:
@@ -375,7 +480,9 @@ def round_words(store: Any, guild_id: int, match: Any) -> str:
 
 
 def result_words(store: Any, guild_id: int, match: Any, people: dict[int, Any]) -> str:
-    if match.score_a is None or match.forfeit:
+    if match.score_a is None and not match.forfeit and match.winner is not None:
+        result = words(store, guild_id, "brackets_no_score_words")
+    elif match.score_a is None or match.forfeit:
         result = words(store, guild_id, "brackets_forfeit_words")
     else:
         result = f"{max(match.score_a, match.score_b)}–{min(match.score_a, match.score_b)}"
@@ -618,6 +725,8 @@ def list_label(store: Any, guild_id: int, action: str, match: Any, people: dict)
         return PICK_LABEL.format(name=name_of(people, match.slot(action[-1])))[:LABEL_LIMIT]
     if action == CLOSE_VOTE:
         return words(store, guild_id, "brackets_close_vote_label")[:LABEL_LIMIT] or action
+    if action in SPORTS_LABEL_KEYS:
+        return words(store, guild_id, SPORTS_LABEL_KEYS[action])[:LABEL_LIMIT] or action
     return label(store, guild_id, action)
 
 
@@ -631,6 +740,11 @@ def set_view(
     ballot: Any = None,
 ) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
+    if store_.is_sports(row):
+        for action in sports_moves(row, match, ballot):
+            text = list_label(store, guild_id, action, match, people or {})
+            view.add_item(SetButton(row["id"], match.key, action, text))
+        return view
     if store_.kind_of(row) == store_.LIST:
         for action in list_moves(row, match, ballot):
             text = list_label(store, guild_id, action, match, people or {})
@@ -647,6 +761,13 @@ def carries(message: Any, prefix: str) -> bool:
 
 
 __all__ = [
+    "EDIT_SET",
+    "RELEASE",
+    "feed_line",
+    "league_line",
+    "score_line",
+    "sports_embed",
+    "sports_moves",
     "CALL",
     "CHECK_IN",
     "CLOSE_VOTE",

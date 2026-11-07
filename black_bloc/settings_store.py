@@ -4250,6 +4250,8 @@ BRACKETS_DECIDE_DEFAULT = "brackets_decide_default"
 BRACKETS_VOTE_MINUTES = "brackets_vote_minutes"
 BRACKETS_VOTES_VISIBLE = "brackets_votes_visible"
 BRACKETS_NAMES_REFRESH_HOUR = "brackets_names_refresh_hour"
+BRACKETS_SYNC_SECONDS = "brackets_sync_seconds"
+BRACKETS_SYNC_IDLE_MINUTES = "brackets_sync_idle_minutes"
 BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_CONFIRM_MINUTES: (12, 1, 1440),
     BRACKETS_CHECK_IN_MINUTES: (30, 5, 1440),
@@ -4263,6 +4265,8 @@ BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_POOLS_SWISS_ROUNDS: (None, 1, 20),
     BRACKETS_VOTE_MINUTES: (1440, 1, 20160),
     BRACKETS_NAMES_REFRESH_HOUR: (4, 0, 23),
+    BRACKETS_SYNC_SECONDS: (60, 30, 600),
+    BRACKETS_SYNC_IDLE_MINUTES: (60, 5, 1440),
 }
 BRACKETS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
     BRACKETS_MODE: ("shadow", BRACKETS_MODES),
@@ -4921,8 +4925,98 @@ BRACKETS_SPORTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "typed",
     ),
 }
+BRACKETS_LIVE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "brackets_score_final_line": (
+        "Final {a_score}–{b_score}",
+        ("a_score", "b_score"),
+        "a finished sports set's score line on its card and on the page",
+    ),
+    "brackets_score_live_line": (
+        "{period} · {a_score}–{b_score}",
+        ("period", "a_score", "b_score"),
+        "a sports set's score line while it is being played: the period or series words, then "
+        "the score",
+    ),
+    "brackets_score_scheduled_line": (
+        "{when}",
+        ("when",),
+        "a sports set's line before it is played: when it starts",
+    ),
+    "brackets_feed_via_line": (
+        "via {source} · synced {ago}",
+        ("source", "ago"),
+        "a sports bracket's feed line on the page and the starter card while the feed answers",
+    ),
+    "brackets_feed_down_line": (
+        "feed down since {when} — results by hand",
+        ("when",),
+        "a sports bracket's feed line once both of its sources have stopped answering",
+    ),
+    "brackets_feed_back_line": (
+        "{source} is answering again",
+        ("source",),
+        "the line logged when a sports bracket's feed answers again after it was down",
+    ),
+    "brackets_source_own_words": (
+        "By hand",
+        (),
+        "the name of a sports bracket with no feed, whose results the organiser enters",
+    ),
+    "brackets_import_label": (
+        "Import",
+        (),
+        "the organiser's button that fills a sports bracket's teams and sets from its feed",
+    ),
+    "brackets_build_label": (
+        "Build bracket",
+        (),
+        "the organiser's button that builds a sports bracket's sets from its entrants and seeds",
+    ),
+    "brackets_sync_label": (
+        "Sync now",
+        (),
+        "the organiser's button that reads a sports bracket's feed at once",
+    ),
+    "brackets_edit_set_label": (
+        "Edit…",
+        (),
+        "the organiser's button that edits a sports set's time, score or teams by hand",
+    ),
+    "brackets_release_hold_label": (
+        "Release hold",
+        (),
+        "the organiser's button that hands a set edited by hand back to the feed",
+    ),
+    "brackets_reimport_asks": (
+        "Importing again replaces every team and set in **{name}**, hand edits included.",
+        BRACKETS_NAMED,
+        "what an organiser is asked before an Import replaces a sports bracket that already has "
+        "teams or sets",
+    ),
+    "brackets_held_note": (
+        "held by hand",
+        (),
+        "the note on a sports set staff edited, which the feed no longer writes",
+    ),
+    "brackets_decided_by_feed_words": (
+        "decided by the feed",
+        (),
+        "how a sports set the feed decided says so on the page",
+    ),
+    "brackets_decided_by_staff_words": (
+        "decided by staff",
+        (),
+        "how a sports set staff decided or edited says so on the page",
+    ),
+    "brackets_no_score_words": (
+        "(no score)",
+        (),
+        "what {result} becomes in brackets_set_final_said when a set was decided with no score",
+    ),
+}
 BRACKETS_WORDS.update(BRACKETS_KIND_WORDS)
 BRACKETS_WORDS.update(BRACKETS_SPORTS_WORDS)
+BRACKETS_WORDS.update(BRACKETS_LIVE_WORDS)
 BRACKETS_DEFAULTS: dict[str, Any] = {
     BRACKETS_CHANNEL: BRACKETS_CHANNEL_ID,
     **{key: default for key, (default, _) in BRACKETS_ENUMS.items()},
@@ -5068,6 +5162,14 @@ KEY_HELP.update(
         BRACKETS_NAMES_REFRESH_HOUR: (
             "the hour (0-23, in default_timezone) the team, school and player names behind a "
             "sports bracket's search are fetched again; 4 by default"
+        ),
+        BRACKETS_SYNC_SECONDS: (
+            "seconds between reads of a sports bracket's feed while one of its sets is being "
+            "played or starts within 15 minutes; 60 by default"
+        ),
+        BRACKETS_SYNC_IDLE_MINUTES: (
+            "minutes between reads of a sports bracket's feed while nothing is being played; 60 "
+            "by default"
         ),
         **{key: said for key, (_, _, said) in BRACKETS_WORDS.items()},
     }

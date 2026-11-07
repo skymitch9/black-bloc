@@ -1025,3 +1025,40 @@ async def test_the_sweep_closes_a_due_vote_and_the_card_reads_the_result(bot, gu
     [card] = the_thread(bot).cards
     assert card.embed.description == "W1-1 is final: Twix wins 1–0.\nVotes: Snickers 0 · Twix 1"
     assert "Snickers" not in card.labels
+
+
+async def sports_running(bot, guild, *, build=True, start=True):
+    from black_bloc import brackets_sports as sports
+
+    values = {"kind": "sports", "league": "nhl", "season": "2025-26", "source": "own"}
+    tid = await created(bot, guild, **values)
+    for name in ("Bruins", "Leafs"):
+        await moved(bot, guild, tid, people.add_entrant, name=name)
+    if build:
+        await moved(bot, guild, tid, sports.build)
+    if start:
+        await moved(bot, guild, tid, moves.start)
+    return tid
+
+
+async def test_sports_sets_get_no_card_before_the_start(bot, guild):
+    await sports_running(bot, guild, start=False)
+    assert the_thread(bot).cards == []
+
+
+async def test_a_sports_card_has_no_player_buttons_and_carries_the_score_line(bot, guild):
+    from black_bloc import brackets_sports as sports
+
+    tid = await sports_running(bot, guild)
+    thread = the_thread(bot)
+    [card] = thread.cards
+    starter = thread.messages[0]
+    assert "NHL · 2025-26" in starter.embed.description
+    assert "By hand" in starter.embed.description
+    assert card.labels == ["Bruins wins…", "Leafs wins…", "Edit…"]
+    edited = {"live_status": "live", "score_a": 2, "score_b": 1}
+    await moved(bot, guild, tid, sports.edit_set, "W1-1", edited)
+    assert card.embed.description == "2–1\nheld by hand"
+    assert card.labels == ["Bruins wins…", "Leafs wins…", "Edit…", "Release hold"]
+    await moved(bot, guild, tid, sets.override, "W1-1", winner="a", score_a=4, score_b=1)
+    assert card.embed.description.startswith("Final 4–1\nW1-1 is final: Bruins wins 4–1.")

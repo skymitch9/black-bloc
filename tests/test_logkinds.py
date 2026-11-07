@@ -97,6 +97,14 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
             "thread_moved",
             "vote_closed",
             "entrant_edited",
+            "imported",
+            "built",
+            "synced",
+            "feed_result",
+            "feed_failed",
+            "feed_back",
+            "set_edited",
+            "hold_released",
         )
     ),
     "black_bloc/points_moves.py::kind": tuple(

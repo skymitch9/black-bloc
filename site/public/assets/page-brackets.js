@@ -8,6 +8,7 @@ import {
   PLAYING,
   allSets,
   eliminationLayout,
+  feedState,
   fill,
   isList,
   memberMoves,
@@ -20,6 +21,7 @@ import {
   resultsGrid,
   roundsLayout,
   scoreChoices,
+  scoreLine,
   seedOrderWith,
   setMoves,
   sortedStandings,
@@ -85,6 +87,9 @@ const ORGANISER = {
   advance: 'Advance to the final',
   unadvance: 'Back to pools',
 };
+const SPORTS_MOVES = { import: 'brackets_import_label', build: 'brackets_build_label', sync: 'brackets_sync_label' };
+const SOURCE_NAMES = { espn: 'ESPN', ncaa: 'NCAA (ncaa-api)', nhl: 'NHL', nba: 'NBA', mlb: 'MLB' };
+const LIVE_STATUSES = ['scheduled', 'live', 'final'];
 const PATHS = {
   open_signups: 'signups/open',
   close_signups: 'signups/close',
@@ -99,6 +104,9 @@ const PATHS = {
   move: 'move',
   advance: 'advance',
   unadvance: 'unadvance',
+  import: 'import',
+  build: 'build',
+  sync: 'sync',
 };
 const ASKS = {
   advance: ["Build {name}'s final from the pools?", 'Advance'],
@@ -218,6 +226,18 @@ const WORDS = {
   namesTeams: '{league} teams',
   namesPlayers: '{league} players',
   pickFirst: 'Pick the score first.',
+  league: 'League',
+  season: 'Season',
+  results: 'Results',
+  feed: 'Feed',
+  when: 'Starts',
+  status: 'Status',
+  statuses: { scheduled: 'Scheduled', live: 'Live', final: 'Final' },
+  scoreOf: '{name} score',
+  slotOf: 'Slot {slot}',
+  empty: 'Nobody yet',
+  held: 'held',
+  rebuildAsks: 'Building again replaces every set in {name}, hand edits included.',
   wins: '{name} wins',
   votes: '{count} votes',
 };
@@ -451,6 +471,15 @@ async function organiserMove(move) {
     }
     return null;
   }
+  if (move === 'import' || move === 'build') {
+    const has = move === 'import' ? (t.entrants || []).length || t.sets.length : t.sets.length;
+    if (has) {
+      const title = move === 'import' ? w('brackets_reimport_asks', { name: t.name }).replace(/\*\*/g, '') : said(WORDS.rebuildAsks, { name: t.name });
+      const yes = await ask({ title, body: [], confirmLabel: w(SPORTS_MOVES[move]), tone: 'warn' });
+      if (!yes) return null;
+    }
+    return act(`${base(t.id)}/${PATHS[move]}`, { replace: Boolean(has) });
+  }
   if (ASKS[move]) {
     const [title, confirmLabel] = ASKS[move];
     const yes = await ask({ title: said(title, { name: t.name }), body: [], confirmLabel, tone: TONES[move] || 'danger' });
@@ -474,7 +503,7 @@ const MEMBER_LABELS = {
 
 function moveBar(t) {
   const members = memberMoves(t, mode()).map((move) => button(w(MEMBER_LABELS[move]), () => memberMove(move), { tone: move === 'join' || move === 'check_in' ? 'warn' : 'quiet', small: false }));
-  const organisers = organiserMoves(t, { mode: mode(), staff: staff() }).map((move) => button(ORGANISER[move], () => organiserMove(move), { tone: move === 'cancel' ? 'danger' : ['start', 'complete', 'open_signups', 'open_check_in', 'move', 'restore', 'reopen', 'advance'].includes(move) ? 'warn' : 'quiet' }));
+  const organisers = organiserMoves(t, { mode: mode(), staff: staff() }).map((move) => button(ORGANISER[move] || w(SPORTS_MOVES[move]), () => organiserMove(move), { tone: move === 'cancel' ? 'danger' : ['start', 'complete', 'open_signups', 'open_check_in', 'move', 'restore', 'reopen', 'advance', 'import'].includes(move) ? 'warn' : 'quiet' }));
   if (!members.length && !organisers.length) return null;
   return el('div', { class: 'bk-moves' }, [
     members.length ? bar(members) : null,
@@ -517,14 +546,31 @@ function waitingLine(t) {
   ]);
 }
 
+function sourceName(t) {
+  return SOURCE_NAMES[t.source] || w('brackets_source_own_words');
+}
+
+function feedLine(t) {
+  const found = feedState(t);
+  if (found === 'own') return el('p', { class: 'bk-meta bk-feed', text: w('brackets_source_own_words') });
+  if (found === 'down') return el('p', { class: 'bk-meta bk-feed', 'data-tone': 'danger', text: w('brackets_feed_down_line', { when: stamp(t.feed_failed_at) }) });
+  if (found === 'via') {
+    const when = ago(t.feed_ok_at);
+    return el('p', { class: 'bk-meta bk-feed', title: when.title, text: w('brackets_feed_via_line', { source: sourceName(t), ago: when.text }) });
+  }
+  return null;
+}
+
 function headBody(t) {
   const cap = t.options && t.options.entrant_cap ? `${t.entrant_count}/${t.options.entrant_cap}` : String(t.entrant_count);
   const listed = isList(t);
+  const sports = isSports(t);
   const meta = [
     t.game,
     listed ? kindWords(t.kind) : null,
+    sports ? t.season : null,
     formatWords(t.format),
-    ...(listed ? [decideWords(t.decide_by)] : optionWords(t)),
+    ...(listed ? [decideWords(t.decide_by)] : sports ? [] : optionWords(t)),
     `${cap} ${t.entrant_count === 1 && !t.options.entrant_cap ? 'entrant' : 'entrants'}`,
     t.to_name,
   ].filter(Boolean);
@@ -534,8 +580,9 @@ function headBody(t) {
   if (PLAYING.includes(t.state) && t.started_at) times.push(`started ${stamp(t.started_at)}`);
   if (t.state === 'complete' && t.completed_at) times.push(stamp(t.completed_at));
   return [
-    el('div', { class: 'bk-title' }, [el('h2', { class: 'bk-name', text: t.name }), kindBadge(t), stateBadge(t.state), t.shadow && view.index.may_run ? badge('rehearsal', 'warn') : null]),
+    el('div', { class: 'bk-title' }, [el('h2', { class: 'bk-name', text: t.name }), kindBadge(t), sports && t.league ? badge(leagueWord(t.league), 'info') : null, stateBadge(t.state), t.shadow && view.index.may_run ? badge('rehearsal', 'warn') : null]),
     el('p', { class: 'bk-meta', text: meta.join(' · ') }),
+    sports ? feedLine(t) : null,
     times.length ? el('p', { class: 'bk-meta mono', text: times.join(' · ') }) : null,
     waitingLine(t),
     moveBar(t),
@@ -923,6 +970,11 @@ function slotLine(t, set, side) {
   ]);
 }
 
+function sportsLine(set) {
+  const words = { final: w('brackets_score_final_line'), live: w('brackets_score_live_line'), scheduled: w('brackets_score_scheduled_line') };
+  return scoreLine(set, words, (iso) => stamp(iso));
+}
+
 function needsYou(t, set, moves) {
   return moves.some((one) => ['report', 'confirm', 'dispute'].includes(one)) || (t.may_run && ['reported', 'disputed'].includes(set.state));
 }
@@ -931,8 +983,10 @@ function setCard(t, set, style = null) {
   const moves = setMoves(t, set, { mode: mode() });
   const mine = t.mine !== null && (set.slot_a === t.mine || set.slot_b === t.mine);
   const quiet = ['waiting', 'void', 'bye'].includes(set.state);
-  const top = [set.key, isList(t) ? null : `Bo${set.best_of}`, set.rematch ? w('brackets_set_card_rematch') : null].filter(Boolean).join(' · ');
-  const stateWord = isList(t) && set.state === 'reported' ? 'tied' : { called: 'called', reported: 'reported', disputed: 'disputed' }[set.state];
+  const sports = isSports(t);
+  const best = isList(t) ? null : sports ? sportsLine(set) || null : `Bo${set.best_of}`;
+  const top = [set.key, best, set.rematch ? w('brackets_set_card_rematch') : null].filter(Boolean).join(' · ');
+  const stateWord = sports ? (set.held ? w('brackets_held_note') : null) : isList(t) && set.state === 'reported' ? 'tied' : { called: 'called', reported: 'reported', disputed: 'disputed' }[set.state];
   return el(quiet ? 'div' : 'button', {
     class: 'bk-set',
     type: quiet ? undefined : 'button',
@@ -1295,12 +1349,107 @@ function listDrawer(t, set) {
   openDrawer(`${set.key} · ${roundWords(set)}`, body);
 }
 
+function scoreBox(id, value, label) {
+  return el('input', { class: 'input bk-scorebox', type: 'number', id, min: '0', max: '999', value: value ?? '', 'aria-label': label });
+}
+
+function slotSelect(t, id, value) {
+  const select = el('select', { class: 'input', id });
+  select.append(el('option', { value: '', text: WORDS.empty, selected: value === null || value === undefined || undefined }));
+  for (const one of (t.entrants || []).filter((row) => !row.dropped && !row.dq)) {
+    select.append(el('option', { value: String(one.id), text: one.name, selected: one.id === value || undefined }));
+  }
+  return select;
+}
+
+function editSetForm(t, set, go) {
+  const when = el('input', { class: 'input', type: 'datetime-local', id: 'bk-set-when', value: localValue(set.scheduled_at) || undefined });
+  const status = segment(LIVE_STATUSES.map((one) => ({ value: one, label: WORDS.statuses[one] })), set.live_status || 'scheduled');
+  const a = scoreBox('bk-set-a', set.score_a, said(WORDS.scoreOf, { name: set.a_name || 'a' }));
+  const b = scoreBox('bk-set-b', set.score_b, said(WORDS.scoreOf, { name: set.b_name || 'b' }));
+  const slots = set.state !== 'complete' ? { a: slotSelect(t, 'bk-slot-a', set.slot_a), b: slotSelect(t, 'bk-slot-b', set.slot_b) } : null;
+  const reason = el('input', { class: 'input', type: 'text', maxlength: '300', id: 'bk-edit-reason' });
+  const number = (box) => (box.value.trim() === '' ? null : Number(box.value));
+  const save = () => {
+    const body = { reason: reason.value.trim() };
+    const at = when.value ? new Date(when.value).toISOString() : null;
+    if (at !== (set.scheduled_at ? new Date(set.scheduled_at).toISOString() : null)) body.scheduled_at = at;
+    if (status.readValue() !== (set.live_status || 'scheduled')) body.live_status = status.readValue();
+    if (number(a) !== (set.score_a ?? null) || number(b) !== (set.score_b ?? null)) Object.assign(body, { score_a: number(a), score_b: number(b) });
+    if (slots) {
+      for (const side of ['a', 'b']) {
+        const wanted = slots[side].value === '' ? null : Number(slots[side].value);
+        if (wanted !== (set[`slot_${side}`] ?? null)) body[`slot_${side}`] = wanted;
+      }
+    }
+    return go('', body, 'PATCH');
+  };
+  return el('div', { class: 'bk-fields bk-edit-set' }, [
+    el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.when, when), field(WORDS.status, status)]),
+    el('div', { class: 'bk-fields bk-fields-row' }, [field(said(WORDS.scoreOf, { name: set.a_name || said(WORDS.slotOf, { slot: 'a' }) }), a), field(said(WORDS.scoreOf, { name: set.b_name || said(WORDS.slotOf, { slot: 'b' }) }), b)]),
+    slots ? el('div', { class: 'bk-fields bk-fields-row' }, [field(said(WORDS.slotOf, { slot: 'a' }), slots.a), field(said(WORDS.slotOf, { slot: 'b' }), slots.b)]) : null,
+    field(WORDS.reason, reason),
+    bar([button(WORDS.save, save, { tone: 'warn' })]),
+  ]);
+}
+
+function sportsDrawer(t, set) {
+  const moves = setMoves(t, set, { mode: mode() });
+  const say = notice();
+  const path = `${base(t.id)}/sets/${encodeURIComponent(set.key)}`;
+  const go = async (tail, body = {}, method = 'POST') => {
+    const done = await act(tail ? `${path}/${tail}` : path, body, method, say);
+    if (done.ok) {
+      closeDrawer();
+      view.say.say(done.found.message, 'ok');
+    }
+  };
+  const line = sportsLine(set);
+  const body = [
+    el('div', { class: 'bk-drawer-set' }, [setCard(t, set)]),
+    el('p', { class: 'bk-meta', text: [roundWords(set), set.best_of > 1 ? w('brackets_set_card_best_of', { best_of: set.best_of }) : null, line].filter(Boolean).join(' · ') }),
+  ];
+  const decided = set.decided_by ? w(`brackets_decided_by_${set.decided_by}_words`) : '';
+  const notes = [decided, set.held ? w('brackets_held_note') : null].filter(Boolean);
+  if (notes.length) body.push(el('p', { class: 'bk-state', text: notes.join(' · ') }));
+  const link = discordLink(t, set);
+  if (link) body.push(link);
+  const organiser = [];
+  const a = scoreBox('bk-pick-a', null, said(WORDS.scoreOf, { name: set.a_name || 'a' }));
+  const b = scoreBox('bk-pick-b', null, said(WORDS.scoreOf, { name: set.b_name || 'b' }));
+  const reason = el('input', { class: 'input', type: 'text', maxlength: '300', id: 'bk-set-reason' });
+  const number = (box) => (box.value.trim() === '' ? null : Number(box.value));
+  if (moves.includes('pick')) {
+    for (const side of ['a', 'b']) {
+      const name = side === 'a' ? set.a_name : set.b_name;
+      if (name) organiser.push(button(said(WORDS.wins, { name }), () => go('override', { winner: side, score_a: number(a), score_b: number(b), reason: reason.value.trim() }), { tone: 'quiet' }));
+    }
+  }
+  if (moves.includes('reset')) organiser.push(button(WORDS.resetSet, () => go('reset', { reason: reason.value.trim() }), { tone: 'danger' }));
+  if (moves.includes('release')) organiser.push(button(w('brackets_release_hold_label'), () => go('release'), { tone: 'warn' }));
+  if (organiser.length) {
+    body.push(el('div', { class: 'bk-organiser' }, [
+      el('p', { class: 'bk-label', text: WORDS.organiser }),
+      moves.includes('pick') ? el('div', { class: 'bk-fields bk-fields-row' }, [field(said(WORDS.scoreOf, { name: set.a_name || 'a' }), a), field(said(WORDS.scoreOf, { name: set.b_name || 'b' }), b)]) : null,
+      bar(organiser),
+      moves.some((one) => ['pick', 'reset'].includes(one)) ? field(WORDS.reason, reason) : null,
+    ]));
+  }
+  if (moves.includes('edit_set')) body.push(foldout(w('brackets_edit_set_label'), [editSetForm(t, set, go)], { open: !organiser.length }));
+  body.push(say);
+  openDrawer(`${set.key} · ${roundWords(set)}`, body);
+}
+
 function setDrawer(key) {
   const t = view.t;
   const set = allSets(t).find((one) => one.key === key);
   if (!set) return;
   if (isList(t)) {
     listDrawer(t, set);
+    return;
+  }
+  if (isSports(t)) {
+    sportsDrawer(t, set);
     return;
   }
   const moves = setMoves(t, set, { mode: mode() });
@@ -1391,6 +1540,10 @@ async function optionsDrawer(t) {
   if (t) for (const one of kind.children) one.disabled = true;
   const decide = segment(DECIDERS.map((one) => ({ value: one, label: decideWords(one) })), (t && t.decide_by) || kinds.decide_by || 'votes', { onChange: () => shapeFor() });
   const voteMinutes = numberBox('bk-vote-minutes', (t && t.vote_minutes) || kinds.vote_minutes || 1440, { max: 20160 });
+  const league = segment(LEAGUES.map((one) => ({ value: one, label: leagueWord(one) })), (t && t.league) || 'ncaam');
+  const season = el('input', { class: 'input', type: 'text', id: 'bk-season', maxlength: '20', value: (t && t.season) || undefined, placeholder: '2025-26' });
+  const fedNow = !t || t.source !== 'own';
+  const source = segment([{ value: 'feed', label: WORDS.feed }, { value: 'own', label: w('brackets_source_own_words') }], fedNow ? 'feed' : 'own');
   const name = el('input', { class: 'input', type: 'text', id: 'bk-name', maxlength: '100', value: t ? t.name : undefined });
   const game = el('input', { class: 'input', type: 'text', id: 'bk-game', maxlength: '100', value: t ? t.game || undefined : undefined });
   const format = el('select', { class: 'input', id: 'bk-format' });
@@ -1428,21 +1581,30 @@ async function optionsDrawer(t) {
   only.listed = el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.decideBy, decide), field(WORDS.voteMinutes, voteMinutes)]);
   only.fighting = el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.bestOf, bestOf), field(WORDS.cap, cap), field(WORDS.checkIn, checkIn)]);
   only.game = field(WORDS.game, game);
+  only.sports = el('div', { class: 'bk-fields' }, [
+    field(WORDS.league, league),
+    el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.season, season), field(WORDS.results, source)]),
+  ]);
+  only.format = field(WORDS.format, format);
   const shapeFor = () => {
     const listed = kind.readValue() === 'list';
+    const sports = kind.readValue() === 'sports';
+    const plain = listed || sports;
+    only.sports.hidden = !sports;
+    only.format.hidden = sports;
     only.listed.hidden = !listed;
     only.listed.lastChild.hidden = decide.readValue() !== 'votes';
-    only.fighting.hidden = listed;
-    only.game.hidden = listed;
-    const pooled = !listed && ELIMINATION.includes(format.value) && poolsFormat.value !== 'none';
-    only.pools.hidden = listed || !ELIMINATION.includes(format.value);
+    only.fighting.hidden = plain;
+    only.game.hidden = plain;
+    const pooled = !plain && ELIMINATION.includes(format.value) && poolsFormat.value !== 'none';
+    only.pools.hidden = plain || !ELIMINATION.includes(format.value);
     only.pooled.hidden = !pooled;
     only.losers.hidden = !pooled || format.value !== 'double';
     only.poolRounds.hidden = !pooled || poolsFormat.value !== 'swiss';
-    only.single.hidden = format.value !== 'single';
-    only.double.hidden = format.value !== 'double';
-    only.swiss.hidden = format.value !== 'swiss';
-    only.elimination.hidden = listed || !ELIMINATION.includes(format.value);
+    only.single.hidden = sports || format.value !== 'single';
+    only.double.hidden = sports || format.value !== 'double';
+    only.swiss.hidden = sports || format.value !== 'swiss';
+    only.elimination.hidden = plain || !ELIMINATION.includes(format.value);
   };
   format.addEventListener('change', shapeFor);
   poolsFormat.addEventListener('change', shapeFor);
@@ -1486,6 +1648,10 @@ async function optionsDrawer(t) {
       body.decide_by = decide.readValue();
       if (number(voteMinutes) !== null) body.vote_minutes = number(voteMinutes);
     }
+    if (kind.readValue() === 'sports') {
+      for (const field of ['game', 'format', 'best_of', 'entrant_cap', 'check_in_minutes', 'best_of_late', 'best_of_finals', 'best_of_from_round', 'pools_format', 'pool_count', 'advance_per_pool', 'pools_best_of', 'advance_losers_from', 'pools_swiss_rounds', 'third_place', 'grand_final_reset', 'swiss_rounds']) delete body[field];
+      Object.assign(body, { league: league.readValue(), season: season.value.trim(), source: source.readValue() });
+    }
     if (!t) body.kind = kind.readValue();
     const done = await run(say, () => (t ? send(base(t.id), 'PATCH', body) : send('/api/brackets', 'POST', body)), (found) => found.message);
     if (!done.ok) return;
@@ -1503,7 +1669,8 @@ async function optionsDrawer(t) {
     field(WORDS.kind, kind),
     field(WORDS.name, name),
     only.game,
-    el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.format, format), field(WORDS.starts, startsAt)]),
+    only.sports,
+    el('div', { class: 'bk-fields bk-fields-row' }, [only.format, field(WORDS.starts, startsAt)]),
     only.listed,
     only.single,
     only.double,

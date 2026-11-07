@@ -68,8 +68,8 @@ async def test_a_fighters_bracket_stores_its_kind_and_no_vote_settings(bot, guil
 
 async def test_sports_is_refused_in_words_for_now_and_a_bad_kind_names_the_choices(bot, guild):
     sports = await moves.create(bot, guild, who(guild, TO), {"name": "March", "kind": "sports"})
-    assert (sports.ok, sports.code, sports.status) == (False, "sports_not_yet", 409)
-    assert "not ready yet" in sports.message
+    assert (sports.ok, sports.code, sports.status) == (False, "bad_option", 400)
+    assert "nfl, nba, mlb, nhl, ncaam, ncaaw" in sports.message
     bad = await moves.create(bot, guild, who(guild, TO), {"name": "X", "kind": "cards"})
     assert (bad.code, bad.status) == ("bad_option", 400)
     assert "fighters, sports, list" in bad.message

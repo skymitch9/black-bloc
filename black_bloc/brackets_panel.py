@@ -12,6 +12,7 @@ from . import brackets_cards as cards
 from . import brackets_moves as moves_
 from . import brackets_people as people_
 from . import brackets_sets as sets_
+from . import brackets_sports as sports_
 from . import brackets_store as store_
 from . import brackets_thread as thread_
 from . import sports_names
@@ -82,6 +83,14 @@ MOVE = thread_.MOVE
 RESTORE_ENTRANT = "restore_entrant"
 ADVANCE = "advance"
 UNADVANCE = "unadvance"
+IMPORT = "import"
+BUILD = "build"
+SYNC = "sync"
+SPORTS_LABELS = {
+    IMPORT: "brackets_import_label",
+    BUILD: "brackets_build_label",
+    SYNC: "brackets_sync_label",
+}
 
 TO_LABELS = {
     OPEN_SIGNUPS: "Open sign-ups",
@@ -101,6 +110,9 @@ TO_LABELS = {
     MOVE: "Move to #knuck-up",
     ADVANCE: "Advance to the final",
     UNADVANCE: "Back to pools",
+    IMPORT: "Import",
+    BUILD: "Build bracket",
+    SYNC: "Sync now",
 }
 TO_STYLES = {
     ADVANCE: discord.ButtonStyle.success,
@@ -134,6 +146,14 @@ LIST_TO_MOVES: dict[str, tuple[str, ...]] = {
     store_.COMPLETE: (REOPEN, CANCEL),
     store_.CANCELLED: (RESTORE,),
 }
+SPORTS_TO_MOVES: dict[str, tuple[str, ...]] = {
+    store_.DRAFT: (IMPORT, BUILD, SEED, SHUFFLE, START, ADD_ENTRANT, CANCEL),
+    store_.SEEDING: (IMPORT, BUILD, SEED, SHUFFLE, START, ADD_ENTRANT, CANCEL),
+    store_.RUNNING: (SYNC, COMPLETE_MOVE, UNSTART, CANCEL),
+    store_.COMPLETE: (REOPEN, CANCEL),
+    store_.CANCELLED: (RESTORE,),
+}
+REBUILD_ASKS = "Building again replaces every set in **{name}**, hand edits included."
 MEMBER_LISTED = (store_.SIGNUPS, store_.CHECK_IN, store_.SEEDING, *store_.PLAYING)
 
 CREATE_PICK = "Create…"
@@ -287,6 +307,13 @@ async def build_home(
 
 
 def legal_to_moves(row: Any, current: Any) -> list[str]:
+    if store_.is_sports(row):
+        found = list(SPORTS_TO_MOVES.get(row["state"], ()))
+        if not store_.fed(row):
+            found = [one for one in found if one not in (IMPORT, SYNC)]
+        if COMPLETE_MOVE in found and (current is None or not pools.finished(current)):
+            found.remove(COMPLETE_MOVE)
+        return found
     if store_.kind_of(row) == store_.LIST:
         found = list(LIST_TO_MOVES.get(row["state"], ()))
         if COMPLETE_MOVE in found and (current is None or not pools.finished(current)):
@@ -318,7 +345,7 @@ def may_unadvance(current: Any) -> bool:
 
 def member_moves(row: Any, mine: Any) -> list[str]:
     """Leave wherever it is legal — in, before the start — as the starter card offers it."""
-    if store_.kind_of(row) == store_.LIST:
+    if store_.kind_of(row) != store_.FIGHTERS:
         return []
     state = row["state"]
     inside = mine is not None and not mine["dropped"] and not mine["dq"]
@@ -422,7 +449,8 @@ async def build_tournament(
         for index, move in enumerate(moves):
             if move == SEED and not seed_text(everyone):
                 continue
-            view.add_item(ToButton(row["id"], move, row=1 if index < 5 else 2))
+            shown = words(bot, guild, SPORTS_LABELS[move]) if move in SPORTS_LABELS else None
+            view.add_item(ToButton(row["id"], move, row=1 if index < 5 else 2, shown=shown))
         if everyone:
             view.add_item(EntrantPick(row["id"], everyone))
     pickable = sorted(playing, key=lambda one: one.state == COMPLETE) if runs else own
@@ -496,6 +524,8 @@ def sports_lines(bot: Any, guild: Any, row: Any, person: Any) -> list[str]:
 
 
 def set_moves_for(row: Any, seat: Any, runs: bool, ballot: Any = None) -> list[str]:
+    if store_.is_sports(row):
+        return list(cards.sports_moves(row, seat.match, ballot)) if runs else []
     if store_.kind_of(row) == store_.LIST:
         return [
             one
@@ -535,15 +565,19 @@ async def build_set(
         return await build_tournament(bot, guild, user, tournament_id, note=note or seat.message)
     row, match, people = seat.row, seat.match, seat.people
     ballot = await thread_.ballot_of(bot, row, match.key)
-    embed = cards.set_embed(
-        bot.store,
-        guild.id,
-        match,
-        people,
-        row["confirm_minutes"],
-        listed=store_.kind_of(row) == store_.LIST,
-        ballot=ballot,
-        visible=bool(bot.store.get(guild.id, BRACKETS_VOTES_VISIBLE)),
+    embed = (
+        cards.sports_embed(bot.store, guild.id, match, people, ballot)
+        if store_.is_sports(row)
+        else cards.set_embed(
+            bot.store,
+            guild.id,
+            match,
+            people,
+            row["confirm_minutes"],
+            listed=store_.kind_of(row) == store_.LIST,
+            ballot=ballot,
+            visible=bool(bot.store.get(guild.id, BRACKETS_VOTES_VISIBLE)),
+        )
     )
     players = cards.players_line(bot.store, guild.id, match, people)
     body = f"{players}\n{embed.description or ''}"
@@ -560,7 +594,7 @@ def seat_label(bot: Any, guild: Any, seat: Any, move: str) -> str:
         return LET_STAND
     if move in ("forfeit_a", "forfeit_b"):
         return FORFEIT_LABEL.format(name=seat.name(move[-1]))[:80]
-    if move in (*cards.VOTE_ACTIONS, *cards.LIST_TO_ACTIONS):
+    if move in (*cards.VOTE_ACTIONS, *cards.LIST_TO_ACTIONS, *cards.SPORTS_TO_ACTIONS):
         return cards.list_label(bot.store, guild.id, move, seat.match, seat.people)
     return cards.label(bot.store, guild.id, move)
 
@@ -925,7 +959,12 @@ async def run_to_move(interaction: discord.Interaction, tournament_id: int, move
         MOVE: thread_.move_home,
         ADVANCE: moves_.advance,
         UNADVANCE: moves_.unadvance,
+        SYNC: sports_.sync_now,
     }
+    if move == IMPORT:
+        return await sports_.import_bracket(bot, guild, user, tournament_id, replace=True)
+    if move == BUILD:
+        return await sports_.build(bot, guild, user, tournament_id, replace=True)
     if move == SHUFFLE:
         return await moves_.seed(bot, guild, user, tournament_id, randomise=True)
     if move == CALL_READY:
@@ -946,7 +985,7 @@ async def to_pressed(
     if move == ADD_ENTRANT:
         await render(interaction, (ADD, tournament_id), previous)
         return
-    if move in CONFIRMED:
+    if move in CONFIRMED or await replaces(interaction.client, tournament_id, move):
         await ask_first(interaction, tournament_id, move, previous)
         return
     outcome = await run_to_move(interaction, tournament_id, move)
@@ -967,6 +1006,12 @@ async def ask_first(
     if move == DROP_OUT:
         question = words(bot, guild, "brackets_drop_confirm", name=row["name"])
         yes = text(words(bot, guild, "brackets_drop_label"), 80)
+    elif move == IMPORT:
+        question = words(bot, guild, "brackets_reimport_asks", name=row["name"])
+        yes = text(words(bot, guild, SPORTS_LABELS[move]), 80)
+    elif move == BUILD:
+        question = REBUILD_ASKS.format(name=row["name"])
+        yes = text(words(bot, guild, SPORTS_LABELS[move]), 80)
     else:
         question = CONFIRMED[move].format(name=row["name"])
         yes = TO_LABELS[move]
@@ -995,6 +1040,16 @@ async def ask_first(
     )
 
 
+async def replaces(bot: Any, tournament_id: int, move: str) -> bool:
+    """Import or Build over a bracket that already has teams or sets asks first."""
+    if move == IMPORT:
+        found = await store_.entrants(bot.db, int(tournament_id))
+        return bool(found or await store_.sets(bot.db, int(tournament_id)))
+    if move == BUILD:
+        return bool(await store_.sets(bot.db, int(tournament_id)))
+    return False
+
+
 async def drop_out(interaction: discord.Interaction, tournament_id: int) -> Outcome:
     bot, guild, user = interaction.client, interaction.guild, interaction.user
     row = await store_.tournament(bot.db, guild.id, int(tournament_id))
@@ -1007,9 +1062,11 @@ async def drop_out(interaction: discord.Interaction, tournament_id: int) -> Outc
 
 
 class ToButton(discord.ui.Button):
-    def __init__(self, tournament_id: int, move: str, *, row: int) -> None:
+    def __init__(
+        self, tournament_id: int, move: str, *, row: int, shown: str | None = None
+    ) -> None:
         super().__init__(
-            label=TO_LABELS[move],
+            label=text(shown or TO_LABELS[move], 80),
             style=TO_STYLES.get(move, discord.ButtonStyle.secondary),
             row=row,
         )

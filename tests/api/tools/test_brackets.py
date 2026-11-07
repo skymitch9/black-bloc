@@ -567,7 +567,7 @@ async def test_a_sports_bracket_is_refused_in_words_and_the_kind_cannot_change(
 ):
     organiser = as_(client, sign_in, wf, TO)
     sports = organiser.post("/api/brackets", json={"name": "March", "kind": "sports"})
-    assert (sports.status_code, sports.json()["error"]) == (409, "sports_not_yet")
+    assert (sports.status_code, sports.json()["error"]) == (400, "bad_option")
     row = made(organiser)
     changed = organiser.patch(f"/api/brackets/{row['id']}", json={"kind": "list"})
     assert (changed.status_code, changed.json()["error"]) == (409, "kind_fixed")
@@ -627,4 +627,67 @@ async def test_an_organiser_edits_an_entrant_on_the_site_and_a_member_cannot(
     assert rows == ["web.brackets.entrant_edited"]
     member = as_(client, sign_in, wf, ADA)
     refused = member.patch(path, json={"seed": 1})
+    assert (refused.status_code, refused.json()["error"]) == (403, "not_organiser")
+
+
+async def test_a_sports_bracket_is_imported_synced_edited_and_released_on_the_site(
+    client, sign_in, wf, web, people
+):
+    from tests.sports_fakes import Recorded
+
+    web.sports_fetch = Recorded({"playoff-bracket/2026": "nhl_bracket_2026"})
+    organiser = as_(client, sign_in, wf, TO)
+    row = made(organiser, kind="sports", league="nhl", season="2025-26")
+    assert (row["kind"], row["league"], row["source"], row["fed"]) == ("sports", "nhl", "nhl", True)
+    tid = row["id"]
+    imported = organiser.post(f"/api/brackets/{tid}/import", json={})
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["message"] == (
+        "Imported **Knuck Up 12** — 16 team(s) and 15 set(s) from NHL."
+    )
+    sets = imported.json()["tournament"]["sets"]
+    assert len(sets) == 15 and not any(one["key"].startswith("pending-") for one in sets)
+    asked = organiser.post(f"/api/brackets/{tid}/import", json={})
+    assert (asked.status_code, asked.json()["error"]) == (409, "confirm_reimport")
+    assert "hand edits included" in asked.json()["message"]
+    assert organiser.post(f"/api/brackets/{tid}/import", json={"replace": True}).status_code == 200
+    assert organiser.post(f"/api/brackets/{tid}/start", json={}).status_code == 200
+
+    synced = organiser.post(f"/api/brackets/{tid}/sync", json={})
+    assert synced.status_code == 200, synced.text
+    final = next(one for one in synced.json()["tournament"]["sets"] if one["key"] == "W4-1")
+    assert (final["state"], final["decided_by"], final["live_status"]) == (
+        "complete",
+        "feed",
+        "final",
+    )
+
+    edited = organiser.patch(
+        f"/api/brackets/{tid}/sets/W4-1", json={"score_a": 4, "score_b": 3, "reason": "TV"}
+    )
+    assert edited.status_code == 200, edited.text
+    one = next(s for s in edited.json()["tournament"]["sets"] if s["key"] == "W4-1")
+    assert (one["score_a"], one["score_b"], one["held"], one["decided_by"]) == (4, 3, True, "staff")
+    released = organiser.post(f"/api/brackets/{tid}/sets/W4-1/release", json={})
+    assert released.json()["message"] == "W4-1 is back under the feed."
+    again = organiser.post(f"/api/brackets/{tid}/sets/W4-1/release", json={})
+    assert (again.status_code, again.json()["error"]) == (409, "not_held")
+
+
+async def test_a_sports_bracket_by_hand_builds_and_refuses_a_feed_in_words(
+    client, sign_in, wf, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    tid = made(organiser, kind="sports", league="ncaam", source="own")["id"]
+    for name in ("Duke", "UNC", "Kansas"):
+        added = organiser.post(f"/api/brackets/{tid}/entrants", json={"name": name})
+        assert added.status_code == 200
+    built = organiser.post(f"/api/brackets/{tid}/build", json={})
+    assert built.status_code == 200
+    assert built.json()["message"] == "Built **Knuck Up 12** — 2 set(s)."
+    import_ = organiser.post(f"/api/brackets/{tid}/import", json={})
+    assert (import_.status_code, import_.json()["error"]) == (409, "not_fed")
+    assert import_.json()["message"] == "**Knuck Up 12** is run by hand, so it has no feed to read."
+    member = as_(client, sign_in, wf, ADA)
+    refused = member.patch(f"/api/brackets/{tid}/sets/W1-1", json={"live_status": "live"})
     assert (refused.status_code, refused.json()["error"]) == (403, "not_organiser")

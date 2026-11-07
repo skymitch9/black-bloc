@@ -45,7 +45,13 @@ VOTE_GONE = (WAITING, BYE, VOID)
 
 OWN = "own"
 STARTGG = "startgg"
-SOURCES = (OWN, STARTGG)
+FEED_SOURCES = ("espn", "ncaa", "nhl", "nba", "mlb")
+SOURCES = (OWN, STARTGG, *FEED_SOURCES)
+FEED = "feed"
+STAFF = "staff"
+DECIDED_BY = (FEED, STAFF)
+SPORTS_COLUMNS = ("source_key", "scheduled_at", "live_status", "period_words", "decided_by", "held")
+FEED_COLUMNS = ("feed_ok_at", "feed_failed_at", "feed_failures", "feed_error")
 
 REMOVED = "removed"
 LEFT = "left"
@@ -85,6 +91,10 @@ EDITABLE = (
     "kind",
     "decide_by",
     "vote_minutes",
+    "league",
+    "season",
+    "source",
+    "source_ref",
 )
 SET_COLUMNS = tuple(one.name for one in fields(Match))
 LIST_LIMIT = 200
@@ -117,6 +127,15 @@ def kind_of(row: Any) -> str:
     """The bracket's kind; a row read before the column existed is a fighters bracket."""
     found = column(row, "kind")
     return found if found in KINDS else FIGHTERS
+
+
+def is_sports(row: Any) -> bool:
+    return kind_of(row) == SPORTS
+
+
+def fed(row: Any) -> bool:
+    """A sports bracket with a feed behind it, rather than one run by hand."""
+    return is_sports(row) and column(row, "source") in FEED_SOURCES and bool(column(row, "league"))
 
 
 def votes_decide(row: Any) -> bool:
@@ -496,3 +515,33 @@ async def sync_votes(db: Any, row: Any, now: datetime | None = None) -> list[str
             )
     await db.conn.commit()
     return opened
+
+
+async def sports_rows(db: Any, tournament_id: int) -> dict[str, dict[str, Any]]:
+    """Each set's feed key, time, live words, who decided it and whether staff hold it."""
+    cur = await db.conn.execute(
+        f"SELECT key, {', '.join(SPORTS_COLUMNS)} FROM tournament_sets WHERE tournament_id = ?",
+        (tournament_id,),
+    )
+    return {
+        row["key"]: {name: row[name] for name in SPORTS_COLUMNS} for row in await cur.fetchall()
+    }
+
+
+async def write_sports(db: Any, tournament_id: int, key: str, values: dict[str, Any]) -> None:
+    wanted = {name: value for name, value in values.items() if name in SPORTS_COLUMNS}
+    if not wanted:
+        return
+    sets = ", ".join(f"{name} = ?" for name in wanted)
+    await db.conn.execute(
+        f"UPDATE tournament_sets SET {sets} WHERE tournament_id = ? AND key = ?",
+        (*wanted.values(), tournament_id, key),
+    )
+    await db.conn.commit()
+
+
+async def clear_entrants(db: Any, tournament_id: int) -> None:
+    await db.conn.execute(
+        "DELETE FROM tournament_entrants WHERE tournament_id = ?", (tournament_id,)
+    )
+    await db.conn.commit()

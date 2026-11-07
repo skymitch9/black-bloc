@@ -6,7 +6,7 @@ from typing import Any
 
 from . import brackets_store as store_
 from . import sports_names
-from .brackets import play, pools, standings, swiss
+from .brackets import play, pools, sports_shape, standings, swiss
 from .brackets.model import ELIMINATION, FINAL, POOLS, SWISS
 from .settings_store import BRACKETS_DEFAULTS
 
@@ -90,6 +90,23 @@ PAGE_WORDS = (
     "brackets_typed_entrant_note",
     "brackets_edit_entrant_label",
     "brackets_use_typed_label",
+    "brackets_score_final_line",
+    "brackets_score_live_line",
+    "brackets_score_scheduled_line",
+    "brackets_feed_via_line",
+    "brackets_feed_down_line",
+    "brackets_feed_back_line",
+    "brackets_source_own_words",
+    "brackets_import_label",
+    "brackets_build_label",
+    "brackets_sync_label",
+    "brackets_edit_set_label",
+    "brackets_release_hold_label",
+    "brackets_reimport_asks",
+    "brackets_held_note",
+    "brackets_decided_by_feed_words",
+    "brackets_decided_by_staff_words",
+    "brackets_no_score_words",
 )
 
 SUMMARY_FIELDS = (
@@ -104,6 +121,9 @@ SUMMARY_FIELDS = (
     "pools_format",
 )
 KIND_FIELDS = ("kind", "decide_by", "vote_minutes")
+SPORTS_FIELDS = ("league", "season", "source")
+FEED_FIELDS = (*SPORTS_FIELDS, "feed_ok_at", "feed_failed_at", "feed_failures", "feed_error")
+EMPTY_SPORTS = {name: None for name in store_.SPORTS_COLUMNS} | {"held": False}
 OPTION_FIELDS = (
     "format",
     "third_place",
@@ -164,7 +184,21 @@ def kind_fields(row: Any) -> dict[str, Any]:
         "kind": store_.kind_of(row),
         "decide_by": store_.column(row, "decide_by"),
         "vote_minutes": store_.column(row, "vote_minutes"),
+        **{name: store_.column(row, name) for name in SPORTS_FIELDS},
     }
+
+
+def feed_fields(row: Any) -> dict[str, Any]:
+    found = {name: store_.column(row, name) for name in FEED_FIELDS}
+    found["feed_failures"] = int(found["feed_failures"] or 0)
+    found["fed"] = store_.fed(row)
+    return found
+
+
+def sports_fields(meta: dict[str, Any] | None) -> dict[str, Any]:
+    if not meta:
+        return dict(EMPTY_SPORTS)
+    return {**meta, "held": bool(meta.get("held"))}
 
 
 def vote_fields(
@@ -379,6 +413,7 @@ async def full(
     mine_votes = await store_.my_votes(db, row["id"], viewer) if held_votes else {}
     bracket = await store_.bracket(db, row)
     held = await store_.cards(db, row["id"]) if bracket is not None else {}
+    meta = await store_.sports_rows(db, row["id"]) if store_.is_sports(row) else {}
     names = {one["id"]: one["name"] for one in people}
     mine = next((one["id"] for one in people if viewer and one["user_id"] == viewer), None)
     found = {
@@ -388,6 +423,7 @@ async def full(
         **{name: as_id(row[name]) for name in ID_FIELDS},
         "shadow": bool(row["shadow"]),
         **kind_fields(row),
+        **feed_fields(row),
         "options": options(row),
         "entrant_count": sum(1 for one in people if not one["dropped"]),
         "finished": bool(bracket is not None and pools.finished(bracket)),
@@ -400,8 +436,9 @@ async def full(
         "sets": [
             set_row(match, names, row["confirm_minutes"], held.get(match.key))
             | vote_fields(held_votes.get(match.key), mine_votes.get(match.key), visible=visible)
+            | sports_fields(meta.get(match.key))
             for match in (bracket.ordered() if bracket else [])
-            if match.phase != POOLS
+            if match.phase != POOLS and not sports_shape.is_pending(match)
         ],
         "pools": pool_rows(bracket, names, row["confirm_minutes"], held),
         "standings": standing_rows(bracket, names),

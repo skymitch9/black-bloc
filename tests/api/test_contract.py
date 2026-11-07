@@ -1322,7 +1322,8 @@ async def seed_brackets(db, guild_id: int) -> dict:
     await sports_names.upsert(db, "team", "nba", "espn", teams)
     sports, (celtics,) = await made("seeding", "single", [(None, "Boston Celtics")], kind="sports")
     await store_.update_entrant(db, celtics, {"ext_source": "espn", "ext_id": "2", "short": "BOS"})
-    return {
+    live = await seed_sports_live(db, guild_id, made)
+    return live | {
         "bracket_draft_id": str(draft),
         "bracket_signups_id": str(signups),
         "bracket_checkin_id": str(checkin),
@@ -1342,6 +1343,41 @@ async def seed_brackets(db, guild_id: int) -> dict:
         "bracket_vote_id": str(voting),
         "bracket_sports_id": str(sports),
         "bracket_sports_entrant_id": str(celtics),
+    }
+
+
+async def seed_sports_live(db, guild_id: int, made) -> dict:
+    """K3: a running NHL bracket fed by the recorded 2026 bracket, one with a held set, one
+    to Import into and one run by hand to Build."""
+    from black_bloc import brackets_store as store_
+    from black_bloc.brackets import play, sports_shape
+
+    nhl = {"kind": "sports", "league": "nhl", "season": "2025-26", "best_of": 1}
+    teams = [(None, "Sabres"), (None, "Bruins"), (None, "Lightning"), (None, "Canadiens")]
+    live, ids = await made("running", "single", teams, source="nhl", **nhl)
+    for entrant, ext_id in zip(ids, ("7", "6", "14", "8"), strict=True):
+        await store_.update_entrant(db, entrant, {"ext_source": "nhl", "ext_id": ext_id})
+    planned = [
+        sports_shape.Planned("A", 1, ids[0], ids[1], 7),
+        sports_shape.Planned("B", 1, ids[2], ids[3], 7),
+        sports_shape.Planned("I", 2, None, None, 7),
+    ]
+    shaped, sources = sports_shape.shaped(planned, {"A": ("I", "a"), "B": ("I", "b")})
+    play.settle(shaped)
+    await store_.save(db, live, shaped, list(shaped.matches), [])
+    for key, source_key in sources.items():
+        await store_.write_sports(db, live, key, {"source_key": source_key})
+    held, pair = await made("running", "single", teams[:2], source="own", **nhl)
+    built = play.build(pair, store_.options_of(await store_.tournament(db, guild_id, held)))
+    await store_.save(db, held, built.bracket, list(built.bracket.matches), [])
+    await store_.write_sports(db, held, "W1-1", {"held": 1, "decided_by": "staff"})
+    into, _ = await made("seeding", "single", [], source="nhl", **nhl)
+    by_hand, _ = await made("seeding", "single", teams[:2], source="own", **nhl)
+    return {
+        "bracket_sports_live_id": str(live),
+        "bracket_sports_held_id": str(held),
+        "bracket_sports_import_id": str(into),
+        "bracket_sports_build_id": str(by_hand),
     }
 
 

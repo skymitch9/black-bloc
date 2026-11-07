@@ -6,7 +6,7 @@ import asyncio
 import functools
 import logging
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from . import brackets_store as store_
@@ -49,6 +49,8 @@ from .settings_store import (
     BRACKETS_TO_ROLE,
     BRACKETS_VOTE_MINUTES,
 )
+from .sports import feeds
+from .sports.model import LEAGUES, SOURCE_NAMES
 
 log = logging.getLogger(__name__)
 
@@ -154,10 +156,20 @@ TO_WORDS = {
         "it is set to {rounds}."
     ),
     "kind_fixed": "A bracket's kind is set when it is made, so **{name}** stays as it is.",
-    "sports_not_yet": (
-        "Sports brackets are not ready yet, so nothing was made. Make a fighting game or a "
-        "list bracket for now."
-    ),
+    "not_sports": "**{name}** is not a sports bracket.",
+    "not_fed": "**{name}** is run by hand, so it has no feed to read.",
+    "feed_failed": "{why}. Nothing was changed; results can be entered by hand.",
+    "no_games": "{source} sent no games for **{name}**, so nothing was imported.",
+    "imported": "Imported **{name}** — {teams} team(s) and {sets} set(s) from {source}.",
+    "built": "Built **{name}** — {sets} set(s).",
+    "rebuild_asks": "Building again replaces every set in **{name}**, hand edits included.",
+    "synced": "Synced **{name}** — {count} set(s) changed.",
+    "synced_none": "Synced **{name}** — nothing changed.",
+    "nothing_to_edit": "Nothing was given to change on {set}.",
+    "slot_played": "{set} has a result, so its teams stay. Reset it first.",
+    "set_edited": "Saved {set}; the feed leaves it alone until Release hold.",
+    "not_held": "{set} is not held, so there is nothing to release.",
+    "hold_released": "{set} is back under the feed.",
     "pick_winner": "The counts are level, so pick who wins {set}.",
 }
 
@@ -460,14 +472,16 @@ def kind_values(bot: Any, guild: Any, given: dict[str, Any], row: Any, values: d
         kind = given.get("kind", defaults["kind"])
         if kind not in store_.KINDS:
             raise bad("kind", ", ".join(store_.KINDS))
-        if kind == store_.SPORTS:
-            raise stop(bot, guild, "sports_not_yet", "sports_not_yet", 409)
     else:
         kind = store_.kind_of(row)
         if "kind" in given and given["kind"] != kind:
             raise stop(bot, guild, "kind_fixed", "kind_fixed", 409, name=row["name"])
     if row is None:
         values["kind"] = kind
+    if kind == store_.SPORTS:
+        values.pop("vote_minutes", None)
+        sports_values(bot, guild, given, row, values)
+        return
     if kind != store_.LIST:
         values.pop("vote_minutes", None)
         return
@@ -480,6 +494,44 @@ def kind_values(bot: Any, guild: Any, given: dict[str, Any], row: Any, values: d
         values["vote_minutes"] = defaults["vote_minutes"]
     values.update({name: 1 for name in LENGTHS if name != "pools_best_of"})
     values["pools_format"] = store_.NO_POOLS
+
+
+def league_of(row: Any) -> str | None:
+    found = store_.column(row, "league")
+    return found if found in LEAGUES else None
+
+
+def source_name(bot: Any, guild: Any, row: Any) -> str:
+    source = store_.column(row, "source")
+    if source in SOURCE_NAMES:
+        return SOURCE_NAMES[source]
+    return said(bot.store, guild.id, "brackets_source_own_words")
+
+
+def feed_source(league: str) -> str:
+    found = feeds.feed_for(league, feeds.BRACKET)
+    return found.primary if found is not None else store_.OWN
+
+
+def sports_values(bot: Any, guild: Any, given: dict[str, Any], row: Any, values: dict) -> None:
+    """A sports bracket names its league and season; its source is the league's feed or own."""
+    bad = bad_option(bot, guild, given)
+    league = given.get("league", league_of(row) if row is not None else None)
+    if league not in LEAGUES:
+        raise bad("league", ", ".join(LEAGUES))
+    if "league" in given or row is None:
+        values["league"] = league
+    if "season" in given or row is None or "league" in given:
+        season = " ".join(str(given.get("season") or "").split())[:20]
+        values["season"] = season or feeds.current_season(league, date.today())
+    if "source" in given or row is None or "league" in given:
+        wanted = given.get("source", store_.column(row, "source") if row is not None else None)
+        values["source"] = store_.OWN if wanted == store_.OWN else feed_source(league)
+    season = values.get("season", store_.column(row, "season") if row is not None else "")
+    values["source_ref"] = f"{league}:{season}"
+    values.update({"format": "single", "third_place": 0, "pools_format": store_.NO_POOLS})
+    values.update({"best_of": 1, "best_of_late": 1, "best_of_finals": 1})
+    values.update({"best_of_from_round": None, "check_in_minutes": 0, "entrant_cap": None})
 
 
 def option_values(bot: Any, guild: Any, given: dict[str, Any], *, creating: bool) -> dict:
@@ -746,6 +798,9 @@ async def start(
         plan = store_.plan_of(row)
         ids = [one["id"] for one in people]
         options = store_.options_of(row)
+        kept = await store_.bracket(bot.db, row) if store_.is_sports(row) else None
+        if kept is not None:
+            return await started_as_built(bot, guild, actor, row, kept, stamp, via)
         if plan is None:
             built = engine(bot, guild, row, names, play.build, ids, options, stamp)
         else:
@@ -763,6 +818,21 @@ async def start(
         key = "started" if certain == most else "started_up_to"
         outcome = done(bot, guild, key, row["id"], name=row["name"], sets=most)
         return touched(outcome, built, gone)
+
+
+async def started_as_built(
+    bot: Any, guild: Any, actor: Any, row: Any, kept: Any, stamp: str, via: str
+) -> Outcome:
+    """A sports bracket starts on the sets Import or Build wrote; a removed team forfeits."""
+    moved = play.moved(play.working(kept), kept, stamp)
+    keys = [key for key in moved.bracket.matches if not key.startswith("pending-")]
+    await store_.save(bot.db, row["id"], moved.bracket, list(moved.bracket.matches), [])
+    await store_.update(bot.db, row["id"], {"state": store_.RUNNING, "started_at": stamp})
+    certain, most = pools.sets_to_play(moved.bracket)
+    await note(bot, guild, "started", actor, row["id"], via, entrants=len(kept.entrants))
+    key = "started" if certain == most else "started_up_to"
+    outcome = done(bot, guild, key, row["id"], name=row["name"], sets=most)
+    return replace(outcome, changed=tuple(keys))
 
 
 @answered
