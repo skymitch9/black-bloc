@@ -188,9 +188,7 @@ async def fetched(kind: str, league: str, fetch: Any, today: date | None) -> Any
     return await feeds.teams(league, fetch=fetch)
 
 
-async def logged(
-    bot: Any, guilds: list[Any], actor: Any, details: dict, *, failing: bool
-) -> None:
+async def logged(bot: Any, guilds: list[Any], actor: Any, details: dict, *, failing: bool) -> None:
     for guild in guilds:
         try:
             await log_action(

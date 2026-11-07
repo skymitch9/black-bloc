@@ -51,9 +51,7 @@ class Sports(commands.Cog):
             return
         for guild in guilds:
             self.tried[guild.id] = names.local_now(self.bot.store, guild.id, moment).date()
-        await names.refreshed_once(
-            self.bot, guilds, fetch=getattr(self.bot, "sports_fetch", None)
-        )
+        await names.refreshed_once(self.bot, guilds, fetch=getattr(self.bot, "sports_fetch", None))
 
     @tasks.loop(minutes=LOOP_MINUTES)
     async def _sweep(self) -> None:

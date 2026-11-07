@@ -20,9 +20,7 @@ async def test_a_body_that_is_not_json_is_a_failure():
 
 
 async def test_a_transport_error_is_a_failure_and_never_raises():
-    answer = await http.get_json(
-        "https://x.test/a", fetch=Recorded({"/a": TimeoutError()})
-    )
+    answer = await http.get_json("https://x.test/a", fetch=Recorded({"/a": TimeoutError()}))
     assert answer.ok is False
     assert answer.why == "did not answer (TimeoutError)"
 

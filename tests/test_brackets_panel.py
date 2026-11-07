@@ -664,3 +664,121 @@ async def test_a_list_tournament_offers_no_member_moves_and_starts_from_draft(bo
     assert "Start" in shown and "Open sign-ups" not in shown and "Open check-in" not in shown
     _, view = await panel.build_add(bot, guild, guild.get_member(TO), outcome.value)
     assert labels(view) == ["Add a name…", "Back"]
+
+
+async def sports_tournament(bot):
+    from black_bloc import sports_names
+    from black_bloc.sports.model import Player, Team
+
+    teams = [
+        Team("2", "Boston Celtics", "BOS", "nba", ("Celtics",)),
+        Team("24", "San Antonio Spurs", "SA", "nba"),
+    ]
+    await sports_names.upsert(bot.db, "team", "nba", "espn", teams)
+    await sports_names.upsert(
+        bot.db, "player", "nba", "espn", [Player("9", "Bostic Smith", "2", "nba", "B. Smith")]
+    )
+    values = {"name": "Playoffs", "kind": "sports", "format": "single"}
+    return await store_.create(bot.db, GUILD, values, TO)
+
+
+async def typed_on_the_panel(bot, guild, tid, name):
+    _, view = await panel.build_add(bot, guild, guild.get_member(TO), tid)
+    assert labels(view) == ["Add a name…", "Back"]
+    interaction = pressing(bot, TO)
+    await item(view, "Add a name…").callback(interaction)
+    fill(interaction.modal, name=name)
+    await interaction.modal.on_submit(interaction)
+    return interaction
+
+
+async def test_a_sports_name_is_answered_with_the_closest_matches_and_the_typed_name(bot, guild):
+    tid = await sports_tournament(bot)
+    interaction = await typed_on_the_panel(bot, guild, tid, "bos")
+    view = shown(interaction)["view"]
+    (pick,) = [one for one in view.children if isinstance(one, panel.SportsPick)]
+    assert [one.label for one in pick.options] == [
+        "Boston Celtics",
+        "Bostic Smith",
+        'Use "bos" as typed',
+    ]
+    assert pick.options[0].description == "BOS · NBA"
+    assert pick.options[1].description == "B. Smith · NBA · Boston Celtics"
+    assert await store_.entrants(bot.db, tid) == []
+
+    pick._values = ["0"]
+    picked = pressing(bot, TO)
+    await pick.callback(picked)
+    assert shown(picked)["embed"].description == "Boston Celtics is in **Playoffs**."
+    (one,) = await store_.entrants(bot.db, tid)
+    assert (one["ext_source"], one["ext_id"], one["short"]) == ("espn", "2", "BOS")
+
+
+async def test_the_typed_choice_adds_the_name_as_typed(bot, guild):
+    tid = await sports_tournament(bot)
+    interaction = await typed_on_the_panel(bot, guild, tid, "Spur")
+    view = shown(interaction)["view"]
+    (pick,) = [one for one in view.children if isinstance(one, panel.SportsPick)]
+    pick._values = [panel.TYPED]
+    picked = pressing(bot, TO)
+    await pick.callback(picked)
+    (one,) = await store_.entrants(bot.db, tid)
+    assert (one["name"], one["ext_id"]) == ("Spur", None)
+
+
+async def test_a_sports_name_with_no_match_is_added_as_typed_at_once(bot, guild):
+    tid = await sports_tournament(bot)
+    interaction = await typed_on_the_panel(bot, guild, tid, "Bobcats")
+    assert shown(interaction)["embed"].description == "Bobcats is in **Playoffs**."
+    embed, view = await panel.build_entrant(
+        bot, guild, guild.get_member(TO), tid, (await store_.entrants(bot.db, tid))[0]["id"]
+    )
+    assert "typed — results by hand" in embed.description
+    assert "Edit entrant" in labels(view)
+
+
+async def test_twenty_five_options_at_most_with_the_typed_one_last(bot, guild):
+    from black_bloc import sports_names
+    from black_bloc.sports.model import Player
+
+    tid = await sports_tournament(bot)
+    many = [Player(str(100 + at), f"Bosworth {at}", None, "nfl") for at in range(40)]
+    await sports_names.upsert(bot.db, "player", "nfl", "espn", many)
+    _, view = await panel.build_add(bot, guild, guild.get_member(TO), tid, typed="bos")
+    (pick,) = [one for one in view.children if isinstance(one, panel.SportsPick)]
+    assert len(pick.options) == 25
+    assert pick.options[-1].value == panel.TYPED
+
+
+async def test_edit_entrant_on_the_panel_saves_name_short_and_seed(bot, guild):
+    tid = await sports_tournament(bot)
+    await people.add_entrant(bot, guild, who(guild, TO), tid, ext_source="espn", ext_id="2")
+    (one,) = await store_.entrants(bot.db, tid)
+    _, view = await panel.build_entrant(bot, guild, guild.get_member(TO), tid, one["id"])
+    interaction = pressing(bot, TO)
+    await item(view, "Edit entrant").callback(interaction)
+    modal = interaction.modal
+    assert modal.title == "Edit Boston Celtics"
+    assert (modal.name.default, modal.short.default, modal.seed.default) == (
+        "Boston Celtics",
+        "BOS",
+        "1",
+    )
+    fill(modal, name="Celtics", short="BOS", seed="4")
+    await modal.on_submit(interaction)
+    assert "Saved Celtics in **Playoffs**." in shown(interaction)["embed"].description
+    after = await store_.entrant(bot.db, tid, one["id"])
+    assert (after["name"], after["seed"], after["ext_id"]) == ("Celtics", 4, "2")
+    bad = pressing(bot, TO)
+    await item(view, "Edit entrant").callback(bad)
+    fill(bad.modal, name="Celtics", short="", seed="four")
+    await bad.modal.on_submit(bad)
+    assert "seed cannot be four" in shown(bad)["embed"].description
+
+
+async def test_a_fighters_entrant_has_no_edit_on_the_panel(bot, guild):
+    tid = await created(bot, guild)
+    await people.add_entrant(bot, guild, who(guild, TO), tid, name="Remy")
+    (one,) = await store_.entrants(bot.db, tid)
+    _, view = await panel.build_entrant(bot, guild, guild.get_member(TO), tid, one["id"])
+    assert "Edit entrant" not in labels(view)

@@ -73,7 +73,11 @@ def roster_url(league: str, team_id: str) -> str:
 
 
 def scoreboard_url(
-    league: str, day: date | None = None, *, postseason: bool = False, week: int | None = None,
+    league: str,
+    day: date | None = None,
+    *,
+    postseason: bool = False,
+    week: int | None = None,
     season: int | None = None,
 ) -> str:
     query: list[str] = []
@@ -237,9 +241,7 @@ async def teams(league: str, *, fetch: http.Fetch | None = None) -> Found:
     return found(listed, ESPN)
 
 
-async def players(
-    league: str, team_ids: list[str], *, fetch: http.Fetch | None = None
-) -> Found:
+async def players(league: str, team_ids: list[str], *, fetch: http.Fetch | None = None) -> Found:
     """Every roster must answer, or the list is not replaced."""
     listed: list[Player] = []
     for team_id in team_ids:

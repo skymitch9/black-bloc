@@ -14,6 +14,7 @@ from . import brackets_people as people_
 from . import brackets_sets as sets_
 from . import brackets_store as store_
 from . import brackets_thread as thread_
+from . import sports_names
 from .brackets import access, pools
 from .brackets.model import (
     CALLED,
@@ -48,6 +49,7 @@ from .settings_store import (
     BRACKETS_PANEL_MINUTES,
     BRACKETS_VOTES_VISIBLE,
 )
+from .sports.model import KINDS as NAME_KINDS
 
 HOME = "home"
 TOURNAMENT = "tournament"
@@ -151,6 +153,14 @@ FORMAT_LINES = {
 }
 ADD_NAME = "Add a name…"
 ADD_NAME_TITLE = "Add a name"
+SPORTS_PICK = "Pick the match…"
+TYPED = "typed"
+EDIT_ENTRANT = "edit_entrant"
+EDIT_TITLE = "Edit {entrant}"
+EDIT_NAME = "Name"
+EDIT_SHORT = "Short name"
+EDIT_SEED = "Seed (blank: none)"
+EDITABLE_KINDS = (store_.SPORTS, store_.LIST)
 FORMAT_EXTRAS = {
     SINGLE: ("third_place",),
     DOUBLE: ("grand_final_reset",),
@@ -462,11 +472,27 @@ async def build_entrant(
         title=text(person["name"], 256),
         description=with_note(note, "\n".join(entrant_lines(person))),
     )
+    extra = sports_lines(bot, guild, row, person)
+    if extra:
+        embed.description = with_note(embed.description or "", "\n".join(extra))
     view = BracketPanel(bot, guild.id, (ENTRANT, row["id"], person["id"]))
     for move in entrant_moves(row, person):
         view.add_item(EntrantButton(row["id"], person["id"], move))
+    if store_.kind_of(row) in EDITABLE_KINDS:
+        label = text(words(bot, guild, "brackets_edit_entrant_label"), 80)
+        view.add_item(EditEntrantButton(row["id"], person["id"], label))
     view.add_item(BackButton(bot, guild, (TOURNAMENT, row["id"])))
     return (embed, view)
+
+
+def sports_lines(bot: Any, guild: Any, row: Any, person: Any) -> list[str]:
+    """A sports entrant's short name, and the typed note when no feed id is held."""
+    if store_.kind_of(row) != store_.SPORTS:
+        return []
+    found = [person["short"]] if store_.column(person, "short") else []
+    if not store_.column(person, "ext_id"):
+        found.append(words(bot, guild, "brackets_typed_entrant_note"))
+    return found
 
 
 def set_moves_for(row: Any, seat: Any, runs: bool, ballot: Any = None) -> list[str]:
@@ -539,15 +565,34 @@ def seat_label(bot: Any, guild: Any, seat: Any, move: str) -> str:
     return cards.label(bot.store, guild.id, move)
 
 
+async def sports_matches(bot: Any, typed: str) -> list[dict[str, Any]]:
+    """The closest names of every kind, leaving one option for the name as typed."""
+    found: list[dict[str, Any]] = []
+    for kind in NAME_KINDS:
+        found += await sports_names.search(bot.db, kind, "", typed)
+    return found[: OPTIONS_LIMIT - 1]
+
+
 async def build_add(
-    bot: Any, guild: Any, user: Any, tournament_id: int, *, note: str = ""
+    bot: Any,
+    guild: Any,
+    user: Any,
+    tournament_id: int,
+    *,
+    note: str = "",
+    typed: str | None = None,
 ) -> tuple[discord.Embed, BracketPanel]:
     row = await store_.tournament(bot.db, guild.id, int(tournament_id))
     if row is None:
         return await build_home(bot, guild, user, note=note)
     embed = discord.Embed(title=text(row["name"], 256), description=note or None)
     view = BracketPanel(bot, guild.id, (ADD, row["id"]))
-    if store_.kind_of(row) == store_.LIST:
+    if store_.kind_of(row) == store_.SPORTS:
+        if typed:
+            matches = await sports_matches(bot, typed)
+            view.add_item(SportsPick(bot, guild, row["id"], typed, matches))
+        view.add_item(GuestButton(row["id"], ADD_NAME))
+    elif store_.kind_of(row) == store_.LIST:
         view.add_item(GuestButton(row["id"], ADD_NAME))
     else:
         view.add_item(AddMemberPick(row["id"]))
@@ -568,7 +613,8 @@ async def built(
     if kind == SET:
         return await build_set(bot, guild, user, place[1], place[2], note=note)
     if kind == ADD:
-        return await build_add(bot, guild, user, place[1], note=note)
+        typed = place[2] if len(place) > 2 else None
+        return await build_add(bot, guild, user, place[1], note=note, typed=typed)
     return await build_home(bot, guild, user, note=note)
 
 
@@ -1212,8 +1258,15 @@ class GuestModal(AnswersErrors, discord.ui.Modal, title=GUEST_TITLE):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction, staff=False):
             return
+        bot = interaction.client
+        row = await store_.tournament(bot.db, interaction.guild.id, self.tournament_id)
+        typed = moves_.clean_text(self.name.value, moves_.NAME_LIMIT)
+        if row is not None and store_.kind_of(row) == store_.SPORTS and typed:
+            if await sports_matches(bot, typed):
+                await render(interaction, (ADD, self.tournament_id, typed), self.previous)
+                return
         outcome = await people_.add_entrant(
-            interaction.client,
+            bot,
             interaction.guild,
             interaction.user,
             self.tournament_id,
@@ -1221,6 +1274,126 @@ class GuestModal(AnswersErrors, discord.ui.Modal, title=GUEST_TITLE):
         )
         await landed(
             interaction, (ADD, self.tournament_id), self.previous, self.tournament_id, outcome, ADD
+        )
+
+
+def match_option(bot: Any, guild: Any, at: int, one: dict[str, Any]) -> discord.SelectOption:
+    league = words(bot, guild, f"brackets_league_{one['league']}_words") if one["league"] else ""
+    about = " · ".join(part for part in (one["short"], league, one["team"]) if part)
+    return discord.SelectOption(
+        label=text(one["name"]), value=str(at), description=text(about) if about else None
+    )
+
+
+class SportsPick(discord.ui.Select):
+    """The closest names to what the organiser typed, and the typed name itself."""
+
+    def __init__(
+        self, bot: Any, guild: Any, tournament_id: int, typed: str, matches: list[dict[str, Any]]
+    ) -> None:
+        options = [match_option(bot, guild, at, one) for at, one in enumerate(matches)]
+        options.append(
+            discord.SelectOption(
+                label=text(words(bot, guild, "brackets_use_typed_label", typed=typed)),
+                value=TYPED,
+            )
+        )
+        super().__init__(placeholder=SPORTS_PICK, options=options, row=1)
+        self.tournament_id = int(tournament_id)
+        self.typed = typed
+        self.matches = matches
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        picked = self.values[0]
+        given: dict[str, Any] = {"name": self.typed}
+        if picked != TYPED:
+            one = self.matches[int(picked)]
+            given = {
+                "name": one["name"],
+                "ext_source": one["source"],
+                "ext_id": one["ext_id"],
+                "short": one["short"],
+            }
+        outcome = await people_.add_entrant(
+            interaction.client, interaction.guild, interaction.user, self.tournament_id, **given
+        )
+        await landed(
+            interaction, (ADD, self.tournament_id), self.view, self.tournament_id, outcome, ADD
+        )
+
+
+class EditEntrantButton(discord.ui.Button):
+    def __init__(self, tournament_id: int, entrant_id: int, label: str) -> None:
+        super().__init__(label=label, style=discord.ButtonStyle.secondary, row=2)
+        self.tournament_id = int(tournament_id)
+        self.entrant_id = int(entrant_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await db_up(interaction):
+            return
+        person = await store_.entrant(interaction.client.db, self.tournament_id, self.entrant_id)
+        modal = EditEntrantModal(self.tournament_id, self.entrant_id, person, self.view)
+        await form_opened(interaction, modal)
+
+
+def seed_given(value: str) -> Any:
+    found = value.strip()
+    if not found:
+        return None
+    return int(found) if found.isdigit() else found
+
+
+class EditEntrantModal(AnswersErrors, discord.ui.Modal):
+    def __init__(
+        self, tournament_id: int, entrant_id: int, person: Any, previous: Any = None
+    ) -> None:
+        name = person["name"] if person is not None else f"#{entrant_id}"
+        super().__init__(title=EDIT_TITLE.format(entrant=name)[:45])
+        self.tournament_id = int(tournament_id)
+        self.entrant_id = int(entrant_id)
+        self.previous = previous
+        short = store_.column(person, "short") if person is not None else None
+        seed = person["seed"] if person is not None else None
+        self.name = discord.ui.TextInput(
+            label=EDIT_NAME, default=name[: moves_.NAME_LIMIT], max_length=moves_.NAME_LIMIT
+        )
+        self.short = discord.ui.TextInput(
+            label=EDIT_SHORT, default=short or None, required=False, max_length=people_.SHORT_LIMIT
+        )
+        self.seed = discord.ui.TextInput(
+            label=EDIT_SEED,
+            default=str(seed) if seed is not None else None,
+            required=False,
+            max_length=4,
+        )
+        for one in (self.name, self.short, self.seed):
+            self.add_item(one)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        given = {
+            "name": self.name.value,
+            "short": self.short.value,
+            "seed": seed_given(self.seed.value),
+        }
+        outcome = await people_.edit_entrant(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.tournament_id,
+            self.entrant_id,
+            given,
+        )
+        await landed(
+            interaction,
+            (ENTRANT, self.tournament_id, self.entrant_id),
+            self.previous,
+            self.tournament_id,
+            outcome,
+            EDIT_ENTRANT,
         )
 
 
