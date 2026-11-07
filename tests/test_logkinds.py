@@ -96,6 +96,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
             "entrant_removed",
             "thread_moved",
             "vote_closed",
+            "entrant_edited",
         )
     ),
     "black_bloc/points_moves.py::kind": tuple(
@@ -284,6 +285,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.request.comment",
         "web.request.filed",
         "web.request.updated",
+        "web.sports.refresh",
     ),
     # The self-test's four kinds are module constants, and every door writes the same four
     # through `kind_via`, so each one is dynamic in exactly the two spellings.
@@ -1315,6 +1317,8 @@ def test_like_patterns_cover_every_head_of_a_feature():
         "web.ninja.%",
         "optouts.%",
         "web.optouts.%",
+        "sports.%",
+        "web.sports.%",
     )
 
 

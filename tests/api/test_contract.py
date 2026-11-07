@@ -1314,6 +1314,14 @@ async def seed_brackets(db, guild_id: int) -> dict:
     built = play.build(pair, Options(format="single", best_of=1, best_of_finals=1))
     await store_.save(db, voting, built.bracket, list(built.bracket.matches), [])
     await store_.sync_votes(db, await store_.tournament(db, guild_id, voting))
+    from black_bloc import sports_names
+    from black_bloc.sports import espn
+    from tests.sports_fakes import payload
+
+    teams = espn.parse_teams(payload("espn_teams_nba"), "nba")
+    await sports_names.upsert(db, "team", "nba", "espn", teams)
+    sports, (celtics,) = await made("seeding", "single", [(None, "Boston Celtics")], kind="sports")
+    await store_.update_entrant(db, celtics, {"ext_source": "espn", "ext_id": "2", "short": "BOS"})
     return {
         "bracket_draft_id": str(draft),
         "bracket_signups_id": str(signups),
@@ -1332,6 +1340,8 @@ async def seed_brackets(db, guild_id: int) -> dict:
         "bracket_pooled_id": str(pooled),
         "bracket_final_id": str(final),
         "bracket_vote_id": str(voting),
+        "bracket_sports_id": str(sports),
+        "bracket_sports_entrant_id": str(celtics),
     }
 
 

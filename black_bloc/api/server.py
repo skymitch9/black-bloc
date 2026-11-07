@@ -48,6 +48,7 @@ from .tools import (
     rolemenus,
     roles,
     runs,
+    sports,
     sticky,
     structure,
     tempvoice,
@@ -214,6 +215,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(structure.build_router(bot))
     app.include_router(pbs.build_router(bot))
     app.include_router(brackets.build_router(bot))
+    app.include_router(sports.build_router(bot))
     app.include_router(points.build_router(bot))
     app.include_router(questions.build_router(bot))
     app.include_router(ninja.build_router(bot))

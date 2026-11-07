@@ -80,6 +80,15 @@ PAGE_WORDS = (
     "brackets_vote_tied_line",
     "brackets_vote_button_change",
     "brackets_close_vote_label",
+    "brackets_league_nfl_words",
+    "brackets_league_nba_words",
+    "brackets_league_mlb_words",
+    "brackets_league_nhl_words",
+    "brackets_league_ncaam_words",
+    "brackets_league_ncaaw_words",
+    "brackets_typed_entrant_note",
+    "brackets_edit_entrant_label",
+    "brackets_use_typed_label",
 )
 
 SUMMARY_FIELDS = (
@@ -211,6 +220,9 @@ def entrant_row(row: Any) -> dict[str, Any]:
         "dq": bool(row["dq"]),
         "placement": row["placement"],
         "final_rank": row["final_rank"],
+        "ext_source": store_.column(row, "ext_source"),
+        "ext_id": store_.column(row, "ext_id"),
+        "short": store_.column(row, "short"),
     }
 
 

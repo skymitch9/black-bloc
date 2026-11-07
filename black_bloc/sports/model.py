@@ -97,12 +97,12 @@ class Found:
     via: str | None = None
 
 
-def found(value: Any, via: str | None = None) -> Found:
-    return Found(True, None, value, via)
+def found(value: Any, source: str | None = None) -> Found:
+    return Found(True, None, value, source)
 
 
-def failed(why: str, via: str | None = None) -> Found:
-    return Found(False, str(why)[:300], None, via)
+def failed(why: str, source: str | None = None) -> Found:
+    return Found(False, str(why)[:300], None, source)
 
 
 def number(value: Any) -> int | None:

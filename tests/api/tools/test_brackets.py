@@ -572,3 +572,58 @@ async def test_a_sports_bracket_is_refused_in_words_and_the_kind_cannot_change(
     changed = organiser.patch(f"/api/brackets/{row['id']}", json={"kind": "list"})
     assert (changed.status_code, changed.json()["error"]) == (409, "kind_fixed")
     assert row["kind"] == "fighters"
+
+
+async def sports_bracket(web, wf):
+    from black_bloc import brackets_store as store_
+    from black_bloc import sports_names
+    from black_bloc.sports import espn
+    from tests.sports_fakes import payload
+
+    teams = espn.parse_teams(payload("espn_teams_nba"), "nba")
+    await sports_names.upsert(web.db, "team", "nba", "espn", teams)
+    values = {"name": "Playoffs", "kind": "sports", "format": "single"}
+    return await store_.create(web.db, wf.GUILD_ID, values, TO)
+
+
+async def test_a_sports_entrant_is_added_by_its_feed_id_and_shown_with_it(
+    client, sign_in, wf, web, people
+):
+    tid = await sports_bracket(web, wf)
+    organiser = as_(client, sign_in, wf, TO)
+    added = organiser.post(
+        f"/api/brackets/{tid}/entrants", json={"ext_source": "espn", "ext_id": "24"}
+    )
+    assert added.status_code == 200, added.text
+    assert added.json()["message"] == "San Antonio Spurs is in **Playoffs**."
+    (spurs,) = added.json()["tournament"]["entrants"]
+    assert (spurs["name"], spurs["short"], spurs["ext_source"], spurs["ext_id"]) == (
+        "San Antonio Spurs",
+        "SA",
+        "espn",
+        "24",
+    )
+    lakers = {"name": "Lakers", "ext_source": "espn", "ext_id": "13"}
+    unknown = organiser.post(f"/api/brackets/{tid}/entrants", json=lakers)
+    assert (unknown.status_code, unknown.json()["error"]) == (400, "ext_unknown")
+    assert unknown.json()["message"].startswith("ESPN 13 is not in the sports names list")
+
+
+async def test_an_organiser_edits_an_entrant_on_the_site_and_a_member_cannot(
+    client, sign_in, wf, web, people
+):
+    tid = await sports_bracket(web, wf)
+    organiser = as_(client, sign_in, wf, TO)
+    added = organiser.post(f"/api/brackets/{tid}/entrants", json={"name": "Celts"}).json()
+    (celts,) = added["tournament"]["entrants"]
+    path = f"/api/brackets/{tid}/entrants/{celts['id']}"
+    edited = organiser.patch(path, json={"ext_source": "espn", "ext_id": "2", "seed": 3})
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["message"] == "Saved Celts in **Playoffs**."
+    (shown,) = edited.json()["tournament"]["entrants"]
+    assert (shown["short"], shown["seed"], shown["ext_id"]) == ("BOS", 3, "2")
+    rows = [kind for kind, _ in await wf.web_rows_in(web.db) if "entrant_edited" in kind]
+    assert rows == ["web.brackets.entrant_edited"]
+    member = as_(client, sign_in, wf, ADA)
+    refused = member.patch(path, json={"seed": 1})
+    assert (refused.status_code, refused.json()["error"]) == (403, "not_organiser")
