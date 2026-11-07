@@ -12,9 +12,9 @@ AT_FOUR = datetime(2026, 11, 6, 11, 5, tzinfo=UTC)
 AT_THREE = datetime(2026, 11, 6, 10, 55, tzinfo=UTC)
 
 
-async def seeded(db):
+async def seeded(db, now=None):
     nba = espn.parse_teams(payload("espn_teams_nba"), "nba")
-    await names.upsert(db, "team", "nba", "espn", nba)
+    await names.upsert(db, "team", "nba", "espn", nba, now=now)
     await names.upsert(
         db, "team", "ncaam", "espn", espn.parse_teams(payload("espn_teams_ncaam"), "ncaam")
     )
@@ -87,7 +87,7 @@ async def test_a_percent_or_underscore_is_typed_text_not_a_pattern(db):
 
 
 async def test_an_upsert_refreshes_in_place_and_keeps_a_name_the_feed_dropped(db):
-    await seeded(db)
+    await seeded(db, now="2026-11-07T10:00:00+00:00")
     renamed = [Team("2", "Boston Celts", "BOS", "nba")]
     await names.upsert(db, "team", "nba", "espn", renamed, now="2026-11-07T11:00:00+00:00")
     held = await names.counts(db)
