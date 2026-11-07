@@ -95,6 +95,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
             "set_reset",
             "entrant_removed",
             "thread_moved",
+            "vote_closed",
         )
     ),
     "black_bloc/points_moves.py::kind": tuple(

@@ -376,6 +376,8 @@ ROUTINE: frozenset[str] = frozenset(
         "brackets.set_confirmed",
         "brackets.thread_made",
         "brackets.card_reposted",
+        "brackets.vote_opened",
+        "brackets.vote_closed",
         "points.submitted",
         "points.approved",
         "points.bounty_set",

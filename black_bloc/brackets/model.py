@@ -41,7 +41,8 @@ SLOTS = (A, B)
 BY_OPPONENT = "opponent"
 BY_TIME = "time"
 BY_TO = "to"
-CONFIRMED_HOW = (BY_OPPONENT, BY_TIME, BY_TO)
+BY_VOTES = "votes"
+CONFIRMED_HOW = (BY_OPPONENT, BY_TIME, BY_TO, BY_VOTES)
 
 DQ = "dq"
 DROP = "drop"

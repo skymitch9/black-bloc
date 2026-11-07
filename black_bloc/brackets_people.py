@@ -28,9 +28,11 @@ from .brackets_moves import (
     person,
     require_on,
     require_runner,
+    require_signups,
     require_state,
     stop,
     touched,
+    votes_synced,
 )
 from .logkinds import VIA_DISCORD, VIA_WEBSITE
 from .panels import Outcome
@@ -58,6 +60,7 @@ async def open_check_in(
     async with lock_for(bot, tournament_id):
         row = await loaded(bot, guild, tournament_id)
         require_runner(bot, guild, actor)
+        require_signups(bot, guild, row)
         require_state(bot, guild, row, store_.SIGNUPS, store_.SEEDING)
         opened = datetime.now(UTC)
         closes = checkin.closes_at(opened, row["check_in_minutes"])
@@ -108,6 +111,7 @@ async def close_check_in(
     async with lock_for(bot, tournament_id):
         row = await loaded(bot, guild, tournament_id)
         require_runner(bot, guild, actor)
+        require_signups(bot, guild, row)
         require_state(bot, guild, row, store_.CHECK_IN)
         return await finish_check_in(bot, guild, actor, row, via)
 
@@ -161,6 +165,7 @@ async def set_check_in(
             raise stop(
                 bot, guild, "brackets_not_yours_said", "not_yours", 403, entrant=found["name"]
             )
+        require_signups(bot, guild, row)
         require_state(bot, guild, row, store_.CHECK_IN)
         if found["dropped"]:
             raise stop(
@@ -201,6 +206,7 @@ async def join(
     require_on(bot, guild)
     async with lock_for(bot, tournament_id):
         row = await loaded(bot, guild, tournament_id)
+        require_signups(bot, guild, row)
         require_state(bot, guild, row, store_.SIGNUPS)
         user_id = actor_id(actor)
         name = clean_text(getattr(actor, "display_name", None) or user_id, NAME_LIMIT)
@@ -268,6 +274,8 @@ async def add_entrant(
         require_runner(bot, guild, actor)
         require_state(bot, guild, row, *store_.BEFORE_START)
         member = guild.get_member(int(user_id)) if user_id is not None else None
+        if store_.kind_of(row) == store_.LIST:
+            user_id = None
         wanted = clean_text(name or getattr(member, "display_name", None), NAME_LIMIT + 1)
         if not wanted or len(wanted) > NAME_LIMIT:
             raise stop(bot, guild, "no_name", "no_name", 400, limit=NAME_LIMIT)
@@ -389,6 +397,7 @@ async def restore_entrant(
                 )
             moved = engine(bot, guild, row, names, pools.reinstate, current, found["id"], None)
             await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
+            await votes_synced(bot, guild, row, via)
         await store_.update_entrant(bot.db, found["id"], back_in())
         await note(
             bot,
@@ -417,6 +426,7 @@ async def withdrawn(
     flags = {"dq": 1} if why == DQ else {"dropped": 1, "dropped_why": store_.DROPPED}
     await store_.update_entrant(bot.db, found["id"], flags | {"dropped_at": now_stamp()})
     gone = await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
+    await votes_synced(bot, guild, row, via)
     event = "dq" if why == DQ else "dropped"
     key = "dq" if why == DQ else "brackets_dropped_said"
     await note(
