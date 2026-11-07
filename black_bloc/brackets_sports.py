@@ -228,11 +228,11 @@ def entrant_map(people: list[Any], via: str | None) -> dict[str, int]:
     }
 
 
-def ext_of(people: dict[int, Any], entrant: int | None, via: str | None = None) -> str | None:
+def ext_of(people: dict[int, Any], entrant: int | None, source: str | None = None) -> str | None:
     found = people.get(entrant) if entrant is not None else None
     if found is None or not found["ext_id"]:
         return None
-    if via is not None and store_.column(found, "ext_source") != via:
+    if source is not None and store_.column(found, "ext_source") != source:
         return None
     return str(found["ext_id"])
 
@@ -693,21 +693,12 @@ async def release_hold(
         )
 
 
-async def held_by_staff(bot: Any, row: Any, keys: Any) -> None:
-    """A staff Decide or Reset on a sports set holds it against the feed."""
-    if not store_.is_sports(row):
-        return
-    for key in keys:
-        await store_.write_sports(bot.db, row["id"], key, {"decided_by": store_.STAFF, "held": 1})
-
-
 __all__ = [
     "FEED_HOW",
     "applied",
     "build",
     "edit_set",
     "fetched_bracket",
-    "held_by_staff",
     "import_bracket",
     "release_hold",
     "sync_now",
