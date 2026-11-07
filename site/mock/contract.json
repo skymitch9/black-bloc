@@ -11040,7 +11040,8 @@
         "may_run",
         "tournaments",
         "words",
-        "defaults"
+        "defaults",
+        "kind_defaults"
       ],
       "rows": {
         "tournaments": [
@@ -11054,7 +11055,9 @@
           "starts_at",
           "to_user_id",
           "to_name",
-          "pools_format"
+          "pools_format",
+          "kind",
+          "decide_by"
         ]
       },
       "nested": {
@@ -11072,7 +11075,10 @@
           "brackets_pool_title",
           "brackets_waiting_final",
           "brackets_pool_tied",
-          "brackets_pool_raise_label"
+          "brackets_pool_raise_label",
+          "brackets_kind_list_words",
+          "brackets_vote_open_line",
+          "brackets_close_vote_label"
         ],
         "defaults": [
           "format",
@@ -11091,6 +11097,11 @@
           "advance_losers_from",
           "pools_swiss_rounds",
           "pools_best_of"
+        ],
+        "kind_defaults": [
+          "kind",
+          "decide_by",
+          "vote_minutes"
         ]
       }
     },
@@ -11130,7 +11141,10 @@
         "rounds_to_play",
         "phase",
         "pools",
-        "pools_finished"
+        "pools_finished",
+        "kind",
+        "decide_by",
+        "vote_minutes"
       ],
       "rows": {
         "entrants": [
@@ -11171,7 +11185,12 @@
           "rematch",
           "message_id",
           "phase",
-          "pool"
+          "pool",
+          "votes_a",
+          "votes_b",
+          "my_vote",
+          "vote_closes_at",
+          "vote_open"
         ],
         "standings": [
           "entrant",
@@ -11241,6 +11260,46 @@
           "entrant_count",
           "shadow",
           "to_name"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets",
+      "body": {
+        "name": "Best candy bar",
+        "kind": "list",
+        "format": "single",
+        "decide_by": "votes"
+      },
+      "read_by": [
+        "page-brackets.js Create (list)"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "decide_by",
+          "vote_minutes"
         ]
       }
     },
@@ -11972,6 +12031,76 @@
           "entrant_count",
           "shadow",
           "to_name"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_vote_id}/sets/W1-1/vote",
+      "body": {
+        "slot": "a"
+      },
+      "read_by": [
+        "page-brackets.js Vote"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "decide_by"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_vote_id}/sets/W1-1/close-vote",
+      "body": {},
+      "read_by": [
+        "page-brackets.js Close now"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "decide_by"
         ]
       }
     },

@@ -1309,6 +1309,11 @@ async def seed_brackets(db, guild_id: int) -> dict:
     rehearsal, _ = await made("signups", "single", [(MEMBER_ID, "ada")], shadow=1)
     pooled = await pools_seeded(db, guild_id, "pools")
     final = await pools_seeded(db, guild_id, "running")
+    lists = {"kind": "list", "decide_by": "votes", "vote_minutes": 1440, "best_of": 1}
+    voting, pair = await made("running", "single", [(None, "Snickers"), (None, "Twix")], **lists)
+    built = play.build(pair, Options(format="single", best_of=1, best_of_finals=1))
+    await store_.save(db, voting, built.bracket, list(built.bracket.matches), [])
+    await store_.sync_votes(db, await store_.tournament(db, guild_id, voting))
     return {
         "bracket_draft_id": str(draft),
         "bracket_signups_id": str(signups),
@@ -1326,6 +1331,7 @@ async def seed_brackets(db, guild_id: int) -> dict:
         "bracket_forum_id": str(INBOX_FORUM_ID),
         "bracket_pooled_id": str(pooled),
         "bracket_final_id": str(final),
+        "bracket_vote_id": str(voting),
     }
 
 
