@@ -11,6 +11,7 @@ from . import brackets_buttons as buttons_
 from . import brackets_cards as cards
 from . import brackets_moves as moves_
 from . import brackets_people as people_
+from . import brackets_picks as picks_
 from . import brackets_sets as sets_
 from . import brackets_sports as sports_
 from . import brackets_store as store_
@@ -451,6 +452,11 @@ async def build_tournament(
                 continue
             shown = words(bot, guild, SPORTS_LABELS[move]) if move in SPORTS_LABELS else None
             view.add_item(ToButton(row["id"], move, row=1 if index < 5 else 2, shown=shown))
+        if store_.picks_on(row) and row["state"] in picks_.OPEN_STATES:
+            view.add_item(PicksToggle(row["id"], True))
+            view.add_item(PicksButton(row["id"]))
+        elif store_.is_sports(row) and row["state"] in picks_.OPEN_STATES:
+            view.add_item(PicksToggle(row["id"], False))
         if everyone:
             view.add_item(EntrantPick(row["id"], everyone))
     pickable = sorted(playing, key=lambda one: one.state == COMPLETE) if runs else own
@@ -1059,6 +1065,102 @@ async def drop_out(interaction: discord.Interaction, tournament_id: int) -> Outc
     if mine is None:
         return buttons_.not_entered(bot, guild, row)
     return await people_.drop(bot, guild, user, row["id"], mine["id"])
+
+
+PICKS_OFF_LABEL = "Picks off"
+PICKS_ON_LABEL = "Picks on"
+PICKS_LABEL = "Picks…"
+PICKS_TITLE = "Picks for {name}"
+PICKS_LOCK_LABEL = "Lock (2026-03-19T12:15:00-04:00)"
+PICKS_POINTS_LABEL = "Points per round (1,2,4,8,16,32)"
+
+
+class PicksToggle(discord.ui.Button):
+    """Turns a sports bracket's pick sheets off, or back on, until they lock."""
+
+    def __init__(self, tournament_id: int, on: bool) -> None:
+        super().__init__(
+            label=PICKS_OFF_LABEL if on else PICKS_ON_LABEL, style=discord.ButtonStyle.secondary
+        )
+        self.tournament_id = int(tournament_id)
+        self.on = on
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        outcome = await picks_.edit_with_picks(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.tournament_id,
+            {"picks_on": not self.on},
+        )
+        place = (TOURNAMENT, self.tournament_id)
+        await landed(interaction, place, self.view, self.tournament_id, outcome, "edit")
+
+
+class PicksButton(discord.ui.Button):
+    def __init__(self, tournament_id: int) -> None:
+        super().__init__(label=PICKS_LABEL, style=discord.ButtonStyle.secondary)
+        self.tournament_id = int(tournament_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await db_up(interaction):
+            return
+        row = await store_.tournament(
+            interaction.client.db, interaction.guild.id, self.tournament_id
+        )
+        if row is None:
+            await answer(
+                interaction,
+                buttons_.no_tournament(
+                    interaction.client, interaction.guild, self.tournament_id
+                ).message,
+            )
+            return
+        await form_opened(interaction, PicksModal(row, self.view))
+
+
+class PicksModal(AnswersErrors, discord.ui.Modal):
+    """The lock time and the points per round; a blank lock leaves the sheets open."""
+
+    def __init__(self, row: Any, previous: Any = None) -> None:
+        super().__init__(title=text(PICKS_TITLE.format(name=row["name"]), 45))
+        self.tournament_id = int(row["id"])
+        self.previous = previous
+        self.lock = discord.ui.TextInput(
+            label=PICKS_LOCK_LABEL,
+            max_length=40,
+            required=False,
+            default=store_.column(row, "picks_lock_at") or "",
+        )
+        self.points = discord.ui.TextInput(
+            label=PICKS_POINTS_LABEL,
+            max_length=200,
+            required=False,
+            default=store_.column(row, "picks_points") or "",
+        )
+        self.add_item(self.lock)
+        self.add_item(self.points)
+
+    def given(self) -> dict[str, Any]:
+        found: dict[str, Any] = {"picks_lock_at": str(self.lock.value or "").strip() or None}
+        if str(self.points.value or "").strip():
+            found["picks_points"] = str(self.points.value).strip()
+        return found
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        outcome = await picks_.edit_with_picks(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.tournament_id,
+            self.given(),
+        )
+        place = (TOURNAMENT, self.tournament_id)
+        await landed(interaction, place, self.previous, self.tournament_id, outcome, "edit")
 
 
 class ToButton(discord.ui.Button):

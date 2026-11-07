@@ -806,3 +806,29 @@ async def test_import_over_teams_asks_first_on_the_panel(bot, guild):
     assert (await people.add_entrant(bot, guild, who(guild, TO), tid, name="Bruins")).ok
     assert await sports_panel.replaces(bot, tid, "import")
     assert not await sports_panel.replaces(bot, tid, "build")
+
+
+async def test_an_organiser_turns_a_sports_brackets_picks_off_and_on_from_the_panel(bot, guild):
+    values = {"name": "Office pool", "kind": "sports", "league": "nba", "source": "own"}
+    tid = (await moves.create(bot, guild, who(guild, TO), values)).value
+    _, view = await tournament(bot, guild, TO, tid)
+    assert "Picks off" in labels(view) and "Picks…" in labels(view)
+    _, member = await tournament(bot, guild, ADA, tid)
+    assert "Picks off" not in labels(member)
+    after = await press(view, "Picks off", pressing(bot, TO))
+    assert after["embed"].description.startswith("Saved **Office pool**.")
+    assert not store_.picks_on(await store_.tournament(bot.db, GUILD, tid))
+    assert "Picks on" in labels(after["view"]) and "Picks…" not in labels(after["view"])
+    await press(after["view"], "Picks on", pressing(bot, TO))
+    assert store_.picks_on(await store_.tournament(bot.db, GUILD, tid))
+
+
+async def test_the_picks_form_sends_the_lock_time_and_the_points(bot, guild):
+    values = {"name": "Office pool", "kind": "sports", "league": "nba", "source": "own"}
+    tid = (await moves.create(bot, guild, who(guild, TO), values)).value
+    modal = panel.PicksModal(await store_.tournament(bot.db, GUILD, tid))
+    assert modal.points.default == "1,2,4,8,16,32"
+    assert len(modal.lock.label) <= 45 and len(modal.points.label) <= 45
+    modal.lock._value = " "
+    modal.points._value = "2,4"
+    assert modal.given() == {"picks_lock_at": None, "picks_points": "2,4"}
