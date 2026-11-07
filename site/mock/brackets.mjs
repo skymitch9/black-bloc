@@ -685,3 +685,63 @@ export function poolWaiting(t) {
     set: null, opponent: null, open: 0,
   }));
 }
+
+/**
+ * A feed's bracket as sets (black_bloc/brackets/sports_shape.py): keyed W{round}-{position}
+ * from the final down (a feeder of slot a is 2p-1, of b 2p), linked as the feed says, and a
+ * slot the feed has not named held open until it is filled.
+ */
+export function buildFed(games, links = {}) {
+  const known = new Map(games.map((game) => [game.source_key, game]));
+  const feeders = new Map();
+  for (const [from, [to, slot]] of Object.entries(links)) {
+    if (!known.has(from) || !known.has(to)) continue;
+    if (!feeders.has(to)) feeders.set(to, []);
+    feeders.get(to).push([from, slot]);
+  }
+  const at = new Map();
+  const used = new Map();
+  const free = (round) => Math.max(0, ...(used.get(round) || [])) + 1;
+  const take = (round, p) => {
+    if (!used.has(round)) used.set(round, new Set());
+    if (used.get(round).has(p)) return false;
+    used.get(round).add(p);
+    return true;
+  };
+  const place = (key, p) => {
+    const game = known.get(key);
+    if (at.has(key) || !take(game.round, p)) return;
+    at.set(key, p);
+    for (const [from, slot] of feeders.get(key) || []) place(from, 2 * p - (slot === 'a' ? 1 : 0));
+  };
+  const linked = (game) => links[game.source_key] && known.has(links[game.source_key][0]);
+  for (const game of games.filter((one) => !linked(one)).sort((a, b) => b.round - a.round)) place(game.source_key, free(game.round));
+  for (const game of games) {
+    if (at.has(game.source_key)) continue;
+    const p = free(game.round);
+    take(game.round, p);
+    at.set(game.source_key, p);
+  }
+  const last = Math.max(...games.map((game) => game.round));
+  const sets = games.map((game) => {
+    const after = games.filter((other) => other.round === game.round + 1).length;
+    return blankSet(`W${game.round}-${at.get(game.source_key)}`, 'winners', game.round, at.get(game.source_key), {
+      best_of: game.best_of || 1, slot_a: game.a ?? null, slot_b: game.b ?? null, source_key: game.source_key,
+      scheduled_at: game.scheduled_at ?? null, live_status: game.live_status ?? null, period_words: game.period_words ?? null,
+      decided_by: null, held: false, winner_slot: null,
+      _place: game.round === last ? { winner: 1, loser: 2 } : { loser: after ? 1 + 2 * after : null },
+    });
+  });
+  const bySource = new Map(sets.map((one) => [one.source_key, one]));
+  for (const one of sets) {
+    const found = links[one.source_key];
+    const target = found ? bySource.get(found[0]) : null;
+    if (!target) continue;
+    Object.assign(one, { winner_to: target.key, winner_slot: found[1] });
+    target._feed[found[1]] = { from: one.key, take: 'winner' };
+  }
+  for (const one of sets) {
+    for (const slot of ['a', 'b']) if (one[`slot_${slot}`] === null && !one._feed[slot]) one._feed[slot] = { from: null };
+  }
+  return sets.sort((a, b) => a.round - b.round || a.position - b.position);
+}

@@ -94,15 +94,28 @@ export function unplayedSets(sets) {
   return new Set(sets.filter((one) => fate(one) !== 'play').map((one) => one.key));
 }
 
+/** A play-in round (round 0, smaller than round 1) is drawn beside the slot each set feeds. */
+function playIn(rounds) {
+  return rounds.length > 1 && rounds[0].round === 0 && rounds[0].sets.length < rounds[1].sets.length ? rounds[0] : null;
+}
+
 function placeSide(rounds, side, hidden) {
-  const rows = treeRows(rounds.map((one) => one.sets.length));
+  const lead = playIn(rounds);
+  const main = lead ? rounds.slice(1) : rounds;
+  const rows = treeRows(main.map((one) => one.sets.length));
   const nodes = [];
-  let col = 0;
-  rounds.forEach((one, at) => {
+  const early = lead ? lead.sets.filter((set) => !hidden.has(set.key)) : [];
+  let col = early.length ? 1 : 0;
+  main.forEach((one, at) => {
     const shown = one.sets.map((set, p) => ({ set, y: rows[at][p] })).filter((two) => !hidden.has(two.set.key));
     if (!shown.length) return;
     for (const two of shown) nodes.push({ key: two.set.key, side, round: one.round, col, y: two.y });
     col += 1;
+  });
+  early.forEach((set, at) => {
+    const target = nodes.find((one) => one.key === set.winner_to);
+    const y = target ? target.y + (set.winner_slot === 'a' ? -0.25 : 0.25) : at + 0.5;
+    nodes.push({ key: set.key, side, round: set.round, col: 0, y });
   });
   if (!nodes.length) return { nodes, cols: 0, span: 0 };
   const least = Math.min(...nodes.map((one) => one.y)) - 0.5;
@@ -273,8 +286,43 @@ export function isList(t) {
   return Boolean(t) && t.kind === 'list';
 }
 
+export function isSports(t) {
+  return Boolean(t) && t.kind === 'sports';
+}
+
+/** Where a sports bracket's results come from: its feed, the feed down, or by hand. */
+export function feedState(t) {
+  if (!isSports(t)) return null;
+  if (!t.fed) return 'own';
+  if (t.feed_failed_at) return 'down';
+  return t.feed_ok_at ? 'via' : null;
+}
+
+/** A sports set's line: Final a–b, the period and the score while live, else when it starts. */
+export function scoreLine(set, words, when) {
+  const shown = (value) => (value === null || value === undefined ? '–' : value);
+  const scores = { a_score: shown(set.score_a), b_score: shown(set.score_b) };
+  if (set.state === 'complete' && set.score_a !== null && set.score_a !== undefined) return fill(words.final, scores);
+  if (set.live_status === 'live') return fill(words.live, { period: set.period_words || '', ...scores }).replace(/^[\s·]+|[\s·]+$/g, '');
+  if (set.scheduled_at) return fill(words.scheduled, { when: when(set.scheduled_at) });
+  return '';
+}
+
+/** An organiser's moves on a sports set: Edit at any time, the pick, reset and release once it runs. */
+export function sportsSetMoves(t, set) {
+  if (!t.may_run) return [];
+  if (BEFORE_START.includes(t.state)) return ['edit_set'];
+  if (t.state !== 'running') return [];
+  const found = [];
+  if (['ready', 'called', 'reported', 'complete'].includes(set.state)) found.push('pick');
+  if (['called', 'reported', 'complete'].includes(set.state)) found.push('reset');
+  found.push('edit_set');
+  if (set.held) found.push('release');
+  return found;
+}
+
 export function memberMoves(t, mode) {
-  if (mode === 'off' || isList(t)) return [];
+  if (mode === 'off' || isList(t) || isSports(t)) return [];
   const me = myEntrant(t);
   const found = [];
   const cap = t.options ? t.options.entrant_cap : null;
@@ -290,6 +338,19 @@ export function memberMoves(t, mode) {
 export function organiserMoves(t, { mode = 'shadow', staff = false } = {}) {
   if (!t.may_run || mode === 'off') return [];
   const ready = allSets(t).some((one) => one.state === 'ready');
+  if (isSports(t)) {
+    const early = [t.fed ? 'import' : null, 'build', 'start', 'edit', 'cancel'];
+    const sports = {
+      draft: early,
+      seeding: early,
+      running: [t.fed ? 'sync' : null, t.finished ? 'complete' : null, 'unstart', 'cancel'],
+      complete: ['reopen', 'cancel'],
+      cancelled: ['restore'],
+    };
+    const found = (sports[t.state] || []).filter(Boolean);
+    if (staff && t.shadow && mode === 'on' && t.state !== 'cancelled') found.push('move');
+    return found;
+  }
   if (isList(t)) {
     const listed = {
       draft: ['start', 'edit', 'cancel'],
@@ -330,7 +391,9 @@ export function listSetMoves(t, set) {
 }
 
 export function setMoves(t, set, { mode = 'shadow' } = {}) {
-  if (mode === 'off' || !PLAYING.includes(t.state)) return [];
+  if (mode === 'off') return [];
+  if (isSports(t)) return sportsSetMoves(t, set);
+  if (!PLAYING.includes(t.state)) return [];
   if (isList(t)) return listSetMoves(t, set);
   if (set.pool && t.phase === 'final') return [];
   const me = t.mine;

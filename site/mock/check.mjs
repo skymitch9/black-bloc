@@ -67,6 +67,12 @@ const IDS = {
   // A sports bracket in seeding with one matched entrant, the Celtics (ESPN 2).
   bracket_sports_id: '21',
   bracket_sports_entrant_id: '251',
+  // Sports brackets live: 22 runs fed with a live set, 23 has its feed down and W1-1 held,
+  // 24 is an empty fed bracket to Import into and 25 is run by hand with three teams to Build.
+  bracket_sports_live_id: '22',
+  bracket_sports_held_id: '23',
+  bracket_sports_import_id: '24',
+  bracket_sports_build_id: '25',
   // The point system: run 1 is pending, 2 approved, 3 rejected; bounty 1 is live.
   points_pending_id: '1',
   points_approved_id: '2',

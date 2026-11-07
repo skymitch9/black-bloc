@@ -12,12 +12,14 @@ import {
   reorderedRows,
   tieOrder,
   eliminationLayout,
+  feedState,
   memberMoves,
   moved,
   organiserMoves,
   placeWords,
   resultsGrid,
   scoreChoices,
+  scoreLine,
   seedOrderWith,
   setMoves,
   sortedStandings,
@@ -25,7 +27,7 @@ import {
   treeSize,
   unplayedSets,
 } from '../public/assets/bracket-layout.js';
-import { advance, build, buildPools, decide, playOut, poolPlacements, poolTableRows, settle, snake, standardOrder, standings, tableRows } from './brackets.mjs';
+import { advance, build, buildFed, buildPools, decide, playOut, poolPlacements, poolTableRows, settle, snake, standardOrder, standings, tableRows } from './brackets.mjs';
 
 const failures = [];
 const is = (where, found, wanted) => {
@@ -262,9 +264,55 @@ is('a forfeit of a player put back counts', finalUntouched({ ...dqForfeit, entra
 is('a pool set goes quiet once the final is built', [setMoves({ ...inFinal, mine: null }, { pool: 1, state: 'complete' }), setMoves({ ...inPools, mine: null }, { pool: 1, state: 'complete', slot_a: 1, slot_b: 2 })], [[], ['decide', 'forfeit', 'reset']]);
 is('a player in pools may drop out', memberMoves({ ...inPools, mine: 5, entrants: [{ id: 5, dropped: false, dq: false }], pools: [{ sets: [{ slot_a: 5, slot_b: 6, state: 'ready' }] }] }, 'shadow'), ['drop_out']);
 
+const fed = buildFed([
+  { source_key: 'P', round: 0, a: 5, b: 6 },
+  { source_key: 'A', round: 1, a: 1, b: null },
+  { source_key: 'B', round: 1, a: 3, b: 4, best_of: 7 },
+  { source_key: 'F', round: 2 },
+], { P: ['A', 'b'], A: ['F', 'a'], B: ['F', 'b'] });
+is('sports: keys from the final down, the play-in beside the slot it feeds', fed.map((one) => one.key), ['W0-2', 'W1-1', 'W1-2', 'W2-1']);
+const fedBy = new Map(fed.map((one) => [one.key, one]));
+is('sports: the feed links and best-of', [fedBy.get('W0-2').winner_to, fedBy.get('W1-2').best_of], ['W1-1', 7]);
+const fedT = { format: 'single', entrants: [], sets: fed };
+settle(fedT);
+is('sports: a slot the feed has not named waits, a full set is ready', [fedBy.get('W1-1').state, fedBy.get('W1-2').state], ['waiting', 'ready']);
+decide(fedBy.get('W0-2'), 'b', { score_a: 60, score_b: 62 });
+settle(fedT);
+is('sports: the play-in winner fills its slot', [fedBy.get('W1-1').slot_b, fedBy.get('W1-1').state], [6, 'ready']);
+const fedTree = eliminationLayout(fed.map(({ _feed, _place, ...rest }) => rest));
+const playInNode = fedTree.nodes.find((one) => one.key === 'W0-2');
+const fedTarget = fedTree.nodes.find((one) => one.key === 'W1-1');
+is('sports: a play-in is drawn in its own column beside its target', [playInNode.col, fedTarget.col, playInNode.y > fedTarget.y], [0, 1, true]);
+const lines = { final: 'Final {a_score}–{b_score}', live: '{period} · {a_score}–{b_score}', scheduled: '{when}' };
+is('sports: the score line', [
+  scoreLine({ state: 'complete', score_a: 78, score_b: 71 }, lines, () => ''),
+  scoreLine({ state: 'ready', live_status: 'live', period_words: 'Q3 4:12', score_a: 55, score_b: 51 }, lines, () => ''),
+  scoreLine({ state: 'ready', live_status: 'live', period_words: null, score_a: 1, score_b: 0 }, lines, () => ''),
+  scoreLine({ state: 'ready', scheduled_at: '2026-03-21T01:10:00Z' }, lines, () => 'Sat 7:10 PM'),
+  scoreLine({ state: 'waiting' }, lines, () => ''),
+], ['Final 78–71', 'Q3 4:12 · 55–51', '1–0', 'Sat 7:10 PM', '']);
+const sportsT = { kind: 'sports', state: 'seeding', may_run: true, fed: true, finished: false, sets: [], entrants: [] };
+is('sports: import, build, start before the start', organiserMoves(sportsT, { mode: 'shadow' }), ['import', 'build', 'start', 'edit', 'cancel']);
+is('sports: by hand has no import', organiserMoves({ ...sportsT, fed: false }, { mode: 'shadow' }), ['build', 'start', 'edit', 'cancel']);
+is('sports: sync while it runs', organiserMoves({ ...sportsT, state: 'running' }, { mode: 'shadow' }), ['sync', 'unstart', 'cancel']);
+is('sports: no member moves', memberMoves({ ...sportsT, state: 'running', mine: 1 }, 'shadow'), []);
+is('sports: set moves', [
+  setMoves(sportsT, { state: 'ready' }),
+  setMoves({ ...sportsT, state: 'running' }, { state: 'ready' }),
+  setMoves({ ...sportsT, state: 'running' }, { state: 'complete', held: true }),
+  setMoves({ ...sportsT, state: 'running', may_run: false }, { state: 'ready' }),
+], [['edit_set'], ['pick', 'edit_set'], ['pick', 'reset', 'edit_set', 'release'], []]);
+is('sports: where results come from', [
+  feedState({ kind: 'sports', fed: false }),
+  feedState({ kind: 'sports', fed: true, feed_failed_at: 'x' }),
+  feedState({ kind: 'sports', fed: true, feed_ok_at: 'x' }),
+  feedState({ kind: 'list' }),
+], ['own', 'down', 'via', null]);
+
 if (failures.length) {
   console.error('brackets: not ok');
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log('brackets: ok - layout for single and double elimination at 4, 8 and 16, byes and void sets at 5, 6, 7 and 12, the reset, round robin, Swiss, standings, scores, seeding, the tree size, the moves, and pools into a bracket');
+console.log('brackets: ok - layout for single and double elimination at 4, 8 and 16, byes and void sets at 5, 6, 7 and 12, the reset, round robin, Swiss, standings, scores, seeding, the tree size, the moves, and pools into a bracket, and sports brackets');
+

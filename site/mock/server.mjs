@@ -16716,6 +16716,12 @@ const BK_PAGE_WORDS = [
   'brackets_league_nfl_words', 'brackets_league_nba_words', 'brackets_league_mlb_words',
   'brackets_league_nhl_words', 'brackets_league_ncaam_words', 'brackets_league_ncaaw_words',
   'brackets_typed_entrant_note', 'brackets_edit_entrant_label', 'brackets_use_typed_label',
+  'brackets_score_final_line', 'brackets_score_live_line', 'brackets_score_scheduled_line',
+  'brackets_feed_via_line', 'brackets_feed_down_line', 'brackets_feed_back_line',
+  'brackets_source_own_words', 'brackets_import_label', 'brackets_build_label',
+  'brackets_sync_label', 'brackets_edit_set_label', 'brackets_release_hold_label',
+  'brackets_reimport_asks', 'brackets_held_note', 'brackets_decided_by_feed_words',
+  'brackets_decided_by_staff_words', 'brackets_no_score_words',
 ];
 
 function bkEntrant(id, user_id, name, extra = {}) {
@@ -17075,9 +17081,10 @@ function seedBrackets() {
       bkEntrant(251, null, 'Boston Celtics', { ext_source: 'espn', ext_id: '2', short: 'BOS' }),
       bkEntrant(252, null, 'Bobcats'),
     ], {
-      game: null, kind: 'sports', starts_at: null,
+      game: null, kind: 'sports', starts_at: null, ...bkSportsRow('nba', '2026-27', 'nba'),
       options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
     }),
+    ...bkSportsSeeds(),
   ];
 }
 
@@ -17150,13 +17157,25 @@ function bkSignups(t) {
 }
 
 function bkState() {
-  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 22, nextEntrant: 300 };
+  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 26, nextEntrant: 400 };
   return state.brackets;
 }
 
 const BK_TO_WORDS = {
   kind_fixed: "A bracket's kind is set when it is made, so **{name}** stays as it is.",
-  sports_not_yet: "Sports brackets are not ready yet, so nothing was made. Make a fighting game or a list bracket for now.",
+  not_sports: "**{name}** is not a sports bracket.",
+  not_fed: "**{name}** is run by hand, so it has no feed to read.",
+  feed_failed: "{why}. Nothing was changed; results can be entered by hand.",
+  imported: "Imported **{name}** — {teams} team(s) and {sets} set(s) from {source}.",
+  built: "Built **{name}** — {sets} set(s).",
+  rebuild_asks: "Building again replaces every set in **{name}**, hand edits included.",
+  synced: "Synced **{name}** — {count} set(s) changed.",
+  synced_none: "Synced **{name}** — nothing changed.",
+  nothing_to_edit: "Nothing was given to change on {set}.",
+  slot_played: "{set} has a result, so its teams stay. Reset it first.",
+  set_edited: "Saved {set}; the feed leaves it alone until Release hold.",
+  not_held: "{set} is not held, so there is nothing to release.",
+  hold_released: "{set} is back under the feed.",
   pick_winner: "The counts are level, so pick who wins {set}.",
   created: "Created **{name}**.",
   edited: "Saved **{name}**.",
@@ -17283,9 +17302,77 @@ function bkSiteWords(text, threads = {}) {
   }).replace(/`/g, '');
 }
 
+const BK_FEEDS = { nfl: 'espn', nba: 'nba', mlb: 'mlb', nhl: 'nhl', ncaam: 'ncaa', ncaaw: 'ncaa' };
+const BK_LEAGUES = Object.keys(BK_FEEDS);
+const BK_SPORTS_EMPTY = { source_key: null, scheduled_at: null, live_status: null, period_words: null, decided_by: null, held: false };
+
+function bkSportsRow(league, season, source) {
+  return { league, season, source, source_ref: `${league}:${season}`, feed_ok_at: null, feed_failed_at: null, feed_failures: 0, feed_error: null };
+}
+
+function bkFed(t) {
+  return t.kind === 'sports' && Boolean(t.league) && t.source !== 'own';
+}
+
+function bkSportsTeams(ids, names) {
+  return ids.map((id, at) => bkEntrant(id, null, names[at][0], { ext_source: names[at][1], ext_id: names[at][2], short: names[at][3] ?? null, seed: at + 1 }));
+}
+
+function bkSportsSeeds() {
+  const madness = bkTournament(22, 'March Madness 2026', 'running', bkSportsTeams([261, 262, 263, 264, 265], [
+    ['Duke', 'ncaa', 'duke', 'DUKE'], ['Michigan', 'ncaa', 'michigan', 'MICH'], ['Gonzaga', 'ncaa', 'gonzaga', 'GONZ'],
+    ['UConn', 'ncaa', 'uconn', 'CONN'], ['Howard', 'ncaa', 'howard', 'HOW'],
+  ]), {
+    game: null, kind: 'sports', starts_at: null, started_at: minutesAgo(60 * 30), ...bkSportsRow('ncaam', '2025-26', 'ncaa'),
+    feed_ok_at: minutesAgo(1), options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
+  });
+  madness.sets = mockBrackets.buildFed([
+    { source_key: '104', round: 0, a: 265, b: 264, live_status: 'final', scheduled_at: minutesAgo(60 * 28) },
+    { source_key: '201', round: 1, a: 261, b: 262, live_status: 'final', scheduled_at: minutesAgo(60 * 3) },
+    { source_key: '202', round: 1, a: 263, b: null, live_status: 'live', period_words: '2nd 4:12', scheduled_at: minutesAgo(70) },
+    { source_key: '301', round: 2, scheduled_at: daysAhead(2) },
+  ], { 104: ['202', 'b'], 201: ['301', 'a'], 202: ['301', 'b'] });
+  mockBrackets.settle(madness);
+  bkSportsFinal(madness, 'W0-4', 'b', 71, 78);
+  bkSportsFinal(madness, 'W1-1', 'a', 78, 71);
+  Object.assign(bkSetIn(madness, 'W1-2'), { score_a: 55, score_b: 51 });
+  const cup = bkTournament(23, 'Stanley Cup 2026', 'running', bkSportsTeams([271, 272, 273, 274], [
+    ['Carolina Hurricanes', 'nhl', '12', 'CAR'], ['Buffalo Sabres', 'nhl', '7', 'BUF'], ['Tampa Bay Lightning', 'nhl', '14', 'TBL'], ['Ottawa Senators', 'nhl', '9', 'OTT'],
+  ]), {
+    game: null, kind: 'sports', starts_at: null, started_at: minutesAgo(60 * 50), ...bkSportsRow('nhl', '2025-26', 'nhl'),
+    feed_ok_at: minutesAgo(60 * 3), feed_failed_at: minutesAgo(45), feed_failures: 45,
+    feed_error: 'NHL did not answer in time for the 2026 playoff bracket', options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
+  });
+  cup.sets = mockBrackets.buildFed([
+    { source_key: 'A', round: 1, a: 271, b: 272, best_of: 7, live_status: 'final', period_words: 'CAR wins 4-2' },
+    { source_key: 'B', round: 1, a: 273, b: 274, best_of: 7, live_status: 'live', period_words: 'TBL leads 3-2' },
+    { source_key: 'I', round: 2, best_of: 7 },
+  ], { A: ['I', 'a'], B: ['I', 'b'] });
+  mockBrackets.settle(cup);
+  bkSportsFinal(cup, 'W1-1', 'a', 4, 2, 'staff');
+  Object.assign(bkSetIn(cup, 'W1-1'), { held: true });
+  Object.assign(bkSetIn(cup, 'W1-2'), { score_a: 3, score_b: 2 });
+  const into = bkTournament(24, 'NHL Playoffs 2027', 'seeding', [], {
+    game: null, kind: 'sports', starts_at: null, ...bkSportsRow('nhl', '2026-27', 'nhl'), options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
+  });
+  const byHand = bkTournament(25, 'Office NFL picks', 'seeding', bkSportsTeams([281, 282, 283], [
+    ['Kansas City Chiefs', 'espn', '12', 'KC'], ['Seattle Seahawks', 'espn', '26', 'SEA'], ['New England Patriots', 'espn', '17', 'NE'],
+  ]), {
+    game: null, kind: 'sports', starts_at: null, ...bkSportsRow('nfl', '2025', 'own'), options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
+  });
+  return [madness, cup, into, byHand];
+}
+
+function bkSportsFinal(t, key, side, a, b, by = 'feed') {
+  const one = bkSetIn(t, key);
+  mockBrackets.decide(one, side, { score_a: a, score_b: b, how: by === 'feed' ? 'feed' : 'to', at: now() });
+  Object.assign(one, { decided_by: by, live_status: 'final' });
+  mockBrackets.settle(t);
+}
+
 function bkSetRow(one, names, me = null) {
   const { _feed, _place, reset_of, votes, ...rest } = one;
-  return { ...rest, phase: one.phase ?? null, pool: one.pool ?? null, a_name: names[one.slot_a] ?? null, b_name: names[one.slot_b] ?? null, ...bkVoteRow(one, me) };
+  return { ...BK_SPORTS_EMPTY, ...rest, phase: one.phase ?? null, pool: one.pool ?? null, a_name: names[one.slot_a] ?? null, b_name: names[one.slot_b] ?? null, ...bkVoteRow(one, me) };
 }
 
 function bkPoolRows(t, names) {
@@ -17326,7 +17413,9 @@ function bkView(t, context) {
   const mine = t.entrants.find((one) => one.user_id === me);
   const pooled = bkPooled(t) && t.pools.length > 0;
   return {
+    league: null, season: null, feed_ok_at: null, feed_failed_at: null, feed_failures: 0, feed_error: null,
     ...t,
+    fed: bkFed(t),
     shadow: Boolean(t.shadow),
     to_name: memberName(t.to_user_id),
     entrant_count: t.entrants.filter((one) => !one.dropped).length,
@@ -17400,6 +17489,7 @@ route('GET', '/api/brackets', (context) => {
       created_at: t.created_at, updated_at: t.updated_at, to_user_id: t.to_user_id, to_name: memberName(t.to_user_id),
       entrant_cap: t.options.entrant_cap, entrant_count: t.entrants.filter((one) => !one.dropped).length,
       pools_format: t.options.pools_format ?? 'none', kind: t.kind || 'fighters', decide_by: t.decide_by ?? null,
+      league: t.league ?? null, season: t.season ?? null, source: t.source ?? 'own',
     })).sort((a, b) => b.id - a.id),
   };
 });
@@ -17445,10 +17535,10 @@ route('POST', '/api/brackets', async (context) => {
   const held = bkState();
   const kind = body.kind ?? state.settings.get('brackets_kind_default') ?? 'fighters';
   if (!['fighters', 'sports', 'list'].includes(kind)) throw new Refused(400, 'bad_option', bkSay('bad_option', { field: 'kind', given: String(kind).slice(0, 40), allowed: 'fighters, sports, list' }));
-  if (kind === 'sports') throw new Refused(409, 'sports_not_yet', bkSay('sports_not_yet'));
-  const format = body.format || state.settings.get('brackets_format_default') || 'double';
+  const sports = kind === 'sports' ? bkSportsValues(body, null) : null;
+  const format = sports ? 'single' : body.format || state.settings.get('brackets_format_default') || 'double';
   const t = bkTournament(held.next++, name, 'draft', [], { format, starts_at: null, to_user_id: actorOf(context.session), created_by: actorOf(context.session) });
-  const listed = kind === 'list' ? { best_of: 1, best_of_late: 1, best_of_finals: 1, pools_format: 'none' } : {};
+  const listed = kind !== 'fighters' ? { best_of: 1, best_of_late: 1, best_of_finals: 1, pools_format: 'none', ...(sports ? { third_place: false, entrant_cap: null } : {}) } : {};
   const pools = body.pools_format ?? (['single', 'double'].includes(format) ? bkDefaults().pools_format : 'none');
   const blanked = bkOptions(t, { ...bkDefaults(), ...body, format, pools_format: pools, ...listed }) && (body.advance_losers_from ?? null) !== null;
   if (kind === 'list') {
@@ -17456,6 +17546,7 @@ route('POST', '/api/brackets', async (context) => {
     if (!['votes', 'organiser'].includes(decide)) throw new Refused(400, 'bad_option', bkSay('bad_option', { field: 'decide_by', given: String(decide).slice(0, 40), allowed: 'votes, organiser' }));
     Object.assign(t, { kind, decide_by: decide, vote_minutes: Number(body.vote_minutes ?? state.settings.get('brackets_vote_minutes') ?? 1440) });
   }
+  if (sports) Object.assign(t, { kind, game: null, ...sports });
   held.tournaments.push(t);
   return bkAnswer(context, t, 'created', blanked ? 'created_losers_blank' : 'created');
 });
@@ -17468,11 +17559,12 @@ route('PATCH', '/api/brackets/:tournament_id', async (context) => {
   bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
   const body = await context.body();
   if ('kind' in body && body.kind !== (t.kind || 'fighters')) throw new Refused(409, 'kind_fixed', bkSay('kind_fixed', { name: t.name }));
-  const listed = t.kind === 'list' ? { best_of: 1, best_of_late: 1, best_of_finals: 1, pools_format: 'none' } : {};
+  const listed = t.kind && t.kind !== 'fighters' ? { best_of: 1, best_of_late: 1, best_of_finals: 1, pools_format: 'none' } : {};
   if (t.kind === 'list') {
     if ('decide_by' in body) t.decide_by = body.decide_by === 'organiser' ? 'organiser' : 'votes';
     if (Number.isInteger(body.vote_minutes)) t.vote_minutes = body.vote_minutes;
   }
+  if (t.kind === 'sports') Object.assign(t, bkSportsValues(body, t));
   const blanked = bkOptions(t, { ...body, ...listed });
   return bkAnswer(context, t, 'edited', blanked ? 'edited_losers_blank' : 'edited', {}, { changed: Object.keys(body).sort() });
 });
@@ -17811,7 +17903,8 @@ function bkSide(t, set, context) {
 
 function bkFinal(t, set) {
   const names = bkNames(t);
-  const result = set.forfeit || set.score_a === null ? bkSay('brackets_forfeit_words') : `${Math.max(set.score_a, set.score_b)}–${Math.min(set.score_a, set.score_b)}`;
+  const unscored = set.score_a === null && !set.forfeit && set.winner !== null;
+  const result = unscored ? bkSay('brackets_no_score_words') : set.forfeit || set.score_a === null ? bkSay('brackets_forfeit_words') : `${Math.max(set.score_a, set.score_b)}–${Math.min(set.score_a, set.score_b)}`;
   return bkSay('brackets_set_final_said', { set: set.key, winner: names[set.winner], result });
 }
 
@@ -17946,6 +18039,13 @@ route('POST', '/api/brackets/:tournament_id/sets/:key/override', async (context)
   if (body.forfeit === true) {
     if (!['a', 'b'].includes(body.winner)) throw new Refused(400, 'forfeit_needs_winner', bkSay('forfeit_needs_winner'));
     bkDecide(t, set, null, null, 'to', context, body.winner);
+  } else if (t.kind === 'sports') {
+    const a = Number.isInteger(body.score_a) ? body.score_a : null;
+    const b = Number.isInteger(body.score_b) ? body.score_b : null;
+    const side = ['a', 'b'].includes(body.winner) ? body.winner : a !== null && b !== null && a !== b ? (a > b ? 'a' : 'b') : null;
+    if (!side) throw new Refused(400, 'pick_winner', bkSay('pick_winner', { set: set.key }));
+    bkDecide(t, set, a, b, 'to', context, side);
+    Object.assign(set, { forfeit: null, decided_by: 'staff', held: true });
   } else if (t.kind === 'list') {
     const given = Number.isInteger(body.score_a) && Number.isInteger(body.score_b);
     const [a, b] = given ? [body.score_a, body.score_b] : bkVoted(t) ? bkTally(set) : [null, null];
@@ -17973,6 +18073,7 @@ route('POST', '/api/brackets/:tournament_id/sets/:key/reset', async (context) =>
   const players = bkPlayers(t, set);
   const owner = mockBrackets.ownerOf(t, set);
   mockBrackets.reset(owner, set.key);
+  if (t.kind === 'sports') Object.assign(set, { decided_by: 'staff', held: true });
   if (set.pool) mockBrackets.tagPool(owner, set.pool);
   if (bkVoted(t)) {
     if (BK_VOTE_OPEN.includes(set.state)) set.vote_closed_at = set.vote_closed_at || now();
@@ -17980,6 +18081,136 @@ route('POST', '/api/brackets/:tournament_id/sets/:key/reset', async (context) =>
   }
   bkWouldDm(context, t, players, 'brackets_dm_reset', bkReason(await context.body()), { set: set.key });
   return bkAnswer(context, t, 'set_reset', 'set_reset', { set: set.key }, { set: set.key });
+});
+
+// Sports brackets live (docs/info/brackets-kinds-design.md K3): Import from a canned feed, Build by
+// hand, Sync, a set edited or held by hand. The canned feed is a few names per league.
+function bkSportsValues(body, t) {
+  const league = body.league ?? (t ? t.league : null);
+  if (!BK_LEAGUES.includes(league)) {
+    throw new Refused(400, 'bad_option', bkSay('bad_option', { field: 'league', given: String(league).slice(0, 40), allowed: BK_LEAGUES.join(', ') }));
+  }
+  const season = String(body.season ?? (t ? t.season : '') ?? '').replace(/\s+/g, ' ').trim().slice(0, 20) || (league === 'mlb' || league === 'nfl' ? '2026' : '2026-27');
+  const wanted = 'source' in body ? body.source : t ? t.source : null;
+  const source = wanted === 'own' ? 'own' : BK_FEEDS[league];
+  return { league, season, source, source_ref: `${league}:${season}`, format: 'single' };
+}
+
+function bkSportsOf(context) {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  if (t.kind !== 'sports') throw new Refused(409, 'not_sports', bkSay('not_sports', { name: t.name }));
+  return t;
+}
+
+function bkFedOf(context) {
+  const t = bkSportsOf(context);
+  if (!bkFed(t)) throw new Refused(409, 'not_fed', bkSay('not_fed', { name: t.name }));
+  return t;
+}
+
+function bkFeedTeams(league) {
+  const named = SPORTS_NAMES.filter((one) => one.kind === 'team' && one.league === league).slice(0, 4);
+  const extra = [['Team A', 'a'], ['Team B', 'b'], ['Team C', 'c'], ['Team D', 'd']];
+  while (named.length < 4) {
+    const [name, id] = extra[named.length];
+    named.push({ name, ext_id: id, short: null });
+  }
+  return named;
+}
+
+route('POST', '/api/brackets/:tournament_id/import', async (context) => {
+  const t = bkFedOf(context);
+  bkIn(t, 'draft', 'seeding');
+  const body = await context.body();
+  if ((t.entrants.length || t.sets.length) && body.replace !== true) {
+    throw new Refused(409, 'confirm_reimport', bkSay('brackets_reimport_asks', { name: t.name }));
+  }
+  const held = bkState();
+  const source = BK_FEEDS[t.league];
+  t.entrants = bkFeedTeams(t.league).map((one, at) => bkEntrant(held.nextEntrant++, null, one.name, { ext_source: source, ext_id: one.ext_id, short: one.short, seed: at + 1 }));
+  const ids = t.entrants.map((one) => one.id);
+  t.sets = mockBrackets.buildFed([
+    { source_key: 'S1', round: 1, a: ids[0], b: ids[3], scheduled_at: daysAhead(1) },
+    { source_key: 'S2', round: 1, a: ids[1], b: ids[2], scheduled_at: daysAhead(1) },
+    { source_key: 'F', round: 2, scheduled_at: daysAhead(4) },
+  ], { S1: ['F', 'a'], S2: ['F', 'b'] });
+  for (const one of t.sets) one.live_status = 'scheduled';
+  mockBrackets.settle(t);
+  Object.assign(t, { feed_ok_at: now(), feed_failed_at: null, feed_failures: 0, feed_error: null });
+  return bkAnswer(context, t, 'imported', 'imported', { teams: ids.length, sets: t.sets.length, source: SPORTS_SOURCE_NAMES[source] }, { teams: ids.length, sets: t.sets.length, source });
+});
+
+route('POST', '/api/brackets/:tournament_id/build', async (context) => {
+  const t = bkSportsOf(context);
+  bkIn(t, 'draft', 'seeding');
+  const body = await context.body();
+  if (t.sets.length && body.replace !== true) throw new Refused(409, 'confirm_rebuild', bkSay('rebuild_asks', { name: t.name }));
+  const playing = bkPlaying(t);
+  if (playing.length < 2) throw new Refused(409, 'too_few', bkSay('too_few', { name: t.name, count: playing.length }));
+  t.sets = mockBrackets.build('single', playing.map((one) => one.id), { ...t.options, best_of: 1, best_of_finals: 1 });
+  mockBrackets.settle(t);
+  const sets = t.sets.filter((one) => !['bye', 'void'].includes(one.state)).length;
+  return bkAnswer(context, t, 'built', 'built', { sets }, { entrants: playing.length });
+});
+
+route('POST', '/api/brackets/:tournament_id/sync', (context) => {
+  const t = bkFedOf(context);
+  bkIn(t, 'running');
+  if (t.feed_failed_at) throw new Refused(502, 'feed_down', bkSay('feed_failed', { why: t.feed_error || 'The feed could not be reached' }));
+  const live = t.sets.filter((one) => one.live_status === 'live' && !one.held && ['ready', 'called'].includes(one.state));
+  for (const one of live) {
+    const side = (one.score_a ?? 0) >= (one.score_b ?? 0) ? 'a' : 'b';
+    bkSportsFinal(t, one.key, side, (one.score_a ?? 0) + 9, (one.score_b ?? 0) + 4);
+  }
+  t.feed_ok_at = now();
+  const keys = live.map((one) => one.key);
+  if (keys.length) logAction('web.brackets.synced', { actor_id: actorOf(context.session), details: { via: 'website', tournament: t.id, sets: keys, decided: keys.length } });
+  t.updated_at = now();
+  return { tournament: bkView(t, context), message: bkSay(keys.length ? 'synced' : 'synced_none', { name: t.name, count: keys.length }) };
+});
+
+route('PATCH', '/api/brackets/:tournament_id/sets/:key', async (context) => {
+  const t = bkSportsOf(context);
+  bkIn(t, 'draft', 'seeding', 'running');
+  const set = bkSetOf(t, context);
+  const body = await context.body();
+  const fields = ['scheduled_at', 'score_a', 'score_b', 'live_status', 'slot_a', 'slot_b'].filter((one) => one in body);
+  if (!fields.length) throw new Refused(400, 'nothing_to_edit', bkSay('nothing_to_edit', { set: set.key }));
+  const bad = (field, allowed) => new Refused(400, 'bad_option', bkSay('bad_option', { field, given: String(body[field]).slice(0, 40), allowed }));
+  for (const field of ['score_a', 'score_b']) {
+    if (field in body && body[field] !== null && !(Number.isInteger(body[field]) && body[field] >= 0 && body[field] <= 999)) throw bad(field, 'a whole number from 0 to 999');
+  }
+  if ('live_status' in body && body.live_status !== null && !['live', 'final', 'scheduled'].includes(body.live_status)) throw bad('live_status', 'live, final, scheduled');
+  if ('scheduled_at' in body && body.scheduled_at && Number.isNaN(new Date(body.scheduled_at).getTime())) throw bad('scheduled_at', 'a date and time like 2026-10-20T19:00:00+00:00');
+  const slots = ['slot_a', 'slot_b'].filter((one) => one in body);
+  if (slots.length && set.state === 'complete') throw new Refused(409, 'slot_played', bkSay('slot_played', { set: set.key }));
+  for (const field of slots) {
+    const wanted = body[field] === null || body[field] === '' ? null : Number(body[field]);
+    if (wanted !== null && !bkPlaying(t).some((one) => one.id === wanted)) throw bad(field, 'an entrant of this bracket');
+    set[field] = wanted;
+    if (wanted === null) set._feed[field.slice(-1)] = { from: null };
+    else delete set._feed[field.slice(-1)];
+    if (set.state !== 'waiting' && (set.slot_a === null || set.slot_b === null)) set.state = 'waiting';
+  }
+  if ('scheduled_at' in body) set.scheduled_at = body.scheduled_at ? new Date(body.scheduled_at).toISOString() : null;
+  if ('live_status' in body) set.live_status = body.live_status;
+  if ('score_a' in body || 'score_b' in body) Object.assign(set, { score_a: body.score_a ?? null, score_b: body.score_b ?? null });
+  Object.assign(set, { decided_by: 'staff', held: true });
+  mockBrackets.settle(t);
+  bkSetLog(context, t, 'set_edited', set, { changed: fields.sort(), reason: bkReason(body) || null });
+  return { tournament: bkView(t, context), message: bkSay('set_edited', { set: set.key }) };
+});
+
+route('POST', '/api/brackets/:tournament_id/sets/:key/release', (context) => {
+  const t = bkSportsOf(context);
+  const set = bkSetOf(t, context);
+  if (!set.held) throw new Refused(409, 'not_held', bkSay('not_held', { set: set.key }));
+  set.held = false;
+  bkSetLog(context, t, 'hold_released', set);
+  return { tournament: bkView(t, context), message: bkSay('hold_released', { set: set.key }) };
 });
 
 // Structure backup (docs/info/structure-backup-design.md): the snapshots, the compare and the
