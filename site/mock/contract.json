@@ -12431,6 +12431,305 @@
     },
     {
       "method": "GET",
+      "path": "/api/brackets/{bracket_sports_live_id}",
+      "read_by": [
+        "page-brackets.js (sports)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "state",
+        "kind",
+        "league",
+        "season",
+        "source",
+        "feed_ok_at",
+        "feed_failed_at",
+        "feed_failures",
+        "feed_error",
+        "fed",
+        "entrants",
+        "sets"
+      ],
+      "rows": {
+        "sets": [
+          "key",
+          "side",
+          "round",
+          "position",
+          "state",
+          "slot_a",
+          "slot_b",
+          "a_name",
+          "b_name",
+          "score_a",
+          "score_b",
+          "winner",
+          "winner_to",
+          "source_key",
+          "scheduled_at",
+          "live_status",
+          "period_words",
+          "decided_by",
+          "held"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets",
+      "body": {
+        "name": "Stanley Cup",
+        "kind": "sports",
+        "league": "nhl",
+        "season": "2025-26",
+        "source": "own"
+      },
+      "read_by": [
+        "page-brackets.js Create (sports)"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "league",
+          "season",
+          "source",
+          "feed_ok_at",
+          "feed_failed_at",
+          "fed"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_sports_import_id}/import",
+      "body": {
+        "replace": true
+      },
+      "read_by": [
+        "page-brackets.js Import"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "league",
+          "season",
+          "source",
+          "feed_ok_at",
+          "feed_failed_at",
+          "fed"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_sports_build_id}/build",
+      "body": {
+        "replace": true
+      },
+      "read_by": [
+        "page-brackets.js Build bracket"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "league",
+          "season",
+          "source",
+          "feed_ok_at",
+          "feed_failed_at",
+          "fed"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_sports_live_id}/sync",
+      "body": {},
+      "read_by": [
+        "page-brackets.js Sync now"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "league",
+          "season",
+          "source",
+          "feed_ok_at",
+          "feed_failed_at",
+          "fed"
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/brackets/{bracket_sports_live_id}/sets/W1-2",
+      "body": {
+        "scheduled_at": "2026-04-20T23:00:00+00:00",
+        "live_status": "scheduled",
+        "reason": "contract check"
+      },
+      "then": {
+        "method": "POST",
+        "path": "/api/brackets/{bracket_sports_live_id}/sets/W1-2/release"
+      },
+      "read_by": [
+        "page-brackets.js Edit set"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "league",
+          "season",
+          "source",
+          "feed_ok_at",
+          "feed_failed_at",
+          "fed"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_sports_held_id}/sets/W1-1/release",
+      "body": {},
+      "read_by": [
+        "page-brackets.js Release hold"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind",
+          "league",
+          "season",
+          "source",
+          "feed_ok_at",
+          "feed_failed_at",
+          "fed"
+        ]
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/ref/sports?kind=team&league=nba&q=bos",
       "read_by": [
         "page-brackets.js Add entrant typeahead"

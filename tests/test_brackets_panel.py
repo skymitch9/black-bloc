@@ -782,3 +782,27 @@ async def test_a_fighters_entrant_has_no_edit_on_the_panel(bot, guild):
     (one,) = await store_.entrants(bot.db, tid)
     _, view = await panel.build_entrant(bot, guild, guild.get_member(TO), tid, one["id"])
     assert "Edit entrant" not in labels(view)
+
+
+def test_a_sports_bracket_offers_import_build_and_sync_by_its_feed():
+    from black_bloc import brackets_panel as sports_panel
+
+    fed = {"kind": "sports", "state": "seeding", "source": "nhl", "league": "nhl"}
+    assert sports_panel.legal_to_moves(fed, None)[:2] == ["import", "build"]
+    own = fed | {"source": "own"}
+    assert "import" not in sports_panel.legal_to_moves(own, None)
+    running_ = fed | {"state": "running"}
+    assert sports_panel.legal_to_moves(running_, None) == ["sync", "unstart", "cancel"]
+    assert sports_panel.legal_to_moves(own | {"state": "running"}, None) == ["unstart", "cancel"]
+    assert sports_panel.member_moves(fed, None) == []
+
+
+async def test_import_over_teams_asks_first_on_the_panel(bot, guild):
+    from black_bloc import brackets_panel as sports_panel
+
+    values = {"name": "Cup", "kind": "sports", "league": "nhl", "source": "own"}
+    tid = (await moves.create(bot, guild, who(guild, TO), values)).value
+    assert not await sports_panel.replaces(bot, tid, "import")
+    assert (await people.add_entrant(bot, guild, who(guild, TO), tid, name="Bruins")).ok
+    assert await sports_panel.replaces(bot, tid, "import")
+    assert not await sports_panel.replaces(bot, tid, "build")

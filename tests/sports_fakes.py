@@ -13,6 +13,7 @@ RECORDED_ROUTES: dict[str, str] = {
     "playerindex": "nba_playerindex",
     "statsapi.mlb.com/api/v1/teams": "mlb_teams",
     "sports/1/players": "mlb_players",
+    "playoff-bracket/2026": "nhl_bracket_2026",
 }
 
 

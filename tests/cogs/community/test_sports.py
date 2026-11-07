@@ -87,3 +87,18 @@ async def test_the_loop_reports_its_health(db, monkeypatch):
     cog = Sports(await sports_bot(db, monkeypatch))
     assert cog.loop_health("_sweep") == (None, None)
     assert cog.loop_health("other") == (None, None)
+
+
+async def test_the_score_sync_is_its_own_loop_with_its_own_health(db, monkeypatch):
+    bot = await sports_bot(db, monkeypatch)
+    cog = Sports(bot)
+    seen = []
+
+    async def sweep(bot_, guild, last, now=None):
+        seen.append((guild, last is cog.synced))
+
+    monkeypatch.setattr("black_bloc.brackets_sports_sync.sweep", sweep)
+    await cog.sync_scores(LATER)
+    assert seen == [(guild, True) for guild in bot.guilds]
+    assert cog._sync.seconds == 30
+    assert cog.loop_health("_sync") == (None, None)
