@@ -5110,7 +5110,10 @@ async def test_one_pick_per_member_and_set_and_one_sheet_per_member_are_the_data
         await db.conn.execute(insert, (1,))
         with pytest.raises(sqlite3.IntegrityError):
             await db.conn.execute(insert, (2,))
-        sheet = "INSERT INTO tournament_sheets(tournament_id, user_id, updated_at) VALUES (9, 5, 'z')"
+        sheet = (
+            "INSERT INTO tournament_sheets(tournament_id, user_id, updated_at) "
+            "VALUES (9, 5, 'z')"
+        )
         await db.conn.execute(sheet)
         with pytest.raises(sqlite3.IntegrityError):
             await db.conn.execute(sheet)

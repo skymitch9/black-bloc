@@ -355,3 +355,41 @@ def test_a_sports_set_offers_no_player_moves_and_release_only_while_held():
     assert cards.sports_moves(sports_row(state="seeding"), match(state="ready")) == ()
     for action in cards.SPORTS_TO_ACTIONS:
         assert re.fullmatch(cards.SET_TEMPLATE, cards.set_custom_id(3, "W0-12", action))
+
+
+def test_the_starter_card_counts_sheets_before_the_lock_and_shows_the_board_after():
+    from black_bloc.brackets_picks import Board
+
+    open_board = Board(locked=False, lock_at="2026-03-19T16:15:00+00:00", count=3, games=7)
+    assert cards.picks_lines(FakeWords(), GUILD, open_board) == [
+        "3 sheet(s) in · locks <t:1773936900:f>"
+    ]
+    untimed = Board(locked=False, lock_at=None, count=0, games=7)
+    assert cards.picks_lines(FakeWords(), GUILD, untimed) == ["0 sheet(s) in"]
+    shut = Board(locked=True, lock_at=None, count=2, games=7, rows=((1, 21, 9), (2, 22, 4)))
+    assert cards.picks_lines(FakeWords(), GUILD, shut) == [
+        "Locked · 2 sheet(s)",
+        "**Leaderboard**",
+        "1. <@21> — 9",
+        "2. <@22> — 4",
+    ]
+    assert cards.picks_lines(FakeWords(), GUILD, None) == []
+
+
+def test_the_my_picks_button_shows_only_with_a_board():
+    from black_bloc.brackets_picks import Board
+
+    sports = row(kind="sports", state="running")
+    plain = cards.starter_view(FakeWords(), GUILD, sports)
+    assert list(plain.children) == []
+    board = Board(locked=False, lock_at=None, count=0, games=3)
+    found = cards.starter_view(FakeWords(), GUILD, sports, board=board)
+    assert [(one.item.label, one.item.custom_id) for one in found.children] == [
+        ("My picks", "brackets:3:my_picks")
+    ]
+    assert re.fullmatch(cards.STARTER_TEMPLATE, "brackets:3:my_picks")
+
+
+class FakeWords:
+    def get(self, guild_id, key):
+        return None

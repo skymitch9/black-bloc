@@ -691,3 +691,92 @@ async def test_a_sports_bracket_by_hand_builds_and_refuses_a_feed_in_words(
     member = as_(client, sign_in, wf, ADA)
     refused = member.patch(f"/api/brackets/{tid}/sets/W1-1", json={"live_status": "live"})
     assert (refused.status_code, refused.json()["error"]) == (403, "not_organiser")
+
+
+def by_hand_pool(organiser):
+    tid = made(organiser, kind="sports", league="nba", source="own")["id"]
+    for name in ("Ants", "Bees", "Cats", "Dogs"):
+        assert organiser.post(f"/api/brackets/{tid}/entrants", json={"name": name}).status_code
+    assert organiser.post(f"/api/brackets/{tid}/build", json={}).status_code == 200
+    one = organiser.get(f"/api/brackets/{tid}").json()
+    team = {row["name"]: row["id"] for row in one["entrants"]}
+    return tid, team
+
+
+async def test_a_member_fills_a_sheet_on_the_site_and_it_stays_private_until_the_lock(
+    client, sign_in, wf, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    tid, team = by_hand_pool(organiser)
+    assert organiser.get(f"/api/brackets/{tid}").json()["picks_on"] is True
+    member = as_(client, sign_in, wf, ADA)
+    mine = member.get(f"/api/brackets/{tid}/picks").json()
+    assert (mine["on"], mine["locked"], mine["may_edit"], mine["picks"]) == (True, False, True, {})
+    assert set(mine["tree"]["sets"]) == {"W1-1", "W1-2", "W2-1"}
+    sheet = {"W1-1": team["Ants"], "W1-2": team["Cats"], "W2-1": team["Cats"]}
+    saved = member.put(f"/api/brackets/{tid}/picks", json={"picks": sheet})
+    assert saved.status_code == 200, saved.text
+    assert (saved.json()["message"], saved.json()["sheet"]["picks"]) == ("Saved.", sheet)
+    wrong = member.put(f"/api/brackets/{tid}/picks", json={"picks": {"W2-1": team["Dogs"]}})
+    assert (wrong.status_code, wrong.json()["error"]) == (409, "pick_inconsistent")
+    assert "W2-1 needs the pick of the game that feeds it" in wrong.json()["message"]
+    other = as_(client, sign_in, wf, BEA)
+    hidden = other.get(f"/api/brackets/{tid}/sheets/{ADA}")
+    assert (hidden.status_code, hidden.json()["error"]) == (403, "sheet_private")
+    assert hidden.json()["message"].startswith("Sheets stay private until picks lock")
+    board = other.get(f"/api/brackets/{tid}/leaderboard").json()
+    assert [(row["user_id"], row["name"], row["may_open"]) for row in board["rows"]] == [
+        (str(ADA), "Ada", False)
+    ]
+    staff_view = as_(client, sign_in, wf, TO).get(f"/api/brackets/{tid}/sheets/{ADA}")
+    assert staff_view.status_code == 200 and staff_view.json()["picks"] == sheet
+
+
+async def test_after_the_lock_sheets_open_to_everyone_and_staff_edit_one_with_a_reason(
+    client, sign_in, wf, people
+):
+    organiser = as_(client, sign_in, wf, TO)
+    tid, team = by_hand_pool(organiser)
+    member = as_(client, sign_in, wf, ADA)
+    member.put(f"/api/brackets/{tid}/picks", json={"picks": {"W1-1": team["Ants"]}})
+    organiser = as_(client, sign_in, wf, TO)
+    locked = organiser.patch(
+        f"/api/brackets/{tid}", json={"picks_lock_at": "2026-01-01T00:00:00+00:00"}
+    )
+    assert locked.status_code == 200, locked.text
+    member = as_(client, sign_in, wf, ADA)
+    late = member.put(f"/api/brackets/{tid}/picks", json={"picks": {"W1-1": team["Dogs"]}})
+    assert (late.status_code, late.json()["error"]) == (409, "picks_locked")
+    other = as_(client, sign_in, wf, BEA)
+    opened = other.get(f"/api/brackets/{tid}/sheets/{ADA}")
+    assert opened.status_code == 200
+    assert (opened.json()["name"], opened.json()["may_edit"]) == ("Ada", False)
+    refused = other.put(f"/api/brackets/{tid}/sheets/{ADA}", json={"picks": {}, "reason": "x"})
+    assert (refused.status_code, refused.json()["error"]) == (403, "not_organiser")
+    organiser = as_(client, sign_in, wf, TO)
+    bare = organiser.put(f"/api/brackets/{tid}/sheets/{ADA}", json={"picks": {}})
+    assert (bare.status_code, bare.json()["error"]) == (400, "reason_needed")
+    edited = organiser.put(
+        f"/api/brackets/{tid}/sheets/{ADA}",
+        json={"picks": {"W1-1": team["Dogs"]}, "reason": "asked in modmail"},
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["message"] == "Saved Ada's sheet."
+    assert (edited.json()["sheet"]["edited"], edited.json()["sheet"]["picks"]) == (
+        True,
+        {"W1-1": team["Dogs"]},
+    )
+
+
+async def test_the_operator_token_is_not_a_member_for_the_picks_routes(client, web, wf):
+    web.settings.operator_read_token = "operator-read-token-long-enough-to-be-taken"
+    bearer = {"Authorization": "Bearer operator-read-token-long-enough-to-be-taken"}
+    for method, route in (
+        ("GET", "/api/brackets/1/picks"),
+        ("GET", "/api/brackets/1/leaderboard"),
+        ("GET", "/api/brackets/1/sheets/21"),
+        ("PUT", "/api/brackets/1/picks"),
+    ):
+        response = client.request(method, route, json={}, headers=bearer)
+        assert response.status_code in (401, 403), (route, response.status_code)
+        assert response.json()["message"]
