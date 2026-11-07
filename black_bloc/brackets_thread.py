@@ -398,7 +398,10 @@ async def sync_starter(
 def set_payload(
     bot: Any, guild: Any, row: Any, match: Any, people: dict, ballot: Any = None
 ) -> dict[str, Any]:
-    if store_.kind_of(row) == store_.LIST:
+    if store_.is_sports(row):
+        embed = cards.sports_embed(bot.store, guild.id, match, people, ballot)
+        view = cards.set_view(bot.store, guild.id, row, match, people=people, ballot=ballot)
+    elif store_.kind_of(row) == store_.LIST:
         embed = cards.set_embed(
             bot.store,
             guild.id,
@@ -421,6 +424,9 @@ def set_payload(
 
 
 async def ballot_of(bot: Any, row: Any, key: str) -> Any:
+    """A voted list set's ballot, or a sports set's feed and hold columns."""
+    if store_.is_sports(row):
+        return (await store_.sports_rows(bot.db, row["id"])).get(key)
     if not store_.votes_decide(row):
         return None
     return await store_.ballot(bot.db, row["id"], key)
@@ -610,7 +616,7 @@ async def sync(
             await ping_start(bot, guild, row, thread)
         await clear_gone(bot, guild, row, thread, dict(gone or {}))
         current = await store_.bracket(bot.db, row)
-        if current is None:
+        if current is None or row["state"] in store_.BEFORE_START:
             return
         people = {one["id"]: one for one in await store_.entrants(bot.db, row["id"])}
         held = await store_.card_rows(bot.db, row["id"])

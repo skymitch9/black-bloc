@@ -402,6 +402,25 @@ async def override(
         row, current, people, _ = await correctable(bot, guild, actor, tournament_id, key)
         match = the_set(bot, guild, row, current, key)
         side = winner if winner in ("a", "b") else match.side_of(score_of(winner))
+        if store_.is_sports(row) and not forfeit:
+            outcome = await overridden(
+                bot,
+                guild,
+                actor,
+                row,
+                current,
+                people,
+                match,
+                via,
+                score_a=score_of(score_a),
+                score_b=score_of(score_b),
+                winner=side,
+                free=True,
+            )
+            await store_.write_sports(
+                bot.db, row["id"], match.key, {"decided_by": store_.STAFF, "held": 1}
+            )
+            return outcome
         if store_.kind_of(row) == store_.LIST and not forfeit:
             score_a, score_b = await tallied(bot, row, match, score_a, score_b)
             return await overridden(
@@ -446,6 +465,10 @@ async def reset(
             bot, guild, row, names, pools.reset, current, match.key, actor_id(actor), now_stamp()
         )
         matches, gone = await kept(bot, guild, row, moved)
+        if store_.is_sports(row):
+            await store_.write_sports(
+                bot.db, row["id"], match.key, {"decided_by": store_.STAFF, "held": 1}
+            )
         await note(
             bot,
             guild,
@@ -470,7 +493,7 @@ async def confirm_due(
     moment = now or datetime.now(UTC)
     confirmed: list[tuple[int, str]] = []
     for row in await store_.tournaments(bot.db, guild.id):
-        if row["state"] not in store_.PLAYING or store_.kind_of(row) == store_.LIST:
+        if row["state"] not in store_.PLAYING or store_.kind_of(row) != store_.FIGHTERS:
             continue
         async with lock_for(bot, row["id"]):
             fresh = await store_.tournament(bot.db, guild.id, row["id"])

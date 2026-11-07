@@ -10,6 +10,7 @@ from ... import brackets_cards, brackets_store, brackets_thread, brackets_view
 from ... import brackets_moves as moves
 from ... import brackets_people as people
 from ... import brackets_sets as sets
+from ... import brackets_sports as sports
 from ... import brackets_votes as votes
 from ...brackets import access
 from ...logkinds import VIA_WEBSITE
@@ -214,6 +215,18 @@ def build_router(bot: Any) -> APIRouter:
     plain("/{tournament_id}/restore", moves.restore)
     plain("/{tournament_id}/move", brackets_thread.move_home)
     plain("/{tournament_id}/unadvance", moves.unadvance)
+    plain("/{tournament_id}/sync", sports.sync_now)
+
+    def replacing(path: str, move: Any) -> None:
+        async def route(request: Request, tournament_id: str, payload: Any = OPTIONAL) -> dict:
+            again = body_of(payload).get("replace") is True
+            return await answered(request, tournament_id, move, replace=again)
+
+        route.__name__ = f"brackets_{move.__name__}"
+        router.add_api_route(path, route, methods=["POST"])
+
+    replacing("/{tournament_id}/import", sports.import_bracket)
+    replacing("/{tournament_id}/build", sports.build)
 
     @router.post("/{tournament_id}/advance")
     async def brackets_advance(
@@ -315,6 +328,13 @@ def build_router(bot: Any) -> APIRouter:
     set_move("/{tournament_id}/sets/{key}/call", sets.call)
     set_move("/{tournament_id}/sets/{key}/confirm", sets.confirm_report)
     set_move("/{tournament_id}/sets/{key}/close-vote", votes.close_vote)
+    set_move("/{tournament_id}/sets/{key}/release", sports.release_hold)
+
+    @router.patch("/{tournament_id}/sets/{key}")
+    async def brackets_edit_set(
+        request: Request, tournament_id: str, key: str, payload: Any = OPTIONAL
+    ) -> dict[str, Any]:
+        return await answered(request, tournament_id, sports.edit_set, key, body_of(payload))
 
     @router.post("/{tournament_id}/sets/{key}/vote")
     async def brackets_vote(

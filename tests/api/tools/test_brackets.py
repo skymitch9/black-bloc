@@ -567,7 +567,7 @@ async def test_a_sports_bracket_is_refused_in_words_and_the_kind_cannot_change(
 ):
     organiser = as_(client, sign_in, wf, TO)
     sports = organiser.post("/api/brackets", json={"name": "March", "kind": "sports"})
-    assert (sports.status_code, sports.json()["error"]) == (409, "sports_not_yet")
+    assert (sports.status_code, sports.json()["error"]) == (400, "bad_option")
     row = made(organiser)
     changed = organiser.patch(f"/api/brackets/{row['id']}", json={"kind": "list"})
     assert (changed.status_code, changed.json()["error"]) == (409, "kind_fixed")

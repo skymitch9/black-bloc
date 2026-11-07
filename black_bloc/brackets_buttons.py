@@ -10,6 +10,7 @@ import discord
 from . import brackets_cards as cards
 from . import brackets_people as people_
 from . import brackets_sets as sets_
+from . import brackets_sports as sports_
 from . import brackets_store as store_
 from . import brackets_thread as thread_
 from . import brackets_votes as votes_
@@ -28,6 +29,11 @@ DECIDE_TITLE = "Decide {set}"
 RESET_TITLE = "Reset {set}"
 FORFEIT_TITLE = "{name} wins {set} by forfeit"
 REASON_LABEL = "Reason (sent to the players)"
+SPORTS_REASON = "Reason"
+EDIT_SET_TITLE = "Edit {set}"
+WHEN_LABEL = "Starts (2026-03-19T19:10:00-04:00)"
+STATUS_LABEL = "Status: scheduled, live or final"
+SCORE_OPTIONAL = "{name} (blank: none)"
 
 
 class CardLanding:
@@ -192,7 +198,8 @@ async def set_move(
         outcome = await votes_.vote(bot, guild, user, tournament_id, key, action[-1])
         await land.end(interaction, tournament_id, outcome, action)
         return
-    if action in (cards.CLOSE_VOTE, cards.PICK_A, cards.PICK_B) and not may_run(interaction):
+    sports_moves = (cards.CLOSE_VOTE, cards.PICK_A, cards.PICK_B, *cards.SPORTS_TO_ACTIONS)
+    if action in sports_moves and not may_run(interaction):
         await answer(interaction, not_organiser(bot, guild).message)
         return
     if action == cards.CLOSE_VOTE:
@@ -200,7 +207,12 @@ async def set_move(
         outcome = await votes_.close_vote(bot, guild, user, tournament_id, key)
         await land.end(interaction, tournament_id, outcome, action)
         return
-    if action in (cards.PICK_A, cards.PICK_B):
+    if action == cards.RELEASE:
+        await land.begin(interaction)
+        outcome = await sports_.release_hold(bot, guild, user, tournament_id, key)
+        await land.end(interaction, tournament_id, outcome, action)
+        return
+    if action in (cards.PICK_A, cards.PICK_B, cards.EDIT_SET):
         seat = await seat_of(bot, guild, user, tournament_id, key)
         if isinstance(seat, Outcome):
             await answer(interaction, seat.message)
@@ -209,7 +221,13 @@ async def set_move(
         if refused:
             await answer(interaction, refused)
             return
-        await interaction.response.send_modal(PickModal(bot, guild, seat, land, action[-1]))
+        if action == cards.EDIT_SET:
+            form: discord.ui.Modal = SportsEditModal(bot, guild, seat, land)
+        elif store_.is_sports(seat.row):
+            form = SportsPickModal(bot, guild, seat, land, action[-1])
+        else:
+            form = PickModal(bot, guild, seat, land, action[-1])
+        await interaction.response.send_modal(form)
         return
     if action in (cards.CONFIRM, cards.CALL):
         await land.begin(interaction)
@@ -508,7 +526,95 @@ class PickModal(SetForm):
         await self.landed(interaction, outcome, cards.DECIDE)
 
 
+class SportsPickModal(SetForm):
+    """The organiser decides a sports set: the named team wins, with the score when known."""
+
+    def __init__(self, bot: Any, guild: Any, seat: Seat, land: Any, side: str) -> None:
+        super().__init__(cards.PICK_LABEL.format(name=seat.name(side)), bot, guild, seat, land)
+        self.side = side
+        self.score_a = optional_score(seat.name("a"))
+        self.score_b = optional_score(seat.name("b"))
+        self.reason = sports_reason()
+        for one in (self.score_a, self.score_b, self.reason):
+            self.add_item(one)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await self.started(interaction):
+            return
+        outcome = await sets_.override(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.seat.row["id"],
+            self.seat.match.key,
+            winner=self.side,
+            score_a=score_of(self.score_a.value),
+            score_b=score_of(self.score_b.value),
+        )
+        await self.landed(interaction, outcome, cards.DECIDE)
+
+
+def optional_score(name: str) -> discord.ui.TextInput:
+    return discord.ui.TextInput(
+        label=clipped(SCORE_OPTIONAL.format(name=name), LABEL_LIMIT),
+        max_length=3,
+        required=False,
+    )
+
+
+def sports_reason() -> discord.ui.TextInput:
+    return discord.ui.TextInput(
+        label=SPORTS_REASON,
+        style=discord.TextStyle.paragraph,
+        max_length=REASON_LIMIT,
+        required=False,
+    )
+
+
+class SportsEditModal(SetForm):
+    """Time, score line and status of a sports set by hand; the set is then held."""
+
+    def __init__(self, bot: Any, guild: Any, seat: Seat, land: Any) -> None:
+        super().__init__(EDIT_SET_TITLE.format(set=seat.match.key), bot, guild, seat, land)
+        self.starts = discord.ui.TextInput(label=WHEN_LABEL, max_length=40, required=False)
+        self.status = discord.ui.TextInput(label=STATUS_LABEL, max_length=12, required=False)
+        self.score_a = optional_score(seat.name("a"))
+        self.score_b = optional_score(seat.name("b"))
+        self.reason = sports_reason()
+        for one in (self.starts, self.status, self.score_a, self.score_b, self.reason):
+            self.add_item(one)
+
+    def given(self) -> dict[str, Any]:
+        found: dict[str, Any] = {}
+        if str(self.starts.value or "").strip():
+            found["scheduled_at"] = str(self.starts.value).strip()
+        if str(self.status.value or "").strip():
+            found["live_status"] = str(self.status.value).strip().lower()
+        for name, box in (("score_a", self.score_a), ("score_b", self.score_b)):
+            text = str(box.value or "").strip()
+            if text:
+                found[name] = score_of(text) if text.isdigit() else text
+        if found:
+            found["reason"] = self.reason.value
+        return found
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await self.started(interaction):
+            return
+        outcome = await sports_.edit_set(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.seat.row["id"],
+            self.seat.match.key,
+            self.given(),
+        )
+        await self.landed(interaction, outcome, cards.EDIT_SET)
+
+
 __all__ = [
+    "SportsEditModal",
+    "SportsPickModal",
     "ON_CARD",
     "PickModal",
     "CardLanding",
