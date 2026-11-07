@@ -1,8 +1,5 @@
 {
-  "release": "v262",
-  "commit": "63183338",
-  "changed_features": [
-    "core",
-    "posts"
-  ]
+  "release": "v263",
+  "commit": "93996c4f",
+  "changed_features": []
 }
