@@ -155,6 +155,8 @@ Before pushing to `main`, [`ci-mirror.md`](ci-mirror.md) runs GitHub's `ci.yml` 
 # -> git push origin main -> flyctl deploy, then appends a
 # SKELETON line to docs/deploys.log that you must EDIT (what shipped; verified: what
 # was checked) and commit. Escape hatch BLACKBLOC_SKIP_GATE=1 - emergencies only.
+# BLACKBLOC_GATE_WORKERS=4 shrinks the gate's pytest workers from 16 (added 2026-11-07: a 16-worker
+# run was killed twice for memory while another project's job held 10 GB; 4 fits beside it).
 .\scripts\deploy.ps1
 .\scripts\deploy.ps1 -GateOnly                 # every gate, then stop: no release.json, no push, no flyctl
 .\scripts\site-gate.ps1                        # only the mock + check.mjs section
