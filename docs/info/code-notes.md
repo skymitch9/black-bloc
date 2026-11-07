@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-11-07 — one section APPENDED, nothing re-keyed**: *Bracket picture* (branch `brackets-picture`, off `main` `ed2d9424`); keyed by LINE at that branch. Rows below `starter_of` in `brackets_thread.py` sit a line or two lower — trust the anchor text. Before that:
 > **2026-11-02 — one section APPENDED, nothing re-keyed**: *Ninja marks* (branch `ninja`, off `main` `665a4219`); keyed by LINE at that branch. Before that:
 > **2026-11-02 — one section APPENDED, nothing re-keyed**: *Replies to the weekly question* (branch `qotw-replies`, off `main` `d6edddde`); keyed by LINE at that branch. Before that:
 > **2026-10-30 — one section APPENDED, nothing re-keyed**: *Found marathons do not spotlight* (branch `spotlight-tracked-only`, off `main` `a8498538`); keyed by LINE at that branch. Rows below the edits in `marathon_spotlight.py` (pure and cog) and `cogs/content/marathon_inbox.py` sit a few lines lower — trust the anchor text. Before that:
@@ -11034,3 +11035,21 @@ Design: [`brackets-kinds-design.md`](brackets-kinds-design.md) ▸ K4 and its *K
 | `black_bloc/brackets_panel.py:1078` `PicksToggle` · `:1124` `PicksModal` | Organiser picks controls on the `/bracket` tournament view, added beside (not inside) `legal_to_moves`, which K3's tests pin. |
 | `site/public/assets/page-brackets.js:1805` `picksTree` · `:1872` `queueSave` · `:2017` `boardBody` · `:1038` `yourPick` | My picks draws the real tree's positions through `eliminationLayout` with taller cards (two 40 px buttons); a press runs the cascade locally, keeps the horizontal scroll, and saves 600 ms later (optimistic; a refusal reloads the sheet). The leaderboard searches through `listFilter`. |
 | `site/mock/brackets.mjs:753` `pickTree` · `:785` `scoreSheet` · `site/mock/server.mjs:18358` `bkPicksOf` · `:18310` `bkNflReseeds` | The mock scores on every read (the bot stores scores); 22 is locked with five sheets, 26 the open NFL bracket. |
+
+
+## Bracket picture (branch `brackets-picture`, 2026-11-07; keyed by LINE at that branch)
+
+Design: [`brackets-picture-design.md`](brackets-picture-design.md).
+
+| Where | Why |
+|---|---|
+| `black_bloc/brackets/picture.py:139` `unplayed` · `:198` `place_side` · `:228` `elimination_layout` | A line-for-line port of `bracket-layout.js` `unplayedSets` / `placeSide` / `eliminationLayout`, so the picture and the page put every set in the same column and row. NOT interchangeable with the JS (two runtimes): a change to one is a change to the other. |
+| `black_bloc/brackets/picture.py:129` `drawn_sets` | The page's set list: no `pending-*` feeder (K3), and once a pools tournament has a final, only the final's sets. |
+| `black_bloc/brackets/picture.py:292` `Scene` · `:412` `fingerprint` | The scene is exactly what is drawn (strings, flags, layout), so its sha256 changes when and only when the pixels would. Timestamps on `Match` never reach it, so a call or a check-in does not redraw. |
+| `black_bloc/brackets/picture.py:428` `tree_size` | 1600 px for 8+ entrants, natural width under 8; the column width fills the room up to 460 px; the name size steps by column count and never goes under 18 px, which keeps 64 entrants legible at Discord's ~550 px only after a click (the thumbnail is an overview). |
+| `black_bloc/brackets/picture.py:113` `fitted` | Binary search on `getlength` for the longest prefix that fits with an ellipsis. |
+| `black_bloc/brackets/picture.py:610` `png` | `compress_level=6`, no `optimize`, no metadata: the same scene gives the same bytes. |
+| `black_bloc/brackets_picture.py:40` `preview` | Before the start the picture is what Start would build from today's seed order — never stored. A refused build (too few, bad order) draws nothing. |
+| `black_bloc/brackets_picture.py:147` `picture_of` | Cache per tournament id `(fingerprint, bytes)` on the bot; drawing in `asyncio.to_thread`. Any exception → None and `brackets.picture_failed` once per streak (`_brackets_picture_failing`), `brackets.picture_back` when it draws again. |
+| `black_bloc/brackets_picture.py:185` `dressed` | Send: `file=`; edit: `attachments=[file]` (replaces). No picture on an edit is `attachments=[]`, so off or a failure removes the stale one rather than leaving it. |
+| `black_bloc/brackets_thread.py:200` `starter_of` | The one hook; `editing=True` only from `edit_starter`. `leave_word` (`:752`) clears the old starter's attachments too. |
