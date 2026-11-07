@@ -10927,3 +10927,25 @@ Design: `docs/info/baf-runs-design.md` *Table height — 2026-10-20*.
 | `black_bloc/ninja_panel.py:197` `run_mode` | Turn on/off writes through `cogs.core.set_key`, so it leaves the one `settings.set` row every other settings door leaves. |
 | `black_bloc/ninja_panel.py:278` `WherePick` | Defaults to `question_channel_id` through `SelectDefaultValue`; the owner's ask was the QOTW channel. |
 | `site/public/assets/posts-hash.js` `SECTION_HASHES` | `sect-ninja` is a section; without it `#sect-ninja` opened an empty post drawer (seen on the mock). |
+
+## Bracket kinds and votes (branch `brackets-kinds`, 2026-11-06; keyed by LINE at that branch)
+
+Design: [`brackets-kinds-design.md`](brackets-kinds-design.md) ▸ K1.
+
+| Where | Why |
+|---|---|
+| `black_bloc/brackets_store.py:116` `kind_of` | A row read through a fake or from before schema 103 has no `kind`; it reads `fighters`, so every fighters path is the old one. `column` (just above) is the same guard for `decide_by` / `vote_minutes`. |
+| `black_bloc/brackets_store.py:456` `sync_votes` | The ONE place a vote opens, closes or clears, by the set's state: playable with no vote (or a closed one — only a Reset gets a closed vote back to playable) opens a fresh one and forgets the old ballots; waiting/bye/void clears it; anything decided with an open vote gets `vote_closed_at`. `vote_closed_at` is a column beyond the brief: without it an expired-but-unswept vote and a reset one look the same. |
+| `black_bloc/brackets_store.py` `save` / `clear_sets` | Removed sets drop their votes too: Back to seeding rebuilds the same keys (`W1-1`), and old ballots must not land on the new set. |
+| `black_bloc/brackets_moves.py:341` `votes_synced` | Called by `brackets_sets.kept` (every set move), `start`, and the people moves that save a bracket (drop, DQ, restore), so a set that becomes playable opens its vote in the same move. `brackets.vote_opened` keeps its bare kind whichever door moved (checklist 34: the bot's consequential row). |
+| `black_bloc/brackets_moves.py:454` `kind_values` | The kind is chosen once (`kind_fixed` on an edit that names another); `sports` is refused with `sports_not_yet` until K3; a list bracket is forced to Bo1 sets and no pools on every create/edit, and a fighters bracket never keeps `vote_minutes`. `kind_defaults` is separate from `option_defaults` so the page's `defaults` (and its pinned test) stay as they were; the API serves it as `kind_defaults`. |
+| `black_bloc/brackets/play.py:468` `override(free=, how=)` · `:499` `counted` | A list set's score is a count, not a best-of: `free` skips `bestof.checked`, the named side wins (else the higher count), level with no pick is `pick_winner`. The vote close passes `how="votes"`. This keeps ONE winner-writer: the close goes `brackets_votes.closed` → `brackets_sets.overridden` → `pools.override` → `play.override`. |
+| `black_bloc/brackets_sets.py:280` `tallied` · `override` | The organiser's Decide on a voted list set with no score keeps the vote's counts as the score (the tie case: 4–4, Twix wins). |
+| `black_bloc/brackets_sets.py:473` `confirm_due` | Skips list brackets: a tie waits `reported` for the organiser, and the confirm sweep would otherwise let a 4–4 "stand" for side b. |
+| `black_bloc/brackets_votes.py` `closed` | A tie is a direct state flip to `reported` with the counts (no winner is written, so it is not a second winner-writer); anything else is `overridden(..., event="vote_closed", free=True, how=BY_VOTES)`. |
+| `black_bloc/brackets_votes.py` `due` · `close_due_votes` | An unreadable `vote_closes_at` is due at once (checklist 5). A late close (bot down past the time) still closes: the counts do not change with lateness. Runs inside the existing one-minute `brackets_thread.sweep` (the cog's `Reconciler` tick), skipped only while `off`, so it runs in shadow. |
+| `black_bloc/brackets_votes.py` `vote` | Not logged per press (the design: the count is the record). Answers `changed=(key,)` so the card's counts follow. |
+| `black_bloc/brackets_cards.py:600` `list_moves` · `list_label` | Vote buttons are the entrants' names (clipped to 80); the organiser's picks are the constant `PICK_LABEL` (organiser-only words stay constants, the owner's "bb"); Close now is the `brackets_close_vote_label` key as the design names it. |
+| `black_bloc/brackets_panel.py` `set_moves_for` | The Discord panel's home view is unchanged (its create dropdown and labels are pinned by the existing panel tests), so a list bracket is CREATED on the site; once made, the panel runs it (Start from draft, plain-name Add a name…, vote / pick / Close now on a set). |
+| `site/public/assets/listfilter.js:13` `passes(groups)` · `ui.js` `listFilter(groups)` | A second chip row (Kind on the brackets list) ANDs with the first through the shared module; `groups` is optional, so every other page is unchanged. |
+| `site/mock/server.mjs` `bkCloseDue` | The mock has no sweep; every read closes the votes that are due, so the page shows the close without waiting. |

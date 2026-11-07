@@ -27,7 +27,7 @@ from .brackets_moves import (
 from .brackets_sets import entrant_name, kept, overridden, running, the_set
 from .logkinds import VIA_DISCORD, VIA_WEBSITE
 from .panels import Outcome
-from .settings_store import BRACKETS_VOTES_VISIBLE, DEFAULT_TIMEZONE_KEY
+from .settings_store import DEFAULT_TIMEZONE_KEY
 from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
@@ -45,10 +45,6 @@ def when_words(bot: Any, guild: Any, stamp: Any, via: str) -> str:
     hour = local.hour % 12 or 12
     clock = f"{hour}:{local.minute:02d} {'am' if local.hour < 12 else 'pm'}"
     return f"{local:%a} {clock} {local.tzname()}"
-
-
-def visible(bot: Any, guild: Any) -> bool:
-    return bool(bot.store.get(guild.id, BRACKETS_VOTES_VISIBLE))
 
 
 def is_open(match: Any, held: dict[str, Any] | None) -> bool:
