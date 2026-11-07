@@ -9,7 +9,7 @@ from typing import Any
 import discord
 
 from . import brackets_cards as cards
-from . import brackets_people, brackets_sets, brackets_votes, shadow
+from . import brackets_people, brackets_picks, brackets_sets, brackets_votes, shadow
 from . import brackets_store as store_
 from .actionlog import log_action
 from .brackets import access
@@ -181,13 +181,20 @@ async def find_thread(bot: Any, guild: Any, thread_id: Any) -> tuple[Any, bool, 
 
 
 def starter_payload(
-    bot: Any, guild: Any, row: Any, people: list[Any], bracket: Any = None
+    bot: Any, guild: Any, row: Any, people: list[Any], bracket: Any = None, board: Any = None
 ) -> dict[str, Any]:
     return {
-        "embed": cards.starter_embed(bot.store, guild.id, row, people, bracket),
-        "view": cards.starter_view(bot.store, guild.id, row, origin_of(bot), people),
+        "embed": cards.starter_embed(bot.store, guild.id, row, people, bracket, board=board),
+        "view": cards.starter_view(bot.store, guild.id, row, origin_of(bot), people, board=board),
         "allowed_mentions": discord.AllowedMentions.none(),
     }
+
+
+async def starter_of(
+    bot: Any, guild: Any, row: Any, people: list[Any], bracket: Any = None
+) -> dict[str, Any]:
+    board = await brackets_picks.board(bot, row)
+    return starter_payload(bot, guild, row, people, bracket, board)
 
 
 async def built(bot: Any, guild: Any, row: Any) -> tuple[Any, str]:
@@ -210,7 +217,7 @@ async def built(bot: Any, guild: Any, row: Any) -> tuple[Any, str]:
                 name=name,
                 auto_archive_duration=AUTO_ARCHIVE_MINUTES,
                 reason=REASON.format(id=row["id"]),
-                **starter_payload(bot, guild, dict(row) | {"shadow": int(rehearsal)}, people),
+                **await starter_of(bot, guild, dict(row) | {"shadow": int(rehearsal)}, people),
             )
             thread, first = getattr(made, "thread", made), getattr(made, "message", None)
         else:
@@ -333,7 +340,7 @@ async def post_starter(bot: Any, guild: Any, row: Any, thread: Any, people: list
         return
     try:
         message = await thread.send(
-            **starter_payload(bot, guild, row, people, await pooled(bot, row))
+            **await starter_of(bot, guild, row, people, await pooled(bot, row))
         )
     except Exception as exc:
         await failed(bot, guild, row, STARTER, reason_of(exc))
@@ -351,7 +358,7 @@ async def edit_starter(bot: Any, guild: Any, row: Any, thread: Any, people: list
     key = (int(row["id"]), STARTER)
     try:
         await thread.get_partial_message(int(row["message_id"])).edit(
-            **starter_payload(bot, guild, row, people, await pooled(bot, row))
+            **await starter_of(bot, guild, row, people, await pooled(bot, row))
         )
     except discord.NotFound:
         stale(bot).discard(key)
@@ -681,8 +688,10 @@ async def sweep(bot: Any, guild: Any, *, full: bool = False) -> None:
     confirmed = await brackets_sets.confirm_due(bot, guild)
     closed = await brackets_people.close_due_check_ins(bot, guild)
     voted = await brackets_votes.close_due_votes(bot, guild)
+    locked = await brackets_picks.lock_due(bot, guild)
     budget = Budget()
-    for tournament_id in dict.fromkeys([*(one for one, _ in confirmed), *closed, *voted]):
+    owed = [*(one for one, _ in confirmed), *closed, *voted, *locked]
+    for tournament_id in dict.fromkeys(owed):
         row = await fresh(bot, guild, tournament_id)
         if row is None:
             continue

@@ -95,7 +95,12 @@ EDITABLE = (
     "season",
     "source",
     "source_ref",
+    "picks_lock_at",
+    "picks_points",
+    "picks_on",
 )
+PICKS_COLUMNS = ("picks_lock_at", "picks_points", "picks_on", "picks_locked_at")
+SHEET_SCORES = ("points", "correct", "possible", "rank")
 SET_COLUMNS = tuple(one.name for one in fields(Match))
 LIST_LIMIT = 200
 
@@ -545,3 +550,111 @@ async def clear_entrants(db: Any, tournament_id: int) -> None:
         "DELETE FROM tournament_entrants WHERE tournament_id = ?", (tournament_id,)
     )
     await db.conn.commit()
+
+
+def picks_on(row: Any) -> bool:
+    """A sports bracket takes pick sheets unless its organiser turned them off."""
+    found = column(row, "picks_on")
+    return is_sports(row) and (found is None or bool(found))
+
+
+async def all_picks(db: Any, tournament_id: int) -> dict[int, dict[str, int]]:
+    cur = await db.conn.execute(
+        "SELECT user_id, key, pick FROM tournament_picks WHERE tournament_id = ?",
+        (tournament_id,),
+    )
+    found: dict[int, dict[str, int]] = {}
+    for row in await cur.fetchall():
+        found.setdefault(int(row["user_id"]), {})[row["key"]] = int(row["pick"])
+    return found
+
+
+async def picks_of(db: Any, tournament_id: int, user_id: int) -> dict[str, int]:
+    return (await all_picks(db, tournament_id)).get(int(user_id), {})
+
+
+async def sheets(db: Any, tournament_id: int) -> dict[int, Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM tournament_sheets WHERE tournament_id = ?", (tournament_id,)
+    )
+    return {int(row["user_id"]): row for row in await cur.fetchall()}
+
+
+async def sheet(db: Any, tournament_id: int, user_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM tournament_sheets WHERE tournament_id = ? AND user_id = ?",
+        (tournament_id, int(user_id)),
+    )
+    return await cur.fetchone()
+
+
+async def write_sheet(
+    db: Any,
+    tournament_id: int,
+    user_id: int,
+    picks: dict[str, int],
+    tiebreak: int | None,
+    *,
+    locked_at: str | None = None,
+    edited_by: int | None = None,
+) -> bool:
+    """The whole sheet replaced in one go; answers whether the member had no sheet before."""
+    now = stamp()
+    fresh = await sheet(db, tournament_id, user_id) is None
+    await db.conn.execute(
+        "DELETE FROM tournament_picks WHERE tournament_id = ? AND user_id = ?",
+        (tournament_id, int(user_id)),
+    )
+    for key, pick in picks.items():
+        await db.conn.execute(
+            "INSERT INTO tournament_picks(tournament_id, user_id, key, pick, at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (tournament_id, int(user_id), key, int(pick), now),
+        )
+    edited = {"edited_by": edited_by, "edited_at": now} if edited_by is not None else {}
+    values = {"tiebreak": tiebreak, "updated_at": now, **edited}
+    if fresh:
+        values["locked_at"] = locked_at
+        names = ["tournament_id", "user_id", *values]
+        await db.conn.execute(
+            f"INSERT INTO tournament_sheets({', '.join(names)}) "
+            f"VALUES ({', '.join('?' for _ in names)})",
+            (tournament_id, int(user_id), *values.values()),
+        )
+    else:
+        sets = ", ".join(f"{name} = ?" for name in values)
+        await db.conn.execute(
+            f"UPDATE tournament_sheets SET {sets} WHERE tournament_id = ? AND user_id = ?",
+            (*values.values(), tournament_id, int(user_id)),
+        )
+    await db.conn.commit()
+    return fresh
+
+
+async def write_scores(db: Any, tournament_id: int, scores: dict[int, tuple]) -> None:
+    """Points, correct, possible and rank per sheet; brackets_picks.rescore is the one caller."""
+    sets = ", ".join(f"{name} = ?" for name in SHEET_SCORES)
+    for user_id, values in scores.items():
+        await db.conn.execute(
+            f"UPDATE tournament_sheets SET {sets} WHERE tournament_id = ? AND user_id = ?",
+            (*values, tournament_id, int(user_id)),
+        )
+    await db.conn.commit()
+
+
+async def lock_sheets(db: Any, tournament_id: int, at: str | None) -> int:
+    """Every sheet stamped locked at `at` (None opens them again); answers how many changed."""
+    if at is None:
+        cur = await db.conn.execute(
+            "UPDATE tournament_sheets SET locked_at = NULL WHERE tournament_id = ? "
+            "AND locked_at IS NOT NULL",
+            (tournament_id,),
+        )
+    else:
+        cur = await db.conn.execute(
+            "UPDATE tournament_sheets SET locked_at = ? WHERE tournament_id = ? "
+            "AND locked_at IS NULL",
+            (at, tournament_id),
+        )
+    await db.conn.commit()
+    return int(cur.rowcount or 0)

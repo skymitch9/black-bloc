@@ -126,6 +126,11 @@ async def member_move(bot: Any, guild: Any, user: Any, tournament_id: int, actio
 async def starter_pressed(
     interaction: discord.Interaction, tournament_id: int, action: str
 ) -> None:
+    if action == cards.MY_PICKS:
+        from .brackets_picks_panel import open_picks
+
+        await open_picks(interaction, tournament_id)
+        return
     if not await db_up(interaction):
         return
     await ON_CARD.begin(interaction)

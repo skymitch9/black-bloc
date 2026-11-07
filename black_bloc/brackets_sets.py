@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from . import brackets_picks as picks_
 from . import brackets_store as store_
 from .brackets import access, play, pools
 from .brackets.model import (
@@ -91,6 +92,7 @@ def final_words(bot: Any, guild: Any, people: dict, match: Any) -> str:
 async def kept(bot: Any, guild: Any, row: Any, moved: Any) -> tuple[Any, dict[str, int]]:
     gone = await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
     await votes_synced(bot, guild, row)
+    await picks_.rescore(bot, row)
     return moved.bracket.matches, gone
 
 

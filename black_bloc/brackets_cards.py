@@ -34,7 +34,8 @@ from .sports.model import SOURCE_NAMES
 JOIN = "join"
 LEAVE = "leave"
 CHECK_IN = "check_in"
-STARTER_ACTIONS = (JOIN, LEAVE, CHECK_IN)
+MY_PICKS = "my_picks"
+STARTER_ACTIONS = (JOIN, LEAVE, CHECK_IN, MY_PICKS)
 
 REPORT = "report"
 CONFIRM = "confirm"
@@ -96,6 +97,7 @@ LABEL_KEYS = {
     REPORT: "brackets_report_label",
     CONFIRM: "brackets_confirm_label",
     DISPUTE: "brackets_dispute_label",
+    MY_PICKS: "brackets_my_picks_label",
 }
 TO_LABELS = {CALL: "Call", DECIDE: "Decide…", RESET: "Reset…"}
 PICK_LABEL = "{name} wins…"
@@ -103,6 +105,7 @@ STYLES = {
     JOIN: discord.ButtonStyle.success,
     LEAVE: discord.ButtonStyle.secondary,
     CHECK_IN: discord.ButtonStyle.primary,
+    MY_PICKS: discord.ButtonStyle.primary,
     REPORT: discord.ButtonStyle.primary,
     CONFIRM: discord.ButtonStyle.success,
     DISPUTE: discord.ButtonStyle.danger,
@@ -409,8 +412,42 @@ def sports_moves(row: Any, match: Any, meta: Any = None) -> tuple[str, ...]:
     return tuple(found)
 
 
+def picks_lines(store: Any, guild_id: int, board: Any) -> list[str]:
+    """Before the lock how many sheets are in and when it locks; after, the top of the board."""
+    if board is None:
+        return []
+    if not board.locked:
+        when = when_words(board.lock_at)
+        if when:
+            return [
+                words(store, guild_id, "brackets_picks_lock_line", count=board.count, when=when)
+            ]
+        return [words(store, guild_id, "brackets_picks_open_line", count=board.count)]
+    found = [words(store, guild_id, "brackets_picks_locked_line", count=board.count)]
+    if board.rows:
+        found.append(f"**{words(store, guild_id, 'brackets_leaderboard_heading')}**")
+        found += [
+            words(
+                store,
+                guild_id,
+                "brackets_leaderboard_line",
+                rank=rank or "–",
+                name=f"<@{int(user)}>",
+                points=points,
+            )
+            for rank, user, points in board.rows
+        ]
+    return found
+
+
 def starter_lines(
-    store: Any, guild_id: int, row: Any, people: list[Any], bracket: Any = None
+    store: Any,
+    guild_id: int,
+    row: Any,
+    people: list[Any],
+    bracket: Any = None,
+    *,
+    board: Any = None,
 ) -> list[str]:
     gid = guild_id
     count = sum(1 for one in people if not one["dropped"])
@@ -446,16 +483,21 @@ def starter_lines(
             words(store, gid, "brackets_card_place_line", place=one["placement"], name=one["name"])
             for one in placed[:PLACINGS_SHOWN]
         )
+    lines.extend(picks_lines(store, gid, board))
     return lines
 
 
 def starter_embed(
-    store: Any, guild_id: int, row: Any, people: list[Any], bracket: Any = None
+    store: Any,
+    guild_id: int,
+    row: Any,
+    people: list[Any],
+    bracket: Any = None,
+    *,
+    board: Any = None,
 ) -> discord.Embed:
-    return discord.Embed(
-        title=str(row["name"])[:TITLE_LIMIT],
-        description="\n".join(starter_lines(store, guild_id, row, people, bracket))[:4000],
-    )
+    lines = starter_lines(store, guild_id, row, people, bracket, board=board)
+    return discord.Embed(title=str(row["name"])[:TITLE_LIMIT], description="\n".join(lines)[:4000])
 
 
 def round_words(store: Any, guild_id: int, match: Any) -> str:
@@ -686,11 +728,20 @@ class SetButton(SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], temp
 
 
 def starter_view(
-    store: Any, guild_id: int, row: Any, origin: Any = None, people: list[Any] | None = None
+    store: Any,
+    guild_id: int,
+    row: Any,
+    origin: Any = None,
+    people: list[Any] | None = None,
+    *,
+    board: Any = None,
 ) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     count = 1 if people is None else sum(1 for one in people if not one["dropped"])
-    for action in starter_moves(row["state"], count):
+    moves = starter_moves(row["state"], count)
+    if board is not None:
+        moves = (*moves, MY_PICKS)
+    for action in moves:
         view.add_item(StarterButton(row["id"], action, label(store, guild_id, action)))
     url = site_url(origin, row["id"])
     if url:
@@ -762,7 +813,9 @@ def carries(message: Any, prefix: str) -> bool:
 
 __all__ = [
     "EDIT_SET",
+    "MY_PICKS",
     "RELEASE",
+    "picks_lines",
     "feed_line",
     "league_line",
     "score_line",

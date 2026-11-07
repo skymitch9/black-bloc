@@ -107,6 +107,15 @@ PAGE_WORDS = (
     "brackets_decided_by_feed_words",
     "brackets_decided_by_staff_words",
     "brackets_no_score_words",
+    "brackets_my_picks_label",
+    "brackets_leaderboard_heading",
+    "brackets_sheet_edited_note",
+    "brackets_edit_sheet_label",
+    "brackets_tiebreak_label",
+    "brackets_your_pick_words",
+    "brackets_picks_lock_line",
+    "brackets_picks_open_line",
+    "brackets_picks_locked_line",
 )
 
 SUMMARY_FIELDS = (
@@ -185,6 +194,13 @@ def kind_fields(row: Any) -> dict[str, Any]:
         "decide_by": store_.column(row, "decide_by"),
         "vote_minutes": store_.column(row, "vote_minutes"),
         **{name: store_.column(row, name) for name in SPORTS_FIELDS},
+    }
+
+
+def picks_fields(row: Any) -> dict[str, Any]:
+    return {
+        "picks_on": store_.picks_on(row),
+        **{name: store_.column(row, name) for name in store_.PICKS_COLUMNS if name != "picks_on"},
     }
 
 
@@ -424,6 +440,7 @@ async def full(
         "shadow": bool(row["shadow"]),
         **kind_fields(row),
         **feed_fields(row),
+        **picks_fields(row),
         "options": options(row),
         "entrant_count": sum(1 for one in people if not one["dropped"]),
         "finished": bool(bracket is not None and pools.finished(bracket)),

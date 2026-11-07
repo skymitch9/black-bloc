@@ -105,6 +105,8 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
             "feed_back",
             "set_edited",
             "hold_released",
+            "picks_locked",
+            "sheet_edited",
         )
     ),
     "black_bloc/points_moves.py::kind": tuple(
