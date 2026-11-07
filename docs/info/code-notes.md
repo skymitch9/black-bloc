@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
 > **2026-11-07 — one section APPENDED, nothing re-keyed**: *Bracket picture* (branch `brackets-picture`, off `main` `ed2d9424`); keyed by LINE at that branch. Rows below `starter_of` in `brackets_thread.py` sit a line or two lower — trust the anchor text. Before that:
+> **2026-11-07 — one section APPENDED, nothing re-keyed**: *Unknown channel types in the structure backup* (branch `structure-unknown-channels`, off `main` `ed2d9424`); keyed by LINE at that branch. Before that:
 > **2026-11-02 — one section APPENDED, nothing re-keyed**: *Ninja marks* (branch `ninja`, off `main` `665a4219`); keyed by LINE at that branch. Before that:
 > **2026-11-02 — one section APPENDED, nothing re-keyed**: *Replies to the weekly question* (branch `qotw-replies`, off `main` `d6edddde`); keyed by LINE at that branch. Before that:
 > **2026-10-30 — one section APPENDED, nothing re-keyed**: *Found marathons do not spotlight* (branch `spotlight-tracked-only`, off `main` `a8498538`); keyed by LINE at that branch. Rows below the edits in `marathon_spotlight.py` (pure and cog) and `cogs/content/marathon_inbox.py` sit a few lines lower — trust the anchor text. Before that:
@@ -11053,3 +11054,12 @@ Design: [`brackets-picture-design.md`](brackets-picture-design.md).
 | `black_bloc/brackets_picture.py:147` `picture_of` | Cache per tournament id `(fingerprint, bytes)` on the bot; drawing in `asyncio.to_thread`. Any exception → None and `brackets.picture_failed` once per streak (`_brackets_picture_failing`), `brackets.picture_back` when it draws again. |
 | `black_bloc/brackets_picture.py:185` `dressed` | Send: `file=`; edit: `attachments=[file]` (replaces). No picture on an edit is `attachments=[]`, so off or a failure removes the stale one rather than leaving it. |
 | `black_bloc/brackets_thread.py:200` `starter_of` | The one hook; `editing=True` only from `edit_starter`. `leave_word` (`:752`) clears the old starter's attachments too. |
+## Unknown channel types in the structure backup (branch `structure-unknown-channels`, 2026-11-07; keyed by LINE at that branch)
+
+Design: [`structure-backup-design.md`](structure-backup-design.md) ▸ *Found 2026-11-07*.
+
+| Where | Why |
+|---|---|
+| `black_bloc/cogs/moderation/structure_backup.py:205` `channels_of` | `Guild.fetch_channels()` (discord.py 2.7.1) raises `InvalidData` for the WHOLE list when one channel has a type its `ChannelType` lacks (it stops at `media = 16`; the live server had a type 20). Only on that error, the same endpoint is read raw (`guild._state.http.get_all_guild_channels`, the call `fetch_channels` itself makes) and each known entry is built with discord.py's own `discord.channel._guild_channel_factory`, so known channels are the same objects as before; unknown ones stay dicts. One warning per capture names the types and counts. A server discord.py reads whole is asked once, as before. Private API on purpose: it is the only read that returns the unknown channel at all (the gateway cache drops unknown types too). |
+| `black_bloc/structure_capture.py:158` `raw_channel_row` · `:177` | A raw dict becomes the same row shape as a typed channel, `type` = `unknown-<number>` (`UNKNOWN_TYPE`), overwrites from `permission_overwrites` (`type` 0 role, 1 member; the role list only when neither), tags from `available_tags`. `structure_diff.py` compares it like any channel (added / removed / renamed). |
+| `tests/cogs/moderation/test_structure_backup.py` `an_http_read` | The read-only guard still bans every `http` name except the exact on-the-spot call `<x>.http.get_all_guild_channels(...)`; holding the client, holding the bound reader, or any other method on it still trips (`SPELLINGS`). |

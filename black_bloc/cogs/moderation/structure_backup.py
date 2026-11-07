@@ -198,8 +198,34 @@ async def read_structure(guild: Any) -> dict[str, Any]:
     if getattr(guild, "unavailable", False):
         raise CaptureError(UNAVAILABLE)
     roles = await asyncio.wait_for(guild.fetch_roles(), FETCH_SECONDS)
-    channels = await asyncio.wait_for(guild.fetch_channels(), FETCH_SECONDS)
+    channels = await channels_of(guild)
     return capture(guild, roles, channels)
+
+
+async def channels_of(guild: Any) -> list[Any]:
+    try:
+        return await asyncio.wait_for(guild.fetch_channels(), FETCH_SECONDS)
+    except discord.InvalidData:
+        pass
+    answered = await asyncio.wait_for(
+        guild._state.http.get_all_guild_channels(guild.id), FETCH_SECONDS
+    )
+    found: list[Any] = []
+    unknown: dict[str, int] = {}
+    for data in answered:
+        factory, _ = discord.channel._guild_channel_factory(data["type"])
+        if factory is None:
+            unknown[str(data["type"])] = unknown.get(str(data["type"]), 0) + 1
+            found.append(data)
+        else:
+            found.append(factory(guild=guild, state=guild._state, data=data))
+    if unknown:
+        log.warning(
+            "structure: guild %s has channels of a type discord.py does not know, kept raw — %s",
+            guild.id,
+            ", ".join(f"type {kind} ({count})" for kind, count in sorted(unknown.items())),
+        )
+    return found
 
 
 async def safely(writing: Any, what: str) -> Any:
