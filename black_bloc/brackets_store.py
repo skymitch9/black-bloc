@@ -183,11 +183,15 @@ async def add_entrant(
     user_id: int | None,
     added_by: int | None,
     checked_in: bool = False,
+    ext_source: str | None = None,
+    ext_id: str | None = None,
+    short: str | None = None,
 ) -> int:
     seed = await next_seed(db, tournament_id)
     cur = await db.conn.execute(
         "INSERT INTO tournament_entrants(tournament_id, user_id, name, seed, checked_in, "
-        "checked_in_at, added_by, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "checked_in_at, added_by, added_at, ext_source, ext_id, short) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             tournament_id,
             user_id,
@@ -197,6 +201,9 @@ async def add_entrant(
             stamp() if checked_in else None,
             added_by,
             stamp(),
+            ext_source,
+            ext_id,
+            short,
         ),
     )
     await db.conn.commit()

@@ -312,6 +312,101 @@ export function listFilter({
 
   return { search, chips, groupChips, none, parts: [search, chips, ...groupChips].filter(Boolean), state, apply, clear };
 }
+
+/** A search box over a server list; see docs/info/code-notes.md ("Sports feeds and names"). */
+export function remoteSearch({
+  label = 'Search',
+  placeholder = '',
+  groups = [],
+  fetch,
+  row,
+  typedRow = null,
+  onPick,
+  className = null,
+} = {}) {
+  const state = {
+    picks: groups.map((group) => group.current ?? group.choices[0][0]),
+    rows: [],
+    query: '',
+    lit: 0,
+    asked: 0,
+  };
+  const list = el('ul', { class: 'picker-results remote-results', role: 'listbox', hidden: true });
+  const status = notice();
+  const field = searchField({ label, placeholder, onQuery: () => run() });
+  const input = field.querySelector('input');
+  const typed = () => input.value.trim();
+  const choices = () => [
+    ...state.rows.map((one) => ({ one, text: null })),
+    ...(typedRow && typed() ? [{ one: null, text: typed() }] : []),
+  ];
+  const pick = (choice) => {
+    if (choice && onPick) onPick(choice.one, choice.one ? null : choice.text);
+  };
+  const paint = () => {
+    const all = choices();
+    state.lit = Math.min(state.lit, Math.max(all.length - 1, 0));
+    list.replaceChildren(...all.map((choice, at) => el('li', {
+      class: 'remote-row',
+      role: 'option',
+      'aria-selected': at === state.lit ? 'true' : 'false',
+      'data-typed': choice.one ? undefined : 'true',
+      on: { mousedown: (event) => event.preventDefault(), click: () => pick(choice) },
+    }, [].concat(choice.one ? row(choice.one) : typedRow(choice.text)))));
+    list.hidden = all.length === 0;
+  };
+  const run = async () => {
+    const query = typed();
+    const ask = ++state.asked;
+    if (!query) {
+      state.rows = [];
+      state.query = '';
+      paint();
+      return;
+    }
+    try {
+      const found = await fetch(query, state.picks.slice());
+      if (ask !== state.asked) return;
+      state.rows = found || [];
+      state.query = query;
+      state.lit = 0;
+      status.say('');
+    } catch (error) {
+      if (ask !== state.asked) return;
+      state.rows = [];
+      const said = sentenceFor(error);
+      status.say(said.text, said.tone);
+    }
+    paint();
+  };
+  input.addEventListener('input', paint);
+  input.addEventListener('keydown', async (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const all = choices();
+      if (!all.length) return;
+      state.lit = (state.lit + (event.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length;
+      paint();
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (state.query !== typed()) await run();
+      pick(choices()[state.lit]);
+    }
+  });
+  const chips = groups.map((group, at) => chipBar(group.choices, state.picks[at], (key) => {
+    state.picks[at] = key;
+    run();
+  }, { className: group.chipClass || null }));
+  const clear = () => {
+    input.value = '';
+    state.rows = [];
+    state.query = '';
+    paint();
+  };
+  const node = el('div', { class: className ? `remote-search ${className}` : 'remote-search' }, [...chips, field, list, status]);
+  return { node, input, state, run, clear };
+}
+
 export function filterRows(root, query) {
   let shown = 0;
   let total = 0;

@@ -254,6 +254,17 @@ def build_router(bot: Any) -> APIRouter:
             people.add_entrant,
             name=given.get("name"),
             user_id=wanted_id(user) if user not in (None, "") else None,
+            ext_source=given.get("ext_source"),
+            ext_id=given.get("ext_id"),
+            short=given.get("short"),
+        )
+
+    @router.patch("/{tournament_id}/entrants/{entrant_id}")
+    async def brackets_edit_entrant(
+        request: Request, tournament_id: str, entrant_id: str, payload: Any = OPTIONAL
+    ) -> dict[str, Any]:
+        return await answered(
+            request, tournament_id, people.edit_entrant, wanted_id(entrant_id), body_of(payload)
         )
 
     @router.delete("/{tournament_id}/entrants/{entrant_id}")

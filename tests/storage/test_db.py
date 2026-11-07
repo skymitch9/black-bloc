@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 103
+        assert SCHEMA_VERSION == 104
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3665,7 +3665,7 @@ async def test_a_schema_86_file_gains_the_stored_tone_and_keeps_what_each_member
         cur = await again.conn.execute("PRAGMA table_info(chat_voice)")
         assert set(TONE_COLUMNS) <= {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
     finally:
         await again.close()
 
@@ -4001,7 +4001,7 @@ async def test_a_schema_88_file_gains_the_pb_feed_tables_and_loses_nothing(tmp_p
         cur = await again.conn.execute("SELECT outcome FROM structure_looks")
         assert [row["outcome"] for row in await cur.fetchall()] == ["saved"]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
     finally:
         await again.close()
 
@@ -4058,7 +4058,7 @@ async def test_a_pb_matches_table_from_the_first_build_gains_the_review_columns(
     try:
         from black_bloc.storage.db import ADDED_COLUMNS
 
-        assert SCHEMA_VERSION == 103
+        assert SCHEMA_VERSION == 104
         for column in PB_ADDED:
             assert any(row[:2] == ("pb_matches", column) for row in ADDED_COLUMNS), column
         assert (await pb_columns(again))["pb_matches"] == PB_TABLES["pb_matches"]
@@ -4090,7 +4090,7 @@ async def test_a_pb_posts_table_from_before_post_again_gains_again_of_and_keeps_
     again = Database(path)
     await again.connect()
     try:
-        assert SCHEMA_VERSION == 103
+        assert SCHEMA_VERSION == 104
         assert (await pb_columns(again))["pb_posts"] == PB_TABLES["pb_posts"]
         cur = await again.conn.execute("SELECT run_id, outcome, again_of FROM pb_posts")
         assert [tuple(row) for row in await cur.fetchall()] == [("r1", "rehearsed", None)]
@@ -4230,7 +4230,7 @@ async def test_a_schema_89_file_gains_the_bracket_tables_and_loses_nothing(tmp_p
             "message_id",
         } <= columns
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
     finally:
         await again.close()
 
@@ -4291,7 +4291,7 @@ async def test_a_schema_90_file_gains_the_pool_columns_and_loses_nothing(tmp_pat
         )
         assert [tuple(row) for row in await cur.fetchall()] == [("W1-1", 4, 5, None, None)]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "103"
+        assert (await cur.fetchone())["value"] == "104"
     finally:
         await again.close()
 
@@ -4403,7 +4403,7 @@ async def test_a_schema_91_file_gains_the_point_tables_and_loses_nothing(tmp_pat
         cur = await again.conn.execute("SELECT state, xp, speedpoints FROM points_runs")
         assert tuple(await cur.fetchone()) == ("pending", 0, 0)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "103"
+        assert (await cur.fetchone())["value"] == "104"
     finally:
         await again.close()
 
@@ -4435,7 +4435,7 @@ async def test_a_schema_92_file_gains_a_post_for_its_stickies_and_keeps_every_on
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         )
-        assert (await cur.fetchone())["value"] == "103"
+        assert (await cur.fetchone())["value"] == "104"
     finally:
         await again.close()
 
@@ -4463,7 +4463,7 @@ async def test_a_schema_93_file_gains_the_marathon_log_thread_columns(tmp_path):
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         )
-        assert (await cur.fetchone())["value"] == "103"
+        assert (await cur.fetchone())["value"] == "104"
     finally:
         await again.close()
 
@@ -4489,7 +4489,7 @@ async def test_a_file_from_before_the_untracked_alert_gains_one_empty_column(tmp
         assert tuple(await cur.fetchone()) == ("AGDQ 2027", None)
         cur = await again.conn.execute("PRAGMA table_info(marathons_archive)")
         assert "untracked_alert_at" in [row["name"] for row in await cur.fetchall()]
-        assert SCHEMA_VERSION == 103
+        assert SCHEMA_VERSION == 104
     finally:
         await again.close()
 
@@ -4527,7 +4527,7 @@ async def test_a_file_from_before_the_stale_archive_gains_one_empty_clock_column
         )
         assert tuple(await cur.fetchone()) == ("Old", "staff", None)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
     finally:
         await again.close()
 
@@ -4570,7 +4570,7 @@ async def test_a_schema_95_file_gains_the_weekly_question_tables_and_loses_nothi
         cur = await again.conn.execute("SELECT user_id FROM marathon_baf_overrides")
         assert [row["user_id"] for row in await cur.fetchall()] == [5]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
     finally:
         await again.close()
 
@@ -4638,7 +4638,7 @@ async def test_a_schema_96_file_gains_the_baf_run_tables_and_loses_nothing(tmp_p
         cur = await again.conn.execute("SELECT body FROM weekly_questions")
         assert [row["body"] for row in await cur.fetchall()] == ["q"]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
     finally:
         await again.close()
 
@@ -4674,7 +4674,7 @@ async def test_a_schema_98_file_gains_genre_and_keeps_every_series_row(tmp_path)
             cur = await again.conn.execute(
                 "SELECT value FROM schema_meta WHERE key='schema_version'"
             )
-            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
         finally:
             await again.close()
 
@@ -4713,7 +4713,7 @@ async def test_a_schema_99_file_gains_developer_and_keeps_every_series_and_genre
             cur = await again.conn.execute(
                 "SELECT value FROM schema_meta WHERE key='schema_version'"
             )
-            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
         finally:
             await again.close()
 
@@ -4776,7 +4776,7 @@ async def test_a_schema_100_file_gains_the_bluesky_tables_and_loses_nothing(tmp_
             cur = await again.conn.execute(
                 "SELECT value FROM schema_meta WHERE key='schema_version'"
             )
-            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
         finally:
             await again.close()
 
@@ -4816,7 +4816,7 @@ async def test_a_schema_101_file_gains_the_ninja_marks_table_and_loses_nothing(t
             cur = await again.conn.execute(
                 "SELECT value FROM schema_meta WHERE key='schema_version'"
             )
-            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
         finally:
             await again.close()
 
@@ -4887,7 +4887,7 @@ async def test_a_schema_102_file_gains_bracket_kinds_and_votes_and_loses_nothing
             cur = await again.conn.execute(
                 "SELECT value FROM schema_meta WHERE key='schema_version'"
             )
-            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "103"
+            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
         finally:
             await again.close()
 
@@ -4907,5 +4907,78 @@ async def test_one_vote_per_member_and_set_is_the_databases_rule(tmp_path):
         await db.conn.execute(insert, ("a",))
         with pytest.raises(sqlite3.IntegrityError):
             await db.conn.execute(insert, ("b",))
+    finally:
+        await db.close()
+
+
+async def test_a_schema_103_file_gains_sports_names_and_entrant_ext_ids_and_loses_nothing(
+    tmp_path,
+):
+    path = tmp_path / "before_sports.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE sports_names")
+    for column in ("ext_source", "ext_id", "short"):
+        await db.conn.execute(f"ALTER TABLE tournament_entrants DROP COLUMN {column}")
+    await db.conn.execute(
+        "INSERT INTO tournaments(id, guild_id, name, format, state, kind, created_by, "
+        "created_at, updated_at) VALUES (5, 1, 'Candy', 'single', 'running', 'list', 7, 'x', 'y')"
+    )
+    await db.conn.execute(
+        "INSERT INTO tournament_entrants(tournament_id, name, seed, added_at) "
+        "VALUES (5, 'Snickers', 1, 'z')"
+    )
+    await db.conn.execute("UPDATE schema_meta SET value = '103' WHERE key = 'schema_version'")
+    await db.conn.commit()
+    await db.close()
+
+    for _ in range(2):
+        again = Database(path)
+        await again.connect()
+        try:
+            cur = await again.conn.execute(
+                "SELECT name, seed, ext_source, ext_id, short FROM tournament_entrants"
+            )
+            assert [tuple(row) for row in await cur.fetchall()] == [
+                ("Snickers", 1, None, None, None)
+            ]
+            cur = await again.conn.execute("SELECT name, kind, state FROM tournaments")
+            assert [tuple(row) for row in await cur.fetchall()] == [("Candy", "list", "running")]
+            cur = await again.conn.execute("PRAGMA table_info(sports_names)")
+            assert {
+                "id",
+                "kind",
+                "league",
+                "source",
+                "ext_id",
+                "name",
+                "short",
+                "aliases",
+                "team_ext_id",
+                "updated_at",
+            } == {row["name"] for row in await cur.fetchall()}
+            cur = await again.conn.execute("PRAGMA index_list(sports_names)")
+            assert {"sports_names_one_each", "sports_names_by_name"} <= {
+                row["name"] for row in await cur.fetchall()
+            }
+            cur = await again.conn.execute(
+                "SELECT value FROM schema_meta WHERE key='schema_version'"
+            )
+            assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "104"
+        finally:
+            await again.close()
+
+
+async def test_one_name_per_source_kind_league_and_id_is_the_databases_rule(tmp_path):
+    db = Database(tmp_path / "names.sqlite3")
+    await db.connect()
+    try:
+        insert = (
+            "INSERT INTO sports_names(kind, league, source, ext_id, name, updated_at) "
+            "VALUES ('team', 'nba', 'espn', '2', ?, 'now')"
+        )
+        await db.conn.execute(insert, ("Boston Celtics",))
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(insert, ("Celtics",))
     finally:
         await db.close()

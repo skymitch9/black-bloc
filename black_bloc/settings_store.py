@@ -4249,6 +4249,7 @@ BRACKETS_KIND_DEFAULT = "brackets_kind_default"
 BRACKETS_DECIDE_DEFAULT = "brackets_decide_default"
 BRACKETS_VOTE_MINUTES = "brackets_vote_minutes"
 BRACKETS_VOTES_VISIBLE = "brackets_votes_visible"
+BRACKETS_NAMES_REFRESH_HOUR = "brackets_names_refresh_hour"
 BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_CONFIRM_MINUTES: (12, 1, 1440),
     BRACKETS_CHECK_IN_MINUTES: (30, 5, 1440),
@@ -4261,6 +4262,7 @@ BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_ADVANCE_LOSERS_FROM: (None, 2, 16),
     BRACKETS_POOLS_SWISS_ROUNDS: (None, 1, 20),
     BRACKETS_VOTE_MINUTES: (1440, 1, 20160),
+    BRACKETS_NAMES_REFRESH_HOUR: (4, 0, 23),
 }
 BRACKETS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
     BRACKETS_MODE: ("shadow", BRACKETS_MODES),
@@ -4873,7 +4875,54 @@ BRACKETS_KIND_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
 BRACKETS_WORDS.update(BRACKETS_CARD_WORDS)
 BRACKETS_WORDS.update(BRACKETS_PAGE_WORDS)
 BRACKETS_WORDS.update(BRACKETS_POOL_WORDS)
+BRACKETS_LEAGUE_NAMES = {
+    "nfl": "NFL",
+    "nba": "NBA",
+    "mlb": "MLB",
+    "nhl": "NHL",
+    "ncaam": "NCAA men's",
+    "ncaaw": "NCAA women's",
+}
+BRACKETS_SPORTS_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    **{
+        f"brackets_league_{league}_words": (
+            shown,
+            (),
+            f"the name of the {shown} on a sports bracket's league chips and cards",
+        )
+        for league, shown in BRACKETS_LEAGUE_NAMES.items()
+    },
+    "brackets_typed_entrant_note": (
+        "typed — results by hand",
+        (),
+        "the note on a sports bracket's entrant that was typed rather than picked from the names "
+        "list, so no feed can fill its results",
+    ),
+    "brackets_edit_entrant_label": (
+        "Edit entrant",
+        (),
+        "the organiser's button that edits an entrant's name, short name and seed",
+    ),
+    "brackets_entrant_edited_said": (
+        "Saved {entrant} in **{name}**.",
+        BRACKETS_ENTRANT,
+        "what an organiser is told after editing an entrant",
+    ),
+    "brackets_ext_unknown_said": (
+        "{source} {ext_id} is not in the sports names list, so nothing was saved. Pick the name "
+        "from the search, or refresh the names list first.",
+        ("source", "ext_id"),
+        "the answer when an entrant names a team, school or player the names list does not hold",
+    ),
+    "brackets_use_typed_label": (
+        'Use "{typed}" as typed',
+        ("typed",),
+        "the last choice under a sports bracket's name search, which adds the name as it was "
+        "typed",
+    ),
+}
 BRACKETS_WORDS.update(BRACKETS_KIND_WORDS)
+BRACKETS_WORDS.update(BRACKETS_SPORTS_WORDS)
 BRACKETS_DEFAULTS: dict[str, Any] = {
     BRACKETS_CHANNEL: BRACKETS_CHANNEL_ID,
     **{key: default for key, (default, _) in BRACKETS_ENUMS.items()},
@@ -5015,6 +5064,10 @@ KEY_HELP.update(
         BRACKETS_VOTES_VISIBLE: (
             "whether a list set shows each name's votes while its vote is open; on by default. "
             "Off shows only how many have voted until it closes"
+        ),
+        BRACKETS_NAMES_REFRESH_HOUR: (
+            "the hour (0-23, in default_timezone) the team, school and player names behind a "
+            "sports bracket's search are fetched again; 4 by default"
         ),
         **{key: said for key, (_, _, said) in BRACKETS_WORDS.items()},
     }

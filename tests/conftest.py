@@ -116,6 +116,16 @@ def no_test_ever_opens_a_link(monkeypatch):
     monkeypatch.setattr("black_bloc.speedrun.SpeedrunClient._open", refuse_speedrun)
 
 
+@pytest.fixture(autouse=True)
+def no_test_ever_reaches_a_sports_feed(monkeypatch):
+    """`sports.http.network` is the only door to the feeds; a test passes `fetch` instead."""
+
+    async def refuse(url, headers, seconds):
+        pytest.fail(f"a test asked a sports feed for {url}; pass `fetch` instead")
+
+    monkeypatch.setattr("black_bloc.sports.http.network", refuse)
+
+
 @pytest.fixture
 def settings(tmp_path):
     return load_settings(_env_file=None, database_path=tmp_path / "test.sqlite3")

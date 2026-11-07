@@ -16,6 +16,7 @@ from black_bloc.logkinds import VIA_DISCORD, VIA_WEBSITE
 from black_bloc.settings_store import SettingsStore
 from black_bloc.storage.db import Database
 from tests.conftest import put, take
+from tests.sports_fakes import Recorded
 
 BLUESKY_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "bluesky" / "author_feed.json"
 
@@ -416,6 +417,7 @@ class WebBot:
         self.views: list[Any] = []
         self.user = SimpleNamespace(id=1)
         self.bluesky_fetch = recorded_bluesky_feed
+        self.sports_fetch = Recorded()
 
     def is_ready(self) -> bool:
         return True

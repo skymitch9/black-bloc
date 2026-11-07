@@ -1,0 +1,48 @@
+{
+ "copyright": "Copyright 2026 MLB Advanced Media, L.P.  Use of any content on this page acknowledges agreement to the terms posted here http://gdx.mlb.com/components/copyright.txt",
+ "dates": [
+  {
+   "date": "2026-10-28",
+   "games": [
+    {
+     "gamePk": 849799,
+     "gameType": "W",
+     "gameDate": "2026-10-29T00:00:00Z",
+     "gamesInSeries": 7,
+     "seriesGameNumber": 5,
+     "seriesDescription": "World Series",
+     "status": {
+      "abstractGameState": "Final",
+      "detailedState": "Final"
+     },
+     "teams": {
+      "away": {
+       "score": 4,
+       "isWinner": true,
+       "team": {
+        "id": 158,
+        "name": "Milwaukee Brewers"
+       }
+      },
+      "home": {
+       "score": 1,
+       "isWinner": false,
+       "team": {
+        "id": 139,
+        "name": "Tampa Bay Rays"
+       }
+      }
+     },
+     "linescore": {
+      "currentInning": 9,
+      "currentInningOrdinal": "9th",
+      "inningState": "Bottom",
+      "inningHalf": "Bottom",
+      "isTopInning": false,
+      "scheduledInnings": 9
+     }
+    }
+   ]
+  }
+ ]
+}

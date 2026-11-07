@@ -1,0 +1,164 @@
+{
+ "events": [
+  {
+   "id": "401856478",
+   "date": "2026-03-19T19:00Z",
+   "name": "Siena Saints at Duke Blue Devils",
+   "shortName": "SIE VS DUKE",
+   "season": {
+    "year": 2026,
+    "type": 3,
+    "slug": "post-season"
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 2,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401856478",
+     "date": "2026-03-19T19:00Z",
+     "type": {
+      "id": "6",
+      "abbreviation": "TRNMNT"
+     },
+     "notes": [
+      {
+       "type": "event",
+       "headline": "NCAA Men's Basketball Championship - East Region - 1st Round"
+      }
+     ],
+     "tournamentId": 22,
+     "competitors": [
+      {
+       "id": "150",
+       "homeAway": "home",
+       "winner": true,
+       "score": "71",
+       "curatedRank": {
+        "current": 1
+       },
+       "order": 0,
+       "team": {
+        "id": "150",
+        "location": "Duke",
+        "name": "Blue Devils",
+        "abbreviation": "DUKE",
+        "displayName": "Duke Blue Devils",
+        "shortDisplayName": "Duke"
+       }
+      },
+      {
+       "id": "2561",
+       "homeAway": "away",
+       "winner": false,
+       "score": "65",
+       "curatedRank": {
+        "current": 16
+       },
+       "order": 1,
+       "team": {
+        "id": "2561",
+        "location": "Siena",
+        "name": "Saints",
+        "abbreviation": "SIE",
+        "displayName": "Siena Saints",
+        "shortDisplayName": "Siena"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401856486",
+   "date": "2026-03-19T23:30Z",
+   "name": "Howard Bison at Michigan Wolverines",
+   "shortName": "HOW VS MICH",
+   "season": {
+    "year": 2026,
+    "type": 3,
+    "slug": "post-season"
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 2,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401856486",
+     "date": "2026-03-19T23:30Z",
+     "type": {
+      "id": "6",
+      "abbreviation": "TRNMNT"
+     },
+     "notes": [
+      {
+       "type": "event",
+       "headline": "NCAA Men's Basketball Championship - Midwest Region - 1st Round"
+      }
+     ],
+     "tournamentId": 22,
+     "competitors": [
+      {
+       "id": "130",
+       "homeAway": "home",
+       "winner": true,
+       "score": "101",
+       "curatedRank": {
+        "current": 1
+       },
+       "order": 0,
+       "team": {
+        "id": "130",
+        "location": "Michigan",
+        "name": "Wolverines",
+        "abbreviation": "MICH",
+        "displayName": "Michigan Wolverines",
+        "shortDisplayName": "Michigan"
+       }
+      },
+      {
+       "id": "47",
+       "homeAway": "away",
+       "winner": false,
+       "score": "80",
+       "curatedRank": {
+        "current": 16
+       },
+       "order": 1,
+       "team": {
+        "id": "47",
+        "location": "Howard",
+        "name": "Bison",
+        "abbreviation": "HOW",
+        "displayName": "Howard Bison",
+        "shortDisplayName": "Howard"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

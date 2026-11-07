@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 103
+SCHEMA_VERSION = 104
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1519,7 +1519,10 @@ CREATE TABLE IF NOT EXISTS tournament_entrants (
     final_rank    INTEGER,
     placement     INTEGER,
     added_by      INTEGER,
-    added_at      TEXT    NOT NULL
+    added_at      TEXT    NOT NULL,
+    ext_source    TEXT,
+    ext_id        TEXT,
+    short         TEXT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS tournament_entrants_one_member
     ON tournament_entrants(tournament_id, user_id) WHERE user_id IS NOT NULL;
@@ -1585,6 +1588,22 @@ CREATE TABLE IF NOT EXISTS tournament_votes (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS tournament_votes_one_each
     ON tournament_votes(tournament_id, key, user_id);
+
+CREATE TABLE IF NOT EXISTS sports_names (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind        TEXT    NOT NULL,
+    league      TEXT    NOT NULL DEFAULT '',
+    source      TEXT    NOT NULL,
+    ext_id      TEXT    NOT NULL,
+    name        TEXT    NOT NULL,
+    short       TEXT,
+    aliases     TEXT,
+    team_ext_id TEXT,
+    updated_at  TEXT    NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS sports_names_one_each
+    ON sports_names(source, kind, league, ext_id);
+CREATE INDEX IF NOT EXISTS sports_names_by_name ON sports_names(kind, league, name);
 
 CREATE TABLE IF NOT EXISTS points_runs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1804,6 +1823,9 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tournament_sets", "vote_opens_at", "TEXT"),
     ("tournament_sets", "vote_closes_at", "TEXT"),
     ("tournament_sets", "vote_closed_at", "TEXT"),
+    ("tournament_entrants", "ext_source", "TEXT"),
+    ("tournament_entrants", "ext_id", "TEXT"),
+    ("tournament_entrants", "short", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

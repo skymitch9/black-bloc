@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
 from . import brackets_store as store_
+from . import sports_names
 from .brackets import access, checkin, play, pools
 from .brackets.model import (
     DQ,
@@ -17,6 +19,7 @@ from .brackets_moves import (
     OFF,
     actor_id,
     answered,
+    bad_option,
     clean_text,
     done,
     engine,
@@ -37,9 +40,15 @@ from .brackets_moves import (
 from .logkinds import VIA_DISCORD, VIA_WEBSITE
 from .panels import Outcome
 from .settings_store import DEFAULT_TIMEZONE_KEY
+from .sports.model import SOURCE_NAMES
 from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
+
+SHORT_LIMIT = 20
+SEED_LIMIT = 1024
+EXT_LIMIT = 100
+EDIT_FIELDS = ("name", "short", "seed", "ext_source", "ext_id")
 
 
 def clock_words(bot: Any, guild: Any, when: datetime, via: str) -> str:
@@ -265,6 +274,9 @@ async def add_entrant(
     *,
     name: Any = None,
     user_id: int | None = None,
+    ext_source: Any = None,
+    ext_id: Any = None,
+    short: Any = None,
     via: str = VIA_DISCORD,
 ) -> Outcome:
     """The TO adds a member, or a guest who is not on Discord (no user id; the TO reports)."""
@@ -274,8 +286,12 @@ async def add_entrant(
         require_runner(bot, guild, actor)
         require_state(bot, guild, row, *store_.BEFORE_START)
         member = guild.get_member(int(user_id)) if user_id is not None else None
-        if store_.kind_of(row) == store_.LIST:
+        if store_.kind_of(row) in (store_.LIST, store_.SPORTS):
             user_id = None
+        given = {"ext_source": ext_source, "ext_id": ext_id, "short": short}
+        matched = await matched_ext(bot, guild, given)
+        if matched is not None and not name:
+            name = matched["name"]
         wanted = clean_text(name or getattr(member, "display_name", None), NAME_LIMIT + 1)
         if not wanted or len(wanted) > NAME_LIMIT:
             raise stop(bot, guild, "no_name", "no_name", 400, limit=NAME_LIMIT)
@@ -306,6 +322,7 @@ async def add_entrant(
                 user_id=int(user_id) if user_id is not None else None,
                 added_by=actor_id(actor),
                 checked_in=guest_in,
+                **ext_values(bot, guild, given, matched),
             )
         await note(
             bot,
@@ -317,8 +334,135 @@ async def add_entrant(
             target=user_id,
             entrant=entrant_id,
             guest=user_id is None,
+            **({"ext": f"{matched['source']}:{matched['ext_id']}"} if matched else {}),
         )
         return done(bot, guild, "entrant_added", row["id"], entrant=wanted, name=row["name"])
+
+
+async def matched_ext(bot: Any, guild: Any, given: dict[str, Any]) -> Any:
+    """The names row an entrant's `ext_source` + `ext_id` point at; both blank is no match."""
+    source = clean_text(given.get("ext_source"), EXT_LIMIT)
+    ext_id = clean_text(given.get("ext_id"), EXT_LIMIT)
+    if not source and not ext_id:
+        return None
+    if not source or not ext_id:
+        raise bad_option(bot, guild, given)("ext_id" if source else "ext_source", "both or neither")
+    found = await sports_names.known(bot.db, source, ext_id)
+    if found is None:
+        raise stop(
+            bot,
+            guild,
+            "brackets_ext_unknown_said",
+            "ext_unknown",
+            400,
+            source=SOURCE_NAMES.get(source, source),
+            ext_id=ext_id,
+        )
+    return found
+
+
+def short_of(bot: Any, guild: Any, given: dict[str, Any]) -> str | None:
+    short = clean_text(given.get("short"), SHORT_LIMIT + 1)
+    if len(short) > SHORT_LIMIT:
+        raise bad_option(bot, guild, given)("short", f"1 to {SHORT_LIMIT} characters")
+    return short or None
+
+
+def ext_values(bot: Any, guild: Any, given: dict[str, Any], matched: Any) -> dict[str, Any]:
+    short = short_of(bot, guild, given)
+    if matched is None:
+        return {"ext_source": None, "ext_id": None, "short": short}
+    return {
+        "ext_source": matched["source"],
+        "ext_id": matched["ext_id"],
+        "short": short or matched["short"],
+    }
+
+
+def seed_value(bot: Any, guild: Any, given: dict[str, Any]) -> int | None:
+    value = given.get("seed")
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= SEED_LIMIT:
+        raise bad_option(bot, guild, given)("seed", f"a whole number from 1 to {SEED_LIMIT}")
+    return value
+
+
+async def edited_values(bot: Any, guild: Any, found: Any, given: dict[str, Any]) -> dict:
+    """Only the fields named, each checked; a matched id with no short name takes the feed's."""
+    values: dict[str, Any] = {}
+    if "name" in given:
+        name = clean_text(given.get("name"), NAME_LIMIT + 1)
+        if not name or len(name) > NAME_LIMIT:
+            raise stop(bot, guild, "no_name", "no_name", 400, limit=NAME_LIMIT)
+        values["name"] = name
+    if "seed" in given:
+        values["seed"] = seed_value(bot, guild, given)
+    if "short" in given:
+        values["short"] = short_of(bot, guild, given)
+    if "ext_source" in given or "ext_id" in given:
+        matched = await matched_ext(bot, guild, given)
+        values["ext_source"] = matched["source"] if matched is not None else None
+        values["ext_id"] = matched["ext_id"] if matched is not None else None
+        if matched is not None and "short" not in given and not found["short"]:
+            values["short"] = matched["short"]
+    return {key: value for key, value in values.items() if found[key] != value}
+
+
+async def sets_holding(bot: Any, row: Any, entrant_id: int) -> tuple[str, ...]:
+    current = await store_.bracket(bot.db, row)
+    if current is None:
+        return ()
+    return tuple(
+        key
+        for key, match in current.matches.items()
+        if int(entrant_id) in (match.slot_a, match.slot_b)
+    )
+
+
+@answered
+async def edit_entrant(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    tournament_id: int,
+    entrant_id: int,
+    given: dict[str, Any],
+    *,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """Name, short name, seed and the feed's id, at any time (the owner's by-hand rule)."""
+    require_on(bot, guild)
+    async with lock_for(bot, tournament_id):
+        row = await loaded(bot, guild, tournament_id)
+        require_runner(bot, guild, actor)
+        found = await person(bot, guild, row, entrant_id)
+        wanted = {key: value for key, value in (given or {}).items() if key in EDIT_FIELDS}
+        values = await edited_values(bot, guild, found, wanted)
+        if values:
+            await store_.update_entrant(bot.db, found["id"], values)
+            await note(
+                bot,
+                guild,
+                "entrant_edited",
+                actor,
+                row["id"],
+                via,
+                target=found["user_id"],
+                entrant=found["id"],
+                changed=sorted(values),
+            )
+        outcome = done(
+            bot,
+            guild,
+            "brackets_entrant_edited_said",
+            row["id"],
+            entrant=values.get("name", found["name"]),
+            name=row["name"],
+        )
+        if "name" in values or "short" in values:
+            return replace(outcome, changed=await sets_holding(bot, row, found["id"]))
+        return outcome
 
 
 @answered

@@ -58,7 +58,10 @@
       "brackets_drop_confirm",
       "brackets_drop_label",
       "brackets_dropped_said",
+      "brackets_edit_entrant_label",
       "brackets_entrant_cap_default",
+      "brackets_entrant_edited_said",
+      "brackets_ext_unknown_said",
       "brackets_forfeit_words",
       "brackets_format_default",
       "brackets_format_double_words",
@@ -73,10 +76,17 @@
       "brackets_kind_has_no_signups_said",
       "brackets_kind_list_words",
       "brackets_kind_sports_words",
+      "brackets_league_mlb_words",
+      "brackets_league_nba_words",
+      "brackets_league_ncaam_words",
+      "brackets_league_ncaaw_words",
+      "brackets_league_nfl_words",
+      "brackets_league_nhl_words",
       "brackets_leave_label",
       "brackets_left_said",
       "brackets_mode",
       "brackets_moved_line",
+      "brackets_names_refresh_hour",
       "brackets_no_role_words",
       "brackets_no_set_said",
       "brackets_no_tournament_said",
@@ -146,6 +156,8 @@
       "brackets_swiss_rounds_default",
       "brackets_third_place_default",
       "brackets_to_role_id",
+      "brackets_typed_entrant_note",
+      "brackets_use_typed_label",
       "brackets_vote_button_change",
       "brackets_vote_closed_line",
       "brackets_vote_hidden_line",
@@ -428,6 +440,7 @@
       "brackets_check_in_minutes": 5,
       "brackets_confirm_minutes": 1,
       "brackets_entrant_cap_default": 2,
+      "brackets_names_refresh_hour": 0,
       "brackets_panel_minutes": 1,
       "brackets_pool_count_default": 1,
       "brackets_pools_swiss_rounds_default": 1,
@@ -549,6 +562,7 @@
       "brackets_check_in_minutes": 1440,
       "brackets_confirm_minutes": 1440,
       "brackets_entrant_cap_default": 1024,
+      "brackets_names_refresh_hour": 23,
       "brackets_panel_minutes": 14,
       "brackets_pool_count_default": 16,
       "brackets_pools_swiss_rounds_default": 20,
@@ -11078,7 +11092,11 @@
           "brackets_pool_raise_label",
           "brackets_kind_list_words",
           "brackets_vote_open_line",
-          "brackets_close_vote_label"
+          "brackets_close_vote_label",
+          "brackets_use_typed_label",
+          "brackets_typed_entrant_note",
+          "brackets_league_nba_words",
+          "brackets_edit_entrant_label"
         ],
         "defaults": [
           "format",
@@ -11157,7 +11175,12 @@
           "dropped",
           "dropped_why",
           "dq",
-          "placement"
+          "placement",
+          "ext_source",
+          "ext_id",
+          "short",
+          "ext_league",
+          "ext_name"
         ],
         "sets": [
           "key",
@@ -12312,6 +12335,146 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/api/brackets/{bracket_sports_id}/entrants",
+      "body": {
+        "ext_source": "espn",
+        "ext_id": "24"
+      },
+      "read_by": [
+        "page-brackets.js Add entrant (sports search)"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind"
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/brackets/{bracket_sports_id}/entrants/{bracket_sports_entrant_id}",
+      "body": {
+        "short": "BOS",
+        "seed": 1
+      },
+      "read_by": [
+        "page-brackets.js Edit entrant"
+      ],
+      "shape": "object",
+      "keys": [
+        "tournament",
+        "message"
+      ],
+      "nested": {
+        "tournament": [
+          "id",
+          "name",
+          "state",
+          "format",
+          "options",
+          "entrants",
+          "sets",
+          "standings",
+          "waiting_on",
+          "may_run",
+          "mine",
+          "finished",
+          "entrant_count",
+          "shadow",
+          "to_name",
+          "kind"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/ref/sports?kind=team&league=nba&q=bos",
+      "read_by": [
+        "page-brackets.js Add entrant typeahead"
+      ],
+      "shape": "list",
+      "keys": [
+        "ext_id",
+        "name",
+        "short",
+        "league",
+        "team",
+        "source"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/sports",
+      "read_by": [
+        "page-brackets.js Sports names"
+      ],
+      "shape": "object",
+      "keys": [
+        "running",
+        "lists",
+        "checked_at"
+      ],
+      "rows": {
+        "lists": [
+          "list",
+          "kind",
+          "league",
+          "rows",
+          "updated_at",
+          "sources",
+          "failed_at",
+          "why"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/sports/refresh",
+      "body": {},
+      "read_by": [
+        "page-brackets.js Refresh names"
+      ],
+      "shape": "object",
+      "keys": [
+        "running",
+        "lists",
+        "checked_at",
+        "message"
+      ],
+      "rows": {
+        "lists": [
+          "list",
+          "kind",
+          "league",
+          "rows",
+          "updated_at",
+          "sources",
+          "failed_at",
+          "why"
+        ]
+      }
+    },
+    {
       "_": "The BaF point system (docs/info/points-design.md §E). The Leaderboard page (layer 3) reads these, and layer 2's /pb panel calls the same moves.",
       "method": "GET",
       "path": "/api/points",
@@ -13162,6 +13325,7 @@
     "web.brackets.entrant_added",
     "web.brackets.entrant_removed",
     "web.brackets.entrant_restored",
+    "web.brackets.entrant_edited",
     "web.brackets.dropped",
     "web.brackets.dq",
     "web.brackets.seeded",
@@ -13202,6 +13366,7 @@
     "web.bluesky.rehearsed",
     "web.bluesky.posted_latest",
     "web.ninja.marked",
-    "web.ninja.ended"
+    "web.ninja.ended",
+    "web.sports.refresh"
   ]
 }

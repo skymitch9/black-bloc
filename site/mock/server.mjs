@@ -1487,6 +1487,18 @@ const SETTING_SPECS = [
   ["brackets_vote_not_open_said", "text", "Voting on {set} is not open.", "Voting on {set} is not open.", "the answer to a vote on a list set whose vote has not opened or has closed"],
   ["brackets_not_votes_said", "text", "{set} is decided by the organiser, not by votes.", "{set} is decided by the organiser, not by votes.", "the answer to a vote on a list set the organiser decides"],
   ["brackets_vote_pick_said", "text", "Pick one of the two names in {set}.", "Pick one of the two names in {set}.", "the answer to a vote that names neither side of a list set"],
+  ["brackets_names_refresh_hour", "int", 4, 4, "the hour (0-23, in default_timezone) the team, school and player names behind a sports bracket's search are fetched again; 4 by default", null, 23, 0],
+  ["brackets_league_nfl_words", "text", "NFL", "NFL", "the name of the NFL on a sports bracket's league chips and cards"],
+  ["brackets_league_nba_words", "text", "NBA", "NBA", "the name of the NBA on a sports bracket's league chips and cards"],
+  ["brackets_league_mlb_words", "text", "MLB", "MLB", "the name of the MLB on a sports bracket's league chips and cards"],
+  ["brackets_league_nhl_words", "text", "NHL", "NHL", "the name of the NHL on a sports bracket's league chips and cards"],
+  ["brackets_league_ncaam_words", "text", "NCAA men's", "NCAA men's", "the name of the NCAA men's on a sports bracket's league chips and cards"],
+  ["brackets_league_ncaaw_words", "text", "NCAA women's", "NCAA women's", "the name of the NCAA women's on a sports bracket's league chips and cards"],
+  ["brackets_typed_entrant_note", "text", "typed \u2014 results by hand", "typed \u2014 results by hand", "the note on a sports bracket's entrant that was typed rather than picked from the names list, so no feed can fill its results"],
+  ["brackets_edit_entrant_label", "text", "Edit entrant", "Edit entrant", "the organiser's button that edits an entrant's name, short name and seed"],
+  ["brackets_entrant_edited_said", "text", "Saved {entrant} in **{name}**.", "Saved {entrant} in **{name}**.", "what an organiser is told after editing an entrant"],
+  ["brackets_ext_unknown_said", "text", "{source} {ext_id} is not in the sports names list, so nothing was saved. Pick the name from the search, or refresh the names list first.", "{source} {ext_id} is not in the sports names list, so nothing was saved. Pick the name from the search, or refresh the names list first.", "the answer when an entrant names a team, school or player the names list does not hold"],
+  ["brackets_use_typed_label", "text", "Use \"{typed}\" as typed", "Use \"{typed}\" as typed", "the last choice under a sports bracket's name search, which adds the name as it was typed"],
   // The BaF point system (docs/info/points-design.md); all of it sits under core.
   ["points_mode", "enum", "shadow", "shadow", "off, test or on: whether runs are taken. off refuses every point system move; test — the default — takes and approves runs and DMs nobody about them; on DMs the runner too. Where the top-places post and the leaderboard sticky go is posts_mode on the Posts page, never this", ["off", "shadow", "on"]],
   ["points_channel_id","channel","1076003845232148580","1076003845232148580","where the post goes when somebody enters, leaves or moves inside the top places while posts_mode is on; #speed-and-pbs by default"],
@@ -2724,7 +2736,7 @@ const STRUCTURE_BACKUP_KEYS = ["structure_backup_mode", "structure_backup_hour",
 CORE_KEYS.push(...STRUCTURE_BACKUP_KEYS);
 const PB_FEED_KEYS = ["pb_feed_mode", "pb_feed_channel_id", "pb_feed_ping_role_id", "pb_feed_auto_match", "pb_feed_interval_minutes", "pb_feed_cycle_requests", "pb_feed_rematch_days", "pb_feed_max_age_days", "pb_feed_max_posts", "pb_feed_panel_minutes", "pb_feed_post_title", "pb_feed_post_text", "pb_feed_post_author", "pb_feed_place_text", "pb_feed_link_label", "pb_feed_panel_title", "pb_feed_panel_footer", "pb_feed_you_matched", "pb_feed_you_set", "pb_feed_posting_on", "pb_feed_posting_off", "pb_feed_you_none", "pb_feed_you_waiting", "pb_feed_you_unlinked", "pb_feed_you_opted_out", "pb_feed_you_blocked", "pb_feed_opt_out_label", "pb_feed_opt_in_label", "pb_feed_opted_out_said", "pb_feed_opted_in_said", "pb_feed_set_said", "pb_feed_unmatched_said", "pb_feed_blocked_said", "pb_feed_unblocked_said", "pb_feed_unblocked_opted_out_said", "pb_feed_no_runner_said", "pb_feed_taken_said", "pb_feed_not_now_said", "pb_feed_nothing_to_do_said", "pb_feed_looked_said", "pb_feed_failed_said", "pb_feed_off_said", "pb_feed_post_again_label", "pb_feed_post_again_pick", "pb_feed_posted_again_said", "pb_feed_rehearsed_again_said", "pb_feed_again_failed_said", "pb_feed_again_off_said", "pb_feed_no_post_said", "pb_feed_again_not_in_feed_said", "pb_feed_dm_set", "pb_feed_dm_unmatched", "pb_feed_dm_blocked", "pb_feed_dm_opt_out_cleared", "pb_feed_dm_no_reason"];
 CORE_KEYS.push(...PB_FEED_KEYS);
-const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_to_role_id", "brackets_ping_role_id", "brackets_format_default", "brackets_best_of", "brackets_best_of_late", "brackets_best_of_finals", "brackets_pools_format_default", "brackets_pools_best_of_default", "brackets_kind_default", "brackets_decide_default", "brackets_grand_final_reset_default", "brackets_third_place_default", "brackets_votes_visible", "brackets_confirm_minutes", "brackets_check_in_minutes", "brackets_best_of_from_round", "brackets_swiss_rounds_default", "brackets_entrant_cap_default", "brackets_panel_minutes", "brackets_pool_count_default", "brackets_advance_per_pool_default", "brackets_advance_losers_from_default", "brackets_pools_swiss_rounds_default", "brackets_vote_minutes", "brackets_checked_in_said", "brackets_checked_out_said", "brackets_joined_said", "brackets_left_said", "brackets_dropped_said", "brackets_set_called_said", "brackets_set_reported_said", "brackets_set_final_said", "brackets_forfeit_words", "brackets_set_disputed_said", "brackets_off_said", "brackets_not_organiser_said", "brackets_no_role_words", "brackets_no_tournament_said", "brackets_wrong_state_said", "brackets_state_draft", "brackets_state_signups", "brackets_state_check_in", "brackets_state_seeding", "brackets_state_running", "brackets_state_complete", "brackets_state_cancelled", "brackets_not_yours_said", "brackets_full_said", "brackets_already_in_said", "brackets_removed_by_to_said", "brackets_no_set_said", "brackets_not_in_set_said", "brackets_not_ready_said", "brackets_not_playable_said", "brackets_already_complete_said", "brackets_disputed_said", "brackets_bad_score_said", "brackets_reported_differently_said", "brackets_not_reported_said", "brackets_own_report_said", "brackets_not_in_bracket_said", "brackets_already_out_said", "brackets_format_single_words", "brackets_format_double_words", "brackets_format_round_robin_words", "brackets_format_swiss_words", "brackets_card_format_line", "brackets_card_reset_words", "brackets_card_third_words", "brackets_card_rounds_words", "brackets_card_late_words", "brackets_card_finals_words", "brackets_card_state_line", "brackets_card_entrants_line", "brackets_card_entrants_cap_line", "brackets_card_starts_line", "brackets_card_check_in_line", "brackets_card_to_line", "brackets_card_place_line", "brackets_card_link_label", "brackets_sign_up_label", "brackets_leave_label", "brackets_check_in_label", "brackets_not_entered_said", "brackets_set_card_players", "brackets_round_winners", "brackets_round_losers", "brackets_round_grand", "brackets_round_reset", "brackets_round_third", "brackets_round_plain", "brackets_set_card_title", "brackets_set_card_best_of", "brackets_set_card_rematch", "brackets_set_card_ready", "brackets_set_card_called", "brackets_set_card_reported", "brackets_set_card_disputed", "brackets_set_card_note", "brackets_set_card_cleared", "brackets_report_label", "brackets_confirm_label", "brackets_dispute_label", "brackets_report_title", "brackets_score_label", "brackets_dispute_title", "brackets_dispute_note_label", "brackets_score_not_number_said", "brackets_panel_title", "brackets_panel_line", "brackets_panel_empty", "brackets_pick_placeholder", "brackets_pick_set_placeholder", "brackets_back_label", "brackets_your_sets_title", "brackets_drop_label", "brackets_drop_confirm", "brackets_panel_footer", "brackets_dm_removed", "brackets_dm_dq", "brackets_dm_dropped", "brackets_dm_decided", "brackets_dm_reset", "brackets_dm_reason", "brackets_start_ping", "brackets_moved_line", "brackets_waiting_play", "brackets_waiting_called", "brackets_waiting_confirm", "brackets_waiting_opponent_confirms", "brackets_waiting_to_decides", "brackets_waiting_waits", "brackets_waiting_next_round", "brackets_waiting_done", "brackets_waiting_out", "brackets_discord_label", "brackets_state_pools", "brackets_round_pool", "brackets_pool_title", "brackets_card_pools_words", "brackets_card_losers_words", "brackets_card_pool_line", "brackets_waiting_final", "brackets_pool_tied", "brackets_pool_raise_label", "brackets_kind_fighters_words", "brackets_kind_sports_words", "brackets_kind_list_words", "brackets_decide_votes_words", "brackets_decide_organiser_words", "brackets_vote_said", "brackets_vote_open_line", "brackets_vote_hidden_line", "brackets_vote_closed_line", "brackets_vote_tied_line", "brackets_vote_button_change", "brackets_close_vote_label", "brackets_kind_has_no_signups_said", "brackets_vote_not_open_said", "brackets_not_votes_said", "brackets_vote_pick_said"];
+const BRACKETS_KEYS = ["brackets_mode", "brackets_channel_id", "brackets_to_role_id", "brackets_ping_role_id", "brackets_format_default", "brackets_best_of", "brackets_best_of_late", "brackets_best_of_finals", "brackets_pools_format_default", "brackets_pools_best_of_default", "brackets_kind_default", "brackets_decide_default", "brackets_grand_final_reset_default", "brackets_third_place_default", "brackets_votes_visible", "brackets_confirm_minutes", "brackets_check_in_minutes", "brackets_best_of_from_round", "brackets_swiss_rounds_default", "brackets_entrant_cap_default", "brackets_panel_minutes", "brackets_pool_count_default", "brackets_advance_per_pool_default", "brackets_advance_losers_from_default", "brackets_pools_swiss_rounds_default", "brackets_vote_minutes", "brackets_names_refresh_hour", "brackets_checked_in_said", "brackets_checked_out_said", "brackets_joined_said", "brackets_left_said", "brackets_dropped_said", "brackets_set_called_said", "brackets_set_reported_said", "brackets_set_final_said", "brackets_forfeit_words", "brackets_set_disputed_said", "brackets_off_said", "brackets_not_organiser_said", "brackets_no_role_words", "brackets_no_tournament_said", "brackets_wrong_state_said", "brackets_state_draft", "brackets_state_signups", "brackets_state_check_in", "brackets_state_seeding", "brackets_state_running", "brackets_state_complete", "brackets_state_cancelled", "brackets_not_yours_said", "brackets_full_said", "brackets_already_in_said", "brackets_removed_by_to_said", "brackets_no_set_said", "brackets_not_in_set_said", "brackets_not_ready_said", "brackets_not_playable_said", "brackets_already_complete_said", "brackets_disputed_said", "brackets_bad_score_said", "brackets_reported_differently_said", "brackets_not_reported_said", "brackets_own_report_said", "brackets_not_in_bracket_said", "brackets_already_out_said", "brackets_format_single_words", "brackets_format_double_words", "brackets_format_round_robin_words", "brackets_format_swiss_words", "brackets_card_format_line", "brackets_card_reset_words", "brackets_card_third_words", "brackets_card_rounds_words", "brackets_card_late_words", "brackets_card_finals_words", "brackets_card_state_line", "brackets_card_entrants_line", "brackets_card_entrants_cap_line", "brackets_card_starts_line", "brackets_card_check_in_line", "brackets_card_to_line", "brackets_card_place_line", "brackets_card_link_label", "brackets_sign_up_label", "brackets_leave_label", "brackets_check_in_label", "brackets_not_entered_said", "brackets_set_card_players", "brackets_round_winners", "brackets_round_losers", "brackets_round_grand", "brackets_round_reset", "brackets_round_third", "brackets_round_plain", "brackets_set_card_title", "brackets_set_card_best_of", "brackets_set_card_rematch", "brackets_set_card_ready", "brackets_set_card_called", "brackets_set_card_reported", "brackets_set_card_disputed", "brackets_set_card_note", "brackets_set_card_cleared", "brackets_report_label", "brackets_confirm_label", "brackets_dispute_label", "brackets_report_title", "brackets_score_label", "brackets_dispute_title", "brackets_dispute_note_label", "brackets_score_not_number_said", "brackets_panel_title", "brackets_panel_line", "brackets_panel_empty", "brackets_pick_placeholder", "brackets_pick_set_placeholder", "brackets_back_label", "brackets_your_sets_title", "brackets_drop_label", "brackets_drop_confirm", "brackets_panel_footer", "brackets_dm_removed", "brackets_dm_dq", "brackets_dm_dropped", "brackets_dm_decided", "brackets_dm_reset", "brackets_dm_reason", "brackets_start_ping", "brackets_moved_line", "brackets_waiting_play", "brackets_waiting_called", "brackets_waiting_confirm", "brackets_waiting_opponent_confirms", "brackets_waiting_to_decides", "brackets_waiting_waits", "brackets_waiting_next_round", "brackets_waiting_done", "brackets_waiting_out", "brackets_discord_label", "brackets_state_pools", "brackets_round_pool", "brackets_pool_title", "brackets_card_pools_words", "brackets_card_losers_words", "brackets_card_pool_line", "brackets_waiting_final", "brackets_pool_tied", "brackets_pool_raise_label", "brackets_kind_fighters_words", "brackets_kind_sports_words", "brackets_kind_list_words", "brackets_decide_votes_words", "brackets_decide_organiser_words", "brackets_vote_said", "brackets_vote_open_line", "brackets_vote_hidden_line", "brackets_vote_closed_line", "brackets_vote_tied_line", "brackets_vote_button_change", "brackets_close_vote_label", "brackets_kind_has_no_signups_said", "brackets_vote_not_open_said", "brackets_not_votes_said", "brackets_vote_pick_said", "brackets_league_nfl_words", "brackets_league_nba_words", "brackets_league_mlb_words", "brackets_league_nhl_words", "brackets_league_ncaam_words", "brackets_league_ncaaw_words", "brackets_typed_entrant_note", "brackets_edit_entrant_label", "brackets_entrant_edited_said", "brackets_ext_unknown_said", "brackets_use_typed_label"];
 CORE_KEYS.push(...BRACKETS_KEYS);
 const POINTS_KEYS = ["points_mode", "points_channel_id", "points_ping_role_id", "points_verifier_role_id", "points_xp_tiers", "points_xp_min", "points_xp_max", "points_per_run", "points_top_n", "points_board_order", "points_bounty_clock", "points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_next_rank_top_said", "points_next_rank_unranked_top_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 CORE_KEYS.push(...POINTS_KEYS);
@@ -16682,13 +16694,149 @@ const BK_PAGE_WORDS = [
   'brackets_decide_votes_words', 'brackets_decide_organiser_words', 'brackets_vote_open_line',
   'brackets_vote_hidden_line', 'brackets_vote_closed_line', 'brackets_vote_tied_line',
   'brackets_vote_button_change', 'brackets_close_vote_label',
+  'brackets_league_nfl_words', 'brackets_league_nba_words', 'brackets_league_mlb_words',
+  'brackets_league_nhl_words', 'brackets_league_ncaam_words', 'brackets_league_ncaaw_words',
+  'brackets_typed_entrant_note', 'brackets_edit_entrant_label', 'brackets_use_typed_label',
 ];
 
 function bkEntrant(id, user_id, name, extra = {}) {
   return {
     id, user_id, name, guest: user_id === null, seed: null, checked_in: false, dropped: false,
-    dropped_why: null, dq: false, placement: null, final_rank: null, ...extra,
+    dropped_why: null, dq: false, placement: null, final_rank: null,
+    ext_source: null, ext_id: null, short: null, ...extra,
   };
+}
+
+// The sports names cache (black_bloc/sports_names.py): a few rows per list, from the trimmed
+// fixtures in tests/sports/fixtures/. Ranked like `sports_names.rank`.
+const SPORTS_NAMES = [
+  ['team', 'nba', 'espn', '2', 'Boston Celtics', 'BOS', 'Celtics | Boston'],
+  ['team', 'nba', 'espn', '24', 'San Antonio Spurs', 'SA', 'Spurs | San Antonio'],
+  ['team', 'nba', 'espn', '18', 'New York Knicks', 'NY', 'Knicks | New York'],
+  ['team', 'nfl', 'espn', '12', 'Kansas City Chiefs', 'KC', 'Chiefs | Kansas City'],
+  ['team', 'nfl', 'espn', '26', 'Seattle Seahawks', 'SEA', 'Seahawks | Seattle'],
+  ['team', 'nfl', 'espn', '17', 'New England Patriots', 'NE', 'Patriots | New England'],
+  ['team', 'mlb', 'mlb', '158', 'Milwaukee Brewers', 'MIL', 'Brewers | Milwaukee'],
+  ['team', 'mlb', 'mlb', '139', 'Tampa Bay Rays', 'TB', 'Rays | Tampa Bay'],
+  ['team', 'nhl', 'espn', '7', 'Carolina Hurricanes', 'CAR', 'Hurricanes | Carolina'],
+  ['team', 'nhl', 'espn', '2', 'Buffalo Sabres', 'BUF', 'Sabres | Buffalo'],
+  ['team', 'ncaam', 'espn', '150', 'Duke Blue Devils', 'DUKE', 'Duke | Blue Devils'],
+  ['team', 'ncaam', 'espn', '2250', 'Gonzaga Bulldogs', 'GONZ', 'Gonzaga | Bulldogs'],
+  ['team', 'ncaam', 'espn', '153', 'North Carolina Tar Heels', 'UNC', 'North Carolina | Tar Heels'],
+  ['team', 'ncaaw', 'espn', '41', 'UConn Huskies', 'CONN', 'UConn | Huskies'],
+  ['team', 'ncaaw', 'espn', '2579', 'South Carolina Gamecocks', 'SC', 'South Carolina | Gamecocks'],
+  ['school', '', 'ncaa', 'duke', 'Duke', null, 'Duke University'],
+  ['school', '', 'ncaa', 'gonzaga', 'Gonzaga', null, 'Gonzaga University'],
+  ['school', '', 'ncaa', 'uconn', 'Connecticut', null, 'University of Connecticut'],
+  ['school', '', 'ncaa', 'michigan', 'Michigan', null, 'University of Michigan'],
+  ['player', 'nba', 'espn', '3195', 'Mike Conley', 'M. Conley', null, '2'],
+  ['player', 'nba', 'espn', '4433188', 'Devin Carter', 'D. Carter', null, '2'],
+  ['player', 'nfl', 'espn', '3139477', 'Patrick Mahomes', 'P. Mahomes', null, '12'],
+  ['player', 'mlb', 'mlb', '592450', 'Aaron Judge', 'A Judge', null, '147'],
+].map(([kind, league, source, ext_id, name, short, aliases, team_ext_id = null]) => ({ kind, league, source, ext_id, name, short, aliases, team_ext_id }));
+const SPORTS_LISTS = [
+  ...['nfl', 'nba', 'mlb', 'nhl', 'ncaam', 'ncaaw'].map((league) => ['team', league]),
+  ['school', ''],
+  ...['nfl', 'nba', 'mlb', 'nhl'].map((league) => ['player', league]),
+];
+const SPORTS_SOURCE_NAMES = { espn: 'ESPN', ncaa: 'NCAA (ncaa-api)', nhl: 'NHL', nba: 'NBA', mlb: 'MLB' };
+
+function sportsState() {
+  if (!state.sports) {
+    state.sports = {
+      updated_at: minutesAgo(60 * 9),
+      failures: { 'player:nhl': { why: 'ESPN had a server error for the NHL roster of team 2', at: minutesAgo(60 * 9) } },
+    };
+  }
+  return state.sports;
+}
+
+function sportsKnown(source, extId) {
+  return SPORTS_NAMES.find((one) => one.source === String(source) && one.ext_id === String(extId)) || null;
+}
+
+function sportsRank(one, wanted) {
+  const name = one.name.toLowerCase();
+  const aliases = String(one.aliases || '').toLowerCase().split(' | ').filter(Boolean);
+  if (name.startsWith(wanted)) return 0;
+  const first = wanted.split(' ')[0];
+  if (name.split(/\s+/).some((word) => word.startsWith(first))) return 1;
+  if (String(one.short || '').toLowerCase().startsWith(first) || aliases.some((alias) => alias.startsWith(first))) return 2;
+  return 3;
+}
+
+function sportsSearch(kind, league, query, limit = 25) {
+  const wanted = String(query || '').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+  if (!wanted || !['team', 'school', 'player'].includes(kind)) return [];
+  const teamOf = (one) => (SPORTS_NAMES.find((team) => team.kind === 'team' && team.source === one.source && team.league === one.league && team.ext_id === one.team_ext_id) || {}).name || null;
+  return SPORTS_NAMES
+    .filter((one) => one.kind === kind && (!league || kind === 'school' || one.league === league))
+    .filter((one) => wanted.split(' ').every((word) => [one.name, one.short || '', one.aliases || ''].some((text) => text.toLowerCase().includes(word))))
+    .sort((a, b) => sportsRank(a, wanted) - sportsRank(b, wanted) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+    .slice(0, Math.max(1, Math.min(Number(limit) || 25, 25)))
+    .map((one) => ({ ext_id: one.ext_id, name: one.name, short: one.short, league: one.league, team: teamOf(one), source: one.source, kind: one.kind }));
+}
+
+function sportsStatus() {
+  const held = sportsState();
+  return {
+    running: false,
+    lists: SPORTS_LISTS.map(([kind, league]) => {
+      const list = league ? `${kind}:${league}` : kind;
+      const rows = SPORTS_NAMES.filter((one) => one.kind === kind && one.league === league);
+      const failing = held.failures[list] || null;
+      return {
+        list, kind, league, rows: rows.length, updated_at: rows.length ? held.updated_at : null,
+        sources: [...new Set(rows.map((one) => SPORTS_SOURCE_NAMES[one.source] || one.source))].sort(),
+        failed_at: failing ? failing.at : null, why: failing ? failing.why : null,
+      };
+    }),
+    checked_at: now(),
+  };
+}
+
+route('GET', '/api/ref/sports', (context) => {
+  requireMember(context.session);
+  const params = context.url.searchParams;
+  return sportsSearch(params.get('kind') || 'team', params.get('league') || '', params.get('q') || '', params.get('limit') || 25);
+});
+
+route('GET', '/api/sports', (context) => {
+  requireStaff(context.session);
+  return sportsStatus();
+});
+
+route('POST', '/api/sports/refresh', (context) => {
+  requireStaff(context.session);
+  sportsState().updated_at = now();
+  logAction('web.sports.refresh', { actor_id: actorOf(context.session), details: { via: 'website' } });
+  const found = sportsStatus();
+  const answered = found.lists.filter((one) => !one.why).length;
+  logAction('sports.names_refreshed', { actor_id: actorOf(context.session), details: { via: 'website', failed: found.lists.filter((one) => one.why).map((one) => one.list) } });
+  return { ...found, message: `Names refreshed: ${answered} of ${found.lists.length} lists answered.` };
+});
+
+function bkExt(body, t) {
+  const source = String(body.ext_source ?? '').trim();
+  const extId = String(body.ext_id ?? '').trim();
+  if (!source && !extId) return null;
+  if (!source || !extId) {
+    throw new Refused(400, 'bad_option', bkSay('bad_option', { field: source ? 'ext_id' : 'ext_source', given: String((source ? body.ext_id : body.ext_source) ?? '').slice(0, 40), allowed: 'both or neither' }));
+  }
+  const found = sportsKnown(source, extId);
+  if (!found) throw new Refused(400, 'ext_unknown', bkSay('brackets_ext_unknown_said', { source: SPORTS_SOURCE_NAMES[source] || source, ext_id: extId }));
+  return found;
+}
+
+function bkShort(body) {
+  const short = String(body.short ?? '').replace(/\s+/g, ' ').trim();
+  if (short.length > 20) throw new Refused(400, 'bad_option', bkSay('bad_option', { field: 'short', given: short.slice(0, 40), allowed: '1 to 20 characters' }));
+  return short || null;
+}
+
+function bkEntrantView(one) {
+  const named = one.ext_id ? sportsKnown(one.ext_source, one.ext_id) : null;
+  return { ...one, ext_league: named ? named.league : null, ext_name: named ? named.name : null };
 }
 
 function bkTournament(id, name, state_, entrants, extra = {}) {
@@ -16904,6 +17052,13 @@ function seedBrackets() {
       game: null, kind: 'list', decide_by: 'organiser', vote_minutes: 1440, starts_at: null,
       options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
     }),
+    bkTournament(21, 'NBA Playoffs 2027', 'seeding', [
+      bkEntrant(251, null, 'Boston Celtics', { ext_source: 'espn', ext_id: '2', short: 'BOS' }),
+      bkEntrant(252, null, 'Bobcats'),
+    ], {
+      game: null, kind: 'sports', starts_at: null,
+      options: { best_of: 1, best_of_late: 1, best_of_finals: 1 },
+    }),
   ];
 }
 
@@ -16976,7 +17131,7 @@ function bkSignups(t) {
 }
 
 function bkState() {
-  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 21, nextEntrant: 200 };
+  if (!state.brackets) state.brackets = { tournaments: seedBrackets(), next: 22, nextEntrant: 300 };
   return state.brackets;
 }
 
@@ -17163,6 +17318,7 @@ function bkView(t, context) {
     rounds_to_play: t.format === 'swiss' ? mockBrackets.swissRounds(t.sets.length ? new Set(t.sets.flatMap((one) => [one.slot_a, one.slot_b]).filter((id) => id !== null)).size : bkPlaying(t).length, t.options) : null,
     may_run: bkMayRun(context),
     mine: mine ? mine.id : null,
+    entrants: t.entrants.map(bkEntrantView),
     sets: t.sets.map((one) => bkSetRow(one, names, me)),
     standings: bkStandings(t),
     waiting_on: pooled ? mockBrackets.poolWaiting(t) : mockBrackets.waitingOn(t),
@@ -17384,14 +17540,53 @@ route('POST', '/api/brackets/:tournament_id/entrants', async (context) => {
   bkRuns(context);
   bkIn(t, 'draft', 'signups', 'check_in', 'seeding');
   const body = await context.body();
-  const user = body.user_id ? String(body.user_id) : null;
-  const name = String(body.name || (user ? memberName(user) : '') || '').trim();
+  const user = body.user_id && !['list', 'sports'].includes(t.kind) ? String(body.user_id) : null;
+  const matched = bkExt(body, t);
+  const short = bkShort(body);
+  const name = String(body.name || (matched ? matched.name : '') || (user ? memberName(user) : '') || '').trim();
   if (!name || name.length > 100) throw new Refused(400, 'no_name', bkSay('no_name', { limit: 100 }));
   const back = user ? t.entrants.find((one) => one.user_id === user) : null;
   if (back && !back.dropped) throw new Refused(409, 'already_in', bkSay('brackets_already_in_said', { entrant: back.name, name: t.name }));
+  const ext = matched ? { ext_source: matched.source, ext_id: matched.ext_id, short: short || matched.short } : { short };
   if (back) Object.assign(back, { dropped: false, dropped_why: null });
-  else t.entrants.push(bkEntrant(bkState().nextEntrant++, user, name, { seed: t.entrants.length + 1, checked_in: !user && t.state === 'check_in' }));
-  return bkAnswer(context, t, 'entrant_added', 'entrant_added', { entrant: name }, { guest: !user });
+  else t.entrants.push(bkEntrant(bkState().nextEntrant++, user, name, { seed: t.entrants.length + 1, checked_in: !user && t.state === 'check_in', ...ext }));
+  return bkAnswer(context, t, 'entrant_added', 'entrant_added', { entrant: name }, { guest: !user, ...(matched ? { ext: `${matched.source}:${matched.ext_id}` } : {}) });
+});
+
+route('PATCH', '/api/brackets/:tournament_id/entrants/:entrant_id', async (context) => {
+  requireMember(context.session);
+  bkOff();
+  const t = bkOf(context);
+  bkRuns(context);
+  const one = bkEntrantOf(t, context);
+  const body = await context.body();
+  const values = {};
+  if ('name' in body) {
+    const name = String(body.name || '').replace(/\s+/g, ' ').trim();
+    if (!name || name.length > 100) throw new Refused(400, 'no_name', bkSay('no_name', { limit: 100 }));
+    values.name = name;
+  }
+  if ('seed' in body) {
+    const seed = body.seed;
+    if (seed !== null && seed !== '' && !(Number.isInteger(seed) && seed >= 1 && seed <= 1024)) {
+      throw new Refused(400, 'bad_option', bkSay('bad_option', { field: 'seed', given: String(seed).slice(0, 40), allowed: 'a whole number from 1 to 1024' }));
+    }
+    values.seed = seed === '' ? null : seed;
+  }
+  if ('short' in body) values.short = bkShort(body);
+  if ('ext_source' in body || 'ext_id' in body) {
+    const matched = bkExt(body, t);
+    values.ext_source = matched ? matched.source : null;
+    values.ext_id = matched ? matched.ext_id : null;
+    if (matched && !('short' in body) && !one.short) values.short = matched.short;
+  }
+  const changed = Object.keys(values).filter((key) => one[key] !== values[key]).sort();
+  for (const key of changed) one[key] = values[key];
+  if (changed.length) {
+    t.updated_at = now();
+    logAction('web.brackets.entrant_edited', { actor_id: actorOf(context.session), details: { via: 'website', tournament: t.id, entrant: one.id, changed } });
+  }
+  return { tournament: bkView(t, context), message: bkSay('brackets_entrant_edited_said', { entrant: one.name, name: t.name }) };
 });
 
 route('DELETE', '/api/brackets/:tournament_id/entrants/:entrant_id', async (context) => {

@@ -214,3 +214,120 @@ async def test_a_dq_in_pools_forfeits_their_pool_sets_and_keeps_them_out_of_the_
     }
     assert ada not in seated and len(seated) == 2
     assert (await people.restore_entrant(bot, guild, who(guild, TO), tid, ada)).ok
+
+
+async def sports_made(bot, guild):
+    from black_bloc import sports_names
+    from black_bloc.sports.model import Team
+
+    teams = [
+        Team("2", "Boston Celtics", "BOS", "nba", ("Celtics",)),
+        Team("24", "San Antonio Spurs", "SA", "nba"),
+    ]
+    await sports_names.upsert(bot.db, "team", "nba", "espn", teams)
+    values = {"name": "Playoffs", "kind": "sports", "format": "single"}
+    return await store_.create(bot.db, GUILD, values, TO)
+
+
+async def test_a_matched_entrant_keeps_the_feeds_id_and_takes_its_name_and_short(bot, guild):
+    tid = await sports_made(bot, guild)
+    added = await people.add_entrant(
+        bot, guild, who(guild, TO), tid, ext_source="espn", ext_id="2", user_id=ADA
+    )
+    assert (added.ok, added.message) == (True, "Boston Celtics is in **Playoffs**.")
+    (one,) = await store_.entrants(bot.db, tid)
+    assert (one["name"], one["short"], one["ext_source"], one["ext_id"], one["user_id"]) == (
+        "Boston Celtics",
+        "BOS",
+        "espn",
+        "2",
+        None,
+    )
+    (row,) = [one for one in await rows(bot.db) if one[0] == "brackets.entrant_added"]
+    assert row[3]["ext"] == "espn:2"
+
+
+async def test_an_id_the_names_list_does_not_hold_is_refused_in_words(bot, guild):
+    tid = await sports_made(bot, guild)
+    refused = await people.add_entrant(
+        bot, guild, who(guild, TO), tid, name="Lakers", ext_source="espn", ext_id="13"
+    )
+    assert (refused.ok, refused.code, refused.status) == (False, "ext_unknown", 400)
+    assert refused.message.startswith("ESPN 13 is not in the sports names list")
+    half = await people.add_entrant(bot, guild, who(guild, TO), tid, name="x", ext_source="espn")
+    assert (half.code, "both or neither" in half.message) == ("bad_option", True)
+    assert await store_.entrants(bot.db, tid) == []
+
+
+async def test_a_typed_name_has_no_feed_id(bot, guild):
+    tid = await sports_made(bot, guild)
+    assert (await people.add_entrant(bot, guild, who(guild, TO), tid, name="Bobcats")).ok
+    (one,) = await store_.entrants(bot.db, tid)
+    assert (one["ext_source"], one["ext_id"], one["short"]) == (None, None, None)
+
+
+async def test_an_organiser_edits_name_short_seed_and_id_at_any_time(bot, guild):
+    tid = await started(bot, guild, ADA, BEA, format="single")
+    await sports_made(bot, guild)
+    ada = await entrant_id(bot, tid, ADA)
+    edited = await people.edit_entrant(
+        bot,
+        guild,
+        who(guild, TO),
+        tid,
+        ada,
+        {"name": "Ada L.", "short": "ADA", "seed": 7, "ext_source": "espn", "ext_id": "24"},
+        via=VIA_WEBSITE,
+    )
+    assert (edited.ok, edited.message) == (True, "Saved Ada L. in **Knuck Up 12**.")
+    assert edited.changed == ("W1-1",)
+    one = await store_.entrant(bot.db, tid, ada)
+    assert (one["name"], one["short"], one["seed"], one["ext_source"], one["ext_id"]) == (
+        "Ada L.",
+        "ADA",
+        7,
+        "espn",
+        "24",
+    )
+    (row,) = [one for one in await rows(bot.db) if "entrant_edited" in one[0]]
+    assert row[0] == "web.brackets.entrant_edited"
+    assert row[3]["changed"] == ["ext_id", "ext_source", "name", "seed", "short"]
+    cleared = await people.edit_entrant(
+        bot, guild, who(guild, TO), tid, ada, {"ext_source": None, "ext_id": None, "short": ""}
+    )
+    assert cleared.ok
+    one = await store_.entrant(bot.db, tid, ada)
+    assert (one["ext_source"], one["ext_id"], one["short"]) == (None, None, None)
+
+
+async def test_a_matched_id_fills_an_empty_short_and_nothing_changed_writes_nothing(bot, guild):
+    tid = await sports_made(bot, guild)
+    await people.add_entrant(bot, guild, who(guild, TO), tid, name="Celts")
+    (one,) = await store_.entrants(bot.db, tid)
+    await people.edit_entrant(
+        bot, guild, who(guild, TO), tid, one["id"], {"ext_source": "espn", "ext_id": "2"}
+    )
+    assert (await store_.entrant(bot.db, tid, one["id"]))["short"] == "BOS"
+    before = len(await rows(bot.db))
+    again = await people.edit_entrant(bot, guild, who(guild, TO), tid, one["id"], {"name": "Celts"})
+    assert again.ok and again.changed == ()
+    assert len(await rows(bot.db)) == before
+
+
+async def test_an_edit_is_the_organisers_and_each_field_is_checked(bot, guild):
+    tid = await sports_made(bot, guild)
+    await people.add_entrant(bot, guild, who(guild, TO), tid, name="Celts")
+    (one,) = await store_.entrants(bot.db, tid)
+    refused = await people.edit_entrant(bot, guild, who(guild, ADA), tid, one["id"], {"seed": 2})
+    assert refused.code == "not_organiser"
+    for given, code in (
+        ({"name": ""}, "no_name"),
+        ({"seed": 0}, "bad_option"),
+        ({"seed": "2"}, "bad_option"),
+        ({"short": "x" * 21}, "bad_option"),
+        ({"ext_source": "espn", "ext_id": "999"}, "ext_unknown"),
+    ):
+        outcome = await people.edit_entrant(bot, guild, who(guild, TO), tid, one["id"], given)
+        assert (outcome.ok, outcome.code) == (False, code), given
+    missing = await people.edit_entrant(bot, guild, who(guild, TO), tid, 9999, {"seed": 2})
+    assert missing.code == "no_entrant"

@@ -133,6 +133,11 @@ export async function refMembers(query) {
   return listOf(found, 'members');
 }
 
+export async function refSports(kind, league, query) {
+  const params = new URLSearchParams({ kind: kind || 'team', league: league || '', q: query || '' });
+  return listOf(await api(`/api/ref/sports?${params}`), 'names');
+}
+
 export function forgetRefs() {
   channelsCache = null;
   rolesCache = null;

@@ -70,6 +70,7 @@ COGS: tuple[str, ...] = (
     "black_bloc.cogs.community.brackets",
     "black_bloc.cogs.community.questions",
     "black_bloc.cogs.community.ninja",
+    "black_bloc.cogs.community.sports",
     "black_bloc.cogs.content.runs",
 )
 

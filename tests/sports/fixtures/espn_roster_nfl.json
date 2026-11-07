@@ -1,0 +1,80 @@
+{
+ "season": {
+  "year": 2026,
+  "displayName": "2026",
+  "type": 2,
+  "name": "Regular Season"
+ },
+ "team": {
+  "id": "12",
+  "abbreviation": "KC",
+  "location": "Kansas City",
+  "name": "Chiefs",
+  "displayName": "Kansas City Chiefs"
+ },
+ "athletes": [
+  {
+   "position": "offense",
+   "items": [
+    {
+     "id": "4912218",
+     "firstName": "Cyrus",
+     "lastName": "Allen",
+     "fullName": "Cyrus Allen",
+     "displayName": "Cyrus Allen",
+     "shortName": "C. Allen",
+     "jersey": "13",
+     "position": {
+      "abbreviation": "WR",
+      "name": "Wide Receiver"
+     }
+    },
+    {
+     "id": "5093923",
+     "firstName": "Andrew",
+     "lastName": "Armstrong",
+     "fullName": "Andrew Armstrong",
+     "displayName": "Andrew Armstrong",
+     "shortName": "A. Armstrong",
+     "jersey": "85",
+     "position": {
+      "abbreviation": "WR",
+      "name": "Wide Receiver"
+     }
+    }
+   ]
+  },
+  {
+   "position": "defense",
+   "items": [
+    {
+     "id": "4612387",
+     "firstName": "Felix",
+     "lastName": "Anudike-Uzomah",
+     "fullName": "Felix Anudike-Uzomah",
+     "displayName": "Felix Anudike-Uzomah",
+     "shortName": "F. Anudike-Uzomah",
+     "jersey": "91",
+     "position": {
+      "abbreviation": "DE",
+      "name": "Defensive End"
+     }
+    },
+    {
+     "id": "4602389",
+     "firstName": "Jeffrey",
+     "lastName": "Bassa",
+     "fullName": "Jeffrey Bassa",
+     "displayName": "Jeffrey Bassa",
+     "shortName": "J. Bassa",
+     "jersey": "31",
+     "position": {
+      "abbreviation": "LB",
+      "name": "Linebacker"
+     }
+    }
+   ]
+  }
+ ],
+ "status": "success"
+}

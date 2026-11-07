@@ -1,0 +1,83 @@
+{
+ "updated_at": "2026-11-07 02:31:07",
+ "games": [
+  {
+   "game": {
+    "gameID": "6534597",
+    "title": "TCU Ohio St.",
+    "gameState": "final",
+    "startDate": "03/19/2026",
+    "startTime": "12:15 PM ET",
+    "startTimeEpoch": "1773936900",
+    "currentPeriod": "FINAL",
+    "contestClock": "0:00",
+    "finalMessage": "FINAL",
+    "bracketId": 202,
+    "bracketRound": 2,
+    "away": {
+     "score": "66",
+     "winner": true,
+     "seed": "9",
+     "rank": "",
+     "names": {
+      "char6": "TCU",
+      "short": "TCU",
+      "seo": "tcu",
+      "full": ""
+     }
+    },
+    "home": {
+     "score": "64",
+     "winner": false,
+     "seed": "8",
+     "rank": "",
+     "names": {
+      "char6": "OHIOST",
+      "short": "Ohio St.",
+      "seo": "ohio-st",
+      "full": ""
+     }
+    }
+   }
+  },
+  {
+   "game": {
+    "gameID": "6534607",
+    "title": "Troy Nebraska",
+    "gameState": "final",
+    "startDate": "03/19/2026",
+    "startTime": "12:40 PM ET",
+    "startTimeEpoch": "1773938400",
+    "currentPeriod": "FINAL",
+    "contestClock": "0:00",
+    "finalMessage": "FINAL",
+    "bracketId": 212,
+    "bracketRound": 2,
+    "away": {
+     "score": "47",
+     "winner": false,
+     "seed": "13",
+     "rank": "",
+     "names": {
+      "char6": "TROY",
+      "short": "Troy",
+      "seo": "troy",
+      "full": ""
+     }
+    },
+    "home": {
+     "score": "76",
+     "winner": true,
+     "seed": "4",
+     "rank": "",
+     "names": {
+      "char6": "NEB",
+      "short": "Nebraska",
+      "seo": "nebraska",
+      "full": ""
+     }
+    }
+   }
+  }
+ ]
+}

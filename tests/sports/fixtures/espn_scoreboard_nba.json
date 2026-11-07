@@ -1,0 +1,226 @@
+{
+ "season": {
+  "type": 2,
+  "year": 2027
+ },
+ "day": {
+  "date": "2026-11-06"
+ },
+ "events": [
+  {
+   "id": "401909287",
+   "date": "2026-11-07T00:00Z",
+   "name": "Washington Wizards at Atlanta Hawks",
+   "shortName": "WSH @ ATL",
+   "season": {
+    "year": 2027,
+    "type": 2,
+    "slug": "regular-season"
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0.0",
+    "period": 4,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401909287",
+     "date": "2026-11-07T00:00Z",
+     "type": {
+      "id": "1",
+      "abbreviation": "STD"
+     },
+     "notes": [
+      {
+       "type": "event",
+       "headline": "NBA Cup - Group Play"
+      }
+     ],
+     "competitors": [
+      {
+       "id": "1",
+       "homeAway": "home",
+       "winner": true,
+       "score": "139",
+       "order": 0,
+       "team": {
+        "id": "1",
+        "location": "Atlanta",
+        "name": "Hawks",
+        "abbreviation": "ATL",
+        "displayName": "Atlanta Hawks",
+        "shortDisplayName": "Hawks"
+       }
+      },
+      {
+       "id": "27",
+       "homeAway": "away",
+       "winner": false,
+       "score": "132",
+       "order": 1,
+       "team": {
+        "id": "27",
+        "location": "Washington",
+        "name": "Wizards",
+        "abbreviation": "WSH",
+        "displayName": "Washington Wizards",
+        "shortDisplayName": "Wizards"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401909289",
+   "date": "2026-11-07T00:30Z",
+   "name": "Philadelphia 76ers at Cleveland Cavaliers",
+   "shortName": "PHI @ CLE",
+   "season": {
+    "year": 2027,
+    "type": 2,
+    "slug": "regular-season"
+   },
+   "status": {
+    "clock": 86.0,
+    "displayClock": "1:26",
+    "period": 3,
+    "type": {
+     "id": "2",
+     "name": "STATUS_IN_PROGRESS",
+     "state": "in",
+     "completed": false,
+     "description": "In Progress",
+     "detail": "1:26 - 3rd Quarter",
+     "shortDetail": "1:26 - 3rd"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401909289",
+     "date": "2026-11-07T00:30Z",
+     "type": {
+      "id": "1",
+      "abbreviation": "STD"
+     },
+     "notes": [
+      {
+       "type": "event",
+       "headline": "NBA Cup - Group Play"
+      }
+     ],
+     "competitors": [
+      {
+       "id": "5",
+       "homeAway": "home",
+       "score": "85",
+       "order": 0,
+       "team": {
+        "id": "5",
+        "location": "Cleveland",
+        "name": "Cavaliers",
+        "abbreviation": "CLE",
+        "displayName": "Cleveland Cavaliers",
+        "shortDisplayName": "Cavaliers"
+       }
+      },
+      {
+       "id": "20",
+       "homeAway": "away",
+       "score": "73",
+       "order": 1,
+       "team": {
+        "id": "20",
+        "location": "Philadelphia",
+        "name": "76ers",
+        "abbreviation": "PHI",
+        "displayName": "Philadelphia 76ers",
+        "shortDisplayName": "76ers"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401909294",
+   "date": "2026-11-07T03:00Z",
+   "name": "Portland Trail Blazers at Los Angeles Lakers",
+   "shortName": "POR @ LAL",
+   "season": {
+    "year": 2027,
+    "type": 2,
+    "slug": "regular-season"
+   },
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0.0",
+    "period": 0,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Fri, November 6th at 10:00 PM EST",
+     "shortDetail": "11/6 - 10:00 PM EST"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401909294",
+     "date": "2026-11-07T03:00Z",
+     "type": {
+      "id": "1",
+      "abbreviation": "STD"
+     },
+     "notes": [
+      {
+       "type": "event",
+       "headline": "NBA Cup - Group Play"
+      }
+     ],
+     "competitors": [
+      {
+       "id": "13",
+       "homeAway": "home",
+       "score": "0",
+       "order": 0,
+       "team": {
+        "id": "13",
+        "location": "Los Angeles",
+        "name": "Lakers",
+        "abbreviation": "LAL",
+        "displayName": "Los Angeles Lakers",
+        "shortDisplayName": "Lakers"
+       }
+      },
+      {
+       "id": "22",
+       "homeAway": "away",
+       "score": "0",
+       "order": 1,
+       "team": {
+        "id": "22",
+        "location": "Portland",
+        "name": "Trail Blazers",
+        "abbreviation": "POR",
+        "displayName": "Portland Trail Blazers",
+        "shortDisplayName": "Trail Blazers"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
