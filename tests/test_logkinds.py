@@ -1387,3 +1387,9 @@ def test_points_has_a_page_and_a_label_but_logs_under_core():
     assert "points" not in FEATURES
     assert feature_of("points.approved") == logkinds.CORE
     assert "points_log_level" not in logkinds.LOG_LEVEL_KEYS
+
+
+def test_a_bracket_picture_that_fails_is_loud_and_its_return_is_routine():
+    assert is_important("brackets.picture_failed") is True
+    assert is_important("brackets.picture_back") is False
+    assert feature_of("brackets.picture_failed") == feature_of("brackets.picture_back")

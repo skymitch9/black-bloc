@@ -308,6 +308,7 @@ IMPORTANT: frozenset[str] = frozenset(
 
 ROUTINE: frozenset[str] = frozenset(
     {
+        "brackets.picture_back",
         "runs.added",
         "runs.edited",
         "runs.removed",

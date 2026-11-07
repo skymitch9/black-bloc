@@ -13,6 +13,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "tzdata>=2024.1",
+    "Pillow>=10,<12",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,8 @@ black_bloc = [
     "guides_seed.json",
     "channel_drafts_seed.json",
     "runs_demo.json",
+    "assets/fonts/*.ttf",
+    "assets/fonts/*.txt",
 ]
 
 [tool.pytest.ini_options]
