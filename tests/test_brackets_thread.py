@@ -10,6 +10,7 @@ import pytest
 
 from black_bloc import brackets_moves as moves
 from black_bloc import brackets_people as people
+from black_bloc import brackets_picture as picture_
 from black_bloc import brackets_sets as sets
 from black_bloc import brackets_store as store_
 from black_bloc import brackets_thread as thread_
@@ -71,6 +72,7 @@ class FakeMessage:
         self.sent = kwargs
         self.embed = None
         self.view = None
+        self.attachments = [kwargs["file"]] if kwargs.get("file") else []
         self.apply(content=content, **kwargs)
 
     def apply(self, **kwargs):
@@ -1086,3 +1088,129 @@ async def test_the_sweep_locks_the_pick_sheets_and_the_starter_card_shows_the_bo
 
     assert "Locked · 1 sheet(s)" in starter.embed.description
     assert f"1. <@{ADA}> — 0" in starter.embed.description
+
+
+def image_of(message):
+    image = getattr(message.embed, "image", None)
+    return getattr(image, "url", None)
+
+
+async def picture_tournament(bot, guild, *players):
+    tid = await created(bot, guild)
+    await moved(bot, guild, tid, moves.open_signups)
+    for player in players:
+        await moved(bot, guild, tid, people.join, actor=player)
+    return tid
+
+
+async def test_the_starter_card_carries_the_bracket_picture_once_two_are_in(bot, guild):
+    tid = await picture_tournament(bot, guild, ADA)
+    starter = the_thread(bot).messages[0]
+    assert starter.attachments == [] and image_of(starter) is None
+
+    await moved(bot, guild, tid, people.join, actor=BEA)
+
+    [file] = starter.attachments
+    assert file.filename == picture_.FILENAME
+    assert image_of(starter) == f"attachment://{picture_.FILENAME}"
+
+
+async def test_each_edit_replaces_the_picture_and_never_adds_one(bot, guild):
+    tid = await picture_tournament(bot, guild, ADA, BEA, CY)
+    starter = the_thread(bot).messages[0]
+    [first] = starter.attachments
+
+    await moved(bot, guild, tid, moves.close_signups)
+    await moved(bot, guild, tid, moves.start)
+    await moved(bot, guild, tid, sets.report, "W1-2", 2, 0, actor=BEA)
+    await moved(bot, guild, tid, sets.confirm_report, "W1-2", actor=CY)
+
+    [last] = starter.attachments
+    assert last is not first
+    assert len(the_thread(bot).messages[0].attachments) == 1
+
+
+async def test_a_sync_that_moves_nothing_reuses_the_last_drawing(bot, guild, monkeypatch):
+    tid = await picture_tournament(bot, guild, ADA, BEA)
+    calls = []
+    real = picture_.render
+    monkeypatch.setattr(picture_, "render", lambda made: calls.append(made) or real(made))
+    row = await row_of(bot, tid)
+
+    await thread_.sync(bot, guild, row, full=True)
+    await thread_.sync(bot, guild, row, full=True)
+
+    assert calls == []
+    assert len(the_thread(bot).messages[0].attachments) == 1
+
+    await moved(bot, guild, tid, people.join, actor=CY)
+    assert len(calls) == 1
+
+
+async def test_a_restart_draws_once_more(bot, guild, monkeypatch):
+    tid = await picture_tournament(bot, guild, ADA, BEA)
+    calls = []
+    real = picture_.render
+    monkeypatch.setattr(picture_, "render", lambda made: calls.append(made) or real(made))
+    bot.forget()
+
+    await thread_.sync(bot, guild, await row_of(bot, tid), full=True)
+
+    assert len(calls) == 1
+
+
+async def test_picture_off_takes_the_picture_away(bot, guild):
+    tid = await picture_tournament(bot, guild, ADA, BEA)
+    starter = the_thread(bot).messages[0]
+    assert starter.attachments
+
+    await bot.store.set(GUILD, "brackets_picture", False)
+    await thread_.sync(bot, guild, await row_of(bot, tid))
+
+    assert starter.attachments == [] and image_of(starter) is None
+
+
+async def test_a_field_past_the_most_says_so_in_one_line_and_draws_nothing(bot, guild):
+    await bot.store.set(GUILD, "brackets_picture_max_entrants", 4)
+    await picture_tournament(bot, guild, ADA, BEA, CY, 40, 41)
+    starter = the_thread(bot).messages[0]
+
+    assert starter.attachments == [] and image_of(starter) is None
+    assert "No picture past 4 entrants: 5 are in" in starter.embed.description
+
+
+async def test_a_failed_drawing_still_edits_the_card_and_is_logged_once(bot, guild, monkeypatch):
+    tid = await picture_tournament(bot, guild, ADA, BEA)
+    starter = the_thread(bot).messages[0]
+    edits = starter.edits
+
+    def broken(made):
+        raise OSError("no font")
+
+    monkeypatch.setattr(picture_, "render", broken)
+    await moved(bot, guild, tid, people.join, actor=CY)
+    await moved(bot, guild, tid, people.join, actor=40)
+
+    assert starter.edits == edits + 2
+    assert starter.attachments == [] and image_of(starter) is None
+    [failed] = kinds(await rows(bot.db), "brackets.picture_failed")
+    assert failed["tournament"] == tid and "no font" in failed["reason"]
+    assert not kinds(await rows(bot.db), "brackets.picture_back")
+
+    monkeypatch.undo()
+    await moved(bot, guild, tid, people.join, actor=41)
+
+    assert len(starter.attachments) == 1
+    assert len(kinds(await rows(bot.db), "brackets.picture_back")) == 1
+    assert len(kinds(await rows(bot.db), "brackets.picture_failed")) == 1
+
+
+async def test_the_old_thread_word_drops_the_picture_too(bot, guild):
+    tid = await picture_tournament(bot, guild, ADA, BEA)
+    old = the_thread(bot)
+    assert old.messages[0].attachments
+    await mode(bot, "on")
+
+    await moved(bot, guild, tid, thread_.move_home, actor=STAFF)
+
+    assert old.messages[0].attachments == []
