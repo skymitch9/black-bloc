@@ -415,3 +415,28 @@ def test_a_report_with_an_unreadable_time_stands_at_the_next_sweep(stamp):
 )
 def test_the_sets_to_play_counts_only_sets_that_are_played(count, options, sets):
     assert play.sets_to_play(built(count, **options)) == sets
+
+
+def test_a_free_score_is_a_count_the_named_side_wins_and_level_needs_a_pick():
+    from black_bloc.brackets import play as engine
+    from black_bloc.brackets.model import BracketError as Refusal
+    from black_bloc.brackets.model import Options as Opts
+
+    built = engine.build([1, 2], Opts(format="single", best_of=1, best_of_finals=1))
+    counted = engine.override(built.bracket, "W1-1", 7, None, score_a=37, score_b=12, free=True)
+    match = counted.bracket.matches["W1-1"]
+    assert (match.winner, match.score_a, match.score_b, match.confirmed_how) == (1, 37, 12, "to")
+    picked = engine.override(
+        built.bracket, "W1-1", 7, None, score_a=4, score_b=4, winner="b", free=True, how="votes"
+    )
+    match = picked.bracket.matches["W1-1"]
+    assert (match.winner, match.confirmed_how) == (2, "votes")
+    for score in ((4, 4), (None, None)):
+        try:
+            engine.override(
+                built.bracket, "W1-1", 7, None, score_a=score[0], score_b=score[1], free=True
+            )
+        except Refusal as error:
+            assert error.code == "pick_winner"
+        else:
+            raise AssertionError("a level count without a pick must be refused")

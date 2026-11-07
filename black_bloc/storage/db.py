@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 102
+SCHEMA_VERSION = 103
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1487,6 +1487,9 @@ CREATE TABLE IF NOT EXISTS tournaments (
     to_user_id         INTEGER,
     source             TEXT    NOT NULL DEFAULT 'own',
     source_ref         TEXT,
+    kind               TEXT    NOT NULL DEFAULT 'fighters',
+    decide_by          TEXT,
+    vote_minutes       INTEGER,
     channel_id         INTEGER,
     thread_id          INTEGER,
     message_id         INTEGER,
@@ -1566,8 +1569,22 @@ CREATE TABLE IF NOT EXISTS tournament_sets (
     pool             INTEGER,
     message_id       INTEGER,
     card_at          TEXT,
+    vote_opens_at    TEXT,
+    vote_closes_at   TEXT,
+    vote_closed_at   TEXT,
     UNIQUE (tournament_id, key)
 );
+
+CREATE TABLE IF NOT EXISTS tournament_votes (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    key           TEXT    NOT NULL,
+    user_id       INTEGER NOT NULL,
+    slot          TEXT    NOT NULL,
+    at            TEXT    NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tournament_votes_one_each
+    ON tournament_votes(tournament_id, key, user_id);
 
 CREATE TABLE IF NOT EXISTS points_runs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1781,6 +1798,12 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathon_baf_overrides", "reason", "TEXT"),
     ("baf_series", "genre", "TEXT NOT NULL DEFAULT ''"),
     ("baf_series", "developer", "TEXT NOT NULL DEFAULT ''"),
+    ("tournaments", "kind", "TEXT NOT NULL DEFAULT 'fighters'"),
+    ("tournaments", "decide_by", "TEXT"),
+    ("tournaments", "vote_minutes", "INTEGER"),
+    ("tournament_sets", "vote_opens_at", "TEXT"),
+    ("tournament_sets", "vote_closes_at", "TEXT"),
+    ("tournament_sets", "vote_closed_at", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

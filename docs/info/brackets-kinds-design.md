@@ -108,6 +108,41 @@ list kind. Filters: a **Kind** chip row (All / Fighters / Sports / List) through
 ("Close now"). Log kinds `brackets.vote_opened` (per set, when it opens), `brackets.vote_closed` (with the counts),
 `web.brackets.vote` is NOT logged per press (noise) — the count is the record.
 
+### K1 as built (branch `brackets-kinds`, 2026-11-06) — the delta from the spec above
+
+- **One column beyond the brief:** `tournament_sets.vote_closed_at`. Without it a vote whose time has passed but
+  that the sweep has not closed yet looks the same as one a Reset brought back; `store_.sync_votes` is the one place a
+  vote opens (fresh ballots), closes or clears, by the set's state.
+- **States:** a list bracket starts from `draft` (Start is legal there, as it already was for fighters); `seeding` is
+  reached only by Back to seeding. Sign-up / check-in / join / entrant check-in refuse with
+  `brackets_kind_has_no_signups_said` (`no_signups`, 409). An entrant added with a member id is stored as a plain name.
+- **Sets:** a list bracket is forced to Bo1 and no pools on every create and edit. Its score is a COUNT:
+  `play.override(free=True, how=...)` skips the best-of check; the named side wins, else the higher count; level with
+  no pick is `pick_winner` (400, organiser words). The vote close, the organiser's Decide and the Discord pick form all
+  go through `brackets_sets.overridden` — the one winner-writer. A tie is written as `reported` with the counts (no
+  winner) and the confirm sweep skips list brackets so it cannot "stand".
+- **The organiser's Decide** on a list set is two buttons, one per name (`{name} wins` — page; `{name} wins…` + reason
+  form — Discord), not a score picker; on a voted set it keeps the vote's counts as the score.
+- **The sweep:** `brackets_votes.close_due_votes` runs inside the existing one-minute `brackets_thread.sweep` (the cog's
+  `Reconciler` tick), skipped only while `brackets_mode` is `off`. An unreadable closing time is due at once.
+- **Discord create (NOT built, flag to the owner):** the `/bracket` home view is pinned by the existing panel tests
+  (its labels and the four-format dropdown), and the hard rule kept those tests untouched, so a list bracket is made on
+  the site only. Once made, the panel runs it: Start from draft, *Add a name…*, and on a set the vote buttons, the picks
+  and Close now.
+- **API:** `GET /api/brackets` adds `kind_defaults` (`kind`, `decide_by`, `vote_minutes`) beside `defaults` (left exactly
+  as it was) and per row `kind`, `decide_by`; a set row adds `votes_a`, `votes_b` (None while hidden and open),
+  `vote_count`, `my_vote`, `vote_opens_at`, `vote_closes_at`, `vote_open`.
+- **Keys:** 20 (CORE_KEYS 393 → 413): `brackets_kind_default`, `brackets_decide_default`, `brackets_vote_minutes`,
+  `brackets_votes_visible`, and 16 words — the three kind names, the two decide names, `brackets_vote_said`,
+  `_vote_open_line`, `_vote_hidden_line` (the hidden variant), `_vote_closed_line`, `_vote_tied_line`,
+  `_vote_button_change` (the other name's hint on the page once you voted), `_close_vote_label`,
+  `_kind_has_no_signups_said`, `_vote_not_open_said`, `_not_votes_said`, `_vote_pick_said`. Organiser-only lines
+  (`kind_fixed`, `sports_not_yet`, `pick_winner`, the pick label) are constants (the owner's "bb").
+- **Log kinds:** `brackets.vote_opened` (bare kind from either door), `brackets.vote_closed` (and `web.` twin from Close
+  now on the site; details `votes_a`, `votes_b`, `tied`). A press is not logged.
+- **Page filters:** the Kind chip row goes through the shared `listFilter` — which gained an optional `groups` (a second
+  chip row that ANDs with the first; `listfilter.js` `passes`), fixtures in `site/mock/listfilter.test.mjs`.
+
 ## K2 — the sports package, names and autocomplete
 
 **Package `black_bloc/sports/`** (pure adapters, no Discord, no bracket knowledge beyond the `Bracket` shape):
@@ -267,3 +302,27 @@ women's NCAA tournament beyond the same henrygd path (`basketball-women` — it 
 - The network is never touched in tests (`sports/http.py` guard); fixtures are trimmed real responses saved under
   `tests/sports/fixtures/` (field names only, a few games — no bulk copies).
 - Report: what was built, what was verified, what was NOT, decisions beyond the brief, the direct review links.
+
+## Gate — K1 (2026-11-06, branch `brackets-kinds`, code at the commit that adds this section)
+
+| Check | Result |
+|---|---|
+| `pytest -q -n auto` | **14,183 passed, 1 skipped, 0 failed** (baseline on `main` `a4c828db`: 14,126 passed, 1 skipped, 1 failed — `test_golive.py::test_the_second_platform_is_an_edit_and_never_a_second_ping`, which passes alone; not touched here and green in this run) |
+| existing bracket tests | untouched (0 removed or changed lines in `tests/test_brackets_*.py`, `tests/brackets/`, `tests/api/tools/test_brackets.py`) and green; changed outside them: the schema-version literals in `tests/storage/test_db.py` (102 → 103), the key counts in `tests/test_settings_store.py` (393 → 413, 1309 → 1329), one kind added to `tests/test_logkinds.py`'s known dynamic list |
+| schema 102 → 103 | `tests/storage/test_db.py::test_a_schema_102_file_gains_bracket_kinds_and_votes_and_loses_nothing` (a fighters tournament and a played set survive, `kind` reads `fighters`, twice-connect) and `::test_one_vote_per_member_and_set_is_the_databases_rule` |
+| `ruff check .` | clean |
+| every `site/public/assets/*.js` parses as a module; the deploy gate's 14 `site/mock/*.test.mjs` | all ok (`brackets.test.mjs` +5 list cases, `listfilter.test.mjs` +3 group cases) |
+| `node site/mock/check.mjs` against the mock | ok — 28 pages, 386 routes, 413 core settings (3 new routes: the list create, vote, close-vote) |
+| the page on the mock, by eye (1512 px) | list chips filter, kind pills, the drawer reshaped by List (decide-by + vote minutes, no game / best-of / cap / check-in), a vote marking the button and moving the count, Close now → *Tied 2–2 · an organiser decides*, Reset → a fresh vote, a list create + start from draft, sports refused in words |
+
+**Checklist items that bit:** 6 (votes under the tournament lock + the unique index), 5 (an unreadable close time is due), 15
+(one winner-writer — the vote close reuses `overridden`), 33 (every new default a key; a list bracket's own
+`decide_by` / `vote_minutes` are editable on the page — **not** on Discord, which has no create or edit for the list
+kind), 34 (Close now on the site leaves one `web.brackets.vote_closed` row; no `note()` in the route), 36 (the pick form
+is a `SetForm`, so it carries `previous`), 37 (the close runs inside the existing `Reconciler` tick), 39 (the pick form's
+title is clipped to 45), 11 (list cards ping nobody: entrants have no user id).
+
+**NOT verified:** nothing ran against real Discord (the vote buttons, the pick form, a card edit per vote press — a busy
+vote edits its card on every press and leans on the existing `card_failed` retry for rate limits); the phone width
+(< 700 px) of the drawer was not looked at; the real server's sweep closing a vote was exercised only through tests
+(`test_the_sweep_closes_a_due_vote_and_the_card_reads_the_result`), never on Fly.

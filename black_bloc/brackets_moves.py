@@ -30,10 +30,12 @@ from .settings_store import (
     BRACKETS_BEST_OF_LATE,
     BRACKETS_CHECK_IN_MINUTES,
     BRACKETS_CONFIRM_MINUTES,
+    BRACKETS_DECIDE_DEFAULT,
     BRACKETS_DEFAULTS,
     BRACKETS_ENTRANT_CAP,
     BRACKETS_FORMAT_DEFAULT,
     BRACKETS_GRAND_FINAL_RESET,
+    BRACKETS_KIND_DEFAULT,
     BRACKETS_MODE,
     BRACKETS_MODES,
     BRACKETS_NUMBERS,
@@ -45,6 +47,7 @@ from .settings_store import (
     BRACKETS_SWISS_ROUNDS,
     BRACKETS_THIRD_PLACE,
     BRACKETS_TO_ROLE,
+    BRACKETS_VOTE_MINUTES,
 )
 
 log = logging.getLogger(__name__)
@@ -63,7 +66,13 @@ RULES_LIMIT = 4000
 
 LOCKS_ATTR = "_brackets_locks"
 
-ENGINE_STATUS = {"bad_score": 400, "bad_order": 400, "forfeit_needs_winner": 400, "no_set": 404}
+ENGINE_STATUS = {
+    "bad_score": 400,
+    "bad_order": 400,
+    "forfeit_needs_winner": 400,
+    "pick_winner": 400,
+    "no_set": 404,
+}
 
 TO_WORDS = {
     "created": "Created **{name}**.",
@@ -144,6 +153,12 @@ TO_WORDS = {
         "**{name}**'s smallest pool can play at most {most} Swiss round(s) without a rematch; "
         "it is set to {rounds}."
     ),
+    "kind_fixed": "A bracket's kind is set when it is made, so **{name}** stays as it is.",
+    "sports_not_yet": (
+        "Sports brackets are not ready yet, so nothing was made. Make a fighting game or a "
+        "list bracket for now."
+    ),
+    "pick_winner": "The counts are level, so pick who wins {set}.",
 }
 
 PLAYER_CODES = (
@@ -178,9 +193,16 @@ NUMBER_RANGES = {
     "advance_per_pool": BRACKETS_NUMBERS[BRACKETS_ADVANCE_PER_POOL][1:],
     "advance_losers_from": BRACKETS_NUMBERS[BRACKETS_ADVANCE_LOSERS_FROM][1:],
     "pools_swiss_rounds": BRACKETS_NUMBERS[BRACKETS_POOLS_SWISS_ROUNDS][1:],
+    "vote_minutes": BRACKETS_NUMBERS[BRACKETS_VOTE_MINUTES][1:],
 }
 
-REQUIRED_NUMBERS = ("check_in_minutes", "confirm_minutes", "pool_count", "advance_per_pool")
+REQUIRED_NUMBERS = (
+    "check_in_minutes",
+    "confirm_minutes",
+    "pool_count",
+    "advance_per_pool",
+    "vote_minutes",
+)
 
 LENGTHS = ("best_of", "best_of_late", "best_of_finals", "pools_best_of")
 
@@ -309,6 +331,32 @@ def require_runner(bot: Any, guild: Any, actor: Any) -> None:
         )
 
 
+def require_signups(bot: Any, guild: Any, row: Any) -> None:
+    if store_.kind_of(row) == store_.LIST:
+        raise stop(
+            bot, guild, "brackets_kind_has_no_signups_said", "no_signups", 409, name=row["name"]
+        )
+
+
+async def votes_synced(bot: Any, guild: Any, row: Any, via: str = VIA_DISCORD) -> list[str]:
+    """After a move on a voted list bracket: the sets that became playable open their vote."""
+    if not store_.votes_decide(row):
+        return []
+    opened = await store_.sync_votes(bot.db, row)
+    for key in opened:
+        try:
+            await log_action(
+                bot,
+                guild,
+                "brackets.vote_opened",
+                actor=None,
+                details={"via": via, "tournament": row["id"], "set": key},
+            )
+        except Exception:
+            log.exception("brackets: could not write the vote_opened row")
+    return opened
+
+
 def require_state(bot: Any, guild: Any, row: Any, *allowed: str) -> None:
     if row["state"] not in allowed:
         raise stop(
@@ -394,21 +442,50 @@ def option_defaults(store: Any, guild_id: int) -> dict[str, Any]:
     }
 
 
+def kind_defaults(store: Any, guild_id: int) -> dict[str, Any]:
+    """A new tournament's kind and, for a list bracket, how its sets are decided."""
+    return {
+        "kind": store.get(guild_id, BRACKETS_KIND_DEFAULT),
+        "decide_by": store.get(guild_id, BRACKETS_DECIDE_DEFAULT),
+        "vote_minutes": int(store.get(guild_id, BRACKETS_VOTE_MINUTES)),
+    }
+
+
+def kind_values(bot: Any, guild: Any, given: dict[str, Any], row: Any, values: dict) -> None:
+    """The kind is chosen once; a list bracket plays Bo1 sets, no pools, and names how it is
+    decided."""
+    defaults = kind_defaults(bot.store, guild.id)
+    bad = bad_option(bot, guild, given)
+    if row is None:
+        kind = given.get("kind", defaults["kind"])
+        if kind not in store_.KINDS:
+            raise bad("kind", ", ".join(store_.KINDS))
+        if kind == store_.SPORTS:
+            raise stop(bot, guild, "sports_not_yet", "sports_not_yet", 409)
+    else:
+        kind = store_.kind_of(row)
+        if "kind" in given and given["kind"] != kind:
+            raise stop(bot, guild, "kind_fixed", "kind_fixed", 409, name=row["name"])
+    if row is None:
+        values["kind"] = kind
+    if kind != store_.LIST:
+        values.pop("vote_minutes", None)
+        return
+    if "decide_by" in given or row is None:
+        decide = given.get("decide_by", defaults["decide_by"])
+        if decide not in store_.DECIDERS:
+            raise bad("decide_by", ", ".join(store_.DECIDERS))
+        values["decide_by"] = decide
+    if "vote_minutes" not in given and row is None:
+        values["vote_minutes"] = defaults["vote_minutes"]
+    values.update({name: 1 for name in LENGTHS if name != "pools_best_of"})
+    values["pools_format"] = store_.NO_POOLS
+
+
 def option_values(bot: Any, guild: Any, given: dict[str, Any], *, creating: bool) -> dict:
     """The options a create or an edit may set, each checked; a bad one refuses in words."""
     found: dict[str, Any] = option_defaults(bot.store, guild.id) if creating else {}
-
-    def bad(field: str, allowed: str) -> Stop:
-        return stop(
-            bot,
-            guild,
-            "bad_option",
-            "bad_option",
-            400,
-            field=field,
-            given=str(given.get(field))[:40],
-            allowed=allowed,
-        )
+    bad = bad_option(bot, guild, given)
 
     if "name" in given or creating:
         name = clean_text(given.get("name"), NAME_LIMIT + 1)
@@ -458,6 +535,22 @@ def option_values(bot: Any, guild: Any, given: dict[str, Any], *, creating: bool
     return found
 
 
+def bad_option(bot: Any, guild: Any, given: dict[str, Any]) -> Any:
+    def bad(field: str, allowed: str) -> Stop:
+        return stop(
+            bot,
+            guild,
+            "bad_option",
+            "bad_option",
+            400,
+            field=field,
+            given=str(given.get(field))[:40],
+            allowed=allowed,
+        )
+
+    return bad
+
+
 def pools_fit(bot: Any, guild: Any, row: Any, values: dict[str, Any]) -> None:
     """Pools feed only an elimination bracket; anything else is refused in words."""
     merged = {
@@ -500,6 +593,7 @@ async def create(
     values = option_values(bot, guild, given, creating=True)
     if "pools_format" not in given and values.get("format") not in ELIMINATION:
         values["pools_format"] = store_.NO_POOLS
+    kind_values(bot, guild, given, None, values)
     pools_fit(bot, guild, None, values)
     blanked = losers_blanked(None, values, given)
     values.setdefault("to_user_id", actor_id(actor))
@@ -525,6 +619,7 @@ async def edit(
         require_runner(bot, guild, actor)
         require_state(bot, guild, row, *store_.BEFORE_START)
         values = option_values(bot, guild, given, creating=False)
+        kind_values(bot, guild, given, row, values)
         pools_fit(bot, guild, row, values)
         blanked = losers_blanked(row, values, given)
         await store_.update(bot.db, row["id"], values)
@@ -546,11 +641,14 @@ async def moved_state(
     event: str,
     key: str,
     extra: dict[str, Any] | None = None,
+    signups: bool = False,
 ) -> Outcome:
     require_on(bot, guild)
     async with lock_for(bot, tournament_id):
         row = await loaded(bot, guild, tournament_id)
         require_runner(bot, guild, actor)
+        if signups:
+            require_signups(bot, guild, row)
         require_state(bot, guild, row, *allowed)
         await store_.update(bot.db, row["id"], {"state": to, **(extra or {})})
         await note(bot, guild, event, actor, row["id"], via, was=row["state"])
@@ -571,6 +669,7 @@ async def open_signups(
         to=store_.SIGNUPS,
         event="signups_opened",
         key="signups_opened",
+        signups=True,
     )
 
 
@@ -588,6 +687,7 @@ async def close_signups(
         to=store_.SEEDING,
         event="signups_closed",
         key="signups_closed",
+        signups=True,
     )
 
 
@@ -657,6 +757,7 @@ async def start(
         await store_.save(bot.db, row["id"], built.bracket, built.changed, [])
         state = store_.RUNNING if plan is None else store_.POOLS
         await store_.update(bot.db, row["id"], {"state": state, "started_at": stamp})
+        await votes_synced(bot, guild, row, via)
         certain, most = pools.sets_to_play(built.bracket)
         await note(bot, guild, "started", actor, row["id"], via, entrants=len(people))
         key = "started" if certain == most else "started_up_to"

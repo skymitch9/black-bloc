@@ -269,8 +269,12 @@ function isIn(person) {
 }
 
 /** The member moves the viewer can press now, as the panel offers them. */
+export function isList(t) {
+  return Boolean(t) && t.kind === 'list';
+}
+
 export function memberMoves(t, mode) {
-  if (mode === 'off') return [];
+  if (mode === 'off' || isList(t)) return [];
   const me = myEntrant(t);
   const found = [];
   const cap = t.options ? t.options.entrant_cap : null;
@@ -286,6 +290,18 @@ export function memberMoves(t, mode) {
 export function organiserMoves(t, { mode = 'shadow', staff = false } = {}) {
   if (!t.may_run || mode === 'off') return [];
   const ready = allSets(t).some((one) => one.state === 'ready');
+  if (isList(t)) {
+    const listed = {
+      draft: ['start', 'edit', 'cancel'],
+      seeding: ['start', 'edit', 'cancel'],
+      running: [t.finished ? 'complete' : null, 'unstart', 'cancel'],
+      complete: ['reopen', 'cancel'],
+      cancelled: ['restore'],
+    };
+    const found = (listed[t.state] || []).filter(Boolean);
+    if (staff && t.shadow && mode === 'on' && t.state !== 'cancelled') found.push('move');
+    return found;
+  }
   const byState = {
     draft: ['open_signups', 'edit', 'cancel'],
     signups: ['close_signups', 'open_check_in', 'edit', 'cancel'],
@@ -302,8 +318,20 @@ export function organiserMoves(t, { mode = 'shadow', staff = false } = {}) {
 }
 
 /** What the viewer may do on one set: a player's moves and, for an organiser, the deciding ones. */
+export function listSetMoves(t, set) {
+  if (t.state !== 'running' || !['ready', 'called', 'reported', 'complete'].includes(set.state)) return [];
+  const found = set.vote_open ? ['vote'] : [];
+  if (t.may_run) {
+    found.push('pick');
+    if (set.vote_open) found.push('close_vote');
+    if (set.state !== 'ready') found.push('reset');
+  }
+  return found;
+}
+
 export function setMoves(t, set, { mode = 'shadow' } = {}) {
   if (mode === 'off' || !PLAYING.includes(t.state)) return [];
+  if (isList(t)) return listSetMoves(t, set);
   if (set.pool && t.phase === 'final') return [];
   const me = t.mine;
   const side = me !== null && me !== undefined ? (set.slot_a === me ? 'a' : set.slot_b === me ? 'b' : null) : null;

@@ -632,3 +632,35 @@ async def test_pools_advance_after_asking_and_go_back_the_same_way(bot, guild):
     assert (await store_.tournament(bot.db, GUILD, tid))["state"] == "pools"
     assert all("cleared" in (card.embed.description or "") for card in finals)
     assert all(card.custom_ids for card in pool_cards)
+
+
+async def test_a_list_set_on_the_panel_offers_the_vote_to_anyone_and_the_picks_to_organisers(
+    bot, guild
+):
+    from tests.test_brackets_thread import listed_running
+
+    tid = await listed_running(bot, guild, "Snickers", "Twix")
+    embed, view = await panel.build_set(bot, guild, guild.get_member(ADA), tid, "W1-1")
+    assert labels(view) == ["Snickers", "Twix", "Back"]
+    assert "Snickers 0 · Twix 0 · closes" in embed.description
+    _, view = await panel.build_set(bot, guild, guild.get_member(TO), tid, "W1-1")
+    assert labels(view) == [
+        "Snickers",
+        "Twix",
+        "Snickers wins…",
+        "Twix wins…",
+        "Close now",
+        "Back",
+    ]
+
+
+async def test_a_list_tournament_offers_no_member_moves_and_starts_from_draft(bot, guild):
+    outcome = await moves.create(
+        bot, guild, who(guild, TO), {"name": "Best candy bar", "kind": "list"}
+    )
+    await people.add_entrant(bot, guild, who(guild, TO), outcome.value, name="Twix")
+    _, view = await panel.build_tournament(bot, guild, guild.get_member(TO), outcome.value)
+    shown = labels(view)
+    assert "Start" in shown and "Open sign-ups" not in shown and "Open check-in" not in shown
+    _, view = await panel.build_add(bot, guild, guild.get_member(TO), outcome.value)
+    assert labels(view) == ["Add a name…", "Back"]

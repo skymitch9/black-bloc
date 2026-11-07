@@ -69,6 +69,17 @@ PAGE_WORDS = (
     "brackets_waiting_final",
     "brackets_pool_tied",
     "brackets_pool_raise_label",
+    "brackets_kind_fighters_words",
+    "brackets_kind_sports_words",
+    "brackets_kind_list_words",
+    "brackets_decide_votes_words",
+    "brackets_decide_organiser_words",
+    "brackets_vote_open_line",
+    "brackets_vote_hidden_line",
+    "brackets_vote_closed_line",
+    "brackets_vote_tied_line",
+    "brackets_vote_button_change",
+    "brackets_close_vote_label",
 )
 
 SUMMARY_FIELDS = (
@@ -82,6 +93,7 @@ SUMMARY_FIELDS = (
     "entrant_cap",
     "pools_format",
 )
+KIND_FIELDS = ("kind", "decide_by", "vote_minutes")
 OPTION_FIELDS = (
     "format",
     "third_place",
@@ -137,8 +149,43 @@ def rounds_to_play(row: Any, bracket: Any, people: list[Any]) -> int | None:
     return swiss.rounds_for(field, row["swiss_rounds"])
 
 
+def kind_fields(row: Any) -> dict[str, Any]:
+    return {
+        "kind": store_.kind_of(row),
+        "decide_by": store_.column(row, "decide_by"),
+        "vote_minutes": store_.column(row, "vote_minutes"),
+    }
+
+
+def vote_fields(
+    held: dict[str, Any] | None, mine: str | None, *, visible: bool = True
+) -> dict[str, Any]:
+    """A list set's vote as the page draws it; hidden counts read None until it closes."""
+    if not held:
+        return {
+            "votes_a": None,
+            "votes_b": None,
+            "vote_count": None,
+            "my_vote": None,
+            "vote_opens_at": None,
+            "vote_closes_at": None,
+            "vote_open": False,
+        }
+    shut = bool(held["closed_at"])
+    shown = visible or shut
+    return {
+        "votes_a": held["a"] if shown else None,
+        "votes_b": held["b"] if shown else None,
+        "vote_count": held["a"] + held["b"],
+        "my_vote": mine,
+        "vote_opens_at": held["opens_at"],
+        "vote_closes_at": held["closes_at"],
+        "vote_open": not shut,
+    }
+
+
 def summary(row: Any) -> dict[str, Any]:
-    found = {"id": row["id"], **{name: row[name] for name in SUMMARY_FIELDS}}
+    found = {"id": row["id"], **{name: row[name] for name in SUMMARY_FIELDS}, **kind_fields(row)}
     found["entrant_count"] = row["entrant_count"] if "entrant_count" in row.keys() else None
     found["to_user_id"] = as_id(row["to_user_id"])
     return found
@@ -304,8 +351,12 @@ def pool_rows(
     return found
 
 
-async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = False) -> dict:
+async def full(
+    db: Any, row: Any, *, viewer: int | None = None, runs: bool = False, visible: bool = True
+) -> dict:
     people = await store_.entrants(db, row["id"])
+    held_votes = await store_.ballots(db, row["id"]) if store_.votes_decide(row) else {}
+    mine_votes = await store_.my_votes(db, row["id"], viewer) if held_votes else {}
     bracket = await store_.bracket(db, row)
     held = await store_.cards(db, row["id"]) if bracket is not None else {}
     names = {one["id"]: one["name"] for one in people}
@@ -316,6 +367,7 @@ async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = Fal
         **{name: row[name] for name in TIME_FIELDS},
         **{name: as_id(row[name]) for name in ID_FIELDS},
         "shadow": bool(row["shadow"]),
+        **kind_fields(row),
         "options": options(row),
         "entrant_count": sum(1 for one in people if not one["dropped"]),
         "finished": bool(bracket is not None and pools.finished(bracket)),
@@ -327,6 +379,7 @@ async def full(db: Any, row: Any, *, viewer: int | None = None, runs: bool = Fal
         "entrants": [entrant_row(one) for one in people],
         "sets": [
             set_row(match, names, row["confirm_minutes"], held.get(match.key))
+            | vote_fields(held_votes.get(match.key), mine_votes.get(match.key), visible=visible)
             for match in (bracket.ordered() if bracket else [])
             if match.phase != POOLS
         ],

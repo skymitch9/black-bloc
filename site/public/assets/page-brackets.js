@@ -9,6 +9,7 @@ import {
   allSets,
   eliminationLayout,
   fill,
+  isList,
   memberMoves,
   moved,
   myEntrant,
@@ -48,6 +49,7 @@ import {
   run,
   sayNothing,
   section,
+  segment,
   sentenceFor,
   settingsPanel,
   table,
@@ -58,6 +60,8 @@ const TAB = 'brackets';
 const LENGTHS = [1, 3, 5, 7, 9, 11, 13, 15];
 const FORMATS = ['double', 'single', 'round_robin', 'swiss'];
 const POOL_FORMATS = ['none', 'round_robin', 'swiss'];
+const KINDS = ['fighters', 'sports', 'list'];
+const DECIDERS = ['votes', 'organiser'];
 const STATE_TONES = { signups: 'info', check_in: 'info', seeding: 'warn', pools: 'ok', running: 'ok', cancelled: 'danger' };
 const SET_TONES = { ready: 'info', called: 'warn', reported: 'info', disputed: 'danger', complete: 'ok' };
 const OUT_WORDS = { removed: 'removed', left: 'left', no_show: 'no-show', dropped: 'dropped' };
@@ -191,6 +195,13 @@ const WORDS = {
   losersFrom: 'Losers from place',
   poolsBestOf: 'Pool best of',
   poolRounds: 'Pool Swiss rounds',
+  kind: 'Kind',
+  decideBy: 'Decided by',
+  voteMinutes: 'Vote minutes',
+  nameToAdd: 'Name',
+  pickFirst: 'Pick the score first.',
+  wins: '{name} wins',
+  votes: '{count} votes',
 };
 
 const view = {
@@ -208,7 +219,7 @@ const view = {
   ties: {},
   timer: null,
   clock: null,
-  filter: { query: '', filter: 'all' },
+  filter: { query: '', filter: 'all', kind: 'all' },
   pending: null,
 };
 let refresh = () => {};
@@ -233,6 +244,18 @@ function stamp(iso) {
 
 function formatWords(format) {
   return w(`brackets_format_${format}_words`) || format;
+}
+
+function kindWords(kind) {
+  return w(`brackets_kind_${kind || 'fighters'}_words`) || kind;
+}
+
+function decideWords(decide) {
+  return decide ? w(`brackets_decide_${decide}_words`) || decide : null;
+}
+
+function kindBadge(t) {
+  return t.kind && t.kind !== 'fighters' ? badge(kindWords(t.kind), 'info') : null;
 }
 
 function poolsWords(format) {
@@ -290,6 +313,7 @@ function listRow(t) {
       el('span', { class: 'rowlist-name', text: t.name }),
       el('span', { class: 'rowlist-note', text: bits.join(' · ') }),
     ]),
+    kindBadge(t),
     stateBadge(t.state),
   ]);
 }
@@ -317,19 +341,22 @@ function listBody() {
     ['complete', WORDS.complete, (t) => t.state === 'complete'],
   ];
   if (runs) filters.push(['cancelled', WORDS.cancelled, (t) => t.state === 'cancelled']);
+  const kinds = [['all', WORDS.all, null], ...KINDS.map((kind) => [kind, kindWords(kind), (t) => (t.kind || 'fighters') === kind])];
   const filter = listFilter({
     items,
     value: (item) => item.t,
-    text: (t) => [t.name, t.game, formatWords(t.format), w(`brackets_state_${t.state}`), t.to_name].join(' '),
+    text: (t) => [t.name, t.game, formatWords(t.format), kindWords(t.kind), w(`brackets_state_${t.state}`), t.to_name].join(' '),
     filters,
     filter: view.filter.filter,
+    groups: [{ filters: kinds, filter: view.filter.kind }],
     query: view.filter.query,
     label: WORDS.searchLabel,
     placeholder: WORDS.search,
     empty: WORDS.noMatch,
-    onChange: ({ query, filter: key }) => {
-      view.filter = { query, filter: key };
-      for (const fold of folds) if (query || key !== 'all') fold.open = true;
+    onChange: ({ query, filter: key, groups }) => {
+      const kind = (groups && groups[0]) || 'all';
+      view.filter = { query, filter: key, kind };
+      for (const fold of folds) if (query || key !== 'all' || kind !== 'all') fold.open = true;
     },
   });
   const newButton = runs && mode() !== 'off'
@@ -459,10 +486,12 @@ function waitingLine(t) {
 
 function headBody(t) {
   const cap = t.options && t.options.entrant_cap ? `${t.entrant_count}/${t.options.entrant_cap}` : String(t.entrant_count);
+  const listed = isList(t);
   const meta = [
     t.game,
+    listed ? kindWords(t.kind) : null,
     formatWords(t.format),
-    ...optionWords(t),
+    ...(listed ? [decideWords(t.decide_by)] : optionWords(t)),
     `${cap} ${t.entrant_count === 1 && !t.options.entrant_cap ? 'entrant' : 'entrants'}`,
     t.to_name,
   ].filter(Boolean);
@@ -472,7 +501,7 @@ function headBody(t) {
   if (PLAYING.includes(t.state) && t.started_at) times.push(`started ${stamp(t.started_at)}`);
   if (t.state === 'complete' && t.completed_at) times.push(stamp(t.completed_at));
   return [
-    el('div', { class: 'bk-title' }, [el('h2', { class: 'bk-name', text: t.name }), stateBadge(t.state), t.shadow && view.index.may_run ? badge('rehearsal', 'warn') : null]),
+    el('div', { class: 'bk-title' }, [el('h2', { class: 'bk-name', text: t.name }), kindBadge(t), stateBadge(t.state), t.shadow && view.index.may_run ? badge('rehearsal', 'warn') : null]),
     el('p', { class: 'bk-meta', text: meta.join(' · ') }),
     times.length ? el('p', { class: 'bk-meta mono', text: times.join(' · ') }) : null,
     waitingLine(t),
@@ -535,7 +564,7 @@ function entrantLine(t, one, { handle = null, seed = null, placed = false } = {}
   const lead = placed ? placeWords(one.placement) || '—' : seed ?? (one.seed ?? '—');
   const notes = [
     placed && one.seed ? said(WORDS.seedNote, { seed: one.seed }) : null,
-    one.guest ? WORDS.guest : null,
+    one.guest && !isList(t) ? WORDS.guest : null,
     t.state === 'check_in' && !one.dropped ? (one.checked_in ? WORDS.checkedIn : WORDS.notCheckedIn) : null,
     waiting && t.may_run ? w(`brackets_waiting_${waiting.what}`, { set: waiting.set || '', opponent: opponent || '' }) : null,
   ].filter(Boolean);
@@ -639,7 +668,25 @@ function shuffled(ids) {
   return found;
 }
 
+function addName(t) {
+  const say = notice();
+  const box = el('input', { class: 'input', type: 'text', maxlength: '100', id: 'bk-guest' });
+  const added = async () => {
+    if (!box.value.trim()) return;
+    const done = await act(`${base(t.id)}/entrants`, { name: box.value.trim() }, 'POST', say);
+    if (done.ok) view.say.say(done.found.message, 'ok');
+  };
+  box.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') added();
+  });
+  return foldout(WORDS.addEntrant, [
+    el('div', { class: 'bk-add' }, [field(WORDS.nameToAdd, box), button(WORDS.add, added, { tone: 'warn' })]),
+    say,
+  ], { open: true });
+}
+
 function addEntrant(t) {
+  if (isList(t)) return addName(t);
   const say = notice();
   const guest = el('input', { class: 'input', type: 'text', maxlength: '100', id: 'bk-guest' });
   const picker = staff() ? memberPicker({ label: 'Member' }) : null;
@@ -725,7 +772,8 @@ function roundWords(set) {
 function slotLine(t, set, side) {
   const id = side === 'a' ? set.slot_a : set.slot_b;
   const name = side === 'a' ? set.a_name : set.b_name;
-  const score = side === 'a' ? set.score_a : set.score_b;
+  const counted = set.vote_open ? (side === 'a' ? set.votes_a : set.votes_b) : null;
+  const score = counted ?? (side === 'a' ? set.score_a : set.score_b);
   const won = set.state === 'complete' && set.winner !== null && set.winner === id;
   const lost = set.state === 'complete' && set.winner !== null && id !== null && set.winner !== id;
   const shownScore = set.state === 'complete' && set.forfeit ? (won ? 'W' : 'FF') : score ?? '';
@@ -748,8 +796,8 @@ function setCard(t, set, style = null) {
   const moves = setMoves(t, set, { mode: mode() });
   const mine = t.mine !== null && (set.slot_a === t.mine || set.slot_b === t.mine);
   const quiet = ['waiting', 'void', 'bye'].includes(set.state);
-  const top = [set.key, `Bo${set.best_of}`, set.rematch ? w('brackets_set_card_rematch') : null].filter(Boolean).join(' · ');
-  const stateWord = { called: 'called', reported: 'reported', disputed: 'disputed' }[set.state];
+  const top = [set.key, isList(t) ? null : `Bo${set.best_of}`, set.rematch ? w('brackets_set_card_rematch') : null].filter(Boolean).join(' · ');
+  const stateWord = isList(t) && set.state === 'reported' ? 'tied' : { called: 'called', reported: 'reported', disputed: 'disputed' }[set.state];
   return el(quiet ? 'div' : 'button', {
     class: 'bk-set',
     type: quiet ? undefined : 'button',
@@ -1033,10 +1081,93 @@ function discordLink(t, set) {
   return linkAction(w('brackets_discord_label'), `https://discord.com/channels/${guild}/${t.thread_id}/${set.message_id}`);
 }
 
+function closesIn(iso) {
+  const left = new Date(iso).getTime() - Date.now();
+  if (!Number.isFinite(left)) return '';
+  const minutes = Math.max(0, Math.round(left / 60000));
+  if (minutes < 60) return `in ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? `in ${hours} h` : `${dayLabel(iso, view.zone)} · ${clockTime(iso, view.zone)}`;
+}
+
+function voteLine(set) {
+  const counts = { a: set.a_name || '', b: set.b_name || '', votes_a: set.votes_a ?? 0, votes_b: set.votes_b ?? 0 };
+  if (set.vote_open) {
+    const closes = set.vote_closes_at ? closesIn(set.vote_closes_at) : '';
+    if (set.votes_a === null || set.votes_a === undefined) return w('brackets_vote_hidden_line', { count: set.vote_count ?? 0, closes });
+    return w('brackets_vote_open_line', { ...counts, closes });
+  }
+  if (set.state === 'reported') return w('brackets_vote_tied_line', counts);
+  if (set.state === 'complete' && set.vote_closes_at) return w('brackets_vote_closed_line', counts);
+  return null;
+}
+
+function voteButton(t, set, side, go) {
+  const name = side === 'a' ? set.a_name : set.b_name;
+  const count = side === 'a' ? set.votes_a : set.votes_b;
+  const mine = set.my_vote === side;
+  const other = set.my_vote && !mine;
+  return el('button', {
+    class: 'bk-vote',
+    type: 'button',
+    'aria-pressed': mine ? 'true' : 'false',
+    title: other ? w('brackets_vote_button_change') : undefined,
+    on: { click: () => go('vote', { slot: side }) },
+  }, [
+    el('span', { class: 'bk-vote-name', text: name || '' }),
+    count === null || count === undefined ? null : el('span', { class: 'bk-vote-count mono', text: String(count) }),
+  ]);
+}
+
+function listDrawer(t, set) {
+  const moves = setMoves(t, set, { mode: mode() });
+  const say = notice();
+  const path = `${base(t.id)}/sets/${encodeURIComponent(set.key)}`;
+  const go = async (tail, body = {}) => {
+    const done = await act(`${path}/${tail}`, body, 'POST', say);
+    if (!done.ok) return;
+    if (tail === 'vote') {
+      say.say(done.found.message, 'ok');
+      const fresh = allSets(view.t).find((one) => one.key === set.key);
+      if (fresh && fresh.vote_open) {
+        listDrawer(view.t, fresh);
+        return;
+      }
+    }
+    closeDrawer();
+    view.say.say(done.found.message, 'ok');
+  };
+  const body = [el('div', { class: 'bk-drawer-set' }, [setCard(t, set)]), el('p', { class: 'bk-meta', text: roundWords(set) })];
+  const line = voteLine(set);
+  if (line) body.push(el('p', { class: 'bk-state' }, boldParts(line)));
+  const link = discordLink(t, set);
+  if (link) body.push(link);
+  if (moves.includes('vote')) body.push(el('div', { class: 'bk-votes', role: 'group', 'aria-label': `${set.a_name} – ${set.b_name}` }, [voteButton(t, set, 'a', go), voteButton(t, set, 'b', go)]));
+  const organiser = [];
+  const reason = el('input', { class: 'input', type: 'text', maxlength: '300', id: 'bk-set-reason' });
+  if (moves.includes('close_vote')) organiser.push(button(w('brackets_close_vote_label'), () => go('close-vote'), { tone: 'warn' }));
+  if (moves.includes('pick')) {
+    for (const side of ['a', 'b']) {
+      const name = side === 'a' ? set.a_name : set.b_name;
+      if (name) organiser.push(button(said(WORDS.wins, { name }), () => go('override', { winner: side, reason: reason.value.trim() }), { tone: 'quiet' }));
+    }
+  }
+  if (moves.includes('reset')) organiser.push(button(WORDS.resetSet, () => go('reset', { reason: reason.value.trim() }), { tone: 'danger' }));
+  if (organiser.length) {
+    body.push(el('div', { class: 'bk-organiser' }, [el('p', { class: 'bk-label', text: WORDS.organiser }), bar(organiser)]));
+  }
+  body.push(say);
+  openDrawer(`${set.key} · ${roundWords(set)}`, body);
+}
+
 function setDrawer(key) {
   const t = view.t;
   const set = allSets(t).find((one) => one.key === key);
   if (!set) return;
+  if (isList(t)) {
+    listDrawer(t, set);
+    return;
+  }
   const moves = setMoves(t, set, { mode: mode() });
   const say = notice();
   const path = `${base(t.id)}/sets/${encodeURIComponent(set.key)}`;
@@ -1120,6 +1251,11 @@ function localValue(iso) {
 
 async function optionsDrawer(t) {
   const o = t ? { ...t.options } : { ...((view.index && view.index.defaults) || {}) };
+  const kinds = (view.index && view.index.kind_defaults) || {};
+  const kind = segment(KINDS.map((one) => ({ value: one, label: kindWords(one) })), t ? t.kind || 'fighters' : kinds.kind || 'fighters', { onChange: () => shapeFor() });
+  if (t) for (const one of kind.children) one.disabled = true;
+  const decide = segment(DECIDERS.map((one) => ({ value: one, label: decideWords(one) })), (t && t.decide_by) || kinds.decide_by || 'votes', { onChange: () => shapeFor() });
+  const voteMinutes = numberBox('bk-vote-minutes', (t && t.vote_minutes) || kinds.vote_minutes || 1440, { max: 20160 });
   const name = el('input', { class: 'input', type: 'text', id: 'bk-name', maxlength: '100', value: t ? t.name : undefined });
   const game = el('input', { class: 'input', type: 'text', id: 'bk-game', maxlength: '100', value: t ? t.game || undefined : undefined });
   const format = el('select', { class: 'input', id: 'bk-format' });
@@ -1154,16 +1290,24 @@ async function optionsDrawer(t) {
     losers: el('div', { class: 'bk-fields' }, [field(WORDS.losersFrom, losersFrom)]),
     poolRounds: el('div', { class: 'bk-fields' }, [field(WORDS.poolRounds, poolRounds)]),
   };
+  only.listed = el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.decideBy, decide), field(WORDS.voteMinutes, voteMinutes)]);
+  only.fighting = el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.bestOf, bestOf), field(WORDS.cap, cap), field(WORDS.checkIn, checkIn)]);
+  only.game = field(WORDS.game, game);
   const shapeFor = () => {
-    const pooled = ELIMINATION.includes(format.value) && poolsFormat.value !== 'none';
-    only.pools.hidden = !ELIMINATION.includes(format.value);
+    const listed = kind.readValue() === 'list';
+    only.listed.hidden = !listed;
+    only.listed.lastChild.hidden = decide.readValue() !== 'votes';
+    only.fighting.hidden = listed;
+    only.game.hidden = listed;
+    const pooled = !listed && ELIMINATION.includes(format.value) && poolsFormat.value !== 'none';
+    only.pools.hidden = listed || !ELIMINATION.includes(format.value);
     only.pooled.hidden = !pooled;
     only.losers.hidden = !pooled || format.value !== 'double';
     only.poolRounds.hidden = !pooled || poolsFormat.value !== 'swiss';
     only.single.hidden = format.value !== 'single';
     only.double.hidden = format.value !== 'double';
     only.swiss.hidden = format.value !== 'swiss';
-    only.elimination.hidden = !ELIMINATION.includes(format.value);
+    only.elimination.hidden = listed || !ELIMINATION.includes(format.value);
   };
   format.addEventListener('change', shapeFor);
   poolsFormat.addEventListener('change', shapeFor);
@@ -1202,6 +1346,12 @@ async function optionsDrawer(t) {
     } else {
       body.pools_format = 'none';
     }
+    if (kind.readValue() === 'list') {
+      for (const field of ['game', 'best_of', 'entrant_cap', 'check_in_minutes', 'best_of_late', 'best_of_finals', 'best_of_from_round', 'pools_format', 'pool_count', 'advance_per_pool', 'pools_best_of', 'advance_losers_from', 'pools_swiss_rounds']) delete body[field];
+      body.decide_by = decide.readValue();
+      if (number(voteMinutes) !== null) body.vote_minutes = number(voteMinutes);
+    }
+    if (!t) body.kind = kind.readValue();
     const done = await run(say, () => (t ? send(base(t.id), 'PATCH', body) : send('/api/brackets', 'POST', body)), (found) => found.message);
     if (!done.ok) return;
     closeDrawer();
@@ -1215,13 +1365,15 @@ async function optionsDrawer(t) {
     }
   };
   openDrawer(t ? said(WORDS.editTitle, { name: t.name }) : WORDS.newTournament, [
+    field(WORDS.kind, kind),
     field(WORDS.name, name),
-    field(WORDS.game, game),
+    only.game,
     el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.format, format), field(WORDS.starts, startsAt)]),
+    only.listed,
     only.single,
     only.double,
     only.swiss,
-    el('div', { class: 'bk-fields bk-fields-row' }, [field(WORDS.bestOf, bestOf), field(WORDS.cap, cap), field(WORDS.checkIn, checkIn)]),
+    only.fighting,
     only.elimination,
     only.pools,
     only.pooled,

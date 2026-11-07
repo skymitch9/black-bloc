@@ -31,6 +31,7 @@ from .brackets_moves import (
     said,
     stop,
     touched,
+    votes_synced,
 )
 from .logkinds import VIA_DISCORD
 from .panels import Outcome
@@ -86,8 +87,9 @@ def final_words(bot: Any, guild: Any, people: dict, match: Any) -> str:
     )
 
 
-async def kept(bot: Any, row: Any, moved: Any) -> tuple[Any, dict[str, int]]:
+async def kept(bot: Any, guild: Any, row: Any, moved: Any) -> tuple[Any, dict[str, int]]:
     gone = await store_.save(bot.db, row["id"], moved.bracket, moved.changed, moved.removed)
+    await votes_synced(bot, guild, row)
     return moved.bracket.matches, gone
 
 
@@ -118,7 +120,7 @@ async def call(
         moved = engine(
             bot, guild, row, names, pools.call, current, match.key, actor_id(actor), now_stamp()
         )
-        matches, gone = await kept(bot, row, moved)
+        matches, gone = await kept(bot, guild, row, moved)
         after = matches[match.key]
         await note(
             bot, guild, "set_called", actor, row["id"], via, set=match.key, rematch=after.rematch
@@ -183,7 +185,7 @@ async def report(
             actor_id(actor),
             stamp,
         )
-        matches, gone = await kept(bot, row, moved)
+        matches, gone = await kept(bot, guild, row, moved)
         after = matches[match.key]
         if after.state == COMPLETE:
             await note(
@@ -235,6 +237,9 @@ async def overridden(
     people: dict,
     match: Any,
     via: str,
+    *,
+    event: str = "set_overridden",
+    extra: dict[str, Any] | None = None,
     **result: Any,
 ) -> Outcome:
     moved = engine(
@@ -249,12 +254,12 @@ async def overridden(
         now_stamp(),
         **result,
     )
-    matches, gone = await kept(bot, row, moved)
+    matches, gone = await kept(bot, guild, row, moved)
     after = matches[match.key]
     await note(
         bot,
         guild,
-        "set_overridden",
+        event,
         actor,
         row["id"],
         via,
@@ -266,9 +271,20 @@ async def overridden(
         cleared=[one for one in moved.changed if one != match.key],
         removed=moved.removed,
         rematch=after.rematch,
+        **(extra or {}),
     )
     outcome = Outcome(True, final_words(bot, guild, people, after), value=row["id"])
     return touched(outcome, moved, gone)
+
+
+async def tallied(bot: Any, row: Any, match: Any, score_a: Any, score_b: Any) -> tuple:
+    """A list set the organiser decides keeps the vote's counts as its score."""
+    if score_of(score_a) is not None or score_of(score_b) is not None:
+        return score_of(score_a), score_of(score_b)
+    if not store_.votes_decide(row):
+        return None, None
+    held = await store_.ballot(bot.db, row["id"], match.key)
+    return (held["a"], held["b"]) if held else (None, None)
 
 
 @answered
@@ -301,7 +317,7 @@ async def confirm_report(
                 actor_id(actor),
                 stamp,
             )
-        matches, gone = await kept(bot, row, moved)
+        matches, gone = await kept(bot, guild, row, moved)
         after = matches[match.key]
         await note(
             bot,
@@ -351,7 +367,7 @@ async def dispute(
             words,
             now_stamp(),
         )
-        matches, gone = await kept(bot, row, moved)
+        matches, gone = await kept(bot, guild, row, moved)
         await note(
             bot,
             guild,
@@ -386,6 +402,22 @@ async def override(
         row, current, people, _ = await correctable(bot, guild, actor, tournament_id, key)
         match = the_set(bot, guild, row, current, key)
         side = winner if winner in ("a", "b") else match.side_of(score_of(winner))
+        if store_.kind_of(row) == store_.LIST and not forfeit:
+            score_a, score_b = await tallied(bot, row, match, score_a, score_b)
+            return await overridden(
+                bot,
+                guild,
+                actor,
+                row,
+                current,
+                people,
+                match,
+                via,
+                score_a=score_a,
+                score_b=score_b,
+                winner=side,
+                free=True,
+            )
         return await overridden(
             bot,
             guild,
@@ -413,7 +445,7 @@ async def reset(
         moved = engine(
             bot, guild, row, names, pools.reset, current, match.key, actor_id(actor), now_stamp()
         )
-        matches, gone = await kept(bot, row, moved)
+        matches, gone = await kept(bot, guild, row, moved)
         await note(
             bot,
             guild,
@@ -438,7 +470,7 @@ async def confirm_due(
     moment = now or datetime.now(UTC)
     confirmed: list[tuple[int, str]] = []
     for row in await store_.tournaments(bot.db, guild.id):
-        if row["state"] not in store_.PLAYING:
+        if row["state"] not in store_.PLAYING or store_.kind_of(row) == store_.LIST:
             continue
         async with lock_for(bot, row["id"]):
             fresh = await store_.tournament(bot.db, guild.id, row["id"])
@@ -460,7 +492,7 @@ async def confirm_due(
             moved = pools.confirm_due(current, moment, int(fresh["confirm_minutes"]))
             if not moved.changed:
                 continue
-            after, _ = await kept(bot, fresh, moved)
+            after, _ = await kept(bot, guild, fresh, moved)
             for key in waiting:
                 if after[key].state == COMPLETE:
                     confirmed.append((int(fresh["id"]), key))

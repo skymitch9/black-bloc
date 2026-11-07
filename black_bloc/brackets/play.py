@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from . import elimination, roundrobin, swiss
 from .bestof import checked, length_for
@@ -464,6 +465,8 @@ def override(
     score_b: int | None = None,
     winner: str | None = None,
     forfeit: bool = False,
+    free: bool = False,
+    how: str = BY_TO,
 ) -> Moved:
     """The TO's result: from any playable state, or correcting a finished set."""
     work = working(bracket)
@@ -477,6 +480,8 @@ def override(
             raise BracketError("forfeit_needs_winner", set=key)
         side = winner
         scored: tuple[int | None, int | None] = (None, None)
+    elif free:
+        scored, side = counted(score_a, score_b, winner)
     else:
         scored = checked(match.best_of, score_a, score_b)
         side = A if scored[0] > scored[1] else B
@@ -486,9 +491,23 @@ def override(
         reopen(match)
     match.score_a, match.score_b = scored
     match.reported_by, match.reported_at = by, now
-    match.confirmed_by, match.confirmed_at, match.confirmed_how = by, now, BY_TO
+    match.confirmed_by, match.confirmed_at, match.confirmed_how = by, now, how
     finish(match, side, now, forfeit="to" if forfeit else None)
     return moved(work, bracket, now)
+
+
+def counted(score_a: Any, score_b: Any, winner: str | None) -> tuple[tuple[Any, Any], str]:
+    """A list set's score is a count, not a best-of; the named side wins, else the higher."""
+    scores = (score_a, score_b)
+    if scores != (None, None) and not all(
+        isinstance(one, int) and not isinstance(one, bool) and one >= 0 for one in scores
+    ):
+        raise BracketError("bad_score", best_of=1, wins=1)
+    if winner in SLOTS:
+        return scores, winner
+    if scores == (None, None) or score_a == score_b:
+        raise BracketError("pick_winner")
+    return scores, A if score_a > score_b else B
 
 
 def kept_winner(bracket: Bracket, match: Match, side: str) -> bool:

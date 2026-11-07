@@ -4243,6 +4243,12 @@ BRACKETS_ADVANCE_PER_POOL = "brackets_advance_per_pool_default"
 BRACKETS_ADVANCE_LOSERS_FROM = "brackets_advance_losers_from_default"
 BRACKETS_POOLS_SWISS_ROUNDS = "brackets_pools_swiss_rounds_default"
 BRACKETS_POOLS_BEST_OF = "brackets_pools_best_of_default"
+BRACKETS_KINDS = ("fighters", "sports", "list")
+BRACKETS_DECIDERS = ("votes", "organiser")
+BRACKETS_KIND_DEFAULT = "brackets_kind_default"
+BRACKETS_DECIDE_DEFAULT = "brackets_decide_default"
+BRACKETS_VOTE_MINUTES = "brackets_vote_minutes"
+BRACKETS_VOTES_VISIBLE = "brackets_votes_visible"
 BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_CONFIRM_MINUTES: (12, 1, 1440),
     BRACKETS_CHECK_IN_MINUTES: (30, 5, 1440),
@@ -4254,6 +4260,7 @@ BRACKETS_NUMBERS: dict[str, tuple[int | None, int, int]] = {
     BRACKETS_ADVANCE_PER_POOL: (2, 1, 16),
     BRACKETS_ADVANCE_LOSERS_FROM: (None, 2, 16),
     BRACKETS_POOLS_SWISS_ROUNDS: (None, 1, 20),
+    BRACKETS_VOTE_MINUTES: (1440, 1, 20160),
 }
 BRACKETS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
     BRACKETS_MODE: ("shadow", BRACKETS_MODES),
@@ -4263,10 +4270,13 @@ BRACKETS_ENUMS: dict[str, tuple[str, tuple[str, ...]]] = {
     BRACKETS_BEST_OF_FINALS: ("5", BRACKETS_LENGTHS),
     BRACKETS_POOLS_FORMAT: ("none", BRACKETS_POOLS_FORMATS),
     BRACKETS_POOLS_BEST_OF: ("3", BRACKETS_LENGTHS),
+    BRACKETS_KIND_DEFAULT: ("fighters", BRACKETS_KINDS),
+    BRACKETS_DECIDE_DEFAULT: ("votes", BRACKETS_DECIDERS),
 }
 BRACKETS_BOOLS: dict[str, bool] = {
     BRACKETS_GRAND_FINAL_RESET: True,
     BRACKETS_THIRD_PLACE: False,
+    BRACKETS_VOTES_VISIBLE: True,
 }
 BRACKETS_NAMED = ("name",)
 BRACKETS_SET = ("set",)
@@ -4777,9 +4787,93 @@ BRACKETS_POOL_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the bracket page's button that moves a tied player up a finished pool's order",
     ),
 }
+BRACKETS_VOTE_FIELDS = ("a", "b", "votes_a", "votes_b")
+BRACKETS_KIND_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "brackets_kind_fighters_words": (
+        "Fighting game",
+        (),
+        "the name of the bracket kind members sign up for and play",
+    ),
+    "brackets_kind_sports_words": (
+        "Sports",
+        (),
+        "the name of the bracket kind for teams, schools and players",
+    ),
+    "brackets_kind_list_words": (
+        "List",
+        (),
+        "the name of the bracket kind for plain names, like the best candy bar",
+    ),
+    "brackets_decide_votes_words": (
+        "Members vote",
+        (),
+        "how a list bracket's sets are decided when members vote on them",
+    ),
+    "brackets_decide_organiser_words": (
+        "Organiser decides",
+        (),
+        "how a list bracket's sets are decided when the organiser picks each winner",
+    ),
+    "brackets_vote_said": (
+        "You voted for {name} · change any time until {closes}",
+        ("name", "closes"),
+        "what a member is told after voting on a list bracket's set",
+    ),
+    "brackets_vote_open_line": (
+        "{a} {votes_a} · {b} {votes_b} · closes {closes}",
+        (*BRACKETS_VOTE_FIELDS, "closes"),
+        "a list set's line while its vote is open and the counts are shown",
+    ),
+    "brackets_vote_hidden_line": (
+        "{count} vote(s) · closes {closes}",
+        ("count", "closes"),
+        "a list set's line while its vote is open and the counts are hidden until it closes",
+    ),
+    "brackets_vote_closed_line": (
+        "Votes: {a} {votes_a} · {b} {votes_b}",
+        BRACKETS_VOTE_FIELDS,
+        "a list set's count line once its vote has closed",
+    ),
+    "brackets_vote_tied_line": (
+        "Tied {votes_a}–{votes_b} · an organiser decides",
+        BRACKETS_VOTE_FIELDS,
+        "a list set's line when its vote closed level",
+    ),
+    "brackets_vote_button_change": (
+        "Change vote",
+        (),
+        "the hint on the other name's button once a member has voted on a list set",
+    ),
+    "brackets_close_vote_label": (
+        "Close now",
+        (),
+        "the organiser's button that closes a list set's vote before its time",
+    ),
+    "brackets_kind_has_no_signups_said": (
+        "**{name}** is a list bracket, so it has no sign-ups or check-in.",
+        BRACKETS_NAMED,
+        "the answer to a sign-up, leave or check-in on a list bracket",
+    ),
+    "brackets_vote_not_open_said": (
+        "Voting on {set} is not open.",
+        BRACKETS_SET,
+        "the answer to a vote on a list set whose vote has not opened or has closed",
+    ),
+    "brackets_not_votes_said": (
+        "{set} is decided by the organiser, not by votes.",
+        BRACKETS_SET,
+        "the answer to a vote on a list set the organiser decides",
+    ),
+    "brackets_vote_pick_said": (
+        "Pick one of the two names in {set}.",
+        BRACKETS_SET,
+        "the answer to a vote that names neither side of a list set",
+    ),
+}
 BRACKETS_WORDS.update(BRACKETS_CARD_WORDS)
 BRACKETS_WORDS.update(BRACKETS_PAGE_WORDS)
 BRACKETS_WORDS.update(BRACKETS_POOL_WORDS)
+BRACKETS_WORDS.update(BRACKETS_KIND_WORDS)
 BRACKETS_DEFAULTS: dict[str, Any] = {
     BRACKETS_CHANNEL: BRACKETS_CHANNEL_ID,
     **{key: default for key, (default, _) in BRACKETS_ENUMS.items()},
@@ -4798,6 +4892,8 @@ BRACKETS_KEYS: tuple[str, ...] = (
     BRACKETS_BEST_OF_FINALS,
     BRACKETS_POOLS_FORMAT,
     BRACKETS_POOLS_BEST_OF,
+    BRACKETS_KIND_DEFAULT,
+    BRACKETS_DECIDE_DEFAULT,
     *BRACKETS_BOOLS,
     *BRACKETS_NUMBERS,
     *BRACKETS_WORDS,
@@ -4904,6 +5000,22 @@ KEY_HELP.update(
             "rounded up"
         ),
         BRACKETS_POOLS_BEST_OF: "the best-of every pool set plays; 3 by default",
+        BRACKETS_KIND_DEFAULT: (
+            "the kind a new tournament starts as on the site: fighters — the default — sports "
+            "or list. A tournament's kind is fixed once it is made"
+        ),
+        BRACKETS_DECIDE_DEFAULT: (
+            "how a new list bracket's sets are decided: votes — the default — members vote on "
+            "each set; organiser, the organiser picks each winner"
+        ),
+        BRACKETS_VOTE_MINUTES: (
+            "minutes a list bracket's vote on a set stays open, from when the set is ready; "
+            "1440 (a day) by default"
+        ),
+        BRACKETS_VOTES_VISIBLE: (
+            "whether a list set shows each name's votes while its vote is open; on by default. "
+            "Off shows only how many have voted until it closes"
+        ),
         **{key: said for key, (_, _, said) in BRACKETS_WORDS.items()},
     }
 )

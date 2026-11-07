@@ -10,8 +10,10 @@ from ... import brackets_cards, brackets_store, brackets_thread, brackets_view
 from ... import brackets_moves as moves
 from ... import brackets_people as people
 from ... import brackets_sets as sets
+from ... import brackets_votes as votes
 from ...brackets import access
 from ...logkinds import VIA_WEBSITE
+from ...settings_store import BRACKETS_VOTES_VISIBLE
 from ..auth import Refused
 from ..names import site_words
 from ..writes import (
@@ -76,7 +78,13 @@ def build_router(bot: Any) -> APIRouter:
                 "no_tournament",
                 moves.said(bot.store, guild.id, "brackets_no_tournament_said", id=tournament_id),
             )
-        found = await brackets_view.full(bot.db, row, viewer=int(who["id"]), runs=runs(guild, who))
+        found = await brackets_view.full(
+            bot.db,
+            row,
+            viewer=int(who["id"]),
+            runs=runs(guild, who),
+            visible=bool(bot.store.get(guild.id, BRACKETS_VOTES_VISIBLE)),
+        )
         return found | {"to_name": name_of(guild, row["to_user_id"])}
 
     async def players(guild: Any, tournament_id: Any, key: str) -> list[int]:
@@ -163,6 +171,7 @@ def build_router(bot: Any) -> APIRouter:
             "may_run": runs(guild, who),
             "words": brackets_view.page_words(bot.store, guild.id),
             "defaults": brackets_view.page_defaults(moves.option_defaults(bot.store, guild.id)),
+            "kind_defaults": moves.kind_defaults(bot.store, guild.id),
             "tournaments": [
                 brackets_view.summary(row) | {"to_name": name_of(guild, row["to_user_id"])}
                 for row in rows
@@ -294,6 +303,13 @@ def build_router(bot: Any) -> APIRouter:
 
     set_move("/{tournament_id}/sets/{key}/call", sets.call)
     set_move("/{tournament_id}/sets/{key}/confirm", sets.confirm_report)
+    set_move("/{tournament_id}/sets/{key}/close-vote", votes.close_vote)
+
+    @router.post("/{tournament_id}/sets/{key}/vote")
+    async def brackets_vote(
+        request: Request, tournament_id: str, key: str, payload: Any = OPTIONAL
+    ) -> dict[str, Any]:
+        return await answered(request, tournament_id, votes.vote, key, body_of(payload).get("slot"))
 
     @router.post("/{tournament_id}/sets/{key}/reset")
     async def brackets_set_reset(

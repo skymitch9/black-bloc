@@ -62,6 +62,8 @@ const IDS = {
   // 18 has its final built with nothing played, so Back to pools takes it away.
   bracket_pooled_id: '17',
   bracket_final_id: '18',
+  // A list bracket decided by votes: 19 runs with W1-1 and W1-2 open to vote.
+  bracket_vote_id: '19',
   // The point system: run 1 is pending, 2 approved, 3 rejected; bounty 1 is live.
   points_pending_id: '1',
   points_approved_id: '2',

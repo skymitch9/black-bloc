@@ -10,9 +10,13 @@ export function ruleOf(filters, key) {
   return found ? found[2] || null : null;
 }
 
-export function passes(item, { text = () => '', filters = null, filter = null, query = '', match = 'text' } = {}) {
+export function passes(item, { text = () => '', filters = null, filter = null, query = '', match = 'text', groups = [] } = {}) {
   const rule = ruleOf(filters, filter);
-  return (!rule || Boolean(rule(item))) && matches(text(item), query, { match });
+  const more = (groups || []).every((group) => {
+    const found = ruleOf(group.filters, group.filter);
+    return !found || Boolean(found(item));
+  });
+  return (!rule || Boolean(rule(item))) && more && matches(text(item), query, { match });
 }
 
 export function applyFilters(items, options = {}) {

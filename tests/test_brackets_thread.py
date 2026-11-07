@@ -966,3 +966,62 @@ async def test_a_move_whose_thread_cannot_be_made_moves_nothing(bot, guild):
     assert str(KNUCK_UP) in outcome.message
     row = await row_of(bot, tid)
     assert (row["shadow"], row["thread_id"]) == (1, the_thread(bot, REHEARSAL).id)
+
+
+async def listed_running(bot, guild, *names, decide_by="votes", **given):
+    tid = await created(
+        bot,
+        guild,
+        name="Best candy bar",
+        kind="list",
+        format="single",
+        decide_by=decide_by,
+        **given,
+    )
+    for name in names:
+        await moved(bot, guild, tid, people.add_entrant, name=name)
+    await moved(bot, guild, tid, moves.start)
+    return tid
+
+
+async def test_a_voted_list_card_carries_two_name_buttons_and_the_open_line(bot, guild):
+    await listed_running(bot, guild, "Snickers", "Twix")
+    thread = the_thread(bot)
+    [card] = thread.cards
+    assert card.content == "Snickers v Twix"
+    assert card.labels == ["Snickers", "Twix", "Snickers wins…", "Twix wins…", "Close now"]
+    assert card.embed.description.startswith("Snickers 0 · Twix 0 · closes <t:")
+    assert "best of" not in card.embed.description.lower()
+    starter = thread.messages[0].embed.description
+    assert "List · Single elimination · Members vote" in starter
+
+
+async def test_hidden_counts_show_only_how_many_voted(bot, guild):
+    await bot.store.set(GUILD, "brackets_votes_visible", False)
+    await listed_running(bot, guild, "Snickers", "Twix")
+    [card] = the_thread(bot).cards
+    assert card.embed.description.startswith("0 vote(s) · closes <t:")
+
+
+async def test_an_organiser_decided_list_card_has_only_the_organisers_picks(bot, guild):
+    await listed_running(bot, guild, "Snickers", "Twix", decide_by="organiser")
+    [card] = the_thread(bot).cards
+    assert card.labels == ["Snickers wins…", "Twix wins…"]
+    assert "Organiser decides" in the_thread(bot).messages[0].embed.description
+
+
+async def test_the_sweep_closes_a_due_vote_and_the_card_reads_the_result(bot, guild):
+    from black_bloc import brackets_votes as votes
+
+    tid = await listed_running(bot, guild, "Snickers", "Twix")
+    await votes.vote(bot, guild, who(guild, ADA), tid, "W1-1", "b")
+    await bot.db.conn.execute(
+        "UPDATE tournament_sets SET vote_closes_at = '2020-01-01T00:00:00+00:00' WHERE key = 'W1-1'"
+    )
+    await bot.db.conn.commit()
+
+    await thread_.sweep(bot, guild)
+
+    [card] = the_thread(bot).cards
+    assert card.embed.description == "W1-1 is final: Twix wins 1–0.\nVotes: Snickers 0 · Twix 1"
+    assert "Snickers" not in card.labels

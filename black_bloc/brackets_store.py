@@ -3,10 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import fields
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from .brackets.model import POOL_FORMATS, Bracket, Match, Options, Plan
+from .brackets.model import (
+    BYE,
+    CALLED,
+    POOL_FORMATS,
+    READY,
+    VOID,
+    WAITING,
+    Bracket,
+    Match,
+    Options,
+    Plan,
+)
 
 DRAFT = "draft"
 SIGNUPS = "signups"
@@ -20,6 +31,17 @@ STATES = (DRAFT, SIGNUPS, CHECK_IN, SEEDING, POOLS, RUNNING, COMPLETE, CANCELLED
 BEFORE_START = (DRAFT, SIGNUPS, CHECK_IN, SEEDING)
 PLAYING = (POOLS, RUNNING)
 NO_POOLS = "none"
+
+FIGHTERS = "fighters"
+SPORTS = "sports"
+LIST = "list"
+KINDS = (FIGHTERS, SPORTS, LIST)
+VOTES = "votes"
+ORGANISER = "organiser"
+DECIDERS = (VOTES, ORGANISER)
+VOTE_SLOTS = ("a", "b")
+VOTE_OPEN = (READY, CALLED)
+VOTE_GONE = (WAITING, BYE, VOID)
 
 OWN = "own"
 STARTGG = "startgg"
@@ -60,6 +82,9 @@ EDITABLE = (
     "rules_text",
     "starts_at",
     "to_user_id",
+    "kind",
+    "decide_by",
+    "vote_minutes",
 )
 SET_COLUMNS = tuple(one.name for one in fields(Match))
 LIST_LIMIT = 200
@@ -79,6 +104,23 @@ async def create(db: Any, guild_id: int, values: dict[str, Any], created_by: int
     )
     await db.conn.commit()
     return int(cur.lastrowid)
+
+
+def column(row: Any, name: str) -> Any:
+    try:
+        return row[name]
+    except (KeyError, IndexError):
+        return None
+
+
+def kind_of(row: Any) -> str:
+    """The bracket's kind; a row read before the column existed is a fighters bracket."""
+    found = column(row, "kind")
+    return found if found in KINDS else FIGHTERS
+
+
+def votes_decide(row: Any) -> bool:
+    return kind_of(row) == LIST and column(row, "decide_by") == VOTES
 
 
 async def tournament(db: Any, guild_id: int, tournament_id: int) -> Any:
@@ -286,6 +328,9 @@ async def save(
         await db.conn.execute(
             "DELETE FROM tournament_sets WHERE tournament_id = ? AND key = ?", (tournament_id, key)
         )
+        await db.conn.execute(
+            "DELETE FROM tournament_votes WHERE tournament_id = ? AND key = ?", (tournament_id, key)
+        )
     columns = ", ".join(SET_COLUMNS)
     marks = ", ".join("?" for _ in SET_COLUMNS)
     updates = ", ".join(f"{name} = excluded.{name}" for name in SET_COLUMNS if name != "key")
@@ -303,6 +348,7 @@ async def save(
 async def clear_sets(db: Any, tournament_id: int) -> dict[str, int]:
     gone = {key: found[0] for key, found in (await cards(db, tournament_id)).items()}
     await db.conn.execute("DELETE FROM tournament_sets WHERE tournament_id = ?", (tournament_id,))
+    await db.conn.execute("DELETE FROM tournament_votes WHERE tournament_id = ?", (tournament_id,))
     await db.conn.commit()
     return gone
 
@@ -338,3 +384,108 @@ async def set_card(
         (message_id, card_at, tournament_id, key),
     )
     await db.conn.commit()
+
+
+async def ballots(db: Any, tournament_id: int) -> dict[str, dict[str, Any]]:
+    """Each set's vote: when it opened, when it closes, when it closed, and the counts."""
+    cur = await db.conn.execute(
+        "SELECT key, vote_opens_at, vote_closes_at, vote_closed_at FROM tournament_sets "
+        "WHERE tournament_id = ? AND vote_opens_at IS NOT NULL",
+        (tournament_id,),
+    )
+    found = {
+        row["key"]: {
+            "opens_at": row["vote_opens_at"],
+            "closes_at": row["vote_closes_at"],
+            "closed_at": row["vote_closed_at"],
+            "a": 0,
+            "b": 0,
+        }
+        for row in await cur.fetchall()
+    }
+    cur = await db.conn.execute(
+        "SELECT key, slot, COUNT(*) AS n FROM tournament_votes WHERE tournament_id = ? "
+        "GROUP BY key, slot",
+        (tournament_id,),
+    )
+    for row in await cur.fetchall():
+        if row["key"] in found and row["slot"] in VOTE_SLOTS:
+            found[row["key"]][row["slot"]] = int(row["n"])
+    return found
+
+
+async def ballot(db: Any, tournament_id: int, key: str) -> dict[str, Any] | None:
+    return (await ballots(db, tournament_id)).get(key)
+
+
+async def my_votes(db: Any, tournament_id: int, user_id: int | None) -> dict[str, str]:
+    if user_id is None:
+        return {}
+    cur = await db.conn.execute(
+        "SELECT key, slot FROM tournament_votes WHERE tournament_id = ? AND user_id = ?",
+        (tournament_id, int(user_id)),
+    )
+    return {row["key"]: row["slot"] for row in await cur.fetchall()}
+
+
+async def cast(db: Any, tournament_id: int, key: str, user_id: int, slot: str) -> None:
+    """One row per member and set, changed in place until the vote closes."""
+    await db.conn.execute(
+        "INSERT INTO tournament_votes(tournament_id, key, user_id, slot, at) "
+        "VALUES (?, ?, ?, ?, ?) ON CONFLICT(tournament_id, key, user_id) "
+        "DO UPDATE SET slot = excluded.slot, at = excluded.at",
+        (tournament_id, key, int(user_id), slot, stamp()),
+    )
+    await db.conn.commit()
+
+
+async def vote_closed(db: Any, tournament_id: int, key: str, at: str) -> None:
+    await db.conn.execute(
+        "UPDATE tournament_sets SET vote_closed_at = ? WHERE tournament_id = ? AND key = ?",
+        (at, tournament_id, key),
+    )
+    await db.conn.commit()
+
+
+async def forget_votes(db: Any, tournament_id: int, key: str) -> None:
+    await db.conn.execute(
+        "DELETE FROM tournament_votes WHERE tournament_id = ? AND key = ?", (tournament_id, key)
+    )
+
+
+async def sync_votes(db: Any, row: Any, now: datetime | None = None) -> list[str]:
+    """A playable set gets a fresh vote, a decided one is closed, a set gone back to waiting is
+    cleared; answers the keys whose vote opened."""
+    if not votes_decide(row):
+        return []
+    moment = (now or datetime.now(UTC)).astimezone(UTC)
+    closes = moment + timedelta(minutes=int(row["vote_minutes"] or 1))
+    cur = await db.conn.execute(
+        "SELECT key, state, vote_opens_at, vote_closed_at FROM tournament_sets "
+        "WHERE tournament_id = ?",
+        (row["id"],),
+    )
+    opened: list[str] = []
+    fields = "vote_opens_at = ?, vote_closes_at = ?, vote_closed_at = ?"
+    where = "WHERE tournament_id = ? AND key = ?"
+    for one in await cur.fetchall():
+        key, state = one["key"], one["state"]
+        if state in VOTE_OPEN and (one["vote_opens_at"] is None or one["vote_closed_at"]):
+            await forget_votes(db, row["id"], key)
+            await db.conn.execute(
+                f"UPDATE tournament_sets SET {fields} {where}",
+                (stamp(moment), stamp(closes), None, row["id"], key),
+            )
+            opened.append(key)
+        elif state in VOTE_GONE and one["vote_opens_at"] is not None:
+            await forget_votes(db, row["id"], key)
+            await db.conn.execute(
+                f"UPDATE tournament_sets SET {fields} {where}", (None, None, None, row["id"], key)
+            )
+        elif state not in VOTE_OPEN and one["vote_opens_at"] and not one["vote_closed_at"]:
+            await db.conn.execute(
+                f"UPDATE tournament_sets SET vote_closed_at = ? {where}",
+                (stamp(moment), row["id"], key),
+            )
+    await db.conn.commit()
+    return opened
