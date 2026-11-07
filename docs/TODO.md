@@ -91,6 +91,10 @@ noise, the command ran; a `discord.ui.View` replaced on a message is NOT stopped
 (`ui/view.py:940–968`); `commands synced` counts TOP-LEVEL commands — a `Group` is one slot,
 so collapsing subcommands into a panel does not change it.
 
+## 📋 Session 2026-11-07
+
+- 🍫 **A test list bracket for best candy in #post-test, then a guide and a guides refresh (owner, Fri 2026-11-06 23:3x Phoenix, verbatim: *"Do a test bracket for me in the post test channel for best candy / Once it all looks good make a guide for it and refresh other guides"*).** Three parts: (1) create a LIST bracket *Best candy* (kind list, decided by votes) in `#post-test` (`1550284332365783091`) on the live site through the owner's signed-in Chrome, start it, run it to a winner and watch the cards; (2) once it looks right, a new guide for the brackets kinds (list votes, sports brackets with Import + the feed, pick sheets + leaderboard) through the guides pipeline (`info/guides-design.md`, `access/guides-capture.md`); (3) refresh the other guides that went stale since their last shoot. ⏳ IN PROGRESS 23:3x.
+
 ## 🎯 Feature asks — the first list (owner, 2026-08-26, verbatim then expanded)
 
 Owner's words: *"Go live message for #live-now channel / Twitch activity
