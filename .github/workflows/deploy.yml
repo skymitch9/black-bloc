@@ -105,23 +105,15 @@ jobs:
           stamp=$(date +%Y%m%d-%H%M%S)
           flyctl ssh console --app "$APP" -C "sh -c 'python3 -m black_bloc.dbsnapshot && cp /data/black_bloc-nightly-snapshot.sqlite3 /data/pre-deploy-$stamp.sqlite3 && ls -t /data/pre-deploy-*.sqlite3 | tail -n +6 | xargs -r rm -f && ls -l /data/pre-deploy-$stamp.sqlite3'"
 
-      - name: Write and commit release.json
+      - name: Write release.json
         id: release
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
           line=$(grep -v '^\s*$' docs/deploys.log | tail -n 1)
           last=$(echo "$line" | awk '{print $3}')
           git cat-file -e "${last}^{commit}" || { echo "REFUSED: $last (column 3 of the last deploys.log line) is not a commit here."; exit 1; }
           git diff --name-only "$last..HEAD" | BB_LAST_DEPLOY_LINE="$line" python scripts/release_json.py "$(git rev-parse --short HEAD)" site/public/assets/release.json
-          release=$(jq -r .release site/public/assets/release.json)
-          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "release=$(jq -r .release site/public/assets/release.json)" >> "$GITHUB_OUTPUT"
           echo "subject=$(git log -1 --format=%s)" >> "$GITHUB_OUTPUT"
-          if [ -n "$(git status --porcelain -- site/public/assets/release.json)" ]; then
-            git add -- site/public/assets/release.json
-            git commit -q -m "Release ${release}: release.json"
-            git push origin HEAD:main
-          fi
           echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Deploy
@@ -135,17 +127,24 @@ jobs:
         env:
           STARTED: ${{ steps.deploy.outputs.started }}
         run: |
-          for _ in $(seq 1 36); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$API_PROBE" || true)
-            booted=$(flyctl logs --app "$APP" --no-tail 2>/dev/null | awk -v s="$STARTED" '$1 >= s' | grep -c "logged in as" || true)
-            echo "api=$code login_lines=$booted"
-            if [ "$code" = "401" ] && [ "$booted" -gt 0 ]; then
-              state=$(flyctl machine list --app "$APP" --json | jq -r '[.[] | select(.state == "started")] | length')
-              [ "$state" -ge 1 ] && { echo "Boot verified."; exit 0; }
+          api=""; booted=0; machines=0
+          for _ in $(seq 1 60); do
+            api=$(curl -s -o /dev/null -w '%{http_code}' "$API_PROBE" || true)
+            booted=$(flyctl logs --app "$APP" --no-tail 2>/dev/null \
+              | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' \
+              | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z.*logged in as' \
+              | awk -v s="$STARTED" '$1 >= s' | wc -l)
+            machines=$(flyctl machine list --app "$APP" --json | jq '[.[] | select(.state == "started")] | length')
+            echo "api=$api login_lines_since_deploy=$booted started_machines=$machines"
+            if [ "$api" = "401" ] && [ "$booted" -gt 0 ] && [ "$machines" -ge 1 ]; then
+              echo "Boot verified."
+              exit 0
             fi
             sleep 5
           done
-          echo "The boot did not verify within 3 minutes."
+          echo "--- the last 80 log lines ---"
+          flyctl logs --app "$APP" --no-tail 2>&1 | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' | tail -n 80
+          echo "::error::Boot not verified in 5 minutes: api=$api, login lines since $STARTED=$booted, started machines=$machines."
           exit 1
 
       - name: Roll back to the release that was running
@@ -155,21 +154,35 @@ jobs:
           flyctl deploy --app "$APP" --image "${{ steps.before.outputs.image }}" --ha=false --yes
           echo "::error::The deploy did not verify, so ${{ steps.before.outputs.image }} was redeployed."
 
-      - name: Append the deploys.log line
+      - name: Commit release.json and the deploys.log line
         if: success()
         env:
           WHAT: ${{ inputs.what }}
           COMMIT: ${{ steps.release.outputs.commit }}
           SUBJECT: ${{ steps.release.outputs.subject }}
+          RELEASE: ${{ steps.release.outputs.release }}
         run: |
-          git pull -q --rebase origin main
-          commit=$COMMIT
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
           machine=$(flyctl machine list --app "$APP" --json | jq -r '[.[] | select(.state == "started")][0].id')
           region=$(flyctl machine list --app "$APP" --json | jq -r '[.[] | select(.state == "started")][0].region')
           stamp=$(date +%Y-%m-%dT%H:%M:%S%:z)
           what=${WHAT:-$SUBJECT}
           printf '%s  black-bloc  %s  machine=%s region=%s  by=deploy.yml  %s %s; verified: API answered 401 and the bot logged in (run %s)\n' \
-            "$stamp" "$commit" "$machine" "$region" "${{ steps.release.outputs.release }}" "$what" "$GITHUB_RUN_ID" >> docs/deploys.log
-          git add docs/deploys.log
-          git commit -q -m "docs: ${{ steps.release.outputs.release }} deploys.log line [skip ci]"
-          git push origin HEAD:main
+            "$stamp" "$COMMIT" "$machine" "$region" "$RELEASE" "$what" "$GITHUB_RUN_ID" > /tmp/deploy-line
+          cp site/public/assets/release.json /tmp/release.json
+          for attempt in 1 2 3 4 5; do
+            git fetch -q origin main
+            git reset -q --hard origin/main
+            cp /tmp/release.json site/public/assets/release.json
+            git add -- site/public/assets/release.json
+            git diff --cached --quiet || git commit -q -m "Release ${RELEASE}: release.json"
+            cat /tmp/deploy-line >> docs/deploys.log
+            git add docs/deploys.log
+            git commit -q -m "docs: ${RELEASE} deploys.log line [skip ci]"
+            git push -q origin HEAD:main && exit 0
+            echo "main moved during the push (attempt $attempt); trying again"
+            sleep 3
+          done
+          echo "::error::Deployed and verified, but release.json and the deploys.log line could not be pushed."
+          exit 1
