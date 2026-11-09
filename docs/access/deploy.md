@@ -145,6 +145,10 @@ Owner, 2026-11-08 18:43: *"If we can't deploy then we need a GitHub action for i
 
 One-time setup (owner): `flyctl tokens create deploy --app black-bloc` from the account that owns the app, then GitHub → repo **Settings → Secrets and variables → Actions → New repository secret** `FLY_API_TOKEN`. Without it the deploy job refuses by name. `main` is unprotected, so the job's own pushes (release.json, deploys.log) go through `GITHUB_TOKEN`; protecting `main` later needs a bypass for `github-actions[bot]`.
 
+### Pruning merged branches — `.github/workflows/prune-branches.yml` (2026-11-08)
+
+A cloud session's git proxy refuses branch deletions (HTTP 403 on `push --delete`), so **Actions → prune-branches → Run workflow** deletes every remote branch already merged into `main` (never `main`, never an unmerged one; *dry_run* lists only). Owner, 2026-11-08 18:55: *"Go ahead and clean up GitHub"*.
+
 ## Every later deploy — `scripts/deploy.ps1`, nothing else
 
 Before pushing to `main`, [`ci-mirror.md`](ci-mirror.md) runs GitHub's `ci.yml` in a Linux container (the deploy gate below stays the native one).
