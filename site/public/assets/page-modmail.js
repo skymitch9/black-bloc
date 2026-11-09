@@ -2,6 +2,7 @@ import { api, listOf, names, send, settings, settingsNamespace } from './api.js'
 import { start } from './app.js';
 import { frontDoorWords } from './blockwords.js';
 import { logsSection } from './logs.js';
+import { isMemberOnly } from './shell.js';
 import {
   ask,
   badge,
@@ -20,6 +21,7 @@ import {
   notice,
   readSelect,
   run,
+  sayAgain,
   sayNothing,
   section,
   table,
@@ -38,6 +40,13 @@ const SOURCE_LABEL = {
   staff: 'staff',
   practice: 'practice',
 };
+const OWN_DIRECTION = { in: 'you', out: 'staff' };
+const OWN_TITLE = 'Your tickets';
+const NO_OWN = 'You have no modmail tickets.';
+const NO_OWN_MESSAGES = 'Nothing has been said on this ticket yet.';
+const CLOSE_OWN = 'Close it';
+const CLOSE_OWN_ASK = 'Close this ticket?';
+const CLOSE_OWN_BODY = 'Staff stop seeing it as open. Message Black Bloc again any time to open a new one.';
 const DOOR_WORDS = 'Edit its words';
 const DOOR_OFF_LINE = 'frontdoor_mode is off, so /ask is hidden and no front door stays posted.';
 const DOOR_ONE_PER_CHANNEL = 'The Open a ticket button in this channel is down while the front door is here.';
@@ -363,7 +372,90 @@ async function panelSettings() {
   };
 }
 
-async function load() {
+function ownMessageNode(message) {
+  const direction = message.direction === 'out' ? 'out' : 'in';
+  return el('li', { class: 'msg', 'data-direction': direction }, [
+    el('div', { class: 'msg-head' }, [
+      el('strong', { text: direction === 'in' ? OWN_DIRECTION.in : message.author_name || OWN_DIRECTION.out }),
+      el('span', { text: when(message.at) }),
+    ]),
+    el('p', { class: 'msg-body', text: message.content || '' }),
+  ]);
+}
+
+async function ownTicketView(id) {
+  const ticket = await api(`/api/mine/modmail/${encodeURIComponent(id)}`);
+  const messages = listOf(ticket, 'messages');
+  const say = notice();
+  const text = el('textarea', { class: 'input area', rows: '4' });
+  const open = ticket.status === 'open';
+  const reply = button('Send', async () => {
+    if (!text.value.trim()) {
+      say.say('An empty message would tell staff nothing.', 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send(`/api/mine/modmail/${encodeURIComponent(id)}/reply`, 'POST', { text: text.value }),
+      (found) => found?.message || 'Sent.',
+    );
+    if (!done.ok) return;
+    keepSaying('modmail', say);
+    refresh();
+  }, { small: false });
+  const close = button(CLOSE_OWN, async () => {
+    const sure = await ask({ title: CLOSE_OWN_ASK, body: [CLOSE_OWN_BODY], confirmLabel: CLOSE_OWN });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => send(`/api/mine/modmail/${encodeURIComponent(id)}/close`, 'POST', {}),
+      (found) => found?.message || 'Closed.',
+    );
+    if (!done.ok) return;
+    keepSaying('modmail', say);
+    refresh();
+  }, { tone: 'quiet' });
+  return card(`Ticket ${ticket.id}`, [
+    el('p', {}, [`${when(ticket.opened_at)} · `, badge(ticket.status, open ? 'ok' : null)]),
+    messages.length ? el('ul', { class: 'msglist' }, messages.map(ownMessageNode)) : sayNothing(NO_OWN_MESSAGES),
+    open ? field('Message staff', text) : null,
+    open ? bar([reply, close]) : null,
+    say,
+  ]);
+}
+
+async function loadOwn() {
+  const tickets = listOf(await api('/api/mine/modmail'), 'tickets');
+  const list = table([
+    { label: 'Ticket', cell: (row) => String(row.id), className: 'mono' },
+    { label: 'Opened', cell: (row) => when(row.opened_at), className: 'mono' },
+    { label: 'Status', cell: (row) => badge(row.status, row.status === 'open' ? 'ok' : null) },
+    {
+      label: '',
+      cell: (row) => button('Open', () => {
+        state.open = row.id;
+        refresh();
+      }, { tone: 'quiet' }),
+    },
+  ], tickets, { empty: NO_OWN });
+  const one = section(OWN_TITLE, null, { count: tickets.length });
+  one.body.append(list, sayAgain('modmail', notice()));
+  const nodes = [one.node];
+  const wanted = state.open ?? tickets.find((row) => row.status === 'open')?.id ?? null;
+  if (wanted !== null) {
+    const view = section(`Ticket ${wanted}`, null, { id: 'ticket', open: true });
+    view.body.append(await ownTicketView(wanted));
+    nodes.push(view.node);
+  }
+  document.getElementById('dash').replaceChildren(...nodes);
+}
+
+async function load(me) {
+  if (isMemberOnly(me)) return loadOwn();
+  return loadStaff();
+}
+
+async function loadStaff() {
   const query = state.status ? `?status=${encodeURIComponent(state.status)}` : '';
   const [ticketPayload, snippetPayload, blockPayload] = await Promise.all([
     api(`/api/modmail/tickets${query}`),

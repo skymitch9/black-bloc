@@ -877,6 +877,9 @@ def test_the_note_table_names_exactly_the_kinds_routes_still_write():
 # CONSEQUENCE the bot emits on its own — no actor, and the same rows come from a sweep with
 # no person behind them — which checklist 34 says keeps the bare kind.
 VIA_NOT_NEEDED: dict[str, str] = {
+    "black_bloc/cogs/moderation/modmail.py::record_inbound": (
+        "modmail.relay_failed is a failure row; the site route writes web.modmail.member_reply"
+    ),
     "black_bloc/events.py::rename_channel": "cosmetic; would_rename/rename_failed carry no actor",
     "black_bloc/cogs/community/polls.py::send_review_card": "poll.card_failed is a failure row",
     "black_bloc/cogs/community/polls.py::post_poll": (

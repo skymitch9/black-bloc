@@ -11073,4 +11073,6 @@ Design: [`structure-backup-design.md`](structure-backup-design.md) ▸ *Found 20
 | `black_bloc/api/page_views.py` `STAFF_PAGE_PREFIXES` | A read-only viewer is admitted only to the GETs of staff pages; member pages' staff reads (`/api/requests` index) are deliberately absent, so @everyone on Requests never opens the staff list. `/api/actions` belongs to Overview, Health and Logs only. |
 | `black_bloc/api/auth.py` `page_viewer` | Runs inside `staff_dependency`, so every staff router gains viewers without per-route edits; a write on a viewed page is `403 read_only`, anywhere else the old `not_staff`. |
 | `site/public/assets/app.js` `painted` | A cached `me` paints first; `verify` repaints when the fresh `me` changes the read-only state, so a role change never leaves edit controls up. |
+| `black_bloc/api/tools/events.py` `build_member_router` / `own_row` | `/api/mine/events`, not `/api/events/mine`: the staff router carries `staff_dependency` at router level and `/{event_id}` would swallow `mine`. `own_row` is an allow-list, so a field added to `event_row` never leaks to a requester by default. |
+| `black_bloc/api/tools/modmail.py` `own_message_row` | Only `in` and `out` rows; `note` is staff's. An anonymous `out` shows `ANONYMOUS_NAME` and never an `author_id`. |
 

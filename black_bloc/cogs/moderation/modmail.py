@@ -587,6 +587,16 @@ async def tickets_by_status(
     return list(await cur.fetchall())
 
 
+async def tickets_of_member(db: Any, guild_id: int, user_id: int, limit: int = 100) -> list:
+    """One member's own tickets, newest first; practice runs are staff's, never theirs."""
+    cur = await db.conn.execute(
+        "SELECT * FROM modmail_tickets WHERE guild_id = ? AND user_id = ? AND practice = 0 "
+        "ORDER BY id DESC LIMIT ?",
+        (guild_id, user_id, int(limit)),
+    )
+    return list(await cur.fetchall())
+
+
 async def ticket_for_channel(db: Any, channel_id: int) -> Any:
     cur = await db.conn.execute(
         "SELECT * FROM modmail_tickets WHERE (thread_id = ? OR (thread_id IS NULL AND "

@@ -11,6 +11,7 @@ from ...events import (
     APPROVED,
     CANCEL_NOTE_LIMIT,
     DENIED,
+    OPEN_STATUSES,
     PENDING,
     STATUSES,
     apply_decision,
@@ -29,7 +30,9 @@ from ...events import (
     message_url,
     move_room_to_forum,
     moved_words,
+    own_events,
     read_where,
+    redraw_review_card,
     rename_channel,
     review_channel_url,
     review_kind,
@@ -42,7 +45,15 @@ from ...settings_store import DEFAULT_TIMEZONE_KEY
 from ...timezones import get_timezone, is_known
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
-from ..writes import actor_for, note, require_db, require_guild, writer_dependency
+from ..writes import (
+    actor_for,
+    member_dependency,
+    member_read_dependency,
+    note,
+    require_db,
+    require_guild,
+    writer_dependency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +84,18 @@ NOT_EDITABLE = (
     "to propose it again."
 )
 EDITABLE = (PENDING, APPROVED)
+OWN_EDITABLE = (PENDING,)
+OWN_NOT_EDITABLE = (
+    "Event **#{event_id}** is **{status}**, so its details were not changed. You can edit yours "
+    "while it waits for a decision; once it is decided, cancel it and propose it again, or ask "
+    "staff to change it."
+)
+NOT_YOUR_EVENT = (
+    "Event **#{event_id}** is not one you proposed, so nothing was done. Your own events are the "
+    "ones listed here."
+)
+OWN_LIMIT = 100
+OWN_EDITED = "Saved. Staff deciding on it see the new details."
 ANNOUNCEMENT_STALE = (
     "The public announcement still says what it said before; Black Bloc does not rewrite one it "
     "has already posted. Say so in the channel, or cancel and let them propose it again."
@@ -113,6 +136,7 @@ def event_row(
         "where_kind": where.kind,
         "where_channel_id": str(where.channel_id) if where.channel_id else None,
         "where_label": where_said(where, channel),
+        "where_channel_name": getattr(channel, "name", None),
         "starts_at": row["starts_at"],
         "ends_at": row["ends_at"],
         "minutes": duration_minutes(row),
@@ -181,6 +205,85 @@ async def wanted_event(bot: Any, guild: Any, event_id: int) -> Any:
     return row
 
 
+async def edited(
+    bot: Any,
+    guild: Any,
+    who: dict[str, Any],
+    row: Any,
+    payload: dict[str, Any],
+    editable: tuple[str, ...],
+    refusal: str,
+) -> dict[str, Any]:
+    """One edit for the staff page and the requester's own, each with its own states."""
+    event_id = row["id"]
+    if row["status"] not in editable:
+        raise Refused(
+            409,
+            "not_editable",
+            refusal.format(event_id=event_id, status=row["status"]),
+        )
+    given = str(payload.get("tz") or "")
+    tz_name = (
+        given
+        if is_known(given)
+        else await get_timezone(
+            bot.db, int(who["id"]), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)
+        )
+    )
+    where, refused = checked_where(
+        guild,
+        payload.get("where_kind"),
+        payload.get("where_channel_id"),
+        payload.get("location"),
+    )
+    if where is None:
+        raise Refused(400, "where_refused", refused)
+    fields, why = checked_fields(
+        title=payload.get("title"),
+        description=payload.get("description"),
+        where=where,
+        start=payload.get("start"),
+        duration=payload.get("duration"),
+        tz_name=tz_name,
+        now=datetime.now(UTC),
+    )
+    if fields is None:
+        raise Refused(400, "event_refused", why)
+    await update_event(
+        bot.db,
+        event_id,
+        title=fields.title,
+        description=fields.description,
+        where=fields.where,
+        starts_at=fields.starts,
+        finishes_at=ends_at(fields.starts, fields.minutes),
+    )
+    fresh = await wanted_event(bot, guild, event_id)
+    await redraw_review_card(bot, guild, fresh)
+    requester = guild.get_member(fresh["requester_id"])
+    await rename_channel(
+        bot,
+        guild,
+        fresh,
+        fresh["status"],
+        getattr(requester, "display_name", str(fresh["requester_id"])),
+    )
+    await note(
+        bot,
+        guild,
+        "web.event.edited",
+        who,
+        target=fresh["requester_id"],
+        details={"event_id": event_id, "title": fields.title, "tz": tz_name},
+    )
+    notes = []
+    if fresh["announce_message_id"]:
+        notes.append(ANNOUNCEMENT_STALE)
+    if fresh["scheduled_event_id"]:
+        notes.append(SCHEDULED_STALE)
+    return {"event": await shown(bot, guild, fresh), "message": EDITED, "notes": notes}
+
+
 def build_router(bot: Any) -> APIRouter:
     writer = writer_dependency(bot)
     router = APIRouter(
@@ -243,71 +346,7 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         row = await wanted_event(bot, guild, event_id)
-        if row["status"] not in EDITABLE:
-            raise Refused(
-                409,
-                "not_editable",
-                NOT_EDITABLE.format(event_id=event_id, status=row["status"]),
-            )
-        given = str(payload.get("tz") or "")
-        tz_name = (
-            given
-            if is_known(given)
-            else await get_timezone(
-                bot.db, int(who["id"]), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)
-            )
-        )
-        where, refused = checked_where(
-            guild,
-            payload.get("where_kind"),
-            payload.get("where_channel_id"),
-            payload.get("location"),
-        )
-        if where is None:
-            raise Refused(400, "where_refused", refused)
-        fields, why = checked_fields(
-            title=payload.get("title"),
-            description=payload.get("description"),
-            where=where,
-            start=payload.get("start"),
-            duration=payload.get("duration"),
-            tz_name=tz_name,
-            now=datetime.now(UTC),
-        )
-        if fields is None:
-            raise Refused(400, "event_refused", why)
-        await update_event(
-            bot.db,
-            event_id,
-            title=fields.title,
-            description=fields.description,
-            where=fields.where,
-            starts_at=fields.starts,
-            finishes_at=ends_at(fields.starts, fields.minutes),
-        )
-        fresh = await wanted_event(bot, guild, event_id)
-        requester = guild.get_member(fresh["requester_id"])
-        await rename_channel(
-            bot,
-            guild,
-            fresh,
-            fresh["status"],
-            getattr(requester, "display_name", str(fresh["requester_id"])),
-        )
-        await note(
-            bot,
-            guild,
-            "web.event.edited",
-            who,
-            target=fresh["requester_id"],
-            details={"event_id": event_id, "title": fields.title, "tz": tz_name},
-        )
-        notes = []
-        if fresh["announce_message_id"]:
-            notes.append(ANNOUNCEMENT_STALE)
-        if fresh["scheduled_event_id"]:
-            notes.append(SCHEDULED_STALE)
-        return {"event": await shown(bot, guild, fresh), "message": EDITED, "notes": notes}
+        return await edited(bot, guild, who, row, payload, EDITABLE, NOT_EDITABLE)
 
     @router.post("/{event_id}/approve")
     async def event_approve(request: Request, event_id: int) -> dict[str, Any]:
@@ -411,3 +450,84 @@ def build_router(bot: Any) -> APIRouter:
         return {"event": await shown(bot, guild, fresh), "message": outcome.message}
 
     return router
+
+
+def build_member_router(bot: Any) -> APIRouter:
+    """The events a member proposed: theirs to read, edit while pending, and cancel."""
+    reader = member_read_dependency(bot)
+    writer = member_dependency(bot)
+    router = APIRouter(prefix="/api/mine/events", tags=["events"])
+
+    async def theirs(guild: Any, who: dict[str, Any], event_id: int) -> Any:
+        row = await get_event(bot.db, event_id)
+        if row is None or row["guild_id"] != guild.id:
+            raise Refused(404, "no_such_event", NO_SUCH_EVENT.format(event_id=event_id))
+        if row["requester_id"] != int(who["id"]):
+            raise Refused(403, "not_yours", NOT_YOUR_EVENT.format(event_id=event_id))
+        return row
+
+    @router.get("")
+    async def my_events(request: Request) -> list[dict[str, Any]]:
+        who = await reader(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        rows = await own_events(bot.db, guild.id, int(who["id"]), STATUSES)
+        rows = sorted(rows, key=lambda row: str(row["starts_at"]), reverse=True)[:OWN_LIMIT]
+        return [own_row(await shown(bot, guild, row)) for row in rows]
+
+    @router.put("/{event_id}")
+    async def my_event_edit(
+        request: Request, event_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await theirs(guild, who, event_id)
+        done = await edited(bot, guild, who, row, payload, OWN_EDITABLE, OWN_NOT_EDITABLE)
+        return {"event": own_row(done["event"]), "message": OWN_EDITED, "notes": []}
+
+    @router.post("/{event_id}/cancel")
+    async def my_event_cancel(request: Request, event_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await theirs(guild, who, event_id)
+        _, fresh = await cancel_for(bot, guild, row, actor_for(bot, who, guild), via=VIA_WEBSITE)
+        if fresh is None:
+            raise Refused(
+                409,
+                "not_cancellable",
+                NOT_CANCELLABLE.format(event_id=event_id, status=row["status"]),
+            )
+        return {"event": own_row(await shown(bot, guild, fresh)), "message": "Cancelled."}
+
+    return router
+
+
+OWN_FIELDS = (
+    "id",
+    "title",
+    "description",
+    "location",
+    "where_kind",
+    "where_channel_id",
+    "where_label",
+    "where_channel_name",
+    "starts_at",
+    "ends_at",
+    "minutes",
+    "duration",
+    "status",
+    "deny_reason",
+    "announce_url",
+    "scheduled_event_url",
+    "created_at",
+)
+
+
+def own_row(row: dict[str, Any]) -> dict[str, Any]:
+    """What the requester sees: their event, never the review room or who decided."""
+    return {key: row.get(key) for key in OWN_FIELDS} | {
+        "editable": row.get("status") in OWN_EDITABLE,
+        "cancellable": row.get("status") in OPEN_STATUSES,
+    }

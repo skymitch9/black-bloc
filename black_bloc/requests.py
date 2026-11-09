@@ -199,6 +199,15 @@ COMMENT_NEEDS_TEXT = (
     "it again."
 )
 WITHDRAWN_SAID = "Request **#{request_id}** is withdrawn. Nobody will pick it up now."
+EDITED_SAID = "Request **#{request_id}** is updated."
+NOT_YOURS_TO_EDIT = (
+    "Request **#{request_id}** is not yours, so nothing was changed. Only the person who filed "
+    "it can edit it."
+)
+TOO_LATE_TO_EDIT = (
+    "Request **#{request_id}** is **{status}**, so it was not changed. You can edit one that is "
+    "still open or on hold; ask staff if this one needs to change."
+)
 CHECK_ASKED_DM = "Request **#{request_id}** — {who} has been asked by DM to try it."
 CHECK_ASKED_CHANNEL = (
     "Request **#{request_id}** — {who}'s DMs are closed, so they were pinged in the request "
@@ -1153,6 +1162,50 @@ def resume_target(row: Any) -> str:
     return found if found in TRANSITIONS.get(HOLD, frozenset()) else IN_PROGRESS
 
 
+async def set_text(
+    db: Any, request_id: int, *, what: str, why: str, due_on: str | None
+) -> None:
+    await db.conn.execute(
+        "UPDATE requests SET what = ?, why = ?, due_on = ? WHERE id = ?",
+        (what, why, due_on, request_id),
+    )
+    await db.conn.commit()
+
+
+async def edit_own_request(
+    bot: Any,
+    guild: Any,
+    row: Any,
+    actor: Any,
+    *,
+    what: str,
+    why: str,
+    due_on: str | None,
+    via: str = VIA_DISCORD,
+) -> tuple[str, Any]:
+    """The person who filed it rewords it while nobody has picked it up."""
+    status = row_value(row, "status")
+    request_id = row_value(row, "id")
+    if status not in WITHDRAWABLE:
+        return (
+            TOO_LATE_TO_EDIT.format(
+                request_id=request_id, status=STATUS_WORDS.get(status, status)
+            ),
+            None,
+        )
+    await set_text(bot.db, request_id, what=what, why=why, due_on=due_on)
+    await log_action(
+        bot,
+        guild,
+        kind_via("request.edited", via),
+        actor=actor,
+        target=row_value(row, "user_id"),
+        details={"request_id": request_id, "via": via},
+    )
+    fresh = await get_request(bot.db, request_id)
+    return (EDITED_SAID.format(request_id=request_id), fresh)
+
+
 async def withdraw_request(
     bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
 ) -> tuple[str, Any]:
@@ -1299,4 +1352,9 @@ __all__ = [
     "wanted_status",
     "wanted_statuses",
     "withdraw_request",
+    "edit_own_request",
+    "EDITED_SAID",
+    "NOT_YOURS_TO_EDIT",
+    "TOO_LATE_TO_EDIT",
+    "set_text",
 ]

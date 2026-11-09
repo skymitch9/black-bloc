@@ -800,3 +800,46 @@ def test_making_the_request_forum_needs_a_session(client):
 
 def test_making_the_request_forum_refuses_a_member(as_member):
     assert as_member.post("/api/requests/forum", json={}).status_code == 403
+
+
+async def test_a_member_edits_their_own_open_row(as_member, web, wf):
+    await file_one(as_member)
+
+    edited = as_member.post(
+        "/api/requests/1/edit",
+        json={"what": "a better board", "why": "still a mess", "due_on": "2099-01-02"},
+    )
+
+    assert edited.status_code == 200
+    row = edited.json()["request"]
+    assert row["what"] == "a better board" and row["why"] == "still a mess"
+    assert "updated" in edited.json()["message"]
+    assert "web.request.edited" in await kinds(web, wf)
+
+
+async def test_a_member_cannot_edit_somebody_elses(as_staff, client, sign_in):
+    await file_one(client)
+    sign_in(client, uid=ASKER, staff=False)
+
+    refused = client.post("/api/requests/1/edit", json=FILED)
+
+    assert refused.status_code == 403 and refused.json()["error"] == "not_yours"
+
+
+async def test_a_picked_up_row_is_too_late_to_edit(as_member, client, sign_in, web):
+    await file_one(as_member)
+    await web.db.conn.execute("UPDATE requests SET status = 'in_progress' WHERE id = 1")
+    await web.db.conn.commit()
+
+    refused = as_member.post("/api/requests/1/edit", json=FILED)
+
+    assert refused.status_code == 409 and refused.json()["error"] == "too_late_to_edit"
+
+
+async def test_an_edit_with_an_empty_box_changes_nothing(as_member, web):
+    await file_one(as_member)
+
+    refused = as_member.post("/api/requests/1/edit", json={"what": "", "why": "x"})
+
+    assert refused.status_code == 400
+    assert (await pure.get_request(web.db, 1))["what"] == FILED["what"]

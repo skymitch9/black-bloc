@@ -11385,7 +11385,14 @@ VIEW_PAGE_WORDS: dict[str, str] = {
     "settings": "Settings",
 }
 VIEW_PAGES: tuple[str, ...] = tuple(VIEW_PAGE_WORDS)
-VIEW_MEMBER_PAGES: tuple[str, ...] = ("requests", "guides", "brackets", "leaderboard")
+VIEW_MEMBER_PAGES: tuple[str, ...] = (
+    "requests",
+    "guides",
+    "brackets",
+    "leaderboard",
+    "events",
+    "modmail",
+)
 VIEW_EVERYONE = "everyone"
 
 

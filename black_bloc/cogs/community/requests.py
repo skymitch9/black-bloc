@@ -664,6 +664,26 @@ async def notify(bot: Any, guild: Any, row: Any, who: Any) -> None:
         await set_message(bot.db, row["id"], message.id)
 
 
+async def redraw_card(bot: Any, guild: Any, row: Any) -> None:
+    """The filer reworded it, so the card it was filed with carries the new words."""
+    message_id = row_value(row, "message_id")
+    if not message_id:
+        return
+    thread = thread_of(bot, guild, row)
+    place = thread
+    if place is None:
+        channel_id = bot.store.get(guild.id, NOTIFY_CHANNEL_KEY)
+        place = guild.get_channel(int(channel_id)) if channel_id else None
+    finder = getattr(place, "get_partial_message", None)
+    if finder is None:
+        return
+    embed, _ = card(bot, guild, row, FILED_LOOK)
+    try:
+        await finder(int(message_id)).edit(embed=embed)
+    except NETWORK_ERRORS as exc:
+        log.warning("requests: could not re-draw the card for %s: %s", row["id"], exc)
+
+
 async def say_in_channel(bot: Any, guild: Any, row: Any, said: str) -> Any:
     """One plain line beside a request — the trail a hand-off leaves where the card lives."""
     return await post_line(
@@ -1759,6 +1779,7 @@ async def setup(bot: commands.Bot) -> None:
 
 
 __all__ = [
+    "redraw_card",
     "BackButton",
     "CardMoveButton",
     "FileButton",

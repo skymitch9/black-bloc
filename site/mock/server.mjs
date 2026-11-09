@@ -1774,7 +1774,8 @@ const SETTING_SPECS = [
   ["chat_review_suggest_phrase", "text", "add **{phrase}** to **{intent}**", "add **{phrase}** to **{intent}**", "how a suggested phrase reads on a review item. It takes {phrase} and {intent}"],
   ["chat_review_suggest_intent", "text", "a new intent **{intent}** for **{phrase}**", "a new intent **{intent}** for **{phrase}**", "how a suggested new intent reads on a review item. It takes {intent} and {phrase}"],
   ["chat_review_suggest_knowledge", "text", "a fact for **{section}**: {line}", "a fact for **{section}**: {line}", "how a suggested knowledge fact reads on a review item. It takes {section} and {line}"],
-  ["chat_review_suggest_none", "text", "nothing to learn", "nothing to learn", "how a review item reads when the cheap model found nothing that fits"],  ["view_overview_role_ids", "roles", [], [], "roles that may open the Overview page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["chat_review_suggest_none", "text", "nothing to learn", "nothing to learn", "how a review item reads when the cheap model found nothing that fits"],
+  ["view_overview_role_ids", "roles", [], [], "roles that may open the Overview page on the site to look but not change anything; staff always have the whole page; none by default"],
   ["view_health_role_ids", "roles", [], [], "roles that may open the Health page on the site to look but not change anything; staff always have the whole page; none by default"],
   ["view_audit_role_ids", "roles", [], [], "roles that may open the Logs page on the site to look but not change anything; staff always have the whole page; none by default"],
   ["view_requests_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Requests page on the site as a member does; @everyone by default"],
@@ -1783,13 +1784,13 @@ const SETTING_SPECS = [
   ["view_members_role_ids", "roles", [], [], "roles that may open the Members page on the site to look but not change anything; staff always have the whole page; none by default"],
   ["view_automod_role_ids", "roles", [], [], "roles that may open the Automod page on the site to look but not change anything; staff always have the whole page; none by default"],
   ["view_honeypot_role_ids", "roles", [], [], "roles that may open the Honeypot page on the site to look but not change anything; staff always have the whole page; none by default"],
-  ["view_modmail_role_ids", "roles", [], [], "roles that may open the Modmail page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_modmail_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Modmail page on the site as a member does; @everyone by default"],
   ["view_posts_role_ids", "roles", [], [], "roles that may open the Posts page on the site to look but not change anything; staff always have the whole page; none by default"],
   ["view_golive_role_ids", "roles", [], [], "roles that may open the Go-live page on the site to look but not change anything; staff always have the whole page; none by default"],
   ["view_pbs_role_ids", "roles", [], [], "roles that may open the Personal bests page on the site to look but not change anything; staff always have the whole page; none by default"],
   ["view_leaderboard_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Leaderboard page on the site as a member does; @everyone by default"],
   ["view_brackets_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Brackets page on the site as a member does; @everyone by default"],
-  ["view_events_role_ids", "roles", [], [], "roles that may open the Events page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_events_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Events page on the site as a member does; @everyone by default"],
   ["view_runs_role_ids", "roles", ["900000000000000012"], ["900000000000000012"], "roles that may open the BaF runs page on the site to look but not change anything; staff always have the whole page; Committee by default"],
   ["view_raidtrain_role_ids", "roles", [], [], "roles that may open the Raid trains page on the site to look but not change anything; staff always have the whole page; none by default"],
   ["view_birthdays_role_ids", "roles", [], [], "roles that may open the Birthdays page on the site to look but not change anything; staff always have the whole page; none by default"],
@@ -3671,12 +3672,12 @@ route('POST', '/api/selftest/:run_id/purge', (context) => {
 });
 
 route('GET', '/api/ref/channels', (context) => {
-  if (!memberSession(context.session) || !sessionViews(context.session).some((page) => !['requests', 'guides', 'brackets', 'leaderboard'].includes(page))) requireStaff(context.session);
+  if (!memberSession(context.session) || !sessionViews(context.session).some((page) => !['requests', 'guides', 'brackets', 'leaderboard', 'events', 'modmail'].includes(page))) requireStaff(context.session);
   return CHANNELS;
 });
 
 route('GET', '/api/ref/roles', (context) => {
-  if (!memberSession(context.session) || !sessionViews(context.session).some((page) => !['requests', 'guides', 'brackets', 'leaderboard'].includes(page))) requireStaff(context.session);
+  if (!memberSession(context.session) || !sessionViews(context.session).some((page) => !['requests', 'guides', 'brackets', 'leaderboard', 'events', 'modmail'].includes(page))) requireStaff(context.session);
   return everyRole();
 });
 
@@ -3860,7 +3861,7 @@ route('GET', '/api/members/optouts', (context) => {
 });
 
 route('GET', '/api/ref/names', (context) => {
-  if (!memberSession(context.session) || !sessionViews(context.session).some((page) => !['requests', 'guides', 'brackets', 'leaderboard'].includes(page))) requireStaff(context.session);
+  if (!memberSession(context.session) || !sessionViews(context.session).some((page) => !['requests', 'guides', 'brackets', 'leaderboard', 'events', 'modmail'].includes(page))) requireStaff(context.session);
   const ids = (context.url.searchParams.get('ids') || '').split(',').map((id) => id.trim()).filter(Boolean);
   const found = {};
   for (const id of ids) found[id] = nameFor(id);
@@ -13883,6 +13884,100 @@ function messageRow(message) {
   };
 }
 
+function ownTicketRow(ticket) {
+  return { id: ticket.id, status: ticket.status, opened_at: ticket.opened_at, closed_at: ticket.closed_at, source: ticket.source || 'dm' };
+}
+
+function ownTicketOf(context) {
+  requireMember(context.session);
+  const ticket = ticketOf(context.params.id);
+  if (String(ticket.user_id) !== String(actorOf(context.session)) || ticket.practice) {
+    throw new Refused(403, 'not_yours', `Ticket **#${ticket.id}** is not one of yours, so nothing was shown or sent. Your own tickets are the ones listed here.`);
+  }
+  return ticket;
+}
+
+route('GET', '/api/mine/modmail', (context) => {
+  requireMember(context.session);
+  const me = String(actorOf(context.session));
+  return state.tickets.filter((ticket) => String(ticket.user_id) === me && !ticket.practice).map(ownTicketRow);
+});
+
+route('GET', '/api/mine/modmail/:id', (context) => {
+  const ticket = ownTicketOf(context);
+  const messages = (state.messages[ticket.id] || []).filter((one) => one.direction !== 'note').map((one) => ({
+    id: one.id,
+    at: one.at,
+    direction: one.direction,
+    author_name: one.direction === 'out' && one.anonymous ? 'Staff' : memberName(one.author_id),
+    content: one.content,
+    attachments: one.attachments || [],
+  }));
+  return { ...ownTicketRow(ticket), messages };
+});
+
+route('POST', '/api/mine/modmail/:id/reply', async (context) => {
+  const ticket = ownTicketOf(context);
+  const body = await context.body();
+  if (!String(body.text || '').trim()) throw new Refused(400, 'nothing_to_send', 'That reply was empty, so nothing was sent. Write something for the member to read.');
+  if (ticket.status !== 'open') throw new Refused(409, 'ticket_closed', `Ticket **#${ticket.id}** is closed. Message Black Bloc again any time to open a new one.`);
+  (state.messages[ticket.id] = state.messages[ticket.id] || []).push({ id: state.nextMessage++, at: now(), author_id: actorOf(context.session), direction: 'in', anonymous: false, content: String(body.text), attachments: null, delivered: 1 });
+  logAction('web.modmail.member_reply', { details: { ticket_id: ticket.id, posted: true } });
+  return { sent: true, ticket_id: ticket.id, message: 'Sent to staff.' };
+});
+
+route('POST', '/api/mine/modmail/:id/close', (context) => {
+  const ticket = ownTicketOf(context);
+  if (ticket.status !== 'open') throw new Refused(409, 'ticket_closed', `Ticket **#${ticket.id}** is closed. Message Black Bloc again any time to open a new one.`);
+  ticket.status = 'closed';
+  ticket.closed_at = now();
+  ticket.closed_by = actorOf(context.session);
+  ticket.close_reason = 'closed by the member';
+  return { ticket: ownTicketRow(ticket), message: `Ticket **#${ticket.id}** is closed. Message Black Bloc again any time to open a new one.` };
+});
+
+const OWN_EVENT_FIELDS = ['id', 'title', 'description', 'location', 'where_kind', 'where_channel_id', 'where_label', 'starts_at', 'ends_at', 'minutes', 'duration', 'status', 'deny_reason', 'created_at'];
+
+function ownEventRow(row) {
+  const shown = eventRow(row);
+  const out = Object.fromEntries(OWN_EVENT_FIELDS.map((key) => [key, shown[key] ?? null]));
+  return { ...out, where_channel_name: null, announce_url: null, scheduled_event_url: null, editable: row.status === 'pending', cancellable: ['pending', 'approved', 'live'].includes(row.status) };
+}
+
+function ownEventOf(context) {
+  requireMember(context.session);
+  const row = eventOf(context.params.id);
+  if (String(row.requester_id) !== String(actorOf(context.session))) {
+    throw new Refused(403, 'not_yours', `Event **#${row.id}** is not one you proposed, so nothing was done. Your own events are the ones listed here.`);
+  }
+  return row;
+}
+
+route('GET', '/api/mine/events', (context) => {
+  requireMember(context.session);
+  const me = String(actorOf(context.session));
+  return state.events.filter((row) => String(row.requester_id) === me).map(ownEventRow);
+});
+
+route('PUT', '/api/mine/events/:id', async (context) => {
+  const row = ownEventOf(context);
+  if (row.status !== 'pending') throw new Refused(409, 'not_editable', `Event **#${row.id}** is **${row.status}**, so its details were not changed.`);
+  const body = await context.body();
+  if (!String(body.title || '').trim()) throw new Refused(400, 'event_refused', 'An event needs a title.');
+  row.title = String(body.title).trim();
+  row.description = String(body.description || '').trim() || null;
+  row.location = String(body.location || '').trim() || null;
+  logAction('web.event.edited', { details: { event_id: row.id, title: row.title } });
+  return { event: ownEventRow(row), message: 'Saved. Staff deciding on it see the new details.', notes: [] };
+});
+
+route('POST', '/api/mine/events/:id/cancel', (context) => {
+  const row = ownEventOf(context);
+  if (!['pending', 'approved', 'live'].includes(row.status)) throw new Refused(409, 'not_cancellable', `Event **#${row.id}** is **${row.status}** already, so there was nothing to cancel.`);
+  row.status = 'cancelled';
+  return { event: ownEventRow(row), message: 'Cancelled.' };
+});
+
 route('GET', '/api/modmail/tickets', (context) => {
   requireStaff(context.session);
   const status = context.url.searchParams.get('status');
@@ -16118,6 +16213,25 @@ route('POST', '/api/requests/:id/withdraw', (context) => {
   row.status = 'withdrawn';
   logAction('web.request.withdrawn', { actor_id: mine, target_id: row.user_id, details: { request_id: row.id } });
   return { request: askRow(row), message: `Request **#${row.id}** is withdrawn. Nobody will pick it up now.` };
+});
+
+route('POST', '/api/requests/:id/edit', async (context) => {
+  requireMember(context.session);
+  const mine = actorOf(context.session);
+  const row = wantedAsk(context.params.id);
+  if (String(row.user_id) !== String(mine)) {
+    throw new Refused(403, 'not_yours', `Request **#${row.id}** is not yours, so nothing was changed. Only the person who filed it can edit it.`);
+  }
+  if (!REQUEST_WITHDRAWABLE.includes(row.status)) {
+    throw new Refused(409, 'too_late_to_edit', `Request **#${row.id}** is **${REQUEST_STATUS_WORDS[row.status]}**, so it was not changed. You can edit one that is still open or on hold; ask staff if this one needs to change.`);
+  }
+  const body = await context.body();
+  if (!String(body.what || '').trim() || !String(body.why || '').trim()) throw new Refused(400, 'request_refused', 'A request needs what you want and why.');
+  row.what = String(body.what).trim();
+  row.why = String(body.why).trim();
+  row.due_on = String(body.due_on || '').trim() || null;
+  logAction('web.request.edited', { actor_id: mine, target_id: row.user_id, details: { request_id: row.id } });
+  return { request: askRow(row), message: `Request **#${row.id}** is updated.` };
 });
 
 route('POST', '/api/requests/:id/comments', async (context) => {
