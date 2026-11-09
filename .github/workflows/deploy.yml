@@ -1,0 +1,175 @@
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      what:
+        description: What ships (goes on the deploys.log line)
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-black-bloc
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  APP: black-bloc
+  API_PROBE: https://black-bloc.fly.dev/api/auth/me
+  TZ: America/Phoenix
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check .
+
+      - name: Tests
+        run: python -m pytest -q -n auto -rfE --timeout-method=signal
+
+      - name: Site assets parse as ES modules
+        run: |
+          for js in site/public/assets/*.js; do
+            node --input-type=module --check < "$js" || { echo "REFUSED: $js does not parse"; exit 1; }
+          done
+
+      - name: Dashboard contract
+        run: |
+          node site/mock/server.mjs > /tmp/mock.log 2>&1 &
+          for _ in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:8788/ && break; sleep 0.5; done
+          node site/mock/check.mjs
+
+      - name: Site fixtures
+        run: |
+          for t in site/mock/*.test.mjs; do
+            node "$t" || { echo "REFUSED: $t is not green"; exit 1; }
+          done
+
+  deploy:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - name: Refuse without a Fly token
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "REFUSED: the FLY_API_TOKEN secret is not set (docs/access/deploy.md, Deploying from GitHub)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Install
+        run: pip install -e .
+
+      - name: The release running now (the rollback target)
+        id: before
+        run: |
+          image=$(flyctl machine list --app "$APP" --json | jq -r '[.[] | select(.state == "started")][0].config.image // empty')
+          if [ -z "$image" ]; then echo "REFUSED: no started machine to roll back to."; exit 1; fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "Rollback target: $image"
+
+      - name: Pre-deploy snapshot on the volume
+        run: |
+          stamp=$(date +%Y%m%d-%H%M%S)
+          flyctl ssh console --app "$APP" -C "sh -c 'python3 -m black_bloc.dbsnapshot && cp /data/black_bloc-nightly-snapshot.sqlite3 /data/pre-deploy-$stamp.sqlite3 && ls -t /data/pre-deploy-*.sqlite3 | tail -n +6 | xargs -r rm -f && ls -l /data/pre-deploy-$stamp.sqlite3'"
+
+      - name: Write and commit release.json
+        id: release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          line=$(grep -v '^\s*$' docs/deploys.log | tail -n 1)
+          last=$(echo "$line" | awk '{print $3}')
+          git cat-file -e "${last}^{commit}" || { echo "REFUSED: $last (column 3 of the last deploys.log line) is not a commit here."; exit 1; }
+          git diff --name-only "$last..HEAD" | BB_LAST_DEPLOY_LINE="$line" python scripts/release_json.py "$(git rev-parse --short HEAD)" site/public/assets/release.json
+          release=$(jq -r .release site/public/assets/release.json)
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "subject=$(git log -1 --format=%s)" >> "$GITHUB_OUTPUT"
+          if [ -n "$(git status --porcelain -- site/public/assets/release.json)" ]; then
+            git add -- site/public/assets/release.json
+            git commit -q -m "Release ${release}: release.json"
+            git push origin HEAD:main
+          fi
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy
+        id: deploy
+        run: |
+          echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          flyctl deploy --app "$APP" --ha=false --remote-only --yes
+
+      - name: Verify the boot and the API
+        id: verify
+        env:
+          STARTED: ${{ steps.deploy.outputs.started }}
+        run: |
+          for _ in $(seq 1 36); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$API_PROBE" || true)
+            booted=$(flyctl logs --app "$APP" --no-tail 2>/dev/null | awk -v s="$STARTED" '$1 >= s' | grep -c "logged in as" || true)
+            echo "api=$code login_lines=$booted"
+            if [ "$code" = "401" ] && [ "$booted" -gt 0 ]; then
+              state=$(flyctl machine list --app "$APP" --json | jq -r '[.[] | select(.state == "started")] | length')
+              [ "$state" -ge 1 ] && { echo "Boot verified."; exit 0; }
+            fi
+            sleep 5
+          done
+          echo "The boot did not verify within 3 minutes."
+          exit 1
+
+      - name: Roll back to the release that was running
+        if: failure() && steps.deploy.outcome != 'skipped' && steps.before.outputs.image != ''
+        run: |
+          echo "Rolling back to ${{ steps.before.outputs.image }}"
+          flyctl deploy --app "$APP" --image "${{ steps.before.outputs.image }}" --ha=false --yes
+          echo "::error::The deploy did not verify, so ${{ steps.before.outputs.image }} was redeployed."
+
+      - name: Append the deploys.log line
+        if: success()
+        env:
+          WHAT: ${{ inputs.what }}
+          COMMIT: ${{ steps.release.outputs.commit }}
+          SUBJECT: ${{ steps.release.outputs.subject }}
+        run: |
+          git pull -q --rebase origin main
+          commit=$COMMIT
+          machine=$(flyctl machine list --app "$APP" --json | jq -r '[.[] | select(.state == "started")][0].id')
+          region=$(flyctl machine list --app "$APP" --json | jq -r '[.[] | select(.state == "started")][0].region')
+          stamp=$(date +%Y-%m-%dT%H:%M:%S%:z)
+          what=${WHAT:-$SUBJECT}
+          printf '%s  black-bloc  %s  machine=%s region=%s  by=deploy.yml  %s %s; verified: API answered 401 and the bot logged in (run %s)\n' \
+            "$stamp" "$commit" "$machine" "$region" "${{ steps.release.outputs.release }}" "$what" "$GITHUB_RUN_ID" >> docs/deploys.log
+          git add docs/deploys.log
+          git commit -q -m "docs: ${{ steps.release.outputs.release }} deploys.log line [skip ci]"
+          git push origin HEAD:main
