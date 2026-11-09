@@ -136,6 +136,15 @@ never run `fly launch` — it rewrites the file.
 
 > ⚠️ **flyctl can lose its login mid-day (2026-09-25 19:14, the v166 launch).** `flyctl auth whoami` began answering *no access token available* at 19:14:49, when `~/.fly/config.yml` was rewritten during the pre-deploy snapshot's `flyctl ssh console` (the 16:12 v165 deploy had worked). Run `flyctl auth whoami` before launching. The owner's `flyctl auth login` needs a real window, and a token from the Fly page works when the terminal callback does not — never paste a token into a Claude session.
 
+## Deploying from GitHub — `.github/workflows/deploy.yml` (2026-11-08)
+
+Owner, 2026-11-08 18:43: *"If we can't deploy then we need a GitHub action for it"* (a cloud session has no flyctl and cannot reach fly.io). **Actions → deploy → Run workflow** on `main` (GitHub mobile works too), with an optional *What ships* line. Same order as `deploy.ps1`:
+
+1. **gate** job: ruff, pytest, every `site/public/assets/*.js` as an ES module, the mock + `check.mjs`, every `site/mock/*.test.mjs`.
+2. **deploy** job (needs gate, `environment: production`, one at a time via `concurrency`): records the started machine's image as the **rollback target**; takes a **pre-deploy snapshot ON the volume** (`/data/pre-deploy-<stamp>.sqlite3`, last five kept) — never as a workflow artifact, the repo is public; writes and commits `release.json` and pushes it; `flyctl deploy --ha=false --remote-only`; **verifies** for up to 3 minutes (`https://black-bloc.fly.dev/api/auth/me` answers 401 AND a `logged in as` log line newer than the deploy AND a started machine); on any failure after the deploy **redeploys the rollback image** and fails the run; on success appends the `deploys.log` line (`by=deploy.yml`) and pushes it.
+
+One-time setup (owner): `flyctl tokens create deploy --app black-bloc` from the account that owns the app, then GitHub → repo **Settings → Secrets and variables → Actions → New repository secret** `FLY_API_TOKEN`. Without it the deploy job refuses by name. `main` is unprotected, so the job's own pushes (release.json, deploys.log) go through `GITHUB_TOKEN`; protecting `main` later needs a bypass for `github-actions[bot]`.
+
 ## Every later deploy — `scripts/deploy.ps1`, nothing else
 
 Before pushing to `main`, [`ci-mirror.md`](ci-mirror.md) runs GitHub's `ci.yml` in a Linux container (the deploy gate below stays the native one).
