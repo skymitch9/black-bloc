@@ -1,5 +1,11 @@
 {
-  "release": "v267",
-  "commit": "42b0eb0d",
-  "changed_features": []
+  "release": "v268",
+  "commit": "e967d7bb",
+  "changed_features": [
+    "core",
+    "events",
+    "marathon",
+    "modmail",
+    "request"
+  ]
 }
