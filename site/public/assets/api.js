@@ -6,6 +6,27 @@ const NAME_BATCH = 80;
 
 export class Outage extends Error {}
 
+export const READ_ONLY_SAID = 'You can look at this page but not change it, so nothing was changed. Ask staff to make the change for you, or a Lead for a staff role.';
+const READ_METHODS = ['GET', 'HEAD'];
+let readOnly = null;
+
+/** Set once per page for a member who may only look: writes stop here and staff-only reads are skipped. */
+export function setReadOnly(state) {
+  readOnly = state || null;
+}
+
+export function readOnlyState() {
+  return readOnly;
+}
+
+function readOnlyRefusal() {
+  const error = new Error(READ_ONLY_SAID);
+  error.status = 403;
+  error.code = 'read_only';
+  error.isPermission = true;
+  return error;
+}
+
 export function signInHref() {
   const here = `${location.pathname}${location.search}${location.hash}`;
   return `${API}/api/auth/login?next=${encodeURIComponent(here)}`;
@@ -17,6 +38,8 @@ export function apiHref(path) {
 }
 
 export async function api(path, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase();
+  if (readOnly && !READ_METHODS.includes(method) && !String(path).startsWith('/api/auth/')) throw readOnlyRefusal();
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
   let response;
@@ -146,6 +169,7 @@ export function forgetRefs() {
 let settingsCache = null;
 
 export async function settings(fresh = false) {
+  if (readOnly && !readOnly.settings) return {};
   if (fresh || settingsCache === null) settingsCache = await api('/api/settings');
   return settingsCache;
 }

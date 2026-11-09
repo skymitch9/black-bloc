@@ -11357,6 +11357,72 @@ KEY_MAX[RUNS_GENRE_MAX] = 5
 KEY_MIN[RUNS_PAGE_SIZE] = 25
 KEY_MAX[RUNS_PAGE_SIZE] = 500
 
+COMMITTEE_ROLE_ID = 1316914599345262632
+VIEW_PAGE_WORDS: dict[str, str] = {
+    "overview": "Overview",
+    "health": "Health",
+    "audit": "Logs",
+    "requests": "Requests",
+    "guides": "Guides",
+    "moderation": "Moderation",
+    "members": "Members",
+    "automod": "Automod",
+    "honeypot": "Honeypot",
+    "modmail": "Modmail",
+    "posts": "Posts",
+    "golive": "Go-live",
+    "pbs": "Personal bests",
+    "leaderboard": "Leaderboard",
+    "brackets": "Brackets",
+    "events": "Events",
+    "runs": "BaF runs",
+    "raidtrain": "Raid trains",
+    "birthdays": "Birthdays",
+    "tempvoice": "Temp voice",
+    "rolemenus": "Role menus",
+    "polls": "Polls",
+    "chat": "Chat",
+    "settings": "Settings",
+}
+VIEW_PAGES: tuple[str, ...] = tuple(VIEW_PAGE_WORDS)
+VIEW_MEMBER_PAGES: tuple[str, ...] = ("requests", "guides", "brackets", "leaderboard")
+VIEW_EVERYONE = "everyone"
+
+
+def view_key(page: str) -> str:
+    return f"view_{page}_role_ids"
+
+
+VIEW_KEYS: dict[str, str] = {view_key(page): page for page in VIEW_PAGES}
+VIEW_DEFAULTS: dict[str, Any] = {
+    view_key(page): VIEW_EVERYONE if page in VIEW_MEMBER_PAGES else [] for page in VIEW_PAGES
+}
+VIEW_DEFAULTS[view_key("runs")] = [COMMITTEE_ROLE_ID]
+KEY_TYPES.update({key: "roles" for key in VIEW_KEYS})
+CORE_KEYS = (*CORE_KEYS, *VIEW_KEYS)
+KEY_HELP.update(
+    {
+        key: (
+            f"roles that may open the {VIEW_PAGE_WORDS[page]} page on the site"
+            + (
+                " as a member does; @everyone by default"
+                if page in VIEW_MEMBER_PAGES
+                else " to look but not change anything; staff always have the whole page"
+                + ("; Committee by default" if page == "runs" else "; none by default")
+            )
+        )
+        for key, page in VIEW_KEYS.items()
+    }
+)
+
+
+def view_default(key: str, guild_id: int | None) -> list[int]:
+    value = VIEW_DEFAULTS[key]
+    if value == VIEW_EVERYONE:
+        return [int(guild_id)] if guild_id else []
+    return list(value)
+
+
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
     kind = KEY_TYPES.get(key)
@@ -11612,7 +11678,9 @@ class SettingsStore:
             guild_id: value for (guild_id, name), value in self._cache.items() if name == key
         }
 
-    def default(self, key: str) -> Any:
+    def default(self, key: str, guild_id: int | None = None) -> Any:
+        if key in VIEW_DEFAULTS:
+            return view_default(key, guild_id)
         if key == "staff_channel_id":
             return self.settings.test_channel_id
         if key == "structure_backup_role_id":
@@ -12213,7 +12281,9 @@ class SettingsStore:
     def get(self, guild_id: int, key: str) -> Any:
         if key not in KEY_TYPES:
             raise SettingError(f"{key!r} is not a Black Bloc setting.")
-        return self._cache.get((guild_id, key), self.default(key))
+        if (guild_id, key) in self._cache:
+            return self._cache[(guild_id, key)]
+        return self.default(key, guild_id)
 
     def all(self, guild_id: int) -> dict[str, Any]:
         return {key: self.get(guild_id, key) for key in KEY_TYPES}
@@ -12248,7 +12318,7 @@ class SettingsStore:
         cleared = bool(cur.rowcount)
         if cleared:
             log.info("settings cleared: %s for guild %s by %s", key, guild_id, by)
-            await self._changed(guild_id, key, self.default(key), by)
+            await self._changed(guild_id, key, self.default(key, guild_id), by)
         return cleared
 
     def staff_roles(self, guild: Any) -> list[Any]:

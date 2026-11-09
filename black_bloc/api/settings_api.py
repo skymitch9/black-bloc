@@ -96,7 +96,7 @@ def key_row(store: Any, guild_id: int, key: str) -> dict[str, Any]:
         "key": key,
         "type": KEY_TYPES[key],
         "value": as_json(key, store.get(guild_id, key)),
-        "default": as_json(key, store.default(key)),
+        "default": as_json(key, store.default(key, guild_id)),
         "help": KEY_HELP.get(key, ""),
     }
     if key in KEY_CHOICES:

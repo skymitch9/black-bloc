@@ -11063,3 +11063,14 @@ Design: [`structure-backup-design.md`](structure-backup-design.md) ▸ *Found 20
 | `black_bloc/cogs/moderation/structure_backup.py:205` `channels_of` | `Guild.fetch_channels()` (discord.py 2.7.1) raises `InvalidData` for the WHOLE list when one channel has a type its `ChannelType` lacks (it stops at `media = 16`; the live server had a type 20). Only on that error, the same endpoint is read raw (`guild._state.http.get_all_guild_channels`, the call `fetch_channels` itself makes) and each known entry is built with discord.py's own `discord.channel._guild_channel_factory`, so known channels are the same objects as before; unknown ones stay dicts. One warning per capture names the types and counts. A server discord.py reads whole is asked once, as before. Private API on purpose: it is the only read that returns the unknown channel at all (the gateway cache drops unknown types too). |
 | `black_bloc/structure_capture.py:158` `raw_channel_row` · `:177` | A raw dict becomes the same row shape as a typed channel, `type` = `unknown-<number>` (`UNKNOWN_TYPE`), overwrites from `permission_overwrites` (`type` 0 role, 1 member; the role list only when neither), tags from `available_tags`. `structure_diff.py` compares it like any channel (added / removed / renamed). |
 | `tests/cogs/moderation/test_structure_backup.py` `an_http_read` | The read-only guard still bans every `http` name except the exact on-the-spot call `<x>.http.get_all_guild_channels(...)`; holding the client, holding the bound reader, or any other method on it still trips (`SPELLINGS`). |
+
+## `black_bloc/api/page_views.py` — who may open which site page
+
+| Where | Why |
+|---|---|
+| `black_bloc/settings_store.py` `VIEW_DEFAULTS` / `view_default` | Member pages default to the string `everyone`, turned into `[guild_id]` (the @everyone role's id) by `SettingsStore.default(key, guild_id)`, because the registry has no guild to read; `get`, `clear`, `settings_api.key_row` and `settings_panel` pass the guild through. |
+| `black_bloc/settings_store.py` `CORE_KEYS = (*CORE_KEYS, *VIEW_KEYS)` | Filed under `core`, not a `view` group: a 26th group falls off the Discord `/settings` select (`test_the_settings_groups_fit_the_select`). |
+| `black_bloc/api/page_views.py` `STAFF_PAGE_PREFIXES` | A read-only viewer is admitted only to the GETs of staff pages; member pages' staff reads (`/api/requests` index) are deliberately absent, so @everyone on Requests never opens the staff list. `/api/actions` belongs to Overview, Health and Logs only. |
+| `black_bloc/api/auth.py` `page_viewer` | Runs inside `staff_dependency`, so every staff router gains viewers without per-route edits; a write on a viewed page is `403 read_only`, anywhere else the old `not_staff`. |
+| `site/public/assets/app.js` `painted` | A cached `me` paints first; `verify` repaints when the fresh `me` changes the read-only state, so a role change never leaves edit controls up. |
+
