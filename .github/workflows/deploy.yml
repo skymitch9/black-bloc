@@ -17,7 +17,7 @@ permissions:
 
 env:
   APP: black-bloc
-  API_PROBE: https://black-bloc.fly.dev/api/auth/me
+  SITE: https://black-bloc.fly.dev
   TZ: America/Phoenix
 
 jobs:
@@ -122,29 +122,29 @@ jobs:
           echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           flyctl deploy --app "$APP" --ha=false --remote-only --yes
 
-      - name: Verify the boot and the API
+      - name: Verify the new release is up and the bot is ready
         id: verify
         env:
-          STARTED: ${{ steps.deploy.outputs.started }}
+          RELEASE: ${{ steps.release.outputs.release }}
         run: |
-          api=""; booted=0; machines=0
+          served=""; health=""
           for _ in $(seq 1 60); do
-            api=$(curl -s -o /dev/null -w '%{http_code}' "$API_PROBE" || true)
-            booted=$(flyctl logs --app "$APP" --no-tail 2>/dev/null \
-              | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' \
-              | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z.*logged in as' \
-              | awk -v s="$STARTED" '$1 >= s' | wc -l)
-            machines=$(flyctl machine list --app "$APP" --json | jq '[.[] | select(.state == "started")] | length')
-            echo "api=$api login_lines_since_deploy=$booted started_machines=$machines"
-            if [ "$api" = "401" ] && [ "$booted" -gt 0 ] && [ "$machines" -ge 1 ]; then
-              echo "Boot verified."
+            served=$(curl -s -m 10 "$SITE/assets/release.json?t=$RANDOM" | jq -r '.release // empty' 2>/dev/null || true)
+            health=$(curl -s -m 10 "$SITE/health?t=$RANDOM" || true)
+            ready=$(echo "$health" | jq -r '.ready // false' 2>/dev/null || echo false)
+            guilds=$(echo "$health" | jq -r '.guilds // 0' 2>/dev/null || echo 0)
+            echo "served=$served want=$RELEASE ready=$ready guilds=$guilds"
+            if [ "$served" = "$RELEASE" ] && [ "$ready" = "true" ] && [ "$guilds" -ge 1 ]; then
+              echo "Verified: $RELEASE is served and the bot is ready in $guilds guild(s)."
               exit 0
             fi
             sleep 5
           done
+          echo "--- /health ---"; echo "$health"
+          echo "--- machines ---"; flyctl machine list --app "$APP" || true
           echo "--- the last 80 log lines ---"
-          flyctl logs --app "$APP" --no-tail 2>&1 | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' | tail -n 80
-          echo "::error::Boot not verified in 5 minutes: api=$api, login lines since $STARTED=$booted, started machines=$machines."
+          flyctl logs --app "$APP" --no-tail 2>&1 | tail -n 80 || true
+          echo "::error::Not verified in 5 minutes: served=$served (wanted $RELEASE), health=$health"
           exit 1
 
       - name: Roll back to the release that was running
@@ -168,7 +168,7 @@ jobs:
           region=$(flyctl machine list --app "$APP" --json | jq -r '[.[] | select(.state == "started")][0].region')
           stamp=$(date +%Y-%m-%dT%H:%M:%S%:z)
           what=${WHAT:-$SUBJECT}
-          printf '%s  black-bloc  %s  machine=%s region=%s  by=deploy.yml  %s %s; verified: API answered 401 and the bot logged in (run %s)\n' \
+          printf '%s  black-bloc  %s  machine=%s region=%s  by=deploy.yml  %s %s; verified: release.json served and /health ready (run %s)\n' \
             "$stamp" "$COMMIT" "$machine" "$region" "$RELEASE" "$what" "$GITHUB_RUN_ID" > /tmp/deploy-line
           cp site/public/assets/release.json /tmp/release.json
           for attempt in 1 2 3 4 5; do
