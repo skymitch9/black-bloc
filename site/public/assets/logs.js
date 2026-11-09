@@ -1,4 +1,4 @@
-import { api, listOf, nameRecord, names } from './api.js';
+import { api, listOf, nameRecord, names, readOnlyState } from './api.js';
 import { tabHref } from './app.js';
 import { syncSubnav } from './layout.js';
 import {
@@ -184,6 +184,8 @@ function nothingSaid(feature, state) {
  * is rebuilt when somebody changes a filter down here.
  */
 export async function logsSection(feature, { title = 'Logs', note = null, perPage = PER_PAGE } = {}) {
+  const looking = readOnlyState();
+  if (looking && !looking.logs) return el('div', { hidden: true });
   const state = { page: 1, kind: '', query: '', important: true };
   const group = section(title, note, { id: `logs-${feature}` });
   const results = el('div', { class: 'logs-results' });

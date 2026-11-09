@@ -5,6 +5,7 @@ import { modeWord } from './labels.js';
 /** The pages a signed-in member who is not staff may use; the first is where they land. */
 export const MEMBER_TABS = ['requests', 'guides', 'brackets', 'leaderboard'];
 export const MEMBER_TAB = MEMBER_TABS[0];
+const LOG_TABS = ['overview', 'health', 'audit'];
 
 export const GROUPS = [
   {
@@ -286,14 +287,16 @@ function paintCounts(tally, waiting, running) {
 }
 
 /**
- * A signed-in member who is not staff gets Requests, Guides, Brackets and the Leaderboard, because every
+ * A signed-in member who is not staff gets the pages their roles may open (`me.views`), because every
  * other page would refuse them. The nav is built before `me` arrives, so this
  * trims it rather than the renderer knowing who is looking.
  */
-function paintNavFor(member, lead) {
+function paintNavFor(me, lead) {
+  const member = isMemberOnly(me);
+  const views = viewsOf(me);
   for (const link of document.querySelectorAll('.nav-link')) {
     const leadsOnly = link.getAttribute('data-leads') === 'true';
-    link.hidden = (member && !MEMBER_TABS.includes(link.getAttribute('data-tab'))) || (leadsOnly && !lead);
+    link.hidden = (member && !views.includes(link.getAttribute('data-tab'))) || (leadsOnly && !lead);
   }
   paintGroups();
 }
@@ -315,17 +318,39 @@ export function isMemberOnly(me) {
   return Boolean(me) && me.staff !== true && me.member === true;
 }
 
+export function viewsOf(me) {
+  return me && Array.isArray(me.views) ? me.views : [];
+}
+
+/** A member who may open this staff page to look, never to change. */
+export function readsOnly(me, tab) {
+  return isMemberOnly(me) && !MEMBER_TABS.includes(tab) && viewsOf(me).includes(tab);
+}
+
+export function readOnlyFor(me, tab) {
+  if (!readsOnly(me, tab)) return null;
+  const views = viewsOf(me);
+  return { tab, settings: views.includes('settings'), logs: LOG_TABS.some((one) => views.includes(one)) };
+}
+
+export function landingFor(me) {
+  const views = viewsOf(me);
+  return MEMBER_TABS.find((tab) => views.includes(tab)) || views[0] || null;
+}
+
 export async function paintShell(me) {
   paintUser(me);
-  paintNavFor(isMemberOnly(me), Boolean(me) && me.structure === true);
+  paintNavFor(me, Boolean(me) && me.structure === true);
   if (isMemberOnly(me)) {
     // Every tally below this line is a staff route, so a member is asked for none of them.
     paintCounts(null, null, null);
     paintCount('featurerequests', null, () => '');
     paintGuild(null, me);
     // guides_mode off answers this member 409 guides_off, so the rail stops offering it.
-    const guides = await guidesIndex();
-    if (!guides.ok) hideTab('guides');
+    if (viewsOf(me).includes('guides')) {
+      const guides = await guidesIndex();
+      if (!guides.ok) hideTab('guides');
+    }
     return null;
   }
   const [status, tally, waiting, running, asked] = await Promise.all([

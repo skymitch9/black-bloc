@@ -521,7 +521,7 @@ def test_the_rail_offers_structure_only_to_someone_the_bot_says_may_see_it():
     assert "{ tab: 'structure', label: 'Structure', icon: 'navStructure', leads: true }" in shell
     assert "hidden: item.leads ? true : undefined," in shell
     assert "(leadsOnly && !lead)" in shell
-    assert "paintNavFor(isMemberOnly(me), Boolean(me) && me.structure === true);" in shell
+    assert "paintNavFor(me, Boolean(me) && me.structure === true);" in shell
     assert "error.code === 'structure_leads_only'" in app
     assert "Structure is for the server’s leads" in app
     assert "me.structure" not in PAGE.read_text(encoding="utf-8")

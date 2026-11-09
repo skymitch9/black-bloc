@@ -105,7 +105,7 @@ class FakeStore:
             return self.values[key]
         return self.default(key)
 
-    def default(self, key):
+    def default(self, key, guild_id=None):
         return self.defaults.get(key)
 
 

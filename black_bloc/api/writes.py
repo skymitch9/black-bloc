@@ -6,10 +6,12 @@ from typing import Any
 from fastapi import Request
 
 from ..actionlog import log_action
+from . import page_views
 from .auth import (
     MEMBER_UNKNOWN,
     NOT_A_MEMBER,
     OPERATOR_WHO,
+    PAGE_CLOSED,
     READ_BUCKET_ATTR,
     READ_RATE,
     READ_WINDOW_SECONDS,
@@ -19,6 +21,7 @@ from .auth import (
     _bucket,
     current_session,
     guild_of,
+    member_of,
     member_state,
     read_bucket_for,
     staff_dependency,
@@ -93,6 +96,13 @@ def _member_who(bot: Any):
             raise Refused(503, "member_unknown", MEMBER_UNKNOWN)
         if state == "not_a_member":
             raise Refused(403, "not_a_member", NOT_A_MEMBER)
+        if not who.get("staff") and page_views.member_page_closed(
+            bot.store,
+            guild_of(bot),
+            member_of(bot, who),
+            str(getattr(getattr(request, "url", None), "path", "") or ""),
+        ):
+            raise Refused(403, "page_closed", PAGE_CLOSED)
         return who
 
     return state_of

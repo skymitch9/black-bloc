@@ -459,7 +459,7 @@ def mode_lines(store: Any, guild_id: int) -> list[str]:
 
 
 def stored_count(store: Any, guild_id: int) -> int:
-    return sum(1 for key in KEY_TYPES if store.get(guild_id, key) != store.default(key))
+    return sum(1 for key in KEY_TYPES if store.get(guild_id, key) != store.default(key, guild_id))
 
 
 def hidden_line(bot: Any, guild_id: int, hidden: Any) -> str:
@@ -509,7 +509,7 @@ def key_card_lines(store: Any, guild_id: int, key: str) -> list[str]:
     value = store.get(guild_id, key)
     lines = [
         KEY_LINE.format(key=key, value=display_value(key, value)),
-        KEY_DEFAULT_LINE.format(value=display_value(key, store.default(key))),
+        KEY_DEFAULT_LINE.format(value=display_value(key, store.default(key, guild_id))),
     ]
     if KEY_HELP.get(key):
         lines.append(KEY_HELP[key])
@@ -523,7 +523,7 @@ def key_card_lines(store: Any, guild_id: int, key: str) -> list[str]:
 
 
 def default_sentence(store: Any, guild_id: int, key: str) -> str:
-    return PUT_BACK_MAKES.format(key=key, value=display_value(key, store.default(key)))
+    return PUT_BACK_MAKES.format(key=key, value=display_value(key, store.default(key, guild_id)))
 
 
 def needs_confirm(key: str) -> bool:

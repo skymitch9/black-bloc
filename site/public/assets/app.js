@@ -1,7 +1,7 @@
-import { api, Outage, signInHref } from './api.js';
+import { api, Outage, setReadOnly, signInHref } from './api.js';
 import { lastTab, mountColumns, mountSections, rememberTab } from './layout.js';
 import { mountPalette } from './palette.js';
-import { MEMBER_TAB, MEMBER_TABS, forgetShellStatus, isMemberOnly, mountShell, paintShell, renderNav } from './shell.js';
+import { forgetShellStatus, isMemberOnly, landingFor, mountShell, paintShell, readOnlyFor, renderNav, viewsOf } from './shell.js';
 import { clearDock } from './ui.js';
 
 export const TABS = [
@@ -194,7 +194,8 @@ export function rememberedMe() {
   try {
     const found = JSON.parse(sessionStorage.getItem(ME_KEY) || 'null');
     if (!found || !found.me) return null;
-    return found.me.staff === true || found.me.member === true ? found.me : null;
+    if (found.me.staff === true) return found.me;
+    return found.me.member === true && Array.isArray(found.me.views) ? found.me : null;
   } catch (e) {
     return null;
   }
@@ -207,8 +208,18 @@ export function rememberedMe() {
  */
 function refuseFor(me, tab) {
   if (isMemberOnly(me)) {
-    if (MEMBER_TABS.includes(tab)) return false;
-    location.replace(tabHref(MEMBER_TAB));
+    if (viewsOf(me).includes(tab)) return false;
+    const landing = landingFor(me);
+    if (landing) {
+      location.replace(tabHref(landing));
+      return true;
+    }
+    refuse({
+      title: 'This dashboard is for staff',
+      message: me.message,
+      note: `Signed in as ${me.user.name}.`,
+      state: 'warn',
+    });
     return true;
   }
   if (me.state === 'staff_unknown') {
@@ -257,7 +268,11 @@ export function start(page) {
     }
   };
 
+  let painted = null;
   const paint = async (me) => {
+    painted = JSON.stringify(readOnlyFor(me, page.tab));
+    setReadOnly(readOnlyFor(me, page.tab));
+    document.body.toggleAttribute('data-readonly', Boolean(readOnlyFor(me, page.tab)));
     await paintShell(me);
     clearDock();
     await page.load(me);
@@ -276,7 +291,8 @@ export function start(page) {
         return;
       }
       rememberMe(me);
-      await paintShell(me);
+      if (JSON.stringify(readOnlyFor(me, page.tab)) !== painted) await paint(me);
+      else await paintShell(me);
     } catch (error) {
       forgetMe();
       handle(error);
