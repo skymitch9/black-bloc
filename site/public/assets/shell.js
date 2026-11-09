@@ -3,7 +3,7 @@ import { duration, el, icon } from './ui.js';
 import { modeWord } from './labels.js';
 
 /** The pages a signed-in member who is not staff may use; the first is where they land. */
-export const MEMBER_TABS = ['requests', 'guides', 'brackets', 'leaderboard'];
+export const MEMBER_TABS = ['requests', 'guides', 'brackets', 'leaderboard', 'events', 'modmail'];
 export const MEMBER_TAB = MEMBER_TABS[0];
 const LOG_TABS = ['overview', 'health', 'audit'];
 

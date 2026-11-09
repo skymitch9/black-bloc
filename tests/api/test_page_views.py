@@ -40,7 +40,7 @@ async def test_runs_opens_to_committee_and_member_pages_to_everyone_by_default(w
     assert web.store.get(wf.GUILD_ID, view_key("runs")) == [COMMITTEE_ROLE_ID]
     for page in VIEW_MEMBER_PAGES:
         assert web.store.get(wf.GUILD_ID, view_key(page)) == [wf.GUILD_ID]
-    assert web.store.get(wf.GUILD_ID, view_key("events")) == []
+    assert web.store.get(wf.GUILD_ID, view_key("chat")) == []
     assert web.store.default(view_key("brackets"), wf.GUILD_ID) == [wf.GUILD_ID]
 
 

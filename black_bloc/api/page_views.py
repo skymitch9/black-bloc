@@ -14,7 +14,6 @@ STAFF_PAGE_PREFIXES: dict[str, tuple[str, ...]] = {
     "members": ("/api/members",),
     "automod": ("/api/mod/rules",),
     "honeypot": ("/api/honeypot",),
-    "modmail": ("/api/modmail", "/api/frontdoor"),
     "posts": (
         "/api/posts",
         "/api/post-blocks",
@@ -25,7 +24,6 @@ STAFF_PAGE_PREFIXES: dict[str, tuple[str, ...]] = {
     ),
     "golive": ("/api/golive", "/api/pings", "/api/youtube"),
     "pbs": ("/api/pbs",),
-    "events": ("/api/events", "/api/marathons"),
     "runs": ("/api/runs",),
     "raidtrain": ("/api/raidtrains",),
     "birthdays": ("/api/birthdays",),
@@ -40,6 +38,8 @@ MEMBER_PAGE_PREFIXES: dict[str, tuple[str, ...]] = {
     "guides": ("/api/guides",),
     "brackets": ("/api/brackets", "/api/sports"),
     "leaderboard": ("/api/points",),
+    "events": ("/api/mine/events",),
+    "modmail": ("/api/mine/modmail",),
 }
 SHARED_READ_PREFIXES: tuple[str, ...] = ("/api/ref",)
 READ_METHODS = frozenset({"GET", "HEAD"})

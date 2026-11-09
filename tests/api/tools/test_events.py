@@ -776,3 +776,69 @@ async def test_a_forum_post_links_to_its_thread(client, sign_in, web, wf):
 
     assert body["review_url"] == f"https://discord.com/channels/{wf.GUILD_ID}/999"
 
+
+
+MINE = 21
+OTHER = 23
+
+
+async def test_a_member_lists_only_their_own_events_without_staff_fields(
+    client, sign_in, web, wf
+):
+    mine = await an_event(web, wf, requester=MINE)
+    await an_event(web, wf, requester=OTHER)
+    sign_in(client, uid=MINE, staff=False)
+
+    rows = client.get("/api/mine/events").json()
+
+    assert [row["id"] for row in rows] == [mine]
+    assert rows[0]["editable"] is True and rows[0]["cancellable"] is True
+    assert "review_channel_id" not in rows[0] and "decided_by_name" not in rows[0]
+
+
+async def test_a_member_edits_their_pending_event(client, sign_in, web, wf):
+    event_id = await an_event(web, wf, requester=MINE)
+    sign_in(client, uid=MINE, staff=False)
+
+    response = client.put(
+        f"/api/mine/events/{event_id}",
+        json={"title": "Bloc evening", "location": "the park", "start": a_start(), "tz": "UTC"},
+    )
+
+    assert response.status_code == 200
+    assert (await get_event(web.db, event_id))["title"] == "Bloc evening"
+    assert "web.event.edited" in await wf.kinds_in(web.db)
+
+
+async def test_a_member_cannot_edit_a_decided_event_or_somebody_elses(client, sign_in, web, wf):
+    approved = await an_event(web, wf, requester=MINE, status="approved")
+    theirs = await an_event(web, wf, requester=OTHER)
+    sign_in(client, uid=MINE, staff=False)
+    body = {"title": "x", "start": a_start(), "tz": "UTC"}
+
+    decided = client.put(f"/api/mine/events/{approved}", json=body)
+    other = client.put(f"/api/mine/events/{theirs}", json=body)
+
+    assert decided.status_code == 409 and decided.json()["error"] == "not_editable"
+    assert other.status_code == 403 and other.json()["error"] == "not_yours"
+    assert (await get_event(web.db, theirs))["title"] == "Bloc night"
+
+
+async def test_a_member_cancels_their_own_event(client, sign_in, web, wf):
+    event_id = await an_event(web, wf, requester=MINE, status="approved")
+    sign_in(client, uid=MINE, staff=False)
+
+    response = client.post(f"/api/mine/events/{event_id}/cancel", json={})
+
+    assert response.status_code == 200
+    assert (await get_event(web.db, event_id))["status"] == "cancelled"
+    again = client.post(f"/api/mine/events/{event_id}/cancel", json={})
+    assert again.status_code == 409
+
+
+async def test_the_staff_event_routes_stay_staff_only_for_a_member(client, sign_in, web, wf):
+    event_id = await an_event(web, wf, requester=MINE)
+    sign_in(client, uid=MINE, staff=False)
+
+    assert client.get("/api/events").status_code == 403
+    assert client.put(f"/api/events/{event_id}", json={}).status_code == 403

@@ -1,12 +1,15 @@
 import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
-import { TONE, eventDrawerFor, eventMoves, forumMove, openEvent } from './event-drawer.js';
+import { TONE, eventDrawerFor, eventMoves, forumMove, openEvent, ownChangeForm } from './event-drawer.js';
+import { isMemberOnly } from './shell.js';
 import { marathonsSection } from './marathons-section.js';
 import {
+  ask,
   badge,
   bar,
   button,
+  closeDrawer,
   el,
   field,
   filterChip,
@@ -15,6 +18,7 @@ import {
   keepSaying,
   nameNode,
   notice,
+  openDrawer,
   run,
   sayAgain,
   section,
@@ -32,6 +36,11 @@ const MACHINERY_TITLE = 'Settings and logs';
 const EVENTS_SETTINGS = 'Events';
 const MARATHON_SETTINGS = 'Marathons';
 const LOG_TITLE = 'Log';
+const OWN_TITLE = 'Your events';
+const NO_OWN = 'You have not proposed any events.';
+const CANCEL_IT = 'Cancel it';
+const CANCEL_ASK = 'Cancel this event?';
+const CANCEL_BODY = 'It is called off for everyone, and staff see that you cancelled it.';
 const LOG_CHIPS = [{ feature: 'events', label: 'Events' }, { feature: 'marathon', label: 'Marathons' }];
 /** The forum and the mode as they stand, read from the same place Settings does. */
 async function forumState() {
@@ -85,7 +94,67 @@ function forumMakeAction(settingsNode, forumId) {
   row.append(bar([make]), say);
 }
 
-async function load() {
+function ownFacts(row) {
+  const line = (label, text) => (text ? el('p', { class: 'field-help' }, [el('strong', { text: `${label}: ` }), el('span', { text })]) : null);
+  return [
+    el('p', { class: 'field-help' }, [badge(row.status, TONE[row.status] || null)]),
+    line('Starts', row.starts_at ? when(row.starts_at) : ''),
+    line('How long', row.duration),
+    line('Where', row.where_label),
+    line('What it is', row.description),
+    line('Why not', row.deny_reason),
+  ].filter(Boolean);
+}
+
+function openOwn(row, message = '') {
+  const say = notice();
+  if (message) say.say(message, 'ok');
+  const cancel = row.cancellable
+    ? button(CANCEL_IT, async () => {
+      const sure = await ask({ title: CANCEL_ASK, body: [CANCEL_BODY], confirmLabel: CANCEL_IT });
+      if (!sure) return;
+      const done = await run(
+        say,
+        () => send(`/api/mine/events/${encodeURIComponent(row.id)}/cancel`, 'POST', {}),
+        (found) => found?.message || 'Cancelled.',
+      );
+      if (!done.ok) return;
+      keepSaying('events', say);
+      closeDrawer();
+      refresh();
+    }, { tone: 'quiet' })
+    : null;
+  const change = row.editable
+    ? ownChangeForm(row, async (said, found) => {
+      refresh();
+      openOwn(found?.event || row, said);
+    })
+    : null;
+  openDrawer(row.title || `Event #${row.id}`, [say, ...ownFacts(row), change, cancel ? bar([cancel]) : null].filter(Boolean));
+}
+
+async function loadOwn() {
+  const rows = listOf(await api('/api/mine/events'), 'events');
+  const say = notice();
+  const queue = table([
+    { label: 'Title', cell: (row) => row.title, className: 'wrap' },
+    { label: 'Starts', cell: (row) => when(row.starts_at), className: 'mono' },
+    { label: 'Where', cell: (row) => row.where_label || '', className: 'wrap' },
+    { label: 'Status', cell: (row) => badge(row.status, TONE[row.status] || null) },
+    { label: 'Why not', cell: (row) => row.deny_reason, className: 'wrap' },
+    { label: '', cell: (row) => bar([button('Open', () => openOwn(row), { tone: 'quiet' })]) },
+  ], rows, { empty: NO_OWN });
+  const one = section(OWN_TITLE, null, { count: rows.length, id: 'queue' });
+  one.body.append(queue, sayAgain('events', say));
+  document.getElementById('dash').replaceChildren(one.node);
+}
+
+async function load(me) {
+  if (isMemberOnly(me)) return loadOwn();
+  return loadStaff();
+}
+
+async function loadStaff() {
   const query = state.status ? `?status=${encodeURIComponent(state.status)}` : '';
   const payload = await api(`/api/events${query}`);
   const rows = listOf(payload, 'events');

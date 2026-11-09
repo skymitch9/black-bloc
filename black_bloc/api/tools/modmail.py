@@ -6,9 +6,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import points_tickets
+from ...actionlog import log_action
 from ...cogs.moderation.modmail import (
     all_snippets,
     block_member,
+    blocked_row,
     blocked_rows,
     close_ticket,
     drop_snippet,
@@ -18,18 +20,23 @@ from ...cogs.moderation.modmail import (
     panel_where,
     post_ticket_panel,
     put_snippet,
+    record_inbound,
     resolve_place,
     send_reply,
     take_panel_down,
     ticket_messages,
     tickets_by_status,
+    tickets_of_member,
     unblock_member,
 )
 from ...events import clamp
-from ...logkinds import VIA_WEBSITE
+from ...logkinds import VIA_WEBSITE, kind_via
 from ...modmail import (
+    ANONYMOUS_NAME,
     CLOSED,
+    IN,
     OPEN,
+    OUT,
     SOURCE_WEB,
     field_of,
     load_attachments,
@@ -40,6 +47,8 @@ from ..names import resolve_one, site_words
 from ..writes import (
     actor_for,
     guard_of,
+    member_dependency,
+    member_read_dependency,
     refuse_guarded,
     require_db,
     require_guild,
@@ -94,6 +103,26 @@ DM_FAILED = (
     "The member could not be sent that reply — their DMs are closed or they have left. It is "
     "saved on the ticket so staff can see it."
 )
+
+
+NOT_YOUR_TICKET = (
+    "Ticket **#{ticket_id}** is not one of yours, so nothing was shown or sent. Your own tickets "
+    "are the ones listed here."
+)
+YOU_ARE_BLOCKED = (
+    "Staff have blocked you from modmail, so nothing was sent. Ask a staff member in the server "
+    "if you think that is a mistake."
+)
+YOUR_REPLY_SENT = "Sent to staff."
+YOUR_REPLY_NOT_POSTED = (
+    "Your message is saved on the ticket, but Black Bloc could not post it where staff read "
+    "tickets just now. Staff will still see it on the ticket."
+)
+YOU_CLOSED = (
+    "Ticket **#{ticket_id}** is closed. Message Black Bloc again any time to open a new one."
+)
+CLOSED_BY_MEMBER = "closed by the member"
+OWN_TICKETS_LIMIT = 100
 
 
 def ticket_row(guild: Any, row: Any) -> dict[str, Any]:
@@ -386,5 +415,127 @@ def build_router(bot: Any) -> APIRouter:
         wanted = wanted_id(user_id)
         await unblock_member(bot, guild, actor_for(bot, who, guild), wanted, via=VIA_WEBSITE)
         return {"unblocked": True, "user_id": str(wanted)}
+
+    return router
+
+
+def own_ticket_row(row: Any) -> dict[str, Any]:
+    """What the member sees of their own ticket: never who closed it or where staff read it."""
+    return {
+        "id": row["id"],
+        "status": row["status"],
+        "opened_at": row["opened_at"],
+        "closed_at": row["closed_at"],
+        "source": ticket_source(row),
+    }
+
+
+def own_message_row(guild: Any, row: Any) -> dict[str, Any]:
+    """A line the member was part of; staff notes never reach this."""
+    hidden = row["direction"] == OUT and bool(row["anonymous"])
+    return {
+        "id": row["id"],
+        "at": row["at"],
+        "direction": row["direction"],
+        "author_name": (
+            ANONYMOUS_NAME if hidden else resolve_one(guild, row["author_id"])["display_name"]
+        ),
+        "content": row["content"],
+        "attachments": load_attachments(row["attachments"]),
+    }
+
+
+def build_member_router(bot: Any) -> APIRouter:
+    """A member's own tickets: read the conversation, reply from the site, close it."""
+    reader = member_read_dependency(bot)
+    writer = member_dependency(bot)
+    router = APIRouter(prefix="/api/mine/modmail", tags=["modmail"])
+
+    async def theirs(guild: Any, who: dict[str, Any], ticket_id: int, **kwargs: Any) -> Any:
+        row = await wanted_ticket(bot, guild, ticket_id, **kwargs)
+        if row["user_id"] != int(who["id"]) or field_of(row, "practice", 0):
+            raise Refused(403, "not_yours", NOT_YOUR_TICKET.format(ticket_id=ticket_id))
+        return row
+
+    @router.get("")
+    async def my_tickets(request: Request) -> list[dict[str, Any]]:
+        who = await reader(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        rows = await tickets_of_member(bot.db, guild.id, int(who["id"]), OWN_TICKETS_LIMIT)
+        return [own_ticket_row(row) for row in rows]
+
+    @router.get("/{ticket_id}")
+    async def my_ticket(request: Request, ticket_id: int) -> dict[str, Any]:
+        who = await reader(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await theirs(guild, who, ticket_id)
+        messages = await ticket_messages(bot.db, ticket_id)
+        return own_ticket_row(row) | {
+            "messages": [
+                own_message_row(guild, one) for one in messages if one["direction"] in (IN, OUT)
+            ]
+        }
+
+    @router.post("/{ticket_id}/reply")
+    async def my_ticket_reply(
+        request: Request, ticket_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await theirs(guild, who, ticket_id)
+        if row["status"] != OPEN:
+            raise Refused(409, "ticket_closed", YOU_CLOSED.format(ticket_id=ticket_id))
+        text = clamp(payload.get("text"), REPLY_LIMIT)
+        if not text:
+            raise Refused(400, "nothing_to_send", NOTHING_TO_SEND)
+        if await blocked_row(bot.db, int(who["id"])) is not None:
+            raise Refused(403, "blocked", YOU_ARE_BLOCKED)
+        author = guild.get_member(int(who["id"])) or actor_for(bot, who, guild)
+        why_not = await record_inbound(bot, guild, row, author, text)
+        await log_action(
+            bot,
+            guild,
+            kind_via("modmail.member_reply", VIA_WEBSITE),
+            actor=actor_for(bot, who, guild),
+            target=int(who["id"]),
+            details={"ticket_id": ticket_id, "posted": why_not is None, "via": VIA_WEBSITE},
+        )
+        return {
+            "sent": True,
+            "ticket_id": ticket_id,
+            "message": YOUR_REPLY_SENT if why_not is None else YOUR_REPLY_NOT_POSTED,
+        }
+
+    @router.post("/{ticket_id}/close")
+    async def my_ticket_close(request: Request, ticket_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await theirs(guild, who, ticket_id)
+        if row["status"] != OPEN:
+            raise Refused(409, "ticket_closed", YOU_CLOSED.format(ticket_id=ticket_id))
+        held = await points_tickets.close_held(bot, guild, row)
+        if held is not None:
+            raise Refused(409, "run_pending", site_words(guild, held))
+        if guard_of(bot) is not None:
+            place, _ = await resolve_place(bot, guild, row)
+            if place is not None and not may_remove(bot, place):
+                refuse_guarded(CLOSE_WOULD_DELETE)
+        closed, _ = await close_ticket(
+            bot,
+            guild,
+            row,
+            by=actor_for(bot, who, guild),
+            reason=CLOSED_BY_MEMBER,
+            silent=True,
+            via=VIA_WEBSITE,
+        )
+        if not closed:
+            raise Refused(409, "close_raced", CLOSE_RACED.format(ticket_id=ticket_id))
+        fresh = await get_ticket(bot.db, ticket_id)
+        return {"ticket": own_ticket_row(fresh), "message": YOU_CLOSED.format(ticket_id=ticket_id)}
 
     return router

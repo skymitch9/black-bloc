@@ -2575,6 +2575,24 @@ async def make_forum(bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD
     return Outcome(True, said, value=forum.id)
 
 
+async def redraw_review_card(bot: Any, guild: Any, row: Any) -> None:
+    """An edited event: the card approvers decide on carries the new details."""
+    message_id = cell(row, "review_message_id")
+    channel_id = cell(row, "card_channel_id")
+    if not message_id or not channel_id:
+        return
+    place = guild.get_channel(int(channel_id)) or getattr(guild, "get_thread", lambda _: None)(
+        int(channel_id)
+    )
+    finder = getattr(place, "get_partial_message", None)
+    if finder is None:
+        return
+    try:
+        await finder(int(message_id)).edit(embed=card_for(row))
+    except Exception as exc:
+        log.warning("events: could not re-draw the card for %s: %s", row["id"], exc)
+
+
 async def post_review_card(bot: Any, guild: Any, row: Any, channel: Any, view: Any) -> int | None:
     """Where the card actually went, so the reply can say so."""
     target = card_channel(bot, channel)

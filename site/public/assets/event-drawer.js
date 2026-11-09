@@ -359,18 +359,37 @@ function whereControl(row, channels) {
 
 async function changeFold(row) {
   if (!row.editable) return el('p', { class: 'field-help', text: SETTLED });
+  return changeForm(row, {
+    target: path(row.id),
+    channels: await refChannels(),
+    after: async (said) => {
+      refresh();
+      await openEvent(row.id, said);
+    },
+  });
+}
+
+/** The requester's own copy of the form: the channel they picked stays, a new one is typed. */
+export function ownChangeForm(row, after) {
+  const channels = row.where_channel_id
+    ? [{ id: row.where_channel_id, type: row.where_kind === 'voice' ? 'voice' : 'text', name: row.where_channel_name || row.where_channel_id }]
+    : [];
+  return changeForm(row, { target: `/api/mine/events/${encodeURIComponent(row.id)}`, channels, after });
+}
+
+function changeForm(row, { target, channels, after }) {
   const say = notice();
   const title = el('input', { class: 'input', type: 'text', value: row.title || '' });
   const description = el('textarea', { class: 'input area', rows: '3' });
   description.value = row.description || '';
-  const where = whereControl(row, await refChannels());
+  const where = whereControl(row, channels);
   const start = whenField({ label: 'Starts', value: localWhen(row.starts_at), min: localWhen() });
   const duration = el('input', { class: 'input', type: 'text', value: row.duration || '', placeholder: '2h — or 1h30m, 45m' });
 
   const save = button('Save', async () => {
     const done = await run(
       say,
-      () => send(path(row.id), 'PUT', {
+      () => send(target, 'PUT', {
         title: title.value.trim(),
         description: description.value.trim(),
         start: start.value(),
@@ -381,8 +400,7 @@ async function changeFold(row) {
       (found) => [found?.message, ...(found?.notes || [])].filter(Boolean).join(' '),
     );
     if (!done.ok) return;
-    refresh();
-    await openEvent(row.id, say.said === undefined ? say.textContent : say.said);
+    await after(say.said === undefined ? say.textContent : say.said, done.found);
   }, { tone: 'warn', small: false });
 
   return foldout(CHANGE_IT, [
