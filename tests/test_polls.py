@@ -169,25 +169,65 @@ def test_a_poll_nobody_voted_in_never_divides_by_zero():
     assert polls.results_text(counts(("Yes", 0), ("No", 0)), 0) is not None
 
 
-def test_the_chart_puts_the_winner_first_and_marks_it():
-    text = polls.results_text(counts(("Friday", 6), ("Saturday", 22), ("Sunday", 13)), 41)
+def test_a_final_chart_puts_the_winner_first_and_marks_it():
+    text = polls.results_text(
+        counts(("Friday", 6), ("Saturday", 22), ("Sunday", 13)), 41, final=True
+    )
     lines = text.splitlines()
     assert lines[0].startswith("Saturday") and "winner" in lines[0]
     assert lines[1].startswith("Sunday") and "winner" not in lines[1]
     assert "54%" in lines[0]
 
 
-def test_a_tie_marks_nobody_as_the_winner():
-    text = polls.results_text(counts(("Yes", 3), ("No", 3)), 6)
+def test_a_running_chart_puts_the_leader_first_and_names_nobody():
+    text = polls.results_text(counts(("Friday", 6), ("Saturday", 22), ("Sunday", 13)), 41)
+    lines = text.splitlines()
+    assert lines[0].startswith("Saturday") and "54%" in lines[0]
     assert "winner" not in text
 
 
-def test_a_tie_is_named_on_the_card_instead():
+def test_a_tie_marks_nobody_as_the_winner():
+    text = polls.results_text(counts(("Yes", 3), ("No", 3)), 6, final=True)
+    assert "winner" not in text
+
+
+def test_a_tie_is_named_on_the_closed_card_instead():
     embed = polls.results_embed(
-        poll_id=4, question="Q", counts=counts(("Yes", 3), ("No", 3)), total=6
+        poll_id=4, question="Q", counts=counts(("Yes", 3), ("No", 3)), total=6, status=polls.CLOSED
     )
     fields = {field.name: field.value for field in embed.fields}
     assert "Winner" in fields and "**Yes**" in fields["Winner"] and "**No**" in fields["Winner"]
+
+
+def test_only_a_closed_or_archived_poll_is_finished():
+    finished = {status for status in polls.STATUSES if polls.is_finished(status)}
+    assert finished == {polls.CLOSED, polls.ARCHIVED}
+    assert not polls.is_finished("draft") and not polls.is_finished(None)
+
+
+def test_an_open_results_card_names_no_winner_and_a_closed_one_does():
+    leader = counts(("Friday", 6), ("Saturday", 22))
+    tie = counts(("Yes", 3), ("No", 3))
+    for status in (polls.OPEN, polls.PENDING_REVIEW, polls.CANCELLED, polls.DENIED):
+        led = polls.results_embed(poll_id=4, question="Q", counts=leader, total=28, status=status)
+        tied = polls.results_embed(poll_id=4, question="Q", counts=tie, total=6, status=status)
+        assert "winner" not in led.description
+        assert "Winner" not in {field.name for field in tied.fields}
+    for status in (polls.CLOSED, polls.ARCHIVED):
+        led = polls.results_embed(poll_id=4, question="Q", counts=leader, total=28, status=status)
+        tied = polls.results_embed(poll_id=4, question="Q", counts=tie, total=6, status=status)
+        assert "Saturday" in led.description and "winner" in led.description
+        assert "Winner" in {field.name for field in tied.fields}
+
+
+def test_an_open_panel_names_no_winner_and_a_closed_one_does():
+    leader = counts(("Friday", 6), ("Saturday", 22))
+    shown = polls.panel_embed(poll_id=4, question="Q", counts=leader, voters=28)
+    assert "winner" not in shown.description
+    closed = polls.panel_embed(
+        poll_id=4, question="Q", counts=leader, voters=28, status=polls.CLOSED
+    )
+    assert "winner" in closed.description
 
 
 def test_the_winner_helpers_agree_about_an_empty_poll():

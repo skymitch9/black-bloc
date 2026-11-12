@@ -54,6 +54,7 @@ from ...polls import (
     clamp,
     counts_from_options,
     describe_cadence,
+    is_finished,
     next_occurrence,
     winners,
 )
@@ -157,7 +158,7 @@ def poll_row(
     guild: Any, row: Any, options: Any, stored: Any = None, counts: Any = None
 ) -> dict[str, Any]:
     counts = counts_from_options(options) if counts is None else list(counts)
-    top = winners(counts)
+    top = winners(counts) if is_finished(row["status"]) else []
     return {
         "id": row["id"],
         "question": row["question"],
