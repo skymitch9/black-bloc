@@ -99,6 +99,7 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
 }
 
 TERMINAL_STATUSES = tuple(status for status, allowed in TRANSITIONS.items() if not allowed)
+FINISHED_STATUSES = (CLOSED, ARCHIVED)
 
 COLOURS: dict[str, int] = {
     PENDING_REVIEW: 0x5865F2,
@@ -613,14 +614,19 @@ def winners(counts: Any) -> list[dict[str, Any]]:
     return [row for row in rows if int(row.get("votes") or 0) == best]
 
 
-def results_text(counts: Any, total: Any) -> str:
+def is_finished(status: Any) -> bool:
+    """Whether a poll's result may name a winner."""
+    return status in FINISHED_STATUSES
+
+
+def results_text(counts: Any, total: Any, *, final: bool = False) -> str:
     """The bar chart every surface shows, in one monospaced block."""
     rows = ranked(counts)
     if not rows:
         return NO_VOTES
     top = winners(counts)
     top_positions = {int(row["position"]) for row in top}
-    alone = len(top) == 1
+    alone = final and len(top) == 1
     lines: list[str] = []
     for row in rows:
         label = clamp(row.get("label"), LABEL_COLUMN).ljust(LABEL_COLUMN)
@@ -661,9 +667,10 @@ def results_embed(
     approximate: bool = False,
 ) -> discord.Embed:
     """The one results card: the slash command, the loop and the review card all use it."""
+    final = is_finished(status)
     embed = discord.Embed(
         title=clamp(question, QUESTION_LIMIT),
-        description=f"```\n{results_text(counts, total)}\n```",
+        description=f"```\n{results_text(counts, total, final=final)}\n```",
         colour=COLOURS.get(status, COLOURS[CLOSED]),
     )
     counted = max(int(total or 0), 0)
@@ -677,7 +684,7 @@ def results_embed(
             embed.add_field(
                 name="Average", value=AVERAGE.format(mean=mean, top=RATING_SLOTS), inline=False
             )
-    won = winners(counts)
+    won = winners(counts) if final else []
     if len(won) > 1:
         names = ", ".join(f"**{clamp(row['label'], LABEL_LIMIT)}**" for row in won)
         embed.add_field(name="Winner", value=TIED.format(names=names), inline=False)
@@ -687,10 +694,10 @@ def results_embed(
     return embed
 
 
-def panel_text(counts: Any, voters: Any, *, hidden: bool) -> str:
+def panel_text(counts: Any, voters: Any, *, hidden: bool, final: bool = False) -> str:
     """The block under a panel poll: the bars, or the options with the bars withheld."""
     if not hidden:
-        return results_text(counts, voters)
+        return results_text(counts, voters, final=final)
     rows = list(counts or ())
     if not rows:
         return NO_VOTES
@@ -716,7 +723,9 @@ def panel_embed(
     withholding = hidden and status == OPEN
     embed = discord.Embed(
         title=clamp(question, QUESTION_LIMIT),
-        description=f"```\n{panel_text(counts, voters, hidden=withholding)}\n```",
+        description=(
+            f"```\n{panel_text(counts, voters, hidden=withholding, final=is_finished(status))}\n```"
+        ),
         colour=COLOURS.get(status, COLOURS[OPEN]),
     )
     counted = max(int(voters or 0), 0)

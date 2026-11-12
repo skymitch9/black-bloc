@@ -80,6 +80,34 @@ async def test_the_index_lists_every_poll_newest_first_with_its_counts(client, s
     assert first["winner_position"] is None
 
 
+async def test_a_running_poll_names_no_winner_and_a_closed_one_does(client, seeded, web):
+    await save_results(
+        web.db,
+        seeded["open"],
+        [
+            {"position": 0, "label": "Pizza", "votes": 1},
+            {"position": 1, "label": "Tacos", "votes": 5},
+        ],
+        6,
+    )
+
+    def shown():
+        rows = client.get("/api/polls").json()["polls"]
+        return next(row for row in rows if row["id"] == seeded["open"])
+
+    running = shown()
+    assert running["status"] == pure.OPEN
+    assert [item["votes"] for item in running["options"]] == [1, 5]
+    assert running["winner_position"] is None
+
+    await web.db.conn.execute(
+        "UPDATE polls SET status = ? WHERE id = ?", (pure.CLOSED, seeded["open"])
+    )
+    await web.db.conn.commit()
+
+    assert shown()["winner_position"] == 1
+
+
 async def test_the_index_can_be_narrowed_to_one_state(client, seeded):
     body = client.get("/api/polls?status=open").json()
 

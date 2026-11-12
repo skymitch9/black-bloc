@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-11-11 — one section APPENDED, nothing re-keyed**: *A running poll names no winner* (branch `poll-no-live-winner`, off `main` `be006151`); keyed by LINE at that branch. Rows below `results_text` in `black_bloc/polls.py` sit a few lines lower — trust the anchor text. Before that:
 > **2026-11-07 — one section APPENDED, nothing re-keyed**: *Bracket picture* (branch `brackets-picture`, off `main` `ed2d9424`); keyed by LINE at that branch. Rows below `starter_of` in `brackets_thread.py` sit a line or two lower — trust the anchor text. Before that:
 > **2026-11-07 — one section APPENDED, nothing re-keyed**: *Unknown channel types in the structure backup* (branch `structure-unknown-channels`, off `main` `ed2d9424`); keyed by LINE at that branch. Before that:
 > **2026-11-02 — one section APPENDED, nothing re-keyed**: *Ninja marks* (branch `ninja`, off `main` `665a4219`); keyed by LINE at that branch. Before that:
@@ -11063,3 +11064,15 @@ Design: [`structure-backup-design.md`](structure-backup-design.md) ▸ *Found 20
 | `black_bloc/cogs/moderation/structure_backup.py:205` `channels_of` | `Guild.fetch_channels()` (discord.py 2.7.1) raises `InvalidData` for the WHOLE list when one channel has a type its `ChannelType` lacks (it stops at `media = 16`; the live server had a type 20). Only on that error, the same endpoint is read raw (`guild._state.http.get_all_guild_channels`, the call `fetch_channels` itself makes) and each known entry is built with discord.py's own `discord.channel._guild_channel_factory`, so known channels are the same objects as before; unknown ones stay dicts. One warning per capture names the types and counts. A server discord.py reads whole is asked once, as before. Private API on purpose: it is the only read that returns the unknown channel at all (the gateway cache drops unknown types too). |
 | `black_bloc/structure_capture.py:158` `raw_channel_row` · `:177` | A raw dict becomes the same row shape as a typed channel, `type` = `unknown-<number>` (`UNKNOWN_TYPE`), overwrites from `permission_overwrites` (`type` 0 role, 1 member; the role list only when neither), tags from `available_tags`. `structure_diff.py` compares it like any channel (added / removed / renamed). |
 | `tests/cogs/moderation/test_structure_backup.py` `an_http_read` | The read-only guard still bans every `http` name except the exact on-the-spot call `<x>.http.get_all_guild_channels(...)`; holding the client, holding the bound reader, or any other method on it still trips (`SPELLINGS`). |
+
+## A running poll names no winner (branch `poll-no-live-winner`, 2026-11-11; keyed by LINE at that branch)
+
+Owner, 2026-11-11: a live mark reads as if the poll had already been won. Storage at close is unchanged (`winners()`, `save_results`).
+
+| Where | Why |
+|---|---|
+| `black_bloc/polls.py:102` `FINISHED_STATUSES` · `:617` `is_finished` | The one test of "may this result name a winner": `closed` or `archived`. A cancelled poll that was later archived also counts, but it never had `save_results` run, so its `final_votes` are all 0 and `winners()` names nobody anyway. |
+| `black_bloc/polls.py:622` `results_text(final=)` | Keyword-only, default `False`: a caller that forgets says nothing rather than crowning a leader. The bars still sort most-votes-first. |
+| `black_bloc/polls.py:670` `results_embed` · `:687` | `final` from its `status`; the tie `Winner` field is gated on it too. `_post_results` passes `CLOSED`; `build_card` passes the row's live status. |
+| `black_bloc/polls.py:697` `panel_text` · `:727` `panel_embed` | The panel passes its `status` through, so an open panel's live bars carry no mark and the closed edit does. |
+| `black_bloc/api/tools/polls.py:161` `poll_row` | `winner_position` is `None` unless `is_finished`; the page's green bar (`page-polls.js` `resultBars`) reads only this field, so the decision lives in the API alone. Mirrored by `site/mock/server.mjs` `POLL_FINISHED` / `pollWinner`. |

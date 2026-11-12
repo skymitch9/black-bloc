@@ -11556,8 +11556,10 @@ route('POST', '/api/events/:id/cancel', (context) => {
 const POLL_STATUSES = ['draft', 'pending_review', 'open', 'closed', 'archived', 'denied', 'cancelled', 'recurring'];
 const POLL_PER_PAGE = 25;
 const POLL_PER_PAGE_MAX = 100;
+const POLL_FINISHED = ['closed', 'archived'];
 
 function pollWinner(row) {
+  if (!POLL_FINISHED.includes(row.status)) return null;
   const best = Math.max(0, ...row.options.map((option) => option.votes));
   const top = row.options.filter((option) => option.votes === best && best > 0);
   return top.length === 1 ? top[0].position : null;
