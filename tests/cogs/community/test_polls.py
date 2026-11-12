@@ -1634,6 +1634,32 @@ async def test_cancelling_a_panel_takes_the_buttons_off_and_publishes_nothing(co
     assert await results_of(db, 1) is None
 
 
+async def test_a_closed_panel_marks_its_winner_on_the_card_it_leaves(cog, bot, lead, member, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+    await press(bot, lead, 1, 1)
+    await press(bot, member, 1, 1)
+    posted = bot.guild.get_channel(TEST_CHANNEL).messages[0]
+
+    await end_poll(cog, bot, lead)
+
+    assert "winner" in posted.edits[-1]["embed"].description
+
+
+async def test_a_cancelled_then_archived_panel_names_nobody(cog, bot, lead, member, db):
+    await panel(cog, bot, lead, options="Pizza | Tacos")
+    await press(bot, lead, 1, 1)
+    await press(bot, member, 1, 1)
+    await cancel_it(cog, bot, lead)
+    await archive_poll(db, 1, drop_votes=True)
+
+    row = await get_poll(db, 1)
+    embed, _ = await polls_cog.build_card(bot, bot.guild, row, lead)
+
+    assert row["status"] == pure.ARCHIVED
+    assert "winner" not in embed.description
+    assert "Winner" not in {field.name for field in embed.fields}
+
+
 async def test_the_modal_uses_a_radio_group_for_one_choice_and_checkboxes_for_many(cog, bot, lead):
     rows = [{"position": n, "label": f"o{n}"} for n in range(6)]
 
