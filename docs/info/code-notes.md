@@ -11076,3 +11076,15 @@ Owner, 2026-11-11: a live mark reads as if the poll had already been won. Storag
 | `black_bloc/polls.py:670` `results_embed` · `:687` | `final` from its `status`; the tie `Winner` field is gated on it too. `_post_results` passes `CLOSED`; `build_card` passes the row's live status. |
 | `black_bloc/polls.py:697` `panel_text` · `:727` `panel_embed` | The panel passes its `status` through, so an open panel's live bars carry no mark and the closed edit does. |
 | `black_bloc/api/tools/polls.py:161` `poll_row` | `winner_position` is `None` unless `is_finished`; the page's green bar (`page-polls.js` `resultBars`) reads only this field, so the decision lives in the API alone. Mirrored by `site/mock/server.mjs` `POLL_FINISHED` / `pollWinner`. |
+## `black_bloc/api/page_views.py` — who may open which site page
+
+| Where | Why |
+|---|---|
+| `black_bloc/settings_store.py` `VIEW_DEFAULTS` / `view_default` | Member pages default to the string `everyone`, turned into `[guild_id]` (the @everyone role's id) by `SettingsStore.default(key, guild_id)`, because the registry has no guild to read; `get`, `clear`, `settings_api.key_row` and `settings_panel` pass the guild through. |
+| `black_bloc/settings_store.py` `CORE_KEYS = (*CORE_KEYS, *VIEW_KEYS)` | Filed under `core`, not a `view` group: a 26th group falls off the Discord `/settings` select (`test_the_settings_groups_fit_the_select`). |
+| `black_bloc/api/page_views.py` `STAFF_PAGE_PREFIXES` | A read-only viewer is admitted only to the GETs of staff pages; member pages' staff reads (`/api/requests` index) are deliberately absent, so @everyone on Requests never opens the staff list. `/api/actions` belongs to Overview, Health and Logs only. |
+| `black_bloc/api/auth.py` `page_viewer` | Runs inside `staff_dependency`, so every staff router gains viewers without per-route edits; a write on a viewed page is `403 read_only`, anywhere else the old `not_staff`. |
+| `site/public/assets/app.js` `painted` | A cached `me` paints first; `verify` repaints when the fresh `me` changes the read-only state, so a role change never leaves edit controls up. |
+| `black_bloc/api/tools/events.py` `build_member_router` / `own_row` | `/api/mine/events`, not `/api/events/mine`: the staff router carries `staff_dependency` at router level and `/{event_id}` would swallow `mine`. `own_row` is an allow-list, so a field added to `event_row` never leaks to a requester by default. |
+| `black_bloc/api/tools/modmail.py` `own_message_row` | Only `in` and `out` rows; `note` is staff's. An anonymous `out` shows `ANONYMOUS_NAME` and never an `author_id`. |
+

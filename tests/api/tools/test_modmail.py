@@ -360,3 +360,80 @@ def test_the_website_says_which_key_a_ticket_forum_needs(client, sign_in):
 
     assert refused.status_code == 409
     assert "modmail_category_id" in refused.json()["message"]
+
+
+async def test_a_member_lists_and_reads_only_their_own_tickets_without_notes(
+    client, sign_in, web, guild, wf
+):
+    from black_bloc.modmail import NOTE, OUT
+
+    wf.member(guild, 21, name="ada")
+    mine = await a_ticket(web, wf)
+    await a_ticket(web, wf, user_id=23)
+    await add_message(web.db, mine, 7, NOTE, content="staff only")
+    await add_message(web.db, mine, 7, OUT, content="hello", anonymous=True)
+    sign_in(client, uid=21, staff=False)
+
+    listed = client.get("/api/mine/modmail").json()
+    one = client.get(f"/api/mine/modmail/{mine}").json()
+
+    assert [row["id"] for row in listed] == [mine]
+    assert [m["content"] for m in one["messages"]] == ["are you there?", "hello"]
+    assert one["messages"][1]["author_name"] == "Staff"
+    assert "closed_by_id" not in one and "author_id" not in one["messages"][0]
+
+
+async def test_a_member_replies_to_their_own_ticket_from_the_site(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    ticket_id = await a_ticket(web, wf)
+    sign_in(client, uid=21, staff=False)
+
+    response = client.post(f"/api/mine/modmail/{ticket_id}/reply", json={"text": "any news?"})
+
+    assert response.status_code == 200
+    body = client.get(f"/api/mine/modmail/{ticket_id}").json()
+    assert body["messages"][-1]["content"] == "any news?"
+    assert body["messages"][-1]["direction"] == IN
+    assert "web.modmail.member_reply" in await wf.kinds_in(web.db)
+
+
+async def test_a_member_cannot_touch_somebody_elses_ticket(client, sign_in, web, guild, wf):
+    wf.member(guild, 21, name="ada")
+    theirs = await a_ticket(web, wf, user_id=23)
+    sign_in(client, uid=21, staff=False)
+
+    assert client.get(f"/api/mine/modmail/{theirs}").status_code == 403
+    sent = client.post(f"/api/mine/modmail/{theirs}/reply", json={"text": "hi"})
+    shut = client.post(f"/api/mine/modmail/{theirs}/close", json={})
+    assert sent.status_code == 403 and shut.status_code == 403
+    assert (await get_ticket(web.db, theirs))["status"] == OPEN
+
+
+async def test_a_blocked_member_is_refused_a_site_reply(client, sign_in, web, guild, wf):
+    from black_bloc.cogs.moderation.modmail import add_block
+
+    wf.member(guild, 21, name="ada")
+    ticket_id = await a_ticket(web, wf)
+    await add_block(web.db, 21, 7, "spam")
+    sign_in(client, uid=21, staff=False)
+
+    refused = client.post(f"/api/mine/modmail/{ticket_id}/reply", json={"text": "hi"})
+
+    assert refused.status_code == 403 and refused.json()["error"] == "blocked"
+
+
+async def test_a_member_closes_their_own_ticket_quietly(client, sign_in, web, guild, wf):
+    member = wf.member(guild, 21, name="ada")
+    ticket_id = await a_ticket(web, wf)
+    sign_in(client, uid=21, staff=False)
+
+    response = client.post(f"/api/mine/modmail/{ticket_id}/close", json={})
+
+    assert response.status_code == 200
+    row = await get_ticket(web.db, ticket_id)
+    assert row["status"] == "closed" and row["close_reason"] == "closed by the member"
+    assert member.dms == []
+    again = client.post(f"/api/mine/modmail/{ticket_id}/reply", json={"text": "hi"})
+    assert again.status_code == 409

@@ -1,0 +1,46 @@
+name: prune-branches
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only list what would be deleted
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete every branch already merged into main
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          git fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*'
+          kept=0
+          gone=()
+          for ref in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin); do
+            [ "$ref" = "main" ] || [ "$ref" = "HEAD" ] && continue
+            if git merge-base --is-ancestor "origin/$ref" origin/main; then
+              gone+=("$ref")
+            else
+              echo "KEPT (not merged): $ref"
+              kept=$((kept + 1))
+            fi
+          done
+          echo "${#gone[@]} merged, $kept kept"
+          [ "${#gone[@]}" -eq 0 ] && exit 0
+          if [ "$DRY_RUN" = "true" ]; then
+            printf 'would delete: %s\n' "${gone[@]}"
+            exit 0
+          fi
+          printf '%s\n' "${gone[@]}" | xargs -n 25 git push -q origin --delete
+          echo "Deleted ${#gone[@]} branch(es)."

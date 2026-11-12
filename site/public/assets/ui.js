@@ -24,6 +24,7 @@ export { applyFilters, channelLabel, countedChoices, familyLabel, familyTerms, f
 
 const OUTAGE_WRITE = 'Black Bloc did not answer, so nothing was changed. That is an outage, not a ' +
   'permission problem — try again in a minute.';
+const roleWord = (role) => (String(role.name).startsWith('@') ? String(role.name) : `@${role.name}`);
 
 export function sentenceFor(error) {
   if (error instanceof Outage) return { text: OUTAGE_WRITE, tone: 'danger' };
@@ -1199,7 +1200,7 @@ export async function roleSelect(value, { multiple = false, id = null } = {}) {
   });
   if (!multiple) select.append(optionNode('', 'not set', chosen.size === 0));
   for (const role of roles) {
-    select.append(optionNode(role.id, `@${role.name}`, chosen.has(String(role.id))));
+    select.append(optionNode(role.id, roleWord(role), chosen.has(String(role.id))));
   }
   keepUnlisted(select, chosen, roles, 'a role the server no longer has');
   return select;
@@ -1391,7 +1392,7 @@ async function control(spec, onChange) {
   if (kind === 'role') return { node: await roleSelect(spec.value), read: (n) => readSelect(n, false) };
   if (kind === 'roles') {
     const node = pickChips(await refRoles(), spec.value, {
-      labelOf: (role) => `@${role.name}`,
+      labelOf: (role) => roleWord(role),
       gone: 'a role the server no longer has',
       add: 'Add a role…',
     });

@@ -15,6 +15,7 @@ from ...cogs.community.requests import (
     make_forum,
     mark_ready,
     notify,
+    redraw_card,
     resume_request,
     send_back,
 )
@@ -30,6 +31,7 @@ from ...requests import (
     NEEDS_A_REASON,
     NO_SUCH_REQUEST,
     NOT_YOURS,
+    NOT_YOURS_TO_EDIT,
     NOTES_LIMIT,
     OPEN,
     REASON_LIMIT,
@@ -51,6 +53,7 @@ from ...requests import (
     comments_for,
     count_requests,
     create_request,
+    edit_own_request,
     everyone_may_file,
     get_comment,
     get_request,
@@ -684,6 +687,38 @@ def build_router(bot: Any) -> APIRouter:
         )
         if fresh is None:
             raise Refused(409, "too_late_to_withdraw", said)
+        return {"request": await _shown(guild, fresh), "message": said}
+
+    @router.post("/{request_id}/edit")
+    async def request_edit_own(
+        request: Request, request_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """The person who filed it rewords it while it is open or on hold."""
+        who = await signed_in_member(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await _wanted(guild, request_id)
+        if row["user_id"] != int(who["id"]):
+            raise Refused(403, "not_yours", NOT_YOURS_TO_EDIT.format(request_id=request_id))
+        try:
+            what, why, due_on = checked_fields(
+                payload.get("what"), payload.get("why"), payload.get("due_on")
+            )
+        except RequestError as exc:
+            raise refused(exc) from exc
+        said, fresh = await edit_own_request(
+            bot,
+            guild,
+            row,
+            actor_for(bot, who, guild),
+            what=what,
+            why=why,
+            due_on=due_on,
+            via=VIA_WEBSITE,
+        )
+        if fresh is None:
+            raise Refused(409, "too_late_to_edit", said)
+        await redraw_card(bot, guild, fresh)
         return {"request": await _shown(guild, fresh), "message": said}
 
     @router.post("/{request_id}/comments")

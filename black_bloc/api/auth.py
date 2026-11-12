@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from ..actionlog import log_action
 from ..logkinds import VIA_OPERATOR
 from ..structure import may_see
-from . import sessions
+from . import page_views, sessions
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +121,14 @@ OPERATOR_READ_ONLY = (
     "The operator token can only look, never change, so nothing was done and nothing was "
     "logged as a change. Make this change on the dashboard or in Discord, where a person signs "
     "for it."
+)
+READ_ONLY_PAGE = (
+    "You can look at this page but not change it, so nothing was changed. Ask staff to make "
+    "the change for you, or a Lead for a staff role."
+)
+PAGE_CLOSED = (
+    "This page is not open to your roles, so nothing was shown. Ask staff to add one of your "
+    "roles to it on the Settings page."
 )
 TOO_MANY_READS = (
     "That is more of this than Black Bloc will look up in a minute, so it was not loaded. "
@@ -400,10 +408,45 @@ def staff_dependency(bot: Any):
         if state == "staff_unknown":
             raise Refused(503, "staff_unknown", STAFF_UNKNOWN)
         if state == "not_staff":
+            viewer = page_viewer(bot, who, request)
+            if viewer is not None:
+                return viewer
             raise Refused(403, "not_staff", NOT_STAFF)
         return who
 
     return dependency
+
+
+def member_of(bot: Any, who: dict[str, Any]) -> Any:
+    guild = guild_of(bot)
+    if guild is None or who.get("operator"):
+        return None
+    return guild.get_member(int(who["id"]))
+
+
+def page_viewer(bot: Any, who: dict[str, Any], request: Any) -> dict[str, Any] | None:
+    """A non-staff member reading a page their roles may view; a write there is refused."""
+    if member_state(who) != "member":
+        return None
+    member = member_of(bot, who)
+    guild = guild_of(bot)
+    path = str(getattr(getattr(request, "url", None), "path", "") or "")
+    method = str(getattr(request, "method", "")).upper()
+    if method in READ_METHODS:
+        if page_views.viewer_may_read(bot.store, guild, member, path):
+            return who | {"viewer": True}
+        return None
+    if page_views.views_a_page_at(bot.store, guild, member, path):
+        raise Refused(403, "read_only", READ_ONLY_PAGE)
+    return None
+
+
+def views_of(bot: Any, who: dict[str, Any]) -> list[str]:
+    if who.get("operator") or staff_state(who) == "staff":
+        return list(page_views.VIEW_PAGES)
+    if member_state(who) != "member":
+        return []
+    return page_views.viewable(bot.store, guild_of(bot), member_of(bot, who))
 
 
 def cookie_kwargs(settings: Any) -> dict[str, Any]:
@@ -706,6 +749,7 @@ def build_router(bot: Any, *, oauth_request: Any = None) -> APIRouter:
             "member": member,
             "operator": bool(who.get("operator")),
             "structure": sees_structure(bot, who),
+            "views": views_of(bot, who),
             "state": state,
             "guild": {"id": str(guild.id), "name": guild.name} if guild is not None else None,
             "message": MEMBER_NOT_STAFF if state == "not_staff" and member else said,
@@ -727,7 +771,9 @@ __all__ = [
     "OPERATOR_READ_ONLY",
     "OPERATOR_SLOW_DOWN",
     "OPERATOR_WHO",
+    "PAGE_CLOSED",
     "READ_BUCKET_ATTR",
+    "READ_ONLY_PAGE",
     "READ_RATE",
     "READ_WINDOW_SECONDS",
     "SESSION_COOKIE",

@@ -1,4 +1,4 @@
-import { api, apiHref, listOf, names, send, settings, settingsNamespace } from './api.js';
+import { api, apiHref, listOf, names, readOnlyState, send, settings, settingsNamespace } from './api.js';
 import { genreFamilies, genreQualifiers, pageOf, pageWords, runsCsv } from './listfilter.js';
 import {
   ALL,
@@ -70,6 +70,7 @@ let showView = () => {};
 
 const rowPath = (key, tail = '') => `/api/runs/${encodeURIComponent(key)}${tail}`;
 
+const looking = () => Boolean(readOnlyState());
 const writes = writeGuard({ isDemo: () => state.demo, refusal: () => refusal, send, api });
 
 function readHash() {
@@ -284,7 +285,7 @@ function runColumns() {
       cell: (row) => el('span', { class: 'runs-how' }, [
         el('span', { text: row.removed ? 'removed' : row.edited.length ? `${row.how_word} · edited` : row.how_word }),
         row.folded && row.folded.length ? el('span', { class: 'pill small', title: row.folded.join(' · '), text: `${row.folded.length + 1} rows` }) : null,
-        el('button', {
+        looking() ? null : el('button', {
           class: 'btn small quiet',
           type: 'button',
           title: 'Edit this run',
@@ -372,6 +373,7 @@ function runsView() {
 const TAG_WORDS = { series: 'Series', genre: 'Genre', developer: 'Developer' };
 
 function tagBox(game, say, tag) {
+  if (looking()) return el('span', { text: game[tag] || '' });
   const input = el('input', { class: 'input', list: `runs-${tag}-names`, value: game[tag] || undefined, 'aria-label': `${TAG_WORDS[tag]} of ${game.game}` });
   input.addEventListener('change', async () => {
     const done = await run(
@@ -759,6 +761,7 @@ function exportLink() {
 }
 
 function asideButtons() {
+  if (looking()) return [exportLink()];
   return [
     button('Add a run…', () => openEditor(null), { tone: 'warn' }),
     button('Import CSV…', openCsvImport, { tone: 'quiet' }),
@@ -817,8 +820,7 @@ async function load() {
   showView();
   document.getElementById('dash').replaceChildren(
     el('div', { class: 'runs-page' }, [el('div', { class: 'runs-viewbar' }, [views, pill].filter(Boolean)), say, holder]),
-    await settingsSection(),
-    await logsSectionNode(),
+    ...(looking() ? [] : [await settingsSection(), await logsSectionNode()]),
   );
 }
 

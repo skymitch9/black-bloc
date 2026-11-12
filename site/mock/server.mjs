@@ -93,6 +93,8 @@ const MINUTES_SEED_NOTES = '**In short**\nThe meeting-minutes prototype ships of
 
 const POST_SEED_BODY = "Welcome to** Black in a Flash**, a dedicated space for Black gamers!  While we appreciate and see multiple teams around the content creation space we don't see one that is just for us, and that is what this Discord hopes to alleviate: the creation of a space where we can authentically and openly be ourselves.\n# Familiarize yourselves with the rules before you join the discord.\n**Failure to comply with the rules may lead to moderator action.**\n\n***1. The moderation team reserve the right to remove anyone from the space.***\n> If you cannot abide the rules or plainly speaking are not a good fit for the space, the moderators can remove you at will.\n\n***2. Be respectful of others.***\n> We will not tolerate any forms of harassment or bigotry, such as- but not limited to- harassment about race, gender/identity expression, sexual orientation, religion, disability, physical appearances. There's a line between a friendly roast and being a jerk.\n\n***3. First and foremost, this space is to adapt, learn, and grow.***\n> Let's try to keep that as the primary focus. It's okay to have off topic conversations or to be upset about things, but this is a space to empower ourselves. If you are going to detract from the experience of others, there may be moderator intervention.\n\nYou can head to the landing channel and type a message so you gain access to the rest of the discord. If you are unsure of something, you are welcome to ping the Aunties / Uncles role.";
 
+const VIEW_PAGES = ['overview', 'health', 'audit', 'requests', 'guides', 'moderation', 'members', 'automod', 'honeypot', 'modmail', 'posts', 'golive', 'pbs', 'leaderboard', 'brackets', 'events', 'runs', 'raidtrain', 'birthdays', 'tempvoice', 'rolemenus', 'polls', 'chat', 'settings'];
+
 const ROLES = [
   { id: '900000000000000001', name: 'Aunties / Uncles', color: '#e04a6d', position: 12, managed: false },
   { id: '900000000000000002', name: 'Leads', color: '#4eefff', position: 14, managed: false },
@@ -104,6 +106,8 @@ const ROLES = [
   { id: '900000000000000008', name: 'Casey pings', color: '#8a8f98', position: 3, managed: false },
   { id: '900000000000000010', name: 'GamesDoneQuick pings', color: '#8a8f98', position: 3, managed: false },
   { id: '900000000000000011', name: 'Staff', color: '#8a8f98', position: 6, managed: false },
+  { id: '900000000000000012', name: 'Committee', color: '#8a8f98', position: 7, managed: false },
+  { id: '600000000000000001', name: '@everyone', color: '#8a8f98', position: 0, managed: false },
 ];
 
 const CHANNELS = [
@@ -1771,6 +1775,30 @@ const SETTING_SPECS = [
   ["chat_review_suggest_intent", "text", "a new intent **{intent}** for **{phrase}**", "a new intent **{intent}** for **{phrase}**", "how a suggested new intent reads on a review item. It takes {intent} and {phrase}"],
   ["chat_review_suggest_knowledge", "text", "a fact for **{section}**: {line}", "a fact for **{section}**: {line}", "how a suggested knowledge fact reads on a review item. It takes {section} and {line}"],
   ["chat_review_suggest_none", "text", "nothing to learn", "nothing to learn", "how a review item reads when the cheap model found nothing that fits"],
+  ["view_overview_role_ids", "roles", [], [], "roles that may open the Overview page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_health_role_ids", "roles", [], [], "roles that may open the Health page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_audit_role_ids", "roles", [], [], "roles that may open the Logs page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_requests_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Requests page on the site as a member does; @everyone by default"],
+  ["view_guides_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Guides page on the site as a member does; @everyone by default"],
+  ["view_moderation_role_ids", "roles", [], [], "roles that may open the Moderation page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_members_role_ids", "roles", [], [], "roles that may open the Members page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_automod_role_ids", "roles", [], [], "roles that may open the Automod page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_honeypot_role_ids", "roles", [], [], "roles that may open the Honeypot page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_modmail_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Modmail page on the site as a member does; @everyone by default"],
+  ["view_posts_role_ids", "roles", [], [], "roles that may open the Posts page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_golive_role_ids", "roles", [], [], "roles that may open the Go-live page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_pbs_role_ids", "roles", [], [], "roles that may open the Personal bests page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_leaderboard_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Leaderboard page on the site as a member does; @everyone by default"],
+  ["view_brackets_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Brackets page on the site as a member does; @everyone by default"],
+  ["view_events_role_ids", "roles", ["600000000000000001"], ["600000000000000001"], "roles that may open the Events page on the site as a member does; @everyone by default"],
+  ["view_runs_role_ids", "roles", ["900000000000000012"], ["900000000000000012"], "roles that may open the BaF runs page on the site to look but not change anything; staff always have the whole page; Committee by default"],
+  ["view_raidtrain_role_ids", "roles", [], [], "roles that may open the Raid trains page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_birthdays_role_ids", "roles", [], [], "roles that may open the Birthdays page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_tempvoice_role_ids", "roles", [], [], "roles that may open the Temp voice page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_rolemenus_role_ids", "roles", [], [], "roles that may open the Role menus page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_polls_role_ids", "roles", [], [], "roles that may open the Polls page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_chat_role_ids", "roles", [], [], "roles that may open the Chat page on the site to look but not change anything; staff always have the whole page; none by default"],
+  ["view_settings_role_ids", "roles", [], [], "roles that may open the Settings page on the site to look but not change anything; staff always have the whole page; none by default"],
 ];
 
 const RULES = {
@@ -2794,6 +2822,7 @@ const QUESTION_KEYS = ["question_channel_id", "question_ping_role_id", "question
 CORE_KEYS.push(...QUESTION_KEYS);
 const NINJA_KEYS = ["ninja_mode", "ninja_emoji", "ninja_default_posts", "ninja_default_minutes", "ninja_panel_title", "ninja_panel_footer", "ninja_state_line", "ninja_mark_line", "ninja_none_line", "ninja_left_posts", "ninja_left_until", "ninja_left_both", "ninja_mark_label", "ninja_refresh_label", "ninja_back_label", "ninja_next_label", "ninja_on_label", "ninja_off_label", "ninja_end_label", "ninja_end_placeholder", "ninja_end_confirm", "ninja_who_placeholder", "ninja_where_placeholder", "ninja_pick_line", "ninja_modal_title", "ninja_posts_field", "ninja_minutes_field", "ninja_no_limit_placeholder", "ninja_marked_said", "ninja_already_said", "ninja_no_one_said", "ninja_no_channel_said", "ninja_no_limit_said", "ninja_bad_number_said", "ninja_ended_said", "ninja_not_active_said", "ninja_mode_said"];
 CORE_KEYS.push(...NINJA_KEYS);
+CORE_KEYS.push(...VIEW_PAGES.map((page) => `view_${page}_role_ids`));
 const POINTS_WORD_KEYS = ["points_announce_title", "points_announce_entered", "points_announce_left", "points_announce_up", "points_announce_down", "points_board_title", "points_board_post_title", "points_board_xp_title", "points_column_player", "points_column_runs", "points_column_xp", "points_column_points", "points_board_line", "points_board_empty", "points_next_rank_said", "points_next_rank_first_said", "points_next_rank_unranked_said", "points_next_rank_top_said", "points_next_rank_unranked_top_said", "points_submitted_said", "points_no_game_said", "points_too_long_said", "points_no_time_said", "points_bad_time_said", "points_no_proof_said", "points_bad_proof_said", "points_off_said", "points_not_verifier_said", "points_no_verifier_role_words", "points_not_staff_said", "points_own_run_said", "points_no_run_said", "points_wrong_state_said", "points_state_pending", "points_state_approved", "points_state_rejected", "points_state_removed", "points_dm_rejected", "points_dm_removed", "points_dm_reason", "points_dm_no_reason", "points_bounty_line", "points_bounty_multiplier_words", "points_bounty_extra_words", "points_bounty_until_words", "points_bounty_event_words", "points_bounty_none", "points_panel_footer", "points_points_label", "points_xp_label", "points_full_board_label", "points_next_rank_label", "points_submit_label", "points_feed_label", "points_back_label", "points_previous_label", "points_next_label", "points_page_words", "points_bounties_heading", "points_submit_title", "points_game_label", "points_category_label", "points_time_label", "points_proof_label", "points_note_label", "points_time_hint", "points_proof_hint", "points_ticket_subject", "points_ticket_body", "points_close_refused_said", "points_dm_approved", "points_blocked_said", "points_ticket_open_said", "points_run_waiting_said", "points_cannot_open_said"];
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
@@ -2992,7 +3021,18 @@ const MEMBER = MEMBERS[3];
 const VERIFIER = MEMBERS[6];
 
 function memberSession(session) {
-  return session === 'member' || session === 'verifier';
+  return session === 'member' || session === 'verifier' || session === 'committee';
+}
+
+/** `as=committee` is a member who wears Committee: the member pages, plus BaF runs to look at. */
+function sessionViews(session) {
+  const roles = session === 'committee' ? ['600000000000000001', '900000000000000012'] : ['600000000000000001'];
+  return VIEW_PAGES.filter((page) => (state.settings.get(`view_${page}_role_ids`) || []).some((id) => roles.includes(String(id))));
+}
+
+function requireViewer(session, page) {
+  if (memberSession(session) && sessionViews(session).includes(page)) return;
+  requireStaff(session);
 }
 
 /** The one session that is a signed-in guild member and NOT staff: requests only. */
@@ -3038,7 +3078,7 @@ function meBody(session) {
   const guild = { id: '600000000000000001', name: 'Black in a Flash!' };
   if (memberSession(session)) {
     const who = session === 'verifier' ? VERIFIER : MEMBER;
-    return { status: 200, body: { user: { id: who.id, name: who.display_name, avatar: null }, staff: false, member: true, state: 'not_staff', guild, message: MEMBER_NOT_STAFF } };
+    return { status: 200, body: { user: { id: who.id, name: who.display_name, avatar: null }, staff: false, member: true, views: sessionViews(session), state: 'not_staff', guild, message: MEMBER_NOT_STAFF } };
   }
   if (session === 'stranger') {
     return { status: 200, body: { user: { id: MEMBERS[5].id, name: MEMBERS[5].name, avatar: null }, staff: false, member: false, state: 'not_staff', guild, message: NOT_STAFF } };
@@ -3046,8 +3086,9 @@ function meBody(session) {
   if (session === 'unknown') {
     return { status: 200, body: { user, staff: false, member: false, state: 'staff_unknown', guild, message: STAFF_UNKNOWN } };
   }
-  return { status: 200, body: { user, staff: true, member: true, structure: session !== 'mod', state: 'staff', guild, message: null } };
+  return { status: 200, body: { user, staff: true, member: true, structure: session !== 'mod', views: VIEW_PAGES, state: 'staff', guild, message: null } };
 }
+
 
 function statusBody() {
   const features = SETTING_SPECS
@@ -3631,12 +3672,12 @@ route('POST', '/api/selftest/:run_id/purge', (context) => {
 });
 
 route('GET', '/api/ref/channels', (context) => {
-  requireStaff(context.session);
+  if (!memberSession(context.session) || !sessionViews(context.session).some((page) => !['requests', 'guides', 'brackets', 'leaderboard', 'events', 'modmail'].includes(page))) requireStaff(context.session);
   return CHANNELS;
 });
 
 route('GET', '/api/ref/roles', (context) => {
-  requireStaff(context.session);
+  if (!memberSession(context.session) || !sessionViews(context.session).some((page) => !['requests', 'guides', 'brackets', 'leaderboard', 'events', 'modmail'].includes(page))) requireStaff(context.session);
   return everyRole();
 });
 
@@ -3820,7 +3861,7 @@ route('GET', '/api/members/optouts', (context) => {
 });
 
 route('GET', '/api/ref/names', (context) => {
-  requireStaff(context.session);
+  if (!memberSession(context.session) || !sessionViews(context.session).some((page) => !['requests', 'guides', 'brackets', 'leaderboard', 'events', 'modmail'].includes(page))) requireStaff(context.session);
   const ids = (context.url.searchParams.get('ids') || '').split(',').map((id) => id.trim()).filter(Boolean);
   const found = {};
   for (const id of ids) found[id] = nameFor(id);
@@ -12935,7 +12976,7 @@ function runsHand(key) {
 }
 
 route('GET', '/api/runs', (context) => {
-  requireStaff(context.session);
+  requireViewer(context.session, 'runs');
   const every = runsView();
   return {
     rows: every,
@@ -12950,14 +12991,14 @@ route('GET', '/api/runs', (context) => {
 });
 
 route('GET', '/api/runs/games', (context) => {
-  requireStaff(context.session);
+  requireViewer(context.session, 'runs');
   return { games: runsGames(runsView()) };
 });
 
 const RUNS_DEMO_FILE = resolve(HERE, '..', '..', 'black_bloc', 'runs_demo.json');
 
 route('GET', '/api/runs/demo', async (context) => {
-  requireStaff(context.session);
+  requireViewer(context.session, 'runs');
   return JSON.parse(await readFile(RUNS_DEMO_FILE, 'utf8'));
 });
 
@@ -13844,6 +13885,100 @@ function messageRow(message) {
     delivered: Boolean(message.delivered),
   };
 }
+
+function ownTicketRow(ticket) {
+  return { id: ticket.id, status: ticket.status, opened_at: ticket.opened_at, closed_at: ticket.closed_at, source: ticket.source || 'dm' };
+}
+
+function ownTicketOf(context) {
+  requireMember(context.session);
+  const ticket = ticketOf(context.params.id);
+  if (String(ticket.user_id) !== String(actorOf(context.session)) || ticket.practice) {
+    throw new Refused(403, 'not_yours', `Ticket **#${ticket.id}** is not one of yours, so nothing was shown or sent. Your own tickets are the ones listed here.`);
+  }
+  return ticket;
+}
+
+route('GET', '/api/mine/modmail', (context) => {
+  requireMember(context.session);
+  const me = String(actorOf(context.session));
+  return state.tickets.filter((ticket) => String(ticket.user_id) === me && !ticket.practice).map(ownTicketRow);
+});
+
+route('GET', '/api/mine/modmail/:id', (context) => {
+  const ticket = ownTicketOf(context);
+  const messages = (state.messages[ticket.id] || []).filter((one) => one.direction !== 'note').map((one) => ({
+    id: one.id,
+    at: one.at,
+    direction: one.direction,
+    author_name: one.direction === 'out' && one.anonymous ? 'Staff' : memberName(one.author_id),
+    content: one.content,
+    attachments: one.attachments || [],
+  }));
+  return { ...ownTicketRow(ticket), messages };
+});
+
+route('POST', '/api/mine/modmail/:id/reply', async (context) => {
+  const ticket = ownTicketOf(context);
+  const body = await context.body();
+  if (!String(body.text || '').trim()) throw new Refused(400, 'nothing_to_send', 'That reply was empty, so nothing was sent. Write something for the member to read.');
+  if (ticket.status !== 'open') throw new Refused(409, 'ticket_closed', `Ticket **#${ticket.id}** is closed. Message Black Bloc again any time to open a new one.`);
+  (state.messages[ticket.id] = state.messages[ticket.id] || []).push({ id: state.nextMessage++, at: now(), author_id: actorOf(context.session), direction: 'in', anonymous: false, content: String(body.text), attachments: null, delivered: 1 });
+  logAction('web.modmail.member_reply', { details: { ticket_id: ticket.id, posted: true } });
+  return { sent: true, ticket_id: ticket.id, message: 'Sent to staff.' };
+});
+
+route('POST', '/api/mine/modmail/:id/close', (context) => {
+  const ticket = ownTicketOf(context);
+  if (ticket.status !== 'open') throw new Refused(409, 'ticket_closed', `Ticket **#${ticket.id}** is closed. Message Black Bloc again any time to open a new one.`);
+  ticket.status = 'closed';
+  ticket.closed_at = now();
+  ticket.closed_by = actorOf(context.session);
+  ticket.close_reason = 'closed by the member';
+  return { ticket: ownTicketRow(ticket), message: `Ticket **#${ticket.id}** is closed. Message Black Bloc again any time to open a new one.` };
+});
+
+const OWN_EVENT_FIELDS = ['id', 'title', 'description', 'location', 'where_kind', 'where_channel_id', 'where_label', 'starts_at', 'ends_at', 'minutes', 'duration', 'status', 'deny_reason', 'created_at'];
+
+function ownEventRow(row) {
+  const shown = eventRow(row);
+  const out = Object.fromEntries(OWN_EVENT_FIELDS.map((key) => [key, shown[key] ?? null]));
+  return { ...out, where_channel_name: null, announce_url: null, scheduled_event_url: null, editable: row.status === 'pending', cancellable: ['pending', 'approved', 'live'].includes(row.status) };
+}
+
+function ownEventOf(context) {
+  requireMember(context.session);
+  const row = eventOf(context.params.id);
+  if (String(row.requester_id) !== String(actorOf(context.session))) {
+    throw new Refused(403, 'not_yours', `Event **#${row.id}** is not one you proposed, so nothing was done. Your own events are the ones listed here.`);
+  }
+  return row;
+}
+
+route('GET', '/api/mine/events', (context) => {
+  requireMember(context.session);
+  const me = String(actorOf(context.session));
+  return state.events.filter((row) => String(row.requester_id) === me).map(ownEventRow);
+});
+
+route('PUT', '/api/mine/events/:id', async (context) => {
+  const row = ownEventOf(context);
+  if (row.status !== 'pending') throw new Refused(409, 'not_editable', `Event **#${row.id}** is **${row.status}**, so its details were not changed.`);
+  const body = await context.body();
+  if (!String(body.title || '').trim()) throw new Refused(400, 'event_refused', 'An event needs a title.');
+  row.title = String(body.title).trim();
+  row.description = String(body.description || '').trim() || null;
+  row.location = String(body.location || '').trim() || null;
+  logAction('web.event.edited', { details: { event_id: row.id, title: row.title } });
+  return { event: ownEventRow(row), message: 'Saved. Staff deciding on it see the new details.', notes: [] };
+});
+
+route('POST', '/api/mine/events/:id/cancel', (context) => {
+  const row = ownEventOf(context);
+  if (!['pending', 'approved', 'live'].includes(row.status)) throw new Refused(409, 'not_cancellable', `Event **#${row.id}** is **${row.status}** already, so there was nothing to cancel.`);
+  row.status = 'cancelled';
+  return { event: ownEventRow(row), message: 'Cancelled.' };
+});
 
 route('GET', '/api/modmail/tickets', (context) => {
   requireStaff(context.session);
@@ -16080,6 +16215,25 @@ route('POST', '/api/requests/:id/withdraw', (context) => {
   row.status = 'withdrawn';
   logAction('web.request.withdrawn', { actor_id: mine, target_id: row.user_id, details: { request_id: row.id } });
   return { request: askRow(row), message: `Request **#${row.id}** is withdrawn. Nobody will pick it up now.` };
+});
+
+route('POST', '/api/requests/:id/edit', async (context) => {
+  requireMember(context.session);
+  const mine = actorOf(context.session);
+  const row = wantedAsk(context.params.id);
+  if (String(row.user_id) !== String(mine)) {
+    throw new Refused(403, 'not_yours', `Request **#${row.id}** is not yours, so nothing was changed. Only the person who filed it can edit it.`);
+  }
+  if (!REQUEST_WITHDRAWABLE.includes(row.status)) {
+    throw new Refused(409, 'too_late_to_edit', `Request **#${row.id}** is **${REQUEST_STATUS_WORDS[row.status]}**, so it was not changed. You can edit one that is still open or on hold; ask staff if this one needs to change.`);
+  }
+  const body = await context.body();
+  if (!String(body.what || '').trim() || !String(body.why || '').trim()) throw new Refused(400, 'request_refused', 'A request needs what you want and why.');
+  row.what = String(body.what).trim();
+  row.why = String(body.why).trim();
+  row.due_on = String(body.due_on || '').trim() || null;
+  logAction('web.request.edited', { actor_id: mine, target_id: row.user_id, details: { request_id: row.id } });
+  return { request: askRow(row), message: `Request **#${row.id}** is updated.` };
 });
 
 route('POST', '/api/requests/:id/comments', async (context) => {

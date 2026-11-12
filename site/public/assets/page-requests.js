@@ -783,6 +783,43 @@ function bodyFor(row, say) {
 
 const WITHDRAWABLE = ['open', 'hold'];
 
+function editForm(row) {
+  const say = notice();
+  const what = el('input', { class: 'input', type: 'text', value: row.what || '', maxlength: String(WHY_MAX) });
+  const why = el('textarea', { class: 'input area', rows: '3', maxlength: String(WHY_MAX) });
+  why.value = row.why || '';
+  const due = el('input', { class: 'input', type: 'date', value: row.due_on || '' });
+  const save = button('Save', async () => {
+    if (!what.value.trim()) {
+      say.say(NEED_A_WHAT, 'warn');
+      return;
+    }
+    if (!why.value.trim()) {
+      say.say(NEED_A_WHY, 'warn');
+      return;
+    }
+    const body = { what: what.value.trim(), why: why.value.trim(), due_on: due.value.trim() || null };
+    const done = await run(
+      say,
+      () => send(`/api/requests/${encodeURIComponent(row.id)}/edit`, 'POST', body),
+      (found) => found?.message || 'Saved.',
+    );
+    if (!done.ok) return;
+    keepSaying('mine', say);
+    closeDrawer();
+    await refresh();
+  }, { tone: 'warn', small: false });
+  return foldout('Edit it', [
+    el('div', { class: 'formrow' }, [
+      field('What', what, limitCounter(what, WHY_MAX)),
+      field('Due date (optional)', due),
+    ]),
+    el('div', { class: 'formrow' }, [field('Why', why, limitCounter(why, WHY_MAX))]),
+    bar([save]),
+    say,
+  ]);
+}
+
 function mineBody(row, say) {
   const withdraw = WITHDRAWABLE.includes(row.status)
     ? button('Take it back', async () => {
@@ -821,6 +858,7 @@ function mineBody(row, say) {
       })
       : null,
     ...writtenBlock(row),
+    WITHDRAWABLE.includes(row.status) ? editForm(row) : null,
     withdraw ? bar([withdraw]) : null,
   ];
 }
