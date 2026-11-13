@@ -27,6 +27,7 @@ from ...cogs.community.role_menus import (
     end_menu_now,
     expires_days_of,
     failure_count,
+    failure_lines,
     get_menu,
     get_options,
     held_is_past,
@@ -40,6 +41,7 @@ from ...cogs.community.role_menus import (
     needs_approval,
     remove_option,
     retry_days_of,
+    role_labels,
     set_menu_end,
     staff_assign,
     stamp_grants,
@@ -448,6 +450,9 @@ def build_router(bot: Any) -> APIRouter:
         payload["pass"] = {
             key: details[key] for key in ("members", "this_pass", "failures", "passes", "ended")
         }
+        payload["pass"]["left"] = failure_lines(
+            bot, guild, details["left"], await role_labels(bot.db, guild, menu["id"])
+        )
         return payload
 
     @router.post("/{name}/end-earlier")

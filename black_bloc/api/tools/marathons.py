@@ -15,6 +15,7 @@ from ... import marathon_people as mt_people
 from ... import marathon_signals as sig
 from ... import marathon_thread_controls as mtc
 from ... import optouts
+from ...cogs.community.role_menus import menus_ending_with
 from ...cogs.content.marathon import (
     add_next,
     baf_overrides,
@@ -474,6 +475,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "host_announcements": host_switch(bot, guild, row, mh.HOST_ANNOUNCE),
         "couch_announcements": couch_switch(bot, guild),
         "overlay": host_switch(bot, guild, row, mh.OVERLAY) | {"sheet": mo.state_of(row)},
+        "role_menus": await menus_ending_with(bot, guild, row["id"]),
         "archived": False,
     } | await tracking_of(bot, guild, row)
 

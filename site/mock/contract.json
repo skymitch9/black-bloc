@@ -1412,7 +1412,8 @@
           "this_pass",
           "failures",
           "passes",
-          "ended"
+          "ended",
+          "left"
         ],
         "last_pass": [
           "passes",
@@ -1421,6 +1422,28 @@
           "ended_at"
         ]
       }
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/{held_menu}/end-earlier",
+      "body": {},
+      "needs": "a menu bound to a marathon with an earlier end held",
+      "read_by": [
+        "page-rolemenus.js Use the earlier end"
+      ],
+      "shape": "object",
+      "keys": [
+        "name",
+        "ends_source",
+        "ends_marathon_id",
+        "ends_at",
+        "ends_held_at",
+        "held_label",
+        "held_past",
+        "held_question",
+        "wearing",
+        "end_label"
+      ]
     },
     {
       "method": "DELETE",
@@ -1454,7 +1477,8 @@
         "expires_at",
         "removed_at",
         "removed_reason",
-        "open"
+        "open",
+        "ends_with_menu"
       ]
     },
     {
@@ -1483,7 +1507,8 @@
         "expires_at",
         "removed_at",
         "removed_reason",
-        "open"
+        "open",
+        "ends_with_menu"
       ]
     },
     {
@@ -1509,7 +1534,8 @@
         "expires_at",
         "removed_at",
         "removed_reason",
-        "open"
+        "open",
+        "ends_with_menu"
       ]
     },
     {
@@ -1532,7 +1558,8 @@
         "expires_at",
         "removed_at",
         "removed_reason",
-        "open"
+        "open",
+        "ends_with_menu"
       ]
     },
     {
@@ -6474,7 +6501,8 @@
           "tracked_state",
           "tracked",
           "thread_url",
-          "inbox_message_url"
+          "inbox_message_url",
+          "role_menus"
         ]
       }
     },
@@ -6562,7 +6590,8 @@
         "keeps_clock",
         "controls",
         "spotlight_line",
-        "labels"
+        "labels",
+        "role_menus"
       ],
       "rows": {
         "controls": [

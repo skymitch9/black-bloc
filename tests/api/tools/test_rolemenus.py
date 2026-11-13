@@ -588,6 +588,7 @@ async def test_end_now_takes_the_roles_off_everyone_and_says_how_many(
     assert response.status_code == 200, response.json()
     body = response.json()
     assert body["pass"]["members"] == 1 and body["pass"]["ended"] is True
+    assert body["pass"]["left"] == []
     assert "**btb** ended" in body["message"]
     assert body["ended_at"] and body["ends_source"] == "date"
     assert wf.PLAIN_ROLE_ID not in [role.id for role in member.roles]
@@ -697,3 +698,25 @@ async def test_assign_needs_no_switch_and_writes_the_menus_end(client, sign_in, 
     grant = await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID)
     menu = await get_menu(web.db, wf.GUILD_ID, "btb")
     assert grant["expires_at"] == menu["ends_at"]
+
+
+async def test_the_marathon_row_names_the_menus_that_end_with_it(client, sign_in, web, guild, wf):
+    sign_in(client)
+    await end_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+    member.roles.append(guild.get_role(wf.PLAIN_ROLE_ID))
+    marathon_id = await a_marathon(web, wf)
+    from black_bloc.cogs.community.role_menus import menus_ending_with
+
+    assert await menus_ending_with(web, guild, marathon_id) == []
+
+    client.put(
+        "/api/rolemenus/btb", json={"ends_source": "marathon", "ends_marathon_id": marathon_id}
+    )
+
+    [line] = await menus_ending_with(web, guild, marathon_id)
+    assert line == {"name": "btb", "title": line["title"], "roles": 1, "wearing": 1}
+
+    await web.db.conn.execute("UPDATE role_menus SET ended_at = '2099-01-01T00:00:00+00:00'")
+    await web.db.conn.commit()
+    assert await menus_ending_with(web, guild, marathon_id) == []

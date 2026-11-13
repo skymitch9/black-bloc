@@ -813,6 +813,17 @@ async def seed_world(client, web, guild, wf) -> dict:
     # Opt-out: Interview Crew hosts Blaster Master and is paired (hosts are always found) — so
     # both opt-out moves reach a BaF person and answer 200 in words.
     await upsert_pairing(db, guild_id, marathon_id, "Interview Crew", HOST_MEMBER_ID, 7)
+    # Request #17: a menu that ends with this marathon and holds an earlier end, so the drawer's
+    # Roles ending line has a row and Use the earlier end reaches a held menu.
+    held_menu = await create_menu(db, guild_id, "btb-2027", "Back to Black 2027", None, "staff")
+    await add_option(db, held_menu, wf.ADMIN_ROLE_ID, "Runner", None)
+    await db.conn.execute(
+        "UPDATE role_menus SET ends_source = 'marathon', ends_marathon_id = ?, "
+        "ends_at = '2099-03-01T05:00:00+00:00', ends_held_at = '2099-02-21T05:00:00+00:00' "
+        "WHERE id = ?",
+        (marathon_id, held_menu),
+    )
+    await db.conn.commit()
     await marathons.rematch(guild, made.value)
     # The People card (marathon-people §B): Contract Runner is spotlit from the marathon, so
     # Stop spotlighting reaches a remembered row; Somebody is not, so Spotlight… reaches them.
@@ -1095,6 +1106,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "window_id": str(window_id),
         "meeting_id": str(meeting_id),
         "marathon_id": str(marathon_id),
+        "held_menu": "btb-2027",
         "marathon_run_id": str(marathon_run_id),
         "marathon_pairing_id": str(marathon_pairing_id),
         "marathon_over_id": str(marathon_over_id),

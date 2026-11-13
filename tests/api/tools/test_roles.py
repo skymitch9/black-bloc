@@ -236,3 +236,16 @@ async def test_extending_a_grant_whose_menu_has_an_end_is_refused_in_words(
     assert "<t:" not in response.json()["message"]
     assert (await grants.get_grant(web.db, grant_id))["expires_at"] == later
     assert "web.role.extended" not in await wf.kinds_in(web.db)
+    [row] = [one for one in client.get("/api/roles/grants").json() if one["id"] == grant_id]
+    assert row["ends_with_menu"] == "btb"
+
+
+async def test_a_grant_on_a_role_on_no_menu_ends_with_no_menu(client, sign_in, web, wf):
+    sign_in(client)
+    grant_id = await grants.add_grant(
+        web.db, wf.GUILD_ID, MEMBER_ID, wf.PLAIN_ROLE_ID, "staff", until=grants.expires_at(3)
+    )
+
+    [row] = [one for one in client.get("/api/roles/grants").json() if one["id"] == grant_id]
+
+    assert row["ends_with_menu"] is None

@@ -490,6 +490,29 @@ async def menus_bound_to(db: Any, guild_id: int, marathon_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
+async def menus_ending_with(bot: Any, guild: Any, marathon_id: Any) -> list[dict[str, Any]]:
+    """The unfinished menus whose roles come off with this marathon, with their counts."""
+    bound = [
+        one for one in await menus_bound_to(bot.db, guild.id, marathon_id) if not one["ended_at"]
+    ]
+    if not bound:
+        return []
+    members = await members_of(guild)
+    found = []
+    for menu in bound:
+        role_ids = await menu_role_ids(bot.db, menu["id"])
+        wearing = wearing_count(bot, guild.id, members, role_ids)
+        found.append(
+            {
+                "name": menu["name"],
+                "title": menu["title"],
+                "roles": len(role_ids),
+                "wearing": wearing if isinstance(wearing, int) else None,
+            }
+        )
+    return found
+
+
 async def store_menu_end(
     db: Any,
     menu_id: int,
@@ -2123,7 +2146,13 @@ def ended_notice(
             failures=details["failures"],
         )
     ]
-    for user_id, left in details["left"]:
+    return "\n".join(lines + failure_lines(bot, guild, details["left"], labels))
+
+
+def failure_lines(bot: Any, guild: Any, left: Any, labels: dict[int, str]) -> list[str]:
+    """One line per member who still wears a role the pass could not take off."""
+    lines = []
+    for user_id, roles in left or ():
         member = guild.get_member(int(user_id))
         lines.append(
             menus.said(
@@ -2131,10 +2160,10 @@ def ended_notice(
                 guild.id,
                 ROLEMENU_END_FAILURE_LINE_KEY,
                 name=str(getattr(member, "display_name", None) or user_id),
-                roles=roles_said(labels, left),
+                roles=roles_said(labels, roles),
             )
         )
-    return "\n".join(lines)
+    return lines
 
 
 async def tell_wearers(

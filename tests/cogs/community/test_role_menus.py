@@ -2507,3 +2507,15 @@ async def test_nothing_re_registers_a_posted_panel_on_boot(bot, db):
 
     assert bot.views == []
     assert cog_module.RetiredMenuPick in added and RequestButton in added
+
+
+def test_failure_lines_name_each_member_and_the_roles_still_on_them(bot):
+    FakeMember(bot.guild, user_id=900, roles=(10, 11))
+
+    lines = cog_module.failure_lines(
+        bot, bot.guild, [[900, [10, 11]], [901, [11]]], {10: "Runner", 11: "Host"}
+    )
+
+    assert lines[1] == "901 still wears **Host**"
+    assert lines[0].endswith(" still wears **Runner**, **Host**")
+    assert cog_module.failure_lines(bot, bot.guild, [], {}) == []
