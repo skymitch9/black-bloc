@@ -1683,11 +1683,17 @@ def grant_names(guild: Any, row: Any) -> tuple[str, str]:
 
 
 async def extend_role(
-    bot: Any, guild: Any, actor: Any, row: Any, days: Any, *, via: str = VIA_DISCORD
-) -> tuple[str, str]:
-    """Extending starts from the later of now and the end it already had; (None, why) when a
-    menu's end owns the date."""
-    refused = await push_back_refusal(bot, guild, row)
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    row: Any,
+    days: Any,
+    *,
+    via: str = VIA_DISCORD,
+    when: Any = None,
+) -> tuple[str | None, str]:
+    """Pushes back from the later of now and its end; (None, why) when a menu's end owns it."""
+    refused = await push_back_refusal(bot, guild, row, when)
     if refused:
         return None, refused
     wanted = max(int(days or 0), 1)
@@ -1842,17 +1848,18 @@ async def menu_ending_role(db: Any, guild_id: int, role_id: Any) -> Any:
     return None
 
 
-async def push_back_refusal(bot: Any, guild: Any, row: Any) -> str | None:
+async def push_back_refusal(bot: Any, guild: Any, row: Any, when: Any = None) -> str | None:
     ending = await menu_ending_role(bot.db, guild.id, row["role_id"])
     if ending is None:
         return None
+    shown = when or (lambda _bot, _guild_id, at: grants.stamp(at, "D"))
     return menus.said(
         bot.store,
         guild.id,
         ROLEMENU_PUSH_BACK_REFUSED_KEY,
         role=role_name(guild, row["role_id"]),
         menu=ending["name"],
-        date=grants.stamp(ending["ends_at"], "D"),
+        date=shown(bot, guild.id, ending["ends_at"]),
     )
 
 
@@ -2153,8 +2160,7 @@ async def tell_wearers(
 
 
 async def follow_marathon(bot: Any, guild: Any, marathon_id: Any) -> int:
-    """A marathon's new end moves every unfinished menu bound to it; staff hear past the floor,
-    and an end pulled EARLIER past the floor waits for staff while the hold is on."""
+    """A marathon's new end moves its unfinished menus; one pulled EARLIER waits for staff."""
     rows = await menus_bound_to(bot.db, guild.id, marathon_id)
     bound = [one for one in rows if not one["ended_at"]]
     if not bound:
@@ -2278,8 +2284,7 @@ async def hold_cleared(
 async def use_held_end(
     bot: Any, guild: Any, actor: Any, menu: Any, *, via: str = VIA_DISCORD
 ) -> str | None:
-    """Staff take the earlier end a marathon proposed: the end is set again from the marathon,
-    one `end_set` row; None when nothing is held any more."""
+    """Staff take the held earlier end: set again from the marathon; None when nothing is held."""
     fresh = await get_menu_by_id(bot.db, menu["id"])
     if (
         fresh is None
@@ -2535,8 +2540,7 @@ async def bindable_marathons(db: Any, guild_id: int, *, at: datetime | None = No
 
 
 async def delete_refusal(bot: Any, guild: Any, menu: Any, when: Any = None) -> str | None:
-    """A menu whose end is still to come keeps its roles' end: it is not deleted while anybody
-    wears them, and the sentence says what to press instead."""
+    """Why a menu with an end still to come and people wearing its roles is not deleted."""
     if menu is None or menu_value(menu, "ended_at"):
         return None
     end = parse_ts(menu_value(menu, "ends_at"))
@@ -2776,8 +2780,7 @@ async def build_hand_out(
 
 
 async def audit_rows(bot: Any, guild: Any, member_id: Any) -> tuple[list[Any], list[Any]]:
-    """(every line of the audit, the grant rows a card can open): a role on a menu with an end
-    is listed by who WEARS it, live, with the menu's end; any other role by its grant rows."""
+    """(audit lines, openable grant rows): menu roles with an end by wearer, the rest by grant."""
     wanted = int(member_id) if member_id else None
     ends = await menu_ends_by_role(bot.db, guild.id)
     rows = [

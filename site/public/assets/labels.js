@@ -1186,8 +1186,8 @@ export const LABELS = {
   automod_log_level: 'How much of automod is repeated into Discord',
   mod_log_level: 'How much of moderation is repeated into Discord',
 
-  rolemenu_approval_channel_id: 'Where a role request card is posted',
-  rolemenu_approver_role_id: 'Who may say yes to a role request',
+  rolemenu_approval_channel_id: 'Where role notices post',
+  rolemenu_approver_role_id: 'Who a role notice pings',
   rolemenu_log_level: 'How much of role menus is repeated into Discord',
 
   chat_mode: 'Whether the bot talks back',

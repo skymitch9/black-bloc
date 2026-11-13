@@ -218,8 +218,7 @@ async def read_menu(bot: Any, guild: Any, name: str) -> tuple[Any, list[Any]]:
 
 
 async def sync_options(bot: Any, menu: Any, wanted: list[tuple[Any, str, Any]]) -> None:
-    """The menu ends up holding exactly the options `wanted_options` passed, in that order;
-    open grants on every role that came or went follow the menu's end."""
+    """Exactly the options given, in order; grants on every role that came or went re-stamped."""
     before = {int(row["role_id"]) for row in await get_options(bot.db, menu["id"])}
     for role, label, emoji in wanted:
         await add_option(bot.db, menu["id"], role.id, label, emoji)
@@ -266,8 +265,7 @@ def wanted_moment(bot: Any, guild_id: int, given: Any) -> datetime:
 
 
 async def wanted_end(bot: Any, guild: Any, menu: Any, payload: dict[str, Any]) -> dict | None:
-    """The end a PUT asks for, checked whole before anything is written; None when it names no
-    end field, so a words-only save never re-arms a menu that already ended."""
+    """The end a PUT asks for, checked before any write; None when the body names no end field."""
     if not any(key in payload for key in END_FIELDS):
         return None
     source = payload.get("ends_source")
@@ -385,8 +383,7 @@ def build_router(bot: Any) -> APIRouter:
     async def rolemenu_update(
         request: Request, name: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
-        """Words and roles write one `edit` row; an end writes one `end_set` row (checklist 34).
-        The retired self-pick fields (mode, approval, the two clocks, channel_id) are ignored."""
+        """Words/roles: one `edit` row; an end: one `end_set` row; retired fields are ignored."""
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)

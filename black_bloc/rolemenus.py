@@ -370,8 +370,7 @@ def moved_far(was: Any, now: Any, minutes: Any) -> bool:
 
 
 def pulls_earlier(current: Any, told: Any, candidate: Any, minutes: Any) -> bool:
-    """Whether a marathon's new end would pull a menu's end earlier than the end it has, or the
-    last one staff were told, by more than the floor — so small moves cannot creep it unseen."""
+    """A new end earlier than the current or the last-told end by more than the floor."""
     after = parse_ts(candidate)
     if after is None:
         return False
@@ -413,11 +412,12 @@ def what_ended(menu: Any, marathon_name: Any) -> str:
 
 
 def said(store: Any, guild_id: Any, key: str, **fields: Any) -> str:
-    """Checklist 17: staff words that will not fill fall back to the shipped ones."""
+    """Checklist 17: staff words that will not fill, or fill to nothing, fall back to ours."""
     try:
-        return str(store.get(guild_id, key)).format_map(fields)
+        text = str(store.get(guild_id, key)).format_map(fields)
     except Exception:
-        return str(store.default(key, guild_id)).format_map(fields)
+        text = ""
+    return text if text.strip() else str(store.default(key, guild_id)).format_map(fields)
 
 
 def panel_minutes(store: Any, guild_id: int) -> int:

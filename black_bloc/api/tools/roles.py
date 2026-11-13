@@ -6,13 +6,17 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import rolegrants as grants
-from ...cogs.community.role_menus import extend_role, grant_role, revoke_grant
+from ...cogs.community.role_menus import extend_role, grant_role, local_moment, revoke_grant
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import as_id, resolve_one
 from ..writes import actor_for, require_db, require_guild, wanted_id, writer_dependency
 
 log = logging.getLogger(__name__)
+
+
+def local_moment_date(bot: Any, guild_id: int, at: Any) -> str:
+    return local_moment(bot, guild_id, at, "%Y-%m-%d")
 
 GRANTS_LIMIT = 200
 
@@ -152,7 +156,13 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(409, "no_end_date", NO_END_DATE)
         days = wanted_days(payload.get("days"), required=True)
         until, said = await extend_role(
-            bot, guild, actor_for(bot, who, guild), row, days, via=VIA_WEBSITE
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            row,
+            days,
+            via=VIA_WEBSITE,
+            when=local_moment_date,
         )
         if until is None:
             raise Refused(409, "menu_end", said)

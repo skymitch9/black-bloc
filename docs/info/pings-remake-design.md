@@ -395,6 +395,8 @@ with fakes — see deviation 3.
     `/mod`), so `rolemenu_mode` went back into `HIDDEN_WHEN_OFF` and `/rolemenu` hides while role
     menus are off. Branch `hide-rolemenu`; why in `code-notes.md` ▸ *`/mod` ▸ Role grants… and
     `/rolemenu` hiding again*.
+    🔴 **RETIRED 2026-11-13 (request #17, `temp-roles-menu` 1b)** — `rolemenu_mode` itself is retired with member self-pick;
+    `/rolemenu` is the permanent staff control and nothing hides it. See [`event-roles-design.md`](event-roles-design.md) §6.4.
 
 ### The guide
 

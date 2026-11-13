@@ -60,7 +60,7 @@ out* draws the lookup card (`preview.py` renderer `birthday_lookup`, mirrored in
 | Feature | Hands out member roles through | Records what it handed out | In this build |
 |---|---|---|---|
 | Pings (`pings_mode`) | `/pings` follow a streamer, the Events / raid-train toggle | its own action-log rows: `pings.follow` / `pings.unfollow`, `pings.events_on` / `pings.events_off` (with `role_id`, target = member). The log is never pruned. | **yes** |
-| Role menus (`rolemenu_mode`) | posted menus (self-pick), approval requests, the staff picker | `role_grants`, source `menu` / `approval` / `staff` / `manual` | **yes**: `menu` and `approval` only |
+| ~~Role menus (`rolemenu_mode`)~~ — 🔴 retired 2026-11-13 with `rolemenu_mode` and the four `rolemenu_off_*` keys (request #17 1b, [`event-roles-design.md`](event-roles-design.md) §6.4); only pings keep a take-back | posted menus (self-pick), approval requests, the staff picker | `role_grants`, source `menu` / `approval` / `staff` / `manual` | **yes**: `menu` and `approval` only |
 | Applications (`applications_mode`) | an approved application | `role_grants` source `approval`, linked by `applications.grant_id` | **no** (deviation 1) |
 | Marathon role block | a toggle button on a post | nothing | no: no mode hides it, so the member's own way out stays |
 | Go-live live role, birthday role | automatic, for the stream / the day | the session / the birthday row | no: not handed out through a panel, and taken off on their own |

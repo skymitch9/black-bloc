@@ -1198,10 +1198,11 @@ KEY_HELP: dict[str, str] = {
         "chat_simple_model, the same quick tier that answers"
     ),
     "rolemenu_approval_channel_id": (
-        "where a role request waits for Approve or Deny; blank uses staff_channel_id"
+        "where role notices post: a role menu's end moving, waiting on staff, or done; blank "
+        "uses staff_channel_id"
     ),
     "rolemenu_approver_role_id": (
-        "role mentioned when a role request arrives; blank pings nobody"
+        "role mentioned on a role notice; blank pings nobody"
     ),
     "emoji_skin_tone": (
         f"the skin tone Black Bloc's hand and people emoji wear: "

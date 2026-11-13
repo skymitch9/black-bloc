@@ -404,3 +404,19 @@ def test_an_end_pulled_earlier_past_the_floor_by_the_end_or_the_last_told_one():
     assert not pulls(None, None, "2020-01-01T00:00:00+00:00", 60)
     assert not pulls(current, current, None, 60)
     assert pulls(current, None, "2020-01-01T00:00:00+00:00", "garbled")
+
+
+def test_a_staff_word_left_blank_or_broken_falls_back_to_the_shipped_one():
+    class Store:
+        def __init__(self, stored):
+            self.stored = stored
+
+        def get(self, guild_id, key):
+            return self.stored
+
+        def default(self, key, guild_id=None):
+            return "Set the end…"
+
+    assert rm.said(Store("   "), GUILD, "rolemenu_set_end_button") == "Set the end…"
+    assert rm.said(Store("{nope}"), GUILD, "rolemenu_set_end_button") == "Set the end…"
+    assert rm.said(Store("Pick the end…"), GUILD, "rolemenu_set_end_button") == "Pick the end…"

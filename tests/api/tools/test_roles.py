@@ -232,6 +232,7 @@ async def test_extending_a_grant_whose_menu_has_an_end_is_refused_in_words(
     response = client.post(f"/api/roles/grants/{grant_id}/extend", json={"days": 4})
 
     assert response.status_code == 409 and response.json()["error"] == "menu_end"
-    assert "ends with **btb**" in response.json()["message"]
+    assert "ends with **btb** on 2098-12-31" in response.json()["message"]
+    assert "<t:" not in response.json()["message"]
     assert (await grants.get_grant(web.db, grant_id))["expires_at"] == later
     assert "web.role.extended" not in await wf.kinds_in(web.db)
