@@ -1,7 +1,8 @@
 # Temporary roles — the role menu becomes the permanent staff control; a role ends on a date or with a marathon (request #17)
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **1a LIVE v271; 🔨 1b BUILT on branch `temp-roles-menu`,
-> not merged; 2 not started** (2026-11-13; 1a's deviations and interface at §6.1–6.2, what the site reads at §6.3, 1b's at §6.4). 📐 Design by Fable, 2026-11-13 09:5x Phoenix. **Last verified: 2026-11-13 09:4x** against `main`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **1a LIVE v271; 🔨 1b + 2 BUILT on branch
+> `temp-roles-menu`, not merged** (2026-11-13; 1a's deviations and interface at §6.1–6.2, what the site reads at §6.3, 1b's at
+> §6.4, dispatch 2's at §6.5). 📐 Design by Fable, 2026-11-13 09:5x Phoenix. **Last verified: 2026-11-13 09:4x** against `main`
 > `8556fcc8` by reading the code, and against the live site through the operator token (request #17; `GET /api/marathons`).
 > ⚠️ NOT verified: anything in Discord; the bot was not run; no browser; the guild's current role list (the role names below are
 > from the 2026-08-26 scan and are examples, never a fixed list).
@@ -400,3 +401,42 @@ Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, the staff con
 
 **NOT built in 1b (dispatch 2's):** the page's End editor / End it now / removing Requests, Post, Seed and the mode switch, the
 marathon drawer line, the Members chip wording.
+
+### 6.5 What dispatch 2 built, and every deviation or decision it took (2026-11-13, branch `temp-roles-menu`)
+
+Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, the site*. Verified by eye on the local mock in
+`chrome-headless-shell` (1280 px and 390 px); ⚠️ nothing here met Discord or the live site.
+
+**Three fixes to 1b first**
+1. **Use the earlier end asks first** (panel and page). The confirm names the held end and the live counts
+   (`rolemenu_use_held_question`); when the held end has already gone by it says so and that the roles come off at the next
+   hourly pass (`rolemenu_use_held_past_question`); `rolemenu_use_held_yes` is its button. Three new keys. `POST
+   /{name}/end-earlier` stays one call; the GET row gains `held_label`, `held_past`, `held_question` and `end_now_question`.
+2. **`pings.py`'s words** no longer send staff to *Post it*: the streamer and notifications groupings are called role menus and
+   members opt in from `/pings` (`CREATED`, `REUSED`, `RENAMED`, `SETUP_MENU_ADDED`, `SETUP_MENU_THERE` + the mock's copies).
+   These were constants, not keys, and stay constants.
+3. A test: End it now on a menu holding an earlier end clears the hold and runs the pass once.
+
+**Deviations from §3.6 and the brief**
+4. **API fields beyond §6.3** (the page needed them): `pass.left` on End it now (worded lines, one helper shared with the ended
+   notice), `ends_with_menu` on every grant row, `role_menus` on every marathon row (unfinished bound menus only). Contract
+   entries for all three plus `POST /{held_menu}/end-earlier` on a seeded held menu (both halves).
+5. **The drawer line sits under the header's facts line**, not on an "Event card" — the drawer has no card by that name; the
+   event switch's line lives inside Settings and is not drawn for every source. One read-only line, drawn only when bound.
+6. **The End controls are their own card with their own Save**, beside the words editor, so a words save can never carry an end
+   field (any end write clears `ended_at`). The card's "how it ends" is a three-way switch (a marathon / a date / No end).
+7. **The page stops drawing `role_menu_channel_id`** (the channel menus were posted in): posting is retired, so it is a dead
+   control here. ⚠️ The key is still in the registry and on the Settings page — retiring it is a conductor question.
+8. **End it now renders on every menu with roles**, the panel's rule — including menus with no end (an ad-hoc end). The confirm
+   names the counts.
+9. **Members chips**: the API already merged menu ends; the chip's tooltip now says *ends with <menu>* (the chip's own note was
+   already the days left).
+10. **The mock** reads typed ends and shows moments in `default_timezone` (1b's §6.4 item 13 is fixed), counts wearers on the
+    roster, takes roles off it on End it now (a reset restores them), and seeds one menu per state the page draws.
+
+**Open questions (named, not decided)**
+- Retire `role_menu_channel_id` from the registry (item 7)?
+- The `streamers` / `notifications` menus are pings' own groupings but now sit on the staff control like any menu: **Set the end
+  on one would strip every fan or Events role at its end**, `pings._drop_spare_menus` deletes a streamer menu without
+  `delete_refusal`, and `pings._fill_menu` rewrites options without `stamp_grants`. Should pings' menus be hidden from, or
+  refused an end on, the staff control?
