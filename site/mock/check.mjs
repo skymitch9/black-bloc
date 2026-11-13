@@ -333,27 +333,20 @@ async function seed() {
   // The same fixture the pytest side builds: the mock is put back to its seed, then given
   // the one role menu the contract's PUT / post / DELETE entries act on.
   await post('/api/mock/reset');
-  // rolemenu_mode ships off, and a panel is not posted while it is off — so the post route's
-  // shape, and the guard's own 409 on it, are only reachable with it turned on.
-  await send('PUT', '/api/settings/rolemenu_mode', { value: 'on' });
   // posts_mode ships in SHADOW, where Post it goes to #blackbloc-logs and the guard allows it.
   // Every posts route and kind below is the `on` behaviour — including the GUARDED entry, which
   // only means anything when the post's own channel is the target — so the mode is turned on
   // here. The three modes are walked on their own in checkPostsModes().
   await send('PUT', '/api/settings/posts_mode', { value: 'on' });
-  await post('/api/rolemenus', { name: 'contract', title: 'Contract', mode: 'multiple' });
+  await post('/api/rolemenus', { name: 'contract', title: 'Contract' });
   await fetch(`${BASE}/api/rolemenus/contract`, {
     method: 'PUT',
     headers: { cookie: 'mock_as=staff', 'content-type': 'application/json' },
     body: JSON.stringify({
       title: 'Contract',
-      mode: 'multiple',
       options: [{ role_id: '900000000000000005', label: 'Members', emoji: null }],
     }),
   });
-  // Posted here so the unpost entry has a panel to take down; refused while the guard is on,
-  // which is exactly what the GUARDED pass asserts a moment later.
-  await post('/api/rolemenus/contract/post', { channel_id: IDS.test_channel_id });
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post('/api/modmail/blocks', { user_id: IDS.member_id, reason: 'contract check' });
   // The opt-out the DELETE entry takes away again; the seed's own opt-out is somebody else.
@@ -363,7 +356,8 @@ async function seed() {
 // The routes the REAL API refuses while test mode is on, and the two it does not. A reply
 // DMs the member and a warn only writes a case, so black_bloc's own guard never sees them.
 const GUARDED = [
-  ['POST', '/api/rolemenus/contract/post', { channel_id: '{test_channel_id}' }],
+  // Request #17: End it now takes roles off everyone, so the real router refuses it in test mode.
+  ['POST', '/api/rolemenus/contract/end-now', {}],
   ['POST', '/api/tempvoice/setup', {}],
   ['POST', '/api/honeypot/setup', {}],
   ['POST', '/api/honeypot/hits/{hit_id}/ban', {}],
@@ -396,6 +390,13 @@ const UNGUARDED = [
 // Retired routes: they answer in words with their status and change nothing; no page calls them.
 const RETIRED = [
   ['DELETE', '/api/marathons/{marathon_id}', 410, 'remove_gone', 'Remove is retired'],
+  // Request #17: member self-pick is retired; Discord's Channels & Roles owns it.
+  ['POST', '/api/rolemenus/contract/post', 410, 'rolemenu_retired', 'Channels & Roles'],
+  ['POST', '/api/rolemenus/contract/unpost', 410, 'rolemenu_retired', 'Channels & Roles'],
+  ['POST', '/api/rolemenus/seed', 410, 'rolemenu_retired', 'Channels & Roles'],
+  ['GET', '/api/rolemenus/requests', 410, 'rolemenu_retired', 'Channels & Roles'],
+  ['POST', '/api/rolemenus/requests/1/approve', 410, 'rolemenu_retired', 'Channels & Roles'],
+  ['POST', '/api/rolemenus/requests/1/deny', 410, 'rolemenu_retired', 'Channels & Roles'],
 ];
 
 async function checkRetired() {

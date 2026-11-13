@@ -80,7 +80,8 @@ function loops(status) {
       : loop.last_ok_at
         ? `Last success ${when(loop.last_ok_at)}`
         : 'This loop does not record its last success yet, so this is liveness, not health.',
-    note: loop.next_iteration ? `Next run ${when(loop.next_iteration)}` : null,
+    note: [loop.counts, loop.next_iteration ? `Next run ${when(loop.next_iteration)}` : null]
+      .filter(Boolean).join(' · ') || null,
   }));
   return found.length ? rows(found) : sayNothing('No loops are loaded.');
 }

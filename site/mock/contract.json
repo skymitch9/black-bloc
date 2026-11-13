@@ -915,7 +915,8 @@
           "state",
           "next_iteration",
           "last_ok_at",
-          "last_error"
+          "last_error",
+          "counts"
         ]
       }
     },
@@ -1222,7 +1223,19 @@
         "approval",
         "expires_days",
         "retry_days",
-        "options"
+        "options",
+        "ends_source",
+        "ends_marathon_id",
+        "buffer_days",
+        "buffer_default",
+        "ends_at",
+        "ended_at",
+        "ends_held_at",
+        "ends_set_by",
+        "ends_set_at",
+        "wearing",
+        "end_label",
+        "last_pass"
       ],
       "rows": {
         "options": [
@@ -1234,12 +1247,25 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/api/rolemenus/marathons",
+      "read_by": [
+        "page-rolemenus.js end editor (dispatch 2)"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "name",
+        "ends_at",
+        "label"
+      ]
+    },
+    {
       "method": "POST",
       "path": "/api/rolemenus",
       "body": {
         "name": "contract-new",
-        "title": "Contract",
-        "mode": "multiple"
+        "title": "Contract"
       },
       "read_by": [
         "page-rolemenus.js editor"
@@ -1255,15 +1281,34 @@
         "approval",
         "expires_days",
         "retry_days",
-        "options"
-      ]
+        "options",
+        "ends_source",
+        "ends_marathon_id",
+        "buffer_days",
+        "buffer_default",
+        "ends_at",
+        "ended_at",
+        "ends_held_at",
+        "ends_set_by",
+        "ends_set_at",
+        "wearing",
+        "end_label",
+        "last_pass"
+      ],
+      "nested": {
+        "last_pass": [
+          "passes",
+          "members",
+          "failures",
+          "ended_at"
+        ]
+      }
     },
     {
       "method": "PUT",
       "path": "/api/rolemenus/contract",
       "body": {
         "title": "Contract",
-        "mode": "multiple",
         "options": []
       },
       "read_by": [
@@ -1280,40 +1325,28 @@
         "approval",
         "expires_days",
         "retry_days",
-        "options"
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/api/rolemenus/contract/post",
-      "body": {
-        "channel_id": "{test_channel_id}"
-      },
-      "needs": "one option",
-      "read_by": [
-        "page-rolemenus.js postCard"
+        "options",
+        "ends_source",
+        "ends_marathon_id",
+        "buffer_days",
+        "buffer_default",
+        "ends_at",
+        "ended_at",
+        "ends_held_at",
+        "ends_set_by",
+        "ends_set_at",
+        "wearing",
+        "end_label",
+        "last_pass"
       ],
-      "shape": "object",
-      "keys": [
-        "posted",
-        "name",
-        "channel_id",
-        "message_id"
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/api/rolemenus/seed",
-      "body": {},
-      "read_by": [
-        "page-rolemenus.js Seed defaults"
-      ],
-      "shape": "object",
-      "keys": [
-        "created",
-        "skipped",
-        "message"
-      ]
+      "nested": {
+        "last_pass": [
+          "passes",
+          "members",
+          "failures",
+          "ended_at"
+        ]
+      }
     },
     {
       "method": "POST",
@@ -1338,19 +1371,40 @@
     },
     {
       "method": "POST",
-      "path": "/api/rolemenus/contract/unpost",
+      "path": "/api/rolemenus/contract/end-now",
       "body": {},
-      "needs": "the contract menu posted by the seed",
+      "needs": "one option",
       "read_by": [
-        "page-rolemenus.js postCard"
+        "page-rolemenus.js End it now (dispatch 2)"
       ],
       "shape": "object",
       "keys": [
-        "unposted",
         "name",
-        "channel_id",
-        "message"
-      ]
+        "options",
+        "ends_source",
+        "ends_at",
+        "ended_at",
+        "wearing",
+        "end_label",
+        "last_pass",
+        "message",
+        "pass"
+      ],
+      "nested": {
+        "pass": [
+          "members",
+          "this_pass",
+          "failures",
+          "passes",
+          "ended"
+        ],
+        "last_pass": [
+          "passes",
+          "members",
+          "failures",
+          "ended_at"
+        ]
+      }
     },
     {
       "method": "DELETE",
@@ -1363,96 +1417,6 @@
         "deleted",
         "name"
       ]
-    },
-    {
-      "method": "GET",
-      "path": "/api/rolemenus/requests",
-      "read_by": [
-        "page-rolemenus.js requests"
-      ],
-      "shape": "list",
-      "keys": [
-        "id",
-        "menu_id",
-        "menu_name",
-        "user_id",
-        "user_name",
-        "user_avatar",
-        "role_id",
-        "role_name",
-        "requested_at",
-        "status",
-        "decided_by_id",
-        "decided_by_name",
-        "decided_at",
-        "deny_reason"
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/api/rolemenus/requests/{request_id}/approve",
-      "body": {
-        "days": 7
-      },
-      "read_by": [
-        "page-rolemenus.js requests"
-      ],
-      "shape": "object",
-      "keys": [
-        "request",
-        "message"
-      ],
-      "nested": {
-        "request": [
-          "id",
-          "menu_id",
-          "menu_name",
-          "user_id",
-          "user_name",
-          "user_avatar",
-          "role_id",
-          "role_name",
-          "requested_at",
-          "status",
-          "decided_by_id",
-          "decided_by_name",
-          "decided_at",
-          "deny_reason"
-        ]
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/api/rolemenus/requests/{request_id}/deny",
-      "body": {
-        "reason": "not this month"
-      },
-      "read_by": [
-        "page-rolemenus.js requests"
-      ],
-      "shape": "object",
-      "keys": [
-        "request",
-        "message"
-      ],
-      "nested": {
-        "request": [
-          "id",
-          "menu_id",
-          "menu_name",
-          "user_id",
-          "user_name",
-          "user_avatar",
-          "role_id",
-          "role_name",
-          "requested_at",
-          "status",
-          "decided_by_id",
-          "decided_by_name",
-          "decided_at",
-          "deny_reason"
-        ]
-      }
     },
     {
       "method": "GET",
@@ -13971,6 +13935,9 @@
     "web.bluesky.posted_latest",
     "web.ninja.marked",
     "web.ninja.ended",
-    "web.sports.refresh"
+    "web.sports.refresh",
+    "web.role_menu.end_set",
+    "web.role_menu.ended",
+    "web.role_menu.end_failed"
   ]
 }

@@ -1124,7 +1124,7 @@ async function load() {
     api('/api/rolemenus'),
     refRoles(),
     settings(true),
-    api('/api/rolemenus/requests'),
+    Promise.resolve([]),
     api('/api/roles/grants'),
   ]);
   const menus = listOf(payload, 'rolemenus');

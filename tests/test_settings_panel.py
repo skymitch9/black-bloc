@@ -151,10 +151,11 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_five_hand_added_rows():
     `pb_feed_mode` joined them 2026-10-09 when `points_mode` took over hiding `/pb`;
     `sticky_mode` left with the Posts page's one switch, 2026-10-19 (24 rows);
     `youtube_live_mode` folded into go-live and `modmail_enabled` retired, 2026-10-20 (22 rows);
-    `ninja_mode` joined the hand-added rows 2026-11-02 (23 rows)."""
+    `ninja_mode` joined the hand-added rows 2026-11-02 (23 rows); `rolemenu_mode` retired with
+    member self-pick, 2026-11-13 (request #17, 22 rows)."""
     from black_bloc.settings_panel import FEATURE_MODES
 
-    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 23
+    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 22
     assert "sticky_mode" not in {row.key for row in FEATURE_MODES}
     assert "question_mode" not in {row.key for row in FEATURE_MODES}
     assert len(EXTRA_MODES) == 5
@@ -162,7 +163,7 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_five_hand_added_rows():
     assert "pb_feed_mode" in {row.key for row in EXTRA_MODES}
     assert "marathon_mode" in {row.key for row in EXTRA_MODES}
     assert "structure_backup_mode" in {row.key for row in EXTRA_MODES}
-    assert "rolemenu_mode" in HIDDEN_WHEN_OFF
+    assert "rolemenu_mode" not in HIDDEN_WHEN_OFF
     assert {row.key for row in FEATURE_MODES} == set(HIDDEN_WHEN_OFF) | {
         row.key for row in EXTRA_MODES
     }
@@ -175,7 +176,7 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     lines = mode_lines(store, GUILD)
     said = "\n".join(lines)
 
-    assert len(lines) == 23
+    assert len(lines) == 22
     assert "**Personal bests** — None · `/pb` to change" in lines
     assert "**Leaderboard** — None · `/pb` to change" in lines
     assert not any("Sticky messages" in line for line in lines)
@@ -330,7 +331,7 @@ def test_row_two_never_grows_past_the_five_controls_discord_allows():
 
 @pytest.mark.parametrize(
     "hidden,expected",
-    [(set(), 0), ({"raidtrain"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 18)],
+    [(set(), 0), ({"raidtrain"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 17)],
 )
 def test_turn_a_feature_back_on_lists_exactly_what_is_hidden_and_never_more(hidden, expected):
     values = {HIDE_COMMANDS_WHEN_OFF: True}

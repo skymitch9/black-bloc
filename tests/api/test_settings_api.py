@@ -18,23 +18,18 @@ def test_every_registry_key_lands_in_a_namespace():
     assert namespace_of("automod_rules") == "automod"
 
 
-async def test_the_role_menu_switch_round_trips_through_the_settings_api(
+async def test_the_retired_role_menu_switch_is_neither_listed_nor_written(
     client, sign_in, web, wf
 ):
-    """The Role menus tab's On/Off switch is this key and nothing else."""
+    """Request #17: member self-pick is retired, so the Role menus tab has no On/Off switch."""
     sign_in(client)
 
-    listed = {row["key"]: row for row in client.get("/api/settings").json()["rolemenu"]}
-    assert listed["rolemenu_mode"]["value"] == "off"
-    assert listed["rolemenu_mode"]["choices"] == ["off", "on"]
+    listed = {row["key"] for row in client.get("/api/settings").json()["rolemenu"]}
+    assert "rolemenu_mode" not in listed
+    assert "rolemenu_end_earlier_holds" in listed
 
-    stored = client.put("/api/settings/rolemenu_mode", json={"value": "on"})
-
-    assert stored.status_code == 200 and stored.json()["value"] == "on"
-    assert web.store.get(wf.GUILD_ID, "rolemenu_mode") == "on"
-    refused = client.put("/api/settings/rolemenu_mode", json={"value": "shadow"})
-    assert refused.status_code == 400 and "off, on" in refused.json()["message"]
-    assert web.store.get(wf.GUILD_ID, "rolemenu_mode") == "on"
+    refused = client.put("/api/settings/rolemenu_mode", json={"value": "on"})
+    assert refused.status_code >= 400 and refused.json()["message"]
 
 
 def test_settings_need_a_session(client):

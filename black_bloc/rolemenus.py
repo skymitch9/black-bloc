@@ -26,28 +26,11 @@ REQUESTS_TITLE = "Requests waiting on staff"
 CONFIRM_TITLE = "Are you sure?"
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /rolemenu again"
 
-NO_MENUS_LINE = (
-    "This server has no role menus yet. **New menu** starts one, and **Seed the defaults** "
-    "brings over the six this server was built with."
-)
-PICKING_IS_OFF = (
-    "Members cannot pick roles from the posted panels right now, so the panels are down and "
-    "**Post it** is missing from every menu. Nobody has lost a role, and staff still hand "
-    "roles over with **Hand roles out…** and **Grants…**."
-)
-MENU_LIST_LINE = "**{name}** — {count} role(s), {mode}, {posted}"
+NO_MENUS_LINE = "This server has no role menus yet. **New menu** starts one."
 NO_ROLES_YET = "No roles on it yet — **Add a role…** puts the first one on."
-NOBODY_PICKS_THESE = (
-    "Nobody gives themselves these roles, so there is no panel to post — **Hand roles out…** "
-    "is how they are handed over."
-)
 OPTIONS_ARE_FULL = (
     "This menu is holding all {limit} roles Discord will show, so nothing else fits. Split it "
     "into a second menu."
-)
-NO_ORDERING = (
-    "The order the options sit in is set on the Role menus page; Discord has nothing to drag "
-    "with, so this panel leaves it alone."
 )
 
 GRANTS_HEADER = "**{count}** timed role(s) running, soonest to end first."
@@ -80,13 +63,6 @@ WHICH_ROLE = "Which role?"
 REMOVE_PICK = "Take a role off this menu…"
 ROLE_PICK = "A role to put on the menu…"
 
-MODE_ON_LABEL = "Turn role menus on"
-MODE_OFF_LABEL = "Turn role menus off"
-APPROVAL_ON_LABEL = "Ask staff first"
-APPROVAL_OFF_LABEL = "Hand it over straight away"
-POST_LABEL = "Post it"
-MOVE_LABEL = "Move it…"
-
 DELETE_QUESTION = (
     "Delete **{name}**? Nobody loses a role they already have, and any panel already posted "
     "stops working."
@@ -99,12 +75,6 @@ END_QUESTION = (
 )
 END_YES_LABEL = "Yes, take it back"
 LEAVE_IT_LABEL = "Leave it"
-SEED_QUESTION = (
-    "Make the six default menus? A menu that already exists is left exactly as it is, options "
-    "and all."
-)
-SEED_YES_LABEL = "Yes, make them"
-LEAVE_THEM_LABEL = "Leave it"
 
 MENU = "menu"
 NEW_MENU = "new_menu"
@@ -140,6 +110,14 @@ LEAVE_IT = "leave_it"
 APPROVE = "approve"
 APPROVE_DAYS = "approve_days"
 DENY = "deny"
+SET_END = "set_end"
+END_MENU = "end_menu"
+END_MENU_YES = "end_menu_yes"
+USE_HELD = "use_held"
+TYPE_DATE = "type_date"
+BUFFER = "buffer"
+NO_END_MOVE_ACTION = "no_end"
+NO_END_YES = "no_end_yes"
 
 
 class PanelMove(NamedTuple):
@@ -150,16 +128,13 @@ class PanelMove(NamedTuple):
 
 
 NEW_MENU_MOVE = PanelMove(NEW_MENU, "New menu", "primary", 1)
-SEED_MOVE = PanelMove(SEED, "Seed the defaults", "secondary", 1)
 GRANTS_MOVE = PanelMove(GRANTS, "Grants…", "secondary", 1)
 LOGS_MOVE = PanelMove(LOGS, "Logs", "secondary", 2)
 REFRESH_MOVE = PanelMove(REFRESH, "Refresh", "secondary", 2)
 BACK_MOVE = PanelMove(BACK, "Back", "secondary", 3)
 ADD_ROLE_MOVE = PanelMove(ADD_ROLE, "Add a role…", "primary", 1)
 WORDS_MOVE = PanelMove(WORDS, "Words…", "secondary", 1)
-RULES_MOVE = PanelMove(RULES, "Rules…", "secondary", 1)
-TAKE_DOWN_MOVE = PanelMove(TAKE_DOWN, "Take it down", "secondary", 2)
-HAND_OUT_MOVE = PanelMove(HAND_OUT, "Hand roles out…", "secondary", 2)
+HAND_OUT_MOVE = PanelMove(HAND_OUT, "Hand roles out…", "secondary", 1)
 DELETE_MOVE = PanelMove(DELETE, "Delete it", "danger", 2)
 USE_ROLE_NAME_MOVE = PanelMove(USE_ROLE_NAME, "Use the role's own name", "primary", 1)
 LABEL_IT_MOVE = PanelMove(LABEL_IT, "Give it a label…", "secondary", 1)
@@ -169,67 +144,42 @@ NEW_GRANT_MOVE = PanelMove(NEW_GRANT, "Give somebody a role…", "primary", 2)
 HOW_LONG_MOVE = PanelMove(HOW_LONG, "How long for…", "primary", 2)
 PUSH_BACK_MOVE = PanelMove(PUSH_BACK, "Push it back…", "primary", 0)
 END_NOW_MOVE = PanelMove(END_NOW, "End it now", "danger", 0)
-DENY_MOVE = PanelMove(DENY, "Deny…", "danger", 0)
-APPROVE_MOVE = PanelMove(APPROVE, "Approve", "success", 0)
-APPROVE_DAYS_MOVE = PanelMove(APPROVE_DAYS, "Approve for a while…", "success", 0)
 
 
-def requests_move(pending: int) -> PanelMove:
-    return PanelMove(REQUESTS, f"Waiting on staff ({pending})…", "primary", 1)
-
-
-def mode_move(picking_on: bool) -> PanelMove:
-    """One button that says what it will do, never a menu with two spellings of one move."""
-    return PanelMove(MODE, MODE_OFF_LABEL if picking_on else MODE_ON_LABEL, "secondary", 2)
-
-
-def approval_move(approval: bool) -> PanelMove:
-    label = APPROVAL_OFF_LABEL if approval else APPROVAL_ON_LABEL
-    return PanelMove(APPROVAL, label, "secondary", 1)
-
-
-def post_move(posted: bool) -> PanelMove:
-    return PanelMove(POST, MOVE_LABEL if posted else POST_LABEL, "primary", 2)
-
-
-def root_buttons(*, has_menus: bool, picking_on: bool, pending: int = 0) -> tuple[PanelMove, ...]:
-    """§B's root table as data — the mode never removes a control from the root."""
-    found = [NEW_MENU_MOVE, SEED_MOVE, GRANTS_MOVE]
-    if pending:
-        found.append(requests_move(pending))
-    found.append(mode_move(picking_on))
-    found.append(LOGS_MOVE)
-    found.append(REFRESH_MOVE)
-    _ = has_menus
-    return tuple(found)
+def root_buttons() -> tuple[PanelMove, ...]:
+    """The permanent staff control: no seed, no mode switch, no requests (design §3.2)."""
+    return (NEW_MENU_MOVE, GRANTS_MOVE, LOGS_MOVE, REFRESH_MOVE)
 
 
 def menu_buttons(
-    *,
-    posted: bool,
-    options: int,
-    menu_mode: str,
-    picking_on: bool,
-    approval: bool,
-    options_max: int,
+    *, options: int, options_max: int, held: bool, words: dict[str, str]
 ) -> tuple[PanelMove, ...]:
-    """§C's menu-card table as data; a control a shared function would refuse is absent."""
+    """A menu card's moves; one that needs roles on the menu renders only once it has some."""
     found: list[PanelMove] = []
     if options < options_max:
         found.append(ADD_ROLE_MOVE)
-    found.append(WORDS_MOVE)
-    found.append(RULES_MOVE)
-    found.append(approval_move(approval))
-    if picking_on and menu_mode != STAFF_MODE and options:
-        found.append(post_move(posted))
-    if posted:
-        found.append(TAKE_DOWN_MOVE)
     if options:
         found.append(HAND_OUT_MOVE)
+    found.append(PanelMove(SET_END, words[SET_END], "primary", 1))
+    found.append(WORDS_MOVE)
+    if options:
+        found.append(PanelMove(END_MENU, words[END_MENU], "danger", 2))
+    if held:
+        found.append(PanelMove(USE_HELD, words[USE_HELD], "primary", 2))
     found.append(DELETE_MOVE)
     found.append(BACK_MOVE)
     found.append(REFRESH_MOVE._replace(row=3))
     return tuple(found)
+
+
+def set_end_buttons(*, source: str, words: dict[str, str]) -> tuple[PanelMove, ...]:
+    """Buffer… only for an end that follows a marathon; No end only while there is one."""
+    found = [PanelMove(TYPE_DATE, words[TYPE_DATE], "primary", 1)]
+    if source == MARATHON_END:
+        found.append(PanelMove(BUFFER, words[BUFFER], "secondary", 1))
+    if source != NO_END:
+        found.append(PanelMove(NO_END_MOVE_ACTION, words[NO_END_MOVE_ACTION], "danger", 1))
+    return (*found, BACK_MOVE._replace(row=2), REFRESH_MOVE._replace(row=2))
 
 
 def add_role_buttons(*, picked: bool) -> tuple[PanelMove, ...]:
@@ -266,54 +216,12 @@ def grant_buttons(*, ends: bool, removed: bool) -> tuple[PanelMove, ...]:
     return (*found, BACK_MOVE._replace(row=0))
 
 
-def request_buttons(status: Any, *, timed: bool) -> tuple[PanelMove, ...]:
-    found: list[PanelMove] = []
-    if str(status) == grants.PENDING:
-        found.append(APPROVE_DAYS_MOVE if timed else APPROVE_MOVE)
-        found.append(DENY_MOVE)
-    return (*found, BACK_MOVE._replace(row=0))
-
-
-def requests_list_buttons() -> tuple[PanelMove, ...]:
-    return (BACK_MOVE._replace(row=1), REFRESH_MOVE._replace(row=1))
-
-
 def menu_heading(menu: Any) -> str:
-    posted = "posted" if menu["message_id"] else "not posted"
-    return f"**{menu['name']}** — {menu['title']} ({menu['mode']}, {posted})"
+    return f"**{menu['name']}** — {menu['title']}"
 
 
 def option_line(row: Any) -> str:
     return f"{row['emoji'] or '•'} {row['label']} — <@&{row['role_id']}>"
-
-
-def menu_lines(menu: Any, options: Any, *, note: str = "") -> list[str]:
-    """What `/rolemenu show` printed, plus the panel's own 'Before you pick' sentences."""
-    rows = list(options or ())
-    lines = [menu_heading(menu), *(option_line(row) for row in rows)]
-    if not rows:
-        lines.append(NO_ROLES_YET)
-    if str(menu["mode"]) == STAFF_MODE:
-        lines.append(NOBODY_PICKS_THESE)
-    if note:
-        lines.append(note)
-    if len(rows) > 1:
-        lines.append(NO_ORDERING)
-    return lines
-
-
-def list_lines(menus: Any, counts: Any) -> list[str]:
-    """What `/rolemenu list` printed, from a menu id → option count map."""
-    found = dict(counts or {})
-    return [
-        MENU_LIST_LINE.format(
-            name=menu["name"],
-            count=int(found.get(menu["id"], 0)),
-            mode=menu["mode"],
-            posted="posted" if menu["message_id"] else "not posted",
-        )
-        for menu in menus or ()
-    ]
 
 
 def ends_at(row: Any) -> Any:
@@ -557,14 +465,12 @@ __all__ = [
     "PANEL_MINUTES_KEY",
     "PANEL_TIMEOUT_FOOTER",
     "PANEL_TITLE",
-    "PICKING_IS_OFF",
     "POST",
     "PUSH_BACK",
     "REFRESH",
     "REQUESTS",
     "RULES",
     "SEED",
-    "SEED_QUESTION",
     "SEED_YES",
     "TAKE_BACK",
     "TAKE_DOWN",
@@ -585,26 +491,19 @@ __all__ = [
     "wearers",
     "what_ended",
     "add_role_buttons",
-    "approval_move",
     "grant_buttons",
     "grant_line",
     "grant_lines",
     "grant_order",
     "grants_buttons",
     "hand_out_buttons",
-    "list_lines",
     "menu_buttons",
     "menu_heading",
-    "menu_lines",
-    "mode_move",
     "new_grant_buttons",
     "option_line",
     "panel_minutes",
-    "post_move",
-    "request_buttons",
-    "requests_list_buttons",
-    "requests_move",
     "root_buttons",
+    "set_end_buttons",
     "site_page_url",
     "time_left",
 ]

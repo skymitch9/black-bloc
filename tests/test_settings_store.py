@@ -502,13 +502,28 @@ async def test_tempvoice_has_a_shadow_between_off_and_on(store):
     assert coerce_value("tempvoice_mode", "staff only") == "shadow"
 
 
-async def test_role_menus_ship_turned_off(store):
-    """Owner ask, 2026-08-27: role selection is off until somebody turns it on."""
-    assert store.get(1, "rolemenu_mode") == "off"
-    assert await store.set(1, "rolemenu_mode", "on") == "on"
-    assert store.get(1, "rolemenu_mode") == "on"
-    with pytest.raises(SettingError, match="off, on"):
-        coerce_value("rolemenu_mode", "shadow")
+async def test_member_self_pick_is_retired_and_its_keys_are_kept_but_not_read(store):
+    """Request #17: Discord's Channels & Roles owns self-pick; the five keys of the panels and the
+    off switch leave the registry the `golive_end_*_RETIRED` way, and a stored row is ignored."""
+    retired = (
+        settings_store.ROLEMENU_MODE_RETIRED,
+        settings_store.ROLEMENU_OFF_CONFIRM_RETIRED,
+        settings_store.ROLEMENU_OFF_BUTTON_RETIRED,
+        settings_store.ROLEMENU_OFF_DM_RETIRED,
+        settings_store.ROLEMENU_OFF_TAKES_RETIRED,
+    )
+    for key in retired:
+        assert key not in settings_store.KEY_TYPES, key
+        with pytest.raises(SettingError, match="not a Black Bloc setting"):
+            store.get(1, key)
+    await store.db.conn.execute(
+        "INSERT INTO settings(guild_id, key, value, updated_at) "
+        "VALUES (1, 'rolemenu_mode', '\"on\"', '2026-11-13')"
+    )
+    await store.db.conn.commit()
+    await store.load()
+    cur = await store.db.conn.execute("SELECT value FROM settings WHERE key = 'rolemenu_mode'")
+    assert (await cur.fetchone())["value"] == '"on"'
 
 
 def test_the_purge_window_is_clamped_to_discord_s_maximum():
@@ -788,14 +803,14 @@ async def test_a_setting_can_be_unset_again(store):
 
 async def test_a_change_hook_hears_every_set_and_clear_of_its_own_key(store):
     heard = []
-    store.on_change("rolemenu_mode", lambda *seen: heard.append(seen))
+    store.on_change("pings_mode", lambda *seen: heard.append(seen))
 
-    await store.set(1, "rolemenu_mode", "on", by=9)
+    await store.set(1, "pings_mode", "on", by=9)
     await store.set(1, "birthday_role_id", 42)
-    await store.clear(1, "rolemenu_mode", by=9)
-    await store.clear(1, "rolemenu_mode")
+    await store.clear(1, "pings_mode", by=9)
+    await store.clear(1, "pings_mode")
 
-    assert heard == [(1, "rolemenu_mode", "on", 9), (1, "rolemenu_mode", "off", 9)]
+    assert heard == [(1, "pings_mode", "on", 9), (1, "pings_mode", "off", 9)]
 
 
 async def test_a_change_hook_may_be_async_and_a_broken_one_does_not_stop_the_write(store):
@@ -807,13 +822,13 @@ async def test_a_change_hook_may_be_async_and_a_broken_one_does_not_stop_the_wri
     def broken(guild_id, key, value, by):
         raise RuntimeError("no")
 
-    store.on_change("rolemenu_mode", broken)
-    store.on_change("rolemenu_mode", slow)
+    store.on_change("pings_mode", broken)
+    store.on_change("pings_mode", slow)
 
-    await store.set(1, "rolemenu_mode", "on")
+    await store.set(1, "pings_mode", "on")
 
     assert heard == ["on"]
-    assert store.get(1, "rolemenu_mode") == "on"
+    assert store.get(1, "pings_mode") == "on"
     with pytest.raises(SettingError, match="not a Black Bloc setting"):
         store.on_change("nonsense_mode", broken)
 
@@ -2300,7 +2315,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1471
+    assert len(settings_store.KEY_TYPES) == 1466
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -3095,3 +3110,17 @@ async def test_a_temporary_role_sentence_takes_only_its_own_placeholders(store):
     assert settings_store.coerce_value(key, "{roles} are gone") == "{roles} are gone"
     with pytest.raises(settings_store.SettingError):
         settings_store.coerce_value(settings_store.ROLEMENU_END_BUFFER_KEY, -1)
+
+
+async def test_every_word_of_the_staff_control_is_a_rolemenu_key_with_its_own_placeholders(store):
+    """Request #17 1b: Set the end, End it now, the hold and the retired doors are all keys."""
+    for key, (default, fields, _) in settings_store.ROLEMENU_STAFF_WORDS.items():
+        assert settings_store.KEY_TYPES[key] == "text" and store.get(7, key) == default, key
+        assert settings_store.namespace_of(key) == "rolemenu", key
+        assert settings_store.KEY_HELP.get(key), key
+        for field in fields:
+            assert "{" + field + "}" in default, (key, field)
+    holds = settings_store.ROLEMENU_END_EARLIER_HOLDS_KEY
+    assert settings_store.KEY_TYPES[holds] == "bool" and store.get(7, holds) is True
+    with pytest.raises(SettingError):
+        coerce_value(settings_store.ROLEMENU_PUSH_BACK_REFUSED_KEY, "{role} ends {when}")

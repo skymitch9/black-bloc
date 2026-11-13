@@ -777,7 +777,6 @@ ROUTINE: frozenset[str] = frozenset(
         "role_menu.create",
         "role_menu.delete",
         "role_menu.edit",
-        "role_menu.mode",
         "role_menu.option_added",
         "role_menu.option_removed",
         "role_menu.post",

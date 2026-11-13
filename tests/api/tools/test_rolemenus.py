@@ -32,8 +32,7 @@ def call(client, method, route, payload):
 
 
 async def menus_on(web, wf) -> None:
-    """`rolemenu_mode` ships off, and a panel is not posted while members cannot pick."""
-    await web.store.set(wf.GUILD_ID, "rolemenu_mode", "on")
+    """Nothing to switch on since request #17: the staff control needs no mode."""
 
 
 async def a_menu(client, wf, name: str = "colours") -> dict:
@@ -95,15 +94,6 @@ def test_a_menu_needs_a_name_and_a_heading(client, sign_in):
         assert refused.json()["message"]
 
 
-def test_an_unknown_mode_is_refused_by_name(client, sign_in):
-    sign_in(client)
-    response = client.post(
-        "/api/rolemenus", json={"name": "c", "title": "C", "mode": "sideways"}
-    )
-    assert response.status_code == 400
-    assert "multiple, single, staff" in response.json()["message"]
-
-
 async def test_the_put_body_is_the_whole_option_list(client, sign_in, web, wf):
     sign_in(client)
     await a_menu(client, wf)
@@ -141,8 +131,8 @@ def test_a_menu_nobody_has_is_a_404_with_a_sentence(client, sign_in):
     for method, route in (
         ("PUT", "/api/rolemenus/ghost"),
         ("DELETE", "/api/rolemenus/ghost"),
-        ("POST", "/api/rolemenus/ghost/post"),
-        ("POST", "/api/rolemenus/ghost/unpost"),
+        ("POST", "/api/rolemenus/ghost/end-now"),
+        ("POST", "/api/rolemenus/ghost/end-earlier"),
     ):
         response = client.request(method, route, json={})
         assert response.status_code == 404
@@ -158,83 +148,6 @@ async def test_deleting_a_menu_says_so_and_logs_it(client, sign_in, web, wf):
     assert response.json() == {"deleted": True, "name": "colours"}
     assert client.get("/api/rolemenus").json() == []
     assert "web.role_menu.delete" in await wf.kinds_in(web.db)
-
-
-async def test_posting_a_panel_puts_it_in_the_channel_and_remembers_the_message(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await menus_on(web, wf)
-    await a_menu(client, wf)
-    client.put(
-        "/api/rolemenus/colours",
-        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
-    )
-
-    response = client.post(
-        "/api/rolemenus/colours/post", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
-    )
-
-    assert response.status_code == 200
-    channel = guild.get_channel(wf.TEST_CHANNEL_ID)
-    assert channel.messages and "embed" in channel.messages[0].kwargs
-    assert response.json()["message_id"] == str(channel.messages[0].id)
-    menu = await get_menu(web.db, wf.GUILD_ID, "colours")
-    assert menu["message_id"] == channel.messages[0].id
-    assert "web.role_menu.post" in await wf.kinds_in(web.db)
-
-
-async def test_unpost_deletes_the_message_and_forgets_it(client, sign_in, web, guild, wf):
-    sign_in(client)
-    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
-    channel = guild.get_channel(wf.TEST_CHANNEL_ID)
-    assert channel.messages
-
-    response = client.post("/api/rolemenus/colours/unpost", json={})
-
-    assert response.status_code == 200
-    assert response.json()["unposted"] is True
-    assert "panel is down" in response.json()["message"]
-    assert channel.messages == []
-    menu = await get_menu(web.db, wf.GUILD_ID, "colours")
-    assert menu["message_id"] is None
-    assert menu["channel_id"] == wf.TEST_CHANNEL_ID
-    assert "web.role_menu.unposted" in await wf.kinds_in(web.db)
-
-
-async def test_seed_creates_the_defaults_and_says_what_it_did(client, sign_in, web, wf):
-    sign_in(client)
-
-    response = client.post("/api/rolemenus/seed", json={})
-
-    assert response.status_code == 200
-    body = response.json()
-    assert "pronouns" in body["created"] and body["skipped"] == []
-    assert "Created: pronouns" in body["message"]
-    assert {menu["name"] for menu in client.get("/api/rolemenus").json()} >= set(body["created"])
-    assert "web.role_menu.seeded" in await wf.kinds_in(web.db)
-
-
-async def test_seeding_twice_rewrites_nothing_and_says_which_were_already_there(
-    client, sign_in, web, wf
-):
-    sign_in(client)
-    await a_menu(client, wf, "pronouns")
-    client.put(
-        "/api/rolemenus/pronouns",
-        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Kept"}]},
-    )
-
-    body = client.post("/api/rolemenus/seed", json={}).json()
-
-    assert "pronouns" in body["skipped"] and "pronouns" not in body["created"]
-    assert "Already there, left alone: pronouns" in body["message"]
-    menu = await get_menu(web.db, wf.GUILD_ID, "pronouns")
-    kept = await get_options(web.db, menu["id"])
-    assert [row["label"] for row in kept] == ["Kept"]
-
-    again = client.post("/api/rolemenus/seed", json={}).json()
-    assert again["created"] == [] and "pronouns" in again["skipped"]
 
 
 async def a_staff_menu(client, web, wf, name: str = "runner") -> None:
@@ -347,23 +260,6 @@ async def test_assign_refuses_a_member_the_bot_cannot_see_and_an_empty_menu(
     assert empty.status_code == 400 and "nothing to hand out" in empty.json()["message"]
 
 
-async def test_assign_is_refused_while_role_menus_are_turned_off(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await a_staff_menu(client, web, wf)
-    wf.member(guild, MEMBER, name="ada")
-    await web.store.set(wf.GUILD_ID, "rolemenu_mode", "off")
-
-    response = client.post(
-        "/api/rolemenus/runner/assign",
-        json={"user_id": str(MEMBER), "role_ids": [str(wf.STAFF_ROLE_ID)]},
-    )
-
-    assert response.status_code == 409
-    assert response.json()["error"] == "rolemenu_off"
-
-
 async def test_a_role_change_discord_refuses_comes_back_as_a_sentence(
     client, sign_in, web, guild, wf
 ):
@@ -381,120 +277,6 @@ async def test_a_role_change_discord_refuses_comes_back_as_a_sentence(
 
     assert response.status_code == 409
     assert response.json()["error"] == "role_refused"
-
-
-async def test_unposting_a_menu_with_no_panel_refuses_in_words(client, sign_in, web, wf):
-    sign_in(client)
-    await a_menu(client, wf)
-
-    response = client.post("/api/rolemenus/colours/unpost", json={})
-
-    assert response.status_code == 400
-    assert "nothing to take down" in response.json()["message"]
-
-
-async def test_unpost_of_a_panel_outside_the_test_channel_is_refused_and_shadow_logged(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
-    await web.db.conn.execute(
-        "UPDATE role_menus SET channel_id = ? WHERE name = 'colours'", (wf.OTHER_CHANNEL_ID,)
-    )
-    await web.db.conn.commit()
-    web.guard = wf.Guard()
-
-    response = client.post("/api/rolemenus/colours/unpost", json={})
-
-    assert response.status_code == 409
-    assert response.json()["error"] == "test_mode"
-    kinds = await wf.kinds_in(web.db)
-    assert "web.role_menu.would_unpost" in kinds
-    assert "web.role_menu.unposted" not in kinds
-    menu = await get_menu(web.db, wf.GUILD_ID, "colours")
-    assert menu["message_id"] is not None
-
-
-async def test_posting_outside_the_test_channel_is_refused_while_the_guard_is_on(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await menus_on(web, wf)
-    await a_menu(client, wf)
-    client.put(
-        "/api/rolemenus/colours",
-        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
-    )
-    web.guard = wf.Guard()
-
-    response = client.post(
-        "/api/rolemenus/colours/post", json={"channel_id": str(wf.OTHER_CHANNEL_ID)}
-    )
-
-    assert response.status_code == 409
-    assert response.json()["error"] == "test_mode"
-    assert "test mode" in response.json()["message"]
-    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
-    assert "web.role_menu.post" not in await wf.kinds_in(web.db)
-
-    allowed = client.post(
-        "/api/rolemenus/colours/post", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
-    )
-    assert allowed.status_code == 200
-
-
-async def test_posting_is_refused_while_role_menus_are_turned_off(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await a_menu(client, wf)
-    client.put(
-        "/api/rolemenus/colours",
-        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
-    )
-
-    response = client.post(
-        "/api/rolemenus/colours/post", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
-    )
-
-    assert response.status_code == 409
-    assert response.json()["error"] == "rolemenu_off"
-    assert "turned off" in response.json()["message"]
-    assert guild.get_channel(wf.TEST_CHANNEL_ID).messages == []
-    assert "web.role_menu.post" not in await wf.kinds_in(web.db)
-
-    await menus_on(web, wf)
-    allowed = client.post(
-        "/api/rolemenus/colours/post", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
-    )
-    assert allowed.status_code == 200
-
-
-async def test_a_staff_menu_and_an_empty_menu_are_not_posted(client, sign_in, wf):
-    sign_in(client)
-    client.post("/api/rolemenus", json={"name": "runner", "title": "R", "mode": "staff"})
-    client.post("/api/rolemenus", json={"name": "empty", "title": "E"})
-
-    staff_menu = client.post("/api/rolemenus/runner/post", json={})
-    empty = client.post("/api/rolemenus/empty/post", json={})
-
-    assert staff_menu.status_code == 400 and "staff-assigned" in staff_menu.json()["message"]
-    assert empty.status_code == 400 and "no roles on it yet" in empty.json()["message"]
-
-
-async def test_the_default_channel_setting_is_used_when_none_is_given(client, sign_in, web, wf):
-    sign_in(client)
-    await menus_on(web, wf)
-    await web.store.set(wf.GUILD_ID, "role_menu_channel_id", wf.TEST_CHANNEL_ID)
-    await a_menu(client, wf)
-    client.put(
-        "/api/rolemenus/colours",
-        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
-    )
-
-    response = client.post("/api/rolemenus/colours/post", json={})
-
-    assert response.json()["channel_id"] == str(wf.TEST_CHANNEL_ID)
 
 
 async def test_an_option_that_is_not_an_object_is_refused_before_anything_is_written(
@@ -615,170 +397,6 @@ async def a_request(client, web, wf, *, expires=None, role_id=None):
     return await grants.create_request(web.db, wf.GUILD_ID, menu["id"], MEMBER, wanted)
 
 
-async def test_a_menu_remembers_approval_and_its_two_clocks(client, sign_in, web, wf):
-    sign_in(client)
-
-    made = client.post(
-        "/api/rolemenus",
-        json={
-            "name": "runner",
-            "title": "Runner",
-            "approval": True,
-            "expires_days": 7,
-            "retry_days": 14,
-        },
-    ).json()
-
-    assert (made["approval"], made["expires_days"], made["retry_days"]) == (True, 7, 14)
-    edited = client.put(
-        "/api/rolemenus/runner", json={"approval": False, "expires_days": 0}
-    ).json()
-    assert edited["approval"] is False and edited["expires_days"] is None
-    assert edited["retry_days"] == 14
-
-
-def test_a_menu_edit_that_says_nothing_about_the_clocks_leaves_them_alone(client, sign_in, wf):
-    sign_in(client)
-    client.post(
-        "/api/rolemenus",
-        json={"name": "runner", "title": "Runner", "approval": True, "expires_days": 7},
-    )
-
-    edited = client.put("/api/rolemenus/runner", json={"title": "Runner status"}).json()
-
-    assert edited["approval"] is True and edited["expires_days"] == 7
-
-
-def test_approval_and_days_that_arrive_in_the_wrong_shape_are_refused(client, sign_in):
-    sign_in(client)
-
-    bad_approval = client.post(
-        "/api/rolemenus", json={"name": "a", "title": "A", "approval": "yes"}
-    )
-    bad_days = client.post(
-        "/api/rolemenus", json={"name": "b", "title": "B", "expires_days": "a week"}
-    )
-
-    assert bad_approval.status_code == 400 and bad_approval.json()["error"] == "bad_approval"
-    assert bad_days.status_code == 400 and bad_days.json()["error"] == "bad_days"
-    assert client.get("/api/rolemenus").json() == []
-
-
-async def test_the_queue_lists_pending_requests_with_names(client, sign_in, web, wf):
-    sign_in(client)
-    wf.member(web.guild, MEMBER, name="ada")
-    request_id = await a_request(client, web, wf)
-
-    rows = client.get("/api/rolemenus/requests").json()
-
-    assert [row["id"] for row in rows] == [request_id]
-    assert rows[0]["status"] == "pending" and rows[0]["user_name"] == "Ada"
-    assert rows[0]["role_name"] == "Aunties / Uncles"
-    assert rows[0]["user_id"] == str(MEMBER) and rows[0]["decided_by_id"] is None
-
-
-async def test_the_queue_filters_by_status_and_names_an_unknown_one(client, sign_in, web, wf):
-    sign_in(client)
-    wf.member(web.guild, MEMBER, name="ada")
-    await a_request(client, web, wf)
-
-    assert client.get("/api/rolemenus/requests?status=denied").json() == []
-    unknown = client.get("/api/rolemenus/requests?status=maybe")
-    assert unknown.status_code == 400 and unknown.json()["error"] == "unknown_status"
-    assert "pending, approved" in unknown.json()["message"]
-
-
-async def test_approving_from_the_page_hands_the_role_over_and_logs_it(client, sign_in, web, wf):
-    sign_in(client)
-    member = wf.member(web.guild, MEMBER, name="ada")
-    request_id = await a_request(client, web, wf, expires=7)
-
-    body = client.post(f"/api/rolemenus/requests/{request_id}/approve", json={}).json()
-
-    assert body["request"]["status"] == "approved"
-    assert body["request"]["decided_by_id"] == "7"
-    assert "Approved" in body["message"]
-    assert member.edits and wf.STAFF_ROLE_ID in member.edits[0]
-    grant = await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.STAFF_ROLE_ID)
-    assert grant["expires_at"] is not None and grant["source"] == "approval"
-    assert "web.role.approved" in await wf.kinds_in(web.db)
-
-
-async def test_the_days_in_the_body_beat_the_menus_own_number(client, sign_in, web, wf):
-    sign_in(client)
-    wf.member(web.guild, MEMBER, name="ada")
-    request_id = await a_request(client, web, wf, expires=7)
-
-    client.post(f"/api/rolemenus/requests/{request_id}/approve", json={"days": 0})
-
-    grant = await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.STAFF_ROLE_ID)
-    assert grant["expires_at"] is None
-
-
-async def test_denying_needs_a_reason_and_sends_it_on(client, sign_in, web, wf):
-    sign_in(client)
-    member = wf.member(web.guild, MEMBER, name="ada")
-    request_id = await a_request(client, web, wf)
-
-    empty = client.post(f"/api/rolemenus/requests/{request_id}/deny", json={"reason": " "})
-    body = client.post(
-        f"/api/rolemenus/requests/{request_id}/deny", json={"reason": "not this month"}
-    ).json()
-
-    assert empty.status_code == 400 and empty.json()["error"] == "no_reason"
-    assert body["request"]["status"] == "denied"
-    assert body["request"]["deny_reason"] == "not this month"
-    assert member.edits == [] and "not this month" in member.dms[0]
-    assert "web.role.denied" in await wf.kinds_in(web.db)
-
-
-async def test_a_second_decision_is_refused_rather_than_repeated(client, sign_in, web, wf):
-    sign_in(client)
-    wf.member(web.guild, MEMBER, name="ada")
-    request_id = await a_request(client, web, wf)
-    client.post(f"/api/rolemenus/requests/{request_id}/approve", json={})
-
-    again = client.post(f"/api/rolemenus/requests/{request_id}/deny", json={"reason": "no"})
-
-    assert again.status_code == 409 and again.json()["error"] == "not_decided"
-    assert "already **approved**" in again.json()["message"]
-
-
-def test_a_request_nobody_has_is_refused_with_a_sentence(client, sign_in):
-    sign_in(client)
-
-    response = client.post("/api/rolemenus/requests/404/approve", json={})
-
-    assert response.status_code == 409
-    assert "no record of that request" in response.json()["message"]
-
-
-async def test_a_queue_row_names_its_menu_and_carries_the_asker_s_picture(
-    client, sign_in, web, wf
-):
-    """The page has only a menu id otherwise, and no menu row carries one."""
-    sign_in(client)
-    member = wf.member(web.guild, MEMBER, name="ada")
-    request_id = await a_request(client, web, wf, expires=7)
-
-    row = client.get("/api/rolemenus/requests").json()[0]
-
-    assert row["menu_name"] == "runner"
-    assert row["user_avatar"] == member.display_avatar.url
-    decided = client.post(f"/api/rolemenus/requests/{request_id}/approve", json={}).json()
-    assert decided["request"]["menu_name"] == "runner"
-
-
-async def test_a_request_from_somebody_who_has_left_still_names_its_menu(client, sign_in, web, wf):
-    sign_in(client)
-    await a_request(client, web, wf)
-
-    row = client.get("/api/rolemenus/requests").json()[0]
-
-    assert row["menu_name"] == "runner"
-    assert row["user_avatar"] is None
-
-
 async def a_posted_menu(client, web, wf, channel_id):
     await menus_on(web, wf)
     await a_menu(client, wf)
@@ -787,111 +405,6 @@ async def a_posted_menu(client, web, wf, channel_id):
         json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
     )
     client.post("/api/rolemenus/colours/post", json={"channel_id": str(channel_id)})
-
-
-async def test_saving_a_different_channel_moves_the_panel_rather_than_cloning_it(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await a_posted_menu(client, web, wf, wf.OTHER_CHANNEL_ID)
-
-    body = client.put(
-        "/api/rolemenus/colours", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
-    ).json()
-
-    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == [], "the old panel came down"
-    landed = guild.get_channel(wf.TEST_CHANNEL_ID).messages
-    assert len(landed) == 1, "one panel, in the new channel"
-    assert body["channel_id"] == str(wf.TEST_CHANNEL_ID)
-    assert body["message_id"] == str(landed[0].id)
-    menu = await get_menu(web.db, wf.GUILD_ID, "colours")
-    assert (menu["channel_id"], menu["message_id"]) == (wf.TEST_CHANNEL_ID, landed[0].id)
-    assert (await wf.kinds_in(web.db)).count("web.role_menu.post") == 2
-
-
-async def test_saving_the_channel_it_is_already_in_posts_nothing_again(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
-    was = guild.get_channel(wf.TEST_CHANNEL_ID).messages[0].id
-
-    client.put("/api/rolemenus/colours", json={"channel_id": str(wf.TEST_CHANNEL_ID)})
-
-    messages = guild.get_channel(wf.TEST_CHANNEL_ID).messages
-    assert [m.id for m in messages] == [was]
-
-
-async def test_an_edit_that_says_nothing_about_the_channel_leaves_the_panel_alone(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
-    was = guild.get_channel(wf.TEST_CHANNEL_ID).messages[0].id
-
-    body = client.put("/api/rolemenus/colours", json={"title": "Colours again"}).json()
-
-    assert body["message_id"] == str(was)
-    assert [m.id for m in guild.get_channel(wf.TEST_CHANNEL_ID).messages] == [was]
-
-
-async def test_a_menu_with_no_panel_is_told_to_post_it_rather_than_moved(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await menus_on(web, wf)
-    await a_menu(client, wf)
-    client.put(
-        "/api/rolemenus/colours",
-        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
-    )
-
-    response = client.put("/api/rolemenus/colours", json={"channel_id": str(wf.TEST_CHANNEL_ID)})
-
-    assert response.status_code == 400 and response.json()["error"] == "not_posted"
-    assert "no panel to move" in response.json()["message"]
-    assert guild.get_channel(wf.TEST_CHANNEL_ID).messages == []
-
-
-async def test_moving_a_panel_outside_the_test_channel_is_refused_by_the_guard(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
-    web.guard = wf.Guard()
-
-    response = client.put("/api/rolemenus/colours", json={"channel_id": str(wf.OTHER_CHANNEL_ID)})
-
-    assert response.status_code == 409 and response.json()["error"] == "test_mode"
-    assert len(guild.get_channel(wf.TEST_CHANNEL_ID).messages) == 1
-    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
-
-
-async def test_a_refused_move_leaves_the_rest_of_the_edit_unsaved(client, sign_in, web, guild, wf):
-    """The refusal says nothing was changed, so nothing may be — not even the title."""
-    sign_in(client)
-    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
-    web.guard = wf.Guard()
-
-    response = client.put(
-        "/api/rolemenus/colours",
-        json={"title": "Half saved", "channel_id": str(wf.OTHER_CHANNEL_ID)},
-    )
-
-    assert response.status_code == 409
-    assert client.get("/api/rolemenus").json()[0]["title"] == "Pick a colour"
-
-
-async def test_moving_a_panel_to_a_channel_that_is_gone_is_refused_in_words(
-    client, sign_in, web, guild, wf
-):
-    sign_in(client)
-    await a_posted_menu(client, web, wf, wf.TEST_CHANNEL_ID)
-
-    response = client.put("/api/rolemenus/colours", json={"channel_id": "404"})
-
-    assert response.status_code == 400 and response.json()["error"] == "no_such_channel"
-    assert len(guild.get_channel(wf.TEST_CHANNEL_ID).messages) == 1
 
 
 async def test_a_put_that_moves_roles_re_stamps_their_open_grants(client, sign_in, web, wf):
@@ -918,3 +431,239 @@ async def test_a_put_that_moves_roles_re_stamps_their_open_grants(client, sign_i
     assert (await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID))[
         "expires_at"
     ] is None
+
+
+# --- request #17 1b: the end, End it now, the hold, and the retired doors ------------------------
+
+
+async def end_menu(client, web, wf, name="btb"):
+    client.post("/api/rolemenus", json={"name": name, "title": "Back to Black"})
+    client.put(
+        f"/api/rolemenus/{name}",
+        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Runner"}]},
+    )
+    return await get_menu(web.db, wf.GUILD_ID, name)
+
+
+async def a_marathon(web, wf, ends_at="2099-02-28T05:00:00+00:00"):
+    cur = await web.db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, source, source_ref, schedule_url, added_by, "
+        "added_at, ends_at) VALUES (?, 'Back to Black 2027', 'gdq', 'x', 'https://x', 1, "
+        "'2026-01-01T00:00:00+00:00', ?)",
+        (wf.GUILD_ID, ends_at),
+    )
+    await web.db.conn.commit()
+    return cur.lastrowid
+
+
+async def kind_count(web, wf, kind):
+    return (await wf.kinds_in(web.db)).count(kind)
+
+
+@pytest.mark.parametrize(
+    ("method", "route"),
+    [
+        ("POST", "/api/rolemenus/colours/post"),
+        ("POST", "/api/rolemenus/colours/unpost"),
+        ("GET", "/api/rolemenus/requests"),
+        ("POST", "/api/rolemenus/requests/1/approve"),
+        ("POST", "/api/rolemenus/requests/1/deny"),
+        ("POST", "/api/rolemenus/seed"),
+    ],
+)
+def test_every_retired_self_pick_route_answers_410_in_words(client, sign_in, method, route):
+    sign_in(client)
+
+    response = client.request(method, route, json={})
+
+    assert response.status_code == 410
+    body = response.json()
+    assert body["error"] == "rolemenu_retired"
+    assert "Channels & Roles" in body["message"] and "Hand roles out" in body["message"]
+
+
+async def test_a_menu_row_carries_its_end_who_wears_it_and_the_last_pass(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await end_menu(client, web, wf)
+    wf.member(guild, MEMBER, name="ada").roles.append(guild.get_role(wf.PLAIN_ROLE_ID))
+
+    [row] = client.get("/api/rolemenus").json()
+
+    assert row["ends_source"] == "none" and row["ends_at"] is None
+    assert row["end_label"] == "no end set"
+    assert row["wearing"] == 1
+    assert row["buffer_days"] is None and row["buffer_default"] == 1
+    assert row["last_pass"] == {"passes": 0, "members": 0, "failures": 0, "ended_at": None}
+    assert row["ends_held_at"] is None and row["mode"] == "staff"
+
+
+async def test_a_put_of_a_typed_date_sets_the_end_with_one_log_row(client, sign_in, web, wf):
+    sign_in(client)
+    await end_menu(client, web, wf)
+    before = len(await wf.kinds_in(web.db))
+
+    row = client.put(
+        "/api/rolemenus/btb", json={"ends_source": "date", "ends_at": "2099-02-28"}
+    ).json()
+
+    assert row["ends_source"] == "date"
+    assert row["ends_at"].startswith("2099-")
+    assert row["end_label"].startswith("ends 2099-02-28")
+    assert (await wf.kinds_in(web.db))[before:] == ["web.role_menu.end_set"]
+
+
+async def test_a_put_binds_a_marathon_with_a_buffer_and_lists_what_it_can_bind_to(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await end_menu(client, web, wf)
+    marathon_id = await a_marathon(web, wf)
+
+    [choice] = client.get("/api/rolemenus/marathons").json()
+    assert choice["id"] == str(marathon_id) and "Back to Black 2027 · ends" in choice["label"]
+
+    row = client.put(
+        "/api/rolemenus/btb",
+        json={"ends_source": "marathon", "ends_marathon_id": str(marathon_id), "buffer_days": 2},
+    ).json()
+
+    assert row["ends_marathon_id"] == str(marathon_id) and row["buffer_days"] == 2
+    assert row["ends_at"] == "2099-03-02T05:00:00+00:00"
+    assert "(Back to Black 2027 + 2 d)" in row["end_label"]
+
+    again = client.put("/api/rolemenus/btb", json={"buffer_days": ""}).json()
+    assert again["buffer_days"] is None and again["ends_at"] == "2099-03-01T05:00:00+00:00"
+
+
+async def test_an_end_the_site_gets_wrong_is_refused_in_words_and_writes_nothing(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await end_menu(client, web, wf)
+    before = await wf.kinds_in(web.db)
+    for body, error in (
+        ({"ends_source": "date", "ends_at": "2020-01-01"}, "past_date"),
+        ({"ends_source": "date", "ends_at": "soon"}, "bad_date"),
+        ({"ends_source": "marathon", "ends_marathon_id": "4242"}, "no_such_marathon"),
+        ({"ends_source": "sometimes"}, "bad_end_source"),
+        ({"buffer_days": 3}, "buffer_needs_marathon"),
+    ):
+        response = client.put("/api/rolemenus/btb", json=body)
+        assert response.status_code == 400 and response.json()["error"] == error, body
+        assert response.json()["message"]
+    assert await wf.kinds_in(web.db) == before
+    assert (await get_menu(web.db, wf.GUILD_ID, "btb"))["ends_source"] == "none"
+
+
+async def test_a_words_only_save_never_touches_the_end(client, sign_in, web, wf):
+    sign_in(client)
+    menu = await end_menu(client, web, wf)
+    await web.db.conn.execute(
+        "UPDATE role_menus SET ends_source = 'date', ends_at = '2020-01-01T00:00:00+00:00', "
+        "ended_at = '2020-01-02T00:00:00+00:00' WHERE id = ?",
+        (menu["id"],),
+    )
+    await web.db.conn.commit()
+
+    client.put("/api/rolemenus/btb", json={"title": "Back to Black 2027", "mode": "multiple"})
+
+    fresh = await get_menu(web.db, wf.GUILD_ID, "btb")
+    assert fresh["ended_at"] == "2020-01-02T00:00:00+00:00"
+    assert "web.role_menu.end_set" not in await wf.kinds_in(web.db)
+
+
+async def test_end_now_takes_the_roles_off_everyone_and_says_how_many(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await end_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+    member.roles.append(guild.get_role(wf.PLAIN_ROLE_ID))
+    web.guard = None
+
+    response = client.post("/api/rolemenus/btb/end-now")
+
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["pass"]["members"] == 1 and body["pass"]["ended"] is True
+    assert "**btb** ended" in body["message"]
+    assert body["ended_at"] and body["ends_source"] == "date"
+    assert wf.PLAIN_ROLE_ID not in [role.id for role in member.roles]
+    assert "web.role_menu.ended" in await wf.kinds_in(web.db)
+
+
+async def test_end_now_under_the_guard_is_the_guards_409(client, sign_in, web, wf):
+    sign_in(client)
+    await end_menu(client, web, wf)
+    web.guard = wf.Guard(wf.TEST_CHANNEL_ID)
+
+    response = client.post("/api/rolemenus/btb/end-now")
+
+    assert response.status_code == 409 and response.json()["error"] == "test_mode"
+    assert (await get_menu(web.db, wf.GUILD_ID, "btb"))["ended_at"] is None
+
+
+async def test_use_the_earlier_end_takes_a_held_end_and_refuses_when_none_waits(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    menu = await end_menu(client, web, wf)
+    marathon_id = await a_marathon(web, wf)
+    client.put(
+        "/api/rolemenus/btb", json={"ends_source": "marathon", "ends_marathon_id": marathon_id}
+    )
+
+    nothing = client.post("/api/rolemenus/btb/end-earlier")
+    assert nothing.status_code == 409 and nothing.json()["error"] == "nothing_held"
+
+    await web.db.conn.execute(
+        "UPDATE marathons SET ends_at = '2099-02-20T05:00:00+00:00' WHERE id = ?", (marathon_id,)
+    )
+    await web.db.conn.execute(
+        "UPDATE role_menus SET ends_held_at = '2099-02-21T05:00:00+00:00' WHERE id = ?",
+        (menu["id"],),
+    )
+    await web.db.conn.commit()
+
+    row = client.post("/api/rolemenus/btb/end-earlier").json()
+
+    assert row["ends_at"] == "2099-02-21T05:00:00+00:00" and row["ends_held_at"] is None
+    assert "web.role_menu.end_set" in await wf.kinds_in(web.db)
+
+
+async def test_a_menu_still_to_end_is_not_deleted_while_people_wear_its_roles(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await end_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+    member.roles.append(guild.get_role(wf.PLAIN_ROLE_ID))
+    client.put("/api/rolemenus/btb", json={"ends_source": "date", "ends_at": "2099-02-28"})
+
+    refused = client.delete("/api/rolemenus/btb")
+
+    assert refused.status_code == 409 and refused.json()["error"] == "menu_still_ends"
+    assert "End it now" in refused.json()["message"]
+    assert await get_menu(web.db, wf.GUILD_ID, "btb") is not None
+
+    client.put("/api/rolemenus/btb", json={"ends_source": "none"})
+    assert client.delete("/api/rolemenus/btb").status_code == 200
+
+
+async def test_assign_needs_no_switch_and_writes_the_menus_end(client, sign_in, web, guild, wf):
+    sign_in(client)
+    await end_menu(client, web, wf)
+    client.put("/api/rolemenus/btb", json={"ends_source": "date", "ends_at": "2099-02-28"})
+    wf.member(guild, MEMBER, name="ada").roles = []
+
+    response = client.post(
+        "/api/rolemenus/btb/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.PLAIN_ROLE_ID)]},
+    )
+
+    assert response.status_code == 200, response.json()
+    grant = await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID)
+    menu = await get_menu(web.db, wf.GUILD_ID, "btb")
+    assert grant["expires_at"] == menu["ends_at"]

@@ -24,8 +24,6 @@ from .orphaned import mark as mark_orphaned
 from .posts_switch import apply as migrate_posts_switch
 from .prefix import no_prefix_commands
 from .presence import boot_presence, shutdown_presence
-from .rolemenu_panels import install as install_panels
-from .rolemenu_panels import panels_on_boot
 from .runs_genre_format import apply as migrate_runs_genre_format
 from .selftest import on_boot as selftest_on_boot
 from .settings_store import SettingsStore
@@ -118,7 +116,6 @@ class BlackBlocBot(commands.Bot):
         await self._load_cogs()
         await sync_dev_guild(self, self.settings.dev_guild_id)
         install_visibility(self)
-        install_panels(self)
         install_handed_roles(self)
         self._start_api()
 
@@ -193,7 +190,6 @@ class BlackBlocBot(commands.Bot):
     async def on_ready(self) -> None:
         assert self.user is not None
         log.info("logged in as %s (%s); %d guild(s)", self.user, self.user.id, len(self.guilds))
-        await panels_on_boot(self)
         await selftest_on_boot(self)
 
     async def close(self) -> None:

@@ -87,13 +87,9 @@ export function memberTally() {
   return membersOnce;
 }
 
-/** Waiting role requests, for the badge beside Role menus. */
+/** Role requests were retired with member self-pick (request #17): no badge, no call. */
 export function requestTally() {
-  if (requestsOnce === null) {
-    requestsOnce = api('/api/rolemenus/requests?status=pending')
-      .then((found) => (Array.isArray(found) ? found.length : null))
-      .catch(() => null);
-  }
+  if (requestsOnce === null) requestsOnce = Promise.resolve(null);
   return requestsOnce;
 }
 

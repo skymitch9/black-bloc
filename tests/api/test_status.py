@@ -122,7 +122,6 @@ def test_every_mode_key_in_the_registry_is_reported():
         "birthday_mode",
         "modmail_mode",
         "automod_mode",
-        "rolemenu_mode",
         "poll_mode",
     }
 
@@ -719,3 +718,16 @@ async def test_the_export_refuses_the_same_way_the_list_does(bot, db, sign_in):
 def test_the_export_needs_a_session_like_every_other_read(bot):
     client = client_for(bot)
     assert client.get("/api/actions/export.csv").status_code == 401
+
+
+def test_a_cog_that_counts_its_last_tick_shows_it_on_the_loop_row():
+    """Request #17 §3.7: the role-menu expiry loop says menus due / ended / failures."""
+    from black_bloc.api.status import _counts
+    from black_bloc.cogs.community.role_menus import RoleMenus
+
+    cog = RoleMenus.__new__(RoleMenus)
+    cog.last_counts = None
+    assert _counts(cog, "_expiry_loop") is None
+    cog.last_counts = {"due": 2, "ended": 1, "failures": 3}
+    assert _counts(cog, "_expiry_loop") == "menus due 2 · ended 1 · failures 3"
+    assert _counts(object(), "_expiry_loop") is None

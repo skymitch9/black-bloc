@@ -124,7 +124,7 @@ GOLIVE_COSTREAM_FIELDS = (
 )
 
 
-ROLEMENU_MODES = ("off", "on")
+ROLEMENU_MODE_RETIRED = "rolemenu_mode"
 
 PINGS_MODES = ("off", "on")
 PINGS_EVENTS_ROLE_NAME = "Events"
@@ -425,7 +425,6 @@ KEY_TYPES: dict[str, str] = {
     "mod_dm_on_action": "enum",
     "bot_bio": "text",
     "status_prefix": "text",
-    "rolemenu_mode": "enum",
     "request_mode": "enum",
     "request_who_can_file": "enum",
     "request_notify_channel_id": "channel",
@@ -499,7 +498,6 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "modmail_mode": MODMAIL_MODES,
     "automod_mode": AUTOMOD_MODES,
     "mod_dm_on_action": MOD_DM_STYLES,
-    "rolemenu_mode": ROLEMENU_MODES,
     "request_mode": REQUEST_MODES,
     "request_who_can_file": REQUEST_FILERS,
     "chat_mode": CHAT_MODES,
@@ -1059,13 +1057,6 @@ KEY_HELP: dict[str, str] = {
     "mod_dm_on_action": "what a punished member is told: none, server_action, server_action_reason",
     "bot_bio": "the About Me on Black Bloc's own profile, dashboard link and all",
     "status_prefix": "what goes in front of the member count in Black Bloc's status",
-    "rolemenu_mode": (
-        "whether members can pick roles from the panels; off takes them down and hides the "
-        "posted panels, and takes back every menu role a member picked from a panel or had "
-        "approved on request (asked first, with how many); a role staff handed over or given "
-        "anywhere else stays. on posts them again and gives nothing back; off also hides "
-        "/rolemenu while hiding is on, and the timed roles stay under /mod ▸ Role grants…"
-    ),
     "request_mode": (
         "off, or on (members can ask for things with /request and staff decide on the site)"
     ),
@@ -10818,9 +10809,9 @@ TEXT_CHECKS.update(
 BIRTHDAY_NOT_SHARED_KEY = "birthday_not_shared_said"
 PINGS_OFF_CONFIRM_KEY = "pings_off_confirm_said"
 PINGS_OFF_BUTTON_KEY = "pings_off_confirm_button"
-ROLEMENU_OFF_CONFIRM_KEY = "rolemenu_off_confirm_said"
-ROLEMENU_OFF_BUTTON_KEY = "rolemenu_off_confirm_button"
-ROLEMENU_OFF_DM_KEY = "rolemenu_off_dm"
+ROLEMENU_OFF_CONFIRM_RETIRED = "rolemenu_off_confirm_said"
+ROLEMENU_OFF_BUTTON_RETIRED = "rolemenu_off_confirm_button"
+ROLEMENU_OFF_DM_RETIRED = "rolemenu_off_dm"
 SMALL_FIXES_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     BIRTHDAY_NOT_SHARED_KEY: (
         "**{name}** keeps their birthday to themselves.",
@@ -10840,44 +10831,19 @@ SMALL_FIXES_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the button that confirms pings_mode off and takes those roles back",
     ),
-    ROLEMENU_OFF_CONFIRM_KEY: (
-        "**{count}** members hold roles the role menus handed out; switching role menus off "
-        "removes them.",
-        ("count",),
-        "what staff are asked before rolemenu_mode goes off while members wear menu roles Black "
-        "Bloc handed out. It takes {count}",
-    ),
-    ROLEMENU_OFF_BUTTON_KEY: (
-        "Yes, switch role menus off",
-        (),
-        "the button that confirms rolemenu_mode off and takes those roles back",
-    ),
-    ROLEMENU_OFF_DM_KEY: (
-        "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing "
-        "else changed.",
-        ("guild", "label"),
-        "the DM sent when role menus go off to a member whose menu role staff approved (those "
-        "members were sent a DM when it was given). It takes {guild} {label}",
-    ),
 }
 SMALL_FIXES_DEFAULTS: dict[str, Any] = {
     key: default for key, (default, _, _) in SMALL_FIXES_WORDS.items()
 }
 KEY_TYPES.update({key: "text" for key in SMALL_FIXES_WORDS})
 PINGS_OFF_TAKES_KEY = "pings_off_takes_roles_back"
-ROLEMENU_OFF_TAKES_KEY = "rolemenu_off_takes_roles_back"
+ROLEMENU_OFF_TAKES_RETIRED = "rolemenu_off_takes_roles_back"
 SMALL_FIXES_SWITCHES: dict[str, tuple[bool, str]] = {
     PINGS_OFF_TAKES_KEY: (
         True,
         "true — the default — makes switching pings_mode off take back every ping role Black "
         "Bloc itself put on a member, after staff confirm the count; false switches pings off "
         "and leaves every role where it is",
-    ),
-    ROLEMENU_OFF_TAKES_KEY: (
-        True,
-        "true — the default — makes switching rolemenu_mode off take back every menu role a "
-        "member picked or had approved, after staff confirm the count; false switches role "
-        "menus off and leaves every role where it is",
     ),
 }
 SMALL_FIXES_DEFAULTS.update({key: default for key, (default, _) in SMALL_FIXES_SWITCHES.items()})
@@ -12294,8 +12260,6 @@ class SettingsStore:
             return True
         if key == SPAWNED_STAFF_REACH:
             return SPAWNED_STAFF_REACH_DEFAULT
-        if key == "rolemenu_mode":
-            return "off"
         if key == "request_mode":
             return "on"
         if key == "request_who_can_file":

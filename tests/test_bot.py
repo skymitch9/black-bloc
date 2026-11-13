@@ -341,24 +341,21 @@ async def test_a_features_logs_is_staff_only_wherever_the_panel_button_reaches_i
     assert require_staff.__name__ in called_names(send_logs)
 
 
-async def test_on_ready_reconciles_the_role_menu_panels_and_runs_the_self_test(monkeypatch):
-    """A restart mid-flip converges, and the deploy proves itself — the two things
-    `on_ready` does beyond logging, in that order."""
+async def test_on_ready_runs_the_self_test_and_no_longer_touches_role_menu_panels(monkeypatch):
+    """The deploy proves itself; since request #17 retired self-pick, nothing on boot takes a
+    posted role menu panel down or puts one up."""
     seen = []
-
-    async def fake_panels(bot):
-        seen.append(("panels", bot))
 
     async def fake_selftest(bot):
         seen.append(("selftest", bot))
 
-    monkeypatch.setattr(bot_module, "panels_on_boot", fake_panels)
     monkeypatch.setattr(bot_module, "selftest_on_boot", fake_selftest)
     stand_in = SimpleNamespace(user=SimpleNamespace(id=1), guilds=[])
 
     await BlackBlocBot.on_ready(stand_in)
 
-    assert seen == [("panels", stand_in), ("selftest", stand_in)]
+    assert seen == [("selftest", stand_in)]
+    assert not hasattr(bot_module, "panels_on_boot")
 
 
 async def test_dispatch_marks_an_orphaned_click_before_any_handler_is_scheduled(settings):

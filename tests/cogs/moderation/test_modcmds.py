@@ -1036,11 +1036,7 @@ async def test_the_panel_says_the_database_is_down_rather_than_drawing_a_dead_on
 GRANTS_TITLE = "Timed roles running right now"
 
 
-@pytest.mark.parametrize("mode", ["off", "on"])
-async def test_role_grants_opens_the_grants_console_whatever_the_role_menus_mode(
-    cog, bot, lead, target, db, mode
-):
-    await bot.store.set(GUILD, "rolemenu_mode", mode)
+async def test_role_grants_opens_the_grants_console(cog, bot, lead, target, db):
     bot.guild.roles.append(FakeRole(777))
     await rolegrants.add_grant(
         db, GUILD, target.id, 777, rolegrants.MANUAL, granted_by=lead.id,

@@ -3,7 +3,6 @@ import json
 import pytest
 
 from black_bloc import handed_roles
-from black_bloc import rolegrants as grants
 from black_bloc.actionlog import log_action
 from black_bloc.cogs.community.role_menus import add_option, create_menu
 from black_bloc.config import load_settings
@@ -85,7 +84,6 @@ async def bot(db, monkeypatch):
     store = SettingsStore(db, load_settings(_env_file=None))
     await store.load()
     await store.set(GUILD, "pings_mode", "on")
-    await store.set(GUILD, "rolemenu_mode", "on")
     return FakeBot(db, store, FakeGuild())
 
 
@@ -137,44 +135,18 @@ async def test_the_pings_dry_run_counts_only_roles_pings_put_on_and_still_worn(b
     assert said.startswith("**2** members hold ping roles Black Bloc handed out")
 
 
-async def test_the_role_menu_dry_run_reads_member_picks_and_never_staff_hand_or_application_ones(
-    bot,
-):
-    await menu_with(bot, MENU_ROLE, APPLICATION_ROLE)
-    picked = FakeMember(bot.guild, 1, roles=(MENU_ROLE,))
-    approved = FakeMember(bot.guild, 2, roles=(MENU_ROLE,))
-    by_hand = FakeMember(bot.guild, 3, roles=(MENU_ROLE,))
-    applied = FakeMember(bot.guild, 4, roles=(APPLICATION_ROLE,))
-    off_menu = FakeMember(bot.guild, 5, roles=(OTHER_ROLE,))
-    ended = FakeMember(bot.guild, 6, roles=(MENU_ROLE,))
-    await grants.add_grant(bot.db, GUILD, picked.id, MENU_ROLE, grants.MENU)
-    await grants.add_grant(bot.db, GUILD, approved.id, MENU_ROLE, grants.APPROVAL)
-    await grants.add_grant(bot.db, GUILD, by_hand.id, MENU_ROLE, grants.MANUAL)
-    applied_grant = await grants.add_grant(
-        bot.db, GUILD, applied.id, APPLICATION_ROLE, grants.APPROVAL
-    )
-    await bot.db.conn.execute(
-        "INSERT INTO applications(guild_id, form_id, user_id, answers, status, submitted_at, "
-        "grant_id) VALUES (?, 1, ?, '{}', 'approved', ?, ?)",
-        (GUILD, applied.id, AT, applied_grant),
-    )
-    await bot.db.conn.commit()
-    await grants.add_grant(bot.db, GUILD, off_menu.id, OTHER_ROLE, grants.MENU)
-    staffed = FakeMember(bot.guild, 7, roles=(MENU_ROLE,))
-    await grants.add_grant(bot.db, GUILD, staffed.id, MENU_ROLE, grants.STAFF)
-    closed = await grants.add_grant(bot.db, GUILD, ended.id, MENU_ROLE, grants.MENU)
-    await grants.end_grant(bot.db, closed, grants.GIVEN_UP)
-
-    found = await handed_roles.held(bot, bot.guild, "rolemenu_mode")
-
-    assert [(one.user_id, one.told) for one in found] == [(1, False), (2, True)]
+async def test_role_menus_have_no_switch_to_take_roles_back_any_more(bot):
+    """Request #17: member self-pick is retired with `rolemenu_mode`; a menu's own end is how
+    its roles come off now, so only pings keep a take-back."""
+    assert handed_roles.KEYS == ("pings_mode",)
+    assert await handed_roles.held(bot, bot.guild, "rolemenu_mode") == []
+    assert await handed_roles.asked(bot, bot.guild, "rolemenu_mode", "off") is None
 
 
 async def test_nothing_held_asks_nothing_and_on_never_asks(bot):
     FakeMember(bot.guild, 1, roles=(FAN_ROLE,))
     await pinged(bot, "pings.follow", 1, FAN_ROLE)
 
-    assert await handed_roles.asked(bot, bot.guild, "rolemenu_mode", "off") is None
     assert await handed_roles.asked(bot, bot.guild, "pings_mode", "on") is None
     assert await handed_roles.asked(bot, bot.guild, "golive_mode", "off") is None
 
@@ -206,27 +178,6 @@ async def test_switching_pings_off_takes_back_its_roles_once_with_one_log_row_an
     assert await handed_roles.held(bot, bot.guild, "pings_mode") == [], (
         "worn again from elsewhere after the take-back, it is no longer pings' to take"
     )
-
-
-async def test_switching_role_menus_off_ends_the_grants_and_dms_only_the_approved(bot):
-    handed_roles.install(bot)
-    await menu_with(bot, MENU_ROLE)
-    picked = FakeMember(bot.guild, 1, roles=(MENU_ROLE,))
-    approved = FakeMember(bot.guild, 2, roles=(MENU_ROLE,))
-    await grants.add_grant(bot.db, GUILD, picked.id, MENU_ROLE, grants.MENU)
-    await grants.add_grant(bot.db, GUILD, approved.id, MENU_ROLE, grants.APPROVAL)
-
-    await bot.store.set(GUILD, "rolemenu_mode", "off", by=99)
-
-    assert not picked.wears(MENU_ROLE) and not approved.wears(MENU_ROLE)
-    assert picked.dms == []
-    assert approved.dms == [
-        f"Role menus were switched off in **Black in a Flash!**, so **label-{MENU_ROLE}** was "
-        "taken back. Nothing else changed."
-    ]
-    assert await grants.open_grants(bot.db, GUILD) == []
-    [row] = await taken_rows(bot, "role_menu.roles_taken_back")
-    assert (row["members"], row["dms"]) == (2, 1)
 
 
 async def test_a_role_discord_refuses_to_remove_is_counted_failed_and_stays_on_the_ledger(bot):

@@ -466,11 +466,7 @@ export const LABELS = {
   birthday_not_shared_said: 'What a member sees looking up someone who opted out',
   pings_off_confirm_said: 'What staff are asked before pings go off',
   pings_off_confirm_button: 'The button that switches pings off',
-  rolemenu_off_confirm_said: 'What staff are asked before role menus go off',
-  rolemenu_off_confirm_button: 'The button that switches role menus off',
-  rolemenu_off_dm: 'The DM when role menus go off and an approved role is taken back',
   pings_off_takes_roles_back: 'Whether switching pings off takes back the ping roles',
-  rolemenu_off_takes_roles_back: 'Whether switching role menus off takes back the picked roles',
   rolemenu_end_buffer_days: 'Days after a marathon before its menu’s roles come off',
   rolemenu_end_moved_minutes: 'How far a menu’s end moves before staff are told',
   rolemenu_end_moved_notice: 'Whether staff hear when a menu’s end moves',
@@ -1192,7 +1188,6 @@ export const LABELS = {
 
   rolemenu_approval_channel_id: 'Where a role request card is posted',
   rolemenu_approver_role_id: 'Who may say yes to a role request',
-  rolemenu_mode: 'Whether role menus are on',
   rolemenu_log_level: 'How much of role menus is repeated into Discord',
 
   chat_mode: 'Whether the bot talks back',

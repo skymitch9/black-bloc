@@ -124,6 +124,19 @@ def _health(cog: Any, name: str) -> tuple[Any, Any]:
     return (last_ok_at, last_error)
 
 
+def _counts(cog: Any, name: str) -> str | None:
+    """A cog may say what its loop's last tick did in numbers; none is the usual answer."""
+    reader = getattr(cog, "loop_counts", None)
+    if not callable(reader):
+        return None
+    try:
+        found = reader(name)
+    except Exception as exc:
+        log.warning("status: %s could not report loop counts - %s", type(cog).__name__, exc)
+        return None
+    return str(found) if found else None
+
+
 def _loops(cog: Any) -> list[tuple[str, Any]]:
     """Every `tasks.Loop` a cog holds, found by type — never by `dir()`, which fires properties."""
     names: dict[str, None] = {}
@@ -159,6 +172,7 @@ def loop_health(bot: Any) -> list[dict[str, Any]]:
                     "next_iteration": _iso(getattr(loop, "next_iteration", None)),
                     "last_ok_at": _iso(last_ok_at),
                     "last_error": str(last_error) if last_error else None,
+                    "counts": _counts(cog, name),
                 }
             )
     return found

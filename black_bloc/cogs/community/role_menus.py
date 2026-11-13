@@ -11,9 +11,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ... import handed_roles
 from ... import rolegrants as grants
 from ... import rolemenus as menus
+from ... import timezones
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
@@ -48,7 +48,9 @@ from ...settings_store import (
     ROLEMENU_ENDED_DM_KEY,
     ROLEMENU_ENDED_NOTICE_KEY,
     ROLEMENU_ENDED_TEXT_KEY,
+    ROLEMENU_PICKING_RETIRED_KEY,
     ROLEMENU_PUSH_BACK_REFUSED_KEY,
+    ROLEMENU_RETIRED_KEY,
     require_staff,
 )
 
@@ -142,10 +144,6 @@ SEED: tuple[tuple[str, str, str, tuple[tuple[str, str, int], ...]], ...] = (
     ),
 )
 
-ROLE_MENUS_OFF = (
-    "Role menus are turned off right now, so nothing was changed. A Lead can turn them back on "
-    "from the dashboard's Role menus tab, or with `/settings` ▸ **Turn a feature back on…**."
-)
 MODE_ON = (
     "Every menu that has a channel is posted there again in a few seconds. `/rolemenu` stays "
     "where it is either way."
@@ -297,7 +295,13 @@ def check_option_count(count: int) -> int:
 
 
 def picking_is_on(bot: Any, guild_id: int) -> bool:
-    return bot.store.get(guild_id, MODE_KEY) == "on"
+    """Retired 2026-11-13 (request #17): members pick roles in Discord's Channels & Roles."""
+    _ = (bot, guild_id)
+    return False
+
+
+def custom_id_template() -> str:
+    return r"rolemenu:(?P<menu_id>[0-9]+)"
 
 
 def custom_id(menu_id: int) -> str:
@@ -1266,26 +1270,13 @@ class RequestButton(
         return cls(int(match["request_id"]), match["action"])
 
     async def on_click(self, interaction: discord.Interaction) -> None:
-        row = await request_context(interaction, self.request_id)
-        if row is None:
-            return
-        if row["status"] != grants.PENDING:
-            await interaction.response.send_message(
-                grants.ALREADY_DECIDED.format(status=row["status"]), ephemeral=True
-            )
-            return
-        if self.action == "deny":
-            await interaction.response.send_modal(RequestDenyModal(self.request_id))
-            return
-        menu = await get_menu_by_id(interaction.client.db, row["menu_id"])
-        days = expires_days_of(menu)
-        if days:
-            await interaction.response.send_modal(
-                RequestApproveModal(self.request_id, days)
-            )
-            return
-        await interaction.response.defer(ephemeral=True)
-        await decide_from_click(interaction, self.request_id, grants.APPROVED)
+        bot = interaction.client
+        guild_id = interaction.guild.id if interaction.guild is not None else None
+        await interaction.response.send_message(
+            menus.said(bot.store, guild_id, ROLEMENU_RETIRED_KEY),
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
 
 class RoleMenuSelect(discord.ui.Select):
@@ -1309,59 +1300,7 @@ class RoleMenuSelect(discord.ui.Select):
         self.labels = {row["role_id"]: row["label"] for row in options}
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        bot = interaction.client
-        guard = getattr(bot, "guard", None)
-        if guard is not None and not guard.allows_channel(interaction.channel_id):
-            await interaction.response.send_message(guard.refusal_message(), ephemeral=True)
-            return
-        member = interaction.user
-        guild = interaction.guild
-        if guild is None or not isinstance(member, discord.Member):
-            await interaction.response.send_message(NOT_IN_GUILD, ephemeral=True)
-            return
-        if not picking_is_on(bot, guild.id):
-            await interaction.response.send_message(ROLE_MENUS_OFF, ephemeral=True)
-            return
-        if not bot.db.is_connected:
-            await interaction.response.send_message(DB_UNAVAILABLE, ephemeral=True)
-            return
-        menu = await get_menu_by_id(bot.db, self.menu_id)
-        if menu is None:
-            await interaction.response.send_message(MENU_IS_GONE, ephemeral=True)
-            return
-        if needs_approval(menu):
-            await self.ask_staff(interaction, bot, guild, member, menu)
-            return
-        to_add, to_remove = role_diff(
-            (role.id for role in member.roles), self.role_ids, (int(v) for v in self.values)
-        )
-        if not to_add and not to_remove:
-            await interaction.response.send_message(summary([], []), ephemeral=True)
-            return
-        if not await change_roles(bot, member, guild, to_add, to_remove, "Black Bloc role menu"):
-            await interaction.response.send_message(CANNOT_EDIT_ROLES, ephemeral=True)
-            return
-        added = [self.labels.get(i, str(i)) for i in to_add]
-        removed = [self.labels.get(i, str(i)) for i in to_remove]
-        await interaction.response.send_message(summary(added, removed), ephemeral=True)
-        await grants.record_added(
-            bot.db,
-            guild.id,
-            member.id,
-            to_add,
-            grants.MENU,
-            granted_by=member.id,
-            until=grants.expires_at(expires_days_of(menu)),
-        )
-        await grants.record_removed(bot.db, guild.id, member.id, to_remove, grants.GIVEN_UP)
-        await log_action(
-            bot,
-            guild,
-            "role_menu.update",
-            actor=member,
-            target=member,
-            details={"menu_id": self.menu_id, "added": added, "removed": removed},
-        )
+        await answer_retired_pick(interaction)
 
     async def ask_staff(
         self, interaction: discord.Interaction, bot: Any, guild: Any, member: Any, menu: Any
@@ -1402,6 +1341,36 @@ class RoleMenuSelect(discord.ui.Select):
             details={"menu_id": self.menu_id, "added": [], "removed": removed},
         )
         return summary([], removed)
+
+
+async def answer_retired_pick(interaction: discord.Interaction) -> None:
+    guild = interaction.guild
+    bot = interaction.client
+    text = (
+        menus.said(bot.store, guild.id, ROLEMENU_PICKING_RETIRED_KEY)
+        if guild is not None
+        else str(bot.store.default(ROLEMENU_PICKING_RETIRED_KEY))
+    )
+    await interaction.response.send_message(
+        text, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+class RetiredMenuPick(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Select], template=custom_id_template()
+):
+    """A panel posted before member self-pick was retired: it answers, and changes nothing."""
+
+    def __init__(self, menu_id: int) -> None:
+        self.menu_id = menu_id
+        super().__init__(discord.ui.Select(custom_id=custom_id(menu_id), min_values=0))
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
+        return cls(int(match["menu_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        await answer_retired_pick(interaction)
 
 
 class RoleMenuView(discord.ui.View):
@@ -1656,18 +1625,6 @@ async def seed_menus(
     return created, skipped
 
 
-async def set_mode(bot: Any, guild: Any, actor: Any, value: Any, *, via: str = VIA_DISCORD) -> str:
-    await bot.store.set(guild.id, MODE_KEY, value, by=actor_id(actor))
-    await log_action(
-        bot,
-        guild,
-        kind_via("role_menu.mode", via),
-        actor=actor,
-        details={"mode": value, "via": via},
-    )
-    return MODE_ON if value == "on" else MODE_OFF
-
-
 async def grant_role(
     bot: Any,
     guild: Any,
@@ -1817,6 +1774,28 @@ async def menu_ends_by_role(db: Any, guild_id: int) -> dict[int, str]:
         held = parse_ts(found.get(role_id))
         if held is None or when < held:
             found[role_id] = menus.utc_iso(when)
+    return found
+
+
+async def menu_ends_named(db: Any, guild_id: Any) -> dict[int, dict[str, str]]:
+    """Each role's soonest unfinished menu end with that menu's name; the Members chips' source."""
+    if db is None or not getattr(db, "is_connected", False):
+        return {}
+    cur = await db.conn.execute(
+        "SELECT o.role_id, m.ends_at, m.name FROM role_menus m JOIN role_menu_options o "
+        "ON o.menu_id = m.id WHERE m.guild_id = ? AND m.ends_at IS NOT NULL "
+        "AND m.ended_at IS NULL ORDER BY m.id",
+        (int(guild_id),),
+    )
+    found: dict[int, dict[str, str]] = {}
+    for row in await cur.fetchall():
+        when = parse_ts(row["ends_at"])
+        if when is None:
+            continue
+        role_id = int(row["role_id"])
+        held = parse_ts((found.get(role_id) or {}).get("ends_at"))
+        if held is None or when < held:
+            found[role_id] = {"ends_at": menus.utc_iso(when), "menu": str(row["name"])}
     return found
 
 
@@ -2392,23 +2371,14 @@ STYLES = {
 
 ROOT = "root"
 MENU_VIEW = "menu"
-WHERE_VIEW = "where"
 ADD_VIEW = "add"
 HAND_VIEW = "hand"
 GRANTS_VIEW = "grants"
 NEW_GRANT_VIEW = "new_grant"
 GRANT_VIEW = "grant"
-REQUESTS_VIEW = "requests"
-REQUEST_VIEW = "request"
+SET_END_VIEW = "set_end"
 
 SITE_BUTTON = "Open on the site"
-WHERE_TITLE = "Where should {name} go?"
-WHERE_PICK = "A channel…"
-WHERE_DEFAULT = "The role menu channel is {where}, so leave it there or pick another."
-WHERE_NOWHERE = (
-    "No role menu channel is set, so pick one here. `/settings` ▸ **Roles & channels…** "
-    "chooses the one Black Bloc offers next time."
-)
 ROLE_ADD_LINE = "Picked: <@&{role_id}>. Name it after the role itself, or give it your own words."
 ROLE_ADD_NOTHING = "Pick the role first — Black Bloc only offers roles it can hand out."
 HAND_LINE = "Picking here changes **{name}**'s roles at once, test mode or not."
@@ -2424,64 +2394,169 @@ MENU_GONE = (
     "This server has no role menu called **{name}** any more, so nothing was changed. Press "
     "**Refresh** and pick again."
 )
-REQUEST_GONE = (
-    "Black Bloc has no record of that request any more, so nothing was changed. Press "
-    "**Refresh** and pick again."
-)
 NAME_TAKEN = (
     "This server already has a role menu called **{name}**, so nothing was created. Pick "
     "another name."
 )
-MENU_MADE = "Created **{name}** ({mode}). **Add a role…** puts the first role on it."
+MENU_MADE = "Created **{name}**. **Add a role…** puts the first role on it."
 MENU_SAVED = "**{name}** is saved."
 OPTION_ADDED = "**{label}** is on **{name}**."
 OPTION_GONE = "**{label}** is off **{name}**. Nobody loses the role they already have."
 OPTION_WAS_NOT_ON = (
     "That role was not on **{name}**, so nothing changed. Press **Refresh** and look again."
 )
-MENU_DELETED = (
-    "Deleted **{name}**. Nobody loses a role they already have, and any panel already posted "
-    "stops working — delete that message by hand."
-)
-POSTED_SAID = "**{name}** is live in {where}. {link}"
-BAD_MODE = (
-    "**{given}** is not a way a role menu can work, so nothing was changed. Type one of "
-    "{modes} — multiple lets people pick several, single allows one, staff hands them out."
-)
+MENU_DELETED = "Deleted **{name}**. Nobody loses a role they already have."
 BAD_NUMBER = (
     "**{given}** is not a whole number of days, so nothing was changed. Type a number, or 0."
 )
-CANNOT_HAND_OUT = (
-    "Black Bloc cannot hand out **{name}**, so it was not added. That role is either above "
-    "Black Bloc's own role in Server Settings → Roles, or managed by another app, or Black Bloc "
-    "is missing the Manage Roles permission. Ask an admin to move Black Bloc's role above it, "
-    "then try again."
-)
-REPOST_TROUBLE = (
-    " The posted panel could not be refreshed, so press **Move it…** when you want it to catch up."
-)
+LOOP_COUNTS = "menus due {due} · ended {ended} · failures {failures}"
 
 NEW_MENU_TITLE = "A new role menu"
 WORDS_TITLE = "What this menu says"
-RULES_TITLE = "How this menu behaves"
 OPTION_TITLE = "How this role reads"
 DAYS_TITLE = "How long for?"
 PUSH_TITLE = "Push the end date back"
 
 NAME_LABEL = "Short name, the one you will pick it by"
-HEADING_LABEL = "Heading shown on the panel"
+HEADING_LABEL = "Heading on its card"
 DESCRIPTION_LABEL = "Optional line under the heading"
-MODE_LABEL = "multiple, single or staff"
 LABEL_LABEL = "What the option says"
 EMOJI_LABEL = "Optional emoji beside it"
-EXPIRES_LABEL = "Days a role from this menu lasts, 0 for never"
-RETRY_LABEL = "Days a member waits after a no"
 DAYS_LABEL = "Days, or 0 for a role that never runs out"
 PUSH_LABEL = "Days to add"
+
+MODAL_WORD_MAX = 45
+PLACEHOLDER_MAX = 100
+SELECT_PLACEHOLDER_MAX = 150
+BUTTON_MAX = 80
+DATE_TYPED_MAX = 16
+BUFFER_TYPED_MAX = 3
+DATE_SHOWN = "%Y-%m-%d"
+MOMENT_SHOWN = "%Y-%m-%d %H:%M"
+END_WORD_KEYS = {
+    menus.SET_END: "rolemenu_set_end_button",
+    menus.END_MENU: "rolemenu_end_now_button",
+    menus.USE_HELD: "rolemenu_use_held_button",
+    menus.TYPE_DATE: "rolemenu_type_date_button",
+    menus.BUFFER: "rolemenu_buffer_button",
+    menus.NO_END_MOVE_ACTION: "rolemenu_no_end_button",
+}
 
 
 def minutes_for(bot: Any, guild_id: int) -> int:
     return menus.panel_minutes(bot.store, guild_id)
+
+
+def word(bot: Any, guild_id: int, key: str, limit: int | None = None, **fields: Any) -> str:
+    """A staff-editable word, filled; Discord's own cap cuts it where a modal or button would."""
+    text = menus.said(bot.store, guild_id, key, **fields)
+    return text[:limit] if limit else text
+
+
+def end_moves(bot: Any, guild_id: int) -> dict[str, str]:
+    return {action: word(bot, guild_id, key, BUTTON_MAX) for action, key in END_WORD_KEYS.items()}
+
+
+def local_moment(bot: Any, guild_id: int, at: Any, shape: str = MOMENT_SHOWN) -> str:
+    """A moment in the server's own zone, for places a Discord timestamp cannot render."""
+    when = parse_ts(at)
+    if when is None:
+        return str(bot.store.get(guild_id, ROLEMENU_END_NOT_KNOWN_KEY))
+    zone = timezones.zone(bot.store.get(guild_id, "default_timezone")) or timezones.zone("UTC")
+    return when.astimezone(zone).strftime(shape)
+
+
+def discord_moment(style: str) -> Any:
+    return lambda bot, guild_id, at: grants.stamp(at, style)
+
+
+def end_label(
+    bot: Any, guild_id: int, menu: Any, marathon_name: Any, when: Any = None
+) -> str:
+    """One menu's end in words: none, a date, or a marathon plus its buffer."""
+    shown = when or discord_moment("D")
+    source = menus.end_source(menu)
+    if source == menus.NO_END:
+        return word(bot, guild_id, "rolemenu_no_end_text")
+    at = menu_value(menu, "ends_at")
+    moment = (
+        shown(bot, guild_id, at)
+        if parse_ts(at) is not None
+        else str(bot.store.get(guild_id, ROLEMENU_END_NOT_KNOWN_KEY))
+    )
+    if source == menus.MARATHON_END:
+        return word(
+            bot,
+            guild_id,
+            "rolemenu_end_marathon_text",
+            when=moment,
+            marathon=marathon_name or "?",
+            buffer=menus.buffer_of(menu, default_buffer(bot, guild_id)),
+        )
+    return word(bot, guild_id, "rolemenu_end_date_text", when=moment)
+
+
+async def marathon_name_of(bot: Any, guild_id: int, menu: Any) -> Any:
+    if menus.end_source(menu) != menus.MARATHON_END:
+        return None
+    found = await marathon_row(bot.db, guild_id, menu_value(menu, "ends_marathon_id"))
+    return found["name"] if found is not None else None
+
+
+def wearing_count(bot: Any, guild_id: int, members: Any, role_ids: Any) -> Any:
+    if members is None:
+        return word(bot, guild_id, "rolemenu_wearing_unknown_text")
+    return len(menus.wearers(members, role_ids))
+
+
+def failure_count(menu: Any) -> int:
+    try:
+        found = json.loads(menu_value(menu, "end_failures") or "[]")
+    except (TypeError, ValueError):
+        return 0
+    return len(found) if isinstance(found, list) else 0
+
+
+async def bindable_marathons(db: Any, guild_id: int, *, at: datetime | None = None) -> list[Any]:
+    """Every marathon on the list (archived ones live elsewhere), still to end first."""
+    cur = await db.conn.execute(
+        "SELECT id, name, ends_at FROM marathons WHERE guild_id = ?", (int(guild_id),)
+    )
+    now = at or datetime.now(UTC)
+    rows = list(await cur.fetchall())
+
+    def order(row: Any) -> tuple[int, str, int]:
+        end = parse_ts(row["ends_at"])
+        if end is None:
+            return (1, "", int(row["id"]))
+        return (0 if end >= now else 2, end.astimezone(UTC).isoformat(), int(row["id"]))
+
+    return sorted(rows, key=order)
+
+
+async def delete_refusal(bot: Any, guild: Any, menu: Any, when: Any = None) -> str | None:
+    """A menu whose end is still to come keeps its roles' end: it is not deleted while anybody
+    wears them, and the sentence says what to press instead."""
+    if menu is None or menu_value(menu, "ended_at"):
+        return None
+    end = parse_ts(menu_value(menu, "ends_at"))
+    if end is None or end <= datetime.now(UTC):
+        return None
+    members = await members_of(guild)
+    count = wearing_count(
+        bot, guild.id, members, await menu_role_ids(bot.db, menu["id"])
+    )
+    if count == 0:
+        return None
+    shown = when or discord_moment("F")
+    return word(
+        bot,
+        guild.id,
+        "rolemenu_delete_refused_said",
+        menu=menu["name"],
+        when=shown(bot, guild.id, menu["ends_at"]),
+        members=count,
+    )
 
 
 def add_site_button(view: Any, bot: Any, row: int) -> None:
@@ -2492,13 +2567,6 @@ def add_site_button(view: Any, bot: Any, row: int) -> None:
     view.add_item(
         discord.ui.Button(style=discord.ButtonStyle.link, label=SITE_BUTTON, url=url, row=row)
     )
-
-
-def default_channel(interaction: discord.Interaction) -> Any:
-    configured = interaction.client.store.get(interaction.guild.id, "role_menu_channel_id")
-    if configured:
-        return interaction.guild.get_channel(configured)
-    return interaction.channel
 
 
 def who_is(guild: Any, user_id: Any) -> str:
@@ -2516,40 +2584,97 @@ class RoleMenuPanel(Panel):
         self.where = ROOT
         self.menu_name = ""
         self.grant_id: int | None = None
-        self.request_id: int | None = None
         self.member_id: int | None = None
         self.role_id: int | None = None
         self.removing: bool | None = None
         self.home: Any = None
 
 
-async def option_counts(db: Any, rows: Any) -> dict[int, int]:
-    return {menu["id"]: len(await get_options(db, menu["id"])) for menu in rows}
+async def root_line(bot: Any, guild: Any, menu: Any, members: Any) -> str:
+    role_ids = await menu_role_ids(bot.db, menu["id"])
+    return word(
+        bot,
+        guild.id,
+        "rolemenu_root_line",
+        name=menu["name"],
+        roles=len(role_ids),
+        wearing=wearing_count(bot, guild.id, members, role_ids),
+        end=end_label(bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu)),
+    )
 
 
 async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, RoleMenuPanel]:
-    """One command, one staff panel — every path here was `require_staff` before it was a panel."""
+    """One command, one staff panel: every menu with its roles, who wears them, and its end."""
     rows = await list_menus(bot.db, guild.id)
-    picking = picking_is_on(bot, guild.id)
-    waiting = await grants.requests_by_status(bot.db, guild.id, (grants.PENDING,))
-    lines = (
-        menus.list_lines(rows, await option_counts(bot.db, rows))
-        if rows
-        else [menus.NO_MENUS_LINE]
-    )
-    if not picking:
-        lines.append(menus.PICKING_IS_OFF)
+    members = await members_of(guild) if rows else []
+    lines = [await root_line(bot, guild, menu, members) for menu in rows] or [
+        menus.NO_MENUS_LINE
+    ]
     embed = discord.Embed(title=menus.PANEL_TITLE, description=clamped(lines))
     view = RoleMenuPanel(minutes_for(bot, guild.id))
     if rows:
         view.add_item(MenuPick(rows, row=0))
-    for move in menus.root_buttons(
-        has_menus=bool(rows), picking_on=picking, pending=len(waiting)
-    ):
+    for move in menus.root_buttons():
         view.add_item(MoveButton(move))
     add_site_button(view, bot, row=2)
     _ = actor
     return (embed, view)
+
+
+async def card_lines(bot: Any, guild: Any, menu: Any, options: Any) -> list[str]:
+    members = await members_of(guild)
+    lines = [menus.menu_heading(menu)]
+    for row in options:
+        lines.append(
+            word(
+                bot,
+                guild.id,
+                "rolemenu_role_line",
+                label=row["label"],
+                role_id=row["role_id"],
+                wearing=wearing_count(bot, guild.id, members, [row["role_id"]]),
+            )
+        )
+    if not options:
+        lines.append(menus.NO_ROLES_YET)
+    lines.append(
+        end_label(
+            bot,
+            guild.id,
+            menu,
+            await marathon_name_of(bot, guild.id, menu),
+            discord_moment("F"),
+        )
+    )
+    if menu_value(menu, "ends_set_by"):
+        lines.append(
+            word(
+                bot,
+                guild.id,
+                "rolemenu_end_set_by_line",
+                who=f"<@{menu['ends_set_by']}>",
+                when=grants.stamp(menu_value(menu, "ends_set_at"), "R"),
+            )
+        )
+    if menu_value(menu, "ended_at"):
+        lines.append(
+            word(
+                bot,
+                guild.id,
+                "rolemenu_ended_line",
+                when=grants.stamp(menu["ended_at"], "D"),
+                members=int(menu_value(menu, "end_members", 0)),
+                failures=failure_count(menu),
+            )
+        )
+    held = menu_value(menu, "ends_held_at")
+    if held:
+        lines.append(
+            word(bot, guild.id, "rolemenu_end_held_line", to=grants.stamp(held, "F"))
+        )
+    if len(options) >= OPTIONS_MAX:
+        lines.append(menus.OPTIONS_ARE_FULL.format(limit=OPTIONS_MAX))
+    return lines
 
 
 async def build_menu(
@@ -2559,14 +2684,9 @@ async def build_menu(
     if menu is None:
         return (None, None)
     options = await get_options(bot.db, menu["id"])
-    picking = picking_is_on(bot, guild.id)
-    lines = menus.menu_lines(menu, options, note=panel_note(menu))
-    if len(options) >= OPTIONS_MAX:
-        lines.append(menus.OPTIONS_ARE_FULL.format(limit=OPTIONS_MAX))
-    if not picking:
-        lines.append(menus.PICKING_IS_OFF)
     embed = discord.Embed(
-        title=menus.MENU_TITLE.format(name=menu["name"]), description=clamped(lines)
+        title=menus.MENU_TITLE.format(name=menu["name"]),
+        description=clamped(await card_lines(bot, guild, menu, options)),
     )
     view = RoleMenuPanel(minutes_for(bot, guild.id))
     view.where = MENU_VIEW
@@ -2574,28 +2694,38 @@ async def build_menu(
     if options:
         view.add_item(OptionPick(options, row=0))
     for move in menus.menu_buttons(
-        posted=bool(menu["message_id"]),
         options=len(options),
-        menu_mode=str(menu["mode"]),
-        picking_on=picking,
-        approval=needs_approval(menu),
         options_max=OPTIONS_MAX,
+        held=bool(menu_value(menu, "ends_held_at")),
+        words=end_moves(bot, guild.id),
     ):
         view.add_item(MoveButton(move))
     return (embed, view)
 
 
-def build_where(
-    interaction: discord.Interaction, name: str
-) -> tuple[discord.Embed, RoleMenuPanel]:
-    home = default_channel(interaction)
-    line = WHERE_DEFAULT.format(where=home.mention) if home is not None else WHERE_NOWHERE
-    embed = discord.Embed(title=WHERE_TITLE.format(name=name), description=line)
-    view = RoleMenuPanel(minutes_for(interaction.client, interaction.guild.id))
-    view.where = WHERE_VIEW
-    view.menu_name = name
-    view.add_item(WherePick(row=0))
-    view.add_item(MoveButton(menus.BACK_MOVE._replace(row=1)))
+async def build_set_end(
+    bot: Any, guild: Any, name: str
+) -> tuple[discord.Embed | None, RoleMenuPanel | None]:
+    menu = await get_menu(bot.db, guild.id, name)
+    if menu is None:
+        return (None, None)
+    marathons = await bindable_marathons(bot.db, guild.id)
+    line = end_label(
+        bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu), discord_moment("F")
+    )
+    embed = discord.Embed(
+        title=word(bot, guild.id, "rolemenu_set_end_title", 256, name=menu["name"]),
+        description=line,
+    )
+    view = RoleMenuPanel(minutes_for(bot, guild.id))
+    view.where = SET_END_VIEW
+    view.menu_name = menu["name"]
+    if marathons:
+        view.add_item(MarathonPick(bot, guild.id, marathons, menu, row=0))
+    for move in menus.set_end_buttons(
+        source=menus.end_source(menu), words=end_moves(bot, guild.id)
+    ):
+        view.add_item(MoveButton(move))
     return (embed, view)
 
 
@@ -2645,16 +2775,37 @@ async def build_hand_out(
     return (embed, view)
 
 
+async def audit_rows(bot: Any, guild: Any, member_id: Any) -> tuple[list[Any], list[Any]]:
+    """(every line of the audit, the grant rows a card can open): a role on a menu with an end
+    is listed by who WEARS it, live, with the menu's end; any other role by its grant rows."""
+    wanted = int(member_id) if member_id else None
+    ends = await menu_ends_by_role(bot.db, guild.id)
+    rows = [
+        row
+        for row in await menus.active_grants(bot.db, guild.id, user_id=wanted)
+        if int(row["role_id"]) not in ends
+    ]
+    worn: list[Any] = []
+    if ends:
+        members = await members_of(guild) or list(getattr(guild, "members", ()) or ())
+        for member, role_ids in menus.wearers(members, list(ends)):
+            if wanted is not None and int(member.id) != wanted:
+                continue
+            for role_id in role_ids:
+                worn.append(
+                    {"user_id": int(member.id), "role_id": role_id, "expires_at": ends[role_id]}
+                )
+    return sorted([*rows, *worn], key=menus.grant_order), rows
+
+
 async def build_grants(
     bot: Any, guild: Any, member_id: Any
 ) -> tuple[discord.Embed, RoleMenuPanel]:
-    """The audit: every timed role running here, soonest to end first (design §I-amend)."""
-    rows = await menus.active_grants(
-        bot.db, guild.id, user_id=int(member_id) if member_id else None
-    )
+    """The audit: who loses which role and when, soonest first (design §3.1)."""
+    lines, rows = await audit_rows(bot, guild, member_id)
     embed = discord.Embed(
         title=menus.GRANTS_TITLE,
-        description=clamped(menus.grant_lines(rows, one_member=bool(member_id))),
+        description=clamped(menus.grant_lines(lines, one_member=bool(member_id))),
     )
     view = RoleMenuPanel(minutes_for(bot, guild.id))
     view.where = GRANTS_VIEW
@@ -2717,45 +2868,6 @@ async def build_grant(
     return (embed, view)
 
 
-async def build_requests(bot: Any, guild: Any) -> tuple[discord.Embed, RoleMenuPanel]:
-    rows = await grants.requests_by_status(bot.db, guild.id, (grants.PENDING,))
-    named = {menu["id"]: menu["name"] for menu in await list_menus(bot.db, guild.id)}
-    embed = discord.Embed(
-        title=menus.REQUESTS_TITLE,
-        description=menus.NO_REQUESTS if not rows else f"**{len(rows)}** waiting.",
-    )
-    view = RoleMenuPanel(minutes_for(bot, guild.id))
-    view.where = REQUESTS_VIEW
-    if rows:
-        view.add_item(RequestPick(rows, named, guild, row=0))
-    for move in menus.requests_list_buttons():
-        view.add_item(MoveButton(move))
-    return (embed, view)
-
-
-async def build_request(
-    bot: Any, guild: Any, request_id: Any
-) -> tuple[discord.Embed | None, RoleMenuPanel | None]:
-    row = await grants.get_request(bot.db, int(request_id)) if request_id else None
-    if row is None or row["guild_id"] != guild.id:
-        return (None, None)
-    menu = await get_menu_by_id(bot.db, row["menu_id"])
-    days = expires_days_of(menu)
-    label = await label_for(bot.db, guild, row["menu_id"], row["role_id"])
-    embed = request_card(
-        row,
-        label=label,
-        menu_name=menu["name"] if menu is not None else "a deleted menu",
-        days=days,
-    )
-    view = RoleMenuPanel(minutes_for(bot, guild.id))
-    view.where = REQUEST_VIEW
-    view.request_id = int(row["id"])
-    for move in menus.request_buttons(row["status"], timed=bool(days)):
-        view.add_item(MoveButton(move))
-    return (embed, view)
-
-
 def confirm_panel(bot: Any, guild: Any, previous: Any) -> RoleMenuPanel:
     """The confirm card keeps the place it was raised from, so the way back lands there."""
     view = RoleMenuPanel(minutes_for(bot, guild.id))
@@ -2785,6 +2897,17 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
 
 async def render_menu(interaction: discord.Interaction, name: str, previous: Any = None) -> None:
     embed, view = await build_menu(interaction.client, interaction.guild, name)
+    if view is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, MENU_GONE.format(name=name))
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def render_set_end(
+    interaction: discord.Interaction, name: str, previous: Any = None
+) -> None:
+    embed, view = await build_set_end(interaction.client, interaction.guild, name)
     if view is None:
         await render_panel(interaction, previous)
         await answer(interaction, MENU_GONE.format(name=name))
@@ -2841,22 +2964,6 @@ async def render_grant(
     await render(interaction, embed, view, previous)
 
 
-async def render_requests(interaction: discord.Interaction, previous: Any = None) -> None:
-    embed, view = await build_requests(interaction.client, interaction.guild)
-    await render(interaction, embed, view, previous)
-
-
-async def render_request(
-    interaction: discord.Interaction, request_id: Any, previous: Any = None
-) -> None:
-    embed, view = await build_request(interaction.client, interaction.guild, request_id)
-    if view is None:
-        await render_requests(interaction, previous)
-        await answer(interaction, REQUEST_GONE)
-        return
-    await render(interaction, embed, view, previous)
-
-
 async def guarded(interaction: discord.Interaction) -> bool:
     """`member.edit` is a side effect the HTTP guard cannot see, so the move asks it (item 1)."""
     guard = getattr(interaction.client, "guard", None)
@@ -2876,6 +2983,12 @@ async def open_menu(interaction: discord.Interaction, name: str, previous: Any =
     if not await opened(interaction):
         return
     await render_menu(interaction, name, previous)
+
+
+async def open_set_end(interaction: discord.Interaction, view: Any) -> None:
+    if not await opened(interaction):
+        return
+    await render_set_end(interaction, view.menu_name, view)
 
 
 async def open_add_role(interaction: discord.Interaction, view: Any) -> None:
@@ -2917,40 +3030,18 @@ async def open_grant(interaction: discord.Interaction, grant_id: Any, previous: 
     await render_grant(interaction, grant_id, previous)
 
 
-async def open_requests(interaction: discord.Interaction, previous: Any) -> None:
-    if not await opened(interaction):
-        return
-    await render_requests(interaction, previous)
-
-
-async def open_request(interaction: discord.Interaction, request_id: Any, previous: Any) -> None:
-    if not await opened(interaction):
-        return
-    await render_request(interaction, request_id, previous)
-
-
-async def open_where(interaction: discord.Interaction, view: Any) -> None:
-    if not await opened(interaction):
-        return
-    embed, fresh = build_where(interaction, view.menu_name)
-    await render(interaction, embed, fresh, view)
-
-
 async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
     if view.where == MENU_VIEW:
         await open_menu(interaction, view.menu_name, view)
+        return
+    if view.where == SET_END_VIEW:
+        await open_set_end(interaction, view)
         return
     if view.where == GRANTS_VIEW:
         await open_grants(interaction, view.member_id, view)
         return
     if view.where == GRANT_VIEW:
         await open_grant(interaction, view.grant_id, view)
-        return
-    if view.where == REQUESTS_VIEW:
-        await open_requests(interaction, view)
-        return
-    if view.where == REQUEST_VIEW:
-        await open_request(interaction, view.request_id, view)
         return
     if view.where == HAND_VIEW:
         await open_hand_out(interaction, view, view.removing)
@@ -2965,14 +3056,11 @@ async def back_from(interaction: discord.Interaction, view: Any) -> None:
     if view.where == GRANTS_VIEW and view.home is not None:
         await view.home(interaction, view)
         return
-    if view.where in (ADD_VIEW, HAND_VIEW, WHERE_VIEW):
+    if view.where in (ADD_VIEW, HAND_VIEW, SET_END_VIEW):
         await open_menu(interaction, view.menu_name, view)
         return
     if view.where in (GRANT_VIEW, NEW_GRANT_VIEW):
         await open_grants(interaction, view.member_id, view)
-        return
-    if view.where == REQUEST_VIEW:
-        await open_requests(interaction, view)
         return
     await open_root(interaction, view)
 
@@ -2980,36 +3068,36 @@ async def back_from(interaction: discord.Interaction, view: Any) -> None:
 # --- the moves, one function each ----------------------------------------------------------------
 
 
-async def repost_if_live(bot: Any, guild: Any, menu: Any) -> bool:
-    """F-R3(a): an edit that changes what the panel says edits the panel, never posts a second."""
-    if not menu["message_id"] or str(menu["mode"]) == STAFF_MODE:
-        return True
-    if not picking_is_on(bot, guild.id):
-        return True
-    options = await get_options(bot.db, menu["id"])
-    channel = bot.get_channel(menu["channel_id"]) if menu["channel_id"] else None
-    if not options or channel is None:
-        return True
-    guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_channel(channel.id):
-        return True
-    try:
-        await post_panel(bot, menu, options, channel)
-    except Exception as exc:
-        log.warning("role menus: %s's panel was not refreshed: %s", menu["name"], exc)
-        return False
-    return True
+async def menu_or_gone(interaction: discord.Interaction, previous: Any) -> Any:
+    """The menu this card is about, or None once the root is back up with the reason."""
+    name = previous.menu_name
+    menu = await get_menu(interaction.client.db, interaction.guild.id, name)
+    if menu is None:
+        await render_panel(interaction, previous)
+        await answer(interaction, MENU_GONE.format(name=name))
+    return menu
+
+
+async def said_end(interaction: discord.Interaction, menu: Any, end: Any) -> None:
+    bot, guild = interaction.client, interaction.guild
+    if menus.end_source(await get_menu_by_id(bot.db, menu["id"])) == menus.NO_END:
+        cleared = word(bot, guild.id, "rolemenu_end_cleared_said", menu=menu["name"])
+        await answer(interaction, cleared)
+        return
+    when = (
+        grants.stamp(end, "F")
+        if parse_ts(end) is not None
+        else str(bot.store.get(guild.id, ROLEMENU_END_NOT_KNOWN_KEY))
+    )
+    await answer(
+        interaction, word(bot, guild.id, "rolemenu_end_set_said", menu=menu["name"], when=when)
+    )
 
 
 async def run_new_menu(
     interaction: discord.Interaction, fields: dict[str, Any], previous: Any
 ) -> None:
     if not await opened(interaction):
-        return
-    mode = str(fields["mode"] or "").strip().lower() or "multiple"
-    if mode not in MODES:
-        await render_panel(interaction, previous)
-        await answer(interaction, BAD_MODE.format(given=mode[:40], modes=", ".join(MODES)))
         return
     name = str(fields["name"]).strip()
     try:
@@ -3020,7 +3108,7 @@ async def run_new_menu(
             name,
             str(fields["title"]).strip(),
             str(fields["description"]).strip() or None,
-            mode,
+            STAFF_MODE,
         )
     except MenuLimitError as exc:
         await render_panel(interaction, previous)
@@ -3031,7 +3119,7 @@ async def run_new_menu(
         await answer(interaction, NAME_TAKEN.format(name=name))
         return
     await render_menu(interaction, name, previous)
-    await answer(interaction, MENU_MADE.format(name=name, mode=mode))
+    await answer(interaction, MENU_MADE.format(name=name))
 
 
 async def run_change_menu(
@@ -3052,11 +3140,8 @@ async def run_change_menu(
         await render_panel(interaction, previous)
         await answer(interaction, MENU_GONE.format(name=name))
         return
-    refreshed = await repost_if_live(interaction.client, interaction.guild, menu)
     await render_menu(interaction, name, previous)
-    await answer(
-        interaction, MENU_SAVED.format(name=name) + ("" if refreshed else REPOST_TROUBLE)
-    )
+    await answer(interaction, MENU_SAVED.format(name=name))
 
 
 async def run_add_option(
@@ -3066,20 +3151,20 @@ async def run_add_option(
         return
     guild = interaction.guild
     name = previous.menu_name
-    menu = await get_menu(interaction.client.db, guild.id, name)
+    menu = await menu_or_gone(interaction, previous)
     if menu is None:
-        await render_panel(interaction, previous)
-        await answer(interaction, MENU_GONE.format(name=name))
         return
     role = guild.get_role(int(previous.role_id)) if previous.role_id else None
     if role is None:
         await render_add_role(interaction, name, None, previous)
         await answer(interaction, ROLE_ADD_NOTHING)
         return
-    assignable = getattr(role, "is_assignable", None)
-    if callable(assignable) and not assignable():
+    if not removable(guild, role.id):
         await render_add_role(interaction, name, role.id, previous)
-        await answer(interaction, CANNOT_HAND_OUT.format(name=role.name))
+        await answer(
+            interaction,
+            word(interaction.client, guild.id, "rolemenu_cannot_strip_said", name=role.name),
+        )
         return
     wanted = str(label or "").strip() or role.name
     try:
@@ -3096,7 +3181,6 @@ async def run_add_option(
         await render_add_role(interaction, name, role.id, previous)
         await answer(interaction, str(exc))
         return
-    await repost_if_live(interaction.client, guild, menu)
     await render_menu(interaction, name, previous)
     await answer(interaction, OPTION_ADDED.format(label=wanted, name=name))
 
@@ -3106,15 +3190,11 @@ async def run_drop_option(interaction: discord.Interaction, role_id: int, previo
         return
     guild = interaction.guild
     name = previous.menu_name
-    menu = await get_menu(interaction.client.db, guild.id, name)
+    menu = await menu_or_gone(interaction, previous)
     if menu is None:
-        await render_panel(interaction, previous)
-        await answer(interaction, MENU_GONE.format(name=name))
         return
     label = await label_for(interaction.client.db, guild, menu["id"], role_id)
     gone = await drop_option(interaction.client, guild, interaction.user, menu, role_id)
-    if gone:
-        await repost_if_live(interaction.client, guild, menu)
     await render_menu(interaction, name, previous)
     await answer(
         interaction,
@@ -3124,100 +3204,179 @@ async def run_drop_option(interaction: discord.Interaction, role_id: int, previo
     )
 
 
-async def run_post(interaction: discord.Interaction, channel: Any, previous: Any) -> None:
-    if not await opened(interaction):
-        return
-    guild = interaction.guild
-    bot = interaction.client
-    name = previous.menu_name
-    menu = await get_menu(bot.db, guild.id, name)
-    if menu is None:
-        await render_panel(interaction, previous)
-        await answer(interaction, MENU_GONE.format(name=name))
-        return
-    options = await get_options(bot.db, menu["id"])
-    if not picking_is_on(bot, guild.id) or not options or str(menu["mode"]) == STAFF_MODE:
-        await render_menu(interaction, name, previous)
-        await answer(interaction, ROLE_MENUS_OFF)
-        return
-    guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_channel(channel.id):
-        await render_menu(interaction, name, previous)
-        await answer(interaction, guard.refusal_message())
-        return
-    message = await post_menu(bot, guild, interaction.user, menu, options, channel)
-    await render_menu(interaction, name, previous)
-    await answer(
-        interaction,
-        POSTED_SAID.format(
-            name=name, where=getattr(channel, "mention", channel.id), link=message.jump_url
-        ),
-    )
-
-
-async def run_take_down(interaction: discord.Interaction, previous: Any) -> None:
-    from ... import rolemenu_panels as posts
-
-    if not await opened(interaction):
-        return
-    name = previous.menu_name
-    menu = await get_menu(interaction.client.db, interaction.guild.id, name)
-    if menu is None or not menu["message_id"]:
-        await render_menu(interaction, name, previous)
-        await answer(interaction, NOTHING_TO_UNPOST.format(name=name))
-        return
-    done = await posts.unpost(interaction.client, menu, interaction.user)
-    await render_menu(interaction, name, previous)
-    await answer(
-        interaction,
-        PANEL_TAKEN_DOWN.format(name=name) if done else PANEL_STUCK.format(name=name),
-    )
-
-
 async def run_delete_menu(interaction: discord.Interaction, previous: Any) -> None:
     if not await opened(interaction):
         return
+    bot, guild = interaction.client, interaction.guild
     name = previous.menu_name
-    gone = await drop_menu(interaction.client, interaction.guild, interaction.user, name)
+    refused = await delete_refusal(bot, guild, await get_menu(bot.db, guild.id, name))
+    if refused:
+        await render_menu(interaction, name, previous)
+        await answer(interaction, refused)
+        return
+    gone = await drop_menu(bot, guild, interaction.user, name)
     await render_panel(interaction, previous)
     await answer(
         interaction, MENU_DELETED.format(name=name) if gone else MENU_GONE.format(name=name)
     )
 
 
-async def run_mode(
-    interaction: discord.Interaction, previous: Any, *, confirmed: bool = False
+async def run_set_marathon(
+    interaction: discord.Interaction, marathon_id: int, previous: Any
 ) -> None:
     if not await opened(interaction):
         return
     bot, guild = interaction.client, interaction.guild
-    wanted = "off" if confirmed or picking_is_on(bot, guild.id) else "on"
-    asked = None if confirmed else await handed_roles.asked(bot, guild, MODE_KEY, wanted)
-    if asked is not None:
-        label = handed_roles.button_label(bot.store, guild.id, MODE_KEY)
-        moves = (
-            menus.PanelMove(menus.MODE_OFF_YES, label, "danger", 0),
-            menus.PanelMove(menus.LEAVE_IT, menus.LEAVE_IT_LABEL, "secondary", 0),
-        )
-        await confirm(
-            interaction,
-            confirm_panel(bot, interaction.guild, previous),
-            discord.Embed(title=menus.CONFIRM_TITLE, description=asked),
-            [MoveButton(move) for move in moves],
-            previous,
-        )
+    menu = await menu_or_gone(interaction, previous)
+    if menu is None:
         return
-    said = await set_mode(bot, interaction.guild, interaction.user, wanted)
-    await render_panel(interaction, previous)
-    await answer(interaction, f"Picking roles from the panels is now **{wanted}**. {said}")
+    if await marathon_row(bot.db, guild.id, marathon_id) is None:
+        await render_set_end(interaction, menu["name"], previous)
+        await answer(interaction, word(bot, guild.id, "rolemenu_end_no_marathon_said"))
+        return
+    following = menus.end_source(menu) == menus.MARATHON_END
+    keeps = menu_value(menu, "buffer_days") if following else None
+    end = await set_menu_end(
+        bot,
+        guild,
+        interaction.user,
+        menu,
+        source=menus.MARATHON_END,
+        marathon_id=marathon_id,
+        buffer_days=keeps,
+    )
+    await render_menu(interaction, menu["name"], previous)
+    await said_end(interaction, menu, end)
 
 
-async def run_seed(interaction: discord.Interaction, previous: Any) -> None:
+async def run_typed_end(interaction: discord.Interaction, typed: Any, previous: Any) -> None:
     if not await opened(interaction):
         return
-    created, skipped = await seed_menus(interaction.client, interaction.guild, interaction.user)
-    await render_panel(interaction, previous)
-    await answer(interaction, seed_summary(created, skipped))
+    bot, guild = interaction.client, interaction.guild
+    menu = await menu_or_gone(interaction, previous)
+    if menu is None:
+        return
+    text = str(typed or "").strip()
+    when = menus.typed_end(text, bot.store.get(guild.id, "default_timezone"))
+    refusal = None
+    if when is None:
+        refusal = word(bot, guild.id, "rolemenu_end_bad_date_said", given=text[:40])
+    elif when <= datetime.now(UTC):
+        refusal = word(bot, guild.id, "rolemenu_end_past_said", when=grants.stamp(when, "F"))
+    if refusal:
+        await render_set_end(interaction, menu["name"], previous)
+        await answer(interaction, refusal)
+        return
+    end = await set_menu_end(
+        bot, guild, interaction.user, menu, source=menus.DATE_END, ends_at=when
+    )
+    await render_menu(interaction, menu["name"], previous)
+    await said_end(interaction, menu, end)
+
+
+def read_buffer(value: Any) -> int | None:
+    """Blank is the server's default; anything but 0-365 whole days is refused, never guessed."""
+    typed = str(value or "").strip()
+    if not typed:
+        return None
+    if not typed.isdigit() or int(typed) > menus.BUFFER_MAX:
+        raise ValueError(typed)
+    return int(typed)
+
+
+async def run_buffer(interaction: discord.Interaction, typed: Any, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    menu = await menu_or_gone(interaction, previous)
+    if menu is None:
+        return
+    refusal = None
+    try:
+        days = read_buffer(typed)
+    except ValueError as exc:
+        days = None
+        refusal = word(bot, guild.id, "rolemenu_end_bad_buffer_said", given=str(exc)[:40])
+    if refusal is None and menus.end_source(menu) != menus.MARATHON_END:
+        refusal = word(bot, guild.id, "rolemenu_buffer_needs_marathon_said", menu=menu["name"])
+    if refusal is None and await marathon_row(bot.db, guild.id, menu["ends_marathon_id"]) is None:
+        refusal = word(bot, guild.id, "rolemenu_end_no_marathon_said")
+    if refusal:
+        await render_set_end(interaction, menu["name"], previous)
+        await answer(interaction, refusal)
+        return
+    end = await set_menu_end(
+        bot,
+        guild,
+        interaction.user,
+        menu,
+        source=menus.MARATHON_END,
+        marathon_id=menu["ends_marathon_id"],
+        buffer_days=days,
+    )
+    await render_menu(interaction, menu["name"], previous)
+    await said_end(interaction, menu, end)
+
+
+async def run_no_end(interaction: discord.Interaction, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    menu = await menu_or_gone(interaction, previous)
+    if menu is None:
+        return
+    end = await set_menu_end(
+        interaction.client, interaction.guild, interaction.user, menu, source=menus.NO_END
+    )
+    await render_menu(interaction, menu["name"], previous)
+    await said_end(interaction, menu, end)
+
+
+async def run_end_now(interaction: discord.Interaction, previous: Any) -> None:
+    if not await guarded(interaction) or not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    menu = await menu_or_gone(interaction, previous)
+    if menu is None:
+        return
+    details = await end_menu_now(bot, guild, interaction.user, menu)
+    await render_menu(interaction, menu["name"], previous)
+    if details is None:
+        guard = getattr(bot, "guard", None)
+        await answer(
+            interaction,
+            guard.refusal_message()
+            if guard is not None
+            else word(bot, guild.id, "rolemenu_end_now_not_run_said", menu=menu["name"]),
+        )
+        return
+    await answer(
+        interaction,
+        word(
+            bot,
+            guild.id,
+            ROLEMENU_ENDED_TEXT_KEY,
+            menu=menu["name"],
+            roles=len(details["roles"]),
+            members=details["members"],
+            failures=details["failures"],
+        ),
+    )
+
+
+async def run_use_held(interaction: discord.Interaction, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    menu = await menu_or_gone(interaction, previous)
+    if menu is None:
+        return
+    had = menu_value(menu, "ends_held_at")
+    end = await use_held_end(bot, guild, interaction.user, menu) if had else None
+    await render_menu(interaction, menu["name"], previous)
+    if not had:
+        await answer(interaction, word(bot, guild.id, "rolemenu_no_held_said", menu=menu["name"]))
+        return
+    await said_end(interaction, menu, end)
 
 
 async def run_assign(interaction: discord.Interaction, select: Any, previous: Any) -> None:
@@ -3285,36 +3444,12 @@ async def run_revoke(interaction: discord.Interaction, previous: Any) -> None:
     await answer(interaction, said)
 
 
-async def run_decision(
-    interaction: discord.Interaction,
-    status: str,
-    previous: Any,
-    *,
-    reason: Any = None,
-    days: Any = None,
-) -> None:
-    """A second door onto a decision the card also offers; the loser is told, never acted on."""
-    if not await opened(interaction):
-        return
-    said, _fresh = await apply_request_decision(
-        interaction.client,
-        interaction.guild,
-        int(previous.request_id),
-        status,
-        interaction.user,
-        reason=reason,
-        days=days,
-    )
-    await render_request(interaction, previous.request_id, previous)
-    await answer(interaction, said)
-
-
 # --- the controls --------------------------------------------------------------------------------
 
 
 class MoveButton(discord.ui.Button):
     def __init__(self, move: Any) -> None:
-        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        super().__init__(label=move.label[:BUTTON_MAX], style=STYLES[move.style], row=move.row)
         self.move = move
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -3332,15 +3467,6 @@ class MoveButton(discord.ui.Button):
         if action == menus.GRANTS:
             await open_grants(interaction, None, view)
             return
-        if action == menus.REQUESTS:
-            await open_requests(interaction, view)
-            return
-        if action == menus.MODE:
-            await run_mode(interaction, view)
-            return
-        if action == menus.MODE_OFF_YES:
-            await run_mode(interaction, view, confirmed=True)
-            return
         if action == menus.ADD_ROLE:
             await open_add_role(interaction, view)
             return
@@ -3356,34 +3482,29 @@ class MoveButton(discord.ui.Button):
         if action == menus.NEW_GRANT:
             await open_new_grant(interaction, view)
             return
-        if action == menus.APPROVE:
-            await run_decision(interaction, grants.APPROVED, view)
+        if action == menus.SET_END:
+            await open_set_end(interaction, view)
             return
-        if action == menus.POST:
-            await open_where(interaction, view)
-            return
-        if action == menus.TAKE_DOWN:
-            await run_take_down(interaction, view)
+        if action == menus.USE_HELD:
+            await run_use_held(interaction, view)
             return
         if action == menus.USE_ROLE_NAME:
             await run_add_option(interaction, None, None, view)
             return
-        if action == menus.APPROVAL:
-            await run_change_menu(
-                interaction, {"approval": self.label == menus.APPROVAL_ON_LABEL}, view
-            )
-            return
-        if action in (menus.DELETE, menus.SEED, menus.END_NOW):
+        if action in (menus.DELETE, menus.END_NOW, menus.END_MENU, menus.NO_END_MOVE_ACTION):
             await self.ask_first(interaction, view, action)
             return
         if action == menus.DELETE_YES:
             await run_delete_menu(interaction, view)
             return
-        if action == menus.SEED_YES:
-            await run_seed(interaction, view)
-            return
         if action == menus.END_YES:
             await run_revoke(interaction, view)
+            return
+        if action == menus.END_MENU_YES:
+            await run_end_now(interaction, view)
+            return
+        if action == menus.NO_END_YES:
+            await run_no_end(interaction, view)
             return
         if action in (menus.KEEP, menus.LEAVE_IT):
             await refresh_where(interaction, view)
@@ -3391,23 +3512,11 @@ class MoveButton(discord.ui.Button):
         await self.open_modal(interaction, view, action)
 
     async def ask_first(self, interaction: discord.Interaction, view: Any, action: str) -> None:
-        """The three moves nobody can undo ask once; every quieter move is one press."""
+        """The moves nobody can undo ask once; every quieter move is one press."""
         if not await opened(interaction):
             return
         bot, guild = interaction.client, interaction.guild
-        if action == menus.DELETE:
-            question = menus.DELETE_QUESTION.format(name=view.menu_name)
-            moves = (
-                menus.PanelMove(menus.DELETE_YES, menus.DELETE_YES_LABEL, "danger", 0),
-                menus.PanelMove(menus.KEEP, menus.KEEP_IT_LABEL, "secondary", 0),
-            )
-        elif action == menus.SEED:
-            question = menus.SEED_QUESTION
-            moves = (
-                menus.PanelMove(menus.SEED_YES, menus.SEED_YES_LABEL, "primary", 0),
-                menus.PanelMove(menus.KEEP, menus.LEAVE_THEM_LABEL, "secondary", 0),
-            )
-        else:
+        if action == menus.END_NOW:
             row = await grants.get_grant(bot.db, int(view.grant_id))
             if row is None:
                 await render_grant(interaction, view.grant_id, view)
@@ -3418,6 +3527,42 @@ class MoveButton(discord.ui.Button):
                 menus.PanelMove(menus.END_YES, menus.END_YES_LABEL, "danger", 0),
                 menus.PanelMove(menus.LEAVE_IT, menus.LEAVE_IT_LABEL, "secondary", 0),
             )
+        else:
+            menu = await menu_or_gone(interaction, view)
+            if menu is None:
+                return
+            if action == menus.DELETE:
+                refused = await delete_refusal(bot, guild, menu)
+                if refused:
+                    await render_menu(interaction, menu["name"], view)
+                    await answer(interaction, refused)
+                    return
+                question = menus.DELETE_QUESTION.format(name=view.menu_name)
+                yes = menus.PanelMove(menus.DELETE_YES, menus.DELETE_YES_LABEL, "danger", 0)
+            elif action == menus.END_MENU:
+                role_ids = await menu_role_ids(bot.db, menu["id"])
+                question = word(
+                    bot,
+                    guild.id,
+                    "rolemenu_end_now_question",
+                    roles=len(role_ids),
+                    members=wearing_count(bot, guild.id, await members_of(guild), role_ids),
+                )
+                yes = menus.PanelMove(
+                    menus.END_MENU_YES,
+                    word(bot, guild.id, "rolemenu_end_now_yes", BUTTON_MAX),
+                    "danger",
+                    0,
+                )
+            else:
+                question = word(bot, guild.id, "rolemenu_no_end_question", menu=menu["name"])
+                yes = menus.PanelMove(
+                    menus.NO_END_YES,
+                    word(bot, guild.id, "rolemenu_no_end_yes", BUTTON_MAX),
+                    "danger",
+                    0,
+                )
+            moves = (yes, menus.PanelMove(menus.KEEP, menus.KEEP_IT_LABEL, "secondary", 0))
         await confirm(
             interaction,
             confirm_panel(bot, guild, view),
@@ -3444,30 +3589,31 @@ class MoveButton(discord.ui.Button):
         if action == menus.PUSH_BACK:
             await interaction.response.send_modal(DaysModal(view, pushing=True))
             return
-        if action == menus.DENY:
-            await interaction.response.send_modal(PanelDenyModal(view))
-            return
-        if action == menus.APPROVE_DAYS:
-            menu = await menu_of_request(bot, guild, view.request_id)
-            await interaction.response.send_modal(
-                PanelApproveModal(view, expires_days_of(menu) or 0)
-            )
-            return
         menu = await get_menu(bot.db, guild.id, view.menu_name)
         if menu is None:
             await answer(interaction, MENU_GONE.format(name=view.menu_name))
             return
-        if action == menus.WORDS:
-            await interaction.response.send_modal(WordsModal(view, menu))
+        if action == menus.TYPE_DATE:
+            await interaction.response.send_modal(
+                DateModal(
+                    view,
+                    word(bot, guild.id, "rolemenu_date_title", MODAL_WORD_MAX),
+                    word(bot, guild.id, "rolemenu_date_label", MODAL_WORD_MAX),
+                    word(bot, guild.id, "rolemenu_date_placeholder", PLACEHOLDER_MAX),
+                )
+            )
             return
-        await interaction.response.send_modal(RulesModal(view, menu))
-
-
-async def menu_of_request(bot: Any, guild: Any, request_id: Any) -> Any:
-    row = await grants.get_request(bot.db, int(request_id)) if request_id else None
-    if row is None or row["guild_id"] != guild.id:
-        return None
-    return await get_menu_by_id(bot.db, row["menu_id"])
+        if action == menus.BUFFER:
+            await interaction.response.send_modal(
+                BufferModal(
+                    view,
+                    word(bot, guild.id, "rolemenu_buffer_title", MODAL_WORD_MAX),
+                    word(bot, guild.id, "rolemenu_buffer_label", MODAL_WORD_MAX),
+                    menu_value(menu, "buffer_days"),
+                )
+            )
+            return
+        await interaction.response.send_modal(WordsModal(view, menu))
 
 
 class MenuPick(discord.ui.Select):
@@ -3489,6 +3635,53 @@ class MenuPick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_menu(interaction, self.values[0], self.view)
+
+
+class MarathonPick(discord.ui.Select):
+    """Every marathon on the list, still to end first; the one the menu follows is ticked."""
+
+    def __init__(self, bot: Any, guild_id: int, rows: Any, menu: Any, row: int) -> None:
+        found = list(rows)
+        shown = found[:OPTIONS_MAX]
+        bound = (
+            menu_value(menu, "ends_marathon_id")
+            if menus.end_source(menu) == menus.MARATHON_END
+            else None
+        )
+        placeholder = (
+            word(bot, guild_id, "rolemenu_marathons_capped", shown=len(shown), total=len(found))
+            if len(found) > len(shown)
+            else word(bot, guild_id, "rolemenu_marathon_pick")
+        )
+        super().__init__(
+            placeholder=placeholder[:SELECT_PLACEHOLDER_MAX],
+            options=[
+                discord.SelectOption(
+                    label=self.label_of(bot, guild_id, one)[:LABEL_MAX],
+                    value=str(one["id"]),
+                    default=bound is not None and int(one["id"]) == int(bound),
+                )
+                for one in shown
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    @staticmethod
+    def label_of(bot: Any, guild_id: int, one: Any) -> str:
+        if parse_ts(one["ends_at"]) is None:
+            return word(bot, guild_id, "rolemenu_marathon_option_unknown", name=one["name"])
+        return word(
+            bot,
+            guild_id,
+            "rolemenu_marathon_option",
+            name=one["name"],
+            date=local_moment(bot, guild_id, one["ends_at"], DATE_SHOWN),
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_set_marathon(interaction, int(self.values[0]), self.view)
 
 
 class OptionPick(discord.ui.Select):
@@ -3572,48 +3765,6 @@ class GrantPick(discord.ui.Select):
         await open_grant(interaction, int(self.values[0]), self.view)
 
 
-class RequestPick(discord.ui.Select):
-    def __init__(self, rows: Any, named: Any, guild: Any, row: int) -> None:
-        found = list(rows)
-        shown = found[:OPTIONS_MAX]
-        super().__init__(
-            placeholder=capped_placeholder(
-                len(shown), len(found), pick=menus.REQUEST_PICK, capped=menus.REQUESTS_CAPPED
-            ),
-            options=[
-                discord.SelectOption(
-                    label=select_label(
-                        one["id"], named.get(one["menu_id"]), who_is(guild, one["user_id"])
-                    ),
-                    value=str(one["id"]),
-                )
-                for one in shown
-            ],
-            min_values=1,
-            max_values=1,
-            row=row,
-        )
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await open_request(interaction, int(self.values[0]), self.view)
-
-
-class WherePick(discord.ui.ChannelSelect):
-    def __init__(self, row: int) -> None:
-        super().__init__(
-            placeholder=WHERE_PICK,
-            channel_types=[discord.ChannelType.text],
-            min_values=1,
-            max_values=1,
-            row=row,
-        )
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        picked = self.values[0]
-        channel = interaction.guild.get_channel(picked.id) or picked
-        await run_post(interaction, channel, self.view)
-
-
 # --- the modals ----------------------------------------------------------------------------------
 
 
@@ -3636,12 +3787,10 @@ class NewMenuModal(AnswersErrors, discord.ui.Modal, title=NEW_MENU_TITLE):
         max_length=DESCRIPTION_LIMIT,
         required=False,
     )
-    mode = discord.ui.TextInput(label=MODE_LABEL, max_length=10, required=False)
 
     def __init__(self, previous: Any) -> None:
         super().__init__()
         self.previous = previous
-        self.mode.default = "multiple"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         await run_new_menu(
@@ -3650,7 +3799,6 @@ class NewMenuModal(AnswersErrors, discord.ui.Modal, title=NEW_MENU_TITLE):
                 "name": str(self.name),
                 "title": str(self.heading),
                 "description": str(self.description),
-                "mode": str(self.mode),
             },
             self.previous,
         )
@@ -3679,28 +3827,31 @@ class WordsModal(AnswersErrors, discord.ui.Modal, title=WORDS_TITLE):
         )
 
 
-class RulesModal(AnswersErrors, discord.ui.Modal, title=RULES_TITLE):
-    expires = discord.ui.TextInput(label=EXPIRES_LABEL, max_length=5, required=False)
-    retry = discord.ui.TextInput(label=RETRY_LABEL, max_length=5, required=False)
+class DateModal(AnswersErrors, discord.ui.Modal):
+    typed = discord.ui.TextInput(label="Date", max_length=DATE_TYPED_MAX)
 
-    def __init__(self, previous: Any, menu: Any) -> None:
-        super().__init__()
+    def __init__(self, previous: Any, title: Any, label: Any, placeholder: Any) -> None:
+        super().__init__(title=str(title)[:MODAL_WORD_MAX])
         self.previous = previous
-        self.expires.default = str(expires_days_of(menu) or 0)
-        self.retry.default = str(retry_days_of(menu))
+        self.typed.label = str(label)[:MODAL_WORD_MAX]
+        self.typed.placeholder = str(placeholder)[:PLACEHOLDER_MAX]
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        try:
-            wanted: dict[str, Any] = {
-                "expires_days": read_days(self.expires),
-                "retry_days": read_days(self.retry),
-            }
-        except ValueError as exc:
-            await answer(interaction, BAD_NUMBER.format(given=str(exc)[:40]))
-            return
-        if wanted["expires_days"] is None:
-            wanted["expires_days"] = UNSET
-        await run_change_menu(interaction, wanted, self.previous)
+        await run_typed_end(interaction, str(self.typed), self.previous)
+
+
+class BufferModal(AnswersErrors, discord.ui.Modal):
+    typed = discord.ui.TextInput(label="Days", max_length=BUFFER_TYPED_MAX, required=False)
+
+    def __init__(self, previous: Any, title: Any, label: Any, current: Any) -> None:
+        super().__init__(title=str(title)[:MODAL_WORD_MAX])
+        self.previous = previous
+        self.typed.label = str(label)[:MODAL_WORD_MAX]
+        if isinstance(current, int):
+            self.typed.default = str(current)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_buffer(interaction, str(self.typed), self.previous)
 
 
 class OptionModal(AnswersErrors, discord.ui.Modal, title=OPTION_TITLE):
@@ -3738,57 +3889,17 @@ class DaysModal(AnswersErrors, discord.ui.Modal):
         await run_grant(interaction, wanted, self.previous)
 
 
-class PanelDenyModal(AnswersErrors, discord.ui.Modal, title="Why not?"):
-    reason = discord.ui.TextInput(
-        label="One line the member will be sent",
-        style=discord.TextStyle.paragraph,
-        max_length=grants.REASON_LIMIT,
-    )
-
-    def __init__(self, previous: Any) -> None:
-        super().__init__()
-        self.previous = previous
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        await run_decision(interaction, grants.DENIED, self.previous, reason=str(self.reason))
-
-
-class PanelApproveModal(AnswersErrors, discord.ui.Modal, title="How long for?"):
-    days = discord.ui.TextInput(label=DAYS_LABEL, max_length=5, required=False)
-
-    def __init__(self, previous: Any, default_days: int) -> None:
-        super().__init__()
-        self.previous = previous
-        self.days.default = str(default_days)
-        self.days.placeholder = f"{default_days} — what this menu says"
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        try:
-            wanted = read_days(self.days)
-        except ValueError as exc:
-            await answer(interaction, BAD_NUMBER.format(given=str(exc)[:40]))
-            return
-        await run_decision(interaction, grants.APPROVED, self.previous, days=wanted)
-
-
 class RoleMenus(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.last_ok_at: dict[str, str | None] = {name: None for name in LOOP_NAMES}
         self.last_error: dict[str, str | None] = {name: None for name in LOOP_NAMES}
+        self.last_counts: dict[str, int] | None = None
 
     async def cog_load(self) -> None:
-        self.bot.add_dynamic_items(RequestButton)
+        self.bot.add_dynamic_items(RequestButton, RetiredMenuPick)
         if not self.bot.db.is_connected:
             return
-        for menu in await posted_menus(self.bot.db):
-            options = await get_options(self.bot.db, menu["id"])
-            if not options:
-                continue
-            self.bot.add_view(
-                RoleMenuView(menu["id"], options, menu["mode"]), message_id=menu["message_id"]
-            )
-            log.info("role menu %s re-registered on message %s", menu["name"], menu["message_id"])
         await self.run_due_grants()
         await self.reconcile_records()
         self._expiry_loop.start()
@@ -3801,6 +3912,13 @@ class RoleMenus(commands.Cog):
         if key not in LOOP_NAMES:
             return (None, None)
         return (self.last_ok_at[key], self.last_error[key])
+
+    def loop_counts(self, name: str) -> str | None:
+        """The expiry loop's last end-pass tick in numbers, for the Health tab (design §3.7)."""
+        key = name.removeprefix("_").removesuffix("_loop")
+        if key != "expiry" or self.last_counts is None:
+            return None
+        return LOOP_COUNTS.format(**self.last_counts)
 
     def loop_failed(self, name: str, exc: BaseException, loop: Any) -> None:
         """A loop that raised is restarted, and its failure is on the record until it is not."""
@@ -3828,14 +3946,22 @@ class RoleMenus(commands.Cog):
         """Menus whose end has come: everyone wearing their roles loses them (design §3.3)."""
         seen = {guild.id: guild for guild in getattr(self.bot, "guilds", ())}
         now = datetime.now(UTC)
+        counts = {"due": 0, "ended": 0, "failures": 0}
         for menu in await menus_still_to_end(self.bot.db):
             guild = seen.get(menu["guild_id"])
             if guild is None or not menus.is_due(menu, now):
                 continue
+            counts["due"] += 1
             try:
-                await end_menu(self.bot, guild, menu["id"])
+                details = await end_menu(self.bot, guild, menu["id"])
             except Exception:
                 log.exception("role menus: the end pass of %s raised", menu["name"])
+                counts["failures"] += 1
+                continue
+            if details:
+                counts["ended"] += int(bool(details["ended"]))
+                counts["failures"] += int(details["failures"])
+        self.last_counts = counts
 
     async def run_due_grants(self) -> None:
         """Grants whose day has come: the role comes off, the row closes, the member is told."""
@@ -3948,7 +4074,7 @@ class RoleMenus(commands.Cog):
             await grants.add_grant(self.bot.db, guild.id, member.id, role_id, grants.MANUAL)
 
     @app_commands.command(
-        name="rolemenu", description="Role menus, timed roles and the requests waiting on staff"
+        name="rolemenu", description="Role menus: hand roles out and set when they end"
     )
     @app_commands.default_permissions(STAFF_ONLY)
     async def rolemenu_panel_command(self, interaction: discord.Interaction) -> None:
@@ -3961,14 +4087,11 @@ class RoleMenus(commands.Cog):
             log.warning("role menus: refused the panel - the database is not connected")
             await answer(interaction, DB_UNAVAILABLE)
             return
+        await interaction.response.defer(ephemeral=True)
         embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
+        view.message = await interaction.edit_original_response(
+            embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
         )
-        view.message = await interaction.original_response()
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -1,7 +1,5 @@
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from black_bloc import rolegrants as grants
 from black_bloc import rolemenus as rm
 from black_bloc.config import load_settings
@@ -39,42 +37,26 @@ def grant(user_id=900, role_id=5, expires_at=None, removed_at=None, grant_id=1):
 
 # --- the root table ------------------------------------------------------------------------------
 
-
-@pytest.mark.parametrize("has_menus", [True, False])
-@pytest.mark.parametrize("picking_on", [True, False])
-def test_the_root_always_offers_the_same_moves_whatever_the_mode(has_menus, picking_on):
-    """The mode never takes a control off the ROOT — the button that turns it back on is here."""
-    found = actions(rm.root_buttons(has_menus=has_menus, picking_on=picking_on))
-
-    assert found == [rm.NEW_MENU, rm.SEED, rm.GRANTS, rm.MODE, rm.LOGS, rm.REFRESH]
-
-
-def test_the_mode_button_says_what_it_will_do():
-    assert rm.mode_move(True).label == rm.MODE_OFF_LABEL
-    assert rm.mode_move(False).label == rm.MODE_ON_LABEL
+WORDS = {
+    rm.SET_END: "Set the end…",
+    rm.END_MENU: "End it now",
+    rm.USE_HELD: "Use the earlier end",
+    rm.TYPE_DATE: "Type a date…",
+    rm.BUFFER: "Buffer…",
+    rm.NO_END_MOVE_ACTION: "No end",
+}
 
 
-def test_waiting_on_staff_renders_only_when_something_is_waiting():
-    with_none = actions(rm.root_buttons(has_menus=True, picking_on=True, pending=0))
-    with_two = rm.root_buttons(has_menus=True, picking_on=True, pending=2)
-
-    assert rm.REQUESTS not in with_none
-    assert rm.REQUESTS in actions(with_two)
-    assert "Waiting on staff (2)…" in labels(with_two)
+def test_the_root_is_the_staff_control_and_nothing_of_self_pick():
+    """Request #17: no seed, no mode switch, no requests queue."""
+    assert actions(rm.root_buttons()) == [rm.NEW_MENU, rm.GRANTS, rm.LOGS, rm.REFRESH]
 
 
 # --- the menu card -------------------------------------------------------------------------------
 
 
 def card(**kwargs):
-    wanted = {
-        "posted": False,
-        "options": 2,
-        "menu_mode": "multiple",
-        "picking_on": True,
-        "approval": False,
-        "options_max": OPTIONS_MAX,
-    }
+    wanted = {"options": 2, "options_max": OPTIONS_MAX, "held": False, "words": WORDS}
     return rm.menu_buttons(**(wanted | kwargs))
 
 
@@ -83,46 +65,58 @@ def test_a_full_menu_stops_offering_another_role():
     assert rm.ADD_ROLE not in actions(card(options=OPTIONS_MAX))
 
 
-def test_post_it_is_absent_on_a_staff_menu_on_an_empty_one_and_while_the_mode_is_off():
-    assert rm.POST in actions(card())
-    assert rm.POST not in actions(card(menu_mode="staff"))
-    assert rm.POST not in actions(card(options=0))
-    assert rm.POST not in actions(card(picking_on=False))
+def test_the_card_offers_the_end_and_never_a_self_pick_move():
+    found = actions(card())
+    assert [rm.SET_END, rm.END_MENU] == [one for one in found if one in (rm.SET_END, rm.END_MENU)]
+    for gone in (rm.POST, rm.TAKE_DOWN, rm.RULES, rm.APPROVAL):
+        assert gone not in found
+    assert "Set the end…" in labels(card()) and "End it now" in labels(card())
 
 
-def test_post_it_becomes_move_it_once_the_menu_is_posted():
-    assert rm.POST_LABEL in labels(card(posted=False))
-    assert rm.MOVE_LABEL in labels(card(posted=True))
-
-
-def test_take_it_down_needs_a_posted_panel():
-    assert rm.TAKE_DOWN not in actions(card(posted=False))
-    assert rm.TAKE_DOWN in actions(card(posted=True))
-
-
-def test_handing_roles_out_needs_options_and_survives_the_mode_going_off():
-    """§C6 of the pings remake: the mode governs MEMBER picking, so a staff hand-out is not
-    its business. Post it still goes; Hand roles out… stays whatever the mode says."""
-    assert rm.HAND_OUT in actions(card(menu_mode="staff"))
+def test_moves_that_need_roles_render_only_once_the_menu_has_some():
+    assert rm.HAND_OUT in actions(card()) and rm.END_MENU in actions(card())
     assert rm.HAND_OUT not in actions(card(options=0))
-    assert rm.HAND_OUT in actions(card(picking_on=False))
+    assert rm.END_MENU not in actions(card(options=0))
+    assert rm.SET_END in actions(card(options=0))
 
 
-def test_the_approval_button_says_what_it_will_do():
-    assert rm.APPROVAL_ON_LABEL in labels(card(approval=False))
-    assert rm.APPROVAL_OFF_LABEL in labels(card(approval=True))
+def test_use_the_earlier_end_renders_only_while_one_is_held():
+    assert rm.USE_HELD not in actions(card())
+    assert rm.USE_HELD in actions(card(held=True))
 
 
 def test_every_menu_card_can_be_left_and_deleted():
-    for state in (card(), card(options=0), card(picking_on=False), card(menu_mode="staff")):
+    for state in (card(), card(options=0), card(held=True)):
         assert rm.DELETE in actions(state)
         assert rm.BACK in actions(state)
 
 
-def test_no_control_sits_outside_discords_five_rows():
-    for state in (card(), card(posted=True), card(options=0), card(picking_on=False)):
+def test_no_control_sits_outside_discords_five_rows_or_crowds_a_row():
+    for state in (card(), card(held=True), card(options=0), rm.root_buttons()):
         assert all(0 <= move.row <= 4 for move in state)
-    assert all(0 <= move.row <= 4 for move in rm.root_buttons(has_menus=True, picking_on=True))
+        rows = [move.row for move in state]
+        assert all(rows.count(one) <= 5 for one in set(rows))
+
+
+def test_set_the_end_offers_buffer_only_for_a_marathon_and_no_end_only_with_an_end():
+    assert actions(rm.set_end_buttons(source=rm.NO_END, words=WORDS)) == [
+        rm.TYPE_DATE,
+        rm.BACK,
+        rm.REFRESH,
+    ]
+    assert actions(rm.set_end_buttons(source=rm.DATE_END, words=WORDS)) == [
+        rm.TYPE_DATE,
+        rm.NO_END_MOVE_ACTION,
+        rm.BACK,
+        rm.REFRESH,
+    ]
+    assert actions(rm.set_end_buttons(source=rm.MARATHON_END, words=WORDS)) == [
+        rm.TYPE_DATE,
+        rm.BUFFER,
+        rm.NO_END_MOVE_ACTION,
+        rm.BACK,
+        rm.REFRESH,
+    ]
 
 
 # --- the sub-panels ------------------------------------------------------------------------------
@@ -169,59 +163,11 @@ def test_a_grant_that_is_already_over_offers_no_move_at_all():
     assert actions(rm.grant_buttons(ends=True, removed=True)) == [rm.BACK]
 
 
-# --- the request card ----------------------------------------------------------------------------
-
-
-def test_only_a_pending_request_can_be_decided():
-    assert actions(rm.request_buttons(grants.PENDING, timed=False)) == [
-        rm.APPROVE,
-        rm.DENY,
-        rm.BACK,
-    ]
-    assert actions(rm.request_buttons(grants.APPROVED, timed=False)) == [rm.BACK]
-    assert actions(rm.request_buttons(grants.DENIED, timed=True)) == [rm.BACK]
-
-
-def test_a_menu_with_a_clock_asks_how_long_when_it_approves():
-    assert rm.APPROVE_DAYS in actions(rm.request_buttons(grants.PENDING, timed=True))
-    assert rm.APPROVE not in actions(rm.request_buttons(grants.PENDING, timed=True))
-
-
 # --- the words -----------------------------------------------------------------------------------
 
 
-def test_menu_lines_say_what_rolemenu_show_used_to_print():
-    menu = row("pronouns", "Pronouns")
-    lines = rm.menu_lines(menu, [option(1, "He/Him", "❤️"), option(2, "She/Her")])
-
-    assert lines[0] == "**pronouns** — Pronouns (multiple, not posted)"
-    assert lines[1] == "❤️ He/Him — <@&1>"
-    assert lines[2] == "• She/Her — <@&2>"
-
-
-def test_an_empty_menu_says_so_and_a_staff_menu_says_nobody_picks_it():
-    assert rm.NO_ROLES_YET in rm.menu_lines(row("m"), [])
-    assert rm.NOBODY_PICKS_THESE in rm.menu_lines(row("m", mode="staff"), [option(1, "One")])
-    assert rm.NOBODY_PICKS_THESE not in rm.menu_lines(row("m"), [option(1, "One")])
-
-
-def test_the_menu_card_carries_the_same_note_the_posted_panel_shows():
-    lines = rm.menu_lines(row("m"), [option(1, "One")], note="Picking a role here asks staff.")
-
-    assert lines[-1] == "Picking a role here asks staff."
-
-
-def test_list_lines_say_what_rolemenu_list_used_to_print():
-    menus = [row("pronouns", menu_id=1), row("runner", mode="staff", message_id=5, menu_id=2)]
-
-    assert rm.list_lines(menus, {1: 9, 2: 3}) == [
-        "**pronouns** — 9 role(s), multiple, not posted",
-        "**runner** — 3 role(s), staff, posted",
-    ]
-
-
-def test_a_menu_the_count_map_has_never_heard_of_reads_zero():
-    assert rm.list_lines([row("m")], {}) == ["**m** — 0 role(s), multiple, not posted"]
+def test_a_menus_heading_names_it_without_any_self_pick_state():
+    assert rm.menu_heading(row("pronouns", "Pronouns", message_id=5)) == "**pronouns** — Pronouns"
 
 
 # --- the audit (§I-amend) ------------------------------------------------------------------------
