@@ -244,6 +244,8 @@ const ROSTER = [
 ];
 // QuietKid and Dax wear GDQ's Staff role, which marathon_optout_role_ids lists (Dax is counted as BaF anyway).
 for (const at of [5, 6]) ROSTER[at].role_ids.push('900000000000000011');
+// End it now takes roles off the roster; a reset puts the seed's roles back.
+const ROSTER_ROLES = ROSTER.map((row) => [...row.role_ids]);
 
 // Mirrors black_bloc/logkinds.py. The mock only needs enough of it to sort and
 // mark its own seed rows; the router is the truth and test_logkinds.py guards it.
@@ -2331,6 +2333,86 @@ function seedState() {
       retry_days: 7,
       options: [{ role_id: '900000000000000003', label: 'Runner', emoji: '🏃', position: 0 }],
     },
+    {
+      id: 4,
+      name: 'btb-2027',
+      title: 'Back to Black 2027',
+      description: null,
+      mode: 'staff',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [
+        { role_id: FAN_ROLE_IDS[0], label: 'Runner', emoji: null, position: 0 },
+        { role_id: EVENTS_ROLE_ID, label: 'Host', emoji: null, position: 1 },
+      ],
+      ends_source: 'marathon',
+      ends_marathon_id: 1,
+      buffer_days: null,
+      ends_at: new Date(Date.now() + (3120 + 1440) * 60000).toISOString(),
+      ends_held_at: new Date(Date.now() + (3120 + 1440 - 600) * 60000).toISOString(),
+      ends_set_by: STAFF.id,
+      ends_set_at: minutesAgo(2900),
+    },
+    {
+      id: 5,
+      name: 'volunteers',
+      title: 'Volunteers',
+      description: null,
+      mode: 'staff',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [{ role_id: SPOTLIGHT_FAN_ROLE_ID, label: 'Tech checker', emoji: null, position: 0 }],
+      ends_source: 'date',
+      ends_at: daysAhead(20),
+      ends_set_by: MEMBERS[1].id,
+      ends_set_at: minutesAgo(600),
+    },
+    {
+      id: 6,
+      name: 'fall-fest-crew',
+      title: 'Fall Fest crew',
+      description: null,
+      mode: 'staff',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [{ role_id: LIVE_ROLE_ID, label: 'Commentator', emoji: null, position: 0 }],
+      ends_source: 'marathon',
+      ends_marathon_id: 31,
+      buffer_days: 2,
+      ends_at: new Date(Date.now() + (22000 + 2880) * 60000).toISOString(),
+      ends_held_at: minutesAgo(90),
+      ends_set_by: STAFF.id,
+      ends_set_at: minutesAgo(9000),
+    },
+    {
+      id: 7,
+      name: 'halo-fest-crew',
+      title: 'Halo Fest crew',
+      description: null,
+      mode: 'staff',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [{ role_id: '900000000000000012', label: 'Moderator', emoji: null, position: 0 }],
+      ends_source: 'date',
+      ends_at: minutesAgo(28000),
+      ended_at: minutesAgo(27950),
+      end_passes: 1,
+      end_members: 4,
+      ends_set_by: STAFF.id,
+      ends_set_at: minutesAgo(40000),
+    },
   ],
   requests: [
     { id: 4, menu_id: 3, user_id: MEMBERS[3].id, role_id: '900000000000000003', requested_at: minutesAgo(35), status: 'pending', decided_by: null, decided_at: null, deny_reason: null },
@@ -2347,7 +2429,7 @@ function seedState() {
     { id: 2, user_id: MEMBERS[5].id, role_id: '900000000000000003', source: 'staff', granted_by: MEMBERS[1].id, granted_at: minutesAgo(40000), expires_at: daysAhead(-1), removed_at: minutesAgo(1200), removed_reason: 'expired' },
     { id: 1, user_id: MEMBERS[6].id, role_id: '900000000000000005', source: 'manual', granted_by: null, granted_at: minutesAgo(50000), expires_at: null, removed_at: minutesAgo(300), removed_reason: 'ended_by_staff' },
   ],
-  nextMenu: 4,
+  nextMenu: 8,
   nextRequest: 5,
   nextGrant: 6,
   // small-fixes: who wears a ping role pings itself put on (black_bloc/handed_roles.py reads
@@ -3353,6 +3435,7 @@ route('POST', '/api/mock/reset', () => {
   // NOT part of the contract: it exists so site/mock/check.mjs can give every route the
   // same fixture, the way each pytest case gets a fresh database.
   state = withRunEvents(seedState());
+  ROSTER.forEach((row, at) => { row.role_ids = [...ROSTER_ROLES[at]]; });
   return { reset: true };
 });
 
@@ -3756,15 +3839,17 @@ route('GET', '/api/ref/members', (context) => {
 const NEW_MS = 7 * 24 * 60 * 60 * 1000;
 const MEMBERS_PER_PAGE = 50;
 
-/** The clock an open timed grant puts on a chip, the way api/tools/members.py joins it on. */
+/** The clock on a chip, the way api/tools/members.py joins it on: a grant's or its menu's end. */
 function expiryOf(userId, roleId) {
+  const menu = menuEndsNamed().get(String(roleId));
   const found = state.grants
     .filter((row) => String(row.user_id) === String(userId)
       && String(row.role_id) === String(roleId)
       && row.removed_at === null
       && row.expires_at !== null)
     .map((row) => row.expires_at)
-    .sort();
+    .concat(menu ? [menu.ends_at] : [])
+    .sort((a, b) => new Date(a) - new Date(b));
   return found.length ? found[0] : null;
 }
 
@@ -3779,6 +3864,7 @@ function rosterRoles(row) {
       name: role.name,
       color: role.color,
       expires_at: expiryOf(row.id, role.id),
+      ends_with_menu: (menuEndsNamed().get(String(role.id)) || {}).menu || null,
     }));
 }
 
@@ -5697,6 +5783,7 @@ function grantRow(row) {
     removed_at: row.removed_at,
     removed_reason: row.removed_reason,
     open: row.removed_at === null,
+    ends_with_menu: row.removed_at === null ? (menuEndsNamed().get(String(row.role_id)) || {}).menu || null : null,
   };
 }
 
@@ -5722,10 +5809,44 @@ function rolemenuRetired() {
   throw new Refused(410, 'rolemenu_retired', roleWord('rolemenu_retired_said'));
 }
 
+// The real API reads and writes these in default_timezone (role_menus.local_moment, typed_end);
+// the mock does the same through Intl, so a typed date means the same moment in both halves.
+function guildZone() {
+  const zone = String(state.settings.get('default_timezone') || 'America/Phoenix');
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return zone;
+  } catch (error) {
+    return 'UTC';
+  }
+}
+
+function zoneParts(at, zone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(at);
+  const got = Object.fromEntries(parts.map((one) => [one.type, one.value]));
+  return { y: +got.year, m: +got.month, d: +got.day, h: +got.hour, mi: +got.minute, s: +got.second };
+}
+
+function zoneWallToUtc(y, m, d, h, mi, zone) {
+  const wall = Date.UTC(y, m - 1, d, h, mi);
+  let guess = wall;
+  for (let i = 0; i < 2; i += 1) {
+    const seen = zoneParts(new Date(guess), zone);
+    guess += wall - Date.UTC(seen.y, seen.m - 1, seen.d, seen.h, seen.mi, seen.s);
+  }
+  return new Date(guess);
+}
+
 function localMoment(at, dateOnly = false) {
   if (!at) return roleWord('rolemenu_end_not_known_text');
-  const text = new Date(at).toISOString().replace('T', ' ');
-  return dateOnly ? text.slice(0, 10) : text.slice(0, 16);
+  const when = new Date(at);
+  if (Number.isNaN(when.getTime())) return roleWord('rolemenu_end_not_known_text');
+  const got = zoneParts(when, guildZone());
+  const two = (n) => String(n).padStart(2, '0');
+  const day = `${got.y}-${two(got.m)}-${two(got.d)}`;
+  return dateOnly ? day : `${day} ${two(got.h)}:${two(got.mi)}`;
 }
 
 function roleMenuMarathon(id) {
@@ -5750,9 +5871,35 @@ function menuEndLabel(menu) {
   return roleWord('rolemenu_end_date_text', { when });
 }
 
-function menuWearing(menu) {
+function menuWearers(menu) {
   const roles = new Set(menu.options.map((one) => String(one.role_id)));
-  return MEMBERS.filter((member) => (member.roles || []).some((role) => roles.has(String(role.id ?? role)))).length;
+  return ROSTER.filter((row) => row.role_ids.some((id) => roles.has(String(id))));
+}
+
+function menuWearing(menu) {
+  return menuWearers(menu).length;
+}
+
+/** Each role's soonest unfinished menu end, with that menu's name (role_menus.menu_ends_named). */
+function menuEndsNamed() {
+  const found = new Map();
+  for (const menu of state.menus) {
+    if (!menu.ends_at || menu.ended_at) continue;
+    for (const option of menu.options) {
+      const held = found.get(String(option.role_id));
+      if (!held || new Date(menu.ends_at) < new Date(held.ends_at)) {
+        found.set(String(option.role_id), { ends_at: menu.ends_at, menu: menu.name });
+      }
+    }
+  }
+  return found;
+}
+
+/** The unfinished menus that end with a marathon (role_menus.menus_ending_with). */
+function menusEndingWith(marathonId) {
+  return state.menus
+    .filter((menu) => menu.ends_source === 'marathon' && String(menu.ends_marathon_id) === String(marathonId) && !menu.ended_at)
+    .map((menu) => ({ name: menu.name, title: menu.title, roles: menu.options.length, wearing: menuWearing(menu) }));
 }
 
 function heldPast(menu) {
@@ -5820,9 +5967,11 @@ function menuByName(name) {
 function typedEnd(given) {
   const text = String(given ?? '').trim();
   let when = null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) when = new Date(`${text}T23:59:00Z`);
-  else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text)) when = new Date(`${text.replace(' ', 'T')}:00Z`);
-  else if (text) when = new Date(text);
+  const typed = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?$/.exec(text);
+  if (typed) {
+    const [, y, m, d, h, mi] = typed.map((one) => (one === undefined ? undefined : Number(one)));
+    when = h === undefined ? zoneWallToUtc(y, m, d, 23, 59, guildZone()) : zoneWallToUtc(y, m, d, h, mi, guildZone());
+  } else if (text) when = new Date(text);
   if (!when || Number.isNaN(when.getTime())) {
     throw new Refused(400, 'bad_date', roleWord('rolemenu_end_bad_date_said', { given: text.slice(0, 40) }));
   }
@@ -5955,7 +6104,9 @@ route('POST', '/api/rolemenus/:name/end-now', (context) => {
   const menu = menuByName(context.params.name);
   guard('ending a role menu now');
   const roles = new Set(menu.options.map((one) => String(one.role_id)));
-  const taken = menuWearing(menu);
+  const wearers = menuWearers(menu);
+  const taken = wearers.length;
+  for (const row of wearers) row.role_ids = row.role_ids.filter((id) => !roles.has(String(id)));
   setMenuEnd(menu, { source: 'date', ends_at: now() });
   menu.ended_at = now();
   menu.end_passes = 1;
@@ -5969,7 +6120,7 @@ route('POST', '/api/rolemenus/:name/end-now', (context) => {
   return {
     ...menuRow(menu),
     message: roleWord('rolemenu_ended_text', { menu: menu.name, roles: menu.options.length, members: taken, failures: 0 }),
-    pass: { members: taken, this_pass: taken, failures: 0, passes: 1, ended: true },
+    pass: { members: taken, this_pass: taken, failures: 0, passes: 1, ended: true, left: [] },
   };
 });
 
@@ -8204,6 +8355,7 @@ function marathonRow(row) {
     host_announcements: marathonSwitch(row, 'host_announcements'),
     couch_announcements: marathonCouchSwitch(),
     overlay: { ...marathonSwitch(row, 'overlay'), sheet: row.overlay_sheet || null },
+    role_menus: menusEndingWith(row.id),
     ...marathonTracking(row),
   };
 }

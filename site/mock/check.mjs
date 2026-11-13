@@ -128,6 +128,8 @@ const IDS = {
   // Marathons: AGDQ 2027 is on now; run 9 is ours (Moth, on commentary through the every-
   // schedule pairing 1), still coming up and never shouted, so shout and done both reach it.
   marathon_id: '1',
+  // Request #17: a role menu that ends with marathon 1 and holds an earlier end.
+  held_menu: 'btb-2027',
   marathon_run_id: '9',
   marathon_pairing_id: '1',
   // Next up: Halo Fest (2) is over with Games Done Hitless suggested and still open; run 4 on
