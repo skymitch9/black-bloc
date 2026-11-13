@@ -1366,3 +1366,132 @@ async def test_taking_the_role_off_while_counted_in_changes_nothing(bot, cog):
 
     assert SKY in await announce.baf_overrides(bot.db)
     assert "marathon.override_cleared_by_optout" not in await kinds(bot.db)
+
+
+# --- a couch is not a runner (request #16) --------------------------------------------------------
+
+COUCH_ONLY = [a_run(1, 1500, game="Yakuza", people=(("Sky", "skyruns", "commentator"),), length=85)]
+RUNNER_AND_COUCH = [
+    a_run(
+        1,
+        1500,
+        game="Yakuza",
+        people=(("anarchy", "anarchyasf", "runner"), ("Sky", "skyruns", "commentator")),
+        length=85,
+    )
+]
+EVERY_MARK = [61, 1381, 1486, 1501, 1590]
+
+
+def every_post(bot):
+    return [one for channel in bot.guild.channels.values() for one in channel.messages]
+
+
+async def loud_show(bot, cog, runs):
+    from black_bloc import optouts
+    from tests.cogs.content.test_marathon import FAN_ROLE
+
+    await optouts.clear_out(bot.db, GUILD, SKY, optouts.ANNOUNCE)
+    await bot.store.set(GUILD, "marathon_reminder_minutes", "1440, 120, 15")
+    await bot.store.set(GUILD, "marathon_reminder_pings", True)
+    await bot.store.set(GUILD, "marathon_live_pings", True)
+    marathon = await show(bot, cog, runs, auto=True)
+    await cogmod.update_marathon(bot.db, marathon["id"], ping_role=1)
+    return marathon, FAN_ROLE
+
+
+async def because_logged(bot, kind):
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id", (kind,)
+    )
+    return [json.loads(row["details"]).get("because") for row in await cur.fetchall()]
+
+
+async def test_a_couch_only_run_posts_nothing_anywhere_at_any_mark_while_the_switch_is_off(
+    bot, cog
+):
+    marathon, fan_role = await loud_show(bot, cog, COUCH_ONLY)
+    assert not announce.policy_of(bot, GUILD, marathon).couch_on
+
+    await walk(bot, cog, marathon, EVERY_MARK)
+
+    said = " ".join(one.content or "" for one in every_post(bot))
+    assert f"<@{SKY}>" not in said and "**Yakuza**" not in said and f"<@&{fan_role}>" not in said
+    logged = await kinds(bot.db)
+    for kind in (
+        "marathon.reminded",
+        "marathon.public_reminded",
+        "marathon.shouted",
+        "marathon.public_highlight_posted",
+        "marathon.runner_post_posted",
+        "marathon.run_event_made",
+    ):
+        assert kind not in logged, kind
+    await walk(bot, cog, marathon, [1505, 1520])
+    assert (await because_logged(bot, "marathon.shout_skipped")).count("couch") == 1
+    row = await run_named(bot, marathon, "Yakuza")
+    assert mt.marks_of(row) == [] and row["event_id"] is None and not row["shout_message_id"]
+    assert mt.is_ours(row)
+
+
+async def test_the_couch_switch_on_posts_the_couch_only_run_again(bot, cog):
+    marathon, fan_role = await loud_show(bot, cog, COUCH_ONLY)
+    await bot.store.set(GUILD, "marathon_couch_announcements", True)
+
+    await walk(bot, cog, marathon, EVERY_MARK)
+
+    assert "marathon.shouted" in await kinds(bot.db)
+    text = " ".join(one.content or "" for one in every_post(bot))
+    assert f"<@{SKY}>" in text and f"<@&{fan_role}>" in text
+
+
+async def test_a_staff_answer_announces_a_couch_and_default_takes_it_back(bot, cog):
+    marathon, _fan_role = await loud_show(bot, cog, COUCH_ONLY)
+    row = await run_named(bot, marathon, "Yakuza")
+    held = announce.person_state(bot, bot.guild, marathon, row, SKY)
+    assert (held["role"], held["announced"], held["why"], held["move"]) == (
+        ma.COUCH,
+        False,
+        ma.WHY_COUCH_OFF,
+        ma.IN,
+    )
+    assert "couch announcements are off" in held["said"]
+    assert (await answer(bot, marathon, "Yakuza", SKY, "in")).ok
+    row = await run_named(bot, marathon, "Yakuza")
+    fresh_marathon = await fresh(bot, marathon)
+    assert announce.person_state(bot, bot.guild, fresh_marathon, row, SKY)["announced"]
+    assert announce.posted_people(bot, GUILD, fresh_marathon, row)
+    assert (await answer(bot, marathon, "Yakuza", SKY, "default")).ok
+    row = await run_named(bot, marathon, "Yakuza")
+    assert announce.posted_people(bot, GUILD, await fresh(bot, marathon), row) == []
+
+
+async def test_a_runner_and_a_couch_post_for_the_runner_and_never_ping_the_couch(bot, cog):
+    marathon, fan_role = await loud_show(bot, cog, RUNNER_AND_COUCH)
+
+    await walk(bot, cog, marathon, EVERY_MARK)
+
+    said = every_post(bot)
+    assert any((one.content or "").startswith(f"<@{ANARCHY}> runs **Yakuza**") for one in said)
+    assert "marathon.shouted" in await kinds(bot.db)
+    text = " ".join(one.content or "" for one in said)
+    assert f"<@{SKY}>" not in text and f"<@&{fan_role}>" not in text
+    row = await run_named(bot, marathon, "Yakuza")
+    assert sorted(mt.marks_of(row)) == [15, 120, 1440]
+
+
+async def test_a_couch_only_runner_post_already_pinned_comes_off_when_the_switch_is_off(bot, cog):
+    await bot.store.set(GUILD, "marathon_runner_posts", True)
+    await bot.store.set(GUILD, "marathon_runner_posts_pinned", True)
+    marathon, _fan_role = await loud_show(bot, cog, COUCH_ONLY)
+    await bot.store.set(GUILD, "marathon_couch_announcements", True)
+    await tick_at(bot, cog, marathon, 1)
+    row = await run_named(bot, marathon, "Yakuza")
+    assert row["post_message_id"] and row["post_pinned"]
+
+    await bot.store.set(GUILD, "marathon_couch_announcements", False)
+    await cog.tick_marathon(bot.guild, await fresh(bot, marathon))
+
+    row = await run_named(bot, marathon, "Yakuza")
+    assert not row["post_pinned"]
+    assert "couch" in await because_logged(bot, "marathon.runner_post_unpinned")

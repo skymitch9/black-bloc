@@ -1,7 +1,7 @@
 # A couch is not a runner — commentators are listed everywhere and posted nowhere (request #16)
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-11-13 09:3x Phoenix)** — dispatches
-> to Opus as branch `couch-parts` once the before-dispatch usage read exists. **Last verified: 2026-11-13 09:2x** against `main`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `couch-parts` (off `main` `d3d5128d`),
+> NOT merged, NOT deployed** (2026-11-13). Design by Fable 09:3x Phoenix; deviations at the foot (§7). **Last verified: 2026-11-13 09:2x** against `main`
 > `8556fcc8` by reading the code, and against the live site through the operator token (request #16; `GET /api/marathons/2`).
 > ⚠️ NOT verified: anything in Discord; the bot was not run; no browser.
 
@@ -70,3 +70,33 @@ Request #16 stays `open` → staff press *in progress* at dispatch; *ready to ch
 Interviews (interviewee / interviewer) — a new tracker feed, notice-only, same COUCH treatment. ✅ Owner Q1 DECIDED (a)
 2026-11-13 09:3x: *"interviewers and interviewees are apart of intersitial"* — the tracker files them under INTERSTITIALS, so the
 follow-up build reads that feed, not a runs column. Tracked in `TODO.md` 2026-11-13 as a follow-up after this build.
+
+## 7. As built — deviations (branch `couch-parts`, 2026-11-13)
+
+- **Two keys, not one.** `marathon_couch_announcements` (bool, off) AND `marathon_announce_why_couch_off` (the `{why}` of the
+  per-person state line — *couch announcements are off*), because the API's `announce.said` and the run post's state line need
+  an editable sentence for the new why. Registry 1414 → 1416.
+- **The switch is server-wide only** (no schema change wins over "wire it exactly like `host_announcements`", which is a
+  per-marathon column). The drawer draws it as an On/Off segment beside *Host announcements* in *Settings for this marathon*,
+  saving through `/api/settings/{key}`; the API carries `couch_announcements: {own: None, on, default, key}`. There is no
+  thread-controls button for it.
+- **More gates than §3's table.** Every posting path was gated on `mt.is_ours`, which a matched commentator satisfies, so the
+  three named sites alone would still have reminded and shouted run 297. One helper, `marathon_announce.posted` (ours minus a
+  couch the decision leaves out), now gates the thread reminder at every mark (staff copy, public copy, heads-up role), the
+  unforced shoutout (logs `marathon.shout_skipped` `because: couch`), new runner thread posts and the fan-role pings.
+  `mt.ours` / `is_ours` are unchanged, so listings, counts, `/runs`, the board and staff moves still see the couch.
+- **Runner + couch: the couch is left OUT of the line, not named with the couch part word.** `{part}` is a single verb phrase
+  for the whole `{member}` list (*runs* / *is on commentary*), so a mixed line cannot be written without a new template field
+  that staff-edited templates would not contain. The couch's own fan role is not pinged.
+- **Staff final say kept:** a run's own *Announce* for a couch beats the switch (and *default* takes it back); *Shout it now*
+  (forced) still posts for a couch-only run; `shoutable` is unchanged (it only enables that forced move).
+- **NOT fixed, the fourth "not host, so runner" test:** `marathon_untracked_alert.baf_of` / `parts_of` / `who_of` count and
+  label a matched commentator as a runner in the staff-only untracked alert. Making it positive on RUNNER would either drop the
+  couch from the alert (a staff NOTICE, which §3 says a couch should still get) or need a third word key
+  (`marathon_untracked_alert_couch`) with its mock row, label and fixtures — not done inside today's 14:42 window. It never posts
+  publicly. Owner/conductor call.
+- **Posts already up when this deploys:** a pinned runner thread post for a couch-only run is unpinned on the next tick
+  (`because: couch`) and stays in the thread, edited with the *couch announcements are off* state line; reminder copies already
+  sent keep following retimes; a public highlight already up is carried (`couch_on` is carried like `hosts_on`). Nothing is
+  deleted. Live note: AshSaidHi's *Mighty Morphin Power Rangers* 1440 mark falls 2026-11-13 13:24 Phoenix — a deploy after that
+  finds that reminder already sent.

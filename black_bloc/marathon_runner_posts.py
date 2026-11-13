@@ -16,6 +16,7 @@ UNPIN_REASON = "Black Bloc: that BaF run is over"
 BECAUSE_OVER = "run_over"
 BECAUSE_UNLISTED = "unlisted"
 BECAUSE_MARATHON_OVER = "over"
+BECAUSE_COUCH = "couch"
 
 
 def post_id(row: Any) -> int | None:

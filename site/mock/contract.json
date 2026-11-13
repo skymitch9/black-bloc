@@ -6562,6 +6562,7 @@
         "baf_event",
         "announcements",
         "host_announcements",
+        "couch_announcements",
         "overlay",
         "tracked_state",
         "tracked",

@@ -567,3 +567,71 @@ def test_the_policy_carries_the_silenced_people_and_the_runner_post_skip_reads_t
 def test_a_post_that_names_nobody_because_of_the_opt_out_says_why():
     row = a_run(1, [SKY])
     assert ma.run_because(row, ma.Policy(silent=frozenset({9001})), [SKY]) == "announce_optout"
+
+
+# --- a couch is not a runner (request #16) --------------------------------------------------------
+
+COUCH = {"name": "PopNoTarts", "user_id": 9301, "login": None, "part": "commentator"}
+
+
+def test_role_of_maps_each_part_to_its_own_role_and_a_couch_is_never_a_runner():
+    assert ma.role_of(SKY) == ma.RUNNER
+    assert ma.role_of(HOSTING) == ma.HOST
+    assert ma.role_of(COUCH) == ma.COUCH
+    assert ma.role_of({"part": "interviewer"}) == ma.COUCH
+
+
+@pytest.mark.parametrize(
+    ("couch_on", "opted", "answer", "wanted"),
+    [
+        (False, False, None, (False, ma.WHY_COUCH_OFF)),
+        (True, False, None, (True, ma.WHY_DEFAULT)),
+        (False, False, ma.IN, (True, ma.WHY_RUN)),
+        (True, False, ma.OUT, (False, ma.WHY_RUN)),
+        (True, True, None, (False, ma.WHY_MARATHON)),
+    ],
+)
+def test_decide_answers_the_couch_switch_for_a_couch(couch_on, opted, answer, wanted):
+    said = ma.decide(
+        runners_on=True,
+        opted_out=opted,
+        answer=answer,
+        role=ma.COUCH,
+        hosts_on=True,
+        couch_on=couch_on,
+    )
+    assert (said.yes, said.why) == wanted
+
+
+def test_a_couch_only_run_is_posted_for_nobody_until_the_couch_switch_or_its_answer_says_so():
+    row = a_run(297, [COUCH])
+    assert ma.posted(row, ma.Policy()) == []
+    assert ma.run_people(row, ma.Policy()) == []
+    assert [one["role"] for one in ma.baf_on(row)] == [ma.COUCH]
+    assert not ma.runs_it(row, 9301)
+    assert [one["user_id"] for one in ma.posted(row, ma.Policy(couch_on=True))] == [9301]
+    answered = a_run(297, [COUCH], {9301: ma.IN})
+    assert [one["user_id"] for one in ma.posted(answered, ma.Policy())] == [9301]
+    assert ma.run_because(row, ma.Policy(), [COUCH]) == "couch"
+
+
+def test_a_runner_and_a_couch_post_for_the_runner_only():
+    row = a_run(8, [SKY, COUCH])
+    assert [one["user_id"] for one in ma.posted(row, ma.Policy())] == [9001]
+    assert [one["user_id"] for one in ma.run_people(row, ma.Policy())] == [9001]
+
+
+def test_the_couch_state_line_says_couch_announcements_are_off():
+    words = STATE_WORDS | {ma.WHY_COUCH_OFF: "couch is off"}
+    assert ma.state_lines(a_run(3, [COUCH]), ma.Policy(), words) == [
+        "PopNoTarts: not announced — couch is off"
+    ]
+
+
+def test_the_policy_carries_the_couch_default():
+    found = ma.policy({}, runners_default=True, hosts_default=False, mention_default=True)
+    assert found.couch_on is False
+    found = ma.policy(
+        {}, runners_default=True, hosts_default=False, mention_default=True, couch_default=True
+    )
+    assert found.couch_on is True

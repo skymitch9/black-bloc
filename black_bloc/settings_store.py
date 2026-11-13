@@ -7881,6 +7881,7 @@ MARATHON_PUBLIC_BUTTON_OPT_IN_KEY = "marathon_public_button_opt_in"
 MARATHON_ANNOUNCE_OPTED_OUT_SAID_KEY = "marathon_announce_opted_out_said"
 MARATHON_ANNOUNCE_OPTED_IN_SAID_KEY = "marathon_announce_opted_in_said"
 MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY = "marathon_host_announcements_default"
+MARATHON_COUCH_ANNOUNCEMENTS_KEY = "marathon_couch_announcements"
 MARATHON_CONTROLS_HOST_ANNOUNCE_ON_KEY = "marathon_controls_host_announcements_on"
 MARATHON_CONTROLS_HOST_ANNOUNCE_OFF_KEY = "marathon_controls_host_announcements_off"
 MARATHON_HOST_ANNOUNCEMENTS_ON_SAID_KEY = "marathon_host_announcements_on_said"
@@ -7926,6 +7927,7 @@ MARATHON_ANNOUNCE_WHY_RUN_KEY = "marathon_announce_why_run"
 MARATHON_ANNOUNCE_WHY_MARATHON_KEY = "marathon_announce_why_marathon"
 MARATHON_ANNOUNCE_WHY_OFF_KEY = "marathon_announce_why_runners_off"
 MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY = "marathon_announce_why_hosts_off"
+MARATHON_ANNOUNCE_WHY_COUCH_OFF_KEY = "marathon_announce_why_couch_off"
 MARATHON_ANNOUNCE_STATE_PLAIN_KEY = "marathon_announce_state_plain"
 MARATHON_ANNOUNCE_RUN_IN_SAID_KEY = "marathon_announce_run_in_said"
 MARATHON_ANNOUNCE_RUN_OUT_SAID_KEY = "marathon_announce_run_out_said"
@@ -8218,6 +8220,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "highlight — when its own Host announcements switch follows this setting. Runners "
         "follow Runner announcements; neither switch is over the other. A run's own answer for a "
         "host beats this switch either way. off by default",
+    ),
+    MARATHON_COUCH_ANNOUNCEMENTS_KEY: (
+        "bool",
+        False,
+        "whether a marathon announces its BaF COUCH (commentators) publicly — the reminders, "
+        "shoutout, highlight and thread post of a run whose only BaF people are on the couch. "
+        "Off, a couch is listed everywhere and posted nowhere. A run's own answer for a person "
+        "beats this switch either way. off by default",
     ),
     MARATHON_MENTION_PEOPLE_KEY: (
         "bool",
@@ -9512,6 +9522,11 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "host announcements are off for this marathon",
         (),
         "{why} of that line for a host while the marathon's Host announcements switch is off",
+    ),
+    MARATHON_ANNOUNCE_WHY_COUCH_OFF_KEY: (
+        "couch announcements are off",
+        (),
+        "{why} of that line for a commentator while marathon_couch_announcements is off",
     ),
     MARATHON_ANNOUNCE_STATE_PLAIN_KEY: (
         " · written without an @",

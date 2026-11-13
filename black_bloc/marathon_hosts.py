@@ -166,8 +166,8 @@ def span_of(block: mhh.Block) -> tuple[Any, Any]:
 
 
 def is_runner_run(row: Any) -> bool:
-    """A run of ours for anyone but a host: the one kind that gets a run event on its own."""
-    return any(one.get("user_id") and one.get("part") != mt.HOST for one in mt.people_of(row))
+    """A run with a BaF runner on it: the one kind that gets a run event on its own."""
+    return any(one.get("user_id") and one.get("part") == mt.RUNNER for one in mt.people_of(row))
 
 
 def event_fields(block: mhh.Block, marathon: Any, name: str | None = None) -> dict[str, str]:

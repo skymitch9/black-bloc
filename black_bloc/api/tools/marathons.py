@@ -107,6 +107,7 @@ from ...marathon_spotlight import mode_of as spotlight_mode_of
 from ...settings_store import (
     MARATHON_CONTROLS_ARCHIVE_KEY,
     MARATHON_CONTROLS_TRACKER_KEY,
+    MARATHON_COUCH_ANNOUNCEMENTS_KEY,
     MARATHON_FAR_POLL_HOURS_KEY,
     MARATHON_HOST_EVENTS_GONE_KEY,
     MARATHON_LEAD_DAYS_KEY,
@@ -338,6 +339,11 @@ def host_switch(bot: Any, guild: Any, row: Any, which: str) -> dict[str, Any]:
     return switch_state(bot, guild.id, row, which)
 
 
+def couch_switch(bot: Any, guild: Any) -> dict[str, Any]:
+    on = bool(bot.store.get(guild.id, MARATHON_COUCH_ANNOUNCEMENTS_KEY))
+    return {"own": None, "on": on, "default": on, "key": MARATHON_COUCH_ANNOUNCEMENTS_KEY}
+
+
 def pairing_row(guild: Any, row: Any) -> dict[str, Any]:
     return {
         "id": row["id"],
@@ -466,6 +472,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "baf_event": baf_event_state(bot, guild, row, rows),
         "announcements": host_switch(bot, guild, row, mh.ANNOUNCE),
         "host_announcements": host_switch(bot, guild, row, mh.HOST_ANNOUNCE),
+        "couch_announcements": couch_switch(bot, guild),
         "overlay": host_switch(bot, guild, row, mh.OVERLAY) | {"sheet": mo.state_of(row)},
         "archived": False,
     } | await tracking_of(bot, guild, row)

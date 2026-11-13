@@ -1076,6 +1076,7 @@ const SETTING_SPECS = [
   ["marathon_baf_override_needs_reason_said", "text", "Say why **{name}** counts as BaF anyway, so nothing was changed.", "Say why **{name}** counts as BaF anyway, so nothing was changed.", "what staff are told when they count someone as BaF anyway without a reason. It takes {name}"],
   ["marathon_override_cleared_by_optout_said", "text", "**{name}** put on {role}, so staff no longer count them as BaF. Count them in again on the Members page if that was wrong.", "**{name}** put on {role}, so staff no longer count them as BaF. Count them in again on the Members page if that was wrong.", "the log channel's notice when someone staff counted as BaF anyway puts on a role of marathon_optout_role_ids themselves, which clears the override. It takes {name} {role}"],
   ["marathon_host_announcements_default", "bool", false, false, "whether a marathon announces its BaF HOSTS publicly — a host block's reminders and highlight — when its own Host announcements switch follows this setting. Runners follow Runner announcements; neither switch is over the other. A run's own answer for a host beats this switch either way. off by default"],
+  ["marathon_couch_announcements", "bool", false, false, "whether a marathon announces its BaF COUCH (commentators) publicly — the reminders, shoutout, highlight and thread post of a run whose only BaF people are on the couch. Off, a couch is listed everywhere and posted nowhere. A run's own answer for a person beats this switch either way. off by default"],
   ["marathon_mention_people", "bool", true, true, "whether a public marathon post writes a BaF person as an @ (drawn, never notified). Off, every public post writes their name as the schedule has it, as plain text, instead; one person on one marathon can be set the other way from a run's post. on by default"],
   ["marathon_controls_host_announcements_on", "text", "Host announcements: on · turn off", "Host announcements: on · turn off", "the thread controls' host announcements button while the marathon's BaF hosts are announced publicly"],
   ["marathon_controls_host_announcements_off", "text", "Host announcements: off · turn on", "Host announcements: off · turn on", "the thread controls' host announcements button while the marathon's BaF hosts are not announced publicly"],
@@ -1102,6 +1103,7 @@ const SETTING_SPECS = [
   ["marathon_announce_why_optout", "text", "asked not to be announced anywhere", "asked not to be announced anywhere", "{why} of that line while the person stopped every announcement of theirs on /golive"],
   ["marathon_announce_why_runners_off", "text", "runner announcements are off for this marathon", "runner announcements are off for this marathon", "{why} of that line for a runner while the marathon's Runner announcements switch is off"],
   ["marathon_announce_why_hosts_off", "text", "host announcements are off for this marathon", "host announcements are off for this marathon", "{why} of that line for a host while the marathon's Host announcements switch is off"],
+  ["marathon_announce_why_couch_off", "text", "couch announcements are off", "couch announcements are off", "{why} of that line for a commentator while marathon_couch_announcements is off"],
   ["marathon_announce_state_plain", "text", " · written without an @", " · written without an @", "{plain} of that line while the person's name is written as plain text"],
   ["marathon_announce_run_in_said", "text", "**{name}** is announced for **{game}** on **{marathon}** from the next reminder mark.", "**{name}** is announced for **{game}** on **{marathon}** from the next reminder mark.", "what staff are told once a person is announced for one run. It takes {name} {game} {marathon}"],
   ["marathon_announce_run_out_said", "text", "**{name}** is not announced for **{game}** on **{marathon}**. Their other runs are unchanged.", "**{name}** is not announced for **{game}** on **{marathon}**. Their other runs are unchanged.", "what staff are told once a person is left out of one run's public posts. It takes {name} {game} {marathon}"],
@@ -8109,6 +8111,7 @@ function marathonRow(row) {
     baf_event: marathonBafEvent(row),
     announcements: marathonSwitch(row, 'announcements'),
     host_announcements: marathonSwitch(row, 'host_announcements'),
+    couch_announcements: marathonCouchSwitch(),
     overlay: { ...marathonSwitch(row, 'overlay'), sheet: row.overlay_sheet || null },
     ...marathonTracking(row),
   };
@@ -8872,6 +8875,11 @@ function marathonBafControl(row) {
     label: marathonSaid(MARATHON_BAF_LABELS[shape.label], { reason }),
     state: null,
   };
+}
+
+function marathonCouchSwitch() {
+  const on = Boolean(state.settings.get('marathon_couch_announcements'));
+  return { own: null, on, default: on, key: 'marathon_couch_announcements' };
 }
 
 function marathonControls(row) {
@@ -10285,6 +10293,7 @@ const MARATHON_ANNOUNCE_WHY = {
   opted_out: 'marathon_announce_why_marathon',
   runners_off: 'marathon_announce_why_runners_off',
   hosts_off: 'marathon_announce_why_hosts_off',
+  couch_off: 'marathon_announce_why_couch_off',
 };
 const MARATHON_RUN_SAID = { in: 'marathon_announce_run_in_said', out: 'marathon_announce_run_out_said', default: 'marathon_announce_run_default_said' };
 const MARATHON_RUN_WORDS = { in: 'in', on: 'in', yes: 'in', announce: 'in', out: 'out', off: 'out', no: 'out', default: 'default', follow: 'default', clear: 'default' };
@@ -10302,13 +10311,17 @@ function marathonPlain(row, userId) {
 function marathonRoleOn(run, userId) {
   const mine = run.people.filter((one) => one.user_id && String(one.user_id) === String(userId));
   if (!mine.some((one) => one.counts !== false || one.part === 'host')) return null;
-  return mine.some((one) => one.part !== 'host' && one.counts !== false) ? 'runner' : 'host';
+  const counted = mine.filter((one) => one.counts !== false);
+  if (counted.some((one) => one.part === 'runner')) return 'runner';
+  if (counted.some((one) => one.part !== 'host')) return 'couch';
+  return 'host';
 }
 
 function marathonDecide(row, run, userId, role) {
   const answer = (run.announce_people || {})[String(userId)] || null;
   if (answer) return { yes: answer === 'in', why: 'run' };
   if (marathonOptedOut(row).has(String(userId))) return { yes: false, why: 'opted_out' };
+  if (role === 'couch') return state.settings.get('marathon_couch_announcements') ? { yes: true, why: 'default' } : { yes: false, why: 'couch_off' };
   const on = marathonSwitch(row, role === 'host' ? 'host_announcements' : 'announcements').on;
   return on ? { yes: true, why: 'default' } : { yes: false, why: role === 'host' ? 'hosts_off' : 'runners_off' };
 }

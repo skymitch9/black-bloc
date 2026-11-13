@@ -12,7 +12,7 @@ from . import marathon_signals as sig
 from .golive import parse_ts
 from .marathon import DROPPED, _cell, normalise, people_of, renames
 from .marathon_hotfix import EASTERN
-from .marathon_sources import COMMENTATOR, HOST, Person, Run, ScheduleError, seconds_of
+from .marathon_sources import COMMENTATOR, HOST, RUNNER, Person, Run, ScheduleError, seconds_of
 from .timezones import zone
 
 COLUMN = "overlay"
@@ -214,10 +214,10 @@ def fits(runs: Any, slots: list[Slot], pairing: Pairing) -> bool:
 
 
 def _people(run: Run, slot: Slot) -> tuple[Person, ...]:
-    kept = [one for one in run.people if one.part != COMMENTATOR]
-    if slot.hosts:
-        kept = [one for one in kept if one.part != HOST]
-        kept += [Person(name, None, HOST) for name in slot.hosts]
+    kept = [
+        one for one in run.people if one.part == RUNNER or (one.part == HOST and not slot.hosts)
+    ]
+    kept += [Person(name, None, HOST) for name in slot.hosts]
     return tuple(kept + [Person(name, None, COMMENTATOR) for name in slot.commentators])
 
 
@@ -266,7 +266,7 @@ def kept(runs: Any, rows: Any, *, minutes: int | None = None) -> list[Run]:
             found.append(run)
             continue
         extra = [one for one in people_of(row) if one.get("part") in (HOST, COMMENTATOR)]
-        people = [one for one in run.people if one.part not in (HOST, COMMENTATOR)]
+        people = [one for one in run.people if one.part == RUNNER]
         people += [Person(str(one.get("name") or ""), None, str(one["part"])) for one in extra]
         found.append(
             replace(
