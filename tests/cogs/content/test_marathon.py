@@ -1899,3 +1899,96 @@ async def test_a_run_retitled_as_the_one_before_it_is_deleted_is_a_new_row(bot, 
         "[]",
     )
     assert await last_change(bot) == (1, 0, 1 if state == mt.DONE else 2, 0)
+
+
+# --- a role menu that ends with the marathon (request #17) ---------------------------------------
+
+ROLE_NOTICES = 4444
+
+
+async def menu_ending_with(bot, marathon):
+    from black_bloc.cogs.community import role_menus as rolecog
+
+    bot.guild.channels[ROLE_NOTICES] = FakeChannel(ROLE_NOTICES)
+    await bot.store.set(GUILD, "rolemenu_approval_channel_id", ROLE_NOTICES)
+    menu_id = await rolecog.create_menu(bot.db, GUILD, "btb-2027", "Back to Black", None, "staff")
+    await rolecog.add_option(bot.db, menu_id, 10, "Runner")
+    await rolecog.set_menu_end(
+        bot,
+        bot.guild,
+        FakeActor(),
+        await rolecog.get_menu_by_id(bot.db, menu_id),
+        source="marathon",
+        marathon_id=marathon["id"],
+    )
+    return menu_id
+
+
+async def role_menu(bot, menu_id):
+    from black_bloc.cogs.community import role_menus as rolecog
+
+    return await rolecog.get_menu_by_id(bot.db, menu_id)
+
+
+async def test_a_read_that_moves_the_end_moves_a_bound_menu_and_tells_staff_once(bot, cog):
+    marathon = await added(bot, cog)
+    menu_id = await menu_ending_with(bot, marathon)
+    first = (await role_menu(bot, menu_id))["ends_at"]
+    assert first == (NOW + timedelta(minutes=210, days=1)).isoformat()
+
+    cog.client.runs_given = [*SCHEDULE, a_run(6, 400, game="New Game")]
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+
+    moved = (await role_menu(bot, menu_id))["ends_at"]
+    assert moved == (NOW + timedelta(minutes=460, days=1)).isoformat()
+    assert len(await all_details(bot, "role_menu.end_moved")) == 1
+    [notice] = bot.guild.channels[ROLE_NOTICES].messages
+    assert "**btb-2027**'s end moved" in notice.content
+
+
+async def test_an_unchanged_read_moves_no_menu_and_posts_nothing(bot, cog):
+    marathon = await added(bot, cog)
+    menu_id = await menu_ending_with(bot, marathon)
+    before = (await role_menu(bot, menu_id))["ends_at"]
+
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+
+    assert (await role_menu(bot, menu_id))["ends_at"] == before
+    assert await all_details(bot, "role_menu.end_moved") == []
+    assert bot.guild.channels[ROLE_NOTICES].messages == []
+
+
+async def test_a_role_menu_fault_never_stops_a_read(bot, cog, monkeypatch):
+    from black_bloc.cogs.community import role_menus as rolecog
+
+    marathon = await added(bot, cog)
+
+    async def broken(*_args):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(rolecog, "follow_marathon", broken)
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+
+    assert (await all_details(bot, "marathon.fetched"))[-1]["marathon_id"] == marathon["id"]
+
+
+@pytest.mark.parametrize("remove", [False, True])
+async def test_archiving_or_removing_the_marathon_leaves_its_menu_on_the_last_date(
+    bot, cog, remove
+):
+    from black_bloc import marathon_archive as ma
+
+    marathon = await added(bot, cog)
+    menu_id = await menu_ending_with(bot, marathon)
+    end = (await role_menu(bot, menu_id))["ends_at"]
+
+    why = ma.REMOVED if remove else ma.STAFF
+    await archive_marathon(bot, bot.guild, FakeActor(), marathon, why=why)
+
+    menu = await role_menu(bot, menu_id)
+    assert (menu["ends_source"], menu["ends_marathon_id"], menu["ends_at"]) == ("date", None, end)
+    [unbound] = await all_details(bot, "role_menu.end_unbound")
+    assert unbound["marathon_id"] == marathon["id"]
+    [notice] = bot.guild.channels[ROLE_NOTICES].messages
+    assert "left the marathon list" in notice.content
