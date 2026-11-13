@@ -456,7 +456,8 @@ Owner decision 2026-11-13: pings-owned menus never sit on the temporary-roles co
    `end-earlier`); the mock mirrors it. *No end*, *Remove a role…* and *Delete* stay open, so a legacy row is never stranded.
 3. **Not closed — the reverse order (conductor's call).** A role ALREADY on a menu with an end can still be made a fan role
    (`/pings` ▸ Streamers… with an existing role → `ensure_fan_role(existing_role=…)`) or the Events role (`setup_events_role(role=…)`,
-   or the two settings keys set by hand). Nothing refuses that, and the hourly end pass then strips it from everyone at the menu's
+   or the two settings keys set by hand) — and by NAME: the template path of `ensure_fan_role` reuses a same-named role, and
+   `setup_events_role` takes a role called `pings_events_role_name` if one exists. Nothing refuses that, and the hourly end pass then strips it from everyone at the menu's
    end. Closing it means either `/pings` refusing a role that sits on a menu with an end, or the end pass skipping `/pings` roles.
 4. **Not covered — the raid-train role** (`raidtrain_ping_role_id`), which members also opt into from `/pings`. The decision named
    fan roles and the Events role only; adding it is one line in `pings.owned_role_ids`.

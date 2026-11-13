@@ -11163,8 +11163,8 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     "rolemenu_pings_role_said": (
         "**{name}** belongs to `/pings`, so nothing was changed — members turn it on and off "
-        "there, and a role menu's end would take it off everyone. Keep it off role menus; "
-        "**Remove a role…** takes it off this one.",
+        "there, and a role menu's end would take it off everyone. A menu that holds it can have no "
+        "end; take it off the menu to give the menu one.",
         ("name",),
         "the refusal when a ping role (a streamer's role or the Events role) is put on a menu, or "
         "a menu holding one is given an end or ended now. It takes {name}",

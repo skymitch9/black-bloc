@@ -179,8 +179,7 @@ promise a post yourself, the panel knows; **Do not post my personal bests** opts
 announced, with **Link my channel** to connect one and **Unlink** to stop it.
 `/pings` — which pings you get. It opens a panel saying what you already wear, with **Follow a
 streamer…** and **Stop following…** for one streamer's go-live pings, a toggle for the go-live
-and event pings everybody can have, and **Start my own ping role** if you stream. The *Streamer
-pings* and *Notifications* panels do the same.
+and event pings everybody can have, and **Start my own ping role** if you stream.
 `/birthday` — one panel: **Set my birthday** stores one, **Opt out** takes it back off.
 `/poll` — one panel: **Create** puts a question to the room.
 `/bracket` — the server's tournaments. It opens one window: pick a tournament to **Sign up**,
