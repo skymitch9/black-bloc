@@ -122,6 +122,16 @@ def expires_at(days: Any, *, at: datetime | None = None) -> str | None:
     return ((at or datetime.now(UTC)) + timedelta(days=min(number, DAYS_MAX))).isoformat()
 
 
+def clamped(until: Any, menu_end: Any) -> str | None:
+    """A grant on a menu role never outlasts the menu: the sooner of the two, None meaning never."""
+    grant, menu = parse_ts(until), parse_ts(menu_end)
+    if menu is None:
+        return None if grant is None else grant.astimezone(UTC).isoformat()
+    if grant is None or menu <= grant:
+        return menu.astimezone(UTC).isoformat()
+    return grant.astimezone(UTC).isoformat()
+
+
 def pushed_back(current: Any, days: int, *, at: datetime | None = None) -> str:
     """Extending starts from the later of now and the end it already had."""
     now = at or datetime.now(UTC)
@@ -440,6 +450,7 @@ __all__ = [
     "STAFF",
     "WITHDRAWN",
     "add_grant",
+    "clamped",
     "create_request",
     "decide_request",
     "due_grants",

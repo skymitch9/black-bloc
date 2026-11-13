@@ -10889,6 +10889,102 @@ TEXT_CHECKS.update(
 )
 
 
+# Temporary roles (temp-roles-menu, 2026-11-13, request #17): a menu carries one end, and when
+# it comes everyone wearing the menu's roles loses them. Design: docs/info/event-roles-design.md.
+ROLEMENU_END_BUFFER_KEY = "rolemenu_end_buffer_days"
+ROLEMENU_END_MOVED_MINUTES_KEY = "rolemenu_end_moved_minutes"
+ROLEMENU_END_MOVED_NOTICE_KEY = "rolemenu_end_moved_notice"
+ROLEMENU_ENDED_NOTICE_KEY = "rolemenu_ended_notice"
+ROLEMENU_END_MOVED_TEXT_KEY = "rolemenu_end_moved_text"
+ROLEMENU_END_UNBOUND_TEXT_KEY = "rolemenu_end_unbound_text"
+ROLEMENU_ENDED_TEXT_KEY = "rolemenu_ended_text"
+ROLEMENU_END_FAILURE_LINE_KEY = "rolemenu_end_failure_line"
+ROLEMENU_ENDED_DM_KEY = "rolemenu_ended_dm"
+ROLEMENU_END_NOT_KNOWN_KEY = "rolemenu_end_not_known_text"
+ROLEMENU_END_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    ROLEMENU_END_MOVED_TEXT_KEY: (
+        "**{menu}**'s end moved: its roles now come off {to} (was {was}).",
+        ("menu", "to", "was"),
+        "the staff notice when a marathon's new dates move the end of a role menu bound to it. "
+        "It takes {menu} {to} {was}",
+    ),
+    ROLEMENU_END_UNBOUND_TEXT_KEY: (
+        "**{marathon}** left the marathon list, so **{menu}** keeps the end it had: its roles "
+        "come off {to}.",
+        ("menu", "marathon", "to"),
+        "the staff notice when a marathon a role menu ends with is archived or removed; the menu "
+        "keeps its last end as a plain date. It takes {menu} {marathon} {to}",
+    ),
+    ROLEMENU_ENDED_TEXT_KEY: (
+        "**{menu}** ended — {roles} role(s) taken off {members} people. {failures} failure(s).",
+        ("menu", "roles", "members", "failures"),
+        "the staff notice when a role menu's end comes and its roles are taken off everyone "
+        "wearing them. It takes {menu} {roles} {members} {failures}",
+    ),
+    ROLEMENU_END_FAILURE_LINE_KEY: (
+        "{name} still wears {roles}",
+        ("name", "roles"),
+        "one line under the ended notice for each member whose roles could not be taken off. "
+        "It takes {name} {roles}",
+    ),
+    ROLEMENU_ENDED_DM_KEY: (
+        "{roles} on **{guild}** ended with {what}.",
+        ("roles", "guild", "what"),
+        "the one DM a member gets when a role menu ends and its roles come off them. It takes "
+        "{roles} {guild} {what} — {what} is the marathon's name or the date",
+    ),
+    ROLEMENU_END_NOT_KNOWN_KEY: (
+        "end not known yet",
+        (),
+        "what stands in for a role menu's end while the marathon it ends with has no dates yet",
+    ),
+}
+ROLEMENU_END_SWITCHES: dict[str, tuple[bool, str]] = {
+    ROLEMENU_END_MOVED_NOTICE_KEY: (
+        True,
+        "true — the default — tells staff where role notices post when a role menu's end moves "
+        "with its marathon, or the marathon leaves the list; false moves it quietly",
+    ),
+    ROLEMENU_ENDED_NOTICE_KEY: (
+        True,
+        "true — the default — tells staff where role notices post when a role menu ends, with "
+        "how many people lost its roles and who still wears one; false ends it quietly",
+    ),
+}
+ROLEMENU_END_NUMBERS: dict[str, tuple[int, int, int, str]] = {
+    ROLEMENU_END_BUFFER_KEY: (
+        1,
+        0,
+        365,
+        "whole days added after a marathon's last run before a role menu that ends with it "
+        "takes its roles off; 1 by default. A menu can carry its own buffer instead",
+    ),
+    ROLEMENU_END_MOVED_MINUTES_KEY: (
+        60,
+        0,
+        10080,
+        "how far, in minutes, a role menu's end must move with its marathon before staff are "
+        "told; 60 by default. The end itself always follows the marathon; smaller moves are "
+        "quiet, so a live schedule does not post a notice on every read",
+    ),
+}
+ROLEMENU_END_DEFAULTS: dict[str, Any] = {
+    **{key: default for key, (default, _, _) in ROLEMENU_END_WORDS.items()},
+    **{key: default for key, (default, _) in ROLEMENU_END_SWITCHES.items()},
+    **{key: default for key, (default, _, _, _) in ROLEMENU_END_NUMBERS.items()},
+}
+KEY_TYPES.update({key: "text" for key in ROLEMENU_END_WORDS})
+KEY_TYPES.update({key: "bool" for key in ROLEMENU_END_SWITCHES})
+KEY_TYPES.update({key: "int" for key in ROLEMENU_END_NUMBERS})
+KEY_HELP.update({key: said for key, (_, _, said) in ROLEMENU_END_WORDS.items()})
+KEY_HELP.update({key: said for key, (_, said) in ROLEMENU_END_SWITCHES.items()})
+KEY_HELP.update({key: said for key, (_, _, _, said) in ROLEMENU_END_NUMBERS.items()})
+KEY_MIN.update({key: floor for key, (_, floor, _, _) in ROLEMENU_END_NUMBERS.items()})
+KEY_MAX.update({key: ceiling for key, (_, _, ceiling, _) in ROLEMENU_END_NUMBERS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in ROLEMENU_END_WORDS.items()}
+)
+
 # Blocks live (blocks-live, 2026-09-28) — who's live now, upcoming events and link buttons. Every
 # word the three blocks post is one of these. Filed under posts, except the upcoming words
 # (events, by prefix): the Go-live page's drawers are pinned by golive-join.test.mjs.
@@ -12013,6 +12109,8 @@ class SettingsStore:
             return OPTOUT_DEFAULTS[key]
         if key in SMALL_FIXES_DEFAULTS:
             return SMALL_FIXES_DEFAULTS[key]
+        if key in ROLEMENU_END_DEFAULTS:
+            return ROLEMENU_END_DEFAULTS[key]
         if key in TEMPVOICE_BLOCK_DEFAULTS:
             return TEMPVOICE_BLOCK_DEFAULTS[key]
         if key in BUTTON_BLOCK_DEFAULTS:

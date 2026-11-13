@@ -1,7 +1,7 @@
 # Temporary roles — the role menu becomes the permanent staff control; a role ends on a date or with a marathon (request #17)
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-11-13 09:5x Phoenix)** — dispatches to
-> Opus as branch `temp-roles-menu` once the before-dispatch usage read exists. **Last verified: 2026-11-13 09:4x** against `main`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **1a BUILT on branch `temp-roles-menu`, not merged; 1b and 2
+> not started** (2026-11-13; deviations, decisions and the interface 1b calls are at §6). 📐 Design by Fable, 2026-11-13 09:5x Phoenix. **Last verified: 2026-11-13 09:4x** against `main`
 > `8556fcc8` by reading the code, and against the live site through the operator token (request #17; `GET /api/marathons`).
 > ⚠️ NOT verified: anything in Discord; the bot was not run; no browser; the guild's current role list (the role names below are
 > from the 2026-08-26 scan and are examples, never a fixed list).
@@ -193,3 +193,92 @@ archive unbinds), `tests/api/tools/test_rolemenus.py` (new fields, 410s in words
 
 None pre-approved beyond the design. Anything that changes a persisted key, a decision default or a surface's owner comes back to
 the conductor first.
+
+### 6.1 What 1a built, and every deviation or decision it took (2026-11-13, branch `temp-roles-menu`)
+
+Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, core*.
+
+**Deviations from the text above**
+
+1. **Accessors live in `cogs/community/role_menus.py`, not `storage/db.py`.** `db.py` holds no accessors at all; every
+   `role_menus` query already sits beside `get_menu` in the cog module, so the new ones (`menus_still_to_end`, `menus_bound_to`,
+   `store_menu_end`, `restamp_menu_end`, `unbind_menu_end`, `record_end_pass`, `marathon_row`) do too.
+2. **The end pass runs FIRST in the tick, not second** (`run_due_menus` → `run_due_grants` → `reconcile_records`), and the grant
+   path skips a grant whose role is on a DUE, unfinished menu. Otherwise grants stamped with the menu's end come off one by one
+   with `DM_EXPIRED` (and `cog_load` runs the grant path on its own), breaking §3.3 step 5's one DM per member.
+3. **Six columns beyond §3.1's five:** `end_passes` (the retry counter), `end_members` (people the roles came off, summed over
+   every pass — the ended notice and the card's *ended … · 23 people*), `end_failures` (JSON leftovers at the cap), `ends_told_at`
+   (see 6 below) and `ends_set_by`/`ends_set_at` (the card's *who set it and when*, so 1b needs no second migration).
+   `role_menu.end_failed` per member carries `{menu, menu_id, user, roles}` with `roles` = the ones still on; `role_menu.ended`
+   carries `roles` (the menu's), `members` (the running total), `this_pass`, `failures`, `left`, `passes`.
+4. **`ROLE_MENU_END_RETRIES` is a constant (3), not a key** — the brief named it so. ⚠️ It is a decided number; if staff should be
+   able to change it, it becomes a key (checklist 33). Question for the conductor.
+5. **Two keys beyond §3.4:** `rolemenu_end_unbound_text` (the unbinding sentence — "every word a key") and
+   `rolemenu_end_failure_line` (one line per member still wearing a role, under the ended notice). `rolemenu_end_not_known_text`
+   (*end not known yet*) was added now because the moved notice says it when a marathon first gets dates.
+
+**Decisions 1a had to make — each named for the conductor**
+
+6. ⚠️ **NEW DECISION DEFAULT: `rolemenu_end_moved_minutes` = 60** (int 0–10080). `mt.span` moves on every live read of a schedule
+   that writes actuals (checklist 41/42), so "notice when the end changed" would ping staff every minute during a live marathon.
+   The end ALWAYS follows the marathon (restamped silently); `role_menu.end_moved` + the notice fire only when it has moved ≥ 60
+   min from the last end staff were TOLD (`ends_told_at`), so drift cannot add up unseen. 0 = every move.
+7. **Guard:** with `bot.guard` set (TEST_MODE) the pass logs `role_menu.would_end` (wearers listed) and does nothing, counting
+   no pass — the `handed_roles.take_back` precedent. ⚠️ The existing `_expire` grant path has NO guard check; 1a did not change it.
+   The pass is NOT gated on `rolemenu_mode` (or on anything else): `bot.guard` is the only brake, and it is `None` on Fly.
+8. **End it now** (`end_menu_now`) writes the end as `date` = now (unbinding a marathon) and then runs the pass, so a pass that
+   leaves failures is retried by the hourly tick like any other end. Under `bot.guard` it logs `would_end` and writes NOTHING, so
+   a rehearsal cannot arm a menu that strips everyone at the first tick after the guard lifts.
+9. **Stamping OVERWRITES** an open grant's `expires_at` with the soonest unfinished menu end of its role — including a grant that
+   had a shorter ad-hoc end from before. A min() would leave an old stamp behind when an end moves later, and the grant path would
+   then take the role off on the old date. Clearing an end (`source="none"`) nulls only the stamp the menu had put there. The
+   shared paths `put_option` (stamps), `drop_option` and `drop_menu` (take the menu's stamp back) re-stamp too, so a role that
+   leaves a menu is not stripped on the menu's date by the grant path.
+10. **An unreadable `ends_at` is never due** (no role removed on a garbled date); it blocks nothing else.
+11. **An empty or short member cache is not a pass:** chunk first; still short of `member_count` → `role_menu.end_failed`
+    `members_not_loaded`, nothing stamped, retried next tick.
+12. **Grants closed by the pass:** every open grant on the menu's roles, members who left included; only members still wearing
+    a role after a failure keep theirs. ⚠️ After the 3-pass cap those leftover grants stay open with a past `expires_at`, so the
+    existing grant path keeps retrying them hourly (`role.expire_failed`) as it does any refused removal today.
+13. **A marathon re-dated after its menu ENDED does not move the menu** — the roles already came off; reuse is staff setting a new
+    end. A menu bound to a marathon that never got an end unbinds to `none`, not to a date with no moment.
+14. **The marathon hooks swallow their own faults** (logged), so a role-menu bug never stops a schedule read or an archive.
+15. **Notices ship ON** as §3.4 says (they post to the staff/approval channel, not to members). Nothing posts or is removed until a
+    menu has an end, and 1a has no door that sets one — 1b does.
+16. **Log kinds:** `role_menu.end_set`, `.end_moved`, `.end_unbound` added to `IMPORTANT`; `.ended` and `.end_failed`,
+    `.notice_failed` are important by suffix; `.would_end` is routine by the shadow rule.
+
+17. **The per-menu locks hang on the bot** (`end_lock(bot, menu_id)`, like the role ledger), not on the module: discord.py's
+    `load_extension` executes the cog module afresh, so the marathon cog's import and the loaded cog could hold two copies.
+
+**Open questions for the conductor (built as described; not decided by 1a)**
+
+- **An end that moves EARLIER.** One schedule read that pulls `marathons.ends_at` earlier (a truncated list, a corrected actual,
+  checklist 42) can make a bound menu due at the next tick, and the pass is irreversible. Should a move earlier wait for a second
+  read, or for staff, before the menu becomes due? Today it follows at once (with the notice if ≥ the floor).
+- **Restore.** Restoring an archived marathon does not rebind the menu that was unbound from it; staff pick it again.
+- **`ROLE_MENU_END_RETRIES`** constant vs key (item 4).
+
+**MUST for 1b:** `api/tools/rolemenus.py` `sync_options` writes options with `add_option`/`remove_option` directly, not through
+`put_option`/`drop_option`, so it does not re-stamp grants — 1b must call `stamp_grants(db, guild_id, changed_role_ids,
+was=(menu["ends_at"],))` there (or route it through the shared functions). `pings.py` edits its own events menu the same way;
+it only matters if that menu is ever given an end.
+
+**NOT built in 1a (1b's):** the clamp is a helper only (`rolegrants.clamped`) — `grant_role` / `staff_assign` / *Push it back…*
+do not call it yet; the Health line (*menus due / ended / failures*); every panel, API and site change; the refusal sentences for
+Set the end… (past date, unknown marathon).
+
+### 6.2 The interface 1b calls (all in `black_bloc/cogs/community/role_menus.py` unless named)
+
+| Need | Call |
+|---|---|
+| Set / change / clear the end | `await set_menu_end(bot, guild, actor, menu, *, source, marathon_id=None, ends_at=None, buffer_days=None, via=VIA_DISCORD) -> str \| None` — `source` in `rolemenus.END_SOURCES` (`"none"`, `"date"`, `"marathon"`); `ends_at` a `datetime` or ISO string (date source); raises `ValueError` for an unknown source or a marathon not in this guild (1b refuses in words BEFORE calling). Clears `ended_at` and the pass counter, stamps grants, logs `role_menu.end_set` via `kind_via` (a route passes `via=VIA_WEBSITE` and never `note()`s, checklist 34). Returns the computed end. |
+| Resolve a typed date | `rolemenus.typed_end(text, store.get(guild.id, "default_timezone")) -> datetime \| None` (date alone = 23:59 local). |
+| End it now | `await end_menu_now(bot, guild, actor, menu, *, via=VIA_DISCORD) -> dict \| None` — the pass's details (`members`, `failures`, `left`, `passes`, `ended`), or None when guarded / cache short. |
+| Run the pass for one due menu | `await end_menu(bot, guild, menu_id, *, actor=None, via=VIA_DISCORD)` |
+| Re-stamp grants by hand | `await stamp_grants(db, guild_id, role_ids, *, was=())` |
+| Who wears the menu's roles (the audit, the card's count, the confirm's count) | `rolemenus.wearers(members, role_ids) -> [(member, [role_ids])]`, with `await members_of(guild)` (None = cache short) and `await menu_role_ids(db, menu_id)` |
+| Clamp a new grant on a menu role | `rolegrants.clamped(until, menu_end)` |
+| The computed end of a menu | `rolemenus.ends_at_of(menu, marathon_row_or_None, store.get(guild.id, "rolemenu_end_buffer_days"))` |
+| Is it due | `rolemenus.is_due(menu, datetime.now(UTC))` |
+| Render a sentence key | `rolemenus.said(store, guild_id, key, **fields)` (falls back to the shipped default, checklist 17) |

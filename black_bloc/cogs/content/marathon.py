@@ -124,6 +124,7 @@ from ...settings_store import (
     MARATHON_WORDS,
 )
 from ...timezones import unix
+from ..community import role_menus as role_ends
 from . import marathon_damping as damping
 from . import marathon_signals as signals
 from .spotlight import channel_by_id, channel_by_login, open_session, windows_for
@@ -2175,6 +2176,7 @@ class Marathons(commands.Cog):
             fetch_failures=0,
             stale_clock_at=stamp,
         )
+        await role_ends.marathon_moved(self.bot, guild, marathon["id"])
         matched = await self.rematch(guild, marathon)
         await self.event_follows(
             guild, marathon, await get_marathon(db, guild.id, marathon["id"])

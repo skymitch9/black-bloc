@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from typing import Any, NamedTuple
 
-from . import panels
+from . import panels, timezones
 from . import rolegrants as grants
 from .golive import parse_ts
 from .panels import panel_minutes as library_panel_minutes
@@ -376,6 +376,125 @@ async def active_grants(db: Any, guild_id: int, *, user_id: int | None = None) -
     return sorted(open_now + forever, key=grant_order)
 
 
+NO_END = "none"
+DATE_END = "date"
+MARATHON_END = "marathon"
+END_SOURCES = (NO_END, DATE_END, MARATHON_END)
+END_OF_DAY = time(23, 59)
+DATE_FORMAT = "%Y-%m-%d"
+BUFFER_MAX = 365
+ROLE_MENU_END_RETRIES = 3
+
+
+def cell(row: Any, key: str, default: Any = None) -> Any:
+    try:
+        found = row[key]
+    except (KeyError, IndexError, TypeError):
+        return default
+    return default if found is None else found
+
+
+def utc_iso(when: datetime | None) -> str | None:
+    return None if when is None else when.astimezone(UTC).isoformat()
+
+
+def typed_end(text: Any, tz_name: Any) -> datetime | None:
+    """A typed `YYYY-MM-DD` ends at 23:59 guild-local; `YYYY-MM-DD HH:MM` at that minute."""
+    words = str(text or "").strip()
+    zone = timezones.zone(tz_name) or timezones.zone("UTC")
+    for form, whole_day in ((timezones.START_FORMAT, False), (DATE_FORMAT, True)):
+        try:
+            naive = datetime.strptime(words, form)
+        except ValueError:
+            continue
+        if whole_day:
+            naive = datetime.combine(naive.date(), END_OF_DAY)
+        return naive.replace(tzinfo=zone).astimezone(UTC)
+    return None
+
+
+def end_source(menu: Any) -> str:
+    found = str(cell(menu, "ends_source", NO_END))
+    return found if found in END_SOURCES else NO_END
+
+
+def buffer_of(menu: Any, default_buffer: Any) -> int:
+    for value in (cell(menu, "buffer_days"), default_buffer):
+        try:
+            return max(0, min(int(value), BUFFER_MAX))
+        except (TypeError, ValueError):
+            continue
+    return 0
+
+
+def ends_at_of(menu: Any, marathon: Any, default_buffer: Any) -> str | None:
+    """The one moment everyone loses the menu's roles, as UTC ISO; None when there is none yet."""
+    source = end_source(menu)
+    if source == NO_END:
+        return None
+    if source == DATE_END or marathon is None:
+        return utc_iso(parse_ts(cell(menu, "ends_at")))
+    end = parse_ts(cell(marathon, "ends_at"))
+    if end is None:
+        return None
+    return utc_iso(end + timedelta(days=buffer_of(menu, default_buffer)))
+
+
+def end_moved(was: Any, now: Any) -> bool:
+    before, after = parse_ts(was), parse_ts(now)
+    if before is None or after is None:
+        return (before is None) != (after is None)
+    return before != after
+
+
+def moved_far(was: Any, now: Any, minutes: Any) -> bool:
+    """Whether a move is big enough to tell staff about; an end appearing or going always is."""
+    if not end_moved(was, now):
+        return False
+    before, after = parse_ts(was), parse_ts(now)
+    if before is None or after is None:
+        return True
+    try:
+        floor = max(int(minutes), 0)
+    except (TypeError, ValueError):
+        floor = 0
+    return abs((after - before).total_seconds()) >= floor * 60
+
+
+def is_due(menu: Any, at: datetime) -> bool:
+    """Ended menus and unreadable ends are never due; nobody loses a role on a garbled date."""
+    if cell(menu, "ended_at"):
+        return False
+    end = parse_ts(cell(menu, "ends_at"))
+    return end is not None and end <= at
+
+
+def wearers(members: Any, role_ids: Any) -> list[tuple[Any, list[int]]]:
+    """Every member wearing any of these roles, with the ones they wear, in the menu's order."""
+    wanted = [int(one) for one in role_ids or ()]
+    found: list[tuple[Any, list[int]]] = []
+    for member in members or ():
+        worn = {int(getattr(role, "id", 0)) for role in getattr(member, "roles", ())}
+        theirs = [role_id for role_id in wanted if role_id in worn]
+        if theirs:
+            found.append((member, theirs))
+    return found
+
+
+def what_ended(menu: Any, marathon_name: Any) -> str:
+    if end_source(menu) == MARATHON_END and marathon_name:
+        return str(marathon_name)
+    return grants.stamp(cell(menu, "ends_at"), "D")
+
+
+def said(store: Any, guild_id: Any, key: str, **fields: Any) -> str:
+    """Checklist 17: staff words that will not fill fall back to the shipped ones."""
+    try:
+        return str(store.get(guild_id, key)).format_map(fields)
+    except Exception:
+        return str(store.default(key, guild_id)).format_map(fields)
+
+
 def panel_minutes(store: Any, guild_id: int) -> int:
     return library_panel_minutes(store, guild_id, PANEL_MINUTES_KEY)
 
@@ -390,6 +509,11 @@ __all__ = [
     "APPROVE",
     "APPROVE_DAYS",
     "AUDIT_MAX",
+    "DATE_END",
+    "END_SOURCES",
+    "MARATHON_END",
+    "NO_END",
+    "ROLE_MENU_END_RETRIES",
     "BACK",
     "DELETE",
     "DELETE_QUESTION",
@@ -431,6 +555,17 @@ __all__ = [
     "WORDS",
     "PanelMove",
     "active_grants",
+    "buffer_of",
+    "end_moved",
+    "end_source",
+    "ends_at_of",
+    "is_due",
+    "moved_far",
+    "said",
+    "typed_end",
+    "utc_iso",
+    "wearers",
+    "what_ended",
     "add_role_buttons",
     "approval_move",
     "grant_buttons",
