@@ -2166,7 +2166,6 @@
       "keys": [
         "role_id",
         "created",
-        "menu",
         "message"
       ]
     },

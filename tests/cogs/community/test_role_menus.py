@@ -2519,3 +2519,101 @@ def test_failure_lines_name_each_member_and_the_roles_still_on_them(bot):
     assert lines[1] == "901 still wears **Host**"
     assert lines[0].endswith(" still wears **Runner**, **Host**")
     assert cog_module.failure_lines(bot, bot.guild, [], {}) == []
+
+
+# --- a role `/pings` hands out never sits on a menu that ends (2026-11-13) ------------------------
+
+PINGS_SAID = "belongs to `/pings`, so nothing was changed"
+
+
+async def a_fan_role(db, role_id=10, user_id=900):
+    from black_bloc import pings
+
+    await pings.set_fan_role(db, GUILD, user_id, role_id, 1)
+
+
+async def test_set_the_end_on_a_menu_holding_a_fan_role_is_refused_every_way(bot, db, lead):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, (first, _), interaction = await btb_card(bot, db, lead)
+    await a_fan_role(db)
+
+    await press(interaction, "Set the end…")
+    await choose(interaction, "Ends with a marathon…", [str(marathon_id)])
+    assert PINGS_SAID in interaction.sent and "**role-10**" in interaction.sent
+
+    await press(interaction, "Type a date…")
+    modal = interaction.response.modals[-1]
+    modal.typed._value = "2099-02-28"
+    await modal.on_submit(interaction)
+    assert PINGS_SAID in interaction.sent
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_source"] == "none" and menu["ends_at"] is None
+    assert await details_of(db, "role_menu.end_set") == []
+    assert first.edits == []
+
+
+async def test_end_it_now_on_a_menu_holding_the_events_role_is_refused_before_it_asks(
+    bot, db, lead
+):
+    await bot.store.set(GUILD, "events_ping_role_id", 11)
+    menu_id, (first, second), interaction = await btb_card(bot, db, lead)
+
+    await press(interaction, "End it now")
+
+    assert PINGS_SAID in interaction.sent and "**role-11**" in interaction.sent
+    assert "Take 2 role(s)" not in str(interaction.embed.description)
+    assert first.edits == [] and second.edits == []
+    assert (await menu_row(db, menu_id))["ended_at"] is None
+
+    await cog_module.run_end_now(interaction, interaction.view)
+
+    assert first.edits == [] and (await menu_row(db, menu_id))["ended_at"] is None
+
+
+async def test_a_bound_menu_that_holds_a_fan_role_keeps_no_end_buffer_or_held_end(
+    bot, db, lead
+):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, end = await bound_menu(bot, db, lead, marathon_id)
+    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    await a_fan_role(db)
+    interaction = await open_a_menu(bot, lead, "btb-2027")
+
+    await press(interaction, "Use the earlier end")
+    assert PINGS_SAID in interaction.sent
+    await press(interaction, "Set the end…")
+    await press(interaction, "Buffer…")
+    modal = interaction.response.modals[-1]
+    modal.typed._value = "3"
+    await modal.on_submit(interaction)
+    assert PINGS_SAID in interaction.sent
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_at"] == end and menu["ends_held_at"] and menu["buffer_days"] is None
+
+    await press(interaction, "No end")
+    await press(interaction, "Yes, clear it")
+
+    assert (await menu_row(db, menu_id))["ends_source"] == "none"
+
+
+async def test_adding_a_ping_role_is_refused_and_removing_one_still_works(bot, db, lead):
+    await self_serve_menu(db)
+    await bot.store.set(GUILD, "golive_ping_role_id", 42)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+
+    await press(interaction, "Add a role…")
+    await choose(interaction, menus.ROLE_PICK, [SimpleNamespace(id=42)])
+    await press(interaction, "Use the role's own name")
+
+    assert PINGS_SAID in interaction.sent and "**role-42**" in interaction.sent
+    menu = await get_menu(db, GUILD, "pronouns")
+    assert 42 not in [row["role_id"] for row in await get_options(db, menu["id"])]
+    assert "role_menu.option_added" not in await action_kinds(db)
+
+    await a_fan_role(db, role_id=1)
+    interaction = await open_a_menu(bot, lead, "pronouns")
+    await choose(interaction, menus.REMOVE_PICK, ["1"])
+
+    assert [row["role_id"] for row in await get_options(db, menu["id"])] == [2]

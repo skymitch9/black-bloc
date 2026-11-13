@@ -56,6 +56,7 @@ from ...settings_store import (
 
 log = logging.getLogger(__name__)
 
+PINGS_ROLE_KEY = "rolemenu_pings_role_said"
 MODES = ("multiple", "single", "staff")
 STAFF_MODE = "staff"
 MODE_KEY = "rolemenu_mode"
@@ -2592,6 +2593,21 @@ async def bindable_marathons(db: Any, guild_id: int, *, at: datetime | None = No
     return sorted(rows, key=order)
 
 
+async def pings_refusal(bot: Any, guild: Any, role_ids: Any) -> str | None:
+    """A role members opt into from `/pings` never sits on a menu that ends; named in words."""
+    from ... import pings
+
+    owned = await pings.owned_role_ids(bot, guild.id)
+    for role_id in role_ids or ():
+        if int(role_id) in owned:
+            return word(bot, guild.id, PINGS_ROLE_KEY, name=role_name(guild, role_id))
+    return None
+
+
+async def menu_pings_refusal(bot: Any, guild: Any, menu: Any) -> str | None:
+    return await pings_refusal(bot, guild, await menu_role_ids(bot.db, menu["id"]))
+
+
 async def delete_refusal(bot: Any, guild: Any, menu: Any, when: Any = None) -> str | None:
     """Why a menu with an end still to come and people wearing its roles is not deleted."""
     if menu is None or menu_value(menu, "ended_at"):
@@ -3222,6 +3238,11 @@ async def run_add_option(
             word(interaction.client, guild.id, "rolemenu_cannot_strip_said", name=role.name),
         )
         return
+    refused = await pings_refusal(interaction.client, guild, [role.id])
+    if refused:
+        await render_add_role(interaction, name, role.id, previous)
+        await answer(interaction, refused)
+        return
     wanted = str(label or "").strip() or role.name
     try:
         await put_option(
@@ -3277,6 +3298,14 @@ async def run_delete_menu(interaction: discord.Interaction, previous: Any) -> No
     )
 
 
+async def end_refused(interaction: discord.Interaction, menu: Any, previous: Any) -> bool:
+    refused = await menu_pings_refusal(interaction.client, interaction.guild, menu)
+    if refused:
+        await render_set_end(interaction, menu["name"], previous)
+        await answer(interaction, refused)
+    return bool(refused)
+
+
 async def run_set_marathon(
     interaction: discord.Interaction, marathon_id: int, previous: Any
 ) -> None:
@@ -3285,6 +3314,8 @@ async def run_set_marathon(
     bot, guild = interaction.client, interaction.guild
     menu = await menu_or_gone(interaction, previous)
     if menu is None:
+        return
+    if await end_refused(interaction, menu, previous):
         return
     if await marathon_row(bot.db, guild.id, marathon_id) is None:
         await render_set_end(interaction, menu["name"], previous)
@@ -3311,6 +3342,8 @@ async def run_typed_end(interaction: discord.Interaction, typed: Any, previous: 
     bot, guild = interaction.client, interaction.guild
     menu = await menu_or_gone(interaction, previous)
     if menu is None:
+        return
+    if await end_refused(interaction, menu, previous):
         return
     text = str(typed or "").strip()
     when = menus.typed_end(text, bot.store.get(guild.id, "default_timezone"))
@@ -3346,6 +3379,8 @@ async def run_buffer(interaction: discord.Interaction, typed: Any, previous: Any
     bot, guild = interaction.client, interaction.guild
     menu = await menu_or_gone(interaction, previous)
     if menu is None:
+        return
+    if await end_refused(interaction, menu, previous):
         return
     refusal = None
     try:
@@ -3394,6 +3429,11 @@ async def run_end_now(interaction: discord.Interaction, previous: Any) -> None:
     menu = await menu_or_gone(interaction, previous)
     if menu is None:
         return
+    refused = await menu_pings_refusal(bot, guild, menu)
+    if refused:
+        await render_menu(interaction, menu["name"], previous)
+        await answer(interaction, refused)
+        return
     details = await end_menu_now(bot, guild, interaction.user, menu)
     await render_menu(interaction, menu["name"], previous)
     if details is None:
@@ -3427,6 +3467,11 @@ async def run_use_held(interaction: discord.Interaction, previous: Any) -> None:
     if menu is None:
         return
     had = menu_value(menu, "ends_held_at")
+    refused = await menu_pings_refusal(bot, guild, menu) if had else None
+    if refused:
+        await render_menu(interaction, menu["name"], previous)
+        await answer(interaction, refused)
+        return
     end = await use_held_end(bot, guild, interaction.user, menu) if had else None
     await render_menu(interaction, menu["name"], previous)
     if not had:
@@ -3592,6 +3637,12 @@ class MoveButton(discord.ui.Button):
         else:
             menu = await menu_or_gone(interaction, view)
             if menu is None:
+                return
+            arming = action in (menus.END_MENU, menus.USE_HELD)
+            refused = await menu_pings_refusal(bot, guild, menu) if arming else None
+            if refused:
+                await render_menu(interaction, menu["name"], view)
+                await answer(interaction, refused)
                 return
             if action == menus.DELETE:
                 refused = await delete_refusal(bot, guild, menu)

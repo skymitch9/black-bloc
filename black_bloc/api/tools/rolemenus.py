@@ -37,8 +37,10 @@ from ...cogs.community.role_menus import (
     marathon_name_of,
     marathon_row,
     members_of,
+    menu_pings_refusal,
     menu_value,
     needs_approval,
+    pings_refusal,
     remove_option,
     retry_days_of,
     role_labels,
@@ -92,6 +94,12 @@ BAD_END_SOURCE = (
     "{known} — a fault in the page rather than in what you picked, so reload it and try again."
 )
 END_FIELDS = ("ends_source", "ends_marathon_id", "ends_at", "buffer_days")
+PINGS_ROLE_CODE = "pings_role"
+
+
+def refuse_pings(refused: str | None) -> None:
+    if refused:
+        raise Refused(409, PINGS_ROLE_CODE, refused)
 
 
 def option_row(row: Any) -> dict[str, Any]:
@@ -401,12 +409,19 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        menu, _ = await read_menu(bot, guild, name)
+        menu, had = await read_menu(bot, guild, name)
         title = wanted_title(payload.get("title")) if payload.get("title") else None
         description = wanted_description(payload.get("description"))
         wanted = payload.get("options")
         options = wanted_options(bot, guild, wanted) if isinstance(wanted, list) else None
+        already = [int(row["role_id"]) for row in had]
+        if options is not None:
+            added = [role.id for role, _, _ in options if int(role.id) not in already]
+            refuse_pings(await pings_refusal(bot, guild, added))
         end = await wanted_end(bot, guild, menu, payload)
+        if end is not None and end["source"] != menus.NO_END:
+            after = already if options is None else [role.id for role, _, _ in options]
+            refuse_pings(await pings_refusal(bot, guild, after))
         actor = actor_for(bot, who, guild)
         if title is not None or description is not None or options is not None:
             await change_menu(
@@ -425,6 +440,7 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         menu, options = await read_menu(bot, guild, name)
+        refuse_pings(await menu_pings_refusal(bot, guild, menu))
         guard = guard_of(bot)
         if guard is not None:
             refuse_guarded(guard.refusal_message())
@@ -465,6 +481,7 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(
                 409, "nothing_held", word(bot, guild.id, "rolemenu_no_held_said", menu=name)
             )
+        refuse_pings(await menu_pings_refusal(bot, guild, menu))
         await use_held_end(bot, guild, actor_for(bot, who, guild), menu, via=VIA_WEBSITE)
         return await one_payload(guild, name)
 

@@ -720,3 +720,83 @@ async def test_the_marathon_row_names_the_menus_that_end_with_it(client, sign_in
     await web.db.conn.execute("UPDATE role_menus SET ended_at = '2099-01-01T00:00:00+00:00'")
     await web.db.conn.commit()
     assert await menus_ending_with(web, guild, marathon_id) == []
+
+
+# --- a role `/pings` hands out never sits on a menu that ends (2026-11-13) ------------------------
+
+PINGS_SAID = "belongs to `/pings`, so nothing was changed"
+
+
+async def test_every_end_and_end_now_on_a_menu_holding_a_fan_role_is_refused_in_words(
+    client, sign_in, web, guild, wf
+):
+    from black_bloc import pings
+
+    sign_in(client)
+    menu = await end_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+    member.roles.append(guild.get_role(wf.PLAIN_ROLE_ID))
+    marathon_id = await a_marathon(web, wf)
+    await pings.set_fan_role(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID, 7)
+    await web.db.conn.execute(
+        "UPDATE role_menus SET ends_held_at = '2099-02-21T05:00:00+00:00' WHERE id = ?",
+        (menu["id"],),
+    )
+    await web.db.conn.commit()
+    web.guard = None
+    before = await wf.kinds_in(web.db)
+
+    for method, route, body in (
+        ("PUT", "/api/rolemenus/btb", {"ends_source": "date", "ends_at": "2099-02-28"}),
+        ("PUT", "/api/rolemenus/btb", {"ends_source": "marathon", "ends_marathon_id": marathon_id}),
+        ("POST", "/api/rolemenus/btb/end-now", {}),
+        ("POST", "/api/rolemenus/btb/end-earlier", {}),
+    ):
+        response = client.request(method, route, json=body)
+        assert response.status_code == 409 and response.json()["error"] == "pings_role", body
+        said = response.json()["message"]
+        assert PINGS_SAID in said and "**Member**" in said
+
+    assert await wf.kinds_in(web.db) == before
+    assert (await get_menu(web.db, wf.GUILD_ID, "btb"))["ends_source"] == "none"
+    assert wf.PLAIN_ROLE_ID in [role.id for role in member.roles]
+
+    cleared = client.put("/api/rolemenus/btb", json={"ends_source": "none"})
+    assert cleared.status_code == 200
+
+
+async def test_putting_the_events_role_on_a_menu_is_refused_and_taking_it_off_is_not(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    menu = await end_menu(client, web, wf)
+    await web.store.set(wf.GUILD_ID, "golive_ping_role_id", wf.ADMIN_ROLE_ID, by=7)
+    both = [
+        {"role_id": str(wf.PLAIN_ROLE_ID), "label": "Runner"},
+        {"role_id": str(wf.ADMIN_ROLE_ID), "label": "Events"},
+    ]
+
+    refused = client.put("/api/rolemenus/btb", json={"options": both})
+
+    assert refused.status_code == 409 and refused.json()["error"] == "pings_role"
+    assert "**Admin**" in refused.json()["message"]
+    assert [row["role_id"] for row in await get_options(web.db, menu["id"])] == [wf.PLAIN_ROLE_ID]
+
+    await web.db.conn.execute(
+        "INSERT INTO role_menu_options(menu_id, role_id, label, emoji, position) "
+        "VALUES (?, ?, 'Events', NULL, 1)",
+        (menu["id"], wf.ADMIN_ROLE_ID),
+    )
+    await web.db.conn.commit()
+
+    kept = client.put("/api/rolemenus/btb", json={"title": "Back to Black 2027", "options": both})
+    assert kept.status_code == 200
+    dropped = client.put("/api/rolemenus/btb", json={"options": both[:1]})
+    assert dropped.status_code == 200
+    assert [row["role_id"] for row in await get_options(web.db, menu["id"])] == [wf.PLAIN_ROLE_ID]
+
+    ends = client.put(
+        "/api/rolemenus/btb",
+        json={"options": both[:1], "ends_source": "date", "ends_at": "2099-02-28"},
+    )
+    assert ends.status_code == 200 and ends.json()["ends_source"] == "date"

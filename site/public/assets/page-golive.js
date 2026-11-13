@@ -144,13 +144,13 @@ const LOG_DRAWER_TITLE = 'Log · both platforms and ping roles';
 const NO_SETTINGS_HERE = 'The bot registers no settings under this heading.';
 const SETUP_ASK_TITLE = 'Set up the Events role?';
 const RAID_ASK_TITLE = 'Set up the raid-train role?';
-const SETUP_HELP = 'Makes (or reuses) the Events role, points both feeds at it and puts it on '
-  + 'the Notifications panel. Post that panel from the Role menus tab.';
+const SETUP_HELP = 'Makes (or reuses) the Events role and points both feeds at it, so a member '
+  + 'opts in from /pings.';
 const RAID_HELP = 'Makes (or reuses) the Raid trains role and points raidtrain_ping_role_id at '
   + 'it, so a member opts in from /pings instead of asking staff.';
 const ONBOARDING_NO_COMMUNITY = 'This server is not a Community server, so Discord has no '
   + 'onboarding screen. Turn Community on in Server Settings ▸ Enable Community; until then '
-  + 'the Notifications role menu is the fallback.';
+  + 'members opt in from /pings.';
 const ONBOARDING_OFF = 'The bot is not managing onboarding. pings_onboarding_managed above turns it on.';
 const ONBOARDING_NEVER = 'Not written yet.';
 const ONBOARDING_NOTHING = 'Nothing to put on the screen yet — set up the Events role or the '

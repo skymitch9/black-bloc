@@ -334,7 +334,9 @@ async def seed_world(client, web, guild, wf) -> dict:
     # review room is made in — without one `submit_event` refuses and so does the route.
     await web.store.set(guild_id, "events_category_id", wf.CATEGORY_ID, by=7)
     await web.store.set(guild_id, "pings_mode", "on", by=7)
-    await pings.set_fan_role(db, guild_id, MEMBER_ID, wf.PLAIN_ROLE_ID, 7)
+    # The ping roles are the Admin role, never Member: Member is the role-menu entries' role, and
+    # a role `/pings` hands out is refused on a menu (pings no longer keeps role menus).
+    await pings.set_fan_role(db, guild_id, MEMBER_ID, wf.ADMIN_ROLE_ID, 7)
     # The streamer list: one on it, and PING_MEMBER_ID off it so the restore route has
     # something to restore. Nobody is added by hand in the app — a go-live is what lists them.
     for user_id, listed in ((MEMBER_ID, 1), (PING_MEMBER_ID, 0)):
@@ -772,7 +774,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         display_name="ESA Marathon",
     )
     await pings.set_fan_role(
-        db, guild_id, None, wf.PLAIN_ROLE_ID, 7, spotlight_id=role_spotlight_id
+        db, guild_id, None, wf.ADMIN_ROLE_ID, 7, spotlight_id=role_spotlight_id
     )
     # The Members page's Opted out list draws a channel opted out of marathons in its own block.
     quiet_spotlight_id = await add_spotlight(
@@ -816,7 +818,7 @@ async def seed_world(client, web, guild, wf) -> dict:
     # Request #17: a menu that ends with this marathon and holds an earlier end, so the drawer's
     # Roles ending line has a row and Use the earlier end reaches a held menu.
     held_menu = await create_menu(db, guild_id, "btb-2027", "Back to Black 2027", None, "staff")
-    await add_option(db, held_menu, wf.ADMIN_ROLE_ID, "Runner", None)
+    await add_option(db, held_menu, wf.STAFF_ROLE_ID, "Runner", None)
     await db.conn.execute(
         "UPDATE role_menus SET ends_source = 'marathon', ends_marathon_id = ?, "
         "ends_at = '2099-03-01T05:00:00+00:00', ends_held_at = '2099-02-21T05:00:00+00:00' "

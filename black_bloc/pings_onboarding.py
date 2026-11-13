@@ -21,6 +21,7 @@ REASON = "Black Bloc pings onboarding"
 SYNCED = "pings.onboarding_synced"
 FAILED = "pings.onboarding_failed"
 TOOK_OVER = "pings.onboarding_took_over"
+NOTIFICATIONS_MENU = "notifications"
 
 NO_COMMUNITY = (
     "This server is not a Community server yet, so Discord has no onboarding screen to put "
@@ -52,8 +53,8 @@ CARD_NOT_MANAGED = (
     "somebody left them and Black Bloc will not write to them."
 )
 CARD_NO_COMMUNITY = (
-    "This server is not a Community server, so there is no onboarding screen. The "
-    "*Notifications* role menu is the fallback until there is."
+    "This server is not a Community server, so there is no onboarding screen. Members opt in "
+    "from `/pings` until there is."
 )
 CARD_PROMPT = "**{title}** — {options}"
 CARD_NO_OPTIONS = "nothing to offer yet"
@@ -303,10 +304,10 @@ async def _refused(
 
 
 async def take_over(bot: Any, guild: Any, *, by: int | None, via: str) -> bool:
-    """Onboarding now asks the question the Notifications menu asked, so that post comes down."""
+    """A legacy posted *notifications* panel comes down once onboarding asks its question."""
     from . import rolemenu_panels as panels
 
-    menu = await get_menu(bot.db, guild.id, pings.NOTIFICATIONS_MENU)
+    menu = await get_menu(bot.db, guild.id, NOTIFICATIONS_MENU)
     if menu is None or not menu["message_id"]:
         return False
     if not await panels.unpost(bot, menu, by):
@@ -316,7 +317,7 @@ async def take_over(bot: Any, guild: Any, *, by: int | None, via: str) -> bool:
         guild,
         kind_via(TOOK_OVER, via),
         actor=by,
-        details={"menu": pings.NOTIFICATIONS_MENU, "via": via},
+        details={"menu": NOTIFICATIONS_MENU, "via": via},
     )
     return True
 
