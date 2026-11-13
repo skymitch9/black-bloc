@@ -1235,6 +1235,10 @@
         "ends_set_at",
         "wearing",
         "end_label",
+        "held_label",
+        "held_past",
+        "held_question",
+        "end_now_question",
         "last_pass"
       ],
       "rows": {
@@ -1293,6 +1297,10 @@
         "ends_set_at",
         "wearing",
         "end_label",
+        "held_label",
+        "held_past",
+        "held_question",
+        "end_now_question",
         "last_pass"
       ],
       "nested": {
@@ -1337,6 +1345,10 @@
         "ends_set_at",
         "wearing",
         "end_label",
+        "held_label",
+        "held_past",
+        "held_question",
+        "end_now_question",
         "last_pass"
       ],
       "nested": {
@@ -1386,6 +1398,10 @@
         "ended_at",
         "wearing",
         "end_label",
+        "held_label",
+        "held_past",
+        "held_question",
+        "end_now_question",
         "last_pass",
         "message",
         "pass"

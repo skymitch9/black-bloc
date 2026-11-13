@@ -29,6 +29,7 @@ from ...cogs.community.role_menus import (
     failure_count,
     get_menu,
     get_options,
+    held_is_past,
     list_menus,
     local_moment,
     make_menu,
@@ -43,6 +44,7 @@ from ...cogs.community.role_menus import (
     staff_assign,
     stamp_grants,
     use_held_end,
+    use_held_question,
     wearing_count,
     word,
 )
@@ -146,6 +148,16 @@ async def menu_payload(bot: Any, guild: Any, menu: Any, options: Any, members: A
     row["buffer_default"] = menus.buffer_of({}, default_buffer(bot, guild.id))
     row["end_label"] = end_label(
         bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu), site_when
+    )
+    held = menu_value(menu, "ends_held_at")
+    row["held_label"] = site_when(bot, guild.id, held) if held else None
+    row["held_past"] = held_is_past(menu)
+    counted = wearing if isinstance(wearing, int) else wearing_count(bot, guild.id, None, ())
+    row["held_question"] = use_held_question(
+        bot, guild.id, menu, len(options), counted, site_when
+    )
+    row["end_now_question"] = word(
+        bot, guild.id, "rolemenu_end_now_question", roles=len(options), members=counted
     )
     return row
 

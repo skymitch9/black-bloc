@@ -11166,6 +11166,20 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("menu",),
         "what staff are told when there is no held end to take. It takes {menu}",
     ),
+    "rolemenu_use_held_question": (
+        "Use **{menu}**'s earlier end? Its {roles} role(s) come off {members} people {when}.",
+        ("menu", "roles", "members", "when"),
+        "what staff are asked before Use the earlier end, while that end is still to come. It "
+        "takes {menu} {roles} {members} {when}",
+    ),
+    "rolemenu_use_held_past_question": (
+        "Use **{menu}**'s earlier end? It was {when}, already gone by, so its {roles} role(s) come "
+        "off {members} people at the next hourly pass.",
+        ("menu", "roles", "members", "when"),
+        "what staff are asked before Use the earlier end when that end has already gone by. It "
+        "takes {menu} {roles} {members} {when}",
+    ),
+    "rolemenu_use_held_yes": ("Yes, use it", (), "Use the earlier end's confirm button"),
 }
 ROLEMENU_STAFF_DEFAULTS: dict[str, Any] = {
     key: default for key, (default, _, _) in ROLEMENU_STAFF_WORDS.items()

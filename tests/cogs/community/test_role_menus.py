@@ -2355,10 +2355,62 @@ async def test_use_the_earlier_end_renders_while_held_and_takes_it(bot, db, lead
     interaction = await open_a_menu(bot, lead, "btb-2027")
     assert "Held: its marathon now ends earlier" in interaction.body
     await press(interaction, "Use the earlier end")
+    await press(interaction, "Yes, use it")
 
     menu = await menu_row(db, menu_id)
     assert menu["ends_at"] == "2027-02-21T05:00:00+00:00" and menu["ends_held_at"] is None
     assert "Use the earlier end" not in labels(interaction.view)
+
+
+async def test_use_the_earlier_end_asks_first_naming_the_end_and_the_counts(bot, db, lead):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, end = await bound_menu(bot, db, lead, marathon_id)
+    wearer = FakeMember(bot.guild, user_id=900, roles=(10,))
+    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    interaction = await open_a_menu(bot, lead, "btb-2027")
+
+    await press(interaction, "Use the earlier end")
+
+    held = grants.stamp("2027-02-21T05:00:00+00:00", "F")
+    assert str(interaction.embed.description) == (
+        f"Use **btb-2027**'s earlier end? Its 1 role(s) come off 1 people {held}."
+    )
+    assert labels(interaction.view)[:2] == ["Yes, use it", "Keep it"]
+    assert (await menu_row(db, menu_id))["ends_at"] == end
+
+    await press(interaction, "Keep it")
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_at"] == end and menu["ends_held_at"]
+    assert wearer.edits == []
+
+
+async def test_use_the_earlier_end_says_plainly_when_that_end_has_already_gone_by(
+    bot, db, lead
+):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
+    wearer = FakeMember(bot.guild, user_id=900, roles=(10,))
+    await move_marathon(db, marathon_id, PAST)
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    interaction = await open_a_menu(bot, lead, "btb-2027")
+
+    await press(interaction, "Use the earlier end")
+
+    said = str(interaction.embed.description)
+    assert "already gone by" in said and "at the next hourly pass" in said
+    assert "1 role(s) come off 1 people" in said
+    assert wearer.edits == []
+
+    await press(interaction, "Yes, use it")
+    assert (await menu_row(db, menu_id))["ends_held_at"] is None
+    assert wearer.edits == []
+
+    await tick(bot)
+
+    assert wearer.edits == [[]]
+    assert (await menu_row(db, menu_id))["ended_at"]
 
 
 async def test_delete_is_refused_while_an_end_is_to_come_and_people_wear_its_roles(bot, db, lead):

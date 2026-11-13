@@ -2514,6 +2514,30 @@ def wearing_count(bot: Any, guild_id: int, members: Any, role_ids: Any) -> Any:
     return len(menus.wearers(members, role_ids))
 
 
+def held_is_past(menu: Any, at: datetime | None = None) -> bool:
+    held = parse_ts(menu_value(menu, "ends_held_at"))
+    return held is not None and held <= (at or datetime.now(UTC))
+
+
+def use_held_question(
+    bot: Any, guild_id: int, menu: Any, roles: int, members: Any, when: Any = None
+) -> str | None:
+    """What Use the earlier end asks, with the counts; None when no earlier end waits."""
+    held = menu_value(menu, "ends_held_at")
+    if not held:
+        return None
+    shown = when or discord_moment("F")
+    return word(
+        bot,
+        guild_id,
+        "rolemenu_use_held_past_question" if held_is_past(menu) else "rolemenu_use_held_question",
+        menu=menu["name"],
+        roles=roles,
+        members=members,
+        when=shown(bot, guild_id, held),
+    )
+
+
 def failure_count(menu: Any) -> int:
     try:
         found = json.loads(menu_value(menu, "end_failures") or "[]")
@@ -3488,13 +3512,19 @@ class MoveButton(discord.ui.Button):
         if action == menus.SET_END:
             await open_set_end(interaction, view)
             return
-        if action == menus.USE_HELD:
+        if action == menus.USE_HELD_YES:
             await run_use_held(interaction, view)
             return
         if action == menus.USE_ROLE_NAME:
             await run_add_option(interaction, None, None, view)
             return
-        if action in (menus.DELETE, menus.END_NOW, menus.END_MENU, menus.NO_END_MOVE_ACTION):
+        if action in (
+            menus.DELETE,
+            menus.END_NOW,
+            menus.END_MENU,
+            menus.NO_END_MOVE_ACTION,
+            menus.USE_HELD,
+        ):
             await self.ask_first(interaction, view, action)
             return
         if action == menus.DELETE_YES:
@@ -3554,6 +3584,27 @@ class MoveButton(discord.ui.Button):
                 yes = menus.PanelMove(
                     menus.END_MENU_YES,
                     word(bot, guild.id, "rolemenu_end_now_yes", BUTTON_MAX),
+                    "danger",
+                    0,
+                )
+            elif action == menus.USE_HELD:
+                role_ids = await menu_role_ids(bot.db, menu["id"])
+                question = use_held_question(
+                    bot,
+                    guild.id,
+                    menu,
+                    len(role_ids),
+                    wearing_count(bot, guild.id, await members_of(guild), role_ids),
+                )
+                if question is None:
+                    await render_menu(interaction, menu["name"], view)
+                    await answer(
+                        interaction, word(bot, guild.id, "rolemenu_no_held_said", menu=menu["name"])
+                    )
+                    return
+                yes = menus.PanelMove(
+                    menus.USE_HELD_YES,
+                    word(bot, guild.id, "rolemenu_use_held_yes", BUTTON_MAX),
                     "danger",
                     0,
                 )

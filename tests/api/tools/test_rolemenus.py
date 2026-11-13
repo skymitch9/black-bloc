@@ -633,6 +633,36 @@ async def test_use_the_earlier_end_takes_a_held_end_and_refuses_when_none_waits(
     assert "web.role_menu.end_set" in await wf.kinds_in(web.db)
 
 
+async def test_the_row_carries_what_the_earlier_end_and_end_now_confirms_ask(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    menu = await end_menu(client, web, wf)
+    member = wf.member(guild, MEMBER, name="ada")
+    member.roles.append(guild.get_role(wf.PLAIN_ROLE_ID))
+
+    [quiet] = client.get("/api/rolemenus").json()
+    assert quiet["held_label"] is None and quiet["held_past"] is False
+    assert quiet["held_question"] is None
+    assert quiet["end_now_question"] == "Take 1 role(s) off 1 people now?"
+
+    for held, past, words in (
+        ("2099-02-21T05:00:00+00:00", False, "come off 1 people 2099-02-2"),
+        ("2020-02-21T05:00:00+00:00", True, "already gone by"),
+    ):
+        await web.db.conn.execute(
+            "UPDATE role_menus SET ends_held_at = ? WHERE id = ?", (held, menu["id"])
+        )
+        await web.db.conn.commit()
+
+        [row] = client.get("/api/rolemenus").json()
+
+        assert row["held_past"] is past and row["wearing"] == 1
+        assert row["held_label"].startswith(held[:4]) and "<t:" not in row["held_label"]
+        assert row["held_question"].startswith("Use **btb**'s earlier end?")
+        assert words in row["held_question"] and "<t:" not in row["held_question"]
+
+
 async def test_a_menu_still_to_end_is_not_deleted_while_people_wear_its_roles(
     client, sign_in, web, guild, wf
 ):
