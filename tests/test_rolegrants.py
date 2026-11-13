@@ -251,3 +251,17 @@ def test_a_stale_ledger_entry_stops_counting(monkeypatch):
 
     assert was_ours(bot, GUILD, MEMBER, ROLE, ADDED) is False
     assert getattr(bot, rolegrants.LEDGER_ATTR) == {}
+
+
+def test_a_grant_on_a_menu_role_never_outlasts_the_menu():
+    from black_bloc.rolegrants import clamped
+
+    menu_end = "2027-03-01T06:59:00+00:00"
+    assert clamped("2027-04-01T00:00:00+00:00", menu_end) == menu_end
+    assert clamped(None, menu_end) == menu_end
+    assert clamped("2027-02-01T00:00:00+00:00", menu_end) == "2027-02-01T00:00:00+00:00"
+    assert clamped("2027-02-01T00:00:00+00:00", None) == "2027-02-01T00:00:00+00:00"
+    assert clamped(None, None) is None
+    assert clamped("2027-04-01T00:00:00-07:00", "2027-04-01T06:00:00+00:00") == (
+        "2027-04-01T06:00:00+00:00"
+    )

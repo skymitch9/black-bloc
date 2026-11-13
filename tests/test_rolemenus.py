@@ -332,3 +332,111 @@ async def test_panel_minutes_reads_the_key_and_defaults_to_ten(db, monkeypatch):
 def test_no_origin_means_no_link_at_all():
     assert rm.site_page_url("") is None
     assert rm.site_page_url("https://bb.example/") == "https://bb.example/rolemenus.html"
+
+
+# --- temporary roles: one end per menu (request #17) ----------------------------------------------
+
+
+def end_row(source="none", ends_at=None, buffer_days=None, ended_at=None):
+    return {"ends_source": source, "ends_at": ends_at, "buffer_days": buffer_days, "ended_at": ended_at}
+
+
+def test_a_typed_date_ends_at_one_minute_to_midnight_guild_local():
+    end = rm.typed_end("2027-02-28", "America/Phoenix")
+    assert end == datetime(2027, 3, 1, 6, 59, tzinfo=UTC)
+
+
+def test_a_typed_date_and_time_ends_at_that_minute_guild_local():
+    assert rm.typed_end("2027-02-28 18:00", "America/Phoenix") == datetime(
+        2027, 3, 1, 1, 0, tzinfo=UTC
+    )
+    assert rm.typed_end("the 28th", "America/Phoenix") is None
+    assert rm.typed_end("", "America/Phoenix") is None
+
+
+def test_a_date_end_is_the_stored_moment_in_one_utc_form():
+    menu = end_row("date", "2027-03-01T06:59:00+00:00")
+    assert rm.ends_at_of(menu, None, 1) == "2027-03-01T06:59:00+00:00"
+    shifted = end_row("date", "2027-02-28T23:59:00-07:00")
+    assert rm.ends_at_of(shifted, None, 1) == "2027-03-01T06:59:00+00:00"
+
+
+def test_a_marathon_end_is_the_marathons_end_plus_the_default_buffer():
+    marathon = {"ends_at": "2027-02-28T05:00:00+00:00"}
+    assert rm.ends_at_of(end_row("marathon"), marathon, 1) == "2027-03-01T05:00:00+00:00"
+    assert rm.ends_at_of(end_row("marathon"), marathon, 0) == "2027-02-28T05:00:00+00:00"
+
+
+def test_a_menus_own_buffer_beats_the_default_and_zero_is_a_buffer():
+    marathon = {"ends_at": "2027-02-28T05:00:00+00:00"}
+    assert rm.ends_at_of(end_row("marathon", buffer_days=3), marathon, 1) == (
+        "2027-03-03T05:00:00+00:00"
+    )
+    assert rm.ends_at_of(end_row("marathon", buffer_days=0), marathon, 1) == (
+        "2027-02-28T05:00:00+00:00"
+    )
+
+
+def test_no_end_is_no_moment_whatever_the_row_still_holds():
+    assert rm.ends_at_of(end_row("none", "2027-03-01T00:00:00+00:00"), None, 1) is None
+    assert rm.ends_at_of({}, None, 1) is None
+    assert rm.ends_at_of(end_row("sometimes", "2027-03-01T00:00:00+00:00"), None, 1) is None
+
+
+def test_a_marathon_with_no_end_yet_binds_to_no_moment():
+    assert rm.ends_at_of(end_row("marathon"), {"ends_at": None}, 1) is None
+
+
+def test_a_marathon_row_that_is_gone_keeps_the_last_computed_end():
+    menu = end_row("marathon", "2027-03-01T05:00:00+00:00")
+    assert rm.ends_at_of(menu, None, 1) == "2027-03-01T05:00:00+00:00"
+
+
+def test_an_end_moves_only_when_the_instant_changes():
+    assert not rm.end_moved("2027-03-01T05:00:00+00:00", "2027-02-28T22:00:00-07:00")
+    assert rm.end_moved("2027-03-01T05:00:00+00:00", "2027-03-01T06:00:00+00:00")
+    assert rm.end_moved(None, "2027-03-01T05:00:00+00:00")
+    assert rm.end_moved("2027-03-01T05:00:00+00:00", None)
+    assert not rm.end_moved(None, None)
+
+
+def test_staff_are_told_only_about_a_move_past_the_floor():
+    was = "2027-03-01T05:00:00+00:00"
+    assert not rm.moved_far(was, "2027-03-01T05:20:00+00:00", 60)
+    assert rm.moved_far(was, "2027-03-01T06:00:00+00:00", 60)
+    assert rm.moved_far(was, "2027-03-01T04:00:00+00:00", 60)
+    assert rm.moved_far(None, was, 60) and rm.moved_far(was, None, 60)
+    assert not rm.moved_far(was, was, 0)
+
+
+def test_a_menu_is_due_once_its_end_has_passed_and_never_twice():
+    now = datetime(2027, 3, 2, tzinfo=UTC)
+    assert rm.is_due(end_row("date", "2027-03-01T06:59:00+00:00"), now)
+    assert not rm.is_due(end_row("date", "2027-03-03T06:59:00+00:00"), now)
+    assert not rm.is_due(
+        end_row("date", "2027-03-01T06:59:00+00:00", ended_at="2027-03-01T07:00:00+00:00"), now
+    )
+    assert not rm.is_due(end_row("none"), now)
+
+
+def test_an_unreadable_end_is_never_due():
+    assert not rm.is_due(end_row("date", "the end of february"), datetime(2099, 1, 1, tzinfo=UTC))
+
+
+class _Wearer:
+    def __init__(self, user_id, *role_ids):
+        self.id = user_id
+        self.roles = [type("R", (), {"id": one})() for one in role_ids]
+
+
+def test_wearers_lists_everyone_wearing_any_role_with_the_ones_they_wear():
+    alice, bob, cara = _Wearer(1, 10, 99), _Wearer(2, 99), _Wearer(3, 11, 10)
+    found = rm.wearers([alice, bob, cara], [10, 11])
+    assert [(member.id, worn) for member, worn in found] == [(1, [10]), (3, [10, 11])]
+    assert rm.wearers([alice], []) == []
+
+
+def test_what_ended_is_the_marathons_name_or_the_date():
+    marathon_menu = end_row("marathon", "2027-03-01T05:00:00+00:00")
+    assert rm.what_ended(marathon_menu, "Back to Black 2027") == "Back to Black 2027"
+    assert rm.what_ended(end_row("date", "2027-03-01T05:00:00+00:00"), None) == "<t:1803877200:D>"

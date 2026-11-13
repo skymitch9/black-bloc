@@ -2300,7 +2300,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1416
+    assert len(settings_store.KEY_TYPES) == 1425
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -3066,3 +3066,31 @@ async def test_every_ninja_word_takes_only_its_own_placeholders(store):
     for key in ("ninja_default_posts", "ninja_default_minutes"):
         with pytest.raises(settings_store.SettingError):
             settings_store.coerce_value(key, -1)
+
+
+async def test_every_temporary_role_decision_is_a_rolemenu_key_both_doors_reach(store):
+    """Request #17: the buffer, the notice floor, both notices and every sentence are keys."""
+    numbers = {
+        settings_store.ROLEMENU_END_BUFFER_KEY: (1, 0, 365),
+        settings_store.ROLEMENU_END_MOVED_MINUTES_KEY: (60, 0, 10080),
+    }
+    for key, (default, floor, ceiling) in numbers.items():
+        assert settings_store.KEY_TYPES[key] == "int" and store.get(7, key) == default
+        assert (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) == (floor, ceiling)
+    for key in (settings_store.ROLEMENU_END_MOVED_NOTICE_KEY, settings_store.ROLEMENU_ENDED_NOTICE_KEY):
+        assert settings_store.KEY_TYPES[key] == "bool" and store.get(7, key) is True
+    for key, (default, _, _) in settings_store.ROLEMENU_END_WORDS.items():
+        assert settings_store.KEY_TYPES[key] == "text" and store.get(7, key) == default
+    every = [*numbers, *settings_store.ROLEMENU_END_SWITCHES, *settings_store.ROLEMENU_END_WORDS]
+    for key in every:
+        assert settings_store.namespace_of(key) == "rolemenu", key
+        assert settings_store.KEY_HELP.get(key), key
+
+
+async def test_a_temporary_role_sentence_takes_only_its_own_placeholders(store):
+    key = settings_store.ROLEMENU_ENDED_DM_KEY
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value(key, "{roles} ended {when}")
+    assert settings_store.coerce_value(key, "{roles} are gone") == "{roles} are gone"
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value(settings_store.ROLEMENU_END_BUFFER_KEY, -1)
