@@ -42,7 +42,7 @@ export const GROUPS = [
       { tab: 'raidtrain', label: 'Raid trains', icon: 'navRaidtrain', feature: 'raidtrain' },
       { tab: 'birthdays', label: 'Birthdays', icon: 'navBirthdays', feature: 'birthday' },
       { tab: 'tempvoice', label: 'Temp voice', icon: 'navTempvoice', feature: 'tempvoice' },
-      { tab: 'rolemenus', label: 'Role menus', icon: 'navRolemenus', feature: 'rolemenu', count: 'requests' },
+      { tab: 'rolemenus', label: 'Role menus', icon: 'navRolemenus', feature: 'rolemenu' },
       { tab: 'polls', label: 'Polls', icon: 'navPolls', feature: 'poll', count: 'polls' },
       { tab: 'chat', label: 'Chat', icon: 'navChat', feature: 'chat' },
     ],
@@ -57,7 +57,6 @@ const at = (id) => document.getElementById(id);
 
 let statusOnce = null;
 let membersOnce = null;
-let requestsOnce = null;
 let pollsOnce = null;
 let featureOnce = null;
 let guidesOnce = null;
@@ -87,12 +86,6 @@ export function memberTally() {
   return membersOnce;
 }
 
-/** Role requests were retired with member self-pick (request #17): no badge, no call. */
-export function requestTally() {
-  if (requestsOnce === null) requestsOnce = Promise.resolve(null);
-  return requestsOnce;
-}
-
 /** Polls still open, for the badge beside Polls. */
 export function pollTally() {
   if (pollsOnce === null) {
@@ -116,7 +109,6 @@ export function featureRequestTally() {
 export function forgetShellStatus() {
   statusOnce = null;
   membersOnce = null;
-  requestsOnce = null;
   pollsOnce = null;
   featureOnce = null;
   guidesOnce = null;
@@ -258,22 +250,16 @@ function paintCount(which, value, said) {
     }
     node.textContent = String(value);
     node.setAttribute('title', said(value));
-    node.setAttribute('data-tone', which === 'requests' && value > 0 ? 'warn' : 'quiet');
+    node.setAttribute('data-tone', 'quiet');
     node.hidden = false;
   }
 }
 
-function paintCounts(tally, waiting, running) {
+function paintCounts(tally, running) {
   paintCount(
     'members',
     tally && typeof tally.total === 'number' ? tally.total : null,
     (total) => `${total} member${total === 1 ? '' : 's'} in the server`,
-  );
-  // A queue with nobody in it says nothing rather than a zero nobody has to act on.
-  paintCount(
-    'requests',
-    typeof waiting === 'number' && waiting > 0 ? waiting : null,
-    (found) => `${found} role request${found === 1 ? '' : 's'} waiting for staff`,
   );
   paintCount(
     'polls',
@@ -349,13 +335,13 @@ export async function paintShell(me) {
     }
     return null;
   }
-  const [status, tally, waiting, running, asked] = await Promise.all([
-    shellStatus(), memberTally(), requestTally(), pollTally(), featureRequestTally(),
+  const [status, tally, running, asked] = await Promise.all([
+    shellStatus(), memberTally(), pollTally(), featureRequestTally(),
   ]);
   paintDots(status);
   paintHealth(status);
   paintGuild(status, me);
-  paintCounts(tally, waiting, running);
+  paintCounts(tally, running);
   paintCount(
     'featurerequests',
     typeof asked === 'number' && asked > 0 ? asked : null,

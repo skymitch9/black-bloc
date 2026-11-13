@@ -43,6 +43,7 @@ import {
   whenWords,
 } from './marathon-words.js';
 import { humanLabel } from './labels.js';
+import { DRAWER_HEAD, drawerItems, menuHash } from './rolemenus-end.js';
 import { trackerHref, trackerLink, trackerRunHref } from './schedule-link.js';
 import { announceMoves, announcedSaid, pingsCard, spotlightCard } from './spotlight-controls.js';
 import {
@@ -83,6 +84,7 @@ import {
 const shown = { id: null, slots: new Set(), people: new Set(), more: false, focus: null, where: null, archived: false };
 const RUNS_LINK = `${BAF} runs`;
 const RUNS_HREF = '/runs.html';
+const ROLE_MENUS_HREF = '/rolemenus.html';
 const HASH = /^marathon-(\d+)$/;
 let refresh = async () => {};
 let showEvent = () => {};
@@ -466,6 +468,16 @@ function eventHead(marathon) {
   return open;
 }
 
+/** Read-only: the role menus whose roles come off with this marathon; each opens its menu. */
+function roleMenusLine(marathon) {
+  const items = drawerItems(marathon.role_menus);
+  if (!items.length) return null;
+  return el('p', { class: 'field-help mx-line mx-role-menus' }, [
+    el('span', { class: 'cell-quiet', text: `${DRAWER_HEAD} ` }),
+    ...joined(items.map((one) => el('a', { class: 'say-nothing-do', href: `${ROLE_MENUS_HREF}${menuHash(one.name)}`, text: one.text }))),
+  ]);
+}
+
 function channelHead(marathon) {
   if (marathon.channel_gone) return el('span', { class: 'mx-line', 'data-tone': 'warn', text: CHANNEL_GONE_SHORT });
   if (!marathon.channel_login) return null;
@@ -511,6 +523,7 @@ function headerBlock(marathon, board, say) {
       eventHead(marathon),
       channelHead(marathon),
     ])),
+    roleMenusLine(marathon),
     ...nextBlock(marathon, say),
   ].filter(Boolean);
 }
