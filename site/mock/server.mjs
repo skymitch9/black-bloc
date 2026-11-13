@@ -5755,7 +5755,22 @@ function menuWearing(menu) {
   return MEMBERS.filter((member) => (member.roles || []).some((role) => roles.has(String(role.id ?? role)))).length;
 }
 
+function heldPast(menu) {
+  return Boolean(menu.ends_held_at) && new Date(menu.ends_held_at).getTime() <= Date.now();
+}
+
+function heldQuestion(menu, wearing) {
+  if (!menu.ends_held_at) return null;
+  return roleWord(heldPast(menu) ? 'rolemenu_use_held_past_question' : 'rolemenu_use_held_question', {
+    menu: menu.name,
+    roles: menu.options.length,
+    members: wearing,
+    when: localMoment(menu.ends_held_at),
+  });
+}
+
 function menuRow(menu) {
+  const wearing = menuWearing(menu);
   return {
     name: menu.name,
     title: menu.title,
@@ -5781,8 +5796,12 @@ function menuRow(menu) {
     ends_held_at: menu.ends_held_at ?? null,
     ends_set_by: menu.ends_set_by ?? null,
     ends_set_at: menu.ends_set_at ?? null,
-    wearing: menuWearing(menu),
+    wearing,
     end_label: menuEndLabel(menu),
+    held_label: menu.ends_held_at ? localMoment(menu.ends_held_at) : null,
+    held_past: heldPast(menu),
+    held_question: heldQuestion(menu, wearing),
+    end_now_question: roleWord('rolemenu_end_now_question', { roles: menu.options.length, members: wearing }),
     last_pass: {
       passes: menu.end_passes ?? 0,
       members: menu.end_members ?? 0,
@@ -11123,8 +11142,8 @@ route('POST', '/api/pings/streamers', async (context) => {
   return {
     ...fanRoleRow(row),
     message: reused
-      ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`.`
-      : `Made **${name}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of their go-live announcement.`,
+      ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* role menu. People pick it with **Follow a streamer…** on \`/pings\`.`
+      : `Made **${name}** and put it on the *streamers* role menu. People pick it with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of their go-live announcement.`,
   };
 });
 
@@ -11200,7 +11219,7 @@ function renameFanRole(held, who, body) {
   logAction('web.pings.fan_role_renamed', note);
   return {
     ...fanRoleRow(held),
-    message: `**${who}**'s ping role is called **${typed}** from now on — it was **${was}**. Nobody was added to it or taken off it, and the *streamers* panel says the new name.`,
+    message: `**${who}**'s ping role is called **${typed}** from now on — it was **${was}**. Nobody was added to it or taken off it, and the *streamers* role menu says the new name.`,
   };
 }
 
@@ -11292,7 +11311,7 @@ route('POST', '/api/pings/setup', async (context) => {
     : (before === role.id
       ? `Both feeds already pointed at **${role.name}**, so nothing was changed.`
       : `Used the role **${role.name}** that was already here and pointed both feeds at it.`);
-  message += ' Put it on the *notifications* panel — `/rolemenu` ▸ *notifications* ▸ **Post it**.';
+  message += ' Put it on the *notifications* role menu too; members turn it on from `/pings`.';
   if (state.settings.get('pings_mode') !== 'on') {
     message += ' Ping roles are still off, so nobody can opt in yet — turn them on with `/settings` ▸ **Turn a feature back on…** or from the dashboard\u2019s Go-live tab.';
   }

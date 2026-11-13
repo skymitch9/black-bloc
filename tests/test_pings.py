@@ -1645,3 +1645,16 @@ async def test_a_hide_by_hand_is_mirrored_into_the_one_opt_out_table_and_a_prune
 
     await pings.restore_streamer(bot, bot.guild, STREAMER, by=STAFF)
     assert await optouts.is_out(bot.db, GUILD, STREAMER, optouts.STREAMER_LIST) is False
+
+
+def test_no_pings_sentence_sends_staff_to_post_a_role_menu():
+    """Request #17 retired posting role menus; the streamer and Events menus are staff groupings."""
+    for said in (
+        pings.CREATED,
+        pings.REUSED,
+        pings.RENAMED,
+        pings.SETUP_MENU_ADDED,
+        pings.SETUP_MENU_THERE,
+    ):
+        assert "Post it" not in said and "panel" not in said, said
+        assert "role menu" in said
