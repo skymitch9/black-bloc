@@ -1,7 +1,7 @@
 {
-  "release": "v269",
-  "commit": "a18eda61",
+  "release": "v270",
+  "commit": "5e2a207a",
   "changed_features": [
-    "poll"
+    "marathon"
   ]
 }
