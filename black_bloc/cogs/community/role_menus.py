@@ -46,6 +46,7 @@ from ...settings_store import (
     ROLEMENU_ENDED_DM_KEY,
     ROLEMENU_ENDED_NOTICE_KEY,
     ROLEMENU_ENDED_TEXT_KEY,
+    ROLEMENU_PUSH_BACK_REFUSED_KEY,
     require_staff,
 )
 
@@ -1435,15 +1436,17 @@ async def staff_assign(
         return False, CANNOT_EDIT_THEIRS.format(name=target.display_name)
     added = [labels.get(role_id, str(role_id)) for role_id in to_add]
     removed = [labels.get(role_id, str(role_id)) for role_id in to_remove]
-    await grants.record_added(
-        bot.db,
-        guild.id,
-        target.id,
-        to_add,
-        grants.STAFF,
-        granted_by=getattr(actor, "id", actor),
-        until=grants.expires_at(expires_days_of(menu)),
-    )
+    ends = await menu_ends_by_role(bot.db, guild.id)
+    for role_id in to_add:
+        await grants.record_added(
+            bot.db,
+            guild.id,
+            target.id,
+            [role_id],
+            grants.STAFF,
+            granted_by=getattr(actor, "id", actor),
+            until=grants.clamped(None, ends.get(int(role_id))),
+        )
     await grants.record_removed(bot.db, guild.id, target.id, to_remove, grants.ENDED_BY_STAFF)
     kind = kind_via(f"role_menu.{'unassign' if remove else 'assign'}", via)
     await log_action(
@@ -1680,7 +1683,8 @@ async def grant_role(
         bot, member, guild, {role.id}, set(), f"Black Bloc timed role by {actor}"
     ):
         return None, CANNOT_ADD.format(label=role.name, name=member.display_name)
-    until = grants.expires_at(days)
+    ending = await menu_ending_role(bot.db, guild.id, role.id)
+    until = grants.clamped(grants.expires_at(days), ending["ends_at"] if ending else None)
     open_row = await grants.open_grant(bot.db, guild.id, member.id, role.id)
     if open_row is not None:
         await grants.extend_grant(bot.db, open_row["id"], until)
@@ -1721,7 +1725,11 @@ def grant_names(guild: Any, row: Any) -> tuple[str, str]:
 async def extend_role(
     bot: Any, guild: Any, actor: Any, row: Any, days: Any, *, via: str = VIA_DISCORD
 ) -> tuple[str, str]:
-    """Extending starts from the later of now and the end it already had."""
+    """Extending starts from the later of now and the end it already had; (None, why) when a
+    menu's end owns the date."""
+    refused = await push_back_refusal(bot, guild, row)
+    if refused:
+        return None, refused
     wanted = max(int(days or 0), 1)
     until = grants.pushed_back(row["expires_at"], wanted)
     await grants.extend_grant(bot.db, row["id"], until)
@@ -1836,6 +1844,34 @@ async def stamp_grants(db: Any, guild_id: int, role_ids: Any, *, was: Any = ()) 
         changed += max(cur.rowcount, 0)
     await db.conn.commit()
     return changed
+
+
+async def menu_ending_role(db: Any, guild_id: int, role_id: Any) -> Any:
+    """The unfinished menu whose end comes soonest for this role; None when it is on none."""
+    cur = await db.conn.execute(
+        "SELECT m.* FROM role_menus m JOIN role_menu_options o ON o.menu_id = m.id "
+        "WHERE m.guild_id = ? AND o.role_id = ? AND m.ends_at IS NOT NULL AND m.ended_at IS NULL "
+        "ORDER BY m.ends_at, m.id",
+        (int(guild_id), int(role_id)),
+    )
+    for row in await cur.fetchall():
+        if parse_ts(row["ends_at"]) is not None:
+            return row
+    return None
+
+
+async def push_back_refusal(bot: Any, guild: Any, row: Any) -> str | None:
+    ending = await menu_ending_role(bot.db, guild.id, row["role_id"])
+    if ending is None:
+        return None
+    return menus.said(
+        bot.store,
+        guild.id,
+        ROLEMENU_PUSH_BACK_REFUSED_KEY,
+        role=role_name(guild, row["role_id"]),
+        menu=ending["name"],
+        date=grants.stamp(ending["ends_at"], "D"),
+    )
 
 
 async def menu_role_ids(db: Any, menu_id: int) -> list[int]:
@@ -2567,6 +2603,9 @@ async def build_grant(
     ]
     if row["removed_at"]:
         lines.append(f"Closed {grants.stamp(row['removed_at'])} — {row['removed_reason']}")
+    refused = None if row["removed_at"] else await push_back_refusal(bot, guild, row)
+    if refused:
+        lines.append(refused)
     embed = discord.Embed(
         title=menus.GRANT_TITLE.format(grant_id=row["id"]), description=clamped(lines)
     )
@@ -2574,7 +2613,7 @@ async def build_grant(
     view.where = GRANT_VIEW
     view.grant_id = int(row["id"])
     for move in menus.grant_buttons(
-        ends=bool(row["expires_at"]), removed=bool(row["removed_at"])
+        ends=bool(row["expires_at"]) and not refused, removed=bool(row["removed_at"])
     ):
         view.add_item(MoveButton(move))
     return (embed, view)

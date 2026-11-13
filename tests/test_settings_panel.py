@@ -237,10 +237,11 @@ def test_three_groups_are_over_the_cap_and_find_is_what_reaches_the_rest():
     would have been dropped silently instead. `core` joined at `panel_expired_text`, and
     `marathon` — the 25th group, the select's last slot — arrived with its 36 keys. `posts`
     reached 26 when the button blocks and the live blocks merged, and `birthday` 28 when its
-    block went straight to the date form with three private answers of its own."""
+    block went straight to the date form with three private answers of its own, and `rolemenu`
+    when the temporary-roles staff control gave every word of /rolemenu's Set the end a key."""
     over = [group for group in groups() if needs_find(group)]
     assert over == [
-        "birthday", "chat", "core", "events", "golive", "marathon", "modmail", "posts"
+        "birthday", "chat", "core", "events", "golive", "marathon", "modmail", "posts", "rolemenu"
     ]
 
     every = editable_options("chat")

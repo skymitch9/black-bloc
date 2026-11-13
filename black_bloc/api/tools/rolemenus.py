@@ -35,8 +35,10 @@ from ...cogs.community.role_menus import (
     remove_option,
     retry_days_of,
     seed_menus,
+    menu_value,
     seed_summary,
     staff_assign,
+    stamp_grants,
 )
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
@@ -269,13 +271,18 @@ async def read_menu(bot: Any, guild: Any, name: str) -> tuple[Any, list[Any]]:
 
 
 async def sync_options(bot: Any, menu: Any, wanted: list[tuple[Any, str, Any]]) -> None:
-    """The menu ends up holding exactly the options `wanted_options` passed, in that order."""
+    """The menu ends up holding exactly the options `wanted_options` passed, in that order;
+    open grants on every role that came or went follow the menu's end."""
+    before = {int(row["role_id"]) for row in await get_options(bot.db, menu["id"])}
     for role, label, emoji in wanted:
         await add_option(bot.db, menu["id"], role.id, label, emoji)
     kept = {role.id for role, _, _ in wanted}
     for row in await get_options(bot.db, menu["id"]):
         if row["role_id"] not in kept:
             await remove_option(bot.db, menu["id"], row["role_id"])
+    moved = sorted(before ^ {int(one) for one in kept})
+    if moved:
+        await stamp_grants(bot.db, menu["guild_id"], moved, was=(menu_value(menu, "ends_at"),))
 
 
 async def wanted_target(bot: Any, guild: Any, menu: Any, options: Any, channel_id: Any) -> Any:

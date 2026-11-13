@@ -892,3 +892,29 @@ async def test_moving_a_panel_to_a_channel_that_is_gone_is_refused_in_words(
 
     assert response.status_code == 400 and response.json()["error"] == "no_such_channel"
     assert len(guild.get_channel(wf.TEST_CHANNEL_ID).messages) == 1
+
+
+async def test_a_put_that_moves_roles_re_stamps_their_open_grants(client, sign_in, web, wf):
+    """1a's must-do: options written by the site follow the menu's end like the panel's do."""
+    sign_in(client)
+    await a_menu(client, wf)
+    later = "2099-01-01T00:00:00+00:00"
+    menu = await get_menu(web.db, wf.GUILD_ID, "colours")
+    await web.db.conn.execute(
+        "UPDATE role_menus SET ends_source = 'date', ends_at = ? WHERE id = ?", (later, menu["id"])
+    )
+    await web.db.conn.commit()
+    await grants.add_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID, "staff", until=None)
+
+    client.put(
+        "/api/rolemenus/colours",
+        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
+    )
+    assert (await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID))[
+        "expires_at"
+    ] == later
+
+    client.put("/api/rolemenus/colours", json={"options": []})
+    assert (await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID))[
+        "expires_at"
+    ] is None

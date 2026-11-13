@@ -2707,3 +2707,73 @@ async def test_a_due_menu_whose_marathon_row_is_gone_still_ends_and_says_the_dat
 
     assert member.edits == [[]] and (await menu_row(db, menu_id))["ended_at"]
     assert grants.stamp(end, "D") in member.dms[0]
+
+
+# --- temporary roles 1b: a grant on a menu role never outlasts the menu ---------------------------
+
+
+async def test_a_timed_grant_on_a_menu_role_is_clamped_to_the_menus_end(bot, db, lead):
+    menu_id = await end_menu_with(db, ends_at="2027-03-01T06:59:00+00:00", roles=(5,))
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+
+    _, said = await cog_module.grant_role(bot, bot.guild, lead, member, FakeRole(5), 3650)
+    assert (await grants.open_grant(db, GUILD, 900, 5))["expires_at"] == (
+        "2027-03-01T06:59:00+00:00"
+    )
+
+    other = FakeMember(bot.guild, user_id=901, display_name="Cy")
+    await cog_module.grant_role(bot, bot.guild, lead, other, FakeRole(5), None)
+    assert (await grants.open_grant(db, GUILD, 901, 5))["expires_at"] == (
+        "2027-03-01T06:59:00+00:00"
+    )
+
+    short = FakeMember(bot.guild, user_id=902, display_name="Di")
+    await cog_module.grant_role(bot, bot.guild, lead, short, FakeRole(5), 1)
+    assert grants.parse_ts((await grants.open_grant(db, GUILD, 902, 5))["expires_at"]) < (
+        grants.parse_ts("2027-03-01T06:59:00+00:00")
+    )
+    assert "<t:" in said and menu_id
+
+
+async def test_an_ended_menu_puts_no_end_on_a_new_grant(bot, db, lead):
+    menu_id = await end_menu_with(db, ends_at=PAST, roles=(5,))
+    await db.conn.execute("UPDATE role_menus SET ended_at = ? WHERE id = ?", (PAST, menu_id))
+    await db.conn.commit()
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+
+    await cog_module.grant_role(bot, bot.guild, lead, member, FakeRole(5), None)
+
+    assert (await grants.open_grant(db, GUILD, 900, 5))["expires_at"] is None
+
+
+async def test_hand_roles_out_writes_the_menus_end_on_each_grant(bot, db, lead):
+    menu_id = await end_menu_with(db, ends_at=LATER, roles=(10, 11))
+    target = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    options = await get_options(db, menu_id)
+    pick = assign_pick(menu_id, options, target, remove=False)
+    pick._values = ["10", "11"]
+
+    await cog_module.run_assign(FakeInteraction(bot, lead), pick, pick.view)
+
+    for role_id in (10, 11):
+        assert (await grants.open_grant(db, GUILD, 900, role_id))["expires_at"] == LATER
+
+
+async def test_push_it_back_on_a_menu_role_with_an_end_is_refused_in_words(bot, db, lead):
+    await end_menu_with(db, ends_at=LATER, roles=(5,))
+    FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(5,))
+    grant_id = await grants.add_grant(db, GUILD, 900, 5, "staff", until=LATER)
+    row = await grants.get_grant(db, grant_id)
+
+    until, said = await cog_module.extend_role(bot, bot.guild, lead, row, 7)
+
+    assert until is None
+    assert said == f"**role-5** ends with **btb-2027** on {grants.stamp(LATER, 'D')} — change the menu's end instead."
+    assert (await grants.get_grant(db, grant_id))["expires_at"] == LATER
+    assert "role.extended" not in await action_kinds(db)
+
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+    await choose(interaction, menus.GRANT_PICK, [str(grant_id)])
+    assert "Push it back…" not in labels(interaction.view)
+    assert "change the menu's end instead" in interaction.body

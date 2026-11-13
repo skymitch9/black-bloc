@@ -151,9 +151,11 @@ def build_router(bot: Any) -> APIRouter:
         if not row["expires_at"]:
             raise Refused(409, "no_end_date", NO_END_DATE)
         days = wanted_days(payload.get("days"), required=True)
-        await extend_role(
+        until, said = await extend_role(
             bot, guild, actor_for(bot, who, guild), row, days, via=VIA_WEBSITE
         )
+        if until is None:
+            raise Refused(409, "menu_end", said)
         return grant_row(guild, await grants.get_grant(bot.db, grant_id))
 
     @router.delete("/grants/{grant_id}")
