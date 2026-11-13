@@ -123,6 +123,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 **2026-10-10 09:1x:** the rehearsal channel `#welcome-test` (`1550284332365783091`) is now **#post-test**; `frontdoor_`, `posts_`, `points_` and `sticky_shadow_channel_id` point there (the last two set this morning), `shadow_channel_id` stays `#blackbloc-logs`; the pinned leaderboard rehearsal copy lives in #post-test. No deploy.
 
+**2026-11-13 12:03:** v270 live - a couch is not a runner (request #16): a matched commentator is listed everywhere and posted nowhere while `marathon_couch_announcements` is off; keys 1416. Verified through the operator token; not verified: Discord or a browser. [`DONE.md`](DONE.md) 2026-11-13.
+
 **2026-11-11 23:54:** v269 live - a running poll names no winner (the mark, the tie line and the site's green bar only once a poll is closed); it also carries the v268 that `deploy.yml` shipped from GitHub on 2026-11-08 (page view roles, own pieces). The v256 to v268 lines were not added here; [`deploys.log`](deploys.log) has them. Not verified: Discord or a browser.
 
 **2026-10-23 17:20:** v255 live - the weekly questions Queue shows a *Goes up* column - when each queued question posts as things stand (projected on every read, never stored). **Signed off by the owner 2026-10-25 11:36: *"dates look good"*.** Live dates Mon Oct 26 -> Mon Dec 28, 9:00 AM Phoenix.
