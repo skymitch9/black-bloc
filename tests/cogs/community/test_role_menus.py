@@ -2413,6 +2413,38 @@ async def test_use_the_earlier_end_says_plainly_when_that_end_has_already_gone_b
     assert (await menu_row(db, menu_id))["ended_at"]
 
 
+async def test_end_it_now_on_a_menu_with_a_held_earlier_end_clears_the_hold_and_runs_once(
+    bot, db, lead
+):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
+    wearer = FakeMember(bot.guild, user_id=900, roles=(10,))
+    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    assert (await menu_row(db, menu_id))["ends_held_at"]
+    interaction = await open_a_menu(bot, lead, "btb-2027")
+
+    await press(interaction, "End it now")
+    await press(interaction, "Yes, take them off")
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_held_at"] is None and menu["ends_source"] == "date"
+    assert menu["ended_at"] and menu["end_passes"] == 1 and menu["end_members"] == 1
+    assert wearer.edits == [[]]
+    assert len(await details_of(db, "role_menu.ended")) == 1
+    assert "Held: its marathon now ends earlier" not in interaction.body
+    assert "Use the earlier end" not in labels(interaction.view)
+    assert "ended " in interaction.body and "1 people · 0 failure(s)" in interaction.body
+    assert "**btb-2027** ended — 1 role(s) taken off 1 people. 0 failure(s)." in interaction.sent
+
+    await tick(bot)
+
+    assert wearer.edits == [[]]
+    assert len(await details_of(db, "role_menu.ended")) == 1
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    assert (await menu_row(db, menu_id))["ends_held_at"] is None
+
+
 async def test_delete_is_refused_while_an_end_is_to_come_and_people_wear_its_roles(bot, db, lead):
     menu_id = await end_menu_with(db, ends_at=LATER, name="btb-2027")
     FakeMember(bot.guild, user_id=900, roles=(10,))
