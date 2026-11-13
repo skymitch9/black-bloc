@@ -112,3 +112,18 @@ the designed behaviour, not a crash.
 | Run | `python -m black_bloc` (Ctrl+C stops it cleanly) |
 | Turn the API on | `.env`: `API_ENABLED=true` → <http://127.0.0.1:8080/health>. On Fly it is already `true` (`fly.toml` `[env]`) and serves the dashboard too |
 | Look at the dashboard with no bot | `node site/mock/server.mjs` → <http://127.0.0.1:8788> ([`site.md`](site.md)) |
+
+## Starting Claude Code — not from Kiro's terminal (gotcha, 2026-11-13)
+
+**Symptom:** a Claude Code session has no browser tools (Claude in Chrome / Brave), no Remote Control (pushes say *Remote Control
+inactive*), and `claude mcp list` says *claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is set*.
+**Cause (measured 2026-11-13 10:2x):** `ANTHROPIC_API_KEY` was set in the PROCESS environment only — not User, not Machine, not any
+shell profile, not `~/.claude/settings.json` — and the process chain was `claude.exe ← powershell.exe ← Kiro.exe`: Kiro's integrated
+terminal injects the key. With it set, Claude Code runs on API-key auth and every claude.ai-side feature is off for the whole
+session; `claude doctor` prints *ANTHROPIC_API_KEY is set, so this session is using API-key auth — unset it*. Auth is fixed at
+session start, so the session cannot recover it.
+**Fix:** start `claude` from a plain PowerShell / Windows Terminal (where `$env:ANTHROPIC_API_KEY` prints nothing — verified
+2026-11-13), or `Remove-Item Env:ANTHROPIC_API_KEY` first. Brave is fine as the browser: the extension's native messaging host
+`com.anthropic.claude_code_browser_extension` is registered under `HKCU:\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts`.
+Then `/doctor`, and `/chrome` if the browser tools are still not listed.
+
