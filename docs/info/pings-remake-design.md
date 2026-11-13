@@ -413,3 +413,11 @@ with fakes — see deviation 3.
     Onboarding card, which the brief named as the first and last things to drop.
 
 > **Follow-up 2026-10-20 (`small-fixes`, v246):** switching `pings_mode` off now takes back every ping role Black Bloc itself put on a member (its own `pings.follow` / `pings.events_on` log rows are the ledger), after staff confirm the count; a role from Discord onboarding or by hand stays; switching back on gives nothing back; `pings_off_takes_roles_back` = false keeps the old behaviour (switch-audit i7b). See [`small-fixes-2026-10-20-design.md`](small-fixes-2026-10-20-design.md) §3.
+
+> **Follow-up 2026-11-13 (`pings-no-menus`):** pings no longer keeps role-menu rows. The `streamers` / `streamers-N` and
+> `notifications` menus existed so members could pick their roles from a posted role-menu panel; members opt in from `/pings`, and
+> request #17 (v272) made `/rolemenu` a staff control for TEMPORARY roles, where giving one of those menus an end would strip every
+> fan or Events role from everyone. Creating, renaming and removing a fan role, and setting up the Events role, now touch no role
+> menu, and their sentences say so without naming one. The staff control refuses an end, End it now and Add a role for a `/pings`
+> role. The onboarding take-over (`take_over`) still takes a legacy posted *notifications* panel down. See
+> [`event-roles-design.md`](event-roles-design.md) §6.6.
