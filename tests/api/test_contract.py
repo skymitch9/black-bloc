@@ -333,7 +333,6 @@ async def seed_world(client, web, guild, wf) -> dict:
     # A raid train's own event is reviewed the way a proposal is, so it needs the category a
     # review room is made in — without one `submit_event` refuses and so does the route.
     await web.store.set(guild_id, "events_category_id", wf.CATEGORY_ID, by=7)
-    await web.store.set(guild_id, "rolemenu_mode", "on", by=7)
     await web.store.set(guild_id, "pings_mode", "on", by=7)
     await pings.set_fan_role(db, guild_id, MEMBER_ID, wf.PLAIN_ROLE_ID, 7)
     # The streamer list: one on it, and PING_MEMBER_ID off it so the restore route has
@@ -414,20 +413,13 @@ async def seed_world(client, web, guild, wf) -> dict:
     await save_birthday(db, guild_id, MEMBER_ID, 3, 4, None, "staff")
     await add_channel(db, wf.VOICE_CHANNEL_ID, guild_id, MEMBER_ID, wf.OTHER_CHANNEL_ID)
     await web.store.set(guild_id, "tempvoice_creator_ids", [wf.VOICE_CHANNEL_ID], by=7)
-    client.post(
-        "/api/rolemenus",
-        json={"name": "contract", "title": "Contract", "mode": "multiple"},
-    )
+    client.post("/api/rolemenus", json={"name": "contract", "title": "Contract"})
     client.put(
         "/api/rolemenus/contract",
         json={
             "title": "Contract",
-            "mode": "multiple",
             "options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}],
         },
-    )
-    client.post(
-        "/api/rolemenus/contract/post", json={"channel_id": str(wf.TEST_CHANNEL_ID)}
     )
     client.put("/api/settings/poll_auto_thread", json={"value": True})
     client.post("/api/modmail/snippets", json={"name": "contract", "content": "hello"})
@@ -821,6 +813,17 @@ async def seed_world(client, web, guild, wf) -> dict:
     # Opt-out: Interview Crew hosts Blaster Master and is paired (hosts are always found) — so
     # both opt-out moves reach a BaF person and answer 200 in words.
     await upsert_pairing(db, guild_id, marathon_id, "Interview Crew", HOST_MEMBER_ID, 7)
+    # Request #17: a menu that ends with this marathon and holds an earlier end, so the drawer's
+    # Roles ending line has a row and Use the earlier end reaches a held menu.
+    held_menu = await create_menu(db, guild_id, "btb-2027", "Back to Black 2027", None, "staff")
+    await add_option(db, held_menu, wf.ADMIN_ROLE_ID, "Runner", None)
+    await db.conn.execute(
+        "UPDATE role_menus SET ends_source = 'marathon', ends_marathon_id = ?, "
+        "ends_at = '2099-03-01T05:00:00+00:00', ends_held_at = '2099-02-21T05:00:00+00:00' "
+        "WHERE id = ?",
+        (marathon_id, held_menu),
+    )
+    await db.conn.commit()
     await marathons.rematch(guild, made.value)
     # The People card (marathon-people §B): Contract Runner is spotlit from the marathon, so
     # Stop spotlighting reaches a remembered row; Somebody is not, so Spotlight… reaches them.
@@ -1103,6 +1106,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "window_id": str(window_id),
         "meeting_id": str(meeting_id),
         "marathon_id": str(marathon_id),
+        "held_menu": "btb-2027",
         "marathon_run_id": str(marathon_run_id),
         "marathon_pairing_id": str(marathon_pairing_id),
         "marathon_over_id": str(marathon_over_id),
@@ -1801,8 +1805,9 @@ async def test_every_write_leaves_the_action_kind_the_audit_tab_filters_on(
     client.put("/api/settings/birthday_show_age", json={"value": True})
     client.post("/api/mod/warn", json={"user_id": seeded["member_id"], "reason": "contract"})
     client.post("/api/modmail/snippets", json={"name": "second", "content": "hi"})
-    client.post(
-        f"/api/rolemenus/requests/{seeded['request_id']}/deny", json={"reason": "contract"}
+    client.put(
+        "/api/rolemenus/contract",
+        json={"ends_source": "date", "ends_at": "2099-01-01"},
     )
     client.delete(f"/api/roles/grants/{seeded['grant_id']}")
 

@@ -66,7 +66,6 @@ const NOT_SIGNED_IN = 'You are not signed in yet. Sign in with the Discord accou
 const NOT_STAFF = 'This dashboard is for the mods and admins of Black in a Flash!. Your Discord account is signed in, but it does not hold a staff role. Ask a Lead for the role.';
 const STAFF_UNKNOWN = 'Black Bloc could not ask Discord which roles you hold, so it cannot tell whether you are staff. That is a fault at the bot, not a problem with your access. Try again in a minute.';
 const MEMBER_NOT_STAFF = 'The rest of this dashboard is for the mods and admins of Black in a Flash!, but you are a member here, so you can still file a request and follow your own. Ask a Lead for a staff role if you need the rest.';
-const ROLE_MENUS_OFF = 'Role menus are turned off right now, so nothing was changed. A Lead can turn them back on from the dashboard\'s Role menus tab, or with `/settings` ▸ **Turn a feature back on…**.';
 const TEST_CHANNEL_NAME = 'blackbloc-logs';
 const GUARD = `TEST MODE is on, so Black Bloc refuses to act outside #${TEST_CHANNEL_NAME}. Nothing was done. Ask the owner to lift the test guard first.`;
 const UNKNOWN_ROUTE = 'This dashboard asked Black Bloc for something it does not serve. That is a fault in the page, not a problem with your access.';
@@ -245,6 +244,8 @@ const ROSTER = [
 ];
 // QuietKid and Dax wear GDQ's Staff role, which marathon_optout_role_ids lists (Dax is counted as BaF anyway).
 for (const at of [5, 6]) ROSTER[at].role_ids.push('900000000000000011');
+// End it now takes roles off the roster; a reset puts the seed's roles back.
+const ROSTER_ROLES = ROSTER.map((row) => [...row.role_ids]);
 
 // Mirrors black_bloc/logkinds.py. The mock only needs enough of it to sort and
 // mark its own seed rows; the router is the truth and test_logkinds.py guards it.
@@ -613,9 +614,8 @@ const SETTING_SPECS = [
   ['automod_warn_threshold', 'int', 8, 8, 'warnings before Black Bloc says so in the log, 0 to stop counting', null, 100],
   ['modlog_channel_id', 'channel', '800000000000000004', null, 'where mod cases are posted; defaults to log_channel_id'],
   ['mod_dm_on_action', 'enum', 'server_action_reason', 'server_action', 'what a punished member is told', ['none', 'server_action', 'server_action_reason']],
-  ['rolemenu_approval_channel_id', 'channel', '800000000000000005', null, 'where a role request card is posted for staff to answer; defaults to staff_channel_id'],
-  ['rolemenu_approver_role_id', 'role', null, null, 'role mentioned when a role request needs answering'],
-  ['rolemenu_mode', 'enum', 'off', 'off', 'whether members can pick roles from the panels; off takes them down and hides the posted panels, and takes back every menu role a member picked from a panel or had approved on request (asked first, with how many); a role staff handed over or given anywhere else stays. on posts them again and gives nothing back; off also hides /rolemenu while hiding is on, and the timed roles stay under /mod ▸ Role grants…', ['off', 'on']],
+  ['rolemenu_approval_channel_id', 'channel', '800000000000000005', null, "where role notices post: a role menu's end moving, waiting on staff, or done; blank uses staff_channel_id"],
+  ['rolemenu_approver_role_id', 'role', null, null, 'role mentioned on a role notice; blank pings nobody'],
   ['chat_mode', 'enum', 'on', 'on', 'off, or on (Black Bloc answers when somebody @-mentions it)', ['off', 'on']],
   ['chat_cooldown_seconds', 'int', 20, 20, 'seconds before the same person gets another @-mention reply, 5 to 600', null, 600, 5],
   ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
@@ -822,11 +822,7 @@ const SETTING_SPECS = [
   ["birthday_not_shared_said", "text", "**{name}** keeps their birthday to themselves.", "**{name}** keeps their birthday to themselves.", "what a member sees on /birthday when they look up someone who opted out; staff still see the date. It takes {name}"],
   ["pings_off_confirm_said", "text", "**{count}** members hold ping roles Black Bloc handed out; switching pings off removes them.", "**{count}** members hold ping roles Black Bloc handed out; switching pings off removes them.", "what staff are asked before pings_mode goes off while members wear ping roles Black Bloc put on them. It takes {count}"],
   ["pings_off_confirm_button", "text", "Yes, switch pings off", "Yes, switch pings off", "the button that confirms pings_mode off and takes those roles back"],
-  ["rolemenu_off_confirm_said", "text", "**{count}** members hold roles the role menus handed out; switching role menus off removes them.", "**{count}** members hold roles the role menus handed out; switching role menus off removes them.", "what staff are asked before rolemenu_mode goes off while members wear menu roles Black Bloc handed out. It takes {count}"],
-  ["rolemenu_off_confirm_button", "text", "Yes, switch role menus off", "Yes, switch role menus off", "the button that confirms rolemenu_mode off and takes those roles back"],
-  ["rolemenu_off_dm", "text", "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing else changed.", "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing else changed.", "the DM sent when role menus go off to a member whose menu role staff approved (those members were sent a DM when it was given). It takes {guild} {label}"],
   ["pings_off_takes_roles_back", "bool", true, true, "true \u2014 the default \u2014 makes switching pings_mode off take back every ping role Black Bloc itself put on a member, after staff confirm the count; false switches pings off and leaves every role where it is"],
-  ["rolemenu_off_takes_roles_back", "bool", true, true, "true \u2014 the default \u2014 makes switching rolemenu_mode off take back every menu role a member picked or had approved, after staff confirm the count; false switches role menus off and leaves every role where it is"],
   ["rolemenu_end_moved_text", "text", "**{menu}**'s end moved: its roles now come off {to} (was {was}).", "**{menu}**'s end moved: its roles now come off {to} (was {was}).", "the staff notice when a marathon's new dates move the end of a role menu bound to it. It takes {menu} {to} {was}"],
   ["rolemenu_end_unbound_text", "text", "**{marathon}** left the marathon list, so **{menu}** keeps the end it had: its roles come off {to}.", "**{marathon}** left the marathon list, so **{menu}** keeps the end it had: its roles come off {to}.", "the staff notice when a marathon a role menu ends with is archived or removed; the menu keeps its last end as a plain date. It takes {menu} {marathon} {to}"],
   ["rolemenu_ended_text", "text", "**{menu}** ended \u2014 {roles} role(s) taken off {members} people. {failures} failure(s).", "**{menu}** ended \u2014 {roles} role(s) taken off {members} people. {failures} failure(s).", "the staff notice when a role menu's end comes and its roles are taken off everyone wearing them. It takes {menu} {roles} {members} {failures}"],
@@ -837,6 +833,54 @@ const SETTING_SPECS = [
   ["rolemenu_ended_notice", "bool", true, true, "true \u2014 the default \u2014 tells staff where role notices post when a role menu ends, with how many people lost its roles and who still wears one; false ends it quietly"],
   ["rolemenu_end_buffer_days", "int", 1, 1, "whole days added after a marathon's last run before a role menu that ends with it takes its roles off; 1 by default. A menu can carry its own buffer instead", null, 365, 0],
   ["rolemenu_end_moved_minutes", "int", 60, 60, "how far, in minutes, a role menu's end must move with its marathon before staff are told; 60 by default. The end itself always follows the marathon; smaller moves are quiet, so a live schedule does not post a notice on every read", null, 10080, 0],
+  ["rolemenu_end_earlier_holds", "bool", true, true, "true \u2014 the default \u2014 holds a marathon's new dates that would pull a role menu's end earlier than it was by more than rolemenu_end_moved_minutes, and tells staff; the menu keeps its end until staff press Use the earlier end. false lets the end follow the marathon at once"],
+  ["rolemenu_end_held_text", "text", "**{menu}**'s marathon now ends earlier: its roles would come off {to} instead of {was}. Nothing moved \u2014 **Use the earlier end** on its card takes the earlier one.", "**{menu}**'s marathon now ends earlier: its roles would come off {to} instead of {was}. Nothing moved \u2014 **Use the earlier end** on its card takes the earlier one.", "the staff notice when a marathon's new dates would pull a role menu's end EARLIER and the move is held for staff. It takes {menu} {to} {was}"],
+  ["rolemenu_retired_said", "text", "Members pick their own roles in Discord's Channels & Roles now, so role menus are no longer posted or requested and nothing was changed. Staff hand roles out from a menu's card \u2014 **Hand roles out\u2026** on /rolemenu or the Role menus page.", "Members pick their own roles in Discord's Channels & Roles now, so role menus are no longer posted or requested and nothing was changed. Staff hand roles out from a menu's card \u2014 **Hand roles out\u2026** on /rolemenu or the Role menus page.", "what the site is told when it asks for a retired role-menu move (post, take down, requests, seed)"],
+  ["rolemenu_picking_retired_said", "text", "Roles are picked in Discord's own Channels & Roles now.", "Roles are picked in Discord's own Channels & Roles now.", "what a member is told when they use a role menu panel still posted from before"],
+  ["rolemenu_push_back_refused", "text", "**{role}** ends with **{menu}** on {date} \u2014 change the menu's end instead.", "**{role}** ends with **{menu}** on {date} \u2014 change the menu's end instead.", "the refusal when somebody pushes back a timed role whose role is on a role menu with an end. It takes {role} {menu} {date}"],
+  ["rolemenu_root_line", "text", "**{name}** \u00b7 {roles} role(s) \u00b7 {wearing} wearing \u00b7 {end}", "**{name}** \u00b7 {roles} role(s) \u00b7 {wearing} wearing \u00b7 {end}", "one menu's line on /rolemenu. It takes {name} {roles} {wearing} {end}"],
+  ["rolemenu_wearing_unknown_text", "text", "?", "?", "what stands in for a wearing count while Discord has not sent the whole member list"],
+  ["rolemenu_no_end_text", "text", "no end set", "no end set", "a role menu with no end"],
+  ["rolemenu_end_date_text", "text", "ends {when}", "ends {when}", "a role menu's end when it is a typed date. It takes {when}"],
+  ["rolemenu_end_marathon_text", "text", "ends {when} ({marathon} + {buffer} d)", "ends {when} ({marathon} + {buffer} d)", "a role menu's end when it ends with a marathon. It takes {when} {marathon} {buffer}"],
+  ["rolemenu_ended_line", "text", "ended {when} \u00b7 {members} people \u00b7 {failures} failure(s)", "ended {when} \u00b7 {members} people \u00b7 {failures} failure(s)", "the card's line once a role menu's end has run. It takes {when} {members} {failures}"],
+  ["rolemenu_end_set_by_line", "text", "Set by {who} {when}", "Set by {who} {when}", "the card's line naming who set a role menu's end. It takes {who} {when}"],
+  ["rolemenu_end_held_line", "text", "Held: its marathon now ends earlier \u2014 {to}", "Held: its marathon now ends earlier \u2014 {to}", "the card's line while an earlier end waits for staff. It takes {to}"],
+  ["rolemenu_role_line", "text", "{label} \u2014 <@&{role_id}> \u00b7 {wearing} wearing", "{label} \u2014 <@&{role_id}> \u00b7 {wearing} wearing", "one role's line on a menu's card. It takes {label} {role_id} {wearing}"],
+  ["rolemenu_set_end_button", "text", "Set the end\u2026", "Set the end\u2026", "the card's button that opens Set the end"],
+  ["rolemenu_end_now_button", "text", "End it now", "End it now", "the card's button that ends a menu now"],
+  ["rolemenu_use_held_button", "text", "Use the earlier end", "Use the earlier end", "the card's button that takes a held, earlier marathon end"],
+  ["rolemenu_type_date_button", "text", "Type a date\u2026", "Type a date\u2026", "Set the end's typed-date button"],
+  ["rolemenu_buffer_button", "text", "Buffer\u2026", "Buffer\u2026", "Set the end's buffer button"],
+  ["rolemenu_no_end_button", "text", "No end", "No end", "Set the end's button that clears the end"],
+  ["rolemenu_set_end_title", "text", "When {name}'s roles come off", "When {name}'s roles come off", "the heading of Set the end. It takes {name}"],
+  ["rolemenu_marathon_pick", "text", "Ends with a marathon\u2026", "Ends with a marathon\u2026", "Set the end's marathon picker before anything is picked"],
+  ["rolemenu_marathons_capped", "text", "{shown} of {total} marathons \u2014 type a date for the rest", "{shown} of {total} marathons \u2014 type a date for the rest", "the marathon picker when there are more marathons than Discord lists. It takes {shown} {total}"],
+  ["rolemenu_marathon_option", "text", "{name} \u00b7 ends {date}", "{name} \u00b7 ends {date}", "one marathon in Set the end's picker. It takes {name} {date}"],
+  ["rolemenu_marathon_option_unknown", "text", "{name} \u00b7 end not known yet", "{name} \u00b7 end not known yet", "a marathon with no dates yet in Set the end's picker. It takes {name}"],
+  ["rolemenu_date_title", "text", "The day its roles come off", "The day its roles come off", "the typed-date form's title; Discord cuts a form title at 45 characters"],
+  ["rolemenu_date_label", "text", "YYYY-MM-DD, a time after it if you like", "YYYY-MM-DD, a time after it if you like", "the typed-date form's box; Discord cuts a form label at 45 characters"],
+  ["rolemenu_date_placeholder", "text", "2027-02-28 or 2027-02-28 18:00", "2027-02-28 or 2027-02-28 18:00", "the typed-date form's grey example"],
+  ["rolemenu_buffer_title", "text", "Days after the marathon", "Days after the marathon", "the buffer form's title; Discord cuts a form title at 45 characters"],
+  ["rolemenu_buffer_label", "text", "Whole days, blank for the server's default", "Whole days, blank for the server's default", "the buffer form's box; Discord cuts a form label at 45 characters"],
+  ["rolemenu_end_set_said", "text", "**{menu}**'s roles come off {when}.", "**{menu}**'s roles come off {when}.", "what staff are told once a role menu's end is set. It takes {menu} {when}"],
+  ["rolemenu_end_cleared_said", "text", "**{menu}** has no end.", "**{menu}** has no end.", "what staff are told once a role menu's end is cleared. It takes {menu}"],
+  ["rolemenu_end_past_said", "text", "{when} has already gone by, so the end was not set. Type a day still to come.", "{when} has already gone by, so the end was not set. Type a day still to come.", "the refusal when a typed end is in the past. It takes {when}"],
+  ["rolemenu_end_bad_date_said", "text", "**{given}** is not a date Black Bloc can read, so the end was not set. Type it as YYYY-MM-DD, or YYYY-MM-DD HH:MM for a time.", "**{given}** is not a date Black Bloc can read, so the end was not set. Type it as YYYY-MM-DD, or YYYY-MM-DD HH:MM for a time.", "the refusal when a typed end is not a date. It takes {given}"],
+  ["rolemenu_end_bad_buffer_said", "text", "**{given}** is not a whole number of days from 0 to 365, so the buffer was not changed. Type one, or leave it blank for the server's default.", "**{given}** is not a whole number of days from 0 to 365, so the buffer was not changed. Type one, or leave it blank for the server's default.", "the refusal when a buffer is not a number of days. It takes {given}"],
+  ["rolemenu_end_no_marathon_said", "text", "That marathon is not on the list any more, so the end was not set. Press **Refresh** and pick again.", "That marathon is not on the list any more, so the end was not set. Press **Refresh** and pick again.", "the refusal when the marathon picked has left the list"],
+  ["rolemenu_buffer_needs_marathon_said", "text", "A buffer is added after a marathon's end, and **{menu}** does not end with one, so nothing was changed. Pick a marathon first.", "A buffer is added after a marathon's end, and **{menu}** does not end with one, so nothing was changed. Pick a marathon first.", "the refusal when a buffer is set on a menu that does not end with a marathon. It takes {menu}"],
+  ["rolemenu_end_now_question", "text", "Take {roles} role(s) off {members} people now?", "Take {roles} role(s) off {members} people now?", "what staff are asked before End it now. It takes {roles} {members}"],
+  ["rolemenu_end_now_yes", "text", "Yes, take them off", "Yes, take them off", "End it now's confirm button"],
+  ["rolemenu_no_end_question", "text", "Clear **{menu}**'s end? Nobody loses its roles until another is set.", "Clear **{menu}**'s end? Nobody loses its roles until another is set.", "what staff are asked before No end. It takes {menu}"],
+  ["rolemenu_no_end_yes", "text", "Yes, clear it", "Yes, clear it", "No end's confirm button"],
+  ["rolemenu_end_now_not_run_said", "text", "Black Bloc could not read the whole member list, so **{menu}** did not end and nobody lost a role. Try again in a minute.", "Black Bloc could not read the whole member list, so **{menu}** did not end and nobody lost a role. Try again in a minute.", "what staff are told when End it now cannot see every member yet. It takes {menu}"],
+  ["rolemenu_delete_refused_said", "text", "**{menu}** still ends {when} and {members} people wear its roles, so it was not deleted. **End it now** first, or **No end** if nobody should lose them.", "**{menu}** still ends {when} and {members} people wear its roles, so it was not deleted. **End it now** first, or **No end** if nobody should lose them.", "the refusal when a menu with an end still to come is deleted while people wear its roles. It takes {menu} {when} {members}"],
+  ["rolemenu_cannot_strip_said", "text", "Black Bloc could not take **{name}** off anybody, so it was not added \u2014 the end of this menu has to be able to remove it. Ask an admin to move Black Bloc's role above it in Server Settings \u2192 Roles, then try again.", "Black Bloc could not take **{name}** off anybody, so it was not added \u2014 the end of this menu has to be able to remove it. Ask an admin to move Black Bloc's role above it in Server Settings \u2192 Roles, then try again.", "the refusal when a role put on a menu is one Black Bloc could not remove. It takes {name}"],
+  ["rolemenu_no_held_said", "text", "**{menu}** has no earlier end waiting, so nothing was changed.", "**{menu}** has no earlier end waiting, so nothing was changed.", "what staff are told when there is no held end to take. It takes {menu}"],
+  ["rolemenu_use_held_question", "text", "Use **{menu}**'s earlier end? Its {roles} role(s) come off {members} people {when}.", "Use **{menu}**'s earlier end? Its {roles} role(s) come off {members} people {when}.", "what staff are asked before Use the earlier end, while that end is still to come. It takes {menu} {roles} {members} {when}"],
+  ["rolemenu_use_held_past_question", "text", "Use **{menu}**'s earlier end? It was {when}, already gone by, so its {roles} role(s) come off {members} people at the next hourly pass.", "Use **{menu}**'s earlier end? It was {when}, already gone by, so its {roles} role(s) come off {members} people at the next hourly pass.", "what staff are asked before Use the earlier end when that end has already gone by. It takes {menu} {roles} {members} {when}"],
+  ["rolemenu_use_held_yes", "text", "Yes, use it", "Yes, use it", "Use the earlier end's confirm button"],
   ['golive_channel_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a CHANNEL is opted out of announcements mid-stream. end — the default — unpins it and rewrites it to the ended wording, exactly as a real stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so no reminder follows and nothing waits on Twitch", ['end', 'delete', 'leave']],
   ['golive_member_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a MEMBER opts out of announcements mid-stream — the same three treatments the channel key has. end — the default — unpins it and rewrites it to the ended wording; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so their live role comes off and nothing waits on Twitch or on their presence", ['end', 'delete', 'leave']],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -2289,6 +2333,86 @@ function seedState() {
       retry_days: 7,
       options: [{ role_id: '900000000000000003', label: 'Runner', emoji: '🏃', position: 0 }],
     },
+    {
+      id: 4,
+      name: 'btb-2027',
+      title: 'Back to Black 2027',
+      description: null,
+      mode: 'staff',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [
+        { role_id: FAN_ROLE_IDS[0], label: 'Runner', emoji: null, position: 0 },
+        { role_id: EVENTS_ROLE_ID, label: 'Host', emoji: null, position: 1 },
+      ],
+      ends_source: 'marathon',
+      ends_marathon_id: 1,
+      buffer_days: null,
+      ends_at: new Date(Date.now() + (3120 + 1440) * 60000).toISOString(),
+      ends_held_at: new Date(Date.now() + (3120 + 1440 - 600) * 60000).toISOString(),
+      ends_set_by: STAFF.id,
+      ends_set_at: minutesAgo(2900),
+    },
+    {
+      id: 5,
+      name: 'volunteers',
+      title: 'Volunteers',
+      description: null,
+      mode: 'staff',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [{ role_id: SPOTLIGHT_FAN_ROLE_ID, label: 'Tech checker', emoji: null, position: 0 }],
+      ends_source: 'date',
+      ends_at: daysAhead(20),
+      ends_set_by: MEMBERS[1].id,
+      ends_set_at: minutesAgo(600),
+    },
+    {
+      id: 6,
+      name: 'fall-fest-crew',
+      title: 'Fall Fest crew',
+      description: null,
+      mode: 'staff',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [{ role_id: LIVE_ROLE_ID, label: 'Commentator', emoji: null, position: 0 }],
+      ends_source: 'marathon',
+      ends_marathon_id: 31,
+      buffer_days: 2,
+      ends_at: new Date(Date.now() + (22000 + 2880) * 60000).toISOString(),
+      ends_held_at: minutesAgo(90),
+      ends_set_by: STAFF.id,
+      ends_set_at: minutesAgo(9000),
+    },
+    {
+      id: 7,
+      name: 'halo-fest-crew',
+      title: 'Halo Fest crew',
+      description: null,
+      mode: 'staff',
+      channel_id: null,
+      message_id: null,
+      approval: false,
+      expires_days: null,
+      retry_days: 7,
+      options: [{ role_id: '900000000000000012', label: 'Moderator', emoji: null, position: 0 }],
+      ends_source: 'date',
+      ends_at: minutesAgo(28000),
+      ended_at: minutesAgo(27950),
+      end_passes: 1,
+      end_members: 4,
+      ends_set_by: STAFF.id,
+      ends_set_at: minutesAgo(40000),
+    },
   ],
   requests: [
     { id: 4, menu_id: 3, user_id: MEMBERS[3].id, role_id: '900000000000000003', requested_at: minutesAgo(35), status: 'pending', decided_by: null, decided_at: null, deny_reason: null },
@@ -2305,7 +2429,7 @@ function seedState() {
     { id: 2, user_id: MEMBERS[5].id, role_id: '900000000000000003', source: 'staff', granted_by: MEMBERS[1].id, granted_at: minutesAgo(40000), expires_at: daysAhead(-1), removed_at: minutesAgo(1200), removed_reason: 'expired' },
     { id: 1, user_id: MEMBERS[6].id, role_id: '900000000000000005', source: 'manual', granted_by: null, granted_at: minutesAgo(50000), expires_at: null, removed_at: minutesAgo(300), removed_reason: 'ended_by_staff' },
   ],
-  nextMenu: 4,
+  nextMenu: 8,
   nextRequest: 5,
   nextGrant: 6,
   // small-fixes: who wears a ping role pings itself put on (black_bloc/handed_roles.py reads
@@ -3120,10 +3244,11 @@ function statusBody() {
     guild: { id: '600000000000000001', name: 'Black in a Flash!' },
     features,
     loops: [
-      { cog: 'GoLive', name: 'poll_twitch', running: true, failed: false, state: 'ok', next_iteration: minutesAgo(-2), last_ok_at: minutesAgo(3), last_error: null },
-      { cog: 'Birthdays', name: 'announce_birthdays', running: true, failed: false, state: 'ok', next_iteration: minutesAgo(-600), last_ok_at: minutesAgo(840), last_error: null },
-      { cog: 'Events', name: 'reconcile_events', running: false, failed: true, state: 'danger', next_iteration: null, last_ok_at: minutesAgo(300), last_error: 'HTTPException: 500 Internal Server Error' },
-      { cog: 'TempVoice', name: 'sweep_empty', running: true, failed: false, state: 'ok', next_iteration: minutesAgo(-4), last_ok_at: minutesAgo(1), last_error: null },
+      { cog: 'GoLive', name: 'poll_twitch', running: true, failed: false, state: 'ok', next_iteration: minutesAgo(-2), last_ok_at: minutesAgo(3), last_error: null, counts: null },
+      { cog: 'RoleMenus', name: '_expiry_loop', running: true, failed: false, state: 'ok', next_iteration: minutesAgo(-40), last_ok_at: minutesAgo(20), last_error: null, counts: 'menus due 0 · ended 0 · failures 0' },
+      { cog: 'Birthdays', name: 'announce_birthdays', running: true, failed: false, state: 'ok', next_iteration: minutesAgo(-600), last_ok_at: minutesAgo(840), last_error: null, counts: null },
+      { cog: 'Events', name: 'reconcile_events', running: false, failed: true, state: 'danger', next_iteration: null, last_ok_at: minutesAgo(300), last_error: 'HTTPException: 500 Internal Server Error', counts: null },
+      { cog: 'TempVoice', name: 'sweep_empty', running: true, failed: false, state: 'ok', next_iteration: minutesAgo(-4), last_ok_at: minutesAgo(1), last_error: null, counts: null },
     ],
     open: {
       role_menus_posted: state.menus.filter((menu) => menu.message_id).length,
@@ -3310,6 +3435,7 @@ route('POST', '/api/mock/reset', () => {
   // NOT part of the contract: it exists so site/mock/check.mjs can give every route the
   // same fixture, the way each pytest case gets a fresh database.
   state = withRunEvents(seedState());
+  ROSTER.forEach((row, at) => { row.role_ids = [...ROSTER_ROLES[at]]; });
   return { reset: true };
 });
 
@@ -3713,15 +3839,17 @@ route('GET', '/api/ref/members', (context) => {
 const NEW_MS = 7 * 24 * 60 * 60 * 1000;
 const MEMBERS_PER_PAGE = 50;
 
-/** The clock an open timed grant puts on a chip, the way api/tools/members.py joins it on. */
+/** The clock on a chip, the way api/tools/members.py joins it on: a grant's or its menu's end. */
 function expiryOf(userId, roleId) {
+  const menu = menuEndsNamed().get(String(roleId));
   const found = state.grants
     .filter((row) => String(row.user_id) === String(userId)
       && String(row.role_id) === String(roleId)
       && row.removed_at === null
       && row.expires_at !== null)
     .map((row) => row.expires_at)
-    .sort();
+    .concat(menu ? [menu.ends_at] : [])
+    .sort((a, b) => new Date(a) - new Date(b));
   return found.length ? found[0] : null;
 }
 
@@ -3736,6 +3864,7 @@ function rosterRoles(row) {
       name: role.name,
       color: role.color,
       expires_at: expiryOf(row.id, role.id),
+      ends_with_menu: (menuEndsNamed().get(String(role.id)) || {}).menu || null,
     }));
 }
 
@@ -5546,21 +5675,16 @@ function consentFlipped(to) {
 }
 
 // small-fixes: an off that takes roles back answers with a count first (black_bloc/handed_roles.py).
-const HANDED_ASKS = { pings_mode: 'pings_off_confirm_said', rolemenu_mode: 'rolemenu_off_confirm_said' };
-const HANDED_KINDS = { pings_mode: 'pings.roles_taken_back', rolemenu_mode: 'role_menu.roles_taken_back' };
-const MENU_PICKED = ['menu', 'approval'];
-const HANDED_TAKES = { pings_mode: 'pings_off_takes_roles_back', rolemenu_mode: 'rolemenu_off_takes_roles_back' };
+const HANDED_ASKS = { pings_mode: 'pings_off_confirm_said' };
+const HANDED_KINDS = { pings_mode: 'pings.roles_taken_back' };
+const HANDED_TAKES = { pings_mode: 'pings_off_takes_roles_back' };
 
 function handedTakes(key) {
   return key in HANDED_TAKES && state.settings.get(HANDED_TAKES[key]) !== false;
 }
 
 function handedHeld(key) {
-  if (key === 'pings_mode') return state.pingsHanded.map((row) => ({ ...row }));
-  const menuRoles = new Set(state.menus.flatMap((menu) => menu.options.map((one) => String(one.role_id))));
-  return state.grants
-    .filter((row) => row.removed_at === null && MENU_PICKED.includes(row.source) && menuRoles.has(String(row.role_id)))
-    .map((row) => ({ user_id: String(row.user_id), role_id: String(row.role_id), grant_id: row.id }));
+  return key === 'pings_mode' ? state.pingsHanded.map((row) => ({ ...row })) : [];
 }
 
 function handedAsked(key, value, confirmed) {
@@ -5629,24 +5753,7 @@ route('DELETE', '/api/settings/:key', (context) => {
   return { ...keyRow(context.params.key), cleared: true };
 });
 
-const BAD_APPROVAL = 'Approval is on or off, so nothing was changed. That is a fault in the page rather than in what you picked.';
 const BAD_DAYS = 'That is not a number of days, so nothing was changed. Send a whole number from 0 to 3650 — 0 means the role never runs out.';
-const NOT_POSTED_YET = 'That menu is not posted anywhere yet, so there is no panel to move. Post it from the Post a menu section to choose where it goes.';
-const NO_SUCH_REQUEST = 'Black Bloc has no record of that request any more, so nothing was done.';
-const ALREADY_DECIDED = 'Somebody answered that request already, so nothing was changed.';
-const DENY_NEEDS_A_REASON = 'A denied request needs one line the member is sent, so nothing was done. Say why and send it again.';
-const NO_SUCH_GRANT = 'Black Bloc has no timed role like that any more, so nothing was changed.';
-const ALREADY_ENDED = 'That timed role has already ended, so there was nothing to change.';
-const NO_END_DATE = 'That role has no end date, so there is nothing to push back. End it now instead.';
-const DAYS_NEEDED = 'Extending a role needs a number of days, so nothing was changed.';
-const NO_SUCH_MEMBER = 'That is not somebody Black Bloc can see in this server, so nothing was granted.';
-const NO_SUCH_ROLE = 'That is not a role in this server any more, so nothing was granted.';
-
-function wantedApproval(given) {
-  if (given === undefined || given === null) return null;
-  if (typeof given !== 'boolean') throw new Refused(400, 'bad_approval', BAD_APPROVAL);
-  return given;
-}
 
 function wantedDays(given, where) {
   if (given === undefined || given === null || given === '') return null;
@@ -5657,47 +5764,8 @@ function wantedDays(given, where) {
   return number;
 }
 
-function checkMove(menu, channelId) {
-  if (!menu.message_id) throw new Refused(400, 'not_posted', NOT_POSTED_YET);
-  if (menu.mode === 'staff') throw new Refused(400, 'staff_menu', `${menu.name} is a staff-assigned menu, so there is no panel to post.`);
-  if (!menu.options.length) throw new Refused(400, 'no_options', `${menu.name} has no roles on it yet, so there is nothing to post.`);
-  if (state.settings.get('rolemenu_mode') !== 'on') throw new Refused(409, 'rolemenu_off', ROLE_MENUS_OFF);
-  if (!CHANNELS.some((channel) => channel.id === channelId)) {
-    throw new Refused(400, 'no_such_channel', `${channelId} is not a channel Black Bloc can see, so nothing was moved.`);
-  }
-  guard('moving a role menu panel');
-}
-
-/** The real API takes the old panel down before the new one goes up. */
-function movePanel(menu, channelId) {
-  checkMove(menu, channelId);
-  menu.channel_id = channelId;
-  menu.message_id = String(Date.now());
-  logAction('web.role_menu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
-}
-
-function menuNameOf(menuId) {
-  const found = state.menus.find((menu) => String(menu.id) === String(menuId));
-  return found ? found.name : null;
-}
-
-function requestRow(row) {
-  return {
-    id: row.id,
-    menu_id: String(row.menu_id),
-    menu_name: menuNameOf(row.menu_id),
-    user_id: String(row.user_id),
-    user_name: memberName(row.user_id),
-    user_avatar: null,
-    role_id: String(row.role_id),
-    role_name: memberName(row.role_id),
-    requested_at: row.requested_at,
-    status: row.status,
-    decided_by_id: row.decided_by === null ? null : String(row.decided_by),
-    decided_by_name: row.decided_by === null ? null : memberName(row.decided_by),
-    decided_at: row.decided_at,
-    deny_reason: row.deny_reason,
-  };
+function whenDays(days) {
+  return days === null || days === undefined ? null : daysAhead(days);
 }
 
 function grantRow(row) {
@@ -5715,18 +5783,141 @@ function grantRow(row) {
     removed_at: row.removed_at,
     removed_reason: row.removed_reason,
     open: row.removed_at === null,
+    ends_with_menu: row.removed_at === null ? (menuEndsNamed().get(String(row.role_id)) || {}).menu || null : null,
   };
 }
 
-function whenDays(days) {
-  return days === null || days === undefined ? null : daysAhead(days);
+const NO_SUCH_GRANT = 'Black Bloc has no timed role like that any more, so nothing was changed.';
+const ALREADY_ENDED = 'That timed role has already ended, so there was nothing to change.';
+const NO_END_DATE = 'That role has no end date, so there is nothing to push back. End it now instead.';
+const DAYS_NEEDED = 'Extending a role needs a number of days, so nothing was changed.';
+const NO_SUCH_MEMBER = 'That is not somebody Black Bloc can see in this server, so nothing was granted.';
+const NO_SUCH_ROLE = 'That is not a role in this server any more, so nothing was granted.';
+const END_SOURCES = ['none', 'date', 'marathon'];
+const END_FIELDS = ['ends_source', 'ends_marathon_id', 'ends_at', 'buffer_days'];
+
+// Request #17 (temp-roles-menu 1b): every word below is a rolemenu_* key, read the way
+// black_bloc/rolemenus.py:said does — the stored words, filled, or the shipped ones.
+function roleWord(key, fields = {}) {
+  const spec = specOf(key);
+  let text = String(state.settings.get(key) ?? (spec ? spec[3] : key));
+  for (const [name, value] of Object.entries(fields)) text = text.split(`{${name}}`).join(String(value));
+  return text;
 }
 
-function menuOfRequest(row) {
-  return state.menus.find((menu) => String(menu.id) === String(row.menu_id)) || null;
+function rolemenuRetired() {
+  throw new Refused(410, 'rolemenu_retired', roleWord('rolemenu_retired_said'));
+}
+
+// The real API reads and writes these in default_timezone (role_menus.local_moment, typed_end);
+// the mock does the same through Intl, so a typed date means the same moment in both halves.
+function guildZone() {
+  const zone = String(state.settings.get('default_timezone') || 'America/Phoenix');
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return zone;
+  } catch (error) {
+    return 'UTC';
+  }
+}
+
+function zoneParts(at, zone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(at);
+  const got = Object.fromEntries(parts.map((one) => [one.type, one.value]));
+  return { y: +got.year, m: +got.month, d: +got.day, h: +got.hour, mi: +got.minute, s: +got.second };
+}
+
+function zoneWallToUtc(y, m, d, h, mi, zone) {
+  const wall = Date.UTC(y, m - 1, d, h, mi);
+  let guess = wall;
+  for (let i = 0; i < 2; i += 1) {
+    const seen = zoneParts(new Date(guess), zone);
+    guess += wall - Date.UTC(seen.y, seen.m - 1, seen.d, seen.h, seen.mi, seen.s);
+  }
+  return new Date(guess);
+}
+
+function localMoment(at, dateOnly = false) {
+  if (!at) return roleWord('rolemenu_end_not_known_text');
+  const when = new Date(at);
+  if (Number.isNaN(when.getTime())) return roleWord('rolemenu_end_not_known_text');
+  const got = zoneParts(when, guildZone());
+  const two = (n) => String(n).padStart(2, '0');
+  const day = `${got.y}-${two(got.m)}-${two(got.d)}`;
+  return dateOnly ? day : `${day} ${two(got.h)}:${two(got.mi)}`;
+}
+
+function roleMenuMarathon(id) {
+  return state.marathons.find((one) => String(one.id) === String(id)) || null;
+}
+
+function bufferDefault() {
+  return Number(state.settings.get('rolemenu_end_buffer_days') ?? 1);
+}
+
+function menuEndLabel(menu) {
+  if ((menu.ends_source || 'none') === 'none') return roleWord('rolemenu_no_end_text');
+  const when = localMoment(menu.ends_at);
+  if (menu.ends_source === 'marathon') {
+    const marathon = roleMenuMarathon(menu.ends_marathon_id);
+    return roleWord('rolemenu_end_marathon_text', {
+      when,
+      marathon: marathon ? marathon.name : '?',
+      buffer: menu.buffer_days ?? bufferDefault(),
+    });
+  }
+  return roleWord('rolemenu_end_date_text', { when });
+}
+
+function menuWearers(menu) {
+  const roles = new Set(menu.options.map((one) => String(one.role_id)));
+  return ROSTER.filter((row) => row.role_ids.some((id) => roles.has(String(id))));
+}
+
+function menuWearing(menu) {
+  return menuWearers(menu).length;
+}
+
+/** Each role's soonest unfinished menu end, with that menu's name (role_menus.menu_ends_named). */
+function menuEndsNamed() {
+  const found = new Map();
+  for (const menu of state.menus) {
+    if (!menu.ends_at || menu.ended_at) continue;
+    for (const option of menu.options) {
+      const held = found.get(String(option.role_id));
+      if (!held || new Date(menu.ends_at) < new Date(held.ends_at)) {
+        found.set(String(option.role_id), { ends_at: menu.ends_at, menu: menu.name });
+      }
+    }
+  }
+  return found;
+}
+
+/** The unfinished menus that end with a marathon (role_menus.menus_ending_with). */
+function menusEndingWith(marathonId) {
+  return state.menus
+    .filter((menu) => menu.ends_source === 'marathon' && String(menu.ends_marathon_id) === String(marathonId) && !menu.ended_at)
+    .map((menu) => ({ name: menu.name, title: menu.title, roles: menu.options.length, wearing: menuWearing(menu) }));
+}
+
+function heldPast(menu) {
+  return Boolean(menu.ends_held_at) && new Date(menu.ends_held_at).getTime() <= Date.now();
+}
+
+function heldQuestion(menu, wearing) {
+  if (!menu.ends_held_at) return null;
+  return roleWord(heldPast(menu) ? 'rolemenu_use_held_past_question' : 'rolemenu_use_held_question', {
+    menu: menu.name,
+    roles: menu.options.length,
+    members: wearing,
+    when: localMoment(menu.ends_held_at),
+  });
 }
 
 function menuRow(menu) {
+  const wearing = menuWearing(menu);
   return {
     name: menu.name,
     title: menu.title,
@@ -5743,12 +5934,126 @@ function menuRow(menu) {
       emoji: option.emoji ?? null,
       position: option.position ?? at,
     })),
+    ends_source: menu.ends_source || 'none',
+    ends_marathon_id: menu.ends_marathon_id === null || menu.ends_marathon_id === undefined ? null : String(menu.ends_marathon_id),
+    buffer_days: menu.buffer_days ?? null,
+    buffer_default: bufferDefault(),
+    ends_at: menu.ends_at ?? null,
+    ended_at: menu.ended_at ?? null,
+    ends_held_at: menu.ends_held_at ?? null,
+    ends_set_by: menu.ends_set_by ?? null,
+    ends_set_at: menu.ends_set_at ?? null,
+    wearing,
+    end_label: menuEndLabel(menu),
+    held_label: menu.ends_held_at ? localMoment(menu.ends_held_at) : null,
+    held_past: heldPast(menu),
+    held_question: heldQuestion(menu, wearing),
+    end_now_question: roleWord('rolemenu_end_now_question', { roles: menu.options.length, members: wearing }),
+    last_pass: {
+      passes: menu.end_passes ?? 0,
+      members: menu.end_members ?? 0,
+      failures: 0,
+      ended_at: menu.ended_at ?? null,
+    },
   };
+}
+
+function menuByName(name) {
+  const menu = state.menus.find((entry) => entry.name === name);
+  if (!menu) throw new Refused(404, 'no_such_menu', `This server has no role menu called **${name}**, so nothing was changed. The role menus page lists the ones that exist.`);
+  return menu;
+}
+
+function typedEnd(given) {
+  const text = String(given ?? '').trim();
+  let when = null;
+  const typed = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?$/.exec(text);
+  if (typed) {
+    const [, y, m, d, h, mi] = typed.map((one) => (one === undefined ? undefined : Number(one)));
+    when = h === undefined ? zoneWallToUtc(y, m, d, 23, 59, guildZone()) : zoneWallToUtc(y, m, d, h, mi, guildZone());
+  } else if (text) when = new Date(text);
+  if (!when || Number.isNaN(when.getTime())) {
+    throw new Refused(400, 'bad_date', roleWord('rolemenu_end_bad_date_said', { given: text.slice(0, 40) }));
+  }
+  if (when.getTime() <= Date.now()) {
+    throw new Refused(400, 'past_date', roleWord('rolemenu_end_past_said', { when: localMoment(when.toISOString()) }));
+  }
+  return when.toISOString().replace('.000Z', '+00:00');
+}
+
+function wantedBuffer(given) {
+  if (given === null || given === undefined || String(given).trim() === '') return null;
+  const text = String(given).trim();
+  if (!/^\d+$/.test(text) || Number(text) > 365) {
+    throw new Refused(400, 'bad_buffer', roleWord('rolemenu_end_bad_buffer_said', { given: text.slice(0, 40) }));
+  }
+  return Number(text);
+}
+
+/** The end a PUT asks for, checked whole before anything is written (api/tools/rolemenus.py). */
+function wantedEnd(menu, body) {
+  if (!END_FIELDS.some((key) => key in body)) return null;
+  let source = body.ends_source;
+  const current = menu.ends_source || 'none';
+  if (source === undefined || source === null) {
+    if (current !== 'marathon' || !('buffer_days' in body)) {
+      throw new Refused(400, 'buffer_needs_marathon', roleWord('rolemenu_buffer_needs_marathon_said', { menu: menu.name }));
+    }
+    source = current;
+  }
+  if (!END_SOURCES.includes(source)) {
+    throw new Refused(400, 'bad_end_source', `**${String(source).slice(0, 40)}** is not a way a role menu can end, so nothing was changed. It is one of ${END_SOURCES.join(', ')} — a fault in the page rather than in what you picked, so reload it and try again.`);
+  }
+  if (source === 'none') return { source };
+  if (source === 'date') return { source, ends_at: typedEnd(body.ends_at) };
+  const marathon = roleMenuMarathon(body.ends_marathon_id ?? menu.ends_marathon_id);
+  if (!marathon) throw new Refused(400, 'no_such_marathon', roleWord('rolemenu_end_no_marathon_said'));
+  const buffer = 'buffer_days' in body ? wantedBuffer(body.buffer_days) : (current === 'marathon' ? menu.buffer_days ?? null : null);
+  return { source, marathon_id: marathon.id, buffer_days: buffer };
+}
+
+function setMenuEnd(menu, end) {
+  menu.ends_source = end.source;
+  menu.ends_marathon_id = end.source === 'marathon' ? end.marathon_id : null;
+  menu.buffer_days = end.source === 'marathon' ? end.buffer_days : null;
+  if (end.source === 'none') menu.ends_at = null;
+  else if (end.source === 'date') menu.ends_at = end.ends_at;
+  else {
+    const marathon = roleMenuMarathon(end.marathon_id);
+    const days = end.buffer_days ?? bufferDefault();
+    menu.ends_at = marathon && marathon.ends_at
+      ? new Date(new Date(marathon.ends_at).getTime() + days * 86400000).toISOString().replace('.000Z', '+00:00')
+      : null;
+  }
+  menu.ended_at = null;
+  menu.ends_held_at = null;
+  menu.end_passes = 0;
+  menu.end_members = 0;
+  menu.ends_set_by = STAFF.id;
+  menu.ends_set_at = now();
+  logAction('web.role_menu.end_set', { reason: menu.name, details: { menu: menu.name, source: end.source, ends_at: menu.ends_at, via: 'website' } });
 }
 
 route('GET', '/api/rolemenus', (context) => {
   requireStaff(context.session);
   return state.menus.map(menuRow);
+});
+
+route('GET', '/api/rolemenus/marathons', (context) => {
+  requireStaff(context.session);
+  const at = Date.now();
+  const order = (one) => (one.ends_at ? (new Date(one.ends_at).getTime() >= at ? 0 : 2) : 1);
+  return state.marathons
+    .slice()
+    .sort((a, b) => order(a) - order(b) || String(a.ends_at || '').localeCompare(String(b.ends_at || '')) || a.id - b.id)
+    .map((one) => ({
+      id: String(one.id),
+      name: one.name,
+      ends_at: one.ends_at ?? null,
+      label: one.ends_at
+        ? roleWord('rolemenu_marathon_option', { name: one.name, date: localMoment(one.ends_at, true) })
+        : roleWord('rolemenu_marathon_option_unknown', { name: one.name }),
+    }));
 });
 
 route('POST', '/api/rolemenus', async (context) => {
@@ -5764,114 +6069,119 @@ route('POST', '/api/rolemenus', async (context) => {
     name,
     title: body.title || name,
     description: body.description || null,
-    mode: body.mode || 'multiple',
+    mode: 'staff',
     channel_id: null,
     message_id: null,
-    approval: wantedApproval(body.approval) ?? false,
-    expires_days: wantedDays(body.expires_days, 'expires_days') ?? null,
-    retry_days: wantedDays(body.retry_days, 'retry_days') ?? 7,
+    approval: false,
+    expires_days: null,
+    retry_days: 7,
     options: Array.isArray(body.options) ? body.options : [],
+    ends_source: 'none',
   };
   state.menus.unshift(menu);
   logAction('web.role_menu.create', { reason: name, details: { menu: name, mode: menu.mode } });
   return menuRow(menu);
 });
 
+// The retired self-pick fields (mode, approval, the two clocks, channel_id) are ignored, as the
+// real router ignores them; words and roles write one edit row, an end one end_set row.
 route('PUT', '/api/rolemenus/:name', async (context) => {
   requireStaff(context.session);
-  const menu = state.menus.find((entry) => entry.name === context.params.name);
-  if (!menu) throw new Refused(404, 'no_menu', `There is no role menu called ${context.params.name}.`);
+  const menu = menuByName(context.params.name);
   const body = await context.body();
-  // Asked BEFORE the edit lands, the way the real router does it, so a refused move
-  // never leaves a half-saved menu behind.
-  const moving = body.channel_id === undefined || body.channel_id === null || body.channel_id === ''
-    ? null
-    : String(body.channel_id);
-  if (moving !== null && moving !== menu.channel_id) checkMove(menu, moving);
-  if (body.title !== undefined) menu.title = body.title;
+  const end = wantedEnd(menu, body);
+  const words = body.title !== undefined || body.description !== undefined || Array.isArray(body.options);
+  if (body.title) menu.title = body.title;
   if (body.description !== undefined) menu.description = body.description;
-  if (body.mode !== undefined) menu.mode = body.mode;
-  if (body.approval !== undefined) menu.approval = wantedApproval(body.approval);
-  if (body.expires_days !== undefined) menu.expires_days = wantedDays(body.expires_days, 'expires_days') || null;
-  if (body.retry_days !== undefined) menu.retry_days = wantedDays(body.retry_days, 'retry_days') ?? menu.retry_days;
   if (Array.isArray(body.options)) menu.options = body.options;
-  logAction('web.role_menu.edit', { reason: menu.name, details: { menu: menu.name } });
-  if (moving !== null && moving !== menu.channel_id) movePanel(menu, moving);
+  if (words) logAction('web.role_menu.edit', { reason: menu.name, details: { menu: menu.name } });
+  if (end) setMenuEnd(menu, end);
+  return menuRow(menu);
+});
+
+route('POST', '/api/rolemenus/:name/end-now', (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  guard('ending a role menu now');
+  const roles = new Set(menu.options.map((one) => String(one.role_id)));
+  const wearers = menuWearers(menu);
+  const taken = wearers.length;
+  for (const row of wearers) row.role_ids = row.role_ids.filter((id) => !roles.has(String(id)));
+  setMenuEnd(menu, { source: 'date', ends_at: now() });
+  menu.ended_at = now();
+  menu.end_passes = 1;
+  menu.end_members = taken;
+  for (const grant of state.grants) {
+    if (grant.removed_at === null && roles.has(String(grant.role_id))) {
+      Object.assign(grant, { removed_at: now(), removed_reason: 'expired' });
+    }
+  }
+  logAction('web.role_menu.ended', { reason: menu.name, details: { menu: menu.name, members: taken, failures: 0, via: 'website' } });
+  return {
+    ...menuRow(menu),
+    message: roleWord('rolemenu_ended_text', { menu: menu.name, roles: menu.options.length, members: taken, failures: 0 }),
+    pass: { members: taken, this_pass: taken, failures: 0, passes: 1, ended: true, left: [] },
+  };
+});
+
+route('POST', '/api/rolemenus/:name/end-earlier', (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  if (!menu.ends_held_at) throw new Refused(409, 'nothing_held', roleWord('rolemenu_no_held_said', { menu: menu.name }));
+  setMenuEnd(menu, { source: 'marathon', marathon_id: menu.ends_marathon_id, buffer_days: menu.buffer_days ?? null });
   return menuRow(menu);
 });
 
 route('DELETE', '/api/rolemenus/:name', (context) => {
   requireStaff(context.session);
-  const at = state.menus.findIndex((entry) => entry.name === context.params.name);
-  if (at < 0) throw new Refused(404, 'no_menu', `There is no role menu called ${context.params.name}.`);
-  state.menus.splice(at, 1);
+  const menu = menuByName(context.params.name);
+  const wearing = menuWearing(menu);
+  if (!menu.ended_at && menu.ends_at && new Date(menu.ends_at).getTime() > Date.now() && wearing) {
+    throw new Refused(409, 'menu_still_ends', roleWord('rolemenu_delete_refused_said', { menu: menu.name, when: localMoment(menu.ends_at), members: wearing }));
+  }
+  state.menus.splice(state.menus.indexOf(menu), 1);
   logAction('web.role_menu.delete', { reason: context.params.name, details: { menu: context.params.name } });
   return { deleted: true, name: context.params.name };
 });
 
-route('POST', '/api/rolemenus/:name/post', async (context) => {
+route('POST', '/api/rolemenus/:name/post', (context) => {
   requireStaff(context.session);
-  const menu = state.menus.find((entry) => entry.name === context.params.name);
-  if (!menu) throw new Refused(404, 'no_menu', `There is no role menu called ${context.params.name}.`);
-  const body = await context.body();
-  if (!body.channel_id) throw new Refused(400, 'bad_value', 'Pick a channel to post the menu in.');
-  if (state.settings.get('rolemenu_mode') !== 'on') throw new Refused(409, 'rolemenu_off', ROLE_MENUS_OFF);
-  guard('posting a role menu');
-  menu.channel_id = String(body.channel_id);
-  menu.message_id = String(Date.now());
-  logAction('web.role_menu.post', { reason: menu.name, target_id: menu.channel_id, details: { menu: menu.name, channel_id: menu.channel_id, message_id: menu.message_id } });
-  return { posted: true, name: menu.name, channel_id: menu.channel_id, message_id: menu.message_id };
+  rolemenuRetired();
 });
 
-// The six names black_bloc/cogs/community/role_menus.py:SEED creates; a name this server
-// already has is left exactly as it is, options and all.
-const SEED_MENUS = ['pronouns', 'playstyle', 'mentoring', 'interests', 'event-alerts', 'runner-status'];
+route('POST', '/api/rolemenus/:name/unpost', (context) => {
+  requireStaff(context.session);
+  rolemenuRetired();
+});
 
 route('POST', '/api/rolemenus/seed', (context) => {
   requireStaff(context.session);
-  const created = [];
-  const skipped = [];
-  for (const name of SEED_MENUS) {
-    if (state.menus.some((entry) => entry.name === name)) {
-      skipped.push(name);
-      continue;
-    }
-    state.menus.push({
-      id: state.nextMenu++,
-      name,
-      title: name,
-      description: null,
-      mode: name === 'runner-status' ? 'staff' : 'multiple',
-      channel_id: null,
-      message_id: null,
-      approval: false,
-      expires_days: null,
-      retry_days: 7,
-      options: [],
-    });
-    created.push(name);
-  }
-  const parts = [];
-  if (created.length) parts.push(`Created: ${created.join(', ')}`);
-  if (skipped.length) {
-    parts.push(`Already there, left alone: ${skipped.join(', ')}`);
-    parts.push('A menu that already exists is left exactly as it is, options and all.');
-  }
-  parts.push('Pick each one on `/rolemenu` and press **Post it** — except `runner-status`, which staff hand out with **Hand roles out…**.');
-  logAction('web.role_menu.seeded', { details: { created, skipped } });
-  return { created, skipped, message: parts.join(' · ') };
+  rolemenuRetired();
+});
+
+route('GET', '/api/rolemenus/requests', (context) => {
+  requireStaff(context.session);
+  rolemenuRetired();
+});
+
+route('POST', '/api/rolemenus/requests/:id/approve', (context) => {
+  requireStaff(context.session);
+  rolemenuRetired();
+});
+
+route('POST', '/api/rolemenus/requests/:id/deny', (context) => {
+  requireStaff(context.session);
+  rolemenuRetired();
 });
 
 // Roles are changed by the same helper the /rolemenu assign picker uses, and neither asks the
 // guard: a member's roles are not a channel, so this is not one of the test-mode refusals.
 route('POST', '/api/rolemenus/:name/assign', async (context) => {
   requireStaff(context.session);
-  const menu = state.menus.find((entry) => entry.name === context.params.name);
-  if (!menu) throw new Refused(404, 'no_such_menu', `This server has no role menu called **${context.params.name}**, so nothing was changed.`);
+  const menu = menuByName(context.params.name);
   if (!(menu.options || []).length) {
     throw new Refused(400, 'no_options', `**${menu.name}** has no roles on it yet, so there is nothing to hand out. Add one to the menu first.`);
   }
-  if (state.settings.get('rolemenu_mode') !== 'on') throw new Refused(409, 'rolemenu_off', ROLE_MENUS_OFF);
   const body = await context.body();
   const wanted = String(body.user_id || '');
   if (!MEMBERS.some((member) => member.id === wanted)) {
@@ -5896,88 +6206,6 @@ route('POST', '/api/rolemenus/:name/assign', async (context) => {
     user_id: wanted,
     message: `**${memberName(wanted)}** — ${remove ? 'Removed' : 'Added'}: ${words}`,
   };
-});
-
-route('POST', '/api/rolemenus/:name/unpost', (context) => {
-  requireStaff(context.session);
-  const menu = state.menus.find((entry) => entry.name === context.params.name);
-  if (!menu) throw new Refused(404, 'no_such_menu', `This server has no role menu called **${context.params.name}**, so nothing was changed.`);
-  if (!menu.message_id) {
-    throw new Refused(400, 'not_posted', `**${menu.name}** has no panel up right now, so there was nothing to take down. Post it from the Post a menu section first.`);
-  }
-  const where = menu.channel_id;
-  menu.message_id = null;
-  logAction('web.role_menu.unposted', { target_id: where, details: { menu: menu.name, channel_id: where } });
-  return {
-    unposted: true,
-    name: menu.name,
-    channel_id: where === null || where === undefined ? null : String(where),
-    message: `**${menu.name}**'s panel is down. The menu and its roles are untouched and nobody loses a role — post it again whenever you want it back.`,
-  };
-});
-
-route('GET', '/api/rolemenus/requests', (context) => {
-  requireStaff(context.session);
-  const asked = (context.url.searchParams.get('status') || '').split(',').filter(Boolean);
-  const known = ['pending', 'approved', 'denied', 'withdrawn', 'granted_by_hand'];
-  for (const one of asked) {
-    if (!known.includes(one)) {
-      throw new Refused(400, 'unknown_status', `${one} is not a state a role request can be in, so nothing was listed. They are ${known.join(', ')}.`);
-    }
-  }
-  const wanted = asked.length ? asked : known;
-  return state.requests
-    .filter((row) => wanted.includes(row.status))
-    .slice()
-    .sort((a, b) => (b.status === 'pending') - (a.status === 'pending') || b.id - a.id)
-    .map(requestRow);
-});
-
-route('POST', '/api/rolemenus/requests/:id/approve', async (context) => {
-  requireStaff(context.session);
-  const body = await context.body();
-  const row = state.requests.find((one) => String(one.id) === context.params.id);
-  if (!row) throw new Refused(409, 'not_decided', NO_SUCH_REQUEST);
-  if (row.status !== 'pending') throw new Refused(409, 'not_decided', `${ALREADY_DECIDED} It is already ${row.status}.`);
-  const given = wantedDays(body.days, 'days');
-  const menu = menuOfRequest(row);
-  const days = body.days === undefined || body.days === null ? (menu ? menu.expires_days : null) : given;
-  row.status = 'approved';
-  row.decided_by = STAFF.id;
-  row.decided_at = now();
-  const until = days ? whenDays(days) : null;
-  state.grants.unshift({
-    id: state.nextGrant++,
-    user_id: row.user_id,
-    role_id: row.role_id,
-    source: 'approval',
-    granted_by: STAFF.id,
-    granted_at: now(),
-    expires_at: until,
-    removed_at: null,
-    removed_reason: null,
-  });
-  logAction('web.role.approved', { target_id: row.user_id, details: { request_id: row.id, role_id: row.role_id } });
-  return {
-    request: requestRow(row),
-    message: `Approved — ${memberName(row.user_id)} has ${memberName(row.role_id)} now.${until ? ' It runs out in ' + days + ' days.' : ''}`,
-  };
-});
-
-route('POST', '/api/rolemenus/requests/:id/deny', async (context) => {
-  requireStaff(context.session);
-  const body = await context.body();
-  const row = state.requests.find((one) => String(one.id) === context.params.id);
-  if (!row) throw new Refused(409, 'not_decided', NO_SUCH_REQUEST);
-  const reason = String(body.reason || '').trim();
-  if (!reason) throw new Refused(400, 'no_reason', DENY_NEEDS_A_REASON);
-  if (row.status !== 'pending') throw new Refused(409, 'not_decided', `${ALREADY_DECIDED} It is already ${row.status}.`);
-  row.status = 'denied';
-  row.decided_by = STAFF.id;
-  row.decided_at = now();
-  row.deny_reason = reason;
-  logAction('web.role.denied', { target_id: row.user_id, reason, details: { request_id: row.id, role_id: row.role_id } });
-  return { request: requestRow(row), message: 'Denied, and they have been told why.' };
 });
 
 route('GET', '/api/roles/grants', (context) => {
@@ -6025,6 +6253,10 @@ route('POST', '/api/roles/grants/:id/extend', async (context) => {
   if (!row) throw new Refused(404, 'no_such_grant', NO_SUCH_GRANT);
   if (row.removed_at) throw new Refused(409, 'already_ended', ALREADY_ENDED);
   if (!row.expires_at) throw new Refused(409, 'no_end_date', NO_END_DATE);
+  const ending = state.menus.find((menu) => !menu.ended_at && menu.ends_at && menu.options.some((one) => String(one.role_id) === String(row.role_id)));
+  if (ending) {
+    throw new Refused(409, 'menu_end', roleWord('rolemenu_push_back_refused', { role: memberName(row.role_id), menu: ending.name, date: localMoment(ending.ends_at, true) }));
+  }
   if (body.days === undefined || body.days === null || body.days === '') {
     throw new Refused(400, 'no_days', DAYS_NEEDED);
   }
@@ -8123,6 +8355,7 @@ function marathonRow(row) {
     host_announcements: marathonSwitch(row, 'host_announcements'),
     couch_announcements: marathonCouchSwitch(),
     overlay: { ...marathonSwitch(row, 'overlay'), sheet: row.overlay_sheet || null },
+    role_menus: menusEndingWith(row.id),
     ...marathonTracking(row),
   };
 }
@@ -11061,8 +11294,8 @@ route('POST', '/api/pings/streamers', async (context) => {
   return {
     ...fanRoleRow(row),
     message: reused
-      ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`.`
-      : `Made **${name}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of their go-live announcement.`,
+      ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* role menu. People pick it with **Follow a streamer…** on \`/pings\`.`
+      : `Made **${name}** and put it on the *streamers* role menu. People pick it with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of their go-live announcement.`,
   };
 });
 
@@ -11138,7 +11371,7 @@ function renameFanRole(held, who, body) {
   logAction('web.pings.fan_role_renamed', note);
   return {
     ...fanRoleRow(held),
-    message: `**${who}**'s ping role is called **${typed}** from now on — it was **${was}**. Nobody was added to it or taken off it, and the *streamers* panel says the new name.`,
+    message: `**${who}**'s ping role is called **${typed}** from now on — it was **${was}**. Nobody was added to it or taken off it, and the *streamers* role menu says the new name.`,
   };
 }
 
@@ -11230,7 +11463,7 @@ route('POST', '/api/pings/setup', async (context) => {
     : (before === role.id
       ? `Both feeds already pointed at **${role.name}**, so nothing was changed.`
       : `Used the role **${role.name}** that was already here and pointed both feeds at it.`);
-  message += ' Put it on the *notifications* panel — `/rolemenu` ▸ *notifications* ▸ **Post it**.';
+  message += ' Put it on the *notifications* role menu too; members turn it on from `/pings`.';
   if (state.settings.get('pings_mode') !== 'on') {
     message += ' Ping roles are still off, so nobody can opt in yet — turn them on with `/settings` ▸ **Turn a feature back on…** or from the dashboard\u2019s Go-live tab.';
   }

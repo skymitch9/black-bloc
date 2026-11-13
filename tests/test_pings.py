@@ -669,7 +669,11 @@ async def test_the_web_head_marks_a_line_the_dashboard_left(bot, streamer):
     assert (await details(bot.db, "web.pings.fan_role_created"))["via"] == "website"
 
 
-async def test_a_posted_panel_is_refreshed_when_a_streamer_is_added(bot, streamer):
+async def test_a_posted_streamers_panel_is_not_re_posted_once_self_pick_is_retired(
+    bot, streamer
+):
+    """Request #17: a panel posted before the retirement keeps its message; the sync still
+    keeps the menu's options, and posts and edits nothing."""
     from black_bloc.cogs.community.role_menus import post_panel
 
     await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
@@ -681,30 +685,8 @@ async def test_a_posted_panel_is_refreshed_when_a_streamer_is_added(bot, streame
     other = FakeMember(bot.guild, 3200, "Bee")
     await pings.ensure_fan_role(bot, bot.guild, other, by=other.id)
 
-    assert posted.edits, "the panel already up was not re-rendered"
-    picker = posted.edits[-1]["view"].children[0]
-    assert sorted(option.label for option in picker.options) == ["Bee pings", "SuperNamu pings"]
-    assert "role_menu.reposted" in await kinds(bot.db)
-
-
-async def test_the_panel_refresh_is_refused_in_test_mode_and_says_so_in_the_log(bot, streamer):
-    from black_bloc.cogs.community.role_menus import post_panel
-
-    await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
-    menu = await get_menu(bot.db, GUILD, "streamers")
-    await post_panel(bot, menu, await get_options(bot.db, menu["id"]), bot.guild.channel)
-
-    class Guard:
-        test_channel_id = 1
-
-        def allows_channel(self, channel):
-            return False
-
-    bot.guard = Guard()
-    other = FakeMember(bot.guild, 3300, "Bee")
-    await pings.ensure_fan_role(bot, bot.guild, other, by=other.id)
-
-    assert "role_menu.would_repost" in await kinds(bot.db)
+    assert not posted.edits
+    assert "role_menu.reposted" not in await kinds(bot.db)
     menu = await get_menu(bot.db, GUILD, "streamers")
     assert [row["label"] for row in await get_options(bot.db, menu["id"])] == [
         "Bee pings",
@@ -1663,3 +1645,16 @@ async def test_a_hide_by_hand_is_mirrored_into_the_one_opt_out_table_and_a_prune
 
     await pings.restore_streamer(bot, bot.guild, STREAMER, by=STAFF)
     assert await optouts.is_out(bot.db, GUILD, STREAMER, optouts.STREAMER_LIST) is False
+
+
+def test_no_pings_sentence_sends_staff_to_post_a_role_menu():
+    """Request #17 retired posting role menus; the streamer and Events menus are staff groupings."""
+    for said in (
+        pings.CREATED,
+        pings.REUSED,
+        pings.RENAMED,
+        pings.SETUP_MENU_ADDED,
+        pings.SETUP_MENU_THERE,
+    ):
+        assert "Post it" not in said and "panel" not in said, said
+        assert "role menu" in said

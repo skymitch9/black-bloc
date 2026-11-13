@@ -116,7 +116,9 @@ function roleChips(roles) {
     return roleChip(role.name, {
       color: role.color,
       note: until ? (left || 'due') : null,
-      title: until ? `${role.name} — runs out ${until.text} (${until.title})` : role.name,
+      title: until
+        ? `${role.name} — ${role.ends_with_menu ? `ends with ${role.ends_with_menu}` : 'runs out'} ${until.text} (${until.title})`
+        : role.name,
     });
   });
   if (found.length > ROLES_SHOWN) {
@@ -134,7 +136,7 @@ function joinedCell(iso) {
 
 /**
  * The row carries two links, so it is a div: the name goes to their cases and
- * the chevron to their role requests and timed roles. An anchor inside an
+ * the chevron to their timed roles. An anchor inside an
  * anchor is invalid HTML and every click would land on the outer one.
  */
 function memberRow(row) {
@@ -159,7 +161,7 @@ function memberRow(row) {
     el('a', {
       class: 'chip-go',
       href: `${tabHref('rolemenus')}?member=${encodeURIComponent(row.id)}`,
-      title: `${who}'s role requests and timed roles`,
+      title: `${who}'s timed roles`,
     }, [icon('chevronRight', 16)]),
   ]);
 }

@@ -289,3 +289,37 @@ async def test_the_opted_out_list_is_one_row_a_person_with_a_chip_a_source(
     assert (ada["user_id"], ada["name"], ada["username"], ada["here"]) == ("21", "Ada", "ada", True)
     assert [one["source"] for one in ada["chips"]] == ["announce", "chat_memory"]
     assert body["channels"] == [] and body["counted_in"] == []
+
+
+async def test_a_role_on_a_menu_with_an_end_carries_that_end_with_no_grant_row(
+    client, sign_in, roster, web, wf
+):
+    """Request #17: the menu's end comes off everyone wearing the role, so the chip says so even
+    for somebody Black Bloc never recorded a grant for; the sooner of the two ends wins."""
+    from black_bloc.cogs.community.role_menus import add_option, create_menu
+
+    sign_in(client)
+    menu_end = "2099-03-01T06:59:00+00:00"
+    menu_id = await create_menu(web.db, wf.GUILD_ID, "btb", "Back to Black", None, "staff")
+    await add_option(web.db, menu_id, wf.PLAIN_ROLE_ID, "Runner")
+    await web.db.conn.execute(
+        "UPDATE role_menus SET ends_source = 'date', ends_at = ? WHERE id = ?", (menu_end, menu_id)
+    )
+    await web.db.conn.commit()
+    sooner = grants.expires_at(7)
+    await grants.add_grant(
+        web.db, wf.GUILD_ID, 21, wf.PLAIN_ROLE_ID, grants.STAFF, granted_by=7, until=sooner
+    )
+
+    members = client.get(ROUTE).json()["members"]
+    chips = [
+        (member["username"], one)
+        for member in members
+        for one in member["roles"]
+        if one["id"] == str(wf.PLAIN_ROLE_ID)
+    ]
+
+    assert chips
+    for username, chip in chips:
+        assert chip["ends_with_menu"] == "btb"
+        assert chip["expires_at"] == (sooner if username == "ada" else menu_end)

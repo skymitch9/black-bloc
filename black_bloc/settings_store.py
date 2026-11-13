@@ -124,7 +124,7 @@ GOLIVE_COSTREAM_FIELDS = (
 )
 
 
-ROLEMENU_MODES = ("off", "on")
+ROLEMENU_MODE_RETIRED = "rolemenu_mode"
 
 PINGS_MODES = ("off", "on")
 PINGS_EVENTS_ROLE_NAME = "Events"
@@ -425,7 +425,6 @@ KEY_TYPES: dict[str, str] = {
     "mod_dm_on_action": "enum",
     "bot_bio": "text",
     "status_prefix": "text",
-    "rolemenu_mode": "enum",
     "request_mode": "enum",
     "request_who_can_file": "enum",
     "request_notify_channel_id": "channel",
@@ -499,7 +498,6 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "modmail_mode": MODMAIL_MODES,
     "automod_mode": AUTOMOD_MODES,
     "mod_dm_on_action": MOD_DM_STYLES,
-    "rolemenu_mode": ROLEMENU_MODES,
     "request_mode": REQUEST_MODES,
     "request_who_can_file": REQUEST_FILERS,
     "chat_mode": CHAT_MODES,
@@ -1059,13 +1057,6 @@ KEY_HELP: dict[str, str] = {
     "mod_dm_on_action": "what a punished member is told: none, server_action, server_action_reason",
     "bot_bio": "the About Me on Black Bloc's own profile, dashboard link and all",
     "status_prefix": "what goes in front of the member count in Black Bloc's status",
-    "rolemenu_mode": (
-        "whether members can pick roles from the panels; off takes them down and hides the "
-        "posted panels, and takes back every menu role a member picked from a panel or had "
-        "approved on request (asked first, with how many); a role staff handed over or given "
-        "anywhere else stays. on posts them again and gives nothing back; off also hides "
-        "/rolemenu while hiding is on, and the timed roles stay under /mod ▸ Role grants…"
-    ),
     "request_mode": (
         "off, or on (members can ask for things with /request and staff decide on the site)"
     ),
@@ -1207,10 +1198,11 @@ KEY_HELP: dict[str, str] = {
         "chat_simple_model, the same quick tier that answers"
     ),
     "rolemenu_approval_channel_id": (
-        "where a role request waits for Approve or Deny; blank uses staff_channel_id"
+        "where role notices post: a role menu's end moving, waiting on staff, or done; blank "
+        "uses staff_channel_id"
     ),
     "rolemenu_approver_role_id": (
-        "role mentioned when a role request arrives; blank pings nobody"
+        "role mentioned on a role notice; blank pings nobody"
     ),
     "emoji_skin_tone": (
         f"the skin tone Black Bloc's hand and people emoji wear: "
@@ -10818,9 +10810,9 @@ TEXT_CHECKS.update(
 BIRTHDAY_NOT_SHARED_KEY = "birthday_not_shared_said"
 PINGS_OFF_CONFIRM_KEY = "pings_off_confirm_said"
 PINGS_OFF_BUTTON_KEY = "pings_off_confirm_button"
-ROLEMENU_OFF_CONFIRM_KEY = "rolemenu_off_confirm_said"
-ROLEMENU_OFF_BUTTON_KEY = "rolemenu_off_confirm_button"
-ROLEMENU_OFF_DM_KEY = "rolemenu_off_dm"
+ROLEMENU_OFF_CONFIRM_RETIRED = "rolemenu_off_confirm_said"
+ROLEMENU_OFF_BUTTON_RETIRED = "rolemenu_off_confirm_button"
+ROLEMENU_OFF_DM_RETIRED = "rolemenu_off_dm"
 SMALL_FIXES_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     BIRTHDAY_NOT_SHARED_KEY: (
         "**{name}** keeps their birthday to themselves.",
@@ -10840,44 +10832,19 @@ SMALL_FIXES_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the button that confirms pings_mode off and takes those roles back",
     ),
-    ROLEMENU_OFF_CONFIRM_KEY: (
-        "**{count}** members hold roles the role menus handed out; switching role menus off "
-        "removes them.",
-        ("count",),
-        "what staff are asked before rolemenu_mode goes off while members wear menu roles Black "
-        "Bloc handed out. It takes {count}",
-    ),
-    ROLEMENU_OFF_BUTTON_KEY: (
-        "Yes, switch role menus off",
-        (),
-        "the button that confirms rolemenu_mode off and takes those roles back",
-    ),
-    ROLEMENU_OFF_DM_KEY: (
-        "Role menus were switched off in **{guild}**, so **{label}** was taken back. Nothing "
-        "else changed.",
-        ("guild", "label"),
-        "the DM sent when role menus go off to a member whose menu role staff approved (those "
-        "members were sent a DM when it was given). It takes {guild} {label}",
-    ),
 }
 SMALL_FIXES_DEFAULTS: dict[str, Any] = {
     key: default for key, (default, _, _) in SMALL_FIXES_WORDS.items()
 }
 KEY_TYPES.update({key: "text" for key in SMALL_FIXES_WORDS})
 PINGS_OFF_TAKES_KEY = "pings_off_takes_roles_back"
-ROLEMENU_OFF_TAKES_KEY = "rolemenu_off_takes_roles_back"
+ROLEMENU_OFF_TAKES_RETIRED = "rolemenu_off_takes_roles_back"
 SMALL_FIXES_SWITCHES: dict[str, tuple[bool, str]] = {
     PINGS_OFF_TAKES_KEY: (
         True,
         "true — the default — makes switching pings_mode off take back every ping role Black "
         "Bloc itself put on a member, after staff confirm the count; false switches pings off "
         "and leaves every role where it is",
-    ),
-    ROLEMENU_OFF_TAKES_KEY: (
-        True,
-        "true — the default — makes switching rolemenu_mode off take back every menu role a "
-        "member picked or had approved, after staff confirm the count; false switches role "
-        "menus off and leaves every role where it is",
     ),
 }
 SMALL_FIXES_DEFAULTS.update({key: default for key, (default, _) in SMALL_FIXES_SWITCHES.items()})
@@ -10983,6 +10950,251 @@ KEY_MIN.update({key: floor for key, (_, floor, _, _) in ROLEMENU_END_NUMBERS.ite
 KEY_MAX.update({key: ceiling for key, (_, _, ceiling, _) in ROLEMENU_END_NUMBERS.items()})
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in ROLEMENU_END_WORDS.items()}
+)
+
+# Temporary roles, the staff control (temp-roles-menu 1b, 2026-11-13): every word /rolemenu's Set
+# the end…, End it now and the retired self-pick doors say. Discord cuts a modal title or label
+# at 45 characters and a button label at 80, so the panel cuts these there too.
+ROLEMENU_END_EARLIER_HOLDS_KEY = "rolemenu_end_earlier_holds"
+ROLEMENU_END_HELD_TEXT_KEY = "rolemenu_end_held_text"
+ROLEMENU_RETIRED_KEY = "rolemenu_retired_said"
+ROLEMENU_PICKING_RETIRED_KEY = "rolemenu_picking_retired_said"
+ROLEMENU_PUSH_BACK_REFUSED_KEY = "rolemenu_push_back_refused"
+ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    ROLEMENU_END_HELD_TEXT_KEY: (
+        "**{menu}**'s marathon now ends earlier: its roles would come off {to} instead of {was}. "
+        "Nothing moved — **Use the earlier end** on its card takes the earlier one.",
+        ("menu", "to", "was"),
+        "the staff notice when a marathon's new dates would pull a role menu's end EARLIER and "
+        "the move is held for staff. It takes {menu} {to} {was}",
+    ),
+    ROLEMENU_RETIRED_KEY: (
+        "Members pick their own roles in Discord's Channels & Roles now, so role menus are no "
+        "longer posted or requested and nothing was changed. Staff hand roles out from a menu's "
+        "card — **Hand roles out…** on /rolemenu or the Role menus page.",
+        (),
+        "what the site is told when it asks for a retired role-menu move (post, take down, "
+        "requests, seed)",
+    ),
+    ROLEMENU_PICKING_RETIRED_KEY: (
+        "Roles are picked in Discord's own Channels & Roles now.",
+        (),
+        "what a member is told when they use a role menu panel still posted from before",
+    ),
+    ROLEMENU_PUSH_BACK_REFUSED_KEY: (
+        "**{role}** ends with **{menu}** on {date} — change the menu's end instead.",
+        ("role", "menu", "date"),
+        "the refusal when somebody pushes back a timed role whose role is on a role menu with "
+        "an end. It takes {role} {menu} {date}",
+    ),
+    "rolemenu_root_line": (
+        "**{name}** · {roles} role(s) · {wearing} wearing · {end}",
+        ("name", "roles", "wearing", "end"),
+        "one menu's line on /rolemenu. It takes {name} {roles} {wearing} {end}",
+    ),
+    "rolemenu_wearing_unknown_text": (
+        "?",
+        (),
+        "what stands in for a wearing count while Discord has not sent the whole member list",
+    ),
+    "rolemenu_no_end_text": ("no end set", (), "a role menu with no end"),
+    "rolemenu_end_date_text": (
+        "ends {when}",
+        ("when",),
+        "a role menu's end when it is a typed date. It takes {when}",
+    ),
+    "rolemenu_end_marathon_text": (
+        "ends {when} ({marathon} + {buffer} d)",
+        ("when", "marathon", "buffer"),
+        "a role menu's end when it ends with a marathon. It takes {when} {marathon} {buffer}",
+    ),
+    "rolemenu_ended_line": (
+        "ended {when} · {members} people · {failures} failure(s)",
+        ("when", "members", "failures"),
+        "the card's line once a role menu's end has run. It takes {when} {members} {failures}",
+    ),
+    "rolemenu_end_set_by_line": (
+        "Set by {who} {when}",
+        ("who", "when"),
+        "the card's line naming who set a role menu's end. It takes {who} {when}",
+    ),
+    "rolemenu_end_held_line": (
+        "Held: its marathon now ends earlier — {to}",
+        ("to",),
+        "the card's line while an earlier end waits for staff. It takes {to}",
+    ),
+    "rolemenu_role_line": (
+        "{label} — <@&{role_id}> · {wearing} wearing",
+        ("label", "role_id", "wearing"),
+        "one role's line on a menu's card. It takes {label} {role_id} {wearing}",
+    ),
+    "rolemenu_set_end_button": ("Set the end…", (), "the card's button that opens Set the end"),
+    "rolemenu_end_now_button": ("End it now", (), "the card's button that ends a menu now"),
+    "rolemenu_use_held_button": (
+        "Use the earlier end",
+        (),
+        "the card's button that takes a held, earlier marathon end",
+    ),
+    "rolemenu_type_date_button": ("Type a date…", (), "Set the end's typed-date button"),
+    "rolemenu_buffer_button": ("Buffer…", (), "Set the end's buffer button"),
+    "rolemenu_no_end_button": ("No end", (), "Set the end's button that clears the end"),
+    "rolemenu_set_end_title": (
+        "When {name}'s roles come off",
+        ("name",),
+        "the heading of Set the end. It takes {name}",
+    ),
+    "rolemenu_marathon_pick": (
+        "Ends with a marathon…",
+        (),
+        "Set the end's marathon picker before anything is picked",
+    ),
+    "rolemenu_marathons_capped": (
+        "{shown} of {total} marathons — type a date for the rest",
+        ("shown", "total"),
+        "the marathon picker when there are more marathons than Discord lists. It takes {shown} "
+        "{total}",
+    ),
+    "rolemenu_marathon_option": (
+        "{name} · ends {date}",
+        ("name", "date"),
+        "one marathon in Set the end's picker. It takes {name} {date}",
+    ),
+    "rolemenu_marathon_option_unknown": (
+        "{name} · end not known yet",
+        ("name",),
+        "a marathon with no dates yet in Set the end's picker. It takes {name}",
+    ),
+    "rolemenu_date_title": (
+        "The day its roles come off",
+        (),
+        "the typed-date form's title; Discord cuts a form title at 45 characters",
+    ),
+    "rolemenu_date_label": (
+        "YYYY-MM-DD, a time after it if you like",
+        (),
+        "the typed-date form's box; Discord cuts a form label at 45 characters",
+    ),
+    "rolemenu_date_placeholder": (
+        "2027-02-28 or 2027-02-28 18:00",
+        (),
+        "the typed-date form's grey example",
+    ),
+    "rolemenu_buffer_title": (
+        "Days after the marathon",
+        (),
+        "the buffer form's title; Discord cuts a form title at 45 characters",
+    ),
+    "rolemenu_buffer_label": (
+        "Whole days, blank for the server's default",
+        (),
+        "the buffer form's box; Discord cuts a form label at 45 characters",
+    ),
+    "rolemenu_end_set_said": (
+        "**{menu}**'s roles come off {when}.",
+        ("menu", "when"),
+        "what staff are told once a role menu's end is set. It takes {menu} {when}",
+    ),
+    "rolemenu_end_cleared_said": (
+        "**{menu}** has no end.",
+        ("menu",),
+        "what staff are told once a role menu's end is cleared. It takes {menu}",
+    ),
+    "rolemenu_end_past_said": (
+        "{when} has already gone by, so the end was not set. Type a day still to come.",
+        ("when",),
+        "the refusal when a typed end is in the past. It takes {when}",
+    ),
+    "rolemenu_end_bad_date_said": (
+        "**{given}** is not a date Black Bloc can read, so the end was not set. Type it as "
+        "YYYY-MM-DD, or YYYY-MM-DD HH:MM for a time.",
+        ("given",),
+        "the refusal when a typed end is not a date. It takes {given}",
+    ),
+    "rolemenu_end_bad_buffer_said": (
+        "**{given}** is not a whole number of days from 0 to 365, so the buffer was not changed. "
+        "Type one, or leave it blank for the server's default.",
+        ("given",),
+        "the refusal when a buffer is not a number of days. It takes {given}",
+    ),
+    "rolemenu_end_no_marathon_said": (
+        "That marathon is not on the list any more, so the end was not set. Press **Refresh** and "
+        "pick again.",
+        (),
+        "the refusal when the marathon picked has left the list",
+    ),
+    "rolemenu_buffer_needs_marathon_said": (
+        "A buffer is added after a marathon's end, and **{menu}** does not end with one, so "
+        "nothing was changed. Pick a marathon first.",
+        ("menu",),
+        "the refusal when a buffer is set on a menu that does not end with a marathon. It takes "
+        "{menu}",
+    ),
+    "rolemenu_end_now_question": (
+        "Take {roles} role(s) off {members} people now?",
+        ("roles", "members"),
+        "what staff are asked before End it now. It takes {roles} {members}",
+    ),
+    "rolemenu_end_now_yes": ("Yes, take them off", (), "End it now's confirm button"),
+    "rolemenu_no_end_question": (
+        "Clear **{menu}**'s end? Nobody loses its roles until another is set.",
+        ("menu",),
+        "what staff are asked before No end. It takes {menu}",
+    ),
+    "rolemenu_no_end_yes": ("Yes, clear it", (), "No end's confirm button"),
+    "rolemenu_end_now_not_run_said": (
+        "Black Bloc could not read the whole member list, so **{menu}** did not end and nobody "
+        "lost a role. Try again in a minute.",
+        ("menu",),
+        "what staff are told when End it now cannot see every member yet. It takes {menu}",
+    ),
+    "rolemenu_delete_refused_said": (
+        "**{menu}** still ends {when} and {members} people wear its roles, so it was not "
+        "deleted. **End it now** first, or **No end** if nobody should lose them.",
+        ("menu", "when", "members"),
+        "the refusal when a menu with an end still to come is deleted while people wear its "
+        "roles. It takes {menu} {when} {members}",
+    ),
+    "rolemenu_cannot_strip_said": (
+        "Black Bloc could not take **{name}** off anybody, so it was not added — the end of this "
+        "menu has to be able to remove it. Ask an admin to move Black Bloc's role above it in "
+        "Server Settings → Roles, then try again.",
+        ("name",),
+        "the refusal when a role put on a menu is one Black Bloc could not remove. It takes {name}",
+    ),
+    "rolemenu_no_held_said": (
+        "**{menu}** has no earlier end waiting, so nothing was changed.",
+        ("menu",),
+        "what staff are told when there is no held end to take. It takes {menu}",
+    ),
+    "rolemenu_use_held_question": (
+        "Use **{menu}**'s earlier end? Its {roles} role(s) come off {members} people {when}.",
+        ("menu", "roles", "members", "when"),
+        "what staff are asked before Use the earlier end, while that end is still to come. It "
+        "takes {menu} {roles} {members} {when}",
+    ),
+    "rolemenu_use_held_past_question": (
+        "Use **{menu}**'s earlier end? It was {when}, already gone by, so its {roles} role(s) come "
+        "off {members} people at the next hourly pass.",
+        ("menu", "roles", "members", "when"),
+        "what staff are asked before Use the earlier end when that end has already gone by. It "
+        "takes {menu} {roles} {members} {when}",
+    ),
+    "rolemenu_use_held_yes": ("Yes, use it", (), "Use the earlier end's confirm button"),
+}
+ROLEMENU_STAFF_DEFAULTS: dict[str, Any] = {
+    key: default for key, (default, _, _) in ROLEMENU_STAFF_WORDS.items()
+}
+ROLEMENU_STAFF_DEFAULTS[ROLEMENU_END_EARLIER_HOLDS_KEY] = True
+KEY_TYPES.update({key: "text" for key in ROLEMENU_STAFF_WORDS})
+KEY_TYPES[ROLEMENU_END_EARLIER_HOLDS_KEY] = "bool"
+KEY_HELP.update({key: said for key, (_, _, said) in ROLEMENU_STAFF_WORDS.items()})
+KEY_HELP[ROLEMENU_END_EARLIER_HOLDS_KEY] = (
+    "true — the default — holds a marathon's new dates that would pull a role menu's end earlier "
+    "than it was by more than rolemenu_end_moved_minutes, and tells staff; the menu keeps its "
+    "end until staff press Use the earlier end. false lets the end follow the marathon at once"
+)
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in ROLEMENU_STAFF_WORDS.items()}
 )
 
 # Blocks live (blocks-live, 2026-09-28) — who's live now, upcoming events and link buttons. Every
@@ -12063,8 +12275,6 @@ class SettingsStore:
             return True
         if key == SPAWNED_STAFF_REACH:
             return SPAWNED_STAFF_REACH_DEFAULT
-        if key == "rolemenu_mode":
-            return "off"
         if key == "request_mode":
             return "on"
         if key == "request_who_can_file":
@@ -12111,6 +12321,8 @@ class SettingsStore:
             return SMALL_FIXES_DEFAULTS[key]
         if key in ROLEMENU_END_DEFAULTS:
             return ROLEMENU_END_DEFAULTS[key]
+        if key in ROLEMENU_STAFF_DEFAULTS:
+            return ROLEMENU_STAFF_DEFAULTS[key]
         if key in TEMPVOICE_BLOCK_DEFAULTS:
             return TEMPVOICE_BLOCK_DEFAULTS[key]
         if key in BUTTON_BLOCK_DEFAULTS:

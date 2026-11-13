@@ -1,46 +1,60 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ... import rolegrants as grants
-from ... import rolemenu_panels as panels
+from ... import rolemenus as menus
 from ...cogs.community.role_menus import (
-    MODES,
     NO_SUCH_MEMBER,
     NOTHING_ON_THIS_MENU,
-    ROLE_MENUS_OFF,
+    ROLEMENU_ENDED_TEXT_KEY,
     STAFF_MODE,
-    UNSET,
     MenuLimitError,
     add_option,
-    apply_request_decision,
+    bindable_marathons,
     change_menu,
     check_description,
     check_label,
     check_option_count,
     check_title,
+    default_buffer,
+    delete_refusal,
     drop_menu,
+    end_label,
+    end_menu_now,
     expires_days_of,
+    failure_count,
+    failure_lines,
     get_menu,
-    get_menu_by_id,
     get_options,
+    held_is_past,
     list_menus,
+    local_moment,
     make_menu,
+    marathon_name_of,
+    marathon_row,
+    members_of,
+    menu_value,
     needs_approval,
-    picking_is_on,
-    post_menu,
     remove_option,
     retry_days_of,
-    seed_menus,
-    seed_summary,
+    role_labels,
+    set_menu_end,
     staff_assign,
+    stamp_grants,
+    use_held_end,
+    use_held_question,
+    wearing_count,
+    word,
 )
+from ...golive import parse_ts
 from ...logkinds import VIA_WEBSITE
+from ...settings_store import ROLEMENU_RETIRED_KEY
 from ..auth import Refused, staff_dependency
-from ..names import as_id, avatar_url, resolve_one
+from ..names import as_id
 from ..writes import (
     actor_for,
     guard_of,
@@ -64,72 +78,20 @@ NEEDS_A_NAME = (
     "A role menu needs a short name and a heading, so nothing was created. Fill both in and try "
     "again."
 )
-BAD_MODE = (
-    "**{given}** is not a way a role menu can work, so nothing was changed. It is one of "
-    "{modes} — multiple lets people pick several, single allows one, staff hands them out."
-)
 NO_SUCH_ROLE = (
     "**{role_id}** is not a role in this server any more, so the menu was left as it was. Refresh "
     "the page and pick the roles again."
-)
-UNASSIGNABLE = (
-    "Black Bloc cannot hand out **{name}**, so it was not added. That role is either above Black "
-    "Bloc's own role in Server Settings → Roles, or managed by another app. Ask an admin to move "
-    "Black Bloc's role above it, then try again."
-)
-STAFF_MENU_NOT_POSTED = (
-    "**{name}** is a staff-assigned menu, so there is no panel to post — nobody gives these roles "
-    "to themselves."
-)
-NOTHING_TO_POST = (
-    "**{name}** has no roles on it yet, so there is nothing to post. Add one first."
-)
-NO_SUCH_CHANNEL = (
-    "**{channel_id}** is not a channel Black Bloc can see, so nothing was posted. Pick one from "
-    "the list and try again."
 )
 BAD_OPTION = (
     "One of the roles on that menu arrived in a shape Black Bloc could not read, so nothing was "
     "changed. It is a fault in the page rather than in what you picked — reload the role menus "
     "page and try again."
 )
-UNKNOWN_STATUS = (
-    "**{given}** is not a state a role request can be in, so nothing was listed. They are {known}."
+BAD_END_SOURCE = (
+    "**{given}** is not a way a role menu can end, so nothing was changed. It is one of "
+    "{known} — a fault in the page rather than in what you picked, so reload it and try again."
 )
-BAD_APPROVAL = (
-    "**{given}** is not on or off, so nothing was changed. It is a fault in the page rather than "
-    "in what you picked — reload the role menus page and try again."
-)
-BAD_DAYS = (
-    "**{given}** is not a number of days, so nothing was changed. Send a whole number from 0 to "
-    "{limit} — 0 means the role never runs out."
-).replace("{limit}", str(grants.DAYS_MAX))
-NOT_POSTED_YET = (
-    "**{name}** is not posted anywhere yet, so there is no panel to move. Post it from the Post "
-    "a menu section to choose where it goes."
-)
-PANEL_NOT_MOVED = (
-    "Black Bloc could not take **{name}**'s old panel down, so it is still where it was and "
-    "nothing was posted in the new channel. It needs to see the old channel and be able to "
-    "delete its own message there."
-)
-DENY_NEEDS_A_REASON = (
-    "A denied request needs one line the member is sent, so nothing was done. Say why and send "
-    "it again."
-)
-NOTHING_TO_UNPOST = (
-    "**{name}** has no panel up right now, so there was nothing to take down. Post it from the "
-    "Post a menu section first."
-)
-PANEL_STUCK = (
-    "Black Bloc could not take **{name}**'s panel down, so it is still where it was. It needs to "
-    "see that channel and be able to delete its own message there — ask a Lead to check both, "
-    "then try again."
-)
-PANEL_TAKEN_DOWN = (
-    "**{name}**'s panel is down. The menu and its roles are untouched and nobody loses a role — "
-    "post it again whenever you want it back."
-)
+END_FIELDS = ("ends_source", "ends_marathon_id", "ends_at", "buffer_days")
 
 
 def option_row(row: Any) -> dict[str, Any]:
@@ -141,7 +103,12 @@ def option_row(row: Any) -> dict[str, Any]:
     }
 
 
+def site_when(bot: Any, guild_id: int, at: Any) -> str:
+    return local_moment(bot, guild_id, at)
+
+
 def menu_row(menu: Any, options: Any) -> dict[str, Any]:
+    """The stored menu; the retired self-pick fields stay readable until the page stops reading."""
     return {
         "name": menu["name"],
         "title": menu["title"],
@@ -153,80 +120,76 @@ def menu_row(menu: Any, options: Any) -> dict[str, Any]:
         "expires_days": expires_days_of(menu),
         "retry_days": retry_days_of(menu),
         "options": [option_row(row) for row in options],
+        "ends_source": menus.end_source(menu),
+        "ends_marathon_id": (
+            str(menu_value(menu, "ends_marathon_id"))
+            if menu_value(menu, "ends_marathon_id") is not None
+            else None
+        ),
+        "buffer_days": menu_value(menu, "buffer_days"),
+        "ends_at": menu_value(menu, "ends_at"),
+        "ended_at": menu_value(menu, "ended_at"),
+        "ends_held_at": menu_value(menu, "ends_held_at"),
+        "ends_set_by": (
+            str(menu_value(menu, "ends_set_by")) if menu_value(menu, "ends_set_by") else None
+        ),
+        "ends_set_at": menu_value(menu, "ends_set_at"),
+        "last_pass": {
+            "passes": int(menu_value(menu, "end_passes", 0)),
+            "members": int(menu_value(menu, "end_members", 0)),
+            "failures": failure_count(menu),
+            "ended_at": menu_value(menu, "ended_at"),
+        },
     }
 
 
-def request_row(guild: Any, row: Any, menu_name: Any = None) -> dict[str, Any]:
-    by = row["decided_by"]
-    member = guild.get_member(row["user_id"]) if guild is not None else None
-    return {
-        "id": row["id"],
-        "menu_id": str(row["menu_id"]),
-        "menu_name": menu_name,
-        "user_id": str(row["user_id"]),
-        "user_name": resolve_one(guild, row["user_id"])["display_name"],
-        "user_avatar": avatar_url(member) if member is not None else None,
-        "role_id": str(row["role_id"]),
-        "role_name": resolve_one(guild, row["role_id"])["display_name"],
-        "requested_at": row["requested_at"],
-        "status": row["status"],
-        "decided_by_id": str(by) if by else None,
-        "decided_by_name": resolve_one(guild, by)["display_name"] if by else None,
-        "decided_at": row["decided_at"],
-        "deny_reason": row["deny_reason"],
-    }
+async def menu_payload(bot: Any, guild: Any, menu: Any, options: Any, members: Any) -> dict:
+    row = menu_row(menu, options)
+    wearing = wearing_count(bot, guild.id, members, [one["role_id"] for one in options])
+    row["wearing"] = wearing if isinstance(wearing, int) else None
+    row["buffer_default"] = menus.buffer_of({}, default_buffer(bot, guild.id))
+    row["end_label"] = end_label(
+        bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu), site_when
+    )
+    held = menu_value(menu, "ends_held_at")
+    row["held_label"] = site_when(bot, guild.id, held) if held else None
+    row["held_past"] = held_is_past(menu)
+    counted = wearing if isinstance(wearing, int) else wearing_count(bot, guild.id, None, ())
+    row["held_question"] = use_held_question(
+        bot, guild.id, menu, len(options), counted, site_when
+    )
+    row["end_now_question"] = word(
+        bot, guild.id, "rolemenu_end_now_question", roles=len(options), members=counted
+    )
+    return row
 
 
-def wanted_statuses(given: Any) -> tuple[str, ...]:
-    wanted = tuple(part for part in str(given or "").split(",") if part)
-    for part in wanted:
-        if part not in grants.REQUEST_STATUSES:
-            raise Refused(
-                400,
-                "unknown_status",
-                UNKNOWN_STATUS.format(
-                    given=part, known=", ".join(grants.REQUEST_STATUSES)
-                ),
-            )
-    return wanted or grants.REQUEST_STATUSES
+async def marathon_choice(bot: Any, guild_id: int, row: Any) -> dict[str, Any]:
+    known = parse_ts(row["ends_at"]) is not None
+    label = (
+        word(
+            bot,
+            guild_id,
+            "rolemenu_marathon_option",
+            name=row["name"],
+            date=local_moment(bot, guild_id, row["ends_at"], "%Y-%m-%d"),
+        )
+        if known
+        else word(bot, guild_id, "rolemenu_marathon_option_unknown", name=row["name"])
+    )
+    return {"id": str(row["id"]), "name": row["name"], "ends_at": row["ends_at"], "label": label}
 
 
-def wanted_approval(given: Any) -> bool | None:
-    if given is None:
-        return None
-    if not isinstance(given, bool):
-        raise Refused(400, "bad_approval", BAD_APPROVAL.format(given=str(given)[:40]))
-    return given
-
-
-def wanted_days(given: Any, *, blank: Any) -> Any:
-    """`blank` is what an absent field means: UNSET to leave it, None to clear it."""
-    if given is None:
-        return blank
-    try:
-        number = int(given)
-    except (TypeError, ValueError):
-        raise Refused(400, "bad_days", BAD_DAYS.format(given=str(given)[:40])) from None
-    if number < 0 or number > grants.DAYS_MAX:
-        raise Refused(400, "bad_days", BAD_DAYS.format(given=str(given)[:40]))
-    return number
-
-
-def checked_mode(given: Any) -> str | None:
-    if given is None:
-        return None
-    if str(given) not in MODES:
-        raise Refused(400, "bad_mode", BAD_MODE.format(given=given, modes=", ".join(MODES)))
-    return str(given)
-
-
-def wanted_role(guild: Any, role_id: Any) -> Any:
+def wanted_role(bot: Any, guild: Any, role_id: Any) -> Any:
+    """A role the end of the menu could not take off is refused here, not discovered then."""
     role = guild.get_role(as_id(role_id)) if as_id(role_id) is not None else None
     if role is None:
         raise Refused(400, "no_such_role", NO_SUCH_ROLE.format(role_id=role_id))
     assignable = getattr(role, "is_assignable", None)
     if callable(assignable) and not assignable():
-        raise Refused(400, "role_refused", UNASSIGNABLE.format(name=role.name))
+        raise Refused(
+            400, "role_refused", word(bot, guild.id, "rolemenu_cannot_strip_said", name=role.name)
+        )
     return role
 
 
@@ -248,17 +211,17 @@ def wanted_description(given: Any) -> str | None:
     return within_limits(check_description, str(given).strip())
 
 
-def wanted_option(guild: Any, item: Any) -> tuple[Any, str, Any]:
+def wanted_option(bot: Any, guild: Any, item: Any) -> tuple[Any, str, Any]:
     if not isinstance(item, dict):
         raise Refused(400, "bad_option", BAD_OPTION)
-    role = wanted_role(guild, item.get("role_id"))
+    role = wanted_role(bot, guild, item.get("role_id"))
     label = within_limits(check_label, str(item.get("label") or role.name))
     return role, label, item.get("emoji")
 
 
-def wanted_options(guild: Any, items: Any) -> list[tuple[Any, str, Any]]:
+def wanted_options(bot: Any, guild: Any, items: Any) -> list[tuple[Any, str, Any]]:
     within_limits(check_option_count, len(items))
-    return [wanted_option(guild, item) for item in items]
+    return [wanted_option(bot, guild, item) for item in items]
 
 
 async def read_menu(bot: Any, guild: Any, name: str) -> tuple[Any, list[Any]]:
@@ -269,49 +232,91 @@ async def read_menu(bot: Any, guild: Any, name: str) -> tuple[Any, list[Any]]:
 
 
 async def sync_options(bot: Any, menu: Any, wanted: list[tuple[Any, str, Any]]) -> None:
-    """The menu ends up holding exactly the options `wanted_options` passed, in that order."""
+    """Exactly the options given, in order; grants on every role that came or went re-stamped."""
+    before = {int(row["role_id"]) for row in await get_options(bot.db, menu["id"])}
     for role, label, emoji in wanted:
         await add_option(bot.db, menu["id"], role.id, label, emoji)
     kept = {role.id for role, _, _ in wanted}
     for row in await get_options(bot.db, menu["id"]):
         if row["role_id"] not in kept:
             await remove_option(bot.db, menu["id"], row["role_id"])
+    moved = sorted(before ^ {int(one) for one in kept})
+    if moved:
+        await stamp_grants(bot.db, menu["guild_id"], moved, was=(menu_value(menu, "ends_at"),))
 
 
-async def wanted_target(bot: Any, guild: Any, menu: Any, options: Any, channel_id: Any) -> Any:
-    """Every refusal the post path gives, in the order a panel meets them."""
-    if menu["mode"] == STAFF_MODE:
-        raise Refused(400, "staff_menu", STAFF_MENU_NOT_POSTED.format(name=menu["name"]))
-    if not options:
-        raise Refused(400, "no_options", NOTHING_TO_POST.format(name=menu["name"]))
-    if not picking_is_on(bot, guild.id):
-        raise Refused(409, "rolemenu_off", ROLE_MENUS_OFF)
-    target = guild.get_channel(channel_id) if channel_id else None
-    if target is None:
-        raise Refused(400, "no_such_channel", NO_SUCH_CHANNEL.format(channel_id=channel_id))
-    guard = guard_of(bot)
-    if guard is not None and not guard.allows_channel(target.id):
-        refuse_guarded(guard.refusal_message())
-    return target
+def wanted_buffer(bot: Any, guild_id: int, given: Any) -> int | None:
+    """None or blank is the server's default; anything but 0-365 whole days is refused."""
+    if given is None or str(given).strip() == "":
+        return None
+    typed = str(given).strip()
+    if isinstance(given, bool) or not typed.isdigit() or int(typed) > menus.BUFFER_MAX:
+        raise Refused(
+            400,
+            "bad_buffer",
+            word(bot, guild_id, "rolemenu_end_bad_buffer_said", given=typed[:40]),
+        )
+    return int(typed)
 
 
-async def can_move(bot: Any, guild: Any, menu: Any, options: Any, channel_id: Any) -> None:
-    """Asked BEFORE an edit is written, so a refused move does not leave a half-saved menu."""
-    if not menu["message_id"]:
-        raise Refused(400, "not_posted", NOT_POSTED_YET.format(name=menu["name"]))
-    await wanted_target(bot, guild, menu, options, channel_id)
+def wanted_moment(bot: Any, guild_id: int, given: Any) -> datetime:
+    """A typed `YYYY-MM-DD` (23:59 guild-local), `YYYY-MM-DD HH:MM`, or a full ISO moment."""
+    text = str(given or "").strip()
+    when = menus.typed_end(text, bot.store.get(guild_id, "default_timezone")) or parse_ts(text)
+    if when is None:
+        raise Refused(
+            400, "bad_date", word(bot, guild_id, "rolemenu_end_bad_date_said", given=text[:40])
+        )
+    if when <= datetime.now(UTC):
+        raise Refused(
+            400,
+            "past_date",
+            word(
+                bot, guild_id, "rolemenu_end_past_said", when=site_when(bot, guild_id, when)
+            ),
+        )
+    return when
 
 
-async def move_panel(bot: Any, guild: Any, name: str, channel_id: int, who: Any) -> Any:
-    """The old panel comes down before the new one goes up, so a menu is never in two places."""
-    menu, options = await read_menu(bot, guild, name)
-    await can_move(bot, guild, menu, options, channel_id)
-    target = await wanted_target(bot, guild, menu, options, channel_id)
-    actor = actor_for(bot, who, guild)
-    if not await panels.unpost(bot, menu, actor, via=VIA_WEBSITE):
-        raise Refused(409, "panel_stuck", PANEL_NOT_MOVED.format(name=name))
-    fresh, options = await read_menu(bot, guild, name)
-    return await post_menu(bot, guild, actor, fresh, options, target, via=VIA_WEBSITE)
+async def wanted_end(bot: Any, guild: Any, menu: Any, payload: dict[str, Any]) -> dict | None:
+    """The end a PUT asks for, checked before any write; None when the body names no end field."""
+    if not any(key in payload for key in END_FIELDS):
+        return None
+    source = payload.get("ends_source")
+    current = menus.end_source(menu)
+    if source is None:
+        if current != menus.MARATHON_END or "buffer_days" not in payload:
+            raise Refused(
+                400,
+                "buffer_needs_marathon",
+                word(bot, guild.id, "rolemenu_buffer_needs_marathon_said", menu=menu["name"]),
+            )
+        source = current
+    if source not in menus.END_SOURCES:
+        raise Refused(
+            400,
+            "bad_end_source",
+            BAD_END_SOURCE.format(given=str(source)[:40], known=", ".join(menus.END_SOURCES)),
+        )
+    if source == menus.NO_END:
+        return {"source": source}
+    if source == menus.DATE_END:
+        return {"source": source, "ends_at": wanted_moment(bot, guild.id, payload.get("ends_at"))}
+    given = payload.get("ends_marathon_id", menu_value(menu, "ends_marathon_id"))
+    marathon_id = as_id(given)
+    if marathon_id is None or await marathon_row(bot.db, guild.id, marathon_id) is None:
+        raise Refused(
+            400, "no_such_marathon", word(bot, guild.id, "rolemenu_end_no_marathon_said")
+        )
+    if "buffer_days" in payload:
+        buffer = wanted_buffer(bot, guild.id, payload.get("buffer_days"))
+    else:
+        buffer = menu_value(menu, "buffer_days") if current == menus.MARATHON_END else None
+    return {"source": source, "marathon_id": marathon_id, "buffer_days": buffer}
+
+
+def retired(bot: Any, guild_id: int) -> None:
+    raise Refused(410, "rolemenu_retired", word(bot, guild_id, ROLEMENU_RETIRED_KEY))
 
 
 def build_router(bot: Any) -> APIRouter:
@@ -320,76 +325,49 @@ def build_router(bot: Any) -> APIRouter:
         prefix="/api/rolemenus", tags=["rolemenus"], dependencies=[Depends(staff_dependency(bot))]
     )
 
+    async def one_payload(guild: Any, name: str) -> dict[str, Any]:
+        menu, options = await read_menu(bot, guild, name)
+        return await menu_payload(bot, guild, menu, options, await members_of(guild))
+
     @router.get("")
     async def rolemenus_index() -> list[dict[str, Any]]:
         guild = require_guild(bot)
         require_db(bot)
+        rows = await list_menus(bot.db, guild.id)
+        members = await members_of(guild) if rows else []
         return [
-            menu_row(menu, await get_options(bot.db, menu["id"]))
-            for menu in await list_menus(bot.db, guild.id)
+            await menu_payload(bot, guild, menu, await get_options(bot.db, menu["id"]), members)
+            for menu in rows
+        ]
+
+    @router.get("/marathons")
+    async def rolemenu_marathons() -> list[dict[str, Any]]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return [
+            await marathon_choice(bot, guild.id, row)
+            for row in await bindable_marathons(bot.db, guild.id)
         ]
 
     @router.post("/seed")
-    async def rolemenu_seed(request: Request) -> dict[str, Any]:
-        who = await writer(request)
-        guild = require_guild(bot)
-        require_db(bot)
-        created, skipped = await seed_menus(
-            bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE
-        )
-        return {
-            "created": created,
-            "skipped": skipped,
-            "message": seed_summary(created, skipped),
-        }
+    async def rolemenu_seed() -> dict[str, Any]:
+        retired(bot, require_guild(bot).id)
+        return {}
 
     @router.get("/requests")
-    async def rolemenu_requests(status: str = "") -> list[dict[str, Any]]:
-        guild = require_guild(bot)
-        require_db(bot)
-        rows = await grants.requests_by_status(bot.db, guild.id, wanted_statuses(status))
-        named = {menu["id"]: menu["name"] for menu in await list_menus(bot.db, guild.id)}
-        return [request_row(guild, row, named.get(row["menu_id"])) for row in rows]
-
-    async def _decide(
-        request: Request, request_id: int, status: str, reason: Any, days: Any
-    ) -> dict[str, Any]:
-        who = await writer(request)
-        guild = require_guild(bot)
-        require_db(bot)
-        said, fresh = await apply_request_decision(
-            bot,
-            guild,
-            request_id,
-            status,
-            actor_for(bot, who, guild),
-            reason=reason,
-            days=days,
-            via=VIA_WEBSITE,
-        )
-        if fresh is None:
-            raise Refused(409, "not_decided", said)
-        menu = await get_menu_by_id(bot.db, fresh["menu_id"])
-        return {
-            "request": request_row(guild, fresh, menu["name"] if menu is not None else None),
-            "message": said,
-        }
+    async def rolemenu_requests() -> list[dict[str, Any]]:
+        retired(bot, require_guild(bot).id)
+        return []
 
     @router.post("/requests/{request_id}/approve")
-    async def request_approve(
-        request: Request, request_id: int, payload: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        days = wanted_days((payload or {}).get("days"), blank=None)
-        return await _decide(request, request_id, grants.APPROVED, None, days)
+    async def request_approve(request_id: int) -> dict[str, Any]:
+        retired(bot, require_guild(bot).id)
+        return {}
 
     @router.post("/requests/{request_id}/deny")
-    async def request_deny(
-        request: Request, request_id: int, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        reason = grants.clamp(payload.get("reason"), grants.REASON_LIMIT)
-        if not reason:
-            raise Refused(400, "no_reason", DENY_NEEDS_A_REASON)
-        return await _decide(request, request_id, grants.DENIED, reason, None)
+    async def request_deny(request_id: int) -> dict[str, Any]:
+        retired(bot, require_guild(bot).id)
+        return {}
 
     @router.post("")
     async def rolemenu_create(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
@@ -400,7 +378,6 @@ def build_router(bot: Any) -> APIRouter:
         title = wanted_title(payload.get("title"))
         if not name or not title:
             raise Refused(400, "bad_request", NEEDS_A_NAME)
-        mode = checked_mode(payload.get("mode")) or "multiple"
         description = wanted_description(payload.get("description"))
         menu_id = await make_menu(
             bot,
@@ -409,84 +386,110 @@ def build_router(bot: Any) -> APIRouter:
             name,
             title,
             description or None,
-            mode,
-            approval=wanted_approval(payload.get("approval")),
-            expires_days=wanted_days(payload.get("expires_days"), blank=None),
-            retry_days=wanted_days(payload.get("retry_days"), blank=None),
+            STAFF_MODE,
             via=VIA_WEBSITE,
         )
         if menu_id is None:
             raise Refused(400, "name_taken", NAME_TAKEN.format(name=name))
-        menu, options = await read_menu(bot, guild, name)
-        return menu_row(menu, options)
+        return await one_payload(guild, name)
 
     @router.put("/{name}")
     async def rolemenu_update(
         request: Request, name: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
+        """Words/roles: one `edit` row; an end: one `end_set` row; retired fields are ignored."""
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        menu, held = await read_menu(bot, guild, name)
-        given = payload.get("channel_id")
-        moving = as_id(given) if given not in (None, "") else None
-        if moving is not None and moving != menu["channel_id"]:
-            await can_move(bot, guild, menu, held, moving)
-        mode = checked_mode(payload.get("mode"))
+        menu, _ = await read_menu(bot, guild, name)
         title = wanted_title(payload.get("title")) if payload.get("title") else None
         description = wanted_description(payload.get("description"))
         wanted = payload.get("options")
-        options = wanted_options(guild, wanted) if isinstance(wanted, list) else None
-        await change_menu(
-            bot,
-            guild,
-            actor_for(bot, who, guild),
-            name,
-            title=title,
-            description=description,
-            mode=mode,
-            approval=wanted_approval(payload.get("approval")),
-            expires_days=wanted_days(payload.get("expires_days"), blank=UNSET),
-            retry_days=wanted_days(payload.get("retry_days"), blank=None),
-            via=VIA_WEBSITE,
-        )
+        options = wanted_options(bot, guild, wanted) if isinstance(wanted, list) else None
+        end = await wanted_end(bot, guild, menu, payload)
+        actor = actor_for(bot, who, guild)
+        if title is not None or description is not None or options is not None:
+            await change_menu(
+                bot, guild, actor, name, title=title, description=description, via=VIA_WEBSITE
+            )
         if options is not None:
             await sync_options(bot, menu, options)
-        if moving is not None and moving != menu["channel_id"]:
-            await move_panel(bot, guild, name, moving, who)
-        fresh, options = await read_menu(bot, guild, name)
-        return menu_row(fresh, options)
+        if end is not None:
+            fresh, _ = await read_menu(bot, guild, name)
+            await set_menu_end(bot, guild, actor, fresh, via=VIA_WEBSITE, **end)
+        return await one_payload(guild, name)
+
+    @router.post("/{name}/end-now")
+    async def rolemenu_end_now(request: Request, name: str) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        menu, options = await read_menu(bot, guild, name)
+        guard = guard_of(bot)
+        if guard is not None:
+            refuse_guarded(guard.refusal_message())
+        details = await end_menu_now(
+            bot, guild, actor_for(bot, who, guild), menu, via=VIA_WEBSITE
+        )
+        if details is None:
+            raise Refused(
+                409,
+                "members_not_loaded",
+                word(bot, guild.id, "rolemenu_end_now_not_run_said", menu=name),
+            )
+        payload = await one_payload(guild, name)
+        payload["message"] = word(
+            bot,
+            guild.id,
+            ROLEMENU_ENDED_TEXT_KEY,
+            menu=name,
+            roles=len(options),
+            members=details["members"],
+            failures=details["failures"],
+        )
+        payload["pass"] = {
+            key: details[key] for key in ("members", "this_pass", "failures", "passes", "ended")
+        }
+        payload["pass"]["left"] = failure_lines(
+            bot, guild, details["left"], await role_labels(bot.db, guild, menu["id"])
+        )
+        return payload
+
+    @router.post("/{name}/end-earlier")
+    async def rolemenu_end_earlier(request: Request, name: str) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        menu, _ = await read_menu(bot, guild, name)
+        if not menu_value(menu, "ends_held_at"):
+            raise Refused(
+                409, "nothing_held", word(bot, guild.id, "rolemenu_no_held_said", menu=name)
+            )
+        await use_held_end(bot, guild, actor_for(bot, who, guild), menu, via=VIA_WEBSITE)
+        return await one_payload(guild, name)
 
     @router.delete("/{name}")
     async def rolemenu_delete(request: Request, name: str) -> dict[str, Any]:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
+        menu = await get_menu(bot.db, guild.id, name)
+        refused = await delete_refusal(bot, guild, menu, site_when)
+        if refused:
+            raise Refused(409, "menu_still_ends", refused)
         if not await drop_menu(bot, guild, actor_for(bot, who, guild), name, via=VIA_WEBSITE):
             raise Refused(404, "no_such_menu", NO_SUCH_MENU.format(name=name))
         return {"deleted": True, "name": name}
 
     @router.post("/{name}/post")
-    async def rolemenu_post(
-        request: Request, name: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        who = await writer(request)
-        guild = require_guild(bot)
-        require_db(bot)
-        menu, options = await read_menu(bot, guild, name)
-        channel_id = as_id(payload.get("channel_id")) or bot.store.get(
-            guild.id, "role_menu_channel_id"
-        )
-        target = await wanted_target(bot, guild, menu, options, channel_id)
-        message = await post_menu(
-            bot, guild, actor_for(bot, who, guild), menu, options, target, via=VIA_WEBSITE
-        )
-        return {
-            "posted": True,
-            "name": name,
-            "channel_id": str(target.id),
-            "message_id": str(message.id),
-        }
+    async def rolemenu_post(name: str) -> dict[str, Any]:
+        retired(bot, require_guild(bot).id)
+        return {}
+
+    @router.post("/{name}/unpost")
+    async def rolemenu_unpost(name: str) -> dict[str, Any]:
+        retired(bot, require_guild(bot).id)
+        return {}
 
     @router.post("/{name}/assign")
     async def rolemenu_assign(
@@ -498,8 +501,6 @@ def build_router(bot: Any) -> APIRouter:
         menu, options = await read_menu(bot, guild, name)
         if not options:
             raise Refused(400, "no_options", NOTHING_ON_THIS_MENU.format(name=name))
-        if not picking_is_on(bot, guild.id):
-            raise Refused(409, "rolemenu_off", ROLE_MENUS_OFF)
         given = payload.get("user_id")
         member = guild.get_member(as_id(given)) if as_id(given) is not None else None
         if member is None:
@@ -524,27 +525,6 @@ def build_router(bot: Any) -> APIRouter:
             "name": name,
             "user_id": str(member.id),
             "message": said,
-        }
-
-    @router.post("/{name}/unpost")
-    async def rolemenu_unpost(request: Request, name: str) -> dict[str, Any]:
-        who = await writer(request)
-        guild = require_guild(bot)
-        require_db(bot)
-        menu, _ = await read_menu(bot, guild, name)
-        if not menu["message_id"]:
-            raise Refused(400, "not_posted", NOTHING_TO_UNPOST.format(name=name))
-        guard = guard_of(bot)
-        blocked = guard is not None and not guard.allows_channel(menu["channel_id"])
-        if not await panels.unpost(bot, menu, actor_for(bot, who, guild), via=VIA_WEBSITE):
-            if blocked:
-                refuse_guarded(guard.refusal_message())
-            raise Refused(409, "panel_stuck", PANEL_STUCK.format(name=name))
-        return {
-            "unposted": True,
-            "name": name,
-            "channel_id": str(menu["channel_id"]) if menu["channel_id"] else None,
-            "message": PANEL_TAKEN_DOWN.format(name=name),
         }
 
     return router

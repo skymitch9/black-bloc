@@ -1,7 +1,8 @@
 # Temporary roles — the role menu becomes the permanent staff control; a role ends on a date or with a marathon (request #17)
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **1a BUILT on branch `temp-roles-menu`, not merged; 1b and 2
-> not started** (2026-11-13; deviations, decisions and the interface 1b calls are at §6). 📐 Design by Fable, 2026-11-13 09:5x Phoenix. **Last verified: 2026-11-13 09:4x** against `main`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **1a LIVE v271; 🔨 1b + 2 BUILT on branch
+> `temp-roles-menu`, not merged** (2026-11-13; 1a's deviations and interface at §6.1–6.2, what the site reads at §6.3, 1b's at
+> §6.4, dispatch 2's at §6.5). 📐 Design by Fable, 2026-11-13 09:5x Phoenix. **Last verified: 2026-11-13 09:4x** against `main`
 > `8556fcc8` by reading the code, and against the live site through the operator token (request #17; `GET /api/marathons`).
 > ⚠️ NOT verified: anything in Discord; the bot was not run; no browser; the guild's current role list (the role names below are
 > from the 2026-08-26 scan and are examples, never a fixed list).
@@ -253,7 +254,7 @@ Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, core*.
 
 **Open questions for the conductor (built as described; not decided by 1a)**
 
-- **An end that moves EARLIER.** One schedule read that pulls `marathons.ends_at` earlier (a truncated list, a corrected actual,
+- ✅ **Answered by the conductor for 1b (2026-11-13): held for staff** — see §6.4 item 1. ~~**An end that moves EARLIER.**~~ One schedule read that pulls `marathons.ends_at` earlier (a truncated list, a corrected actual,
   checklist 42) can make a bound menu due at the next tick, and the pass is irreversible. Should a move earlier wait for a second
   read, or for staff, before the menu becomes due? Today it follows at once (with the notice if ≥ the floor).
 - **Restore.** Restoring an archived marathon does not rebind the menu that was unbound from it; staff pick it again.
@@ -282,3 +283,160 @@ Set the end… (past date, unknown marathon).
 | The computed end of a menu | `rolemenus.ends_at_of(menu, marathon_row_or_None, store.get(guild.id, "rolemenu_end_buffer_days"))` |
 | Is it due | `rolemenus.is_due(menu, datetime.now(UTC))` |
 | Render a sentence key | `rolemenus.said(store, guild_id, key, **fields)` (falls back to the shipped default, checklist 17) |
+
+### 6.3 For the dispatch-2 (site) builder: every route and field the Role menus page uses
+
+All routes are staff-only (session + staff role), as before. Every refusal is `{"error": code, "message": sentence}`; show the
+sentence, never the status. Times are UTC ISO strings; `end_label` is already in words (guild-local, no `<t:>` tokens).
+
+**`GET /api/rolemenus`** — one row per menu:
+
+```json
+{
+  "name": "btb-2027", "title": "Back to Black 2027", "description": null,
+  "options": [{"role_id": "1285361896383320074", "label": "Runner", "emoji": null, "position": 0}],
+  "ends_source": "marathon", "ends_marathon_id": "24", "buffer_days": null, "buffer_default": 1,
+  "ends_at": "2027-03-01T05:00:00+00:00", "ended_at": null, "ends_held_at": null,
+  "ends_set_by": "1234", "ends_set_at": "2026-11-13T20:00:00+00:00",
+  "wearing": 23, "end_label": "ends 2027-02-28 22:00 (Back to Black 2027 + 1 d)",
+  "last_pass": {"passes": 0, "members": 0, "failures": 0, "ended_at": null},
+  "mode": "staff", "channel_id": null, "message_id": null, "approval": false, "expires_days": null, "retry_days": 7
+}
+```
+
+- `ends_source` is `none` · `date` · `marathon`. `buffer_days` null = the server default, which is `buffer_default`.
+- `wearing` = people wearing ANY of the menu's roles right now; `null` while Discord has not sent the whole member list.
+- `ends_held_at` set = a marathon read proposed this EARLIER end and it is waiting: show it and offer *Use the earlier end*.
+- `ended_at` set = the end pass has run; `last_pass.members` people lost roles, `last_pass.failures` still wear one.
+- `mode`, `channel_id`, `message_id`, `approval`, `expires_days`, `retry_days` are RETIRED — still in the row so the old page loads;
+  dispatch 2 stops reading them, and they are ignored on write.
+
+**`GET /api/rolemenus/marathons`** — what a menu can end with, still-to-end first:
+`[{"id": "24", "name": "Back to Black 2027", "ends_at": "2027-02-28T05:00:00+00:00", "label": "Back to Black 2027 · ends 2027-02-27"}]`
+(`ends_at` null → label *… · end not known yet*). The panel's 25-cap does not apply here; the site may show them all.
+
+**`POST /api/rolemenus`** `{"name": "btb-2027", "title": "Back to Black 2027", "description": ""}` → the row above.
+
+**`PUT /api/rolemenus/{name}`** — send ONLY the fields that changed. Words/options write one `web.role_menu.edit`; an end writes one
+`web.role_menu.end_set`. An end is only touched when the body names one of `ends_source`, `ends_marathon_id`, `ends_at`,
+`buffer_days`, so a words-only save never re-arms an ended menu — and ANY end write clears `ended_at` (that is how a menu is reused).
+
+| Body | Effect | Refusals (400) |
+|---|---|---|
+| `{"ends_source": "date", "ends_at": "2027-02-28"}` | ends 23:59 guild-local that day; `"2027-02-28 18:00"` or a full ISO moment also work | `bad_date`, `past_date` |
+| `{"ends_source": "marathon", "ends_marathon_id": "24", "buffer_days": 1}` | follows the marathon's end + buffer; omit `buffer_days` to keep the menu's own (or the default), `""`/`null` = default | `no_such_marathon`, `bad_buffer` (0–365) |
+| `{"buffer_days": 2}` | changes the buffer of a menu that already follows a marathon | `buffer_needs_marathon` |
+| `{"ends_source": "none"}` | no end (ask first on the page — *No end*) | `bad_end_source` |
+| `{"options": [...]}` | as before; a role Black Bloc could not take off is refused | `role_refused` (`rolemenu_cannot_strip_said`) |
+
+**`POST /api/rolemenus/{name}/end-now`** `{}` — the end pass now. Ask first with the counts: *Take {options.length} role(s) off
+{wearing} people now?* (`rolemenu_end_now_question`). 200 → the row + `"message"` (the ended sentence) + `"pass": {"members",
+"this_pass", "failures", "passes", "ended"}`. 409 `test_mode` under the guard; 409 `members_not_loaded` when the member list would
+not load (nothing changed).
+
+**`POST /api/rolemenus/{name}/end-earlier`** `{}` — take the held earlier end. 200 → the row; 409 `nothing_held`.
+
+**`DELETE /api/rolemenus/{name}`** — 409 `menu_still_ends` while the end is still ahead and someone wears a role (the sentence says
+*End it now* first, or *No end*).
+
+**`POST /api/rolemenus/{name}/assign`** `{"user_id", "role_ids": [...], "remove": false}` — as before, no longer refused by any
+mode; grants are written with the menu's end.
+
+**Retired (410 `rolemenu_retired`, sentence `rolemenu_retired_said`)** — the page must not call them: `POST /{name}/post`,
+`POST /{name}/unpost`, `GET /requests`, `POST /requests/{id}/approve|deny`, `POST /seed`.
+
+**Members** — `GET /api/members` chips: `roles[].expires_at` is now the sooner of the grant's end and the role's menu end (so a
+by-hand wearer with no grant row gets the chip), and `roles[].ends_with_menu` names the menu (null otherwise). The existing chip code
+therefore already draws *ends <date>* for menu roles; dispatch 2 only needs to say *with {menu}* if wanted.
+
+**Timed roles** — `POST /api/roles/grants/{id}/extend` answers 409 `menu_end` (`rolemenu_push_back_refused`) for a role on a menu
+with an end; `POST /api/roles/grants` clamps `days` to the menu's end.
+
+**Settings** (Role menus tab, namespace `rolemenu`): `rolemenu_end_earlier_holds`, `rolemenu_end_buffer_days`,
+`rolemenu_end_moved_minutes`, the two notice switches and every `rolemenu_*` sentence of §3.4/§6.4. `rolemenu_mode` and the four
+`rolemenu_off_*` keys are gone from `/api/settings` (the page's mode switch shows its "did not report a key" sentence until dispatch 2).
+
+### 6.4 What 1b built, and every deviation or decision it took (2026-11-13, branch `temp-roles-menu`)
+
+Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, the staff control*.
+
+1. **The earlier-end hold (conductor's addition, not in §3).** Schema 108 adds `role_menus.ends_held_at`. A marathon read that would
+   pull a bound menu's end earlier than its end OR the last end staff were told, by MORE than `rolemenu_end_moved_minutes`, is not
+   applied while `rolemenu_end_earlier_holds` (bool, **default on**) is on: the candidate is stored, `role_menu.end_held` logged
+   (important), one notice posted (`rolemenu_end_held_text`, again only if a later candidate moves past the floor), and the card shows
+   *Held: …* and **Use the earlier end** (API `POST /{name}/end-earlier`). A later read that no longer pulls earlier clears it
+   (`role_menu.end_hold_cleared`, routine). Staff-set dates and *End it now* are never held. Off = 1a's behaviour.
+   - Decision: comparing against the TOLD end too (not only the current end) so many sub-floor earlier moves cannot creep the end.
+   - Decision: the held notice ignores `rolemenu_end_moved_notice` — it is the only way staff learn something waits on them.
+2. **Retired keys: five, not three.** `rolemenu_mode`, `rolemenu_off_confirm_said`, `rolemenu_off_confirm_button` as briefed, and
+   ALSO `rolemenu_off_dm` and `rolemenu_off_takes_roles_back`: their only reader was `handed_roles`' role-menu branch, which goes
+   with the mode, and a switch on the Settings page that does nothing is a dead control. Rows stay in the database (ignored). ⚠️ For
+   the conductor: reversible by re-registering them; say so if they should have stayed.
+3. **Per-menu `mode` / `approval` / `expires_days` / `retry_days` / `channel_id` / `message_id`**: kept in the DB and in the GET row
+   (so the old page loads), ignored on POST/PUT. New menus are stored `mode = staff`. The New menu modal lost its mode box and the
+   card its Rules…/Post…/Take it down; the root lost Seed / mode switch / Waiting on staff.
+4. **`_register_panels` did not exist** — the re-registration was inline in `cog_load`. It is removed, and a DynamicItem on
+   `rolemenu:<id>` (`RetiredMenuPick`) answers a posted panel's select with `rolemenu_picking_retired_said` (no view registered, so
+   nothing double-fires). `RequestButton` answers `rolemenu_retired_said`.
+5. **The boot panel sweep is gone** (`rolemenu_panels.reconcile` / `panels_on_boot` / `install`): with the mode retired it would
+   have taken every posted panel DOWN, and "nothing is deleted from any channel". `repost` posts nothing (pings' streamer menus
+   are no longer re-rendered); `unpost` stays for pings' own take-over.
+6. **`/rolemenu` is never hidden** (`command_visibility` lost its `rolemenu_mode` row) and its description no longer mentions
+   requests. The root command DEFERS before building (wearer counts may chunk).
+7. **Words.** Every new sentence, label, title, placeholder and refusal is a key (`ROLEMENU_STAFF_WORDS`, 45 keys incl. the hold
+   switch); modal titles/labels are cut at 45 and buttons at 80 where they render (the brackets precedent). The existing panel
+   words 1b did not touch (New menu, Grants…, Words…, Hand roles out…, the grant card) stay constants as before — same open item as
+   the sticky panel's.
+8. **The Grants… audit**: a role on a menu with an UNFINISHED end is listed by wearers (live) with that end and its grant rows are
+   dropped from list and picker; a role on a menu with NO end keeps its grant rows (the design was silent; nothing running
+   disappears).
+9. **The clamp** reads the soonest UNFINISHED menu end per role, never `menu["ends_at"]` of an ended menu. *Give somebody a role…*
+   with 0/blank days on a menu role gets the menu's end (`clamped(None, end)`).
+10. **Delete refused** while the end is ahead and anyone (or an unknown number, cache short) wears a role.
+11. **Health**: each loop row in `/api/status` gains `counts` (only the role-menu expiry loop fills it: *menus due N · ended N ·
+    failures N*, the last tick); the Health page shows it beside *Next run*.
+12. **Site, minimum only**: `page-rolemenus.js` no longer calls `GET /requests` on load (an empty list feeds the old Requests
+    section) and `shell.js` no longer calls it for the nav badge. Everything else on the page is dispatch 2's.
+13. **Mock**: `typedEnd` treats a typed date as UTC 23:59 (the real API uses `default_timezone`); good enough for shapes.
+
+**NOT built in 1b (dispatch 2's):** the page's End editor / End it now / removing Requests, Post, Seed and the mode switch, the
+marathon drawer line, the Members chip wording.
+
+### 6.5 What dispatch 2 built, and every deviation or decision it took (2026-11-13, branch `temp-roles-menu`)
+
+Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, the site*. Verified by eye on the local mock in
+`chrome-headless-shell` (1280 px and 390 px); ⚠️ nothing here met Discord or the live site.
+
+**Three fixes to 1b first**
+1. **Use the earlier end asks first** (panel and page). The confirm names the held end and the live counts
+   (`rolemenu_use_held_question`); when the held end has already gone by it says so and that the roles come off at the next
+   hourly pass (`rolemenu_use_held_past_question`); `rolemenu_use_held_yes` is its button. Three new keys. `POST
+   /{name}/end-earlier` stays one call; the GET row gains `held_label`, `held_past`, `held_question` and `end_now_question`.
+2. **`pings.py`'s words** no longer send staff to *Post it*: the streamer and notifications groupings are called role menus and
+   members opt in from `/pings` (`CREATED`, `REUSED`, `RENAMED`, `SETUP_MENU_ADDED`, `SETUP_MENU_THERE` + the mock's copies).
+   These were constants, not keys, and stay constants.
+3. A test: End it now on a menu holding an earlier end clears the hold and runs the pass once.
+
+**Deviations from §3.6 and the brief**
+4. **API fields beyond §6.3** (the page needed them): `pass.left` on End it now (worded lines, one helper shared with the ended
+   notice), `ends_with_menu` on every grant row, `role_menus` on every marathon row (unfinished bound menus only). Contract
+   entries for all three plus `POST /{held_menu}/end-earlier` on a seeded held menu (both halves).
+5. **The drawer line sits under the header's facts line**, not on an "Event card" — the drawer has no card by that name; the
+   event switch's line lives inside Settings and is not drawn for every source. One read-only line, drawn only when bound.
+6. **The End controls are their own card with their own Save**, beside the words editor, so a words save can never carry an end
+   field (any end write clears `ended_at`). The card's "how it ends" is a three-way switch (a marathon / a date / No end).
+7. **The page stops drawing `role_menu_channel_id`** (the channel menus were posted in): posting is retired, so it is a dead
+   control here. ⚠️ The key is still in the registry and on the Settings page — retiring it is a conductor question.
+8. **End it now renders on every menu with roles**, the panel's rule — including menus with no end (an ad-hoc end). The confirm
+   names the counts.
+9. **Members chips**: the API already merged menu ends; the chip's tooltip now says *ends with <menu>* (the chip's own note was
+   already the days left).
+10. **The mock** reads typed ends and shows moments in `default_timezone` (1b's §6.4 item 13 is fixed), counts wearers on the
+    roster, takes roles off it on End it now (a reset restores them), and seeds one menu per state the page draws.
+
+**Open questions (named, not decided)**
+- Retire `role_menu_channel_id` from the registry (item 7)?
+- The `streamers` / `notifications` menus are pings' own groupings but now sit on the staff control like any menu: **Set the end
+  on one would strip every fan or Events role at its end**, `pings._drop_spare_menus` deletes a streamer menu without
+  `delete_refusal`, and `pings._fill_menu` rewrites options without `stamp_grants`. Should pings' menus be hidden from, or
+  refused an end on, the staff control?

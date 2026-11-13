@@ -210,3 +210,42 @@ async def test_a_grant_for_a_role_they_already_hold_only_starts_the_clock(client
 
     assert member.edits == []
     assert made["expires_at"] is not None
+
+
+async def test_extending_a_grant_whose_menu_has_an_end_is_refused_in_words(
+    client, sign_in, web, wf
+):
+    from black_bloc.cogs.community.role_menus import add_option, create_menu
+
+    sign_in(client)
+    later = "2099-01-01T00:00:00+00:00"
+    menu_id = await create_menu(web.db, wf.GUILD_ID, "btb", "Back to Black", None, "staff")
+    await add_option(web.db, menu_id, wf.PLAIN_ROLE_ID, "Runner")
+    await web.db.conn.execute(
+        "UPDATE role_menus SET ends_source = 'date', ends_at = ? WHERE id = ?", (later, menu_id)
+    )
+    await web.db.conn.commit()
+    grant_id = await grants.add_grant(
+        web.db, wf.GUILD_ID, MEMBER_ID, wf.PLAIN_ROLE_ID, "staff", until=later
+    )
+
+    response = client.post(f"/api/roles/grants/{grant_id}/extend", json={"days": 4})
+
+    assert response.status_code == 409 and response.json()["error"] == "menu_end"
+    assert "ends with **btb** on 2098-12-31" in response.json()["message"]
+    assert "<t:" not in response.json()["message"]
+    assert (await grants.get_grant(web.db, grant_id))["expires_at"] == later
+    assert "web.role.extended" not in await wf.kinds_in(web.db)
+    [row] = [one for one in client.get("/api/roles/grants").json() if one["id"] == grant_id]
+    assert row["ends_with_menu"] == "btb"
+
+
+async def test_a_grant_on_a_role_on_no_menu_ends_with_no_menu(client, sign_in, web, wf):
+    sign_in(client)
+    grant_id = await grants.add_grant(
+        web.db, wf.GUILD_ID, MEMBER_ID, wf.PLAIN_ROLE_ID, "staff", until=grants.expires_at(3)
+    )
+
+    [row] = [one for one in client.get("/api/roles/grants").json() if one["id"] == grant_id]
+
+    assert row["ends_with_menu"] is None

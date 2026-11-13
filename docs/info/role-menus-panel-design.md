@@ -589,6 +589,8 @@ Settled first, by the standing rules, so they are **not** put to him:
   because hiding became the `hide_commands_when_off` setting (default **true**) rather than a
   per-feature decision. The Settings page and `/settings set-value` are the way back in, and
   `/help` says how many are hidden. See the header.
+  🔴 **RETIRED 2026-11-13 (request #17, `temp-roles-menu` 1b)** — `rolemenu_mode` itself is retired with member self-pick;
+  `/rolemenu` is the permanent staff control and nothing hides it. See [`event-roles-design.md`](event-roles-design.md) §6.4.
 - ✅ **Staff may decide a request from the panel as well as from the card.** Staff-final-say, and
   `decide_request`'s conditional UPDATE makes two doors safe rather than racy.
 - ✅ **`End it now` exists at last.** Every stored decision gets a staff reversal; the website has had

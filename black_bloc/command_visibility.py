@@ -31,7 +31,6 @@ HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "posts_mode": ("posts", "sticky", "questions"),
     "raidtrain_mode": ("raidtrain",),
     "request_mode": ("request",),
-    "rolemenu_mode": ("rolemenu",),
     "tempvoice_mode": ("voice",),
 }
 NEVER_HIDDEN: tuple[str, ...] = ("settings", "help", "about", "ping")

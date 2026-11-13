@@ -5,13 +5,10 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from black_bloc import chat_data
-from black_bloc.chat import with_extra
 from black_bloc.chat_data import (
-    MENUS_LIVE_IN,
     NO_SUCH_ROLE,
     NOBODY_HOLDS_IT,
     NOBODY_ONLINE,
-    NOTHING_HELD,
     ONLINE_NOW,
     at_local,
     clock,
@@ -235,69 +232,14 @@ async def test_a_guild_with_no_member_count_yet_is_the_empty_state(bot):
     assert await asked(bot, "head_count") == ({}, False)
 
 
-async def test_my_roles_names_the_menus_and_the_roles_they_already_hold(bot, db):
-    await bot.store.set(GUILD, "rolemenu_mode", "on")
+async def test_my_roles_is_the_empty_state_now_members_pick_roles_in_discord(bot, db):
+    """Request #17 retired member self-pick, so the chat no longer points at role menus."""
     await create_menu(db, GUILD, "colours", "Colours")
     menu = await get_menu(db, GUILD, "colours")
     await add_option(db, menu["id"], 22, "Member", None)
     member = FakeMember(roles=[bot.guild.get_role(22)])
 
-    tokens, filled = await asked(bot, "my_roles", member=member)
-
-    assert filled is True
-    assert tokens["menus"] == "Colours"
-    assert tokens["roles"] == "Member"
-
-
-async def test_my_roles_says_nothing_held_rather_than_leaving_a_hole(bot, db):
-    await bot.store.set(GUILD, "rolemenu_mode", "on")
-    await create_menu(db, GUILD, "colours", "Colours")
-    menu = await get_menu(db, GUILD, "colours")
-    await add_option(db, menu["id"], 22, "Member", None)
-
-    tokens, filled = await asked(bot, "my_roles", member=FakeMember())
-
-    assert filled is True and tokens["roles"] == NOTHING_HELD
-
-
-async def test_my_roles_names_the_channel_the_menus_were_posted_in_when_one_is_set(bot, db):
-    """A sentence appended at render time, because the stored line predates it."""
-    await bot.store.set(GUILD, "rolemenu_mode", "on")
-    await bot.store.set(GUILD, "role_menu_channel_id", 4242)
-    await create_menu(db, GUILD, "colours", "Colours")
-    menu = await get_menu(db, GUILD, "colours")
-    await add_option(db, menu["id"], 22, "Member", None)
-
-    tokens, filled = await asked(bot, "my_roles", member=FakeMember())
-
-    assert filled is True
-    assert tokens["extra"] == MENUS_LIVE_IN.format(where="<#4242>")
-    assert with_extra("You can pick from Colours.", tokens).endswith("<#4242>.")
-
-
-async def test_my_roles_says_nothing_about_a_channel_nobody_has_pointed_it_at(bot, db):
-    await bot.store.set(GUILD, "rolemenu_mode", "on")
-    assert bot.store.get(GUILD, "role_menu_channel_id") is None
-    await create_menu(db, GUILD, "colours", "Colours")
-    menu = await get_menu(db, GUILD, "colours")
-    await add_option(db, menu["id"], 22, "Member", None)
-
-    tokens, _ = await asked(bot, "my_roles", member=FakeMember())
-
-    assert tokens["extra"] == ""
-
-
-async def test_my_roles_is_the_empty_state_while_picking_is_off(bot, db):
-    await create_menu(db, GUILD, "colours", "Colours")
-    menu = await get_menu(db, GUILD, "colours")
-    await add_option(db, menu["id"], 22, "Member", None)
-
-    assert await asked(bot, "my_roles") == ({}, False)
-
-
-async def test_my_roles_with_picking_on_but_no_menus_is_the_empty_state(bot):
-    await bot.store.set(GUILD, "rolemenu_mode", "on")
-    assert await asked(bot, "my_roles") == ({}, False)
+    assert await asked(bot, "my_roles", member=member) == ({}, False)
 
 
 def test_a_time_is_read_from_a_stamp_a_12_hour_clock_or_a_24_hour_one():

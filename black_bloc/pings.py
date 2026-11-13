@@ -121,7 +121,7 @@ FAN_ROLE_GONE = (
 )
 RENAMED = (
     "**{name}**'s ping role is called **{now}** from now on — it was **{was}**. Nobody was added "
-    "to it or taken off it, and the *{menu}* panel says the new name."
+    "to it or taken off it, and the *{menu}* role menu says the new name."
 )
 NOT_A_STREAMER = (
     "Black Bloc does not know you stream yet, so there is nothing to make a role for. Link your "
@@ -142,13 +142,12 @@ NO_FAN_ROLE = (
     "shows who has one."
 )
 CREATED = (
-    "Made **{role}** and put it on the *{menu}* panel. People pick it there, or with **Follow a "
-    "streamer…** on `/pings`, and Black Bloc mentions it in front of their go-live announcement. "
-    "Open `/rolemenu`, pick *{menu}* and press **Post it** if it is not up yet."
+    "Made **{role}** and put it on the *{menu}* role menu. People pick it with **Follow a "
+    "streamer…** on `/pings`, and Black Bloc mentions it in front of their go-live announcement."
 )
 REUSED = (
-    "Used the role **{role}** for **{name}** and put it on the *{menu}* panel. People pick it "
-    "there, or with **Follow a streamer…** on `/pings`."
+    "Used the role **{role}** for **{name}** and put it on the *{menu}* role menu. People pick "
+    "it with **Follow a streamer…** on `/pings`."
 )
 REMOVED_KEPT = (
     "**{name}** no longer has a ping role here, and the Discord role **{role}** was left on the "
@@ -177,8 +176,8 @@ NO_SUCH_SPOTLIGHT = (
 SETUP_CREATED = "Made the role **{role}** and pointed go-live and event pings at it."
 SETUP_REUSED = "Used the role **{role}** that was already here and pointed both feeds at it."
 SETUP_UNCHANGED = "Both feeds already pointed at **{role}**, so nothing was changed."
-SETUP_MENU_ADDED = " Put it on the *{menu}* panel — `/rolemenu` ▸ *{menu}* ▸ **Post it**."
-SETUP_MENU_THERE = " It is already on the *{menu}* panel."
+SETUP_MENU_ADDED = " Put it on the *{menu}* role menu too; members turn it on from `/pings`."
+SETUP_MENU_THERE = " It is already on the *{menu}* role menu."
 SETUP_STILL_OFF = (
     " Ping roles are still off, so nobody can opt in yet — turn them on with `/settings` ▸ "
     "pings_mode on` or from the dashboard's Go-live tab."

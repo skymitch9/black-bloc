@@ -4,23 +4,39 @@ import { openSection } from './layout.js';
 import { logsSection } from './logs.js';
 import { modeWord } from './labels.js';
 import {
+  BY_DATE,
+  BY_MARATHON,
+  ENDS_WITH,
+  NO_END,
+  endBody,
+  endLine,
+  filled,
+  grantEndsWithMenu,
+  menuFromHash,
+  menuHash,
+  resolvedMoment,
+  resultLines,
+  wordsBody,
+} from './rolemenus-end.js';
+import {
   ago,
   ask,
   avatar,
   badge,
   bar,
   blankMeans,
+  boldParts,
   button,
   capMark,
   card,
   channelSelect,
   el,
   field,
+  fillTemplate,
   foldout,
   idsIn,
   keepSaying,
   memberPicker,
-  modeChip,
   nameNode,
   notice,
   readSelect,
@@ -39,34 +55,24 @@ import {
   untilWhen,
 } from './ui.js';
 
-const MODE_KEY = 'rolemenu_mode';
-const DEFAULT_CHANNEL_KEY = 'role_menu_channel_id';
-const TURNED_ON = 'On. Every menu that has a channel is posted there again, and the /rolemenu ' +
-  'commands come back, within about five seconds.';
-const TURNED_OFF = 'Off. The posted panels are removed, and /rolemenu stays where it is in ' +
-  'Discord within about five seconds. Nobody loses a role and no menu is changed.';
 const NEVER = 'never';
-const NO_KEY = 'The bot did not report a rolemenu_mode key, so this switch is not shown rather ' +
-  'than guessed at.';
-
-const SEED_BODY = 'Six menus this server expects — pronouns, playstyle, mentoring, interests, ' +
-  'event-alerts and runner-status. A name you already have is left exactly as it is, options ' +
-  'and all, and nothing is posted until you post it.';
-
-const CHANNEL_UNPOSTED = 'No panel is posted yet.';
-
-const NO_REQUESTS = 'Nobody is waiting on staff.';
-const NO_DECIDED = 'Nothing has been decided yet.';
-const NO_GRANTS = 'No role has a clock on it. Grant one below, or give a menu an "Expires after".';
+const NO_GRANTS = 'No role has a clock on it.';
 const NO_MENU_TO_ASSIGN = 'No menu has a role on it yet, so there is nothing to hand out.';
 const PICK_A_MEMBER = 'Pick the member this is about first.';
 const PICK_A_ROLE = 'Pick the role to give them first.';
+const NO_MENUS = 'No role menus exist yet.';
+const NO_MENU_MATCHES = 'No menu matches what you typed.';
+const NO_SUCH_MENU = 'There is no role menu called {name} any more, so there is nothing to open.';
+const BY_MARATHON_LABEL = 'A marathon';
+const BY_DATE_LABEL = 'A date';
+const SAVE_END = 'Save the end';
+const ZONE_KEY = 'default_timezone';
 
 const APPLICATIONS_MODE_KEY = 'applications_mode';
 const NO_APPLICATION_FORMS = 'No application form exists yet. Make one below.';
 const NO_APPLICATIONS = 'Nobody is waiting on staff.';
 const NO_DECIDED_APPLICATIONS = 'No application has been decided yet.';
-const NO_ROLE_OPTION = 'No role \u2014 keep a list';
+const NO_ROLE_OPTION = 'No role — keep a list';
 const NO_ROSTER_YET = 'Nobody is on this list yet.';
 const NOT_LINKED = 'not linked';
 const LEFT_THE_SERVER = 'left the server';
@@ -78,7 +84,7 @@ const COULD_NOT_COPY = 'This browser would not let the page reach the clipboard,
 const ROSTER_LINE = (row) => {
   const login = row.twitch_login ? `twitch.tv/${row.twitch_login}` : 'no Twitch linked';
   const gone = row.in_server ? '' : ` (${LEFT_THE_SERVER})`;
-  return `${row.user_name || row.user_id} \u2014 ${login}${gone}`;
+  return `${row.user_name || row.user_id} — ${login}${gone}`;
 };
 
 const APPLICATION_TONE = {
@@ -89,24 +95,33 @@ const APPLICATION_TONE = {
   removed: 'warn',
 };
 
-const STATUS_TONE = {
-  pending: 'warn',
-  approved: 'ok',
-  denied: null,
-  withdrawn: null,
-  granted_by_hand: 'ok',
-};
-
 /** `rolemenus.html?member=<id>` is how a Members row hands one person over. */
 function askedFor() {
   const wanted = new URLSearchParams(location.search).get('member');
   return wanted && /^\d+$/.test(wanted) ? wanted : null;
 }
 
-const state = { editing: null, creating: false, form: null, newForm: false, member: askedFor() };
+const state = {
+  editing: menuFromHash(location.hash),
+  creating: false,
+  form: null,
+  newForm: false,
+  member: askedFor(),
+};
 
 let refresh = () => {};
 let roleColours = new Map();
+let roleWords = new Map();
+
+/** A rolemenu_* sentence as staff left it (the same words /rolemenu says), filled in. */
+function word(key, values = {}) {
+  const spec = roleWords.get(key);
+  const shipped = spec ? String(spec.default ?? '') : key;
+  const stored = spec && spec.value !== null && spec.value !== undefined ? String(spec.value) : shipped;
+  return filled(stored.trim() ? stored : shipped, shipped, values, fillTemplate);
+}
+
+const plain = (text) => String(text || '').replace(/\*\*/g, '');
 
 function chipFor(roleId, roleName, note = null) {
   const name = roleName || roleId;
@@ -123,36 +138,30 @@ function daysBox(value, { min = '0' } = {}) {
   });
 }
 
-function modeSwitch(spec) {
-  const say = notice();
-  const chip = modeChip(spec.value);
-  let now = spec.value === 'on' ? 'on' : 'off';
-
-  const flip = async (wanted) => {
-    if (wanted === now) return;
-    const done = await run(say, () => saveSetting(MODE_KEY, wanted), wanted === 'on' ? TURNED_ON : TURNED_OFF);
-    if (done.ok) paint(done.found && done.found.value ? done.found.value : wanted);
-  };
-
-  const on = button('Turn on', () => flip('on'), { small: false });
-  const off = button('Turn off', () => flip('off'), { small: false, tone: 'warn' });
-
-  function paint(value) {
-    now = value === 'on' ? 'on' : 'off';
-    chip.textContent = now;
-    chip.setAttribute('data-mode', now);
-    on.disabled = now === 'on';
-    off.disabled = now === 'off';
+function openMenu(name) {
+  if (menuFromHash(location.hash) === name) {
+    state.editing = name;
+    state.creating = false;
+    refresh();
+    return;
   }
-  paint(spec.value);
-  if (spec.help) chip.setAttribute('title', spec.help);
-
-  return card('Members picking roles', [
-    field('Now', chip),
-    bar([on, off]),
-    say,
-  ]);
+  location.hash = menuHash(name);
 }
+
+function closeEditor() {
+  state.editing = null;
+  state.creating = false;
+  if (location.hash) history.replaceState(null, '', `${location.pathname}${location.search}`);
+  refresh();
+}
+
+window.addEventListener('hashchange', () => {
+  const wanted = menuFromHash(location.hash);
+  if (!wanted) return;
+  state.editing = wanted;
+  state.creating = false;
+  refresh();
+});
 
 async function optionRow(option) {
   const role = await roleSelect(option ? option.role_id : null);
@@ -174,25 +183,12 @@ async function optionRow(option) {
   };
 }
 
+/** Words and roles; the end is its own card and its own save, so this one can never re-arm it. */
 async function editor(menu) {
   const say = notice();
-  const posted = Boolean(menu && menu.message_id);
   const name = slugInput(el('input', { class: 'input', type: 'text', value: menu ? menu.name : '', disabled: menu ? true : undefined }));
   const title = el('input', { class: 'input', type: 'text', value: menu ? menu.title || '' : '' });
   const description = el('input', { class: 'input', type: 'text', value: menu ? menu.description || '' : '' });
-  const mode = el('select', { class: 'input' });
-  for (const one of ['multiple', 'single', 'staff']) {
-    mode.append(el('option', { value: one, text: one, selected: menu && menu.mode === one ? true : undefined }));
-  }
-  const approval = segment(
-    [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }],
-    menu && menu.approval ? 'true' : 'false',
-  );
-  const expires = daysBox(menu ? menu.expires_days : null);
-  expires.placeholder = NEVER;
-  const retry = daysBox(menu && menu.retry_days !== null && menu.retry_days !== undefined ? menu.retry_days : 7, { min: '1' });
-  const where = await channelSelect(menu ? menu.channel_id : null);
-  where.disabled = posted ? undefined : true;
 
   const options = [];
   const list = el('div');
@@ -205,216 +201,237 @@ async function editor(menu) {
   if (!menu) await addOption(null);
 
   const save = button(menu ? 'Save menu' : 'Create menu', async () => {
-    const body = {
+    const body = wordsBody({
+      name: menu ? undefined : name.value.trim(),
       title: title.value.trim(),
       description: description.value.trim() || null,
-      mode: mode.value,
-      approval: approval.readValue() === 'true',
-      expires_days: expires.value.trim() === '' ? 0 : Number(expires.value),
-      options: options.map((one) => one.read()).filter(Boolean),
-    };
-    if (retry.value.trim() !== '') body.retry_days = Number(retry.value);
-    if (!menu) body.name = name.value.trim();
-    const moving = posted && readSelect(where, false) && readSelect(where, false) !== menu.channel_id
-      ? readSelect(where, false)
-      : null;
-    if (moving) body.channel_id = moving;
+      options: options.filter((one) => one.node.isConnected).map((one) => one.read()).filter(Boolean),
+    });
     const done = await run(
       say,
       () => (menu
         ? send(`/api/rolemenus/${encodeURIComponent(menu.name)}`, 'PUT', body)
         : send('/api/rolemenus', 'POST', body)),
-      (found) => {
-        const what = found?.name || body.name || menu.name;
-        const clock = body.expires_days ? ` It runs out after ${body.expires_days} days.` : '';
-        if (moving) return `Saved ${what} and moved its panel — the old message is gone.${clock}`;
-        return `Saved ${what} with ${body.options.length} option(s). Post it again for the change ` +
-          `to show in Discord.${clock}`;
-      },
+      (found) => `Saved ${found?.name || body.name || menu.name} with ${body.options.length} role(s).`,
     );
     if (done.ok) {
       keepSaying('menus', say);
-      state.editing = null;
-      state.creating = false;
-      refresh();
+      if (menu) closeEditor();
+      else openMenu(done.found?.name || body.name);
     }
   }, { small: false });
 
-  const close = button('Close editor', () => {
-    state.editing = null;
-    state.creating = false;
-    refresh();
-  }, { tone: 'quiet' });
-
-  return card(menu ? `Editing ${menu.name}` : 'New menu', [
+  return card(menu ? menu.title || menu.name : 'New menu', [
     el('div', { class: 'formrow' }, [
       field('Name', name),
       field('Title', title),
       field('Description', description),
-      field('Mode', mode),
     ]),
-    el('div', { class: 'formrow' }, [
-      field('Staff approve first', approval),
-      field('Expires after, days', expires),
-      field('Ask again after a no, days', retry),
-      field('Channel', where, posted ? null : CHANNEL_UNPOSTED),
-    ]),
-    el('h3', { text: 'Options' }),
+    el('h3', { text: 'Roles' }),
     list,
-    bar([button('Add option', () => addOption(null), { tone: 'quiet' })]),
+    bar([button('Add a role', () => addOption(null), { tone: 'quiet' })]),
     say,
-  ], { actions: [save, close] });
+  ], { actions: [save, button('Close editor', closeEditor, { tone: 'quiet' })] });
 }
 
-async function postCard(menu, say) {
-  const where = await channelSelect(menu.channel_id);
-  return el('div', { class: 'formrow' }, [
-    field('Post in', where),
-    bar([
-      button('Post', async () => {
-        const channelId = readSelect(where, false);
-        if (!channelId) {
-          say.say('Pick a channel to post it in.', 'warn');
-          return;
-        }
-        const sure = await ask({
-          title: `Post ${menu.name}?`,
-          body: [menu.message_id
-            ? 'This posts a new message. The old one stops handing out roles once this one exists.'
-            : 'This posts the menu where people can click it and get roles.'],
-          confirmLabel: 'Post it',
-          tone: 'warn',
-        });
-        if (!sure) return;
-        const done = await run(say, () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/post`, 'POST', { channel_id: channelId }), 'Posted.');
-        if (done.ok) {
-          keepSaying('menus', say);
-          refresh();
-        }
-      }, { tone: 'warn' }),
-      button('Un-post', async () => {
-        const sure = await ask({
-          title: `Take ${menu.name}'s panel down?`,
-          body: ['The message is deleted. The menu, its roles and everybody who already has one are untouched, and you can post it again whenever you want.'],
-          confirmLabel: 'Take it down',
-          tone: 'warn',
-        });
-        if (!sure) return;
-        const done = await run(
-          say,
-          () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/unpost`, 'POST', {}),
-          (found) => found?.message || 'The panel is down.',
-        );
-        if (done.ok) {
-          keepSaying('menus', say);
-          refresh();
-        }
-      }, { tone: 'quiet', disabled: !menu.message_id }),
-    ]),
-    menu.message_id ? null : el('p', { class: 'field-help', text: 'Nothing is posted yet, so there is nothing to take down.' }),
+/** When a menu's roles come off: a marathon (plus a buffer), a typed date, or none. */
+function endCard(menu, marathons, zone) {
+  const say = notice();
+  const current = menu.ends_source || NO_END;
+  const marathon = el('select', { class: 'input', 'data-end': 'marathon' }, [
+    el('option', { value: '', text: word('rolemenu_marathon_pick') }),
+    ...marathons.map((one) => el('option', {
+      value: String(one.id),
+      text: one.label,
+      selected: current === BY_MARATHON && String(menu.ends_marathon_id) === String(one.id) ? true : undefined,
+    })),
+  ]);
+  const buffer = el('input', {
+    class: 'input',
+    'data-end': 'buffer',
+    type: 'number',
+    min: '0',
+    max: '365',
+    step: '1',
+    value: menu.buffer_days === null || menu.buffer_days === undefined ? '' : String(menu.buffer_days),
+    placeholder: String(menu.buffer_default ?? ''),
+  });
+  const date = el('input', { class: 'input', type: 'date', 'data-end': 'date' });
+  const time = el('input', { class: 'input', type: 'time', 'data-end': 'time' });
+  const resolved = el('p', { class: 'field-help' });
+
+  const byMarathon = el('div', { class: 'formrow' }, [
+    field('Marathon', marathon),
+    field('Buffer, days', buffer),
+  ]);
+  const byDate = el('div', { class: 'formrow' }, [
+    field('Day', date),
+    field('Time', time),
+  ]);
+  const how = segment([
+    { value: BY_MARATHON, label: BY_MARATHON_LABEL },
+    { value: BY_DATE, label: BY_DATE_LABEL },
+    { value: NO_END, label: word('rolemenu_no_end_button') },
+  ], current, { onChange: () => paint() });
+
+  const picked = () => ({
+    how: how.readValue(),
+    marathonId: marathon.value,
+    buffer: buffer.value,
+    date: date.value,
+    time: time.value,
+  });
+
+  const save = button(SAVE_END, async () => {
+    const body = endBody(menu, picked());
+    if (!body) return;
+    if (body.ends_source === NO_END) {
+      const sure = await ask({
+        title: word('rolemenu_no_end_button'),
+        body: [el('p', { class: 'ask-body' }, boldParts(word('rolemenu_no_end_question', { menu: menu.name })))],
+        confirmLabel: word('rolemenu_no_end_yes'),
+        tone: 'warn',
+      });
+      if (!sure) return;
+    }
+    const done = await run(
+      say,
+      () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}`, 'PUT', body),
+      (found) => `${found?.name || menu.name}: ${found?.end_label || ''}`,
+    );
+    if (done.ok) {
+      keepSaying('menus', say);
+      refresh();
+    }
+  }, { small: false, tone: 'warn' });
+
+  function paint() {
+    const now = picked();
+    byMarathon.hidden = now.how !== BY_MARATHON;
+    buffer.closest('.field').hidden = !marathon.value;
+    byDate.hidden = now.how !== BY_DATE;
+    resolved.hidden = now.how !== BY_DATE || !date.value;
+    resolved.textContent = resolvedMoment(date.value, time.value, zone);
+    save.hidden = endBody(menu, now) === null;
+  }
+  for (const control of [marathon, buffer, date, time]) {
+    control.addEventListener('input', paint);
+    control.addEventListener('change', paint);
+  }
+
+  const node = card(word('rolemenu_set_end_title', { name: menu.name }), [
+    el('p', { class: 'menu-end', text: endLine(menu) }),
+    how,
+    byMarathon,
+    byDate,
+    resolved,
+    bar([save]),
+    say,
+  ]);
+  paint();
+  return node;
+}
+
+function setByLine(menu) {
+  if (!menu.ends_set_by) return null;
+  const when = ago(menu.ends_set_at);
+  const [before, after = ''] = word('rolemenu_end_set_by_line', { when: when.text }).split('{who}');
+  return el('p', { class: 'field-help', title: when.title }, [
+    before,
+    nameNode(menu.ends_set_by),
+    after,
   ]);
 }
 
-function pendingCard(row, menu, say) {
-  const clock = menu && menu.expires_days ? daysBox(menu.expires_days) : null;
-  if (clock) clock.placeholder = 'no end date';
+function lastPassLine(menu) {
+  if (!menu.ended_at) return null;
+  const when = ago(menu.ended_at);
+  return el('p', {
+    class: 'field-help',
+    title: when.title,
+    text: word('rolemenu_ended_line', {
+      when: when.text,
+      members: menu.last_pass ? menu.last_pass.members : 0,
+      failures: menu.last_pass ? menu.last_pass.failures : 0,
+    }),
+  });
+}
 
-  const approve = button('Approve', async () => {
-    const body = {};
-    if (clock) body.days = clock.value.trim() === '' ? 0 : Number(clock.value);
-    const done = await run(
-      say,
-      () => send(`/api/rolemenus/requests/${encodeURIComponent(row.id)}/approve`, 'POST', body),
-      (found) => found?.message || `Approved — ${row.user_name || row.user_id} has ${row.role_name}.`,
-    );
-    if (done.ok) {
-      keepSaying('requests', say);
-      refresh();
-    }
-  }, { tone: 'warn', small: false });
-
-  const deny = button('Deny', async () => {
-    const reason = el('input', { class: 'input', type: 'text', placeholder: 'why — they are sent this' });
+function heldLine(menu, say) {
+  if (!menu.ends_held_at) return null;
+  const take = button(word('rolemenu_use_held_button'), async () => {
     const sure = await ask({
-      title: `Say no to ${row.user_name || row.user_id}?`,
-      body: [
-        `They are DM'd the reason you type here, and told when they may ask for ${row.role_name} again.`,
-        field('Reason', reason),
-      ],
-      confirmLabel: 'Deny it',
+      title: word('rolemenu_use_held_button'),
+      body: [el('p', { class: 'ask-body' }, boldParts(menu.held_question || ''))],
+      confirmLabel: word('rolemenu_use_held_yes'),
+      tone: menu.held_past ? 'danger' : 'warn',
     });
     if (!sure) return;
     const done = await run(
       say,
-      () => send(`/api/rolemenus/requests/${encodeURIComponent(row.id)}/deny`, 'POST', { reason: reason.value.trim() }),
-      (found) => found?.message || `Denied, and ${row.user_name || row.user_id} has been told why.`,
+      () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/end-earlier`, 'POST', {}),
+      (found) => `${found?.name || menu.name}: ${found?.end_label || ''}`,
     );
     if (done.ok) {
-      keepSaying('requests', say);
+      keepSaying('menus', say);
       refresh();
     }
-  }, { tone: 'danger', small: false });
-
-  const asked = ago(row.requested_at);
-  const head = el('div', { class: 'reqhead' }, [
-    avatar(row.user_name || row.user_id, row.user_avatar),
-    el('div', { class: 'rowlist-main' }, [
-      el('span', { class: 'rowlist-name', text: String(row.user_name || row.user_id) }),
-      el('span', {
-        class: 'rowlist-note',
-        title: asked.title,
-        text: `asked ${asked.text} · ${row.menu_name || `menu #${row.menu_id}`}`,
-      }),
-    ]),
-    chipFor(row.role_id, row.role_name),
+  }, { tone: menu.held_past ? 'danger' : 'warn' });
+  return el('div', { class: 'bar menu-held' }, [
+    notice(word('rolemenu_end_held_line', { to: menu.held_label || '' }), 'warn'),
+    take,
   ]);
-
-  const controls = clock
-    ? el('div', { class: 'formrow' }, [
-      field('Give it for, days', clock),
-      bar([approve, deny]),
-    ])
-    : bar([approve, deny]);
-
-  return card(null, [head, controls]);
 }
 
-function decidedTable(rows) {
-  return table([
-    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
-    { label: 'Role', cell: (row) => chipFor(row.role_id, row.role_name) },
-    { label: 'Menu', cell: (row) => row.menu_name || `#${row.menu_id}` },
-    { label: 'Status', cell: (row) => badge(row.status.replace(/_/g, ' '), STATUS_TONE[row.status] || null) },
-    { label: 'By', cell: (row) => nameNode(row.decided_by_id, row.decided_by_name) },
-    {
-      label: 'When',
-      cell: (row) => {
-        const said = ago(row.decided_at);
-        return el('span', { class: 'cell-quiet', title: said.title, text: said.text });
-      },
-    },
-    { label: 'Why not', cell: (row) => row.deny_reason, className: 'wrap' },
-  ], rows, { empty: NO_DECIDED });
-}
+function menuCard(menu, say) {
+  const actions = [button('Edit', () => openMenu(menu.name), { tone: 'quiet' })];
+  if ((menu.options || []).length) {
+    actions.push(button(word('rolemenu_end_now_button'), async () => {
+      const sure = await ask({
+        title: plain(menu.end_now_question),
+        body: [],
+        confirmLabel: word('rolemenu_end_now_yes'),
+      });
+      if (!sure) return;
+      const done = await run(
+        say,
+        () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/end-now`, 'POST', {}),
+        (found) => resultLines(found).join(' '),
+      );
+      if (done.ok) {
+        keepSaying('menus', say);
+        refresh();
+      }
+    }, { tone: 'danger' }));
+  }
+  actions.push(button('Delete', async () => {
+    const sure = await ask({ title: `Delete ${menu.name}?`, body: [], confirmLabel: 'Delete it' });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => api(`/api/rolemenus/${encodeURIComponent(menu.name)}`, { method: 'DELETE' }),
+      `Deleted ${menu.name}.`,
+    );
+    if (done.ok) {
+      keepSaying('menus', say);
+      if (state.editing === menu.name) closeEditor();
+      else refresh();
+    }
+  }, { tone: 'danger' }));
 
-function requestsSection(rows, menus, say) {
-  const pending = rows.filter((row) => row.status === 'pending');
-  const decided = rows.filter((row) => row.status !== 'pending');
-  const byName = new Map(menus.map((menu) => [menu.name, menu]));
-  const one = section('Requests', null, { count: pending.length });
-
-  one.body.append(
-    pending.length === 0
-      ? sayNothing(
-        state.member ? 'They are not waiting on anything.' : NO_REQUESTS,
-        textAction('Open the menus', () => openSection('menus')),
-      )
-      : el('div', { class: 'section-body' }, pending.map((row) =>
-        pendingCard(row, byName.get(row.menu_name) || null, say))),
-    foldout('Decided', [decidedTable(decided)], { count: decided.length }),
-    say,
-  );
-  return one.node;
+  const roles = (menu.options || []).map((option) => chipFor(option.role_id, option.label || option.role_name));
+  const node = card(menu.title || menu.name, [
+    el('p', { class: 'menu-end' }, [
+      el('span', { class: 'mono', text: menu.name }),
+      ` · ${endLine(menu)}`,
+    ]),
+    setByLine(menu),
+    lastPassLine(menu),
+    heldLine(menu, say),
+    roles.length ? el('div', { class: 'bar' }, roles) : null,
+  ], { actions });
+  node.setAttribute('data-menu', menu.name);
+  return node;
 }
 
 function endsCell(row) {
@@ -428,6 +445,13 @@ function endsCell(row) {
   }
   if (!row.expires_at) return el('span', { class: 'cell-quiet', text: 'no expiry' });
   const until = untilWhen(row.expires_at);
+  if (grantEndsWithMenu(row)) {
+    return el('span', { title: until.title }, [
+      `${ENDS_WITH} `,
+      el('a', { href: menuHash(row.ends_with_menu), text: row.ends_with_menu }),
+      ` · ${until.text}`,
+    ]);
+  }
   return el('span', {
     title: until.title,
     text: until.days < 0 ? `overdue by ${Math.abs(until.days)} days` : `expires ${until.text}`,
@@ -436,34 +460,34 @@ function endsCell(row) {
 
 function grantActions(row, say) {
   if (!row.open) return null;
-  const extend = button('Extend', async () => {
-    const more = daysBox(7, { min: '1' });
-    const sure = await ask({
-      title: `Give ${row.user_name || row.user_id} longer?`,
-      body: [
-        `The end date on ${row.role_name} is pushed back from where it is now, not from today.`,
-        field('Days to add', more),
-      ],
-      confirmLabel: 'Push it back',
-      tone: 'warn',
-    });
-    if (!sure) return;
-    const done = await run(
-      say,
-      () => send(`/api/roles/grants/${encodeURIComponent(row.id)}/extend`, 'POST', { days: Number(more.value) }),
-      (found) => `Pushed back — ${row.user_name || row.user_id}'s ${row.role_name} runs out ` +
-        `${untilWhen(found?.expires_at).text}.`,
-    );
-    if (done.ok) {
-      keepSaying('timed', say);
-      refresh();
-    }
-  }, { tone: 'quiet' });
+  const moves = [];
+  if (!grantEndsWithMenu(row)) {
+    moves.push(button('Extend', async () => {
+      const more = daysBox(7, { min: '1' });
+      const sure = await ask({
+        title: `Give ${row.user_name || row.user_id} longer?`,
+        body: [field('Days to add', more)],
+        confirmLabel: 'Push it back',
+        tone: 'warn',
+      });
+      if (!sure) return;
+      const done = await run(
+        say,
+        () => send(`/api/roles/grants/${encodeURIComponent(row.id)}/extend`, 'POST', { days: Number(more.value) }),
+        (found) => `Pushed back — ${row.user_name || row.user_id}'s ${row.role_name} runs out ` +
+          `${untilWhen(found?.expires_at).text}.`,
+      );
+      if (done.ok) {
+        keepSaying('timed', say);
+        refresh();
+      }
+    }, { tone: 'quiet' }));
+  }
 
-  const end = button('End now', async () => {
+  moves.push(button('End now', async () => {
     const sure = await ask({
       title: `Take ${row.role_name} off ${row.user_name || row.user_id}?`,
-      body: ['The role comes off in Discord straight away and the clock is closed. Nothing is sent to them.'],
+      body: [],
       confirmLabel: 'Take it off',
     });
     if (!sure) return;
@@ -476,9 +500,9 @@ function grantActions(row, say) {
       keepSaying('timed', say);
       refresh();
     }
-  }, { tone: 'danger' });
+  }, { tone: 'danger' }));
 
-  return el('div', { class: 'bar' }, [extend, end]);
+  return el('div', { class: 'bar' }, moves);
 }
 
 async function grantForm(say) {
@@ -524,7 +548,7 @@ async function grantForm(say) {
   ]);
 }
 
-/** B7: the /rolemenu assign picker, as a form — one menu, one member, its own roles. */
+/** B7: the /rolemenu hand-out picker, as a form — one menu, one member, its own roles. */
 function assignForm(menus, say) {
   const usable = menus.filter((menu) => (menu.options || []).length > 0);
   if (usable.length === 0) {
@@ -532,7 +556,7 @@ function assignForm(menus, say) {
   }
   const picker = memberPicker({ label: 'Member' });
   const which = el('select', { class: 'input' }, usable.map((menu) =>
-    el('option', { value: menu.name, text: `${menu.name} — ${menu.mode}` })));
+    el('option', { value: menu.name, text: `${menu.name} · ${menu.end_label}` })));
   const boxes = el('div', { class: 'formrow' });
 
   const paint = () => {
@@ -610,14 +634,44 @@ function onlyThem(rows, key) {
   return state.member ? rows.filter((row) => String(row[key]) === state.member) : rows;
 }
 
-function memberBanner(requests, grants) {
+function memberBanner(grants) {
   if (!state.member) return null;
-  const named = (requests.find((row) => String(row.user_id) === state.member)
-    || grants.find((row) => String(row.user_id) === state.member) || {}).user_name;
+  const named = (grants.find((row) => String(row.user_id) === state.member) || {}).user_name;
   return el('p', { class: 'section-note' }, [
-    el('span', { text: `Showing the requests and timed roles of ${named || `member ${state.member}`} only. ` }),
+    el('span', { text: `Showing the timed roles of ${named || `member ${state.member}`} only. ` }),
     el('a', { href: tabHref('rolemenus'), text: 'Show everybody' }),
   ]);
+}
+
+function menusSection(menus, say) {
+  const one = section('Menus', null, { id: 'menus', count: menus.length, open: true });
+  const box = el('div', { class: 'section-body' }, menus.map((menu) => menuCard(menu, say)));
+  one.body.append(
+    bar([
+      button('New menu', () => {
+        state.creating = true;
+        state.editing = null;
+        refresh();
+      }, { small: false }),
+    ], { sticky: true }),
+    menus.length === 0
+      ? sayNothing(NO_MENUS)
+      : searchOver(box, {
+        label: 'Search the menus',
+        placeholder: 'part of a menu name',
+        noun: 'menu(s)',
+        empty: NO_MENU_MATCHES,
+      }),
+    box,
+    say,
+  );
+  return one.node;
+}
+
+function zoneOf(allSettings) {
+  const specs = Object.values(allSettings || {}).flat();
+  const found = specs.find((spec) => spec && spec.key === ZONE_KEY);
+  return found ? String(found.value || found.default || '') : '';
 }
 
 /** One question row on the form editor; position is wherever it ends up in the list. */
@@ -1120,170 +1174,62 @@ async function applicationsSection(allSettings, say) {
 }
 
 async function load() {
-  const [payload, roles, allSettings, allRequests, allGrants] = await Promise.all([
+  const [payload, roles, allSettings, allGrants] = await Promise.all([
     api('/api/rolemenus'),
     refRoles(),
     settings(true),
-    api('/api/rolemenus/requests'),
     api('/api/roles/grants'),
   ]);
   const menus = listOf(payload, 'rolemenus');
-  const requests = onlyThem(listOf(allRequests, 'requests'), 'user_id');
   const grants = onlyThem(listOf(allGrants, 'grants'), 'user_id');
   roleColours = new Map((roles || []).map((role) => [String(role.id), role.color]));
 
   const rolemenu = settingsNamespace(allSettings, 'rolemenu');
-  const mode = rolemenu.find((spec) => spec.key === MODE_KEY);
-  const defaultChannel = settingsNamespace(allSettings, 'core')
-    .find((spec) => spec.key === DEFAULT_CHANNEL_KEY);
-  const settingSpecs = (defaultChannel ? [defaultChannel] : [])
-    .concat(rolemenu.filter((spec) => spec.key !== MODE_KEY));
+  roleWords = new Map(rolemenu.map((spec) => [spec.key, spec]));
   const optionIds = [];
   for (const menu of menus) for (const option of menu.options || []) optionIds.push(option.role_id);
-  await names(idsIn(menus, ['channel_id']).concat(optionIds));
+  await names(idsIn(menus, ['ends_set_by']).concat(optionIds));
 
-  const say = notice();
-  const askSay = sayAgain('requests', notice());
+  const say = sayAgain('menus', notice());
   const applicationSay = sayAgain('applications', notice());
   const timedSay = sayAgain('timed', notice());
 
-  const list = table([
-    { label: 'Name', cell: (row) => el('span', { class: 'mono', text: row.name }) },
-    { label: 'Title', cell: (row) => row.title, className: 'wrap' },
-    { label: 'Mode', cell: (row) => badge(row.mode) },
-    {
-      label: 'Asks first',
-      cell: (row) => (row.approval ? badge('approval', 'warn') : el('span', { class: 'cell-quiet', text: 'no' })),
-    },
-    {
-      label: 'Runs out',
-      cell: (row) => (row.expires_days
-        ? `${row.expires_days} day(s)`
-        : el('span', { class: 'cell-quiet', text: 'never' })),
-    },
-    {
-      label: 'Options',
-      cell: (row) => {
-        const parts = [];
-        (row.options || []).forEach((option, at) => {
-          if (at > 0) parts.push(', ');
-          parts.push(nameNode(option.role_id, option.role_name));
-        });
-        return parts.length ? el('span', {}, parts) : null;
-      },
-      className: 'wrap',
-    },
-    { label: 'Posted in', cell: (row) => (row.message_id ? nameNode(row.channel_id, row.channel_name) : badge('not posted', 'warn')) },
-    {
-      label: '',
-      cell: (row) => el('div', { class: 'bar' }, [
-        button('Edit', () => {
-          state.editing = row.name;
-          state.creating = false;
-          refresh();
-        }, { tone: 'quiet' }),
-        button('Delete', async () => {
-          const sure = await ask({
-            title: `Delete ${row.name}?`,
-            body: ['The menu and its options are removed. A message already posted stops working; nobody loses a role they already have.'],
-            confirmLabel: 'Delete it',
-          });
-          if (!sure) return;
-          const done = await run(say, () => api(`/api/rolemenus/${encodeURIComponent(row.name)}`, { method: 'DELETE' }), 'Deleted.');
-          if (done.ok) refresh();
-        }, { tone: 'danger' }),
-      ]),
-    },
-  ], menus, { empty: 'No role menus exist yet.' });
-
-  const one = section('Menus', null, { count: menus.length });
-  one.body.append(
-    bar([
-      button('New menu', () => {
-        state.creating = true;
-        state.editing = null;
-        refresh();
-      }, { small: false }),
-      button('Seed defaults', async () => {
-        const sure = await ask({
-          title: 'Create the default role menus?',
-          body: [SEED_BODY],
-          confirmLabel: 'Create them',
-          tone: 'warn',
-        });
-        if (!sure) return;
-        const done = await run(
-          say,
-          () => send('/api/rolemenus/seed', 'POST', {}),
-          (found) => found?.message || 'Seeded.',
-        );
-        if (done.ok) {
-          keepSaying('menus', say);
-          refresh();
-        }
-      }, { small: false, tone: 'quiet' }),
-    ], { sticky: true }),
-    list,
-    sayAgain('menus', say),
-  );
-
-  const two = section('Post a menu', null, {
-    count: menus.length || null,
-  });
-  if (menus.length === 0) {
-    two.body.append(sayNothing('There is no menu to post yet.'));
-  } else {
-    const box = el('div', { class: 'section-body' });
-    for (const menu of menus) box.append(card(`Post ${menu.name}`, [await postCard(menu, say)]));
-    two.body.append(
-      searchOver(box, {
-        label: 'Search the menus',
-        placeholder: 'part of a menu name',
-        noun: 'menu(s)',
-        empty: 'No menu matches what you typed.',
-      }),
-      box,
-    );
-  }
-
-  const switchboard = section('Role selection');
-  switchboard.body.append(mode ? modeSwitch(mode) : sayNothing(NO_KEY));
-
-  const box = section('Settings', null, {
-    count: settingSpecs.length || null,
-  });
-  box.body.append(await settingsPanel(settingSpecs, {
+  const box = section('Settings', null, { count: rolemenu.length || null });
+  box.body.append(await settingsPanel(rolemenu, {
     where: 'Settings',
-    empty: 'The bot registers no role-menu settings beyond the switch above.',
+    empty: 'The bot registers no role-menu settings.',
   }));
 
-  const banner = memberBanner(requests, grants);
+  const editing = state.editing ? menus.find((entry) => entry.name === state.editing) : null;
+  if (state.editing && !editing) {
+    say.say(NO_SUCH_MENU.replace('{name}', state.editing), 'warn');
+    state.editing = null;
+  }
+  let editorNode = null;
+  if (state.creating) {
+    const made = section('New menu', null, { id: 'editor', open: true });
+    made.body.append(await editor(null));
+    editorNode = made.node;
+  } else if (editing) {
+    const marathons = listOf(await api('/api/rolemenus/marathons'), 'marathons');
+    const made = section(`Editing ${editing.name}`, null, { id: 'editor', open: true });
+    made.body.append(await editor(editing), endCard(editing, marathons, zoneOf(allSettings)));
+    editorNode = made.node;
+  }
+
   const nodes = [
-    banner,
-    switchboard.node,
-    requestsSection(requests, menus, askSay),
+    memberBanner(grants),
+    editorNode,
+    menusSection(menus, say),
     await timedSection(grants, menus, timedSay),
-    one.node,
-    two.node,
     box.node,
     await applicationsSection(allSettings, applicationSay),
     await logsSection('rolemenu'),
     await logsSection('applications', { title: 'Application logs' }),
   ].filter(Boolean);
-  if (state.creating) {
-    const made = section('New menu', null, { id: 'editor', open: true });
-    made.body.append(await editor(null));
-    nodes.push(made.node);
-  } else if (state.editing) {
-    const menu = menus.find((entry) => entry.name === state.editing);
-    if (menu) {
-      const made = section(`Editing ${menu.name}`, null, { id: 'editor', open: true });
-      made.body.append(await editor(menu));
-      nodes.push(made.node);
-    }
-  }
 
   document.getElementById('dash').replaceChildren(...nodes);
+  if (editorNode) editorNode.scrollIntoView({ block: 'start' });
 }
 
 refresh = start({

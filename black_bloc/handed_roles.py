@@ -6,8 +6,6 @@ import json
 import logging
 from typing import Any, NamedTuple
 
-import discord
-
 from . import optouts
 from . import rolegrants as grants
 from .actionlog import log_action
@@ -15,10 +13,6 @@ from .settings_store import (
     PINGS_OFF_BUTTON_KEY,
     PINGS_OFF_CONFIRM_KEY,
     PINGS_OFF_TAKES_KEY,
-    ROLEMENU_OFF_BUTTON_KEY,
-    ROLEMENU_OFF_CONFIRM_KEY,
-    ROLEMENU_OFF_DM_KEY,
-    ROLEMENU_OFF_TAKES_KEY,
 )
 
 log = logging.getLogger(__name__)
@@ -26,21 +20,17 @@ log = logging.getLogger(__name__)
 OFF = "off"
 CONFIRM_CODE = "confirm_needed"
 PINGS = "pings_mode"
-ROLEMENUS = "rolemenu_mode"
-KEYS: tuple[str, ...] = (PINGS, ROLEMENUS)
-ASKS = {PINGS: PINGS_OFF_CONFIRM_KEY, ROLEMENUS: ROLEMENU_OFF_CONFIRM_KEY}
-BUTTONS = {PINGS: PINGS_OFF_BUTTON_KEY, ROLEMENUS: ROLEMENU_OFF_BUTTON_KEY}
-TAKES = {PINGS: PINGS_OFF_TAKES_KEY, ROLEMENUS: ROLEMENU_OFF_TAKES_KEY}
+KEYS: tuple[str, ...] = (PINGS,)
+ASKS = {PINGS: PINGS_OFF_CONFIRM_KEY}
+BUTTONS = {PINGS: PINGS_OFF_BUTTON_KEY}
+TAKES = {PINGS: PINGS_OFF_TAKES_KEY}
 FEATURE_OFF = "feature_off"
 PINGS_TAKEN = "pings.roles_taken_back"
-MENUS_TAKEN = "role_menu.roles_taken_back"
 PINGS_GIVEN = ("pings.follow", "pings.events_on")
 PINGS_DROPPED = ("pings.unfollow", "pings.events_off")
 PINGS_LEDGER = (*PINGS_GIVEN, *PINGS_DROPPED, PINGS_TAKEN)
-MENU_SOURCES = (grants.MENU, grants.APPROVAL)
 REASONS = {
     PINGS: "Black Bloc: pings were switched off",
-    ROLEMENUS: "Black Bloc: role menus were switched off",
 }
 HOOK_ATTR = "_handed_roles_hooked"
 
@@ -91,24 +81,6 @@ async def pings_ledger(db: Any, guild_id: int) -> dict[tuple[int, int], bool]:
     return ledger
 
 
-async def menu_grants(db: Any, guild_id: int) -> list[Any]:
-    """Open grants of a menu role a member picked from a panel or asked for; never one staff
-    handed over, one added by hand, or an application's role."""
-    cur = await db.conn.execute(
-        "SELECT g.id, g.user_id, g.role_id, g.source, "
-        "(SELECT o.label FROM role_menu_options o JOIN role_menus m ON m.id = o.menu_id "
-        " WHERE m.guild_id = g.guild_id AND o.role_id = g.role_id LIMIT 1) AS label "
-        "FROM role_grants g WHERE g.guild_id = ? AND g.removed_at IS NULL "
-        f"AND g.source IN ({', '.join('?' for _ in MENU_SOURCES)}) "
-        "AND g.role_id IN (SELECT o.role_id FROM role_menu_options o JOIN role_menus m "
-        " ON m.id = o.menu_id WHERE m.guild_id = g.guild_id) "
-        "AND g.id NOT IN (SELECT grant_id FROM applications WHERE grant_id IS NOT NULL) "
-        "ORDER BY g.id",
-        (int(guild_id), *MENU_SOURCES),
-    )
-    return list(await cur.fetchall())
-
-
 def wears(guild: Any, user_id: int, role_id: int) -> bool:
     member = guild.get_member(int(user_id))
     return member is not None and any(
@@ -129,19 +101,6 @@ async def held(bot: Any, guild: Any, key: str) -> list[Held]:
             for (user_id, role_id), given in sorted(ledger.items())
             if given and wears(guild, user_id, role_id)
         ]
-    if key == ROLEMENUS:
-        found: dict[tuple[int, int], Held] = {}
-        for row in await menu_grants(bot.db, guild.id):
-            pair = (int(row["user_id"]), int(row["role_id"]))
-            if pair in found or not wears(guild, *pair):
-                continue
-            found[pair] = Held(
-                *pair,
-                grant_id=int(row["id"]),
-                told=row["source"] == grants.APPROVAL,
-                label=str(row["label"] or ""),
-            )
-        return list(found.values())
     return []
 
 
@@ -168,28 +127,9 @@ async def _take(bot: Any, guild: Any, key: str, one: Held) -> bool:
     role = guild.get_role(one.role_id) if hasattr(guild, "get_role") else None
     if member is None or role is None:
         return False
-    if key == PINGS:
-        from .pings import wear
+    from .pings import wear
 
-        return await wear(bot, guild, member, role, add=False) is None
-    from .cogs.community.role_menus import change_roles
-
-    return await change_roles(bot, member, guild, set(), {one.role_id}, REASONS[key])
-
-
-async def _tell(bot: Any, guild: Any, one: Held) -> bool:
-    member = guild.get_member(one.user_id)
-    if member is None:
-        return False
-    text = optouts.said(
-        bot.store, guild.id, ROLEMENU_OFF_DM_KEY, guild=guild.name, label=one.label or "a role"
-    )
-    try:
-        await member.send(text, allowed_mentions=discord.AllowedMentions.none())
-    except Exception as exc:
-        log.info("handed roles: no DM for %s — %s: %s", one.user_id, type(exc).__name__, exc)
-        return False
-    return True
+    return await wear(bot, guild, member, role, add=False) is None
 
 
 async def take_back(bot: Any, guild: Any, key: str, actor: Any = None) -> dict[str, Any] | None:
@@ -219,8 +159,6 @@ async def take_back(bot: Any, guild: Any, key: str, actor: Any = None) -> dict[s
         taken.append([one.user_id, one.role_id])
         if one.grant_id is not None:
             await grants.end_grant(bot.db, one.grant_id, FEATURE_OFF)
-        if one.told and await _tell(bot, guild, one):
-            told += 1
     details = {
         "key": key,
         "members": len({user_id for user_id, _ in taken}),
@@ -267,7 +205,6 @@ __all__ = [
     "held",
     "install",
     "members_in",
-    "menu_grants",
     "pings_ledger",
     "take_back",
     "takes_back",

@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends
 
 from ... import rolegrants as grants
 from ...cogs.community.birthdays import members_of
+from ...cogs.community.role_menus import menu_ends_named
+from ...golive import parse_ts
 from ...modcases import count_cases_for
 from ...settings_store import member_is_staff
 from ..auth import staff_dependency
@@ -37,7 +39,21 @@ def hex_colour(role: Any) -> str | None:
     return f"#{value:06x}"
 
 
-def top_roles(member: Any, expiries: dict[tuple[int, int], str]) -> list[dict[str, Any]]:
+def merged_end(grant_end: Any, menu_end: Any) -> Any:
+    """The sooner of a grant's own end and its role's menu end; either alone when one is None."""
+    grant, menu = parse_ts(grant_end), parse_ts(menu_end)
+    if grant is None:
+        return menu_end if menu is not None else None
+    if menu is None or grant <= menu:
+        return grant_end
+    return menu_end
+
+
+def top_roles(
+    member: Any,
+    expiries: dict[tuple[int, int], str],
+    menu_ends: dict[int, dict[str, str]] | None = None,
+) -> list[dict[str, Any]]:
     found = [
         role
         for role in getattr(member, "roles", ()) or ()
@@ -50,7 +66,11 @@ def top_roles(member: Any, expiries: dict[tuple[int, int], str]) -> list[dict[st
             "id": str(role.id),
             "name": str(getattr(role, "name", "") or ""),
             "color": hex_colour(role),
-            "expires_at": expiries.get((int(member.id), int(role.id))),
+            "expires_at": merged_end(
+                expiries.get((int(member.id), int(role.id))),
+                ((menu_ends or {}).get(int(role.id)) or {}).get("ends_at"),
+            ),
+            "ends_with_menu": ((menu_ends or {}).get(int(role.id)) or {}).get("menu"),
         }
         for role in found[:ROLES_SHOWN]
     ]
@@ -122,7 +142,12 @@ def sorted_members(members: list[Any], how: str) -> list[Any]:
 
 
 def member_row(
-    member: Any, *, staff: bool, cases: int, expiries: dict[tuple[int, int], str]
+    member: Any,
+    *,
+    staff: bool,
+    cases: int,
+    expiries: dict[tuple[int, int], str],
+    menu_ends: dict[int, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     name = str(getattr(member, "name", "") or "")
     return {
@@ -131,7 +156,7 @@ def member_row(
         "username": name or str(member.id),
         "bot": bool(getattr(member, "bot", False)),
         "joined_at": joined_iso(member),
-        "roles": top_roles(member, expiries),
+        "roles": top_roles(member, expiries, menu_ends),
         "staff": staff,
         "cases": cases,
         "avatar": avatar_url(member),
@@ -184,6 +209,7 @@ def build_router(bot: Any) -> APIRouter:
         ids = [m.id for m in shown]
         cases = await count_cases_for(getattr(bot, "db", None), guild.id, ids)
         expiries = await grants.expiring_for(getattr(bot, "db", None), guild.id, ids)
+        menu_ends = await menu_ends_named(getattr(bot, "db", None), guild.id)
 
         return {
             "total": int(getattr(guild, "member_count", 0) or len(everyone)),
@@ -200,6 +226,7 @@ def build_router(bot: Any) -> APIRouter:
                     staff=bool(is_staff.get(m.id)),
                     cases=cases.get(m.id, 0),
                     expiries=expiries,
+                    menu_ends=menu_ends,
                 )
                 for m in shown
             ],
