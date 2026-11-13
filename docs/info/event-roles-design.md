@@ -65,8 +65,16 @@ Rules:
   AGDQ 2027 today) binds fine: `ends_at` stays `NULL` until the schedule gives one; the card says *end not known yet*.
 - A menu's end also stamps `role_grants.expires_at` for every OPEN grant on its roles (so the Grants… audit and the Members chips
   read the same date, one source) — but **removal is by ROLE, not by grant** (§3.3).
-- Per-grant day counts (`Give somebody a role…` ▸ *How long for…*) stay for ad-hoc one-person grants; a grant on a menu role is
-  clamped to the menu's end when the menu has one (`min(grant end, menu end)`).
+- Per-grant day counts (`Give somebody a role…` ▸ *How long for…*) stay for ad-hoc one-person grants on roles that sit on NO menu;
+  a grant on a menu role is clamped to the menu's end when the menu has one (`min(grant end, menu end)`), and **Push it back…** on a
+  grant whose role is on a menu with an end is refused in words (*{role} ends with {menu} on {date} — change the menu's end instead*).
+- Per-menu `expires_days` is dead (Hand roles out… writes the menu end): retired the same way as `mode` / `approval` (§3.5), kept in the DB.
+- `_added_by_hand` is **unchanged** — a by-hand holder gets NO grant row. Removal is by role (§3.3), so no row is needed.
+- **The Grants… audit lists WEARERS, not rows, for a role on a menu with an end:** every member wearing the role (live from the guild)
+  with the menu's end, soonest first; grant rows are listed only for roles on no menu. The menu card's *N wearing* and the audit then
+  answer *who loses this role* with the same number — two surfaces, one source.
+- A typed date with no time ends at **23:59 guild-local** in `default_timezone` (Champrul's *"on February 28th"* means after the 28th);
+  the card shows the resolved moment as `<t:…:F>`.
 
 ### 3.2 The staff control — `/rolemenu`, permanent
 
@@ -98,7 +106,8 @@ Runs inside the existing `_expiry_loop` tick (hourly) as a second step, `run_due
 1. Menus with `ends_at <= now` and `ended_at IS NULL`.
 2. For each: the menu's role ids → every `guild.member` wearing ANY of them (gateway cache; `chunk` if the guild is not chunked).
 3. **One `change_roles` per member** removing all of that menu's roles they wear (one API call per member; discord.py waits on
-   429s). On a refusal/failure: log `role_menu.end_failed` `{menu, user, roles}` and continue — the member stays due; the next tick
+   429s). `change_roles` already calls `grants.remember_change` (`role_menus.py:709-710`), so `on_member_update` sees the removals
+   as ours and does not log 23 × 7 `role.changed_by_hand` rows — the pass MUST go through `change_roles`, never `member.remove_roles`. On a refusal/failure: log `role_menu.end_failed` `{menu, user, roles}` and continue — the member stays due; the next tick
    retries because `ended_at` is only stamped once a pass finishes with zero failures OR `ROLE_MENU_END_RETRIES` (3) passes have run
    (then `ended_at` is stamped, `end_failures` recorded, and the staff notice lists who still wears what).
 4. Close every open grant on those roles for those members (`end_grant(..., EXPIRED)`), including grants the bot never knew (a
@@ -132,8 +141,11 @@ Code and data stay (a rehearsal or a reversal costs nothing); nothing renders or
 - API: `/{name}/post`, `/{name}/unpost`, `/requests*`, `/seed` answer `410` in words (`rolemenu_retired`, three-part refusal per
   the global rule); the site stops calling them. `PUT /{name}` gains `ends_source`, `ends_marathon_id`, `ends_at` (date source),
   `buffer_days`; `POST /{name}/end-now`; `GET` rows gain `ends_*`, `ended_at`, `wearing` (count), `end_label`.
-- Open `role_requests` rows: left as they are (decided collapsed on nothing); the request cards in the approval channel are edited
-  once to the retired sentence by a one-off boot sweep logged `role_menu.requests_retired`.
+- Open `role_requests` rows: **none exist** (live 09:5x: `GET /api/rolemenus/requests` → 0), and **no menu is posted** (all 7 live
+  menus have `message_id = null`), so the retired-sentence paths above are safety nets, not a sweep; drop the boot sweep and
+  `role_menu.requests_retired`. The 7 live menus are the Phase 9 seeds (`event-alerts`, `interests`, `mentoring`, `notifications`,
+  `playstyle`, …), all self-pick groupings with no end: the build leaves them untouched (they read *no end set*); deleting them is
+  the owner's call via **Delete it**, named in the report.
 
 ### 3.6 Site
 
@@ -149,8 +161,7 @@ Code and data stay (a rehearsal or a reversal costs nothing); nothing renders or
 
 ### 3.7 Logs and health
 
-New kinds: `role_menu.end_set`, `role_menu.end_moved`, `role_menu.end_unbound`, `role_menu.ended`, `role_menu.end_failed`,
-`role_menu.requests_retired`. The Health tab's expiry loop line gains *menus due / ended / failures*.
+New kinds: `role_menu.end_set`, `role_menu.end_moved`, `role_menu.end_unbound`, `role_menu.ended`, `role_menu.end_failed`. The Health tab's expiry loop line gains *menus due / ended / failures*.
 
 ## 4. Tests (mirror the package)
 
@@ -164,8 +175,11 @@ archive unbinds), `tests/api/tools/test_rolemenus.py` (new fields, 410s in words
 
 ## 5. Rollout
 
-- Branch `temp-roles-menu` off `main`. **Two dispatches**, each ≤ ~250k: (1) storage + `rolemenus.py` + cog + API + mock contract
-  + tests; (2) site (`page-rolemenus.js`, marathon drawer line, members chips) + node tests, after (1) merges. Both briefs carry:
+- Branch `temp-roles-menu` off `main`. **Three dispatches in sequence** (the calibration table puts one subsystem at ~279k and a
+  multi-layer build at ~474k): **1a** storage + `rolemenus.py` helpers (`ends_at_of`, the wearers audit) + the end pass + the
+  marathon hook + their tests; **1b** the panel sub-panels (Set the end…, End it now), API fields and 410s, retirement, mock contract +
+  tests; **2** site (`page-rolemenus.js`, marathon drawer line, members chips) + node tests. Each commits at clean boundaries and
+  lands fewer things completely over one thing half-built. Both briefs carry:
   `docs/info/review-checklist.md` (47 items), code-notes re-key, no blurbs, every word a key, commit at clean boundaries, no
   `git stash`, directory deploys from a worktree of HEAD only.
 - Merge, gate (`pytest -q -n 16 -rfE`, `ruff`, `check.mjs`), deploy per `access/deploy.md` with the previous release noted in
