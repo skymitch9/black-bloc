@@ -3077,7 +3077,8 @@ async def test_every_temporary_role_decision_is_a_rolemenu_key_both_doors_reach(
     for key, (default, floor, ceiling) in numbers.items():
         assert settings_store.KEY_TYPES[key] == "int" and store.get(7, key) == default
         assert (settings_store.KEY_MIN[key], settings_store.KEY_MAX[key]) == (floor, ceiling)
-    for key in (settings_store.ROLEMENU_END_MOVED_NOTICE_KEY, settings_store.ROLEMENU_ENDED_NOTICE_KEY):
+    switches = settings_store.ROLEMENU_END_SWITCHES
+    for key in switches:
         assert settings_store.KEY_TYPES[key] == "bool" and store.get(7, key) is True
     for key, (default, _, _) in settings_store.ROLEMENU_END_WORDS.items():
         assert settings_store.KEY_TYPES[key] == "text" and store.get(7, key) == default

@@ -338,7 +338,12 @@ def test_no_origin_means_no_link_at_all():
 
 
 def end_row(source="none", ends_at=None, buffer_days=None, ended_at=None):
-    return {"ends_source": source, "ends_at": ends_at, "buffer_days": buffer_days, "ended_at": ended_at}
+    return {
+        "ends_source": source,
+        "ends_at": ends_at,
+        "buffer_days": buffer_days,
+        "ended_at": ended_at,
+    }
 
 
 def test_a_typed_date_ends_at_one_minute_to_midnight_guild_local():

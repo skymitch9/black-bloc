@@ -860,7 +860,8 @@ async def test_a_role_menu_from_before_schema_107_gains_an_end_that_is_no_end(tm
     db = Database(path)
     await db.connect()
     await db.conn.execute(
-        "INSERT INTO role_menus(guild_id, name, title, mode) VALUES (1, 'pronouns', 'P', 'multiple')"
+        "INSERT INTO role_menus(guild_id, name, title, mode) "
+        "VALUES (1, 'pronouns', 'P', 'multiple')"
     )
     for column in ROLE_MENU_END_COLUMNS:
         await db.conn.execute(f"ALTER TABLE role_menus DROP COLUMN {column}")

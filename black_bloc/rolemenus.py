@@ -3,9 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, time, timedelta
 from typing import Any, NamedTuple
 
-from . import panels
+from . import panels, timezones
 from . import rolegrants as grants
-from . import timezones
 from .golive import parse_ts
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
