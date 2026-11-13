@@ -80,7 +80,7 @@ async def test_staff_can_start_a_role_from_the_site_and_it_leaves_a_web_line(
 
     assert response.status_code == 200
     assert response.json()["role"] == "Namu pings"
-    assert "streamers" in response.json()["message"]
+    assert "menu" not in response.json()["message"]
     assert await pings.get_fan_role(on.db, wf.GUILD_ID, 21) is not None
     assert "web.pings.fan_role_created" in await wf.kinds_in(on.db)
 
@@ -235,7 +235,8 @@ async def test_setup_makes_the_events_role_and_points_both_feeds_at_it(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["created"] is True and payload["menu"] == "notifications"
+    assert payload["created"] is True and "menu" not in payload
+    assert "menu" not in payload["message"]
     assert on.store.get(wf.GUILD_ID, "golive_ping_role_id") == int(payload["role_id"])
     assert on.store.get(wf.GUILD_ID, "events_ping_role_id") == int(payload["role_id"])
     assert "web.pings.setup" in await wf.kinds_in(on.db)

@@ -331,9 +331,14 @@ async def test_a_hidden_streamer_is_left_off_the_onboarding_prompt(bot, streamer
 # --- taking over ---------------------------------------------------------------------------------
 
 
-async def test_the_first_sync_takes_the_notifications_menu_down(bot):
+async def test_the_first_sync_takes_a_legacy_notifications_post_down(bot):
+    from black_bloc.cogs.community.role_menus import create_menu
+
     setup = await pings.setup_events_role(bot, bot.guild, by=STAFF)
-    menu = await get_menu(bot.db, GUILD, pings.NOTIFICATIONS_MENU)
+    await create_menu(
+        bot.db, GUILD, onboarding.NOTIFICATIONS_MENU, "Notifications", None, "multiple"
+    )
+    menu = await get_menu(bot.db, GUILD, onboarding.NOTIFICATIONS_MENU)
     await set_message(bot.db, menu["id"], LOG_CHANNEL, 4242)
 
     await onboarding.reconcile(bot, bot.guild, by=STAFF, asked=True)

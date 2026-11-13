@@ -877,6 +877,7 @@ const SETTING_SPECS = [
   ["rolemenu_end_now_not_run_said", "text", "Black Bloc could not read the whole member list, so **{menu}** did not end and nobody lost a role. Try again in a minute.", "Black Bloc could not read the whole member list, so **{menu}** did not end and nobody lost a role. Try again in a minute.", "what staff are told when End it now cannot see every member yet. It takes {menu}"],
   ["rolemenu_delete_refused_said", "text", "**{menu}** still ends {when} and {members} people wear its roles, so it was not deleted. **End it now** first, or **No end** if nobody should lose them.", "**{menu}** still ends {when} and {members} people wear its roles, so it was not deleted. **End it now** first, or **No end** if nobody should lose them.", "the refusal when a menu with an end still to come is deleted while people wear its roles. It takes {menu} {when} {members}"],
   ["rolemenu_cannot_strip_said", "text", "Black Bloc could not take **{name}** off anybody, so it was not added \u2014 the end of this menu has to be able to remove it. Ask an admin to move Black Bloc's role above it in Server Settings \u2192 Roles, then try again.", "Black Bloc could not take **{name}** off anybody, so it was not added \u2014 the end of this menu has to be able to remove it. Ask an admin to move Black Bloc's role above it in Server Settings \u2192 Roles, then try again.", "the refusal when a role put on a menu is one Black Bloc could not remove. It takes {name}"],
+  ["rolemenu_pings_role_said", "text", "**{name}** belongs to `/pings`, so nothing was changed — members turn it on and off there, and a role menu's end would take it off everyone. Keep it off role menus; **Remove a role…** takes it off this one.", "**{name}** belongs to `/pings`, so nothing was changed — members turn it on and off there, and a role menu's end would take it off everyone. Keep it off role menus; **Remove a role…** takes it off this one.", "the refusal when a ping role (a streamer's role or the Events role) is put on a menu, or a menu holding one is given an end or ended now. It takes {name}"],
   ["rolemenu_no_held_said", "text", "**{menu}** has no earlier end waiting, so nothing was changed.", "**{menu}** has no earlier end waiting, so nothing was changed.", "what staff are told when there is no held end to take. It takes {menu}"],
   ["rolemenu_use_held_question", "text", "Use **{menu}**'s earlier end? Its {roles} role(s) come off {members} people {when}.", "Use **{menu}**'s earlier end? Its {roles} role(s) come off {members} people {when}.", "what staff are asked before Use the earlier end, while that end is still to come. It takes {menu} {roles} {members} {when}"],
   ["rolemenu_use_held_past_question", "text", "Use **{menu}**'s earlier end? It was {when}, already gone by, so its {roles} role(s) come off {members} people at the next hourly pass.", "Use **{menu}**'s earlier end? It was {when}, already gone by, so its {roles} role(s) come off {members} people at the next hourly pass.", "what staff are asked before Use the earlier end when that end has already gone by. It takes {menu} {roles} {members} {when}"],
@@ -2345,8 +2346,8 @@ function seedState() {
       expires_days: null,
       retry_days: 7,
       options: [
-        { role_id: FAN_ROLE_IDS[0], label: 'Runner', emoji: null, position: 0 },
-        { role_id: EVENTS_ROLE_ID, label: 'Host', emoji: null, position: 1 },
+        { role_id: LIVE_ROLE_ID, label: 'Runner', emoji: null, position: 0 },
+        { role_id: '900000000000000012', label: 'Host', emoji: null, position: 1 },
       ],
       ends_source: 'marathon',
       ends_marathon_id: 1,
@@ -2367,7 +2368,7 @@ function seedState() {
       approval: false,
       expires_days: null,
       retry_days: 7,
-      options: [{ role_id: SPOTLIGHT_FAN_ROLE_ID, label: 'Tech checker', emoji: null, position: 0 }],
+      options: [{ role_id: '900000000000000004', label: 'Tech checker', emoji: null, position: 0 }],
       ends_source: 'date',
       ends_at: daysAhead(20),
       ends_set_by: MEMBERS[1].id,
@@ -6012,6 +6013,18 @@ function wantedEnd(menu, body) {
   return { source, marathon_id: marathon.id, buffer_days: buffer };
 }
 
+// Mirrors role_menus.py:pings_refusal — a role members opt into from /pings never sits on a
+// menu that ends.
+function refusePingsRoles(roleIds) {
+  const owned = new Set(state.golive.fanRoles.map((row) => String(row.role_id)));
+  for (const key of ['golive_ping_role_id', 'events_ping_role_id']) {
+    const id = state.settings.get(key);
+    if (id) owned.add(String(id));
+  }
+  const hit = (roleIds || []).map(String).find((id) => owned.has(id));
+  if (hit) throw new Refused(409, 'pings_role', roleWord('rolemenu_pings_role_said', { name: roleOf(hit)?.name || hit }));
+}
+
 function setMenuEnd(menu, end) {
   menu.ends_source = end.source;
   menu.ends_marathon_id = end.source === 'marathon' ? end.marathon_id : null;
@@ -6089,7 +6102,11 @@ route('PUT', '/api/rolemenus/:name', async (context) => {
   requireStaff(context.session);
   const menu = menuByName(context.params.name);
   const body = await context.body();
+  const had = menu.options.map((one) => String(one.role_id));
+  const given = Array.isArray(body.options) ? body.options.map((one) => String(one.role_id)) : null;
+  if (given) refusePingsRoles(given.filter((id) => !had.includes(id)));
   const end = wantedEnd(menu, body);
+  if (end && end.source !== 'none') refusePingsRoles(given || had);
   const words = body.title !== undefined || body.description !== undefined || Array.isArray(body.options);
   if (body.title) menu.title = body.title;
   if (body.description !== undefined) menu.description = body.description;
@@ -6102,6 +6119,7 @@ route('PUT', '/api/rolemenus/:name', async (context) => {
 route('POST', '/api/rolemenus/:name/end-now', (context) => {
   requireStaff(context.session);
   const menu = menuByName(context.params.name);
+  refusePingsRoles(menu.options.map((one) => one.role_id));
   guard('ending a role menu now');
   const roles = new Set(menu.options.map((one) => String(one.role_id)));
   const wearers = menuWearers(menu);
@@ -6128,6 +6146,7 @@ route('POST', '/api/rolemenus/:name/end-earlier', (context) => {
   requireStaff(context.session);
   const menu = menuByName(context.params.name);
   if (!menu.ends_held_at) throw new Refused(409, 'nothing_held', roleWord('rolemenu_no_held_said', { menu: menu.name }));
+  refusePingsRoles(menu.options.map((one) => one.role_id));
   setMenuEnd(menu, { source: 'marathon', marathon_id: menu.ends_marathon_id, buffer_days: menu.buffer_days ?? null });
   return menuRow(menu);
 });
@@ -11294,8 +11313,8 @@ route('POST', '/api/pings/streamers', async (context) => {
   return {
     ...fanRoleRow(row),
     message: reused
-      ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* role menu. People pick it with **Follow a streamer…** on \`/pings\`.`
-      : `Made **${name}** and put it on the *streamers* role menu. People pick it with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of their go-live announcement.`,
+      ? `Used the role **${name}** for **${memberName(memberId)}**. People pick it with **Follow a streamer…** on \`/pings\`.`
+      : `Made **${name}**. People pick it with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of their go-live announcement.`,
   };
 });
 
@@ -11371,7 +11390,7 @@ function renameFanRole(held, who, body) {
   logAction('web.pings.fan_role_renamed', note);
   return {
     ...fanRoleRow(held),
-    message: `**${who}**'s ping role is called **${typed}** from now on — it was **${was}**. Nobody was added to it or taken off it, and the *streamers* role menu says the new name.`,
+    message: `**${who}**'s ping role is called **${typed}** from now on — it was **${was}**. Nobody was added to it or taken off it.`,
   };
 }
 
@@ -11463,11 +11482,11 @@ route('POST', '/api/pings/setup', async (context) => {
     : (before === role.id
       ? `Both feeds already pointed at **${role.name}**, so nothing was changed.`
       : `Used the role **${role.name}** that was already here and pointed both feeds at it.`);
-  message += ' Put it on the *notifications* role menu too; members turn it on from `/pings`.';
+  message += ' Members turn it on from `/pings`.';
   if (state.settings.get('pings_mode') !== 'on') {
     message += ' Ping roles are still off, so nobody can opt in yet — turn them on with `/settings` ▸ **Turn a feature back on…** or from the dashboard\u2019s Go-live tab.';
   }
-  return { role_id: role.id, created, menu: 'notifications', message };
+  return { role_id: role.id, created, message };
 });
 
 route('POST', '/api/pings/raidtrain-role', async (context) => {

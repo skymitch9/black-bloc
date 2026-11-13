@@ -344,7 +344,6 @@ def build_router(bot: Any) -> APIRouter:
         return {
             "role_id": str(outcome.role_id),
             "created": outcome.created,
-            "menu": pings.NOTIFICATIONS_MENU,
             "message": outcome.message,
         }
 

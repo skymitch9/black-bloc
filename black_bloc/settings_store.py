@@ -11161,6 +11161,14 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("name",),
         "the refusal when a role put on a menu is one Black Bloc could not remove. It takes {name}",
     ),
+    "rolemenu_pings_role_said": (
+        "**{name}** belongs to `/pings`, so nothing was changed — members turn it on and off "
+        "there, and a role menu's end would take it off everyone. Keep it off role menus; "
+        "**Remove a role…** takes it off this one.",
+        ("name",),
+        "the refusal when a ping role (a streamer's role or the Events role) is put on a menu, or "
+        "a menu holding one is given an end or ended now. It takes {name}",
+    ),
     "rolemenu_no_held_said": (
         "**{menu}** has no earlier end waiting, so nothing was changed.",
         ("menu",),

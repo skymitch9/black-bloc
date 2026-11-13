@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from black_bloc import pings
-from black_bloc.cogs.community.role_menus import get_menu, get_options, list_menus
+from black_bloc.cogs.community.role_menus import get_options, list_menus
 from black_bloc.config import load_settings
 from black_bloc.settings_store import (
     BUTTON_BLOCK_DEFAULTS,
@@ -201,16 +201,6 @@ def test_a_template_that_renders_to_nothing_still_names_the_streamer():
     assert pings.fan_role_name("   ", "Ada") == "Ada pings"
 
 
-def test_the_menus_page_at_twenty_five_because_that_is_all_a_select_shows():
-    assert pings.pages_of([]) == []
-    rows = list(range(26))
-    pages = pings.pages_of(rows)
-    assert [len(page) for page in pages] == [25, 1]
-    assert pings.menu_name(0) == "streamers" and pings.menu_name(1) == "streamers-2"
-    assert pings.menu_title(0) == "Streamer pings"
-    assert pings.menu_title(1) == "Streamer pings (2)"
-
-
 async def test_the_fan_role_store_is_one_row_per_streamer(db):
     await pings.set_fan_role(db, GUILD, STREAMER, 42, STAFF)
     await pings.set_fan_role(db, GUILD, STREAMER, 43, STAFF)
@@ -222,14 +212,13 @@ async def test_the_fan_role_store_is_one_row_per_streamer(db):
     assert await pings.forget_fan_role(db, GUILD, STREAMER) is False
 
 
-async def test_a_role_is_made_stored_and_put_on_the_streamers_menu(bot, streamer):
+async def test_a_role_is_made_and_stored_and_no_role_menu_is_made(bot, streamer):
     outcome = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
 
     assert outcome.ok and outcome.created
     assert bot.guild.made == [("SuperNamu pings", False, pings.ROLE_REASON)]
-    assert "streamers" in outcome.message
-    menu = await get_menu(bot.db, GUILD, "streamers")
-    assert [row["label"] for row in await get_options(bot.db, menu["id"])] == ["SuperNamu pings"]
+    assert outcome.message == pings.CREATED.format(role="SuperNamu pings")
+    assert await list_menus(bot.db, GUILD) == []
     assert "pings.fan_role_created" in await kinds(bot.db)
     assert (await details(bot.db, "pings.fan_role_created"))["reused"] is False
 
@@ -344,8 +333,8 @@ async def test_staff_rename_a_ping_role_where_it_stands(bot, streamer, fan):
         "via": "discord",
         "user_id": STREAMER,
     }
-    menu = await get_menu(bot.db, GUILD, "streamers")
-    assert [option["label"] for option in await get_options(bot.db, menu["id"])] == ["Namu crew"]
+    assert "menu" not in outcome.message
+    assert await list_menus(bot.db, GUILD) == []
 
 
 async def test_renaming_to_a_name_another_role_has_is_refused(bot, streamer):
@@ -453,7 +442,7 @@ async def test_removing_deletes_the_discord_role_by_default(bot, streamer):
     assert outcome.ok and role.deleted is True
     assert "is gone from the server" in outcome.message
     assert await pings.all_fan_roles(bot.db, GUILD) == []
-    assert await get_menu(bot.db, GUILD, "streamers") is None
+    assert await list_menus(bot.db, GUILD) == []
     assert (await details(bot.db, "pings.fan_role_removed"))["deleted"] is True
 
 
@@ -501,45 +490,6 @@ async def test_nothing_is_read_while_the_feature_is_off(bot, streamer):
     assert await pings.announced_fan_role(bot, bot.guild, STREAMER) is None
 
 
-async def test_twenty_six_streamers_fill_two_menus_and_shrink_back_to_one(bot):
-    for at in range(26):
-        member = FakeMember(bot.guild, 2000 + at, f"streamer{at:02d}")
-        await pings.ensure_fan_role(bot, bot.guild, member, by=member.id)
-
-    first = await get_menu(bot.db, GUILD, "streamers")
-    second = await get_menu(bot.db, GUILD, "streamers-2")
-    assert len(await get_options(bot.db, first["id"])) == 25
-    assert len(await get_options(bot.db, second["id"])) == 1
-
-    for at in range(10):
-        await pings.remove_fan_role(bot, bot.guild, 2000 + at, by=STAFF)
-
-    assert await get_menu(bot.db, GUILD, "streamers-2") is None
-    assert len(await get_options(bot.db, (await get_menu(bot.db, GUILD, "streamers"))["id"])) == 16
-
-
-async def test_the_menu_is_sorted_by_the_role_name_people_read(bot):
-    for at, name in enumerate(("Zoe", "ada", "Mo")):
-        member = FakeMember(bot.guild, 3000 + at, name)
-        await pings.ensure_fan_role(bot, bot.guild, member, by=member.id)
-
-    menu = await get_menu(bot.db, GUILD, "streamers")
-    labels = [row["label"] for row in await get_options(bot.db, menu["id"])]
-
-    assert labels == ["ada pings", "Mo pings", "Zoe pings"]
-
-
-async def test_a_role_that_vanished_is_left_off_the_menu(bot, streamer):
-    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
-    other = FakeMember(bot.guild, 3100, "Bee")
-    bot.guild.roles = [role for role in bot.guild.roles if role.id != made.role_id]
-
-    await pings.ensure_fan_role(bot, bot.guild, other, by=other.id)
-
-    menu = await get_menu(bot.db, GUILD, "streamers")
-    assert [row["label"] for row in await get_options(bot.db, menu["id"])] == ["Bee pings"]
-
-
 async def test_a_role_change_discord_refuses_is_a_sentence_and_a_log_line(bot, streamer):
     role = bot.guild.add_role(FakeRole(4242, "Namu Squad"))
     fan = FakeMember(bot.guild, FAN, "Fan")
@@ -569,12 +519,9 @@ async def test_setup_makes_the_events_role_and_points_both_feeds_at_it(bot):
     assert bot.guild.made == [("Events", False, pings.ROLE_REASON)]
     assert bot.store.get(GUILD, "golive_ping_role_id") == outcome.role_id
     assert bot.store.get(GUILD, "events_ping_role_id") == outcome.role_id
-    assert "notifications" in outcome.message
-    menu = await get_menu(bot.db, GUILD, "notifications")
-    options = await get_options(bot.db, menu["id"])
-    assert [row["label"] for row in options] == [pings.EVENTS_OPTION_LABEL]
-    assert options[0]["emoji"] == pings.EVENTS_OPTION_EMOJI
-    assert menu["message_id"] is None
+    assert outcome.message.endswith(pings.SETUP_OPT_IN)
+    assert "menu" not in outcome.message
+    assert await list_menus(bot.db, GUILD) == []
     assert "pings.setup" in await kinds(bot.db)
 
 
@@ -594,9 +541,7 @@ async def test_setup_run_twice_changes_nothing_the_second_time(bot):
 
     assert again.role_id == first.role_id
     assert "nothing was changed" in again.message
-    assert "already on the" in again.message
-    menu = await get_menu(bot.db, GUILD, "notifications")
-    assert len(await get_options(bot.db, menu["id"])) == 1
+    assert await list_menus(bot.db, GUILD) == []
 
 
 async def test_setup_says_the_feature_is_still_off_rather_than_leaving_it_a_mystery(bot):
@@ -667,41 +612,6 @@ async def test_the_web_head_marks_a_line_the_dashboard_left(bot, streamer):
 
     assert "web.pings.fan_role_created" in await kinds(bot.db)
     assert (await details(bot.db, "web.pings.fan_role_created"))["via"] == "website"
-
-
-async def test_a_posted_streamers_panel_is_not_re_posted_once_self_pick_is_retired(
-    bot, streamer
-):
-    """Request #17: a panel posted before the retirement keeps its message; the sync still
-    keeps the menu's options, and posts and edits nothing."""
-    from black_bloc.cogs.community.role_menus import post_panel
-
-    await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
-    menu = await get_menu(bot.db, GUILD, "streamers")
-    posted = await post_panel(
-        bot, menu, await get_options(bot.db, menu["id"]), bot.guild.channel
-    )
-
-    other = FakeMember(bot.guild, 3200, "Bee")
-    await pings.ensure_fan_role(bot, bot.guild, other, by=other.id)
-
-    assert not posted.edits
-    assert "role_menu.reposted" not in await kinds(bot.db)
-    menu = await get_menu(bot.db, GUILD, "streamers")
-    assert [row["label"] for row in await get_options(bot.db, menu["id"])] == [
-        "Bee pings",
-        "SuperNamu pings",
-    ]
-
-
-async def test_the_streamers_menus_are_the_only_ones_the_sync_touches(bot, streamer):
-    from black_bloc.cogs.community.role_menus import create_menu
-
-    await create_menu(bot.db, GUILD, "pronouns", "Pronouns", None, "multiple")
-    await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
-    await pings.remove_fan_role(bot, bot.guild, STREAMER, by=STAFF)
-
-    assert [menu["name"] for menu in await list_menus(bot.db, GUILD)] == ["pronouns"]
 
 
 # --- the panel layer -------------------------------------------------------------------------
@@ -1647,14 +1557,40 @@ async def test_a_hide_by_hand_is_mirrored_into_the_one_opt_out_table_and_a_prune
     assert await optouts.is_out(bot.db, GUILD, STREAMER, optouts.STREAMER_LIST) is False
 
 
-def test_no_pings_sentence_sends_staff_to_post_a_role_menu():
-    """Request #17 retired posting role menus; the streamer and Events menus are staff groupings."""
+def test_no_pings_sentence_mentions_a_role_menu():
+    """Pings keeps no role-menu rows (2026-11-13), so no sentence of its may say it does."""
     for said in (
         pings.CREATED,
         pings.REUSED,
         pings.RENAMED,
-        pings.SETUP_MENU_ADDED,
-        pings.SETUP_MENU_THERE,
+        pings.CREATED_CHANNEL,
+        pings.REUSED_CHANNEL,
+        pings.SETUP_OPT_IN,
     ):
-        assert "Post it" not in said and "panel" not in said, said
-        assert "role menu" in said
+        assert "menu" not in said and "panel" not in said, said
+    assert "/pings" in pings.SETUP_OPT_IN
+
+
+async def test_no_path_of_pings_makes_or_touches_a_role_menu(bot, streamer):
+    from black_bloc.cogs.community.role_menus import create_menu
+
+    await create_menu(bot.db, GUILD, "streamers", "Streamer pings", None, "staff")
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+    await pings.rename_fan_role(bot, bot.guild, row, "Namu crew", by=STAFF)
+    await pings.setup_events_role(bot, bot.guild, by=STAFF)
+    await pings.remove_fan_role(bot, bot.guild, STREAMER, by=STAFF)
+
+    assert made.ok
+    menus = await list_menus(bot.db, GUILD)
+    assert [menu["name"] for menu in menus] == ["streamers"]
+    assert await get_options(bot.db, menus[0]["id"]) == []
+
+
+async def test_the_roles_pings_owns_are_every_fan_role_and_both_feeds(bot, streamer):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    await bot.store.set(GUILD, "golive_ping_role_id", 501, by=STAFF)
+    await bot.store.set(GUILD, "events_ping_role_id", 502, by=STAFF)
+    await pings.set_fan_role(bot.db, GUILD, None, 503, STAFF, spotlight_id=7)
+
+    assert await pings.owned_role_ids(bot, GUILD) == {made.role_id, 501, 502, 503}

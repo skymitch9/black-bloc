@@ -6,20 +6,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
 from . import optouts
-from . import rolemenu_panels as panels
 from .actionlog import log_action
 from .button_block import ButtonLook, Words
 from .button_block import look as button_look
-from .cogs.community.role_menus import (
-    OPTIONS_MAX,
-    add_option,
-    create_menu,
-    delete_menu,
-    get_menu,
-    get_options,
-    list_menus,
-    remove_option,
-)
 from .golive import now_iso, parse_ts
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import KEEP_IT as KEEP_IT
@@ -70,12 +59,6 @@ FAN_ROLE_SELECT = (
     "SELECT r.*, s.twitch_login AS spotlight_login, s.display_name AS spotlight_name "
     "FROM golive_fan_roles r LEFT JOIN spotlight_channels s ON s.id = r.spotlight_id"
 )
-STREAMERS_MENU = "streamers"
-STREAMERS_TITLE = "Streamer pings"
-NOTIFICATIONS_MENU = "notifications"
-NOTIFICATIONS_TITLE = "Notifications"
-EVENTS_OPTION_LABEL = "Events — go-live and event pings"
-EVENTS_OPTION_EMOJI = "🔔"
 ROLE_REASON = "Black Bloc pings"
 
 OFF = (
@@ -121,7 +104,7 @@ FAN_ROLE_GONE = (
 )
 RENAMED = (
     "**{name}**'s ping role is called **{now}** from now on — it was **{was}**. Nobody was added "
-    "to it or taken off it, and the *{menu}* role menu says the new name."
+    "to it or taken off it."
 )
 NOT_A_STREAMER = (
     "Black Bloc does not know you stream yet, so there is nothing to make a role for. Link your "
@@ -142,12 +125,12 @@ NO_FAN_ROLE = (
     "shows who has one."
 )
 CREATED = (
-    "Made **{role}** and put it on the *{menu}* role menu. People pick it with **Follow a "
-    "streamer…** on `/pings`, and Black Bloc mentions it in front of their go-live announcement."
+    "Made **{role}**. People pick it with **Follow a streamer…** on `/pings`, and Black Bloc "
+    "mentions it in front of their go-live announcement."
 )
 REUSED = (
-    "Used the role **{role}** for **{name}** and put it on the *{menu}* role menu. People pick "
-    "it with **Follow a streamer…** on `/pings`."
+    "Used the role **{role}** for **{name}**. People pick it with **Follow a streamer…** on "
+    "`/pings`."
 )
 REMOVED_KEPT = (
     "**{name}** no longer has a ping role here, and the Discord role **{role}** was left on the "
@@ -176,8 +159,7 @@ NO_SUCH_SPOTLIGHT = (
 SETUP_CREATED = "Made the role **{role}** and pointed go-live and event pings at it."
 SETUP_REUSED = "Used the role **{role}** that was already here and pointed both feeds at it."
 SETUP_UNCHANGED = "Both feeds already pointed at **{role}**, so nothing was changed."
-SETUP_MENU_ADDED = " Put it on the *{menu}* role menu too; members turn it on from `/pings`."
-SETUP_MENU_THERE = " It is already on the *{menu}* role menu."
+SETUP_OPT_IN = " Members turn it on from `/pings`."
 SETUP_STILL_OFF = (
     " Ping roles are still off, so nobody can opt in yet — turn them on with `/settings` ▸ "
     "pings_mode on` or from the dashboard's Go-live tab."
@@ -459,21 +441,6 @@ async def wear(bot: Any, guild: Any, member: Any, role: Any, *, add: bool) -> st
     return None
 
 
-def menu_name(page: int) -> str:
-    return STREAMERS_MENU if page == 0 else f"{STREAMERS_MENU}-{page + 1}"
-
-
-def menu_title(page: int) -> str:
-    return STREAMERS_TITLE if page == 0 else f"{STREAMERS_TITLE} ({page + 1})"
-
-
-def pages_of(rows: list[Any]) -> list[list[Any]]:
-    """Discord shows at most 25 options in one select, so the roles run over onto more menus."""
-    if not rows:
-        return []
-    return [rows[at : at + OPTIONS_MAX] for at in range(0, len(rows), OPTIONS_MAX)]
-
-
 def option_label(guild: Any, row: Any) -> str:
     role = guild.get_role(int(row["role_id"]))
     if role is not None:
@@ -482,54 +449,6 @@ def option_label(guild: Any, row: Any) -> str:
         return spotlight_name(row)
     member = guild.get_member(int(row["user_id"]))
     return display_name(member) if member is not None else str(row["user_id"])
-
-
-async def sync_streamer_menus(bot: Any, guild: Any) -> list[str]:
-    """Rebuild the Streamer pings panels from the fan-role rows; the names that now exist."""
-    rows = [row for row in await all_fan_roles(bot.db, guild.id) if guild.get_role(row["role_id"])]
-    labelled = sorted(
-        ((option_label(guild, row), row) for row in rows), key=lambda pair: pair[0].casefold()
-    )
-    wanted = pages_of(labelled)
-    names = [menu_name(page) for page in range(len(wanted))]
-    for page, entries in enumerate(wanted):
-        await _fill_menu(bot, guild, menu_name(page), menu_title(page), entries)
-    await _drop_spare_menus(bot, guild, keep=set(names))
-    for name in names:
-        await _refresh(bot, guild, name)
-    return names
-
-
-async def _fill_menu(
-    bot: Any, guild: Any, name: str, title: str, entries: list[tuple[str, Any]]
-) -> None:
-    menu = await get_menu(bot.db, guild.id, name)
-    if menu is None:
-        await create_menu(bot.db, guild.id, name, title, None, "multiple")
-        menu = await get_menu(bot.db, guild.id, name)
-    if menu is None:
-        return
-    for existing in await get_options(bot.db, menu["id"]):
-        await remove_option(bot.db, menu["id"], existing["role_id"])
-    for label, row in entries:
-        await add_option(bot.db, menu["id"], int(row["role_id"]), label, None)
-
-
-async def _drop_spare_menus(bot: Any, guild: Any, *, keep: set[str]) -> None:
-    for menu in await list_menus(bot.db, guild.id):
-        name = str(menu["name"])
-        if name in keep or not (name == STREAMERS_MENU or name.startswith(f"{STREAMERS_MENU}-")):
-            continue
-        if menu["message_id"]:
-            await panels.unpost(bot, menu, None)
-        await delete_menu(bot.db, guild.id, name)
-
-
-async def _refresh(bot: Any, guild: Any, name: str) -> None:
-    menu = await get_menu(bot.db, guild.id, name)
-    if menu is None or not menu["message_id"]:
-        return
-    await panels.repost(bot, menu, None)
 
 
 async def ensure_fan_role(
@@ -601,14 +520,13 @@ async def ensure_fan_role(
         target=int(spotlight["id"]) if channel else member,
         details=details,
     )
-    await sync_streamer_menus(bot, guild)
     if channel:
         said = REUSED_CHANNEL if reused else CREATED_CHANNEL
     else:
         said = REUSED if reused else CREATED
     return Outcome(
         True,
-        said.format(role=role.name, name=who, menu=STREAMERS_MENU),
+        said.format(role=role.name, name=who),
         role_id=int(role.id),
         created=not reused,
     )
@@ -670,10 +588,9 @@ async def rename_fan_role(
         target=target,
         details=details,
     )
-    await sync_streamer_menus(bot, guild)
     return Outcome(
         True,
-        RENAMED.format(name=who, was=was, now=wanted, menu=STREAMERS_MENU),
+        RENAMED.format(name=who, was=was, now=wanted),
         role_id=role_id,
     )
 
@@ -735,7 +652,6 @@ async def remove_fan_role(
         ),
         details=details,
     )
-    await sync_streamer_menus(bot, guild)
     if role is None:
         return Outcome(True, REMOVED_ALREADY_GONE.format(name=name), role_id=role_id)
     said = REMOVED_DELETED if deleted else REMOVED_KEPT
@@ -768,21 +684,14 @@ def events_role_id(bot: Any, guild_id: int) -> int | None:
     return bot.store.get(guild_id, GOLIVE_PING_KEY) or bot.store.get(guild_id, EVENTS_PING_KEY)
 
 
-async def ensure_notifications_menu(bot: Any, guild: Any, role: Any) -> bool:
-    """Put the Events role on its own panel; True when the option was not already there."""
-    menu = await get_menu(bot.db, guild.id, NOTIFICATIONS_MENU)
-    if menu is None:
-        await create_menu(
-            bot.db, guild.id, NOTIFICATIONS_MENU, NOTIFICATIONS_TITLE, None, "multiple"
-        )
-        menu = await get_menu(bot.db, guild.id, NOTIFICATIONS_MENU)
-    if menu is None:
-        return False
-    already = any(row["role_id"] == role.id for row in await get_options(bot.db, menu["id"]))
-    await add_option(bot.db, menu["id"], role.id, EVENTS_OPTION_LABEL, EVENTS_OPTION_EMOJI)
-    if menu["message_id"]:
-        await _refresh(bot, guild, NOTIFICATIONS_MENU)
-    return not already
+async def owned_role_ids(bot: Any, guild_id: int) -> set[int]:
+    """Every role members opt into from `/pings`: each fan role and both feeds' Events role."""
+    found = {int(row["role_id"]) for row in await all_fan_roles(bot.db, guild_id)}
+    for key in (GOLIVE_PING_KEY, EVENTS_PING_KEY):
+        role_id = bot.store.get(guild_id, key)
+        if role_id:
+            found.add(int(role_id))
+    return found
 
 
 async def setup_events_role(
@@ -807,7 +716,6 @@ async def setup_events_role(
     for key in (GOLIVE_PING_KEY, EVENTS_PING_KEY):
         if bot.store.get(guild.id, key) != role.id:
             await bot.store.set(guild.id, key, int(role.id), by=by)
-    added = await ensure_notifications_menu(bot, guild, role)
     await log_action(
         bot,
         guild,
@@ -821,7 +729,7 @@ async def setup_events_role(
         said = SETUP_UNCHANGED.format(role=role.name)
     else:
         said = SETUP_REUSED.format(role=role.name)
-    said += (SETUP_MENU_ADDED if added else SETUP_MENU_THERE).format(menu=NOTIFICATIONS_MENU)
+    said += SETUP_OPT_IN
     if not is_on(bot, guild.id):
         said += SETUP_STILL_OFF
     return Outcome(True, said, role_id=int(role.id), created=made)
@@ -1742,7 +1650,6 @@ async def drop_unworn_fan_role(bot: Any, guild: Any, user_id: int) -> str | None
             )
             return None
     await forget_fan_role(bot.db, guild.id, user_id)
-    await sync_streamer_menus(bot, guild)
     return name
 
 
@@ -1848,7 +1755,6 @@ async def prune_empty_roles(bot: Any, guild: Any, *, now: Any = None) -> list[in
     when = now or datetime.now(UTC)
     stamp = when.isoformat()
     deleted: list[int] = []
-    touched = False
     for row in await member_fan_roles(bot.db, guild.id):
         user_id = int(row["user_id"])
         role = role_of(guild, row["role_id"])
@@ -1875,7 +1781,6 @@ async def prune_empty_roles(bot: Any, guild: Any, *, now: Any = None) -> list[in
             )
             continue
         await forget_fan_role(bot.db, guild.id, user_id)
-        touched = True
         await log_action(
             bot,
             guild,
@@ -1890,8 +1795,6 @@ async def prune_empty_roles(bot: Any, guild: Any, *, now: Any = None) -> list[in
             },
         )
         deleted.append(user_id)
-    if touched:
-        await sync_streamer_menus(bot, guild)
     return deleted
 
 

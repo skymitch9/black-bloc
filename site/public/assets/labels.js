@@ -520,6 +520,7 @@ export const LABELS = {
   rolemenu_end_now_not_run_said: 'What staff hear when End it now cannot run',
   rolemenu_delete_refused_said: 'The refusal to delete a menu still to end',
   rolemenu_cannot_strip_said: 'The refusal of a role the end could not remove',
+  rolemenu_pings_role_said: 'The refusal of a ping role on a menu that ends',
   rolemenu_no_held_said: 'What staff hear when no earlier end waits',
   rolemenu_use_held_question: 'What staff are asked before Use the earlier end',
   rolemenu_use_held_past_question: 'What staff are asked when the earlier end has gone by',
