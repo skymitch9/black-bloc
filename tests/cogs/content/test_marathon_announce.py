@@ -1388,8 +1388,10 @@ def every_post(bot):
 
 
 async def loud_show(bot, cog, runs):
+    from black_bloc import optouts
     from tests.cogs.content.test_marathon import FAN_ROLE
 
+    await optouts.clear_out(bot.db, GUILD, SKY, optouts.ANNOUNCE)
     await bot.store.set(GUILD, "marathon_reminder_minutes", "1440, 120, 15")
     await bot.store.set(GUILD, "marathon_reminder_pings", True)
     await bot.store.set(GUILD, "marathon_live_pings", True)
