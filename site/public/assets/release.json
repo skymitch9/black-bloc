@@ -1,8 +1,9 @@
 {
-  "release": "v271",
-  "commit": "cab7e538",
+  "release": "v272",
+  "commit": "8fc149db",
   "changed_features": [
     "marathon",
+    "pings",
     "rolemenu"
   ]
 }
