@@ -461,6 +461,23 @@ def moved_far(was: Any, now: Any, minutes: Any) -> bool:
     return abs((after - before).total_seconds()) >= floor * 60
 
 
+def pulls_earlier(current: Any, told: Any, candidate: Any, minutes: Any) -> bool:
+    """Whether a marathon's new end would pull a menu's end earlier than the end it has, or the
+    last one staff were told, by more than the floor — so small moves cannot creep it unseen."""
+    after = parse_ts(candidate)
+    if after is None:
+        return False
+    try:
+        floor = max(int(minutes), 0) * 60
+    except (TypeError, ValueError):
+        floor = 0
+    for was in (current, told):
+        before = parse_ts(was)
+        if before is not None and (before - after).total_seconds() > floor:
+            return True
+    return False
+
+
 def is_due(menu: Any, at: datetime) -> bool:
     """Ended menus and unreadable ends are never due; nobody loses a role on a garbled date."""
     if cell(menu, "ended_at"):
@@ -561,6 +578,7 @@ __all__ = [
     "ends_at_of",
     "is_due",
     "moved_far",
+    "pulls_earlier",
     "said",
     "typed_end",
     "utc_iso",

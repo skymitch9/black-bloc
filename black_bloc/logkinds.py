@@ -205,6 +205,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "role_menu.roles_taken_back",
         "role_menu.end_set",
         "role_menu.end_moved",
+        "role_menu.end_held",
         "role_menu.end_unbound",
         "pbfeed.cap_reached",
         "pbfeed.runner_gone",
@@ -312,6 +313,7 @@ IMPORTANT: frozenset[str] = frozenset(
 ROUTINE: frozenset[str] = frozenset(
     {
         "brackets.picture_back",
+        "role_menu.end_hold_cleared",
         "runs.added",
         "runs.edited",
         "runs.removed",

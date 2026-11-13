@@ -2777,3 +2777,107 @@ async def test_push_it_back_on_a_menu_role_with_an_end_is_refused_in_words(bot, 
     await choose(interaction, menus.GRANT_PICK, [str(grant_id)])
     assert "Push it back…" not in labels(interaction.view)
     assert "change the menu's end instead" in interaction.body
+
+
+# --- an end that moves EARLIER waits for staff (conductor's safety, 1b) ---------------------------
+
+
+async def move_marathon(db, marathon_id, ends_at):
+    await db.conn.execute("UPDATE marathons SET ends_at = ? WHERE id = ?", (ends_at, marathon_id))
+    await db.conn.commit()
+
+
+async def test_an_earlier_marathon_end_is_held_and_never_makes_the_menu_due(bot, db, lead):
+    await store_notice_channel(bot)
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, end = await bound_menu(bot, db, lead, marathon_id)
+    wearer = FakeMember(bot.guild, user_id=900, roles=(10,))
+
+    await move_marathon(db, marathon_id, PAST)
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    await tick(bot)
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_at"] == end and menu["ended_at"] is None
+    assert menu["ends_held_at"] == "2020-01-02T00:00:00+00:00"
+    assert wearer.edits == [] and [r.id for r in wearer.roles] == [10]
+    [held] = await details_of(db, "role_menu.end_held")
+    assert (held["ends_at"], held["held"]) == (end, "2020-01-02T00:00:00+00:00")
+    [notice] = bot.guild.channels[STAFF_CHANNEL].messages
+    assert "**btb-2027**'s marathon now ends earlier" in notice.kwargs["content"]
+    assert await details_of(db, "role_menu.end_moved") == []
+
+
+async def test_use_the_earlier_end_takes_the_held_end_in_one_row(bot, db, lead):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
+    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    before = len(await details_of(db, "role_menu.end_set"))
+
+    end = await cog_module.use_held_end(bot, bot.guild, lead, await menu_row(db, menu_id))
+
+    menu = await menu_row(db, menu_id)
+    assert end == menu["ends_at"] == "2027-02-21T05:00:00+00:00"
+    assert menu["ends_held_at"] is None and menu["ends_source"] == "marathon"
+    assert len(await details_of(db, "role_menu.end_set")) == before + 1
+    assert await cog_module.use_held_end(bot, bot.guild, lead, menu) is None
+
+
+async def test_a_later_read_that_no_longer_pulls_earlier_clears_the_hold(bot, db, lead):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
+    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    assert (await menu_row(db, menu_id))["ends_held_at"]
+
+    await move_marathon(db, marathon_id, "2027-02-28T07:00:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_held_at"] is None
+    assert menu["ends_at"] == "2027-03-01T07:00:00+00:00"
+    [cleared] = await details_of(db, "role_menu.end_hold_cleared")
+    assert cleared["held"] == "2027-02-21T05:00:00+00:00"
+
+
+async def test_with_the_hold_off_an_earlier_end_applies_at_once(bot, db, lead):
+    await bot.store.set(GUILD, "rolemenu_end_earlier_holds", False)
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
+
+    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_at"] == "2027-02-21T05:00:00+00:00" and menu["ends_held_at"] is None
+    assert await details_of(db, "role_menu.end_held") == []
+
+
+async def test_small_earlier_moves_apply_until_they_add_up_past_the_floor(bot, db, lead):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
+
+    await move_marathon(db, marathon_id, "2027-02-28T04:30:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    assert (await menu_row(db, menu_id))["ends_at"] == "2027-03-01T04:30:00+00:00"
+
+    await move_marathon(db, marathon_id, "2027-02-28T03:50:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_at"] == "2027-03-01T04:30:00+00:00"
+    assert menu["ends_held_at"] == "2027-03-01T03:50:00+00:00"
+
+
+async def test_a_staff_typed_end_or_end_it_now_is_never_held(bot, db, lead):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
+
+    end = await cog_module.set_menu_end(
+        bot, bot.guild, lead, await menu_row(db, menu_id), source="date",
+        ends_at="2027-01-01T00:00:00+00:00",
+    )
+
+    assert (await menu_row(db, menu_id))["ends_at"] == end == "2027-01-01T00:00:00+00:00"
+    assert await details_of(db, "role_menu.end_held") == []

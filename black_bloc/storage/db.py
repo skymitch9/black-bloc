@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 107
+SCHEMA_VERSION = 108
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS role_menus (
     end_passes       INTEGER NOT NULL DEFAULT 0,
     end_members      INTEGER NOT NULL DEFAULT 0,
     end_failures     TEXT,
+    ends_held_at     TEXT,
     UNIQUE (guild_id, name)
 );
 
@@ -1907,6 +1908,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("role_menus", "end_passes", "INTEGER NOT NULL DEFAULT 0"),
     ("role_menus", "end_members", "INTEGER NOT NULL DEFAULT 0"),
     ("role_menus", "end_failures", "TEXT"),
+    ("role_menus", "ends_held_at", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

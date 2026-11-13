@@ -37,7 +37,9 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
     ROLEMENU_END_BUFFER_KEY,
+    ROLEMENU_END_EARLIER_HOLDS_KEY,
     ROLEMENU_END_FAILURE_LINE_KEY,
+    ROLEMENU_END_HELD_TEXT_KEY,
     ROLEMENU_END_MOVED_MINUTES_KEY,
     ROLEMENU_END_MOVED_NOTICE_KEY,
     ROLEMENU_END_MOVED_TEXT_KEY,
@@ -498,7 +500,7 @@ async def store_menu_end(
     await db.conn.execute(
         "UPDATE role_menus SET ends_source = ?, ends_marathon_id = ?, buffer_days = ?, "
         "ends_at = ?, ends_told_at = ?, ends_set_by = ?, ends_set_at = ?, ended_at = NULL, "
-        "end_passes = 0, end_members = 0, end_failures = NULL WHERE id = ?",
+        "end_passes = 0, end_members = 0, end_failures = NULL, ends_held_at = NULL WHERE id = ?",
         (source, marathon_id, buffer_days, ends_at, ends_at, by, now_iso(), int(menu_id)),
     )
     await db.conn.commit()
@@ -515,7 +517,8 @@ async def restamp_menu_end(db: Any, menu_id: int, ends_at: Any, *, told: bool) -
 
 async def unbind_menu_end(db: Any, menu_id: int, *, keeps_a_date: bool) -> None:
     await db.conn.execute(
-        "UPDATE role_menus SET ends_source = ?, ends_marathon_id = NULL WHERE id = ?",
+        "UPDATE role_menus SET ends_source = ?, ends_marathon_id = NULL, ends_held_at = NULL "
+        "WHERE id = ?",
         (menus.DATE_END if keeps_a_date else menus.NO_END, int(menu_id)),
     )
     await db.conn.commit()
@@ -2171,13 +2174,15 @@ async def tell_wearers(
 
 
 async def follow_marathon(bot: Any, guild: Any, marathon_id: Any) -> int:
-    """A marathon's new end moves every unfinished menu bound to it; staff hear past the floor."""
+    """A marathon's new end moves every unfinished menu bound to it; staff hear past the floor,
+    and an end pulled EARLIER past the floor waits for staff while the hold is on."""
     rows = await menus_bound_to(bot.db, guild.id, marathon_id)
     bound = [one for one in rows if not one["ended_at"]]
     if not bound:
         return 0
     marathon = await marathon_row(bot.db, guild.id, marathon_id)
     floor = bot.store.get(guild.id, ROLEMENU_END_MOVED_MINUTES_KEY)
+    holding = bool(bot.store.get(guild.id, ROLEMENU_END_EARLIER_HOLDS_KEY))
     moved = 0
     for menu in bound:
         async with end_lock(bot, menu["id"]):
@@ -2185,10 +2190,24 @@ async def follow_marathon(bot: Any, guild: Any, marathon_id: Any) -> int:
             if fresh is None or fresh["ended_at"]:
                 continue
             end = menus.ends_at_of(fresh, marathon, default_buffer(bot, guild.id))
+            held = menu_value(fresh, "ends_held_at")
+            if holding and menus.pulls_earlier(
+                fresh["ends_at"], fresh["ends_told_at"], end, floor
+            ):
+                if menus.end_moved(held, end):
+                    await hold_menu_end(bot.db, fresh["id"], end)
+                    await end_was_held(bot, guild, fresh, marathon_id, end, held, floor)
+                continue
+            if held:
+                await hold_menu_end(bot.db, fresh["id"], None)
             if not menus.end_moved(fresh["ends_at"], end):
+                if held:
+                    await hold_cleared(bot, guild, fresh, marathon_id, held, end)
                 continue
             told = menus.moved_far(fresh["ends_told_at"], end, floor)
             await restamp_menu_end(bot.db, fresh["id"], end, told=told)
+        if held:
+            await hold_cleared(bot, guild, fresh, marathon_id, held, end)
         await stamp_grants(
             bot.db, guild.id, await menu_role_ids(bot.db, fresh["id"]), was=(fresh["ends_at"],)
         )
@@ -2220,6 +2239,85 @@ async def follow_marathon(bot: Any, guild: Any, marathon_id: Any) -> int:
                 ),
             )
     return moved
+
+
+async def hold_menu_end(db: Any, menu_id: int, candidate: Any) -> None:
+    await db.conn.execute(
+        "UPDATE role_menus SET ends_held_at = ? WHERE id = ?", (candidate, int(menu_id))
+    )
+    await db.conn.commit()
+
+
+async def end_was_held(
+    bot: Any, guild: Any, menu: Any, marathon_id: Any, end: Any, held: Any, floor: Any
+) -> None:
+    """One log row per new candidate; staff hear once, and again only past the floor."""
+    await log_action(
+        bot,
+        guild,
+        "role_menu.end_held",
+        details={
+            "menu": menu["name"],
+            "marathon_id": int(marathon_id),
+            "ends_at": menu["ends_at"],
+            "held": end,
+            "was_held": held,
+        },
+    )
+    if held is not None and not menus.moved_far(held, end, floor):
+        return
+    await post_role_notice(
+        bot,
+        guild,
+        menus.said(
+            bot.store,
+            guild.id,
+            ROLEMENU_END_HELD_TEXT_KEY,
+            menu=menu["name"],
+            to=end_words(bot, guild.id, end),
+            was=end_words(bot, guild.id, menu["ends_at"]),
+        ),
+    )
+
+
+async def hold_cleared(
+    bot: Any, guild: Any, menu: Any, marathon_id: Any, held: Any, end: Any
+) -> None:
+    await log_action(
+        bot,
+        guild,
+        "role_menu.end_hold_cleared",
+        details={
+            "menu": menu["name"],
+            "marathon_id": int(marathon_id),
+            "held": held,
+            "ends_at": end,
+        },
+    )
+
+
+async def use_held_end(
+    bot: Any, guild: Any, actor: Any, menu: Any, *, via: str = VIA_DISCORD
+) -> str | None:
+    """Staff take the earlier end a marathon proposed: the end is set again from the marathon,
+    one `end_set` row; None when nothing is held any more."""
+    fresh = await get_menu_by_id(bot.db, menu["id"])
+    if (
+        fresh is None
+        or not menu_value(fresh, "ends_held_at")
+        or menus.end_source(fresh) != menus.MARATHON_END
+    ):
+        return None
+    return await set_menu_end(
+        bot,
+        guild,
+        actor,
+        fresh,
+        source=menus.MARATHON_END,
+        marathon_id=fresh["ends_marathon_id"],
+        buffer_days=menu_value(fresh, "buffer_days"),
+        via=via,
+    )
 
 
 async def unbind_marathon(bot: Any, guild: Any, marathon: Any) -> int:

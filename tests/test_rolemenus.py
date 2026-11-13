@@ -445,3 +445,16 @@ def test_what_ended_is_the_marathons_name_or_the_date():
     marathon_menu = end_row("marathon", "2027-03-01T05:00:00+00:00")
     assert rm.what_ended(marathon_menu, "Back to Black 2027") == "Back to Black 2027"
     assert rm.what_ended(end_row("date", "2027-03-01T05:00:00+00:00"), None) == "<t:1803877200:D>"
+
+
+def test_an_end_pulled_earlier_past_the_floor_by_the_end_or_the_last_told_one():
+    pulls = rm.pulls_earlier
+    current = "2027-03-01T05:00:00+00:00"
+    assert pulls(current, current, "2027-03-01T03:59:00+00:00", 60)
+    assert not pulls(current, current, "2027-03-01T04:00:00+00:00", 60)
+    assert not pulls(current, current, "2027-03-02T05:00:00+00:00", 60)
+    assert pulls(current, current, "2027-03-01T04:59:00+00:00", 0)
+    assert pulls("2027-03-01T04:30:00+00:00", current, "2027-03-01T03:50:00+00:00", 60)
+    assert not pulls(None, None, "2020-01-01T00:00:00+00:00", 60)
+    assert not pulls(current, current, None, 60)
+    assert pulls(current, None, "2020-01-01T00:00:00+00:00", "garbled")
