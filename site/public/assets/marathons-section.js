@@ -42,6 +42,7 @@ import {
   trackedLine,
   whenWords,
 } from './marathon-words.js';
+import { humanLabel } from './labels.js';
 import { trackerHref, trackerLink, trackerRunHref } from './schedule-link.js';
 import { announceMoves, announcedSaid, pingsCard, spotlightCard } from './spotlight-controls.js';
 import {
@@ -1001,9 +1002,20 @@ function switchRow(marathon, say, control) {
   ].filter(Boolean);
 }
 
+/** The server's couch switch, drawn beside Host announcements. */
+function couchRow(marathon) {
+  const found = marathon.couch_announcements;
+  if (!found || !found.key) return [];
+  const switched = modeSwitch({ key: found.key, type: 'bool', value: found.on }, { onSaved: () => refresh() });
+  return [el('div', { class: 'bar mx-switch mx-couch' }, [el('span', { class: 'cell-quiet', text: humanLabel(found.key) }), switched.node, switched.say])];
+}
+
 /** Settings for this marathon: the thread's switches in the thread's order and words. */
 function settingsCard(marathon, say) {
-  const node = card(SETTINGS_FOLD, (marathon.controls || []).flatMap((one) => switchRow(marathon, say, one)));
+  const node = card(SETTINGS_FOLD, (marathon.controls || []).flatMap((one) => [
+    ...switchRow(marathon, say, one),
+    ...(one.action === 'hostannounce' ? couchRow(marathon) : []),
+  ]));
   node.classList.add('mx-settings');
   return node;
 }

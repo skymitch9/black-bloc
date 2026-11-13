@@ -65,14 +65,15 @@ async def sync_posts(cog: Any, guild: Any, marathon: Any) -> None:
     target, _why = await cog._place(guild, marathon)
     if target is None:
         return
-    from .marathon_announce import state_lines
+    from .marathon_announce import posted_people, state_lines
     from .marathon_public import button_of
 
     words = words_for(bot, guild.id)
     login = await channel_login(bot, marathon)
     silent = optouts.silenced(bot.db, guild.id)
     for row in rows:
-        if not mrp.post_id(row) and ma.all_silent(row, silent):
+        people = posted_people(bot, guild.id, marathon, row) or None
+        if not mrp.post_id(row) and (people is None or ma.all_silent(row, silent)):
             continue
         text = mrp.post_text(
             row,
@@ -80,8 +81,9 @@ async def sync_posts(cog: Any, guild: Any, marathon: Any) -> None:
             words,
             template=words[MARATHON_RUNNER_POST_TEMPLATE_KEY],
             default=said_default(MARATHON_RUNNER_POST_TEMPLATE_KEY),
-            url=mt.run_url(row, login, marathon["schedule_url"]),
+            url=mt.run_url(row, login, marathon["schedule_url"], people=people),
             unlisted=words[MARATHON_RUNNER_POST_UNLISTED_KEY],
+            people=people,
         ).text
         said = "\n".join([text, *state_lines(bot, guild, marathon, row)])
         text = said[: mt.MESSAGE_LIMIT]

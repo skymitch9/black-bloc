@@ -68,6 +68,7 @@ BAD_MENTION_CODE = "bad_mention"
 
 RUNNER = "runner"
 HOST = "host"
+COUCH = "couch"
 
 WHY_RUNNERS_OFF = "runners_off"
 WHY_MARATHON = "opted_out"
@@ -75,7 +76,16 @@ WHY_RUN = "run"
 WHY_DEFAULT = "default"
 WHY_HOSTS_OFF = "hosts_off"
 WHY_ANNOUNCE = "announce_optout"
-WHYS = (WHY_RUNNERS_OFF, WHY_MARATHON, WHY_RUN, WHY_DEFAULT, WHY_HOSTS_OFF, WHY_ANNOUNCE)
+WHY_COUCH_OFF = "couch_off"
+WHYS = (
+    WHY_RUNNERS_OFF,
+    WHY_MARATHON,
+    WHY_RUN,
+    WHY_DEFAULT,
+    WHY_HOSTS_OFF,
+    WHY_ANNOUNCE,
+    WHY_COUCH_OFF,
+)
 
 NAMED = "public_people"
 GONE = "not_on_run"
@@ -85,6 +95,7 @@ BECAUSE = {
     WHY_HOSTS_OFF: "hosts_off",
     WHY_RUN: "run_answer",
     WHY_RUNNERS_OFF: "runners_off",
+    WHY_COUCH_OFF: "couch",
 }
 
 MOVES = (IN, OUT, DEFAULT, PLAIN, MENTION)
@@ -118,6 +129,7 @@ class Policy(NamedTuple):
     mentions: Any = None
     mention_default: bool = True
     silent: frozenset[int] = frozenset()
+    couch_on: bool = False
 
     def plain(self, user_id: Any) -> bool:
         answer = (self.mentions or {}).get(int(user_id))
@@ -157,10 +169,10 @@ def decide(
     role: str,
     hosts_on: bool,
     silent: bool = False,
+    couch_on: bool = False,
 ) -> Verdict:
     """Whether one person is announced for one run: the run's own answer, then their
-    marathon-wide opt-out, then the switch for their part as the default (Runner or Host
-    announcements, neither over the other)."""
+    marathon-wide opt-out, then the switch for their part as the default."""
     if silent:
         return Verdict(False, WHY_ANNOUNCE)
     if answer == IN:
@@ -171,6 +183,8 @@ def decide(
         return Verdict(False, WHY_MARATHON)
     if role == HOST:
         return Verdict(bool(hosts_on), WHY_DEFAULT if hosts_on else WHY_HOSTS_OFF)
+    if role == COUCH:
+        return Verdict(bool(couch_on), WHY_DEFAULT if couch_on else WHY_COUCH_OFF)
     return Verdict(bool(runners_on), WHY_DEFAULT if runners_on else WHY_RUNNERS_OFF)
 
 
@@ -260,6 +274,7 @@ def policy(
     hosts_default: Any,
     mention_default: Any,
     silent: Any = frozenset(),
+    couch_default: Any = False,
 ) -> Policy:
     return Policy(
         runners_on=announces(marathon, runners_default),
@@ -268,6 +283,7 @@ def policy(
         mentions=mentions(marathon),
         mention_default=bool(mention_default),
         silent=frozenset(int(one) for one in silent or ()),
+        couch_on=bool(couch_default),
     )
 
 
@@ -285,7 +301,12 @@ def kept(people: Any, opted: Any) -> list[dict[str, Any]]:
 
 
 def role_of(person: Any) -> str:
-    return HOST if person.get("part") == mt.HOST else RUNNER
+    part = person.get("part")
+    if part == mt.RUNNER:
+        return RUNNER
+    if part == mt.HOST:
+        return HOST
+    return COUCH
 
 
 def baf_on(row: Any) -> list[dict[str, Any]]:
@@ -309,7 +330,17 @@ def verdict(found: Policy, row: Any, user_id: Any, role: str) -> Verdict:
         role=role,
         hosts_on=found.hosts_on,
         silent=int(user_id) in found.silent,
+        couch_on=found.couch_on,
     )
+
+
+def posted(row: Any, found: Policy) -> list[dict[str, Any]]:
+    """The people of ours a run's posts stand for: everyone but a couch the decision leaves out."""
+    return [
+        dict(one)
+        for one in mt.ours(mt.people_of(row))
+        if role_of(one) != COUCH or verdict(found, row, one["user_id"], COUCH).yes
+    ]
 
 
 def runs_it(row: Any, user_id: Any) -> bool:
@@ -326,6 +357,7 @@ def host_verdict(found: Policy, row: Any, user_id: Any) -> Verdict:
         role=HOST,
         hosts_on=found.hosts_on,
         silent=int(user_id) in found.silent,
+        couch_on=found.couch_on,
     )
 
 
@@ -388,7 +420,7 @@ def still_named(
     name; someone a move was aimed at is weighed by the real host switch; anyone it does not
     name joins only when the decision announces them. No record reads as naming everyone."""
     held = found._replace(runners_on=True)
-    carried = held._replace(hosts_on=True)
+    carried = held._replace(hosts_on=True, couch_on=True)
     was = None if recorded is None else {int(one) for one in recorded}
     aimed = {int(one) for one in moved or ()}
     kept = []
@@ -635,6 +667,7 @@ def state_lines(row: Any, found: Policy, words: dict[str, str], *, only: Any = N
 
 __all__ = [
     "ANSWERS",
+    "COUCH",
     "BAD_MENTION",
     "BAD_OPT",
     "BAD_RUN",
@@ -702,6 +735,7 @@ __all__ = [
     "held_role",
     "option_of",
     "policy",
+    "posted",
     "role_of",
     "run_answers",
     "run_move",

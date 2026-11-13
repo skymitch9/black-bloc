@@ -12,6 +12,7 @@ import discord
 from discord.ext import commands, tasks
 
 from ... import marathon as mt
+from ... import marathon_announce as mann
 from ... import marathon_archive as ma
 from ... import marathon_damping as md
 from ... import marathon_events as me
@@ -2635,11 +2636,14 @@ class Marathons(commands.Cog):
 
     async def _edit_done(self, guild: Any, marathon: Any, row: Any) -> bool:
         words = words_for(self.bot, guild.id)
-        url = mt.run_url(row, await channel_login(self.bot, marathon), marathon["schedule_url"])
+        people = self.posted(guild, marathon, row) or None
+        url = mt.run_url(
+            row, await channel_login(self.bot, marathon), marathon["schedule_url"], people=people
+        )
         text = mt.render(
             words[MARATHON_DONE_TEMPLATE_KEY],
             said_default(MARATHON_DONE_TEMPLATE_KEY),
-            **mt.run_fields(row, marathon, words, url=url),
+            **mt.run_fields(row, marathon, words, url=url, people=people),
         ).text
         message = await self._fetch(guild, row["shout_channel_id"], row["shout_message_id"])
         if message is None:
@@ -2663,7 +2667,9 @@ class Marathons(commands.Cog):
         marks = mt.reminder_marks(store.get(guild.id, MARATHON_REMINDER_MINUTES_KEY), ping_mark)
         stale_after = int(store.get(guild.id, MARATHON_REMINDER_STALE_KEY))
         for row in await runs_of(self.bot.db, marathon["id"]):
-            if not mt.is_ours(row) or (only is not None and row["id"] != only):
+            if only is not None and row["id"] != only:
+                continue
+            if not self.posted(guild, marathon, row):
                 continue
             mark, skipped = mt.due_marks(row, marks, now, stale_minutes=stale_after)
             if mark is None and not skipped:
@@ -2691,15 +2697,23 @@ class Marathons(commands.Cog):
                 )
                 await update_run(self.bot.db, row["id"], reminder_posts=mrem.dump(posts))
 
+    def posted(self, guild: Any, marathon: Any, row: Any) -> list[dict[str, Any]]:
+        from .marathon_announce import posted_people
+
+        return posted_people(self.bot, guild.id, marathon, row)
+
     async def reminder_words(
         self, guild: Any, marathon: Any, row: Any, *, key: str = MARATHON_REMINDER_TEMPLATE_KEY
     ) -> tuple[str, str]:
         """(the staff copy's words, the link they carry)."""
         words = words_for(self.bot, guild.id)
         login = await channel_login(self.bot, marathon)
-        url = mt.run_url(row, login, marathon["schedule_url"])
+        people = self.posted(guild, marathon, row) or None
+        url = mt.run_url(row, login, marathon["schedule_url"], people=people)
         text = mt.render(
-            words[key], said_default(key), **mt.run_fields(row, marathon, words, url=url)
+            words[key],
+            said_default(key),
+            **mt.run_fields(row, marathon, words, url=url, people=people),
         ).text
         return (text, url)
 
@@ -2771,7 +2785,7 @@ class Marathons(commands.Cog):
         if not mp.pings_role(marathon):
             return []
         found: list[int] = []
-        for member_id in mt.member_ids(row):
+        for member_id in (int(one["user_id"]) for one in self.posted(guild, marathon, row)):
             role_id = await pings.announced_fan_role(self.bot, guild, member_id)
             if role_id:
                 found.append(int(role_id))
@@ -2802,16 +2816,26 @@ class Marathons(commands.Cog):
 
         if not force and not mi.is_tracked(marathon):
             return None
+        people = self.posted(guild, marathon, row) or None
+        if not force and people is None:
+            await log_action(
+                self.bot,
+                guild,
+                "marathon.shout_skipped",
+                details=self.run_details(marathon, row)
+                | {"because": mann.BECAUSE[mann.WHY_COUCH_OFF]},
+            )
+            return None
         await auto_highlight(self, guild, marathon, row)
         if not force and await self.said_by_its_event(guild, marathon, row):
             return None
         words = words_for(self.bot, guild.id)
         login = await channel_login(self.bot, marathon)
-        url = mt.run_url(row, login, marathon["schedule_url"])
+        url = mt.run_url(row, login, marathon["schedule_url"], people=people)
         text = mt.render(
             words[MARATHON_LIVE_TEMPLATE_KEY],
             said_default(MARATHON_LIVE_TEMPLATE_KEY),
-            **mt.run_fields(row, marathon, words, url=url),
+            **mt.run_fields(row, marathon, words, url=url, people=people),
         ).text
         roles: list[int] = []
         if self.bot.store.get(guild.id, MARATHON_LIVE_PINGS_KEY):

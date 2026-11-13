@@ -119,3 +119,11 @@ def test_match_people_reads_a_schedule_run_s_people_too():
     run = Run("1", 1, "G", "G", "Any%", START, None, 60, (Person("Jr", "Jr", "runner"),))
     fixed = [{"marathon_id": None, "runner_name": "jr", "user_id": 5, "twitch_login": "junior_sm"}]
     assert mt.match_people(run.people, {}, fixed)[0]["sheet_login"] == "Jr"
+
+
+def test_a_couch_only_run_is_not_a_runner_run_and_a_runner_makes_one():
+    couch = {"name": "PopNoTarts", "login": None, "part": "commentator", "user_id": 11}
+    assert not mh.is_runner_run(a_row(9, START, START, [couch]))
+    assert not mh.is_runner_run(a_row(9, START, START, [couch, HOST]))
+    assert mh.is_runner_run(a_row(9, START, START, [couch, RUNNER]))
+    assert not mh.is_runner_run(a_row(9, START, START, [RUNNER | {"user_id": None}]))

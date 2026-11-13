@@ -338,3 +338,26 @@ def test_a_staff_start_anchors_a_sheet_with_gaps_and_its_day_keeps_them():
     rows = [one(1, 0, 60), one(2, 70, 60, staff_start_at=at(90)), one(3, 140, 30)]
     found = {row.row["id"]: row.starts_at for row in mo.retimed(rows)}
     assert found == {2: at(90), 3: at(160)}
+
+
+def test_the_overlay_keeps_only_runners_from_the_schedule_and_the_couch_from_the_sheet():
+    run = replace(
+        gdqueer()[0],
+        people=(
+            Person("Sky", "skyruns", "runner"),
+            Person("Mo", None, "host"),
+            Person("PopNoTarts", None, "commentator"),
+            Person("Talent", None, "interviewer"),
+        ),
+    )
+    hosted = mo.Slot(utc("2026-10-03T17:00:00"), 60, "G", "C", (), ("Sheet Host",), ("Kat",))
+    assert [(one.name, one.part) for one in mo._people(run, hosted)] == [
+        ("Sky", "runner"),
+        ("Sheet Host", "host"),
+        ("Kat", "commentator"),
+    ]
+    bare = mo.Slot(utc("2026-10-03T17:00:00"), 60, "G", "C")
+    assert [(one.name, one.part) for one in mo._people(run, bare)] == [
+        ("Sky", "runner"),
+        ("Mo", "host"),
+    ]

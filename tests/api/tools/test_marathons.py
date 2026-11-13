@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import discord
@@ -1782,3 +1783,51 @@ async def test_staff_set_a_start_and_shift_the_day_from_the_tracker_page(
     assert row["from"] == "staff" and row["can"]["set_start"] and row["can"]["shift"]
     assert page["labels"] == {"set_start": "Set start…", "shift": "Shift from here…"}
     assert any(one["kind"] == "day_shifted" for one in page["moves"])
+
+
+async def test_a_stored_couch_row_reads_as_couch_not_announced_and_staff_can_move_it(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    first = client.get(f"/api/marathons/{marathon_id}").json()
+    assert first["couch_announcements"] == {
+        "own": None,
+        "on": False,
+        "default": False,
+        "key": "marathon_couch_announcements",
+    }
+    run_id = next(one["id"] for one in first["run_list"] if one["game"] == "Blaster Master")
+    stored = [{"name": "PopNoTarts", "login": None, "part": "commentator", "user_id": 77}]
+    await web.db.conn.execute(
+        "UPDATE marathon_runs SET people = ? WHERE id = ?", (json.dumps(stored), run_id)
+    )
+    await web.db.conn.commit()
+
+    def couch():
+        detail = client.get(f"/api/marathons/{marathon_id}").json()
+        run = next(one for one in detail["run_list"] if one["id"] == run_id)
+        return run, run["people"][0]["announce"]
+
+    run, shown = couch()
+    assert (shown["role"], shown["announced"], shown["why"], shown["move"]) == (
+        "couch",
+        False,
+        "couch_off",
+        "in",
+    )
+    assert shown["said"] == "PopNoTarts: not announced for this run — couch announcements are off"
+    assert run["ours"] is True and run["reminders_sent"] == []
+    path = f"/api/marathons/{marathon_id}/runs/{run_id}/people/77/announce"
+    assert client.post(path, json={"to": "in"}).status_code == 200
+    _, shown = couch()
+    assert (shown["announced"], shown["why"], shown["move"]) == (True, "run", "default")
+    assert client.post(path, json={"to": "default"}).status_code == 200
+    _, shown = couch()
+    assert (shown["announced"], shown["why"]) == (False, "couch_off")
+
+    await web.store.set(wf.GUILD_ID, "marathon_couch_announcements", True)
+    _, shown = couch()
+    assert (shown["announced"], shown["why"]) == (True, "default")
+    on = client.get(f"/api/marathons/{marathon_id}").json()["couch_announcements"]
+    assert on["on"] is True

@@ -31,6 +31,7 @@ from ...settings_store import (
     MARATHON_ANNOUNCE_STATE_NO_KEY,
     MARATHON_ANNOUNCE_STATE_PLAIN_KEY,
     MARATHON_ANNOUNCE_STATE_YES_KEY,
+    MARATHON_ANNOUNCE_WHY_COUCH_OFF_KEY,
     MARATHON_ANNOUNCE_WHY_DEFAULT_KEY,
     MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY,
     MARATHON_ANNOUNCE_WHY_MARATHON_KEY,
@@ -47,6 +48,7 @@ from ...settings_store import (
     MARATHON_BAF_OVERRIDE_REASON_TITLE_KEY,
     MARATHON_BAF_OVERRIDE_SET_SAID_KEY,
     MARATHON_BAF_OVERRIDE_WORD_KEY,
+    MARATHON_COUCH_ANNOUNCEMENTS_KEY,
     MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY,
     MARATHON_MENTION_ON_SAID_KEY,
     MARATHON_MENTION_PEOPLE_KEY,
@@ -87,6 +89,7 @@ STATE_KEYS = {
     ma.WHY_ANNOUNCE: MARATHON_ANNOUNCE_WHY_OPTOUT_KEY,
     ma.WHY_RUNNERS_OFF: MARATHON_ANNOUNCE_WHY_OFF_KEY,
     ma.WHY_HOSTS_OFF: MARATHON_ANNOUNCE_WHY_HOSTS_OFF_KEY,
+    ma.WHY_COUCH_OFF: MARATHON_ANNOUNCE_WHY_COUCH_OFF_KEY,
 }
 RUN_SAID = {
     ma.IN: MARATHON_ANNOUNCE_RUN_IN_SAID_KEY,
@@ -124,7 +127,12 @@ def policy_of(bot: Any, guild_id: int, marathon: Any) -> ma.Policy:
         hosts_default=bot.store.get(guild_id, MARATHON_HOST_ANNOUNCEMENTS_DEFAULT_KEY),
         mention_default=bot.store.get(guild_id, MARATHON_MENTION_PEOPLE_KEY),
         silent=optouts.silenced(getattr(bot, "db", None), guild_id),
+        couch_default=bot.store.get(guild_id, MARATHON_COUCH_ANNOUNCEMENTS_KEY),
     )
+
+
+def posted_people(bot: Any, guild_id: int, marathon: Any, row: Any) -> list[dict[str, Any]]:
+    return ma.posted(row, policy_of(bot, guild_id, marathon))
 
 
 def words(bot: Any, guild_id: int, key: str, **fields: Any) -> str:
@@ -718,6 +726,7 @@ __all__ = [
     "people_for",
     "person_state",
     "policy_of",
+    "posted_people",
     "press",
     "set_mention",
     "set_opt_out",
