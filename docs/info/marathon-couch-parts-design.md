@@ -90,6 +90,13 @@ follow-up build reads that feed, not a runs column. Tracked in `TODO.md` 2026-11
   that staff-edited templates would not contain. The couch's own fan role is not pinged.
 - **Staff final say kept:** a run's own *Announce* for a couch beats the switch (and *default* takes it back); *Shout it now*
   (forced) still posts for a couch-only run; `shoutable` is unchanged (it only enables that forced move).
-- **Found, not changed:** `marathon_untracked_alert.parts_of` / `who_of` label a matched commentator "runner" in the
-  staff-only untracked alert (a fourth "not host, so runner" test). It posts to staff, never publicly; fixing the label needs a
-  third word key — left for the conductor.
+- **NOT fixed, the fourth "not host, so runner" test:** `marathon_untracked_alert.baf_of` / `parts_of` / `who_of` count and
+  label a matched commentator as a runner in the staff-only untracked alert. Making it positive on RUNNER would either drop the
+  couch from the alert (a staff NOTICE, which §3 says a couch should still get) or need a third word key
+  (`marathon_untracked_alert_couch`) with its mock row, label and fixtures — not done inside today's 14:42 window. It never posts
+  publicly. Owner/conductor call.
+- **Posts already up when this deploys:** a pinned runner thread post for a couch-only run is unpinned on the next tick
+  (`because: couch`) and stays in the thread, edited with the *couch announcements are off* state line; reminder copies already
+  sent keep following retimes; a public highlight already up is carried (`couch_on` is carried like `hosts_on`). Nothing is
+  deleted. Live note: AshSaidHi's *Mighty Morphin Power Rangers* 1440 mark falls 2026-11-13 13:24 Phoenix — a deploy after that
+  finds that reminder already sent.
