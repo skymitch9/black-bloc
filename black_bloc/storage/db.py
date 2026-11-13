@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 106
+SCHEMA_VERSION = 107
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -72,6 +72,16 @@ CREATE TABLE IF NOT EXISTS role_menus (
     approval     INTEGER NOT NULL DEFAULT 0,
     expires_days INTEGER,
     retry_days   INTEGER NOT NULL DEFAULT 7,
+    ends_source      TEXT    NOT NULL DEFAULT 'none',
+    ends_marathon_id INTEGER,
+    buffer_days      INTEGER,
+    ends_at          TEXT,
+    ends_told_at     TEXT,
+    ends_set_by      INTEGER,
+    ends_set_at      TEXT,
+    ended_at         TEXT,
+    end_passes       INTEGER NOT NULL DEFAULT 0,
+    end_failures     TEXT,
     UNIQUE (guild_id, name)
 );
 
@@ -1885,6 +1895,16 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tournaments", "picks_points", "TEXT"),
     ("tournaments", "picks_on", "INTEGER NOT NULL DEFAULT 1"),
     ("tournaments", "picks_locked_at", "TEXT"),
+    ("role_menus", "ends_source", "TEXT NOT NULL DEFAULT 'none'"),
+    ("role_menus", "ends_marathon_id", "INTEGER"),
+    ("role_menus", "buffer_days", "INTEGER"),
+    ("role_menus", "ends_at", "TEXT"),
+    ("role_menus", "ends_told_at", "TEXT"),
+    ("role_menus", "ends_set_by", "INTEGER"),
+    ("role_menus", "ends_set_at", "TEXT"),
+    ("role_menus", "ended_at", "TEXT"),
+    ("role_menus", "end_passes", "INTEGER NOT NULL DEFAULT 0"),
+    ("role_menus", "end_failures", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {
