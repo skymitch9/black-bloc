@@ -1427,7 +1427,8 @@ async def test_a_couch_only_run_posts_nothing_anywhere_at_any_mark_while_the_swi
         "marathon.run_event_made",
     ):
         assert kind not in logged, kind
-    assert "couch" in await because_logged(bot, "marathon.shout_skipped")
+    await walk(bot, cog, marathon, [1505, 1520])
+    assert (await because_logged(bot, "marathon.shout_skipped")).count("couch") == 1
     row = await run_named(bot, marathon, "Yakuza")
     assert mt.marks_of(row) == [] and row["event_id"] is None and not row["shout_message_id"]
     assert mt.is_ours(row)
@@ -1477,3 +1478,20 @@ async def test_a_runner_and_a_couch_post_for_the_runner_and_never_ping_the_couch
     assert f"<@{SKY}>" not in text and f"<@&{fan_role}>" not in text
     row = await run_named(bot, marathon, "Yakuza")
     assert sorted(mt.marks_of(row)) == [15, 120, 1440]
+
+
+async def test_a_couch_only_runner_post_already_pinned_comes_off_when_the_switch_is_off(bot, cog):
+    await bot.store.set(GUILD, "marathon_runner_posts", True)
+    await bot.store.set(GUILD, "marathon_runner_posts_pinned", True)
+    marathon, _fan_role = await loud_show(bot, cog, COUCH_ONLY)
+    await bot.store.set(GUILD, "marathon_couch_announcements", True)
+    await tick_at(bot, cog, marathon, 1)
+    row = await run_named(bot, marathon, "Yakuza")
+    assert row["post_message_id"] and row["post_pinned"]
+
+    await bot.store.set(GUILD, "marathon_couch_announcements", False)
+    await cog.tick_marathon(bot.guild, await fresh(bot, marathon))
+
+    row = await run_named(bot, marathon, "Yakuza")
+    assert not row["post_pinned"]
+    assert "couch" in await because_logged(bot, "marathon.runner_post_unpinned")

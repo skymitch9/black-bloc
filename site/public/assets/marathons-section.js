@@ -1006,7 +1006,7 @@ function switchRow(marathon, say, control) {
 function couchRow(marathon) {
   const found = marathon.couch_announcements;
   if (!found || !found.key) return [];
-  const switched = modeSwitch({ key: found.key, type: 'bool', value: found.on }, { onSaved: () => refresh() });
+  const switched = modeSwitch({ key: found.key, type: 'bool', value: found.on }, { onSaved: () => after(marathon, { ok: true }) });
   return [el('div', { class: 'bar mx-switch mx-couch' }, [el('span', { class: 'cell-quiet', text: humanLabel(found.key) }), switched.node, switched.say])];
 }
 

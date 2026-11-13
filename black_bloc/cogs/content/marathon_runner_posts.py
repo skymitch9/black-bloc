@@ -294,9 +294,13 @@ async def unpin_due(cog: Any, guild: Any, marathon: Any) -> None:
     rows = [one for one in await runs_of(cog.bot.db, marathon["id"]) if mrp.is_pinned(one)]
     if not rows:
         return
+    from .marathon_announce import posted_people
+
     now = cog.clock()
     over = mt.board_due_off(marathon, now)
     for row in rows:
         because = mrp.BECAUSE_MARATHON_OVER if over else mrp.unpin_because(row, now)
+        if because is None and not posted_people(cog.bot, guild.id, marathon, row):
+            because = mrp.BECAUSE_COUCH
         if because is not None:
             await unpin_one(cog, guild, marathon, row, because)
