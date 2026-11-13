@@ -2225,3 +2225,201 @@ async def test_the_tick_counts_menus_due_ended_and_failures_for_the_health_tab(b
 
     assert cog.loop_counts("_expiry_loop") == "menus due 1 · ended 1 · failures 0"
     assert cog.loop_counts("_other_loop") is None
+
+
+# --- /rolemenu's Set the end…, End it now, Delete, the audit and the retired doors (1b) ---------
+
+
+async def btb_card(bot, db, lead, *, wearers=((900, (10, 11)), (901, (10,)))):
+    menu_id = await create_menu(db, GUILD, "btb-2027", "Back to Black 2027", None, "staff")
+    await add_option(db, menu_id, 10, "Runner")
+    await add_option(db, menu_id, 11, "Host")
+    people = [FakeMember(bot.guild, user_id=uid, roles=roles) for uid, roles in wearers]
+    return menu_id, people, await open_a_menu(bot, lead, "btb-2027")
+
+
+async def test_set_the_end_picks_a_marathon_and_the_card_reads_its_end(bot, db, lead):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _, interaction = await btb_card(bot, db, lead)
+
+    await press(interaction, "Set the end…")
+    assert labels(interaction.view) == ["Type a date…", "Back", "Refresh"]
+    pick = picker(interaction.view, "Ends with a marathon…")
+    assert [one.label for one in pick.options] == ["Back to Black 2027 · ends 2027-02-27"]
+    await choose(interaction, "Ends with a marathon…", [str(marathon_id)])
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_source"] == "marathon" and menu["ends_at"] == "2027-03-01T05:00:00+00:00"
+    assert "(Back to Black 2027 + 1 d)" in interaction.body
+    assert "**btb-2027**'s roles come off" in interaction.sent
+    assert "Set by <@1>" in interaction.body
+    [row] = await details_of(db, "role_menu.end_set")
+    assert row["source"] == "marathon" and row["via"] == "discord"
+
+
+async def test_type_a_date_sets_the_end_and_a_past_or_garbled_date_is_refused(bot, db, lead):
+    menu_id, _, interaction = await btb_card(bot, db, lead)
+    await press(interaction, "Set the end…")
+
+    for typed, said in (("2020-01-01", "has already gone by"), ("soon", "is not a date")):
+        await press(interaction, "Type a date…")
+        modal = interaction.response.modals[-1]
+        modal.typed._value = typed
+        await modal.on_submit(interaction)
+        assert said in interaction.sent
+        assert (await menu_row(db, menu_id))["ends_source"] == "none"
+
+    await press(interaction, "Type a date…")
+    modal = interaction.response.modals[-1]
+    assert modal.title == "The day its roles come off"
+    modal.typed._value = "2099-02-28"
+    await modal.on_submit(interaction)
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_source"] == "date" and menu["ends_at"] == "2099-03-01T06:59:00+00:00"
+    assert "End it now" in labels(interaction.view)
+
+
+async def test_buffer_renders_only_for_a_marathon_and_a_blank_one_is_the_default(bot, db, lead):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _, interaction = await btb_card(bot, db, lead)
+    await press(interaction, "Set the end…")
+    await choose(interaction, "Ends with a marathon…", [str(marathon_id)])
+    await press(interaction, "Set the end…")
+    assert labels(interaction.view) == ["Type a date…", "Buffer…", "No end", "Back", "Refresh"]
+
+    await press(interaction, "Buffer…")
+    modal = interaction.response.modals[-1]
+    modal.typed._value = "x"
+    await modal.on_submit(interaction)
+    assert "is not a whole number of days" in interaction.sent
+
+    modal.typed._value = "0"
+    await modal.on_submit(interaction)
+    assert (await menu_row(db, menu_id))["ends_at"] == "2027-02-28T05:00:00+00:00"
+
+    modal.typed._value = ""
+    await modal.on_submit(interaction)
+    menu = await menu_row(db, menu_id)
+    assert menu["buffer_days"] is None and menu["ends_at"] == "2027-03-01T05:00:00+00:00"
+
+
+async def test_no_end_asks_first_then_clears_the_end(bot, db, lead):
+    menu_id = await end_menu_with(db, ends_at=LATER, name="btb-2027")
+    interaction = await open_a_menu(bot, lead, "btb-2027")
+    await press(interaction, "Set the end…")
+
+    await press(interaction, "No end")
+    assert "Clear **btb-2027**'s end?" in str(interaction.embed.description)
+    assert (await menu_row(db, menu_id))["ends_source"] == "date"
+
+    await press(interaction, "Yes, clear it")
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_source"] == "none" and menu["ends_at"] is None
+    assert "**btb-2027** has no end." in interaction.sent
+
+
+async def test_end_it_now_names_the_counts_then_takes_every_role_off(bot, db, lead):
+    menu_id, (first, second), interaction = await btb_card(bot, db, lead)
+
+    await press(interaction, "End it now")
+    assert "Take 2 role(s) off 2 people now?" in str(interaction.embed.description)
+    assert first.edits == []
+
+    await press(interaction, "Yes, take them off")
+
+    assert first.edits == [[]] and second.edits == [[]]
+    assert (await menu_row(db, menu_id))["ended_at"]
+    assert "**btb-2027** ended — 2 role(s) taken off 2 people. 0 failure(s)." in interaction.sent
+    assert "2 people · 0 failure(s)" in interaction.body
+
+
+async def test_end_it_now_in_test_mode_is_the_guards_sentence_and_nothing_moves(bot, db, lead):
+    menu_id, (first, _), interaction = await btb_card(bot, db, lead)
+    bot.guard = FakeGuard()
+
+    await press(interaction, "End it now")
+    await press(interaction, "Yes, take them off")
+
+    assert interaction.sent == "test mode"
+    assert first.edits == [] and (await menu_row(db, menu_id))["ended_at"] is None
+
+
+async def test_use_the_earlier_end_renders_while_held_and_takes_it(bot, db, lead):
+    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
+    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
+    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
+    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
+
+    interaction = await open_a_menu(bot, lead, "btb-2027")
+    assert "Held: its marathon now ends earlier" in interaction.body
+    await press(interaction, "Use the earlier end")
+
+    menu = await menu_row(db, menu_id)
+    assert menu["ends_at"] == "2027-02-21T05:00:00+00:00" and menu["ends_held_at"] is None
+    assert "Use the earlier end" not in labels(interaction.view)
+
+
+async def test_delete_is_refused_while_an_end_is_to_come_and_people_wear_its_roles(bot, db, lead):
+    menu_id = await end_menu_with(db, ends_at=LATER, name="btb-2027")
+    FakeMember(bot.guild, user_id=900, roles=(10,))
+    interaction = await open_a_menu(bot, lead, "btb-2027")
+
+    await press(interaction, "Delete it")
+
+    assert "still ends" in interaction.sent and "**End it now** first" in interaction.sent
+    assert await menu_row(db, menu_id) is not None
+    assert "Yes, delete it" not in labels(interaction.view)
+
+
+async def test_the_audit_lists_wearers_of_a_menu_role_with_its_end_and_grants_for_the_rest(
+    bot, db, lead
+):
+    await end_menu_with(db, ends_at=LATER, name="btb-2027", roles=(10,))
+    FakeMember(bot.guild, user_id=900, roles=(10,))
+    FakeMember(bot.guild, user_id=901, roles=(77,))
+    await grants.add_grant(db, GUILD, 901, 77, "staff", until=grants.expires_at(3))
+    await grants.add_grant(db, GUILD, 902, 10, "staff", until=LATER)
+
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+
+    body = interaction.body
+    assert "**2** timed role(s) running" in body
+    assert "<@901> · <@&77>" in body and "<@900> · <@&10>" in body
+    assert "<@902>" not in body
+    assert body.index("<@901>") < body.index("<@900>")
+    assert len(picker(interaction.view, menus.GRANT_PICK).options) == 1
+
+
+async def test_a_posted_panel_from_before_answers_the_retired_sentence_and_changes_nothing(
+    bot, db
+):
+    menu_id = await self_serve_menu(db)
+    member = FakeMember(bot.guild, user_id=900, roles=(1,))
+    interaction = FakeInteraction(bot, member)
+    select = cog_module.RoleMenuSelect(menu_id, await get_options(db, menu_id), "multiple")
+    select._values = ["2"]
+
+    await select.callback(interaction)
+    retired = cog_module.RetiredMenuPick(menu_id)
+    await retired.callback(interaction)
+
+    assert interaction.said == ["Roles are picked in Discord's own Channels & Roles now."] * 2
+    assert member.edits == [] and await action_kinds(db) == []
+    assert re.fullmatch(cog_module.custom_id_template(), cog_module.custom_id(menu_id))
+
+
+async def test_nothing_re_registers_a_posted_panel_on_boot(bot, db):
+    menu_id = await self_serve_menu(db)
+    await set_message(db, menu_id, TEST_CHANNEL, 5000)
+    added = []
+    bot.add_dynamic_items = lambda *items: added.extend(items)
+
+    cog = RoleMenus(bot)
+    cog._expiry_loop.start = lambda: None
+    await cog.cog_load()
+
+    assert bot.views == []
+    assert cog_module.RetiredMenuPick in added and RequestButton in added
