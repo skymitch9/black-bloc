@@ -480,6 +480,7 @@ export const LABELS = {
   rolemenu_ended_text: 'The notice when a menu ends and its roles come off',
   rolemenu_end_failure_line: 'The line for someone who still wears an ended role',
   rolemenu_ended_dm: 'The DM when a menu ends and its roles come off',
+  rolemenu_end_not_known_text: 'What a menu’s end reads before its marathon has dates',
   golive_cooldown_minutes: 'How long before the same person is announced again',
   golive_ping_role_id: 'Who is pinged when someone goes live',
   golive_max_session_hours: 'How long a stream may run before it is closed',

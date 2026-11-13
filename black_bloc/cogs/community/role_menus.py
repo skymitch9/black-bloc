@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 import discord
@@ -14,7 +17,7 @@ from ... import rolemenus as menus
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
-from ...golive import now_iso
+from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
 from ...panels import (
@@ -30,7 +33,21 @@ from ...panels import (
     still_staff,
 )
 from ...panels import option_label as select_label
-from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY, require_staff
+from ...settings_store import (
+    DB_UNAVAILABLE,
+    GUILD_ONLY,
+    ROLEMENU_END_BUFFER_KEY,
+    ROLEMENU_END_FAILURE_LINE_KEY,
+    ROLEMENU_END_MOVED_MINUTES_KEY,
+    ROLEMENU_END_MOVED_NOTICE_KEY,
+    ROLEMENU_END_MOVED_TEXT_KEY,
+    ROLEMENU_END_NOT_KNOWN_KEY,
+    ROLEMENU_END_UNBOUND_TEXT_KEY,
+    ROLEMENU_ENDED_DM_KEY,
+    ROLEMENU_ENDED_NOTICE_KEY,
+    ROLEMENU_ENDED_TEXT_KEY,
+    require_staff,
+)
 
 log = logging.getLogger(__name__)
 
@@ -447,6 +464,80 @@ async def unposted_menus(db: Any) -> list[Any]:
 
 async def get_menu_by_id(db: Any, menu_id: int) -> Any:
     cur = await db.conn.execute("SELECT * FROM role_menus WHERE id = ?", (menu_id,))
+    return await cur.fetchone()
+
+
+async def menus_still_to_end(db: Any) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM role_menus WHERE ends_at IS NOT NULL AND ended_at IS NULL ORDER BY id"
+    )
+    return list(await cur.fetchall())
+
+
+async def menus_bound_to(db: Any, guild_id: int, marathon_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM role_menus WHERE guild_id = ? AND ends_source = ? AND ends_marathon_id = ? "
+        "ORDER BY id",
+        (int(guild_id), menus.MARATHON_END, int(marathon_id)),
+    )
+    return list(await cur.fetchall())
+
+
+async def store_menu_end(
+    db: Any,
+    menu_id: int,
+    *,
+    source: str,
+    marathon_id: Any,
+    buffer_days: Any,
+    ends_at: Any,
+    by: Any,
+) -> None:
+    """A new end starts the menu over: nothing has ended, no pass has run, staff know the date."""
+    await db.conn.execute(
+        "UPDATE role_menus SET ends_source = ?, ends_marathon_id = ?, buffer_days = ?, "
+        "ends_at = ?, ends_told_at = ?, ends_set_by = ?, ends_set_at = ?, ended_at = NULL, "
+        "end_passes = 0, end_failures = NULL WHERE id = ?",
+        (source, marathon_id, buffer_days, ends_at, ends_at, by, now_iso(), int(menu_id)),
+    )
+    await db.conn.commit()
+
+
+async def restamp_menu_end(db: Any, menu_id: int, ends_at: Any, *, told: bool) -> None:
+    await db.conn.execute(
+        "UPDATE role_menus SET ends_at = ?, "
+        "ends_told_at = CASE WHEN ? THEN ? ELSE ends_told_at END WHERE id = ?",
+        (ends_at, int(told), ends_at, int(menu_id)),
+    )
+    await db.conn.commit()
+
+
+async def unbind_menu_end(db: Any, menu_id: int, *, keeps_a_date: bool) -> None:
+    await db.conn.execute(
+        "UPDATE role_menus SET ends_source = ?, ends_marathon_id = NULL WHERE id = ?",
+        (menus.DATE_END if keeps_a_date else menus.NO_END, int(menu_id)),
+    )
+    await db.conn.commit()
+
+
+async def record_end_pass(
+    db: Any, menu_id: int, passes: int, *, ended_at: Any, failures: Any
+) -> None:
+    await db.conn.execute(
+        "UPDATE role_menus SET end_passes = ?, ended_at = ?, end_failures = ? WHERE id = ?",
+        (int(passes), ended_at, failures, int(menu_id)),
+    )
+    await db.conn.commit()
+
+
+async def marathon_row(db: Any, guild_id: int, marathon_id: Any) -> Any:
+    try:
+        wanted = int(marathon_id)
+    except (TypeError, ValueError):
+        return None
+    cur = await db.conn.execute(
+        "SELECT * FROM marathons WHERE id = ? AND guild_id = ?", (wanted, int(guild_id))
+    )
     return await cur.fetchone()
 
 
@@ -1669,6 +1760,472 @@ async def revoke_grant(
         details={"grant_id": row["id"], "role_id": row["role_id"], "via": via},
     )
     return True, GRANT_ENDED.format(label=label, name=name)
+
+
+# --- temporary roles: a menu's end, and the pass that takes its roles off everyone -------------
+
+
+END_REASON = "Black Bloc: {menu} ended"
+NOTICE_LIMIT = 2000
+END_LOCKS: dict[int, asyncio.Lock] = {}
+
+
+def end_lock(menu_id: Any) -> asyncio.Lock:
+    return END_LOCKS.setdefault(int(menu_id), asyncio.Lock())
+
+
+def default_buffer(bot: Any, guild_id: int) -> Any:
+    return bot.store.get(guild_id, ROLEMENU_END_BUFFER_KEY)
+
+
+async def menu_ends_by_role(db: Any, guild_id: int) -> dict[int, str]:
+    """The soonest unfinished menu end each role carries; a role on no such menu is absent."""
+    cur = await db.conn.execute(
+        "SELECT o.role_id, m.ends_at FROM role_menus m JOIN role_menu_options o "
+        "ON o.menu_id = m.id WHERE m.guild_id = ? AND m.ends_at IS NOT NULL "
+        "AND m.ended_at IS NULL",
+        (int(guild_id),),
+    )
+    found: dict[int, str] = {}
+    for row in await cur.fetchall():
+        when = parse_ts(row["ends_at"])
+        if when is None:
+            continue
+        role_id = int(row["role_id"])
+        held = parse_ts(found.get(role_id))
+        if held is None or when < held:
+            found[role_id] = menus.utc_iso(when)
+    return found
+
+
+async def stamp_grants(db: Any, guild_id: int, role_ids: Any, *, was: Any = ()) -> int:
+    """Open grants on these roles carry their menu's end, so every surface reads one date.
+
+    A role whose menu end went away loses only the stamp the menu put there (`was`)."""
+    ends = await menu_ends_by_role(db, guild_id)
+    gone = [str(one) for one in was or () if one]
+    changed = 0
+    for role_id in dict.fromkeys(int(one) for one in role_ids or ()):
+        end = ends.get(role_id)
+        if end is not None:
+            cur = await db.conn.execute(
+                "UPDATE role_grants SET expires_at = ? WHERE guild_id = ? AND role_id = ? "
+                "AND removed_at IS NULL AND expires_at IS NOT ?",
+                (end, int(guild_id), role_id, end),
+            )
+        elif gone:
+            marks = ", ".join("?" for _ in gone)
+            cur = await db.conn.execute(
+                "UPDATE role_grants SET expires_at = NULL WHERE guild_id = ? AND role_id = ? "
+                f"AND removed_at IS NULL AND expires_at IN ({marks})",
+                (int(guild_id), role_id, *gone),
+            )
+        else:
+            continue
+        changed += max(cur.rowcount, 0)
+    await db.conn.commit()
+    return changed
+
+
+async def menu_role_ids(db: Any, menu_id: int) -> list[int]:
+    return [int(row["role_id"]) for row in await get_options(db, menu_id)]
+
+
+async def roles_ending_now(db: Any, at: datetime) -> set[tuple[int, int]]:
+    """(guild, role) pairs a due menu is about to take off, so the grant path leaves them be."""
+    found: set[tuple[int, int]] = set()
+    for menu in await menus_still_to_end(db):
+        if menus.is_due(menu, at):
+            for role_id in await menu_role_ids(db, menu["id"]):
+                found.add((int(menu["guild_id"]), role_id))
+    return found
+
+
+async def post_role_notice(bot: Any, guild: Any, text: str) -> bool:
+    """Where role notices post, with the approver ping and nobody else's (checklist 11)."""
+    target, where = card_target(bot, approval_channel(bot, guild))
+    if target is None:
+        await log_action(bot, guild, "role_menu.notice_failed", details={"reason": where})
+        return False
+    role_id = bot.store.get(guild.id, APPROVER_ROLE_KEY)
+    content = f"<@&{role_id}> {text}" if role_id else text
+    try:
+        await target.send(content[:NOTICE_LIMIT], allowed_mentions=ping_mentions(role_id))
+    except Exception as exc:
+        await log_action(
+            bot,
+            guild,
+            "role_menu.notice_failed",
+            details={"reason": f"{type(exc).__name__}: {exc}"[:300]},
+        )
+        return False
+    return True
+
+
+async def set_menu_end(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    *,
+    source: str,
+    marathon_id: Any = None,
+    ends_at: Any = None,
+    buffer_days: Any = None,
+    via: str = VIA_DISCORD,
+) -> str | None:
+    """Staff set (or clear) a menu's one end; open grants on its roles follow it."""
+    if source not in menus.END_SOURCES:
+        raise ValueError(f"source must be one of {menus.END_SOURCES}")
+    marathon = None
+    if source == menus.MARATHON_END:
+        marathon = await marathon_row(bot.db, guild.id, marathon_id)
+        if marathon is None:
+            raise ValueError(f"no marathon {marathon_id!r} in this server")
+    wanted = {
+        "ends_source": source,
+        "buffer_days": None if buffer_days is None else menus.buffer_of({}, buffer_days),
+        "ends_at": menus.utc_iso(ends_at) if isinstance(ends_at, datetime) else ends_at,
+    }
+    end = menus.ends_at_of(wanted, marathon, default_buffer(bot, guild.id))
+    async with end_lock(menu["id"]):
+        await store_menu_end(
+            bot.db,
+            menu["id"],
+            source=source,
+            marathon_id=int(marathon["id"]) if marathon is not None else None,
+            buffer_days=wanted["buffer_days"],
+            ends_at=end,
+            by=actor_id(actor),
+        )
+    await stamp_grants(
+        bot.db, guild.id, await menu_role_ids(bot.db, menu["id"]), was=(menu["ends_at"],)
+    )
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.end_set", via),
+        actor=actor,
+        details={
+            "menu": menu["name"],
+            "source": source,
+            "marathon_id": marathon["id"] if marathon is not None else None,
+            "buffer_days": wanted["buffer_days"],
+            "was": menu["ends_at"],
+            "ends_at": end,
+            "via": via,
+        },
+    )
+    return end
+
+
+async def members_of(guild: Any) -> list[Any] | None:
+    """Every member, chunking first when the cache is short; None when it stays short."""
+    members = list(getattr(guild, "members", ()) or ())
+    expected = int(getattr(guild, "member_count", 0) or 0)
+    if expected and len(members) < expected:
+        try:
+            await guild.chunk()
+        except Exception as exc:
+            log.warning("role menus: could not fill the member cache of %s (%s)", guild.id, exc)
+        members = list(getattr(guild, "members", ()) or ())
+    return None if expected and len(members) < expected else members
+
+
+def removable(guild: Any, role_id: int) -> bool:
+    role = guild.get_role(int(role_id)) if guild is not None else None
+    if role is None:
+        return False
+    assignable = getattr(role, "is_assignable", None)
+    return not callable(assignable) or bool(assignable())
+
+
+async def role_labels(db: Any, guild: Any, menu_id: int) -> dict[int, str]:
+    return {
+        int(row["role_id"]): str(row["label"] or role_name(guild, row["role_id"]))
+        for row in await get_options(db, menu_id)
+    }
+
+
+def roles_said(labels: dict[int, str], role_ids: Any) -> str:
+    return ", ".join(f"**{labels.get(int(one), one)}**" for one in role_ids)
+
+
+async def close_menu_grants(db: Any, guild_id: int, role_ids: Any, keep: set[int]) -> int:
+    """Every open grant on the menu's roles closes, except for members who still wear them."""
+    closed = 0
+    wanted = {int(one) for one in role_ids or ()}
+    for row in await grants.open_grants(db, guild_id):
+        if int(row["role_id"]) in wanted and int(row["user_id"]) not in keep:
+            closed += int(await grants.end_grant(db, row["id"], grants.EXPIRED))
+    return closed
+
+
+async def end_menu(
+    bot: Any, guild: Any, menu_id: Any, *, actor: Any = None, via: str = VIA_DISCORD
+) -> dict[str, Any] | None:
+    """One pass over a due menu, under its lock; None when there was nothing to run."""
+    async with end_lock(menu_id):
+        menu = await get_menu_by_id(bot.db, int(menu_id))
+        if menu is None or not menus.is_due(menu, datetime.now(UTC)):
+            return None
+        return await _end_pass(bot, guild, menu, actor, via)
+
+
+async def end_menu_now(
+    bot: Any, guild: Any, actor: Any, menu: Any, *, via: str = VIA_DISCORD
+) -> dict[str, Any] | None:
+    """Staff's End it now: the end becomes this moment, as a date, and the pass runs."""
+    async with end_lock(menu["id"]):
+        await store_menu_end(
+            bot.db,
+            menu["id"],
+            source=menus.DATE_END,
+            marathon_id=None,
+            buffer_days=menu_value(menu, "buffer_days"),
+            ends_at=now_iso(),
+            by=actor_id(actor),
+        )
+    await stamp_grants(
+        bot.db, guild.id, await menu_role_ids(bot.db, menu["id"]), was=(menu["ends_at"],)
+    )
+    return await end_menu(bot, guild, menu["id"], actor=actor, via=via)
+
+
+async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> Any:
+    db = bot.db
+    role_ids = await menu_role_ids(db, menu["id"])
+    base = {"menu": menu["name"], "menu_id": menu["id"], "roles": role_ids, "via": via}
+    if getattr(guild, "unavailable", False):
+        return None
+    members = await members_of(guild)
+    if members is None:
+        await log_action(
+            bot,
+            guild,
+            kind_via("role_menu.end_failed", via),
+            actor=actor,
+            details=base | {"reason": "members_not_loaded"},
+        )
+        return None
+    found = menus.wearers(members, role_ids)
+    if getattr(bot, "guard", None) is not None:
+        await log_action(
+            bot,
+            guild,
+            "role_menu.would_end",
+            actor=actor,
+            details=base | {"wearers": [[member.id, worn] for member, worn in found]},
+        )
+        return None
+    reason = END_REASON.format(menu=menu["name"])
+    taken: list[tuple[Any, list[int]]] = []
+    stuck: list[tuple[Any, list[int]]] = []
+    for member, worn in found:
+        can = [one for one in worn if removable(guild, one)]
+        done = bool(can) and await change_roles(bot, member, guild, set(), set(can), reason)
+        if done:
+            taken.append((member, can))
+            await grants.record_removed(db, guild.id, member.id, can, grants.EXPIRED)
+        left = [one for one in worn if not done or one not in can]
+        if left:
+            stuck.append((member, left))
+            await log_action(
+                bot,
+                guild,
+                kind_via("role_menu.end_failed", via),
+                actor=actor,
+                target=member,
+                details=base | {"user": member.id, "left": left},
+            )
+    await close_menu_grants(db, guild.id, role_ids, {int(member.id) for member, _ in stuck})
+    passes = int(menu_value(menu, "end_passes", 0)) + 1
+    finished = not stuck or passes >= menus.ROLE_MENU_END_RETRIES
+    leftovers = [[int(member.id), left] for member, left in stuck]
+    await record_end_pass(
+        db,
+        menu["id"],
+        passes,
+        ended_at=now_iso() if finished else None,
+        failures=json.dumps(leftovers) if finished and leftovers else None,
+    )
+    details = base | {
+        "members": len(taken),
+        "taken": [[int(member.id), can] for member, can in taken],
+        "failures": len(stuck),
+        "left": leftovers,
+        "passes": passes,
+        "ended": finished,
+    }
+    labels = await role_labels(db, guild, menu["id"])
+    if finished:
+        await log_action(bot, guild, kind_via("role_menu.ended", via), actor=actor, details=details)
+        if bot.store.get(guild.id, ROLEMENU_ENDED_NOTICE_KEY):
+            await post_role_notice(bot, guild, ended_notice(bot, guild, menu, details, labels))
+    await tell_wearers(bot, guild, menu, taken, labels)
+    return details
+
+
+def ended_notice(
+    bot: Any, guild: Any, menu: Any, details: dict[str, Any], labels: dict[int, str]
+) -> str:
+    lines = [
+        menus.said(
+            bot.store,
+            guild.id,
+            ROLEMENU_ENDED_TEXT_KEY,
+            menu=menu["name"],
+            roles=len(labels),
+            members=details["members"],
+            failures=details["failures"],
+        )
+    ]
+    for user_id, left in details["left"]:
+        member = guild.get_member(int(user_id))
+        lines.append(
+            menus.said(
+                bot.store,
+                guild.id,
+                ROLEMENU_END_FAILURE_LINE_KEY,
+                name=str(getattr(member, "display_name", None) or user_id),
+                roles=roles_said(labels, left),
+            )
+        )
+    return "\n".join(lines)
+
+
+async def tell_wearers(
+    bot: Any, guild: Any, menu: Any, taken: Any, labels: dict[int, str]
+) -> None:
+    """One DM per member, naming every role that came off them."""
+    marathon = None
+    if menus.end_source(menu) == menus.MARATHON_END:
+        marathon = await marathon_row(bot.db, guild.id, menu_value(menu, "ends_marathon_id"))
+    what = menus.what_ended(menu, marathon["name"] if marathon is not None else None)
+    for member, role_ids in taken:
+        await dm(
+            member,
+            menus.said(
+                bot.store,
+                guild.id,
+                ROLEMENU_ENDED_DM_KEY,
+                roles=roles_said(labels, role_ids),
+                guild=guild.name,
+                what=what,
+            ),
+        )
+
+
+async def follow_marathon(bot: Any, guild: Any, marathon_id: Any) -> int:
+    """A marathon's new end moves every unfinished menu bound to it; staff hear past the floor."""
+    rows = await menus_bound_to(bot.db, guild.id, marathon_id)
+    bound = [one for one in rows if not one["ended_at"]]
+    if not bound:
+        return 0
+    marathon = await marathon_row(bot.db, guild.id, marathon_id)
+    floor = bot.store.get(guild.id, ROLEMENU_END_MOVED_MINUTES_KEY)
+    moved = 0
+    for menu in bound:
+        async with end_lock(menu["id"]):
+            fresh = await get_menu_by_id(bot.db, menu["id"])
+            if fresh is None or fresh["ended_at"]:
+                continue
+            end = menus.ends_at_of(fresh, marathon, default_buffer(bot, guild.id))
+            if not menus.end_moved(fresh["ends_at"], end):
+                continue
+            told = menus.moved_far(fresh["ends_told_at"], end, floor)
+            await restamp_menu_end(bot.db, fresh["id"], end, told=told)
+        await stamp_grants(
+            bot.db, guild.id, await menu_role_ids(bot.db, fresh["id"]), was=(fresh["ends_at"],)
+        )
+        moved += 1
+        if not told:
+            continue
+        await log_action(
+            bot,
+            guild,
+            "role_menu.end_moved",
+            details={
+                "menu": fresh["name"],
+                "marathon_id": int(marathon_id),
+                "was": fresh["ends_told_at"],
+                "to": end,
+            },
+        )
+        if bot.store.get(guild.id, ROLEMENU_END_MOVED_NOTICE_KEY):
+            await post_role_notice(
+                bot,
+                guild,
+                menus.said(
+                    bot.store,
+                    guild.id,
+                    ROLEMENU_END_MOVED_TEXT_KEY,
+                    menu=fresh["name"],
+                    to=end_words(bot, guild.id, end),
+                    was=end_words(bot, guild.id, fresh["ends_told_at"]),
+                ),
+            )
+    return moved
+
+
+async def unbind_marathon(bot: Any, guild: Any, marathon: Any) -> int:
+    """A marathon leaving the list leaves its menus on the last end it gave them, as a date."""
+    unbound = 0
+    for menu in await menus_bound_to(bot.db, guild.id, marathon["id"]):
+        async with end_lock(menu["id"]):
+            fresh = await get_menu_by_id(bot.db, menu["id"])
+            if fresh is None or menus.end_source(fresh) != menus.MARATHON_END:
+                continue
+            await unbind_menu_end(bot.db, fresh["id"], keeps_a_date=bool(fresh["ends_at"]))
+        unbound += 1
+        await log_action(
+            bot,
+            guild,
+            "role_menu.end_unbound",
+            details={
+                "menu": fresh["name"],
+                "marathon_id": int(marathon["id"]),
+                "marathon": marathon["name"],
+                "ends_at": fresh["ends_at"],
+            },
+        )
+        if fresh["ended_at"] or not bot.store.get(guild.id, ROLEMENU_END_MOVED_NOTICE_KEY):
+            continue
+        await post_role_notice(
+            bot,
+            guild,
+            menus.said(
+                bot.store,
+                guild.id,
+                ROLEMENU_END_UNBOUND_TEXT_KEY,
+                menu=fresh["name"],
+                marathon=marathon["name"],
+                to=end_words(bot, guild.id, fresh["ends_at"]),
+            ),
+        )
+    return unbound
+
+
+def end_words(bot: Any, guild_id: int, at: Any) -> str:
+    return grants.stamp(at, "F") if at else str(bot.store.get(guild_id, ROLEMENU_END_NOT_KNOWN_KEY))
+
+
+async def marathon_moved(bot: Any, guild: Any, marathon_id: Any) -> None:
+    """The marathon cog's one call after a span write; a role-menu fault never stops a read."""
+    try:
+        if bot.db.is_connected:
+            await follow_marathon(bot, guild, marathon_id)
+    except Exception:
+        log.exception("role menus: could not follow marathon %s", marathon_id)
+
+
+async def marathon_gone(bot: Any, guild: Any, marathon: Any) -> None:
+    """The marathon cog's one call after an archive or remove."""
+    try:
+        if bot.db.is_connected:
+            await unbind_marathon(bot, guild, marathon)
+    except Exception:
+        log.exception("role menus: could not unbind marathon %s", marathon["id"])
 
 
 # --- the panel: one command, one ephemeral window ------------------------------------------------
@@ -3099,6 +3656,7 @@ class RoleMenus(commands.Cog):
     @tasks.loop(hours=EXPIRY_HOURS)
     async def _expiry_loop(self) -> None:
         if self.bot.db.is_connected:
+            await self.run_due_menus()
             await self.run_due_grants()
             await self.reconcile_records()
         self.last_ok_at["expiry"] = now_iso()
@@ -3111,12 +3669,26 @@ class RoleMenus(commands.Cog):
     async def _expiry_broke(self, exc: BaseException) -> None:
         self.loop_failed("expiry", exc, self._expiry_loop)
 
+    async def run_due_menus(self) -> None:
+        """Menus whose end has come: everyone wearing their roles loses them (design §3.3)."""
+        seen = {guild.id: guild for guild in getattr(self.bot, "guilds", ())}
+        now = datetime.now(UTC)
+        for menu in await menus_still_to_end(self.bot.db):
+            guild = seen.get(menu["guild_id"])
+            if guild is None or not menus.is_due(menu, now):
+                continue
+            try:
+                await end_menu(self.bot, guild, menu["id"])
+            except Exception:
+                log.exception("role menus: the end pass of %s raised", menu["name"])
+
     async def run_due_grants(self) -> None:
         """Grants whose day has come: the role comes off, the row closes, the member is told."""
         seen = {guild.id: guild for guild in getattr(self.bot, "guilds", ())}
+        ending = await roles_ending_now(self.bot.db, datetime.now(UTC))
         for row in await grants.due_grants(self.bot.db, now_iso()):
             guild = seen.get(row["guild_id"])
-            if guild is not None:
+            if guild is not None and (row["guild_id"], row["role_id"]) not in ending:
                 await self._expire(guild, row)
 
     async def _expire(self, guild: Any, row: Any) -> None:

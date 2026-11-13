@@ -37,6 +37,7 @@ from ...settings_store import (
 )
 from ...storage.db import ARCHIVED_TABLES
 from ...timezones import unix
+from ..community import role_menus as role_ends
 from . import marathon_late_track as late_track
 from .marathon import (
     ARCHIVE_VIEW,
@@ -272,6 +273,7 @@ async def archive_held(
     moved = await archive_rows(bot.db, marathon["id"], why=why, by=actor_id(actor), at=at)
     if not moved:
         return False
+    await role_ends.marathon_gone(bot, guild, marathon)
     cog.forget(marathon["id"])
     await log_action(
         bot,

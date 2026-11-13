@@ -10900,6 +10900,7 @@ ROLEMENU_END_UNBOUND_TEXT_KEY = "rolemenu_end_unbound_text"
 ROLEMENU_ENDED_TEXT_KEY = "rolemenu_ended_text"
 ROLEMENU_END_FAILURE_LINE_KEY = "rolemenu_end_failure_line"
 ROLEMENU_ENDED_DM_KEY = "rolemenu_ended_dm"
+ROLEMENU_END_NOT_KNOWN_KEY = "rolemenu_end_not_known_text"
 ROLEMENU_END_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ROLEMENU_END_MOVED_TEXT_KEY: (
         "**{menu}**'s end moved: its roles now come off {to} (was {was}).",
@@ -10931,6 +10932,11 @@ ROLEMENU_END_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("roles", "guild", "what"),
         "the one DM a member gets when a role menu ends and its roles come off them. It takes "
         "{roles} {guild} {what} — {what} is the marathon's name or the date",
+    ),
+    ROLEMENU_END_NOT_KNOWN_KEY: (
+        "end not known yet",
+        (),
+        "what stands in for a role menu's end while the marathon it ends with has no dates yet",
     ),
 }
 ROLEMENU_END_SWITCHES: dict[str, tuple[bool, str]] = {
