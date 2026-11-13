@@ -2355,7 +2355,7 @@ async def test_a_refusal_is_logged_retried_and_the_menu_ends_after_the_cap(bot, 
     assert menu["ended_at"] is None and menu["end_passes"] == 1
     assert fine.edits == [[]] and len(fine.dms) == 1
     [failed] = await details_of(db, "role_menu.end_failed")
-    assert failed["user"] == 900 and failed["left"] == [10]
+    assert failed["user"] == 900 and failed["roles"] == [10]
     assert "role_menu.ended" not in await action_kinds(db)
 
     await tick(bot)
@@ -2367,9 +2367,11 @@ async def test_a_refusal_is_logged_retried_and_the_menu_ends_after_the_cap(bot, 
     assert len(await details_of(db, "role_menu.end_failed")) == 3
     [ended] = await details_of(db, "role_menu.ended")
     assert ended["failures"] == 1 and ended["passes"] == 3
+    assert (ended["members"], ended["this_pass"], menu["end_members"]) == (1, 0, 1)
     assert len(fine.dms) == 1 and stuck.dms == []
     [notice] = bot.guild.channels[STAFF_CHANNEL].messages
     assert "Stuck still wears **Role 10**" in notice.kwargs["content"]
+    assert "taken off 1 people" in notice.kwargs["content"]
 
     await tick(bot)
     assert len(await details_of(db, "role_menu.end_failed")) == 3
@@ -2384,7 +2386,7 @@ async def test_a_role_above_the_bot_is_a_failure_and_the_rest_still_come_off(bot
 
     assert member.edits == [[11, 99]]
     [failed] = await details_of(db, "role_menu.end_failed")
-    assert failed["left"] == [11]
+    assert failed["roles"] == [11]
     assert "**Role 10**" in member.dms[0] and "Role 11" not in member.dms[0]
 
 
@@ -2649,3 +2651,59 @@ async def test_a_marathon_with_no_end_yet_binds_and_unbinds_to_no_end(bot, db, l
     await cog_module.unbind_marathon(bot, bot.guild, {"id": marathon_id, "name": "Halo Fest"})
 
     assert (await menu_row(db, menu_id))["ends_source"] == "none"
+
+
+async def test_end_it_now_in_test_mode_changes_nothing_and_arms_nothing(bot, db, lead):
+    bot.guard = FakeGuard()
+    menu_id = await end_menu_with(db, ends_at=LATER)
+    before = tuple(await menu_row(db, menu_id))
+    member = FakeMember(bot.guild, user_id=900, roles=(10,))
+
+    found = await cog_module.end_menu_now(bot, bot.guild, lead, await menu_row(db, menu_id))
+
+    assert found is None and member.edits == []
+    assert tuple(await menu_row(db, menu_id)) == before
+    assert len(await details_of(db, "role_menu.would_end")) == 1
+
+
+async def test_a_role_taken_off_a_menu_or_a_deleted_menu_loses_the_menus_stamp(bot, db, lead):
+    menu_id = await create_menu(db, GUILD, "btb-2027", "Back to Black 2027", None, "staff")
+    await add_option(db, menu_id, 10, "Runner")
+    await add_option(db, menu_id, 11, "Host")
+    await grants.add_grant(db, GUILD, 900, 10, "staff", until=None)
+    await grants.add_grant(db, GUILD, 900, 11, "staff", until=None)
+    await cog_module.set_menu_end(
+        bot, bot.guild, lead, await menu_row(db, menu_id), source="date", ends_at=LATER
+    )
+
+    await cog_module.drop_option(bot, bot.guild, lead, await menu_row(db, menu_id), 10)
+    assert (await grants.open_grant(db, GUILD, 900, 10))["expires_at"] is None
+    assert (await grants.open_grant(db, GUILD, 900, 11))["expires_at"] == LATER
+
+    await cog_module.drop_menu(bot, bot.guild, lead, "btb-2027")
+    assert (await grants.open_grant(db, GUILD, 900, 11))["expires_at"] is None
+
+
+async def test_a_role_put_on_a_menu_with_an_end_stamps_its_open_grants(bot, db, lead):
+    menu_id = await create_menu(db, GUILD, "btb-2027", "Back to Black 2027", None, "staff")
+    await cog_module.set_menu_end(
+        bot, bot.guild, lead, await menu_row(db, menu_id), source="date", ends_at=LATER
+    )
+    await grants.add_grant(db, GUILD, 900, 12, "staff", until=None)
+
+    await cog_module.put_option(bot, bot.guild, lead, await menu_row(db, menu_id), 12, "Tech")
+
+    assert (await grants.open_grant(db, GUILD, 900, 12))["expires_at"] == LATER
+
+
+async def test_a_due_menu_whose_marathon_row_is_gone_still_ends_and_says_the_date(bot, db, lead):
+    marathon_id = await marathon_with(db, "2020-01-01T00:00:00+00:00")
+    menu_id, end = await bound_menu(bot, db, lead, marathon_id)
+    await db.conn.execute("DELETE FROM marathons WHERE id = ?", (marathon_id,))
+    await db.conn.commit()
+    member = FakeMember(bot.guild, user_id=900, roles=(10,))
+
+    await tick(bot)
+
+    assert member.edits == [[]] and (await menu_row(db, menu_id))["ended_at"]
+    assert grants.stamp(end, "D") in member.dms[0]

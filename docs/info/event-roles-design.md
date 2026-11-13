@@ -206,8 +206,11 @@ Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, core*.
 2. **The end pass runs FIRST in the tick, not second** (`run_due_menus` → `run_due_grants` → `reconcile_records`), and the grant
    path skips a grant whose role is on a DUE, unfinished menu. Otherwise grants stamped with the menu's end come off one by one
    with `DM_EXPIRED` (and `cog_load` runs the grant path on its own), breaking §3.3 step 5's one DM per member.
-3. **Four columns beyond §3.1's five:** `end_passes` (the retry counter), `end_failures` (JSON leftovers at the cap), `ends_told_at`
+3. **Six columns beyond §3.1's five:** `end_passes` (the retry counter), `end_members` (people the roles came off, summed over
+   every pass — the ended notice and the card's *ended … · 23 people*), `end_failures` (JSON leftovers at the cap), `ends_told_at`
    (see 6 below) and `ends_set_by`/`ends_set_at` (the card's *who set it and when*, so 1b needs no second migration).
+   `role_menu.end_failed` per member carries `{menu, menu_id, user, roles}` with `roles` = the ones still on; `role_menu.ended`
+   carries `roles` (the menu's), `members` (the running total), `this_pass`, `failures`, `left`, `passes`.
 4. **`ROLE_MENU_END_RETRIES` is a constant (3), not a key** — the brief named it so. ⚠️ It is a decided number; if staff should be
    able to change it, it becomes a key (checklist 33). Question for the conductor.
 5. **Two keys beyond §3.4:** `rolemenu_end_unbound_text` (the unbinding sentence — "every word a key") and
@@ -224,10 +227,13 @@ Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, core*.
    no pass — the `handed_roles.take_back` precedent. ⚠️ The existing `_expire` grant path has NO guard check; 1a did not change it.
    The pass is NOT gated on `rolemenu_mode` (or on anything else): `bot.guard` is the only brake, and it is `None` on Fly.
 8. **End it now** (`end_menu_now`) writes the end as `date` = now (unbinding a marathon) and then runs the pass, so a pass that
-   leaves failures is retried by the hourly tick like any other end.
+   leaves failures is retried by the hourly tick like any other end. Under `bot.guard` it logs `would_end` and writes NOTHING, so
+   a rehearsal cannot arm a menu that strips everyone at the first tick after the guard lifts.
 9. **Stamping OVERWRITES** an open grant's `expires_at` with the soonest unfinished menu end of its role — including a grant that
    had a shorter ad-hoc end from before. A min() would leave an old stamp behind when an end moves later, and the grant path would
-   then take the role off on the old date. Clearing an end (`source="none"`) nulls only the stamp the menu had put there.
+   then take the role off on the old date. Clearing an end (`source="none"`) nulls only the stamp the menu had put there. The
+   shared paths `put_option` (stamps), `drop_option` and `drop_menu` (take the menu's stamp back) re-stamp too, so a role that
+   leaves a menu is not stripped on the menu's date by the grant path.
 10. **An unreadable `ends_at` is never due** (no role removed on a garbled date); it blocks nothing else.
 11. **An empty or short member cache is not a pass:** chunk first; still short of `member_count` → `role_menu.end_failed`
     `members_not_loaded`, nothing stamped, retried next tick.
@@ -241,6 +247,22 @@ Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, core*.
     menu has an end, and 1a has no door that sets one — 1b does.
 16. **Log kinds:** `role_menu.end_set`, `.end_moved`, `.end_unbound` added to `IMPORTANT`; `.ended` and `.end_failed`,
     `.notice_failed` are important by suffix; `.would_end` is routine by the shadow rule.
+
+17. **The per-menu locks hang on the bot** (`end_lock(bot, menu_id)`, like the role ledger), not on the module: discord.py's
+    `load_extension` executes the cog module afresh, so the marathon cog's import and the loaded cog could hold two copies.
+
+**Open questions for the conductor (built as described; not decided by 1a)**
+
+- **An end that moves EARLIER.** One schedule read that pulls `marathons.ends_at` earlier (a truncated list, a corrected actual,
+  checklist 42) can make a bound menu due at the next tick, and the pass is irreversible. Should a move earlier wait for a second
+  read, or for staff, before the menu becomes due? Today it follows at once (with the notice if ≥ the floor).
+- **Restore.** Restoring an archived marathon does not rebind the menu that was unbound from it; staff pick it again.
+- **`ROLE_MENU_END_RETRIES`** constant vs key (item 4).
+
+**MUST for 1b:** `api/tools/rolemenus.py` `sync_options` writes options with `add_option`/`remove_option` directly, not through
+`put_option`/`drop_option`, so it does not re-stamp grants — 1b must call `stamp_grants(db, guild_id, changed_role_ids,
+was=(menu["ends_at"],))` there (or route it through the shared functions). `pings.py` edits its own events menu the same way;
+it only matters if that menu is ever given an end.
 
 **NOT built in 1a (1b's):** the clamp is a helper only (`rolegrants.clamped`) — `grant_role` / `staff_assign` / *Push it back…*
 do not call it yet; the Health line (*menus due / ended / failures*); every panel, API and site change; the refusal sentences for

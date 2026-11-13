@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS role_menus (
     ends_set_at      TEXT,
     ended_at         TEXT,
     end_passes       INTEGER NOT NULL DEFAULT 0,
+    end_members      INTEGER NOT NULL DEFAULT 0,
     end_failures     TEXT,
     UNIQUE (guild_id, name)
 );
@@ -1904,6 +1905,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("role_menus", "ends_set_at", "TEXT"),
     ("role_menus", "ended_at", "TEXT"),
     ("role_menus", "end_passes", "INTEGER NOT NULL DEFAULT 0"),
+    ("role_menus", "end_members", "INTEGER NOT NULL DEFAULT 0"),
     ("role_menus", "end_failures", "TEXT"),
 )
 

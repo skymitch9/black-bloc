@@ -851,6 +851,7 @@ ROLE_MENU_END_COLUMNS = (
     "ends_set_at",
     "ended_at",
     "end_passes",
+    "end_members",
     "end_failures",
 )
 
@@ -877,11 +878,11 @@ async def test_a_role_menu_from_before_schema_107_gains_an_end_that_is_no_end(tm
         assert all(names.count(column) == 1 for column in ROLE_MENU_END_COLUMNS)
         cur = await again.conn.execute("SELECT * FROM role_menus WHERE name = 'pronouns'")
         row = await cur.fetchone()
-        assert row["ends_source"] == "none" and row["end_passes"] == 0
+        assert (row["ends_source"], row["end_passes"], row["end_members"]) == ("none", 0, 0)
         assert all(
             row[column] is None
             for column in ROLE_MENU_END_COLUMNS
-            if column not in ("ends_source", "end_passes")
+            if column not in ("ends_source", "end_passes", "end_members")
         )
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "107"
