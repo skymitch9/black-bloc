@@ -438,28 +438,28 @@
     },
     {
       "slug": "rolemenu-post",
-      "title": "Give out temporary roles",
-      "goal": "A menu of roles with one end. When it comes, everyone wearing them loses them.",
+      "title": "Give out timed roles",
+      "goal": "One event per marathon or date. When it ends, everyone wearing a timed role loses it unless another open event still has them.",
       "audience": "staff",
       "feature": "rolemenu",
       "command": "/rolemenu",
       "sort": 250,
       "steps": [
-        {"do": "Type **/rolemenu** and press **New menu**. Type a short name and a heading.", "expect": "The menu's card, empty, with **Add a role…**."},
-        {"do": "Press **Add a role…** and pick a role. Press **Use the role's own name** or **Give it a label…**.", "expect": "The role is listed with how many people wear it. Repeat for each role."},
-        {"do": "Press **Set the end…** and pick the marathon in **Ends with a marathon…**, or press **Type a date…**.", "expect": "The card reads *ends* and the moment. A marathon end is its last run plus **Buffer…** days; a typed day ends at 23:59 server time."},
-        {"do": "Press **Hand roles out…**, pick who in **Whose roles?**, press **Give them roles…** and tick the roles.", "expect": "They wear them until the end. Within the hour after it, everyone wearing the menu's roles loses them, given here or by hand, with one DM each."}
+        {"do": "Type **/rolemenu** and press **New event…**. Pick the marathon in **Ends with a marathon…**, or press **No marathon yet…**.", "expect": "The event's card and its end: the marathon's last run plus the buffer, or 23:59 server time on the day typed."},
+        {"do": "Press **Timed roles…** and pick each role in **Add a role…**.", "expect": "The role is listed with how many people wear it. Every event shares this one list."},
+        {"do": "On the event's card press **Give roles…**, pick a role in **A timed role…** and up to 25 people in **Up to 25 people…**.", "expect": "The card counts them; the next batch adds to it. **Fill from the schedule** gives the marathon's runners theirs; the site's **Give from a list…** takes a pasted list."},
+        {"do": "Leave the end to come, or press **End it now**. A dated event takes a marathon later with **Attach a marathon…**.", "expect": "At the end, everyone wearing a timed role loses it, given here or by hand, unless another open event still has them. One DM each."}
       ],
       "faults": [
-        {"symptom": "**Add a role…** refused a role Black Bloc could not take off", "answer": "The end has to be able to remove it. Move Black Bloc's role above it in Server Settings ▸ Roles."},
-        {"symptom": "A role or an end was refused because it belongs to `/pings`", "answer": "Streamer roles and the Events role are members' own choice in `/pings`. A menu holding one can have no end; take it off the menu to give the menu one."},
+        {"symptom": "**Add a role…** refused a role", "answer": "An event's end has to be able to take it off: move Black Bloc's role above it in Server Settings ▸ Roles. A role that belongs to `/pings` is never a timed role."},
+        {"symptom": "A marathon was refused: it already has an open event", "answer": "One event per marathon. Give roles from the event that has it, or end that one first."},
         {"symptom": "The card says *Held* and shows **Use the earlier end**", "answer": "The marathon's new dates would end the roles sooner. Nothing moved; **Use the earlier end** asks with the counts, then takes it."},
-        {"symptom": "**Delete it** was refused", "answer": "Its end is still to come and people wear its roles. **End it now** first, or **No end** if nobody should lose them."}
+        {"symptom": "**Delete it** was refused", "answer": "Its end is still to come and people are assigned to it. **End it now** first, or **No end** if nobody should lose a role."}
       ],
       "facts": [
         {"kind": "setting", "ref": "rolemenu_end_buffer_days"},
         {"kind": "setting", "ref": "rolemenu_end_earlier_holds"},
-        {"kind": "setting", "ref": "rolemenu_approval_channel_id"}
+        {"kind": "setting", "ref": "rolemenu_by_hand_channel_id"}
       ]
     },
     {

@@ -196,19 +196,42 @@ def shipped_rolemenu_guide():
     return next(one for one in guides.seed_entries() if one["slug"] == ROLEMENU_GUIDE)
 
 
-def test_the_role_menu_guide_teaches_the_temporary_roles_control_and_nothing_retired():
+RETIRED_TIMED_ROLE_WORDS = ("New menu", "Hand roles out…", "Set the end…", "Whose roles?")
+
+
+def test_the_role_menu_guide_teaches_timed_roles_per_event_and_nothing_retired():
+    """§7: every quoted label is one the panel or the page really draws, from its own key."""
+    from black_bloc.settings_store import ROLEMENU_STAFF_DEFAULTS as KEY_DEFAULTS
+
     entry = shipped_rolemenu_guide()
     said = json.dumps(entry, ensure_ascii=False)
 
-    assert entry["title"] == "Give out temporary roles"
-    for retired in RETIRED_ROLEMENU_WORDS:
+    assert entry["title"] == "Give out timed roles"
+    assert len(entry["steps"]) == 4
+    for retired in (*RETIRED_ROLEMENU_WORDS, *RETIRED_TIMED_ROLE_WORDS):
         assert retired not in said, retired
-    for label in ("Set the end…", "Hand roles out…", "Use the earlier end", "End it now"):
-        assert label in said, label
+    for key in (
+        "rolemenu_new_event_button",
+        "rolemenu_marathon_pick",
+        "rolemenu_no_marathon_button",
+        "rolemenu_timed_roles_button",
+        "rolemenu_timed_add_pick",
+        "rolemenu_give_button",
+        "rolemenu_pick_role_placeholder",
+        "rolemenu_pick_people_placeholder",
+        "rolemenu_fill_button",
+        "rolemenu_list_button",
+        "rolemenu_end_now_button",
+        "rolemenu_attach_button",
+        "rolemenu_use_held_button",
+        "rolemenu_no_end_button",
+    ):
+        assert f"**{KEY_DEFAULTS[key]}**" in said, key
+    assert [guides.lint_step(one["do"], one["expect"]) for one in entry["steps"]] == [[]] * 4
     assert [one["ref"] for one in entry["facts"]] == [
         "rolemenu_end_buffer_days",
         "rolemenu_end_earlier_holds",
-        "rolemenu_approval_channel_id",
+        "rolemenu_by_hand_channel_id",
     ]
 
 

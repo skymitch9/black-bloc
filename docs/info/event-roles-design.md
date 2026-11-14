@@ -1,8 +1,8 @@
 # Temporary roles — the role menu becomes the permanent staff control; a role ends on a date or with a marathon (request #17)
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **1a LIVE v271; 🔨 1b + 2 BUILT on branch
-> `temp-roles-menu`, not merged** (2026-11-13; 1a's deviations and interface at §6.1–6.2, what the site reads at §6.3, 1b's at
-> §6.4, dispatch 2's at §6.5). 📐 Design by Fable, 2026-11-13 09:5x Phoenix. **Last verified: 2026-11-13 09:4x** against `main`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **§7 (timed roles per event) dispatches A + B BUILT on
+> branch `timed-roles`, not merged** (2026-11-14; A at §7.8, B — API, site, guide — at §7.9; ⚠️ neither met Discord or the live
+> site). Before that: §3–§6 (menus with one end) LIVE through v274 (§6.1–§6.7). 📐 Design by Fable, 2026-11-13 09:5x Phoenix. **Last verified: 2026-11-13 09:4x** against `main`
 > `8556fcc8` by reading the code, and against the live site through the operator token (request #17; `GET /api/marathons`).
 > ⚠️ NOT verified: anything in Discord; the bot was not run; no browser; the guild's current role list (the role names below are
 > from the 2026-08-26 scan and are examples, never a fixed list).
@@ -643,8 +643,8 @@ no browser, no live database. Verified by the suite, `ruff`, the ES-module parse
     words 1b left as constants (Grants…, the grant card, `DELETE_QUESTION`) are still constants.
 
 **Open questions for the conductor (built as described, not decided here)**
-- The Members chip for a member assigned on two events reads the SOONER end (`expiring_for` takes `MIN`), but they keep the role
-  until the LATER one. B's Members merge should take the latest open-event end for an assigned member.
+- ✅ **Closed by B (§7.9 item 1).** ~~The Members chip for a member assigned on two events reads the SOONER end (`expiring_for` takes `MIN`), but they keep the role
+  until the LATER one. B's Members merge should take the latest open-event end for an assigned member.~~
 - A legacy null-event grant on a timed role (none on live) is left open and skipped by both paths. Close it at the pass?
 
 **For dispatch B (site, API, guide): the interface** (all in `black_bloc/cogs/community/role_menus.py` unless named)
@@ -684,9 +684,81 @@ on the list so Member stays free for the ad-hoc grant routes.
 - `on_member_update` closes the rows of removed roles BEFORE it posts about added ones, so a fault in the post cannot skip them.
 - ⚠️ **Not verified, Discord only:** `who_added` reads the audit log at once on `on_member_update`. If Discord writes the entry
   after the gateway event, a readable log answers SILENT and the adder is not pinged. No delayed re-read was built.
-- Known, not closed: the ad-hoc grant rows' `ends_with_menu` (`api/tools/roles.py` `grant_row`) names the soonest event for the
+  ✅ B built one (§7.9 item 4).
+- ✅ **Closed by B (§7.9 items 2, 3, 5).** Known, not closed (at A): the ad-hoc grant rows' `ends_with_menu` (`api/tools/roles.py` `grant_row`) names the soonest event for the
   role, not the row's own event (B's, beside the Members chip question). *One event per marathon* is enforced where the
   marathons are offered (New event, Attach), not re-checked at the write; *Change the end…* offers every marathon. The end lock
   is per event, so a Give on B during A's pass can race for a member already in A's take list (narrow; a per-guild lock closes it).
 - `PUT options` writes `web.role_menu.edit` plus one `option_added` / `option_removed` per role that moved.
 - The staff guide `rolemenu-post` still quotes removed labels (New menu, Hand roles out…): dispatch B rewrites it.
+
+### 7.9 What dispatch B built, every deviation it took, and what is left (2026-11-14, branch `timed-roles`)
+
+Code notes: [`code-notes.md`](code-notes.md) ▸ *Timed roles per event, dispatch B*. ⚠️ Nothing here met Discord or the live site:
+verified by the suite, `ruff`, the ES-module parse, `site-gate` (`check.mjs`), every `site/mock/*.test.mjs`, and the real page
+driven on the local mock in `chrome-headless-shell` (1280 px and 390 px) over raw CDP.
+
+**A's open items (§7.8), closed**
+1. **Members chip** — an assigned member's chip reads the end they KEEP the role until: the latest of their own open events
+   (`timed.assignment_ends`); an open event with no end outlasts every date and reads no date. A wearer with no assignment
+   still reads the soonest open end. `GET /api/members` `roles[].ends_with_menu` names that event.
+2. **A grant row's `ends_with_menu`** names its OWN event (`menu_id` → title); only a row with no event falls back to the soonest.
+3. **One event per marathon at the WRITE** — `set_menu_end` (marathon), `attach_marathon`, `make_event` (checked before the row is
+   made) raise `MarathonTakenError` with `rolemenu_marathon_taken_said`; both doors answer it in words (API 409
+   `marathon_taken`). *Change the end…* offers only free marathons plus the event's own (`free_marathons(…, menu_id)`).
+4. **The by-hand audit re-read** — `who_added_soon`: one more read after `AUDIT_RETRY_SECONDS` = 3 (a constant), only when the
+   first found no entry.
+5. **Per-guild lock — built** (small and safe): `guild_lock(bot, guild_id)`, innermost, held by every give/take batch and by the
+   pass's plan-and-remove; the ended log, notice and DMs run after it is released. ⚠️ Not exercised against Discord's rate limits:
+   a long pass now makes a Give on another event wait for it.
+
+**Deviations and decisions**
+6. **Change the end… to a marathon on a dated event now ATTACHES** (panel `follow_marathon_end`, API PUT `write_end`), so the
+   earlier-end hold applies; §7.8 item 23's Change the end called `set_menu_end` directly and skipped it. A buffer sent in the
+   same PUT is applied only when nothing was held.
+7. **Routes kept their prefix** (`/api/rolemenus`, a persisted page URL and every log kind) and the event key stays `name`.
+   `POST /api/rolemenus` IS New event now (`{title, marathon_id}` or `{title, ends_at}` or `{title}`); the old name+title
+   body is gone with the menu editor.
+8. **Status families** — 400 what was sent cannot be read (`bad_date`, `past_date`, `bad_buffer`, `bad_end_source`,
+   `buffer_needs_marathon`, `needs_name`, `too_long`, `nobody_named`, `list_too_long`); 404 the thing named is gone
+   (`no_such_menu`, `no_such_marathon`, `no_such_role`, `not_timed` on DELETE); 409 the state refuses (`marathon_taken`,
+   `already_follows`, `event_ended`, `no_marathon`, `not_timed`, `cannot_strip`, `pings_role`, `already_timed`, `list_full`,
+   `role_assigned`, `menu_still_ends`, `nothing_held`, `members_not_loaded`, `test_mode`); 410 retired (`rolemenu_retired`,
+   `options_moved`). `no_such_marathon` and `no_such_role` moved from 400 to 404.
+9. **Give from a list matches EXACTLY** (`timed_roles_list.match`): id, mention, or a name exactly one member has; a shared name is
+   *ambiguous* and nobody. This is deliberately not checklist 45's word search — it writes roles on a live server. The save
+   sends the preview's `to_save` ids, never the lines again. `LINES_MAX` = 500 lines a call (a constant; ⚠️ a decided number —
+   if staff should change it, it becomes a key, checklist 33).
+10. **The guard**: list save, Fill and End it now answer 409 `test_mode` under `bot.guard`; the two previews do not ask.
+11. **Retired doors**: `POST /{name}/assign` joins the 410s (`rolemenu_retired_said`, its default now points at **Give roles…** and
+    **Give from a list…** — it quoted **Hand roles out…**, which A removed); `PUT /{name}` with `options` answers 410
+    `options_moved`. `staff_assign` and five caller-less constants (`ALREADY_EXACTLY`, `NO_SUCH_MEMBER`, `NOTHING_ON_THIS_MENU`,
+    `CANNOT_EDIT_THEIRS`, `NOTHING_TO_UNASSIGN`) are gone; the API's own `NO_SUCH_MENU` / `NO_SUCH_ROLE` / `BAD_END_SOURCE`
+    constants became keys.
+12. **A's bug fixed**: `rolemenu_timed_list_full_said` takes `{limit}`, which `word()` reads as its cut length — the list's 26th
+    role raised `KeyError` in the panel. It renders through `menus.said` now (`timed_role_refusal`).
+13. **`menus_ending_with`** (the marathon drawer's rows) returns `assigned`, not `wearing`; the drawer line names the event's TITLE
+    (`Timed roles end with this marathon: Back to Black 2027 (23 people)`).
+14. **Keys: 1540 → 1569** (`settings_store.TIMED_ROLE_SITE_WORDS`, 29: the API's refusals, the list's words, the page's headings
+    and counts) — registry + mock row + label each. **Routes: 14 → 23** under `/api/rolemenus` (new: `GET /{name}`,
+    `GET|POST|DELETE /timed-roles…`, `POST /{name}/attach`, `POST /{name}/list/preview`, `POST /{name}/list`,
+    `GET|POST /{name}/fill`; `POST /{name}/assign` became a 410). Contract entries for `/api/rolemenus*`: 8 → 15 (401 → 408 in all).
+15. **The page** (`rolemenus.html`, file and URL kept; nav, heading and Settings tab read *Timed roles*): **Events** (New event…;
+    one card per open event — its end in words, people assigned, a chip per role with people on it, the held line with **Use the
+    earlier end**, who set the end; **Give from a list…** and **Fill from the schedule** visible; *Change the end…* folded with
+    Attach a marathon inside; Rename / End it now / Delete quiet at the foot; ended events folded under *Ended events*) ·
+    **Timed roles** (the shared list: wearing and assigned counts, Remove, Add) · **Every assignment and grant** (the old *Timed
+    roles* table, renamed; the ad-hoc grant form folded and without timed roles) · Settings · Applications · Logs. Gone: the menu
+    editor (words, description, per-menu roles) and *Hand roles out* — every state they reached is reachable from an event card or
+    the timed list (checklist 44). A `#<event>` hash scrolls to that card. Confirms re-read the event first.
+16. **The staff guide `rolemenu-post`** is *Give out timed roles*, 4 steps (the live guide has 4, so `refresh_seeds` re-points
+    every live step's *Put the original back*; the live words change only on **Reset the whole guide**). Facts:
+    `rolemenu_end_buffer_days`, `rolemenu_end_earlier_holds`, `rolemenu_by_hand_channel_id` (was `rolemenu_approval_channel_id`).
+17. **Gate**: `site/mock/rolemenus-end.test.mjs` was in no gate; `scripts/deploy.ps1` runs it now.
+
+**Not built / left open**
+- The *pick the event later* flow (its own dispatch); the page leaves room for a *Waiting for an event* group beside Events.
+- By-hand posts are not shown on the site.
+- `ROLE_MENU_END_RETRIES` (§6.1 item 4) and `LINES_MAX` are constants, not keys.
+- The fill parts read `marathon_part_*` words (*runs: 2 matched · 1 to give Runner*), shared with the panel.
+- The Applications strings in `cogs/community/applications.py` and the mock still say *the Role menus page*.
