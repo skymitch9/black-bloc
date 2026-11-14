@@ -1,9 +1,8 @@
 {
-  "release": "v273",
-  "commit": "62c947a6",
+  "release": "v274",
+  "commit": "67312d20",
   "changed_features": [
-    "golive",
-    "pings",
-    "rolemenu"
+    "core",
+    "guides"
   ]
 }
