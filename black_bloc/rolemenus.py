@@ -15,10 +15,6 @@ STAFF_MODE = "staff"
 ON = "on"
 AUDIT_MAX = 25
 
-PANEL_TITLE = "Role menus"
-MENU_TITLE = "The menu {name}"
-ADD_ROLE_TITLE = "Add a role to {name}"
-HAND_OUT_TITLE = "Hand out roles from {name}"
 GRANTS_TITLE = "Timed roles running right now"
 NEW_GRANT_TITLE = "Give somebody a role"
 GRANT_TITLE = "Timed role #{grant_id}"
@@ -26,12 +22,7 @@ REQUESTS_TITLE = "Requests waiting on staff"
 CONFIRM_TITLE = "Are you sure?"
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /rolemenu again"
 
-NO_MENUS_LINE = "This server has no role menus yet. **New menu** starts one."
 NO_ROLES_YET = "No roles on it yet — **Add a role…** puts the first one on."
-OPTIONS_ARE_FULL = (
-    "This menu is holding all {limit} roles Discord will show, so nothing else fits. Split it "
-    "into a second menu."
-)
 
 GRANTS_HEADER = "**{count}** timed role(s) running, soonest to end first."
 GRANTS_FOR_ONE = "**{count}** timed role(s) running for that member, soonest to end first."
@@ -55,12 +46,9 @@ NO_REQUESTS = "Nothing is waiting on staff right now."
 REQUEST_PICK = "A request…"
 REQUESTS_CAPPED = "{shown} of {total} — the Role menus page has the rest"
 
-MENU_PICK = "A menu…"
-MENUS_CAPPED = "{shown} of {total} — the Role menus page has the rest"
 WHOSE_ROLES = "Whose roles?"
 WHO_GETS_IT = "Who gets it?"
 WHICH_ROLE = "Which role?"
-REMOVE_PICK = "Take a role off this menu…"
 ROLE_PICK = "A role to put on the menu…"
 
 DELETE_QUESTION = (
@@ -119,6 +107,15 @@ TYPE_DATE = "type_date"
 BUFFER = "buffer"
 NO_END_MOVE_ACTION = "no_end"
 NO_END_YES = "no_end_yes"
+NEW_EVENT = "new_event"
+NO_MARATHON = "no_marathon"
+TIMED_ROLES = "timed_roles"
+ENDED = "ended"
+TAKE_OFF = "take_off"
+FILL = "fill"
+FILL_YES = "fill_yes"
+ATTACH = "attach"
+RENAME = "rename"
 
 
 class PanelMove(NamedTuple):
@@ -128,49 +125,73 @@ class PanelMove(NamedTuple):
     row: int = 0
 
 
-NEW_MENU_MOVE = PanelMove(NEW_MENU, "New menu", "primary", 1)
 GRANTS_MOVE = PanelMove(GRANTS, "Grants…", "secondary", 1)
 LOGS_MOVE = PanelMove(LOGS, "Logs", "secondary", 2)
 REFRESH_MOVE = PanelMove(REFRESH, "Refresh", "secondary", 2)
 BACK_MOVE = PanelMove(BACK, "Back", "secondary", 3)
-ADD_ROLE_MOVE = PanelMove(ADD_ROLE, "Add a role…", "primary", 1)
-WORDS_MOVE = PanelMove(WORDS, "Words…", "secondary", 1)
-HAND_OUT_MOVE = PanelMove(HAND_OUT, "Hand roles out…", "secondary", 1)
 DELETE_MOVE = PanelMove(DELETE, "Delete it", "danger", 2)
-USE_ROLE_NAME_MOVE = PanelMove(USE_ROLE_NAME, "Use the role's own name", "primary", 1)
-LABEL_IT_MOVE = PanelMove(LABEL_IT, "Give it a label…", "secondary", 1)
-GIVE_MOVE = PanelMove(GIVE, "Give them roles…", "primary", 1)
-TAKE_BACK_MOVE = PanelMove(TAKE_BACK, "Take roles back…", "secondary", 1)
 NEW_GRANT_MOVE = PanelMove(NEW_GRANT, "Give somebody a role…", "primary", 2)
 HOW_LONG_MOVE = PanelMove(HOW_LONG, "How long for…", "primary", 2)
 PUSH_BACK_MOVE = PanelMove(PUSH_BACK, "Push it back…", "primary", 0)
 END_NOW_MOVE = PanelMove(END_NOW, "End it now", "danger", 0)
 
 
-def root_buttons() -> tuple[PanelMove, ...]:
-    """The permanent staff control: no seed, no mode switch, no requests (design §3.2)."""
-    return (NEW_MENU_MOVE, GRANTS_MOVE, LOGS_MOVE, REFRESH_MOVE)
+def root_buttons(*, ended: int, words: dict[str, str]) -> tuple[PanelMove, ...]:
+    """The events: New event, the shared list, and the ended ones folded behind a count."""
+    found = [
+        PanelMove(NEW_EVENT, words[NEW_EVENT], "primary", 1),
+        PanelMove(TIMED_ROLES, words[TIMED_ROLES], "secondary", 1),
+        GRANTS_MOVE,
+    ]
+    if ended:
+        found.append(PanelMove(ENDED, words[ENDED].format(count=ended), "secondary", 2))
+    return (*found, LOGS_MOVE, REFRESH_MOVE)
 
 
-def menu_buttons(
-    *, options: int, options_max: int, held: bool, words: dict[str, str]
+def event_buttons(
+    *,
+    open_: bool,
+    roles: int,
+    marathon: bool,
+    attachable: bool,
+    assigned: bool,
+    held: bool,
+    words: dict[str, str],
 ) -> tuple[PanelMove, ...]:
-    """A menu card's moves; one that needs roles on the menu renders only once it has some."""
+    """An event's card; a move renders only when it can do something on this event."""
     found: list[PanelMove] = []
-    if options < options_max:
-        found.append(ADD_ROLE_MOVE)
-    if options:
-        found.append(HAND_OUT_MOVE)
-    found.append(PanelMove(SET_END, words[SET_END], "primary", 1))
-    found.append(WORDS_MOVE)
-    if options:
-        found.append(PanelMove(END_MENU, words[END_MENU], "danger", 2))
+    if open_ and roles:
+        found.append(PanelMove(GIVE, words[GIVE], "primary", 1))
+        if marathon:
+            found.append(PanelMove(FILL, words[FILL], "primary", 1))
+    if assigned:
+        found.append(PanelMove(TAKE_OFF, words[TAKE_OFF], "secondary", 1))
+    found.append(PanelMove(SET_END, words[SET_END], "secondary", 2))
+    if open_ and attachable:
+        found.append(PanelMove(ATTACH, words[ATTACH], "secondary", 2))
+    found.append(PanelMove(RENAME, words[RENAME], "secondary", 2))
+    if open_ and roles:
+        found.append(PanelMove(END_MENU, words[END_MENU], "danger", 3))
     if held:
-        found.append(PanelMove(USE_HELD, words[USE_HELD], "primary", 2))
-    found.append(DELETE_MOVE)
-    found.append(BACK_MOVE)
-    found.append(REFRESH_MOVE._replace(row=3))
-    return tuple(found)
+        found.append(PanelMove(USE_HELD, words[USE_HELD], "primary", 3))
+    found.append(DELETE_MOVE._replace(row=3))
+    return (*found, BACK_MOVE._replace(row=4), REFRESH_MOVE._replace(row=4))
+
+
+def new_event_buttons(words: dict[str, str]) -> tuple[PanelMove, ...]:
+    return (
+        PanelMove(NO_MARATHON, words[NO_MARATHON], "primary", 1),
+        BACK_MOVE._replace(row=2),
+    )
+
+
+def fill_buttons(*, missing: int, words: dict[str, str]) -> tuple[PanelMove, ...]:
+    found = [PanelMove(FILL_YES, words[FILL_YES], "primary", 1)] if missing else []
+    return (*found, BACK_MOVE._replace(row=2), REFRESH_MOVE._replace(row=2))
+
+
+def back_buttons() -> tuple[PanelMove, ...]:
+    return (BACK_MOVE._replace(row=4), REFRESH_MOVE._replace(row=4))
 
 
 def set_end_buttons(*, source: str, words: dict[str, str]) -> tuple[PanelMove, ...]:
@@ -181,21 +202,6 @@ def set_end_buttons(*, source: str, words: dict[str, str]) -> tuple[PanelMove, .
     if source != NO_END:
         found.append(PanelMove(NO_END_MOVE_ACTION, words[NO_END_MOVE_ACTION], "danger", 1))
     return (*found, BACK_MOVE._replace(row=2), REFRESH_MOVE._replace(row=2))
-
-
-def add_role_buttons(*, picked: bool) -> tuple[PanelMove, ...]:
-    found = [USE_ROLE_NAME_MOVE, LABEL_IT_MOVE] if picked else []
-    return (*found, BACK_MOVE._replace(row=2))
-
-
-def hand_out_buttons(*, picked: bool, holds_any: bool) -> tuple[PanelMove, ...]:
-    """`Take roles back…` needs them to hold one of this menu's roles, so it renders only then."""
-    found: list[PanelMove] = []
-    if picked:
-        found.append(GIVE_MOVE)
-        if holds_any:
-            found.append(TAKE_BACK_MOVE)
-    return (*found, BACK_MOVE._replace(row=3))
 
 
 def grants_buttons() -> tuple[PanelMove, ...]:
@@ -462,10 +468,8 @@ __all__ = [
     "MODE",
     "NEW_GRANT",
     "NEW_MENU",
-    "NO_MENUS_LINE",
     "PANEL_MINUTES_KEY",
     "PANEL_TIMEOUT_FOOTER",
-    "PANEL_TITLE",
     "POST",
     "PUSH_BACK",
     "REFRESH",
@@ -491,14 +495,11 @@ __all__ = [
     "utc_iso",
     "wearers",
     "what_ended",
-    "add_role_buttons",
     "grant_buttons",
     "grant_line",
     "grant_lines",
     "grant_order",
     "grants_buttons",
-    "hand_out_buttons",
-    "menu_buttons",
     "menu_heading",
     "new_grant_buttons",
     "option_line",

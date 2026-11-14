@@ -175,10 +175,12 @@ async def test_assign_gives_the_role_through_the_same_path_as_the_picker(
     )
 
     assert response.status_code == 200
-    assert "Added: Runner" in response.json()["message"]
+    assert "given to 1" in response.json()["message"]
     assert wf.STAFF_ROLE_ID in [role.id for role in member.roles]
     grant = await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.STAFF_ROLE_ID)
+    menu = await get_menu(web.db, wf.GUILD_ID, "runner")
     assert grant is not None and grant["source"] == grants.STAFF
+    assert grant["menu_id"] == menu["id"]
     assert "web.role_menu.assign" in await wf.kinds_in(web.db)
 
 
@@ -198,7 +200,7 @@ async def test_assign_with_remove_takes_the_role_off_again(client, sign_in, web,
 
     assert response.status_code == 200
     assert response.json()["assigned"] is False
-    assert "Removed: Runner" in response.json()["message"]
+    assert "taken off 1" in response.json()["message"]
     assert wf.STAFF_ROLE_ID not in [role.id for role in member.roles]
     assert "web.role_menu.unassign" in await wf.kinds_in(web.db)
 
@@ -238,7 +240,7 @@ async def test_assigning_what_they_already_have_says_so_and_changes_nothing(
     )
 
     assert again.status_code == 200
-    assert "already has exactly those roles" in again.json()["message"]
+    assert "1 already assigned" in again.json()["message"]
     assert len(member.edits) == before
 
 
@@ -246,13 +248,13 @@ async def test_assign_refuses_a_member_the_bot_cannot_see_and_an_empty_menu(
     client, sign_in, web, wf
 ):
     sign_in(client)
-    await a_staff_menu(client, web, wf)
     await a_menu(client, wf, "empty")
+    empty = client.post("/api/rolemenus/empty/assign", json={"user_id": str(MEMBER)})
+    await a_staff_menu(client, web, wf)
 
     stranger = client.post(
         "/api/rolemenus/runner/assign", json={"user_id": "4242", "role_ids": []}
     )
-    empty = client.post("/api/rolemenus/empty/assign", json={"user_id": str(MEMBER)})
 
     assert stranger.status_code == 404 and "not somebody Black Bloc can see" in (
         stranger.json()["message"]
@@ -407,30 +409,29 @@ async def a_posted_menu(client, web, wf, channel_id):
     client.post("/api/rolemenus/colours/post", json={"channel_id": str(channel_id)})
 
 
-async def test_a_put_that_moves_roles_re_stamps_their_open_grants(client, sign_in, web, wf):
-    """1a's must-do: options written by the site follow the menu's end like the panel's do."""
+async def test_an_assignment_carries_its_events_end_and_an_assigned_role_stays_on_the_list(
+    client, sign_in, web, guild, wf
+):
+    """§7.2: the list is shared; a role still assigned on an open event cannot leave it."""
     sign_in(client)
-    await a_menu(client, wf)
-    later = "2099-01-01T00:00:00+00:00"
-    menu = await get_menu(web.db, wf.GUILD_ID, "colours")
-    await web.db.conn.execute(
-        "UPDATE role_menus SET ends_source = 'date', ends_at = ? WHERE id = ?", (later, menu["id"])
+    await end_menu(client, web, wf)
+    wf.member(guild, MEMBER, name="ada")
+    client.post(
+        "/api/rolemenus/btb/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.PLAIN_ROLE_ID)]},
     )
-    await web.db.conn.commit()
-    await grants.add_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID, "staff", until=None)
+    client.put("/api/rolemenus/btb", json={"ends_source": "date", "ends_at": "2099-02-28"})
+    menu = await get_menu(web.db, wf.GUILD_ID, "btb")
+    grant = await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID)
+    assert grant["expires_at"] == menu["ends_at"] and grant["menu_id"] == menu["id"]
 
-    client.put(
-        "/api/rolemenus/colours",
-        json={"options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}]},
-    )
-    assert (await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID))[
-        "expires_at"
-    ] == later
+    refused = client.put("/api/rolemenus/btb", json={"options": []})
 
-    client.put("/api/rolemenus/colours", json={"options": []})
-    assert (await grants.open_grant(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID))[
-        "expires_at"
-    ] is None
+    assert refused.status_code == 409 and refused.json()["error"] == "role_assigned"
+    assert "still assigned 1 time(s)" in refused.json()["message"]
+    assert [row["role_id"] for row in await get_options(web.db, menu["id"])] == [
+        wf.PLAIN_ROLE_ID
+    ]
 
 
 # --- request #17 1b: the end, End it now, the hold, and the retired doors ------------------------
@@ -493,7 +494,7 @@ async def test_a_menu_row_carries_its_end_who_wears_it_and_the_last_pass(
 
     assert row["ends_source"] == "none" and row["ends_at"] is None
     assert row["end_label"] == "no end set"
-    assert row["wearing"] == 1
+    assert row["wearing"] == 0
     assert row["buffer_days"] is None and row["buffer_default"] == 1
     assert row["last_pass"] == {"passes": 0, "members": 0, "failures": 0, "ended_at": None}
     assert row["ends_held_at"] is None and row["mode"] == "staff"
@@ -645,7 +646,9 @@ async def test_the_row_carries_what_the_earlier_end_and_end_now_confirms_ask(
     [quiet] = client.get("/api/rolemenus").json()
     assert quiet["held_label"] is None and quiet["held_past"] is False
     assert quiet["held_question"] is None
-    assert quiet["end_now_question"] == "Take 1 role(s) off 1 people now?"
+    assert quiet["end_now_question"] == (
+        "Take 1 role(s) off 1 people now? 0 keep a role through another event."
+    )
 
     for held, past, words in (
         ("2099-02-21T05:00:00+00:00", False, "come off 1 people 2099-02-2"),
@@ -658,9 +661,9 @@ async def test_the_row_carries_what_the_earlier_end_and_end_now_confirms_ask(
 
         [row] = client.get("/api/rolemenus").json()
 
-        assert row["held_past"] is past and row["wearing"] == 1
+        assert row["held_past"] is past and row["wearing"] == 0
         assert row["held_label"].startswith(held[:4]) and "<t:" not in row["held_label"]
-        assert row["held_question"].startswith("Use **btb**'s earlier end?")
+        assert row["held_question"].startswith("Use **Back to Black**'s earlier end?")
         assert words in row["held_question"] and "<t:" not in row["held_question"]
 
 
@@ -669,9 +672,12 @@ async def test_a_menu_still_to_end_is_not_deleted_while_people_wear_its_roles(
 ):
     sign_in(client)
     await end_menu(client, web, wf)
-    member = wf.member(guild, MEMBER, name="ada")
-    member.roles.append(guild.get_role(wf.PLAIN_ROLE_ID))
+    wf.member(guild, MEMBER, name="ada")
     client.put("/api/rolemenus/btb", json={"ends_source": "date", "ends_at": "2099-02-28"})
+    client.post(
+        "/api/rolemenus/btb/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.PLAIN_ROLE_ID)]},
+    )
 
     refused = client.delete("/api/rolemenus/btb")
 
@@ -703,8 +709,11 @@ async def test_assign_needs_no_switch_and_writes_the_menus_end(client, sign_in, 
 async def test_the_marathon_row_names_the_menus_that_end_with_it(client, sign_in, web, guild, wf):
     sign_in(client)
     await end_menu(client, web, wf)
-    member = wf.member(guild, MEMBER, name="ada")
-    member.roles.append(guild.get_role(wf.PLAIN_ROLE_ID))
+    wf.member(guild, MEMBER, name="ada")
+    client.post(
+        "/api/rolemenus/btb/assign",
+        json={"user_id": str(MEMBER), "role_ids": [str(wf.PLAIN_ROLE_ID)]},
+    )
     marathon_id = await a_marathon(web, wf)
     from black_bloc.cogs.community.role_menus import menus_ending_with
 
@@ -724,45 +733,29 @@ async def test_the_marathon_row_names_the_menus_that_end_with_it(client, sign_in
 
 # --- a role `/pings` hands out never sits on a menu that ends (2026-11-13) ------------------------
 
-PINGS_SAID = "belongs to `/pings`, so nothing was changed"
+PINGS_SAID = "belongs to `/pings`, so it was not made a timed role"
 
 
-async def test_every_end_and_end_now_on_a_menu_holding_a_fan_role_is_refused_in_words(
+async def test_end_now_never_takes_a_role_pings_owns_even_one_set_on_the_list_by_hand(
     client, sign_in, web, guild, wf
 ):
+    """§7.3.3: the pass skips `/pings` roles, however a role came to sit on the timed list."""
     from black_bloc import pings
+    from black_bloc import timed_roles as timed
 
     sign_in(client)
-    menu = await end_menu(client, web, wf)
+    await end_menu(client, web, wf)
     member = wf.member(guild, MEMBER, name="ada")
     member.roles.append(guild.get_role(wf.PLAIN_ROLE_ID))
-    marathon_id = await a_marathon(web, wf)
     await pings.set_fan_role(web.db, wf.GUILD_ID, MEMBER, wf.PLAIN_ROLE_ID, 7)
-    await web.db.conn.execute(
-        "UPDATE role_menus SET ends_held_at = '2099-02-21T05:00:00+00:00' WHERE id = ?",
-        (menu["id"],),
-    )
-    await web.db.conn.commit()
+    assert await timed.is_timed(web.db, wf.GUILD_ID, wf.PLAIN_ROLE_ID)
     web.guard = None
-    before = await wf.kinds_in(web.db)
 
-    for method, route, body in (
-        ("PUT", "/api/rolemenus/btb", {"ends_source": "date", "ends_at": "2099-02-28"}),
-        ("PUT", "/api/rolemenus/btb", {"ends_source": "marathon", "ends_marathon_id": marathon_id}),
-        ("POST", "/api/rolemenus/btb/end-now", {}),
-        ("POST", "/api/rolemenus/btb/end-earlier", {}),
-    ):
-        response = client.request(method, route, json=body)
-        assert response.status_code == 409 and response.json()["error"] == "pings_role", body
-        said = response.json()["message"]
-        assert PINGS_SAID in said and "**Member**" in said
+    response = client.post("/api/rolemenus/btb/end-now")
 
-    assert await wf.kinds_in(web.db) == before
-    assert (await get_menu(web.db, wf.GUILD_ID, "btb"))["ends_source"] == "none"
+    assert response.status_code == 200, response.json()
+    assert response.json()["pass"]["members"] == 0
     assert wf.PLAIN_ROLE_ID in [role.id for role in member.roles]
-
-    cleared = client.put("/api/rolemenus/btb", json={"ends_source": "none"})
-    assert cleared.status_code == 200
 
 
 async def test_putting_the_events_role_on_a_menu_is_refused_and_taking_it_off_is_not(
@@ -783,9 +776,9 @@ async def test_putting_the_events_role_on_a_menu_is_refused_and_taking_it_off_is
     assert [row["role_id"] for row in await get_options(web.db, menu["id"])] == [wf.PLAIN_ROLE_ID]
 
     await web.db.conn.execute(
-        "INSERT INTO role_menu_options(menu_id, role_id, label, emoji, position) "
-        "VALUES (?, ?, 'Events', NULL, 1)",
-        (menu["id"], wf.ADMIN_ROLE_ID),
+        "INSERT INTO timed_roles(guild_id, role_id, label, position, added_at) "
+        "VALUES (?, ?, 'Events', 1, '2026-11-14T00:00:00+00:00')",
+        (wf.GUILD_ID, wf.ADMIN_ROLE_ID),
     )
     await web.db.conn.commit()
 

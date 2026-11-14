@@ -13678,6 +13678,8 @@
     "web.role_menu.seeded",
     "web.role_menu.assign",
     "web.role_menu.unassign",
+    "web.role_menu.option_added",
+    "web.role_menu.option_removed",
     "web.golive.link",
     "web.golive.unlink",
     "web.golive.optout",

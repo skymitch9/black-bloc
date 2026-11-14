@@ -70,8 +70,3 @@ async def unpost(bot: Any, menu: Any, actor: Any, *, via: str = VIA_DISCORD) -> 
     await note(bot, menu, UNPOSTED, actor, via=via, message_id=menu["message_id"])
     return True
 
-
-async def repost(bot: Any, menu: Any, actor: Any) -> bool:
-    """Members pick roles in Discord's Channels & Roles now: no panel is ever posted again."""
-    _ = (bot, menu, actor)
-    return False

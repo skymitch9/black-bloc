@@ -10986,9 +10986,9 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "an end. It takes {role} {menu} {date}",
     ),
     "rolemenu_root_line": (
-        "**{name}** · {roles} role(s) · {wearing} wearing · {end}",
-        ("name", "roles", "wearing", "end"),
-        "one menu's line on /rolemenu. It takes {name} {roles} {wearing} {end}",
+        "**{name}** · {end} · {wearing} people",
+        ("name", "wearing", "end"),
+        "one event's line on /rolemenu. It takes {name} {end} {wearing} (people assigned)",
     ),
     "rolemenu_wearing_unknown_text": (
         "?",
@@ -11026,7 +11026,11 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("label", "role_id", "wearing"),
         "one role's line on a menu's card. It takes {label} {role_id} {wearing}",
     ),
-    "rolemenu_set_end_button": ("Set the end…", (), "the card's button that opens Set the end"),
+    "rolemenu_set_end_button": (
+        "Change the end…",
+        (),
+        "the event card's button that opens Change the end",
+    ),
     "rolemenu_end_now_button": ("End it now", (), "the card's button that ends a menu now"),
     "rolemenu_use_held_button": (
         "Use the earlier end",
@@ -11128,9 +11132,11 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{menu}",
     ),
     "rolemenu_end_now_question": (
-        "Take {roles} role(s) off {members} people now?",
-        ("roles", "members"),
-        "what staff are asked before End it now. It takes {roles} {members}",
+        "Take {roles} role(s) off {members} people now? {keep} keep a role through another "
+        "event.",
+        ("roles", "members", "keep"),
+        "what staff are asked before End it now — the counts the end itself will use. It takes "
+        "{roles} {members} {keep}",
     ),
     "rolemenu_end_now_yes": ("Yes, take them off", (), "End it now's confirm button"),
     "rolemenu_no_end_question": (
@@ -11146,26 +11152,26 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what staff are told when End it now cannot see every member yet. It takes {menu}",
     ),
     "rolemenu_delete_refused_said": (
-        "**{menu}** still ends {when} and {members} people wear its roles, so it was not "
-        "deleted. **End it now** first, or **No end** if nobody should lose them.",
+        "**{menu}** still ends {when} and {members} people are assigned to it, so it was not "
+        "deleted. **End it now** first, or **No end** if nobody should lose a role.",
         ("menu", "when", "members"),
-        "the refusal when a menu with an end still to come is deleted while people wear its "
-        "roles. It takes {menu} {when} {members}",
+        "the refusal when an event with an end still to come is deleted while people are "
+        "assigned to it. It takes {menu} {when} {members}",
     ),
     "rolemenu_cannot_strip_said": (
-        "Black Bloc could not take **{name}** off anybody, so it was not added — the end of this "
-        "menu has to be able to remove it. Ask an admin to move Black Bloc's role above it in "
-        "Server Settings → Roles, then try again.",
+        "Black Bloc could not take **{name}** off anybody, so it was not made a timed role — an "
+        "event's end has to be able to remove it. Ask an admin to move Black Bloc's role above "
+        "it in Server Settings → Roles, then try again.",
         ("name",),
-        "the refusal when a role put on a menu is one Black Bloc could not remove. It takes {name}",
+        "the refusal when a role put on the timed-role list is one Black Bloc could not remove. "
+        "It takes {name}",
     ),
     "rolemenu_pings_role_said": (
-        "**{name}** belongs to `/pings`, so nothing was changed — members turn it on and off "
-        "there, and a role menu's end would take it off everyone. A menu that holds it can have no "
-        "end; take it off the menu to give the menu one.",
+        "**{name}** belongs to `/pings`, so it was not made a timed role — members turn it on "
+        "and off there, and an event's end would take it off everyone.",
         ("name",),
-        "the refusal when a ping role (a streamer's role or the Events role) is put on a menu, or "
-        "a menu holding one is given an end or ended now. It takes {name}",
+        "the refusal when a ping role (a streamer's role, the Events role or the raid-train "
+        "role) is added to the timed-role list. It takes {name}",
     ),
     "rolemenu_no_held_said": (
         "**{menu}** has no earlier end waiting, so nothing was changed.",
@@ -11173,17 +11179,18 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what staff are told when there is no held end to take. It takes {menu}",
     ),
     "rolemenu_use_held_question": (
-        "Use **{menu}**'s earlier end? Its {roles} role(s) come off {members} people {when}.",
-        ("menu", "roles", "members", "when"),
+        "Use **{menu}**'s earlier end? {roles} role(s) come off {members} people {when}; {keep} "
+        "keep a role through another event.",
+        ("menu", "roles", "members", "when", "keep"),
         "what staff are asked before Use the earlier end, while that end is still to come. It "
-        "takes {menu} {roles} {members} {when}",
+        "takes {menu} {roles} {members} {when} {keep}",
     ),
     "rolemenu_use_held_past_question": (
-        "Use **{menu}**'s earlier end? It was {when}, already gone by, so its {roles} role(s) come "
-        "off {members} people at the next hourly pass.",
-        ("menu", "roles", "members", "when"),
+        "Use **{menu}**'s earlier end? It was {when}, already gone by, so {roles} role(s) come "
+        "off {members} people at the next hourly pass; {keep} keep a role through another event.",
+        ("menu", "roles", "members", "when", "keep"),
         "what staff are asked before Use the earlier end when that end has already gone by. It "
-        "takes {menu} {roles} {members} {when}",
+        "takes {menu} {roles} {members} {when} {keep}",
     ),
     "rolemenu_use_held_yes": ("Yes, use it", (), "Use the earlier end's confirm button"),
 }
@@ -11201,6 +11208,365 @@ KEY_HELP[ROLEMENU_END_EARLIER_HOLDS_KEY] = (
 )
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in ROLEMENU_STAFF_WORDS.items()}
+)
+
+# Timed roles per event (timed-roles, 2026-11-14, event-roles-design.md §7): the events panel,
+# the shared timed-role list, Give / Take roles off, Fill from the schedule, the by-hand post.
+TIMED_ROLE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "rolemenu_panel_title": ("Timed roles", (), "the heading of /rolemenu"),
+    "rolemenu_no_events_line": (
+        "No events yet.",
+        (),
+        "what /rolemenu says while there is no event",
+    ),
+    "rolemenu_event_pick": ("An event…", (), "the event picker on /rolemenu"),
+    "rolemenu_events_capped": (
+        "{shown} of {total} events — the site has the rest",
+        ("shown", "total"),
+        "the event picker when there are more events than Discord lists. It takes {shown} {total}",
+    ),
+    "rolemenu_new_event_button": ("New event…", (), "the root's button that starts an event"),
+    "rolemenu_timed_roles_button": (
+        "Timed roles…",
+        (),
+        "the root's button that opens the timed-role list",
+    ),
+    "rolemenu_ended_button": (
+        "Ended ({count})…",
+        ("count",),
+        "the root's button that opens the ended events. It takes {count}",
+    ),
+    "rolemenu_ended_title": ("Ended events", (), "the heading of the ended events"),
+    "rolemenu_ended_event_line": (
+        "**{name}** · ended {when} · {members} people",
+        ("name", "when", "members"),
+        "one ended event's line. It takes {name} {when} {members}",
+    ),
+    "rolemenu_event_title": (
+        "{name}",
+        ("name",),
+        "the heading of an event's card. It takes {name}",
+    ),
+    "rolemenu_event_role_line": (
+        "{label} — <@&{role_id}> · {assigned} assigned",
+        ("label", "role_id", "assigned"),
+        "one timed role's line on an event's card. It takes {label} {role_id} {assigned}",
+    ),
+    "rolemenu_no_timed_roles_line": (
+        "No timed roles yet.",
+        (),
+        "what a card says while the timed-role list is empty",
+    ),
+    "rolemenu_end_date_only_text": (
+        "{end} (date, no marathon)",
+        ("end",),
+        "an event's end when it is a typed date and no marathon is attached. It takes {end}",
+    ),
+    "rolemenu_give_button": ("Give roles…", (), "the event card's button that gives its roles"),
+    "rolemenu_fill_button": (
+        "Fill from the schedule",
+        (),
+        "the event card's button that reads the marathon's schedule",
+    ),
+    "rolemenu_take_button": (
+        "Take roles off…",
+        (),
+        "the event card's button that takes its roles off people",
+    ),
+    "rolemenu_attach_button": (
+        "Attach a marathon…",
+        (),
+        "the event card's button that ties a dated event to a marathon",
+    ),
+    "rolemenu_rename_button": ("Rename…", (), "the event card's rename button"),
+    "rolemenu_no_marathon_button": (
+        "No marathon yet…",
+        (),
+        "New event's button for an event typed by hand",
+    ),
+    "rolemenu_new_event_title": (
+        "A new event",
+        (),
+        "the heading of New event and its form; Discord cuts a form title at 45 characters",
+    ),
+    "rolemenu_event_name_label": (
+        "Name",
+        (),
+        "the event form's name box; Discord cuts a form label at 45 characters",
+    ),
+    "rolemenu_rename_title": (
+        "Rename the event",
+        (),
+        "the rename form's title; Discord cuts a form title at 45 characters",
+    ),
+    "rolemenu_event_needs_name_said": (
+        "An event needs a name, so nothing was changed. Type one.",
+        (),
+        "the refusal when an event is given a blank name",
+    ),
+    "rolemenu_event_made_said": (
+        "**{name}** is an event now.",
+        ("name",),
+        "what staff are told once an event is made. It takes {name}",
+    ),
+    "rolemenu_event_renamed_said": (
+        "The event is called **{name}** now.",
+        ("name",),
+        "what staff are told once an event is renamed. It takes {name}",
+    ),
+    "rolemenu_attach_title": (
+        "Attach a marathon · {name}",
+        ("name",),
+        "the heading of Attach a marathon. It takes {name}",
+    ),
+    "rolemenu_timed_roles_title": ("Timed roles", (), "the heading of the timed-role list"),
+    "rolemenu_timed_add_pick": ("Add a role…", (), "the timed-role list's role picker"),
+    "rolemenu_timed_remove_pick": ("Remove a role…", (), "the timed-role list's remove picker"),
+    "rolemenu_timed_added_said": (
+        "**{name}** is a timed role now.",
+        ("name",),
+        "what staff are told once a role joins the list. It takes {name}",
+    ),
+    "rolemenu_timed_removed_said": (
+        "**{name}** is not a timed role any more. Nobody loses it.",
+        ("name",),
+        "what staff are told once a role leaves the list. It takes {name}",
+    ),
+    "rolemenu_timed_already_said": (
+        "**{name}** is already a timed role, so nothing changed.",
+        ("name",),
+        "the answer when a role already on the list is added again. It takes {name}",
+    ),
+    "rolemenu_timed_not_listed_said": (
+        "**{name}** is not a timed role, so nothing changed. Press **Refresh** and look again.",
+        ("name",),
+        "the answer when a role that is not on the list is removed. It takes {name}",
+    ),
+    "rolemenu_timed_list_full_said": (
+        "The timed-role list holds {limit} roles, all Discord will show, so nothing was added. "
+        "Remove one first.",
+        ("limit",),
+        "the refusal when the timed-role list is full. It takes {limit}",
+    ),
+    "rolemenu_timed_remove_refused_said": (
+        "**{name}** is still assigned {count} time(s) on events that have not ended, so it stays "
+        "a timed role. Take it off those people first, or end those events.",
+        ("name", "count"),
+        "the refusal when a role that open events still assign leaves the list. It takes {name} "
+        "{count}",
+    ),
+    "rolemenu_timed_needs_event_said": (
+        "**{role}** is a timed role, so it is given from an event — `/rolemenu` ▸ the event ▸ "
+        "**Give roles…**. Nothing was changed.",
+        ("role",),
+        "the refusal when a timed role is given or pushed back without an event. It takes {role}",
+    ),
+    "rolemenu_kept_through_said": (
+        "This assignment is closed, and **{name}** keeps **{role}** through **{menu}**.",
+        ("role", "name", "menu"),
+        "what staff are told when a timed role is ended for one event but another open event "
+        "still holds it. It takes {role} {name} {menu}",
+    ),
+    "rolemenu_give_title": (
+        "Give roles · {name}",
+        ("name",),
+        "the heading of Give roles. It takes {name}",
+    ),
+    "rolemenu_take_title": (
+        "Take roles off · {name}",
+        ("name",),
+        "the heading of Take roles off. It takes {name}",
+    ),
+    "rolemenu_pick_role_placeholder": (
+        "A timed role…",
+        (),
+        "the role picker of Give roles and Take roles off",
+    ),
+    "rolemenu_pick_people_placeholder": (
+        "Up to 25 people…",
+        (),
+        "the people picker of Give roles and Take roles off",
+    ),
+    "rolemenu_given_line": (
+        "<@&{role_id}> · given to {count}",
+        ("role_id", "count"),
+        "the running count on Give roles. It takes {role_id} {count}",
+    ),
+    "rolemenu_taken_line": (
+        "<@&{role_id}> · taken off {count}",
+        ("role_id", "count"),
+        "the running count on Take roles off. It takes {role_id} {count}",
+    ),
+    "rolemenu_give_said": (
+        "**{role}**: given to {given}, {had} already wore it, {already} already assigned, "
+        "{refused} refused.",
+        ("role", "given", "had", "already", "refused"),
+        "what staff are told after one batch of Give roles. It takes {role} {given} {had} "
+        "{already} {refused}",
+    ),
+    "rolemenu_take_said": (
+        "**{role}**: taken off {given}, {kept} keep it through another event, {refused} refused.",
+        ("role", "given", "kept", "refused"),
+        "what staff are told after one batch of Take roles off. It takes {role} {given} {kept} "
+        "{refused}",
+    ),
+    "rolemenu_give_refused_said": (
+        "**{role}** cannot be given from this event — it has ended, or the role is no longer "
+        "timed. Nothing was changed.",
+        ("role",),
+        "the refusal when a role is given from an ended event or is not timed. It takes {role}",
+    ),
+    "rolemenu_fill_title": (
+        "Fill from the schedule · {name}",
+        ("name",),
+        "the heading of Fill from the schedule. It takes {name}",
+    ),
+    "rolemenu_fill_line": (
+        "{part}: {matched} matched · {missing} to give <@&{role_id}>",
+        ("part", "matched", "missing", "role_id"),
+        "one part's line on Fill from the schedule. It takes {part} {matched} {missing} {role_id}",
+    ),
+    "rolemenu_fill_no_role_line": (
+        "{part}: no role set ({setting}), skipped",
+        ("part", "setting"),
+        "a part with no role on Fill from the schedule. It takes {part} {setting}",
+    ),
+    "rolemenu_fill_not_timed_line": (
+        "{part}: <@&{role_id}> is not a timed role, skipped",
+        ("part", "role_id"),
+        "a part whose role is not on the timed list. It takes {part} {role_id}",
+    ),
+    "rolemenu_fill_unmatched_line": (
+        "{part} not matched to a member ({count}): {names}",
+        ("part", "count", "names"),
+        "the schedule names no member was matched to. It takes {part} {count} {names}",
+    ),
+    "rolemenu_fill_yes": ("Give them the roles", (), "Fill from the schedule's confirm button"),
+    "rolemenu_fill_done_said": (
+        "{given} given, {had} already wore it, {already} already assigned, {refused} refused.",
+        ("given", "had", "already", "refused"),
+        "what staff are told after Fill from the schedule. It takes {given} {had} {already} "
+        "{refused}",
+    ),
+    "rolemenu_fill_nothing_said": (
+        "Everyone matched already has their role on this event, so nothing was given.",
+        (),
+        "what staff are told when Fill from the schedule finds nobody missing",
+    ),
+    "rolemenu_pings_timed_role_said": (
+        "**{role}** is a timed role, so `/pings` did not take it — an event's end would take it "
+        "off everyone who opted in. Pick another role, or take it off the timed-role list first.",
+        ("role",),
+        "the refusal when `/pings` is pointed at a role on the timed-role list. It takes {role}",
+    ),
+}
+ROLEMENU_STAFF_DEFAULTS.update(
+    {key: default for key, (default, _, _) in TIMED_ROLE_WORDS.items()}
+)
+KEY_TYPES.update({key: "text" for key in TIMED_ROLE_WORDS})
+KEY_HELP.update({key: said for key, (_, _, said) in TIMED_ROLE_WORDS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in TIMED_ROLE_WORDS.items()}
+)
+ROLEMENU_BY_HAND_CHANNEL_KEY = "rolemenu_by_hand_channel_id"
+ROLEMENU_BY_HAND_POSTS_KEY = "rolemenu_by_hand_posts"
+TIMED_ROLE_BY_HAND_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "rolemenu_by_hand_text": (
+        "{who} gave {member} {roles} by hand. Which event is it for?",
+        ("who", "member", "roles"),
+        "the post in the by-hand channel when somebody adds a timed role by hand. It takes "
+        "{who} {member} {roles}",
+    ),
+    "rolemenu_by_hand_someone": (
+        "Somebody",
+        (),
+        "what stands in for {who} when the audit log does not name who added the role",
+    ),
+    "rolemenu_by_hand_unreadable_text": (
+        "Black Bloc cannot read the audit log, so it does not know who added it — give its role "
+        "View Audit Log to be told.",
+        (),
+        "the line under a by-hand post when Black Bloc may not read the audit log",
+    ),
+    "rolemenu_by_hand_silent_text": (
+        "The audit log did not say who added it.",
+        (),
+        "the line under a by-hand post when the audit log has no entry for that change",
+    ),
+    "rolemenu_by_hand_no_events_text": (
+        "No event is open to attach it to.",
+        (),
+        "the line under a by-hand post while no event is open",
+    ),
+    "rolemenu_by_hand_pick": ("Which event?", (), "the by-hand post's event picker"),
+    "rolemenu_by_hand_attached_text": (
+        "{who} gave {member} {roles} by hand — attached to **{event}** by {staff}.",
+        ("who", "member", "roles", "event", "staff"),
+        "the by-hand post once staff attach it to an event. It takes {who} {member} {roles} "
+        "{event} {staff}",
+    ),
+    "rolemenu_by_hand_done_said": (
+        "Attached to **{event}**: {given} assignment(s) written.",
+        ("event", "given"),
+        "what staff are told once a by-hand post is attached. It takes {event} {given}",
+    ),
+    "rolemenu_by_hand_already_said": (
+        "This was already attached to **{event}**, so nothing changed.",
+        ("event",),
+        "what staff are told when a by-hand post was attached already. It takes {event}",
+    ),
+    "rolemenu_by_hand_gone_said": (
+        "Black Bloc has no record of that by-hand post or that event any more, so nothing was "
+        "attached.",
+        (),
+        "what staff are told when a by-hand post or its picked event is gone",
+    ),
+    "rolemenu_by_hand_not_worn_said": (
+        "{member} no longer wears {roles}, so nothing was attached.",
+        ("member", "roles"),
+        "what staff are told when the member no longer wears the roles. It takes {member} {roles}",
+    ),
+}
+ROLEMENU_STAFF_DEFAULTS.update(
+    {key: default for key, (default, _, _) in TIMED_ROLE_BY_HAND_WORDS.items()}
+)
+ROLEMENU_STAFF_DEFAULTS[ROLEMENU_BY_HAND_POSTS_KEY] = True
+KEY_TYPES.update({key: "text" for key in TIMED_ROLE_BY_HAND_WORDS})
+KEY_HELP.update({key: said for key, (_, _, said) in TIMED_ROLE_BY_HAND_WORDS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in TIMED_ROLE_BY_HAND_WORDS.items()}
+)
+KEY_TYPES.update(
+    {
+        ROLEMENU_BY_HAND_CHANNEL_KEY: "channel",
+        ROLEMENU_BY_HAND_POSTS_KEY: "bool",
+        "rolemenu_fill_runner_role_id": "role",
+        "rolemenu_fill_commentator_role_id": "role",
+        "rolemenu_fill_host_role_id": "role",
+    }
+)
+KEY_HELP.update(
+    {
+        ROLEMENU_BY_HAND_CHANNEL_KEY: (
+            "where Black Bloc asks which event a timed role added by hand is for; blank uses "
+            "rolemenu_approval_channel_id, then staff_channel_id"
+        ),
+        ROLEMENU_BY_HAND_POSTS_KEY: (
+            "true — the default — posts in rolemenu_by_hand_channel_id when somebody adds a "
+            "timed role by hand; false posts nothing, and the role still goes at the next event's "
+            "end"
+        ),
+        "rolemenu_fill_runner_role_id": (
+            "the timed role Fill from the schedule gives a marathon's runners; blank skips them"
+        ),
+        "rolemenu_fill_commentator_role_id": (
+            "the timed role Fill from the schedule gives a marathon's commentators (couch); blank "
+            "skips them"
+        ),
+        "rolemenu_fill_host_role_id": (
+            "the timed role Fill from the schedule gives a marathon's hosts; blank skips them"
+        ),
+    }
 )
 
 # Blocks live (blocks-live, 2026-09-28) — who's live now, upcoming events and link buttons. Every

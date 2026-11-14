@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
 from . import optouts
+from . import timed_roles as timed
 from .actionlog import log_action
 from .button_block import ButtonLook, Words
 from .button_block import look as button_look
@@ -34,6 +35,7 @@ ONBOARDING_MANAGED_KEY = "pings_onboarding_managed"
 ONBOARDING_TITLE_KEY = "pings_onboarding_prompt_title"
 ONBOARDING_CAP_KEY = "pings_onboarding_option_cap"
 RAIDTRAIN_PING_KEY = "raidtrain_ping_role_id"
+TIMED_ROLE_KEY = "rolemenu_pings_timed_role_said"
 RAIDTRAIN_ROLE_NAME = "Raid trains"
 TEMPLATE_KEY = "pings_fan_role_template"
 UNLINK_KEY = "pings_fan_role_on_unlink"
@@ -451,6 +453,17 @@ def option_label(guild: Any, row: Any) -> str:
     return display_name(member) if member is not None else str(row["user_id"])
 
 
+async def timed_refusal(bot: Any, guild: Any, role: Any) -> str | None:
+    """A role on the timed-role list is never adopted: an event's end would strip every fan."""
+    if role is None or not await timed.is_timed(bot.db, guild.id, role.id):
+        return None
+    try:
+        text = str(bot.store.get(guild.id, TIMED_ROLE_KEY)).format(role=role.name)
+    except Exception:
+        text = ""
+    return text or str(bot.store.default(TIMED_ROLE_KEY, guild.id)).format(role=role.name)
+
+
 async def ensure_fan_role(
     bot: Any,
     guild: Any,
@@ -481,6 +494,9 @@ async def ensure_fan_role(
     role, refusal = existing_role, None
     if role is not None and not assignable(role):
         return Outcome(False, ROLE_UNASSIGNABLE.format(name=role.name))
+    refused = await timed_refusal(bot, guild, role)
+    if refused:
+        return Outcome(False, refused)
     reused = role is not None
     if role is None and name is not None:
         wanted = typed_role_name(name)
@@ -492,6 +508,9 @@ async def ensure_fan_role(
     elif role is None:
         wanted = fan_role_name(bot.store.get(guild.id, TEMPLATE_KEY), who)
         there = named_role(guild, wanted)
+        refused = await timed_refusal(bot, guild, there)
+        if refused:
+            return Outcome(False, refused)
         if there is not None and assignable(there):
             role, reused = there, True
         else:
@@ -685,9 +704,9 @@ def events_role_id(bot: Any, guild_id: int) -> int | None:
 
 
 async def owned_role_ids(bot: Any, guild_id: int) -> set[int]:
-    """Every role members opt into from `/pings`: each fan role and both feeds' Events role."""
+    """Every role members opt into from `/pings`: fan roles, Events and the raid-train role."""
     found = {int(row["role_id"]) for row in await all_fan_roles(bot.db, guild_id)}
-    for key in (GOLIVE_PING_KEY, EVENTS_PING_KEY):
+    for key in (GOLIVE_PING_KEY, EVENTS_PING_KEY, RAIDTRAIN_PING_KEY):
         role_id = bot.store.get(guild_id, key)
         if role_id:
             found.add(int(role_id))
@@ -709,6 +728,9 @@ async def setup_events_role(
         made = True
     if not assignable(role):
         return Outcome(False, ROLE_UNASSIGNABLE.format(name=role.name))
+    refused = await timed_refusal(bot, guild, role)
+    if refused:
+        return Outcome(False, refused)
     before = (
         bot.store.get(guild.id, GOLIVE_PING_KEY),
         bot.store.get(guild.id, EVENTS_PING_KEY),
@@ -1822,6 +1844,9 @@ async def setup_raidtrain_role(
         made = True
     if not assignable(role):
         return Outcome(False, ROLE_UNASSIGNABLE.format(name=role.name))
+    refused = await timed_refusal(bot, guild, role)
+    if refused:
+        return Outcome(False, refused)
     before = bot.store.get(guild.id, RAIDTRAIN_PING_KEY)
     if before != role.id:
         await bot.store.set(guild.id, RAIDTRAIN_PING_KEY, int(role.id), by=by)

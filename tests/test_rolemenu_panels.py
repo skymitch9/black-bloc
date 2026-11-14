@@ -8,9 +8,6 @@ from black_bloc.cogs.community.role_menus import (
     clear_message,
     create_menu,
     get_menu,
-    get_options,
-    list_menus,
-    seed_default_menus,
     set_message,
     unposted_menus,
 )
@@ -154,21 +151,6 @@ async def test_the_guard_refuses_a_take_down_and_nothing_is_touched(bot, db):
 
     assert bot.channels[PANEL_CHANNEL].deleted == []
     assert "role_menu.would_unpost" in await kinds(db)
-
-
-async def test_a_panel_is_never_posted_again_once_self_pick_is_retired(bot, db):
-    """Request #17: Discord's Channels & Roles owns self-pick, so repost posts nothing."""
-    await a_panel(db, message_id=None)
-    await seed_default_menus(db, GUILD)
-    before = [tuple(row) for row in await list_menus(db, GUILD)]
-
-    for menu in await list_menus(db, GUILD):
-        assert await panels.repost(bot, menu, 77) is False
-
-    assert all(channel.sent == [] for channel in bot.channels.values())
-    assert bot.views == []
-    assert [tuple(row) for row in await list_menus(db, GUILD)] == before
-    assert await get_options(db, (await get_menu(db, GUILD, "pronouns"))["id"])
 
 
 def test_nothing_on_boot_or_on_a_settings_write_reconciles_panels_any_more():

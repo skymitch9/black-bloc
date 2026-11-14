@@ -294,14 +294,15 @@ async def test_the_opted_out_list_is_one_row_a_person_with_a_chip_a_source(
 async def test_a_role_on_a_menu_with_an_end_carries_that_end_with_no_grant_row(
     client, sign_in, roster, web, wf
 ):
-    """Request #17: the menu's end comes off everyone wearing the role, so the chip says so even
-    for somebody Black Bloc never recorded a grant for; the sooner of the two ends wins."""
-    from black_bloc.cogs.community.role_menus import add_option, create_menu
+    """§7: a timed role worn with no assignment comes off at the next event's end, so the chip
+    says so even for somebody Black Bloc never recorded; the sooner of the two ends wins."""
+    from black_bloc import timed_roles as timed
+    from black_bloc.cogs.community.role_menus import create_menu
 
     sign_in(client)
     menu_end = "2099-03-01T06:59:00+00:00"
     menu_id = await create_menu(web.db, wf.GUILD_ID, "btb", "Back to Black", None, "staff")
-    await add_option(web.db, menu_id, wf.PLAIN_ROLE_ID, "Runner")
+    await timed.add(web.db, wf.GUILD_ID, wf.PLAIN_ROLE_ID, "Runner")
     await web.db.conn.execute(
         "UPDATE role_menus SET ends_source = 'date', ends_at = ? WHERE id = ?", (menu_end, menu_id)
     )
@@ -321,5 +322,5 @@ async def test_a_role_on_a_menu_with_an_end_carries_that_end_with_no_grant_row(
 
     assert chips
     for username, chip in chips:
-        assert chip["ends_with_menu"] == "btb"
+        assert chip["ends_with_menu"] == "Back to Black"
         assert chip["expires_at"] == (sooner if username == "ada" else menu_end)

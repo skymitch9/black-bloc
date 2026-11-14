@@ -318,6 +318,8 @@ def seed_members(guild, wf) -> None:
     wf.member(guild, PING_MEMBER_ID, name="namu")
 
 
+TIMED_ROLE_ID = 44
+
 async def seed_world(client, web, guild, wf) -> dict:
     """One of everything the contract's routes read, so no route answers empty."""
     seed_members(guild, wf)
@@ -415,12 +417,15 @@ async def seed_world(client, web, guild, wf) -> dict:
     await save_birthday(db, guild_id, MEMBER_ID, 3, 4, None, "staff")
     await add_channel(db, wf.VOICE_CHANNEL_ID, guild_id, MEMBER_ID, wf.OTHER_CHANNEL_ID)
     await web.store.set(guild_id, "tempvoice_creator_ids", [wf.VOICE_CHANNEL_ID], by=7)
+    # Timed roles (§7.2): the list is the server's own and a timed role is never given ad hoc,
+    # so it holds a role of its own — Member stays free for the Timed roles grant routes.
+    guild.roles.append(wf.Role(TIMED_ROLE_ID, "Runner", position=1))
     client.post("/api/rolemenus", json={"name": "contract", "title": "Contract"})
     client.put(
         "/api/rolemenus/contract",
         json={
             "title": "Contract",
-            "options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}],
+            "options": [{"role_id": str(TIMED_ROLE_ID), "label": "Runner"}],
         },
     )
     client.put("/api/settings/poll_auto_thread", json={"value": True})

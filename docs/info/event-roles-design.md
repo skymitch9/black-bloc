@@ -530,3 +530,147 @@ Event cards (end, assigned per role, held line, last pass), the timed-roles list
 - **B — API, site, guide:** §7.6, the staff guide `rolemenu-post` rewritten for this flow (slug kept), the mock and contract.
 
 The builder records every deviation as §7.8 / §7.9, the way §6.1–§6.5 were kept.
+
+### 7.8 What dispatch A built, every deviation it took, and the interface dispatch B calls (2026-11-14, branch `timed-roles`)
+
+Code notes: [`code-notes.md`](code-notes.md) ▸ *Timed roles per event, dispatch A*. ⚠️ Nothing here met Discord: the bot was not run,
+no browser, no live database. Verified by the suite, `ruff`, the ES-module parse, `site-gate` and the node tests only.
+
+**Data (schema 109, additive)**
+1. `timed_roles(guild_id, role_id, label, emoji, position, added_by, added_at)`, PK `(guild_id, role_id)`. Migration
+   (`storage/db.py` `_copy_menu_roles_to_the_timed_list`) copies every `role_menu_options` row in once, first label kept,
+   **only when the stored schema is < 109** (so a role staff later remove is never copied back at the next boot). On the live
+   shape (one `BtB` row, no options) it copies nothing and `BtB` reads as an open event with no end. ⚠️ **Before deploy, confirm
+   `GET /api/rolemenus` lists only `BtB` with no options** — §3.5 recorded seven seeded self-pick menus on 2026-11-13; any options
+   still on live would become timed roles that the next event end strips from everyone wearing them.
+2. `role_grants.menu_id` (nullable) + partial unique index `role_grants_one_open_per_event (guild_id, user_id, role_id, menu_id)
+   WHERE removed_at IS NULL AND menu_id IS NOT NULL` + `role_grants_by_event`. The indexes are created AFTER
+   `_add_missing_columns` (`EVENT_GRANT_INDEXES`), not in `SCHEMA` — `SCHEMA` runs first and would name a column the live
+   table does not have yet.
+3. `timed_role_prompts` (the by-hand posts, §7.4): `id, guild_id, user_id, role_ids (JSON), added_by, audit, channel_id,
+   message_id, posted_at, attached_menu_id, attached_by, attached_at`.
+4. `role_grants.source` gains `schedule`, `site_list`, `by_hand_attached` (`rolegrants.SOURCES`). `site_list` is unused until B.
+5. **`role_menu_options` is read by nothing that decides anything**: `get_options(db, menu_id)` and `option_label` now read the
+   event's guild's `timed_roles`. Left reading the legacy table: `channel_reach.openers_for` (self-pick menus, `mode != staff`;
+   live has none) and the legacy writers `add_option` / `remove_option` / `seed_default_menus` (only the 410'd seed route and old
+   tests call them). `chat_data.my_roles` / `knowledge` call `get_options` behind `picking_is_on` (always False).
+
+**The pass (§7.3)**
+6. **One plan, `role_menus.end_plan(bot, guild, menu) -> timed_roles.Plan | None`** (None = member cache short). It is wearers of
+   the timed list, minus `(member, role)` pairs held by an open assignment on ANOTHER event with `ended_at IS NULL` (no end set
+   counts as open), minus `pings.owned_role_ids`. `_end_pass`, End it now's confirm, Use the earlier end's confirm and the API's
+   `end_now_question` / `held_question` all read it. `Plan.take` = `[(member, [role_ids])]`; `Plan.members` = people losing at
+   least one role; `Plan.roles` = distinct roles taken; `Plan.keep` = people keeping a role through another event.
+7. Roles Black Bloc cannot remove stay IN the plan (counted, attempted, logged `role_menu.end_failed`, retried, listed in the
+   ended notice): the count is what the pass will try, and a stuck role is a failure staff must see, not a silent skip.
+8. Grants: a member whose roles came off has EVERY open row for those roles closed (`timed_roles.close_member_roles`, reason
+   `expired`); then every open row on THIS event closes except the stuck pairs (`close_event`). A B assignee's B row stays open.
+9. **The grant path never touches timed roles**: `run_due_grants` skips any grant carrying a `menu_id` and any grant on a role on
+   the timed list (legacy null-event rows included), so `cog_load`'s grant pass cannot strip a B assignee whose stamp passed.
+10. `role_menu.ended` / `would_end` details gain `kept` (`Plan.keep`). ⚠️ The ended notice's `{roles}` is the size of the timed
+    list, as 1a's was the menu's option count.
+11. `raidtrain_ping_role_id` joined `pings.owned_role_ids`. `/pings` refuses a timed role in `rolemenu_pings_timed_role_said` at
+    every entrance (`ensure_fan_role` given or reused by the template's name, `setup_events_role` given or by name,
+    `setup_raidtrain_role` given or by name) through `pings.timed_refusal`. Keys set by hand cannot be refused; the pass's skip
+    covers them.
+12. **The arming refusals of §6.6 item 2 are gone** (Set the end, End it now, Use the earlier end on a menu holding a `/pings`
+    role): every event shares the list, so one such role on it would block every event's end. The pass skips the role instead.
+    *Add a role…* to the list still refuses a `/pings` role and a role Black Bloc cannot strip.
+13. Removing a role from the list is refused while open events assign it (`rolemenu_timed_remove_refused_said`, with the count).
+14. A timed role is never given ad hoc: `grant_role` (panel *Give somebody a role…*, `POST /api/roles/grants`) refuses it in
+    `rolemenu_timed_needs_event_said`; *Push it back…* on an event assignment is refused with the event's name and end
+    (`rolemenu_push_back_refused`, `{menu}` = the event's title). *End it now* on one assignment (`revoke_grant`) closes the row
+    and leaves the role on when another open event still holds it (`rolemenu_kept_through_said`).
+15. Deleting an event closes its open assignments (reason `event_deleted`) and takes no role off anybody; the refusal now counts
+    people ASSIGNED, not wearing (every event shares the list, so the wearing count is the same for all of them).
+16. Every `{menu}` an event's words show is its TITLE (`event_name`), not the stored slug. Key names and fields did not change.
+    The API's End-it-now `message` still passes the slug (B's to align).
+
+**By hand (§7.4)**
+17. `on_member_update` → timed roles added by hand that `/pings` does not own → `ask_which_event`: one post per member and set
+    of roles not already waiting, under a per-member lock, a stored `timed_role_prompts` row, **restart-safe through two
+    DynamicItems** (`ByHandPick` `tbh:<prompt_id>`, `ByHandNew` `tbhnew:<prompt_id>`, registered in `cog_load`).
+18. Who added it: `timed_roles_by_hand.who_added` reads the audit log only with **View Audit Log**, and names someone only from a
+    `member_role_update` entry on THIS member, carrying one of THESE roles, under 5 minutes old. Otherwise there is no ping and
+    the post says why: `rolemenu_by_hand_unreadable_text` (no permission, or the read failed) or `rolemenu_by_hand_silent_text`
+    (no matching entry). An entry by Black Bloc itself (a bot path outside `change_roles`, e.g. `marathon_role.py`,
+    `birthdays.py`, `golive.py`, `pings.py`'s own `add_roles`) posts nothing. ⚠️ **View Audit Log is optional on this server**
+    (`OWNER_GUIDE.md` step 4, `runbook.md` *role.changed_by_hand has no actor*): if the Bots role lacks it every post is the
+    no-ping one, and a bot path that adds a timed role (only if staff put such a role on the list) would post once per add. Not
+    verified which is true on live.
+19. The post: `rolemenu_by_hand_text` (`{who} {member} {roles}`) in `rolemenu_by_hand_channel_id` (new channel key; unset →
+    `rolemenu_approval_channel_id` → `staff_channel_id`; the guard's test channel stands in under TEST_MODE), pinging only the
+    adder. A select of open events (25-capped, `rolemenu_by_hand_pick`) and **New event…** (modal: name + date). With no open
+    event the select is not drawn and `rolemenu_by_hand_no_events_text` says so. Staff-gated (`still_staff`) and guarded.
+20. Picking writes the assignment through `give_event_role` (source `by_hand_attached`) for each role the member still wears,
+    marks the row attached (one writer wins), logs `role_menu.by_hand_attached` (important) and edits the post to
+    `rolemenu_by_hand_attached_text` with no controls. Posting logs `role_menu.by_hand_posted` (routine);
+    `role_menu.by_hand_post_failed` (important by suffix) when there is nowhere to post or Discord refused.
+21. **New switch `rolemenu_by_hand_posts` (bool, default ON)**: the owner asked for the post (Q2); the switch is checklist 33. It
+    posts to a staff channel, never to members.
+
+**Panel (§7.5)**: `/rolemenu`, titled *Timed roles* (`rolemenu_panel_title`)
+22. Root: one line per open event (`rolemenu_root_line`, default now `**{name}** · {end} · {wearing} people`, `{wearing}` = people
+    assigned; a date end reads `… (date, no marathon)` through `rolemenu_end_date_only_text`); an event select; **New event…** ·
+    **Timed roles…** · **Grants…** · **Ended (N)…** (only with ended events) · **Logs** · **Refresh** · the site link.
+    Deviation: **Grants…, Logs and Refresh stay**: the ad-hoc grants console still serves roles that are not timed and
+    `modcmds` opens it (`open_grants_from`); §7.5 did not name them as gone.
+23. Event card: ASSIGNED counts per timed role, the end, set-by, ended and held lines. Buttons: **Give roles…** and **Fill from
+    the schedule** (open, list not empty; Fill only with a marathon attached) · **Take roles off…** (anyone assigned) · **Change
+    the end…** (the existing Set-the-end sub-panel) · **Attach a marathon…** (open, not following a marathon) · **Rename…** ·
+    **End it now** (open, list not empty) · **Use the earlier end** (held) · **Delete it** · Back · Refresh. Five rows.
+24. Give / Take: a timed-role select, then a `UserSelect` of `max_values=25`; the card stays on that role with *given to N* /
+    *taken off N*. Take leaves the Discord role on anyone another open event holds it for.
+25. New event: tracked marathons with no open event yet (`free_marathons`, one event per marathon) or **No marathon yet…**
+    (modal). The stored `name` is a slug of the title, numbered when taken (`free_name`); the API routes keep using it.
+26. Attach a marathon (`attach_marathon`): when the marathon's end plus the default buffer is EARLIER than the event's date by
+    more than `rolemenu_end_moved_minutes` and `rolemenu_end_earlier_holds` is on, the event follows the marathon but keeps its
+    date as `ends_at`, the candidate goes to `ends_held_at`, `role_menu.end_set` (with `held`) and `role_menu.end_held` are
+    logged and the held notice posts. Otherwise it is `set_menu_end(source=marathon)`.
+27. Fill from the schedule (`timed_roles_fill.plan_fill`, `fill_preview`, `fill_from_schedule`): people come from
+    `marathon_people.group_people(runs_of(marathon))`, members matched on the schedule (`user_id`) who are in the guild. Parts:
+    runner → `rolemenu_fill_runner_role_id`, commentator (couch) → `rolemenu_fill_commentator_role_id`, host →
+    `rolemenu_fill_host_role_id`. A part with no key set, or a key naming a role NOT on the timed list, is skipped and the
+    preview says which. Unmatched names (no member, or a member who left) are listed per part (30 shown, then `+N`). The confirm
+    writes through `give_event_role` (source `schedule`); a re-run gives only the missing.
+28. Gone: New menu, per-menu Add a role…, Hand roles out… / `AssignPick`, Words…, `OptionPick`, the six caller-less strings
+    (`NO_MENUS_YET`, `seed_summary` with `SEED_EMOJI_NOTE`, `NOTHING_TO_UNPOST`, `PANEL_TAKEN_DOWN`, `STAFF_MENU_NOT_POSTED`, each
+    grep-verified caller-less first), `rolemenu_panels.repost`, and the constants the rewrite orphaned.
+29. New words are keys (`settings_store.TIMED_ROLE_WORDS`, `TIMED_ROLE_BY_HAND_WORDS`; 71 new keys, 1469 → 1540). Changed
+    defaults (same key, same or fewer fields): `rolemenu_root_line`, `rolemenu_end_now_question` (+`{keep}`),
+    `rolemenu_use_held_question` / `_past_question` (+`{keep}`), `rolemenu_set_end_button` (*Change the end…*),
+    `rolemenu_set_end_title`, `rolemenu_delete_refused_said`, `rolemenu_pings_role_said`, `rolemenu_cannot_strip_said`. The panel
+    words 1b left as constants (Grants…, the grant card, `DELETE_QUESTION`) are still constants.
+
+**Open questions for the conductor (built as described, not decided here)**
+- The Members chip for a member assigned on two events reads the SOONER end (`expiring_for` takes `MIN`), but they keep the role
+  until the LATER one. B's Members merge should take the latest open-event end for an assigned member.
+- A legacy null-event grant on a timed role (none on live) is left open and skipped by both paths. Close it at the pass?
+
+**For dispatch B (site, API, guide): the interface** (all in `black_bloc/cogs/community/role_menus.py` unless named)
+
+| Need | Call |
+|---|---|
+| The timed list | `timed_roles.listed(db, guild_id) -> [row]` (`role_id, label, emoji, position, added_by, added_at`), `timed_roles.role_ids`, `timed_roles.is_timed(db, guild_id, role_id)` |
+| Add / remove a timed role | `await add_timed_role(bot, guild, actor, role, *, label=None, emoji=None, via) -> str \| None` (None = done, else the refusal: cannot strip, `/pings` role, list full, already on) · `await drop_timed_role(bot, guild, actor, role_id, *, via) -> str \| None` (refused while assigned). Kinds `role_menu.option_added` / `option_removed` |
+| Events | `timed_roles.open_events(db, guild_id)` (soonest end first), `timed_roles.ended_events`, `timed_roles.event_for_marathon(db, guild_id, marathon_id)` · `await make_event(bot, guild, actor, title, *, marathon_id=None, ends_at=None, via) -> row` (raises `MenuLimitError` with a sentence) · `await free_marathons(bot, guild)` · rename = `change_menu(bot, guild, actor, name, title=…, via=)` |
+| Attach a marathon | `await attach_marathon(bot, guild, actor, menu, marathon_id, *, via) -> ends_at` (raises `ValueError` for a marathon not in this guild; holds an earlier end) |
+| Give / take | `await give_event_role(bot, guild, actor, menu, role_id, members, *, source=grants.STAFF, via) -> {"given","had","already","refused": [user_ids], "said"}` · `await take_event_role(...) -> {"given" (taken off), "kept", "already", "refused", "said"}`. One `role_menu.assign` / `role_menu.unassign` row per batch. The site's list passes `source=grants.SITE_LIST` |
+| Assigned counts | `timed_roles.assigned_by_role(db, guild_id, menu_id) -> {role_id: n}`, `assigned_people`, `event_grants`, `assigned_count(db, guild_id, role_id)` |
+| The confirm counts | `plan = await end_plan(bot, guild, menu)`; `end_now_question(bot, guild_id, plan)`; `use_held_question(bot, guild_id, menu, plan, when=site_when)`; numbers `plan.roles`, `plan.members`, `plan.keep` (None = members not loaded) |
+| Fill from the schedule | `await fill_preview(bot, guild, menu) -> [timed_roles_fill.FillLine(part, role_id, timed, matched, missing, unmatched)]` · `await fill_from_schedule(bot, guild, actor, menu, *, via) -> {"given","had","already","refused": int}` · in words: `fill_lines(bot, guild_id, lines)` |
+| By-hand posts | table `timed_role_prompts`; `timed_roles_by_hand.get_prompt` / `waiting_roles`; `await attach_by_hand(bot, guild, actor, prompt, menu, *, via) -> (done, said)` |
+| End, hold, delete | unchanged from §6.2–§6.3 (`set_menu_end`, `end_menu_now`, `use_held_end`, `delete_refusal`, which now counts people assigned) |
+| Members / grants chips | `menu_ends_named(db, guild_id)` = `timed_roles.soonest_ends`: `{role_id: {"ends_at", "menu"}}`, the soonest open event end for every timed role, `menu` = that event's TITLE |
+
+New keys B must show or edit: every `rolemenu_*` key in `TIMED_ROLE_WORDS` / `TIMED_ROLE_BY_HAND_WORDS`, plus
+`rolemenu_by_hand_channel_id` (channel), `rolemenu_by_hand_posts` (bool), `rolemenu_fill_runner_role_id`,
+`rolemenu_fill_commentator_role_id`, `rolemenu_fill_host_role_id` (role). New log kinds: `role_menu.by_hand_posted` (routine),
+`role_menu.by_hand_attached` / `web.role_menu.by_hand_attached` (important), `role_menu.by_hand_post_failed`;
+`web.role_menu.option_added` / `option_removed` joined the contract's action kinds.
+
+**What A changed in the API only to keep the page alive (B redesigns these)**: GET rows' `options` = the timed list (the same for
+every event) and `wearing` = people ASSIGNED; `PUT options` edits the shared list (409 `role_assigned` when a removal is refused,
+409 `pings_role` for an add refused for any reason); `POST /{name}/assign` writes event assignments (`given to N` sentences); the
+`pings_role` 409s on end fields, end-now and end-earlier are gone (item 12). The contract seed puts its own role (44, *Runner*)
+on the list so Member stays free for the ad-hoc grant routes.

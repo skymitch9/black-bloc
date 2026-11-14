@@ -7,13 +7,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import rolemenus as menus
+from ... import timed_roles as timed
 from ...cogs.community.role_menus import (
     NO_SUCH_MEMBER,
     NOTHING_ON_THIS_MENU,
     ROLEMENU_ENDED_TEXT_KEY,
     STAFF_MODE,
     MenuLimitError,
-    add_option,
+    add_timed_role,
     bindable_marathons,
     change_menu,
     check_description,
@@ -23,8 +24,11 @@ from ...cogs.community.role_menus import (
     default_buffer,
     delete_refusal,
     drop_menu,
+    drop_timed_role,
     end_label,
     end_menu_now,
+    end_now_question,
+    end_plan,
     expires_days_of,
     failure_count,
     failure_lines,
@@ -37,19 +41,14 @@ from ...cogs.community.role_menus import (
     marathon_name_of,
     marathon_row,
     members_of,
-    menu_pings_refusal,
     menu_value,
     needs_approval,
-    pings_refusal,
-    remove_option,
     retry_days_of,
     role_labels,
     set_menu_end,
     staff_assign,
-    stamp_grants,
     use_held_end,
     use_held_question,
-    wearing_count,
     word,
 )
 from ...golive import parse_ts
@@ -95,11 +94,6 @@ BAD_END_SOURCE = (
 )
 END_FIELDS = ("ends_source", "ends_marathon_id", "ends_at", "buffer_days")
 PINGS_ROLE_CODE = "pings_role"
-
-
-def refuse_pings(refused: str | None) -> None:
-    if refused:
-        raise Refused(409, PINGS_ROLE_CODE, refused)
 
 
 def option_row(row: Any) -> dict[str, Any]:
@@ -152,9 +146,10 @@ def menu_row(menu: Any, options: Any) -> dict[str, Any]:
 
 
 async def menu_payload(bot: Any, guild: Any, menu: Any, options: Any, members: Any) -> dict:
+    """`wearing` is the people assigned to this event; the questions read the end pass's plan."""
+    _ = members
     row = menu_row(menu, options)
-    wearing = wearing_count(bot, guild.id, members, [one["role_id"] for one in options])
-    row["wearing"] = wearing if isinstance(wearing, int) else None
+    row["wearing"] = await timed.assigned_people(bot.db, guild.id, menu["id"])
     row["buffer_default"] = menus.buffer_of({}, default_buffer(bot, guild.id))
     row["end_label"] = end_label(
         bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu), site_when
@@ -162,13 +157,9 @@ async def menu_payload(bot: Any, guild: Any, menu: Any, options: Any, members: A
     held = menu_value(menu, "ends_held_at")
     row["held_label"] = site_when(bot, guild.id, held) if held else None
     row["held_past"] = held_is_past(menu)
-    counted = wearing if isinstance(wearing, int) else wearing_count(bot, guild.id, None, ())
-    row["held_question"] = use_held_question(
-        bot, guild.id, menu, len(options), counted, site_when
-    )
-    row["end_now_question"] = word(
-        bot, guild.id, "rolemenu_end_now_question", roles=len(options), members=counted
-    )
+    plan = await end_plan(bot, guild, menu)
+    row["held_question"] = use_held_question(bot, guild.id, menu, plan, site_when)
+    row["end_now_question"] = end_now_question(bot, guild.id, plan)
     return row
 
 
@@ -239,18 +230,23 @@ async def read_menu(bot: Any, guild: Any, name: str) -> tuple[Any, list[Any]]:
     return menu, await get_options(bot.db, menu["id"])
 
 
-async def sync_options(bot: Any, menu: Any, wanted: list[tuple[Any, str, Any]]) -> None:
-    """Exactly the options given, in order; grants on every role that came or went re-stamped."""
-    before = {int(row["role_id"]) for row in await get_options(bot.db, menu["id"])}
+async def sync_options(
+    bot: Any, guild: Any, actor: Any, wanted: list[tuple[Any, str, Any]]
+) -> None:
+    """The server's one timed-role list becomes exactly the roles given (every event shares it)."""
+    before = set(await timed.role_ids(bot.db, guild.id))
+    kept = {int(role.id) for role, _, _ in wanted}
+    for role_id in sorted(before - kept):
+        refused = await drop_timed_role(bot, guild, actor, role_id, via=VIA_WEBSITE)
+        if refused:
+            raise Refused(409, "role_assigned", refused)
     for role, label, emoji in wanted:
-        await add_option(bot.db, menu["id"], role.id, label, emoji)
-    kept = {role.id for role, _, _ in wanted}
-    for row in await get_options(bot.db, menu["id"]):
-        if row["role_id"] not in kept:
-            await remove_option(bot.db, menu["id"], row["role_id"])
-    moved = sorted(before ^ {int(one) for one in kept})
-    if moved:
-        await stamp_grants(bot.db, menu["guild_id"], moved, was=(menu_value(menu, "ends_at"),))
+        if int(role.id) not in before:
+            refused = await add_timed_role(
+                bot, guild, actor, role, label=label, emoji=emoji, via=VIA_WEBSITE
+            )
+            if refused:
+                raise Refused(409, PINGS_ROLE_CODE, refused)
 
 
 def wanted_buffer(bot: Any, guild_id: int, given: Any) -> int | None:
@@ -414,21 +410,15 @@ def build_router(bot: Any) -> APIRouter:
         description = wanted_description(payload.get("description"))
         wanted = payload.get("options")
         options = wanted_options(bot, guild, wanted) if isinstance(wanted, list) else None
-        already = [int(row["role_id"]) for row in had]
-        if options is not None:
-            added = [role.id for role, _, _ in options if int(role.id) not in already]
-            refuse_pings(await pings_refusal(bot, guild, added))
+        _ = had
         end = await wanted_end(bot, guild, menu, payload)
-        if end is not None and end["source"] != menus.NO_END:
-            after = already if options is None else [role.id for role, _, _ in options]
-            refuse_pings(await pings_refusal(bot, guild, after))
         actor = actor_for(bot, who, guild)
         if title is not None or description is not None or options is not None:
             await change_menu(
                 bot, guild, actor, name, title=title, description=description, via=VIA_WEBSITE
             )
         if options is not None:
-            await sync_options(bot, menu, options)
+            await sync_options(bot, guild, actor, options)
         if end is not None:
             fresh, _ = await read_menu(bot, guild, name)
             await set_menu_end(bot, guild, actor, fresh, via=VIA_WEBSITE, **end)
@@ -440,7 +430,6 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         menu, options = await read_menu(bot, guild, name)
-        refuse_pings(await menu_pings_refusal(bot, guild, menu))
         guard = guard_of(bot)
         if guard is not None:
             refuse_guarded(guard.refusal_message())
@@ -481,7 +470,6 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(
                 409, "nothing_held", word(bot, guild.id, "rolemenu_no_held_said", menu=name)
             )
-        refuse_pings(await menu_pings_refusal(bot, guild, menu))
         await use_held_end(bot, guild, actor_for(bot, who, guild), menu, via=VIA_WEBSITE)
         return await one_payload(guild, name)
 
