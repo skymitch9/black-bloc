@@ -123,6 +123,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 **2026-10-10 09:1x:** the rehearsal channel `#welcome-test` (`1550284332365783091`) is now **#post-test**; `frontdoor_`, `posts_`, `points_` and `sticky_shadow_channel_id` point there (the last two set this morning), `shadow_channel_id` stays `#blackbloc-logs`; the pinned leaderboard rehearsal copy lives in #post-test. No deploy.
 
+**2026-11-13 22:35:** v274 live - the staff guide `rolemenu-post` now reads *Give out temporary roles* (live copy replaced at the owner's word); `role_menu_channel_id` retired; keys **1469**. The owner asked the same hour for the control to be turned round into timed roles per event - design questions in [`TODO.md`](TODO.md). [`DONE.md`](DONE.md) 2026-11-13.
+
 **2026-11-13 15:40:** v273 live - pings keeps no role-menu rows; a menu holding a `/pings` role is refused an end in words (owner Q2); the seven old self-pick menus were deleted at the owner's word (0 role menus live); keys 1470. [`DONE.md`](DONE.md) 2026-11-13.
 
 **2026-11-13 14:43:** v272 live - request #17 complete: `/rolemenu` is the permanent staff control for temporary roles (Set the end, End it now, the earlier-end hold), member self-pick retired, the Role menus page reworked; schema **108**, keys 1469. Seen live in a browser; not verified in Discord. [`DONE.md`](DONE.md) 2026-11-13.
