@@ -254,6 +254,10 @@ class MenuLimitError(ValueError):
     """A heading, line, label or option list is longer than Discord will show."""
 
 
+class MarathonTakenError(MenuLimitError):
+    """Another open event already ends with this marathon (one event per marathon)."""
+
+
 def check_length(what: str, value: str, limit: int) -> str:
     if len(value) > limit:
         raise MenuLimitError(TOO_LONG.format(what=what, given=len(value), limit=limit))
@@ -1724,7 +1728,7 @@ async def give_event_role(
         found["said"] = word(bot, guild.id, "rolemenu_give_refused_said", role=label)
         return found
     reason = f"Black Bloc: {event_name(menu)} by {actor}"
-    async with end_lock(bot, menu["id"]):
+    async with end_lock(bot, menu["id"]), guild_lock(bot, guild.id):
         fresh = await get_menu_by_id(bot.db, menu["id"])
         until = menu_value(fresh, "ends_at")
         for member in members or ():
@@ -1785,7 +1789,7 @@ async def take_event_role(
     role_id = int(role_id)
     label = role_name(guild, role_id)
     reason = f"Black Bloc: {event_name(menu)} taken off by {actor}"
-    async with end_lock(bot, menu["id"]):
+    async with end_lock(bot, menu["id"]), guild_lock(bot, guild.id):
         keeping = await timed.keepers(bot.db, guild.id, menu["id"])
         for member in members or ():
             row = await timed.event_grant(bot.db, guild.id, member.id, role_id, menu["id"])
@@ -1832,6 +1836,7 @@ async def take_event_role(
 END_REASON = "Black Bloc: {menu} ended"
 NOTICE_LIMIT = 2000
 END_LOCKS_ATTR = "_role_menu_end_locks"
+GUILD_LOCKS_ATTR = "_role_menu_guild_locks"
 
 
 def end_lock(bot: Any, menu_id: Any) -> asyncio.Lock:
@@ -1841,6 +1846,15 @@ def end_lock(bot: Any, menu_id: Any) -> asyncio.Lock:
         found = {}
         setattr(bot, END_LOCKS_ATTR, found)
     return found.setdefault(int(menu_id), asyncio.Lock())
+
+
+def guild_lock(bot: Any, guild_id: Any) -> asyncio.Lock:
+    """Innermost, never nested: an end pass and a give or take on ANY event wait for each other."""
+    found = getattr(bot, GUILD_LOCKS_ATTR, None)
+    if found is None:
+        found = {}
+        setattr(bot, GUILD_LOCKS_ATTR, found)
+    return found.setdefault(int(guild_id), asyncio.Lock())
 
 
 def default_buffer(bot: Any, guild_id: int) -> Any:
@@ -1932,6 +1946,7 @@ async def set_menu_end(
         marathon = await marathon_row(bot.db, guild.id, marathon_id)
         if marathon is None:
             raise ValueError(f"no marathon {marathon_id!r} in this server")
+        await refuse_taken_marathon(bot, guild, marathon, menu["id"])
     wanted = {
         "ends_source": source,
         "buffer_days": None if buffer_days is None else menus.buffer_of({}, buffer_days),
@@ -2051,11 +2066,25 @@ async def end_plan(bot: Any, guild: Any, menu: Any) -> timed.Plan | None:
 
 
 async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> Any:
+    if getattr(guild, "unavailable", False):
+        return None
+    async with guild_lock(bot, guild.id):
+        done = await _take_off(bot, guild, menu, actor, via)
+    if done is None:
+        return None
+    details, labels, taken, finished = done
+    if finished:
+        await log_action(bot, guild, kind_via("role_menu.ended", via), actor=actor, details=details)
+        if bot.store.get(guild.id, ROLEMENU_ENDED_NOTICE_KEY):
+            await post_role_notice(bot, guild, ended_notice(bot, guild, menu, details, labels))
+    await tell_wearers(bot, guild, menu, taken, labels)
+    return details
+
+
+async def _take_off(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> Any:
     db = bot.db
     role_ids = await timed.role_ids(db, guild.id)
     base = {"menu": menu["name"], "menu_id": menu["id"], "via": via}
-    if getattr(guild, "unavailable", False):
-        return None
     plan = await end_plan(bot, guild, menu)
     if plan is None:
         await log_action(
@@ -2127,12 +2156,7 @@ async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> An
         "ended": finished,
     }
     labels = await role_labels(db, guild, menu["id"])
-    if finished:
-        await log_action(bot, guild, kind_via("role_menu.ended", via), actor=actor, details=details)
-        if bot.store.get(guild.id, ROLEMENU_ENDED_NOTICE_KEY):
-            await post_role_notice(bot, guild, ended_notice(bot, guild, menu, details, labels))
-    await tell_wearers(bot, guild, menu, taken, labels)
-    return details
+    return details, labels, taken, finished
 
 
 def ended_notice(
@@ -2693,6 +2717,11 @@ async def make_event(
     wanted = check_title(str(title or "").strip())
     if not wanted:
         raise MenuLimitError(word(bot, guild.id, "rolemenu_event_needs_name_said"))
+    if marathon_id is not None:
+        marathon = await marathon_row(bot.db, guild.id, marathon_id)
+        if marathon is None:
+            raise ValueError(f"no marathon {marathon_id!r} in this server")
+        await refuse_taken_marathon(bot, guild, marathon)
     name = await free_name(bot.db, guild.id, wanted)
     menu_id = await make_menu(bot, guild, actor, name, wanted, None, STAFF_MODE, via=via)
     menu = await get_menu_by_id(bot.db, menu_id)
@@ -2712,6 +2741,7 @@ async def attach_marathon(
     marathon = await marathon_row(bot.db, guild.id, marathon_id)
     if marathon is None:
         raise ValueError(f"no marathon {marathon_id!r} in this server")
+    await refuse_taken_marathon(bot, guild, marathon, menu["id"])
     candidate = menus.ends_at_of(
         {"ends_source": menus.MARATHON_END}, marathon, default_buffer(bot, guild.id)
     )
@@ -2995,13 +3025,34 @@ async def build_menu(
     return (embed, view)
 
 
-async def free_marathons(bot: Any, guild: Any) -> list[Any]:
-    """Marathons on the list that have no open event yet — one event per marathon."""
+async def free_marathons(bot: Any, guild: Any, menu_id: Any = None) -> list[Any]:
+    """Marathons with no open event yet, or followed by `menu_id` itself — one event each."""
     found = []
     for row in await bindable_marathons(bot.db, guild.id):
-        if await timed.event_for_marathon(bot.db, guild.id, row["id"]) is None:
+        taken = await timed.event_for_marathon(bot.db, guild.id, row["id"])
+        if taken is None or (menu_id is not None and int(taken["id"]) == int(menu_id)):
             found.append(row)
     return found
+
+
+async def taken_refusal(bot: Any, guild: Any, marathon: Any, menu_id: Any = None) -> str | None:
+    """Why this marathon cannot take another event: the open one that already follows it."""
+    taken = await timed.event_for_marathon(bot.db, guild.id, marathon["id"])
+    if taken is None or (menu_id is not None and int(taken["id"]) == int(menu_id)):
+        return None
+    return word(
+        bot,
+        guild.id,
+        "rolemenu_marathon_taken_said",
+        marathon=marathon["name"],
+        event=event_name(taken),
+    )
+
+
+async def refuse_taken_marathon(bot: Any, guild: Any, marathon: Any, menu_id: Any = None) -> None:
+    refused = await taken_refusal(bot, guild, marathon, menu_id)
+    if refused:
+        raise MarathonTakenError(refused)
 
 
 async def build_new_event(bot: Any, guild: Any) -> tuple[discord.Embed, RoleMenuPanel]:
@@ -3150,7 +3201,7 @@ async def build_set_end(
     menu = await get_menu(bot.db, guild.id, name)
     if menu is None:
         return (None, None)
-    marathons = await bindable_marathons(bot.db, guild.id)
+    marathons = await free_marathons(bot, guild, menu["id"])
     line = end_label(
         bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu), discord_moment("F")
     )
@@ -3636,7 +3687,12 @@ async def run_attach(interaction: discord.Interaction, marathon_id: int, previou
         await render_attach(interaction, menu["name"], previous)
         await answer(interaction, word(bot, guild.id, "rolemenu_end_no_marathon_said"))
         return
-    end = await attach_marathon(bot, guild, interaction.user, menu, marathon_id)
+    try:
+        end = await attach_marathon(bot, guild, interaction.user, menu, marathon_id)
+    except MarathonTakenError as exc:
+        await render_attach(interaction, menu["name"], previous)
+        await answer(interaction, str(exc))
+        return
     await render_menu(interaction, menu["name"], previous)
     await said_end(interaction, menu, end)
 
@@ -3675,15 +3731,20 @@ async def run_set_marathon(
         return
     following = menus.end_source(menu) == menus.MARATHON_END
     keeps = menu_value(menu, "buffer_days") if following else None
-    end = await set_menu_end(
-        bot,
-        guild,
-        interaction.user,
-        menu,
-        source=menus.MARATHON_END,
-        marathon_id=marathon_id,
-        buffer_days=keeps,
-    )
+    try:
+        end = await set_menu_end(
+            bot,
+            guild,
+            interaction.user,
+            menu,
+            source=menus.MARATHON_END,
+            marathon_id=marathon_id,
+            buffer_days=keeps,
+        )
+    except MarathonTakenError as exc:
+        await render_set_end(interaction, menu["name"], previous)
+        await answer(interaction, str(exc))
+        return
     await render_menu(interaction, menu["name"], previous)
     await said_end(interaction, menu, end)
 
@@ -3740,15 +3801,20 @@ async def run_buffer(interaction: discord.Interaction, typed: Any, previous: Any
         await render_set_end(interaction, menu["name"], previous)
         await answer(interaction, refusal)
         return
-    end = await set_menu_end(
-        bot,
-        guild,
-        interaction.user,
-        menu,
-        source=menus.MARATHON_END,
-        marathon_id=menu["ends_marathon_id"],
-        buffer_days=days,
-    )
+    try:
+        end = await set_menu_end(
+            bot,
+            guild,
+            interaction.user,
+            menu,
+            source=menus.MARATHON_END,
+            marathon_id=menu["ends_marathon_id"],
+            buffer_days=days,
+        )
+    except MarathonTakenError as exc:
+        await render_set_end(interaction, menu["name"], previous)
+        await answer(interaction, str(exc))
+        return
     await render_menu(interaction, menu["name"], previous)
     await said_end(interaction, menu, end)
 
@@ -3806,7 +3872,12 @@ async def run_use_held(interaction: discord.Interaction, previous: Any) -> None:
     if menu is None:
         return
     had = menu_value(menu, "ends_held_at")
-    end = await use_held_end(bot, guild, interaction.user, menu) if had else None
+    try:
+        end = await use_held_end(bot, guild, interaction.user, menu) if had else None
+    except MarathonTakenError as exc:
+        await render_menu(interaction, menu["name"], previous)
+        await answer(interaction, str(exc))
+        return
     await render_menu(interaction, menu["name"], previous)
     if not had:
         await answer(
@@ -4392,7 +4463,7 @@ async def ask_which_event(bot: Any, guild: Any, member: Any, role_ids: Any) -> i
         wanted = sorted({int(one) for one in role_ids} - asked)
         if not wanted:
             return None
-        who_id, audit = await hand.who_added(guild, member, wanted)
+        who_id, audit = await hand.who_added_soon(guild, member, wanted)
         if audit == hand.OURS:
             return None
         target, where = card_target(bot, by_hand_channel(bot, guild))

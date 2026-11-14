@@ -93,3 +93,24 @@ async def test_open_events_come_soonest_first_and_the_next_end_names_its_event(d
     ]
     assert [row["name"] for row in await timed.ended_events(db, GUILD)] == ["over"]
     assert await timed.soonest_ends(db, GUILD) == {10: {"ends_at": SOON, "menu": "Soon"}}
+
+
+async def test_an_assigned_member_keeps_a_role_until_their_latest_open_event(db):
+    a = await event(db, "a", ends_at=SOON)
+    b = await event(db, "b", ends_at=LATER)
+    c = await event(db, "c")
+    over = await event(db, "d", ends_at=LATER, ended=True)
+    await assign(db, 1, 10, a)
+    await assign(db, 1, 10, b)
+    await assign(db, 2, 10, a)
+    await assign(db, 2, 10, c)
+    await assign(db, 3, 10, over)
+    await assign(db, 3, 11, a)
+
+    found = await timed.assignment_ends(db, GUILD, [1, 2, 3])
+
+    assert found[(1, 10)] == {"ends_at": LATER, "menu": "B"}
+    assert found[(2, 10)] == {"ends_at": None, "menu": "C"}
+    assert found[(3, 11)] == {"ends_at": SOON, "menu": "A"}
+    assert (3, 10) not in found
+    assert await timed.event_titles(db, GUILD) == {a: "A", b: "B", c: "C", over: "D"}

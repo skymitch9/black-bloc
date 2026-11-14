@@ -324,3 +324,45 @@ async def test_a_role_on_a_menu_with_an_end_carries_that_end_with_no_grant_row(
     for username, chip in chips:
         assert chip["ends_with_menu"] == "Back to Black"
         assert chip["expires_at"] == (sooner if username == "ada" else menu_end)
+
+
+async def test_someone_assigned_on_two_events_shows_the_end_they_keep_the_role_until(
+    client, sign_in, roster, web, wf
+):
+    """They keep it through the later event, so the chip names that one; a wearer with no
+    assignment still loses it at the soonest end; an event with no end outlasts every date."""
+    from black_bloc import timed_roles as timed
+    from black_bloc.cogs.community.role_menus import create_menu
+
+    sign_in(client)
+    soon, late = "2099-03-01T06:59:00+00:00", "2099-06-01T06:59:00+00:00"
+    first = await create_menu(web.db, wf.GUILD_ID, "a", "Event A", None, "staff")
+    second = await create_menu(web.db, wf.GUILD_ID, "b", "Event B", None, "staff")
+    open_ended = await create_menu(web.db, wf.GUILD_ID, "c", "Event C", None, "staff")
+    for menu_id, end in ((first, soon), (second, late)):
+        await web.db.conn.execute(
+            "UPDATE role_menus SET ends_source = 'date', ends_at = ? WHERE id = ?", (end, menu_id)
+        )
+    await web.db.conn.commit()
+    await timed.add(web.db, wf.GUILD_ID, wf.PLAIN_ROLE_ID, "Runner")
+    for menu_id, until in ((first, soon), (second, late)):
+        await grants.add_grant(
+            web.db, wf.GUILD_ID, 21, wf.PLAIN_ROLE_ID, grants.STAFF, until=until, menu_id=menu_id
+        )
+    await grants.add_grant(
+        web.db, wf.GUILD_ID, 22, wf.PLAIN_ROLE_ID, grants.STAFF, until=soon, menu_id=first
+    )
+    await grants.add_grant(
+        web.db, wf.GUILD_ID, 22, wf.PLAIN_ROLE_ID, grants.STAFF, menu_id=open_ended
+    )
+
+    chips = {
+        member["username"]: one
+        for member in client.get(ROUTE).json()["members"]
+        for one in member["roles"]
+        if one["id"] == str(wf.PLAIN_ROLE_ID)
+    }
+
+    assert (chips["ada"]["expires_at"], chips["ada"]["ends_with_menu"]) == (late, "Event B")
+    assert (chips["bo"]["expires_at"], chips["bo"]["ends_with_menu"]) == (None, "Event C")
+    assert (chips["fresh"]["expires_at"], chips["fresh"]["ends_with_menu"]) == (soon, "Event A")

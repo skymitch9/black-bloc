@@ -10968,11 +10968,11 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     ROLEMENU_RETIRED_KEY: (
         "Members pick their own roles in Discord's Channels & Roles now, so role menus are no "
-        "longer posted or requested and nothing was changed. Staff hand roles out from a menu's "
-        "card — **Hand roles out…** on /rolemenu or the Role menus page.",
+        "longer posted or requested and nothing was changed. Staff give timed roles from an "
+        "event — **Give roles…** on /rolemenu, or **Give from a list…** on the Timed roles page.",
         (),
         "what the site is told when it asks for a retired role-menu move (post, take down, "
-        "requests, seed)",
+        "requests, seed, one member's assign)",
     ),
     ROLEMENU_PICKING_RETIRED_KEY: (
         "Roles are picked in Discord's own Channels & Roles now.",
@@ -11567,6 +11567,171 @@ KEY_HELP.update(
             "the timed role Fill from the schedule gives a marathon's hosts; blank skips them"
         ),
     }
+)
+
+TIMED_ROLE_SITE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "rolemenu_marathon_taken_said": (
+        "**{marathon}** already has an open event, **{event}**, so nothing was changed — one "
+        "event per marathon. Give roles from **{event}**, or end it first.",
+        ("marathon", "event"),
+        "the refusal when a marathon that an open event already ends with is picked for "
+        "another event. It takes {marathon} {event}",
+    ),
+    "rolemenu_no_such_event_said": (
+        "This server has no event called **{name}** any more, so nothing was changed. Refresh "
+        "the Timed roles page and pick it again.",
+        ("name",),
+        "the refusal when the site names an event that is gone. It takes {name}",
+    ),
+    "rolemenu_no_such_role_said": (
+        "**{role_id}** is not a role in this server any more, so nothing was changed. Refresh "
+        "the page and pick the role again.",
+        ("role_id",),
+        "the refusal when the site names a role the server no longer has. It takes {role_id}",
+    ),
+    "rolemenu_event_ended_said": (
+        "**{menu}** has ended, so nothing was changed. Change its end to use it again.",
+        ("menu",),
+        "the refusal when roles are given from, or a marathon attached to, an ended event. It "
+        "takes {menu}",
+    ),
+    "rolemenu_already_follows_said": (
+        "**{menu}** already ends with a marathon, so there is nothing to attach. **Change the "
+        "end…** picks another.",
+        ("menu",),
+        "the refusal when a marathon is attached to an event that already follows one. It takes "
+        "{menu}",
+    ),
+    "rolemenu_no_fill_marathon_said": (
+        "**{menu}** has no marathon attached, so there is no schedule to fill from. **Attach a "
+        "marathon…** first.",
+        ("menu",),
+        "the refusal when Fill from the schedule is asked of an event with no marathon. It "
+        "takes {menu}",
+    ),
+    "rolemenu_bad_end_source_said": (
+        "**{given}** is not a way an event can end, so nothing was changed. It is one of "
+        "{known} — a fault in the page rather than in what you picked, so reload it and try "
+        "again.",
+        ("given", "known"),
+        "the refusal when the site sends an end the bot does not know. It takes {given} {known}",
+    ),
+    "rolemenu_options_moved_said": (
+        "The timed roles are one list for every event now, so nothing was changed here. Edit "
+        "the list under **Timed roles…**.",
+        (),
+        "the refusal when the site sends an event its own roles (the old menu editor)",
+    ),
+    "rolemenu_list_empty_said": (
+        "Nobody was named, so nothing was changed. Paste names, mentions or ids one per line, "
+        "or tick members.",
+        (),
+        "the refusal when Give from a list is sent nobody",
+    ),
+    "rolemenu_list_too_long_said": (
+        "That list has {count} lines and Black Bloc reads at most {limit} at a time, so nothing "
+        "was changed. Split it in two.",
+        ("count", "limit"),
+        "the refusal when Give from a list is pasted too many lines. It takes {count} {limit}",
+    ),
+    "rolemenu_list_button": (
+        "Give from a list…",
+        (),
+        "the Timed roles page's button that gives or takes an event's role for a pasted or "
+        "ticked list of members",
+    ),
+    "rolemenu_list_title": (
+        "Give from a list · {name}",
+        ("name",),
+        "the heading of Give from a list on the Timed roles page. It takes {name}",
+    ),
+    "rolemenu_list_paste_label": (
+        "Names, mentions or ids, one per line",
+        (),
+        "the paste box of Give from a list",
+    ),
+    "rolemenu_list_tick_label": ("Or tick members", (), "the member search of Give from a list"),
+    "rolemenu_list_check_button": (
+        "Check the list",
+        (),
+        "Give from a list's button that matches the names before anything is written",
+    ),
+    "rolemenu_list_give_save": (
+        "Give {role} to {count}",
+        ("role", "count"),
+        "Give from a list's save button when giving. It takes {role} {count}",
+    ),
+    "rolemenu_list_take_save": (
+        "Take {role} off {count}",
+        ("role", "count"),
+        "Give from a list's save button when taking off. It takes {role} {count}",
+    ),
+    "rolemenu_list_matched_head": (
+        "Matched ({count})",
+        ("count",),
+        "the matched people's heading on Give from a list. It takes {count}",
+    ),
+    "rolemenu_list_unmatched_head": (
+        "Not matched ({count})",
+        ("count",),
+        "the heading of the lines no member was matched to. It takes {count}",
+    ),
+    "rolemenu_list_ambiguous_note": (
+        "more than one member has this name — use their id or mention",
+        (),
+        "why a pasted line was not matched when two members share the name",
+    ),
+    "rolemenu_list_unknown_note": (
+        "no member by that name, mention or id",
+        (),
+        "why a pasted line was not matched to anybody",
+    ),
+    "rolemenu_list_already_note": (
+        "already assigned on this event",
+        (),
+        "the note on a matched person who already holds the role on this event",
+    ),
+    "rolemenu_list_not_assigned_note": (
+        "not assigned on this event",
+        (),
+        "the note on a matched person Take off would find nothing to take from",
+    ),
+    "rolemenu_site_assigned": (
+        "{count} assigned",
+        ("count",),
+        "one timed role's count of people assigned, on the Timed roles page. It takes {count}",
+    ),
+    "rolemenu_site_wearing": (
+        "{count} wearing",
+        ("count",),
+        "one timed role's count of people wearing it, on the Timed roles page. It takes {count}",
+    ),
+    "rolemenu_site_fill_line": (
+        "{part}: {matched} matched · {missing} to give {role}",
+        ("part", "matched", "missing", "role"),
+        "one part's line on the Timed roles page's Fill from the schedule. It takes {part} "
+        "{matched} {missing} {role}",
+    ),
+    "rolemenu_site_fill_not_timed_line": (
+        "{part}: {role} is not a timed role, skipped",
+        ("part", "role"),
+        "a part whose role is not on the timed list, on the Timed roles page. It takes {part} "
+        "{role}",
+    ),
+    "rolemenu_events_title": ("Events", (), "the Timed roles page's heading over the events"),
+    "rolemenu_grants_title": (
+        "Every assignment and grant",
+        (),
+        "the Timed roles page's heading over the table of every assignment and ad-hoc grant",
+    ),
+}
+ROLEMENU_STAFF_DEFAULTS.update(
+    {key: default for key, (default, _, _) in TIMED_ROLE_SITE_WORDS.items()}
+)
+KEY_TYPES.update({key: "text" for key in TIMED_ROLE_SITE_WORDS})
+KEY_HELP.update({key: said for key, (_, _, said) in TIMED_ROLE_SITE_WORDS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in TIMED_ROLE_SITE_WORDS.items()}
 )
 
 # Blocks live (blocks-live, 2026-09-28) — who's live now, upcoming events and link buttons. Every

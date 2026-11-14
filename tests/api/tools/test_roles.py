@@ -250,3 +250,28 @@ async def test_a_grant_on_a_role_on_no_menu_ends_with_no_menu(client, sign_in, w
     [row] = [one for one in client.get("/api/roles/grants").json() if one["id"] == grant_id]
 
     assert row["ends_with_menu"] is None
+
+
+async def test_an_assignment_row_names_its_own_event_not_the_soonest_one(
+    client, sign_in, web, wf
+):
+    from black_bloc import timed_roles as timed
+    from black_bloc.cogs.community.role_menus import create_menu
+
+    sign_in(client)
+    soon, late = "2099-01-01T00:00:00+00:00", "2099-05-01T00:00:00+00:00"
+    first = await create_menu(web.db, wf.GUILD_ID, "a", "Event A", None, "staff")
+    second = await create_menu(web.db, wf.GUILD_ID, "b", "Event B", None, "staff")
+    for menu_id, end in ((first, soon), (second, late)):
+        await web.db.conn.execute(
+            "UPDATE role_menus SET ends_source = 'date', ends_at = ? WHERE id = ?", (end, menu_id)
+        )
+    await web.db.conn.commit()
+    await timed.add(web.db, wf.GUILD_ID, wf.PLAIN_ROLE_ID, "Runner")
+    grant_id = await grants.add_grant(
+        web.db, wf.GUILD_ID, MEMBER_ID, wf.PLAIN_ROLE_ID, "staff", until=late, menu_id=second
+    )
+
+    [row] = [one for one in client.get("/api/roles/grants").json() if one["id"] == grant_id]
+
+    assert row["ends_with_menu"] == "Event B"

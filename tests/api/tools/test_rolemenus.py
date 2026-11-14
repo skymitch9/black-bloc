@@ -480,7 +480,7 @@ def test_every_retired_self_pick_route_answers_410_in_words(client, sign_in, met
     assert response.status_code == 410
     body = response.json()
     assert body["error"] == "rolemenu_retired"
-    assert "Channels & Roles" in body["message"] and "Hand roles out" in body["message"]
+    assert "Channels & Roles" in body["message"] and "Give roles…" in body["message"]
 
 
 async def test_a_menu_row_carries_its_end_who_wears_it_and_the_last_pass(

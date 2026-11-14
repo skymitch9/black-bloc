@@ -326,6 +326,11 @@ class FakeInteraction:
         return self.rendered.get("view")
 
 
+@pytest.fixture(autouse=True)
+def no_audit_wait(monkeypatch):
+    monkeypatch.setattr(cog_module.hand, "AUDIT_RETRY_SECONDS", 0)
+
+
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
@@ -2140,3 +2145,72 @@ async def test_a_give_discord_refuses_logs_a_failure_and_never_the_success_kind(
     kinds = await action_kinds(db)
     assert "role_menu.assign_failed" in kinds and "role_menu.assign" not in kinds
     assert await open_grant_on(db, 900, 10, a["id"]) is None
+
+
+async def test_one_event_per_marathon_is_refused_at_every_write_in_words(bot, db, lead):
+    await timed_list(db, 10)
+    marathon_id = await marathon_with(db, LATER)
+    first = await cog_module.make_event(bot, bot.guild, lead, "First", marathon_id=marathon_id)
+    dated = await an_event(db, "dated", ends_at=SOON)
+
+    taken = r"already has an open event, \*\*First"
+    with pytest.raises(cog_module.MarathonTakenError, match=taken):
+        await cog_module.make_event(bot, bot.guild, lead, "Second", marathon_id=marathon_id)
+    assert await get_menu(db, GUILD, "second") is None
+    with pytest.raises(cog_module.MarathonTakenError):
+        await cog_module.attach_marathon(bot, bot.guild, lead, dated, marathon_id)
+    with pytest.raises(cog_module.MarathonTakenError):
+        await cog_module.set_menu_end(
+            bot, bot.guild, lead, dated, source=menus.MARATHON_END, marathon_id=marathon_id
+        )
+    assert (await menu_row(db, dated["id"]))["ends_source"] == "date"
+
+    await cog_module.set_menu_end(
+        bot,
+        bot.guild,
+        lead,
+        first,
+        source=menus.MARATHON_END,
+        marathon_id=marathon_id,
+        buffer_days=2,
+    )
+    assert (await menu_row(db, first["id"]))["buffer_days"] == 2
+
+
+async def test_change_the_end_never_offers_a_marathon_another_open_event_follows(bot, db, lead):
+    await timed_list(db, 10)
+    taken = await another_marathon(db, LATER, "https://taken")
+    free = await marathon_with(db, SOON)
+    await cog_module.make_event(bot, bot.guild, lead, "Taken", marathon_id=taken)
+    mine = await cog_module.make_event(bot, bot.guild, lead, "Mine", marathon_id=free)
+    interaction = await open_a_menu(bot, lead, mine["name"])
+
+    await press(interaction, "Change the end…")
+
+    offered = picker(interaction.view, "Ends with a marathon…")
+    assert [one.value for one in offered.options] == [str(free)]
+
+
+async def test_a_give_on_another_event_waits_for_an_end_pass_already_taking_roles_off(
+    bot, db, lead
+):
+    import asyncio
+
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=SOON)
+    b = await an_event(db, "b", ends_at=LATER)
+    member = FakeMember(bot.guild, user_id=900)
+    member.roles.append(FakeRole(10))
+    lock = cog_module.guild_lock(bot, GUILD)
+    await lock.acquire()
+    given = asyncio.create_task(give(bot, lead, b, 10, member))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert not given.done()
+    assert await open_grant_on(db, 900, 10, b["id"]) is None
+
+    lock.release()
+    await given
+    assert await open_grant_on(db, 900, 10, b["id"]) is not None
+    assert cog_module.guild_lock(bot, GUILD) is lock
+    _ = a

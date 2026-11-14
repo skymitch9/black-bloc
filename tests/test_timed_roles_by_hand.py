@@ -72,3 +72,38 @@ def test_the_custom_ids_round_trip_through_their_templates():
 
     assert re.fullmatch(hand.PICK_TEMPLATE, hand.pick_id(42))["prompt_id"] == "42"
     assert re.fullmatch(hand.NEW_TEMPLATE, hand.new_id(42))["prompt_id"] == "42"
+
+
+async def test_an_entry_discord_writes_late_is_found_by_one_read_after_a_short_wait(monkeypatch):
+    entries: list = []
+    found = guild(entries)
+    waited: list = []
+
+    async def wait(seconds):
+        waited.append(seconds)
+        entries.append(entry(900, 57, [10]))
+
+    monkeypatch.setattr(hand.asyncio, "sleep", wait)
+
+    assert await hand.who_added_soon(found, MEMBER, [10]) == (57, hand.FOUND)
+    assert waited == [hand.AUDIT_RETRY_SECONDS]
+
+
+async def test_the_second_read_happens_only_when_the_first_found_nothing(monkeypatch):
+    waited: list = []
+
+    async def wait(seconds):
+        waited.append(seconds)
+
+    monkeypatch.setattr(hand.asyncio, "sleep", wait)
+
+    assert await hand.who_added_soon(guild([entry(900, 57, [10])]), MEMBER, [10]) == (
+        57,
+        hand.FOUND,
+    )
+    assert await hand.who_added_soon(guild([], readable=False), MEMBER, [10]) == (
+        None,
+        hand.UNREADABLE,
+    )
+    assert await hand.who_added_soon(guild([]), MEMBER, [10]) == (None, hand.SILENT)
+    assert waited == [hand.AUDIT_RETRY_SECONDS]

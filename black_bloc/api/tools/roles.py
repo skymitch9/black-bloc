@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import rolegrants as grants
+from ... import timed_roles as timed
 from ...cogs.community.role_menus import (
     extend_role,
     grant_role,
@@ -55,10 +56,21 @@ DAYS_NEEDED = (
 )
 
 
-def grant_row(guild: Any, row: Any, menu_ends: dict[int, dict[str, str]] | None = None) -> dict:
-    """An open grant on a role whose menu has an end names that menu; it ends with the menu."""
+def grant_row(
+    guild: Any,
+    row: Any,
+    menu_ends: dict[int, dict[str, str]] | None = None,
+    titles: dict[int, str] | None = None,
+) -> dict:
+    """An open assignment names its OWN event; any other open row on a timed role, the soonest."""
     by = row["granted_by"]
-    ending = (menu_ends or {}).get(int(row["role_id"])) if row["removed_at"] is None else None
+    own = row["menu_id"] if "menu_id" in row.keys() else None
+    if row["removed_at"] is not None:
+        ending = None
+    elif own is not None:
+        ending = {"menu": (titles or {}).get(int(own))}
+    else:
+        ending = (menu_ends or {}).get(int(row["role_id"]))
     return {
         "id": row["id"],
         "user_id": str(row["user_id"]),
@@ -119,7 +131,8 @@ def build_router(bot: Any) -> APIRouter:
             limit=max(1, min(int(limit), GRANTS_LIMIT)),
         )
         ends = await menu_ends_named(bot.db, guild.id)
-        return [grant_row(guild, row, ends) for row in rows]
+        titles = await timed.event_titles(bot.db, guild.id)
+        return [grant_row(guild, row, ends, titles) for row in rows]
 
     @router.post("/grants")
     async def grant_create(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
@@ -151,7 +164,10 @@ def build_router(bot: Any) -> APIRouter:
         if grant_id is None:
             raise Refused(409, "role_refused", said)
         return grant_row(
-            guild, await grants.get_grant(bot.db, grant_id), await menu_ends_named(bot.db, guild.id)
+            guild,
+            await grants.get_grant(bot.db, grant_id),
+            await menu_ends_named(bot.db, guild.id),
+            await timed.event_titles(bot.db, guild.id),
         )
 
     @router.post("/grants/{grant_id}/extend")
@@ -179,7 +195,10 @@ def build_router(bot: Any) -> APIRouter:
         if until is None:
             raise Refused(409, "menu_end", said)
         return grant_row(
-            guild, await grants.get_grant(bot.db, grant_id), await menu_ends_named(bot.db, guild.id)
+            guild,
+            await grants.get_grant(bot.db, grant_id),
+            await menu_ends_named(bot.db, guild.id),
+            await timed.event_titles(bot.db, guild.id),
         )
 
     @router.delete("/grants/{grant_id}")
@@ -196,7 +215,10 @@ def build_router(bot: Any) -> APIRouter:
         if not done:
             raise Refused(409, "role_refused", said)
         return grant_row(
-            guild, await grants.get_grant(bot.db, grant_id), await menu_ends_named(bot.db, guild.id)
+            guild,
+            await grants.get_grant(bot.db, grant_id),
+            await menu_ends_named(bot.db, guild.id),
+            await timed.event_titles(bot.db, guild.id),
         )
 
     return router

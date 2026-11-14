@@ -233,6 +233,49 @@ async def soonest_ends(db: Any, guild_id: Any) -> dict[int, dict[str, str]]:
     return {role_id: dict(found) for role_id in ids}
 
 
+async def assignment_ends(db: Any, guild_id: Any, user_ids: Any) -> dict[tuple[int, int], dict]:
+    """(member, role) → the end they KEEP it until: the latest of their own open events'.
+
+    An open event with no end yet outlasts every dated one, so it wins with `ends_at` None."""
+    wanted = list(dict.fromkeys(int(one) for one in user_ids or ()))
+    if not wanted or db is None or not getattr(db, "is_connected", False):
+        return {}
+    holes = ", ".join("?" for _ in wanted)
+    cur = await db.conn.execute(
+        "SELECT g.user_id, g.role_id, m.ends_at, m.title FROM role_grants g "
+        "JOIN role_menus m ON m.id = g.menu_id WHERE g.guild_id = ? AND g.removed_at IS NULL "
+        f"AND m.ended_at IS NULL AND g.user_id IN ({holes}) ORDER BY m.id",
+        (int(guild_id), *wanted),
+    )
+    found: dict[tuple[int, int], dict] = {}
+    for row in await cur.fetchall():
+        key = (int(row["user_id"]), int(row["role_id"]))
+        end = parse_ts(row["ends_at"])
+        mine = {
+            "ends_at": end.astimezone(UTC).isoformat() if end is not None else None,
+            "menu": str(row["title"]),
+        }
+        held = found.get(key)
+        if held is None or (held["ends_at"] is not None and outlasts(mine, held)):
+            found[key] = mine
+    return found
+
+
+def outlasts(one: dict, other: dict) -> bool:
+    if one["ends_at"] is None:
+        return True
+    return other["ends_at"] is not None and parse_ts(one["ends_at"]) > parse_ts(other["ends_at"])
+
+
+async def event_titles(db: Any, guild_id: Any) -> dict[int, str]:
+    if db is None or not getattr(db, "is_connected", False):
+        return {}
+    cur = await db.conn.execute(
+        "SELECT id, title FROM role_menus WHERE guild_id = ?", (int(guild_id),)
+    )
+    return {int(row["id"]): str(row["title"]) for row in await cur.fetchall()}
+
+
 __all__ = [
     "LABEL_MAX",
     "LIST_MAX",
@@ -241,17 +284,20 @@ __all__ = [
     "assigned_by_role",
     "assigned_count",
     "assigned_people",
+    "assignment_ends",
     "close_event",
     "close_member_roles",
     "ended_events",
     "event_for_marathon",
     "event_grant",
     "event_grants",
+    "event_titles",
     "is_timed",
     "keepers",
     "labels",
     "listed",
     "open_events",
+    "outlasts",
     "plan",
     "remove",
     "role_ids",

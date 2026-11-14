@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,7 @@ UNREADABLE = "unreadable"
 OURS = "ours"
 AUDIT_LOOK_BACK = 10
 AUDIT_WINDOW = timedelta(minutes=5)
+AUDIT_RETRY_SECONDS = 3.0
 PICK_TEMPLATE = r"tbh:(?P<prompt_id>[0-9]+)"
 NEW_TEMPLATE = r"tbhnew:(?P<prompt_id>[0-9]+)"
 LOCKS_ATTR = "_timed_by_hand_locks"
@@ -163,6 +165,15 @@ async def who_added(
     return None, SILENT
 
 
+async def who_added_soon(guild: Any, member: Any, role_ids: Any) -> tuple[int | None, str]:
+    """`who_added`, read once more after a short wait when the entry is not there yet."""
+    found = await who_added(guild, member, role_ids)
+    if found[1] != SILENT:
+        return found
+    await asyncio.sleep(AUDIT_RETRY_SECONDS)
+    return await who_added(guild, member, role_ids)
+
+
 def by_hand_locks(bot: Any) -> dict[tuple[int, int], Any]:
     found = getattr(bot, LOCKS_ATTR, None)
     if found is None:
@@ -174,6 +185,7 @@ def by_hand_locks(bot: Any) -> dict[tuple[int, int], Any]:
 __all__ = [
     "FOUND",
     "NEW_TEMPLATE",
+    "AUDIT_RETRY_SECONDS",
     "OURS",
     "PICK_TEMPLATE",
     "SILENT",
@@ -191,4 +203,5 @@ __all__ = [
     "set_message",
     "waiting_roles",
     "who_added",
+    "who_added_soon",
 ]
