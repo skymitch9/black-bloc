@@ -426,7 +426,7 @@ Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, the site*. Ve
 6. **The End controls are their own card with their own Save**, beside the words editor, so a words save can never carry an end
    field (any end write clears `ended_at`). The card's "how it ends" is a three-way switch (a marathon / a date / No end).
 7. **The page stops drawing `role_menu_channel_id`** (the channel menus were posted in): posting is retired, so it is a dead
-   control here. ⚠️ The key is still in the registry and on the Settings page — retiring it is a conductor question.
+   control here. ~~The key is still in the registry and on the Settings page~~ — retired 2026-11-13, §6.7.
 8. **End it now renders on every menu with roles**, the panel's rule — including menus with no end (an ad-hoc end). The confirm
    names the counts.
 9. **Members chips**: the API already merged menu ends; the chip's tooltip now says *ends with <menu>* (the chip's own note was
@@ -435,7 +435,7 @@ Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, the site*. Ve
     roster, takes roles off it on End it now (a reset restores them), and seeds one menu per state the page draws.
 
 **Open questions (named, not decided)**
-- Retire `role_menu_channel_id` from the registry (item 7)?
+- Retire `role_menu_channel_id` from the registry (item 7)? ✅ **Answered 2026-11-13 (owner Q5 a): retired**, §6.7.
 - The `streamers` / `notifications` menus are pings' own groupings but now sit on the staff control like any menu: **Set the end
   on one would strip every fan or Events role at its end**, `pings._drop_spare_menus` deletes a streamer menu without
   `delete_refusal`, and `pings._fill_menu` rewrites options without `stamp_grants`. Should pings' menus be hidden from, or
