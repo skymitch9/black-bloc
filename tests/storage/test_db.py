@@ -5307,3 +5307,25 @@ async def test_one_pick_per_member_and_set_and_one_sheet_per_member_are_the_data
             await db.conn.execute(sheet)
     finally:
         await db.close()
+
+
+async def test_schema_110_gives_an_older_file_the_waits_table_with_one_open_wait_per_pair(tmp_path):
+    path = tmp_path / "live-older.sqlite3"
+    db = await shaped_like_live_108(path)
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        insert = (
+            "INSERT INTO timed_role_waits(guild_id, user_id, role_id, until, set_at, state) "
+            "VALUES (1, 5, 9, '2099-01-01T00:00:00+00:00', '2026-11-14T00:00:00+00:00', ?)"
+        )
+        await again.conn.execute(insert, ("waiting",))
+        await again.conn.execute(insert, ("removed",))
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(insert, ("waiting",))
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "110"
+    finally:
+        await again.close()

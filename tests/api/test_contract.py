@@ -1125,6 +1125,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_id": str(marathon_id),
         "held_menu": "btb-2027",
         "timed_role_id": str(TIMED_ROLE_ID),
+        "waiting_member_id": str(MEMBER_ID),
         "spare_role_id": str(SPARE_ROLE_ID),
         "dated_menu": "volunteers",
         "free_marathon_id": str(marathon_over_id),

@@ -2287,3 +2287,9 @@ async def test_the_panel_answers_a_taken_marathon_in_words_and_changes_nothing(b
 
     assert "already has an open event, **Taken**" in interaction.sent
     assert (await menu_row(db, event["id"]))["ends_source"] == "date"
+
+
+async def test_an_event_named_like_a_route_gets_a_numbered_key_so_the_route_stays_reachable(db):
+    assert await cog_module.free_name(db, GUILD, "Waiting") == "waiting-2"
+    assert await cog_module.free_name(db, GUILD, "Timed roles") == "timed-roles-2"
+    assert await cog_module.free_name(db, GUILD, "Back to Black") == "back-to-black"

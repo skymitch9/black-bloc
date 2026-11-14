@@ -2698,13 +2698,14 @@ class RoleMenuPanel(Panel):
 
 SLUG = re.compile(r"[^a-z0-9]+")
 NAME_MAX = 60
+ROUTE_NAMES = frozenset({"waiting", "marathons", "timed-roles", "requests", "seed"})
 
 
 async def free_name(db: Any, guild_id: int, title: str) -> str:
     """The event's stored key: its name in lowercase dashes, numbered when already taken."""
     base = SLUG.sub("-", title.lower()).strip("-")[:NAME_MAX] or "event"
     found, n = base, 1
-    while await get_menu(db, guild_id, found) is not None:
+    while found in ROUTE_NAMES or await get_menu(db, guild_id, found) is not None:
         n += 1
         found = f"{base}-{n}"
     return found

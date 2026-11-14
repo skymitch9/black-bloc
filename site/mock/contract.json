@@ -1343,6 +1343,34 @@
     },
     {
       "method": "POST",
+      "path": "/api/rolemenus/waiting/{waiting_member_id}/date",
+      "body": {
+        "until": "2030-06-01"
+      },
+      "settings": {
+        "rolemenu_wait_max_days": 3650
+      },
+      "read_by": [
+        "page-rolemenus.js Waiting for an event, Change the date…"
+      ],
+      "shape": "object",
+      "keys": [
+        "message",
+        "entry"
+      ],
+      "nested": {
+        "entry": [
+          "user_id",
+          "roles",
+          "until",
+          "until_label",
+          "removal_label",
+          "take_off_question"
+        ]
+      }
+    },
+    {
+      "method": "POST",
       "path": "/api/rolemenus",
       "body": {
         "title": "Contract new"

@@ -11302,4 +11302,7 @@ Design: [`event-roles-design.md`](event-roles-design.md) §8 and §8.9 (every de
 | `cogs/community/role_menus.py:4920` `on_member_remove` | A member who leaves ends every open wait `left` (the pass does the same for one it finds gone). |
 | `api/tools/rolemenus.py:349` `wait_payload` · `:388` `wanted_wait_date` | One member per row, labels from the timed list; the confirm sentence comes from the route so the page never builds it. |
 | `site/public/assets/page-rolemenus.js:684` `waitCard` · `:738` `waitingSection` | The section is drawn only while someone waits (as the panel's button). *Save the date* is page chrome (§7.9 item 20). |
+| `api/tools/members.py:70` `keeps_until` | A waiting role's chip reads its removal day and no event; assigned AND waiting reads the later of the two (`timed.outlasts`, so an event with no end still wins). |
+| `cogs/community/role_menus.py:2701` `ROUTE_NAMES` · `free_name` | An event's key never equals a word the `/api/rolemenus` router uses as a path segment, so `GET /{name}` and `GET /waiting` cannot shadow each other. |
+| `black_bloc/timed_roles_waiting_flow.py:1217` `TakeOffConfirm` | `AnswersErrors` first, so a fault in the confirm reaches the presser as a sentence, not Discord's *interaction failed*. |
 | `site/mock/server.mjs:6060` `endPlan` · `:6107` `waitEntries` | The mock's copies of the plan's waiting count and the entries; the seed (`waits:`) holds one member waiting with time to spare and one past the rough end (checklist 49). |

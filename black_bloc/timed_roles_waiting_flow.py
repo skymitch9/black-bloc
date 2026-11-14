@@ -1214,7 +1214,7 @@ class WaitEventModal(AnswersErrors, discord.ui.Modal):
         await ask_about_new_event(bot, guild, menu)
 
 
-class TakeOffConfirm(discord.ui.View):
+class TakeOffConfirm(AnswersErrors, discord.ui.View):
     def __init__(self, bot: Any, guild_id: int, user_id: int) -> None:
         super().__init__(timeout=CONFIRM_SECONDS)
         self.user_id = int(user_id)

@@ -736,8 +736,9 @@ function waitCard(entry, events, sectionSay) {
 }
 
 function waitingSection(entries, events, say) {
-  if (!entries.length) return null;
+  if (!entries.length && !String(say.textContent || '').trim()) return null;
   const one = section(word('rolemenu_waiting_title'), null, { id: 'waiting', count: entries.length, open: true });
+  if (!entries.length) one.body.append(sayNothing(word('rolemenu_waiting_none_line')));
   for (const entry of entries) one.body.append(waitCard(entry, events, say));
   one.body.append(say);
   return one.node;

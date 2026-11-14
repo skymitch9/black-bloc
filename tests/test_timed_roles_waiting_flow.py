@@ -449,9 +449,10 @@ async def test_a_stranger_is_refused_at_every_waiting_control(bot, db, lead):
 # --- the waiting pass: removal → Revert → removal
 
 
-async def removal_ready(bot, db, lead, *roles):
+async def removal_ready(bot, db, lead, *roles, ping=True):
     member, post, _ = await waiting_member(bot, lead, *roles)
-    await bot.store.set(GUILD, "rolemenu_wait_ping_role_id", LEADS)
+    if ping:
+        await bot.store.set(GUILD, "rolemenu_wait_ping_role_id", LEADS)
     await db.conn.execute("UPDATE timed_role_waits SET until = ?, stage = 3", (ago(14),))
     await db.conn.commit()
     return member, post
@@ -745,3 +746,38 @@ async def test_after_the_removal_the_pair_is_free_and_a_new_by_hand_add_asks_aga
 
     assert len(posts(bot)) == count + 1
     assert "<@&10> by hand" in posts(bot)[-1].kwargs["content"]
+
+
+async def test_the_removal_and_take_it_off_now_wait_for_the_guild_lock(bot, db, lead):
+    import asyncio
+
+    member, _ = await removal_ready(bot, db, lead, 10)
+    lock = cog_module.guild_lock(bot, GUILD)
+    await lock.acquire()
+    passing = asyncio.create_task(flow.waiting_pass(bot, bot.guild))
+    await asyncio.sleep(0.05)
+    assert not passing.done() and wears(member, 10)
+    lock.release()
+    await passing
+    assert not wears(member, 10)
+
+    other = FakeMember(bot.guild, user_id=901)
+    await put_to_waiting(bot, lead, other, 10)
+    await lock.acquire()
+    taking = asyncio.create_task(flow.take_off_now(bot, bot.guild, lead, 901))
+    await asyncio.sleep(0.05)
+    assert not taking.done() and wears(other, 10)
+    lock.release()
+    ok, _ = await taking
+    assert ok and not wears(other, 10)
+
+
+async def test_with_no_ping_role_set_the_removal_notice_pings_nobody(bot, db, lead):
+    await removal_ready(bot, db, lead, 10, ping=False)
+
+    await flow.waiting_pass(bot, bot.guild)
+
+    notice = posts(bot)[-1]
+    assert notice.kwargs["content"].startswith("<@900> lost <@&10>")
+    mentions = notice.kwargs["allowed_mentions"]
+    assert not mentions.roles and not mentions.users and not mentions.everyone

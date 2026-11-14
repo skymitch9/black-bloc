@@ -940,16 +940,22 @@ at both widths; Attach on a waiting card wrote the assignment and the card left 
     picker with **Attach** (`rolemenu_wait_attach_button`), **Change the date…** folded (a date box + *Save the date*), **Take it off
     now** (confirm with the route's `take_off_question`). With no open event the picker is replaced by
     `rolemenu_by_hand_no_events_text`. *Save the date* is page chrome, a JS constant (§7.9 item 20).
-22. Removing a role from the timed list is refused while anyone waits on it (`rolemenu_wait_remove_refused_said`, count named); the
+22. **Members chips** (`GET /api/members`, `members.keeps_until`): a waiting role's chip reads its removal day (`until` + the
+    removal days) and names no event; a member both assigned and waiting reads the later of the two. (§7.9 item 1's "a wearer with
+    no assignment reads the soonest open end" would otherwise show a date on which nothing comes off.)
+23. **An event's stored key never equals a route word** (`free_name` skips `waiting`, `marathons`, `timed-roles`, `requests`,
+    `seed`): an event titled *Waiting* is `waiting-2`, so `GET /api/rolemenus/waiting` and `GET /{name}` cannot shadow each other.
+    Existing live keys are untouched (the live row is `BtB`).
+24. Removing a role from the timed list is refused while anyone waits on it (`rolemenu_wait_remove_refused_said`, count named); the
     API answers it with the SAME 409 `role_assigned` code as the assignment refusal (one code for "the list still holds people").
 
 **Words, guide**
-23. **Keys: 1569 → 1619 (+50)**: 45 words in `settings_store.TIMED_ROLE_WAIT_WORDS`, three numbers in `ROLEMENU_WAIT_NUMBERS`
+25. **Keys: 1569 → 1619 (+50)**: 45 words in `settings_store.TIMED_ROLE_WAIT_WORDS`, three numbers in `ROLEMENU_WAIT_NUMBERS`
     (`rolemenu_wait_removal_days` 14 [1–365], `rolemenu_wait_revert_days` 14 [1–365], `rolemenu_wait_max_days` 365 [1–3650]),
     `rolemenu_wait_reminder_days` (text, `0, 7, 13`), `rolemenu_wait_ping_role_id` (role, unset). Each has a mock row, a
     `labels.js` line, and the bounds are in the contract's `min`/`max`. The by-hand post's **New event…** label, the event picker
     (`rolemenu_by_hand_pick`), *no event is open* and *Somebody* reuse A's keys.
-24. The guide `rolemenu-post` keeps its 4 steps (the live guide has 4, so the boot refresh re-points each *Put the original back*)
+26. The guide `rolemenu-post` keeps its 4 steps (the live guide has 4, so the boot refresh re-points each *Put the original back*)
     and gains the *Pick later…* path as its FIRST FAULT (*A timed role was given by hand before anyone made its event*, quoting
     **Pick later…**, **Change the date…**, **Take it off now**, **Revert** from their keys) and the fact
     `rolemenu_wait_removal_days` (`FACTS_MAX` = 4, so the reminder days are not a fact). The live words change only on a reset.
@@ -967,8 +973,11 @@ at both widths; Attach on a waiting card wrote the assignment and the card left 
 - Routes (23 → 27 under `/api/rolemenus`): `GET /waiting`, `POST /waiting/{user_id}/attach` `{name}`, `POST /waiting/{user_id}/date`
   `{until}`, `POST /waiting/{user_id}/take-off`. Refusals: 404 `no_such_wait` / `no_such_menu`, 400 `bad_date` / `past_date` /
   `too_far`, 409 `event_ended` / `not_attached` / `not_taken_off` / `test_mode`. Contract: `GET /api/rolemenus/waiting` (408 → 409
-  routes); the contract seed and the mock seed each hold a waiting member.
-- The 50 settings keys (item 23); panel move `waiting` (`rolemenus.WAITING`, view `waiting`).
+  routes) and `POST /api/rolemenus/waiting/{waiting_member_id}/date` (with `rolemenu_wait_max_days` lifted to 3650 for its
+  fixed 2030 date; → 410 routes); the contract seed and the mock seed each hold a waiting member. ⚠️ **Attach and take-off are
+  NOT in the contract**: each is single-use on the shared seed and has no undo route for a `then`; their real-router shapes are
+  pinned by `tests/api/tools/test_rolemenus.py`, the mock's only by the page drive.
+- The 50 settings keys (item 25); panel move `waiting` (`rolemenus.WAITING`, view `waiting`).
 - Modules: `black_bloc/timed_roles_waiting.py` (store + schedule, stdlib only — `settings_store` imports its offsets parser),
   `black_bloc/timed_roles_waiting_flow.py` (the Discord moves, imported lazily from `role_menus` through `flows()`).
 
@@ -980,5 +989,13 @@ at both widths; Attach on a waiting card wrote the assignment and the card left 
   reverted* (no `removed` rows) — cosmetic, the roles stayed on.
 - A stuck role retries every hour forever (item 15). If the owner wants a cap, it becomes a key.
 - The by-hand post's event list in the waiting state is the open events at the time it was redrawn (as A's post).
-- The Members page chips do not show *waiting*.
+- **Attach can race the hourly pass**: `attach_entry` ends the wait after `give_event_role` lets the guild lock go; a pass landing
+  in between (the removal day due that same moment) marks the row `removed` with a *stays on* notice (the assignment it just
+  wrote holds the role) and the attach answers *still waits*. Nothing is lost — the role stays on through the event — but the
+  words are wrong for that one press. Not closed.
+- The tests of `role_menus.py`'s waiting-aware moves (`take_event_role`, `revoke_grant`, `drop_timed_role`, `build_waiting`,
+  `run_waits`, `on_member_remove`) sit in `tests/test_timed_roles_waiting_flow.py` beside the flow they drive end to end (they
+  need its post-to-waiting helpers, and `test_role_menus.py` importing from it would make the two test files import each
+  other). Recorded as a deviation from the mirror rule.
+- `CLAUDE.md` still says the review checklist has 49 items (it has 50) — the conductor's file.
 - Live values for the conductor: `rolemenu_wait_ping_role_id` → Leads (the owner's Q1); `rolemenu_by_hand_channel_id` as before.

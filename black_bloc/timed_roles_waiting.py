@@ -337,6 +337,21 @@ async def wait_again(db: Any, wait_ids: Any, until: datetime, by: Any) -> list[i
     return moved
 
 
+async def removal_ends(
+    db: Any, guild_id: Any, user_ids: Any, removal_days: int
+) -> dict[tuple[int, int], dict[str, Any]]:
+    """(member, role) → the day a waiting role comes off unless an event is picked."""
+    wanted = {int(one) for one in user_ids or ()}
+    if not wanted or db is None or not getattr(db, "is_connected", False):
+        return {}
+    found: dict[tuple[int, int], dict[str, Any]] = {}
+    for row in await waiting(db, int(guild_id)):
+        end = removal_at(row["until"], removal_days)
+        if int(row["user_id"]) in wanted and end is not None:
+            found[(int(row["user_id"]), int(row["role_id"]))] = {"ends_at": iso(end), "menu": None}
+    return found
+
+
 def entries(rows: Any) -> list[dict[str, Any]]:
     """One entry per member: their waiting roles, the soonest end, who set it and who assigned."""
     found: dict[int, dict[str, Any]] = {}
@@ -412,6 +427,7 @@ __all__ = [
     "reminder_id",
     "removal_at",
     "removal_due",
+    "removal_ends",
     "revert_id",
     "roles_waiting",
     "set_notice",
