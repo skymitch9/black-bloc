@@ -158,6 +158,104 @@ async def test_reset_puts_the_whole_guide_back_and_refuses_one_nobody_shipped(bo
     assert guides.is_seeded(row) is False
 
 
+def test_every_shipped_fact_names_a_setting_or_probe_that_still_exists():
+    from black_bloc.settings_store import KEY_TYPES
+
+    for entry in guides.seed_entries():
+        for fact in entry.get("facts") or ():
+            known = KEY_TYPES if fact["kind"] == guides.SETTING else guides.PROBES
+            assert fact["ref"] in known, (entry["slug"], fact["ref"])
+
+
+ROLEMENU_GUIDE = "rolemenu-post"
+RETIRED_ROLEMENU_WORDS = ("Post it", "Take it down", "Ask staff first", "Rules…", "test mode")
+OLD_ROLEMENU_GUIDE = {
+    "slug": ROLEMENU_GUIDE,
+    "title": "Post a role menu",
+    "goal": "New menu, add roles, post it. Approval-gated or timed roles when you need them.",
+    "audience": "staff",
+    "feature": "rolemenu",
+    "command": "/rolemenu",
+    "sort": 250,
+    "steps": [
+        {"do": "Type **/rolemenu** and press **New menu**. Type a name.", "expect": "A card."},
+        {"do": "Press **Add a role…**.", "expect": "The role is listed."},
+        {"do": "Press **Post it** and pick the channel.", "expect": "A panel appears."},
+        {"do": "Press **Ask staff first**.", "expect": "Requests land in the approval channel."},
+    ],
+    "faults": [{"symptom": "You want the panel down", "answer": "**Take it down** on the card."}],
+    "facts": [
+        {"kind": "setting", "ref": "rolemenu_mode"},
+        {"kind": "setting", "ref": "role_menu_channel_id"},
+        {"kind": "setting", "ref": "rolemenu_approval_channel_id"},
+    ],
+}
+
+
+def shipped_rolemenu_guide():
+    return next(one for one in guides.seed_entries() if one["slug"] == ROLEMENU_GUIDE)
+
+
+def test_the_role_menu_guide_teaches_the_temporary_roles_control_and_nothing_retired():
+    entry = shipped_rolemenu_guide()
+    said = json.dumps(entry, ensure_ascii=False)
+
+    assert entry["title"] == "Give out temporary roles"
+    for retired in RETIRED_ROLEMENU_WORDS:
+        assert retired not in said, retired
+    for label in ("Set the end…", "Hand roles out…", "Use the earlier end", "End it now"):
+        assert label in said, label
+    assert [one["ref"] for one in entry["facts"]] == [
+        "rolemenu_end_buffer_days",
+        "rolemenu_end_earlier_holds",
+        "rolemenu_approval_channel_id",
+    ]
+
+
+async def test_an_old_role_menu_guide_keeps_its_words_at_boot_and_takes_the_new_ones_on_reset(
+    bot, db, monkeypatch
+):
+    """Owner Q4 (2026-11-13): the boot refresh only re-points Put the original back; the live
+    words change when staff press it."""
+    shipped = guides.seed_entries()
+    monkeypatch.setattr(
+        guides,
+        "seed_entries",
+        lambda: [OLD_ROLEMENU_GUIDE if one["slug"] == ROLEMENU_GUIDE else one for one in shipped],
+    )
+    await guides.seed_guides(db, GUILD)
+    monkeypatch.setattr(guides, "seed_entries", lambda: shipped)
+    entry = shipped_rolemenu_guide()
+
+    assert await guides.refresh_seeds(db, GUILD) == 1
+    guide = await guides.get_guide(db, GUILD, ROLEMENU_GUIDE)
+    steps = await guides.steps_of(db, guide["id"])
+    assert guide["title"] == "Post a role menu"
+    assert guide["seed_hash"] == guides.seed_hash(entry)
+    assert [one["do_text"] for one in steps] == [one["do"] for one in OLD_ROLEMENU_GUIDE["steps"]]
+    assert [one["seed_do"] for one in steps] == [one["do"] for one in entry["steps"]]
+    assert [one["seed_expect"] for one in steps] == [one["expect"] for one in entry["steps"]]
+    assert [one["ref"] for one in await guides.facts_of(db, guide["id"])] == [
+        "rolemenu_mode",
+        "role_menu_channel_id",
+        "rolemenu_approval_channel_id",
+    ]
+    assert await guides.refresh_seeds(db, GUILD) == 0
+
+    assert await guides.reset_to_seed(db, GUILD, guide) is True
+    fresh = await guides.get_guide(db, GUILD, ROLEMENU_GUIDE)
+    steps = await guides.steps_of(db, fresh["id"])
+    assert (fresh["title"], fresh["goal"]) == (entry["title"], entry["goal"])
+    assert [one["do_text"] for one in steps] == [one["do"] for one in entry["steps"]]
+    assert [one["expect_text"] for one in steps] == [one["expect"] for one in entry["steps"]]
+    assert [one["symptom"] for one in await guides.faults_of(db, fresh["id"])] == [
+        one["symptom"] for one in entry["faults"]
+    ]
+    assert [one["ref"] for one in await guides.facts_of(db, fresh["id"])] == [
+        one["ref"] for one in entry["facts"]
+    ]
+
+
 # --- the linter -------------------------------------------------------------------------------
 
 
