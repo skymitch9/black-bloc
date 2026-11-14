@@ -1,8 +1,10 @@
 {
-  "release": "v274",
-  "commit": "67312d20",
+  "release": "v275",
+  "commit": "73424346",
   "changed_features": [
-    "core",
-    "guides"
+    "guides",
+    "marathon",
+    "pings",
+    "rolemenu"
   ]
 }
