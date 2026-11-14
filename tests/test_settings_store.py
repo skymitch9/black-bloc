@@ -176,7 +176,7 @@ class _Member:
     [
         ("staff_channel_id", TEST_CH),
         ("log_channel_id", TEST_CH),
-        ("role_menu_channel_id", None),
+        ("rolemenu_approval_channel_id", None),
         ("poll_channel_id", TEST_CH),
         ("request_notify_channel_id", TEST_CH),
     ],
@@ -241,12 +241,12 @@ async def test_a_row_for_a_retired_key_is_ignored_rather_than_fatal(store, caplo
 
 
 async def test_all_lists_every_known_key(store):
-    await store.set(1, "role_menu_channel_id", 777)
+    await store.set(1, "rolemenu_approval_channel_id", 777)
     values = store.all(1)
     assert set(values) == set(KEY_TYPES)
     assert values["log_channel_id"] == TEST_CH
     assert values["staff_channel_id"] == TEST_CH
-    assert values["role_menu_channel_id"] == 777
+    assert values["rolemenu_approval_channel_id"] == 777
 
 
 async def test_unknown_key_is_refused(store):
@@ -524,6 +524,31 @@ async def test_member_self_pick_is_retired_and_its_keys_are_kept_but_not_read(st
     await store.load()
     cur = await store.db.conn.execute("SELECT value FROM settings WHERE key = 'rolemenu_mode'")
     assert (await cur.fetchone())["value"] == '"on"'
+
+
+async def test_the_role_menu_channel_is_retired_and_a_stored_row_is_kept(store):
+    """Owner Q5 (2026-11-13): nothing posts a role menu any more, so the channel menus were posted
+    in leaves the registry, Settings and /settings ▸ Roles & channels; a stored row stays."""
+    from black_bloc.settings_panel import CORE_CHANNEL_KEYS, KEY_PURPOSE
+
+    key = settings_store.ROLE_MENU_CHANNEL_RETIRED
+    assert key not in settings_store.KEY_TYPES
+    assert key not in settings_store.KEY_HELP
+    assert key not in settings_store.CORE_KEYS
+    assert key not in CORE_CHANNEL_KEYS and key not in KEY_PURPOSE
+    with pytest.raises(SettingError, match="not a Black Bloc setting"):
+        store.get(1, key)
+    await store.db.conn.execute(
+        "INSERT INTO settings(guild_id, key, value, updated_at) "
+        "VALUES (1, 'role_menu_channel_id', '777', '2026-11-13')"
+    )
+    await store.db.conn.commit()
+    await store.load()
+    assert key not in store.all(1)
+    cur = await store.db.conn.execute(
+        "SELECT value FROM settings WHERE key = 'role_menu_channel_id'"
+    )
+    assert (await cur.fetchone())["value"] == "777"
 
 
 def test_the_purge_window_is_clamped_to_discord_s_maximum():
@@ -1966,7 +1991,7 @@ async def test_the_boot_status_ships_with_both_sentences_written(store):
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 498
+    assert len(settings_store.CORE_KEYS) == 497
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
@@ -2315,7 +2340,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 1470
+    assert len(settings_store.KEY_TYPES) == 1469
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):

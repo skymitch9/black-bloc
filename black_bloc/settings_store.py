@@ -125,6 +125,7 @@ GOLIVE_COSTREAM_FIELDS = (
 
 
 ROLEMENU_MODE_RETIRED = "rolemenu_mode"
+ROLE_MENU_CHANNEL_RETIRED = "role_menu_channel_id"
 
 PINGS_MODES = ("off", "on")
 PINGS_EVENTS_ROLE_NAME = "Events"
@@ -329,7 +330,6 @@ STATUS_PREFIX = "Cookout attendees"
 KEY_TYPES: dict[str, str] = {
     "log_channel_id": "channel",
     "staff_channel_id": "channel",
-    "role_menu_channel_id": "channel",
     "golive_mode": "enum",
     "golive_channel_id": "channel",
     "golive_template": "text",
@@ -722,7 +722,6 @@ KEY_MAX_REASON: dict[str, str] = {
 KEY_HELP: dict[str, str] = {
     "log_channel_id": "where Black Bloc posts what it did",
     "staff_channel_id": "the channel whose viewers count as staff",
-    "role_menu_channel_id": "the channel /rolemenu offers first when a menu is posted",
     "golive_mode": (
         "whether a stream is announced at all: members' streams, spotlight channels, and YouTube "
         "streams while golive_youtube is on. off watches nobody; test watches and logs what it "
@@ -6338,7 +6337,6 @@ CORE_KEYS = (
     "log_channel_id",
     SHADOW_CHANNEL,
     "staff_channel_id",
-    "role_menu_channel_id",
     "bot_bio",
     "status_prefix",
     "operator_read_log",
