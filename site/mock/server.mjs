@@ -106,6 +106,10 @@ const ROLES = [
   { id: '900000000000000010', name: 'GamesDoneQuick pings', color: '#8a8f98', position: 3, managed: false },
   { id: '900000000000000011', name: 'Staff', color: '#8a8f98', position: 6, managed: false },
   { id: '900000000000000012', name: 'Committee', color: '#8a8f98', position: 7, managed: false },
+  { id: '900000000000000013', name: 'Runner', color: '#ff7a59', position: 8, managed: false },
+  { id: '900000000000000014', name: 'Commentator', color: '#5bc0eb', position: 8, managed: false },
+  { id: '900000000000000015', name: 'Host', color: '#9bc53d', position: 8, managed: false },
+  { id: '900000000000000016', name: 'Tech Check', color: '#c3a6ff', position: 8, managed: false },
   { id: '600000000000000001', name: '@everyone', color: '#8a8f98', position: 0, managed: false },
 ];
 
@@ -181,6 +185,11 @@ const STAFF = MEMBERS[0];
 // and a handful of joins inside the last week, so every chip has something to show.
 const STAFF_ROLE_IDS = ['900000000000000002', '900000000000000001'];
 const MEMBER_ROLE_ID = '900000000000000005';
+// §7: the timed-role list's seed roles (event-roles-design.md §7.9 — one row per state the page draws).
+const RUNNER_ROLE_ID = '900000000000000013';
+const COMMENTATOR_ROLE_ID = '900000000000000014';
+const HOST_ROLE_ID = '900000000000000015';
+const TECH_ROLE_ID = '900000000000000016';
 const BOOSTER_ROLE_ID = '900000000000000006';
 const LIVE_ROLE_ID = '900000000000000003';
 const EVENTS_ROLE_ID = '900000000000000007';
@@ -244,6 +253,14 @@ const ROSTER = [
 ];
 // QuietKid and Dax wear GDQ's Staff role, which marathon_optout_role_ids lists (Dax is counted as BaF anyway).
 for (const at of [5, 6]) ROSTER[at].role_ids.push('900000000000000011');
+// Who wears a timed role: Casey and Rivet run, Rivet also commentates, Moth hosts, Quiet Kid
+// wears Runner by hand with no assignment, and two filler names are on the couch.
+ROSTER[1].role_ids.push(RUNNER_ROLE_ID);
+ROSTER[2].role_ids.push(RUNNER_ROLE_ID, COMMENTATOR_ROLE_ID);
+ROSTER[3].role_ids.push(HOST_ROLE_ID);
+ROSTER[5].role_ids.push(RUNNER_ROLE_ID);
+ROSTER[12].role_ids.push(COMMENTATOR_ROLE_ID);
+ROSTER[13].role_ids.push(COMMENTATOR_ROLE_ID);
 // End it now takes roles off the roster; a reset puts the seed's roles back.
 const ROSTER_ROLES = ROSTER.map((row) => [...row.role_ids]);
 
@@ -949,8 +966,8 @@ const SETTING_SPECS = [
   ["rolemenu_by_hand_not_worn_said", "text", "{member} no longer wears {roles}, so nothing was attached.", "{member} no longer wears {roles}, so nothing was attached.", "what staff are told when the member no longer wears the roles. It takes {member} {roles}"],
   ["rolemenu_by_hand_channel_id", "channel", null, null, "where Black Bloc asks which event a timed role added by hand is for; blank uses rolemenu_approval_channel_id, then staff_channel_id"],
   ["rolemenu_by_hand_posts", "bool", true, true, "true \u2014 the default \u2014 posts in rolemenu_by_hand_channel_id when somebody adds a timed role by hand; false posts nothing, and the role still goes at the next event's end"],
-  ["rolemenu_fill_runner_role_id", "role", null, null, "the timed role Fill from the schedule gives a marathon's runners; blank skips them"],
-  ["rolemenu_fill_commentator_role_id", "role", null, null, "the timed role Fill from the schedule gives a marathon's commentators (couch); blank skips them"],
+  ["rolemenu_fill_runner_role_id", "role", "900000000000000013", null, "the timed role Fill from the schedule gives a marathon's runners; blank skips them"],
+  ["rolemenu_fill_commentator_role_id", "role", "900000000000000014", null, "the timed role Fill from the schedule gives a marathon's commentators (couch); blank skips them"],
   ["rolemenu_fill_host_role_id", "role", null, null, "the timed role Fill from the schedule gives a marathon's hosts; blank skips them"],
   ["rolemenu_marathon_taken_said", "text", "**{marathon}** already has an open event, **{event}**, so nothing was changed \u2014 one event per marathon. Give roles from **{event}**, or end it first.", "**{marathon}** already has an open event, **{event}**, so nothing was changed \u2014 one event per marathon. Give roles from **{event}**, or end it first.", "the refusal when a marathon that an open event already ends with is picked for another event. It takes {marathon} {event}"],
   ["rolemenu_no_such_event_said", "text", "This server has no event called **{name}** any more, so nothing was changed. Refresh the Timed roles page and pick it again.", "This server has no event called **{name}** any more, so nothing was changed. Refresh the Timed roles page and pick it again.", "the refusal when the site names an event that is gone. It takes {name}"],
@@ -961,7 +978,7 @@ const SETTING_SPECS = [
   ["rolemenu_bad_end_source_said", "text", "**{given}** is not a way an event can end, so nothing was changed. It is one of {known} \u2014 a fault in the page rather than in what you picked, so reload it and try again.", "**{given}** is not a way an event can end, so nothing was changed. It is one of {known} \u2014 a fault in the page rather than in what you picked, so reload it and try again.", "the refusal when the site sends an end the bot does not know. It takes {given} {known}"],
   ["rolemenu_options_moved_said", "text", "The timed roles are one list for every event now, so nothing was changed here. Edit the list under **Timed roles\u2026**.", "The timed roles are one list for every event now, so nothing was changed here. Edit the list under **Timed roles\u2026**.", "the refusal when the site sends an event its own roles (the old menu editor)"],
   ["rolemenu_list_empty_said", "text", "Nobody was named, so nothing was changed. Paste names, mentions or ids one per line, or tick members.", "Nobody was named, so nothing was changed. Paste names, mentions or ids one per line, or tick members.", "the refusal when Give from a list is sent nobody"],
-  ["rolemenu_list_too_long_said", "text", "That list has {count} lines and Black Bloc reads at most {limit} at a time, so nothing was changed. Split it in two.", "That list has {count} lines and Black Bloc reads at most {limit} at a time, so nothing was changed. Split it in two.", "the refusal when Give from a list is pasted too many lines. It takes {count} {limit}"],
+  ["rolemenu_list_too_long_said", "text", "That list has {count} lines and Black Bloc reads at most {most} at a time, so nothing was changed. Split it in two.", "That list has {count} lines and Black Bloc reads at most {most} at a time, so nothing was changed. Split it in two.", "the refusal when Give from a list is pasted too many lines. It takes {count} {most}"],
   ["rolemenu_list_button", "text", "Give from a list\u2026", "Give from a list\u2026", "the Timed roles page's button that gives or takes an event's role for a pasted or ticked list of members"],
   ["rolemenu_list_title", "text", "Give from a list \u00b7 {name}", "Give from a list \u00b7 {name}", "the heading of Give from a list on the Timed roles page. It takes {name}"],
   ["rolemenu_list_paste_label", "text", "Names, mentions or ids, one per line", "Names, mentions or ids, one per line", "the paste box of Give from a list"],
@@ -2390,64 +2407,19 @@ function seedState() {
   nextGuideStep: 5,
   nextGuideMedia: 3,
   rules: JSON.parse(JSON.stringify(RULES)),
+  timedRoles: [
+    { role_id: RUNNER_ROLE_ID, label: 'Runner', emoji: null, position: 0, added_by: STAFF.id, added_at: minutesAgo(9000) },
+    { role_id: COMMENTATOR_ROLE_ID, label: 'Commentator', emoji: null, position: 1, added_by: STAFF.id, added_at: minutesAgo(9000) },
+    { role_id: HOST_ROLE_ID, label: 'Host', emoji: null, position: 2, added_by: STAFF.id, added_at: minutesAgo(9000) },
+    { role_id: TECH_ROLE_ID, label: 'Tech Check', emoji: null, position: 3, added_by: STAFF.id, added_at: minutesAgo(9000) },
+  ],
+  // One event per state the page draws: following a marathon with a held FUTURE earlier end,
+  // a typed date, a marathon with a held end already gone by, ended, and no end at all.
   menus: [
-    {
-      id: 1,
-      name: 'colours',
-      title: 'Pick a colour',
-      description: 'One at a time.',
-      mode: 'single',
-      channel_id: '800000000000000002',
-      message_id: '810000000000000001',
-      approval: false,
-      expires_days: null,
-      retry_days: 7,
-      options: [
-        { role_id: '900000000000000003', label: 'Live now', emoji: '🔴', position: 0 },
-        { role_id: '900000000000000004', label: 'Birthday', emoji: '🎂', position: 1 },
-      ],
-    },
-    {
-      id: 2,
-      name: 'pings',
-      title: 'What should we ping you for?',
-      description: null,
-      mode: 'multiple',
-      channel_id: null,
-      message_id: null,
-      approval: false,
-      expires_days: null,
-      retry_days: 7,
-      options: [{ role_id: '900000000000000005', label: 'Members', emoji: null, position: 0 }],
-    },
-    {
-      id: 3,
-      name: 'runner-status',
-      title: 'Runner status',
-      description: 'Staff say yes to these, and they run out after a week.',
-      mode: 'multiple',
-      channel_id: '800000000000000002',
-      message_id: '810000000000000002',
-      approval: true,
-      expires_days: 7,
-      retry_days: 7,
-      options: [{ role_id: '900000000000000003', label: 'Runner', emoji: '🏃', position: 0 }],
-    },
     {
       id: 4,
       name: 'btb-2027',
       title: 'Back to Black 2027',
-      description: null,
-      mode: 'staff',
-      channel_id: null,
-      message_id: null,
-      approval: false,
-      expires_days: null,
-      retry_days: 7,
-      options: [
-        { role_id: LIVE_ROLE_ID, label: 'Runner', emoji: null, position: 0 },
-        { role_id: '900000000000000012', label: 'Host', emoji: null, position: 1 },
-      ],
       ends_source: 'marathon',
       ends_marathon_id: 1,
       buffer_days: null,
@@ -2460,15 +2432,8 @@ function seedState() {
       id: 5,
       name: 'volunteers',
       title: 'Volunteers',
-      description: null,
-      mode: 'staff',
-      channel_id: null,
-      message_id: null,
-      approval: false,
-      expires_days: null,
-      retry_days: 7,
-      options: [{ role_id: '900000000000000004', label: 'Tech checker', emoji: null, position: 0 }],
       ends_source: 'date',
+      ends_marathon_id: null,
       ends_at: daysAhead(20),
       ends_set_by: MEMBERS[1].id,
       ends_set_at: minutesAgo(600),
@@ -2477,14 +2442,6 @@ function seedState() {
       id: 6,
       name: 'fall-fest-crew',
       title: 'Fall Fest crew',
-      description: null,
-      mode: 'staff',
-      channel_id: null,
-      message_id: null,
-      approval: false,
-      expires_days: null,
-      retry_days: 7,
-      options: [{ role_id: LIVE_ROLE_ID, label: 'Commentator', emoji: null, position: 0 }],
       ends_source: 'marathon',
       ends_marathon_id: 31,
       buffer_days: 2,
@@ -2497,21 +2454,22 @@ function seedState() {
       id: 7,
       name: 'halo-fest-crew',
       title: 'Halo Fest crew',
-      description: null,
-      mode: 'staff',
-      channel_id: null,
-      message_id: null,
-      approval: false,
-      expires_days: null,
-      retry_days: 7,
-      options: [{ role_id: '900000000000000012', label: 'Moderator', emoji: null, position: 0 }],
       ends_source: 'date',
+      ends_marathon_id: null,
       ends_at: minutesAgo(28000),
       ended_at: minutesAgo(27950),
       end_passes: 1,
       end_members: 4,
       ends_set_by: STAFF.id,
       ends_set_at: minutesAgo(40000),
+    },
+    {
+      id: 8,
+      name: 'spring-meetup',
+      title: 'Spring meetup',
+      ends_source: 'none',
+      ends_marathon_id: null,
+      ends_at: null,
     },
   ],
   requests: [
@@ -2528,10 +2486,17 @@ function seedState() {
     { id: 3, user_id: MEMBERS[3].id, role_id: '900000000000000004', source: 'menu', granted_by: null, granted_at: minutesAgo(30000), expires_at: null, removed_at: null, removed_reason: null },
     { id: 2, user_id: MEMBERS[5].id, role_id: '900000000000000003', source: 'staff', granted_by: MEMBERS[1].id, granted_at: minutesAgo(40000), expires_at: daysAhead(-1), removed_at: minutesAgo(1200), removed_reason: 'expired' },
     { id: 1, user_id: MEMBERS[6].id, role_id: '900000000000000005', source: 'manual', granted_by: null, granted_at: minutesAgo(50000), expires_at: null, removed_at: minutesAgo(300), removed_reason: 'ended_by_staff' },
+    // Assignments: Rivet runs and commentates on Back to Black AND runs for Volunteers (so ending
+    // one keeps him through the other), Moth hosts Volunteers. Casey wears Runner with no
+    // assignment, so Fill from the schedule has her still to give.
+    { id: 7, user_id: MEMBERS[2].id, role_id: RUNNER_ROLE_ID, source: 'schedule', granted_by: STAFF.id, granted_at: minutesAgo(2800), expires_at: new Date(Date.now() + (3120 + 1440) * 60000).toISOString(), removed_at: null, removed_reason: null, menu_id: 4 },
+    { id: 8, user_id: MEMBERS[2].id, role_id: COMMENTATOR_ROLE_ID, source: 'site_list', granted_by: STAFF.id, granted_at: minutesAgo(2700), expires_at: new Date(Date.now() + (3120 + 1440) * 60000).toISOString(), removed_at: null, removed_reason: null, menu_id: 4 },
+    { id: 9, user_id: MEMBERS[2].id, role_id: RUNNER_ROLE_ID, source: 'staff', granted_by: MEMBERS[1].id, granted_at: minutesAgo(500), expires_at: daysAhead(20), removed_at: null, removed_reason: null, menu_id: 5 },
+    { id: 10, user_id: MEMBERS[3].id, role_id: HOST_ROLE_ID, source: 'by_hand_attached', granted_by: MEMBERS[1].id, granted_at: minutesAgo(400), expires_at: daysAhead(20), removed_at: null, removed_reason: null, menu_id: 5 },
   ],
-  nextMenu: 8,
+  nextMenu: 9,
   nextRequest: 5,
-  nextGrant: 6,
+  nextGrant: 11,
   // small-fixes: who wears a ping role pings itself put on (black_bloc/handed_roles.py reads
   // the pings.follow / pings.events_on rows of the action log for this).
   pingsHanded: [
@@ -3939,7 +3904,14 @@ route('GET', '/api/ref/members', (context) => {
 const NEW_MS = 7 * 24 * 60 * 60 * 1000;
 const MEMBERS_PER_PAGE = 50;
 
-/** The clock on a chip, the way api/tools/members.py joins it on: a grant's or its menu's end. */
+/** The clock on a chip, the way api/tools/members.py joins it on: an assigned member keeps the
+ * role until their LATEST open event; anyone else loses it at the soonest open event's end. */
+function chipEnd(userId, roleId) {
+  const own = assignmentEnd(userId, roleId);
+  if (own) return own;
+  return { ends_at: expiryOf(userId, roleId), menu: (menuEndsNamed().get(String(roleId)) || {}).menu || null };
+}
+
 function expiryOf(userId, roleId) {
   const menu = menuEndsNamed().get(String(roleId));
   const found = state.grants
@@ -3963,8 +3935,8 @@ function rosterRoles(row) {
       id: role.id,
       name: role.name,
       color: role.color,
-      expires_at: expiryOf(row.id, role.id),
-      ends_with_menu: (menuEndsNamed().get(String(role.id)) || {}).menu || null,
+      expires_at: chipEnd(row.id, role.id).ends_at,
+      ends_with_menu: chipEnd(row.id, role.id).menu,
     }));
 }
 
@@ -5883,8 +5855,15 @@ function grantRow(row) {
     removed_at: row.removed_at,
     removed_reason: row.removed_reason,
     open: row.removed_at === null,
-    ends_with_menu: row.removed_at === null ? (menuEndsNamed().get(String(row.role_id)) || {}).menu || null : null,
+    ends_with_menu: grantEvent(row),
   };
+}
+
+/** An open assignment names its OWN event; any other open row on a timed role, the soonest. */
+function grantEvent(row) {
+  if (row.removed_at !== null) return null;
+  if (row.menu_id) return (state.menus.find((one) => one.id === row.menu_id) || {}).title || null;
+  return (menuEndsNamed().get(String(row.role_id)) || {}).menu || null;
 }
 
 const NO_SUCH_GRANT = 'Black Bloc has no timed role like that any more, so nothing was changed.';
@@ -5968,99 +5947,171 @@ function menuEndLabel(menu) {
       buffer: menu.buffer_days ?? bufferDefault(),
     });
   }
-  return roleWord('rolemenu_end_date_text', { when });
+  return roleWord('rolemenu_end_date_only_text', { end: roleWord('rolemenu_end_date_text', { when }) });
 }
 
-function menuWearers(menu) {
-  const roles = new Set(menu.options.map((one) => String(one.role_id)));
-  return ROSTER.filter((row) => row.role_ids.some((id) => roles.has(String(id))));
+// §7 (timed roles per event): ONE list per server, events are role_menus rows, and an
+// assignment is a grant carrying its event (menu_id) — black_bloc/timed_roles.py.
+function timedIds() {
+  return state.timedRoles.map((one) => String(one.role_id));
 }
 
-function menuWearing(menu) {
-  return menuWearers(menu).length;
+function isTimed(roleId) {
+  return timedIds().includes(String(roleId));
 }
 
-/** Each role's soonest unfinished menu end, with that menu's name (role_menus.menu_ends_named). */
-function menuEndsNamed() {
-  const found = new Map();
-  for (const menu of state.menus) {
-    if (!menu.ends_at || menu.ended_at) continue;
-    for (const option of menu.options) {
-      const held = found.get(String(option.role_id));
-      if (!held || new Date(menu.ends_at) < new Date(held.ends_at)) {
-        found.set(String(option.role_id), { ends_at: menu.ends_at, menu: menu.name });
-      }
+function pingsOwned() {
+  const owned = new Set(state.golive.fanRoles.map((row) => String(row.role_id)));
+  for (const key of ['golive_ping_role_id', 'events_ping_role_id', 'raidtrain_ping_role_id']) {
+    const id = state.settings.get(key);
+    if (id) owned.add(String(id));
+  }
+  return owned;
+}
+
+function eventOpen(menu) {
+  return !menu.ended_at;
+}
+
+function eventGrants(menu) {
+  return state.grants.filter((row) => row.removed_at === null && Number(row.menu_id) === Number(menu.id));
+}
+
+function assignedPeople(menu) {
+  return new Set(eventGrants(menu).map((row) => String(row.user_id))).size;
+}
+
+function assignedCount(roleId) {
+  return state.grants.filter((row) => {
+    const menu = row.menu_id ? state.menus.find((one) => one.id === row.menu_id) : null;
+    return row.removed_at === null && menu && eventOpen(menu) && String(row.role_id) === String(roleId);
+  }).length;
+}
+
+/** (member, role) pairs held through ANOTHER open event (timed_roles.keepers). */
+function keepers(menu) {
+  const kept = new Set();
+  for (const row of state.grants) {
+    const other = row.menu_id ? state.menus.find((one) => one.id === row.menu_id) : null;
+    if (row.removed_at === null && other && other.id !== menu.id && eventOpen(other)) {
+      kept.add(`${row.user_id}:${row.role_id}`);
     }
   }
-  return found;
+  return kept;
 }
 
-/** The unfinished menus that end with a marathon (role_menus.menus_ending_with). */
-function menusEndingWith(marathonId) {
-  return state.menus
-    .filter((menu) => menu.ends_source === 'marathon' && String(menu.ends_marathon_id) === String(marathonId) && !menu.ended_at)
-    .map((menu) => ({ name: menu.name, title: menu.title, roles: menu.options.length, wearing: menuWearing(menu) }));
+/** What this event's end takes: the pass and every confirm read this one plan (role_menus.end_plan). */
+function endPlan(menu) {
+  const kept = keepers(menu);
+  const skip = pingsOwned();
+  const timedSet = new Set(timedIds());
+  const take = [];
+  let keep = 0;
+  for (const row of ROSTER) {
+    const worn = row.role_ids.filter((id) => timedSet.has(String(id)));
+    if (!worn.length) continue;
+    const held = worn.filter((id) => kept.has(`${row.id}:${id}`));
+    const gone = worn.filter((id) => !skip.has(String(id)) && !held.includes(id));
+    if (held.length) keep += 1;
+    if (gone.length) take.push([row, gone]);
+  }
+  return { take, keep, members: take.length, roles: new Set(take.flatMap(([, gone]) => gone)).size };
+}
+
+function planWords(plan) {
+  return { roles: plan.roles, members: plan.members, keep: plan.keep };
 }
 
 function heldPast(menu) {
   return Boolean(menu.ends_held_at) && new Date(menu.ends_held_at).getTime() <= Date.now();
 }
 
-function heldQuestion(menu, wearing) {
-  if (!menu.ends_held_at) return null;
+function heldQuestion(menu, plan) {
+  if (!menu.ends_held_at || !eventOpen(menu)) return null;
   return roleWord(heldPast(menu) ? 'rolemenu_use_held_past_question' : 'rolemenu_use_held_question', {
-    menu: menu.name,
-    roles: menu.options.length,
-    members: wearing,
+    menu: menu.title,
     when: localMoment(menu.ends_held_at),
+    ...planWords(plan),
   });
 }
 
 function menuRow(menu) {
-  const wearing = menuWearing(menu);
+  const isOpen = eventOpen(menu);
+  const plan = isOpen ? endPlan(menu) : null;
+  const marathon = menu.ends_source === 'marathon' ? roleMenuMarathon(menu.ends_marathon_id) : null;
+  const following = menu.ends_source === 'marathon' && menu.ends_marathon_id !== null && menu.ends_marathon_id !== undefined;
+  const byRole = new Map();
+  for (const row of eventGrants(menu)) byRole.set(String(row.role_id), (byRole.get(String(row.role_id)) || 0) + 1);
   return {
     name: menu.name,
     title: menu.title,
-    description: menu.description,
-    mode: menu.mode,
-    channel_id: menu.channel_id === null || menu.channel_id === undefined ? null : String(menu.channel_id),
-    message_id: menu.message_id === null || menu.message_id === undefined ? null : String(menu.message_id),
-    approval: Boolean(menu.approval),
-    expires_days: menu.expires_days ?? null,
-    retry_days: menu.retry_days ?? 7,
-    options: menu.options.map((option, at) => ({
-      role_id: String(option.role_id),
-      label: option.label ?? null,
-      emoji: option.emoji ?? null,
-      position: option.position ?? at,
-    })),
+    open: isOpen,
     ends_source: menu.ends_source || 'none',
     ends_marathon_id: menu.ends_marathon_id === null || menu.ends_marathon_id === undefined ? null : String(menu.ends_marathon_id),
     buffer_days: menu.buffer_days ?? null,
-    buffer_default: bufferDefault(),
     ends_at: menu.ends_at ?? null,
     ended_at: menu.ended_at ?? null,
     ends_held_at: menu.ends_held_at ?? null,
     ends_set_by: menu.ends_set_by ?? null,
     ends_set_at: menu.ends_set_at ?? null,
-    wearing,
-    end_label: menuEndLabel(menu),
-    held_label: menu.ends_held_at ? localMoment(menu.ends_held_at) : null,
-    held_past: heldPast(menu),
-    held_question: heldQuestion(menu, wearing),
-    end_now_question: roleWord('rolemenu_end_now_question', { roles: menu.options.length, members: wearing }),
     last_pass: {
       passes: menu.end_passes ?? 0,
       members: menu.end_members ?? 0,
       failures: 0,
       ended_at: menu.ended_at ?? null,
     },
+    marathon_name: marathon ? marathon.name : null,
+    assigned: assignedPeople(menu),
+    assigned_by_role: state.timedRoles.map((one) => ({ role_id: String(one.role_id), label: one.label, count: byRole.get(String(one.role_id)) || 0 })),
+    buffer_default: bufferDefault(),
+    end_label: menuEndLabel(menu),
+    held_label: menu.ends_held_at ? localMoment(menu.ends_held_at) : null,
+    held_past: heldPast(menu),
+    can_fill: Boolean(isOpen && following && state.timedRoles.length),
+    can_attach: Boolean(isOpen && !following),
+    held_question: heldQuestion(menu, plan),
+    end_now_question: isOpen ? roleWord('rolemenu_end_now_question', planWords(plan)) : null,
   };
+}
+
+function soonestOpenEnd() {
+  return state.menus
+    .filter((menu) => eventOpen(menu) && menu.ends_at)
+    .sort((a, b) => new Date(a.ends_at) - new Date(b.ends_at))[0] || null;
+}
+
+/** Each timed role's next end with that event's name (timed_roles.soonest_ends). */
+function menuEndsNamed() {
+  const found = new Map();
+  const soonest = soonestOpenEnd();
+  if (!soonest) return found;
+  for (const id of timedIds()) found.set(id, { ends_at: soonest.ends_at, menu: soonest.title });
+  return found;
+}
+
+/** (member, role) → the end they keep it until: their latest open event (timed_roles.assignment_ends). */
+function assignmentEnd(userId, roleId) {
+  let best = null;
+  for (const row of state.grants) {
+    const menu = row.menu_id ? state.menus.find((one) => one.id === row.menu_id) : null;
+    if (row.removed_at !== null || !menu || !eventOpen(menu)) continue;
+    if (String(row.user_id) !== String(userId) || String(row.role_id) !== String(roleId)) continue;
+    const mine = { ends_at: menu.ends_at || null, menu: menu.title };
+    if (!best || (best.ends_at !== null && (mine.ends_at === null || new Date(mine.ends_at) > new Date(best.ends_at)))) best = mine;
+  }
+  return best;
+}
+
+/** The open events that end with a marathon (role_menus.menus_ending_with). */
+function menusEndingWith(marathonId) {
+  return state.menus
+    .filter((menu) => menu.ends_source === 'marathon' && String(menu.ends_marathon_id) === String(marathonId) && eventOpen(menu))
+    .map((menu) => ({ name: menu.name, title: menu.title, roles: state.timedRoles.length, assigned: assignedPeople(menu) }));
 }
 
 function menuByName(name) {
   const menu = state.menus.find((entry) => entry.name === name);
-  if (!menu) throw new Refused(404, 'no_such_menu', `This server has no role menu called **${name}**, so nothing was changed. The role menus page lists the ones that exist.`);
+  if (!menu) throw new Refused(404, 'no_such_menu', roleWord('rolemenu_no_such_event_said', { name }));
   return menu;
 }
 
@@ -6090,6 +6141,21 @@ function wantedBuffer(given) {
   return Number(text);
 }
 
+function wantedMarathon(given) {
+  const marathon = given === null || given === undefined || given === '' ? null : roleMenuMarathon(given);
+  if (!marathon) throw new Refused(404, 'no_such_marathon', roleWord('rolemenu_end_no_marathon_said'));
+  return marathon;
+}
+
+/** One event per marathon, refused at the write (role_menus.taken_refusal). */
+function refuseTaken(marathon, menu = null) {
+  const taken = state.menus.find((one) => eventOpen(one) && one.ends_source === 'marathon'
+    && String(one.ends_marathon_id) === String(marathon.id) && (!menu || one.id !== menu.id));
+  if (taken) {
+    throw new Refused(409, 'marathon_taken', roleWord('rolemenu_marathon_taken_said', { marathon: marathon.name, event: taken.title }));
+  }
+}
+
 /** The end a PUT asks for, checked whole before anything is written (api/tools/rolemenus.py). */
 function wantedEnd(menu, body) {
   if (!END_FIELDS.some((key) => key in body)) return null;
@@ -6097,58 +6163,234 @@ function wantedEnd(menu, body) {
   const current = menu.ends_source || 'none';
   if (source === undefined || source === null) {
     if (current !== 'marathon' || !('buffer_days' in body)) {
-      throw new Refused(400, 'buffer_needs_marathon', roleWord('rolemenu_buffer_needs_marathon_said', { menu: menu.name }));
+      throw new Refused(400, 'buffer_needs_marathon', roleWord('rolemenu_buffer_needs_marathon_said', { menu: menu.title }));
     }
     source = current;
   }
   if (!END_SOURCES.includes(source)) {
-    throw new Refused(400, 'bad_end_source', `**${String(source).slice(0, 40)}** is not a way a role menu can end, so nothing was changed. It is one of ${END_SOURCES.join(', ')} — a fault in the page rather than in what you picked, so reload it and try again.`);
+    throw new Refused(400, 'bad_end_source', roleWord('rolemenu_bad_end_source_said', { given: String(source).slice(0, 40), known: END_SOURCES.join(', ') }));
   }
   if (source === 'none') return { source };
   if (source === 'date') return { source, ends_at: typedEnd(body.ends_at) };
-  const marathon = roleMenuMarathon(body.ends_marathon_id ?? menu.ends_marathon_id);
-  if (!marathon) throw new Refused(400, 'no_such_marathon', roleWord('rolemenu_end_no_marathon_said'));
+  const marathon = wantedMarathon(body.ends_marathon_id ?? menu.ends_marathon_id);
   const buffer = 'buffer_days' in body ? wantedBuffer(body.buffer_days) : (current === 'marathon' ? menu.buffer_days ?? null : null);
-  return { source, marathon_id: marathon.id, buffer_days: buffer };
+  return { source, marathon_id: marathon.id, buffer_days: buffer, given: 'buffer_days' in body };
 }
 
-// Mirrors role_menus.py:pings_refusal — a role members opt into from /pings never sits on a
-// menu that ends.
-function refusePingsRoles(roleIds) {
-  const owned = new Set(state.golive.fanRoles.map((row) => String(row.role_id)));
-  for (const key of ['golive_ping_role_id', 'events_ping_role_id']) {
-    const id = state.settings.get(key);
-    if (id) owned.add(String(id));
-  }
-  const hit = (roleIds || []).map(String).find((id) => owned.has(id));
-  if (hit) throw new Refused(409, 'pings_role', roleWord('rolemenu_pings_role_said', { name: roleOf(hit)?.name || hit }));
+function marathonEnd(marathonId, bufferDays) {
+  const marathon = roleMenuMarathon(marathonId);
+  const days = bufferDays ?? bufferDefault();
+  return marathon && marathon.ends_at
+    ? new Date(new Date(marathon.ends_at).getTime() + days * 86400000).toISOString().replace('.000Z', '+00:00')
+    : null;
 }
 
 function setMenuEnd(menu, end) {
+  if (end.source === 'marathon') refuseTaken(roleMenuMarathon(end.marathon_id), menu);
   menu.ends_source = end.source;
   menu.ends_marathon_id = end.source === 'marathon' ? end.marathon_id : null;
   menu.buffer_days = end.source === 'marathon' ? end.buffer_days : null;
   if (end.source === 'none') menu.ends_at = null;
   else if (end.source === 'date') menu.ends_at = end.ends_at;
-  else {
-    const marathon = roleMenuMarathon(end.marathon_id);
-    const days = end.buffer_days ?? bufferDefault();
-    menu.ends_at = marathon && marathon.ends_at
-      ? new Date(new Date(marathon.ends_at).getTime() + days * 86400000).toISOString().replace('.000Z', '+00:00')
-      : null;
-  }
+  else menu.ends_at = marathonEnd(end.marathon_id, end.buffer_days);
   menu.ended_at = null;
   menu.ends_held_at = null;
   menu.end_passes = 0;
   menu.end_members = 0;
   menu.ends_set_by = STAFF.id;
   menu.ends_set_at = now();
+  for (const row of eventGrants(menu)) row.expires_at = menu.ends_at;
   logAction('web.role_menu.end_set', { reason: menu.name, details: { menu: menu.name, source: end.source, ends_at: menu.ends_at, via: 'website' } });
+}
+
+/** A dated event starts following a marathon; an earlier end waits for staff (attach_marathon). */
+function attachMarathon(menu, marathon) {
+  refuseTaken(marathon, menu);
+  const candidate = marathonEnd(marathon.id, null);
+  const holds = state.settings.get('rolemenu_end_earlier_holds') !== false;
+  if (holds && menu.ends_at && candidate && new Date(candidate) < new Date(menu.ends_at)) {
+    menu.ends_source = 'marathon';
+    menu.ends_marathon_id = marathon.id;
+    menu.buffer_days = null;
+    menu.ends_held_at = candidate;
+    menu.ends_set_by = STAFF.id;
+    menu.ends_set_at = now();
+    logAction('web.role_menu.end_set', { reason: menu.name, details: { menu: menu.name, source: 'marathon', ends_at: menu.ends_at, held: candidate, via: 'website' } });
+    return;
+  }
+  setMenuEnd(menu, { source: 'marathon', marathon_id: marathon.id, buffer_days: null });
+}
+
+function refuseEnded(menu) {
+  if (!eventOpen(menu)) throw new Refused(409, 'event_ended', roleWord('rolemenu_event_ended_said', { menu: menu.title }));
+}
+
+function slugOf(title) {
+  const base = String(title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'event';
+  let found = base;
+  for (let n = 2; state.menus.some((one) => one.name === found); n += 1) found = `${base}-${n}`;
+  return found;
+}
+
+function timedRow(one) {
+  const role = roleOf(one.role_id);
+  return {
+    role_id: String(one.role_id),
+    label: one.label,
+    emoji: one.emoji ?? null,
+    position: one.position,
+    role_name: role ? role.name : String(one.role_id),
+    wearing: ROSTER.filter((row) => row.role_ids.includes(String(one.role_id))).length,
+    assigned: assignedCount(one.role_id),
+    removable: Boolean(role && !role.managed),
+    added_by: one.added_by ?? null,
+    added_at: one.added_at ?? null,
+  };
+}
+
+function wantedRole(given) {
+  const role = roleOf(String(given ?? ''));
+  if (!role) throw new Refused(404, 'no_such_role', roleWord('rolemenu_no_such_role_said', { role_id: String(given ?? '').slice(0, 40) }));
+  return role;
+}
+
+function wantedTimedRole(given) {
+  const role = wantedRole(given);
+  if (!isTimed(role.id)) throw new Refused(409, 'not_timed', roleWord('rolemenu_timed_not_listed_said', { name: role.name }));
+  return role;
+}
+
+const LIST_MAX = 500;
+
+function rosterNames(row) {
+  return [row.name, row.display_name].filter(Boolean).map((one) => String(one).trim().toLowerCase());
+}
+
+/** Exact matches only, the way timed_roles_list.match does: a shared name names nobody. */
+function matchLines(lines) {
+  const matched = [];
+  const unmatched = [];
+  const seen = new Set();
+  for (const line of lines) {
+    const mention = /^<@!?(\d+)>$/.exec(line);
+    const id = mention ? mention[1] : (/^\d{15,22}$/.test(line) ? line : null);
+    let found;
+    if (id !== null) found = ROSTER.filter((row) => row.id === id);
+    else {
+      const wanted = line.replace(/^@+/, '').toLowerCase();
+      found = ROSTER.filter((row) => rosterNames(row).includes(wanted));
+    }
+    if (found.length > 1) unmatched.push({ typed: line, why: 'ambiguous' });
+    else if (!found.length) unmatched.push({ typed: line, why: 'unknown' });
+    else if (!seen.has(found[0].id)) {
+      seen.add(found[0].id);
+      matched.push({ typed: line, row: found[0] });
+    }
+  }
+  return { matched, unmatched };
+}
+
+function wantedLines(body) {
+  const typed = [];
+  for (const raw of String(body.lines || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line && !typed.includes(line)) typed.push(line);
+  }
+  for (const id of body.user_ids || []) {
+    const line = `<@${id}>`;
+    if (!typed.includes(line)) typed.push(line);
+  }
+  if (!typed.length) throw new Refused(400, 'nobody_named', roleWord('rolemenu_list_empty_said'));
+  if (typed.length > LIST_MAX) throw new Refused(400, 'list_too_long', roleWord('rolemenu_list_too_long_said', { count: typed.length, most: LIST_MAX }));
+  return typed;
+}
+
+function giveRole(menu, roleId, rows, source) {
+  const found = { given: [], had: [], already: [], refused: [], kept: [] };
+  for (const row of rows) {
+    if (eventGrants(menu).some((one) => String(one.user_id) === row.id && String(one.role_id) === String(roleId))) {
+      found.already.push(row.id);
+      continue;
+    }
+    const wears = row.role_ids.includes(String(roleId));
+    if (!wears) row.role_ids.push(String(roleId));
+    state.grants.unshift({
+      id: state.nextGrant++, user_id: row.id, role_id: String(roleId), source, granted_by: STAFF.id,
+      granted_at: now(), expires_at: menu.ends_at ?? null, removed_at: null, removed_reason: null, menu_id: menu.id,
+    });
+    found[wears ? 'had' : 'given'].push(row.id);
+  }
+  if (found.given.length || found.had.length || found.already.length) {
+    logAction('web.role_menu.assign', { details: { menu: menu.name, role_id: String(roleId), source, given: found.given, via: 'website' } });
+  }
+  found.said = roleWord('rolemenu_give_said', { role: roleOf(roleId)?.name || roleId, given: found.given.length, had: found.had.length, already: found.already.length, refused: 0, kept: 0 });
+  return found;
+}
+
+function takeRole(menu, roleId, rows) {
+  const found = { given: [], had: [], already: [], refused: [], kept: [] };
+  const kept = keepers(menu);
+  for (const row of rows) {
+    const mine = eventGrants(menu).filter((one) => String(one.user_id) === row.id && String(one.role_id) === String(roleId));
+    const wears = row.role_ids.includes(String(roleId));
+    if (kept.has(`${row.id}:${roleId}`)) {
+      for (const one of mine) Object.assign(one, { removed_at: now(), removed_reason: 'ended_by_staff' });
+      found.kept.push(row.id);
+      continue;
+    }
+    if (wears) row.role_ids = row.role_ids.filter((id) => id !== String(roleId));
+    const open = state.grants.filter((one) => one.removed_at === null && String(one.user_id) === row.id && String(one.role_id) === String(roleId));
+    for (const one of open) Object.assign(one, { removed_at: now(), removed_reason: 'ended_by_staff' });
+    found[wears || open.length ? 'given' : 'already'].push(row.id);
+  }
+  logAction('web.role_menu.unassign', { details: { menu: menu.name, role_id: String(roleId), taken: found.given, via: 'website' } });
+  found.said = roleWord('rolemenu_take_said', { role: roleOf(roleId)?.name || roleId, given: found.given.length, kept: found.kept.length, refused: 0, had: 0, already: found.already.length });
+  return found;
+}
+
+const FILL_PARTS = [['runner', 'rolemenu_fill_runner_role_id'], ['commentator', 'rolemenu_fill_commentator_role_id'], ['host', 'rolemenu_fill_host_role_id']];
+
+function refuseNoFill(menu) {
+  refuseEnded(menu);
+  if (menu.ends_source !== 'marathon' || menu.ends_marathon_id === null || menu.ends_marathon_id === undefined) {
+    throw new Refused(409, 'no_marathon', roleWord('rolemenu_no_fill_marathon_said', { menu: menu.title }));
+  }
+}
+
+/** The schedule's people per part against the event (timed_roles_fill.plan_fill). */
+function fillLines(menu) {
+  const people = marathonRunsOf(Number(menu.ends_marathon_id)).flatMap((run) => run.people || []);
+  const here = new Set(eventGrants(menu).map((row) => `${row.user_id}:${row.role_id}`));
+  return FILL_PARTS.map(([part, key]) => {
+    const roleId = state.settings.get(key) ? String(state.settings.get(key)) : null;
+    const usable = roleId !== null && isTimed(roleId);
+    const named = people.filter((one) => one.part === part);
+    const matched = [...new Set(named.filter((one) => one.user_id && ROSTER.some((row) => row.id === String(one.user_id))).map((one) => String(one.user_id)))];
+    const unmatched = [...new Set(named.filter((one) => !one.user_id || !ROSTER.some((row) => row.id === String(one.user_id))).map((one) => one.name))]
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    const missing = usable ? matched.filter((user) => !here.has(`${user}:${roleId}`)) : [];
+    return {
+      part,
+      part_label: roleWord(`marathon_part_${part}`) || part,
+      setting: key,
+      role_id: roleId,
+      role_name: roleId ? roleOf(roleId)?.name || roleId : null,
+      timed: usable,
+      matched: matched.length,
+      missing: missing.length,
+      missing_ids: missing,
+      unmatched: unmatched.slice(0, 30),
+      unmatched_count: unmatched.length,
+    };
+  });
 }
 
 route('GET', '/api/rolemenus', (context) => {
   requireStaff(context.session);
-  return state.menus.map(menuRow);
+  const open = state.menus.filter(eventOpen).sort((a, b) => (a.ends_at ? 0 : 1) - (b.ends_at ? 0 : 1)
+    || String(a.ends_at || '').localeCompare(String(b.ends_at || '')) || String(a.title).localeCompare(String(b.title)));
+  const ended = state.menus.filter((menu) => !eventOpen(menu)).sort((a, b) => String(b.ended_at).localeCompare(String(a.ended_at)));
+  return [...open, ...ended].map(menuRow);
 });
 
 route('GET', '/api/rolemenus/marathons', (context) => {
@@ -6158,172 +6400,245 @@ route('GET', '/api/rolemenus/marathons', (context) => {
   return state.marathons
     .slice()
     .sort((a, b) => order(a) - order(b) || String(a.ends_at || '').localeCompare(String(b.ends_at || '')) || a.id - b.id)
-    .map((one) => ({
-      id: String(one.id),
-      name: one.name,
-      ends_at: one.ends_at ?? null,
-      label: one.ends_at
-        ? roleWord('rolemenu_marathon_option', { name: one.name, date: localMoment(one.ends_at, true) })
-        : roleWord('rolemenu_marathon_option_unknown', { name: one.name }),
-    }));
+    .map((one) => {
+      const following = state.menus.find((menu) => eventOpen(menu) && menu.ends_source === 'marathon' && String(menu.ends_marathon_id) === String(one.id));
+      return {
+        id: String(one.id),
+        name: one.name,
+        ends_at: one.ends_at ?? null,
+        label: one.ends_at
+          ? roleWord('rolemenu_marathon_option', { name: one.name, date: localMoment(one.ends_at, true) })
+          : roleWord('rolemenu_marathon_option_unknown', { name: one.name }),
+        event: following ? following.name : null,
+        event_title: following ? following.title : null,
+      };
+    });
 });
 
-route('POST', '/api/rolemenus', async (context) => {
+route('GET', '/api/rolemenus/timed-roles', (context) => {
+  requireStaff(context.session);
+  return state.timedRoles.map(timedRow);
+});
+
+route('POST', '/api/rolemenus/timed-roles', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
-  const name = String(body.name || '').trim();
-  if (!name) throw new Refused(400, 'bad_value', 'A role menu needs a name so people can find it again.');
-  if (state.menus.some((menu) => menu.name === name)) {
-    throw new Refused(409, 'exists', `There is already a role menu called ${name}. Pick another name or edit that one.`);
-  }
-  const menu = {
-    id: state.nextMenu++,
-    name,
-    title: body.title || name,
-    description: body.description || null,
-    mode: 'staff',
-    channel_id: null,
-    message_id: null,
-    approval: false,
-    expires_days: null,
-    retry_days: 7,
-    options: Array.isArray(body.options) ? body.options : [],
-    ends_source: 'none',
-  };
-  state.menus.unshift(menu);
-  logAction('web.role_menu.create', { reason: name, details: { menu: name, mode: menu.mode } });
-  return menuRow(menu);
+  const role = wantedRole(body.role_id);
+  if (role.managed) throw new Refused(409, 'cannot_strip', roleWord('rolemenu_cannot_strip_said', { name: role.name }));
+  if (pingsOwned().has(role.id)) throw new Refused(409, 'pings_role', roleWord('rolemenu_pings_role_said', { name: role.name }));
+  if (isTimed(role.id)) throw new Refused(409, 'already_timed', roleWord('rolemenu_timed_already_said', { name: role.name }));
+  if (state.timedRoles.length >= 25) throw new Refused(409, 'list_full', roleWord('rolemenu_timed_list_full_said', { limit: 25 }));
+  const one = { role_id: role.id, label: String(body.label || '').trim() || role.name, emoji: null, position: state.timedRoles.length, added_by: STAFF.id, added_at: now() };
+  state.timedRoles.push(one);
+  logAction('web.role_menu.option_added', { details: { role_id: role.id, label: one.label, via: 'website' } });
+  return timedRow(one);
 });
 
-// The retired self-pick fields (mode, approval, the two clocks, channel_id) are ignored, as the
-// real router ignores them; words and roles write one edit row, an end one end_set row.
-route('PUT', '/api/rolemenus/:name', async (context) => {
+route('DELETE', '/api/rolemenus/timed-roles/:role_id', (context) => {
   requireStaff(context.session);
-  const menu = menuByName(context.params.name);
-  const body = await context.body();
-  const had = menu.options.map((one) => String(one.role_id));
-  const given = Array.isArray(body.options) ? body.options.map((one) => String(one.role_id)) : null;
-  if (given) refusePingsRoles(given.filter((id) => !had.includes(id)));
-  const end = wantedEnd(menu, body);
-  if (end && end.source !== 'none') refusePingsRoles(given || had);
-  const words = body.title !== undefined || body.description !== undefined || Array.isArray(body.options);
-  if (body.title) menu.title = body.title;
-  if (body.description !== undefined) menu.description = body.description;
-  if (Array.isArray(body.options)) menu.options = body.options;
-  if (words) logAction('web.role_menu.edit', { reason: menu.name, details: { menu: menu.name } });
-  if (end) setMenuEnd(menu, end);
-  return menuRow(menu);
+  const roleId = context.params.role_id;
+  if (!isTimed(roleId)) throw new Refused(404, 'not_timed', roleWord('rolemenu_timed_not_listed_said', { name: roleOf(roleId)?.name || roleId }));
+  const count = assignedCount(roleId);
+  if (count) throw new Refused(409, 'role_assigned', roleWord('rolemenu_timed_remove_refused_said', { name: roleOf(roleId)?.name || roleId, count }));
+  state.timedRoles = state.timedRoles.filter((one) => String(one.role_id) !== String(roleId));
+  logAction('web.role_menu.option_removed', { details: { role_id: roleId, via: 'website' } });
+  return { removed: true, role_id: String(roleId) };
 });
 
-route('POST', '/api/rolemenus/:name/end-now', (context) => {
-  requireStaff(context.session);
-  const menu = menuByName(context.params.name);
-  refusePingsRoles(menu.options.map((one) => one.role_id));
-  guard('ending a role menu now');
-  const roles = new Set(menu.options.map((one) => String(one.role_id)));
-  const wearers = menuWearers(menu);
-  const taken = wearers.length;
-  for (const row of wearers) row.role_ids = row.role_ids.filter((id) => !roles.has(String(id)));
-  setMenuEnd(menu, { source: 'date', ends_at: now() });
-  menu.ended_at = now();
-  menu.end_passes = 1;
-  menu.end_members = taken;
-  for (const grant of state.grants) {
-    if (grant.removed_at === null && roles.has(String(grant.role_id))) {
-      Object.assign(grant, { removed_at: now(), removed_reason: 'expired' });
-    }
-  }
-  logAction('web.role_menu.ended', { reason: menu.name, details: { menu: menu.name, members: taken, failures: 0, via: 'website' } });
-  return {
-    ...menuRow(menu),
-    message: roleWord('rolemenu_ended_text', { menu: menu.name, roles: menu.options.length, members: taken, failures: 0 }),
-    pass: { members: taken, this_pass: taken, failures: 0, passes: 1, ended: true, left: [] },
-  };
-});
-
-route('POST', '/api/rolemenus/:name/end-earlier', (context) => {
-  requireStaff(context.session);
-  const menu = menuByName(context.params.name);
-  if (!menu.ends_held_at) throw new Refused(409, 'nothing_held', roleWord('rolemenu_no_held_said', { menu: menu.name }));
-  refusePingsRoles(menu.options.map((one) => one.role_id));
-  setMenuEnd(menu, { source: 'marathon', marathon_id: menu.ends_marathon_id, buffer_days: menu.buffer_days ?? null });
-  return menuRow(menu);
-});
-
-route('DELETE', '/api/rolemenus/:name', (context) => {
-  requireStaff(context.session);
-  const menu = menuByName(context.params.name);
-  const wearing = menuWearing(menu);
-  if (!menu.ended_at && menu.ends_at && new Date(menu.ends_at).getTime() > Date.now() && wearing) {
-    throw new Refused(409, 'menu_still_ends', roleWord('rolemenu_delete_refused_said', { menu: menu.name, when: localMoment(menu.ends_at), members: wearing }));
-  }
-  state.menus.splice(state.menus.indexOf(menu), 1);
-  logAction('web.role_menu.delete', { reason: context.params.name, details: { menu: context.params.name } });
-  return { deleted: true, name: context.params.name };
-});
-
-route('POST', '/api/rolemenus/:name/post', (context) => {
-  requireStaff(context.session);
-  rolemenuRetired();
-});
-
-route('POST', '/api/rolemenus/:name/unpost', (context) => {
-  requireStaff(context.session);
-  rolemenuRetired();
-});
-
-route('POST', '/api/rolemenus/seed', (context) => {
-  requireStaff(context.session);
-  rolemenuRetired();
-});
+for (const path of ['/api/rolemenus/:name/post', '/api/rolemenus/:name/unpost', '/api/rolemenus/:name/assign', '/api/rolemenus/seed', '/api/rolemenus/requests/:id/approve', '/api/rolemenus/requests/:id/deny']) {
+  route('POST', path, (context) => {
+    requireStaff(context.session);
+    rolemenuRetired();
+  });
+}
 
 route('GET', '/api/rolemenus/requests', (context) => {
   requireStaff(context.session);
   rolemenuRetired();
 });
 
-route('POST', '/api/rolemenus/requests/:id/approve', (context) => {
+route('POST', '/api/rolemenus', async (context) => {
   requireStaff(context.session);
-  rolemenuRetired();
+  const body = await context.body();
+  const marathon = body.marathon_id !== undefined && body.marathon_id !== null && body.marathon_id !== '' ? wantedMarathon(body.marathon_id) : null;
+  const title = String(body.title || '').trim() || (marathon ? marathon.name : '');
+  if (!title) throw new Refused(400, 'needs_name', roleWord('rolemenu_event_needs_name_said'));
+  if (title.length > 256) throw new Refused(400, 'too_long', `That heading is ${title.length} characters and Discord will not show more than 256, so nothing was changed. Shorten it and try again — Black Bloc will not cut down words you typed.`);
+  const endsAt = !marathon && String(body.ends_at || '').trim() ? typedEnd(body.ends_at) : null;
+  if (marathon) refuseTaken(marathon);
+  const menu = { id: state.nextMenu++, name: slugOf(title), title, ends_source: 'none', ends_marathon_id: null, buffer_days: null, ends_at: null, ended_at: null, ends_held_at: null };
+  state.menus.push(menu);
+  logAction('web.role_menu.create', { reason: menu.name, details: { menu: menu.name, mode: 'staff', via: 'website' } });
+  if (marathon) setMenuEnd(menu, { source: 'marathon', marathon_id: marathon.id, buffer_days: null });
+  else if (endsAt) setMenuEnd(menu, { source: 'date', ends_at: endsAt });
+  return menuRow(menu);
 });
 
-route('POST', '/api/rolemenus/requests/:id/deny', (context) => {
+route('GET', '/api/rolemenus/:name', (context) => {
   requireStaff(context.session);
-  rolemenuRetired();
+  return menuRow(menuByName(context.params.name));
 });
 
-// Roles are changed by the same helper the /rolemenu assign picker uses, and neither asks the
-// guard: a member's roles are not a channel, so this is not one of the test-mode refusals.
-route('POST', '/api/rolemenus/:name/assign', async (context) => {
+route('PUT', '/api/rolemenus/:name', async (context) => {
   requireStaff(context.session);
   const menu = menuByName(context.params.name);
-  if (!(menu.options || []).length) {
-    throw new Refused(400, 'no_options', `**${menu.name}** has no roles on it yet, so there is nothing to hand out. Add one to the menu first.`);
-  }
   const body = await context.body();
-  const wanted = String(body.user_id || '');
-  if (!MEMBERS.some((member) => member.id === wanted)) {
-    throw new Refused(404, 'no_such_member', `**${wanted}** is not somebody Black Bloc can see in this server, so nothing was changed. Pick them from the list rather than typing an id.`);
+  if ('options' in body) throw new Refused(410, 'options_moved', roleWord('rolemenu_options_moved_said'));
+  const end = wantedEnd(menu, body);
+  if (body.title) {
+    menu.title = String(body.title).trim();
+    logAction('web.role_menu.edit', { reason: menu.name, details: { menu: menu.name, via: 'website' } });
   }
-  const remove = body.remove === true;
-  const owned = new Map((menu.options || []).map((option) => [String(option.role_id), option.label]));
-  const picked = (body.role_ids || []).map(String).filter((id) => owned.has(id));
-  if (picked.length === 0) {
-    return {
-      assigned: !remove,
-      name: menu.name,
-      user_id: wanted,
-      message: `**${memberName(wanted)}** already has exactly those roles, so nothing changed.`,
-    };
+  if (end && end.source === 'marathon' && (menu.ends_source || 'none') !== 'marathon') {
+    attachMarathon(menu, roleMenuMarathon(end.marathon_id));
+    if (end.given && end.buffer_days !== null && !menu.ends_held_at) setMenuEnd(menu, end);
+  } else if (end) setMenuEnd(menu, end);
+  return menuRow(menu);
+});
+
+route('POST', '/api/rolemenus/:name/attach', async (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  refuseEnded(menu);
+  if (menu.ends_source === 'marathon') throw new Refused(409, 'already_follows', roleWord('rolemenu_already_follows_said', { menu: menu.title }));
+  const body = await context.body();
+  attachMarathon(menu, wantedMarathon(body.marathon_id));
+  return menuRow(menu);
+});
+
+route('POST', '/api/rolemenus/:name/end-now', (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  guard('ending an event now');
+  const plan = endPlan(menu);
+  for (const [row, gone] of plan.take) {
+    row.role_ids = row.role_ids.filter((id) => !gone.includes(id));
+    for (const grant of state.grants) {
+      if (grant.removed_at === null && String(grant.user_id) === row.id && gone.includes(String(grant.role_id))) {
+        Object.assign(grant, { removed_at: now(), removed_reason: 'expired' });
+      }
+    }
   }
-  const words = picked.map((id) => owned.get(id)).join(', ');
-  logAction(remove ? 'web.role_menu.unassign' : 'web.role_menu.assign', { target_id: wanted, details: { menu_id: menu.id } });
+  for (const grant of eventGrants(menu)) Object.assign(grant, { removed_at: now(), removed_reason: 'expired' });
+  menu.ends_source = 'date';
+  menu.ends_marathon_id = null;
+  menu.ends_at = now();
+  menu.ends_held_at = null;
+  menu.ended_at = now();
+  menu.end_passes = 1;
+  menu.end_members = plan.members;
+  logAction('web.role_menu.ended', { reason: menu.name, details: { menu: menu.name, members: plan.members, kept: plan.keep, failures: 0, via: 'website' } });
   return {
-    assigned: !remove,
-    name: menu.name,
-    user_id: wanted,
-    message: `**${memberName(wanted)}** — ${remove ? 'Removed' : 'Added'}: ${words}`,
+    ...menuRow(menu),
+    message: roleWord('rolemenu_ended_text', { menu: menu.title, roles: state.timedRoles.length, members: plan.members, failures: 0 }),
+    pass: { members: plan.members, this_pass: plan.members, failures: 0, passes: 1, ended: true, left: [] },
   };
+});
+
+route('POST', '/api/rolemenus/:name/end-earlier', (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  if (!menu.ends_held_at) throw new Refused(409, 'nothing_held', roleWord('rolemenu_no_held_said', { menu: menu.title }));
+  menu.ends_at = menu.ends_held_at;
+  menu.ends_held_at = null;
+  menu.ended_at = null;
+  menu.ends_set_by = STAFF.id;
+  menu.ends_set_at = now();
+  for (const row of eventGrants(menu)) row.expires_at = menu.ends_at;
+  logAction('web.role_menu.end_set', { reason: menu.name, details: { menu: menu.name, source: 'marathon', ends_at: menu.ends_at, via: 'website' } });
+  return menuRow(menu);
+});
+
+route('DELETE', '/api/rolemenus/:name', (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  const assigned = assignedPeople(menu);
+  if (eventOpen(menu) && menu.ends_at && new Date(menu.ends_at).getTime() > Date.now() && assigned) {
+    throw new Refused(409, 'menu_still_ends', roleWord('rolemenu_delete_refused_said', { menu: menu.title, when: localMoment(menu.ends_at), members: assigned }));
+  }
+  for (const grant of eventGrants(menu)) Object.assign(grant, { removed_at: now(), removed_reason: 'event_deleted' });
+  state.menus.splice(state.menus.indexOf(menu), 1);
+  logAction('web.role_menu.delete', { reason: context.params.name, details: { menu: context.params.name, via: 'website' } });
+  return { deleted: true, name: context.params.name };
+});
+
+route('POST', '/api/rolemenus/:name/list/preview', async (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  const body = await context.body();
+  const remove = body.remove === true;
+  if (!remove) refuseEnded(menu);
+  const role = wantedTimedRole(body.role_id);
+  const { matched, unmatched } = matchLines(wantedLines(body));
+  const here = new Set(eventGrants(menu).filter((row) => String(row.role_id) === role.id).map((row) => String(row.user_id)));
+  const rows = matched.map(({ typed, row }) => {
+    const wears = row.role_ids.includes(role.id);
+    const note = remove ? (here.has(row.id) || wears ? null : 'not_assigned') : (here.has(row.id) ? 'already' : null);
+    return { user_id: row.id, name: row.display_name || row.name, typed, note };
+  });
+  return {
+    role_id: role.id,
+    role_name: role.name,
+    remove,
+    matched: rows,
+    unmatched,
+    to_save: rows.filter((one) => one.note === null).map((one) => one.user_id),
+  };
+});
+
+route('POST', '/api/rolemenus/:name/list', async (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  const body = await context.body();
+  const remove = body.remove === true;
+  if (!remove) refuseEnded(menu);
+  const role = wantedTimedRole(body.role_id);
+  const ids = [...new Set((body.user_ids || []).map(String).filter((one) => /^\d+$/.test(one)))];
+  if (!ids.length) throw new Refused(400, 'nobody_named', roleWord('rolemenu_list_empty_said'));
+  if (ids.length > LIST_MAX) throw new Refused(400, 'list_too_long', roleWord('rolemenu_list_too_long_said', { count: ids.length, most: LIST_MAX }));
+  guard('giving or taking a timed role');
+  const rows = ids.map((id) => ROSTER.find((row) => row.id === id)).filter(Boolean);
+  const gone = ids.filter((id) => !ROSTER.some((row) => row.id === id));
+  const found = remove ? takeRole(menu, role.id, rows) : giveRole(menu, role.id, rows, 'site_list');
+  return {
+    given: found.given.length,
+    had: found.had.length,
+    already: found.already.length,
+    refused: found.refused.length,
+    kept: found.kept.length,
+    gone,
+    message: found.said,
+    event: menuRow(menu),
+  };
+});
+
+route('GET', '/api/rolemenus/:name/fill', (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  refuseNoFill(menu);
+  const lines = fillLines(menu);
+  return {
+    name: menu.name,
+    marathon_name: roleMenuMarathon(menu.ends_marathon_id)?.name || null,
+    lines: lines.map(({ missing_ids: _ids, ...rest }) => rest),
+    missing: lines.reduce((sum, one) => sum + one.missing, 0),
+  };
+});
+
+route('POST', '/api/rolemenus/:name/fill', (context) => {
+  requireStaff(context.session);
+  const menu = menuByName(context.params.name);
+  refuseNoFill(menu);
+  guard('filling an event from the schedule');
+  const totals = { given: 0, had: 0, already: 0, refused: 0 };
+  for (const line of fillLines(menu)) {
+    const rows = line.missing_ids.map((id) => ROSTER.find((row) => row.id === id)).filter(Boolean);
+    if (!rows.length || !line.role_id) continue;
+    const found = giveRole(menu, line.role_id, rows, 'schedule');
+    for (const key of Object.keys(totals)) totals[key] += found[key].length;
+  }
+  const key = Object.values(totals).some(Boolean) ? 'rolemenu_fill_done_said' : 'rolemenu_fill_nothing_said';
+  return { ...totals, message: roleWord(key, totals), event: menuRow(menu) };
 });
 
 route('GET', '/api/roles/grants', (context) => {
@@ -6347,6 +6662,7 @@ route('POST', '/api/roles/grants', async (context) => {
   const roleId = String(body.role_id || '');
   if (!ROSTER.some((row) => row.id === userId)) throw new Refused(404, 'no_such_member', NO_SUCH_MEMBER);
   if (!ROLES.some((row) => row.id === roleId)) throw new Refused(404, 'no_such_role', NO_SUCH_ROLE);
+  if (isTimed(roleId)) throw new Refused(409, 'role_refused', roleWord('rolemenu_timed_needs_event_said', { role: memberName(roleId) }));
   const days = wantedDays(body.days, 'days');
   const row = {
     id: state.nextGrant++,
@@ -6371,10 +6687,11 @@ route('POST', '/api/roles/grants/:id/extend', async (context) => {
   if (!row) throw new Refused(404, 'no_such_grant', NO_SUCH_GRANT);
   if (row.removed_at) throw new Refused(409, 'already_ended', ALREADY_ENDED);
   if (!row.expires_at) throw new Refused(409, 'no_end_date', NO_END_DATE);
-  const ending = state.menus.find((menu) => !menu.ended_at && menu.ends_at && menu.options.some((one) => String(one.role_id) === String(row.role_id)));
+  const ending = row.menu_id ? state.menus.find((menu) => menu.id === row.menu_id) : null;
   if (ending) {
-    throw new Refused(409, 'menu_end', roleWord('rolemenu_push_back_refused', { role: memberName(row.role_id), menu: ending.name, date: localMoment(ending.ends_at, true) }));
+    throw new Refused(409, 'menu_end', roleWord('rolemenu_push_back_refused', { role: memberName(row.role_id), menu: ending.title, date: ending.ends_at ? localMoment(ending.ends_at, true) : roleWord('rolemenu_end_not_known_text') }));
   }
+  if (isTimed(row.role_id)) throw new Refused(409, 'menu_end', roleWord('rolemenu_timed_needs_event_said', { role: memberName(row.role_id) }));
   if (body.days === undefined || body.days === null || body.days === '') {
     throw new Refused(400, 'no_days', DAYS_NEEDED);
   }

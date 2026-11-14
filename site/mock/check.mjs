@@ -130,6 +130,12 @@ const IDS = {
   marathon_id: '1',
   // Request #17: a role menu that ends with marathon 1 and holds an earlier end.
   held_menu: 'btb-2027',
+  // §7: Runner is on the seed's timed list; Committee is a plain role that is not; Volunteers
+  // is the seed's dated event and GDQx 2026 (3) a marathon no event follows yet.
+  timed_role_id: '900000000000000013',
+  spare_role_id: '900000000000000012',
+  dated_menu: 'volunteers',
+  free_marathon_id: '3',
   marathon_run_id: '9',
   marathon_pairing_id: '1',
   // Next up: Halo Fest (2) is over with Games Done Hitless suggested and still open; run 4 on
@@ -340,15 +346,7 @@ async function seed() {
   // only means anything when the post's own channel is the target — so the mode is turned on
   // here. The three modes are walked on their own in checkPostsModes().
   await send('PUT', '/api/settings/posts_mode', { value: 'on' });
-  await post('/api/rolemenus', { name: 'contract', title: 'Contract' });
-  await fetch(`${BASE}/api/rolemenus/contract`, {
-    method: 'PUT',
-    headers: { cookie: 'mock_as=staff', 'content-type': 'application/json' },
-    body: JSON.stringify({
-      title: 'Contract',
-      options: [{ role_id: '900000000000000005', label: 'Members', emoji: null }],
-    }),
-  });
+  await post('/api/rolemenus', { title: 'Contract' });
   await post('/api/modmail/snippets', { name: 'contract', content: 'hello' });
   await post('/api/modmail/blocks', { user_id: IDS.member_id, reason: 'contract check' });
   // The opt-out the DELETE entry takes away again; the seed's own opt-out is somebody else.
@@ -360,6 +358,9 @@ async function seed() {
 const GUARDED = [
   // Request #17: End it now takes roles off everyone, so the real router refuses it in test mode.
   ['POST', '/api/rolemenus/contract/end-now', {}],
+  // §7: Give from a list and Fill from the schedule change members' roles, so they ask the guard too.
+  ['POST', '/api/rolemenus/contract/list', { role_id: IDS.timed_role_id, user_ids: [IDS.member_id] }],
+  ['POST', '/api/rolemenus/{held_menu}/fill', {}],
   ['POST', '/api/tempvoice/setup', {}],
   ['POST', '/api/honeypot/setup', {}],
   ['POST', '/api/honeypot/hits/{hit_id}/ban', {}],
@@ -376,9 +377,6 @@ const UNGUARDED = [
   // spawned from a lobby the guard placed sits in the test channel's own category, so it is
   // one of the ones a staffer may still change while test mode is on.
   ['POST', '/api/tempvoice/rooms/{room_channel_id}/rename', { name: 'guarded check' }],
-  // A member's roles are not a channel, so guard.py cannot see this and neither the picker
-  // nor the route refuses it in test mode — /rolemenu assign changes real roles today.
-  ['POST', '/api/rolemenus/contract/assign', { user_id: '{member_id}', role_ids: ['{plain_role_id}'] }],
   ['POST', '/api/modmail/tickets/{ticket_id}/reply', { text: 'hello' }],
   ['POST', '/api/mod/warn', { user_id: '{member_id}', reason: 'contract check' }],
   // Filing a request writes a row and DMs; only the one line in request_notify_channel_id
@@ -395,6 +393,7 @@ const RETIRED = [
   // Request #17: member self-pick is retired; Discord's Channels & Roles owns it.
   ['POST', '/api/rolemenus/contract/post', 410, 'rolemenu_retired', 'Channels & Roles'],
   ['POST', '/api/rolemenus/contract/unpost', 410, 'rolemenu_retired', 'Channels & Roles'],
+  ['POST', '/api/rolemenus/contract/assign', 410, 'rolemenu_retired', 'Give from a list'],
   ['POST', '/api/rolemenus/seed', 410, 'rolemenu_retired', 'Channels & Roles'],
   ['GET', '/api/rolemenus/requests', 410, 'rolemenu_retired', 'Channels & Roles'],
   ['POST', '/api/rolemenus/requests/1/approve', 410, 'rolemenu_retired', 'Channels & Roles'],
@@ -523,8 +522,10 @@ async function checkActionKinds() {
   await post(`/api/tempvoice/rooms/${IDS.room_channel_id}/hide`, { hidden: false });
   await post('/api/rolemenus/contract/unpost', {});
   await post('/api/rolemenus/seed', {});
-  await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id] });
-  await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id], remove: true });
+  await post('/api/rolemenus/contract/list', { role_id: IDS.timed_role_id, user_ids: [IDS.member_id] });
+  await post('/api/rolemenus/contract/list', { role_id: IDS.timed_role_id, user_ids: [IDS.member_id], remove: true });
+  await post('/api/rolemenus/timed-roles', { role_id: IDS.spare_role_id });
+  await send('DELETE', `/api/rolemenus/timed-roles/${IDS.spare_role_id}`, undefined);
   await send('PUT', `/api/events/${IDS.event_id}`, { title: 'Contract night', start: '2099-09-14 19:30', duration: '2h' });
   // §H: the forum has to exist before a room can move into it, so both kinds land here.
   await post('/api/events/forum', {});

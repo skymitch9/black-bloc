@@ -11629,10 +11629,10 @@ TIMED_ROLE_SITE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the refusal when Give from a list is sent nobody",
     ),
     "rolemenu_list_too_long_said": (
-        "That list has {count} lines and Black Bloc reads at most {limit} at a time, so nothing "
+        "That list has {count} lines and Black Bloc reads at most {most} at a time, so nothing "
         "was changed. Split it in two.",
-        ("count", "limit"),
-        "the refusal when Give from a list is pasted too many lines. It takes {count} {limit}",
+        ("count", "most"),
+        "the refusal when Give from a list is pasted too many lines. It takes {count} {most}",
     ),
     "rolemenu_list_button": (
         "Give from a list…",

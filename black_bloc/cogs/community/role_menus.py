@@ -167,28 +167,6 @@ CANNOT_EDIT_ROLES = (
     "Manage Roles permission and its own role has to sit above every role in this menu in "
     "Server Settings → Roles. Ask an admin to fix that, then click again."
 )
-CANNOT_EDIT_THEIRS = (
-    "Discord refused the change, so **{name}** still has exactly the roles they had. Black Bloc "
-    "needs the Manage Roles permission and its own role has to sit above every role in this menu "
-    "in Server Settings → Roles. Ask an admin to fix that, then run the command again."
-)
-NOTHING_TO_UNASSIGN = (
-    "**{name}** has none of the roles on **{menu}**, so there is nothing to take off. "
-    "**Hand roles out…** on that menu's card gives them one."
-)
-
-
-ALREADY_EXACTLY = (
-    "**{name}** already has exactly those roles, so nothing changed."
-)
-NO_SUCH_MEMBER = (
-    "**{user_id}** is not somebody Black Bloc can see in this server, so nothing was changed. "
-    "Pick them from the list rather than typing an id."
-)
-NOTHING_ON_THIS_MENU = (
-    "**{name}** has no roles on it yet, so there is nothing to hand out. Add one to the menu "
-    "first."
-)
 PANEL_STUCK = (
     "Black Bloc could not take **{name}**'s panel down, so it is still where it was. It needs to "
     "see that channel and be able to delete its own message there — ask a Lead to check both, "
@@ -491,7 +469,7 @@ async def menus_ending_with(bot: Any, guild: Any, marathon_id: Any) -> list[dict
             "name": menu["name"],
             "title": menu["title"],
             "roles": roles,
-            "wearing": await timed.assigned_people(bot.db, guild.id, menu["id"]),
+            "assigned": await timed.assigned_people(bot.db, guild.id, menu["id"]),
         }
         for menu in bound
     ]
@@ -1364,33 +1342,6 @@ class RoleMenuView(discord.ui.View):
         self.add_item(RoleMenuSelect(menu_id, options, mode))
 
 
-async def staff_assign(
-    bot: Any,
-    guild: Any,
-    actor: Any,
-    menu: Any,
-    options: Any,
-    target: Any,
-    selected: Any,
-    *,
-    remove: bool,
-    via: str = VIA_DISCORD,
-) -> tuple[bool, str]:
-    """One member, several of the event's roles: given, or taken off (the site's door)."""
-    listed = {int(row["role_id"]) for row in options or ()}
-    wanted = [int(value) for value in selected or () if int(value) in listed]
-    if not wanted:
-        return True, ALREADY_EXACTLY.format(name=target.display_name)
-    said: list[str] = []
-    for role_id in wanted:
-        move = take_event_role if remove else give_event_role
-        outcome = await move(bot, guild, actor, menu, role_id, [target], via=via)
-        if outcome["refused"]:
-            return False, CANNOT_EDIT_THEIRS.format(name=target.display_name)
-        said.append(outcome["said"])
-    return True, " ".join(said)
-
-
 # --- one function per move, one write, one log row; both doors call these ------------------------
 
 
@@ -1481,13 +1432,9 @@ async def add_timed_role(
     via: str = VIA_DISCORD,
 ) -> str | None:
     """A role joins the one timed list; None when it did, else why not, in words."""
-    if not removable(guild, role.id):
-        return word(bot, guild.id, "rolemenu_cannot_strip_said", name=role.name)
-    refused = await pings_refusal(bot, guild, [role.id])
+    refused = await timed_role_refusal(bot, guild, role)
     if refused:
-        return refused
-    if len(await timed.role_ids(bot.db, guild.id)) >= timed.LIST_MAX:
-        return word(bot, guild.id, "rolemenu_timed_list_full_said", limit=timed.LIST_MAX)
+        return refused[1]
     wanted = str(label or "").strip() or str(role.name)
     if not await timed.add(bot.db, guild.id, role.id, wanted, emoji=emoji, by=actor_id(actor)):
         return word(bot, guild.id, "rolemenu_timed_already_said", name=role.name)
@@ -1498,6 +1445,22 @@ async def add_timed_role(
         actor=actor,
         details={"role_id": int(role.id), "label": wanted, "via": via},
     )
+    return None
+
+
+async def timed_role_refusal(bot: Any, guild: Any, role: Any) -> tuple[str, str] | None:
+    """(code, sentence) for a role that may not join the timed list; None when it may."""
+    if not removable(guild, role.id):
+        return "cannot_strip", word(bot, guild.id, "rolemenu_cannot_strip_said", name=role.name)
+    refused = await pings_refusal(bot, guild, [role.id])
+    if refused:
+        return "pings_role", refused
+    if await timed.is_timed(bot.db, guild.id, role.id):
+        return "already_timed", word(bot, guild.id, "rolemenu_timed_already_said", name=role.name)
+    if len(await timed.role_ids(bot.db, guild.id)) >= timed.LIST_MAX:
+        return "list_full", word(
+            bot, guild.id, "rolemenu_timed_list_full_said", limit=timed.LIST_MAX
+        )
     return None
 
 
@@ -2791,6 +2754,25 @@ async def attach_marathon(
     return current
 
 
+async def follow_marathon_end(
+    bot: Any, guild: Any, actor: Any, menu: Any, marathon_id: Any, *, via: str = VIA_DISCORD
+) -> str | None:
+    """Change the end to a marathon: a dated event ATTACHES (an earlier end waits for staff); one
+    already following a marathon switches and keeps its buffer."""
+    if menus.end_source(menu) != menus.MARATHON_END:
+        return await attach_marathon(bot, guild, actor, menu, marathon_id, via=via)
+    return await set_menu_end(
+        bot,
+        guild,
+        actor,
+        menu,
+        source=menus.MARATHON_END,
+        marathon_id=marathon_id,
+        buffer_days=menu_value(menu, "buffer_days"),
+        via=via,
+    )
+
+
 async def fill_preview(bot: Any, guild: Any, menu: Any) -> list[Any]:
     """The schedule's people against the event: who is matched, who is still to give, who is not."""
     from ..content.marathon import runs_of
@@ -3729,18 +3711,8 @@ async def run_set_marathon(
         await render_set_end(interaction, menu["name"], previous)
         await answer(interaction, word(bot, guild.id, "rolemenu_end_no_marathon_said"))
         return
-    following = menus.end_source(menu) == menus.MARATHON_END
-    keeps = menu_value(menu, "buffer_days") if following else None
     try:
-        end = await set_menu_end(
-            bot,
-            guild,
-            interaction.user,
-            menu,
-            source=menus.MARATHON_END,
-            marathon_id=marathon_id,
-            buffer_days=keeps,
-        )
+        end = await follow_marathon_end(bot, guild, interaction.user, menu, marathon_id)
     except MarathonTakenError as exc:
         await render_set_end(interaction, menu["name"], previous)
         await answer(interaction, str(exc))
