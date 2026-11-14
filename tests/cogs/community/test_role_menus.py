@@ -1722,7 +1722,10 @@ async def test_end_it_now_asks_with_the_count_the_pass_then_takes(bot, db, lead)
     await press(interaction, "End it now")
 
     question = interaction.body
-    assert question == "Take 1 role(s) off 3 people now? 1 keep a role through another event."
+    assert question == (
+        "Take 1 role(s) off 3 people now? 1 keep a role through another event, 0 are waiting "
+        "for an event."
+    )
     plan = await cog_module.end_plan(bot, bot.guild, a)
     await press(interaction, "Yes, take them off")
 
@@ -2022,9 +2025,10 @@ async def test_a_timed_role_added_by_hand_pings_who_added_it_with_the_open_event
     [post] = posts(bot)
     assert post.kwargs["content"].startswith("<@55> gave <@900> <@&10>, <@&11> by hand.")
     assert [one.id for one in post.kwargs["allowed_mentions"].users] == [55]
-    [pick, new] = post.kwargs["view"].children
+    [pick, new, later] = post.kwargs["view"].children
     assert [one.label for one in pick.item.options] == ["Back to Black"]
     assert new.item.label == "New event…"
+    assert later.item.label == "Pick later…"
 
     await added_by_hand(bot, member)
     before = SimpleNamespace(roles=[r for r in member.roles if r.id != 10])
@@ -2045,7 +2049,10 @@ async def test_without_the_audit_log_the_post_names_nobody_and_says_why(bot, db,
     assert "cannot read the audit log" in post.kwargs["content"]
     assert "No event is open" in post.kwargs["content"]
     assert post.kwargs["allowed_mentions"].users is False
-    assert [type(one).__name__ for one in post.kwargs["view"].children] == ["ByHandNew"]
+    assert [type(one).__name__ for one in post.kwargs["view"].children] == [
+        "ByHandNew",
+        "ByHandLater",
+    ]
 
 
 async def test_a_silent_audit_log_or_the_bots_own_add_is_handled_honestly(bot, db, lead):
@@ -2105,7 +2112,7 @@ async def test_new_event_on_a_by_hand_post_makes_the_event_and_attaches_to_it(bo
     member = FakeMember(bot.guild, user_id=900)
     await added_by_hand(bot, member, 10)
     [post] = posts(bot)
-    new = post.kwargs["view"].children[-1]
+    new = post.kwargs["view"].children[-2]
     interaction = FakeInteraction(bot, lead)
 
     await new.callback(interaction)

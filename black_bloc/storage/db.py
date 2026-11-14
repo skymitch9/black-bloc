@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 109
+SCHEMA_VERSION = 110
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -160,6 +160,30 @@ CREATE TABLE IF NOT EXISTS timed_role_prompts (
 );
 CREATE INDEX IF NOT EXISTS timed_role_prompts_by_member
     ON timed_role_prompts(guild_id, user_id, attached_at);
+
+CREATE TABLE IF NOT EXISTS timed_role_waits (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id          INTEGER NOT NULL,
+    user_id           INTEGER NOT NULL,
+    role_id           INTEGER NOT NULL,
+    prompt_id         INTEGER,
+    assigner_id       INTEGER,
+    until             TEXT    NOT NULL,
+    set_by            INTEGER,
+    set_at            TEXT    NOT NULL,
+    stage             INTEGER NOT NULL DEFAULT 0,
+    reminded_at       TEXT,
+    state             TEXT    NOT NULL DEFAULT 'waiting',
+    ended_at          TEXT,
+    ended_by          INTEGER,
+    menu_id           INTEGER,
+    notice_channel_id INTEGER,
+    notice_message_id INTEGER,
+    remove_failures   INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS timed_role_waits_one_open
+    ON timed_role_waits(guild_id, user_id, role_id) WHERE state = 'waiting';
+CREATE INDEX IF NOT EXISTS timed_role_waits_by_state ON timed_role_waits(guild_id, state, until);
 
 CREATE TABLE IF NOT EXISTS golive_links (
     user_id        INTEGER PRIMARY KEY,

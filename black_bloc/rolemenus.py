@@ -116,6 +116,7 @@ FILL = "fill"
 FILL_YES = "fill_yes"
 ATTACH = "attach"
 RENAME = "rename"
+WAITING = "waiting"
 
 
 class PanelMove(NamedTuple):
@@ -136,13 +137,17 @@ PUSH_BACK_MOVE = PanelMove(PUSH_BACK, "Push it back…", "primary", 0)
 END_NOW_MOVE = PanelMove(END_NOW, "End it now", "danger", 0)
 
 
-def root_buttons(*, ended: int, words: dict[str, str]) -> tuple[PanelMove, ...]:
-    """The events: New event, the shared list, and the ended ones folded behind a count."""
+def root_buttons(
+    *, ended: int, words: dict[str, str], waiting: int = 0
+) -> tuple[PanelMove, ...]:
+    """The events: New event, the shared list, and the ended and waiting ones behind a count."""
     found = [
         PanelMove(NEW_EVENT, words[NEW_EVENT], "primary", 1),
         PanelMove(TIMED_ROLES, words[TIMED_ROLES], "secondary", 1),
         GRANTS_MOVE,
     ]
+    if waiting:
+        found.append(PanelMove(WAITING, words[WAITING].format(count=waiting), "secondary", 1))
     if ended:
         found.append(PanelMove(ENDED, words[ENDED].format(count=ended), "secondary", 2))
     return (*found, LOGS_MOVE, REFRESH_MOVE)
@@ -480,6 +485,7 @@ __all__ = [
     "TAKE_BACK",
     "TAKE_DOWN",
     "USE_ROLE_NAME",
+    "WAITING",
     "WORDS",
     "PanelMove",
     "active_grants",

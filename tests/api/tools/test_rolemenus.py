@@ -249,7 +249,8 @@ async def test_an_event_row_counts_who_is_assigned_per_role_and_the_last_pass(
     ]
     assert row["last_pass"] == {"passes": 0, "members": 0, "failures": 0, "ended_at": None}
     assert row["end_now_question"] == (
-        "Take 2 role(s) off 2 people now? 0 keep a role through another event."
+        "Take 2 role(s) off 2 people now? 0 keep a role through another event, 0 are waiting "
+        "for an event."
     )
     assert row["buffer_default"] == 1 and row["ends_set_by"] == "7"
 
@@ -535,7 +536,10 @@ async def test_end_now_takes_the_roles_off_everyone_not_kept_and_the_question_sa
     asked = client.get(f"/api/rolemenus/{event['name']}").json()["end_now_question"]
     response = client.post(f"/api/rolemenus/{event['name']}/end-now")
 
-    assert asked == "Take 1 role(s) off 1 people now? 1 keep a role through another event."
+    assert asked == (
+        "Take 1 role(s) off 1 people now? 1 keep a role through another event, 0 are waiting "
+        "for an event."
+    )
     assert response.status_code == 200, response.json()
     body = response.json()
     assert body["pass"]["members"] == 1 and body["pass"]["ended"] is True

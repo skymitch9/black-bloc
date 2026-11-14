@@ -38,6 +38,30 @@ def test_the_plan_takes_every_worn_role_no_other_open_event_holds_and_skips_ping
     assert (plan.members, plan.roles, plan.keep) == (2, 1, 1)
 
 
+def test_a_pair_waiting_for_an_event_is_never_taken_and_is_counted():
+    wearing = [(member(1), [10, 11]), (member(2), [10]), (member(3), [10])]
+
+    plan = timed.plan(wearing, {(3, 10)}, waiting={(1, 10), (1, 11), (3, 10)})
+
+    assert [(one.id, roles) for one, roles in plan.take] == [(2, [10])]
+    assert (plan.members, plan.keep, plan.waiting) == (1, 1, 1)
+
+
+async def test_held_open_reads_only_open_assignments_on_events_that_have_not_ended(db):
+    from black_bloc.cogs.community.role_menus import create_menu
+
+    a = await create_menu(db, GUILD, "a", "A", None, "staff")
+    b = await create_menu(db, GUILD, "b", "B", None, "staff")
+    await db.conn.execute("UPDATE role_menus SET ended_at = '2020-01-01' WHERE id = ?", (b,))
+    await db.conn.commit()
+    await assign(db, 900, 10, a)
+    await assign(db, 901, 10, b)
+
+    assert await timed.held_open(db, GUILD, 900, 10)
+    assert not await timed.held_open(db, GUILD, 901, 10)
+    assert not await timed.held_open(db, GUILD, 900, 11)
+
+
 async def test_the_list_is_one_per_server_first_label_kept_in_the_order_added(db):
     assert await timed.add(db, GUILD, 10, "Runner") is True
     assert await timed.add(db, GUILD, 11, "Host") is True
