@@ -5254,7 +5254,7 @@ const GUIDE_FEATURES = [
   ['modmail', 'modmail.html', 'Modmail'], ['golive', 'golive.html', 'Go-live'],
   ['youtube', 'golive.html', 'YouTube'], ['events', 'events.html', 'Events'],
   ['birthday', 'birthdays.html', 'Birthdays'], ['tempvoice', 'tempvoice.html', 'Temp voice'],
-  ['rolemenu', 'rolemenus.html', 'Role menus'], ['poll', 'polls.html', 'Polls'],
+  ['rolemenu', 'rolemenus.html', 'Timed roles'], ['poll', 'polls.html', 'Polls'],
   ['chat', 'chat.html', 'Chat'], ['request', 'requests.html', 'Requests'],
   ['pings', 'golive.html', 'Ping roles'], ['raidtrain', 'raidtrain.html', 'Raid trains'],
   ['marathon', 'events.html', 'Marathons'], ['applications', 'rolemenus.html', 'Applications'],

@@ -1594,7 +1594,7 @@ export const LABELS = {
   view_raidtrain_role_ids: 'Who can open Raid trains',
   view_birthdays_role_ids: 'Who can open Birthdays',
   view_tempvoice_role_ids: 'Who can open Temp voice',
-  view_rolemenus_role_ids: 'Who can open Role menus',
+  view_rolemenus_role_ids: 'Who can open Timed roles',
   view_polls_role_ids: 'Who can open Polls',
   view_chat_role_ids: 'Who can open Chat',
   view_settings_role_ids: 'Who can open Settings',

@@ -29,7 +29,7 @@ export const LOG_FEATURES = [
   { feature: 'events', label: 'Events', tab: 'events' },
   { feature: 'birthday', label: 'Birthdays', tab: 'birthdays' },
   { feature: 'tempvoice', label: 'Temp voice', tab: 'tempvoice' },
-  { feature: 'rolemenu', label: 'Role menus', tab: 'rolemenus' },
+  { feature: 'rolemenu', label: 'Timed roles', tab: 'rolemenus' },
   { feature: 'poll', label: 'Polls', tab: 'polls' },
   { feature: 'chat', label: 'Chat', tab: 'chat' },
   { feature: 'request', label: 'Requests', tab: 'requests' },

@@ -2214,3 +2214,30 @@ async def test_a_give_on_another_event_waits_for_an_end_pass_already_taking_role
     assert await open_grant_on(db, 900, 10, b["id"]) is not None
     assert cog_module.guild_lock(bot, GUILD) is lock
     _ = a
+
+
+async def test_change_the_end_to_a_marathon_on_a_dated_event_attaches_and_holds_an_earlier_end(
+    bot, db, lead
+):
+    await timed_list(db, 10)
+    marathon_id = await marathon_with(db, "2099-01-10T05:00:00+00:00")
+    event = await an_event(db, "a", ends_at="2099-02-28T06:59:00+00:00")
+    interaction = await open_a_menu(bot, lead, "a")
+    await press(interaction, "Change the end…")
+
+    await choose(interaction, "Ends with a marathon…", [str(marathon_id)])
+
+    fresh = await menu_row(db, event["id"])
+    assert fresh["ends_source"] == "marathon" and fresh["ends_at"] == "2099-02-28T06:59:00+00:00"
+    assert fresh["ends_held_at"] == "2099-01-11T05:00:00+00:00"
+
+
+async def test_each_reason_a_role_may_not_join_the_timed_list_has_its_own_code(bot, db, lead):
+    await timed_list(db, 10)
+    bot.guild.stuck_roles = {13}
+
+    assert (await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(13)))[0] == "cannot_strip"
+    assert (await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(10)))[0] == "already_timed"
+    assert await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(14)) is None
+    await timed_list(db, *range(100, 124))
+    assert (await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(14)))[0] == "list_full"

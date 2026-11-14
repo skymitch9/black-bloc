@@ -42,7 +42,7 @@ export const GROUPS = [
       { tab: 'raidtrain', label: 'Raid trains', icon: 'navRaidtrain', feature: 'raidtrain' },
       { tab: 'birthdays', label: 'Birthdays', icon: 'navBirthdays', feature: 'birthday' },
       { tab: 'tempvoice', label: 'Temp voice', icon: 'navTempvoice', feature: 'tempvoice' },
-      { tab: 'rolemenus', label: 'Role menus', icon: 'navRolemenus', feature: 'rolemenu' },
+      { tab: 'rolemenus', label: 'Timed roles', icon: 'navRolemenus', feature: 'rolemenu' },
       { tab: 'polls', label: 'Polls', icon: 'navPolls', feature: 'poll', count: 'polls' },
       { tab: 'chat', label: 'Chat', icon: 'navChat', feature: 'chat' },
     ],

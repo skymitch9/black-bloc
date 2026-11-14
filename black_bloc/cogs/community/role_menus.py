@@ -1458,8 +1458,8 @@ async def timed_role_refusal(bot: Any, guild: Any, role: Any) -> tuple[str, str]
     if await timed.is_timed(bot.db, guild.id, role.id):
         return "already_timed", word(bot, guild.id, "rolemenu_timed_already_said", name=role.name)
     if len(await timed.role_ids(bot.db, guild.id)) >= timed.LIST_MAX:
-        return "list_full", word(
-            bot, guild.id, "rolemenu_timed_list_full_said", limit=timed.LIST_MAX
+        return "list_full", menus.said(
+            bot.store, guild.id, "rolemenu_timed_list_full_said", limit=timed.LIST_MAX
         )
     return None
 
