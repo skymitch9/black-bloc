@@ -755,6 +755,16 @@ driven on the local mock in `chrome-headless-shell` (1280 px and 390 px) over ra
     every live step's *Put the original back*; the live words change only on **Reset the whole guide**). Facts:
     `rolemenu_end_buffer_days`, `rolemenu_end_earlier_holds`, `rolemenu_by_hand_channel_id` (was `rolemenu_approval_channel_id`).
 17. **Gate**: `site/mock/rolemenus-end.test.mjs` was in no gate; `scripts/deploy.ps1` runs it now.
+18. **End it now refuses an event that has already ended** (409 `event_ended`): `end_menu_now` would otherwise re-arm it and run
+    the pass again. The page's confirms re-read the event first; a failed re-read says why and asks nothing, and an event
+    somebody else ended redraws instead of asking.
+19. **A dated event that follows a marathon with a buffer is ONE write** (`attach_marathon(…, buffer_days=)`): the candidate end
+    uses that buffer, and a held attach stores it, so **Use the earlier end** takes exactly the end it showed.
+20. **Page chrome stays JS constants, the page's existing convention**: *Make the event*, *Cancel*, *Save the end*, *Delete* /
+    *Delete {name}?* / *Delete it*, *Remove*, the field labels (*Name*, *Day*, *Time*, *Marathon*, *Buffer, days*, *Role*,
+    *Label*), *A marathon* / *A date* and the folded ad-hoc form's *Grant another role for a while*. Every sentence the bot
+    says and every label the panel shares is a key; these never reach Discord. ⚠️ If the owner reads "every word" to cover
+    page chrome too, they become keys.
 
 **Not built / left open**
 - The *pick the event later* flow (its own dispatch); the page leaves room for a *Waiting for an event* group beside Events.
