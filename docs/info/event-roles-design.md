@@ -584,7 +584,7 @@ no browser, no live database. Verified by the suite, `ruff`, the ES-module parse
 15. Deleting an event closes its open assignments (reason `event_deleted`) and takes no role off anybody; the refusal now counts
     people ASSIGNED, not wearing (every event shares the list, so the wearing count is the same for all of them).
 16. Every `{menu}` an event's words show is its TITLE (`event_name`), not the stored slug. Key names and fields did not change.
-    The API's End-it-now `message` still passes the slug (B's to align).
+    The API sentences follow (End it now, the held and not-run refusals).
 
 **By hand (§7.4)**
 17. `on_member_update` → timed roles added by hand that `/pings` does not own → `ask_which_event`: one post per member and set

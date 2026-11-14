@@ -590,7 +590,7 @@ async def test_end_now_takes_the_roles_off_everyone_and_says_how_many(
     body = response.json()
     assert body["pass"]["members"] == 1 and body["pass"]["ended"] is True
     assert body["pass"]["left"] == []
-    assert "**btb** ended" in body["message"]
+    assert "**Back to Black** ended" in body["message"]
     assert body["ended_at"] and body["ends_source"] == "date"
     assert wf.PLAIN_ROLE_ID not in [role.id for role in member.roles]
     assert "web.role_menu.ended" in await wf.kinds_in(web.db)

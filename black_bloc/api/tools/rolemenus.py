@@ -29,6 +29,7 @@ from ...cogs.community.role_menus import (
     end_menu_now,
     end_now_question,
     end_plan,
+    event_name,
     expires_days_of,
     failure_count,
     failure_lines,
@@ -293,7 +294,9 @@ async def wanted_end(bot: Any, guild: Any, menu: Any, payload: dict[str, Any]) -
             raise Refused(
                 400,
                 "buffer_needs_marathon",
-                word(bot, guild.id, "rolemenu_buffer_needs_marathon_said", menu=menu["name"]),
+                word(
+                    bot, guild.id, "rolemenu_buffer_needs_marathon_said", menu=event_name(menu)
+                ),
             )
         source = current
     if source not in menus.END_SOURCES:
@@ -440,14 +443,14 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(
                 409,
                 "members_not_loaded",
-                word(bot, guild.id, "rolemenu_end_now_not_run_said", menu=name),
+                word(bot, guild.id, "rolemenu_end_now_not_run_said", menu=event_name(menu)),
             )
         payload = await one_payload(guild, name)
         payload["message"] = word(
             bot,
             guild.id,
             ROLEMENU_ENDED_TEXT_KEY,
-            menu=name,
+            menu=event_name(menu),
             roles=len(options),
             members=details["members"],
             failures=details["failures"],
@@ -468,7 +471,9 @@ def build_router(bot: Any) -> APIRouter:
         menu, _ = await read_menu(bot, guild, name)
         if not menu_value(menu, "ends_held_at"):
             raise Refused(
-                409, "nothing_held", word(bot, guild.id, "rolemenu_no_held_said", menu=name)
+                409,
+                "nothing_held",
+                word(bot, guild.id, "rolemenu_no_held_said", menu=event_name(menu)),
             )
         await use_held_end(bot, guild, actor_for(bot, who, guild), menu, via=VIA_WEBSITE)
         return await one_payload(guild, name)

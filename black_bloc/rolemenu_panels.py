@@ -69,4 +69,3 @@ async def unpost(bot: Any, menu: Any, actor: Any, *, via: str = VIA_DISCORD) -> 
     await clear_message(bot.db, menu["id"])
     await note(bot, menu, UNPOSTED, actor, via=via, message_id=menu["message_id"])
     return True
-

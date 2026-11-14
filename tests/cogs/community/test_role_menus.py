@@ -1253,7 +1253,7 @@ async def test_the_ended_notice_pings_only_the_approver_role(bot, db):
     await tick(bot)
 
     [message] = bot.guild.channels[STAFF_CHANNEL].messages
-    assert message.kwargs["content"].startswith(f"<@&{APPROVER}> **btb-2027** ended")
+    assert message.kwargs["content"].startswith(f"<@&{APPROVER}> **Back to Black 2027** ended")
     mentions = message.kwargs["allowed_mentions"]
     assert mentions.everyone is False and mentions.users is False
     assert [role.id for role in mentions.roles] == [APPROVER]
@@ -1458,7 +1458,7 @@ async def test_an_earlier_marathon_end_is_held_and_never_makes_the_menu_due(bot,
     [held] = await details_of(db, "role_menu.end_held")
     assert (held["ends_at"], held["held"]) == (end, "2020-01-02T00:00:00+00:00")
     [notice] = bot.guild.channels[STAFF_CHANNEL].messages
-    assert "**btb-2027**'s marathon now ends earlier" in notice.kwargs["content"]
+    assert "**Back to Black 2027**'s marathon now ends earlier" in notice.kwargs["content"]
     assert await details_of(db, "role_menu.end_moved") == []
 
 
