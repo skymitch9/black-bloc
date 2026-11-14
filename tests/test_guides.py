@@ -232,7 +232,25 @@ def test_the_role_menu_guide_teaches_timed_roles_per_event_and_nothing_retired()
         "rolemenu_end_buffer_days",
         "rolemenu_end_earlier_holds",
         "rolemenu_by_hand_channel_id",
+        "rolemenu_wait_removal_days",
     ]
+
+
+def test_the_role_menu_guide_teaches_pick_later_in_the_labels_the_posts_draw():
+    """§8: the by-hand post's Pick later… path, every label read from its own key."""
+    from black_bloc.settings_store import ROLEMENU_STAFF_DEFAULTS as KEY_DEFAULTS
+
+    entry = shipped_rolemenu_guide()
+    said = json.dumps(entry, ensure_ascii=False)
+
+    assert len(entry["steps"]) == 4
+    for key in (
+        "rolemenu_pick_later_button",
+        "rolemenu_wait_change_date_button",
+        "rolemenu_wait_take_off_button",
+        "rolemenu_wait_revert_button",
+    ):
+        assert f"**{KEY_DEFAULTS[key]}**" in said, key
 
 
 async def test_an_old_role_menu_guide_keeps_its_words_at_boot_and_takes_the_new_ones_on_reset(

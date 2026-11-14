@@ -12,6 +12,7 @@ LIST_MAX = 25
 class Plan(NamedTuple):
     take: list[tuple[Any, list[int]]]
     keep: int
+    waiting: int = 0
 
     @property
     def members(self) -> int:
@@ -123,19 +124,40 @@ async def keepers(db: Any, guild_id: int, menu_id: int) -> set[tuple[int, int]]:
     return {(int(row["user_id"]), int(row["role_id"])) for row in await cur.fetchall()}
 
 
-def plan(wearing: Any, keeping: set[tuple[int, int]], skip: Any = ()) -> Plan:
-    """What an event's end takes: every worn timed role not held through another open event."""
+def plan(
+    wearing: Any, keeping: set[tuple[int, int]], skip: Any = (), waiting: Any = ()
+) -> Plan:
+    """What an event's end takes: worn timed roles not kept, not waiting, not `/pings`-owned."""
     left_alone = {int(one) for one in skip or ()}
+    owed = {(int(user), int(role)) for user, role in waiting or ()}
     take: list[tuple[Any, list[int]]] = []
     keep = 0
+    waits = 0
     for member, worn in wearing or ():
         user_id = int(member.id)
-        kept = [one for one in worn if (user_id, int(one)) in keeping]
-        gone = [int(one) for one in worn if int(one) not in left_alone and int(one) not in kept]
+        kept = [int(one) for one in worn if (user_id, int(one)) in keeping]
+        held = [int(one) for one in worn if (user_id, int(one)) in owed and int(one) not in kept]
+        gone = [
+            int(one)
+            for one in worn
+            if int(one) not in left_alone and int(one) not in kept and int(one) not in held
+        ]
         keep += int(bool(kept))
+        waits += int(bool(held))
         if gone:
             take.append((member, gone))
-    return Plan(take, keep)
+    return Plan(take, keep, waits)
+
+
+async def held_open(db: Any, guild_id: int, user_id: int, role_id: int) -> bool:
+    """An open assignment on an event that has not ended holds this member's role."""
+    cur = await db.conn.execute(
+        "SELECT 1 FROM role_grants g JOIN role_menus m ON m.id = g.menu_id "
+        "WHERE g.guild_id = ? AND g.user_id = ? AND g.role_id = ? AND g.removed_at IS NULL "
+        "AND m.ended_at IS NULL LIMIT 1",
+        (int(guild_id), int(user_id), int(role_id)),
+    )
+    return await cur.fetchone() is not None
 
 
 async def stamp_event(db: Any, guild_id: int, menu_id: int, ends_at: Any) -> int:
@@ -290,6 +312,7 @@ __all__ = [
     "event_grant",
     "event_grants",
     "event_titles",
+    "held_open",
     "is_timed",
     "keepers",
     "labels",

@@ -107,3 +107,29 @@ async def test_the_second_read_happens_only_when_the_first_found_nothing(monkeyp
     )
     assert await hand.who_added_soon(guild([]), MEMBER, [10]) == (None, hand.SILENT)
     assert waited == [hand.AUDIT_RETRY_SECONDS]
+
+
+async def test_a_post_with_a_role_still_waiting_is_not_retired_and_asked_reads_the_waits(db):
+    from black_bloc import timed_roles_waiting as waits
+
+    prompt_id = await hand.add_prompt(db, GUILD, 900, [10, 11], 5, hand.FOUND)
+    until = waits.now() + timedelta(days=3)
+    await waits.put(db, GUILD, 900, [10, 11], prompt_id=prompt_id, assigner_id=5, until=until, by=5)
+    await waits.end_pairs(db, GUILD, 900, [11], waits.CAME_OFF)
+
+    assert await hand.waiting_roles(db, GUILD, 900) == {10}
+    assert await hand.retire_roles(db, GUILD, 900, [11]) == 0
+    assert not await hand.finish(db, prompt_id)
+    await waits.end_pairs(db, GUILD, 900, [10], waits.TAKEN_OFF)
+    assert await hand.finish(db, prompt_id, menu_id=3, by=1)
+    prompt = await hand.get_prompt(db, prompt_id)
+    assert (prompt["attached_menu_id"], prompt["attached_by"]) == (3, 1)
+    assert await hand.waiting_roles(db, GUILD, 900) == set()
+
+
+async def test_a_post_never_put_to_waiting_still_retires_whole(db):
+    prompt_id = await hand.add_prompt(db, GUILD, 900, [10, 11], 5, hand.FOUND)
+
+    assert await hand.waiting_roles(db, GUILD, 900) == {10, 11}
+    assert await hand.retire_roles(db, GUILD, 900, [11]) == 1
+    assert (await hand.get_prompt(db, prompt_id))["attached_at"] is not None

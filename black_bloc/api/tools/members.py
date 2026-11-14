@@ -8,11 +8,12 @@ from fastapi import APIRouter, Depends
 
 from ... import rolegrants as grants
 from ... import timed_roles as timed
+from ... import timed_roles_waiting as waits
 from ...cogs.community.birthdays import members_of
 from ...cogs.community.role_menus import menu_ends_named
 from ...golive import parse_ts
 from ...modcases import count_cases_for
-from ...settings_store import member_is_staff
+from ...settings_store import ROLEMENU_WAIT_REMOVAL_DAYS_KEY, member_is_staff
 from ..auth import staff_dependency
 from ..names import avatar_url
 from ..writes import reader_dependency, require_db, require_guild
@@ -64,6 +65,18 @@ def role_end(
         return own["ends_at"], own["menu"]
     soonest = (menu_ends or {}).get(int(role.id)) or {}
     return merged_end(expiries.get(key), soonest.get("ends_at")), soonest.get("menu")
+
+
+def keeps_until(
+    assigned: dict[tuple[int, int], dict], waiting: dict[tuple[int, int], dict]
+) -> dict[tuple[int, int], dict]:
+    """A waiting role stays past any event's end: the later of the two is when it comes off."""
+    found = dict(assigned)
+    for key, owed in waiting.items():
+        held = found.get(key)
+        if held is None or (held["ends_at"] is not None and timed.outlasts(owed, held)):
+            found[key] = owed
+    return found
 
 
 def top_roles(
@@ -229,7 +242,15 @@ def build_router(bot: Any) -> APIRouter:
         cases = await count_cases_for(getattr(bot, "db", None), guild.id, ids)
         expiries = await grants.expiring_for(getattr(bot, "db", None), guild.id, ids)
         menu_ends = await menu_ends_named(getattr(bot, "db", None), guild.id)
-        assigned = await timed.assignment_ends(getattr(bot, "db", None), guild.id, ids)
+        assigned = keeps_until(
+            await timed.assignment_ends(getattr(bot, "db", None), guild.id, ids),
+            await waits.removal_ends(
+                getattr(bot, "db", None),
+                guild.id,
+                ids,
+                int(bot.store.get(guild.id, ROLEMENU_WAIT_REMOVAL_DAYS_KEY)),
+            ),
+        )
 
         return {
             "total": int(getattr(guild, "member_count", 0) or len(everyone)),

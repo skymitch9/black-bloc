@@ -88,6 +88,9 @@ from .structure import MODE_DEFAULT as STRUCTURE_MODE_DEFAULT
 from .structure import MODES as STRUCTURE_MODES
 from .structure import ROLE_KEY as STRUCTURE_ROLE_KEY
 from .structure import SHADOW_CHANNEL_KEY as STRUCTURE_SHADOW_CHANNEL_KEY
+from .timed_roles_waiting import OFFSET_DAYS_MAX as WAIT_OFFSET_DAYS_MAX
+from .timed_roles_waiting import OFFSETS_MAX as WAIT_OFFSETS_MAX
+from .timed_roles_waiting import day_offsets as wait_day_offsets
 from .timezones import DEFAULT_TZ, is_known, suggest
 
 log = logging.getLogger(__name__)
@@ -11133,10 +11136,10 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     "rolemenu_end_now_question": (
         "Take {roles} role(s) off {members} people now? {keep} keep a role through another "
-        "event.",
-        ("roles", "members", "keep"),
+        "event, {waiting} are waiting for an event.",
+        ("roles", "members", "keep", "waiting"),
         "what staff are asked before End it now — the counts the end itself will use. It takes "
-        "{roles} {members} {keep}",
+        "{roles} {members} {keep} {waiting}",
     ),
     "rolemenu_end_now_yes": ("Yes, take them off", (), "End it now's confirm button"),
     "rolemenu_no_end_question": (
@@ -11180,17 +11183,18 @@ ROLEMENU_STAFF_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     "rolemenu_use_held_question": (
         "Use **{menu}**'s earlier end? {roles} role(s) come off {members} people {when}; {keep} "
-        "keep a role through another event.",
-        ("menu", "roles", "members", "when", "keep"),
+        "keep a role through another event, {waiting} are waiting for an event.",
+        ("menu", "roles", "members", "when", "keep", "waiting"),
         "what staff are asked before Use the earlier end, while that end is still to come. It "
-        "takes {menu} {roles} {members} {when} {keep}",
+        "takes {menu} {roles} {members} {when} {keep} {waiting}",
     ),
     "rolemenu_use_held_past_question": (
         "Use **{menu}**'s earlier end? It was {when}, already gone by, so {roles} role(s) come "
-        "off {members} people at the next hourly pass; {keep} keep a role through another event.",
-        ("menu", "roles", "members", "when", "keep"),
+        "off {members} people at the next hourly pass; {keep} keep a role through another "
+        "event, {waiting} are waiting for an event.",
+        ("menu", "roles", "members", "when", "keep", "waiting"),
         "what staff are asked before Use the earlier end when that end has already gone by. It "
-        "takes {menu} {roles} {members} {when} {keep}",
+        "takes {menu} {roles} {members} {when} {keep} {waiting}",
     ),
     "rolemenu_use_held_yes": ("Yes, use it", (), "Use the earlier end's confirm button"),
 }
@@ -11733,6 +11737,315 @@ KEY_HELP.update({key: said for key, (_, _, said) in TIMED_ROLE_SITE_WORDS.items(
 TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in TIMED_ROLE_SITE_WORDS.items()}
 )
+
+# Pick the event later (pick-later, 2026-11-14, event-roles-design.md §8): a timed role given by
+# hand before its event exists waits, its assigner is reminded, and it comes off after the
+# removal day with a staff notice and Revert.
+ROLEMENU_WAIT_REMINDER_DAYS_KEY = "rolemenu_wait_reminder_days"
+ROLEMENU_WAIT_REMOVAL_DAYS_KEY = "rolemenu_wait_removal_days"
+ROLEMENU_WAIT_REVERT_DAYS_KEY = "rolemenu_wait_revert_days"
+ROLEMENU_WAIT_MAX_DAYS_KEY = "rolemenu_wait_max_days"
+ROLEMENU_WAIT_PING_ROLE_KEY = "rolemenu_wait_ping_role_id"
+WAIT_BAD_OFFSETS = (
+    "**{given}** is not a list of days Black Bloc can read, so nothing was changed. Write whole "
+    "days after the rough end date, separated by commas — `0, 7, 13` — at most {most} of them, "
+    "each {days} or fewer."
+)
+TIMED_ROLE_WAIT_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "rolemenu_pick_later_button": (
+        "Pick later…",
+        (),
+        "the by-hand post's button that puts the role to waiting for an event nobody has made",
+    ),
+    "rolemenu_pick_later_title": (
+        "Pick the event later",
+        (),
+        "the heading of the Pick later… box on a by-hand post",
+    ),
+    "rolemenu_wait_date_label": (
+        "Rough end date",
+        (),
+        "the date box of Pick later… and Change the date…",
+    ),
+    "rolemenu_wait_post_text": (
+        "{who} gave {member} {roles} by hand — waiting for an event, expected to end {date}. Set "
+        "by {staff}.",
+        ("who", "member", "roles", "date", "staff"),
+        "a by-hand post once its role waits for an event. It takes {who} {member} {roles} {date} "
+        "{staff}",
+    ),
+    "rolemenu_wait_set_said": (
+        "{member} waits for an event until {date}: {roles}. Reminders go to {who}.",
+        ("member", "date", "roles", "who"),
+        "what staff are told after Pick later…. It takes {member} {date} {roles} {who}",
+    ),
+    "rolemenu_wait_too_far_said": (
+        "{when} is more than {days} days away, so nothing was changed. Pick a nearer date.",
+        ("when", "days"),
+        "the refusal when a rough end date is further off than rolemenu_wait_max_days. It takes "
+        "{when} {days}",
+    ),
+    "rolemenu_wait_already_said": (
+        "This post already waits for an event, so nothing was changed. **Change the date…** "
+        "moves it.",
+        (),
+        "what staff are told when Pick later… is pressed on a post that already waits",
+    ),
+    "rolemenu_wait_change_date_button": (
+        "Change the date…",
+        (),
+        "the button that moves the rough end date of somebody waiting for an event",
+    ),
+    "rolemenu_wait_change_date_title": (
+        "A new rough end date",
+        (),
+        "the heading of the Change the date… box",
+    ),
+    "rolemenu_wait_date_changed_said": (
+        "{member} now waits until {date}.",
+        ("member", "date"),
+        "what staff are told after Change the date…. It takes {member} {date}",
+    ),
+    "rolemenu_wait_take_off_button": (
+        "Take it off now",
+        (),
+        "the button that ends a wait and takes the role off at once",
+    ),
+    "rolemenu_wait_take_off_question": (
+        "Take {roles} off {member} now?",
+        ("roles", "member"),
+        "what staff are asked before Take it off now. It takes {roles} {member}",
+    ),
+    "rolemenu_wait_take_off_yes": ("Yes, take it off", (), "Take it off now's confirm button"),
+    "rolemenu_wait_keep_button": (
+        "Keep waiting",
+        (),
+        "the button that leaves Take it off now without changing anything",
+    ),
+    "rolemenu_wait_taken_off_said": (
+        "Took {roles} off {member}.",
+        ("roles", "member"),
+        "what staff are told after Take it off now. It takes {roles} {member}",
+    ),
+    "rolemenu_wait_stays_on_text": (
+        "{roles} stay on {member}: another open event holds them, or `/pings` owns them.",
+        ("roles", "member"),
+        "the line saying a wait ended but the role stays on. It takes {roles} {member}",
+    ),
+    "rolemenu_wait_refused_said": (
+        "Discord refused to take {roles} off {member}, so they still wait. Move Black Bloc's role "
+        "above it and try again.",
+        ("roles", "member"),
+        "the refusal when Take it off now could not take the role off. It takes {roles} {member}",
+    ),
+    "rolemenu_wait_gone_said": (
+        "{member} is not waiting for an event any more, so nothing was changed.",
+        ("member",),
+        "what staff are told when the wait they pressed has already ended. It takes {member}",
+    ),
+    "rolemenu_wait_post_taken_off_text": (
+        "{who} gave {member} {roles} by hand — taken off by {staff}.",
+        ("who", "member", "roles", "staff"),
+        "a by-hand post once Take it off now ends its wait. It takes {who} {member} {roles} "
+        "{staff}",
+    ),
+    "rolemenu_wait_post_removed_text": (
+        "{who} gave {member} {roles} by hand — nobody picked an event, so it came off {date}.",
+        ("who", "member", "roles", "date"),
+        "a by-hand post once the waiting pass takes its role off. It takes {who} {member} {roles} "
+        "{date}",
+    ),
+    "rolemenu_wait_reminder_text": (
+        "{who}, these are still waiting for an event:",
+        ("who",),
+        "the reminder to whoever gave the roles, above the list. It takes {who}",
+    ),
+    "rolemenu_wait_line": (
+        "{member} · {roles} · expected to end {date} · comes off {removal}",
+        ("member", "roles", "date", "removal"),
+        "one person waiting for an event, in the reminder, the entry card and /rolemenu. It "
+        "takes {member} {roles} {date} {removal}",
+    ),
+    "rolemenu_wait_pick": ("Sort one out…", (), "the reminder's picker of the people waiting"),
+    "rolemenu_wait_capped": (
+        "{shown} of {total} — the site has the rest",
+        ("shown", "total"),
+        "a picker of people waiting when there are more than Discord lists. It takes {shown} "
+        "{total}",
+    ),
+    "rolemenu_wait_removed_text": (
+        "{member} lost {roles}: nobody picked an event by {date}. Given by {who}.",
+        ("member", "roles", "date", "who"),
+        "the staff notice when the waiting pass takes a role off. It takes {member} {roles} "
+        "{date} {who}",
+    ),
+    "rolemenu_wait_stuck_line": (
+        "Black Bloc could not take {roles} off {member} and tries again next hour.",
+        ("roles", "member"),
+        "the notice's line for a role Discord refused to take off. It takes {roles} {member}",
+    ),
+    "rolemenu_wait_revert_button": ("Revert", (), "the removal notice's button"),
+    "rolemenu_wait_reverted_text": (
+        "{member} got {roles} back from {staff} and waits for an event again until {date}.",
+        ("member", "roles", "staff", "date"),
+        "the removal notice once Revert is pressed. It takes {member} {roles} {staff} {date}",
+    ),
+    "rolemenu_wait_reverted_said": (
+        "Put {roles} back on {member}; waiting until {date}.",
+        ("roles", "member", "date"),
+        "what staff are told after Revert. It takes {roles} {member} {date}",
+    ),
+    "rolemenu_wait_revert_left_said": (
+        "{member} has left the server, so nothing was put back.",
+        ("member",),
+        "the refusal when Revert is pressed for somebody who left. It takes {member}",
+    ),
+    "rolemenu_wait_revert_refused_said": (
+        "Discord refused to put {roles} back on {member}, so nothing changed. Move Black Bloc's "
+        "role above it and try again.",
+        ("roles", "member"),
+        "the refusal when Revert could not put the role back. It takes {roles} {member}",
+    ),
+    "rolemenu_wait_revert_done_said": (
+        "This was already reverted, so nothing changed.",
+        (),
+        "what staff are told when Revert is pressed a second time",
+    ),
+    "rolemenu_wait_revert_taken_said": (
+        "{member} already waits for {roles} again, so those were left as they are.",
+        ("member", "roles"),
+        "what Revert says about a role that already waits again from a newer post. It takes "
+        "{member} {roles}",
+    ),
+    "rolemenu_wait_event_text": (
+        "**{event}** is new. Is it for any of these? {who}",
+        ("event", "who"),
+        "the post when an event is made while people wait for one. It takes {event} {who}",
+    ),
+    "rolemenu_wait_event_pick": ("Who is it for?", (), "the new-event post's picker"),
+    "rolemenu_wait_attached_line": (
+        "{staff} attached {members} to **{event}**.",
+        ("staff", "members", "event"),
+        "the line a post gains when waiting people are attached to an event. It takes {staff} "
+        "{members} {event}",
+    ),
+    "rolemenu_wait_attached_said": (
+        "Attached {members} to **{event}**.",
+        ("members", "event"),
+        "what staff are told after waiting people are attached. It takes {members} {event}",
+    ),
+    "rolemenu_wait_not_attached_said": (
+        "{member} still waits: no assignment on **{event}** was written.",
+        ("member", "event"),
+        "what staff are told when an attach wrote nothing. It takes {member} {event}",
+    ),
+    "rolemenu_waiting_button": (
+        "Waiting for an event ({count})…",
+        ("count",),
+        "the /rolemenu button to the people waiting for an event. It takes {count}",
+    ),
+    "rolemenu_waiting_title": (
+        "Waiting for an event",
+        (),
+        "the heading over the people waiting for an event, on /rolemenu and the site",
+    ),
+    "rolemenu_waiting_none_line": (
+        "Nobody is waiting for an event.",
+        (),
+        "what /rolemenu and the site say while nobody waits",
+    ),
+    "rolemenu_wait_remove_refused_said": (
+        "**{name}** has {count} people waiting for an event on it, so it stays on the list. "
+        "Attach them to an event, or take it off them, first.",
+        ("name", "count"),
+        "the refusal when a role somebody waits on is taken off the timed list. It takes {name} "
+        "{count}",
+    ),
+    "rolemenu_kept_waiting_said": (
+        "Ended. {name} keeps **{role}**: they are waiting for an event.",
+        ("name", "role"),
+        "what staff are told when an ended grant leaves the role on a person waiting for an "
+        "event. It takes {name} {role}",
+    ),
+    "rolemenu_wait_site_line": (
+        "{roles} · expected to end {date} · comes off {removal} · set by {staff}",
+        ("roles", "date", "removal", "staff"),
+        "one person waiting for an event on the Timed roles page. It takes {roles} {date} "
+        "{removal} {staff}",
+    ),
+    "rolemenu_wait_attach_button": (
+        "Attach",
+        (),
+        "the Timed roles page's button that attaches somebody waiting to the picked event",
+    ),
+}
+ROLEMENU_WAIT_NUMBERS: dict[str, tuple[int, int, int, str]] = {
+    ROLEMENU_WAIT_REMOVAL_DAYS_KEY: (
+        14,
+        1,
+        365,
+        "whole days after the rough end date before a timed role still waiting for an event "
+        "comes off, with a staff notice and Revert; 14 by default",
+    ),
+    ROLEMENU_WAIT_REVERT_DAYS_KEY: (
+        14,
+        1,
+        365,
+        "whole days a reverted role waits for an event again, counted from the Revert press; "
+        "14 by default",
+    ),
+    ROLEMENU_WAIT_MAX_DAYS_KEY: (
+        365,
+        1,
+        3650,
+        "how far ahead, in days, a rough end date may be when a timed role waits for an event; "
+        "365 by default",
+    ),
+}
+ROLEMENU_STAFF_DEFAULTS.update(
+    {key: default for key, (default, _, _) in TIMED_ROLE_WAIT_WORDS.items()}
+)
+ROLEMENU_STAFF_DEFAULTS.update(
+    {key: default for key, (default, _, _, _) in ROLEMENU_WAIT_NUMBERS.items()}
+)
+ROLEMENU_STAFF_DEFAULTS[ROLEMENU_WAIT_REMINDER_DAYS_KEY] = "0, 7, 13"
+KEY_TYPES.update({key: "text" for key in TIMED_ROLE_WAIT_WORDS})
+KEY_TYPES.update({key: "int" for key in ROLEMENU_WAIT_NUMBERS})
+KEY_TYPES[ROLEMENU_WAIT_REMINDER_DAYS_KEY] = "text"
+KEY_TYPES[ROLEMENU_WAIT_PING_ROLE_KEY] = "role"
+KEY_HELP.update({key: said for key, (_, _, said) in TIMED_ROLE_WAIT_WORDS.items()})
+KEY_HELP.update({key: said for key, (_, _, _, said) in ROLEMENU_WAIT_NUMBERS.items()})
+KEY_HELP[ROLEMENU_WAIT_REMINDER_DAYS_KEY] = (
+    "the days after the rough end date on which whoever gave a waiting timed role is reminded, "
+    "separated by commas; 0, 7, 13 by default. A day at or past rolemenu_wait_removal_days is "
+    "skipped"
+)
+KEY_HELP[ROLEMENU_WAIT_PING_ROLE_KEY] = (
+    "the role the staff notice pings when a timed role waiting for an event comes off; blank "
+    "pings nobody"
+)
+KEY_MIN.update({key: floor for key, (_, floor, _, _) in ROLEMENU_WAIT_NUMBERS.items()})
+KEY_MAX.update({key: ceiling for key, (_, _, ceiling, _) in ROLEMENU_WAIT_NUMBERS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in TIMED_ROLE_WAIT_WORDS.items()}
+)
+
+
+def checked_wait_offsets(given: Any) -> str:
+    """The reminder days in one spelling, earliest first."""
+    found = wait_day_offsets(given)
+    if not found:
+        raise SettingError(
+            WAIT_BAD_OFFSETS.format(
+                given=str(given or "").strip()[:60],
+                most=WAIT_OFFSETS_MAX,
+                days=WAIT_OFFSET_DAYS_MAX,
+            )
+        )
+    return ", ".join(str(one) for one in found)
+
+
+TEXT_CHECKS[ROLEMENU_WAIT_REMINDER_DAYS_KEY] = checked_wait_offsets
 
 # Blocks live (blocks-live, 2026-09-28) — who's live now, upcoming events and link buttons. Every
 # word the three blocks post is one of these. Filed under posts, except the upcoming words

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
 import pytest
 
 from black_bloc import rolegrants as grants
 from black_bloc import timed_roles as timed
+from black_bloc import timed_roles_waiting as waits
 from black_bloc.cogs.community.role_menus import TITLE_MAX, get_menu
 
 ADA, BO, CY = 900, 901, 902
@@ -29,6 +31,10 @@ ROUTES = [
     ("POST", "/api/rolemenus/btb/list", {"role_id": "44", "user_ids": ["900"]}),
     ("GET", "/api/rolemenus/btb/fill", None),
     ("POST", "/api/rolemenus/btb/fill", None),
+    ("GET", "/api/rolemenus/waiting", None),
+    ("POST", "/api/rolemenus/waiting/900/attach", {"name": "btb"}),
+    ("POST", "/api/rolemenus/waiting/900/date", {"until": LATER}),
+    ("POST", "/api/rolemenus/waiting/900/take-off", None),
 ]
 
 RETIRED = [
@@ -249,7 +255,8 @@ async def test_an_event_row_counts_who_is_assigned_per_role_and_the_last_pass(
     ]
     assert row["last_pass"] == {"passes": 0, "members": 0, "failures": 0, "ended_at": None}
     assert row["end_now_question"] == (
-        "Take 2 role(s) off 2 people now? 0 keep a role through another event."
+        "Take 2 role(s) off 2 people now? 0 keep a role through another event, 0 are waiting "
+        "for an event."
     )
     assert row["buffer_default"] == 1 and row["ends_set_by"] == "7"
 
@@ -535,7 +542,10 @@ async def test_end_now_takes_the_roles_off_everyone_not_kept_and_the_question_sa
     asked = client.get(f"/api/rolemenus/{event['name']}").json()["end_now_question"]
     response = client.post(f"/api/rolemenus/{event['name']}/end-now")
 
-    assert asked == "Take 1 role(s) off 1 people now? 1 keep a role through another event."
+    assert asked == (
+        "Take 1 role(s) off 1 people now? 1 keep a role through another event, 0 are waiting "
+        "for an event."
+    )
     assert response.status_code == 200, response.json()
     body = response.json()
     assert body["pass"]["members"] == 1 and body["pass"]["ended"] is True
@@ -684,3 +694,105 @@ async def test_end_now_on_an_event_somebody_already_ended_is_refused_and_runs_no
     assert (again.status_code, again.json()["error"]) == (409, "event_ended")
     assert RUNNER in role_ids_of(member)
     assert await wf.kinds_in(web.db) == before
+
+
+async def waiting_for(web, wf, user_id, *role_ids, days=10):
+    until = waits.now() + timedelta(days=days)
+    return await waits.put(
+        web.db, wf.GUILD_ID, user_id, role_ids, prompt_id=None, assigner_id=7, until=until, by=7
+    )
+
+
+def soon(days=30):
+    return waits.iso(waits.now() + timedelta(days=days))[:10]
+
+
+async def test_the_waiting_list_names_who_waits_on_what_until_when(client, sign_in, web, roles, wf):
+    sign_in(client)
+    assert client.get("/api/rolemenus/waiting").json() == []
+    listed(client, RUNNER)
+    wf.member(roles, ADA, name="ada")
+    wearing(roles, ADA, RUNNER)
+    await waiting_for(web, wf, ADA, RUNNER)
+
+    [row] = client.get("/api/rolemenus/waiting").json()
+
+    assert row["user_id"] == str(ADA) and row["in_server"] is True
+    assert row["roles"] == [{"role_id": str(RUNNER), "label": "Runner"}]
+    assert row["set_by"] == "7" and row["until_label"] and row["removal_label"]
+    assert row["take_off_question"] == "Take Runner off Ada now?"
+
+
+async def test_attach_from_the_site_writes_the_assignment_and_ends_the_wait(
+    client, sign_in, web, roles, wf
+):
+    sign_in(client)
+    listed(client, RUNNER)
+    event = an_event(client, ends_at=LATER)
+    wf.member(roles, ADA, name="ada")
+    wearing(roles, ADA, RUNNER)
+    await waiting_for(web, wf, ADA, RUNNER)
+    web.guard = None
+
+    response = client.post(f"/api/rolemenus/waiting/{ADA}/attach", json={"name": event["name"]})
+
+    assert response.status_code == 200, response.json()
+    assert "Attached" in response.json()["message"]
+    assert response.json()["event"]["assigned"] == 1
+    assert await waits.waiting(web.db, wf.GUILD_ID) == []
+    assert "web.role_menu.wait_attached" in await wf.kinds_in(web.db)
+    again = client.post(f"/api/rolemenus/waiting/{ADA}/attach", json={"name": event["name"]})
+    assert again.status_code == 404 and again.json()["error"] == "no_such_wait"
+    assert "not waiting for an event" in again.json()["message"]
+
+
+async def test_each_waiting_move_the_site_gets_wrong_is_refused_in_words(
+    client, sign_in, web, roles, wf
+):
+    sign_in(client)
+    listed(client, RUNNER)
+    wf.member(roles, ADA, name="ada")
+    wearing(roles, ADA, RUNNER)
+    await waiting_for(web, wf, ADA, RUNNER)
+    web.guard = None
+    gone = client.post("/api/rolemenus/waiting/900/attach", json={"name": "nope"})
+    assert gone.status_code == 404 and gone.json()["error"] == "no_such_menu"
+    for typed, code in (("someday", "bad_date"), ("2020-01-01", "past_date"), (LATER, "too_far")):
+        refused = client.post(f"/api/rolemenus/waiting/{ADA}/date", json={"until": typed})
+        assert refused.status_code == 400 and refused.json()["error"] == code, typed
+        assert refused.json()["message"]
+    web.guard = wf.Guard(wf.TEST_CHANNEL_ID)
+    guarded = client.post(f"/api/rolemenus/waiting/{ADA}/take-off")
+    assert guarded.status_code == 409 and guarded.json()["error"] == "test_mode"
+    assert len(await waits.waiting(web.db, wf.GUILD_ID)) == 1
+
+
+async def test_a_new_date_and_take_it_off_now_from_the_site(client, sign_in, web, roles, wf):
+    sign_in(client)
+    listed(client, RUNNER)
+    wf.member(roles, ADA, name="ada")
+    ada = wearing(roles, ADA, RUNNER)
+    await waiting_for(web, wf, ADA, RUNNER)
+    web.guard = None
+
+    moved = client.post(f"/api/rolemenus/waiting/{ADA}/date", json={"until": soon(60)})
+    assert moved.status_code == 200, moved.json()
+    assert moved.json()["entry"]["until"].startswith(soon(60)[:7])
+    assert "web.role_menu.wait_date_changed" in await wf.kinds_in(web.db)
+
+    off = client.post(f"/api/rolemenus/waiting/{ADA}/take-off")
+    assert off.status_code == 200, off.json()
+    assert "Took" in off.json()["message"] and RUNNER not in role_ids_of(ada)
+    assert await waits.waiting(web.db, wf.GUILD_ID) == []
+    assert "web.role_menu.wait_taken_off" in await wf.kinds_in(web.db)
+
+
+async def test_a_role_somebody_waits_on_stays_on_the_list(client, sign_in, web, roles, wf):
+    sign_in(client)
+    listed(client, RUNNER)
+    await waiting_for(web, wf, ADA, RUNNER)
+
+    refused = client.delete(f"/api/rolemenus/timed-roles/{RUNNER}")
+
+    assert refused.status_code == 409 and refused.json()["error"] == "role_assigned"
+    assert "waiting for an event" in refused.json()["message"]

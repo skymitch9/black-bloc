@@ -54,6 +54,7 @@ WORDS = {
     rm.RENAME: "Rename…",
     rm.NO_MARATHON: "No marathon yet…",
     rm.FILL_YES: "Give them the roles",
+    rm.WAITING: "Waiting for an event ({count})…",
 }
 
 
@@ -67,6 +68,13 @@ def test_the_root_opens_on_events_with_the_ended_ones_folded_behind_a_count():
     ]
     folded = rm.root_buttons(ended=3, words=WORDS)
     assert rm.ENDED in actions(folded) and "Ended (3)…" in labels(folded)
+
+
+def test_the_waiting_list_renders_only_while_somebody_waits():
+    assert rm.WAITING not in actions(rm.root_buttons(ended=0, words=WORDS, waiting=0))
+    found = rm.root_buttons(ended=0, words=WORDS, waiting=2)
+    assert rm.WAITING in actions(found) and "Waiting for an event (2)…" in labels(found)
+    assert sum(1 for move in found if move.row == 1) <= 5
 
 
 # --- the event card ------------------------------------------------------------------------------

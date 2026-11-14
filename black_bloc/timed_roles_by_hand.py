@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from . import timed_roles_waiting as waits
 from .golive import now_iso
 
 log = logging.getLogger(__name__)
@@ -39,16 +40,32 @@ def role_ids_of(prompt: Any) -> list[int]:
 
 
 async def waiting_roles(db: Any, guild_id: int, user_id: int) -> set[int]:
-    """Roles of this member already asked about and not attached yet: one post each."""
+    """Roles of this member already asked about: an unfinished post, or an open wait."""
     cur = await db.conn.execute(
-        "SELECT role_ids FROM timed_role_prompts WHERE guild_id = ? AND user_id = ? "
+        "SELECT id, role_ids FROM timed_role_prompts WHERE guild_id = ? AND user_id = ? "
         "AND attached_at IS NULL",
         (int(guild_id), int(user_id)),
     )
     found: set[int] = set()
     for row in await cur.fetchall():
-        found |= set(role_ids_of(row))
-    return found
+        if not await has_waits(db, row["id"]):
+            found |= set(role_ids_of(row))
+    return found | await waits.roles_waiting(db, guild_id, user_id)
+
+
+async def has_waits(db: Any, prompt_id: int) -> bool:
+    cur = await db.conn.execute(
+        "SELECT 1 FROM timed_role_waits WHERE prompt_id = ? LIMIT 1", (int(prompt_id),)
+    )
+    return await cur.fetchone() is not None
+
+
+async def still_waiting(db: Any, prompt_id: int) -> bool:
+    cur = await db.conn.execute(
+        "SELECT 1 FROM timed_role_waits WHERE prompt_id = ? AND state = ? LIMIT 1",
+        (int(prompt_id), waits.WAITING),
+    )
+    return await cur.fetchone() is not None
 
 
 async def add_prompt(
@@ -100,7 +117,7 @@ async def mark_attached(db: Any, prompt_id: int, menu_id: int, by: Any) -> bool:
 
 
 async def retire_roles(db: Any, guild_id: int, user_id: int, role_ids: Any) -> int:
-    """A role that came off closes the post waiting on it, so the next by-hand add asks again."""
+    """A role that came off closes the post waiting on it, unless another of its roles waits."""
     wanted = {int(one) for one in role_ids or ()}
     if not wanted:
         return 0
@@ -111,15 +128,28 @@ async def retire_roles(db: Any, guild_id: int, user_id: int, role_ids: Any) -> i
     )
     retired = 0
     for row in await cur.fetchall():
-        if wanted & set(role_ids_of(row)):
-            await db.conn.execute(
-                "UPDATE timed_role_prompts SET attached_at = ? "
-                "WHERE id = ? AND attached_at IS NULL",
-                (now_iso(), row["id"]),
-            )
-            retired += 1
+        if not wanted & set(role_ids_of(row)) or await still_waiting(db, row["id"]):
+            continue
+        await db.conn.execute(
+            "UPDATE timed_role_prompts SET attached_at = ? WHERE id = ? AND attached_at IS NULL",
+            (now_iso(), row["id"]),
+        )
+        retired += 1
     await db.conn.commit()
     return retired
+
+
+async def finish(db: Any, prompt_id: int, *, menu_id: Any = None, by: Any = None) -> bool:
+    """The post is done once none of its roles waits; one writer wins."""
+    if await still_waiting(db, prompt_id):
+        return False
+    cur = await db.conn.execute(
+        "UPDATE timed_role_prompts SET attached_at = ?, attached_menu_id = ?, attached_by = ? "
+        "WHERE id = ? AND attached_at IS NULL",
+        (now_iso(), menu_id, by, int(prompt_id)),
+    )
+    await db.conn.commit()
+    return bool(cur.rowcount and cur.rowcount > 0)
 
 
 def entry_roles(entry: Any) -> set[int]:
@@ -194,6 +224,8 @@ __all__ = [
     "by_hand_locks",
     "drop_prompt",
     "entry_roles",
+    "finish",
+    "has_waits",
     "get_prompt",
     "mark_attached",
     "new_id",
@@ -201,6 +233,7 @@ __all__ = [
     "retire_roles",
     "role_ids_of",
     "set_message",
+    "still_waiting",
     "waiting_roles",
     "who_added",
     "who_added_soon",

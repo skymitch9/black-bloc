@@ -605,6 +605,9 @@
       "raidtrain_slot_minutes": 15,
       "rolemenu_end_buffer_days": 0,
       "rolemenu_end_moved_minutes": 0,
+      "rolemenu_wait_max_days": 1,
+      "rolemenu_wait_removal_days": 1,
+      "rolemenu_wait_revert_days": 1,
       "runs_genre_max": 1,
       "runs_page_size": 25,
       "runs_same_run_minutes": 0,
@@ -747,6 +750,9 @@
       "raidtrain_slot_minutes": 720,
       "rolemenu_end_buffer_days": 365,
       "rolemenu_end_moved_minutes": 10080,
+      "rolemenu_wait_max_days": 3650,
+      "rolemenu_wait_removal_days": 365,
+      "rolemenu_wait_revert_days": 365,
       "runs_genre_max": 5,
       "runs_page_size": 500,
       "runs_same_run_minutes": 1440,
@@ -1306,6 +1312,61 @@
       "then": {
         "method": "DELETE",
         "path": "/api/rolemenus/timed-roles/{spare_role_id}"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/rolemenus/waiting",
+      "read_by": [
+        "page-rolemenus.js Waiting for an event"
+      ],
+      "shape": "list",
+      "keys": [
+        "user_id",
+        "name",
+        "in_server",
+        "roles",
+        "until",
+        "until_label",
+        "removal_at",
+        "removal_label",
+        "set_by",
+        "assigner_id",
+        "take_off_question"
+      ],
+      "rows": {
+        "roles": [
+          "role_id",
+          "label"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/waiting/{waiting_member_id}/date",
+      "body": {
+        "until": "2030-06-01"
+      },
+      "settings": {
+        "rolemenu_wait_max_days": 3650
+      },
+      "read_by": [
+        "page-rolemenus.js Waiting for an event, Change the date…"
+      ],
+      "shape": "object",
+      "keys": [
+        "message",
+        "entry"
+      ],
+      "nested": {
+        "entry": [
+          "user_id",
+          "roles",
+          "until",
+          "until_label",
+          "removal_label",
+          "take_off_question"
+        ]
       }
     },
     {
@@ -13881,6 +13942,10 @@
     "web.role_menu.unassign_failed",
     "web.role_menu.option_added",
     "web.role_menu.option_removed",
+    "web.role_menu.wait_attached",
+    "web.role_menu.wait_date_changed",
+    "web.role_menu.wait_taken_off",
+    "web.role_menu.wait_take_off_failed",
     "web.golive.link",
     "web.golive.unlink",
     "web.golive.optout",

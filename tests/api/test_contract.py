@@ -27,6 +27,7 @@ from black_bloc import (
     sticky,
 )
 from black_bloc import rolegrants as grants
+from black_bloc import timed_roles_waiting as timed_waits
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.settings_api import grouped
 from black_bloc.chat import add_line as add_chat_line
@@ -427,6 +428,17 @@ async def seed_world(client, web, guild, wf) -> dict:
     client.post("/api/rolemenus", json={"title": "Contract"})
     client.post("/api/rolemenus/timed-roles", json={"role_id": str(TIMED_ROLE_ID)})
     client.post("/api/rolemenus", json={"title": "Volunteers", "ends_at": "2099-02-01"})
+    # §8: somebody waits for an event, so the Waiting for an event list has a row to check.
+    await timed_waits.put(
+        db,
+        guild_id,
+        MEMBER_ID,
+        [TIMED_ROLE_ID],
+        prompt_id=None,
+        assigner_id=7,
+        until=datetime.now(UTC) + timedelta(days=10),
+        by=7,
+    )
     client.put("/api/settings/poll_auto_thread", json={"value": True})
     client.post("/api/modmail/snippets", json={"name": "contract", "content": "hello"})
     client.post("/api/modmail/blocks", json={"user_id": str(MEMBER_ID)})
@@ -1113,6 +1125,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_id": str(marathon_id),
         "held_menu": "btb-2027",
         "timed_role_id": str(TIMED_ROLE_ID),
+        "waiting_member_id": str(MEMBER_ID),
         "spare_role_id": str(SPARE_ROLE_ID),
         "dated_menu": "volunteers",
         "free_marathon_id": str(marathon_over_id),

@@ -20,6 +20,8 @@ const contract = JSON.parse(await readFile(new URL('./contract.json', import.met
 // The mock's own fixture ids, so the {placeholders} in the table point at rows it has.
 const IDS = {
   member_id: '700000000000000002',
+  // §8: Quiet Kid waits for an event in the seed, so Change the date reaches a wait.
+  waiting_member_id: '700000000000000006',
   case_id: '9',
   // A case the seed already has VOIDED, because /restore is only legal from there and every
   // contract entry runs against a fresh seed.
