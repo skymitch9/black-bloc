@@ -316,8 +316,11 @@ async def test_a_put_that_turns_a_dated_event_to_a_marathon_attaches_and_holds_a
     ).json()
 
     assert row["ends_source"] == "marathon" and row["ends_at"] == event["ends_at"]
-    assert row["ends_held_at"] == "2099-01-11T05:00:00+00:00" and row["buffer_days"] is None
+    assert row["ends_held_at"] == "2099-01-13T05:00:00+00:00" and row["buffer_days"] == 3
     assert row["held_question"].startswith("Use **Back to Black**'s earlier end?")
+    assert (await wf.kinds_in(web.db)).count("web.role_menu.end_set") == 2
+    taken = client.post(f"/api/rolemenus/{event['name']}/end-earlier").json()
+    assert taken["ends_at"] == "2099-01-13T05:00:00+00:00" and taken["ends_held_at"] is None
     assert "role_menu.end_held" in await wf.kinds_in(web.db)
 
 
@@ -334,6 +337,7 @@ async def test_a_put_that_follows_a_later_marathon_keeps_the_buffer_it_was_given
     ).json()
 
     assert row["ends_at"] == "2099-03-13T05:00:00+00:00" and row["buffer_days"] == 3
+    assert (await wf.kinds_in(web.db)).count("web.role_menu.end_set") == 2
     again = client.put(f"/api/rolemenus/{event['name']}", json={"buffer_days": ""}).json()
     assert again["buffer_days"] is None and again["ends_at"] == "2099-03-11T05:00:00+00:00"
 
@@ -642,3 +646,41 @@ async def test_end_now_never_takes_a_role_pings_owns_even_one_set_on_the_list_by
     assert response.status_code == 200, response.json()
     assert response.json()["pass"]["members"] == 0
     assert RUNNER in role_ids_of(member)
+
+
+async def test_a_put_to_a_marathon_another_open_event_follows_is_refused_in_words(
+    client, sign_in, web, roles, wf
+):
+    sign_in(client)
+    marathon_id = await a_marathon(web, wf)
+    an_event(client, "Taken", marathon_id=str(marathon_id))
+    event = an_event(client, ends_at=LATER)
+    before = await wf.kinds_in(web.db)
+
+    refused = client.put(
+        f"/api/rolemenus/{event['name']}",
+        json={"ends_source": "marathon", "ends_marathon_id": str(marathon_id)},
+    )
+
+    assert (refused.status_code, refused.json()["error"]) == (409, "marathon_taken")
+    assert "**Taken**" in refused.json()["message"]
+    assert await wf.kinds_in(web.db) == before
+
+
+async def test_end_now_on_an_event_somebody_already_ended_is_refused_and_runs_nothing(
+    client, sign_in, web, roles, wf
+):
+    sign_in(client)
+    listed(client, RUNNER)
+    event = an_event(client, ends_at=LATER)
+    web.guard = None
+    assert client.post(f"/api/rolemenus/{event['name']}/end-now").status_code == 200
+    wf.member(roles, ADA, name="ada")
+    member = wearing(roles, ADA, RUNNER)
+    before = await wf.kinds_in(web.db)
+
+    again = client.post(f"/api/rolemenus/{event['name']}/end-now")
+
+    assert (again.status_code, again.json()["error"]) == (409, "event_ended")
+    assert RUNNER in role_ids_of(member)
+    assert await wf.kinds_in(web.db) == before

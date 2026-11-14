@@ -318,14 +318,19 @@ async def wanted_end(bot: Any, guild: Any, menu: Any, payload: dict[str, Any]) -
 
 async def write_end(bot: Any, guild: Any, actor: Any, menu: Any, end: dict[str, Any]) -> None:
     """A dated event that starts following a marathon attaches, so an earlier end is held."""
-    given = end.pop("buffer_given", False)
+    end.pop("buffer_given", None)
     try:
         if end["source"] == menus.MARATHON_END and menus.end_source(menu) != menus.MARATHON_END:
-            await follow_marathon_end(bot, guild, actor, menu, end["marathon_id"], via=VIA_WEBSITE)
-            fresh = await get_menu(bot.db, guild.id, menu["name"])
-            if not (given and end["buffer_days"] is not None) or menu_value(fresh, "ends_held_at"):
-                return
-            menu = fresh
+            await follow_marathon_end(
+                bot,
+                guild,
+                actor,
+                menu,
+                end["marathon_id"],
+                buffer_days=end["buffer_days"],
+                via=VIA_WEBSITE,
+            )
+            return
         await set_menu_end(bot, guild, actor, menu, via=VIA_WEBSITE, **end)
     except MarathonTakenError as exc:
         raise taken(exc) from None
@@ -482,8 +487,7 @@ def build_router(bot: Any) -> APIRouter:
 
     @router.post("/timed-roles")
     async def timed_role_add(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
-        """Refused by cause: a role Black Bloc could not strip, a `/pings` role, a full list,
-        or one already on it — each 409 with its own code and sentence."""
+        """Each refusal is 409 with its own code and sentence."""
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
@@ -635,6 +639,7 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         menu, options = await read_menu(bot, guild, name)
+        refuse_ended(bot, guild.id, menu)
         refuse_guard(bot)
         details = await end_menu_now(bot, guild, actor_for(bot, who, guild), menu, via=VIA_WEBSITE)
         if details is None:

@@ -171,9 +171,19 @@ function openPanel(event, kind) {
   refresh();
 }
 
-/** Re-read one event just before a confirm, so the number asked IS the number the pass takes. */
-async function fresh(event) {
-  return api(`/api/rolemenus/${encodeURIComponent(event.name)}`);
+/**
+ * Re-read one event just before a confirm, so the number asked IS the number the pass takes. A
+ * read that fails says why and asks nothing; an event somebody already ended redraws instead.
+ */
+async function fresh(event, say) {
+  const done = await run(say, () => api(`/api/rolemenus/${encodeURIComponent(event.name)}`), '');
+  if (!done.ok) return null;
+  say.say('');
+  if (!done.found.open) {
+    refresh();
+    return null;
+  }
+  return done.found;
 }
 
 function marathonOptions(marathons, current, placeholder) {
@@ -313,7 +323,11 @@ function lastPassLine(event) {
 function heldLine(event, say) {
   if (!event.ends_held_at || !event.open) return null;
   const take = button(word('rolemenu_use_held_button'), async () => {
-    const now = await fresh(event).catch(() => event);
+    const now = await fresh(event, say);
+    if (!now || !now.held_question) {
+      if (now) refresh();
+      return;
+    }
     const sure = await ask({
       title: word('rolemenu_use_held_button'),
       body: [el('p', { class: 'ask-body' }, boldParts(now.held_question || ''))],
@@ -344,7 +358,8 @@ function roleCounts(event) {
 }
 
 async function endNow(event, say) {
-  const now = await fresh(event).catch(() => event);
+  const now = await fresh(event, say);
+  if (!now) return;
   const sure = await ask({
     title: plain(now.end_now_question),
     body: [],
@@ -406,7 +421,7 @@ function listPanel(event, timedRoles) {
   ], event.open ? GIVE : TAKE, { onChange: () => forget() });
   const pasted = el('textarea', { class: 'input', rows: '6', spellcheck: 'false' });
   const ticked = [];
-  const tickedRow = el('div', { class: 'bar' });
+  const tickedRow = el('div', { class: 'bar', hidden: true });
   const picker = memberPicker({
     label: word('rolemenu_list_tick_label'),
     onPick: (member) => {
@@ -421,6 +436,7 @@ function listPanel(event, timedRoles) {
   let preview = null;
 
   function paintTicked() {
+    tickedRow.hidden = ticked.length === 0;
     tickedRow.replaceChildren(...ticked.map((member) => button(`${member.name} ×`, () => {
       ticked.splice(ticked.indexOf(member), 1);
       paintTicked();

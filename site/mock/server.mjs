@@ -6204,21 +6204,21 @@ function setMenuEnd(menu, end) {
 }
 
 /** A dated event starts following a marathon; an earlier end waits for staff (attach_marathon). */
-function attachMarathon(menu, marathon) {
+function attachMarathon(menu, marathon, bufferDays = null) {
   refuseTaken(marathon, menu);
-  const candidate = marathonEnd(marathon.id, null);
+  const candidate = marathonEnd(marathon.id, bufferDays);
   const holds = state.settings.get('rolemenu_end_earlier_holds') !== false;
   if (holds && menu.ends_at && candidate && new Date(candidate) < new Date(menu.ends_at)) {
     menu.ends_source = 'marathon';
     menu.ends_marathon_id = marathon.id;
-    menu.buffer_days = null;
+    menu.buffer_days = bufferDays;
     menu.ends_held_at = candidate;
     menu.ends_set_by = STAFF.id;
     menu.ends_set_at = now();
     logAction('web.role_menu.end_set', { reason: menu.name, details: { menu: menu.name, source: 'marathon', ends_at: menu.ends_at, held: candidate, via: 'website' } });
     return;
   }
-  setMenuEnd(menu, { source: 'marathon', marathon_id: marathon.id, buffer_days: null });
+  setMenuEnd(menu, { source: 'marathon', marathon_id: marathon.id, buffer_days: bufferDays });
 }
 
 function refuseEnded(menu) {
@@ -6490,8 +6490,7 @@ route('PUT', '/api/rolemenus/:name', async (context) => {
     logAction('web.role_menu.edit', { reason: menu.name, details: { menu: menu.name, via: 'website' } });
   }
   if (end && end.source === 'marathon' && (menu.ends_source || 'none') !== 'marathon') {
-    attachMarathon(menu, roleMenuMarathon(end.marathon_id));
-    if (end.given && end.buffer_days !== null && !menu.ends_held_at) setMenuEnd(menu, end);
+    attachMarathon(menu, roleMenuMarathon(end.marathon_id), end.buffer_days);
   } else if (end) setMenuEnd(menu, end);
   return menuRow(menu);
 });
@@ -6509,6 +6508,7 @@ route('POST', '/api/rolemenus/:name/attach', async (context) => {
 route('POST', '/api/rolemenus/:name/end-now', (context) => {
   requireStaff(context.session);
   const menu = menuByName(context.params.name);
+  refuseEnded(menu);
   guard('ending an event now');
   const plan = endPlan(menu);
   for (const [row, gone] of plan.take) {

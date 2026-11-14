@@ -57,8 +57,7 @@ def role_end(
     menu_ends: dict[int, dict[str, str]] | None,
     assigned: dict[tuple[int, int], dict] | None,
 ) -> tuple[Any, Any]:
-    """(ends_at, event): an assigned member keeps it until their latest event; anyone else
-    loses it at the soonest open event's end."""
+    """(ends_at, event): an assignee's latest event, else the soonest open end."""
     key = (int(member.id), int(role.id))
     own = (assigned or {}).get(key)
     if own is not None:

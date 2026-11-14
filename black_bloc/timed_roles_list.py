@@ -54,8 +54,7 @@ def index(members: Any) -> tuple[dict[int, Any], dict[str, list[Any]]]:
 
 
 def match(members: Any, typed: Any) -> tuple[list[Matched], list[Unmatched]]:
-    """Exact matches only: an id or mention names one member; a name two members share names
-    nobody, so a live server never gets the wrong person's role."""
+    """Exact matches only; a name two members share names nobody."""
     by_id, by_name = index(members)
     matched: list[Matched] = []
     unmatched: list[Unmatched] = []

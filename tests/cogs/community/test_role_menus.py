@@ -2241,3 +2241,42 @@ async def test_each_reason_a_role_may_not_join_the_timed_list_has_its_own_code(b
     assert await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(14)) is None
     await timed_list(db, *range(100, 124))
     assert (await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(14)))[0] == "list_full"
+
+
+async def test_the_end_pass_takes_roles_off_under_the_guild_lock_and_lets_go_before_the_dms(
+    bot, db, lead, monkeypatch
+):
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER)
+    FakeMember(bot.guild, user_id=900, roles=(10,))
+    held: list = []
+    real = cog_module.change_roles
+
+    async def spy(*args, **kwargs):
+        held.append(cog_module.guild_lock(bot, GUILD).locked())
+        return await real(*args, **kwargs)
+
+    async def told(*args, **kwargs):
+        held.append(("dm", cog_module.guild_lock(bot, GUILD).locked()))
+
+    monkeypatch.setattr(cog_module, "change_roles", spy)
+    monkeypatch.setattr(cog_module, "tell_wearers", told)
+    await db.conn.execute("UPDATE role_menus SET ends_at = ? WHERE id = ?", (PAST, a["id"]))
+    await db.conn.commit()
+    await tick(bot)
+
+    assert held == [True, ("dm", False)]
+
+
+async def test_the_panel_answers_a_taken_marathon_in_words_and_changes_nothing(bot, db, lead):
+    await timed_list(db, 10)
+    taken = await marathon_with(db, LATER)
+    await cog_module.make_event(bot, bot.guild, lead, "Taken", marathon_id=taken)
+    event = await an_event(db, "a", ends_at=SOON)
+    interaction = await open_a_menu(bot, lead, "a")
+    await press(interaction, "Change the end…")
+
+    await cog_module.run_set_marathon(interaction, taken, interaction.view)
+
+    assert "already has an open event, **Taken**" in interaction.sent
+    assert (await menu_row(db, event["id"]))["ends_source"] == "date"

@@ -234,9 +234,7 @@ async def soonest_ends(db: Any, guild_id: Any) -> dict[int, dict[str, str]]:
 
 
 async def assignment_ends(db: Any, guild_id: Any, user_ids: Any) -> dict[tuple[int, int], dict]:
-    """(member, role) → the end they KEEP it until: the latest of their own open events'.
-
-    An open event with no end yet outlasts every dated one, so it wins with `ends_at` None."""
+    """(member, role) → the latest end of their own open events; no end outlasts every date."""
     wanted = list(dict.fromkeys(int(one) for one in user_ids or ()))
     if not wanted or db is None or not getattr(db, "is_connected", False):
         return {}

@@ -2698,7 +2698,14 @@ async def make_event(
 
 
 async def attach_marathon(
-    bot: Any, guild: Any, actor: Any, menu: Any, marathon_id: Any, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    marathon_id: Any,
+    *,
+    buffer_days: Any = None,
+    via: str = VIA_DISCORD,
 ) -> str | None:
     """A dated event starts following a marathon; an earlier end it brings waits for staff."""
     marathon = await marathon_row(bot.db, guild.id, marathon_id)
@@ -2706,7 +2713,9 @@ async def attach_marathon(
         raise ValueError(f"no marathon {marathon_id!r} in this server")
     await refuse_taken_marathon(bot, guild, marathon, menu["id"])
     candidate = menus.ends_at_of(
-        {"ends_source": menus.MARATHON_END}, marathon, default_buffer(bot, guild.id)
+        {"ends_source": menus.MARATHON_END, "buffer_days": buffer_days},
+        marathon,
+        default_buffer(bot, guild.id),
     )
     current = menu_value(menu, "ends_at")
     floor = bot.store.get(guild.id, ROLEMENU_END_MOVED_MINUTES_KEY)
@@ -2717,15 +2726,23 @@ async def attach_marathon(
         and menus.pulls_earlier(current, menu_value(menu, "ends_told_at"), candidate, floor)
     ):
         return await set_menu_end(
-            bot, guild, actor, menu, source=menus.MARATHON_END, marathon_id=marathon_id, via=via
+            bot,
+            guild,
+            actor,
+            menu,
+            source=menus.MARATHON_END,
+            marathon_id=marathon_id,
+            buffer_days=buffer_days,
+            via=via,
         )
     async with end_lock(bot, menu["id"]):
         await bot.db.conn.execute(
-            "UPDATE role_menus SET ends_source = ?, ends_marathon_id = ?, buffer_days = NULL, "
+            "UPDATE role_menus SET ends_source = ?, ends_marathon_id = ?, buffer_days = ?, "
             "ends_held_at = ?, ends_set_by = ?, ends_set_at = ? WHERE id = ?",
             (
                 menus.MARATHON_END,
                 int(marathon["id"]),
+                None if buffer_days is None else menus.buffer_of({}, buffer_days),
                 candidate,
                 actor_id(actor),
                 now_iso(),
@@ -2742,7 +2759,7 @@ async def attach_marathon(
             "menu": menu["name"],
             "source": menus.MARATHON_END,
             "marathon_id": int(marathon["id"]),
-            "buffer_days": None,
+            "buffer_days": buffer_days,
             "was": current,
             "ends_at": current,
             "held": candidate,
@@ -2755,12 +2772,21 @@ async def attach_marathon(
 
 
 async def follow_marathon_end(
-    bot: Any, guild: Any, actor: Any, menu: Any, marathon_id: Any, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    marathon_id: Any,
+    *,
+    buffer_days: Any = UNSET,
+    via: str = VIA_DISCORD,
 ) -> str | None:
-    """Change the end to a marathon: a dated event ATTACHES (an earlier end waits for staff); one
-    already following a marathon switches and keeps its buffer."""
+    """Change the end to a marathon: a dated event attaches; a following one keeps its buffer."""
     if menus.end_source(menu) != menus.MARATHON_END:
-        return await attach_marathon(bot, guild, actor, menu, marathon_id, via=via)
+        buffer = None if buffer_days is UNSET else buffer_days
+        return await attach_marathon(
+            bot, guild, actor, menu, marathon_id, buffer_days=buffer, via=via
+        )
     return await set_menu_end(
         bot,
         guild,
@@ -2768,7 +2794,7 @@ async def follow_marathon_end(
         menu,
         source=menus.MARATHON_END,
         marathon_id=marathon_id,
-        buffer_days=menu_value(menu, "buffer_days"),
+        buffer_days=menu_value(menu, "buffer_days") if buffer_days is UNSET else buffer_days,
         via=via,
     )
 
