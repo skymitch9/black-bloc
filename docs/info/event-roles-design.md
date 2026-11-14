@@ -784,7 +784,7 @@ The ask, verbatim: *"I also want to add a criteria where if there isn't an event
 | Q1 | Two weeks after the rough end date with no event attached, the role COMES OFF. *"instead of a dm it's a staff notification with a button to revert and the staff ping should be lead"* — no DM to the member; a staff notice pinging the Leads role, with **Revert**. |
 | Q2 | Three reminders to the person who assigned it: on the date, a week after, the day before removal. Several people in one message. Each offers: pick an event / New event / Take it off now. |
 | Q3 | *"a"* — the rough end date is REQUIRED when someone presses *Pick later…*. No default. |
-| Q4 | **OPEN — asked 2026-11-14 12:1x, the build waits on it.** What **Revert** does: (a) one press puts the roles back and the person waits again for a number of days held in a settings key; (b) the press asks for a new required date. §8.6 is written for whichever he picks. |
+| Q4 | *"a"* (12:1x) — **Revert** is ONE press: the roles go back and the person waits again for a number of days held in a settings key (default 14), counted from the press; the reminders start over. No date is asked. |
 
 ### 8.2 Data (schema +1, additive)
 
@@ -829,7 +829,7 @@ Per guild, per waiting row, from `until`:
 
 - **Reminders** at day offsets from a settings key (default `0, 7, 13`) — one message per assigner per tick in the by-hand channel, pinging that assigner, listing every one of their entries with a reminder due (member, roles, expected end, the day it comes off), with a select of those entries; picking one answers an ephemeral card for that entry: event select · **New event…** · **Change the date…** · **Take it off now**. After downtime only the LATEST due stage is sent, never a burst. An offset at or past the removal day is ignored.
 - **Removal** at `until` + a settings key (default 14 days): the role comes off through `change_roles` (ours, so no by-hand post) UNLESS an open assignment on an event that has not ended holds it for that member, or `/pings` owns it — then the Discord role stays and only the row ends; no DM; row `removed`; and ONE staff notice in the by-hand channel pinging the role in a new role key (unset = no ping; the conductor sets the live value to Leads): member, roles, the date, the assigner, **Revert**. Several removals in one tick make one notice per member. A role the bot could not take is said in the notice, logged (important), and retried next tick — never a silent skip.
-- **Revert** (staff-gated, restart-safe; Q4 decides whether it asks for a date or uses a days key) → roles back through `change_roles`, the row waits again with reminders reset, the notice edited to say who reverted and the new date. A member who left is refused in words.
+- **Revert** (staff-gated, restart-safe; one press, Q4) → `until` = now + the revert-days key (default 14), roles back through `change_roles`, the row waits again with reminders reset, the notice edited to say who reverted and the new date. A member who left is refused in words.
 - **Change the date…** resets the reminder stage to what the new date implies.
 - The loop's Health counts gain the waiting numbers.
 
