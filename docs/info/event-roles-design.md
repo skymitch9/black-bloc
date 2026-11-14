@@ -461,3 +461,10 @@ Owner decision 2026-11-13: pings-owned menus never sit on the temporary-roles co
    end. Closing it means either `/pings` refusing a role that sits on a menu with an end, or the end pass skipping `/pings` roles.
 4. **Not covered — the raid-train role** (`raidtrain_ping_role_id`), which members also opt into from `/pings`. The decision named
    fan roles and the Events role only; adding it is one line in `pings.owned_role_ids`.
+
+### 6.7 The staff guide and the posting channel (2026-11-13, branch `rolemenu-guide`; answers §6.5's first open question)
+
+Owner decisions 2026-11-13 (Q4 a, Q5 a). Code notes: [`code-notes.md`](code-notes.md) ▸ *The temporary-roles guide and `role_menu_channel_id` retired*.
+
+1. **The staff guide `rolemenu-post` teaches the temporary-roles control** (Q4 a): *Give out temporary roles* — New menu, Add a role, Set the end (a marathon or a typed day), Hand roles out; faults for a role Black Bloc cannot take off, a `/pings` role, a held earlier end, Delete refused; facts `rolemenu_end_buffer_days`, `rolemenu_end_earlier_holds`, `rolemenu_approval_channel_id` (it still has a job: role notices). The slug stays. ⚠️ A deploy re-points *Put the original back* only; the live guide reads the old words until staff press it.
+2. **`role_menu_channel_id` is retired** (Q5 a), the `rolemenu_mode` way: out of the registry, Settings, `/settings` ▸ Roles & channels, the mock and the contract; a stored row is kept and ignored. Keys 1470 → 1469. Its readers had no job left: the Roles & channels picker (a dead control), the chat's *the menus are posted in* sentence (behind `picking_is_on`, always False), the page (dropped in §6.5 item 7).
