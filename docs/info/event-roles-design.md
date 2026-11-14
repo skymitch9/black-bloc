@@ -468,3 +468,65 @@ Owner decisions 2026-11-13 (Q4 a, Q5 a). Code notes: [`code-notes.md`](code-note
 
 1. **The staff guide `rolemenu-post` teaches the temporary-roles control** (Q4 a): *Give out temporary roles* — New menu, Add a role, Set the end (a marathon or a typed day), Hand roles out; faults for a role Black Bloc cannot take off, a `/pings` role, a held earlier end, Delete refused; facts `rolemenu_end_buffer_days`, `rolemenu_end_earlier_holds`, `rolemenu_approval_channel_id` (it still has a job: role notices). The slug stays. ⚠️ A deploy re-points *Put the original back* only; the live guide reads the old words until staff press it.
 2. **`role_menu_channel_id` is retired** (Q5 a), the `rolemenu_mode` way: out of the registry, Settings, `/settings` ▸ Roles & channels, the mock and the contract; a stored row is kept and ignored. Keys 1470 → 1469. Its readers had no job left: the Roles & channels picker (a dead control), the chat's *the menus are posted in* sentence (behind `picking_is_on`, always False), the page (dropped in §6.5 item 7).
+
+## 7. Timed roles per event — the control turned round (owner, 2026-11-13 22:1x → 2026-11-14 08:1x)
+
+The owner tried `/rolemenu` (v273) and said, verbatim: *"its fine but its not intuitive. Also i think we have this backwards. so the roles we set will always be temporary but the event could change. so lets preload timed roles with the roles we already named. then we set endate by marathon or date with an option to add marathon later and then we use that to assign people the roles. i also want it to override manually assigned roles too"*. §3 put the roles on a menu and gave the menu one end. §7 supersedes §3.1–§3.3 and §3.6 where they disagree; §3.4 (notices), §3.5 (self-pick retired), the earlier-end hold (§6.4) and the `/pings` refusal (§6.6) carry over.
+
+### 7.1 The decisions (each is the owner's answer, verbatim in `TODO.md` 2026-11-13/14)
+
+| # | Decision |
+|---|---|
+| Q1 | An assignment belongs to an EVENT. Events can overlap: *"someone might be a runner for event A but not for event B … we don't want to remove roles for people in event B when event A ends"*. An event is tied to a marathon; when the marathon is not tracked yet the event carries a typed date and the tracker is attached later. |
+| Q2 | At an event's end, every member wearing a timed role who is NOT assigned that role in another still-open event loses it — by-hand holders included. When the bot sees a timed role added by hand it pings the person who added it in `#bot-control` and has them attach it to a marathon. |
+| Q3 | The timed roles (one list per server, shared by every event) are preloaded: Runner, Commentator, Host, Donations, Tech Check, Social Media, Chat Mods, Host Coord, Host First Assist, Backup Host. Staff can edit the list. The conductor preloads the live list through the control after the deploy; the code seeds nothing. |
+| Q4 | Bulk giving, all three: a multi-pick in Discord (25 per pick, the panel stays open for the next batch); *Fill from the schedule*; a pasted / ticked member list on the site with no cap. |
+| Q5 | The panel opens on the EVENTS. The command stays `/rolemenu`; the title is *Timed roles*. Existing menus become events. |
+
+### 7.2 Data
+
+- **An event is a `role_menus` row** (the table and its `ends_*` / `ended_at` / `ends_held_at` columns stay; no rename — a persisted table). `title` is the event's name. The existing live row (`BtB`, no roles, no end) becomes an event untouched.
+- **The timed-role list is per guild, not per event.** New table (name it for what it is, e.g. `timed_roles(guild_id, role_id, label, emoji, position, added_by, added_at)`, PK `(guild_id, role_id)`). Migration: every `role_menu_options` row is copied in (first label wins); `role_menu_options` is then read by nothing and is kept.
+- **An assignment is a `role_grants` row carrying its event:** new nullable column `menu_id`. `source` names how it was made (`staff`, `schedule`, `site_list`, `by_hand_attached`). A grant on a timed role MUST carry an event (refused in words otherwise); a grant on a non-timed role keeps today's ad-hoc *How long for…* path with `menu_id` NULL. One open grant per `(user, role, event)`.
+- An event with `ends_source = date` gains **Attach a marathon…**: sets `ends_marathon_id`, flips to `marathon`, recomputes `ends_at` through the ONE helper (`ends_at_of`), logs `role_menu.end_set`. The earlier-end hold applies to the recompute as it does to a marathon re-date.
+- `SCHEMA_VERSION` +1, additive only.
+
+### 7.3 The end pass, per event
+
+For an event that is due (`ends_at <= now`, `ended_at IS NULL`, not held) or on **End it now**:
+
+1. For each timed role: every member WEARING it (live from the guild).
+2. A member KEEPS the role iff they hold an open grant for that role on ANOTHER event that has not ended (`ended_at IS NULL`; an event with no end set yet counts as open). Everyone else loses it — the event's own assignees and by-hand holders alike.
+3. A role that `/pings` owns is never taken (the reverse-order hole of §6.6 closes here: the pass skips `pings.owned_role_ids`, `/pings` refuses to adopt a role that is on the timed list, and `raidtrain_ping_role_id` joins `owned_role_ids`).
+4. One `change_roles` per member, grants on THIS event closed, one DM per member, the retries, `role_menu.ended`, the staff notice — as §3.3.
+5. The confirm on **End it now** and on **Use the earlier end** names the real counts under THESE rules (*Take N roles off M people now? K keep a role through another event.*) — the number shown is the number the pass will take.
+
+### 7.4 A timed role added by hand
+
+`on_member_update` sees a timed role appear that the bot did not add (`grants.remember_change` already tells ours from theirs):
+
+- Find who added it from the audit log (`member_role_update`); if the bot cannot read the audit log or finds no entry, post without a ping and say so in words.
+- Post in the by-hand channel (new channel key; the owner named `#bot-control`, the conductor sets the live value after the deploy; unset falls back to where role notices post): *{who} gave {member} {role} by hand. Which event is it for?* with a select of the open events and **New event…**. Picking writes the grant on that event (`source = by_hand_attached`) and edits the message to say what was attached and by whom. With NO open event the message says so and offers **New event…**.
+- Staff-gated; persistent across restarts (a dynamic item or a stored message row — the builder's choice, recorded). Unattached, the role simply goes at the next event end (Q2).
+- One message per (member, role); several roles added in one edit make one message. Sentences and labels are settings keys.
+
+### 7.5 `/rolemenu` — *Timed roles*
+
+No blurbs. Root: one line per open event — *name · ends <t:…:D> (marathon + N d)* / *(date, no marathon)* / *no end set* · *N people*; ended events folded behind **Ended (N)…**. Controls: an event select · **New event…** · **Timed roles…** · the site link.
+
+- **New event…**: a select of tracked non-archived marathons (an event per marathon; a marathon that already has an open event is not offered), or **No marathon yet…** → modal: name + date.
+- **Timed roles…**: the shared list with wearing counts; **Add a role…** (refused in words when the bot could not remove it, or when `/pings` owns it) · **Remove a role…** (refused in words while open assignments exist on it — name the count).
+- **Event card**: per-role counts of ASSIGNED people; the end line; held line. **Give roles…** (role select from the timed list → UserSelect `max_values=25`; after each batch the panel stays on the same role with a running *given to N* line) · **Fill from the schedule** (only with a marathon attached) · **Take roles off…** · **Change the end…** (the existing Set-the-end panel: marathon, date, buffer, no end) · **Attach a marathon…** (only on a date/no-end event with no marathon) · **End it now** · **Rename…** · **Delete it** (existing refusal).
+- **Fill from the schedule**: runners of the event's marathon → the role in `…_fill_runner_role_id`, commentators (couch, §`marathon-couch-parts-design.md`) → `…_fill_commentator_role_id`, hosts (`marathon_hosts`) → `…_fill_host_role_id` (three role keys, unset = that line is skipped and says so). People come from the tracker's matched members only; a preview lists the counts and the UNMATCHED names before anything is written; confirm writes grants (`source = schedule`) and adds the roles. Re-running adds only the missing.
+- Gone: *New menu*, per-menu *Add a role…*, *Hand roles out…* as it was.
+
+### 7.6 Site (`rolemenus.html`, the page's nav label and heading become *Timed roles*)
+
+Event cards (end, assigned per role, held line, last pass), the timed-roles list editor, **New event**, **Attach a marathon**, the End card, *End it now*, *Fill from the schedule* with its preview, and the **list**: pick an event and a role, paste names / mentions / ids one per line or tick members from the one search module (`ui.js`), see matched vs unmatched before saving. The marathon drawer line and the Members chips name the EVENT. Routes change shape; the mock, the contract and `site-gate` follow; old routes that lose their job answer 410 in words.
+
+### 7.7 Dispatches (sequential, one worktree, nothing deployed until both land)
+
+- **A — model, pass, Discord:** §7.2–§7.5, the `/pings` items of §7.3.3, the caller-less `rolemenu_panels.repost` and the six caller-less strings named in DONE v274 go. Tests mirror the package.
+- **B — API, site, guide:** §7.6, the staff guide `rolemenu-post` rewritten for this flow (slug kept), the mock and contract.
+
+The builder records every deviation as §7.8 / §7.9, the way §6.1–§6.5 were kept.
