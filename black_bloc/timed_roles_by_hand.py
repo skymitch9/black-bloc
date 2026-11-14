@@ -97,6 +97,29 @@ async def mark_attached(db: Any, prompt_id: int, menu_id: int, by: Any) -> bool:
     return bool(cur.rowcount and cur.rowcount > 0)
 
 
+async def retire_roles(db: Any, guild_id: int, user_id: int, role_ids: Any) -> int:
+    """A role that came off closes the post waiting on it, so the next by-hand add asks again."""
+    wanted = {int(one) for one in role_ids or ()}
+    if not wanted:
+        return 0
+    cur = await db.conn.execute(
+        "SELECT id, role_ids FROM timed_role_prompts WHERE guild_id = ? AND user_id = ? "
+        "AND attached_at IS NULL",
+        (int(guild_id), int(user_id)),
+    )
+    retired = 0
+    for row in await cur.fetchall():
+        if wanted & set(role_ids_of(row)):
+            await db.conn.execute(
+                "UPDATE timed_role_prompts SET attached_at = ? "
+                "WHERE id = ? AND attached_at IS NULL",
+                (now_iso(), row["id"]),
+            )
+            retired += 1
+    await db.conn.commit()
+    return retired
+
+
 def entry_roles(entry: Any) -> set[int]:
     after = getattr(entry, "after", None)
     return {int(getattr(role, "id", 0)) for role in getattr(after, "roles", None) or ()}
@@ -163,6 +186,7 @@ __all__ = [
     "mark_attached",
     "new_id",
     "pick_id",
+    "retire_roles",
     "role_ids_of",
     "set_message",
     "waiting_roles",

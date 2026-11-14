@@ -1750,20 +1750,22 @@ async def give_event_role(
                 found["already"].append(int(member.id))
                 continue
             found["had" if wears else "given"].append(int(member.id))
-    await log_action(
-        bot,
-        guild,
-        kind_via("role_menu.assign", via),
-        actor=actor,
-        details={
-            "menu": menu["name"],
-            "menu_id": int(menu["id"]),
-            "role_id": role_id,
-            "source": source,
-            **{key: found[key] for key in ("given", "had", "already", "refused")},
-            "via": via,
-        },
-    )
+    details = {
+        "menu": menu["name"],
+        "menu_id": int(menu["id"]),
+        "role_id": role_id,
+        "source": source,
+        **{key: found[key] for key in ("given", "had", "already", "refused")},
+        "via": via,
+    }
+    if found["given"] or found["had"] or found["already"]:
+        await log_action(
+            bot, guild, kind_via("role_menu.assign", via), actor=actor, details=details
+        )
+    if found["refused"]:
+        await log_action(
+            bot, guild, kind_via("role_menu.assign_failed", via), actor=actor, details=details
+        )
     found["said"] = outcome_said(bot, guild.id, "rolemenu_give_said", label, found)
     return found
 
@@ -1799,23 +1801,27 @@ async def take_event_role(
             closed = await timed.close_member_roles(
                 bot.db, guild.id, member.id, [role_id], grants.ENDED_BY_STAFF
             )
+            if wears:
+                await hand.retire_roles(bot.db, guild.id, member.id, [role_id])
             found["given" if wears or closed else "already"].append(int(member.id))
-    await log_action(
-        bot,
-        guild,
-        kind_via("role_menu.unassign", via),
-        actor=actor,
-        details={
-            "menu": menu["name"],
-            "menu_id": int(menu["id"]),
-            "role_id": role_id,
-            "taken": found["given"],
-            "kept": found["kept"],
-            "already": found["already"],
-            "refused": found["refused"],
-            "via": via,
-        },
-    )
+    details = {
+        "menu": menu["name"],
+        "menu_id": int(menu["id"]),
+        "role_id": role_id,
+        "taken": found["given"],
+        "kept": found["kept"],
+        "already": found["already"],
+        "refused": found["refused"],
+        "via": via,
+    }
+    if found["given"] or found["kept"] or found["already"]:
+        await log_action(
+            bot, guild, kind_via("role_menu.unassign", via), actor=actor, details=details
+        )
+    if found["refused"]:
+        await log_action(
+            bot, guild, kind_via("role_menu.unassign_failed", via), actor=actor, details=details
+        )
     found["said"] = outcome_said(bot, guild.id, "rolemenu_take_said", label, found)
     return found
 
@@ -2083,6 +2089,7 @@ async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> An
         if done:
             taken.append((member, can))
             await timed.close_member_roles(db, guild.id, member.id, can, grants.EXPIRED)
+            await hand.retire_roles(db, guild.id, member.id, can)
         left = [one for one in worn if not done or one not in can]
         if left:
             stuck.append((member, left))
@@ -4445,7 +4452,9 @@ async def attach_by_hand(
         )
     if not await hand.mark_attached(bot.db, prompt["id"], menu["id"], actor_id(actor)):
         fresh = await hand.get_prompt(bot.db, prompt["id"])
-        done = await get_menu_by_id(bot.db, fresh["attached_menu_id"]) if fresh else None
+        if fresh is None or fresh["attached_menu_id"] is None:
+            return False, word(bot, guild.id, "rolemenu_by_hand_gone_said")
+        done = await get_menu_by_id(bot.db, fresh["attached_menu_id"])
         return False, word(
             bot,
             guild.id,
@@ -4779,19 +4788,18 @@ class RoleMenus(commands.Cog):
         for role_id in added:
             await self._added_by_hand(guild, after, role_id)
         listed = set(await timed.role_ids(self.bot.db, guild.id))
-        owned = await owned_by_pings(self.bot, guild.id)
-        asked = [one for one in added if one in listed and one not in owned]
-        if asked:
-            await ask_which_event(self.bot, guild, after, asked)
         if removed:
-            await timed.close_member_roles(
-                self.bot.db, guild.id, after.id, [one for one in removed if one in listed],
-                grants.BY_HAND,
-            )
+            gone = [one for one in removed if one in listed]
+            await timed.close_member_roles(self.bot.db, guild.id, after.id, gone, grants.BY_HAND)
+            await hand.retire_roles(self.bot.db, guild.id, after.id, gone)
             await grants.record_removed(
                 self.bot.db, guild.id, after.id, [one for one in removed if one not in listed],
                 grants.BY_HAND,
             )
+        owned = await owned_by_pings(self.bot, guild.id)
+        asked = [one for one in added if one in listed and one not in owned]
+        if asked:
+            await ask_which_event(self.bot, guild, after, asked)
 
     async def _added_by_hand(self, guild: Any, member: Any, role_id: int) -> None:
         row = await grants.open_request_for_role(self.bot.db, guild.id, member.id, role_id)

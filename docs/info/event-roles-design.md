@@ -674,3 +674,19 @@ every event) and `wearing` = people ASSIGNED; `PUT options` edits the shared lis
 409 `pings_role` for an add refused for any reason); `POST /{name}/assign` writes event assignments (`given to N` sentences); the
 `pings_role` 409s on end fields, end-now and end-earlier are gone (item 12). The contract seed puts its own role (44, *Runner*)
 on the list so Member stays free for the ad-hoc grant routes.
+
+**Added after review (same branch)**
+- A waiting by-hand post is RETIRED (`timed_roles_by_hand.retire_roles`, `attached_at` set, `attached_menu_id` NULL) when its role
+  comes off the member — by the end pass, by hand, or *Take roles off…* — so the next by-hand add of that role asks again. A
+  click on a retired post answers `rolemenu_by_hand_gone_said`; its select stays drawn on the message (cosmetic, not edited).
+- A Give / Take batch Discord refused logs `role_menu.assign_failed` / `role_menu.unassign_failed` (important by suffix) with the
+  refused ids; the success kind is written only when something else happened, so a refused batch never reads as a success.
+- `on_member_update` closes the rows of removed roles BEFORE it posts about added ones, so a fault in the post cannot skip them.
+- ⚠️ **Not verified, Discord only:** `who_added` reads the audit log at once on `on_member_update`. If Discord writes the entry
+  after the gateway event, a readable log answers SILENT and the adder is not pinged. No delayed re-read was built.
+- Known, not closed: the ad-hoc grant rows' `ends_with_menu` (`api/tools/roles.py` `grant_row`) names the soonest event for the
+  role, not the row's own event (B's, beside the Members chip question). *One event per marathon* is enforced where the
+  marathons are offered (New event, Attach), not re-checked at the write; *Change the end…* offers every marathon. The end lock
+  is per event, so a Give on B during A's pass can race for a member already in A's take list (narrow; a per-guild lock closes it).
+- `PUT options` writes `web.role_menu.edit` plus one `option_added` / `option_removed` per role that moved.
+- The staff guide `rolemenu-post` still quotes removed labels (New menu, Hand roles out…): dispatch B rewrites it.

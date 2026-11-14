@@ -265,3 +265,15 @@ def test_a_grant_on_a_menu_role_never_outlasts_the_menu():
     assert clamped("2027-04-01T00:00:00-07:00", "2027-04-01T06:00:00+00:00") == (
         "2027-04-01T06:00:00+00:00"
     )
+
+
+async def test_a_grant_can_carry_its_event_and_the_timed_role_sources(db):
+    from black_bloc import rolegrants as grants
+
+    for source in (grants.SCHEDULE, grants.SITE_LIST, grants.BY_HAND_ATTACHED):
+        grant_id = await add_grant(db, GUILD, MEMBER, ROLE, source, menu_id=MENU_ID)
+        row = await get_grant(db, grant_id)
+        assert (row["source"], row["menu_id"]) == (source, MENU_ID)
+        await end_grant(db, grant_id, EXPIRED)
+    plain = await get_grant(db, await add_grant(db, GUILD, MEMBER, ROLE, "staff"))
+    assert plain["menu_id"] is None

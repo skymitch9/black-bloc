@@ -2111,3 +2111,32 @@ async def test_new_event_on_a_by_hand_post_makes_the_event_and_attaches_to_it(bo
 
     event = await get_menu(db, GUILD, "back-to-black-2027")
     assert event is not None and await open_grant_on(db, 900, 10, event["id"]) is not None
+
+
+async def test_a_role_that_came_off_asks_again_the_next_time_it_is_added_by_hand(bot, db, lead):
+    await store_notice_channel(bot)
+    await timed_list(db, 10)
+    member = FakeMember(bot.guild, user_id=900)
+    await added_by_hand(bot, member, 10)
+    await an_event(db, "a", ends_at=PAST)
+
+    await tick(bot)
+    assert 10 not in [r.id for r in member.roles]
+    await added_by_hand(bot, member, 10)
+
+    asked = [one for one in posts(bot) if "by hand." in str(one.kwargs.get("content"))]
+    assert len(asked) == 2
+
+
+async def test_a_give_discord_refuses_logs_a_failure_and_never_the_success_kind(bot, db, lead):
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER)
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    member.edit_raises = discord.HTTPException(_Refused(403), "no")
+
+    found = await give(bot, lead, a, 10, member)
+
+    assert found["refused"] == [900] and "1 refused" in found["said"]
+    kinds = await action_kinds(db)
+    assert "role_menu.assign_failed" in kinds and "role_menu.assign" not in kinds
+    assert await open_grant_on(db, 900, 10, a["id"]) is None
