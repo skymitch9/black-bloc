@@ -11,6 +11,8 @@ from ... import rolemenus as menus
 from ... import timed_roles as timed
 from ... import timed_roles_fill as fill
 from ... import timed_roles_list as roster
+from ... import timed_roles_waiting as waits
+from ... import timed_roles_waiting_flow as flow
 from ...cogs.community.role_menus import (
     ROLEMENU_ENDED_TEXT_KEY,
     MarathonTakenError,
@@ -58,7 +60,7 @@ from ...cogs.community.role_menus import (
 )
 from ...golive import parse_ts
 from ...logkinds import VIA_WEBSITE
-from ...settings_store import ROLEMENU_RETIRED_KEY
+from ...settings_store import ROLEMENU_RETIRED_KEY, ROLEMENU_WAIT_MAX_DAYS_KEY
 from ..auth import Refused, staff_dependency
 from ..names import as_id
 from ..writes import (
@@ -336,6 +338,71 @@ async def write_end(bot: Any, guild: Any, actor: Any, menu: Any, end: dict[str, 
         raise taken(exc) from None
 
 
+def no_such_wait(bot: Any, guild_id: int, user_id: Any) -> Refused:
+    return Refused(
+        404,
+        "no_such_wait",
+        said(bot, guild_id, "rolemenu_wait_gone_said", member=str(user_id)[:40]),
+    )
+
+
+async def wait_payload(bot: Any, guild: Any, entry: dict[str, Any]) -> dict[str, Any]:
+    """One person waiting for an event, the way the page draws them."""
+    labels = await timed.labels(bot.db, guild.id)
+    removal = waits.removal_at(entry["until"], flow.removal_days(bot, guild.id))
+    member = guild.get_member(int(entry["user_id"]))
+    return {
+        "user_id": str(entry["user_id"]),
+        "name": str(getattr(member, "display_name", None) or entry["user_id"]),
+        "in_server": member is not None,
+        "roles": [
+            {"role_id": str(one), "label": labels.get(int(one)) or role_name(guild, one)}
+            for one in entry["role_ids"]
+        ],
+        "until": entry["until"],
+        "until_label": site_when(bot, guild.id, entry["until"]),
+        "removal_at": waits.iso(removal) if removal is not None else None,
+        "removal_label": site_when(bot, guild.id, removal) if removal is not None else None,
+        "set_by": str(entry["set_by"]) if entry["set_by"] else None,
+        "assigner_id": str(entry["assigner_id"]) if entry["assigner_id"] else None,
+        "take_off_question": said(
+            bot,
+            guild.id,
+            "rolemenu_wait_take_off_question",
+            roles=", ".join(
+                labels.get(int(one)) or role_name(guild, one) for one in entry["role_ids"]
+            ),
+            member=str(getattr(member, "display_name", None) or entry["user_id"]),
+        ),
+    }
+
+
+async def wanted_wait(bot: Any, guild: Any, user_id: str) -> dict[str, Any]:
+    wanted = as_id(user_id)
+    entry = await flow.entry_of(bot, guild, wanted) if wanted is not None else None
+    if entry is None:
+        raise no_such_wait(bot, guild.id, user_id)
+    return entry
+
+
+def wanted_wait_date(bot: Any, guild_id: int, given: Any) -> datetime:
+    when = wanted_moment(bot, guild_id, given)
+    if flow.too_far(bot, guild_id, when):
+        most = bot.store.get(guild_id, ROLEMENU_WAIT_MAX_DAYS_KEY)
+        raise Refused(
+            400,
+            "too_far",
+            said(
+                bot,
+                guild_id,
+                "rolemenu_wait_too_far_said",
+                when=site_when(bot, guild_id, when),
+                days=most,
+            ),
+        )
+    return when
+
+
 def retired(bot: Any, guild_id: int) -> None:
     raise Refused(410, "rolemenu_retired", word(bot, guild_id, ROLEMENU_RETIRED_KEY))
 
@@ -579,6 +646,72 @@ def build_router(bot: Any) -> APIRouter:
         except MenuLimitError as exc:
             raise Refused(400, "too_long", str(exc)) from None
         return await one_payload(guild, menu["name"])
+
+    @router.get("/waiting")
+    async def rolemenu_waiting() -> list[dict[str, Any]]:
+        """Everyone waiting for an event, soonest end first."""
+        guild = require_guild(bot)
+        require_db(bot)
+        return [
+            await wait_payload(bot, guild, entry)
+            for entry in await flow.waiting_entries(bot, guild)
+        ]
+
+    @router.post("/waiting/{user_id}/attach")
+    async def rolemenu_wait_attach(
+        request: Request, user_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """The member's waiting roles go on the picked event; the wait ends once written."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        entry = await wanted_wait(bot, guild, user_id)
+        menu, _ = await read_menu(bot, guild, str(payload.get("name") or ""))
+        refuse_ended(bot, guild.id, menu)
+        refuse_guard(bot)
+        done, message = await flow.attach_entry(
+            bot, guild, actor_for(bot, who, guild), entry["user_id"], menu, via=VIA_WEBSITE
+        )
+        if not done:
+            raise Refused(409, "not_attached", message)
+        return {
+            "attached": True,
+            "message": message,
+            "event": await one_payload(guild, menu["name"]),
+        }
+
+    @router.post("/waiting/{user_id}/date")
+    async def rolemenu_wait_date(
+        request: Request, user_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """A new rough end date; the reminders start from what it implies."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        entry = await wanted_wait(bot, guild, user_id)
+        when = wanted_wait_date(bot, guild.id, payload.get("until"))
+        done, message = await flow.change_date(
+            bot, guild, actor_for(bot, who, guild), entry["user_id"], when, via=VIA_WEBSITE
+        )
+        if not done:
+            raise no_such_wait(bot, guild.id, user_id)
+        fresh = await flow.entry_of(bot, guild, entry["user_id"])
+        return {"message": message, "entry": await wait_payload(bot, guild, fresh)}
+
+    @router.post("/waiting/{user_id}/take-off")
+    async def rolemenu_wait_take_off(request: Request, user_id: str) -> dict[str, Any]:
+        """Take it off now: the wait ends and the role comes off unless something holds it."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        entry = await wanted_wait(bot, guild, user_id)
+        refuse_guard(bot)
+        done, message = await flow.take_off_now(
+            bot, guild, actor_for(bot, who, guild), entry["user_id"], via=VIA_WEBSITE
+        )
+        if not done:
+            raise Refused(409, "not_taken_off", message)
+        return {"taken_off": True, "message": message}
 
     @router.get("/{name}")
     async def rolemenu_one(name: str) -> dict[str, Any]:

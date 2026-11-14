@@ -77,10 +77,15 @@ def date_refusal(bot: Any, guild_id: int, typed: Any) -> tuple[str | None, Any]:
     refusal, when = rm.typed_refusal(bot, guild_id, typed)
     if refusal:
         return refusal, None
+    refusal = too_far(bot, guild_id, when)
+    return (refusal, None) if refusal else (None, when)
+
+
+def too_far(bot: Any, guild_id: int, when: Any) -> str | None:
     most = int(bot.store.get(guild_id, ROLEMENU_WAIT_MAX_DAYS_KEY))
-    if when > waits.now() + timedelta(days=most):
-        return word(bot, guild_id, "rolemenu_wait_too_far_said", when=stamp(when), days=most), None
-    return None, when
+    if when <= waits.now() + timedelta(days=most):
+        return None
+    return word(bot, guild_id, "rolemenu_wait_too_far_said", when=stamp(when), days=most)
 
 
 def entry_line(bot: Any, guild: Any, entry: dict[str, Any], shown: Any = None) -> str:
@@ -1460,6 +1465,7 @@ __all__ = [
     "attach_many",
     "change_date",
     "date_refusal",
+    "too_far",
     "entry_line",
     "entry_of",
     "open_entry_card",

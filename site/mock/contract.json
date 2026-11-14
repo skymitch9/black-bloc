@@ -1315,6 +1315,33 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/api/rolemenus/waiting",
+      "read_by": [
+        "page-rolemenus.js Waiting for an event"
+      ],
+      "shape": "list",
+      "keys": [
+        "user_id",
+        "name",
+        "in_server",
+        "roles",
+        "until",
+        "until_label",
+        "removal_at",
+        "removal_label",
+        "set_by",
+        "assigner_id",
+        "take_off_question"
+      ],
+      "rows": {
+        "roles": [
+          "role_id",
+          "label"
+        ]
+      }
+    },
+    {
       "method": "POST",
       "path": "/api/rolemenus",
       "body": {
@@ -13887,6 +13914,10 @@
     "web.role_menu.unassign_failed",
     "web.role_menu.option_added",
     "web.role_menu.option_removed",
+    "web.role_menu.wait_attached",
+    "web.role_menu.wait_date_changed",
+    "web.role_menu.wait_taken_off",
+    "web.role_menu.wait_take_off_failed",
     "web.golive.link",
     "web.golive.unlink",
     "web.golive.optout",
