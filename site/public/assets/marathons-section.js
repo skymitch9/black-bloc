@@ -468,7 +468,7 @@ function eventHead(marathon) {
   return open;
 }
 
-/** Read-only: the role menus whose roles come off with this marathon; each opens its menu. */
+/** Read-only: the open events whose timed roles come off with this marathon; each opens its event. */
 function roleMenusLine(marathon) {
   const items = drawerItems(marathon.role_menus);
   if (!items.length) return null;

@@ -19,7 +19,7 @@ const NAMESPACE_NAMES = {
   events: 'Events',
   birthday: 'Birthdays',
   tempvoice: 'Temp voice',
-  rolemenu: 'Role menus',
+  rolemenu: 'Timed roles',
   poll: 'Polls',
   chat: 'Chat',
   request: 'Requests',

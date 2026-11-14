@@ -536,14 +536,6 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/command_visibility.py::LOG_KIND": ("commands.visibility",),
     "black_bloc/orphaned.py::PANEL_EXPIRED_CLICK": ("panel.expired_click",),
     "black_bloc/api/auth.py::OPERATOR_READ_KIND": ("web.operator.read",),
-    # B7: one helper serves the staff picker and the dashboard, so the head and the word are
-    # both built at call time rather than being two literals in two places.
-    "black_bloc/cogs/community/role_menus.py::kind": (
-        "role_menu.assign",
-        "role_menu.unassign",
-        "web.role_menu.assign",
-        "web.role_menu.unassign",
-    ),
     "black_bloc/rolemenu_panels.py::kind": (
         "role_menu.unposted",
         "role_menu.unpost_failed",

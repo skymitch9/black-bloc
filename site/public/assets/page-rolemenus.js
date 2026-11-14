@@ -1,22 +1,29 @@
 import { api, listOf, names, refRoles, saveSetting, send, settings, settingsNamespace } from './api.js';
 import { start, tabHref } from './app.js';
-import { openSection } from './layout.js';
 import { logsSection } from './logs.js';
 import { modeWord } from './labels.js';
 import {
   BY_DATE,
   BY_MARATHON,
-  ENDS_WITH,
+  GIVE,
   NO_END,
+  TAKE,
   endBody,
-  endLine,
+  fillLine,
+  fillUnmatched,
   filled,
+  freeMarathons,
   grantEndsWithMenu,
+  heldRoles,
   menuFromHash,
   menuHash,
+  noteKey,
+  notTimed,
+  previewBody,
   resolvedMoment,
   resultLines,
-  wordsBody,
+  saveBody,
+  splitEvents,
 } from './rolemenus-end.js';
 import {
   ago,
@@ -45,7 +52,6 @@ import {
   run,
   sayAgain,
   sayNothing,
-  searchOver,
   section,
   segment,
   settingsPanel,
@@ -56,16 +62,25 @@ import {
 } from './ui.js';
 
 const NEVER = 'never';
-const NO_GRANTS = 'No role has a clock on it.';
-const NO_MENU_TO_ASSIGN = 'No menu has a role on it yet, so there is nothing to hand out.';
+const NO_GRANTS = 'Nobody holds a role on a clock.';
 const PICK_A_MEMBER = 'Pick the member this is about first.';
 const PICK_A_ROLE = 'Pick the role to give them first.';
-const NO_MENUS = 'No role menus exist yet.';
-const NO_MENU_MATCHES = 'No menu matches what you typed.';
-const NO_SUCH_MENU = 'There is no role menu called {name} any more, so there is nothing to open.';
+const NO_SUCH_EVENT = 'There is no event called {name} any more, so there is nothing to open.';
 const BY_MARATHON_LABEL = 'A marathon';
 const BY_DATE_LABEL = 'A date';
 const SAVE_END = 'Save the end';
+const MAKE_EVENT = 'Make the event';
+const DELETE = 'Delete';
+const DELETE_ASK = 'Delete {name}?';
+const DELETE_YES = 'Delete it';
+const NAME_FIELD = 'Name';
+const DAY_FIELD = 'Day';
+const TIME_FIELD = 'Time';
+const BUFFER_FIELD = 'Buffer, days';
+const MARATHON_FIELD = 'Marathon';
+const ROLE_FIELD = 'Role';
+const LABEL_FIELD = 'Label';
+const REMOVE = 'Remove';
 const ZONE_KEY = 'default_timezone';
 
 const APPLICATIONS_MODE_KEY = 'applications_mode';
@@ -102,8 +117,9 @@ function askedFor() {
 }
 
 const state = {
-  editing: menuFromHash(location.hash),
+  focus: menuFromHash(location.hash),
   creating: false,
+  panel: null,
   form: null,
   newForm: false,
   member: askedFor(),
@@ -122,6 +138,7 @@ function word(key, values = {}) {
 }
 
 const plain = (text) => String(text || '').replace(/\*\*/g, '');
+const bare = (text) => plain(text).replace(/…$/, '');
 
 function chipFor(roleId, roleName, note = null) {
   const name = roleName || roleId;
@@ -138,114 +155,58 @@ function daysBox(value, { min = '0' } = {}) {
   });
 }
 
-function openMenu(name) {
-  if (menuFromHash(location.hash) === name) {
-    state.editing = name;
-    state.creating = false;
-    refresh();
-    return;
-  }
-  location.hash = menuHash(name);
-}
-
-function closeEditor() {
-  state.editing = null;
-  state.creating = false;
-  if (location.hash) history.replaceState(null, '', `${location.pathname}${location.search}`);
-  refresh();
-}
+const sayKey = (event) => `event:${event.name}`;
 
 window.addEventListener('hashchange', () => {
   const wanted = menuFromHash(location.hash);
   if (!wanted) return;
-  state.editing = wanted;
-  state.creating = false;
+  state.focus = wanted;
   refresh();
 });
 
-async function optionRow(option) {
-  const role = await roleSelect(option ? option.role_id : null);
-  const label = el('input', { class: 'input', type: 'text', value: option ? option.label || '' : '' });
-  const emoji = el('input', { class: 'input', type: 'text', value: option ? option.emoji || '' : '', placeholder: '🔴 or <:name:id>' });
-  const node = el('div', { class: 'formrow' }, [
-    field('Role', role),
-    field('Label', label),
-    field('Emoji', emoji),
-    bar([button('Remove', () => node.remove(), { tone: 'quiet' })]),
-  ]);
-  return {
-    node,
-    read: () => {
-      const roleId = readSelect(role, false);
-      if (!roleId) return null;
-      return { role_id: roleId, label: label.value.trim() || null, emoji: emoji.value.trim() || null };
-    },
-  };
+function openPanel(event, kind) {
+  const same = state.panel && state.panel.name === event.name && state.panel.kind === kind;
+  state.panel = same ? null : { name: event.name, kind };
+  state.focus = event.name;
+  refresh();
 }
 
-/** Words and roles; the end is its own card and its own save, so this one can never re-arm it. */
-async function editor(menu) {
-  const say = notice();
-  const name = slugInput(el('input', { class: 'input', type: 'text', value: menu ? menu.name : '', disabled: menu ? true : undefined }));
-  const title = el('input', { class: 'input', type: 'text', value: menu ? menu.title || '' : '' });
-  const description = el('input', { class: 'input', type: 'text', value: menu ? menu.description || '' : '' });
-
-  const options = [];
-  const list = el('div');
-  const addOption = async (option) => {
-    const made = await optionRow(option);
-    options.push(made);
-    list.append(made.node);
-  };
-  for (const option of (menu && menu.options) || []) await addOption(option);
-  if (!menu) await addOption(null);
-
-  const save = button(menu ? 'Save menu' : 'Create menu', async () => {
-    const body = wordsBody({
-      name: menu ? undefined : name.value.trim(),
-      title: title.value.trim(),
-      description: description.value.trim() || null,
-      options: options.filter((one) => one.node.isConnected).map((one) => one.read()).filter(Boolean),
-    });
-    const done = await run(
-      say,
-      () => (menu
-        ? send(`/api/rolemenus/${encodeURIComponent(menu.name)}`, 'PUT', body)
-        : send('/api/rolemenus', 'POST', body)),
-      (found) => `Saved ${found?.name || body.name || menu.name} with ${body.options.length} role(s).`,
-    );
-    if (done.ok) {
-      keepSaying('menus', say);
-      if (menu) closeEditor();
-      else openMenu(done.found?.name || body.name);
-    }
-  }, { small: false });
-
-  return card(menu ? menu.title || menu.name : 'New menu', [
-    el('div', { class: 'formrow' }, [
-      field('Name', name),
-      field('Title', title),
-      field('Description', description),
-    ]),
-    el('h3', { text: 'Roles' }),
-    list,
-    bar([button('Add a role', () => addOption(null), { tone: 'quiet' })]),
-    say,
-  ], { actions: [save, button('Close editor', closeEditor, { tone: 'quiet' })] });
+/**
+ * Re-read one event just before a confirm, so the number asked IS the number the pass takes. A
+ * read that fails says why and asks nothing; an event somebody already ended redraws instead.
+ */
+async function fresh(event, say) {
+  const done = await run(say, () => api(`/api/rolemenus/${encodeURIComponent(event.name)}`), '');
+  if (!done.ok) return null;
+  say.say('');
+  if (!done.found.open) {
+    refresh();
+    return null;
+  }
+  return done.found;
 }
 
-/** When a menu's roles come off: a marathon (plus a buffer), a typed date, or none. */
-function endCard(menu, marathons, zone) {
-  const say = notice();
-  const current = menu.ends_source || NO_END;
-  const marathon = el('select', { class: 'input', 'data-end': 'marathon' }, [
-    el('option', { value: '', text: word('rolemenu_marathon_pick') }),
+function marathonOptions(marathons, current, placeholder) {
+  return [
+    el('option', { value: '', text: placeholder }),
     ...marathons.map((one) => el('option', {
       value: String(one.id),
       text: one.label,
-      selected: current === BY_MARATHON && String(menu.ends_marathon_id) === String(one.id) ? true : undefined,
+      selected: current !== null && String(current) === String(one.id) ? true : undefined,
     })),
-  ]);
+  ];
+}
+
+/** When an event's roles come off: a marathon (plus a buffer), a typed date, or none. */
+function endCard(event, marathons, zone) {
+  const say = notice();
+  const current = event.ends_source || NO_END;
+  const offered = freeMarathons(marathons, event.name);
+  const marathon = el('select', { class: 'input', 'data-end': 'marathon' }, marathonOptions(
+    offered,
+    current === BY_MARATHON ? event.ends_marathon_id : null,
+    word('rolemenu_marathon_pick'),
+  ));
   const buffer = el('input', {
     class: 'input',
     'data-end': 'buffer',
@@ -253,21 +214,15 @@ function endCard(menu, marathons, zone) {
     min: '0',
     max: '365',
     step: '1',
-    value: menu.buffer_days === null || menu.buffer_days === undefined ? '' : String(menu.buffer_days),
-    placeholder: String(menu.buffer_default ?? ''),
+    value: event.buffer_days === null || event.buffer_days === undefined ? '' : String(event.buffer_days),
+    placeholder: String(event.buffer_default ?? ''),
   });
   const date = el('input', { class: 'input', type: 'date', 'data-end': 'date' });
   const time = el('input', { class: 'input', type: 'time', 'data-end': 'time' });
   const resolved = el('p', { class: 'field-help' });
 
-  const byMarathon = el('div', { class: 'formrow' }, [
-    field('Marathon', marathon),
-    field('Buffer, days', buffer),
-  ]);
-  const byDate = el('div', { class: 'formrow' }, [
-    field('Day', date),
-    field('Time', time),
-  ]);
+  const byMarathon = el('div', { class: 'formrow' }, [field(MARATHON_FIELD, marathon), field(BUFFER_FIELD, buffer)]);
+  const byDate = el('div', { class: 'formrow' }, [field(DAY_FIELD, date), field(TIME_FIELD, time)]);
   const how = segment([
     { value: BY_MARATHON, label: BY_MARATHON_LABEL },
     { value: BY_DATE, label: BY_DATE_LABEL },
@@ -283,12 +238,12 @@ function endCard(menu, marathons, zone) {
   });
 
   const save = button(SAVE_END, async () => {
-    const body = endBody(menu, picked());
+    const body = endBody(event, picked());
     if (!body) return;
     if (body.ends_source === NO_END) {
       const sure = await ask({
         title: word('rolemenu_no_end_button'),
-        body: [el('p', { class: 'ask-body' }, boldParts(word('rolemenu_no_end_question', { menu: menu.name })))],
+        body: [el('p', { class: 'ask-body' }, boldParts(word('rolemenu_no_end_question', { menu: event.title })))],
         confirmLabel: word('rolemenu_no_end_yes'),
         tone: 'warn',
       });
@@ -296,11 +251,11 @@ function endCard(menu, marathons, zone) {
     }
     const done = await run(
       say,
-      () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}`, 'PUT', body),
-      (found) => `${found?.name || menu.name}: ${found?.end_label || ''}`,
+      () => send(`/api/rolemenus/${encodeURIComponent(event.name)}`, 'PUT', body),
+      (found) => `${found?.title || event.title}: ${found?.end_label || ''}`,
     );
     if (done.ok) {
-      keepSaying('menus', say);
+      keepSaying(sayKey(event), say);
       refresh();
     }
   }, { small: false, tone: 'warn' });
@@ -312,126 +267,455 @@ function endCard(menu, marathons, zone) {
     byDate.hidden = now.how !== BY_DATE;
     resolved.hidden = now.how !== BY_DATE || !date.value;
     resolved.textContent = resolvedMoment(date.value, time.value, zone);
-    save.hidden = endBody(menu, now) === null;
+    save.hidden = endBody(event, now) === null;
   }
   for (const control of [marathon, buffer, date, time]) {
     control.addEventListener('input', paint);
     control.addEventListener('change', paint);
   }
+  const node = el('div', { class: 'end-card' }, [how, byMarathon, byDate, resolved, bar([save]), say]);
+  paint();
+  return node;
+}
 
-  const node = card(word('rolemenu_set_end_title', { name: menu.name }), [
-    el('p', { class: 'menu-end', text: endLine(menu) }),
+function attachRow(event, marathons, say) {
+  const offered = freeMarathons(marathons);
+  if (!event.can_attach || offered.length === 0) return null;
+  const pick = el('select', { class: 'input' }, marathonOptions(offered, null, word('rolemenu_marathon_pick')));
+  const go = button(bare(word('rolemenu_attach_button')), async () => {
+    if (!pick.value) return;
+    const done = await run(
+      say,
+      () => send(`/api/rolemenus/${encodeURIComponent(event.name)}/attach`, 'POST', { marathon_id: pick.value }),
+      (found) => `${found?.title || event.title}: ${found?.end_label || ''}`,
+    );
+    if (done.ok) {
+      keepSaying(sayKey(event), say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  go.hidden = true;
+  pick.addEventListener('change', () => { go.hidden = !pick.value; });
+  return el('div', { class: 'formrow' }, [field(word('rolemenu_attach_button'), pick), bar([go])]);
+}
+
+function setByLine(event) {
+  if (!event.ends_set_by) return null;
+  const when = ago(event.ends_set_at);
+  const [before, after = ''] = word('rolemenu_end_set_by_line', { when: when.text }).split('{who}');
+  return el('p', { class: 'field-help', title: when.title }, [before, nameNode(event.ends_set_by), after]);
+}
+
+function lastPassLine(event) {
+  if (!event.ended_at) return null;
+  const when = ago(event.ended_at);
+  return el('p', {
+    class: 'field-help',
+    title: when.title,
+    text: word('rolemenu_ended_line', {
+      when: when.text,
+      members: event.last_pass ? event.last_pass.members : 0,
+      failures: event.last_pass ? event.last_pass.failures : 0,
+    }),
+  });
+}
+
+function heldLine(event, say) {
+  if (!event.ends_held_at || !event.open) return null;
+  const take = button(word('rolemenu_use_held_button'), async () => {
+    const now = await fresh(event, say);
+    if (!now || !now.held_question) {
+      if (now) refresh();
+      return;
+    }
+    const sure = await ask({
+      title: word('rolemenu_use_held_button'),
+      body: [el('p', { class: 'ask-body' }, boldParts(now.held_question || ''))],
+      confirmLabel: word('rolemenu_use_held_yes'),
+      tone: now.held_past ? 'danger' : 'warn',
+    });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => send(`/api/rolemenus/${encodeURIComponent(event.name)}/end-earlier`, 'POST', {}),
+      (found) => `${found?.title || event.title}: ${found?.end_label || ''}`,
+    );
+    if (done.ok) {
+      keepSaying(sayKey(event), say);
+      refresh();
+    }
+  }, { tone: event.held_past ? 'danger' : 'warn' });
+  return el('div', { class: 'bar menu-held' }, [
+    notice(word('rolemenu_end_held_line', { to: event.held_label || '' }), 'warn'),
+    take,
+  ]);
+}
+
+function roleCounts(event) {
+  const held = heldRoles(event);
+  if (!held.length) return null;
+  return el('div', { class: 'bar' }, held.map((one) => chipFor(one.role_id, one.label, String(one.count))));
+}
+
+async function endNow(event, say) {
+  const now = await fresh(event, say);
+  if (!now) return;
+  const sure = await ask({
+    title: plain(now.end_now_question),
+    body: [],
+    confirmLabel: word('rolemenu_end_now_yes'),
+  });
+  if (!sure) return;
+  const done = await run(
+    say,
+    () => send(`/api/rolemenus/${encodeURIComponent(event.name)}/end-now`, 'POST', {}),
+    (found) => resultLines(found).join(' '),
+  );
+  if (done.ok) {
+    keepSaying(sayKey(event), say);
+    refresh();
+  }
+}
+
+async function rename(event, say) {
+  const box = el('input', { class: 'input', type: 'text', value: event.title || '' });
+  const sure = await ask({
+    title: word('rolemenu_rename_title'),
+    body: [field(word('rolemenu_event_name_label'), box)],
+    confirmLabel: bare(word('rolemenu_rename_button')),
+    tone: 'warn',
+  });
+  if (!sure || !box.value.trim() || box.value.trim() === event.title) return;
+  const done = await run(
+    say,
+    () => send(`/api/rolemenus/${encodeURIComponent(event.name)}`, 'PUT', { title: box.value.trim() }),
+    (found) => plain(word('rolemenu_event_renamed_said', { name: found?.title || box.value.trim() })),
+  );
+  if (done.ok) {
+    keepSaying(sayKey(event), say);
+    refresh();
+  }
+}
+
+async function remove(event, say) {
+  const sure = await ask({ title: DELETE_ASK.replace('{name}', event.title), body: [], confirmLabel: DELETE_YES });
+  if (!sure) return;
+  const done = await run(
+    say,
+    () => api(`/api/rolemenus/${encodeURIComponent(event.name)}`, { method: 'DELETE' }),
+    `${event.title}: ${DELETE_YES}.`,
+  );
+  if (done.ok) {
+    keepSaying(sayKey(event), say);
+    refresh();
+  }
+}
+
+/** Give from a list: a role, pasted lines and ticked members, matched before anything is written. */
+function listPanel(event, timedRoles) {
+  const say = notice();
+  const role = el('select', { class: 'input' }, timedRoles.map((one) => el('option', { value: String(one.role_id), text: one.label })));
+  const mode = segment([
+    { value: GIVE, label: bare(word('rolemenu_give_button')) },
+    { value: TAKE, label: bare(word('rolemenu_take_button')) },
+  ], event.open ? GIVE : TAKE, { onChange: () => forget() });
+  const pasted = el('textarea', { class: 'input', rows: '6', spellcheck: 'false' });
+  const ticked = [];
+  const tickedRow = el('div', { class: 'bar', hidden: true });
+  const picker = memberPicker({
+    label: word('rolemenu_list_tick_label'),
+    onPick: (member) => {
+      if (!member || ticked.some((one) => one.id === member.id)) return;
+      ticked.push(member);
+      paintTicked();
+      forget();
+      picker.clear();
+    },
+  });
+  const result = el('div', { class: 'list-result' });
+  let preview = null;
+
+  function paintTicked() {
+    tickedRow.hidden = ticked.length === 0;
+    tickedRow.replaceChildren(...ticked.map((member) => button(`${member.name} ×`, () => {
+      ticked.splice(ticked.indexOf(member), 1);
+      paintTicked();
+      forget();
+    }, { tone: 'quiet' })));
+  }
+  function forget() {
+    preview = null;
+    result.replaceChildren();
+  }
+  for (const control of [role, pasted]) control.addEventListener('input', forget);
+  role.addEventListener('change', forget);
+
+  const check = button(word('rolemenu_list_check_button'), async () => {
+    const body = previewBody({ roleId: role.value, text: pasted.value, ticked, mode: mode.readValue() });
+    const done = await run(
+      say,
+      () => send(`/api/rolemenus/${encodeURIComponent(event.name)}/list/preview`, 'POST', body),
+      '',
+    );
+    if (!done.ok) return;
+    say.say('');
+    preview = done.found;
+    paintResult();
+  }, { small: false });
+
+  function paintResult() {
+    const rows = preview.matched || [];
+    const misses = preview.unmatched || [];
+    const parts = [
+      el('h4', { text: word('rolemenu_list_matched_head', { count: rows.length }) }),
+      rows.length ? el('ul', { class: 'list-names' }, rows.map((one) => el('li', { 'data-note': one.note || undefined }, [
+        nameNode(one.user_id, one.name),
+        one.typed && !one.typed.startsWith('<@') && one.typed.toLowerCase() !== String(one.name).toLowerCase()
+          ? el('span', { class: 'cell-quiet', text: ` · ${one.typed}` })
+          : null,
+        one.note ? el('span', { class: 'cell-quiet', text: ` · ${word(noteKey(one.note))}` }) : null,
+      ]))) : null,
+    ];
+    if (misses.length) {
+      parts.push(
+        el('h4', { text: word('rolemenu_list_unmatched_head', { count: misses.length }) }),
+        el('ul', { class: 'list-names', 'data-tone': 'warn' }, misses.map((one) => el('li', {}, [
+          el('span', { class: 'mono', text: one.typed }),
+          el('span', { class: 'cell-quiet', text: ` · ${word(noteKey(one.why))}` }),
+        ]))),
+      );
+    }
+    const count = (preview.to_save || []).length;
+    if (count) {
+      const key = preview.remove ? 'rolemenu_list_take_save' : 'rolemenu_list_give_save';
+      parts.push(bar([button(word(key, { role: preview.role_name, count }), save, { tone: preview.remove ? 'danger' : 'warn', small: false })]));
+    }
+    result.replaceChildren(...parts.filter(Boolean));
+  }
+
+  async function save() {
+    const done = await run(
+      say,
+      () => send(`/api/rolemenus/${encodeURIComponent(event.name)}/list`, 'POST', saveBody(preview)),
+      (found) => plain(found?.message || ''),
+    );
+    if (!done.ok) return;
+    keepSaying(sayKey(event), say);
+    state.panel = null;
+    refresh();
+  }
+
+  return card(word('rolemenu_list_title', { name: event.title }), [
+    mode,
+    el('div', { class: 'formrow' }, [field(ROLE_FIELD, role)]),
+    el('div', { class: 'formrow' }, [field(word('rolemenu_list_paste_label'), pasted)]),
+    el('div', { class: 'formrow' }, [picker.node]),
+    tickedRow,
+    bar([check]),
+    result,
+    say,
+  ]);
+}
+
+/** Fill from the schedule: per part, who is matched, who is still to give, who nobody matched. */
+async function fillPanel(event) {
+  const say = notice();
+  const body = el('div');
+  const node = card(word('rolemenu_fill_title', { name: event.title }), [body, say]);
+  let found;
+  try {
+    found = await api(`/api/rolemenus/${encodeURIComponent(event.name)}/fill`);
+  } catch (error) {
+    await run(say, () => Promise.reject(error), '');
+    return node;
+  }
+  const lines = [];
+  for (const line of found.lines || []) {
+    const said = fillLine(line);
+    lines.push(el('li', { text: word(said.key, said.values) }));
+    const missed = fillUnmatched(line);
+    if (missed) lines.push(el('li', { class: 'cell-quiet', text: word(missed.key, missed.values) }));
+  }
+  body.append(el('ul', { class: 'list-names' }, lines));
+  if (found.missing > 0) {
+    body.append(bar([button(word('rolemenu_fill_yes'), async () => {
+      const done = await run(
+        say,
+        () => send(`/api/rolemenus/${encodeURIComponent(event.name)}/fill`, 'POST', {}),
+        (answer) => plain(answer?.message || ''),
+      );
+      if (done.ok) {
+        keepSaying(sayKey(event), say);
+        state.panel = null;
+        refresh();
+      }
+    }, { tone: 'warn', small: false })]));
+  } else {
+    body.append(el('p', { class: 'field-help', text: word('rolemenu_fill_nothing_said') }));
+  }
+  return node;
+}
+
+async function eventCard(event, { marathons, zone, timedRoles }) {
+  const say = sayAgain(`event:${event.name}`, notice());
+  const actions = [];
+  if (event.open && timedRoles.length) {
+    actions.push(button(word('rolemenu_list_button'), () => openPanel(event, 'list'), { small: false }));
+  }
+  if (event.can_fill) actions.push(button(word('rolemenu_fill_button'), () => openPanel(event, 'fill')));
+  const assigned = event.assigned ? ` · ${word('rolemenu_site_assigned', { count: event.assigned })}` : '';
+  const panel = state.panel && state.panel.name === event.name
+    ? (state.panel.kind === 'fill' ? await fillPanel(event) : listPanel(event, timedRoles))
+    : null;
+  const moves = [button(bare(word('rolemenu_rename_button')), () => rename(event, say), { tone: 'quiet' })];
+  if (event.open && timedRoles.length) moves.push(button(word('rolemenu_end_now_button'), () => endNow(event, say), { tone: 'danger' }));
+  moves.push(button(DELETE, () => remove(event, say), { tone: 'danger' }));
+  const node = card(event.title, [
+    el('p', { class: 'menu-end', text: `${event.end_label}${assigned}` }),
+    heldLine(event, say),
+    roleCounts(event),
+    setByLine(event),
+    lastPassLine(event),
+    panel,
+    foldout(bare(word('rolemenu_set_end_button')), [endCard(event, marathons, zone), attachRow(event, marathons, say)]),
+    bar(moves),
+    say,
+  ], { actions });
+  node.setAttribute('data-menu', event.name);
+  node.id = `event-${event.name}`;
+  return node;
+}
+
+/** New event: a tracked marathon (one event each), or a name with a typed date. */
+function newEventCard(marathons, zone) {
+  const say = notice();
+  const offered = freeMarathons(marathons);
+  const how = segment([
+    { value: BY_MARATHON, label: BY_MARATHON_LABEL },
+    { value: BY_DATE, label: bare(word('rolemenu_no_marathon_button')) },
+  ], offered.length ? BY_MARATHON : BY_DATE, { onChange: () => paint() });
+  const marathon = el('select', { class: 'input' }, marathonOptions(offered, null, word('rolemenu_marathon_pick')));
+  const name = el('input', { class: 'input', type: 'text' });
+  const date = el('input', { class: 'input', type: 'date' });
+  const time = el('input', { class: 'input', type: 'time' });
+  const resolved = el('p', { class: 'field-help' });
+  const byMarathon = el('div', { class: 'formrow' }, [field(MARATHON_FIELD, marathon)]);
+  const byDate = el('div', { class: 'formrow' }, [field(DAY_FIELD, date), field(TIME_FIELD, time)]);
+  const make = button(MAKE_EVENT, async () => {
+    const body = how.readValue() === BY_MARATHON
+      ? { title: name.value.trim(), marathon_id: marathon.value }
+      : { title: name.value.trim(), ends_at: date.value ? `${date.value}${time.value ? ` ${time.value}` : ''}` : '' };
+    const done = await run(
+      say,
+      () => send('/api/rolemenus', 'POST', body),
+      (found) => plain(word('rolemenu_event_made_said', { name: found?.title || body.title })),
+    );
+    if (done.ok) {
+      keepSaying('events', say);
+      state.creating = false;
+      state.focus = done.found?.name || null;
+      refresh();
+    }
+  }, { small: false });
+
+  function paint() {
+    const byMarathonNow = how.readValue() === BY_MARATHON;
+    byMarathon.hidden = !byMarathonNow;
+    byDate.hidden = byMarathonNow;
+    const chosen = offered.find((one) => String(one.id) === marathon.value);
+    name.placeholder = byMarathonNow && chosen ? chosen.name : '';
+    resolved.hidden = byMarathonNow || !date.value;
+    resolved.textContent = resolvedMoment(date.value, time.value, zone);
+    make.hidden = byMarathonNow ? !marathon.value : !name.value.trim();
+  }
+  for (const control of [marathon, name, date, time]) {
+    control.addEventListener('input', paint);
+    control.addEventListener('change', paint);
+  }
+  const node = card(word('rolemenu_new_event_title'), [
     how,
     byMarathon,
+    el('div', { class: 'formrow' }, [field(word('rolemenu_event_name_label'), name)]),
     byDate,
     resolved,
-    bar([save]),
+    bar([make, button('Cancel', () => { state.creating = false; refresh(); }, { tone: 'quiet' })]),
     say,
   ]);
   paint();
   return node;
 }
 
-function setByLine(menu) {
-  if (!menu.ends_set_by) return null;
-  const when = ago(menu.ends_set_at);
-  const [before, after = ''] = word('rolemenu_end_set_by_line', { when: when.text }).split('{who}');
-  return el('p', { class: 'field-help', title: when.title }, [
-    before,
-    nameNode(menu.ends_set_by),
-    after,
-  ]);
-}
-
-function lastPassLine(menu) {
-  if (!menu.ended_at) return null;
-  const when = ago(menu.ended_at);
-  return el('p', {
-    class: 'field-help',
-    title: when.title,
-    text: word('rolemenu_ended_line', {
-      when: when.text,
-      members: menu.last_pass ? menu.last_pass.members : 0,
-      failures: menu.last_pass ? menu.last_pass.failures : 0,
-    }),
-  });
-}
-
-function heldLine(menu, say) {
-  if (!menu.ends_held_at) return null;
-  const take = button(word('rolemenu_use_held_button'), async () => {
-    const sure = await ask({
-      title: word('rolemenu_use_held_button'),
-      body: [el('p', { class: 'ask-body' }, boldParts(menu.held_question || ''))],
-      confirmLabel: word('rolemenu_use_held_yes'),
-      tone: menu.held_past ? 'danger' : 'warn',
-    });
-    if (!sure) return;
-    const done = await run(
-      say,
-      () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/end-earlier`, 'POST', {}),
-      (found) => `${found?.name || menu.name}: ${found?.end_label || ''}`,
-    );
-    if (done.ok) {
-      keepSaying('menus', say);
+async function eventsSection(events, context, say) {
+  const { open, ended } = splitEvents(events);
+  const one = section(word('rolemenu_events_title'), null, { id: 'events', count: open.length, open: true });
+  one.body.append(bar([
+    button(word('rolemenu_new_event_button'), () => {
+      state.creating = !state.creating;
       refresh();
-    }
-  }, { tone: menu.held_past ? 'danger' : 'warn' });
-  return el('div', { class: 'bar menu-held' }, [
-    notice(word('rolemenu_end_held_line', { to: menu.held_label || '' }), 'warn'),
-    take,
-  ]);
+    }, { small: false }),
+  ], { sticky: true }));
+  if (state.creating) one.body.append(newEventCard(context.marathons, context.zone));
+  if (!open.length) one.body.append(sayNothing(word('rolemenu_no_events_line')));
+  for (const event of open) one.body.append(await eventCard(event, context));
+  if (ended.length) {
+    const cards = [];
+    for (const event of ended) cards.push(await eventCard(event, context));
+    one.body.append(foldout(word('rolemenu_ended_title'), cards, {
+      count: ended.length,
+      open: ended.some((event) => event.name === state.focus),
+    }));
+  }
+  one.body.append(say);
+  return one.node;
 }
 
-function menuCard(menu, say) {
-  const actions = [button('Edit', () => openMenu(menu.name), { tone: 'quiet' })];
-  if ((menu.options || []).length) {
-    actions.push(button(word('rolemenu_end_now_button'), async () => {
-      const sure = await ask({
-        title: plain(menu.end_now_question),
-        body: [],
-        confirmLabel: word('rolemenu_end_now_yes'),
-      });
-      if (!sure) return;
+/** The one list every event shares: who wears each role, how many are assigned, add and remove. */
+async function timedSection(timedRoles, roles, say) {
+  const one = section(word('rolemenu_timed_roles_title'), null, { id: 'timed-list', count: timedRoles.length });
+  const rows = timedRoles.map((row) => el('div', { class: 'bar timed-row' }, [
+    chipFor(row.role_id, row.label),
+    el('span', { class: 'cell-quiet', text: ` ${row.wearing === null ? '' : word('rolemenu_site_wearing', { count: row.wearing })}${row.assigned ? ` · ${word('rolemenu_site_assigned', { count: row.assigned })}` : ''}` }),
+    button(REMOVE, async () => {
       const done = await run(
         say,
-        () => send(`/api/rolemenus/${encodeURIComponent(menu.name)}/end-now`, 'POST', {}),
-        (found) => resultLines(found).join(' '),
+        () => api(`/api/rolemenus/timed-roles/${encodeURIComponent(row.role_id)}`, { method: 'DELETE' }),
+        plain(word('rolemenu_timed_removed_said', { name: row.role_name })),
       );
       if (done.ok) {
-        keepSaying('menus', say);
+        keepSaying('timed-list', say);
         refresh();
       }
-    }, { tone: 'danger' }));
-  }
-  actions.push(button('Delete', async () => {
-    const sure = await ask({ title: `Delete ${menu.name}?`, body: [], confirmLabel: 'Delete it' });
-    if (!sure) return;
+    }, { tone: 'quiet' }),
+  ]));
+  const free = notTimed(roles, timedRoles).filter((role) => role.name !== '@everyone');
+  const pick = el('select', { class: 'input' }, [
+    el('option', { value: '', text: word('rolemenu_timed_add_pick') }),
+    ...free.map((role) => el('option', { value: String(role.id), text: role.name })),
+  ]);
+  const label = el('input', { class: 'input', type: 'text' });
+  const add = button(bare(word('rolemenu_timed_add_pick')), async () => {
+    if (!pick.value) return;
     const done = await run(
       say,
-      () => api(`/api/rolemenus/${encodeURIComponent(menu.name)}`, { method: 'DELETE' }),
-      `Deleted ${menu.name}.`,
+      () => send('/api/rolemenus/timed-roles', 'POST', { role_id: pick.value, label: label.value.trim() || null }),
+      (found) => plain(word('rolemenu_timed_added_said', { name: found?.role_name || '' })),
     );
     if (done.ok) {
-      keepSaying('menus', say);
-      if (state.editing === menu.name) closeEditor();
-      else refresh();
+      keepSaying('timed-list', say);
+      refresh();
     }
-  }, { tone: 'danger' }));
-
-  const roles = (menu.options || []).map((option) => chipFor(option.role_id, option.label || option.role_name));
-  const node = card(menu.title || menu.name, [
-    el('p', { class: 'menu-end' }, [
-      el('span', { class: 'mono', text: menu.name }),
-      ` · ${endLine(menu)}`,
-    ]),
-    setByLine(menu),
-    lastPassLine(menu),
-    heldLine(menu, say),
-    roles.length ? el('div', { class: 'bar' }, roles) : null,
-  ], { actions });
-  node.setAttribute('data-menu', menu.name);
-  return node;
+  }, { tone: 'warn' });
+  add.hidden = true;
+  pick.addEventListener('change', () => {
+    add.hidden = !pick.value;
+    label.placeholder = pick.selectedOptions[0] && pick.value ? pick.selectedOptions[0].textContent : '';
+  });
+  one.body.append(
+    timedRoles.length ? el('div', { class: 'timed-list' }, rows) : sayNothing(word('rolemenu_no_timed_roles_line')),
+    el('div', { class: 'formrow' }, [field(ROLE_FIELD, pick), field(LABEL_FIELD, label), bar([add])]),
+    say,
+  );
+  return one.node;
 }
 
 function endsCell(row) {
@@ -443,15 +727,15 @@ function endsCell(row) {
       text: `ended ${gone.text}${row.removed_reason ? ` · ${String(row.removed_reason).replace(/_/g, ' ')}` : ''}`,
     });
   }
-  if (!row.expires_at) return el('span', { class: 'cell-quiet', text: 'no expiry' });
-  const until = untilWhen(row.expires_at);
   if (grantEndsWithMenu(row)) {
-    return el('span', { title: until.title }, [
-      `${ENDS_WITH} `,
-      el('a', { href: menuHash(row.ends_with_menu), text: row.ends_with_menu }),
-      ` · ${until.text}`,
+    const until = row.expires_at ? untilWhen(row.expires_at) : null;
+    return el('span', { title: until ? until.title : '' }, [
+      `${bare(word('rolemenu_event_title', { name: row.ends_with_menu }))}`,
+      until ? ` · ${until.text}` : '',
     ]);
   }
+  if (!row.expires_at) return el('span', { class: 'cell-quiet', text: 'no expiry' });
+  const until = untilWhen(row.expires_at);
   return el('span', {
     title: until.title,
     text: until.days < 0 ? `overdue by ${Math.abs(until.days)} days` : `expires ${until.text}`,
@@ -478,7 +762,7 @@ function grantActions(row, say) {
           `${untilWhen(found?.expires_at).text}.`,
       );
       if (done.ok) {
-        keepSaying('timed', say);
+        keepSaying('grants', say);
         refresh();
       }
     }, { tone: 'quiet' }));
@@ -497,7 +781,7 @@ function grantActions(row, say) {
       `Ended — ${row.user_name || row.user_id} does not have ${row.role_name} any more.`,
     );
     if (done.ok) {
-      keepSaying('timed', say);
+      keepSaying('grants', say);
       refresh();
     }
   }, { tone: 'danger' }));
@@ -505,9 +789,12 @@ function grantActions(row, say) {
   return el('div', { class: 'bar' }, moves);
 }
 
-async function grantForm(say) {
+/** A role on no event's list, for a while: the timed list's roles are given from an event. */
+async function grantForm(say, timedRoles) {
   const picker = memberPicker({ label: 'Member' });
   const role = await roleSelect(null);
+  const listed = new Set(timedRoles.map((one) => String(one.role_id)));
+  for (const option of [...role.options]) if (listed.has(option.value)) option.remove();
   const days = daysBox(7, { min: '0' });
   days.placeholder = NEVER;
   const reason = el('input', { class: 'input', type: 'text', placeholder: 'why — this only goes in the log' });
@@ -532,12 +819,12 @@ async function grantForm(say) {
         : `${found?.user_name || picker.name} has ${found?.role_name || 'the role'}, with no end date.`),
     );
     if (done.ok) {
-      keepSaying('timed', say);
+      keepSaying('grants', say);
       refresh();
     }
   }, { tone: 'warn', small: false });
 
-  return card('Grant a timed role', [
+  return foldout('Grant another role for a while', [
     picker.node,
     el('div', { class: 'formrow' }, [
       field('Role', role),
@@ -548,83 +835,19 @@ async function grantForm(say) {
   ]);
 }
 
-/** B7: the /rolemenu hand-out picker, as a form — one menu, one member, its own roles. */
-function assignForm(menus, say) {
-  const usable = menus.filter((menu) => (menu.options || []).length > 0);
-  if (usable.length === 0) {
-    return sayNothing(NO_MENU_TO_ASSIGN, textAction('Open the menus', () => openSection('menus')));
-  }
-  const picker = memberPicker({ label: 'Member' });
-  const which = el('select', { class: 'input' }, usable.map((menu) =>
-    el('option', { value: menu.name, text: `${menu.name} · ${menu.end_label}` })));
-  const boxes = el('div', { class: 'formrow' });
-
-  const paint = () => {
-    const menu = usable.find((one) => one.name === which.value) || usable[0];
-    boxes.replaceChildren(...(menu.options || []).map((option) => {
-      const box = el('input', {
-        class: 'input switch',
-        type: 'checkbox',
-        value: String(option.role_id),
-      });
-      return el('label', { class: 'field' }, [box, ' ', chipFor(option.role_id, option.label)]);
-    }));
-  };
-  which.addEventListener('change', paint);
-  paint();
-
-  const picked = () => [...boxes.querySelectorAll('input:checked')].map((box) => box.value);
-
-  const go = (remove) => async () => {
-    if (!picker.id) {
-      say.say(PICK_A_MEMBER, 'warn');
-      return;
-    }
-    const roleIds = picked();
-    if (roleIds.length === 0) {
-      say.say(PICK_A_ROLE, 'warn');
-      return;
-    }
-    const done = await run(
-      say,
-      () => send(`/api/rolemenus/${encodeURIComponent(which.value)}/assign`, 'POST', {
-        user_id: picker.id,
-        role_ids: roleIds,
-        remove,
-      }),
-      (found) => found?.message || 'Done.',
-    );
-    if (done.ok) {
-      keepSaying('timed', say);
-      refresh();
-    }
-  };
-
-  return card('Hand roles out', [
-    picker.node,
-    field('Menu', which),
-    boxes,
-    bar([
-      button('Give these', go(false), { tone: 'warn', small: false }),
-      button('Take these off', go(true), { tone: 'danger', small: false }),
-    ]),
-  ]);
-}
-
-async function timedSection(rows, menus, say) {
+async function grantsSection(rows, timedRoles, say) {
   const open = rows.filter((row) => row.open).length;
-  const one = section('Timed roles', null, { count: open });
+  const one = section(word('rolemenu_grants_title'), null, { id: 'grants', count: open });
   one.body.append(
     table([
       { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
       { label: 'Role', cell: (row) => chipFor(row.role_id, row.role_name) },
-      { label: 'Source', cell: (row) => badge(row.source) },
+      { label: 'Source', cell: (row) => badge(String(row.source).replace(/_/g, ' ')) },
       { label: 'Given by', cell: (row) => nameNode(row.granted_by_id, row.granted_by_name) },
       { label: 'Ends', cell: endsCell },
       { label: '', cell: (row) => grantActions(row, say) },
     ], rows, { empty: state.member ? 'No role of theirs has a clock on it.' : NO_GRANTS }),
-    assignForm(menus, say),
-    await grantForm(say),
+    await grantForm(say, timedRoles),
     say,
   );
   return one.node;
@@ -641,31 +864,6 @@ function memberBanner(grants) {
     el('span', { text: `Showing the timed roles of ${named || `member ${state.member}`} only. ` }),
     el('a', { href: tabHref('rolemenus'), text: 'Show everybody' }),
   ]);
-}
-
-function menusSection(menus, say) {
-  const one = section('Menus', null, { id: 'menus', count: menus.length, open: true });
-  const box = el('div', { class: 'section-body' }, menus.map((menu) => menuCard(menu, say)));
-  one.body.append(
-    bar([
-      button('New menu', () => {
-        state.creating = true;
-        state.editing = null;
-        refresh();
-      }, { small: false }),
-    ], { sticky: true }),
-    menus.length === 0
-      ? sayNothing(NO_MENUS)
-      : searchOver(box, {
-        label: 'Search the menus',
-        placeholder: 'part of a menu name',
-        noun: 'menu(s)',
-        empty: NO_MENU_MATCHES,
-      }),
-    box,
-    say,
-  );
-  return one.node;
 }
 
 function zoneOf(allSettings) {
@@ -1174,54 +1372,46 @@ async function applicationsSection(allSettings, say) {
 }
 
 async function load() {
-  const [payload, roles, allSettings, allGrants] = await Promise.all([
+  const [payload, roles, allSettings, allGrants, timedPayload, marathonPayload] = await Promise.all([
     api('/api/rolemenus'),
     refRoles(),
     settings(true),
     api('/api/roles/grants'),
+    api('/api/rolemenus/timed-roles'),
+    api('/api/rolemenus/marathons'),
   ]);
-  const menus = listOf(payload, 'rolemenus');
+  const events = listOf(payload, 'rolemenus');
+  const timedRoles = listOf(timedPayload, 'timed_roles');
+  const marathons = listOf(marathonPayload, 'marathons');
   const grants = onlyThem(listOf(allGrants, 'grants'), 'user_id');
   roleColours = new Map((roles || []).map((role) => [String(role.id), role.color]));
 
   const rolemenu = settingsNamespace(allSettings, 'rolemenu');
   roleWords = new Map(rolemenu.map((spec) => [spec.key, spec]));
-  const optionIds = [];
-  for (const menu of menus) for (const option of menu.options || []) optionIds.push(option.role_id);
-  await names(idsIn(menus, ['ends_set_by']).concat(optionIds));
+  await names(idsIn(events, ['ends_set_by']));
 
-  const say = sayAgain('menus', notice());
+  const say = sayAgain('events', notice());
+  const timedSay = sayAgain('timed-list', notice());
+  const grantsSay = sayAgain('grants', notice());
   const applicationSay = sayAgain('applications', notice());
-  const timedSay = sayAgain('timed', notice());
+
+  if (state.focus && !events.some((event) => event.name === state.focus)) {
+    say.say(NO_SUCH_EVENT.replace('{name}', state.focus), 'warn');
+    state.focus = null;
+  }
 
   const box = section('Settings', null, { count: rolemenu.length || null });
   box.body.append(await settingsPanel(rolemenu, {
     where: 'Settings',
-    empty: 'The bot registers no role-menu settings.',
+    empty: 'The bot registers no timed-role settings.',
   }));
 
-  const editing = state.editing ? menus.find((entry) => entry.name === state.editing) : null;
-  if (state.editing && !editing) {
-    say.say(NO_SUCH_MENU.replace('{name}', state.editing), 'warn');
-    state.editing = null;
-  }
-  let editorNode = null;
-  if (state.creating) {
-    const made = section('New menu', null, { id: 'editor', open: true });
-    made.body.append(await editor(null));
-    editorNode = made.node;
-  } else if (editing) {
-    const marathons = listOf(await api('/api/rolemenus/marathons'), 'marathons');
-    const made = section(`Editing ${editing.name}`, null, { id: 'editor', open: true });
-    made.body.append(await editor(editing), endCard(editing, marathons, zoneOf(allSettings)));
-    editorNode = made.node;
-  }
-
+  const context = { marathons, zone: zoneOf(allSettings), timedRoles };
   const nodes = [
     memberBanner(grants),
-    editorNode,
-    menusSection(menus, say),
-    await timedSection(grants, menus, timedSay),
+    state.member ? null : await eventsSection(events, context, say),
+    state.member ? null : await timedSection(timedRoles, roles || [], timedSay),
+    await grantsSection(grants, timedRoles, grantsSay),
     box.node,
     await applicationsSection(allSettings, applicationSay),
     await logsSection('rolemenu'),
@@ -1229,7 +1419,8 @@ async function load() {
   ].filter(Boolean);
 
   document.getElementById('dash').replaceChildren(...nodes);
-  if (editorNode) editorNode.scrollIntoView({ block: 'start' });
+  const focused = state.focus ? document.getElementById(`event-${state.focus}`) : null;
+  if (focused) focused.scrollIntoView({ block: 'start' });
 }
 
 refresh = start({

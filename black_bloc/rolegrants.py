@@ -21,12 +21,16 @@ MENU = "menu"
 APPROVAL = "approval"
 STAFF = "staff"
 MANUAL = "manual"
-SOURCES = (MENU, APPROVAL, STAFF, MANUAL)
+SCHEDULE = "schedule"
+SITE_LIST = "site_list"
+BY_HAND_ATTACHED = "by_hand_attached"
+SOURCES = (MENU, APPROVAL, STAFF, MANUAL, SCHEDULE, SITE_LIST, BY_HAND_ATTACHED)
 
 EXPIRED = "expired"
 BY_HAND = "by_hand"
 GIVEN_UP = "given_up"
 ENDED_BY_STAFF = "ended_by_staff"
+EVENT_DELETED = "event_deleted"
 
 ADDED = "added"
 REMOVED = "removed"
@@ -304,13 +308,14 @@ async def add_grant(
     *,
     granted_by: int | None = None,
     until: str | None = None,
+    menu_id: int | None = None,
 ) -> int | None:
     if source not in SOURCES:
         raise ValueError(f"source must be one of {SOURCES}")
     cur = await db.conn.execute(
         "INSERT INTO role_grants(guild_id, user_id, role_id, source, granted_by, granted_at, "
-        "expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (guild_id, user_id, role_id, source, granted_by, now_iso(), until),
+        "expires_at, menu_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (guild_id, user_id, role_id, source, granted_by, now_iso(), until, menu_id),
     )
     await db.conn.commit()
     return cur.lastrowid
@@ -437,6 +442,10 @@ __all__ = [
     "APPROVAL",
     "APPROVED",
     "BY_HAND",
+    "BY_HAND_ATTACHED",
+    "EVENT_DELETED",
+    "SCHEDULE",
+    "SITE_LIST",
     "DENIED",
     "EXPIRED",
     "GIVEN_UP",

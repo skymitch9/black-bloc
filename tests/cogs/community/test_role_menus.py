@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import discord
@@ -8,18 +8,16 @@ import pytest
 
 from black_bloc import rolegrants as grants
 from black_bloc import rolemenus as menus
+from black_bloc import timed_roles as timed
 from black_bloc.cogs.community import role_menus as cog_module
 from black_bloc.cogs.community.role_menus import (
     APPROVAL_CHANNEL_KEY,
     APPROVER_ROLE_KEY,
     DESCRIPTION_MAX,
     JOY_GAMING,
-    LABEL_MAX,
     MODES,
-    OPTIONS_MAX,
     SEED,
     TITLE_MAX,
-    AssignPick,
     MenuLimitError,
     RequestButton,
     RoleMenus,
@@ -27,7 +25,6 @@ from black_bloc.cogs.community.role_menus import (
     add_option,
     audit_actor,
     card_target,
-    clear_message,
     create_menu,
     custom_id,
     delete_menu,
@@ -41,15 +38,12 @@ from black_bloc.cogs.community.role_menus import (
     parse_custom_id,
     positive_days,
     posted_menus,
-    remove_option,
     retry_days_of,
     role_diff,
     seed_default_menus,
-    seed_summary,
     select_emoji,
     set_message,
     summary,
-    timed_menu_owns,
     unposted_menus,
     update_menu,
 )
@@ -76,50 +70,12 @@ async def test_menu_crud(db):
     assert await delete_menu(db, GUILD, "pronouns") is False
 
 
-async def test_option_crud_and_ordering(db):
-    menu_id = await create_menu(db, GUILD, "m", "M")
-    await add_option(db, menu_id, 1, "He/Him", "❤️")
-    await add_option(db, menu_id, 2, "She/Her", "💙")
-    await add_option(db, menu_id, 1, "He/Him (edited)", "❤️")
-
-    options = await get_options(db, menu_id)
-    assert [(o["role_id"], o["label"]) for o in options] == [
-        (1, "He/Him (edited)"),
-        (2, "She/Her"),
-    ]
-    assert await remove_option(db, menu_id, 2) is True
-    assert await remove_option(db, menu_id, 2) is False
-    assert len(await get_options(db, menu_id)) == 1
-
-
-async def test_delete_menu_takes_its_options(db):
-    menu_id = await create_menu(db, GUILD, "m", "M")
-    await add_option(db, menu_id, 1, "One")
-    await delete_menu(db, GUILD, "m")
-    assert await get_options(db, menu_id) == []
-
-
 async def test_posted_menus_only_lists_posted_ones(db):
     posted_id = await create_menu(db, GUILD, "posted", "P")
     await create_menu(db, GUILD, "draft", "D")
     await set_message(db, posted_id, 500, 600)
     rows = await posted_menus(db)
     assert [(r["name"], r["channel_id"], r["message_id"]) for r in rows] == [("posted", 500, 600)]
-
-
-async def test_clearing_the_message_keeps_the_channel_the_panel_was_in(db):
-    menu_id = await create_menu(db, GUILD, "posted", "P")
-    await add_option(db, menu_id, 1, "One")
-    await set_message(db, menu_id, 500, 600)
-
-    await clear_message(db, menu_id)
-
-    menu = await get_menu(db, GUILD, "posted")
-    assert menu["message_id"] is None and menu["channel_id"] == 500
-    options = await get_options(db, menu_id)
-    assert [(row["role_id"], row["label"]) for row in options] == [(1, "One")]
-    assert [row["name"] for row in await unposted_menus(db)] == ["posted"]
-    assert await posted_menus(db) == []
 
 
 async def test_unposted_menus_skips_a_menu_that_never_had_a_channel(db):
@@ -130,18 +86,6 @@ async def test_unposted_menus_skips_a_menu_that_never_had_a_channel(db):
 async def test_bad_mode_is_refused(db):
     with pytest.raises(ValueError, match="mode must be"):
         await create_menu(db, GUILD, "m", "M", None, "sometimes")
-
-
-async def test_seed_is_idempotent(db):
-    created, skipped = await seed_default_menus(db, GUILD)
-    assert created == [name for name, _, _, _ in SEED] and skipped == []
-    menu = await get_menu(db, GUILD, "pronouns")
-    assert len(await get_options(db, menu["id"])) == 9
-
-    created_again, skipped_again = await seed_default_menus(db, GUILD)
-    assert created_again == [] and skipped_again == [name for name, _, _, _ in SEED]
-    assert len(await list_menus(db, GUILD)) == len(SEED)
-    assert len(await get_options(db, menu["id"])) == 9
 
 
 class FakeRole:
@@ -382,6 +326,11 @@ class FakeInteraction:
         return self.rendered.get("view")
 
 
+@pytest.fixture(autouse=True)
+def no_audit_wait(monkeypatch):
+    monkeypatch.setattr(cog_module.hand, "AUDIT_RETRY_SECONDS", 0)
+
+
 @pytest.fixture
 async def bot(db, monkeypatch):
     monkeypatch.delenv("DISCORD_TOKEN", raising=False)
@@ -406,79 +355,16 @@ def a_panel(where=cog_module.ROOT, **state):
     return view
 
 
-def assign_pick(menu_id, options, target, *, remove):
-    """The picker as the panel builds it: inside a view that knows which menu it came from."""
-    view = a_panel(cog_module.HAND_VIEW, menu_name="runner-status", member_id=target.id)
-    view.removing = remove
-    pick = AssignPick(menu_id, options, target, remove=remove)
-    view.add_item(pick)
-    return pick
-
-
 async def staff_menu(db, name="runner-status"):
     menu_id = await create_menu(db, GUILD, name, "Runner status", None, "staff")
-    await add_option(db, menu_id, 10, "Runner")
-    await add_option(db, menu_id, 11, "Live Runner")
+    await timed.add(db, GUILD, 10, "Runner")
+    await timed.add(db, GUILD, 11, "Live Runner")
     return menu_id
 
 
 async def action_kinds(db):
     cur = await db.conn.execute("SELECT kind FROM action_log ORDER BY id")
     return [row["kind"] for row in await cur.fetchall()]
-
-
-async def test_assign_applies_the_diff_to_the_target_and_logs_who_did_it(bot, db, lead):
-    menu_id = await staff_menu(db)
-    target = FakeMember(bot.guild, user_id=900, roles=(10, 99))
-    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
-    select._values = ["11"]
-    interaction = FakeInteraction(bot, lead)
-
-    await select.callback(interaction)
-
-    assert target.edits == [[99, 11]]
-    assert "Added: Live Runner" in interaction.sent and "Removed: Runner" in interaction.sent
-    assert "role_menu.assign" in await action_kinds(db)
-
-
-async def test_unassign_takes_only_the_picked_roles_off(bot, db, lead):
-    menu_id = await staff_menu(db)
-    target = FakeMember(bot.guild, user_id=900, roles=(10, 11, 99))
-    options = [row for row in await get_options(db, menu_id)]
-    select = assign_pick(menu_id, options, target, remove=True)
-    select._values = ["10"]
-
-    await select.callback(FakeInteraction(bot, lead))
-
-    assert target.edits == [[11, 99]]
-    assert "role_menu.unassign" in await action_kinds(db)
-
-
-async def test_assigning_is_refused_in_test_mode(bot, db, lead):
-    menu_id = await staff_menu(db)
-    bot.guard = FakeGuard(allowed=LOG_CHANNEL)
-    target = FakeMember(bot.guild, user_id=900)
-    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
-    select._values = ["10"]
-    interaction = FakeInteraction(bot, lead)
-
-    await select.callback(interaction)
-
-    assert target.edits == [] and interaction.sent == "test mode"
-
-
-async def test_a_refused_role_edit_says_the_member_is_unchanged(bot, db, lead):
-    menu_id = await staff_menu(db)
-    target = FakeMember(bot.guild, user_id=900, display_name="Bo")
-    target.edit_raises = discord.HTTPException(_Refused(403), "no")
-    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
-    select._values = ["10"]
-    interaction = FakeInteraction(bot, lead)
-
-    await select.callback(interaction)
-
-    assert "still has exactly the roles they had" in interaction.sent
-    assert "role_menu.assign" not in await action_kinds(db)
 
 
 @pytest.fixture
@@ -493,28 +379,6 @@ async def self_serve_menu(db, name="pronouns"):
     await add_option(db, menu_id, 1, "He/Him")
     await add_option(db, menu_id, 2, "She/Her")
     return menu_id
-
-
-async def test_the_staff_select_hands_a_role_over(bot, db, lead):
-    menu_id = await staff_menu(db)
-    target = FakeMember(bot.guild, user_id=900, roles=(10,))
-    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
-    select._values = ["11"]
-    interaction = FakeInteraction(bot, lead)
-
-    await select.callback(interaction)
-
-    assert target.edits == [[11]]
-    assert "role_menu.assign" in await action_kinds(db)
-
-
-def test_seed_summary_is_the_one_wording_both_doors_show():
-    said = seed_summary(["pronouns"], ["colours"])
-
-    assert "Created: pronouns" in said
-    assert "Already there, left alone: colours" in said
-    assert "press **Post it**" in said
-    assert "Already there" not in seed_summary(["pronouns"], [])
 
 
 class _Refused:
@@ -653,33 +517,6 @@ async def test_an_update_over_the_limit_changes_nothing(db):
     assert (menu["id"], menu["title"], menu["description"]) == (menu_id, "Colours", "one each")
 
 
-async def test_a_label_over_the_limit_and_a_twenty_sixth_option_are_both_refused(db):
-    menu_id = await create_menu(db, GUILD, "colours", "Colours")
-
-    with pytest.raises(MenuLimitError, match="100"):
-        await add_option(db, menu_id, 1, "l" * (LABEL_MAX + 1))
-
-    for role_id in range(OPTIONS_MAX):
-        await add_option(db, menu_id, role_id, f"role {role_id}")
-    with pytest.raises(MenuLimitError, match="25"):
-        await add_option(db, menu_id, 999, "one too many")
-
-    assert len(await get_options(db, menu_id)) == OPTIONS_MAX
-
-
-async def test_a_full_menu_can_still_have_an_existing_option_relabelled(db):
-    """The count only bounds NEW rows; editing one of the 25 must not be refused."""
-    menu_id = await create_menu(db, GUILD, "colours", "Colours")
-    for role_id in range(OPTIONS_MAX):
-        await add_option(db, menu_id, role_id, f"role {role_id}")
-
-    await add_option(db, menu_id, 0, "renamed")
-
-    options = await get_options(db, menu_id)
-    assert len(options) == OPTIONS_MAX
-    assert options[0]["label"] == "renamed"
-
-
 async def approval_menu(db, name="runner-status", *, expires=None, retry=7):
     menu_id = await create_menu(
         db,
@@ -727,32 +564,6 @@ async def deny(bot, db, request_id, user, reason):
     modal.reason._value = reason
     await modal.on_submit(interaction)
     return interaction
-
-
-async def test_a_staff_assign_starts_the_menus_clock(bot, db, lead):
-    menu_id = await create_menu(db, GUILD, "timed", "Timed", None, "staff", expires_days=7)
-    await add_option(db, menu_id, 10, "Runner")
-    target = FakeMember(bot.guild, user_id=900)
-    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
-    select._values = ["10"]
-
-    await select.callback(FakeInteraction(bot, lead))
-
-    grant = await grants.open_grant(db, GUILD, 900, 10)
-    assert grant["source"] == "staff" and grant["granted_by"] == lead.id
-
-
-async def test_a_staff_assign_on_a_menu_with_no_end_keeps_no_clock(bot, db, lead):
-    """`expires_days` is retired: Hand roles out… writes the menu's end, and no end is none."""
-    menu_id = await create_menu(db, GUILD, "timed", "Timed", None, "staff", expires_days=7)
-    await add_option(db, menu_id, 10, "Runner")
-    target = FakeMember(bot.guild, user_id=902)
-    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
-    select._values = ["10"]
-
-    await select.callback(FakeInteraction(bot, lead))
-
-    assert (await grants.open_grant(db, GUILD, 902, 10))["expires_at"] is None
 
 
 async def test_a_panel_says_what_picking_a_role_will_actually_do(db):
@@ -833,35 +644,6 @@ async def test_a_grant_for_a_member_who_left_is_closed_rather_than_retried_forev
     assert await grants.open_grant(db, GUILD, 900, 10) is None
 
 
-async def test_a_role_added_by_hand_is_logged(bot, db):
-    """`_added_by_hand` is unchanged by request #17; a by-hand holder of a menu role loses it
-    at the menu's end because removal is by role (design §3.3)."""
-    menu_id = await create_menu(db, GUILD, "timed", "Timed", None, "staff", expires_days=7)
-    await add_option(db, menu_id, 10, "Runner")
-    before = FakeMember(bot.guild, user_id=900, roles=(99,))
-    after = FakeMember(bot.guild, user_id=900, roles=(99, 10))
-
-    await RoleMenus(bot).on_member_update(before, after)
-
-    assert "role.changed_by_hand" in await action_kinds(db)
-    grant = await grants.open_grant(db, GUILD, 900, 10)
-    assert grant["source"] == "manual" and grant["expires_at"] is None
-
-
-async def test_a_role_the_bot_added_itself_is_not_reported_as_by_hand(bot, db, lead):
-    menu_id = await staff_menu(db)
-    target = FakeMember(bot.guild, user_id=900, roles=(99,))
-    pick = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
-    pick._values = ["10"]
-    await pick.callback(FakeInteraction(bot, lead))
-    before = FakeMember(bot.guild, user_id=900, roles=(99,))
-    after = FakeMember(bot.guild, user_id=900, roles=(99, 10))
-
-    await RoleMenus(bot).on_member_update(before, after)
-
-    assert "role.changed_by_hand" not in await action_kinds(db)
-
-
 async def test_a_role_taken_off_by_hand_closes_its_grant(bot, db):
     await grants.add_grant(db, GUILD, 900, 10, "approval", until=grants.expires_at(7))
     before = FakeMember(bot.guild, user_id=900, roles=(10,))
@@ -872,18 +654,6 @@ async def test_a_role_taken_off_by_hand_closes_its_grant(bot, db):
     assert await grants.open_grant(db, GUILD, 900, 10) is None
     assert (await grants.grants_for(db, GUILD))[0]["removed_reason"] == "by_hand"
     assert "role.changed_by_hand" in await action_kinds(db)
-
-
-async def test_a_manual_add_of_an_untimed_role_keeps_no_clock(bot, db):
-    menu_id = await create_menu(db, GUILD, "plain", "Plain")
-    await add_option(db, menu_id, 10, "Runner")
-    before = FakeMember(bot.guild, user_id=900, roles=())
-    after = FakeMember(bot.guild, user_id=900, roles=(10,))
-
-    await RoleMenus(bot).on_member_update(before, after)
-
-    assert await grants.open_grant(db, GUILD, 900, 10) is None
-    assert await timed_menu_owns(db, GUILD, 10) is False
 
 
 async def test_nothing_is_logged_when_no_roles_moved(bot, db):
@@ -1018,21 +788,8 @@ async def open_the_panel(bot, who):
 
 async def open_a_menu(bot, who, name):
     interaction = await open_the_panel(bot, who)
-    await choose(interaction, menus.MENU_PICK, [name])
+    await choose(interaction, "An event…", [name])
     return interaction
-
-
-async def test_rolemenu_opens_one_ephemeral_panel_with_the_root_moves(bot, db, lead):
-    """Request #17: no Seed the defaults, no mode switch, no Waiting on staff."""
-    await self_serve_menu(db)
-    FakeMember(bot.guild, user_id=900, roles=(1, 2))
-
-    interaction = await open_the_panel(bot, lead)
-
-    assert interaction.response.deferred is True
-    assert labels(interaction.view) == ["New menu", "Grants…", "Logs", "Refresh"]
-    assert has_picker(interaction.view, menus.MENU_PICK)
-    assert "**pronouns** · 2 role(s) · 1 wearing · no end set" in interaction.body
 
 
 async def test_rolemenu_is_staff_only_and_never_leaves_a_dead_button(bot, db):
@@ -1042,160 +799,6 @@ async def test_rolemenu_is_staff_only_and_never_leaves_a_dead_button(bot, db):
 
     assert "staff only" in interaction.sent
     assert interaction.view is None
-
-
-async def test_the_menu_card_lists_roles_with_who_wears_them_and_its_end(bot, db, lead):
-    await self_serve_menu(db)
-    FakeMember(bot.guild, user_id=900, roles=(1,))
-    FakeMember(bot.guild, user_id=901, roles=(1, 2))
-
-    interaction = await open_a_menu(bot, lead, "pronouns")
-
-    assert "**pronouns** — Pronouns" in interaction.body
-    assert "He/Him — <@&1> · 2 wearing" in interaction.body
-    assert "She/Her — <@&2> · 1 wearing" in interaction.body
-    assert "no end set" in interaction.body
-    assert labels(interaction.view) == [
-        "Add a role…",
-        "Hand roles out…",
-        "Set the end…",
-        "Words…",
-        "End it now",
-        "Delete it",
-        "Back",
-        "Refresh",
-    ]
-
-
-async def test_an_empty_menu_offers_no_hand_out_no_end_now_and_no_way_to_remove_a_role(
-    bot, db, lead
-):
-    await create_menu(db, GUILD, "empty", "Nothing yet")
-
-    interaction = await open_a_menu(bot, lead, "empty")
-
-    assert "Hand roles out…" not in labels(interaction.view)
-    assert "End it now" not in labels(interaction.view)
-    assert "Set the end…" in labels(interaction.view)
-    assert not has_picker(interaction.view, menus.REMOVE_PICK)
-    assert menus.NO_ROLES_YET in interaction.body
-
-
-async def test_a_full_menu_stops_offering_another_role_and_says_so(bot, db, lead):
-    menu_id = await create_menu(db, GUILD, "full", "Full")
-    for role_id in range(OPTIONS_MAX):
-        await add_option(db, menu_id, role_id + 1, f"role {role_id}")
-
-    interaction = await open_a_menu(bot, lead, "full")
-
-    assert "Add a role…" not in labels(interaction.view)
-    assert "Split it into a second menu" in interaction.body
-
-
-async def test_adding_a_role_black_bloc_could_not_take_off_is_refused_in_words(bot, db, lead):
-    await self_serve_menu(db)
-    interaction = await open_a_menu(bot, lead, "pronouns")
-    await press(interaction, "Add a role…")
-
-    class Above(FakeRole):
-        def is_assignable(self):
-            return False
-
-    bot.guild.get_role = lambda role_id: Above(role_id)
-    await choose(interaction, menus.ROLE_PICK, [SimpleNamespace(id=42)])
-    await press(interaction, "Use the role's own name")
-
-    assert "could not take **role-42** off anybody" in interaction.sent
-    menu = await get_menu(db, GUILD, "pronouns")
-    assert 42 not in [row["role_id"] for row in await get_options(db, menu["id"])]
-
-
-async def test_adding_a_role_by_its_own_name_lands_and_leaves_one_log_row(bot, db, lead):
-    await self_serve_menu(db)
-    interaction = await open_a_menu(bot, lead, "pronouns")
-
-    await press(interaction, "Add a role…")
-    await choose(interaction, menus.ROLE_PICK, [SimpleNamespace(id=42)])
-    await press(interaction, "Use the role's own name")
-
-    menu = await get_menu(db, GUILD, "pronouns")
-    rows = await get_options(db, menu["id"])
-    assert (42, "role-42") in [(row["role_id"], row["label"]) for row in rows]
-    assert (await action_kinds(db)).count("role_menu.option_added") == 1
-
-
-async def test_removing_a_role_says_nobody_loses_the_one_they_have(bot, db, lead):
-    await self_serve_menu(db)
-    interaction = await open_a_menu(bot, lead, "pronouns")
-
-    await choose(interaction, menus.REMOVE_PICK, ["1"])
-
-    assert "Nobody loses the role they already have" in interaction.sent
-    menu = await get_menu(db, GUILD, "pronouns")
-    assert [row["role_id"] for row in await get_options(db, menu["id"])] == [2]
-    assert "role_menu.option_removed" in await action_kinds(db)
-
-
-async def test_taking_roles_back_renders_only_when_they_hold_one(bot, db, lead):
-    await staff_menu(db)
-    FakeMember(bot.guild, user_id=900, display_name="Bo")
-    FakeMember(bot.guild, user_id=901, display_name="Cy", roles=(10,))
-    interaction = await open_a_menu(bot, lead, "runner-status")
-    await press(interaction, "Hand roles out…")
-
-    await choose(interaction, menus.WHOSE_ROLES, [SimpleNamespace(id=900)])
-    assert "Take roles back…" not in labels(interaction.view)
-    assert "Give them roles…" in labels(interaction.view)
-
-    await choose(interaction, menus.WHOSE_ROLES, [SimpleNamespace(id=901)])
-    assert "Take roles back…" in labels(interaction.view)
-
-
-async def test_a_new_menu_arrives_from_a_modal_with_no_mode_to_pick(bot, db, lead):
-    interaction = await open_the_panel(bot, lead)
-    await press(interaction, "New menu")
-    modal = interaction.response.modals[-1]
-    assert not hasattr(modal, "mode")
-
-    modal.name._value = "btb-2027"
-    modal.heading._value = "Back to Black 2027"
-    modal.description._value = ""
-    await modal.on_submit(interaction)
-
-    assert (await get_menu(db, GUILD, "btb-2027"))["title"] == "Back to Black 2027"
-    assert "role_menu.create" in await action_kinds(db)
-
-
-async def test_a_name_already_taken_is_refused_in_words(bot, db, lead):
-    await self_serve_menu(db)
-    interaction = await open_the_panel(bot, lead)
-    await press(interaction, "New menu")
-    modal = interaction.response.modals[-1]
-    modal.name._value = "pronouns"
-    modal.heading._value = "Again"
-    modal.description._value = ""
-
-    await modal.on_submit(interaction)
-
-    assert "already has a role menu called **pronouns**" in interaction.sent
-    assert len(await list_menus(db, GUILD)) == 1
-
-
-async def test_deleting_a_menu_asks_first_and_keeping_it_changes_nothing(bot, db, lead):
-    await self_serve_menu(db)
-    interaction = await open_a_menu(bot, lead, "pronouns")
-
-    await press(interaction, "Delete it")
-    assert labels(interaction.view) == ["Yes, delete it", "Keep it"]
-    await press(interaction, "Keep it")
-
-    assert await get_menu(db, GUILD, "pronouns") is not None
-
-    await press(interaction, "Delete it")
-    await press(interaction, "Yes, delete it")
-
-    assert await get_menu(db, GUILD, "pronouns") is None
-    assert "role_menu.delete" in await action_kinds(db)
 
 
 async def test_the_grants_sub_panel_opens_as_an_audit_soonest_first(bot, db, lead):
@@ -1303,16 +906,6 @@ async def test_leaving_a_grant_alone_changes_nothing(bot, db, lead):
 
     assert member.edits == []
     assert (await grants.get_grant(db, grant_id))["removed_at"] is None
-
-
-async def test_back_from_grants_opened_on_rolemenu_still_lands_on_rolemenu(bot, db, lead):
-    interaction = await open_the_panel(bot, lead)
-    await press(interaction, "Grants…")
-    assert interaction.view.home is None
-
-    await press(interaction, "Back")
-
-    assert interaction.embed.title == menus.PANEL_TITLE
 
 
 async def test_a_door_from_another_panel_keeps_its_way_home_through_a_confirm(bot, db, lead):
@@ -1424,17 +1017,6 @@ async def test_giving_a_role_out_is_refused_outside_the_test_channel(bot, db, le
 # --- the requests queue (fork F-R1) ---------------------------------------------------------------
 
 
-async def test_a_staffer_demoted_mid_card_moves_nothing_and_is_told_why(bot, db, lead):
-    await self_serve_menu(db)
-    interaction = await open_a_menu(bot, lead, "pronouns")
-    lead.guild_permissions = FakePerms(manage_guild=False)
-
-    await press(interaction, "Delete it")
-
-    assert "staff only" in interaction.sent
-    assert await get_menu(db, GUILD, "pronouns") is not None
-
-
 async def test_a_read_re_asks_the_staff_question_too(bot, db, lead):
     await self_serve_menu(db)
     interaction = await open_the_panel(bot, lead)
@@ -1465,17 +1047,6 @@ class FakeDownDatabase:
     conn = None
 
 
-async def test_a_re_render_retires_the_view_it_replaced(bot, db, lead):
-    await self_serve_menu(db)
-    interaction = await open_the_panel(bot, lead)
-    first = interaction.view
-
-    await choose(interaction, menus.MENU_PICK, ["pronouns"])
-
-    assert first.replaced is True and first.is_finished()
-    assert interaction.view is not first
-
-
 async def test_a_panel_that_goes_quiet_disables_every_control_and_says_so(bot, db, lead):
     await self_serve_menu(db)
     interaction = await open_the_panel(bot, lead)
@@ -1486,19 +1057,6 @@ async def test_a_panel_that_goes_quiet_disables_every_control_and_says_so(bot, d
 
     assert all(one.disabled for one in view.children)
     assert view.message.kwargs["embeds"][0].footer.text == menus.PANEL_TIMEOUT_FOOTER
-
-
-async def test_a_replaced_view_never_writes_over_the_card_that_replaced_it(bot, db, lead):
-    await self_serve_menu(db)
-    interaction = await open_the_panel(bot, lead)
-    first = interaction.view
-    first.message = PanelMessage(1)
-    await choose(interaction, menus.MENU_PICK, ["pronouns"])
-    edits = len(interaction.edits)
-
-    await first.on_timeout()
-
-    assert len(interaction.edits) == edits
 
 
 async def test_the_panel_stays_live_for_the_minutes_the_setting_says(bot, db, lead):
@@ -1515,17 +1073,6 @@ async def test_the_panel_never_offers_a_link_when_there_is_no_dashboard(bot, db,
     assert not [one for one in interaction.view.children if getattr(one, "url", None)]
 
 
-async def test_every_control_sits_inside_discords_five_rows(bot, db, lead):
-    menu_id = await self_serve_menu(db)
-    await set_message(db, menu_id, TEST_CHANNEL, 5)
-
-    root = await open_the_panel(bot, lead)
-    card = await open_a_menu(bot, lead, "pronouns")
-
-    for view in (root.view, card.view):
-        assert all(0 <= one.row <= 4 for one in view.children)
-
-
 # --- switching role menus off takes back what members picked, asked first (small-fixes) ---------
 
 
@@ -1539,7 +1086,7 @@ APPROVER = 4242
 async def end_menu_with(db, *, ends_at=PAST, name="btb-2027", roles=(10, 11), passes=0):
     menu_id = await create_menu(db, GUILD, name, "Back to Black 2027", None, "staff")
     for role_id in roles:
-        await add_option(db, menu_id, role_id, f"Role {role_id}")
+        await timed.add(db, GUILD, role_id, f"Role {role_id}")
     await db.conn.execute(
         "UPDATE role_menus SET ends_source = 'date', ends_at = ?, end_passes = ? WHERE id = ?",
         (ends_at, passes, menu_id),
@@ -1614,15 +1161,6 @@ async def test_every_wearer_loses_the_menus_roles_including_one_added_by_hand(bo
     assert "role.expired" not in await action_kinds(db)
 
 
-async def test_a_grant_for_a_member_who_left_closes_with_the_menu(bot, db):
-    await end_menu_with(db)
-    await grants.add_grant(db, GUILD, 905, 10, "staff", until=LATER)
-
-    await tick(bot)
-
-    assert await grants.open_grant(db, GUILD, 905, 10) is None
-
-
 async def test_one_dm_per_member_names_every_role_that_ended(bot, db):
     await end_menu_with(db)
     member = FakeMember(bot.guild, user_id=900, roles=(10, 11))
@@ -1645,17 +1183,6 @@ async def test_the_grant_path_leaves_a_due_menus_roles_to_the_end_pass(bot, db):
 
     assert member.edits == [] and member.dms == []
     assert await grants.open_grant(db, GUILD, 900, 10) is not None
-
-
-async def test_a_shorter_grant_on_a_menu_role_still_runs_out_on_its_own(bot, db):
-    await end_menu_with(db, ends_at=LATER)
-    member = FakeMember(bot.guild, user_id=900, roles=(10,))
-    await grants.add_grant(db, GUILD, 900, 10, "staff", until=PAST)
-
-    await tick(bot)
-
-    assert member.edits == [[]]
-    assert "role.expired" in await action_kinds(db)
 
 
 async def test_the_pass_goes_through_change_roles_one_call_per_member(bot, db, monkeypatch):
@@ -1731,7 +1258,7 @@ async def test_the_ended_notice_pings_only_the_approver_role(bot, db):
     await tick(bot)
 
     [message] = bot.guild.channels[STAFF_CHANNEL].messages
-    assert message.kwargs["content"].startswith(f"<@&{APPROVER}> **btb-2027** ended")
+    assert message.kwargs["content"].startswith(f"<@&{APPROVER}> **Back to Black 2027** ended")
     mentions = message.kwargs["allowed_mentions"]
     assert mentions.everyone is False and mentions.users is False
     assert [role.id for role in mentions.roles] == [APPROVER]
@@ -1790,27 +1317,6 @@ async def test_a_member_cache_that_will_not_fill_is_never_a_clean_pass(bot, db):
     assert failed["reason"] == "members_not_loaded"
 
 
-async def test_an_unreadable_end_or_a_broken_menu_never_blocks_the_others(bot, db, monkeypatch):
-    garbled = await end_menu_with(db, ends_at="the end of february", name="garbled")
-    broken = await end_menu_with(db, name="broken", roles=(12,))
-    fine = await end_menu_with(db, name="fine", roles=(10,))
-    member = FakeMember(bot.guild, user_id=900, roles=(10, 12))
-    real = cog_module._end_pass
-
-    async def flaky(bot_, guild, menu, actor, via):
-        if menu["name"] == "broken":
-            raise RuntimeError("boom")
-        return await real(bot_, guild, menu, actor, via)
-
-    monkeypatch.setattr(cog_module, "_end_pass", flaky)
-    await tick(bot)
-
-    assert member.edits == [[12]]
-    assert (await menu_row(db, fine))["ended_at"]
-    assert (await menu_row(db, garbled))["ended_at"] is None
-    assert (await menu_row(db, broken))["ended_at"] is None
-
-
 async def test_a_menu_ends_once_and_a_second_pass_finds_nothing(bot, db):
     await end_menu_with(db)
     member = FakeMember(bot.guild, user_id=900, roles=(10,))
@@ -1834,47 +1340,6 @@ async def test_end_it_now_takes_the_roles_off_at_once(bot, db, lead):
     assert menu["ended_at"] and menu["ends_source"] == "date" and menu["ends_set_by"] == lead.id
     [ended] = await details_of(db, "role_menu.ended")
     assert ended["members"] == 1
-
-
-async def test_setting_an_end_stamps_open_grants_and_clearing_it_takes_the_stamp_back(
-    bot, db, lead
-):
-    menu_id = await create_menu(db, GUILD, "btb-2027", "Back to Black 2027", None, "staff")
-    await add_option(db, menu_id, 10, "Runner")
-    await grants.add_grant(db, GUILD, 900, 10, "staff", until=None)
-    await grants.add_grant(db, GUILD, 901, 99, "staff", until=None)
-
-    end = await cog_module.set_menu_end(
-        bot,
-        bot.guild,
-        lead,
-        await menu_row(db, menu_id),
-        source="date",
-        ends_at=datetime(2027, 3, 1, 6, 59, tzinfo=UTC),
-    )
-
-    assert end == "2027-03-01T06:59:00+00:00"
-    assert (await grants.open_grant(db, GUILD, 900, 10))["expires_at"] == end
-    assert (await grants.open_grant(db, GUILD, 901, 99))["expires_at"] is None
-    [set_row] = await details_of(db, "role_menu.end_set")
-    assert set_row["ends_at"] == end and set_row["source"] == "date"
-
-    later = await cog_module.set_menu_end(
-        bot,
-        bot.guild,
-        lead,
-        await menu_row(db, menu_id),
-        source="date",
-        ends_at="2027-04-01T06:59:00+00:00",
-    )
-    assert (await grants.open_grant(db, GUILD, 900, 10))["expires_at"] == later
-
-    cleared = await cog_module.set_menu_end(
-        bot, bot.guild, lead, await menu_row(db, menu_id), source="none"
-    )
-    assert cleared is None
-    assert (await grants.open_grant(db, GUILD, 900, 10))["expires_at"] is None
-    assert (await menu_row(db, menu_id))["ends_at"] is None
 
 
 async def test_a_new_end_on_an_ended_menu_starts_it_over(bot, db, lead):
@@ -1902,7 +1367,7 @@ async def marathon_with(db, ends_at):
 
 async def bound_menu(bot, db, lead, marathon_id, name="btb-2027"):
     menu_id = await create_menu(db, GUILD, name, "Back to Black 2027", None, "staff")
-    await add_option(db, menu_id, 10, "Runner")
+    await timed.add(db, GUILD, 10, "Runner")
     end = await cog_module.set_menu_end(
         bot,
         bot.guild,
@@ -1912,35 +1377,6 @@ async def bound_menu(bot, db, lead, marathon_id, name="btb-2027"):
         marathon_id=marathon_id,
     )
     return menu_id, end
-
-
-async def test_a_menu_bound_to_a_marathon_follows_it_and_tells_staff_past_the_floor(
-    bot, db, lead
-):
-    await store_notice_channel(bot)
-    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
-    await grants.add_grant(db, GUILD, 900, 10, "staff", until=None)
-    menu_id, end = await bound_menu(bot, db, lead, marathon_id)
-    assert end == "2027-03-01T05:00:00+00:00"
-
-    await db.conn.execute(
-        "UPDATE marathons SET ends_at = '2027-02-28T05:20:00+00:00' WHERE id = ?", (marathon_id,)
-    )
-    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
-    menu = await menu_row(db, menu_id)
-    assert menu["ends_at"] == "2027-03-01T05:20:00+00:00"
-    assert (await grants.open_grant(db, GUILD, 900, 10))["expires_at"] == menu["ends_at"]
-    assert bot.guild.channels[STAFF_CHANNEL].messages == []
-
-    await db.conn.execute(
-        "UPDATE marathons SET ends_at = '2027-02-28T06:10:00+00:00' WHERE id = ?", (marathon_id,)
-    )
-    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
-    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
-    [moved] = await details_of(db, "role_menu.end_moved")
-    assert (moved["was"], moved["to"]) == (end, "2027-03-01T06:10:00+00:00")
-    [notice] = bot.guild.channels[STAFF_CHANNEL].messages
-    assert "**btb-2027**'s end moved" in notice.kwargs["content"]
 
 
 async def test_an_ended_menu_does_not_follow_its_marathon_any_more(bot, db, lead):
@@ -1998,119 +1434,7 @@ async def test_end_it_now_in_test_mode_changes_nothing_and_arms_nothing(bot, db,
     assert len(await details_of(db, "role_menu.would_end")) == 1
 
 
-async def test_a_role_taken_off_a_menu_or_a_deleted_menu_loses_the_menus_stamp(bot, db, lead):
-    menu_id = await create_menu(db, GUILD, "btb-2027", "Back to Black 2027", None, "staff")
-    await add_option(db, menu_id, 10, "Runner")
-    await add_option(db, menu_id, 11, "Host")
-    await grants.add_grant(db, GUILD, 900, 10, "staff", until=None)
-    await grants.add_grant(db, GUILD, 900, 11, "staff", until=None)
-    await cog_module.set_menu_end(
-        bot, bot.guild, lead, await menu_row(db, menu_id), source="date", ends_at=LATER
-    )
-
-    await cog_module.drop_option(bot, bot.guild, lead, await menu_row(db, menu_id), 10)
-    assert (await grants.open_grant(db, GUILD, 900, 10))["expires_at"] is None
-    assert (await grants.open_grant(db, GUILD, 900, 11))["expires_at"] == LATER
-
-    await cog_module.drop_menu(bot, bot.guild, lead, "btb-2027")
-    assert (await grants.open_grant(db, GUILD, 900, 11))["expires_at"] is None
-
-
-async def test_a_role_put_on_a_menu_with_an_end_stamps_its_open_grants(bot, db, lead):
-    menu_id = await create_menu(db, GUILD, "btb-2027", "Back to Black 2027", None, "staff")
-    await cog_module.set_menu_end(
-        bot, bot.guild, lead, await menu_row(db, menu_id), source="date", ends_at=LATER
-    )
-    await grants.add_grant(db, GUILD, 900, 12, "staff", until=None)
-
-    await cog_module.put_option(bot, bot.guild, lead, await menu_row(db, menu_id), 12, "Tech")
-
-    assert (await grants.open_grant(db, GUILD, 900, 12))["expires_at"] == LATER
-
-
-async def test_a_due_menu_whose_marathon_row_is_gone_still_ends_and_says_the_date(bot, db, lead):
-    marathon_id = await marathon_with(db, "2020-01-01T00:00:00+00:00")
-    menu_id, end = await bound_menu(bot, db, lead, marathon_id)
-    await db.conn.execute("DELETE FROM marathons WHERE id = ?", (marathon_id,))
-    await db.conn.commit()
-    member = FakeMember(bot.guild, user_id=900, roles=(10,))
-
-    await tick(bot)
-
-    assert member.edits == [[]] and (await menu_row(db, menu_id))["ended_at"]
-    assert grants.stamp(end, "D") in member.dms[0]
-
-
 # --- temporary roles 1b: a grant on a menu role never outlasts the menu ---------------------------
-
-
-async def test_a_timed_grant_on_a_menu_role_is_clamped_to_the_menus_end(bot, db, lead):
-    menu_id = await end_menu_with(db, ends_at="2027-03-01T06:59:00+00:00", roles=(5,))
-    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
-
-    _, said = await cog_module.grant_role(bot, bot.guild, lead, member, FakeRole(5), 3650)
-    assert (await grants.open_grant(db, GUILD, 900, 5))["expires_at"] == (
-        "2027-03-01T06:59:00+00:00"
-    )
-
-    other = FakeMember(bot.guild, user_id=901, display_name="Cy")
-    await cog_module.grant_role(bot, bot.guild, lead, other, FakeRole(5), None)
-    assert (await grants.open_grant(db, GUILD, 901, 5))["expires_at"] == (
-        "2027-03-01T06:59:00+00:00"
-    )
-
-    short = FakeMember(bot.guild, user_id=902, display_name="Di")
-    await cog_module.grant_role(bot, bot.guild, lead, short, FakeRole(5), 1)
-    assert grants.parse_ts((await grants.open_grant(db, GUILD, 902, 5))["expires_at"]) < (
-        grants.parse_ts("2027-03-01T06:59:00+00:00")
-    )
-    assert "<t:" in said and menu_id
-
-
-async def test_an_ended_menu_puts_no_end_on_a_new_grant(bot, db, lead):
-    menu_id = await end_menu_with(db, ends_at=PAST, roles=(5,))
-    await db.conn.execute("UPDATE role_menus SET ended_at = ? WHERE id = ?", (PAST, menu_id))
-    await db.conn.commit()
-    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
-
-    await cog_module.grant_role(bot, bot.guild, lead, member, FakeRole(5), None)
-
-    assert (await grants.open_grant(db, GUILD, 900, 5))["expires_at"] is None
-
-
-async def test_hand_roles_out_writes_the_menus_end_on_each_grant(bot, db, lead):
-    menu_id = await end_menu_with(db, ends_at=LATER, roles=(10, 11))
-    target = FakeMember(bot.guild, user_id=900, display_name="Bo")
-    options = await get_options(db, menu_id)
-    pick = assign_pick(menu_id, options, target, remove=False)
-    pick._values = ["10", "11"]
-
-    await cog_module.run_assign(FakeInteraction(bot, lead), pick, pick.view)
-
-    for role_id in (10, 11):
-        assert (await grants.open_grant(db, GUILD, 900, role_id))["expires_at"] == LATER
-
-
-async def test_push_it_back_on_a_menu_role_with_an_end_is_refused_in_words(bot, db, lead):
-    await end_menu_with(db, ends_at=LATER, roles=(5,))
-    FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(5,))
-    grant_id = await grants.add_grant(db, GUILD, 900, 5, "staff", until=LATER)
-    row = await grants.get_grant(db, grant_id)
-
-    until, said = await cog_module.extend_role(bot, bot.guild, lead, row, 7)
-
-    assert until is None
-    when = grants.stamp(LATER, "D")
-    assert said == f"**role-5** ends with **btb-2027** on {when} — change the menu's end instead."
-    assert (await grants.get_grant(db, grant_id))["expires_at"] == LATER
-    assert "role.extended" not in await action_kinds(db)
-
-    interaction = await open_the_panel(bot, lead)
-    await press(interaction, "Grants…")
-    assert not has_picker(interaction.view, menus.GRANT_PICK)
-    await cog_module.open_grant(interaction, grant_id, interaction.view)
-    assert "Push it back…" not in labels(interaction.view)
-    assert "change the menu's end instead" in interaction.body
 
 
 # --- an end that moves EARLIER waits for staff (conductor's safety, 1b) ---------------------------
@@ -2139,7 +1463,7 @@ async def test_an_earlier_marathon_end_is_held_and_never_makes_the_menu_due(bot,
     [held] = await details_of(db, "role_menu.end_held")
     assert (held["ends_at"], held["held"]) == (end, "2020-01-02T00:00:00+00:00")
     [notice] = bot.guild.channels[STAFF_CHANNEL].messages
-    assert "**btb-2027**'s marathon now ends earlier" in notice.kwargs["content"]
+    assert "**Back to Black 2027**'s marathon now ends earlier" in notice.kwargs["content"]
     assert await details_of(db, "role_menu.end_moved") == []
 
 
@@ -2232,249 +1556,10 @@ async def test_the_tick_counts_menus_due_ended_and_failures_for_the_health_tab(b
 
 async def btb_card(bot, db, lead, *, wearers=((900, (10, 11)), (901, (10,)))):
     menu_id = await create_menu(db, GUILD, "btb-2027", "Back to Black 2027", None, "staff")
-    await add_option(db, menu_id, 10, "Runner")
-    await add_option(db, menu_id, 11, "Host")
+    await timed.add(db, GUILD, 10, "Runner")
+    await timed.add(db, GUILD, 11, "Host")
     people = [FakeMember(bot.guild, user_id=uid, roles=roles) for uid, roles in wearers]
     return menu_id, people, await open_a_menu(bot, lead, "btb-2027")
-
-
-async def test_set_the_end_picks_a_marathon_and_the_card_reads_its_end(bot, db, lead):
-    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
-    menu_id, _, interaction = await btb_card(bot, db, lead)
-
-    await press(interaction, "Set the end…")
-    assert labels(interaction.view) == ["Type a date…", "Back", "Refresh"]
-    pick = picker(interaction.view, "Ends with a marathon…")
-    assert [one.label for one in pick.options] == ["Back to Black 2027 · ends 2027-02-27"]
-    await choose(interaction, "Ends with a marathon…", [str(marathon_id)])
-
-    menu = await menu_row(db, menu_id)
-    assert menu["ends_source"] == "marathon" and menu["ends_at"] == "2027-03-01T05:00:00+00:00"
-    assert "(Back to Black 2027 + 1 d)" in interaction.body
-    assert "**btb-2027**'s roles come off" in interaction.sent
-    assert "Set by <@1>" in interaction.body
-    [row] = await details_of(db, "role_menu.end_set")
-    assert row["source"] == "marathon" and row["via"] == "discord"
-
-
-async def test_type_a_date_sets_the_end_and_a_past_or_garbled_date_is_refused(bot, db, lead):
-    menu_id, _, interaction = await btb_card(bot, db, lead)
-    await press(interaction, "Set the end…")
-
-    for typed, said in (("2020-01-01", "has already gone by"), ("soon", "is not a date")):
-        await press(interaction, "Type a date…")
-        modal = interaction.response.modals[-1]
-        modal.typed._value = typed
-        await modal.on_submit(interaction)
-        assert said in interaction.sent
-        assert (await menu_row(db, menu_id))["ends_source"] == "none"
-
-    await press(interaction, "Type a date…")
-    modal = interaction.response.modals[-1]
-    assert modal.title == "The day its roles come off"
-    modal.typed._value = "2099-02-28"
-    await modal.on_submit(interaction)
-
-    menu = await menu_row(db, menu_id)
-    assert menu["ends_source"] == "date" and menu["ends_at"] == "2099-03-01T06:59:00+00:00"
-    assert "End it now" in labels(interaction.view)
-
-
-async def test_buffer_renders_only_for_a_marathon_and_a_blank_one_is_the_default(bot, db, lead):
-    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
-    menu_id, _, interaction = await btb_card(bot, db, lead)
-    await press(interaction, "Set the end…")
-    await choose(interaction, "Ends with a marathon…", [str(marathon_id)])
-    await press(interaction, "Set the end…")
-    assert labels(interaction.view) == ["Type a date…", "Buffer…", "No end", "Back", "Refresh"]
-
-    await press(interaction, "Buffer…")
-    modal = interaction.response.modals[-1]
-    modal.typed._value = "x"
-    await modal.on_submit(interaction)
-    assert "is not a whole number of days" in interaction.sent
-
-    modal.typed._value = "0"
-    await modal.on_submit(interaction)
-    assert (await menu_row(db, menu_id))["ends_at"] == "2027-02-28T05:00:00+00:00"
-
-    modal.typed._value = ""
-    await modal.on_submit(interaction)
-    menu = await menu_row(db, menu_id)
-    assert menu["buffer_days"] is None and menu["ends_at"] == "2027-03-01T05:00:00+00:00"
-
-
-async def test_no_end_asks_first_then_clears_the_end(bot, db, lead):
-    menu_id = await end_menu_with(db, ends_at=LATER, name="btb-2027")
-    interaction = await open_a_menu(bot, lead, "btb-2027")
-    await press(interaction, "Set the end…")
-
-    await press(interaction, "No end")
-    assert "Clear **btb-2027**'s end?" in str(interaction.embed.description)
-    assert (await menu_row(db, menu_id))["ends_source"] == "date"
-
-    await press(interaction, "Yes, clear it")
-
-    menu = await menu_row(db, menu_id)
-    assert menu["ends_source"] == "none" and menu["ends_at"] is None
-    assert "**btb-2027** has no end." in interaction.sent
-
-
-async def test_end_it_now_names_the_counts_then_takes_every_role_off(bot, db, lead):
-    menu_id, (first, second), interaction = await btb_card(bot, db, lead)
-
-    await press(interaction, "End it now")
-    assert "Take 2 role(s) off 2 people now?" in str(interaction.embed.description)
-    assert first.edits == []
-
-    await press(interaction, "Yes, take them off")
-
-    assert first.edits == [[]] and second.edits == [[]]
-    assert (await menu_row(db, menu_id))["ended_at"]
-    assert "**btb-2027** ended — 2 role(s) taken off 2 people. 0 failure(s)." in interaction.sent
-    assert "2 people · 0 failure(s)" in interaction.body
-
-
-async def test_end_it_now_in_test_mode_is_the_guards_sentence_and_nothing_moves(bot, db, lead):
-    menu_id, (first, _), interaction = await btb_card(bot, db, lead)
-    bot.guard = FakeGuard()
-
-    await press(interaction, "End it now")
-    await press(interaction, "Yes, take them off")
-
-    assert interaction.sent == "test mode"
-    assert first.edits == [] and (await menu_row(db, menu_id))["ended_at"] is None
-
-
-async def test_use_the_earlier_end_renders_while_held_and_takes_it(bot, db, lead):
-    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
-    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
-    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
-    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
-
-    interaction = await open_a_menu(bot, lead, "btb-2027")
-    assert "Held: its marathon now ends earlier" in interaction.body
-    await press(interaction, "Use the earlier end")
-    await press(interaction, "Yes, use it")
-
-    menu = await menu_row(db, menu_id)
-    assert menu["ends_at"] == "2027-02-21T05:00:00+00:00" and menu["ends_held_at"] is None
-    assert "Use the earlier end" not in labels(interaction.view)
-
-
-async def test_use_the_earlier_end_asks_first_naming_the_end_and_the_counts(bot, db, lead):
-    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
-    menu_id, end = await bound_menu(bot, db, lead, marathon_id)
-    wearer = FakeMember(bot.guild, user_id=900, roles=(10,))
-    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
-    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
-    interaction = await open_a_menu(bot, lead, "btb-2027")
-
-    await press(interaction, "Use the earlier end")
-
-    held = grants.stamp("2027-02-21T05:00:00+00:00", "F")
-    assert str(interaction.embed.description) == (
-        f"Use **btb-2027**'s earlier end? Its 1 role(s) come off 1 people {held}."
-    )
-    assert labels(interaction.view)[:2] == ["Yes, use it", "Keep it"]
-    assert (await menu_row(db, menu_id))["ends_at"] == end
-
-    await press(interaction, "Keep it")
-
-    menu = await menu_row(db, menu_id)
-    assert menu["ends_at"] == end and menu["ends_held_at"]
-    assert wearer.edits == []
-
-
-async def test_use_the_earlier_end_says_plainly_when_that_end_has_already_gone_by(
-    bot, db, lead
-):
-    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
-    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
-    wearer = FakeMember(bot.guild, user_id=900, roles=(10,))
-    await move_marathon(db, marathon_id, PAST)
-    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
-    interaction = await open_a_menu(bot, lead, "btb-2027")
-
-    await press(interaction, "Use the earlier end")
-
-    said = str(interaction.embed.description)
-    assert "already gone by" in said and "at the next hourly pass" in said
-    assert "1 role(s) come off 1 people" in said
-    assert wearer.edits == []
-
-    await press(interaction, "Yes, use it")
-    assert (await menu_row(db, menu_id))["ends_held_at"] is None
-    assert wearer.edits == []
-
-    await tick(bot)
-
-    assert wearer.edits == [[]]
-    assert (await menu_row(db, menu_id))["ended_at"]
-
-
-async def test_end_it_now_on_a_menu_with_a_held_earlier_end_clears_the_hold_and_runs_once(
-    bot, db, lead
-):
-    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
-    menu_id, _ = await bound_menu(bot, db, lead, marathon_id)
-    wearer = FakeMember(bot.guild, user_id=900, roles=(10,))
-    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
-    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
-    assert (await menu_row(db, menu_id))["ends_held_at"]
-    interaction = await open_a_menu(bot, lead, "btb-2027")
-
-    await press(interaction, "End it now")
-    await press(interaction, "Yes, take them off")
-
-    menu = await menu_row(db, menu_id)
-    assert menu["ends_held_at"] is None and menu["ends_source"] == "date"
-    assert menu["ended_at"] and menu["end_passes"] == 1 and menu["end_members"] == 1
-    assert wearer.edits == [[]]
-    assert len(await details_of(db, "role_menu.ended")) == 1
-    assert "Held: its marathon now ends earlier" not in interaction.body
-    assert "Use the earlier end" not in labels(interaction.view)
-    assert "ended " in interaction.body and "1 people · 0 failure(s)" in interaction.body
-    assert "**btb-2027** ended — 1 role(s) taken off 1 people. 0 failure(s)." in interaction.sent
-
-    await tick(bot)
-
-    assert wearer.edits == [[]]
-    assert len(await details_of(db, "role_menu.ended")) == 1
-    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
-    assert (await menu_row(db, menu_id))["ends_held_at"] is None
-
-
-async def test_delete_is_refused_while_an_end_is_to_come_and_people_wear_its_roles(bot, db, lead):
-    menu_id = await end_menu_with(db, ends_at=LATER, name="btb-2027")
-    FakeMember(bot.guild, user_id=900, roles=(10,))
-    interaction = await open_a_menu(bot, lead, "btb-2027")
-
-    await press(interaction, "Delete it")
-
-    assert "still ends" in interaction.sent and "**End it now** first" in interaction.sent
-    assert await menu_row(db, menu_id) is not None
-    assert "Yes, delete it" not in labels(interaction.view)
-
-
-async def test_the_audit_lists_wearers_of_a_menu_role_with_its_end_and_grants_for_the_rest(
-    bot, db, lead
-):
-    await end_menu_with(db, ends_at=LATER, name="btb-2027", roles=(10,))
-    FakeMember(bot.guild, user_id=900, roles=(10,))
-    FakeMember(bot.guild, user_id=901, roles=(77,))
-    await grants.add_grant(db, GUILD, 901, 77, "staff", until=grants.expires_at(3))
-    await grants.add_grant(db, GUILD, 902, 10, "staff", until=LATER)
-
-    interaction = await open_the_panel(bot, lead)
-    await press(interaction, "Grants…")
-
-    body = interaction.body
-    assert "**2** timed role(s) running" in body
-    assert "<@901> · <@&77>" in body and "<@900> · <@&10>" in body
-    assert "<@902>" not in body
-    assert body.index("<@901>") < body.index("<@900>")
-    assert len(picker(interaction.view, menus.GRANT_PICK).options) == 1
 
 
 async def test_a_posted_panel_from_before_answers_the_retired_sentence_and_changes_nothing(
@@ -2532,88 +1617,666 @@ async def a_fan_role(db, role_id=10, user_id=900):
     await pings.set_fan_role(db, GUILD, user_id, role_id, 1)
 
 
-async def test_set_the_end_on_a_menu_holding_a_fan_role_is_refused_every_way(bot, db, lead):
-    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
-    menu_id, (first, _), interaction = await btb_card(bot, db, lead)
-    await a_fan_role(db)
+# --- timed roles per event (event-roles-design.md §7) --------------------------------------------
 
-    await press(interaction, "Set the end…")
-    await choose(interaction, "Ends with a marathon…", [str(marathon_id)])
-    assert PINGS_SAID in interaction.sent and "**role-10**" in interaction.sent
-
-    await press(interaction, "Type a date…")
-    modal = interaction.response.modals[-1]
-    modal.typed._value = "2099-02-28"
-    await modal.on_submit(interaction)
-    assert PINGS_SAID in interaction.sent
-
-    menu = await menu_row(db, menu_id)
-    assert menu["ends_source"] == "none" and menu["ends_at"] is None
-    assert await details_of(db, "role_menu.end_set") == []
-    assert first.edits == []
+SOON = "2099-02-01T00:00:00+00:00"
 
 
-async def test_end_it_now_on_a_menu_holding_the_events_role_is_refused_before_it_asks(
+async def an_event(db, name, *, ends_at=None, title=None):
+    menu_id = await create_menu(db, GUILD, name, title or name.title(), None, "staff")
+    if ends_at is not None:
+        await db.conn.execute(
+            "UPDATE role_menus SET ends_source = 'date', ends_at = ? WHERE id = ?",
+            (ends_at, menu_id),
+        )
+        await db.conn.commit()
+    return await menu_row(db, menu_id)
+
+
+async def timed_list(db, *role_ids):
+    for role_id in role_ids:
+        await timed.add(db, GUILD, role_id, f"Role {role_id}")
+
+
+async def give(bot, lead, event, role_id, *members):
+    return await cog_module.give_event_role(bot, bot.guild, lead, event, role_id, list(members))
+
+
+async def open_grant_on(db, user_id, role_id, menu_id):
+    return await timed.event_grant(db, GUILD, user_id, role_id, menu_id)
+
+
+async def test_overlapping_events_a_b_assignee_keeps_the_role_and_a_by_hand_holder_loses_it(
     bot, db, lead
 ):
-    await bot.store.set(GUILD, "events_ping_role_id", 11)
-    menu_id, (first, second), interaction = await btb_card(bot, db, lead)
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER)
+    b = await an_event(db, "b", ends_at=SOON)
+    only_a = FakeMember(bot.guild, user_id=900)
+    both = FakeMember(bot.guild, user_id=901)
+    by_hand = FakeMember(bot.guild, user_id=902, roles=(10,))
+    await give(bot, lead, a, 10, only_a, both)
+    await give(bot, lead, b, 10, both)
+    assert await open_grant_on(db, 901, 10, a["id"]) and await open_grant_on(db, 901, 10, b["id"])
+
+    await db.conn.execute("UPDATE role_menus SET ends_at = ? WHERE id = ?", (PAST, a["id"]))
+    await db.conn.commit()
+    await tick(bot)
+
+    assert 10 not in [r.id for r in only_a.roles] and 10 not in [r.id for r in by_hand.roles]
+    assert 10 in [r.id for r in both.roles]
+    assert await open_grant_on(db, 901, 10, a["id"]) is None
+    assert await open_grant_on(db, 901, 10, b["id"]) is not None
+    [ended] = await details_of(db, "role_menu.ended")
+    assert (ended["this_pass"], ended["kept"], ended["failures"]) == (2, 1, 0)
+
+    await db.conn.execute("UPDATE role_menus SET ends_at = ? WHERE id = ?", (PAST, b["id"]))
+    await db.conn.commit()
+    await tick(bot)
+
+    assert 10 not in [r.id for r in both.roles]
+    assert await open_grant_on(db, 901, 10, b["id"]) is None
+
+
+async def test_the_grant_path_never_strips_an_event_assignment_or_a_timed_role_at_cog_load(
+    bot, db, lead
+):
+    await timed_list(db, 10, 11)
+    b = await an_event(db, "b", ends_at=LATER)
+    member = FakeMember(bot.guild, user_id=900, roles=(11,))
+    await give(bot, lead, b, 10, member)
+    await db.conn.execute("UPDATE role_grants SET expires_at = ?", (PAST,))
+    await grants.add_grant(db, GUILD, 900, 11, "staff", until=PAST)
+    await db.conn.commit()
+
+    await RoleMenus(bot).run_due_grants()
+
+    assert {r.id for r in member.roles} == {10, 11}
+    assert "role.expired" not in await action_kinds(db)
+
+
+async def test_a_role_pings_owns_is_never_taken_even_when_it_sits_on_the_list(bot, db, lead):
+    from black_bloc import pings
+
+    await timed_list(db, 10, 12)
+    await bot.store.set(GUILD, "raidtrain_ping_role_id", 12)
+    await pings.set_fan_role(db, GUILD, 905, 10, 1)
+    await an_event(db, "a", ends_at=PAST)
+    fan = FakeMember(bot.guild, user_id=900, roles=(10, 12))
+
+    await tick(bot)
+
+    assert {r.id for r in fan.roles} == {10, 12} and fan.dms == []
+    assert 12 in await pings.owned_role_ids(bot, GUILD)
+
+
+async def test_end_it_now_asks_with_the_count_the_pass_then_takes(bot, db, lead):
+    await timed_list(db, 10, 11)
+    a = await an_event(db, "a", ends_at=LATER, title="Back to Black")
+    b = await an_event(db, "b", ends_at=LATER)
+    kept = FakeMember(bot.guild, user_id=900, roles=(10, 11))
+    gone = [FakeMember(bot.guild, user_id=uid, roles=(10,)) for uid in (901, 902)]
+    await give(bot, lead, b, 11, kept)
+    interaction = await open_a_menu(bot, lead, "a")
 
     await press(interaction, "End it now")
 
-    assert PINGS_SAID in interaction.sent and "**role-11**" in interaction.sent
-    assert "Take 2 role(s)" not in str(interaction.embed.description)
-    assert first.edits == [] and second.edits == []
-    assert (await menu_row(db, menu_id))["ended_at"] is None
+    question = interaction.body
+    assert question == "Take 1 role(s) off 3 people now? 1 keep a role through another event."
+    plan = await cog_module.end_plan(bot, bot.guild, a)
+    await press(interaction, "Yes, take them off")
 
-    await cog_module.run_end_now(interaction, interaction.view)
+    [ended] = await details_of(db, "role_menu.ended")
+    assert ended["this_pass"] == plan.members == 3 and ended["kept"] == plan.keep == 1
+    assert {r.id for r in kept.roles} == {11} and all(not one.roles for one in gone)
 
-    assert first.edits == [] and (await menu_row(db, menu_id))["ended_at"] is None
+
+async def test_an_ad_hoc_grant_or_push_back_on_a_timed_role_is_refused_in_words(bot, db, lead):
+    await timed_list(db, 10)
+    member = FakeMember(bot.guild, user_id=900)
+
+    grant_id, said = await cog_module.grant_role(
+        bot, bot.guild, lead, member, bot.guild.get_role(10), 7
+    )
+
+    assert grant_id is None and "is a timed role, so it is given from an event" in said
+    assert member.edits == []
+    a = await an_event(db, "a", ends_at=LATER, title="Back to Black")
+    await give(bot, lead, a, 10, member)
+    row = await open_grant_on(db, 900, 10, a["id"])
+    until, said = await cog_module.extend_role(bot, bot.guild, lead, row, 3)
+    assert until is None and "ends with **Back to Black**" in said
 
 
-async def test_a_bound_menu_that_holds_a_fan_role_keeps_no_end_buffer_or_held_end(
+async def test_ending_one_assignment_keeps_the_role_another_event_holds(bot, db, lead):
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER)
+    b = await an_event(db, "b", ends_at=LATER, title="Fall Fest")
+    member = FakeMember(bot.guild, user_id=900)
+    await give(bot, lead, a, 10, member)
+    await give(bot, lead, b, 10, member)
+
+    done, said = await cog_module.revoke_grant(
+        bot, bot.guild, lead, await open_grant_on(db, 900, 10, a["id"])
+    )
+
+    assert done and "keeps **role-10** through **Fall Fest**" in said
+    assert 10 in [r.id for r in member.roles]
+    found = await cog_module.take_event_role(bot, bot.guild, lead, b, 10, [member])
+    assert found["given"] == [900] and 10 not in [r.id for r in member.roles]
+
+
+async def test_the_root_opens_on_open_events_with_the_ended_ones_folded(bot, db, lead):
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER, title="Back to Black")
+    await an_event(db, "z", title="Old one")
+    await db.conn.execute("UPDATE role_menus SET ended_at = ? WHERE name = 'z'", (PAST,))
+    await db.conn.commit()
+    await give(bot, lead, a, 10, FakeMember(bot.guild, user_id=900))
+
+    interaction = await open_the_panel(bot, lead)
+
+    assert interaction.embed.title == "Timed roles"
+    assert "**Back to Black** · ends <t:" in interaction.body and "· 1 people" in interaction.body
+    assert "Old one" not in interaction.body
+    assert labels(interaction.view) == [
+        "New event…",
+        "Timed roles…",
+        "Grants…",
+        "Ended (1)…",
+        "Logs",
+        "Refresh",
+    ]
+    await press(interaction, "Ended (1)…")
+    assert "**Old one** · ended" in interaction.body
+
+
+async def another_marathon(db, ends_at, url):
+    cur = await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, source, source_ref, schedule_url, added_by, "
+        "added_at, ends_at) VALUES (?, 'Fall Fest', 'gdq', 'y', ?, 1, ?, ?)",
+        (GUILD, url, PAST, ends_at),
+    )
+    await db.conn.commit()
+    return cur.lastrowid
+
+
+async def test_new_event_offers_marathons_without_one_and_a_typed_event(bot, db, lead):
+    await timed_list(db, 10)
+    taken = await another_marathon(db, LATER, "https://taken")
+    free = await marathon_with(db, SOON)
+    await cog_module.make_event(bot, bot.guild, lead, "Taken", marathon_id=taken)
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "New event…")
+
+    offered = picker(interaction.view, "Ends with a marathon…")
+    assert [one.value for one in offered.options] == [str(free)]
+    await choose(interaction, "Ends with a marathon…", [str(free)])
+    assert interaction.embed.title == "Back to Black 2027"
+    assert "Fill from the schedule" in labels(interaction.view)
+    assert "Attach a marathon…" not in labels(interaction.view)
+
+    await press(interaction, "Back")
+    await press(interaction, "New event…")
+    await press(interaction, "No marathon yet…")
+    modal = interaction.response.modals[-1]
+    modal.name._value = "Back to Black 2027"
+    modal.typed._value = "2099-02-28"
+    await modal.on_submit(interaction)
+    made = await get_menu(db, GUILD, "back-to-black-2027-2")
+    assert made is not None and made["ends_source"] == "date"
+    assert "(date, no marathon)" in interaction.body
+    assert "Attach a marathon…" in labels(interaction.view)
+
+
+async def test_the_timed_list_refuses_a_role_it_could_not_strip_and_keeps_one_still_assigned(
     bot, db, lead
 ):
-    marathon_id = await marathon_with(db, "2027-02-28T05:00:00+00:00")
-    menu_id, end = await bound_menu(bot, db, lead, marathon_id)
-    await move_marathon(db, marathon_id, "2027-02-20T05:00:00+00:00")
-    await cog_module.follow_marathon(bot, bot.guild, marathon_id)
-    await a_fan_role(db)
-    interaction = await open_a_menu(bot, lead, "btb-2027")
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER)
+    await give(bot, lead, a, 10, FakeMember(bot.guild, user_id=900))
+    bot.guild.stuck_roles = {13}
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Timed roles…")
 
-    await press(interaction, "Use the earlier end")
-    assert PINGS_SAID in interaction.sent
-    await press(interaction, "Set the end…")
-    await press(interaction, "Buffer…")
+    await choose(interaction, "Add a role…", [SimpleNamespace(id=13)])
+    assert "could not take **role-13** off anybody" in interaction.sent
+    await choose(interaction, "Add a role…", [SimpleNamespace(id=14)])
+    assert "**role-14** is a timed role now." == interaction.sent
+    await choose(interaction, "Remove a role…", ["10"])
+    assert "still assigned 1 time(s)" in interaction.sent
+    assert await timed.role_ids(db, GUILD) == [10, 14]
+    await choose(interaction, "Remove a role…", ["14"])
+    assert await timed.role_ids(db, GUILD) == [10]
+
+
+async def test_give_roles_takes_twenty_five_a_batch_and_keeps_a_running_count(bot, db, lead):
+    await timed_list(db, 10)
+    await an_event(db, "a", ends_at=LATER)
+    people = [FakeMember(bot.guild, user_id=900 + n) for n in range(3)]
+    interaction = await open_a_menu(bot, lead, "a")
+    await press(interaction, "Give roles…")
+
+    await choose(interaction, "A timed role…", ["10"])
+    who = picker(interaction.view, "Up to 25 people…")
+    assert who.max_values == 25
+    await choose(interaction, "Up to 25 people…", people[:2])
+    assert "<@&10> · given to 2" in interaction.body
+    await choose(interaction, "Up to 25 people…", people[1:])
+    assert "<@&10> · given to 3" in interaction.body
+    assert "1 already assigned" in interaction.sent
+    assert all(10 in [r.id for r in one.roles] for one in people)
+    assert all(row["menu_id"] for row in await grants.open_grants(db, GUILD))
+
+
+async def schedule_runs(db, marathon_id, people):
+    await db.conn.execute(
+        "INSERT INTO marathon_runs(marathon_id, external_id, game, people, scheduled_at, "
+        "first_seen_at, last_seen_at) VALUES (?, 'r1', 'Game', ?, ?, ?, ?)",
+        (marathon_id, json.dumps(people), SOON, PAST, PAST),
+    )
+    await db.conn.commit()
+
+
+async def test_fill_from_the_schedule_previews_counts_and_unmatched_and_a_rerun_adds_the_missing(
+    bot, db, lead
+):
+    await timed_list(db, 10, 11)
+    await bot.store.set(GUILD, "rolemenu_fill_runner_role_id", 10)
+    await bot.store.set(GUILD, "rolemenu_fill_commentator_role_id", 11)
+    marathon_id = await marathon_with(db, LATER)
+    await schedule_runs(
+        db,
+        marathon_id,
+        [
+            {"name": "Ada", "part": "runner", "user_id": 900},
+            {"name": "Stranger", "part": "runner"},
+            {"name": "Couch", "part": "commentator", "user_id": 901},
+            {"name": "Hosty", "part": "host", "user_id": 902},
+        ],
+    )
+    ada = FakeMember(bot.guild, user_id=900)
+    FakeMember(bot.guild, user_id=901)
+    FakeMember(bot.guild, user_id=902)
+    event = await cog_module.make_event(bot, bot.guild, lead, "BtB", marathon_id=marathon_id)
+    interaction = await open_a_menu(bot, lead, event["name"])
+    await press(interaction, "Fill from the schedule")
+
+    assert "1 matched · 1 to give <@&10>" in interaction.body
+    assert "not matched to a member (1): Stranger" in interaction.body
+    assert "no role set (rolemenu_fill_host_role_id), skipped" in interaction.body
+    assert await timed.event_grants(db, GUILD, event["id"]) == []
+    await press(interaction, "Give them the roles")
+    assert "2 given" in interaction.sent
+    rows = await timed.event_grants(db, GUILD, event["id"])
+    assert {(r["user_id"], r["role_id"], r["source"]) for r in rows} == {
+        (900, 10, "schedule"),
+        (901, 11, "schedule"),
+    }
+    assert "Give them the roles" not in labels(interaction.view)
+
+    await timed.close_member_roles(db, GUILD, 900, [10], "by_hand")
+    ada.roles = []
+    await press(interaction, "Refresh")
+    assert "1 matched · 1 to give <@&10>" in interaction.body
+    await press(interaction, "Give them the roles")
+    assert len(await timed.event_grants(db, GUILD, event["id"])) == 2
+
+
+async def test_attach_a_marathon_that_ends_earlier_holds_the_earlier_end_for_staff(
+    bot, db, lead
+):
+    await store_notice_channel(bot)
+    await timed_list(db, 10)
+    marathon_id = await marathon_with(db, "2099-01-10T05:00:00+00:00")
+    event = await an_event(db, "a", ends_at="2099-02-28T06:59:00+00:00")
+    interaction = await open_a_menu(bot, lead, "a")
+    await press(interaction, "Attach a marathon…")
+
+    await choose(interaction, "Ends with a marathon…", [str(marathon_id)])
+
+    fresh = await menu_row(db, event["id"])
+    assert fresh["ends_source"] == "marathon" and fresh["ends_marathon_id"] == marathon_id
+    assert fresh["ends_at"] == "2099-02-28T06:59:00+00:00"
+    assert fresh["ends_held_at"] == "2099-01-11T05:00:00+00:00"
+    assert "Use the earlier end" in labels(interaction.view)
+    assert "Held:" in interaction.sent
+    assert bot.guild.channels[STAFF_CHANNEL].messages
+    assert "role_menu.end_held" in await action_kinds(db)
+
+
+async def test_attach_a_marathon_that_ends_later_follows_it_at_once(bot, db, lead):
+    await timed_list(db, 10)
+    marathon_id = await marathon_with(db, "2099-03-10T05:00:00+00:00")
+    event = await an_event(db, "a", ends_at="2099-02-28T06:59:00+00:00")
+
+    end = await cog_module.attach_marathon(bot, bot.guild, lead, event, marathon_id)
+
+    assert end == "2099-03-11T05:00:00+00:00"
+    assert (await menu_row(db, event["id"]))["ends_held_at"] is None
+
+
+async def test_delete_is_refused_while_people_are_assigned_to_an_end_still_to_come(
+    bot, db, lead
+):
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER)
+    await give(bot, lead, a, 10, FakeMember(bot.guild, user_id=900))
+    interaction = await open_a_menu(bot, lead, "a")
+
+    await press(interaction, "Delete it")
+
+    assert "1 people are assigned to it" in interaction.sent
+    assert await get_menu(db, GUILD, "a") is not None
+
+
+async def test_every_event_card_control_sits_inside_discords_five_rows(bot, db, lead):
+    await timed_list(db, 10)
+    marathon_id = await marathon_with(db, LATER)
+    event = await cog_module.make_event(bot, bot.guild, lead, "BtB", marathon_id=marathon_id)
+    await give(bot, lead, event, 10, FakeMember(bot.guild, user_id=900))
+    await db.conn.execute("UPDATE role_menus SET ends_held_at = ?", (SOON,))
+    await db.conn.commit()
+
+    card = await open_a_menu(bot, lead, event["name"])
+
+    assert all(0 <= one.row <= 4 for one in card.view.children)
+    for label in ("Give roles…", "Fill from the schedule", "Take roles off…"):
+        assert label in labels(card.view)
+    assert "Use the earlier end" in labels(card.view)
+
+
+# --- a timed role added by hand ------------------------------------------------------------------
+
+
+def audit_entry(target, user, role_ids, *, ago=1):
+    return SimpleNamespace(
+        target=target,
+        user=user,
+        created_at=datetime.now(UTC) - timedelta(minutes=ago),
+        after=SimpleNamespace(roles=[SimpleNamespace(id=one) for one in role_ids]),
+    )
+
+
+async def added_by_hand(bot, member, *role_ids):
+    before = SimpleNamespace(roles=list(member.roles))
+    member.roles = [*member.roles, *(FakeRole(one) for one in role_ids)]
+    await RoleMenus(bot).on_member_update(before, member)
+
+
+def posts(bot):
+    return bot.guild.channels[STAFF_CHANNEL].messages
+
+
+async def test_a_timed_role_added_by_hand_pings_who_added_it_with_the_open_events(bot, db, lead):
+    await store_notice_channel(bot)
+    await timed_list(db, 10, 11)
+    await an_event(db, "a", ends_at=LATER, title="Back to Black")
+    member = FakeMember(bot.guild, user_id=900)
+    bot.guild.me = SimpleNamespace(id=1, guild_permissions=SimpleNamespace(view_audit_log=True))
+    staffer = FakeMember(bot.guild, user_id=55, display_name="Sky")
+    bot.guild.audit_entries = [audit_entry(member, staffer, (10, 11))]
+
+    await added_by_hand(bot, member, 10, 11)
+
+    [post] = posts(bot)
+    assert post.kwargs["content"].startswith("<@55> gave <@900> <@&10>, <@&11> by hand.")
+    assert [one.id for one in post.kwargs["allowed_mentions"].users] == [55]
+    [pick, new] = post.kwargs["view"].children
+    assert [one.label for one in pick.item.options] == ["Back to Black"]
+    assert new.item.label == "New event…"
+
+    await added_by_hand(bot, member)
+    before = SimpleNamespace(roles=[r for r in member.roles if r.id != 10])
+    await RoleMenus(bot).on_member_update(before, member)
+    assert len(posts(bot)) == 1
+
+
+async def test_without_the_audit_log_the_post_names_nobody_and_says_why(bot, db, lead):
+    await store_notice_channel(bot)
+    await timed_list(db, 10)
+    member = FakeMember(bot.guild, user_id=900)
+    bot.guild.me = SimpleNamespace(id=1, guild_permissions=SimpleNamespace(view_audit_log=False))
+
+    await added_by_hand(bot, member, 10)
+
+    [post] = posts(bot)
+    assert post.kwargs["content"].startswith("Somebody gave <@900> <@&10> by hand.")
+    assert "cannot read the audit log" in post.kwargs["content"]
+    assert "No event is open" in post.kwargs["content"]
+    assert post.kwargs["allowed_mentions"].users is False
+    assert [type(one).__name__ for one in post.kwargs["view"].children] == ["ByHandNew"]
+
+
+async def test_a_silent_audit_log_or_the_bots_own_add_is_handled_honestly(bot, db, lead):
+    await store_notice_channel(bot)
+    await timed_list(db, 10, 11)
+    member = FakeMember(bot.guild, user_id=900)
+    me = SimpleNamespace(id=1, guild_permissions=SimpleNamespace(view_audit_log=True))
+    bot.guild.me = me
+    bot.guild.audit_entries = [
+        audit_entry(member, me, (11,)),
+        audit_entry(member, lead, (10,), ago=30),
+    ]
+
+    await added_by_hand(bot, member, 10)
+    assert "The audit log did not say who added it." in posts(bot)[0].kwargs["content"]
+
+    await added_by_hand(bot, member, 11)
+    assert len(posts(bot)) == 1
+
+
+async def test_picking_an_event_attaches_the_role_even_after_a_restart(bot, db, lead):
+    await store_notice_channel(bot)
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER, title="Back to Black")
+    member = FakeMember(bot.guild, user_id=900)
+    await added_by_hand(bot, member, 10)
+    [post] = posts(bot)
+    custom = post.kwargs["view"].children[0].item.custom_id
+
+    match = re.fullmatch(cog_module.hand.PICK_TEMPLATE, custom)
+    fresh = discord.ui.Select(
+        custom_id=custom, options=[discord.SelectOption(label="x", value="0")]
+    )
+    item = await cog_module.ByHandPick.from_custom_id(FakeInteraction(bot, lead), fresh, match)
+    item.item._values = [str(a["id"])]
+    interaction = FakeInteraction(bot, lead)
+    await item.callback(interaction)
+
+    row = await open_grant_on(db, 900, 10, a["id"])
+    assert row is not None and row["source"] == "by_hand_attached"
+    assert "Attached to **Back to Black**" in interaction.sent
+    assert "attached to **Back to Black** by <@1>" in post.kwargs["content"]
+    assert post.kwargs["view"] is None
+
+    again = FakeInteraction(bot, lead)
+    await item.callback(again)
+    assert "already attached to **Back to Black**" in again.sent
+
+    stranger = FakeInteraction(bot, FakeMember(bot.guild, user_id=77))
+    await item.callback(stranger)
+    assert len(await timed.event_grants(db, GUILD, a["id"])) == 1
+
+
+async def test_new_event_on_a_by_hand_post_makes_the_event_and_attaches_to_it(bot, db, lead):
+    await store_notice_channel(bot)
+    await timed_list(db, 10)
+    member = FakeMember(bot.guild, user_id=900)
+    await added_by_hand(bot, member, 10)
+    [post] = posts(bot)
+    new = post.kwargs["view"].children[-1]
+    interaction = FakeInteraction(bot, lead)
+
+    await new.callback(interaction)
     modal = interaction.response.modals[-1]
-    modal.typed._value = "3"
-    await modal.on_submit(interaction)
-    assert PINGS_SAID in interaction.sent
-    menu = await menu_row(db, menu_id)
-    assert menu["ends_at"] == end and menu["ends_held_at"] and menu["buffer_days"] is None
+    modal.name._value = "Back to Black 2027"
+    modal.typed._value = "2099-02-28"
+    await modal.on_submit(FakeInteraction(bot, lead))
 
-    await press(interaction, "No end")
-    await press(interaction, "Yes, clear it")
-
-    assert (await menu_row(db, menu_id))["ends_source"] == "none"
+    event = await get_menu(db, GUILD, "back-to-black-2027")
+    assert event is not None and await open_grant_on(db, 900, 10, event["id"]) is not None
 
 
-async def test_adding_a_ping_role_is_refused_and_removing_one_still_works(bot, db, lead):
-    await self_serve_menu(db)
-    await bot.store.set(GUILD, "golive_ping_role_id", 42)
-    interaction = await open_a_menu(bot, lead, "pronouns")
+async def test_a_role_that_came_off_asks_again_the_next_time_it_is_added_by_hand(bot, db, lead):
+    await store_notice_channel(bot)
+    await timed_list(db, 10)
+    member = FakeMember(bot.guild, user_id=900)
+    await added_by_hand(bot, member, 10)
+    await an_event(db, "a", ends_at=PAST)
 
-    await press(interaction, "Add a role…")
-    await choose(interaction, menus.ROLE_PICK, [SimpleNamespace(id=42)])
-    await press(interaction, "Use the role's own name")
+    await tick(bot)
+    assert 10 not in [r.id for r in member.roles]
+    await added_by_hand(bot, member, 10)
 
-    assert PINGS_SAID in interaction.sent and "**role-42**" in interaction.sent
-    menu = await get_menu(db, GUILD, "pronouns")
-    assert 42 not in [row["role_id"] for row in await get_options(db, menu["id"])]
-    assert "role_menu.option_added" not in await action_kinds(db)
+    asked = [one for one in posts(bot) if "by hand." in str(one.kwargs.get("content"))]
+    assert len(asked) == 2
 
-    await a_fan_role(db, role_id=1)
-    interaction = await open_a_menu(bot, lead, "pronouns")
-    await choose(interaction, menus.REMOVE_PICK, ["1"])
 
-    assert [row["role_id"] for row in await get_options(db, menu["id"])] == [2]
+async def test_a_give_discord_refuses_logs_a_failure_and_never_the_success_kind(bot, db, lead):
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER)
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo")
+    member.edit_raises = discord.HTTPException(_Refused(403), "no")
+
+    found = await give(bot, lead, a, 10, member)
+
+    assert found["refused"] == [900] and "1 refused" in found["said"]
+    kinds = await action_kinds(db)
+    assert "role_menu.assign_failed" in kinds and "role_menu.assign" not in kinds
+    assert await open_grant_on(db, 900, 10, a["id"]) is None
+
+
+async def test_one_event_per_marathon_is_refused_at_every_write_in_words(bot, db, lead):
+    await timed_list(db, 10)
+    marathon_id = await marathon_with(db, LATER)
+    first = await cog_module.make_event(bot, bot.guild, lead, "First", marathon_id=marathon_id)
+    dated = await an_event(db, "dated", ends_at=SOON)
+
+    taken = r"already has an open event, \*\*First"
+    with pytest.raises(cog_module.MarathonTakenError, match=taken):
+        await cog_module.make_event(bot, bot.guild, lead, "Second", marathon_id=marathon_id)
+    assert await get_menu(db, GUILD, "second") is None
+    with pytest.raises(cog_module.MarathonTakenError):
+        await cog_module.attach_marathon(bot, bot.guild, lead, dated, marathon_id)
+    with pytest.raises(cog_module.MarathonTakenError):
+        await cog_module.set_menu_end(
+            bot, bot.guild, lead, dated, source=menus.MARATHON_END, marathon_id=marathon_id
+        )
+    assert (await menu_row(db, dated["id"]))["ends_source"] == "date"
+
+    await cog_module.set_menu_end(
+        bot,
+        bot.guild,
+        lead,
+        first,
+        source=menus.MARATHON_END,
+        marathon_id=marathon_id,
+        buffer_days=2,
+    )
+    assert (await menu_row(db, first["id"]))["buffer_days"] == 2
+
+
+async def test_change_the_end_never_offers_a_marathon_another_open_event_follows(bot, db, lead):
+    await timed_list(db, 10)
+    taken = await another_marathon(db, LATER, "https://taken")
+    free = await marathon_with(db, SOON)
+    await cog_module.make_event(bot, bot.guild, lead, "Taken", marathon_id=taken)
+    mine = await cog_module.make_event(bot, bot.guild, lead, "Mine", marathon_id=free)
+    interaction = await open_a_menu(bot, lead, mine["name"])
+
+    await press(interaction, "Change the end…")
+
+    offered = picker(interaction.view, "Ends with a marathon…")
+    assert [one.value for one in offered.options] == [str(free)]
+
+
+async def test_a_give_on_another_event_waits_for_an_end_pass_already_taking_roles_off(
+    bot, db, lead
+):
+    import asyncio
+
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=SOON)
+    b = await an_event(db, "b", ends_at=LATER)
+    member = FakeMember(bot.guild, user_id=900)
+    member.roles.append(FakeRole(10))
+    lock = cog_module.guild_lock(bot, GUILD)
+    await lock.acquire()
+    given = asyncio.create_task(give(bot, lead, b, 10, member))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert not given.done()
+    assert await open_grant_on(db, 900, 10, b["id"]) is None
+
+    lock.release()
+    await given
+    assert await open_grant_on(db, 900, 10, b["id"]) is not None
+    assert cog_module.guild_lock(bot, GUILD) is lock
+    _ = a
+
+
+async def test_change_the_end_to_a_marathon_on_a_dated_event_attaches_and_holds_an_earlier_end(
+    bot, db, lead
+):
+    await timed_list(db, 10)
+    marathon_id = await marathon_with(db, "2099-01-10T05:00:00+00:00")
+    event = await an_event(db, "a", ends_at="2099-02-28T06:59:00+00:00")
+    interaction = await open_a_menu(bot, lead, "a")
+    await press(interaction, "Change the end…")
+
+    await choose(interaction, "Ends with a marathon…", [str(marathon_id)])
+
+    fresh = await menu_row(db, event["id"])
+    assert fresh["ends_source"] == "marathon" and fresh["ends_at"] == "2099-02-28T06:59:00+00:00"
+    assert fresh["ends_held_at"] == "2099-01-11T05:00:00+00:00"
+
+
+async def test_each_reason_a_role_may_not_join_the_timed_list_has_its_own_code(bot, db, lead):
+    await timed_list(db, 10)
+    bot.guild.stuck_roles = {13}
+
+    assert (await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(13)))[0] == "cannot_strip"
+    assert (await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(10)))[0] == "already_timed"
+    assert await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(14)) is None
+    await timed_list(db, *range(100, 124))
+    assert (await cog_module.timed_role_refusal(bot, bot.guild, FakeRole(14)))[0] == "list_full"
+
+
+async def test_the_end_pass_takes_roles_off_under_the_guild_lock_and_lets_go_before_the_dms(
+    bot, db, lead, monkeypatch
+):
+    await timed_list(db, 10)
+    a = await an_event(db, "a", ends_at=LATER)
+    FakeMember(bot.guild, user_id=900, roles=(10,))
+    held: list = []
+    real = cog_module.change_roles
+
+    async def spy(*args, **kwargs):
+        held.append(cog_module.guild_lock(bot, GUILD).locked())
+        return await real(*args, **kwargs)
+
+    async def told(*args, **kwargs):
+        held.append(("dm", cog_module.guild_lock(bot, GUILD).locked()))
+
+    monkeypatch.setattr(cog_module, "change_roles", spy)
+    monkeypatch.setattr(cog_module, "tell_wearers", told)
+    await db.conn.execute("UPDATE role_menus SET ends_at = ? WHERE id = ?", (PAST, a["id"]))
+    await db.conn.commit()
+    await tick(bot)
+
+    assert held == [True, ("dm", False)]
+
+
+async def test_the_panel_answers_a_taken_marathon_in_words_and_changes_nothing(bot, db, lead):
+    await timed_list(db, 10)
+    taken = await marathon_with(db, LATER)
+    await cog_module.make_event(bot, bot.guild, lead, "Taken", marathon_id=taken)
+    event = await an_event(db, "a", ends_at=SOON)
+    interaction = await open_a_menu(bot, lead, "a")
+    await press(interaction, "Change the end…")
+
+    await cog_module.run_set_marathon(interaction, taken, interaction.view)
+
+    assert "already has an open event, **Taken**" in interaction.sent
+    assert (await menu_row(db, event["id"]))["ends_source"] == "date"

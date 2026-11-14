@@ -1592,5 +1592,34 @@ async def test_the_roles_pings_owns_are_every_fan_role_and_both_feeds(bot, strea
     await bot.store.set(GUILD, "golive_ping_role_id", 501, by=STAFF)
     await bot.store.set(GUILD, "events_ping_role_id", 502, by=STAFF)
     await pings.set_fan_role(bot.db, GUILD, None, 503, STAFF, spotlight_id=7)
+    await bot.store.set(GUILD, "raidtrain_ping_role_id", 504, by=STAFF)
 
-    assert await pings.owned_role_ids(bot, GUILD) == {made.role_id, 501, 502, 503}
+    assert await pings.owned_role_ids(bot, GUILD) == {made.role_id, 501, 502, 503, 504}
+
+
+async def test_pings_never_adopts_a_role_on_the_timed_list_by_any_door(bot, streamer):
+    """§7.3.3: an event's end would take a timed role off every member who opted in."""
+    from black_bloc import timed_roles as timed
+
+    runner = bot.guild.add_role(FakeRole(601, "Runner"))
+    bot.guild.add_role(FakeRole(602, "Events"))
+    bot.guild.add_role(FakeRole(603, "Raid trains"))
+    bot.guild.add_role(FakeRole(604, "SuperNamu fans"))
+    for role_id in (601, 602, 603, 604):
+        await timed.add(bot.db, GUILD, role_id, "timed")
+    await bot.store.set(GUILD, "pings_events_role_name", "Events", by=STAFF)
+    await bot.store.set(GUILD, "pings_fan_role_template", "{name} fans", by=STAFF)
+
+    refused = [
+        await pings.ensure_fan_role(bot, bot.guild, streamer, by=STAFF, existing_role=runner),
+        await pings.ensure_fan_role(bot, bot.guild, streamer, by=STAFF),
+        await pings.setup_events_role(bot, bot.guild, by=STAFF, role=runner),
+        await pings.setup_events_role(bot, bot.guild, by=STAFF),
+        await pings.setup_raidtrain_role(bot, bot.guild, by=STAFF),
+    ]
+
+    for done in refused:
+        assert done.ok is False and "is a timed role, so `/pings` did not take it" in done.message
+    assert await pings.get_fan_role(bot.db, GUILD, STREAMER) is None
+    assert not bot.store.get(GUILD, "golive_ping_role_id")
+    assert not bot.store.get(GUILD, "raidtrain_ping_role_id")

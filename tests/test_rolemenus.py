@@ -38,46 +38,85 @@ def grant(user_id=900, role_id=5, expires_at=None, removed_at=None, grant_id=1):
 # --- the root table ------------------------------------------------------------------------------
 
 WORDS = {
-    rm.SET_END: "Set the end…",
+    rm.SET_END: "Change the end…",
     rm.END_MENU: "End it now",
     rm.USE_HELD: "Use the earlier end",
     rm.TYPE_DATE: "Type a date…",
     rm.BUFFER: "Buffer…",
     rm.NO_END_MOVE_ACTION: "No end",
+    rm.NEW_EVENT: "New event…",
+    rm.TIMED_ROLES: "Timed roles…",
+    rm.ENDED: "Ended ({count})…",
+    rm.GIVE: "Give roles…",
+    rm.FILL: "Fill from the schedule",
+    rm.TAKE_OFF: "Take roles off…",
+    rm.ATTACH: "Attach a marathon…",
+    rm.RENAME: "Rename…",
+    rm.NO_MARATHON: "No marathon yet…",
+    rm.FILL_YES: "Give them the roles",
 }
 
 
-def test_the_root_is_the_staff_control_and_nothing_of_self_pick():
-    """Request #17: no seed, no mode switch, no requests queue."""
-    assert actions(rm.root_buttons()) == [rm.NEW_MENU, rm.GRANTS, rm.LOGS, rm.REFRESH]
+def test_the_root_opens_on_events_with_the_ended_ones_folded_behind_a_count():
+    assert actions(rm.root_buttons(ended=0, words=WORDS)) == [
+        rm.NEW_EVENT,
+        rm.TIMED_ROLES,
+        rm.GRANTS,
+        rm.LOGS,
+        rm.REFRESH,
+    ]
+    folded = rm.root_buttons(ended=3, words=WORDS)
+    assert rm.ENDED in actions(folded) and "Ended (3)…" in labels(folded)
 
 
-# --- the menu card -------------------------------------------------------------------------------
+# --- the event card ------------------------------------------------------------------------------
 
 
 def card(**kwargs):
-    wanted = {"options": 2, "options_max": OPTIONS_MAX, "held": False, "words": WORDS}
-    return rm.menu_buttons(**(wanted | kwargs))
+    wanted = {
+        "open_": True,
+        "roles": 2,
+        "marathon": False,
+        "attachable": True,
+        "assigned": True,
+        "held": False,
+        "words": WORDS,
+    }
+    return rm.event_buttons(**(wanted | kwargs))
 
 
-def test_a_full_menu_stops_offering_another_role():
-    assert rm.ADD_ROLE in actions(card(options=OPTIONS_MAX - 1))
-    assert rm.ADD_ROLE not in actions(card(options=OPTIONS_MAX))
+def test_an_open_dated_event_gives_takes_attaches_changes_ends_renames_and_deletes():
+    assert actions(card()) == [
+        rm.GIVE,
+        rm.TAKE_OFF,
+        rm.SET_END,
+        rm.ATTACH,
+        rm.RENAME,
+        rm.END_MENU,
+        rm.DELETE,
+        rm.BACK,
+        rm.REFRESH,
+    ]
+    assert "Change the end…" in labels(card()) and "End it now" in labels(card())
 
 
-def test_the_card_offers_the_end_and_never_a_self_pick_move():
-    found = actions(card())
-    assert [rm.SET_END, rm.END_MENU] == [one for one in found if one in (rm.SET_END, rm.END_MENU)]
-    for gone in (rm.POST, rm.TAKE_DOWN, rm.RULES, rm.APPROVAL):
-        assert gone not in found
-    assert "Set the end…" in labels(card()) and "End it now" in labels(card())
+def test_fill_from_the_schedule_renders_only_with_a_marathon_and_attach_only_without():
+    assert rm.FILL in actions(card(marathon=True, attachable=False))
+    assert rm.ATTACH not in actions(card(marathon=True, attachable=False))
+    assert rm.FILL not in actions(card())
 
 
-def test_moves_that_need_roles_render_only_once_the_menu_has_some():
-    assert rm.HAND_OUT in actions(card()) and rm.END_MENU in actions(card())
-    assert rm.HAND_OUT not in actions(card(options=0))
-    assert rm.END_MENU not in actions(card(options=0))
-    assert rm.SET_END in actions(card(options=0))
+def test_moves_that_need_roles_or_people_render_only_once_there_are_some():
+    empty = actions(card(roles=0, assigned=False))
+    assert rm.GIVE not in empty and rm.END_MENU not in empty and rm.TAKE_OFF not in empty
+    assert rm.SET_END in empty and rm.DELETE in empty
+
+
+def test_an_ended_event_cannot_be_given_to_attached_or_ended_again():
+    over = actions(card(open_=False, assigned=False))
+    for gone in (rm.GIVE, rm.FILL, rm.ATTACH, rm.END_MENU, rm.TAKE_OFF):
+        assert gone not in over
+    assert rm.SET_END in over and rm.RENAME in over and rm.DELETE in over
 
 
 def test_use_the_earlier_end_renders_only_while_one_is_held():
@@ -85,14 +124,16 @@ def test_use_the_earlier_end_renders_only_while_one_is_held():
     assert rm.USE_HELD in actions(card(held=True))
 
 
-def test_every_menu_card_can_be_left_and_deleted():
-    for state in (card(), card(options=0), card(held=True)):
-        assert rm.DELETE in actions(state)
-        assert rm.BACK in actions(state)
-
-
 def test_no_control_sits_outside_discords_five_rows_or_crowds_a_row():
-    for state in (card(), card(held=True), card(options=0), rm.root_buttons()):
+    for state in (
+        card(),
+        card(held=True, marathon=True, attachable=False),
+        card(roles=0),
+        rm.root_buttons(ended=2, words=WORDS),
+        rm.new_event_buttons(WORDS),
+        rm.fill_buttons(missing=3, words=WORDS),
+        rm.back_buttons(),
+    ):
         assert all(0 <= move.row <= 4 for move in state)
         rows = [move.row for move in state]
         assert all(rows.count(one) <= 5 for one in set(rows))
@@ -122,23 +163,10 @@ def test_set_the_end_offers_buffer_only_for_a_marathon_and_no_end_only_with_an_e
 # --- the sub-panels ------------------------------------------------------------------------------
 
 
-def test_a_role_has_to_be_picked_before_it_can_be_named():
-    assert actions(rm.add_role_buttons(picked=False)) == [rm.BACK]
-    assert actions(rm.add_role_buttons(picked=True)) == [
-        rm.USE_ROLE_NAME,
-        rm.LABEL_IT,
-        rm.BACK,
-    ]
-
-
-def test_taking_roles_back_renders_only_when_they_hold_one():
-    assert actions(rm.hand_out_buttons(picked=False, holds_any=True)) == [rm.BACK]
-    assert actions(rm.hand_out_buttons(picked=True, holds_any=False)) == [rm.GIVE, rm.BACK]
-    assert actions(rm.hand_out_buttons(picked=True, holds_any=True)) == [
-        rm.GIVE,
-        rm.TAKE_BACK,
-        rm.BACK,
-    ]
+def test_new_event_offers_a_typed_event_and_fill_confirms_only_with_someone_missing():
+    assert actions(rm.new_event_buttons(WORDS)) == [rm.NO_MARATHON, rm.BACK]
+    assert actions(rm.fill_buttons(missing=0, words=WORDS)) == [rm.BACK, rm.REFRESH]
+    assert actions(rm.fill_buttons(missing=2, words=WORDS)) == [rm.FILL_YES, rm.BACK, rm.REFRESH]
 
 
 def test_a_new_grant_asks_how_long_only_once_it_knows_who_and_which():

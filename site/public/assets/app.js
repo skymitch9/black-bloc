@@ -13,7 +13,7 @@ export const TABS = [
   { tab: 'events', href: '/events.html', label: 'Events' },
   { tab: 'raidtrain', href: '/raidtrain.html', label: 'Raid trains' },
   { tab: 'golive', href: '/golive.html', label: 'Go-live' },
-  { tab: 'rolemenus', href: '/rolemenus.html', label: 'Role menus' },
+  { tab: 'rolemenus', href: '/rolemenus.html', label: 'Timed roles' },
   { tab: 'polls', href: '/polls.html', label: 'Polls' },
   { tab: 'chat', href: '/chat.html', label: 'Chat' },
   { tab: 'channels', href: '/channels.html', label: 'Channels' },

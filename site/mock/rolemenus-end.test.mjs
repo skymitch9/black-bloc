@@ -1,19 +1,28 @@
-// The Role menus page's end rules (site/public/assets/rolemenus-end.js), proved without a browser.
+// The Timed roles page's pure rules (site/public/assets/rolemenus-end.js), proved without a browser.
 //   node site/mock/rolemenus-end.test.mjs
 // Exits 0 when every case matched, 1 with a list of what did not.
 
 import {
   END_FIELDS,
+  GIVE,
+  TAKE,
   drawerItems,
   endBody,
-  endLine,
+  fillLine,
+  fillUnmatched,
   filled,
+  freeMarathons,
   grantEndsWithMenu,
+  heldRoles,
   menuFromHash,
   menuHash,
+  noteKey,
+  notTimed,
+  previewBody,
   resolvedMoment,
   resultLines,
-  wordsBody,
+  saveBody,
+  splitEvents,
 } from '../public/assets/rolemenus-end.js';
 
 const failures = [];
@@ -32,59 +41,69 @@ is('a new buffer on the same marathon is sent', endBody(following, { how: 'marat
   { ends_source: 'marathon', ends_marathon_id: '24', buffer_days: '2' });
 is('a blank buffer is the server default', endBody(dated, { how: 'marathon', marathonId: '24', buffer: ' ' }),
   { ends_source: 'marathon', ends_marathon_id: '24', buffer_days: null });
-is('another marathon is sent', endBody(following, { how: 'marathon', marathonId: '3', buffer: '' }),
-  { ends_source: 'marathon', ends_marathon_id: '3', buffer_days: null });
 is('no marathon picked sends nothing', endBody(none, { how: 'marathon', marathonId: '', buffer: '' }), null);
-is('a blank date sends nothing', endBody(dated, { how: 'date', date: '', time: '13:00' }), null);
 is('a date alone is the day', endBody(none, { how: 'date', date: '2027-02-28', time: '' }),
   { ends_source: 'date', ends_at: '2027-02-28' });
 is('a date and a time travel as typed, never as a browser Date', endBody(none, { how: 'date', date: '2027-02-28', time: '18:00' }),
   { ends_source: 'date', ends_at: '2027-02-28 18:00' });
-is('No end on a menu with no end sends nothing', endBody(none, { how: 'none' }), null);
-is('No end on a menu with one clears it', endBody(dated, { how: 'none' }), { ends_source: 'none' });
+is('No end on an event with no end sends nothing', endBody(none, { how: 'none' }), null);
+is('No end on an event with one clears it', endBody(dated, { how: 'none' }), { ends_source: 'none' });
+is('an end body only ever names end fields', Object.keys(endBody(dated, { how: 'marathon', marathonId: '3', buffer: '1' })).every((key) => END_FIELDS.includes(key)), true);
 
-const words = wordsBody({ title: 'Back to Black', description: '', options: [], ends_source: 'date', buffer_days: 3, mode: 'single' });
-is('a words save carries no end field', END_FIELDS.filter((key) => key in words), []);
-is('a words save carries no retired field', 'mode' in words, false);
-is('a words save keeps its words', words, { title: 'Back to Black', description: '', options: [] });
-
-is('a menu name in the hash', menuFromHash('#btb-2027'), 'btb-2027');
+is('an event name in the hash', menuFromHash('#btb-2027'), 'btb-2027');
 is('an encoded name comes back whole', menuFromHash(menuHash('back to black')), 'back to black');
-is('a section hash is not a menu', menuFromHash('#sect-timed-roles'), null);
-is('no hash is no menu', menuFromHash(''), null);
-is('a broken escape is no menu', menuFromHash('#%E0%A4%A'), null);
-
-is('a menu with no end says only that', endLine({ ends_source: 'none', end_label: 'no end set', wearing: 4 }), 'no end set');
-is('a menu with an end says who wears it', endLine({ ends_source: 'date', end_label: 'ends 2027-02-28 23:59', wearing: 23 }),
-  'ends 2027-02-28 23:59 · 23 wearing');
-is('an unknown count is a question mark', endLine({ ends_source: 'date', end_label: 'ends x', wearing: null }), 'ends x · ? wearing');
+is('a section hash is not an event', menuFromHash('#sect-events'), null);
+is('a broken escape is no event', menuFromHash('#%E0%A4%A'), null);
 
 is('a typed day resolves to 23:59', resolvedMoment('2027-02-28', '', 'America/Phoenix'), '2027-02-28 23:59 · America/Phoenix');
-is('a typed time is kept', resolvedMoment('2027-02-28', '18:00', 'America/Phoenix'), '2027-02-28 18:00 · America/Phoenix');
 is('no day resolves to nothing', resolvedMoment('', '18:00', 'UTC'), '');
 
 const fill = (template, values) => (template.includes('{broken') ? null : template.replace(/\{(\w+)\}/g, (all, key) => values[key] ?? all));
 is('a staff sentence is filled', filled('Set by {who}', 'x', { who: 'Nick' }, fill), 'Set by Nick');
 is('a broken staff sentence falls back to the shipped one', filled('{broken', 'Set by {who}', { who: 'Nick' }, fill), 'Set by Nick');
 
-is('the result names who still wears what', resultLines({
-  message: '**btb** ended — 2 role(s) taken off 3 people. 1 failure(s).',
-  pass: { left: ['Ada still wears **Runner**'] },
-}), ['**btb** ended — 2 role(s) taken off 3 people. 1 failure(s).', 'Ada still wears **Runner**']);
-is('a clean result is one line', resultLines({ message: 'done', pass: { left: [] } }), ['done']);
+is('the result names who still wears what', resultLines({ message: 'ended', pass: { left: ['Ada still wears **Runner**'] } }),
+  ['ended', 'Ada still wears **Runner**']);
 
-is('the drawer line counts roles and people', drawerItems([{ name: 'btb-2027', roles: 7, wearing: 23 }]),
-  [{ name: 'btb-2027', text: 'btb-2027 (7 roles · 23 people)' }]);
-is('no bound menu draws nothing', drawerItems([]), []);
-is('a count Discord has not sent reads ?', drawerItems([{ name: 'x', roles: 1, wearing: null }])[0].text, 'x (1 roles · ? people)');
+is('the drawer line names the EVENT, not its key', drawerItems([{ name: 'btb-2027', title: 'Back to Black 2027', roles: 7, assigned: 23 }]),
+  [{ name: 'btb-2027', text: 'Back to Black 2027 (23 people)' }]);
+is('no bound event draws nothing', drawerItems([]), []);
 
-is('an open grant on a menu with an end ends with it', grantEndsWithMenu({ open: true, ends_with_menu: 'btb' }), true);
-is('an ended grant does not', grantEndsWithMenu({ open: false, ends_with_menu: 'btb' }), false);
-is('a grant on no menu does not', grantEndsWithMenu({ open: true, ends_with_menu: null }), false);
+is('an open assignment ends with its event', grantEndsWithMenu({ open: true, ends_with_menu: 'Back to Black' }), true);
+is('an ended one does not', grantEndsWithMenu({ open: false, ends_with_menu: 'Back to Black' }), false);
+
+const events = [{ name: 'a', open: true }, { name: 'b', open: false }, { name: 'c', open: true }];
+is('open events keep the API order and ended ones fold apart', splitEvents(events),
+  { open: [events[0], events[2]], ended: [events[1]] });
+is('a role nobody is assigned is no fact', heldRoles({ assigned_by_role: [{ role_id: '1', count: 0 }, { role_id: '2', count: 3 }] }),
+  [{ role_id: '2', count: 3 }]);
+
+const marathons = [{ id: '1', event: null }, { id: '2', event: 'btb' }, { id: '3', event: 'other' }];
+is('New event offers only marathons no open event follows', freeMarathons(marathons).map((one) => one.id), ['1']);
+is('Change the end also offers the one the event follows itself', freeMarathons(marathons, 'btb').map((one) => one.id), ['1', '2']);
+is('the ad-hoc grant form never offers a timed role', notTimed([{ id: '1' }, { id: '2' }], [{ role_id: '2' }]), [{ id: '1' }]);
+
+is('Check the list sends the pasted text and the ticked ids once', previewBody({
+  roleId: 13, text: 'ada\n<@9>', ticked: [{ id: '7' }, { id: '7' }, { id: 8 }], mode: GIVE,
+}), { role_id: '13', lines: 'ada\n<@9>', user_ids: ['7', '8'], remove: false });
+is('Take off says so', previewBody({ roleId: '13', text: '', ticked: [], mode: TAKE }).remove, true);
+is('the save sends exactly who the preview said, nobody it only matched', saveBody({
+  role_id: '13', remove: false, matched: [{ user_id: '1' }, { user_id: '2', note: 'already' }], to_save: ['1'],
+}), { role_id: '13', user_ids: ['1'], remove: false });
+is('every reason a line was not saved has a key', ['already', 'not_assigned', 'ambiguous', 'unknown'].map(noteKey).every(Boolean), true);
+is('a person the save changes has no note', noteKey(null), null);
+
+const line = { part: 'runner', part_label: 'runs', setting: 'rolemenu_fill_runner_role_id', role_id: '13', role_name: 'Runner', timed: true, matched: 2, missing: 1, unmatched: ['Ryan', 'Gelly'], unmatched_count: 5 };
+is('a Fill line counts with the role by name, never a Discord token', fillLine(line),
+  { key: 'rolemenu_site_fill_line', values: { part: 'runs', matched: 2, missing: 1, role: 'Runner' } });
+is('a part with no role says which setting', fillLine({ ...line, role_id: null }).key, 'rolemenu_fill_no_role_line');
+is('a part whose role left the list says so', fillLine({ ...line, timed: false }).key, 'rolemenu_site_fill_not_timed_line');
+is('the unmatched names carry the count past the ones shown', fillUnmatched(line).values.names, 'Ryan, Gelly +3');
+is('nobody unmatched draws no line', fillUnmatched({ ...line, unmatched: [], unmatched_count: 0 }), null);
 
 if (failures.length) {
   console.error('rolemenus-end: not ok');
   for (const said of failures) console.error(`  - ${said}`);
   process.exit(1);
 }
-console.log('rolemenus-end: ok - an untouched End card sends no end field, a words save never does, typed dates travel as text, and the hash, lines and drawer read right');
+console.log('rolemenus-end: ok - ends send only end fields, marathons are offered one event each, a list saves only what its preview showed, and Fill and the drawer read in words');

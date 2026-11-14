@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 108
+SCHEMA_VERSION = 109
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -117,7 +117,8 @@ CREATE TABLE IF NOT EXISTS role_grants (
     granted_at     TEXT    NOT NULL,
     expires_at     TEXT,
     removed_at     TEXT,
-    removed_reason TEXT
+    removed_reason TEXT,
+    menu_id        INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS role_grants_due ON role_grants(expires_at, removed_at);
@@ -131,6 +132,34 @@ CREATE TABLE IF NOT EXISTS role_menu_options (
     position INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (menu_id, role_id)
 );
+
+CREATE TABLE IF NOT EXISTS timed_roles (
+    guild_id INTEGER NOT NULL,
+    role_id  INTEGER NOT NULL,
+    label    TEXT    NOT NULL,
+    emoji    TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    added_by INTEGER,
+    added_at TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS timed_role_prompts (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id         INTEGER NOT NULL,
+    user_id          INTEGER NOT NULL,
+    role_ids         TEXT    NOT NULL,
+    added_by         INTEGER,
+    audit            TEXT    NOT NULL,
+    channel_id       INTEGER,
+    message_id       INTEGER,
+    posted_at        TEXT    NOT NULL,
+    attached_menu_id INTEGER,
+    attached_by      INTEGER,
+    attached_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS timed_role_prompts_by_member
+    ON timed_role_prompts(guild_id, user_id, attached_at);
 
 CREATE TABLE IF NOT EXISTS golive_links (
     user_id        INTEGER PRIMARY KEY,
@@ -1909,6 +1938,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("role_menus", "end_members", "INTEGER NOT NULL DEFAULT 0"),
     ("role_menus", "end_failures", "TEXT"),
     ("role_menus", "ends_held_at", "TEXT"),
+    ("role_grants", "menu_id", "INTEGER"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {
@@ -1978,6 +2008,14 @@ BACKFILL_POST_BLOCKS = (
     "post_blocks WHERE post_blocks.post_id = posts.id AND post_blocks.kind = 'frontdoor')"
 )
 BLOCKS_SINCE = 78
+
+TIMED_ROLES_SINCE = 109
+EVENT_GRANT_INDEXES = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS role_grants_one_open_per_event "
+    "ON role_grants(guild_id, user_id, role_id, menu_id) "
+    "WHERE removed_at IS NULL AND menu_id IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS role_grants_by_event ON role_grants(menu_id, removed_at)",
+)
 
 TONES_STORED_SINCE = 87
 TONES_KEPT_FROM_THE_LAST_HEARD = (
@@ -2061,6 +2099,8 @@ class Database:
         await self._conn.executescript(SCHEMA)
         await self._drop_retired_indexes()
         await self._add_missing_columns()
+        await self._index_event_grants()
+        await self._copy_menu_roles_to_the_timed_list(before)
         await self._mirror_archived_tables()
         await self._restore_set_aside_mod_cases()
         await self._restore_set_aside_fan_roles()
@@ -2204,6 +2244,34 @@ class Database:
                 cur.rowcount,
                 PLACEHOLDER_PIN_DAY,
             )
+
+    async def _index_event_grants(self) -> None:
+        for sql in EVENT_GRANT_INDEXES:
+            await self.conn.execute(sql)
+
+    async def _copy_menu_roles_to_the_timed_list(self, before: int) -> None:
+        """Schema 109: every role a menu held joins the one timed-role list, first label kept."""
+        if before >= TIMED_ROLES_SINCE:
+            return
+        cur = await self.conn.execute(
+            "SELECT m.guild_id, o.role_id, o.label, o.emoji FROM role_menu_options o "
+            "JOIN role_menus m ON m.id = o.menu_id ORDER BY m.id, o.position, o.rowid"
+        )
+        copied = 0
+        at = datetime.now(UTC).isoformat()
+        for row in await cur.fetchall():
+            count = await self.conn.execute(
+                "SELECT COUNT(*) AS n FROM timed_roles WHERE guild_id = ?", (row["guild_id"],)
+            )
+            position = (await count.fetchone())["n"]
+            done = await self.conn.execute(
+                "INSERT OR IGNORE INTO timed_roles(guild_id, role_id, label, emoji, position, "
+                "added_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (row["guild_id"], row["role_id"], row["label"], row["emoji"], position, at),
+            )
+            copied += max(done.rowcount, 0)
+        if copied:
+            log.warning("database: %d role menu option(s) joined the timed-role list", copied)
 
     async def _add_missing_columns(self) -> None:
         for table, column, declaration in ADDED_COLUMNS:

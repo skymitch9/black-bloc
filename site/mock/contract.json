@@ -1209,22 +1209,16 @@
       "method": "GET",
       "path": "/api/rolemenus",
       "read_by": [
-        "page-rolemenus.js"
+        "page-rolemenus.js events"
       ],
       "shape": "list",
       "keys": [
         "name",
         "title",
-        "description",
-        "mode",
-        "channel_id",
-        "message_id",
-        "approval",
-        "expires_days",
-        "retry_days",
-        "options",
+        "open",
         "ends_source",
         "ends_marathon_id",
+        "marathon_name",
         "buffer_days",
         "buffer_default",
         "ends_at",
@@ -1232,20 +1226,22 @@
         "ends_held_at",
         "ends_set_by",
         "ends_set_at",
-        "wearing",
+        "assigned",
+        "assigned_by_role",
         "end_label",
         "held_label",
         "held_past",
         "held_question",
         "end_now_question",
+        "can_fill",
+        "can_attach",
         "last_pass"
       ],
       "rows": {
-        "options": [
+        "assigned_by_role": [
           "role_id",
           "label",
-          "emoji",
-          "position"
+          "count"
         ]
       }
     },
@@ -1253,40 +1249,82 @@
       "method": "GET",
       "path": "/api/rolemenus/marathons",
       "read_by": [
-        "page-rolemenus.js end editor (dispatch 2)"
+        "page-rolemenus.js New event, Change the end, Attach a marathon"
       ],
       "shape": "list",
       "keys": [
         "id",
         "name",
         "ends_at",
-        "label"
+        "label",
+        "event",
+        "event_title"
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/rolemenus/timed-roles",
+      "read_by": [
+        "page-rolemenus.js timed-role list"
+      ],
+      "shape": "list",
+      "keys": [
+        "role_id",
+        "label",
+        "emoji",
+        "position",
+        "role_name",
+        "wearing",
+        "assigned",
+        "removable",
+        "added_by",
+        "added_at"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/timed-roles",
+      "body": {
+        "role_id": "{spare_role_id}"
+      },
+      "read_by": [
+        "page-rolemenus.js timed-role list Add"
+      ],
+      "shape": "object",
+      "keys": [
+        "role_id",
+        "label",
+        "emoji",
+        "position",
+        "role_name",
+        "wearing",
+        "assigned",
+        "removable",
+        "added_by",
+        "added_at"
+      ],
+      "then": {
+        "method": "DELETE",
+        "path": "/api/rolemenus/timed-roles/{spare_role_id}"
+      }
     },
     {
       "method": "POST",
       "path": "/api/rolemenus",
       "body": {
-        "name": "contract-new",
-        "title": "Contract"
+        "title": "Contract new"
       },
       "read_by": [
-        "page-rolemenus.js editor"
+        "page-rolemenus.js New event"
       ],
       "shape": "object",
       "keys": [
         "name",
         "title",
-        "description",
-        "mode",
-        "channel_id",
-        "message_id",
-        "approval",
-        "expires_days",
-        "retry_days",
-        "options",
+        "open",
         "ends_source",
         "ends_marathon_id",
+        "marathon_name",
         "buffer_days",
         "buffer_default",
         "ends_at",
@@ -1294,12 +1332,56 @@
         "ends_held_at",
         "ends_set_by",
         "ends_set_at",
-        "wearing",
+        "assigned",
+        "assigned_by_role",
         "end_label",
         "held_label",
         "held_past",
         "held_question",
         "end_now_question",
+        "can_fill",
+        "can_attach",
+        "last_pass"
+      ],
+      "nested": {
+        "last_pass": [
+          "passes",
+          "members",
+          "failures",
+          "ended_at"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/rolemenus/contract",
+      "read_by": [
+        "page-rolemenus.js the confirms re-read the event before they ask"
+      ],
+      "shape": "object",
+      "keys": [
+        "name",
+        "title",
+        "open",
+        "ends_source",
+        "ends_marathon_id",
+        "marathon_name",
+        "buffer_days",
+        "buffer_default",
+        "ends_at",
+        "ended_at",
+        "ends_held_at",
+        "ends_set_by",
+        "ends_set_at",
+        "assigned",
+        "assigned_by_role",
+        "end_label",
+        "held_label",
+        "held_past",
+        "held_question",
+        "end_now_question",
+        "can_fill",
+        "can_attach",
         "last_pass"
       ],
       "nested": {
@@ -1315,26 +1397,19 @@
       "method": "PUT",
       "path": "/api/rolemenus/contract",
       "body": {
-        "title": "Contract",
-        "options": []
+        "title": "Contract"
       },
       "read_by": [
-        "page-rolemenus.js editor"
+        "page-rolemenus.js Rename and the End card"
       ],
       "shape": "object",
       "keys": [
         "name",
         "title",
-        "description",
-        "mode",
-        "channel_id",
-        "message_id",
-        "approval",
-        "expires_days",
-        "retry_days",
-        "options",
+        "open",
         "ends_source",
         "ends_marathon_id",
+        "marathon_name",
         "buffer_days",
         "buffer_default",
         "ends_at",
@@ -1342,12 +1417,15 @@
         "ends_held_at",
         "ends_set_by",
         "ends_set_at",
-        "wearing",
+        "assigned",
+        "assigned_by_role",
         "end_label",
         "held_label",
         "held_past",
         "held_question",
         "end_now_question",
+        "can_fill",
+        "can_attach",
         "last_pass"
       ],
       "nested": {
@@ -1361,41 +1439,162 @@
     },
     {
       "method": "POST",
-      "path": "/api/rolemenus/contract/assign",
+      "path": "/api/rolemenus/{dated_menu}/attach",
       "body": {
-        "user_id": "{member_id}",
-        "role_ids": [
-          "{plain_role_id}"
-        ]
+        "marathon_id": "{free_marathon_id}"
       },
-      "needs": "one option",
       "read_by": [
-        "page-rolemenus.js assignForm"
+        "page-rolemenus.js Attach a marathon"
       ],
       "shape": "object",
       "keys": [
-        "assigned",
         "name",
-        "user_id",
-        "message"
+        "title",
+        "open",
+        "ends_source",
+        "ends_marathon_id",
+        "marathon_name",
+        "buffer_days",
+        "buffer_default",
+        "ends_at",
+        "ended_at",
+        "ends_held_at",
+        "ends_set_by",
+        "ends_set_at",
+        "assigned",
+        "assigned_by_role",
+        "end_label",
+        "held_label",
+        "held_past",
+        "held_question",
+        "end_now_question",
+        "can_fill",
+        "can_attach",
+        "last_pass"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/contract/list/preview",
+      "body": {
+        "role_id": "{timed_role_id}",
+        "user_ids": [
+          "{member_id}"
+        ]
+      },
+      "read_by": [
+        "page-rolemenus.js Give from a list, Check the list"
+      ],
+      "shape": "object",
+      "keys": [
+        "role_id",
+        "role_name",
+        "remove",
+        "matched",
+        "unmatched",
+        "to_save"
+      ],
+      "rows": {
+        "matched": [
+          "user_id",
+          "name",
+          "typed",
+          "note"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/contract/list",
+      "body": {
+        "role_id": "{timed_role_id}",
+        "user_ids": [
+          "{member_id}"
+        ]
+      },
+      "read_by": [
+        "page-rolemenus.js Give from a list, save"
+      ],
+      "shape": "object",
+      "keys": [
+        "given",
+        "had",
+        "already",
+        "refused",
+        "kept",
+        "gone",
+        "message",
+        "event"
+      ],
+      "nested": {
+        "event": [
+          "name",
+          "assigned",
+          "assigned_by_role",
+          "end_now_question"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/rolemenus/{held_menu}/fill",
+      "read_by": [
+        "page-rolemenus.js Fill from the schedule preview"
+      ],
+      "shape": "object",
+      "keys": [
+        "name",
+        "marathon_name",
+        "lines",
+        "missing"
+      ],
+      "rows": {
+        "lines": [
+          "part",
+          "part_label",
+          "setting",
+          "role_id",
+          "role_name",
+          "timed",
+          "matched",
+          "missing",
+          "unmatched",
+          "unmatched_count"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/rolemenus/{held_menu}/fill",
+      "body": {},
+      "read_by": [
+        "page-rolemenus.js Fill from the schedule, confirm"
+      ],
+      "shape": "object",
+      "keys": [
+        "given",
+        "had",
+        "already",
+        "refused",
+        "message",
+        "event"
       ]
     },
     {
       "method": "POST",
       "path": "/api/rolemenus/contract/end-now",
       "body": {},
-      "needs": "one option",
       "read_by": [
-        "page-rolemenus.js End it now (dispatch 2)"
+        "page-rolemenus.js End it now"
       ],
       "shape": "object",
       "keys": [
         "name",
-        "options",
+        "open",
         "ends_source",
         "ends_at",
         "ended_at",
-        "wearing",
+        "assigned",
         "end_label",
         "held_label",
         "held_past",
@@ -1426,7 +1625,7 @@
       "method": "POST",
       "path": "/api/rolemenus/{held_menu}/end-earlier",
       "body": {},
-      "needs": "a menu bound to a marathon with an earlier end held",
+      "needs": "an event following a marathon with an earlier end held",
       "read_by": [
         "page-rolemenus.js Use the earlier end"
       ],
@@ -1440,7 +1639,7 @@
         "held_label",
         "held_past",
         "held_question",
-        "wearing",
+        "assigned",
         "end_label"
       ]
     },
@@ -13678,6 +13877,10 @@
     "web.role_menu.seeded",
     "web.role_menu.assign",
     "web.role_menu.unassign",
+    "web.role_menu.assign_failed",
+    "web.role_menu.unassign_failed",
+    "web.role_menu.option_added",
+    "web.role_menu.option_removed",
     "web.golive.link",
     "web.golive.unlink",
     "web.golive.optout",

@@ -1944,7 +1944,7 @@ async def test_a_read_that_moves_the_end_moves_a_bound_menu_and_tells_staff_once
     assert moved == (NOW + timedelta(minutes=460, days=1)).isoformat()
     assert len(await all_details(bot, "role_menu.end_moved")) == 1
     [notice] = bot.guild.channels[ROLE_NOTICES].messages
-    assert "**btb-2027**'s end moved" in notice.content
+    assert "**Back to Black**'s end moved" in notice.content
 
 
 async def test_an_unchanged_read_moves_no_menu_and_posts_nothing(bot, cog):

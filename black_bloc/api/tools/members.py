@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from ... import rolegrants as grants
+from ... import timed_roles as timed
 from ...cogs.community.birthdays import members_of
 from ...cogs.community.role_menus import menu_ends_named
 from ...golive import parse_ts
@@ -49,10 +50,27 @@ def merged_end(grant_end: Any, menu_end: Any) -> Any:
     return menu_end
 
 
+def role_end(
+    member: Any,
+    role: Any,
+    expiries: dict[tuple[int, int], str],
+    menu_ends: dict[int, dict[str, str]] | None,
+    assigned: dict[tuple[int, int], dict] | None,
+) -> tuple[Any, Any]:
+    """(ends_at, event): an assignee's latest event, else the soonest open end."""
+    key = (int(member.id), int(role.id))
+    own = (assigned or {}).get(key)
+    if own is not None:
+        return own["ends_at"], own["menu"]
+    soonest = (menu_ends or {}).get(int(role.id)) or {}
+    return merged_end(expiries.get(key), soonest.get("ends_at")), soonest.get("menu")
+
+
 def top_roles(
     member: Any,
     expiries: dict[tuple[int, int], str],
     menu_ends: dict[int, dict[str, str]] | None = None,
+    assigned: dict[tuple[int, int], dict] | None = None,
 ) -> list[dict[str, Any]]:
     found = [
         role
@@ -61,19 +79,19 @@ def top_roles(
         and getattr(role, "id", None) != getattr(getattr(member, "guild", None), "id", None)
     ]
     found.sort(key=lambda role: -int(getattr(role, "position", 0) or 0))
-    return [
-        {
-            "id": str(role.id),
-            "name": str(getattr(role, "name", "") or ""),
-            "color": hex_colour(role),
-            "expires_at": merged_end(
-                expiries.get((int(member.id), int(role.id))),
-                ((menu_ends or {}).get(int(role.id)) or {}).get("ends_at"),
-            ),
-            "ends_with_menu": ((menu_ends or {}).get(int(role.id)) or {}).get("menu"),
-        }
-        for role in found[:ROLES_SHOWN]
-    ]
+    rows = []
+    for role in found[:ROLES_SHOWN]:
+        end, event = role_end(member, role, expiries, menu_ends, assigned)
+        rows.append(
+            {
+                "id": str(role.id),
+                "name": str(getattr(role, "name", "") or ""),
+                "color": hex_colour(role),
+                "expires_at": end,
+                "ends_with_menu": event,
+            }
+        )
+    return rows
 
 
 def joined_iso(member: Any) -> str | None:
@@ -148,6 +166,7 @@ def member_row(
     cases: int,
     expiries: dict[tuple[int, int], str],
     menu_ends: dict[int, dict[str, str]] | None = None,
+    assigned: dict[tuple[int, int], dict] | None = None,
 ) -> dict[str, Any]:
     name = str(getattr(member, "name", "") or "")
     return {
@@ -156,7 +175,7 @@ def member_row(
         "username": name or str(member.id),
         "bot": bool(getattr(member, "bot", False)),
         "joined_at": joined_iso(member),
-        "roles": top_roles(member, expiries, menu_ends),
+        "roles": top_roles(member, expiries, menu_ends, assigned),
         "staff": staff,
         "cases": cases,
         "avatar": avatar_url(member),
@@ -210,6 +229,7 @@ def build_router(bot: Any) -> APIRouter:
         cases = await count_cases_for(getattr(bot, "db", None), guild.id, ids)
         expiries = await grants.expiring_for(getattr(bot, "db", None), guild.id, ids)
         menu_ends = await menu_ends_named(getattr(bot, "db", None), guild.id)
+        assigned = await timed.assignment_ends(getattr(bot, "db", None), guild.id, ids)
 
         return {
             "total": int(getattr(guild, "member_count", 0) or len(everyone)),
@@ -227,6 +247,7 @@ def build_router(bot: Any) -> APIRouter:
                     cases=cases.get(m.id, 0),
                     expiries=expiries,
                     menu_ends=menu_ends,
+                    assigned=assigned,
                 )
                 for m in shown
             ],

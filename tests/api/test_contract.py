@@ -309,6 +309,10 @@ def inbox_forum(guild, wf):
     guild.channels.append(room)
 
 
+TIMED_ROLE_ID = 44
+SPARE_ROLE_ID = 46
+
+
 def seed_members(guild, wf) -> None:
     wf.member(guild, MEMBER_ID, name="ada")
     wf.member(guild, 7, name="lead", staff=True)
@@ -316,6 +320,9 @@ def seed_members(guild, wf) -> None:
     # F14: {member_id} is given a ping role below, so the POST needs somebody who has none —
     # otherwise it answers the 409 that says they already have one.
     wf.member(guild, PING_MEMBER_ID, name="namu")
+    guild.roles.append(wf.Role(TIMED_ROLE_ID, "Runner", position=1))
+    guild.roles.append(wf.Role(SPARE_ROLE_ID, "Host", position=1))
+
 
 
 async def seed_world(client, web, guild, wf) -> dict:
@@ -415,14 +422,11 @@ async def seed_world(client, web, guild, wf) -> dict:
     await save_birthday(db, guild_id, MEMBER_ID, 3, 4, None, "staff")
     await add_channel(db, wf.VOICE_CHANNEL_ID, guild_id, MEMBER_ID, wf.OTHER_CHANNEL_ID)
     await web.store.set(guild_id, "tempvoice_creator_ids", [wf.VOICE_CHANNEL_ID], by=7)
-    client.post("/api/rolemenus", json={"name": "contract", "title": "Contract"})
-    client.put(
-        "/api/rolemenus/contract",
-        json={
-            "title": "Contract",
-            "options": [{"role_id": str(wf.PLAIN_ROLE_ID), "label": "Member"}],
-        },
-    )
+    # Timed roles (§7.2): the list is the server's own and a timed role is never given ad hoc,
+    # so it holds a role of its own — Member stays free for the Timed roles grant routes.
+    client.post("/api/rolemenus", json={"title": "Contract"})
+    client.post("/api/rolemenus/timed-roles", json={"role_id": str(TIMED_ROLE_ID)})
+    client.post("/api/rolemenus", json={"title": "Volunteers", "ends_at": "2099-02-01"})
     client.put("/api/settings/poll_auto_thread", json={"value": True})
     client.post("/api/modmail/snippets", json={"name": "contract", "content": "hello"})
     client.post("/api/modmail/blocks", json={"user_id": str(MEMBER_ID)})
@@ -818,7 +822,6 @@ async def seed_world(client, web, guild, wf) -> dict:
     # Request #17: a menu that ends with this marathon and holds an earlier end, so the drawer's
     # Roles ending line has a row and Use the earlier end reaches a held menu.
     held_menu = await create_menu(db, guild_id, "btb-2027", "Back to Black 2027", None, "staff")
-    await add_option(db, held_menu, wf.STAFF_ROLE_ID, "Runner", None)
     await db.conn.execute(
         "UPDATE role_menus SET ends_source = 'marathon', ends_marathon_id = ?, "
         "ends_at = '2099-03-01T05:00:00+00:00', ends_held_at = '2099-02-21T05:00:00+00:00' "
@@ -1109,6 +1112,10 @@ async def seed_world(client, web, guild, wf) -> dict:
         "meeting_id": str(meeting_id),
         "marathon_id": str(marathon_id),
         "held_menu": "btb-2027",
+        "timed_role_id": str(TIMED_ROLE_ID),
+        "spare_role_id": str(SPARE_ROLE_ID),
+        "dated_menu": "volunteers",
+        "free_marathon_id": str(marathon_over_id),
         "marathon_run_id": str(marathon_run_id),
         "marathon_pairing_id": str(marathon_pairing_id),
         "marathon_over_id": str(marathon_over_id),
@@ -1679,8 +1686,9 @@ async def test_a_single_use_seed_is_put_back_so_its_route_answers_twice(
 ):
     path = fill(spec["path"], seeded)
     back = spec["then"]
+    body = json.loads(fill(json.dumps(spec.get("body", {})), seeded))
     for _ in range(2):
-        response = module_client.request(spec["method"], path, json=spec.get("body", {}))
+        response = module_client.request(spec["method"], path, json=body)
         assert response.status_code == 200, response.text
         undone = module_client.request(back["method"], fill(back["path"], seeded), json={})
         assert undone.status_code == 200, undone.text

@@ -89,6 +89,8 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the Posts page hash fixtures are not green." }
     node site/mock/brackets.test.mjs
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the bracket drawing fixtures are not green." }
+    node site/mock/rolemenus-end.test.mjs
+    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the Timed roles page fixtures are not green." }
 }
 
 if ($GateOnly) {

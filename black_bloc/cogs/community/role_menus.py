@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,6 +14,9 @@ from discord.ext import commands, tasks
 
 from ... import rolegrants as grants
 from ... import rolemenus as menus
+from ... import timed_roles as timed
+from ... import timed_roles_by_hand as hand
+from ... import timed_roles_fill as fill
 from ... import timezones
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
@@ -21,7 +25,6 @@ from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
 from ...panels import (
-    DESCRIPTION_LIMIT,
     Panel,
     answer,
     capped_placeholder,
@@ -36,6 +39,8 @@ from ...panels import option_label as select_label
 from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
+    ROLEMENU_BY_HAND_CHANNEL_KEY,
+    ROLEMENU_BY_HAND_POSTS_KEY,
     ROLEMENU_END_BUFFER_KEY,
     ROLEMENU_END_EARLIER_HOLDS_KEY,
     ROLEMENU_END_FAILURE_LINE_KEY,
@@ -162,54 +167,10 @@ CANNOT_EDIT_ROLES = (
     "Manage Roles permission and its own role has to sit above every role in this menu in "
     "Server Settings → Roles. Ask an admin to fix that, then click again."
 )
-CANNOT_EDIT_THEIRS = (
-    "Discord refused the change, so **{name}** still has exactly the roles they had. Black Bloc "
-    "needs the Manage Roles permission and its own role has to sit above every role in this menu "
-    "in Server Settings → Roles. Ask an admin to fix that, then run the command again."
-)
-STAFF_MENU_NOT_POSTED = (
-    "**{name}** is a staff-assigned menu, so there is no panel to post — nobody gives these "
-    "roles to themselves. Open `/rolemenu`, pick **{name}**, and **Hand roles out…** gives them "
-    "out and takes them back."
-)
-NOTHING_TO_UNASSIGN = (
-    "**{name}** has none of the roles on **{menu}**, so there is nothing to take off. "
-    "**Hand roles out…** on that menu's card gives them one."
-)
-NO_MENUS_YET = (
-    "This server has no role menus yet. Open `/rolemenu`: **New menu** starts one, and **Seed "
-    "the defaults** brings over the six this server was built with."
-)
-SEED_EMOJI_NOTE = (
-    "A menu that already exists is left exactly as it is, options and all — to pick up the "
-    "Marathons emoji on `event-alerts`, open that menu's card, press **Delete it**, and seed "
-    "again."
-)
-
-
-ALREADY_EXACTLY = (
-    "**{name}** already has exactly those roles, so nothing changed."
-)
-NO_SUCH_MEMBER = (
-    "**{user_id}** is not somebody Black Bloc can see in this server, so nothing was changed. "
-    "Pick them from the list rather than typing an id."
-)
-NOTHING_ON_THIS_MENU = (
-    "**{name}** has no roles on it yet, so there is nothing to hand out. Add one to the menu "
-    "first."
-)
-NOTHING_TO_UNPOST = (
-    "**{name}** has no panel up right now, so there was nothing to take down. **Post it** on "
-    "that menu's card puts one up."
-)
 PANEL_STUCK = (
     "Black Bloc could not take **{name}**'s panel down, so it is still where it was. It needs to "
     "see that channel and be able to delete its own message there — ask a Lead to check both, "
     "then try again."
-)
-PANEL_TAKEN_DOWN = (
-    "**{name}**'s panel is down. The menu and its roles are untouched and nobody loses a role — "
-    "post it again whenever you want it back."
 )
 
 
@@ -269,6 +230,10 @@ GRANT_ENDED = (
 
 class MenuLimitError(ValueError):
     """A heading, line, label or option list is longer than Discord will show."""
+
+
+class MarathonTakenError(MenuLimitError):
+    """Another open event already ends with this marathon (one event per marathon)."""
 
 
 def check_length(what: str, value: str, limit: int) -> str:
@@ -492,26 +457,22 @@ async def menus_bound_to(db: Any, guild_id: int, marathon_id: int) -> list[Any]:
 
 
 async def menus_ending_with(bot: Any, guild: Any, marathon_id: Any) -> list[dict[str, Any]]:
-    """The unfinished menus whose roles come off with this marathon, with their counts."""
+    """The open events that end with this marathon, with their roles and people assigned."""
     bound = [
         one for one in await menus_bound_to(bot.db, guild.id, marathon_id) if not one["ended_at"]
     ]
     if not bound:
         return []
-    members = await members_of(guild)
-    found = []
-    for menu in bound:
-        role_ids = await menu_role_ids(bot.db, menu["id"])
-        wearing = wearing_count(bot, guild.id, members, role_ids)
-        found.append(
-            {
-                "name": menu["name"],
-                "title": menu["title"],
-                "roles": len(role_ids),
-                "wearing": wearing if isinstance(wearing, int) else None,
-            }
-        )
-    return found
+    roles = len(await timed.role_ids(bot.db, guild.id))
+    return [
+        {
+            "name": menu["name"],
+            "title": menu["title"],
+            "roles": roles,
+            "assigned": await timed.assigned_people(bot.db, guild.id, menu["id"]),
+        }
+        for menu in bound
+    ]
 
 
 async def store_menu_end(
@@ -576,22 +537,12 @@ async def marathon_row(db: Any, guild_id: int, marathon_id: Any) -> Any:
 
 async def option_label(db: Any, menu_id: int, role_id: int) -> str | None:
     cur = await db.conn.execute(
-        "SELECT label FROM role_menu_options WHERE menu_id = ? AND role_id = ?",
+        "SELECT t.label FROM timed_roles t JOIN role_menus m ON m.guild_id = t.guild_id "
+        "WHERE m.id = ? AND t.role_id = ?",
         (menu_id, role_id),
     )
     row = await cur.fetchone()
     return row["label"] if row is not None else None
-
-
-async def timed_menu_owns(db: Any, guild_id: int, role_id: int) -> bool:
-    """True when some menu in this guild hands that role out on a clock."""
-    cur = await db.conn.execute(
-        "SELECT 1 FROM role_menus m JOIN role_menu_options o ON o.menu_id = m.id "
-        "WHERE m.guild_id = ? AND o.role_id = ? AND m.expires_days IS NOT NULL "
-        "AND m.expires_days > 0 LIMIT 1",
-        (guild_id, role_id),
-    )
-    return await cur.fetchone() is not None
 
 
 def role_name(guild: Any, role_id: Any) -> str:
@@ -706,8 +657,11 @@ async def delete_menu(db: Any, guild_id: int, name: str) -> bool:
 
 
 async def get_options(db: Any, menu_id: int) -> list[Any]:
+    """An event's roles: the one timed-role list of its server, shared by every event."""
     cur = await db.conn.execute(
-        "SELECT * FROM role_menu_options WHERE menu_id = ? ORDER BY position, rowid", (menu_id,)
+        "SELECT t.* FROM timed_roles t JOIN role_menus m ON m.guild_id = t.guild_id "
+        "WHERE m.id = ? ORDER BY t.position, t.role_id",
+        (menu_id,),
     )
     return list(await cur.fetchall())
 
@@ -758,21 +712,6 @@ async def clear_message(db: Any, menu_id: int) -> None:
         "UPDATE role_menus SET message_id = NULL WHERE id = ?", (menu_id,)
     )
     await db.conn.commit()
-
-
-def seed_summary(created: list[str], skipped: list[str]) -> str:
-    """What seeding did, in the one wording the slash command and the dashboard both show."""
-    parts = []
-    if created:
-        parts.append("Created: " + ", ".join(created))
-    if skipped:
-        parts.append("Already there, left alone: " + ", ".join(skipped))
-        parts.append(SEED_EMOJI_NOTE)
-    parts.append(
-        "Pick each one on `/rolemenu` and press **Post it** — except `runner-status`, which "
-        "staff hand out with **Hand roles out…**."
-    )
-    return " · ".join(parts)
 
 
 async def seed_default_menus(db: Any, guild_id: int) -> tuple[list[str], list[str]]:
@@ -1403,95 +1342,6 @@ class RoleMenuView(discord.ui.View):
         self.add_item(RoleMenuSelect(menu_id, options, mode))
 
 
-async def staff_assign(
-    bot: Any,
-    guild: Any,
-    actor: Any,
-    menu: Any,
-    options: Any,
-    target: Any,
-    selected: Any,
-    *,
-    remove: bool,
-    via: str = VIA_DISCORD,
-) -> tuple[bool, str]:
-    """Hand a menu's roles out or take them back: the staff picker and the dashboard, one path."""
-    rows = list(options or ())
-    role_ids = [row["role_id"] for row in rows]
-    labels = {row["role_id"]: row["label"] for row in rows}
-    wanted = {int(value) for value in selected or ()}
-    if remove:
-        to_add, to_remove = set(), wanted & set(role_ids)
-    else:
-        to_add, to_remove = role_diff((role.id for role in target.roles), role_ids, wanted)
-    if not to_add and not to_remove:
-        return True, ALREADY_EXACTLY.format(name=target.display_name)
-    if not await change_roles(
-        bot, target, guild, to_add, to_remove, f"Black Bloc role menu by {actor}"
-    ):
-        return False, CANNOT_EDIT_THEIRS.format(name=target.display_name)
-    added = [labels.get(role_id, str(role_id)) for role_id in to_add]
-    removed = [labels.get(role_id, str(role_id)) for role_id in to_remove]
-    ends = await menu_ends_by_role(bot.db, guild.id)
-    for role_id in to_add:
-        await grants.record_added(
-            bot.db,
-            guild.id,
-            target.id,
-            [role_id],
-            grants.STAFF,
-            granted_by=getattr(actor, "id", actor),
-            until=grants.clamped(None, ends.get(int(role_id))),
-        )
-    await grants.record_removed(bot.db, guild.id, target.id, to_remove, grants.ENDED_BY_STAFF)
-    kind = kind_via(f"role_menu.{'unassign' if remove else 'assign'}", via)
-    await log_action(
-        bot,
-        guild,
-        kind,
-        actor=actor,
-        target=target,
-        details={
-            "menu_id": menu["id"] if menu is not None else None,
-            "added": added,
-            "removed": removed,
-            "via": via,
-        },
-    )
-    return True, f"**{target.display_name}** — {summary(added, removed)}"
-
-
-class AssignPick(discord.ui.Select):
-    """The staff picker: the roles they hold arrive already ticked, so 'have' means have."""
-
-    def __init__(
-        self, menu_id: int, options: Any, target: Any, *, remove: bool, row: int = 2
-    ) -> None:
-        held = {role.id for role in target.roles}
-        super().__init__(
-            placeholder=("Roles to take off " if remove else "Roles for ") + target.display_name,
-            min_values=0,
-            max_values=max(1, min(len(options), 25)),
-            options=[
-                discord.SelectOption(
-                    label=one["label"],
-                    value=str(one["role_id"]),
-                    emoji=select_emoji(one["emoji"]),
-                    default=not remove and one["role_id"] in held,
-                )
-                for one in options
-            ],
-            row=row,
-        )
-        self.menu_id = menu_id
-        self.rows = list(options)
-        self.target = target
-        self.remove = remove
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await run_assign(interaction, self, self.view)
-
-
 # --- one function per move, one write, one log row; both doors call these ------------------------
 
 
@@ -1556,57 +1406,87 @@ async def change_menu(
 
 
 async def drop_menu(bot: Any, guild: Any, actor: Any, name: str, *, via: str = VIA_DISCORD) -> bool:
+    """An event goes; its assignments close, and nobody loses a role for it."""
     menu = await get_menu(bot.db, guild.id, name)
-    role_ids = await menu_role_ids(bot.db, menu["id"]) if menu is not None else []
-    if not await delete_menu(bot.db, guild.id, name):
+    if menu is None or not await delete_menu(bot.db, guild.id, name):
         return False
-    await stamp_grants(bot.db, guild.id, role_ids, was=(menu_value(menu, "ends_at"),))
+    closed = await timed.close_event(bot.db, guild.id, menu["id"], grants.EVENT_DELETED)
     await log_action(
         bot,
         guild,
         kind_via("role_menu.delete", via),
         actor=actor,
-        details={"menu": name, "via": via},
+        details={"menu": name, "assignments_closed": closed, "via": via},
     )
     return True
 
 
-async def put_option(
+async def add_timed_role(
     bot: Any,
     guild: Any,
     actor: Any,
-    menu: Any,
-    role_id: int,
-    label: str,
-    emoji: Any = None,
+    role: Any,
     *,
+    label: Any = None,
+    emoji: Any = None,
     via: str = VIA_DISCORD,
-) -> None:
-    await add_option(bot.db, menu["id"], int(role_id), label, emoji)
-    await stamp_grants(bot.db, guild.id, [int(role_id)])
+) -> str | None:
+    """A role joins the one timed list; None when it did, else why not, in words."""
+    refused = await timed_role_refusal(bot, guild, role)
+    if refused:
+        return refused[1]
+    wanted = str(label or "").strip() or str(role.name)
+    if not await timed.add(bot.db, guild.id, role.id, wanted, emoji=emoji, by=actor_id(actor)):
+        return word(bot, guild.id, "rolemenu_timed_already_said", name=role.name)
     await log_action(
         bot,
         guild,
         kind_via("role_menu.option_added", via),
         actor=actor,
-        details={"menu": menu["name"], "role_id": int(role_id), "label": label, "via": via},
+        details={"role_id": int(role.id), "label": wanted, "via": via},
     )
+    return None
 
 
-async def drop_option(
-    bot: Any, guild: Any, actor: Any, menu: Any, role_id: int, *, via: str = VIA_DISCORD
-) -> bool:
-    if not await remove_option(bot.db, menu["id"], int(role_id)):
-        return False
-    await stamp_grants(bot.db, guild.id, [int(role_id)], was=(menu_value(menu, "ends_at"),))
+async def timed_role_refusal(bot: Any, guild: Any, role: Any) -> tuple[str, str] | None:
+    """(code, sentence) for a role that may not join the timed list; None when it may."""
+    if not removable(guild, role.id):
+        return "cannot_strip", word(bot, guild.id, "rolemenu_cannot_strip_said", name=role.name)
+    refused = await pings_refusal(bot, guild, [role.id])
+    if refused:
+        return "pings_role", refused
+    if await timed.is_timed(bot.db, guild.id, role.id):
+        return "already_timed", word(bot, guild.id, "rolemenu_timed_already_said", name=role.name)
+    if len(await timed.role_ids(bot.db, guild.id)) >= timed.LIST_MAX:
+        return "list_full", menus.said(
+            bot.store, guild.id, "rolemenu_timed_list_full_said", limit=timed.LIST_MAX
+        )
+    return None
+
+
+async def drop_timed_role(
+    bot: Any, guild: Any, actor: Any, role_id: int, *, via: str = VIA_DISCORD
+) -> str | None:
+    """A role leaves the list; refused while any open event still assigns it."""
+    count = await timed.assigned_count(bot.db, guild.id, role_id)
+    if count:
+        return word(
+            bot,
+            guild.id,
+            "rolemenu_timed_remove_refused_said",
+            name=role_name(guild, role_id),
+            count=count,
+        )
+    if not await timed.remove(bot.db, guild.id, role_id):
+        return word(bot, guild.id, "rolemenu_timed_not_listed_said", name=role_name(guild, role_id))
     await log_action(
         bot,
         guild,
         kind_via("role_menu.option_removed", via),
         actor=actor,
-        details={"menu": menu["name"], "role_id": int(role_id), "via": via},
+        details={"role_id": int(role_id), "via": via},
     )
-    return True
+    return None
 
 
 async def post_menu(
@@ -1662,13 +1542,14 @@ async def grant_role(
 ) -> tuple[Any, str]:
     """One timed role: `days` of None or 0 means it never runs out, as the website has always
     allowed. A role they already hold only starts the clock; an open grant has its clock reset."""
+    if await timed.is_timed(bot.db, guild.id, role.id):
+        return None, word(bot, guild.id, TIMED_NEEDS_EVENT_KEY, role=role.name)
     held = any(r.id == role.id for r in member.roles)
     if not held and not await change_roles(
         bot, member, guild, {role.id}, set(), f"Black Bloc timed role by {actor}"
     ):
         return None, CANNOT_ADD.format(label=role.name, name=member.display_name)
-    ending = await menu_ending_role(bot.db, guild.id, role.id)
-    until = grants.clamped(grants.expires_at(days), ending["ends_at"] if ending else None)
+    until = grants.expires_at(days)
     open_row = await grants.open_grant(bot.db, guild.id, member.id, role.id)
     if open_row is not None:
         await grants.extend_grant(bot.db, open_row["id"], until)
@@ -1749,7 +1630,8 @@ async def revoke_grant(
     """The staff reversal every stored decision gets — the Discord half that never existed."""
     member = guild.get_member(row["user_id"]) if guild is not None else None
     name, label = grant_names(guild, row)
-    if member is not None and any(r.id == row["role_id"] for r in member.roles):
+    kept = await kept_elsewhere(bot.db, guild.id, row)
+    if not kept and member is not None and any(r.id == row["role_id"] for r in member.roles):
         if not await change_roles(
             bot, member, guild, set(), {row["role_id"]}, f"Black Bloc timed role ended by {actor}"
         ):
@@ -1763,7 +1645,152 @@ async def revoke_grant(
         target=member if member is not None else row["user_id"],
         details={"grant_id": row["id"], "role_id": row["role_id"], "via": via},
     )
+    if kept:
+        return True, word(bot, guild.id, KEPT_THROUGH_KEY, role=label, name=name, menu=kept)
     return True, GRANT_ENDED.format(label=label, name=name)
+
+
+# --- timed roles per event: giving and taking an event's roles --------------------------------
+
+
+def event_name(menu: Any) -> str:
+    return str(menu_value(menu, "title") or menu_value(menu, "name") or "?")
+
+
+def outcome_said(bot: Any, guild_id: int, key: str, role: str, found: dict[str, list]) -> str:
+    return word(
+        bot,
+        guild_id,
+        key,
+        role=role,
+        given=len(found["given"]),
+        had=len(found["had"]),
+        already=len(found["already"]),
+        refused=len(found["refused"]),
+        kept=len(found.get("kept", ())),
+    )
+
+
+async def give_event_role(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    role_id: int,
+    members: Any,
+    *,
+    source: str = grants.STAFF,
+    via: str = VIA_DISCORD,
+) -> dict[str, Any]:
+    """One batch: each member wears the role and holds it through this event, once."""
+    found: dict[str, Any] = {"given": [], "had": [], "already": [], "refused": []}
+    role_id = int(role_id)
+    label = role_name(guild, role_id)
+    if menu_value(menu, "ended_at") or not await timed.is_timed(bot.db, guild.id, role_id):
+        found["refused"] = [int(one.id) for one in members or ()]
+        found["said"] = word(bot, guild.id, "rolemenu_give_refused_said", role=label)
+        return found
+    reason = f"Black Bloc: {event_name(menu)} by {actor}"
+    async with end_lock(bot, menu["id"]), guild_lock(bot, guild.id):
+        fresh = await get_menu_by_id(bot.db, menu["id"])
+        until = menu_value(fresh, "ends_at")
+        for member in members or ():
+            if await timed.event_grant(bot.db, guild.id, member.id, role_id, menu["id"]):
+                found["already"].append(int(member.id))
+                continue
+            wears = any(int(r.id) == role_id for r in member.roles)
+            if not wears and not await change_roles(bot, member, guild, {role_id}, set(), reason):
+                found["refused"].append(int(member.id))
+                continue
+            try:
+                await grants.add_grant(
+                    bot.db,
+                    guild.id,
+                    member.id,
+                    role_id,
+                    source,
+                    granted_by=actor_id(actor),
+                    until=until,
+                    menu_id=int(menu["id"]),
+                )
+            except sqlite3.IntegrityError:
+                found["already"].append(int(member.id))
+                continue
+            found["had" if wears else "given"].append(int(member.id))
+    details = {
+        "menu": menu["name"],
+        "menu_id": int(menu["id"]),
+        "role_id": role_id,
+        "source": source,
+        **{key: found[key] for key in ("given", "had", "already", "refused")},
+        "via": via,
+    }
+    if found["given"] or found["had"] or found["already"]:
+        await log_action(
+            bot, guild, kind_via("role_menu.assign", via), actor=actor, details=details
+        )
+    if found["refused"]:
+        await log_action(
+            bot, guild, kind_via("role_menu.assign_failed", via), actor=actor, details=details
+        )
+    found["said"] = outcome_said(bot, guild.id, "rolemenu_give_said", label, found)
+    return found
+
+
+async def take_event_role(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    role_id: int,
+    members: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> dict[str, Any]:
+    """Off this event; the role itself stays on anyone another open event still holds it for."""
+    found: dict[str, Any] = {"given": [], "had": [], "already": [], "refused": [], "kept": []}
+    role_id = int(role_id)
+    label = role_name(guild, role_id)
+    reason = f"Black Bloc: {event_name(menu)} taken off by {actor}"
+    async with end_lock(bot, menu["id"]), guild_lock(bot, guild.id):
+        keeping = await timed.keepers(bot.db, guild.id, menu["id"])
+        for member in members or ():
+            row = await timed.event_grant(bot.db, guild.id, member.id, role_id, menu["id"])
+            wears = any(int(r.id) == role_id for r in member.roles)
+            if (int(member.id), role_id) in keeping:
+                if row is not None:
+                    await grants.end_grant(bot.db, row["id"], grants.ENDED_BY_STAFF)
+                found["kept"].append(int(member.id))
+                continue
+            if wears and not await change_roles(bot, member, guild, set(), {role_id}, reason):
+                found["refused"].append(int(member.id))
+                continue
+            closed = await timed.close_member_roles(
+                bot.db, guild.id, member.id, [role_id], grants.ENDED_BY_STAFF
+            )
+            if wears:
+                await hand.retire_roles(bot.db, guild.id, member.id, [role_id])
+            found["given" if wears or closed else "already"].append(int(member.id))
+    details = {
+        "menu": menu["name"],
+        "menu_id": int(menu["id"]),
+        "role_id": role_id,
+        "taken": found["given"],
+        "kept": found["kept"],
+        "already": found["already"],
+        "refused": found["refused"],
+        "via": via,
+    }
+    if found["given"] or found["kept"] or found["already"]:
+        await log_action(
+            bot, guild, kind_via("role_menu.unassign", via), actor=actor, details=details
+        )
+    if found["refused"]:
+        await log_action(
+            bot, guild, kind_via("role_menu.unassign_failed", via), actor=actor, details=details
+        )
+    found["said"] = outcome_said(bot, guild.id, "rolemenu_take_said", label, found)
+    return found
 
 
 # --- temporary roles: a menu's end, and the pass that takes its roles off everyone -------------
@@ -1772,6 +1799,7 @@ async def revoke_grant(
 END_REASON = "Black Bloc: {menu} ended"
 NOTICE_LIMIT = 2000
 END_LOCKS_ATTR = "_role_menu_end_locks"
+GUILD_LOCKS_ATTR = "_role_menu_guild_locks"
 
 
 def end_lock(bot: Any, menu_id: Any) -> asyncio.Lock:
@@ -1783,122 +1811,61 @@ def end_lock(bot: Any, menu_id: Any) -> asyncio.Lock:
     return found.setdefault(int(menu_id), asyncio.Lock())
 
 
+def guild_lock(bot: Any, guild_id: Any) -> asyncio.Lock:
+    """Innermost, never nested: an end pass and a give or take on ANY event wait for each other."""
+    found = getattr(bot, GUILD_LOCKS_ATTR, None)
+    if found is None:
+        found = {}
+        setattr(bot, GUILD_LOCKS_ATTR, found)
+    return found.setdefault(int(guild_id), asyncio.Lock())
+
+
 def default_buffer(bot: Any, guild_id: int) -> Any:
     return bot.store.get(guild_id, ROLEMENU_END_BUFFER_KEY)
 
 
-async def menu_ends_by_role(db: Any, guild_id: int) -> dict[int, str]:
-    """The soonest unfinished menu end each role carries; a role on no such menu is absent."""
-    cur = await db.conn.execute(
-        "SELECT o.role_id, m.ends_at FROM role_menus m JOIN role_menu_options o "
-        "ON o.menu_id = m.id WHERE m.guild_id = ? AND m.ends_at IS NOT NULL "
-        "AND m.ended_at IS NULL",
-        (int(guild_id),),
-    )
-    found: dict[int, str] = {}
-    for row in await cur.fetchall():
-        when = parse_ts(row["ends_at"])
-        if when is None:
-            continue
-        role_id = int(row["role_id"])
-        held = parse_ts(found.get(role_id))
-        if held is None or when < held:
-            found[role_id] = menus.utc_iso(when)
-    return found
-
-
 async def menu_ends_named(db: Any, guild_id: Any) -> dict[int, dict[str, str]]:
-    """Each role's soonest unfinished menu end with that menu's name; the Members chips' source."""
-    if db is None or not getattr(db, "is_connected", False):
-        return {}
+    """Each timed role's next end with that event's name; the Members chips' source."""
+    return await timed.soonest_ends(db, guild_id)
+
+
+async def kept_elsewhere(db: Any, guild_id: int, row: Any) -> str | None:
+    """The name of another open event that holds this member's role, or None."""
     cur = await db.conn.execute(
-        "SELECT o.role_id, m.ends_at, m.name FROM role_menus m JOIN role_menu_options o "
-        "ON o.menu_id = m.id WHERE m.guild_id = ? AND m.ends_at IS NOT NULL "
-        "AND m.ended_at IS NULL ORDER BY m.id",
-        (int(guild_id),),
+        "SELECT m.title FROM role_grants g JOIN role_menus m ON m.id = g.menu_id "
+        "WHERE g.guild_id = ? AND g.user_id = ? AND g.role_id = ? AND g.removed_at IS NULL "
+        "AND m.ended_at IS NULL AND g.id != ? ORDER BY m.id LIMIT 1",
+        (int(guild_id), int(row["user_id"]), int(row["role_id"]), int(row["id"])),
     )
-    found: dict[int, dict[str, str]] = {}
-    for row in await cur.fetchall():
-        when = parse_ts(row["ends_at"])
-        if when is None:
-            continue
-        role_id = int(row["role_id"])
-        held = parse_ts((found.get(role_id) or {}).get("ends_at"))
-        if held is None or when < held:
-            found[role_id] = {"ends_at": menus.utc_iso(when), "menu": str(row["name"])}
-    return found
-
-
-async def stamp_grants(db: Any, guild_id: int, role_ids: Any, *, was: Any = ()) -> int:
-    """Open grants on these roles carry their menu's end, so every surface reads one date.
-
-    A role whose menu end went away loses only the stamp the menu put there (`was`)."""
-    ends = await menu_ends_by_role(db, guild_id)
-    gone = [str(one) for one in was or () if one]
-    changed = 0
-    for role_id in dict.fromkeys(int(one) for one in role_ids or ()):
-        end = ends.get(role_id)
-        if end is not None:
-            cur = await db.conn.execute(
-                "UPDATE role_grants SET expires_at = ? WHERE guild_id = ? AND role_id = ? "
-                "AND removed_at IS NULL AND expires_at IS NOT ?",
-                (end, int(guild_id), role_id, end),
-            )
-        elif gone:
-            marks = ", ".join("?" for _ in gone)
-            cur = await db.conn.execute(
-                "UPDATE role_grants SET expires_at = NULL WHERE guild_id = ? AND role_id = ? "
-                f"AND removed_at IS NULL AND expires_at IN ({marks})",
-                (int(guild_id), role_id, *gone),
-            )
-        else:
-            continue
-        changed += max(cur.rowcount, 0)
-    await db.conn.commit()
-    return changed
-
-
-async def menu_ending_role(db: Any, guild_id: int, role_id: Any) -> Any:
-    """The unfinished menu whose end comes soonest for this role; None when it is on none."""
-    cur = await db.conn.execute(
-        "SELECT m.* FROM role_menus m JOIN role_menu_options o ON o.menu_id = m.id "
-        "WHERE m.guild_id = ? AND o.role_id = ? AND m.ends_at IS NOT NULL AND m.ended_at IS NULL "
-        "ORDER BY m.ends_at, m.id",
-        (int(guild_id), int(role_id)),
-    )
-    for row in await cur.fetchall():
-        if parse_ts(row["ends_at"]) is not None:
-            return row
-    return None
+    found = await cur.fetchone()
+    return str(found["title"]) if found is not None else None
 
 
 async def push_back_refusal(bot: Any, guild: Any, row: Any, when: Any = None) -> str | None:
-    ending = await menu_ending_role(bot.db, guild.id, row["role_id"])
-    if ending is None:
-        return None
-    shown = when or (lambda _bot, _guild_id, at: grants.stamp(at, "D"))
-    return menus.said(
-        bot.store,
-        guild.id,
-        ROLEMENU_PUSH_BACK_REFUSED_KEY,
-        role=role_name(guild, row["role_id"]),
-        menu=ending["name"],
-        date=shown(bot, guild.id, ending["ends_at"]),
-    )
+    """An assignment ends with its event, and a timed role is only ever given from one."""
+    menu_id = menu_value(row, "menu_id")
+    event = await get_menu_by_id(bot.db, int(menu_id)) if menu_id is not None else None
+    if event is not None:
+        shown = when or (lambda _bot, _guild_id, at: grants.stamp(at, "D"))
+        return menus.said(
+            bot.store,
+            guild.id,
+            ROLEMENU_PUSH_BACK_REFUSED_KEY,
+            role=role_name(guild, row["role_id"]),
+            menu=event["title"],
+            date=(
+                shown(bot, guild.id, event["ends_at"])
+                if parse_ts(event["ends_at"]) is not None
+                else str(bot.store.get(guild.id, ROLEMENU_END_NOT_KNOWN_KEY))
+            ),
+        )
+    if await timed.is_timed(bot.db, guild.id, row["role_id"]):
+        return word(bot, guild.id, TIMED_NEEDS_EVENT_KEY, role=role_name(guild, row["role_id"]))
+    return None
 
 
 async def menu_role_ids(db: Any, menu_id: int) -> list[int]:
     return [int(row["role_id"]) for row in await get_options(db, menu_id)]
-
-
-async def roles_ending_now(db: Any, at: datetime) -> set[tuple[int, int]]:
-    """(guild, role) pairs a due menu is about to take off, so the grant path leaves them be."""
-    found: set[tuple[int, int]] = set()
-    for menu in await menus_still_to_end(db):
-        if menus.is_due(menu, at):
-            for role_id in await menu_role_ids(db, menu["id"]):
-                found.add((int(menu["guild_id"]), role_id))
-    return found
 
 
 async def post_role_notice(bot: Any, guild: Any, text: str) -> bool:
@@ -1942,6 +1909,7 @@ async def set_menu_end(
         marathon = await marathon_row(bot.db, guild.id, marathon_id)
         if marathon is None:
             raise ValueError(f"no marathon {marathon_id!r} in this server")
+        await refuse_taken_marathon(bot, guild, marathon, menu["id"])
     wanted = {
         "ends_source": source,
         "buffer_days": None if buffer_days is None else menus.buffer_of({}, buffer_days),
@@ -1958,9 +1926,7 @@ async def set_menu_end(
             ends_at=end,
             by=actor_id(actor),
         )
-    await stamp_grants(
-        bot.db, guild.id, await menu_role_ids(bot.db, menu["id"]), was=(menu["ends_at"],)
-    )
+    await timed.stamp_event(bot.db, guild.id, menu["id"], end)
     await log_action(
         bot,
         guild,
@@ -2011,16 +1977,6 @@ def roles_said(labels: dict[int, str], role_ids: Any) -> str:
     return ", ".join(f"**{labels.get(int(one), one)}**" for one in role_ids)
 
 
-async def close_menu_grants(db: Any, guild_id: int, role_ids: Any, keep: set[int]) -> int:
-    """Every open grant on the menu's roles closes, except for members who still wear them."""
-    closed = 0
-    wanted = {int(one) for one in role_ids or ()}
-    for row in await grants.open_grants(db, guild_id):
-        if int(row["role_id"]) in wanted and int(row["user_id"]) not in keep:
-            closed += int(await grants.end_grant(db, row["id"], grants.EXPIRED))
-    return closed
-
-
 async def end_menu(
     bot: Any, guild: Any, menu_id: Any, *, actor: Any = None, via: str = VIA_DISCORD
 ) -> dict[str, Any] | None:
@@ -2048,20 +2004,52 @@ async def end_menu_now(
             ends_at=now_iso(),
             by=actor_id(actor),
         )
-    await stamp_grants(
-        bot.db, guild.id, await menu_role_ids(bot.db, menu["id"]), was=(menu["ends_at"],)
-    )
+    fresh = await get_menu_by_id(bot.db, menu["id"])
+    await timed.stamp_event(bot.db, guild.id, menu["id"], menu_value(fresh, "ends_at"))
     return await end_menu(bot, guild, menu["id"], actor=actor, via=via)
 
 
-async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> Any:
-    db = bot.db
-    role_ids = await menu_role_ids(db, menu["id"])
-    base = {"menu": menu["name"], "menu_id": menu["id"], "via": via}
-    if getattr(guild, "unavailable", False):
-        return None
+async def owned_by_pings(bot: Any, guild_id: int) -> set[int]:
+    from ... import pings
+
+    return await pings.owned_role_ids(bot, guild_id)
+
+
+async def end_plan(bot: Any, guild: Any, menu: Any) -> timed.Plan | None:
+    """What this event's end takes now; the pass and every confirm read this one count."""
     members = await members_of(guild)
     if members is None:
+        return None
+    role_ids = await timed.role_ids(bot.db, guild.id)
+    return timed.plan(
+        menus.wearers(members, role_ids),
+        await timed.keepers(bot.db, guild.id, menu["id"]),
+        await owned_by_pings(bot, guild.id),
+    )
+
+
+async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> Any:
+    if getattr(guild, "unavailable", False):
+        return None
+    async with guild_lock(bot, guild.id):
+        done = await _take_off(bot, guild, menu, actor, via)
+    if done is None:
+        return None
+    details, labels, taken, finished = done
+    if finished:
+        await log_action(bot, guild, kind_via("role_menu.ended", via), actor=actor, details=details)
+        if bot.store.get(guild.id, ROLEMENU_ENDED_NOTICE_KEY):
+            await post_role_notice(bot, guild, ended_notice(bot, guild, menu, details, labels))
+    await tell_wearers(bot, guild, menu, taken, labels)
+    return details
+
+
+async def _take_off(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> Any:
+    db = bot.db
+    role_ids = await timed.role_ids(db, guild.id)
+    base = {"menu": menu["name"], "menu_id": menu["id"], "via": via}
+    plan = await end_plan(bot, guild, menu)
+    if plan is None:
         await log_action(
             bot,
             guild,
@@ -2070,7 +2058,6 @@ async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> An
             details=base | {"roles": role_ids, "reason": "members_not_loaded"},
         )
         return None
-    found = menus.wearers(members, role_ids)
     if getattr(bot, "guard", None) is not None:
         await log_action(
             bot,
@@ -2078,18 +2065,23 @@ async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> An
             "role_menu.would_end",
             actor=actor,
             details=base
-            | {"roles": role_ids, "wearers": [[member.id, worn] for member, worn in found]},
+            | {
+                "roles": role_ids,
+                "wearers": [[member.id, worn] for member, worn in plan.take],
+                "kept": plan.keep,
+            },
         )
         return None
     reason = END_REASON.format(menu=menu["name"])
     taken: list[tuple[Any, list[int]]] = []
     stuck: list[tuple[Any, list[int]]] = []
-    for member, worn in found:
+    for member, worn in plan.take:
         can = [one for one in worn if removable(guild, one)]
         done = bool(can) and await change_roles(bot, member, guild, set(), set(can), reason)
         if done:
             taken.append((member, can))
-            await grants.record_removed(db, guild.id, member.id, can, grants.EXPIRED)
+            await timed.close_member_roles(db, guild.id, member.id, can, grants.EXPIRED)
+            await hand.retire_roles(db, guild.id, member.id, can)
         left = [one for one in worn if not done or one not in can]
         if left:
             stuck.append((member, left))
@@ -2101,7 +2093,8 @@ async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> An
                 target=member,
                 details=base | {"user": member.id, "roles": left},
             )
-    await close_menu_grants(db, guild.id, role_ids, {int(member.id) for member, _ in stuck})
+    still_on = {(int(member.id), int(one)) for member, left in stuck for one in left}
+    await timed.close_event(db, guild.id, menu["id"], grants.EXPIRED, keep=still_on)
     passes = int(menu_value(menu, "end_passes", 0)) + 1
     members = int(menu_value(menu, "end_members", 0)) + len(taken)
     finished = not stuck or passes >= menus.ROLE_MENU_END_RETRIES
@@ -2119,18 +2112,14 @@ async def _end_pass(bot: Any, guild: Any, menu: Any, actor: Any, via: str) -> An
         "members": members,
         "this_pass": len(taken),
         "taken": [[int(member.id), can] for member, can in taken],
+        "kept": plan.keep,
         "failures": len(stuck),
         "left": leftovers,
         "passes": passes,
         "ended": finished,
     }
     labels = await role_labels(db, guild, menu["id"])
-    if finished:
-        await log_action(bot, guild, kind_via("role_menu.ended", via), actor=actor, details=details)
-        if bot.store.get(guild.id, ROLEMENU_ENDED_NOTICE_KEY):
-            await post_role_notice(bot, guild, ended_notice(bot, guild, menu, details, labels))
-    await tell_wearers(bot, guild, menu, taken, labels)
-    return details
+    return details, labels, taken, finished
 
 
 def ended_notice(
@@ -2141,7 +2130,7 @@ def ended_notice(
             bot.store,
             guild.id,
             ROLEMENU_ENDED_TEXT_KEY,
-            menu=menu["name"],
+            menu=event_name(menu),
             roles=len(labels),
             members=details["members"],
             failures=details["failures"],
@@ -2223,9 +2212,7 @@ async def follow_marathon(bot: Any, guild: Any, marathon_id: Any) -> int:
             await restamp_menu_end(bot.db, fresh["id"], end, told=told)
         if held:
             await hold_cleared(bot, guild, fresh, marathon_id, held, end)
-        await stamp_grants(
-            bot.db, guild.id, await menu_role_ids(bot.db, fresh["id"]), was=(fresh["ends_at"],)
-        )
+        await timed.stamp_event(bot.db, guild.id, fresh["id"], end)
         moved += 1
         if not told:
             continue
@@ -2248,7 +2235,7 @@ async def follow_marathon(bot: Any, guild: Any, marathon_id: Any) -> int:
                     bot.store,
                     guild.id,
                     ROLEMENU_END_MOVED_TEXT_KEY,
-                    menu=fresh["name"],
+                    menu=event_name(fresh),
                     to=end_words(bot, guild.id, end),
                     was=end_words(bot, guild.id, fresh["ends_told_at"]),
                 ),
@@ -2288,7 +2275,7 @@ async def end_was_held(
             bot.store,
             guild.id,
             ROLEMENU_END_HELD_TEXT_KEY,
-            menu=menu["name"],
+            menu=event_name(menu),
             to=end_words(bot, guild.id, end),
             was=end_words(bot, guild.id, menu["ends_at"]),
         ),
@@ -2364,7 +2351,7 @@ async def unbind_marathon(bot: Any, guild: Any, marathon: Any) -> int:
                 bot.store,
                 guild.id,
                 ROLEMENU_END_UNBOUND_TEXT_KEY,
-                menu=fresh["name"],
+                menu=event_name(fresh),
                 marathon=marathon["name"],
                 to=end_words(bot, guild.id, fresh["ends_at"]),
             ),
@@ -2406,19 +2393,19 @@ STYLES = {
 
 ROOT = "root"
 MENU_VIEW = "menu"
-ADD_VIEW = "add"
 HAND_VIEW = "hand"
+ROLES_VIEW = "roles"
+NEW_EVENT_VIEW = "new_event"
+ENDED_VIEW = "ended"
+ATTACH_VIEW = "attach"
+FILL_VIEW = "fill"
+PEOPLE_MAX = 25
 GRANTS_VIEW = "grants"
 NEW_GRANT_VIEW = "new_grant"
 GRANT_VIEW = "grant"
 SET_END_VIEW = "set_end"
 
 SITE_BUTTON = "Open on the site"
-ROLE_ADD_LINE = "Picked: <@&{role_id}>. Name it after the role itself, or give it your own words."
-ROLE_ADD_NOTHING = "Pick the role first — Black Bloc only offers roles it can hand out."
-HAND_LINE = "Picking here changes **{name}**'s roles at once, test mode or not."
-HAND_NOBODY = "Pick who this is about first."
-HAND_HAS_NONE = "**{name}** has none of this menu's roles, so there is nothing to take back."
 NEW_GRANT_LINE = "Giving <@&{role_id}> to <@{user_id}>. **How long for…** finishes it."
 NEW_GRANT_NOBODY = "Pick who gets it and which role, and Black Bloc will ask how long for."
 GRANT_GONE = (
@@ -2429,34 +2416,15 @@ MENU_GONE = (
     "This server has no role menu called **{name}** any more, so nothing was changed. Press "
     "**Refresh** and pick again."
 )
-NAME_TAKEN = (
-    "This server already has a role menu called **{name}**, so nothing was created. Pick "
-    "another name."
-)
-MENU_MADE = "Created **{name}**. **Add a role…** puts the first role on it."
-MENU_SAVED = "**{name}** is saved."
-OPTION_ADDED = "**{label}** is on **{name}**."
-OPTION_GONE = "**{label}** is off **{name}**. Nobody loses the role they already have."
-OPTION_WAS_NOT_ON = (
-    "That role was not on **{name}**, so nothing changed. Press **Refresh** and look again."
-)
 MENU_DELETED = "Deleted **{name}**. Nobody loses a role they already have."
 BAD_NUMBER = (
     "**{given}** is not a whole number of days, so nothing was changed. Type a number, or 0."
 )
 LOOP_COUNTS = "menus due {due} · ended {ended} · failures {failures}"
 
-NEW_MENU_TITLE = "A new role menu"
-WORDS_TITLE = "What this menu says"
-OPTION_TITLE = "How this role reads"
 DAYS_TITLE = "How long for?"
 PUSH_TITLE = "Push the end date back"
 
-NAME_LABEL = "Short name, the one you will pick it by"
-HEADING_LABEL = "Heading on its card"
-DESCRIPTION_LABEL = "Optional line under the heading"
-LABEL_LABEL = "What the option says"
-EMOJI_LABEL = "Optional emoji beside it"
 DAYS_LABEL = "Days, or 0 for a role that never runs out"
 PUSH_LABEL = "Days to add"
 
@@ -2475,7 +2443,19 @@ END_WORD_KEYS = {
     menus.TYPE_DATE: "rolemenu_type_date_button",
     menus.BUFFER: "rolemenu_buffer_button",
     menus.NO_END_MOVE_ACTION: "rolemenu_no_end_button",
+    menus.NEW_EVENT: "rolemenu_new_event_button",
+    menus.TIMED_ROLES: "rolemenu_timed_roles_button",
+    menus.ENDED: "rolemenu_ended_button",
+    menus.GIVE: "rolemenu_give_button",
+    menus.FILL: "rolemenu_fill_button",
+    menus.TAKE_OFF: "rolemenu_take_button",
+    menus.ATTACH: "rolemenu_attach_button",
+    menus.RENAME: "rolemenu_rename_button",
+    menus.NO_MARATHON: "rolemenu_no_marathon_button",
+    menus.FILL_YES: "rolemenu_fill_yes",
 }
+TIMED_NEEDS_EVENT_KEY = "rolemenu_timed_needs_event_said"
+KEPT_THROUGH_KEY = "rolemenu_kept_through_said"
 
 
 def minutes_for(bot: Any, guild_id: int) -> int:
@@ -2489,7 +2469,11 @@ def word(bot: Any, guild_id: int, key: str, limit: int | None = None, **fields: 
 
 
 def end_moves(bot: Any, guild_id: int) -> dict[str, str]:
-    return {action: word(bot, guild_id, key, BUTTON_MAX) for action, key in END_WORD_KEYS.items()}
+    """Every button word; `{count}` is left for the one label that carries a number."""
+    return {
+        action: word(bot, guild_id, key, BUTTON_MAX, count="{count}")
+        for action, key in END_WORD_KEYS.items()
+    }
 
 
 def local_moment(bot: Any, guild_id: int, at: Any, shape: str = MOMENT_SHOWN) -> str:
@@ -2549,10 +2533,22 @@ def held_is_past(menu: Any, at: datetime | None = None) -> bool:
     return held is not None and held <= (at or datetime.now(UTC))
 
 
+def plan_counts(bot: Any, guild_id: int, plan: Any) -> dict[str, Any]:
+    """The confirm's numbers, from the plan the pass itself reads; `?` while members load."""
+    if plan is None:
+        unknown = word(bot, guild_id, "rolemenu_wearing_unknown_text")
+        return {"roles": unknown, "members": unknown, "keep": unknown}
+    return {"roles": plan.roles, "members": plan.members, "keep": plan.keep}
+
+
+def end_now_question(bot: Any, guild_id: int, plan: Any) -> str:
+    return word(bot, guild_id, "rolemenu_end_now_question", **plan_counts(bot, guild_id, plan))
+
+
 def use_held_question(
-    bot: Any, guild_id: int, menu: Any, roles: int, members: Any, when: Any = None
+    bot: Any, guild_id: int, menu: Any, plan: Any, when: Any = None
 ) -> str | None:
-    """What Use the earlier end asks, with the counts; None when no earlier end waits."""
+    """What Use the earlier end asks, with the plan's counts; None when no earlier end waits."""
     held = menu_value(menu, "ends_held_at")
     if not held:
         return None
@@ -2561,10 +2557,9 @@ def use_held_question(
         bot,
         guild_id,
         "rolemenu_use_held_past_question" if held_is_past(menu) else "rolemenu_use_held_question",
-        menu=menu["name"],
-        roles=roles,
-        members=members,
+        menu=event_name(menu),
         when=shown(bot, guild_id, held),
+        **plan_counts(bot, guild_id, plan),
     )
 
 
@@ -2604,21 +2599,14 @@ async def pings_refusal(bot: Any, guild: Any, role_ids: Any) -> str | None:
     return None
 
 
-async def menu_pings_refusal(bot: Any, guild: Any, menu: Any) -> str | None:
-    return await pings_refusal(bot, guild, await menu_role_ids(bot.db, menu["id"]))
-
-
 async def delete_refusal(bot: Any, guild: Any, menu: Any, when: Any = None) -> str | None:
-    """Why a menu with an end still to come and people wearing its roles is not deleted."""
+    """Why an event with an end still to come and people assigned to it is not deleted."""
     if menu is None or menu_value(menu, "ended_at"):
         return None
     end = parse_ts(menu_value(menu, "ends_at"))
     if end is None or end <= datetime.now(UTC):
         return None
-    members = await members_of(guild)
-    count = wearing_count(
-        bot, guild.id, members, await menu_role_ids(bot.db, menu["id"])
-    )
+    count = await timed.assigned_people(bot.db, guild.id, menu["id"])
     if count == 0:
         return None
     shown = when or discord_moment("F")
@@ -2626,7 +2614,7 @@ async def delete_refusal(bot: Any, guild: Any, menu: Any, when: Any = None) -> s
         bot,
         guild.id,
         "rolemenu_delete_refused_said",
-        menu=menu["name"],
+        menu=event_name(menu),
         when=shown(bot, guild.id, menu["ends_at"]),
         members=count,
     )
@@ -2660,64 +2648,335 @@ class RoleMenuPanel(Panel):
         self.member_id: int | None = None
         self.role_id: int | None = None
         self.removing: bool | None = None
+        self.given = 0
         self.home: Any = None
 
 
-async def root_line(bot: Any, guild: Any, menu: Any, members: Any) -> str:
-    role_ids = await menu_role_ids(bot.db, menu["id"])
+SLUG = re.compile(r"[^a-z0-9]+")
+NAME_MAX = 60
+
+
+async def free_name(db: Any, guild_id: int, title: str) -> str:
+    """The event's stored key: its name in lowercase dashes, numbered when already taken."""
+    base = SLUG.sub("-", title.lower()).strip("-")[:NAME_MAX] or "event"
+    found, n = base, 1
+    while await get_menu(db, guild_id, found) is not None:
+        n += 1
+        found = f"{base}-{n}"
+    return found
+
+
+async def make_event(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    title: Any,
+    *,
+    marathon_id: Any = None,
+    ends_at: Any = None,
+    via: str = VIA_DISCORD,
+) -> Any:
+    """A new event: its name, and an end from a tracked marathon or a typed date."""
+    wanted = check_title(str(title or "").strip())
+    if not wanted:
+        raise MenuLimitError(word(bot, guild.id, "rolemenu_event_needs_name_said"))
+    if marathon_id is not None:
+        marathon = await marathon_row(bot.db, guild.id, marathon_id)
+        if marathon is None:
+            raise ValueError(f"no marathon {marathon_id!r} in this server")
+        await refuse_taken_marathon(bot, guild, marathon)
+    name = await free_name(bot.db, guild.id, wanted)
+    menu_id = await make_menu(bot, guild, actor, name, wanted, None, STAFF_MODE, via=via)
+    menu = await get_menu_by_id(bot.db, menu_id)
+    if marathon_id is not None:
+        await set_menu_end(
+            bot, guild, actor, menu, source=menus.MARATHON_END, marathon_id=marathon_id, via=via
+        )
+    elif ends_at is not None:
+        await set_menu_end(bot, guild, actor, menu, source=menus.DATE_END, ends_at=ends_at, via=via)
+    return await get_menu_by_id(bot.db, menu_id)
+
+
+async def attach_marathon(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    marathon_id: Any,
+    *,
+    buffer_days: Any = None,
+    via: str = VIA_DISCORD,
+) -> str | None:
+    """A dated event starts following a marathon; an earlier end it brings waits for staff."""
+    marathon = await marathon_row(bot.db, guild.id, marathon_id)
+    if marathon is None:
+        raise ValueError(f"no marathon {marathon_id!r} in this server")
+    await refuse_taken_marathon(bot, guild, marathon, menu["id"])
+    candidate = menus.ends_at_of(
+        {"ends_source": menus.MARATHON_END, "buffer_days": buffer_days},
+        marathon,
+        default_buffer(bot, guild.id),
+    )
+    current = menu_value(menu, "ends_at")
+    floor = bot.store.get(guild.id, ROLEMENU_END_MOVED_MINUTES_KEY)
+    holding = bool(bot.store.get(guild.id, ROLEMENU_END_EARLIER_HOLDS_KEY))
+    if not (
+        holding
+        and current
+        and menus.pulls_earlier(current, menu_value(menu, "ends_told_at"), candidate, floor)
+    ):
+        return await set_menu_end(
+            bot,
+            guild,
+            actor,
+            menu,
+            source=menus.MARATHON_END,
+            marathon_id=marathon_id,
+            buffer_days=buffer_days,
+            via=via,
+        )
+    async with end_lock(bot, menu["id"]):
+        await bot.db.conn.execute(
+            "UPDATE role_menus SET ends_source = ?, ends_marathon_id = ?, buffer_days = ?, "
+            "ends_held_at = ?, ends_set_by = ?, ends_set_at = ? WHERE id = ?",
+            (
+                menus.MARATHON_END,
+                int(marathon["id"]),
+                None if buffer_days is None else menus.buffer_of({}, buffer_days),
+                candidate,
+                actor_id(actor),
+                now_iso(),
+                int(menu["id"]),
+            ),
+        )
+        await bot.db.conn.commit()
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.end_set", via),
+        actor=actor,
+        details={
+            "menu": menu["name"],
+            "source": menus.MARATHON_END,
+            "marathon_id": int(marathon["id"]),
+            "buffer_days": buffer_days,
+            "was": current,
+            "ends_at": current,
+            "held": candidate,
+            "via": via,
+        },
+    )
+    fresh = await get_menu_by_id(bot.db, menu["id"])
+    await end_was_held(bot, guild, fresh, marathon["id"], candidate, None, floor)
+    return current
+
+
+async def follow_marathon_end(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    menu: Any,
+    marathon_id: Any,
+    *,
+    buffer_days: Any = UNSET,
+    via: str = VIA_DISCORD,
+) -> str | None:
+    """Change the end to a marathon: a dated event attaches; a following one keeps its buffer."""
+    if menus.end_source(menu) != menus.MARATHON_END:
+        buffer = None if buffer_days is UNSET else buffer_days
+        return await attach_marathon(
+            bot, guild, actor, menu, marathon_id, buffer_days=buffer, via=via
+        )
+    return await set_menu_end(
+        bot,
+        guild,
+        actor,
+        menu,
+        source=menus.MARATHON_END,
+        marathon_id=marathon_id,
+        buffer_days=menu_value(menu, "buffer_days") if buffer_days is UNSET else buffer_days,
+        via=via,
+    )
+
+
+async def fill_preview(bot: Any, guild: Any, menu: Any) -> list[Any]:
+    """The schedule's people against the event: who is matched, who is still to give, who is not."""
+    from ..content.marathon import runs_of
+
+    marathon_id = menu_value(menu, "ends_marathon_id")
+    if menus.end_source(menu) != menus.MARATHON_END or marathon_id is None:
+        return []
+    runs = await runs_of(bot.db, int(marathon_id))
+    present = {int(member.id) for member in getattr(guild, "members", ()) or ()}
+    roles = {part: bot.store.get(guild.id, key) for part, key in fill.ROLE_KEYS.items()}
+    assigned = {
+        (int(row["user_id"]), int(row["role_id"]))
+        for row in await timed.event_grants(bot.db, guild.id, menu["id"])
+    }
+    return fill.plan_fill(
+        fill.people_of(runs), roles, await timed.role_ids(bot.db, guild.id), present, assigned
+    )
+
+
+async def fill_from_schedule(
+    bot: Any, guild: Any, actor: Any, menu: Any, *, via: str = VIA_DISCORD
+) -> dict[str, int]:
+    """The preview's missing people get their part's role on this event; a re-run adds only them."""
+    totals = {"given": 0, "had": 0, "already": 0, "refused": 0}
+    for line in await fill_preview(bot, guild, menu):
+        people = [guild.get_member(user) for user in line.missing]
+        people = [one for one in people if one is not None]
+        if not people or line.role_id is None:
+            continue
+        found = await give_event_role(
+            bot, guild, actor, menu, line.role_id, people, source=grants.SCHEDULE, via=via
+        )
+        for key in totals:
+            totals[key] += len(found[key])
+    return totals
+
+
+def part_word(bot: Any, guild_id: int, part: str) -> str:
+    return str(bot.store.get(guild_id, f"marathon_part_{part}") or part)
+
+
+def fill_lines(bot: Any, guild_id: int, lines: Any) -> list[str]:
+    said: list[str] = []
+    for line in lines:
+        part = part_word(bot, guild_id, line.part)
+        if line.role_id is None:
+            said.append(
+                word(
+                    bot,
+                    guild_id,
+                    "rolemenu_fill_no_role_line",
+                    part=part,
+                    setting=fill.ROLE_KEYS[line.part],
+                )
+            )
+        elif not line.timed:
+            said.append(
+                word(bot, guild_id, "rolemenu_fill_not_timed_line", part=part, role_id=line.role_id)
+            )
+        else:
+            said.append(
+                word(
+                    bot,
+                    guild_id,
+                    "rolemenu_fill_line",
+                    part=part,
+                    role_id=line.role_id,
+                    matched=len(line.matched),
+                    missing=len(line.missing),
+                )
+            )
+        if line.unmatched:
+            shown = ", ".join(line.unmatched[: fill.NAMES_SHOWN])
+            more = len(line.unmatched) - fill.NAMES_SHOWN
+            said.append(
+                word(
+                    bot,
+                    guild_id,
+                    "rolemenu_fill_unmatched_line",
+                    part=part,
+                    count=len(line.unmatched),
+                    names=shown + (f" +{more}" if more > 0 else ""),
+                )
+            )
+    return said
+
+
+def event_moves(bot: Any, guild_id: int) -> dict[str, str]:
+    return end_moves(bot, guild_id)
+
+
+def end_text(bot: Any, guild_id: int, menu: Any, marathon_name: Any) -> str:
+    if menus.end_source(menu) == menus.DATE_END:
+        return word(
+            bot,
+            guild_id,
+            "rolemenu_end_date_only_text",
+            end=end_label(bot, guild_id, menu, marathon_name),
+        )
+    return end_label(bot, guild_id, menu, marathon_name)
+
+
+async def root_line(bot: Any, guild: Any, menu: Any, members: Any = None) -> str:
+    _ = members
     return word(
         bot,
         guild.id,
         "rolemenu_root_line",
-        name=menu["name"],
-        roles=len(role_ids),
-        wearing=wearing_count(bot, guild.id, members, role_ids),
-        end=end_label(bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu)),
+        name=event_name(menu),
+        roles=len(await timed.role_ids(bot.db, guild.id)),
+        wearing=await timed.assigned_people(bot.db, guild.id, menu["id"]),
+        end=end_text(bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu)),
     )
 
 
 async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, RoleMenuPanel]:
-    """One command, one staff panel: every menu with its roles, who wears them, and its end."""
-    rows = await list_menus(bot.db, guild.id)
-    members = await members_of(guild) if rows else []
-    lines = [await root_line(bot, guild, menu, members) for menu in rows] or [
-        menus.NO_MENUS_LINE
+    """The events still to end, one line each; the ended ones fold behind a count."""
+    _ = actor
+    rows = await timed.open_events(bot.db, guild.id)
+    ended = await timed.ended_events(bot.db, guild.id)
+    lines = [await root_line(bot, guild, menu) for menu in rows] or [
+        word(bot, guild.id, "rolemenu_no_events_line")
     ]
-    embed = discord.Embed(title=menus.PANEL_TITLE, description=clamped(lines))
+    embed = discord.Embed(
+        title=word(bot, guild.id, "rolemenu_panel_title", 256), description=clamped(lines)
+    )
     view = RoleMenuPanel(minutes_for(bot, guild.id))
     if rows:
-        view.add_item(MenuPick(rows, row=0))
-    for move in menus.root_buttons():
+        view.add_item(EventPick(bot, guild.id, rows, row=0))
+    for move in menus.root_buttons(ended=len(ended), words=event_moves(bot, guild.id)):
         view.add_item(MoveButton(move))
     add_site_button(view, bot, row=2)
-    _ = actor
+    return (embed, view)
+
+
+async def build_ended(bot: Any, guild: Any) -> tuple[discord.Embed, RoleMenuPanel]:
+    rows = await timed.ended_events(bot.db, guild.id)
+    lines = [
+        word(
+            bot,
+            guild.id,
+            "rolemenu_ended_event_line",
+            name=event_name(menu),
+            when=grants.stamp(menu["ended_at"], "D"),
+            members=int(menu_value(menu, "end_members", 0)),
+        )
+        for menu in rows
+    ] or [word(bot, guild.id, "rolemenu_no_events_line")]
+    embed = discord.Embed(
+        title=word(bot, guild.id, "rolemenu_ended_title", 256), description=clamped(lines)
+    )
+    view = RoleMenuPanel(minutes_for(bot, guild.id))
+    view.where = ENDED_VIEW
+    if rows:
+        view.add_item(EventPick(bot, guild.id, rows, row=0))
+    for move in menus.back_buttons():
+        view.add_item(MoveButton(move))
     return (embed, view)
 
 
 async def card_lines(bot: Any, guild: Any, menu: Any, options: Any) -> list[str]:
-    members = await members_of(guild)
-    lines = [menus.menu_heading(menu)]
+    assigned = await timed.assigned_by_role(bot.db, guild.id, menu["id"])
+    lines = [f"**{event_name(menu)}**"]
     for row in options:
         lines.append(
             word(
                 bot,
                 guild.id,
-                "rolemenu_role_line",
+                "rolemenu_event_role_line",
                 label=row["label"],
                 role_id=row["role_id"],
-                wearing=wearing_count(bot, guild.id, members, [row["role_id"]]),
+                assigned=assigned.get(int(row["role_id"]), 0),
             )
         )
     if not options:
-        lines.append(menus.NO_ROLES_YET)
+        lines.append(word(bot, guild.id, "rolemenu_no_timed_roles_line"))
     lines.append(
-        end_label(
-            bot,
-            guild.id,
-            menu,
-            await marathon_name_of(bot, guild.id, menu),
-            discord_moment("F"),
-        )
+        end_text(bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu))
     )
     if menu_value(menu, "ends_set_by"):
         lines.append(
@@ -2742,11 +3001,7 @@ async def card_lines(bot: Any, guild: Any, menu: Any, options: Any) -> list[str]
         )
     held = menu_value(menu, "ends_held_at")
     if held:
-        lines.append(
-            word(bot, guild.id, "rolemenu_end_held_line", to=grants.stamp(held, "F"))
-        )
-    if len(options) >= OPTIONS_MAX:
-        lines.append(menus.OPTIONS_ARE_FULL.format(limit=OPTIONS_MAX))
+        lines.append(word(bot, guild.id, "rolemenu_end_held_line", to=grants.stamp(held, "F")))
     return lines
 
 
@@ -2758,19 +3013,191 @@ async def build_menu(
         return (None, None)
     options = await get_options(bot.db, menu["id"])
     embed = discord.Embed(
-        title=menus.MENU_TITLE.format(name=menu["name"]),
+        title=word(bot, guild.id, "rolemenu_event_title", 256, name=event_name(menu)),
         description=clamped(await card_lines(bot, guild, menu, options)),
     )
     view = RoleMenuPanel(minutes_for(bot, guild.id))
     view.where = MENU_VIEW
     view.menu_name = menu["name"]
-    if options:
-        view.add_item(OptionPick(options, row=0))
-    for move in menus.menu_buttons(
-        options=len(options),
-        options_max=OPTIONS_MAX,
+    source = menus.end_source(menu)
+    for move in menus.event_buttons(
+        open_=not menu_value(menu, "ended_at"),
+        roles=len(options),
+        marathon=source == menus.MARATHON_END and menu_value(menu, "ends_marathon_id") is not None,
+        attachable=source != menus.MARATHON_END,
+        assigned=bool(await timed.event_grants(bot.db, guild.id, menu["id"])),
         held=bool(menu_value(menu, "ends_held_at")),
-        words=end_moves(bot, guild.id),
+        words=event_moves(bot, guild.id),
+    ):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def free_marathons(bot: Any, guild: Any, menu_id: Any = None) -> list[Any]:
+    """Marathons with no open event yet, or followed by `menu_id` itself — one event each."""
+    found = []
+    for row in await bindable_marathons(bot.db, guild.id):
+        taken = await timed.event_for_marathon(bot.db, guild.id, row["id"])
+        if taken is None or (menu_id is not None and int(taken["id"]) == int(menu_id)):
+            found.append(row)
+    return found
+
+
+async def taken_refusal(bot: Any, guild: Any, marathon: Any, menu_id: Any = None) -> str | None:
+    """Why this marathon cannot take another event: the open one that already follows it."""
+    taken = await timed.event_for_marathon(bot.db, guild.id, marathon["id"])
+    if taken is None or (menu_id is not None and int(taken["id"]) == int(menu_id)):
+        return None
+    return word(
+        bot,
+        guild.id,
+        "rolemenu_marathon_taken_said",
+        marathon=marathon["name"],
+        event=event_name(taken),
+    )
+
+
+async def refuse_taken_marathon(bot: Any, guild: Any, marathon: Any, menu_id: Any = None) -> None:
+    refused = await taken_refusal(bot, guild, marathon, menu_id)
+    if refused:
+        raise MarathonTakenError(refused)
+
+
+async def build_new_event(bot: Any, guild: Any) -> tuple[discord.Embed, RoleMenuPanel]:
+    marathons = await free_marathons(bot, guild)
+    embed = discord.Embed(title=word(bot, guild.id, "rolemenu_new_event_title", 256))
+    view = RoleMenuPanel(minutes_for(bot, guild.id))
+    view.where = NEW_EVENT_VIEW
+    if marathons:
+        view.add_item(MarathonPick(bot, guild.id, marathons, None, row=0))
+    for move in menus.new_event_buttons(event_moves(bot, guild.id)):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def build_attach(
+    bot: Any, guild: Any, name: str
+) -> tuple[discord.Embed | None, RoleMenuPanel | None]:
+    menu = await get_menu(bot.db, guild.id, name)
+    if menu is None:
+        return (None, None)
+    marathons = await free_marathons(bot, guild)
+    embed = discord.Embed(
+        title=word(bot, guild.id, "rolemenu_attach_title", 256, name=event_name(menu)),
+        description=end_text(bot, guild.id, menu, None),
+    )
+    view = RoleMenuPanel(minutes_for(bot, guild.id))
+    view.where = ATTACH_VIEW
+    view.menu_name = menu["name"]
+    if marathons:
+        view.add_item(MarathonPick(bot, guild.id, marathons, None, row=0))
+    for move in menus.back_buttons():
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def build_timed_roles(bot: Any, guild: Any) -> tuple[discord.Embed, RoleMenuPanel]:
+    rows = await timed.listed(bot.db, guild.id)
+    members = await members_of(guild)
+    lines = [
+        word(
+            bot,
+            guild.id,
+            "rolemenu_role_line",
+            label=row["label"],
+            role_id=row["role_id"],
+            wearing=wearing_count(bot, guild.id, members, [row["role_id"]]),
+        )
+        for row in rows
+    ] or [word(bot, guild.id, "rolemenu_no_timed_roles_line")]
+    embed = discord.Embed(
+        title=word(bot, guild.id, "rolemenu_timed_roles_title", 256), description=clamped(lines)
+    )
+    view = RoleMenuPanel(minutes_for(bot, guild.id))
+    view.where = ROLES_VIEW
+    if len(rows) < timed.LIST_MAX:
+        view.add_item(
+            TimedRoleAdd(word(bot, guild.id, "rolemenu_timed_add_pick", SELECT_PLACEHOLDER_MAX))
+        )
+    if rows:
+        view.add_item(
+            TimedRolePick(
+                rows,
+                word(bot, guild.id, "rolemenu_timed_remove_pick", SELECT_PLACEHOLDER_MAX),
+                row=1,
+            )
+        )
+    for move in menus.back_buttons():
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def build_hand_out(
+    bot: Any, guild: Any, name: str, role_id: Any, removing: Any, given: int = 0
+) -> tuple[discord.Embed | None, RoleMenuPanel | None]:
+    """Give roles… / Take roles off…: a timed role, then up to 25 people a batch."""
+    menu = await get_menu(bot.db, guild.id, name)
+    if menu is None:
+        return (None, None)
+    options = await get_options(bot.db, menu["id"])
+    title_key = "rolemenu_take_title" if removing else "rolemenu_give_title"
+    lines = []
+    if role_id:
+        lines.append(
+            word(
+                bot,
+                guild.id,
+                "rolemenu_taken_line" if removing else "rolemenu_given_line",
+                role_id=role_id,
+                count=given,
+            )
+        )
+    embed = discord.Embed(
+        title=word(bot, guild.id, title_key, 256, name=event_name(menu)),
+        description=clamped(lines) if lines else None,
+    )
+    view = RoleMenuPanel(minutes_for(bot, guild.id))
+    view.where = HAND_VIEW
+    view.menu_name = menu["name"]
+    view.role_id = int(role_id) if role_id else None
+    view.removing = bool(removing)
+    view.given = int(given)
+    if options:
+        view.add_item(
+            TimedRolePick(
+                options,
+                word(bot, guild.id, "rolemenu_pick_role_placeholder", SELECT_PLACEHOLDER_MAX),
+                row=0,
+                chosen=view.role_id,
+            )
+        )
+    if view.role_id:
+        view.add_item(
+            PeoplePick(
+                word(bot, guild.id, "rolemenu_pick_people_placeholder", SELECT_PLACEHOLDER_MAX)
+            )
+        )
+    for move in menus.back_buttons():
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def build_fill(
+    bot: Any, guild: Any, name: str
+) -> tuple[discord.Embed | None, RoleMenuPanel | None]:
+    menu = await get_menu(bot.db, guild.id, name)
+    if menu is None:
+        return (None, None)
+    lines = await fill_preview(bot, guild, menu)
+    embed = discord.Embed(
+        title=word(bot, guild.id, "rolemenu_fill_title", 256, name=event_name(menu)),
+        description=clamped(fill_lines(bot, guild.id, lines)) or None,
+    )
+    view = RoleMenuPanel(minutes_for(bot, guild.id))
+    view.where = FILL_VIEW
+    view.menu_name = menu["name"]
+    for move in menus.fill_buttons(
+        missing=fill.missing_count(lines), words=event_moves(bot, guild.id)
     ):
         view.add_item(MoveButton(move))
     return (embed, view)
@@ -2782,12 +3209,12 @@ async def build_set_end(
     menu = await get_menu(bot.db, guild.id, name)
     if menu is None:
         return (None, None)
-    marathons = await bindable_marathons(bot.db, guild.id)
+    marathons = await free_marathons(bot, guild, menu["id"])
     line = end_label(
         bot, guild.id, menu, await marathon_name_of(bot, guild.id, menu), discord_moment("F")
     )
     embed = discord.Embed(
-        title=word(bot, guild.id, "rolemenu_set_end_title", 256, name=menu["name"]),
+        title=word(bot, guild.id, "rolemenu_set_end_title", 256, name=event_name(menu)),
         description=line,
     )
     view = RoleMenuPanel(minutes_for(bot, guild.id))
@@ -2802,61 +3229,12 @@ async def build_set_end(
     return (embed, view)
 
 
-def build_add_role(
-    bot: Any, guild: Any, name: str, role_id: Any
-) -> tuple[discord.Embed, RoleMenuPanel]:
-    line = ROLE_ADD_LINE.format(role_id=role_id) if role_id else ROLE_ADD_NOTHING
-    embed = discord.Embed(title=menus.ADD_ROLE_TITLE.format(name=name), description=line)
-    view = RoleMenuPanel(minutes_for(bot, guild.id))
-    view.where = ADD_VIEW
-    view.menu_name = name
-    view.role_id = int(role_id) if role_id else None
-    view.add_item(NewRolePick(row=0))
-    for move in menus.add_role_buttons(picked=bool(role_id)):
-        view.add_item(MoveButton(move))
-    return (embed, view)
-
-
-async def build_hand_out(
-    bot: Any, guild: Any, name: str, member_id: Any, removing: Any
-) -> tuple[discord.Embed | None, RoleMenuPanel | None]:
-    menu = await get_menu(bot.db, guild.id, name)
-    if menu is None:
-        return (None, None)
-    options = await get_options(bot.db, menu["id"])
-    member = guild.get_member(int(member_id)) if member_id else None
-    held = {role.id for role in member.roles} if member is not None else set()
-    theirs = [row for row in options if row["role_id"] in held]
-    lines = [HAND_LINE.format(name=member.display_name) if member is not None else HAND_NOBODY]
-    if member is not None and not theirs:
-        lines.append(HAND_HAS_NONE.format(name=member.display_name))
-    embed = discord.Embed(
-        title=menus.HAND_OUT_TITLE.format(name=menu["name"]), description=clamped(lines)
-    )
-    view = RoleMenuPanel(minutes_for(bot, guild.id))
-    view.where = HAND_VIEW
-    view.menu_name = menu["name"]
-    view.member_id = int(member_id) if member_id else None
-    view.removing = removing
-    view.add_item(WhoPick(menus.WHOSE_ROLES, row=0))
-    for move in menus.hand_out_buttons(picked=member is not None, holds_any=bool(theirs)):
-        view.add_item(MoveButton(move))
-    if member is not None and removing is not None:
-        wanted = theirs if removing else options
-        if wanted:
-            view.add_item(AssignPick(menu["id"], wanted, member, remove=bool(removing), row=2))
-    return (embed, view)
-
-
 async def audit_rows(bot: Any, guild: Any, member_id: Any) -> tuple[list[Any], list[Any]]:
-    """(audit lines, openable grant rows): menu roles with an end by wearer, the rest by grant."""
+    """(audit lines, openable grant rows): every running grant, and timed roles worn by hand."""
     wanted = int(member_id) if member_id else None
-    ends = await menu_ends_by_role(bot.db, guild.id)
-    rows = [
-        row
-        for row in await menus.active_grants(bot.db, guild.id, user_id=wanted)
-        if int(row["role_id"]) not in ends
-    ]
+    rows = await menus.active_grants(bot.db, guild.id, user_id=wanted)
+    ends = await timed.soonest_ends(bot.db, guild.id)
+    held = {(int(row["user_id"]), int(row["role_id"])) for row in rows}
     worn: list[Any] = []
     if ends:
         members = await members_of(guild) or list(getattr(guild, "members", ()) or ())
@@ -2864,16 +3242,20 @@ async def audit_rows(bot: Any, guild: Any, member_id: Any) -> tuple[list[Any], l
             if wanted is not None and int(member.id) != wanted:
                 continue
             for role_id in role_ids:
-                worn.append(
-                    {"user_id": int(member.id), "role_id": role_id, "expires_at": ends[role_id]}
-                )
+                if (int(member.id), role_id) not in held:
+                    worn.append(
+                        {
+                            "user_id": int(member.id),
+                            "role_id": role_id,
+                            "expires_at": ends[role_id]["ends_at"],
+                        }
+                    )
     return sorted([*rows, *worn], key=menus.grant_order), rows
 
 
 async def build_grants(
     bot: Any, guild: Any, member_id: Any
 ) -> tuple[discord.Embed, RoleMenuPanel]:
-    """The audit: who loses which role and when, soonest first (design §3.1)."""
     lines, rows = await audit_rows(bot, guild, member_id)
     embed = discord.Embed(
         title=menus.GRANTS_TITLE,
@@ -2967,47 +3349,66 @@ async def render_panel(interaction: discord.Interaction, previous: Any = None) -
     await render(interaction, embed, view, previous)
 
 
-async def render_menu(interaction: discord.Interaction, name: str, previous: Any = None) -> None:
-    embed, view = await build_menu(interaction.client, interaction.guild, name)
+async def render_built(
+    interaction: discord.Interaction, built: Any, name: str, previous: Any
+) -> None:
+    """A card for one event, or the root with the reason once that event is gone."""
+    embed, view = built
     if view is None:
         await render_panel(interaction, previous)
         await answer(interaction, MENU_GONE.format(name=name))
         return
     await render(interaction, embed, view, previous)
+
+
+async def render_menu(interaction: discord.Interaction, name: str, previous: Any = None) -> None:
+    built = await build_menu(interaction.client, interaction.guild, name)
+    await render_built(interaction, built, name, previous)
 
 
 async def render_set_end(
     interaction: discord.Interaction, name: str, previous: Any = None
 ) -> None:
-    embed, view = await build_set_end(interaction.client, interaction.guild, name)
-    if view is None:
-        await render_panel(interaction, previous)
-        await answer(interaction, MENU_GONE.format(name=name))
-        return
-    await render(interaction, embed, view, previous)
+    built = await build_set_end(interaction.client, interaction.guild, name)
+    await render_built(interaction, built, name, previous)
 
 
-async def render_add_role(
-    interaction: discord.Interaction, name: str, role_id: Any, previous: Any = None
-) -> None:
-    embed, view = build_add_role(interaction.client, interaction.guild, name, role_id)
-    await render(interaction, embed, view, previous)
+async def render_attach(interaction: discord.Interaction, name: str, previous: Any = None) -> None:
+    built = await build_attach(interaction.client, interaction.guild, name)
+    await render_built(interaction, built, name, previous)
+
+
+async def render_fill(interaction: discord.Interaction, name: str, previous: Any = None) -> None:
+    built = await build_fill(interaction.client, interaction.guild, name)
+    await render_built(interaction, built, name, previous)
 
 
 async def render_hand_out(
     interaction: discord.Interaction,
     name: str,
-    member_id: Any,
+    role_id: Any,
     removing: Any,
     previous: Any = None,
+    given: int = 0,
 ) -> None:
-    embed, view = await build_hand_out(
-        interaction.client, interaction.guild, name, member_id, removing
+    built = await build_hand_out(
+        interaction.client, interaction.guild, name, role_id, removing, given
     )
-    if view is None:
-        await render_panel(interaction, previous)
-        await answer(interaction, MENU_GONE.format(name=name))
-        return
+    await render_built(interaction, built, name, previous)
+
+
+async def render_timed_roles(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_timed_roles(interaction.client, interaction.guild)
+    await render(interaction, embed, view, previous)
+
+
+async def render_new_event(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_new_event(interaction.client, interaction.guild)
+    await render(interaction, embed, view, previous)
+
+
+async def render_ended(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_ended(interaction.client, interaction.guild)
     await render(interaction, embed, view, previous)
 
 
@@ -3057,24 +3458,6 @@ async def open_menu(interaction: discord.Interaction, name: str, previous: Any =
     await render_menu(interaction, name, previous)
 
 
-async def open_set_end(interaction: discord.Interaction, view: Any) -> None:
-    if not await opened(interaction):
-        return
-    await render_set_end(interaction, view.menu_name, view)
-
-
-async def open_add_role(interaction: discord.Interaction, view: Any) -> None:
-    if not await opened(interaction):
-        return
-    await render_add_role(interaction, view.menu_name, None, view)
-
-
-async def open_hand_out(interaction: discord.Interaction, view: Any, removing: Any) -> None:
-    if not await opened(interaction):
-        return
-    await render_hand_out(interaction, view.menu_name, view.member_id, removing, view)
-
-
 async def open_grants(interaction: discord.Interaction, member_id: Any, previous: Any) -> None:
     if not await opened(interaction):
         return
@@ -3090,12 +3473,6 @@ async def open_grants_from(interaction: discord.Interaction, previous: Any, home
     await render(interaction, embed, view, previous)
 
 
-async def open_new_grant(interaction: discord.Interaction, view: Any) -> None:
-    if not await opened(interaction):
-        return
-    await render_new_grant(interaction, view.member_id, view.role_id, view)
-
-
 async def open_grant(interaction: discord.Interaction, grant_id: Any, previous: Any) -> None:
     if not await opened(interaction):
         return
@@ -3103,45 +3480,54 @@ async def open_grant(interaction: discord.Interaction, grant_id: Any, previous: 
 
 
 async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
-    if view.where == MENU_VIEW:
-        await open_menu(interaction, view.menu_name, view)
+    if not await opened(interaction):
         return
-    if view.where == SET_END_VIEW:
-        await open_set_end(interaction, view)
-        return
-    if view.where == GRANTS_VIEW:
-        await open_grants(interaction, view.member_id, view)
-        return
-    if view.where == GRANT_VIEW:
-        await open_grant(interaction, view.grant_id, view)
-        return
-    if view.where == HAND_VIEW:
-        await open_hand_out(interaction, view, view.removing)
-        return
-    if view.where == ADD_VIEW:
-        await open_add_role(interaction, view)
-        return
-    await open_root(interaction, view)
+    where, name = view.where, view.menu_name
+    if where == MENU_VIEW:
+        await render_menu(interaction, name, view)
+    elif where == SET_END_VIEW:
+        await render_set_end(interaction, name, view)
+    elif where == ATTACH_VIEW:
+        await render_attach(interaction, name, view)
+    elif where == FILL_VIEW:
+        await render_fill(interaction, name, view)
+    elif where == HAND_VIEW:
+        await render_hand_out(interaction, name, view.role_id, view.removing, view, view.given)
+    elif where == ROLES_VIEW:
+        await render_timed_roles(interaction, view)
+    elif where == NEW_EVENT_VIEW:
+        await render_new_event(interaction, view)
+    elif where == ENDED_VIEW:
+        await render_ended(interaction, view)
+    elif where == GRANTS_VIEW:
+        await render_grants(interaction, view.member_id, view)
+    elif where == GRANT_VIEW:
+        await render_grant(interaction, view.grant_id, view)
+    elif where == NEW_GRANT_VIEW:
+        await render_new_grant(interaction, view.member_id, view.role_id, view)
+    else:
+        await render_panel(interaction, view)
 
 
 async def back_from(interaction: discord.Interaction, view: Any) -> None:
     if view.where == GRANTS_VIEW and view.home is not None:
         await view.home(interaction, view)
         return
-    if view.where in (ADD_VIEW, HAND_VIEW, SET_END_VIEW):
-        await open_menu(interaction, view.menu_name, view)
+    if not await opened(interaction):
         return
-    if view.where in (GRANT_VIEW, NEW_GRANT_VIEW):
-        await open_grants(interaction, view.member_id, view)
-        return
-    await open_root(interaction, view)
+    if view.where in (HAND_VIEW, SET_END_VIEW, ATTACH_VIEW, FILL_VIEW):
+        await render_menu(interaction, view.menu_name, view)
+    elif view.where in (GRANT_VIEW, NEW_GRANT_VIEW):
+        await render_grants(interaction, view.member_id, view)
+    else:
+        await render_panel(interaction, view)
 
 
 # --- the moves, one function each ----------------------------------------------------------------
 
 
 async def menu_or_gone(interaction: discord.Interaction, previous: Any) -> Any:
-    """The menu this card is about, or None once the root is back up with the reason."""
+    """The event this card is about, or None once the root is back up with the reason."""
     name = previous.menu_name
     menu = await get_menu(interaction.client.db, interaction.guild.id, name)
     if menu is None:
@@ -3152,8 +3538,9 @@ async def menu_or_gone(interaction: discord.Interaction, previous: Any) -> Any:
 
 async def said_end(interaction: discord.Interaction, menu: Any, end: Any) -> None:
     bot, guild = interaction.client, interaction.guild
-    if menus.end_source(await get_menu_by_id(bot.db, menu["id"])) == menus.NO_END:
-        cleared = word(bot, guild.id, "rolemenu_end_cleared_said", menu=menu["name"])
+    fresh = await get_menu_by_id(bot.db, menu["id"])
+    if menus.end_source(fresh) == menus.NO_END:
+        cleared = word(bot, guild.id, "rolemenu_end_cleared_said", menu=event_name(menu))
         await answer(interaction, cleared)
         return
     when = (
@@ -3161,124 +3548,161 @@ async def said_end(interaction: discord.Interaction, menu: Any, end: Any) -> Non
         if parse_ts(end) is not None
         else str(bot.store.get(guild.id, ROLEMENU_END_NOT_KNOWN_KEY))
     )
+    said = word(bot, guild.id, "rolemenu_end_set_said", menu=event_name(menu), when=when)
+    if menu_value(fresh, "ends_held_at"):
+        said += " " + word(
+            bot, guild.id, "rolemenu_end_held_line", to=grants.stamp(fresh["ends_held_at"], "F")
+        )
+    await answer(interaction, said)
+
+
+async def run_new_event(
+    interaction: discord.Interaction, previous: Any, *, title: Any, marathon_id: Any = None,
+    typed: Any = None,
+) -> None:
+    if not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    ends_at = None
+    if marathon_id is not None:
+        marathon = await marathon_row(bot.db, guild.id, marathon_id)
+        if marathon is None:
+            await render_new_event(interaction, previous)
+            await answer(interaction, word(bot, guild.id, "rolemenu_end_no_marathon_said"))
+            return
+        title = marathon["name"]
+    else:
+        refusal, ends_at = typed_refusal(bot, guild.id, typed)
+        if refusal:
+            await render_new_event(interaction, previous)
+            await answer(interaction, refusal)
+            return
+    try:
+        menu = await make_event(
+            bot, guild, interaction.user, title, marathon_id=marathon_id, ends_at=ends_at
+        )
+    except MenuLimitError as exc:
+        await render_new_event(interaction, previous)
+        await answer(interaction, str(exc))
+        return
+    await render_menu(interaction, menu["name"], previous)
     await answer(
-        interaction, word(bot, guild.id, "rolemenu_end_set_said", menu=menu["name"], when=when)
+        interaction, word(bot, guild.id, "rolemenu_event_made_said", name=event_name(menu))
     )
 
 
-async def run_new_menu(
-    interaction: discord.Interaction, fields: dict[str, Any], previous: Any
-) -> None:
+def typed_refusal(bot: Any, guild_id: int, typed: Any) -> tuple[str | None, Any]:
+    """(why not, the moment): a typed end that is unreadable or already gone is refused."""
+    text = str(typed or "").strip()
+    when = menus.typed_end(text, bot.store.get(guild_id, "default_timezone"))
+    if when is None:
+        return word(bot, guild_id, "rolemenu_end_bad_date_said", given=text[:40]), None
+    if when <= datetime.now(UTC):
+        return word(bot, guild_id, "rolemenu_end_past_said", when=grants.stamp(when, "F")), None
+    return None, when
+
+
+async def run_rename(interaction: discord.Interaction, typed: Any, previous: Any) -> None:
     if not await opened(interaction):
         return
-    name = str(fields["name"]).strip()
-    try:
-        menu_id = await make_menu(
-            interaction.client,
-            interaction.guild,
-            interaction.user,
-            name,
-            str(fields["title"]).strip(),
-            str(fields["description"]).strip() or None,
-            STAFF_MODE,
-        )
-    except MenuLimitError as exc:
-        await render_panel(interaction, previous)
-        await answer(interaction, str(exc))
-        return
-    if menu_id is None:
-        await render_panel(interaction, previous)
-        await answer(interaction, NAME_TAKEN.format(name=name))
-        return
-    await render_menu(interaction, name, previous)
-    await answer(interaction, MENU_MADE.format(name=name))
-
-
-async def run_change_menu(
-    interaction: discord.Interaction, fields: dict[str, Any], previous: Any
-) -> None:
-    if not await opened(interaction):
-        return
-    name = previous.menu_name
-    try:
-        menu = await change_menu(
-            interaction.client, interaction.guild, interaction.user, name, **fields
-        )
-    except MenuLimitError as exc:
-        await render_menu(interaction, name, previous)
-        await answer(interaction, str(exc))
-        return
-    if menu is None:
-        await render_panel(interaction, previous)
-        await answer(interaction, MENU_GONE.format(name=name))
-        return
-    await render_menu(interaction, name, previous)
-    await answer(interaction, MENU_SAVED.format(name=name))
-
-
-async def run_add_option(
-    interaction: discord.Interaction, label: Any, emoji: Any, previous: Any
-) -> None:
-    if not await opened(interaction):
-        return
-    guild = interaction.guild
-    name = previous.menu_name
+    bot, guild = interaction.client, interaction.guild
     menu = await menu_or_gone(interaction, previous)
     if menu is None:
         return
-    role = guild.get_role(int(previous.role_id)) if previous.role_id else None
-    if role is None:
-        await render_add_role(interaction, name, None, previous)
-        await answer(interaction, ROLE_ADD_NOTHING)
-        return
-    if not removable(guild, role.id):
-        await render_add_role(interaction, name, role.id, previous)
-        await answer(
-            interaction,
-            word(interaction.client, guild.id, "rolemenu_cannot_strip_said", name=role.name),
-        )
-        return
-    refused = await pings_refusal(interaction.client, guild, [role.id])
-    if refused:
-        await render_add_role(interaction, name, role.id, previous)
-        await answer(interaction, refused)
-        return
-    wanted = str(label or "").strip() or role.name
+    wanted = str(typed or "").strip()
     try:
-        await put_option(
-            interaction.client,
-            guild,
-            interaction.user,
-            menu,
-            role.id,
-            wanted,
-            str(emoji or "").strip() or None,
-        )
+        if not wanted:
+            raise MenuLimitError(word(bot, guild.id, "rolemenu_event_needs_name_said"))
+        await change_menu(bot, guild, interaction.user, menu["name"], title=wanted)
     except MenuLimitError as exc:
-        await render_add_role(interaction, name, role.id, previous)
+        await render_menu(interaction, menu["name"], previous)
         await answer(interaction, str(exc))
         return
-    await render_menu(interaction, name, previous)
-    await answer(interaction, OPTION_ADDED.format(label=wanted, name=name))
+    await render_menu(interaction, menu["name"], previous)
+    await answer(interaction, word(bot, guild.id, "rolemenu_event_renamed_said", name=wanted))
 
 
-async def run_drop_option(interaction: discord.Interaction, role_id: int, previous: Any) -> None:
+async def run_add_timed(interaction: discord.Interaction, role_id: int, previous: Any) -> None:
     if not await opened(interaction):
         return
-    guild = interaction.guild
-    name = previous.menu_name
-    menu = await menu_or_gone(interaction, previous)
-    if menu is None:
-        return
-    label = await label_for(interaction.client.db, guild, menu["id"], role_id)
-    gone = await drop_option(interaction.client, guild, interaction.user, menu, role_id)
-    await render_menu(interaction, name, previous)
+    bot, guild = interaction.client, interaction.guild
+    role = guild.get_role(int(role_id))
+    refused = (
+        await add_timed_role(bot, guild, interaction.user, role)
+        if role is not None
+        else word(bot, guild.id, "rolemenu_timed_not_listed_said", name=role_id)
+    )
+    await render_timed_roles(interaction, previous)
     await answer(
         interaction,
-        OPTION_GONE.format(label=label, name=name)
-        if gone
-        else OPTION_WAS_NOT_ON.format(name=name),
+        refused or word(bot, guild.id, "rolemenu_timed_added_said", name=role.name),
     )
+
+
+async def run_drop_timed(interaction: discord.Interaction, role_id: int, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    refused = await drop_timed_role(bot, guild, interaction.user, int(role_id))
+    await render_timed_roles(interaction, previous)
+    await answer(
+        interaction,
+        refused
+        or word(bot, guild.id, "rolemenu_timed_removed_said", name=role_name(guild, role_id)),
+    )
+
+
+async def run_hand_out(interaction: discord.Interaction, users: Any, previous: Any) -> None:
+    """One batch of up to 25; the card stays on the same role with the running count."""
+    if not await guarded(interaction) or not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    menu = await menu_or_gone(interaction, previous)
+    if menu is None:
+        return
+    people = [guild.get_member(int(getattr(one, "id", one))) for one in users or ()]
+    people = [one for one in people if one is not None]
+    move = take_event_role if previous.removing else give_event_role
+    found = await move(bot, guild, interaction.user, menu, previous.role_id, people)
+    count = previous.given + len(found["given"]) + len(found["had"])
+    await render_hand_out(
+        interaction, menu["name"], previous.role_id, previous.removing, previous, count
+    )
+    await answer(interaction, found["said"])
+
+
+async def run_fill(interaction: discord.Interaction, previous: Any) -> None:
+    if not await guarded(interaction) or not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    menu = await menu_or_gone(interaction, previous)
+    if menu is None:
+        return
+    totals = await fill_from_schedule(bot, guild, interaction.user, menu)
+    await render_fill(interaction, menu["name"], previous)
+    key = "rolemenu_fill_done_said" if any(totals.values()) else "rolemenu_fill_nothing_said"
+    await answer(interaction, word(bot, guild.id, key, **totals))
+
+
+async def run_attach(interaction: discord.Interaction, marathon_id: int, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    menu = await menu_or_gone(interaction, previous)
+    if menu is None:
+        return
+    if await marathon_row(bot.db, guild.id, marathon_id) is None:
+        await render_attach(interaction, menu["name"], previous)
+        await answer(interaction, word(bot, guild.id, "rolemenu_end_no_marathon_said"))
+        return
+    try:
+        end = await attach_marathon(bot, guild, interaction.user, menu, marathon_id)
+    except MarathonTakenError as exc:
+        await render_attach(interaction, menu["name"], previous)
+        await answer(interaction, str(exc))
+        return
+    await render_menu(interaction, menu["name"], previous)
+    await said_end(interaction, menu, end)
 
 
 async def run_delete_menu(interaction: discord.Interaction, previous: Any) -> None:
@@ -3286,7 +3710,8 @@ async def run_delete_menu(interaction: discord.Interaction, previous: Any) -> No
         return
     bot, guild = interaction.client, interaction.guild
     name = previous.menu_name
-    refused = await delete_refusal(bot, guild, await get_menu(bot.db, guild.id, name))
+    menu = await get_menu(bot.db, guild.id, name)
+    refused = await delete_refusal(bot, guild, menu)
     if refused:
         await render_menu(interaction, name, previous)
         await answer(interaction, refused)
@@ -3294,16 +3719,9 @@ async def run_delete_menu(interaction: discord.Interaction, previous: Any) -> No
     gone = await drop_menu(bot, guild, interaction.user, name)
     await render_panel(interaction, previous)
     await answer(
-        interaction, MENU_DELETED.format(name=name) if gone else MENU_GONE.format(name=name)
+        interaction,
+        MENU_DELETED.format(name=event_name(menu)) if gone else MENU_GONE.format(name=name),
     )
-
-
-async def end_refused(interaction: discord.Interaction, menu: Any, previous: Any) -> bool:
-    refused = await menu_pings_refusal(interaction.client, interaction.guild, menu)
-    if refused:
-        await render_set_end(interaction, menu["name"], previous)
-        await answer(interaction, refused)
-    return bool(refused)
 
 
 async def run_set_marathon(
@@ -3315,23 +3733,16 @@ async def run_set_marathon(
     menu = await menu_or_gone(interaction, previous)
     if menu is None:
         return
-    if await end_refused(interaction, menu, previous):
-        return
     if await marathon_row(bot.db, guild.id, marathon_id) is None:
         await render_set_end(interaction, menu["name"], previous)
         await answer(interaction, word(bot, guild.id, "rolemenu_end_no_marathon_said"))
         return
-    following = menus.end_source(menu) == menus.MARATHON_END
-    keeps = menu_value(menu, "buffer_days") if following else None
-    end = await set_menu_end(
-        bot,
-        guild,
-        interaction.user,
-        menu,
-        source=menus.MARATHON_END,
-        marathon_id=marathon_id,
-        buffer_days=keeps,
-    )
+    try:
+        end = await follow_marathon_end(bot, guild, interaction.user, menu, marathon_id)
+    except MarathonTakenError as exc:
+        await render_set_end(interaction, menu["name"], previous)
+        await answer(interaction, str(exc))
+        return
     await render_menu(interaction, menu["name"], previous)
     await said_end(interaction, menu, end)
 
@@ -3343,15 +3754,7 @@ async def run_typed_end(interaction: discord.Interaction, typed: Any, previous: 
     menu = await menu_or_gone(interaction, previous)
     if menu is None:
         return
-    if await end_refused(interaction, menu, previous):
-        return
-    text = str(typed or "").strip()
-    when = menus.typed_end(text, bot.store.get(guild.id, "default_timezone"))
-    refusal = None
-    if when is None:
-        refusal = word(bot, guild.id, "rolemenu_end_bad_date_said", given=text[:40])
-    elif when <= datetime.now(UTC):
-        refusal = word(bot, guild.id, "rolemenu_end_past_said", when=grants.stamp(when, "F"))
+    refusal, when = typed_refusal(bot, guild.id, typed)
     if refusal:
         await render_set_end(interaction, menu["name"], previous)
         await answer(interaction, refusal)
@@ -3380,8 +3783,6 @@ async def run_buffer(interaction: discord.Interaction, typed: Any, previous: Any
     menu = await menu_or_gone(interaction, previous)
     if menu is None:
         return
-    if await end_refused(interaction, menu, previous):
-        return
     refusal = None
     try:
         days = read_buffer(typed)
@@ -3389,22 +3790,29 @@ async def run_buffer(interaction: discord.Interaction, typed: Any, previous: Any
         days = None
         refusal = word(bot, guild.id, "rolemenu_end_bad_buffer_said", given=str(exc)[:40])
     if refusal is None and menus.end_source(menu) != menus.MARATHON_END:
-        refusal = word(bot, guild.id, "rolemenu_buffer_needs_marathon_said", menu=menu["name"])
+        refusal = word(
+            bot, guild.id, "rolemenu_buffer_needs_marathon_said", menu=event_name(menu)
+        )
     if refusal is None and await marathon_row(bot.db, guild.id, menu["ends_marathon_id"]) is None:
         refusal = word(bot, guild.id, "rolemenu_end_no_marathon_said")
     if refusal:
         await render_set_end(interaction, menu["name"], previous)
         await answer(interaction, refusal)
         return
-    end = await set_menu_end(
-        bot,
-        guild,
-        interaction.user,
-        menu,
-        source=menus.MARATHON_END,
-        marathon_id=menu["ends_marathon_id"],
-        buffer_days=days,
-    )
+    try:
+        end = await set_menu_end(
+            bot,
+            guild,
+            interaction.user,
+            menu,
+            source=menus.MARATHON_END,
+            marathon_id=menu["ends_marathon_id"],
+            buffer_days=days,
+        )
+    except MarathonTakenError as exc:
+        await render_set_end(interaction, menu["name"], previous)
+        await answer(interaction, str(exc))
+        return
     await render_menu(interaction, menu["name"], previous)
     await said_end(interaction, menu, end)
 
@@ -3429,11 +3837,6 @@ async def run_end_now(interaction: discord.Interaction, previous: Any) -> None:
     menu = await menu_or_gone(interaction, previous)
     if menu is None:
         return
-    refused = await menu_pings_refusal(bot, guild, menu)
-    if refused:
-        await render_menu(interaction, menu["name"], previous)
-        await answer(interaction, refused)
-        return
     details = await end_menu_now(bot, guild, interaction.user, menu)
     await render_menu(interaction, menu["name"], previous)
     if details is None:
@@ -3442,7 +3845,7 @@ async def run_end_now(interaction: discord.Interaction, previous: Any) -> None:
             interaction,
             guard.refusal_message()
             if guard is not None
-            else word(bot, guild.id, "rolemenu_end_now_not_run_said", menu=menu["name"]),
+            else word(bot, guild.id, "rolemenu_end_now_not_run_said", menu=event_name(menu)),
         )
         return
     await answer(
@@ -3451,7 +3854,7 @@ async def run_end_now(interaction: discord.Interaction, previous: Any) -> None:
             bot,
             guild.id,
             ROLEMENU_ENDED_TEXT_KEY,
-            menu=menu["name"],
+            menu=event_name(menu),
             roles=len(details["roles"]),
             members=details["members"],
             failures=details["failures"],
@@ -3467,39 +3870,19 @@ async def run_use_held(interaction: discord.Interaction, previous: Any) -> None:
     if menu is None:
         return
     had = menu_value(menu, "ends_held_at")
-    refused = await menu_pings_refusal(bot, guild, menu) if had else None
-    if refused:
+    try:
+        end = await use_held_end(bot, guild, interaction.user, menu) if had else None
+    except MarathonTakenError as exc:
         await render_menu(interaction, menu["name"], previous)
-        await answer(interaction, refused)
+        await answer(interaction, str(exc))
         return
-    end = await use_held_end(bot, guild, interaction.user, menu) if had else None
     await render_menu(interaction, menu["name"], previous)
     if not had:
-        await answer(interaction, word(bot, guild.id, "rolemenu_no_held_said", menu=menu["name"]))
+        await answer(
+            interaction, word(bot, guild.id, "rolemenu_no_held_said", menu=event_name(menu))
+        )
         return
     await said_end(interaction, menu, end)
-
-
-async def run_assign(interaction: discord.Interaction, select: Any, previous: Any) -> None:
-    if not await guarded(interaction) or not await opened(interaction):
-        return
-    bot = interaction.client
-    guild = interaction.guild
-    menu = await get_menu_by_id(bot.db, select.menu_id)
-    _, said = await staff_assign(
-        bot,
-        guild,
-        interaction.user,
-        menu,
-        select.rows,
-        select.target,
-        select.values,
-        remove=select.remove,
-    )
-    await render_hand_out(
-        interaction, previous.menu_name, previous.member_id, previous.removing, previous
-    )
-    await answer(interaction, said)
 
 
 async def run_grant(interaction: discord.Interaction, days: Any, previous: Any) -> None:
@@ -3556,67 +3939,19 @@ class MoveButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
         action = self.move.action
-        if action == menus.REFRESH:
+        if action == menus.REFRESH or action in (menus.KEEP, menus.LEAVE_IT):
             await refresh_where(interaction, view)
-            return
-        if action == menus.BACK:
+        elif action == menus.BACK:
             await back_from(interaction, view)
-            return
-        if action == menus.LOGS:
+        elif action == menus.LOGS:
             await send_logs(interaction, "rolemenu")
-            return
-        if action == menus.GRANTS:
-            await open_grants(interaction, None, view)
-            return
-        if action == menus.ADD_ROLE:
-            await open_add_role(interaction, view)
-            return
-        if action == menus.HAND_OUT:
-            await open_hand_out(interaction, view, None)
-            return
-        if action == menus.GIVE:
-            await open_hand_out(interaction, view, False)
-            return
-        if action == menus.TAKE_BACK:
-            await open_hand_out(interaction, view, True)
-            return
-        if action == menus.NEW_GRANT:
-            await open_new_grant(interaction, view)
-            return
-        if action == menus.SET_END:
-            await open_set_end(interaction, view)
-            return
-        if action == menus.USE_HELD_YES:
-            await run_use_held(interaction, view)
-            return
-        if action == menus.USE_ROLE_NAME:
-            await run_add_option(interaction, None, None, view)
-            return
-        if action in (
-            menus.DELETE,
-            menus.END_NOW,
-            menus.END_MENU,
-            menus.NO_END_MOVE_ACTION,
-            menus.USE_HELD,
-        ):
+        elif action in (menus.END_NOW, menus.END_MENU, menus.NO_END_MOVE_ACTION, menus.USE_HELD,
+                        menus.DELETE):
             await self.ask_first(interaction, view, action)
-            return
-        if action == menus.DELETE_YES:
-            await run_delete_menu(interaction, view)
-            return
-        if action == menus.END_YES:
-            await run_revoke(interaction, view)
-            return
-        if action == menus.END_MENU_YES:
-            await run_end_now(interaction, view)
-            return
-        if action == menus.NO_END_YES:
-            await run_no_end(interaction, view)
-            return
-        if action in (menus.KEEP, menus.LEAVE_IT):
-            await refresh_where(interaction, view)
-            return
-        await self.open_modal(interaction, view, action)
+        elif action in PLAIN_MOVES:
+            await PLAIN_MOVES[action](interaction, view)
+        else:
+            await self.open_modal(interaction, view, action)
 
     async def ask_first(self, interaction: discord.Interaction, view: Any, action: str) -> None:
         """The moves nobody can undo ask once; every quieter move is one press."""
@@ -3638,29 +3973,16 @@ class MoveButton(discord.ui.Button):
             menu = await menu_or_gone(interaction, view)
             if menu is None:
                 return
-            arming = action in (menus.END_MENU, menus.USE_HELD)
-            refused = await menu_pings_refusal(bot, guild, menu) if arming else None
-            if refused:
-                await render_menu(interaction, menu["name"], view)
-                await answer(interaction, refused)
-                return
             if action == menus.DELETE:
                 refused = await delete_refusal(bot, guild, menu)
                 if refused:
                     await render_menu(interaction, menu["name"], view)
                     await answer(interaction, refused)
                     return
-                question = menus.DELETE_QUESTION.format(name=view.menu_name)
+                question = menus.DELETE_QUESTION.format(name=event_name(menu))
                 yes = menus.PanelMove(menus.DELETE_YES, menus.DELETE_YES_LABEL, "danger", 0)
             elif action == menus.END_MENU:
-                role_ids = await menu_role_ids(bot.db, menu["id"])
-                question = word(
-                    bot,
-                    guild.id,
-                    "rolemenu_end_now_question",
-                    roles=len(role_ids),
-                    members=wearing_count(bot, guild.id, await members_of(guild), role_ids),
-                )
+                question = end_now_question(bot, guild.id, await end_plan(bot, guild, menu))
                 yes = menus.PanelMove(
                     menus.END_MENU_YES,
                     word(bot, guild.id, "rolemenu_end_now_yes", BUTTON_MAX),
@@ -3668,18 +3990,14 @@ class MoveButton(discord.ui.Button):
                     0,
                 )
             elif action == menus.USE_HELD:
-                role_ids = await menu_role_ids(bot.db, menu["id"])
                 question = use_held_question(
-                    bot,
-                    guild.id,
-                    menu,
-                    len(role_ids),
-                    wearing_count(bot, guild.id, await members_of(guild), role_ids),
+                    bot, guild.id, menu, await end_plan(bot, guild, menu)
                 )
                 if question is None:
                     await render_menu(interaction, menu["name"], view)
                     await answer(
-                        interaction, word(bot, guild.id, "rolemenu_no_held_said", menu=menu["name"])
+                        interaction,
+                        word(bot, guild.id, "rolemenu_no_held_said", menu=event_name(menu)),
                     )
                     return
                 yes = menus.PanelMove(
@@ -3689,7 +4007,7 @@ class MoveButton(discord.ui.Button):
                     0,
                 )
             else:
-                question = word(bot, guild.id, "rolemenu_no_end_question", menu=menu["name"])
+                question = word(bot, guild.id, "rolemenu_no_end_question", menu=event_name(menu))
                 yes = menus.PanelMove(
                     menus.NO_END_YES,
                     word(bot, guild.id, "rolemenu_no_end_yes", BUTTON_MAX),
@@ -3711,17 +4029,14 @@ class MoveButton(discord.ui.Button):
         if not await db_up(interaction):
             return
         bot, guild = interaction.client, interaction.guild
-        if action == menus.NEW_MENU:
-            await interaction.response.send_modal(NewMenuModal(view))
-            return
-        if action == menus.LABEL_IT:
-            await interaction.response.send_modal(OptionModal(view))
-            return
         if action == menus.HOW_LONG:
             await interaction.response.send_modal(DaysModal(view, pushing=False))
             return
         if action == menus.PUSH_BACK:
             await interaction.response.send_modal(DaysModal(view, pushing=True))
+            return
+        if action == menus.NO_MARATHON:
+            await interaction.response.send_modal(NewEventModal(bot, guild.id, view))
             return
         menu = await get_menu(bot.db, guild.id, view.menu_name)
         if menu is None:
@@ -3747,19 +4062,50 @@ class MoveButton(discord.ui.Button):
                 )
             )
             return
-        await interaction.response.send_modal(WordsModal(view, menu))
+        await interaction.response.send_modal(RenameModal(bot, guild.id, view, menu))
 
 
-class MenuPick(discord.ui.Select):
-    def __init__(self, rows: Any, row: int) -> None:
+async def move_to(interaction: discord.Interaction, render_it: Any, *args: Any) -> None:
+    if not await opened(interaction):
+        return
+    await render_it(interaction, *args)
+
+
+PLAIN_MOVES = {
+    menus.GRANTS: lambda i, v: open_grants(i, None, v),
+    menus.NEW_GRANT: lambda i, v: move_to(i, render_new_grant, v.member_id, v.role_id, v),
+    menus.NEW_EVENT: lambda i, v: move_to(i, render_new_event, v),
+    menus.TIMED_ROLES: lambda i, v: move_to(i, render_timed_roles, v),
+    menus.ENDED: lambda i, v: move_to(i, render_ended, v),
+    menus.GIVE: lambda i, v: move_to(i, render_hand_out, v.menu_name, None, False, v),
+    menus.TAKE_OFF: lambda i, v: move_to(i, render_hand_out, v.menu_name, None, True, v),
+    menus.FILL: lambda i, v: move_to(i, render_fill, v.menu_name, v),
+    menus.ATTACH: lambda i, v: move_to(i, render_attach, v.menu_name, v),
+    menus.SET_END: lambda i, v: move_to(i, render_set_end, v.menu_name, v),
+    menus.FILL_YES: run_fill,
+    menus.USE_HELD_YES: run_use_held,
+    menus.DELETE_YES: run_delete_menu,
+    menus.END_YES: run_revoke,
+    menus.END_MENU_YES: run_end_now,
+    menus.NO_END_YES: run_no_end,
+}
+
+
+class EventPick(discord.ui.Select):
+    def __init__(self, bot: Any, guild_id: int, rows: Any, row: int) -> None:
         found = list(rows)
         shown = found[:OPTIONS_MAX]
         super().__init__(
             placeholder=capped_placeholder(
-                len(shown), len(found), pick=menus.MENU_PICK, capped=menus.MENUS_CAPPED
-            ),
+                len(shown),
+                len(found),
+                pick=word(bot, guild_id, "rolemenu_event_pick"),
+                capped=word(
+                    bot, guild_id, "rolemenu_events_capped", shown="{shown}", total="{total}"
+                ),
+            )[:SELECT_PLACEHOLDER_MAX],
             options=[
-                discord.SelectOption(label=str(one["name"])[:LABEL_MAX], value=str(one["name"]))
+                discord.SelectOption(label=event_name(one)[:LABEL_MAX], value=str(one["name"]))
                 for one in shown
             ],
             min_values=1,
@@ -3772,14 +4118,14 @@ class MenuPick(discord.ui.Select):
 
 
 class MarathonPick(discord.ui.Select):
-    """Every marathon on the list, still to end first; the one the menu follows is ticked."""
+    """Marathons still to end first; on Change the end the one the event follows is ticked."""
 
     def __init__(self, bot: Any, guild_id: int, rows: Any, menu: Any, row: int) -> None:
         found = list(rows)
         shown = found[:OPTIONS_MAX]
         bound = (
             menu_value(menu, "ends_marathon_id")
-            if menus.end_source(menu) == menus.MARATHON_END
+            if menu is not None and menus.end_source(menu) == menus.MARATHON_END
             else None
         )
         placeholder = (
@@ -3815,21 +4161,30 @@ class MarathonPick(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await run_set_marathon(interaction, int(self.values[0]), self.view)
+        view, picked = self.view, int(self.values[0])
+        if view.where == NEW_EVENT_VIEW:
+            await run_new_event(interaction, view, title=None, marathon_id=picked)
+        elif view.where == ATTACH_VIEW:
+            await run_attach(interaction, picked, view)
+        else:
+            await run_set_marathon(interaction, picked, view)
 
 
-class OptionPick(discord.ui.Select):
-    def __init__(self, rows: Any, row: int) -> None:
-        found = list(rows)
+class TimedRolePick(discord.ui.Select):
+    """A role from the timed list: the one to give or take, or the one to take off the list."""
+
+    def __init__(self, rows: Any, placeholder: str, row: int, chosen: Any = None) -> None:
+        found = list(rows)[:OPTIONS_MAX]
         super().__init__(
-            placeholder=menus.REMOVE_PICK,
+            placeholder=placeholder,
             options=[
                 discord.SelectOption(
                     label=str(one["label"])[:LABEL_MAX],
                     value=str(one["role_id"]),
                     emoji=select_emoji(one["emoji"]),
+                    default=chosen is not None and int(one["role_id"]) == int(chosen),
                 )
-                for one in found[:OPTIONS_MAX]
+                for one in found
             ],
             min_values=1,
             max_values=1,
@@ -3837,7 +4192,31 @@ class OptionPick(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await run_drop_option(interaction, int(self.values[0]), self.view)
+        view, picked = self.view, int(self.values[0])
+        if view.where == ROLES_VIEW:
+            await run_drop_timed(interaction, picked, view)
+            return
+        if not await opened(interaction):
+            return
+        await render_hand_out(interaction, view.menu_name, picked, view.removing, view)
+
+
+class TimedRoleAdd(discord.ui.RoleSelect):
+    def __init__(self, placeholder: str) -> None:
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_add_timed(interaction, int(self.values[0].id), self.view)
+
+
+class PeoplePick(discord.ui.UserSelect):
+    def __init__(self, placeholder: str) -> None:
+        super().__init__(
+            placeholder=placeholder, min_values=1, max_values=PEOPLE_MAX, row=1
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_hand_out(interaction, list(self.values), self.view)
 
 
 class NewRolePick(discord.ui.RoleSelect):
@@ -3849,10 +4228,7 @@ class NewRolePick(discord.ui.RoleSelect):
         picked = int(self.values[0].id)
         if not await opened(interaction):
             return
-        if view.where == NEW_GRANT_VIEW:
-            await render_new_grant(interaction, view.member_id, picked, view)
-            return
-        await render_add_role(interaction, view.menu_name, picked, view)
+        await render_new_grant(interaction, view.member_id, picked, view)
 
 
 class WhoPick(discord.ui.UserSelect):
@@ -3864,13 +4240,10 @@ class WhoPick(discord.ui.UserSelect):
         picked = int(self.values[0].id)
         if not await opened(interaction):
             return
-        if view.where == GRANTS_VIEW:
-            await render_grants(interaction, picked, view)
-            return
         if view.where == NEW_GRANT_VIEW:
             await render_new_grant(interaction, picked, view.role_id, view)
             return
-        await render_hand_out(interaction, view.menu_name, picked, view.removing, view)
+        await render_grants(interaction, picked, view)
 
 
 class GrantPick(discord.ui.Select):
@@ -3912,53 +4285,34 @@ def read_days(value: Any) -> int | None:
     return whole_days(typed)
 
 
-class NewMenuModal(AnswersErrors, discord.ui.Modal, title=NEW_MENU_TITLE):
-    name = discord.ui.TextInput(label=NAME_LABEL, max_length=LABEL_MAX)
-    heading = discord.ui.TextInput(label=HEADING_LABEL, max_length=TITLE_MAX)
-    description = discord.ui.TextInput(
-        label=DESCRIPTION_LABEL,
-        style=discord.TextStyle.paragraph,
-        max_length=DESCRIPTION_LIMIT,
-        required=False,
-    )
+class NewEventModal(AnswersErrors, discord.ui.Modal):
+    name = discord.ui.TextInput(label="Name", max_length=TITLE_MAX)
+    typed = discord.ui.TextInput(label="Date", max_length=DATE_TYPED_MAX)
 
-    def __init__(self, previous: Any) -> None:
-        super().__init__()
+    def __init__(self, bot: Any, guild_id: int, previous: Any) -> None:
+        super().__init__(title=word(bot, guild_id, "rolemenu_new_event_title", MODAL_WORD_MAX))
         self.previous = previous
+        self.name.label = word(bot, guild_id, "rolemenu_event_name_label", MODAL_WORD_MAX)
+        self.typed.label = word(bot, guild_id, "rolemenu_date_label", MODAL_WORD_MAX)
+        self.typed.placeholder = word(bot, guild_id, "rolemenu_date_placeholder", PLACEHOLDER_MAX)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await run_new_menu(
-            interaction,
-            {
-                "name": str(self.name),
-                "title": str(self.heading),
-                "description": str(self.description),
-            },
-            self.previous,
+        await run_new_event(
+            interaction, self.previous, title=str(self.name), typed=str(self.typed)
         )
 
 
-class WordsModal(AnswersErrors, discord.ui.Modal, title=WORDS_TITLE):
-    heading = discord.ui.TextInput(label=HEADING_LABEL, max_length=TITLE_MAX)
-    description = discord.ui.TextInput(
-        label=DESCRIPTION_LABEL,
-        style=discord.TextStyle.paragraph,
-        max_length=DESCRIPTION_LIMIT,
-        required=False,
-    )
+class RenameModal(AnswersErrors, discord.ui.Modal):
+    name = discord.ui.TextInput(label="Name", max_length=TITLE_MAX)
 
-    def __init__(self, previous: Any, menu: Any) -> None:
-        super().__init__()
+    def __init__(self, bot: Any, guild_id: int, previous: Any, menu: Any) -> None:
+        super().__init__(title=word(bot, guild_id, "rolemenu_rename_title", MODAL_WORD_MAX))
         self.previous = previous
-        self.heading.default = str(menu["title"])
-        self.description.default = str(menu["description"] or "")
+        self.name.label = word(bot, guild_id, "rolemenu_event_name_label", MODAL_WORD_MAX)
+        self.name.default = event_name(menu)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await run_change_menu(
-            interaction,
-            {"title": str(self.heading), "description": str(self.description)},
-            self.previous,
-        )
+        await run_rename(interaction, str(self.name), self.previous)
 
 
 class DateModal(AnswersErrors, discord.ui.Modal):
@@ -3988,18 +4342,6 @@ class BufferModal(AnswersErrors, discord.ui.Modal):
         await run_buffer(interaction, str(self.typed), self.previous)
 
 
-class OptionModal(AnswersErrors, discord.ui.Modal, title=OPTION_TITLE):
-    label = discord.ui.TextInput(label=LABEL_LABEL, max_length=LABEL_MAX, required=False)
-    emoji = discord.ui.TextInput(label=EMOJI_LABEL, max_length=64, required=False)
-
-    def __init__(self, previous: Any) -> None:
-        super().__init__()
-        self.previous = previous
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        await run_add_option(interaction, str(self.label), str(self.emoji), self.previous)
-
-
 class DaysModal(AnswersErrors, discord.ui.Modal):
     days = discord.ui.TextInput(label=DAYS_LABEL, max_length=5, required=False)
 
@@ -4023,6 +4365,335 @@ class DaysModal(AnswersErrors, discord.ui.Modal):
         await run_grant(interaction, wanted, self.previous)
 
 
+# --- a timed role added by hand: ask staff which event it is for --------------------------------
+
+
+def by_hand_channel(bot: Any, guild: Any) -> Any:
+    """The by-hand channel, else where role notices post (the approval channel, then staff)."""
+    channel_id = bot.store.get(guild.id, ROLEMENU_BY_HAND_CHANNEL_KEY)
+    if channel_id:
+        found = bot.get_channel(channel_id) or guild.get_channel(channel_id)
+        if found is not None:
+            return found
+    return approval_channel(bot, guild)
+
+
+def roles_named(role_ids: Any) -> str:
+    return ", ".join(f"<@&{int(one)}>" for one in role_ids or ())
+
+
+def by_hand_who(bot: Any, guild_id: int, who_id: Any) -> str:
+    return f"<@{int(who_id)}>" if who_id else word(bot, guild_id, "rolemenu_by_hand_someone")
+
+
+def by_hand_text(bot: Any, guild_id: int, prompt: Any, events: Any) -> str:
+    lines = [
+        word(
+            bot,
+            guild_id,
+            "rolemenu_by_hand_text",
+            who=by_hand_who(bot, guild_id, prompt["added_by"]),
+            member=f"<@{prompt['user_id']}>",
+            roles=roles_named(hand.role_ids_of(prompt)),
+        )
+    ]
+    if prompt["audit"] == hand.UNREADABLE:
+        lines.append(word(bot, guild_id, "rolemenu_by_hand_unreadable_text"))
+    elif prompt["audit"] == hand.SILENT:
+        lines.append(word(bot, guild_id, "rolemenu_by_hand_silent_text"))
+    if not events:
+        lines.append(word(bot, guild_id, "rolemenu_by_hand_no_events_text"))
+    return "\n".join(lines)[:NOTICE_LIMIT]
+
+
+def by_hand_view(bot: Any, guild_id: int, prompt_id: int, events: Any) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    shown = list(events or ())[:OPTIONS_MAX]
+    if shown:
+        view.add_item(
+            ByHandPick(
+                prompt_id,
+                discord.ui.Select(
+                    custom_id=hand.pick_id(prompt_id),
+                    placeholder=capped_placeholder(
+                        len(shown),
+                        len(list(events)),
+                        pick=word(bot, guild_id, "rolemenu_by_hand_pick"),
+                        capped=word(
+                            bot,
+                            guild_id,
+                            "rolemenu_events_capped",
+                            shown="{shown}",
+                            total="{total}",
+                        ),
+                    )[:SELECT_PLACEHOLDER_MAX],
+                    min_values=1,
+                    max_values=1,
+                    options=[
+                        discord.SelectOption(
+                            label=event_name(one)[:LABEL_MAX], value=str(int(one["id"]))
+                        )
+                        for one in shown
+                    ],
+                ),
+            )
+        )
+    view.add_item(
+        ByHandNew(
+            prompt_id,
+            discord.ui.Button(
+                custom_id=hand.new_id(prompt_id),
+                label=word(bot, guild_id, "rolemenu_new_event_button", BUTTON_MAX),
+                style=discord.ButtonStyle.secondary,
+            ),
+        )
+    )
+    return view
+
+
+async def ask_which_event(bot: Any, guild: Any, member: Any, role_ids: Any) -> int | None:
+    """One post per member and set of roles, naming who added them when the audit log says."""
+    if not bot.store.get(guild.id, ROLEMENU_BY_HAND_POSTS_KEY):
+        return None
+    lock = hand.by_hand_locks(bot).setdefault((int(guild.id), int(member.id)), asyncio.Lock())
+    async with lock:
+        asked = await hand.waiting_roles(bot.db, guild.id, member.id)
+        wanted = sorted({int(one) for one in role_ids} - asked)
+        if not wanted:
+            return None
+        who_id, audit = await hand.who_added_soon(guild, member, wanted)
+        if audit == hand.OURS:
+            return None
+        target, where = card_target(bot, by_hand_channel(bot, guild))
+        details = {"user": int(member.id), "roles": wanted, "audit": audit, "by": who_id}
+        if target is None:
+            await log_action(
+                bot, guild, "role_menu.by_hand_post_failed", details=details | {"reason": where}
+            )
+            return None
+        prompt_id = await hand.add_prompt(bot.db, guild.id, member.id, wanted, who_id, audit)
+        prompt = await hand.get_prompt(bot.db, prompt_id)
+        events = await timed.open_events(bot.db, guild.id)
+        try:
+            message = await target.send(
+                by_hand_text(bot, guild.id, prompt, events),
+                view=by_hand_view(bot, guild.id, prompt_id, events),
+                allowed_mentions=discord.AllowedMentions(
+                    everyone=False,
+                    roles=False,
+                    users=[discord.Object(id=int(who_id))] if who_id else False,
+                ),
+            )
+        except Exception as exc:
+            await hand.drop_prompt(bot.db, prompt_id)
+            await log_action(
+                bot,
+                guild,
+                "role_menu.by_hand_post_failed",
+                details=details | {"reason": f"{type(exc).__name__}: {exc}"[:300]},
+            )
+            return None
+        await hand.set_message(bot.db, prompt_id, target.id, message.id)
+    await log_action(
+        bot,
+        guild,
+        "role_menu.by_hand_posted",
+        target=member,
+        details=details | {"prompt_id": prompt_id, "channel_id": int(target.id), "where": where},
+    )
+    return prompt_id
+
+
+async def attach_by_hand(
+    bot: Any, guild: Any, actor: Any, prompt: Any, menu: Any, *, via: str = VIA_DISCORD
+) -> tuple[bool, str]:
+    """The roles the member still wears are assigned on the picked event; one writer wins."""
+    member = guild.get_member(int(prompt["user_id"]))
+    role_ids = hand.role_ids_of(prompt)
+    worn = [one for one in role_ids if member is not None and one in {r.id for r in member.roles}]
+    if not worn:
+        return False, word(
+            bot,
+            guild.id,
+            "rolemenu_by_hand_not_worn_said",
+            member=f"<@{prompt['user_id']}>",
+            roles=roles_named(role_ids),
+        )
+    if not await hand.mark_attached(bot.db, prompt["id"], menu["id"], actor_id(actor)):
+        fresh = await hand.get_prompt(bot.db, prompt["id"])
+        if fresh is None or fresh["attached_menu_id"] is None:
+            return False, word(bot, guild.id, "rolemenu_by_hand_gone_said")
+        done = await get_menu_by_id(bot.db, fresh["attached_menu_id"])
+        return False, word(
+            bot,
+            guild.id,
+            "rolemenu_by_hand_already_said",
+            event=event_name(done) if done is not None else "?",
+        )
+    given = 0
+    for role_id in worn:
+        found = await give_event_role(
+            bot, guild, actor, menu, role_id, [member], source=grants.BY_HAND_ATTACHED, via=via
+        )
+        given += len(found["had"]) + len(found["given"])
+    await log_action(
+        bot,
+        guild,
+        kind_via("role_menu.by_hand_attached", via),
+        actor=actor,
+        target=member,
+        details={
+            "prompt_id": int(prompt["id"]),
+            "menu": menu["name"],
+            "menu_id": int(menu["id"]),
+            "roles": worn,
+            "given": given,
+            "via": via,
+        },
+    )
+    await close_by_hand_post(bot, guild, prompt, menu, actor)
+    return True, word(
+        bot, guild.id, "rolemenu_by_hand_done_said", event=event_name(menu), given=given
+    )
+
+
+async def close_by_hand_post(bot: Any, guild: Any, prompt: Any, menu: Any, actor: Any) -> None:
+    """Cosmetic and last: the post says what was attached and by whom, with nothing to press."""
+    channel = bot.get_channel(prompt["channel_id"]) if prompt["channel_id"] else None
+    if channel is None or not prompt["message_id"]:
+        return
+    text = word(
+        bot,
+        guild.id,
+        "rolemenu_by_hand_attached_text",
+        who=by_hand_who(bot, guild.id, prompt["added_by"]),
+        member=f"<@{prompt['user_id']}>",
+        roles=roles_named(hand.role_ids_of(prompt)),
+        event=event_name(menu),
+        staff=f"<@{actor_id(actor)}>" if actor_id(actor) else "?",
+    )
+    try:
+        message = channel.get_partial_message(int(prompt["message_id"]))
+        await message.edit(
+            content=text[:NOTICE_LIMIT], view=None, allowed_mentions=discord.AllowedMentions.none()
+        )
+    except (*NETWORK_ERRORS, LookupError, AttributeError) as exc:
+        log.info("timed roles: could not close by-hand post %s: %s", prompt["id"], exc)
+
+
+async def by_hand_target(interaction: discord.Interaction, prompt_id: int) -> Any:
+    """The stored post this click belongs to, once staff are confirmed; None once answered."""
+    if interaction.guild is None:
+        await answer(interaction, GUILD_ONLY)
+        return None
+    if not await still_staff(interaction) or not await db_up(interaction):
+        return None
+    prompt = await hand.get_prompt(interaction.client.db, prompt_id)
+    if prompt is None or int(prompt["guild_id"]) != interaction.guild.id:
+        await answer(
+            interaction,
+            word(interaction.client, interaction.guild.id, "rolemenu_by_hand_gone_said"),
+        )
+        return None
+    return prompt
+
+
+async def run_attach_by_hand(
+    interaction: discord.Interaction, prompt_id: int, menu_id: Any
+) -> None:
+    prompt = await by_hand_target(interaction, prompt_id)
+    if prompt is None:
+        return
+    bot, guild = interaction.client, interaction.guild
+    if not await guarded(interaction):
+        return
+    await interaction.response.defer(ephemeral=True)
+    menu = await get_menu_by_id(bot.db, int(menu_id)) if str(menu_id).isdigit() else None
+    if menu is None or int(menu["guild_id"]) != guild.id or menu_value(menu, "ended_at"):
+        await answer(interaction, word(bot, guild.id, "rolemenu_by_hand_gone_said"))
+        return
+    _, said = await attach_by_hand(bot, guild, interaction.user, prompt, menu)
+    await answer(interaction, said)
+
+
+class ByHandPick(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Select], template=hand.PICK_TEMPLATE
+):
+    """The by-hand post's event picker; it lives on the message, so a restart keeps it."""
+
+    def __init__(self, prompt_id: int, select: Any = None) -> None:
+        self.prompt_id = int(prompt_id)
+        super().__init__(
+            select
+            or discord.ui.Select(
+                custom_id=hand.pick_id(prompt_id),
+                options=[discord.SelectOption(label="?", value="0")],
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
+        return cls(int(match["prompt_id"]), item)
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        values = list(getattr(self.item, "values", None) or ())
+        if not values:
+            values = list((getattr(interaction, "data", None) or {}).get("values") or ())
+        await run_attach_by_hand(interaction, self.prompt_id, values[0] if values else None)
+
+
+class ByHandNew(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=hand.NEW_TEMPLATE
+):
+    """New event… on a by-hand post: name and date, then the post is attached to it."""
+
+    def __init__(self, prompt_id: int, button: Any = None) -> None:
+        self.prompt_id = int(prompt_id)
+        super().__init__(button or discord.ui.Button(custom_id=hand.new_id(prompt_id), label="?"))
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
+        return cls(int(match["prompt_id"]), item)
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        prompt = await by_hand_target(interaction, self.prompt_id)
+        if prompt is None:
+            return
+        await interaction.response.send_modal(
+            ByHandEventModal(interaction.client, interaction.guild.id, self.prompt_id)
+        )
+
+
+class ByHandEventModal(AnswersErrors, discord.ui.Modal):
+    name = discord.ui.TextInput(label="Name", max_length=TITLE_MAX)
+    typed = discord.ui.TextInput(label="Date", max_length=DATE_TYPED_MAX)
+
+    def __init__(self, bot: Any, guild_id: int, prompt_id: int) -> None:
+        super().__init__(title=word(bot, guild_id, "rolemenu_new_event_title", MODAL_WORD_MAX))
+        self.prompt_id = int(prompt_id)
+        self.name.label = word(bot, guild_id, "rolemenu_event_name_label", MODAL_WORD_MAX)
+        self.typed.label = word(bot, guild_id, "rolemenu_date_label", MODAL_WORD_MAX)
+        self.typed.placeholder = word(bot, guild_id, "rolemenu_date_placeholder", PLACEHOLDER_MAX)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        prompt = await by_hand_target(interaction, self.prompt_id)
+        if prompt is None:
+            return
+        bot, guild = interaction.client, interaction.guild
+        refusal, when = typed_refusal(bot, guild.id, str(self.typed))
+        if refusal:
+            await answer(interaction, refusal)
+            return
+        await interaction.response.defer(ephemeral=True)
+        try:
+            menu = await make_event(bot, guild, interaction.user, str(self.name), ends_at=when)
+        except MenuLimitError as exc:
+            await answer(interaction, str(exc))
+            return
+        _, said = await attach_by_hand(bot, guild, interaction.user, prompt, menu)
+        await answer(interaction, said)
+
+
 class RoleMenus(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -4031,7 +4702,7 @@ class RoleMenus(commands.Cog):
         self.last_counts: dict[str, int] | None = None
 
     async def cog_load(self) -> None:
-        self.bot.add_dynamic_items(RequestButton, RetiredMenuPick)
+        self.bot.add_dynamic_items(RequestButton, RetiredMenuPick, ByHandPick, ByHandNew)
         if not self.bot.db.is_connected:
             return
         await self.run_due_grants()
@@ -4100,11 +4771,13 @@ class RoleMenus(commands.Cog):
     async def run_due_grants(self) -> None:
         """Grants whose day has come: the role comes off, the row closes, the member is told."""
         seen = {guild.id: guild for guild in getattr(self.bot, "guilds", ())}
-        ending = await roles_ending_now(self.bot.db, datetime.now(UTC))
         for row in await grants.due_grants(self.bot.db, now_iso()):
             guild = seen.get(row["guild_id"])
-            if guild is not None and (row["guild_id"], row["role_id"]) not in ending:
-                await self._expire(guild, row)
+            if guild is None or menu_value(row, "menu_id") is not None:
+                continue
+            if await timed.is_timed(self.bot.db, guild.id, row["role_id"]):
+                continue
+            await self._expire(guild, row)
 
     async def _expire(self, guild: Any, row: Any) -> None:
         member = guild.get_member(row["user_id"])
@@ -4183,10 +4856,19 @@ class RoleMenus(commands.Cog):
         )
         for role_id in added:
             await self._added_by_hand(guild, after, role_id)
+        listed = set(await timed.role_ids(self.bot.db, guild.id))
         if removed:
+            gone = [one for one in removed if one in listed]
+            await timed.close_member_roles(self.bot.db, guild.id, after.id, gone, grants.BY_HAND)
+            await hand.retire_roles(self.bot.db, guild.id, after.id, gone)
             await grants.record_removed(
-                self.bot.db, guild.id, after.id, removed, grants.BY_HAND
+                self.bot.db, guild.id, after.id, [one for one in removed if one not in listed],
+                grants.BY_HAND,
             )
+        owned = await owned_by_pings(self.bot, guild.id)
+        asked = [one for one in added if one in listed and one not in owned]
+        if asked:
+            await ask_which_event(self.bot, guild, after, asked)
 
     async def _added_by_hand(self, guild: Any, member: Any, role_id: int) -> None:
         row = await grants.open_request_for_role(self.bot.db, guild.id, member.id, role_id)
@@ -4202,10 +4884,6 @@ class RoleMenus(commands.Cog):
                 await label_for(self.bot.db, guild, fresh["menu_id"], role_id),
                 menu["name"] if menu is not None else "a deleted menu",
             )
-        if await grants.open_grant(self.bot.db, guild.id, member.id, role_id) is not None:
-            return
-        if await timed_menu_owns(self.bot.db, guild.id, role_id):
-            await grants.add_grant(self.bot.db, guild.id, member.id, role_id, grants.MANUAL)
 
     @app_commands.command(
         name="rolemenu", description="Role menus: hand roles out and set when they end"
