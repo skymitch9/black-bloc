@@ -772,3 +772,73 @@ driven on the local mock in `chrome-headless-shell` (1280 px and 390 px) over ra
 - `ROLE_MENU_END_RETRIES` (§6.1 item 4) and `LINES_MAX` are constants, not keys.
 - The fill parts read `marathon_part_*` words (*runs: 2 matched · 1 to give Runner*), shared with the panel.
 - The Applications strings in `cogs/community/applications.py` and the mock still say *the Role menus page*.
+
+## 8. Pick the event later — a timed role waiting for an event (owner, 2026-11-14 09:0x → 12:0x)
+
+The ask, verbatim: *"I also want to add a criteria where if there isn't an event yet it lets them pick it later. Maybe we take an event end time and remind them up to 2 weeks later depending on the end date. Help me plan that experience out"*. The situation covered: a role is handed out by hand before anyone has made the event it is for (a runner accepted in March for a marathon nobody has put on the tracker). Without this, that person loses the role at the end of whatever unrelated event ends first (§7.3). §8 adds to §7; nothing in §7 is withdrawn.
+
+### 8.1 The decisions (owner's answers, verbatim in `TODO.md` 2026-11-14)
+
+| # | Decision |
+|---|---|
+| Q1 | Two weeks after the rough end date with no event attached, the role COMES OFF. *"instead of a dm it's a staff notification with a button to revert and the staff ping should be lead"* — no DM to the member; a staff notice pinging the Leads role, with **Revert**. |
+| Q2 | Three reminders to the person who assigned it: on the date, a week after, the day before removal. Several people in one message. Each offers: pick an event / New event / Take it off now. |
+| Q3 | *"a"* — the rough end date is REQUIRED when someone presses *Pick later…*. No default. |
+| Q4 | **OPEN — asked 2026-11-14 12:2x, the build waits on it.** What **Revert** does: (a) one press puts the roles back and the person waits again for a number of days held in a settings key; (b) the press asks for a new required date. §8.6 is written for whichever he picks. |
+
+### 8.2 Data (schema +1, additive)
+
+Waiting is held PER (member, role), in its own table (the name is the builder's, e.g. `timed_role_waits`): guild, member, role, the by-hand post it came from, the rough end (`until`, an ISO moment), who set it and when, the last reminder stage sent and when, how and when it ended, by whom, the event it was attached to, the removal notice's channel and message ids. `timed_role_prompts` stays what it is — the POST — and its `attached_at` keeps its one meaning, *this post is finished*.
+
+**The states of a wait row, and every move between them (a test for each):**
+
+| From | Move | To |
+|---|---|---|
+| (none) | *Pick later…* with a date on a by-hand post, per role on the post the member still wears | `waiting` |
+| `waiting` | an event is picked for it (the post, the reminder card, the new-event post, the panel, the site) — writes the assignment, source `by_hand_attached` | `attached` |
+| `waiting` | *Take it off now* | `taken_off` |
+| `waiting` | the role comes off the member by hand, or by any path that is not the waiting pass | `came_off` |
+| `waiting` | the member leaves | `left` |
+| `waiting` | the waiting pass at the removal day | `removed` |
+| `removed` | **Revert** | `waiting` (stage reset) |
+| `waiting` | *Change the date…* | `waiting` (new `until`, stage recomputed) |
+
+- ⚠️ **Waiting is independent of event assignments.** Being given the same role on event A (Give, Fill, the site list) does NOT end the wait: A's end must not take a role the person is still owed for an event nobody has made (owner Q1 of §7: *"we don't want to remove roles for people in event B when event A ends"*).
+- ⚠️ **One role coming off ends only that role's wait.** A post that covered Runner and Host keeps Runner waiting when Host is removed. (`retire_roles` today finishes the whole post when any of its roles goes; the post may still finish, the other role's wait row must not.)
+- **Already asked**: `on_member_update` posts nothing for a (member, role) that has an unfinished post OR an open wait row. After `removed`, `taken_off`, `came_off` the pair is free: a later by-hand add of that role posts again.
+- The waiting pass's own removal arrives back through `on_member_update`; it must leave the row `removed` (not `came_off`) so **Revert** finds it. Test removal → Revert → removal.
+- **The assigner** = the post's `added_by` when the audit log named one, else whoever pressed *Pick later…*.
+
+### 8.3 Protection
+
+`end_plan` (the ONE function) treats a waiting (member, role) pair like a keeper: an event's end never takes it. `Plan` gains a `waiting` count; the two confirm questions gain a `{waiting}` field and their defaults say it (*… K keep a role through another event, W are waiting for an event.*), so the number shown is still the number the pass takes. `/pings`-owned roles stay skipped as before.
+
+### 8.4 The by-hand post
+
+- New button **Pick later…** beside the event select and **New event…** → modal, one REQUIRED field, the rough end date (the existing typed-date reader and its refusal; a past date is refused in words; a ceiling in days is a settings key, default 365).
+- The post is edited to the waiting state: who, member, roles, *waiting for an event, expected to end {date}*, set by whom; it keeps the event select, **New event…**, and gains **Change the date…** and **Take it off now** (confirm with the role names; a role another open event holds, or `/pings` owns, stays on and the sentence says so). Restart-safe (DynamicItems, as `ByHandPick`).
+- Staff-gated as the post is today.
+
+### 8.5 When a new event is made (any path: panel, site, by-hand **New event…**)
+
+If anyone is waiting, ONE post in the by-hand channel: the new event's name, the waiting people (member, roles, expected end), pinging the distinct assigners, with a multi-select of the waiting entries (25-capped, the cap said in words) → the picked entries are attached to this event (`attach_by_hand`, source `by_hand_attached`), the post edited to say who was attached by whom. Restart-safe. The event made from a waiting entry's own **New event…** attaches that entry directly and asks about the others.
+
+### 8.6 The waiting pass (in the existing expiry loop; one function decides what is due)
+
+Per guild, per waiting row, from `until`:
+
+- **Reminders** at day offsets from a settings key (default `0, 7, 13`) — one message per assigner per tick in the by-hand channel, pinging that assigner, listing every one of their entries with a reminder due (member, roles, expected end, the day it comes off), with a select of those entries; picking one answers an ephemeral card for that entry: event select · **New event…** · **Change the date…** · **Take it off now**. After downtime only the LATEST due stage is sent, never a burst. An offset at or past the removal day is ignored.
+- **Removal** at `until` + a settings key (default 14 days): the role comes off through `change_roles` (ours, so no by-hand post) UNLESS an open assignment on an event that has not ended holds it for that member, or `/pings` owns it — then the Discord role stays and only the row ends; no DM; row `removed`; and ONE staff notice in the by-hand channel pinging the role in a new role key (unset = no ping; the conductor sets the live value to Leads): member, roles, the date, the assigner, **Revert**. Several removals in one tick make one notice per member. A role the bot could not take is said in the notice, logged (important), and retried next tick — never a silent skip.
+- **Revert** (staff-gated, restart-safe; Q4 decides whether it asks for a date or uses a days key) → roles back through `change_roles`, the row waits again with reminders reset, the notice edited to say who reverted and the new date. A member who left is refused in words.
+- **Change the date…** resets the reminder stage to what the new date implies.
+- The loop's Health counts gain the waiting numbers.
+
+### 8.7 Where staff see it
+
+- `/rolemenu` root: **Waiting for an event (N)…** (drawn only when N > 0) → the entries, soonest removal first; a select opens the same entry card as §8.6.
+- `rolemenus.html`: a **Waiting for an event (N)** group beside Events (§7.9 left room): member, roles, expected end, comes off on, set by; attach to an event, change the date, take it off now (confirm). Routes for list / attach / date / take-off; the mock, the contract and `site-gate` follow; refusals in words, never a bare status.
+- Removing a role from the timed list is refused while anyone waits on it (the count named), as it is for assignments.
+
+### 8.8 Words, logs, guide
+
+Every sentence, label, placeholder and modal title is a settings key (registry + mock row + label), no blurbs. The day offsets, the removal days, the date ceiling and the ping role are keys reachable from the Settings page and `/settings`. New log kinds for: put to waiting, date changed, reminded, removed by the waiting pass (important), revert (important), failures (important). The staff guide seed `rolemenu-post` gains the *Pick later…* path (slug kept; the live copy changes only on a reset).
