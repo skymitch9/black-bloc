@@ -713,3 +713,35 @@ async def test_the_root_offers_the_waiting_list_only_while_somebody_waits(bot, d
     assert embed.title == "Waiting for an event"
     assert "<@900> · <@&10>" in embed.description
     assert type(waiting.children[0]).__name__ == "WaitEntryPick"
+
+
+async def test_every_waiting_control_is_registered_at_load_so_a_restart_keeps_it(bot, db):
+    registered = []
+    bot.add_dynamic_items = lambda *items: registered.extend(items)
+    connected = bot.db
+    bot.db = SimpleNamespace(is_connected=False)
+    try:
+        await RoleMenus(bot).cog_load()
+    finally:
+        bot.db = connected
+
+    assert set(flow.DYNAMIC_ITEMS) <= set(registered)
+    assert [item.__name__ for item in flow.DYNAMIC_ITEMS] == [
+        "ByHandLater",
+        "WaitMove",
+        "WaitEventPick",
+        "ReminderPick",
+        "NewEventPick",
+        "WaitRevert",
+    ]
+
+
+async def test_after_the_removal_the_pair_is_free_and_a_new_by_hand_add_asks_again(bot, db, lead):
+    member, _ = await removal_ready(bot, db, lead, 10)
+    await flow.waiting_pass(bot, bot.guild)
+    count = len(posts(bot))
+
+    await added_by_hand(bot, member, 10)
+
+    assert len(posts(bot)) == count + 1
+    assert "<@&10> by hand" in posts(bot)[-1].kwargs["content"]

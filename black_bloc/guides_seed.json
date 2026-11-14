@@ -451,6 +451,7 @@
         {"do": "Leave the end to come, or press **End it now**. A dated event takes a marathon later with **Attach a marathon…**.", "expect": "At the end, everyone wearing a timed role loses it, given here or by hand, unless another open event still has them. One DM each."}
       ],
       "faults": [
+        {"symptom": "A timed role was given by hand before anyone made its event", "answer": "On the post in the by-hand channel press **Pick later…** and type a rough end date. No event's end takes it while it waits, and whoever gave it is reminded. Pick the event once it exists, or **Change the date…**, or **Take it off now**. If nobody picks one it comes off with a staff notice, and **Revert** puts it back."},
         {"symptom": "**Add a role…** refused a role", "answer": "An event's end has to be able to take it off: move Black Bloc's role above it in Server Settings ▸ Roles. A role that belongs to `/pings` is never a timed role."},
         {"symptom": "A marathon was refused: it already has an open event", "answer": "One event per marathon. Give roles from the event that has it, or end that one first."},
         {"symptom": "The card says *Held* and shows **Use the earlier end**", "answer": "The marathon's new dates would end the roles sooner. Nothing moved; **Use the earlier end** asks with the counts, then takes it."},
@@ -459,7 +460,8 @@
       "facts": [
         {"kind": "setting", "ref": "rolemenu_end_buffer_days"},
         {"kind": "setting", "ref": "rolemenu_end_earlier_holds"},
-        {"kind": "setting", "ref": "rolemenu_by_hand_channel_id"}
+        {"kind": "setting", "ref": "rolemenu_by_hand_channel_id"},
+        {"kind": "setting", "ref": "rolemenu_wait_removal_days"}
       ]
     },
     {

@@ -1,6 +1,7 @@
 # Temporary roles — the role menu becomes the permanent staff control; a role ends on a date or with a marathon (request #17)
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **§7 (timed roles per event) dispatches A + B BUILT on
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **§8 (pick the event later) BUILT on branch
+> `pick-later`, not merged** (2026-11-14, §8.9; ⚠️ not met Discord). Before that: **§7 (timed roles per event) dispatches A + B BUILT on
 > branch `timed-roles`, not merged** (2026-11-14; A at §7.8, B — API, site, guide — at §7.9; ⚠️ neither met Discord or the live
 > site). Before that: §3–§6 (menus with one end) LIVE through v274 (§6.1–§6.7). 📐 Design by Fable, 2026-11-13 09:5x Phoenix. **Last verified: 2026-11-13 09:4x** against `main`
 > `8556fcc8` by reading the code, and against the live site through the operator token (request #17; `GET /api/marathons`).
@@ -842,3 +843,142 @@ Per guild, per waiting row, from `until`:
 ### 8.8 Words, logs, guide
 
 Every sentence, label, placeholder and modal title is a settings key (registry + mock row + label), no blurbs. The day offsets, the removal days, the date ceiling and the ping role are keys reachable from the Settings page and `/settings`. New log kinds for: put to waiting, date changed, reminded, removed by the waiting pass (important), revert (important), failures (important). The staff guide seed `rolemenu-post` gains the *Pick later…* path (slug kept; the live copy changes only on a reset).
+
+### 8.9 What the pick-later build built, every deviation it took, and what is left (2026-11-14, branch `pick-later`)
+
+Code notes: [`code-notes.md`](code-notes.md) ▸ *Pick the event later*. ⚠️ Nothing here met Discord or the live site: verified by the
+suite, `ruff`, the ES-module parse, `site-gate` (`check.mjs`), every `site/mock/*.test.mjs`, the contract test, and the real page
+driven on the local mock in `chrome-headless-shell` (1280 px and 390 px) over raw CDP (no console errors; `scrollWidth` = viewport
+at both widths; Attach on a waiting card wrote the assignment and the card left the list).
+
+**Data (schema 110, additive: one new table, no new column on an old one)**
+1. `timed_role_waits(id, guild_id, user_id, role_id, prompt_id, assigner_id, until, set_by, set_at, stage, reminded_at, state,
+   ended_at, ended_by, menu_id, notice_channel_id, notice_message_id, remove_failures)` with
+   `timed_role_waits_one_open` (UNIQUE `(guild_id, user_id, role_id) WHERE state = 'waiting'`) and `timed_role_waits_by_state
+   (guild_id, state, until)`. Both indexes are in `SCHEMA` itself: they name only the new table's columns, so the 109 rule (indexes on
+   ADDED columns after `_add_missing_columns`) does not apply. States: `waiting`, `attached`, `taken_off`, `came_off`, `left`,
+   `removed`. Every move out of `waiting` is a conditional `UPDATE … WHERE state = 'waiting'` (one writer wins); Revert's is
+   `… WHERE state = 'removed'` and skips a row whose pair already waits again (the unique index), saying so.
+2. `stage` = how many reminder offsets have been sent for the current `until`; `assigner_id` is fixed when the row is made
+   (the post's `added_by`, else whoever pressed *Pick later…*). `prompt_id` names the post; `timed_role_prompts.attached_at` keeps
+   its one meaning (*this post is finished*): a post with a role still waiting is never finished (`timed_roles_by_hand.finish`,
+   `retire_roles`), and "already asked" is now *roles of unfinished posts never put to waiting* ∪ *pairs with an open wait*
+   (`waiting_roles`).
+
+**Protection (§8.3)**
+3. `end_plan` stays the ONE function: `timed.plan(…, waiting=waits.pairs(…))` takes no waiting pair; `Plan.waiting` counts MEMBERS
+   with a waiting worn role (as `keep` counts members), and a pair both kept and waiting counts in `keep` only. `plan_counts` adds
+   `{waiting}`; the three questions (`rolemenu_end_now_question`, `rolemenu_use_held_question`, `rolemenu_use_held_past_question`)
+   gained `{waiting}` and their defaults say it (same keys, one more field; a stored custom wording without it still renders).
+4. ⚠️ **Every other remover reads the waits too** (not only the end pass): *Take roles off…* / the site list's take-off
+   (`take_event_role`) treat a waiting pair as kept (the event row closes, the role stays, the wait continues); ending one ad-hoc
+   grant (`revoke_grant`) leaves a waiting role on and says `rolemenu_kept_waiting_said`. Reading that removes fewer roles.
+5. "Held elsewhere" for the waiting pass and *Take it off now* is one helper, `role_menus.held_elsewhere`: an open assignment on an
+   event with `ended_at IS NULL` (`timed.held_open`) or a `/pings`-owned role. The row ends; the Discord role stays; the sentence /
+   notice says so (`rolemenu_wait_stays_on_text`).
+
+**The moves**
+6. **An entry is a MEMBER**: the reminder's picker, the entry card, `/rolemenu`'s list, the site and the new-event post act on all of
+   one member's waiting rows (one stable id, `user_id`, across restarts). On the by-hand post, the event select and **New event…**
+   act on the post (`attach_by_hand`, which now also ends the waits it wrote an assignment for); **Change the date…** and **Take it
+   off now** on the post act on the member's entry. A member who waits from two posts is moved together — deliberate, recorded.
+7. *Pick later…* (`ByHandLater`, modal `WaitDateModal`, `required=True`): `rm.typed_refusal` (unreadable / gone by) then
+   `too_far` against `rolemenu_wait_max_days` (default 365, max 3650). Only roles the member still wears wait; none worn, a finished
+   post, or a post already waiting is refused in words. The post is redrawn to `rolemenu_wait_post_text` with the event select,
+   **New event…**, **Change the date…**, **Take it off now** (no **Pick later…**).
+8. Attach (post, card, panel, site, new-event post) writes through `give_event_role` (source `by_hand_attached`) only for roles the
+   member still wears; a row ends `attached` (with `menu_id`) only when the member is in `had`/`given`/`already` — nothing written
+   → it still waits and the answer says `rolemenu_wait_not_attached_said`.
+9. *Change the date…* re-stamps `until` and sets `stage` to what the new date implies (always 0, since a past date is refused) and
+   clears `remove_failures`.
+10. *Take it off now* asks first (ephemeral `TakeOffConfirm`, `rolemenu_wait_take_off_question`), runs under the guild lock, ends
+    every row `taken_off`; a refused removal changes nothing and says `rolemenu_wait_refused_said` (logged `_failed`).
+11. Posts settle when their last waiting row ends: attached → the existing attached text; taken off →
+    `rolemenu_wait_post_taken_off_text`; removed → `rolemenu_wait_post_removed_text`; came off / left → finished with no edit (as
+    A's retire). Revert does not reopen a post: the notice, the reminders, `/rolemenu` and the site carry the entry after it.
+
+**The waiting pass (§8.6)** — `RoleMenus.run_waits` after `reconcile_records` in the hourly tick, per guild, each guild in its own
+`try` (one fault never stops the menus' tick).
+12. ⚠️ **A short member cache skips the guild** (logs `role_menu.wait_pass_failed`): with it full, a waiting row whose member is
+    gone ends `left`, and one whose member no longer wears the role ends `came_off` — never `removed`, so Revert never hands back a
+    role staff took off while the bot was down.
+13. Reminders: offsets from `rolemenu_wait_reminder_days` (text `0, 7, 13`, validated by `checked_wait_offsets` — the registry has
+    no int-list type), offsets at or past `rolemenu_wait_removal_days` ignored. A row is due when `due_stage(until) > stage`; after
+    downtime only the latest stage is sent. ONE message per assigner per tick (`tbwrem:<assigner>`, 0 = nobody named → *Somebody*,
+    no ping), listing each member with a row due, pinging only that assigner. A send that fails is logged and not marked, so the
+    next tick tries again.
+14. ⚠️ **Removal posts the notice FIRST, then takes the roles**, under the guild lock: with nowhere to post (no channel) or a send
+    Discord refuses, NOTHING comes off (`role_menu.wait_notice_failed`, retried next tick) — a removal with no Revert would be a
+    stored state staff cannot leave. If Discord then refuses the removal, the notice is redrawn without **Revert** and with
+    `rolemenu_wait_stuck_line`. The notice pings `rolemenu_wait_ping_role_id` (unset = no ping), no DM.
+15. A role Black Bloc cannot take (above it / refused): the row stays `waiting`, `remove_failures` +1, `role_menu.wait_remove_failed`
+    (important) EVERY tick, retried every tick with no cap; the notice line is posted on the FIRST failure only (no hourly notice).
+    Staff exits: *Take it off now*, *Change the date…*, attach. ⚠️ No cap, unlike the end pass's `ROLE_MENU_END_RETRIES`.
+16. **Revert** (`tbwrev:<lead wait id>`): the rows of that notice (`notice_message_id`) in state `removed`; a member who left →
+    `rolemenu_wait_revert_left_said`; roles not worn go back through `change_roles` (ours, so no by-hand post); `until` = now +
+    `rolemenu_wait_revert_days`, `stage` 0; the notice is edited to `rolemenu_wait_reverted_text` with no button. Pressed twice →
+    `rolemenu_wait_revert_done_said`. Removal → Revert → removal is tested end to end.
+17. Under `TEST_MODE` (`bot.guard`): the pass logs `role_menu.wait_would_remove` and touches nobody (as `_take_off`); reminders and
+    the new-event post still post (to the guard's test channel through `card_target`). Every Discord control that moves a role
+    asks `guarded()` (entry event pick, new-event pick, the entry's New event…, Take it off now's yes, Revert); the API's attach and
+    take-off answer 409 `test_mode`. *Pick later…* and *Change the date…* move no role and are not guarded.
+18. Health: the loop row gains `waiting N · reminded N · removed N · wait failures N` (a constant like `LOOP_COUNTS`) once the
+    waiting pass has run; `loop_counts` fills missing fields with 0, so a partial dict never raises.
+
+**A new event (§8.5)**
+19. `make_event(…, ask_waiting=True)` posts *is it for any of these?* after ANY make (panel, site, by-hand **New event…**, the
+    entry's **New event…**); the two by-hand paths pass `ask_waiting=False`, attach first, then ask — so the attached entry is not
+    listed. The post pings the distinct assigners; the picker is a multi-select of up to 25 members (`rolemenu_wait_capped` says the
+    cap). After a pick the post gains `rolemenu_wait_attached_line` and the picker is redrawn with who still waits (none → no
+    picker). `ask_about_new_event` never raises into `make_event` (logged `role_menu.wait_event_ask_failed`).
+
+**Where staff see it (§8.7)**
+20. `/rolemenu` root: **Waiting for an event (N)…** (row 1, drawn only when N > 0) → the entries soonest first and a member picker
+    (`WaitEntryPick`, panel-scoped) that opens the same ephemeral entry card as the reminder.
+21. `rolemenus.html`: a **Waiting for an event (N)** section after Events, drawn only when someone waits (as the panel's button):
+    per member a card — `rolemenu_wait_site_line` (roles · expected end · comes off · set by, the setter as a name chip), an event
+    picker with **Attach** (`rolemenu_wait_attach_button`), **Change the date…** folded (a date box + *Save the date*), **Take it off
+    now** (confirm with the route's `take_off_question`). With no open event the picker is replaced by
+    `rolemenu_by_hand_no_events_text`. *Save the date* is page chrome, a JS constant (§7.9 item 20).
+22. Removing a role from the timed list is refused while anyone waits on it (`rolemenu_wait_remove_refused_said`, count named); the
+    API answers it with the SAME 409 `role_assigned` code as the assignment refusal (one code for "the list still holds people").
+
+**Words, guide**
+23. **Keys: 1569 → 1619 (+50)**: 45 words in `settings_store.TIMED_ROLE_WAIT_WORDS`, three numbers in `ROLEMENU_WAIT_NUMBERS`
+    (`rolemenu_wait_removal_days` 14 [1–365], `rolemenu_wait_revert_days` 14 [1–365], `rolemenu_wait_max_days` 365 [1–3650]),
+    `rolemenu_wait_reminder_days` (text, `0, 7, 13`), `rolemenu_wait_ping_role_id` (role, unset). Each has a mock row, a
+    `labels.js` line, and the bounds are in the contract's `min`/`max`. The by-hand post's **New event…** label, the event picker
+    (`rolemenu_by_hand_pick`), *no event is open* and *Somebody* reuse A's keys.
+24. The guide `rolemenu-post` keeps its 4 steps (the live guide has 4, so the boot refresh re-points each *Put the original back*)
+    and gains the *Pick later…* path as its FIRST FAULT (*A timed role was given by hand before anyone made its event*, quoting
+    **Pick later…**, **Change the date…**, **Take it off now**, **Revert** from their keys) and the fact
+    `rolemenu_wait_removal_days` (`FACTS_MAX` = 4, so the reminder days are not a fact). The live words change only on a reset.
+
+**Every persisted name this build adds**
+- Table `timed_role_waits` (columns above); indexes `timed_role_waits_one_open`, `timed_role_waits_by_state`; the six state words.
+- custom_ids: `tbhlater:<prompt_id>` (Pick later…), `tbw:<user_id>:<date|off|new>`, `tbwpick:<user_id>`, `tbwrem:<assigner_id|0>`,
+  `tbwev:<menu_id>`, `tbwrev:<wait_id>` — all `DynamicItem`s registered in `cog_load` (`flow.DYNAMIC_ITEMS`).
+- Log kinds — routine: `role_menu.wait_set`, `wait_date_changed`, `wait_reminded`, `wait_cleared` (came_off / left records),
+  `wait_would_remove`, `wait_event_asked`; important: `role_menu.wait_attached`, `wait_removed`, `wait_reverted`, `wait_taken_off`
+  (listed — `_removed` does not match the `.removed` suffix); important by suffix: `wait_take_off_failed`, `wait_revert_failed`,
+  `wait_remove_failed`, `wait_notice_failed`, `wait_remind_failed`, `wait_event_ask_failed`, `wait_pass_failed`. Web twins the
+  routes write: `web.role_menu.wait_attached`, `wait_date_changed`, `wait_taken_off`, `wait_take_off_failed` (in the contract's
+  action kinds).
+- Routes (23 → 27 under `/api/rolemenus`): `GET /waiting`, `POST /waiting/{user_id}/attach` `{name}`, `POST /waiting/{user_id}/date`
+  `{until}`, `POST /waiting/{user_id}/take-off`. Refusals: 404 `no_such_wait` / `no_such_menu`, 400 `bad_date` / `past_date` /
+  `too_far`, 409 `event_ended` / `not_attached` / `not_taken_off` / `test_mode`. Contract: `GET /api/rolemenus/waiting` (408 → 409
+  routes); the contract seed and the mock seed each hold a waiting member.
+- The 50 settings keys (item 23); panel move `waiting` (`rolemenus.WAITING`, view `waiting`).
+- Modules: `black_bloc/timed_roles_waiting.py` (store + schedule, stdlib only — `settings_store` imports its offsets parser),
+  `black_bloc/timed_roles_waiting_flow.py` (the Discord moves, imported lazily from `role_menus` through `flows()`).
+
+**Not built / left open**
+- ⚠️ **Not verified, Discord only:** the required modal field, the six DynamicItems after a real restart, the pings' allowed
+  mentions, the ephemeral entry card's persistent items, the edits of posts and notices. The fakes pass; Discord was not reached.
+- A notice deleted by staff: Revert still works (it reads the rows), the edit of the notice fails quietly (logged at info).
+- If the notice posted but the later redraw after a refused removal fails, the notice keeps a **Revert** that answers *already
+  reverted* (no `removed` rows) — cosmetic, the roles stayed on.
+- A stuck role retries every hour forever (item 15). If the owner wants a cap, it becomes a key.
+- The by-hand post's event list in the waiting state is the open events at the time it was redrawn (as A's post).
+- The Members page chips do not show *waiting*.
+- Live values for the conductor: `rolemenu_wait_ping_role_id` → Leads (the owner's Q1); `rolemenu_by_hand_channel_id` as before.
