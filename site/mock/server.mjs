@@ -886,7 +886,7 @@ const SETTING_SPECS = [
   ["rolemenu_end_bad_buffer_said", "text", "**{given}** is not a whole number of days from 0 to 365, so the buffer was not changed. Type one, or leave it blank for the server's default.", "**{given}** is not a whole number of days from 0 to 365, so the buffer was not changed. Type one, or leave it blank for the server's default.", "the refusal when a buffer is not a number of days. It takes {given}"],
   ["rolemenu_end_no_marathon_said", "text", "That marathon is not on the list any more, so the end was not set. Press **Refresh** and pick again.", "That marathon is not on the list any more, so the end was not set. Press **Refresh** and pick again.", "the refusal when the marathon picked has left the list"],
   ["rolemenu_buffer_needs_marathon_said", "text", "A buffer is added after a marathon's end, and **{menu}** does not end with one, so nothing was changed. Pick a marathon first.", "A buffer is added after a marathon's end, and **{menu}** does not end with one, so nothing was changed. Pick a marathon first.", "the refusal when a buffer is set on a menu that does not end with a marathon. It takes {menu}"],
-  ["rolemenu_end_now_question", "text", "Take {roles} role(s) off {members} people now? {keep} keep a role through another event.", "Take {roles} role(s) off {members} people now? {keep} keep a role through another event.", "what staff are asked before End it now \u2014 the counts the end itself will use. It takes {roles} {members} {keep}"],
+  ["rolemenu_end_now_question", "text", "Take {roles} role(s) off {members} people now? {keep} keep a role through another event, {waiting} are waiting for an event.", "Take {roles} role(s) off {members} people now? {keep} keep a role through another event, {waiting} are waiting for an event.", "what staff are asked before End it now \u2014 the counts the end itself will use. It takes {roles} {members} {keep} {waiting}"],
   ["rolemenu_end_now_yes", "text", "Yes, take them off", "Yes, take them off", "End it now's confirm button"],
   ["rolemenu_no_end_question", "text", "Clear **{menu}**'s end? Nobody loses its roles until another is set.", "Clear **{menu}**'s end? Nobody loses its roles until another is set.", "what staff are asked before No end. It takes {menu}"],
   ["rolemenu_no_end_yes", "text", "Yes, clear it", "Yes, clear it", "No end's confirm button"],
@@ -895,8 +895,8 @@ const SETTING_SPECS = [
   ["rolemenu_cannot_strip_said", "text", "Black Bloc could not take **{name}** off anybody, so it was not made a timed role \u2014 an event's end has to be able to remove it. Ask an admin to move Black Bloc's role above it in Server Settings \u2192 Roles, then try again.", "Black Bloc could not take **{name}** off anybody, so it was not made a timed role \u2014 an event's end has to be able to remove it. Ask an admin to move Black Bloc's role above it in Server Settings \u2192 Roles, then try again.", "the refusal when a role put on the timed-role list is one Black Bloc could not remove. It takes {name}"],
   ["rolemenu_pings_role_said", "text", "**{name}** belongs to `/pings`, so it was not made a timed role \u2014 members turn it on and off there, and an event's end would take it off everyone.", "**{name}** belongs to `/pings`, so it was not made a timed role \u2014 members turn it on and off there, and an event's end would take it off everyone.", "the refusal when a ping role (a streamer's role, the Events role or the raid-train role) is added to the timed-role list. It takes {name}"],
   ["rolemenu_no_held_said", "text", "**{menu}** has no earlier end waiting, so nothing was changed.", "**{menu}** has no earlier end waiting, so nothing was changed.", "what staff are told when there is no held end to take. It takes {menu}"],
-  ["rolemenu_use_held_question", "text", "Use **{menu}**'s earlier end? {roles} role(s) come off {members} people {when}; {keep} keep a role through another event.", "Use **{menu}**'s earlier end? {roles} role(s) come off {members} people {when}; {keep} keep a role through another event.", "what staff are asked before Use the earlier end, while that end is still to come. It takes {menu} {roles} {members} {when} {keep}"],
-  ["rolemenu_use_held_past_question", "text", "Use **{menu}**'s earlier end? It was {when}, already gone by, so {roles} role(s) come off {members} people at the next hourly pass; {keep} keep a role through another event.", "Use **{menu}**'s earlier end? It was {when}, already gone by, so {roles} role(s) come off {members} people at the next hourly pass; {keep} keep a role through another event.", "what staff are asked before Use the earlier end when that end has already gone by. It takes {menu} {roles} {members} {when} {keep}"],
+  ["rolemenu_use_held_question", "text", "Use **{menu}**'s earlier end? {roles} role(s) come off {members} people {when}; {keep} keep a role through another event, {waiting} are waiting for an event.", "Use **{menu}**'s earlier end? {roles} role(s) come off {members} people {when}; {keep} keep a role through another event, {waiting} are waiting for an event.", "what staff are asked before Use the earlier end, while that end is still to come. It takes {menu} {roles} {members} {when} {keep} {waiting}"],
+  ["rolemenu_use_held_past_question", "text", "Use **{menu}**'s earlier end? It was {when}, already gone by, so {roles} role(s) come off {members} people at the next hourly pass; {keep} keep a role through another event, {waiting} are waiting for an event.", "Use **{menu}**'s earlier end? It was {when}, already gone by, so {roles} role(s) come off {members} people at the next hourly pass; {keep} keep a role through another event, {waiting} are waiting for an event.", "what staff are asked before Use the earlier end when that end has already gone by. It takes {menu} {roles} {members} {when} {keep} {waiting}"],
   ["rolemenu_use_held_yes", "text", "Yes, use it", "Yes, use it", "Use the earlier end's confirm button"],
   ["rolemenu_panel_title", "text", "Timed roles", "Timed roles", "the heading of /rolemenu"],
   ["rolemenu_no_events_line", "text", "No events yet.", "No events yet.", "what /rolemenu says while there is no event"],
@@ -998,6 +998,56 @@ const SETTING_SPECS = [
   ["rolemenu_site_fill_not_timed_line", "text", "{part}: {role} is not a timed role, skipped", "{part}: {role} is not a timed role, skipped", "a part whose role is not on the timed list, on the Timed roles page. It takes {part} {role}"],
   ["rolemenu_events_title", "text", "Events", "Events", "the Timed roles page's heading over the events"],
   ["rolemenu_grants_title", "text", "Every assignment and grant", "Every assignment and grant", "the Timed roles page's heading over the table of every assignment and ad-hoc grant"],
+  ["rolemenu_pick_later_button", "text", "Pick later\u2026", "Pick later\u2026", "the by-hand post's button that puts the role to waiting for an event nobody has made"],
+  ["rolemenu_pick_later_title", "text", "Pick the event later", "Pick the event later", "the heading of the Pick later\u2026 box on a by-hand post"],
+  ["rolemenu_wait_date_label", "text", "Rough end date", "Rough end date", "the date box of Pick later\u2026 and Change the date\u2026"],
+  ["rolemenu_wait_post_text", "text", "{who} gave {member} {roles} by hand \u2014 waiting for an event, expected to end {date}. Set by {staff}.", "{who} gave {member} {roles} by hand \u2014 waiting for an event, expected to end {date}. Set by {staff}.", "a by-hand post once its role waits for an event. It takes {who} {member} {roles} {date} {staff}"],
+  ["rolemenu_wait_set_said", "text", "{member} waits for an event until {date}: {roles}. Reminders go to {who}.", "{member} waits for an event until {date}: {roles}. Reminders go to {who}.", "what staff are told after Pick later\u2026. It takes {member} {date} {roles} {who}"],
+  ["rolemenu_wait_too_far_said", "text", "{when} is more than {days} days away, so nothing was changed. Pick a nearer date.", "{when} is more than {days} days away, so nothing was changed. Pick a nearer date.", "the refusal when a rough end date is further off than rolemenu_wait_max_days. It takes {when} {days}"],
+  ["rolemenu_wait_already_said", "text", "This post already waits for an event, so nothing was changed. **Change the date\u2026** moves it.", "This post already waits for an event, so nothing was changed. **Change the date\u2026** moves it.", "what staff are told when Pick later\u2026 is pressed on a post that already waits"],
+  ["rolemenu_wait_change_date_button", "text", "Change the date\u2026", "Change the date\u2026", "the button that moves the rough end date of somebody waiting for an event"],
+  ["rolemenu_wait_change_date_title", "text", "A new rough end date", "A new rough end date", "the heading of the Change the date\u2026 box"],
+  ["rolemenu_wait_date_changed_said", "text", "{member} now waits until {date}.", "{member} now waits until {date}.", "what staff are told after Change the date\u2026. It takes {member} {date}"],
+  ["rolemenu_wait_take_off_button", "text", "Take it off now", "Take it off now", "the button that ends a wait and takes the role off at once"],
+  ["rolemenu_wait_take_off_question", "text", "Take {roles} off {member} now?", "Take {roles} off {member} now?", "what staff are asked before Take it off now. It takes {roles} {member}"],
+  ["rolemenu_wait_take_off_yes", "text", "Yes, take it off", "Yes, take it off", "Take it off now's confirm button"],
+  ["rolemenu_wait_keep_button", "text", "Keep waiting", "Keep waiting", "the button that leaves Take it off now without changing anything"],
+  ["rolemenu_wait_taken_off_said", "text", "Took {roles} off {member}.", "Took {roles} off {member}.", "what staff are told after Take it off now. It takes {roles} {member}"],
+  ["rolemenu_wait_stays_on_text", "text", "{roles} stay on {member}: another open event holds them, or `/pings` owns them.", "{roles} stay on {member}: another open event holds them, or `/pings` owns them.", "the line saying a wait ended but the role stays on. It takes {roles} {member}"],
+  ["rolemenu_wait_refused_said", "text", "Discord refused to take {roles} off {member}, so they still wait. Move Black Bloc's role above it and try again.", "Discord refused to take {roles} off {member}, so they still wait. Move Black Bloc's role above it and try again.", "the refusal when Take it off now could not take the role off. It takes {roles} {member}"],
+  ["rolemenu_wait_gone_said", "text", "{member} is not waiting for an event any more, so nothing was changed.", "{member} is not waiting for an event any more, so nothing was changed.", "what staff are told when the wait they pressed has already ended. It takes {member}"],
+  ["rolemenu_wait_post_taken_off_text", "text", "{who} gave {member} {roles} by hand \u2014 taken off by {staff}.", "{who} gave {member} {roles} by hand \u2014 taken off by {staff}.", "a by-hand post once Take it off now ends its wait. It takes {who} {member} {roles} {staff}"],
+  ["rolemenu_wait_post_removed_text", "text", "{who} gave {member} {roles} by hand \u2014 nobody picked an event, so it came off {date}.", "{who} gave {member} {roles} by hand \u2014 nobody picked an event, so it came off {date}.", "a by-hand post once the waiting pass takes its role off. It takes {who} {member} {roles} {date}"],
+  ["rolemenu_wait_reminder_text", "text", "{who}, these are still waiting for an event:", "{who}, these are still waiting for an event:", "the reminder to whoever gave the roles, above the list. It takes {who}"],
+  ["rolemenu_wait_line", "text", "{member} \u00b7 {roles} \u00b7 expected to end {date} \u00b7 comes off {removal}", "{member} \u00b7 {roles} \u00b7 expected to end {date} \u00b7 comes off {removal}", "one person waiting for an event, in the reminder, the entry card and /rolemenu. It takes {member} {roles} {date} {removal}"],
+  ["rolemenu_wait_pick", "text", "Sort one out\u2026", "Sort one out\u2026", "the reminder's picker of the people waiting"],
+  ["rolemenu_wait_capped", "text", "{shown} of {total} \u2014 the site has the rest", "{shown} of {total} \u2014 the site has the rest", "a picker of people waiting when there are more than Discord lists. It takes {shown} {total}"],
+  ["rolemenu_wait_removed_text", "text", "{member} lost {roles}: nobody picked an event by {date}. Given by {who}.", "{member} lost {roles}: nobody picked an event by {date}. Given by {who}.", "the staff notice when the waiting pass takes a role off. It takes {member} {roles} {date} {who}"],
+  ["rolemenu_wait_stuck_line", "text", "Black Bloc could not take {roles} off {member} and tries again next hour.", "Black Bloc could not take {roles} off {member} and tries again next hour.", "the notice's line for a role Discord refused to take off. It takes {roles} {member}"],
+  ["rolemenu_wait_revert_button", "text", "Revert", "Revert", "the removal notice's button"],
+  ["rolemenu_wait_reverted_text", "text", "{member} got {roles} back from {staff} and waits for an event again until {date}.", "{member} got {roles} back from {staff} and waits for an event again until {date}.", "the removal notice once Revert is pressed. It takes {member} {roles} {staff} {date}"],
+  ["rolemenu_wait_reverted_said", "text", "Put {roles} back on {member}; waiting until {date}.", "Put {roles} back on {member}; waiting until {date}.", "what staff are told after Revert. It takes {roles} {member} {date}"],
+  ["rolemenu_wait_revert_left_said", "text", "{member} has left the server, so nothing was put back.", "{member} has left the server, so nothing was put back.", "the refusal when Revert is pressed for somebody who left. It takes {member}"],
+  ["rolemenu_wait_revert_refused_said", "text", "Discord refused to put {roles} back on {member}, so nothing changed. Move Black Bloc's role above it and try again.", "Discord refused to put {roles} back on {member}, so nothing changed. Move Black Bloc's role above it and try again.", "the refusal when Revert could not put the role back. It takes {roles} {member}"],
+  ["rolemenu_wait_revert_done_said", "text", "This was already reverted, so nothing changed.", "This was already reverted, so nothing changed.", "what staff are told when Revert is pressed a second time"],
+  ["rolemenu_wait_revert_taken_said", "text", "{member} already waits for {roles} again, so those were left as they are.", "{member} already waits for {roles} again, so those were left as they are.", "what Revert says about a role that already waits again from a newer post. It takes {member} {roles}"],
+  ["rolemenu_wait_event_text", "text", "**{event}** is new. Is it for any of these? {who}", "**{event}** is new. Is it for any of these? {who}", "the post when an event is made while people wait for one. It takes {event} {who}"],
+  ["rolemenu_wait_event_pick", "text", "Who is it for?", "Who is it for?", "the new-event post's picker"],
+  ["rolemenu_wait_attached_line", "text", "{staff} attached {members} to **{event}**.", "{staff} attached {members} to **{event}**.", "the line a post gains when waiting people are attached to an event. It takes {staff} {members} {event}"],
+  ["rolemenu_wait_attached_said", "text", "Attached {members} to **{event}**.", "Attached {members} to **{event}**.", "what staff are told after waiting people are attached. It takes {members} {event}"],
+  ["rolemenu_wait_not_attached_said", "text", "{member} still waits: no assignment on **{event}** was written.", "{member} still waits: no assignment on **{event}** was written.", "what staff are told when an attach wrote nothing. It takes {member} {event}"],
+  ["rolemenu_waiting_button", "text", "Waiting for an event ({count})\u2026", "Waiting for an event ({count})\u2026", "the /rolemenu button to the people waiting for an event. It takes {count}"],
+  ["rolemenu_waiting_title", "text", "Waiting for an event", "Waiting for an event", "the heading over the people waiting for an event, on /rolemenu and the site"],
+  ["rolemenu_waiting_none_line", "text", "Nobody is waiting for an event.", "Nobody is waiting for an event.", "what /rolemenu and the site say while nobody waits"],
+  ["rolemenu_wait_remove_refused_said", "text", "**{name}** has {count} people waiting for an event on it, so it stays on the list. Attach them to an event, or take it off them, first.", "**{name}** has {count} people waiting for an event on it, so it stays on the list. Attach them to an event, or take it off them, first.", "the refusal when a role somebody waits on is taken off the timed list. It takes {name} {count}"],
+  ["rolemenu_kept_waiting_said", "text", "Ended. {name} keeps **{role}**: they are waiting for an event.", "Ended. {name} keeps **{role}**: they are waiting for an event.", "what staff are told when an ended grant leaves the role on a person waiting for an event. It takes {name} {role}"],
+  ["rolemenu_wait_site_line", "text", "{roles} \u00b7 expected to end {date} \u00b7 comes off {removal} \u00b7 set by {staff}", "{roles} \u00b7 expected to end {date} \u00b7 comes off {removal} \u00b7 set by {staff}", "one person waiting for an event on the Timed roles page. It takes {roles} {date} {removal} {staff}"],
+  ["rolemenu_wait_attach_button", "text", "Attach", "Attach", "the Timed roles page's button that attaches somebody waiting to the picked event"],
+  ["rolemenu_wait_removal_days", "int", 14, 14, "whole days after the rough end date before a timed role still waiting for an event comes off, with a staff notice and Revert; 14 by default", null, 365, 1],
+  ["rolemenu_wait_revert_days", "int", 14, 14, "whole days a reverted role waits for an event again, counted from the Revert press; 14 by default", null, 365, 1],
+  ["rolemenu_wait_max_days", "int", 365, 365, "how far ahead, in days, a rough end date may be when a timed role waits for an event; 365 by default", null, 3650, 1],
+  ["rolemenu_wait_reminder_days", "text", "0, 7, 13", "0, 7, 13", "the days after the rough end date on which whoever gave a waiting timed role is reminded, separated by commas; 0, 7, 13 by default. A day at or past rolemenu_wait_removal_days is skipped"],
+  ["rolemenu_wait_ping_role_id", "role", null, null, "the role the staff notice pings when a timed role waiting for an event comes off; blank pings nobody"],
   ['golive_channel_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a CHANNEL is opted out of announcements mid-stream. end — the default — unpins it and rewrites it to the ended wording, exactly as a real stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so no reminder follows and nothing waits on Twitch", ['end', 'delete', 'leave']],
   ['golive_member_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a MEMBER opts out of announcements mid-stream — the same three treatments the channel key has. end — the default — unpins it and rewrites it to the ended wording; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so their live role comes off and nothing waits on Twitch or on their presence", ['end', 'delete', 'leave']],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -2493,6 +2543,12 @@ function seedState() {
     { id: 8, user_id: MEMBERS[2].id, role_id: COMMENTATOR_ROLE_ID, source: 'site_list', granted_by: STAFF.id, granted_at: minutesAgo(2700), expires_at: new Date(Date.now() + (3120 + 1440) * 60000).toISOString(), removed_at: null, removed_reason: null, menu_id: 4 },
     { id: 9, user_id: MEMBERS[2].id, role_id: RUNNER_ROLE_ID, source: 'staff', granted_by: MEMBERS[1].id, granted_at: minutesAgo(500), expires_at: daysAhead(20), removed_at: null, removed_reason: null, menu_id: 5 },
     { id: 10, user_id: MEMBERS[3].id, role_id: HOST_ROLE_ID, source: 'by_hand_attached', granted_by: MEMBERS[1].id, granted_at: minutesAgo(400), expires_at: daysAhead(20), removed_at: null, removed_reason: null, menu_id: 5 },
+  ],
+  // §8 (pick the event later): Quiet Kid's by-hand Runner waits for an event that nobody has made
+  // yet, and a couch filler's Commentator is past its rough end, so it comes off in two days.
+  waits: [
+    { id: 1, user_id: MEMBERS[5].id, role_id: RUNNER_ROLE_ID, until: daysAhead(9), set_by: STAFF.id, assigner_id: STAFF.id, state: 'waiting', stage: 0 },
+    { id: 2, user_id: ROSTER[13].id, role_id: COMMENTATOR_ROLE_ID, until: daysAhead(-12), set_by: MEMBERS[1].id, assigner_id: MEMBERS[1].id, state: 'waiting', stage: 2 },
   ],
   nextMenu: 9,
   nextRequest: 5,
@@ -6004,22 +6060,101 @@ function keepers(menu) {
 function endPlan(menu) {
   const kept = keepers(menu);
   const skip = pingsOwned();
+  const owed = waitingPairs();
   const timedSet = new Set(timedIds());
   const take = [];
   let keep = 0;
+  let waiting = 0;
   for (const row of ROSTER) {
     const worn = row.role_ids.filter((id) => timedSet.has(String(id)));
     if (!worn.length) continue;
     const held = worn.filter((id) => kept.has(`${row.id}:${id}`));
-    const gone = worn.filter((id) => !skip.has(String(id)) && !held.includes(id));
+    const waits = worn.filter((id) => owed.has(`${row.id}:${id}`) && !held.includes(id));
+    const gone = worn.filter((id) => !skip.has(String(id)) && !held.includes(id) && !waits.includes(id));
     if (held.length) keep += 1;
+    if (waits.length) waiting += 1;
     if (gone.length) take.push([row, gone]);
   }
-  return { take, keep, members: take.length, roles: new Set(take.flatMap(([, gone]) => gone)).size };
+  return { take, keep, waiting, members: take.length, roles: new Set(take.flatMap(([, gone]) => gone)).size };
 }
 
 function planWords(plan) {
-  return { roles: plan.roles, members: plan.members, keep: plan.keep };
+  return { roles: plan.roles, members: plan.members, keep: plan.keep, waiting: plan.waiting };
+}
+
+// §8 (pick the event later): waits per (member, role), black_bloc/timed_roles_waiting.py.
+function openWaits() {
+  return state.waits.filter((one) => one.state === 'waiting');
+}
+
+function waitingPairs() {
+  return new Set(openWaits().map((one) => `${one.user_id}:${one.role_id}`));
+}
+
+function waitRemovalAt(until) {
+  const days = Number(state.settings.get('rolemenu_wait_removal_days') ?? 14);
+  return new Date(new Date(until).getTime() + days * 86400000).toISOString().replace('.000Z', '+00:00');
+}
+
+function waitLabel(roleId) {
+  return state.timedRoles.find((one) => String(one.role_id) === String(roleId))?.label || roleOf(roleId)?.name || String(roleId);
+}
+
+function waitMember(userId) {
+  return ROSTER.find((row) => String(row.id) === String(userId)) || null;
+}
+
+function waitEntries() {
+  const found = new Map();
+  for (const one of openWaits()) {
+    const entry = found.get(one.user_id) || { user_id: one.user_id, role_ids: [], wait_ids: [], until: one.until, set_by: one.set_by, assigner_id: one.assigner_id };
+    entry.role_ids.push(String(one.role_id));
+    entry.wait_ids.push(one.id);
+    if (new Date(one.until) < new Date(entry.until)) entry.until = one.until;
+    found.set(one.user_id, entry);
+  }
+  return [...found.values()].sort((a, b) => String(a.until).localeCompare(String(b.until)) || String(a.user_id).localeCompare(String(b.user_id)));
+}
+
+function waitRow(entry) {
+  const member = waitMember(entry.user_id);
+  const name = member ? member.display_name : String(entry.user_id);
+  const removal = waitRemovalAt(entry.until);
+  return {
+    user_id: String(entry.user_id),
+    name,
+    in_server: Boolean(member),
+    roles: entry.role_ids.map((roleId) => ({ role_id: String(roleId), label: waitLabel(roleId) })),
+    until: entry.until,
+    until_label: localMoment(entry.until),
+    removal_at: removal,
+    removal_label: localMoment(removal),
+    set_by: entry.set_by ? String(entry.set_by) : null,
+    assigner_id: entry.assigner_id ? String(entry.assigner_id) : null,
+    take_off_question: roleWord('rolemenu_wait_take_off_question', { roles: entry.role_ids.map(waitLabel).join(', '), member: name }),
+  };
+}
+
+function wantedWait(userId) {
+  const entry = waitEntries().find((one) => String(one.user_id) === String(userId));
+  if (!entry) {
+    const member = waitMember(userId);
+    throw new Refused(404, 'no_such_wait', roleWord('rolemenu_wait_gone_said', { member: member ? member.display_name : String(userId).slice(0, 40) }));
+  }
+  return entry;
+}
+
+function endWaits(waitIds, wanted, extra = {}) {
+  for (const one of openWaits()) {
+    if (waitIds.includes(one.id)) Object.assign(one, { state: wanted, ended_at: now(), ended_by: STAFF.id, ...extra });
+  }
+}
+
+function heldElsewhere(userId, roleId) {
+  if (pingsOwned().has(String(roleId))) return true;
+  return state.grants.some((grant) => grant.removed_at === null && grant.menu_id
+    && String(grant.user_id) === String(userId) && String(grant.role_id) === String(roleId)
+    && state.menus.some((menu) => menu.id === grant.menu_id && eventOpen(menu)));
 }
 
 function heldPast(menu) {
@@ -6440,6 +6575,8 @@ route('DELETE', '/api/rolemenus/timed-roles/:role_id', (context) => {
   if (!isTimed(roleId)) throw new Refused(404, 'not_timed', roleWord('rolemenu_timed_not_listed_said', { name: roleOf(roleId)?.name || roleId }));
   const count = assignedCount(roleId);
   if (count) throw new Refused(409, 'role_assigned', roleWord('rolemenu_timed_remove_refused_said', { name: roleOf(roleId)?.name || roleId, count }));
+  const waiting = openWaits().filter((one) => String(one.role_id) === String(roleId)).length;
+  if (waiting) throw new Refused(409, 'role_assigned', roleWord('rolemenu_wait_remove_refused_said', { name: roleOf(roleId)?.name || roleId, count: waiting }));
   state.timedRoles = state.timedRoles.filter((one) => String(one.role_id) !== String(roleId));
   logAction('web.role_menu.option_removed', { details: { role_id: roleId, via: 'website' } });
   return { removed: true, role_id: String(roleId) };
@@ -6472,6 +6609,70 @@ route('POST', '/api/rolemenus', async (context) => {
   if (marathon) setMenuEnd(menu, { source: 'marathon', marathon_id: marathon.id, buffer_days: null });
   else if (endsAt) setMenuEnd(menu, { source: 'date', ends_at: endsAt });
   return menuRow(menu);
+});
+
+route('GET', '/api/rolemenus/waiting', (context) => {
+  requireStaff(context.session);
+  return waitEntries().map(waitRow);
+});
+
+route('POST', '/api/rolemenus/waiting/:user_id/attach', async (context) => {
+  requireStaff(context.session);
+  const entry = wantedWait(context.params.user_id);
+  const body = await context.body();
+  const menu = menuByName(String(body.name || ''));
+  refuseEnded(menu);
+  guard('attaching somebody waiting to an event');
+  const member = waitMember(entry.user_id);
+  const name = member ? member.display_name : String(entry.user_id);
+  const worn = entry.role_ids.filter((roleId) => member && member.role_ids.includes(String(roleId)));
+  if (!worn.length) throw new Refused(409, 'not_attached', roleWord('rolemenu_wait_not_attached_said', { member: name, event: menu.title }));
+  for (const roleId of worn) {
+    const open = state.grants.some((grant) => grant.removed_at === null && String(grant.user_id) === String(entry.user_id) && String(grant.role_id) === String(roleId) && grant.menu_id === menu.id);
+    if (!open) {
+      state.grants.unshift({ id: state.nextGrant++, user_id: String(entry.user_id), role_id: String(roleId), source: 'by_hand_attached', granted_by: STAFF.id, granted_at: now(), expires_at: menu.ends_at ?? null, removed_at: null, removed_reason: null, menu_id: menu.id });
+    }
+  }
+  const ids = openWaits().filter((one) => entry.wait_ids.includes(one.id) && worn.includes(String(one.role_id))).map((one) => one.id);
+  endWaits(ids, 'attached', { menu_id: menu.id });
+  logAction('web.role_menu.wait_attached', { target_id: String(entry.user_id), details: { user: entry.user_id, menu: menu.name, menu_id: menu.id, roles: worn, via: 'website' } });
+  return { attached: true, message: roleWord('rolemenu_wait_attached_said', { members: name, event: menu.title }), event: menuRow(menu) };
+});
+
+route('POST', '/api/rolemenus/waiting/:user_id/date', async (context) => {
+  requireStaff(context.session);
+  const entry = wantedWait(context.params.user_id);
+  const body = await context.body();
+  const until = typedEnd(body.until);
+  const most = Number(state.settings.get('rolemenu_wait_max_days') ?? 365);
+  if (new Date(until).getTime() > Date.now() + most * 86400000) {
+    throw new Refused(400, 'too_far', roleWord('rolemenu_wait_too_far_said', { when: localMoment(until), days: most }));
+  }
+  for (const one of openWaits()) {
+    if (entry.wait_ids.includes(one.id)) Object.assign(one, { until, stage: 0, set_by: STAFF.id });
+  }
+  logAction('web.role_menu.wait_date_changed', { target_id: String(entry.user_id), details: { user: entry.user_id, was: entry.until, until, via: 'website' } });
+  const member = waitMember(entry.user_id);
+  return {
+    message: roleWord('rolemenu_wait_date_changed_said', { member: member ? member.display_name : entry.user_id, date: localMoment(until, true) }),
+    entry: waitRow(wantedWait(entry.user_id)),
+  };
+});
+
+route('POST', '/api/rolemenus/waiting/:user_id/take-off', (context) => {
+  requireStaff(context.session);
+  const entry = wantedWait(context.params.user_id);
+  guard('taking a waiting timed role off');
+  const member = waitMember(entry.user_id);
+  const name = member ? member.display_name : String(entry.user_id);
+  const held = entry.role_ids.filter((roleId) => heldElsewhere(entry.user_id, roleId));
+  const taking = entry.role_ids.filter((roleId) => !held.includes(roleId));
+  if (member) member.role_ids = member.role_ids.filter((id) => !taking.includes(String(id)));
+  endWaits(entry.wait_ids, 'taken_off');
+  logAction('web.role_menu.wait_taken_off', { target_id: String(entry.user_id), details: { user: entry.user_id, taken: taking, stayed_on: held, via: 'website' } });
+  let message = roleWord('rolemenu_wait_taken_off_said', { roles: entry.role_ids.map(waitLabel).join(', '), member: name });
+  if (held.length) message += ` ${roleWord('rolemenu_wait_stays_on_text', { roles: held.map(waitLabel).join(', '), member: name })}`;
+  return { taken_off: true, message };
 });
 
 route('GET', '/api/rolemenus/:name', (context) => {

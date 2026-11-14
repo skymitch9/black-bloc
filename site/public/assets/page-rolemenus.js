@@ -81,6 +81,7 @@ const MARATHON_FIELD = 'Marathon';
 const ROLE_FIELD = 'Role';
 const LABEL_FIELD = 'Label';
 const REMOVE = 'Remove';
+const SAVE_DATE = 'Save the date';
 const ZONE_KEY = 'default_timezone';
 
 const APPLICATIONS_MODE_KEY = 'applications_mode';
@@ -665,6 +666,79 @@ async function eventsSection(events, context, say) {
       open: ended.some((event) => event.name === state.focus),
     }));
   }
+  one.body.append(say);
+  return one.node;
+}
+
+const waitKey = (entry) => `wait:${entry.user_id}`;
+
+async function waitMove(entry, say, work, okText) {
+  const done = await run(say, work, okText);
+  if (done.ok) {
+    keepSaying('waiting', say);
+    refresh();
+  }
+}
+
+/** One person waiting for an event: attach to an open event, a new rough date, or take it off now. */
+function waitCard(entry, events, sectionSay) {
+  const say = sayAgain(waitKey(entry), notice());
+  const path = `/api/rolemenus/waiting/${encodeURIComponent(entry.user_id)}`;
+  const roles = entry.roles.map((one) => one.label).join(', ');
+  const [before, after = ''] = word('rolemenu_wait_site_line', {
+    roles,
+    date: entry.until_label || '',
+    removal: entry.removal_label || '',
+  }).split('{staff}');
+  const line = el('p', { class: 'menu-end' }, [before, entry.set_by ? nameNode(entry.set_by) : '', after]);
+  const open = events.filter((event) => event.open);
+  let attachRow = sayNothing(word('rolemenu_by_hand_no_events_text'));
+  if (open.length) {
+    const pick = el('select', { class: 'input' }, [
+      el('option', { value: '', text: word('rolemenu_by_hand_pick') }),
+      ...open.map((event) => el('option', { value: event.name, text: event.title })),
+    ]);
+    const attach = button(word('rolemenu_wait_attach_button'), () => {
+      if (!pick.value) return;
+      waitMove(entry, sectionSay, () => send(`${path}/attach`, 'POST', { name: pick.value }), (found) => plain(found?.message || ''));
+    }, { tone: 'warn' });
+    attach.hidden = true;
+    pick.addEventListener('change', () => { attach.hidden = !pick.value; });
+    attachRow = bar([pick, attach]);
+  }
+  const date = el('input', { class: 'input', type: 'date' });
+  const save = button(SAVE_DATE, () => {
+    if (!date.value) return;
+    waitMove(entry, say, () => send(`${path}/date`, 'POST', { until: date.value }), (found) => plain(found?.message || ''));
+  }, { tone: 'warn' });
+  save.hidden = true;
+  date.addEventListener('input', () => { save.hidden = !date.value; });
+  const off = button(bare(word('rolemenu_wait_take_off_button')), async () => {
+    const sure = await ask({
+      title: plain(entry.take_off_question),
+      body: [],
+      confirmLabel: word('rolemenu_wait_take_off_yes'),
+    });
+    if (!sure) return;
+    waitMove(entry, sectionSay, () => send(`${path}/take-off`, 'POST', {}), (found) => plain(found?.message || ''));
+  }, { tone: 'danger' });
+  const node = card(entry.name, [
+    line,
+    attachRow,
+    foldout(bare(word('rolemenu_wait_change_date_button')), [
+      el('div', { class: 'formrow' }, [field(word('rolemenu_wait_date_label'), date), bar([save])]),
+    ]),
+    bar([off]),
+    say,
+  ]);
+  node.setAttribute('data-wait', entry.user_id);
+  return node;
+}
+
+function waitingSection(entries, events, say) {
+  if (!entries.length) return null;
+  const one = section(word('rolemenu_waiting_title'), null, { id: 'waiting', count: entries.length, open: true });
+  for (const entry of entries) one.body.append(waitCard(entry, events, say));
   one.body.append(say);
   return one.node;
 }
@@ -1372,26 +1446,29 @@ async function applicationsSection(allSettings, say) {
 }
 
 async function load() {
-  const [payload, roles, allSettings, allGrants, timedPayload, marathonPayload] = await Promise.all([
+  const [payload, roles, allSettings, allGrants, timedPayload, marathonPayload, waitPayload] = await Promise.all([
     api('/api/rolemenus'),
     refRoles(),
     settings(true),
     api('/api/roles/grants'),
     api('/api/rolemenus/timed-roles'),
     api('/api/rolemenus/marathons'),
+    api('/api/rolemenus/waiting'),
   ]);
   const events = listOf(payload, 'rolemenus');
   const timedRoles = listOf(timedPayload, 'timed_roles');
   const marathons = listOf(marathonPayload, 'marathons');
+  const waiting = listOf(waitPayload, 'waiting');
   const grants = onlyThem(listOf(allGrants, 'grants'), 'user_id');
   roleColours = new Map((roles || []).map((role) => [String(role.id), role.color]));
 
   const rolemenu = settingsNamespace(allSettings, 'rolemenu');
   roleWords = new Map(rolemenu.map((spec) => [spec.key, spec]));
-  await names(idsIn(events, ['ends_set_by']));
+  await names(idsIn([...events, ...waiting], ['ends_set_by', 'set_by']));
 
   const say = sayAgain('events', notice());
   const timedSay = sayAgain('timed-list', notice());
+  const waitSay = sayAgain('waiting', notice());
   const grantsSay = sayAgain('grants', notice());
   const applicationSay = sayAgain('applications', notice());
 
@@ -1410,6 +1487,7 @@ async function load() {
   const nodes = [
     memberBanner(grants),
     state.member ? null : await eventsSection(events, context, say),
+    state.member ? null : waitingSection(waiting, events, waitSay),
     state.member ? null : await timedSection(timedRoles, roles || [], timedSay),
     await grantsSection(grants, timedRoles, grantsSay),
     box.node,
