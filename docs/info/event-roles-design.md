@@ -426,7 +426,7 @@ Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, the site*. Ve
 6. **The End controls are their own card with their own Save**, beside the words editor, so a words save can never carry an end
    field (any end write clears `ended_at`). The card's "how it ends" is a three-way switch (a marathon / a date / No end).
 7. **The page stops drawing `role_menu_channel_id`** (the channel menus were posted in): posting is retired, so it is a dead
-   control here. ⚠️ The key is still in the registry and on the Settings page — retiring it is a conductor question.
+   control here. ~~The key is still in the registry and on the Settings page~~ — retired 2026-11-13, §6.7.
 8. **End it now renders on every menu with roles**, the panel's rule — including menus with no end (an ad-hoc end). The confirm
    names the counts.
 9. **Members chips**: the API already merged menu ends; the chip's tooltip now says *ends with <menu>* (the chip's own note was
@@ -435,7 +435,7 @@ Code notes: [`code-notes.md`](code-notes.md) ▸ *Temporary roles, the site*. Ve
     roster, takes roles off it on End it now (a reset restores them), and seeds one menu per state the page draws.
 
 **Open questions (named, not decided)**
-- Retire `role_menu_channel_id` from the registry (item 7)?
+- Retire `role_menu_channel_id` from the registry (item 7)? ✅ **Answered 2026-11-13 (owner Q5 a): retired**, §6.7.
 - The `streamers` / `notifications` menus are pings' own groupings but now sit on the staff control like any menu: **Set the end
   on one would strip every fan or Events role at its end**, `pings._drop_spare_menus` deletes a streamer menu without
   `delete_refusal`, and `pings._fill_menu` rewrites options without `stamp_grants`. Should pings' menus be hidden from, or
@@ -461,3 +461,10 @@ Owner decision 2026-11-13: pings-owned menus never sit on the temporary-roles co
    end. Closing it means either `/pings` refusing a role that sits on a menu with an end, or the end pass skipping `/pings` roles.
 4. **Not covered — the raid-train role** (`raidtrain_ping_role_id`), which members also opt into from `/pings`. The decision named
    fan roles and the Events role only; adding it is one line in `pings.owned_role_ids`.
+
+### 6.7 The staff guide and the posting channel (2026-11-13, branch `rolemenu-guide`; answers §6.5's first open question)
+
+Owner decisions 2026-11-13 (Q4 a, Q5 a). Code notes: [`code-notes.md`](code-notes.md) ▸ *The temporary-roles guide and `role_menu_channel_id` retired*.
+
+1. **The staff guide `rolemenu-post` teaches the temporary-roles control** (Q4 a): *Give out temporary roles* — New menu, Add a role, Set the end (a marathon or a typed day), Hand roles out; faults for a role Black Bloc cannot take off, a `/pings` role, a held earlier end, Delete refused; facts `rolemenu_end_buffer_days`, `rolemenu_end_earlier_holds`, `rolemenu_approval_channel_id` (it still has a job: role notices). The slug stays. ⚠️ A deploy re-points *Put the original back* only; the live guide reads the old words until staff press it.
+2. **`role_menu_channel_id` is retired** (Q5 a), the `rolemenu_mode` way: out of the registry, Settings, `/settings` ▸ Roles & channels, the mock and the contract; a stored row is kept and ignored. Keys 1470 → 1469. Its readers had no job left: the Roles & channels picker (a dead control), the chat's *the menus are posted in* sentence (behind `picking_is_on`, always False), the page (dropped in §6.5 item 7).

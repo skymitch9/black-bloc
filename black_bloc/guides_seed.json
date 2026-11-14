@@ -438,26 +438,27 @@
     },
     {
       "slug": "rolemenu-post",
-      "title": "Post a role menu",
-      "goal": "New menu, add roles, post it. Approval-gated or timed roles when you need them.",
+      "title": "Give out temporary roles",
+      "goal": "A menu of roles with one end. When it comes, everyone wearing them loses them.",
       "audience": "staff",
       "feature": "rolemenu",
       "command": "/rolemenu",
       "sort": 250,
       "steps": [
-        {"do": "Type **/rolemenu** and press **New menu**. Type a name.", "expect": "The menu's card, empty, with **Add a role…**."},
-        {"do": "Press **Add a role…**, pick a role, then **Use the role's own name** or **Give it a label…**.", "expect": "The role is listed with its label and emoji. Repeat for each role."},
-        {"do": "Press **Words…** to set the heading, then **Post it** and pick the channel.", "expect": "A panel with a select appears in that channel. Members pick from it."},
-        {"do": "For roles staff must approve, press **Ask staff first**. For roles that expire, press **Rules…** and set the days.", "expect": "The posted panel refreshes itself and says so. Requests land in the approval channel."}
+        {"do": "Type **/rolemenu** and press **New menu**. Type a short name and a heading.", "expect": "The menu's card, empty, with **Add a role…**."},
+        {"do": "Press **Add a role…** and pick a role. Press **Use the role's own name** or **Give it a label…**.", "expect": "The role is listed with how many people wear it. Repeat for each role."},
+        {"do": "Press **Set the end…** and pick the marathon in **Ends with a marathon…**, or press **Type a date…**.", "expect": "The card reads *ends* and the moment. A marathon end is its last run plus **Buffer…** days; a typed day ends at 23:59 server time."},
+        {"do": "Press **Hand roles out…**, pick who in **Whose roles?**, press **Give them roles…** and tick the roles.", "expect": "They wear them until the end. Within the hour after it, everyone wearing the menu's roles loses them, given here or by hand, with one DM each."}
       ],
       "faults": [
-        {"symptom": "A role was refused", "answer": "It sits above Black Bloc's role in Server Settings ▸ Roles. Move the bot's role up."},
-        {"symptom": "Any channel but the spam channel was refused", "answer": "Only during a rehearsal: while test mode is switched on for a drill, only the test channel is allowed. Post there until it is lifted."},
-        {"symptom": "You want the panel down", "answer": "**Take it down** on the card. Nobody loses a role they have."}
+        {"symptom": "**Add a role…** refused a role Black Bloc could not take off", "answer": "The end has to be able to remove it. Move Black Bloc's role above it in Server Settings ▸ Roles."},
+        {"symptom": "A role or an end was refused because it belongs to `/pings`", "answer": "Streamer roles and the Events role are members' own choice in `/pings`. A menu holding one can have no end; take it off the menu to give the menu one."},
+        {"symptom": "The card says *Held* and shows **Use the earlier end**", "answer": "The marathon's new dates would end the roles sooner. Nothing moved; **Use the earlier end** asks with the counts, then takes it."},
+        {"symptom": "**Delete it** was refused", "answer": "Its end is still to come and people wear its roles. **End it now** first, or **No end** if nobody should lose them."}
       ],
       "facts": [
-        {"kind": "setting", "ref": "rolemenu_mode"},
-        {"kind": "setting", "ref": "role_menu_channel_id"},
+        {"kind": "setting", "ref": "rolemenu_end_buffer_days"},
+        {"kind": "setting", "ref": "rolemenu_end_earlier_holds"},
         {"kind": "setting", "ref": "rolemenu_approval_channel_id"}
       ]
     },

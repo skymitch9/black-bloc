@@ -72,7 +72,6 @@ LINK = "link"
 STAFF_CHANNEL_KEY = "staff_channel_id"
 LOG_CHANNEL_KEY = "log_channel_id"
 MODLOG_CHANNEL_KEY = "modlog_channel_id"
-ROLE_MENU_CHANNEL_KEY = "role_menu_channel_id"
 OPERATOR_READ_LOG_KEY = "operator_read_log"
 HOSTING_KEY = "cost_hosting_usd"
 BIO_KEY = "bot_bio"
@@ -86,13 +85,11 @@ CORE_CHANNEL_KEYS: tuple[str, ...] = (
     STAFF_CHANNEL_KEY,
     LOG_CHANNEL_KEY,
     MODLOG_CHANNEL_KEY,
-    ROLE_MENU_CHANNEL_KEY,
 )
 KEY_PURPOSE: dict[str, str] = {
     STAFF_CHANNEL_KEY: "Where staff talk — and who counts as staff",
     LOG_CHANNEL_KEY: "Where Black Bloc repeats what it did",
     MODLOG_CHANNEL_KEY: "Where moderation actions are written down",
-    ROLE_MENU_CHANNEL_KEY: "Where the role menus are posted",
 }
 
 
