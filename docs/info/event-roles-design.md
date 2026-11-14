@@ -784,7 +784,7 @@ The ask, verbatim: *"I also want to add a criteria where if there isn't an event
 | Q1 | Two weeks after the rough end date with no event attached, the role COMES OFF. *"instead of a dm it's a staff notification with a button to revert and the staff ping should be lead"* — no DM to the member; a staff notice pinging the Leads role, with **Revert**. |
 | Q2 | Three reminders to the person who assigned it: on the date, a week after, the day before removal. Several people in one message. Each offers: pick an event / New event / Take it off now. |
 | Q3 | *"a"* — the rough end date is REQUIRED when someone presses *Pick later…*. No default. |
-| Q4 | **OPEN — asked 2026-11-14 12:2x, the build waits on it.** What **Revert** does: (a) one press puts the roles back and the person waits again for a number of days held in a settings key; (b) the press asks for a new required date. §8.6 is written for whichever he picks. |
+| Q4 | **OPEN — asked 2026-11-14 12:1x, the build waits on it.** What **Revert** does: (a) one press puts the roles back and the person waits again for a number of days held in a settings key; (b) the press asks for a new required date. §8.6 is written for whichever he picks. |
 
 ### 8.2 Data (schema +1, additive)
 
