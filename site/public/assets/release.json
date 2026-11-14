@@ -1,10 +1,8 @@
 {
-  "release": "v275",
-  "commit": "73424346",
+  "release": "v276",
+  "commit": "e7bc98ea",
   "changed_features": [
     "guides",
-    "marathon",
-    "pings",
     "rolemenu"
   ]
 }
