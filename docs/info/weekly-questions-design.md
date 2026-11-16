@@ -23,7 +23,7 @@ does. My account could post at 9:00 and the bot verifies it's there by 9:05"*.
 
 | Fork | Decided | Owner's words |
 |---|---|---|
-| 1 — post as the owner | A scheduled Claude task on the owner's PC posts from his account; the bot checks after a grace window and posts itself if the question is not there. Owner accepted the Discord ToS / ban risk of the Claude half knowingly. | "Yes risk it" |
+| 1 — post as the owner | A scheduled Claude task on the owner's PC posts from his account; the bot checks after a grace window and posts itself if the question is not there. Owner accepted the Discord ToS / ban risk of the Claude half knowingly. | "Yes risk it". **Withdrawn 2026-11-16** (*"cancel the job where we post qotw from my discord, let the bot post it"*): the routine is disabled, the bot posts at slot + grace every week; the owner-post check in §3 stays in the code and simply finds nothing |
 | 2 — queue runs dry | The week is skipped; the bot warns ahead (DM + log channel) | "A" |
 | 3 — reply thread | No thread. Still a settings key (configurable-both-ways rule), default OFF | "B" |
 | 4 — one queue or several | One queue, one channel, one day + time | "A" |
