@@ -2,7 +2,7 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-10-18 09:5x** - header only: v228 to v234 accepted or waived nothing, so no entry was added or changed; the two defects found today (a dropped Hotfix show never goes stale; run ids drift on marathon 14) are open work in [`TODO.md`](TODO.md) ▸ Session 2026-10-18, not tolerated. ⚠️ No other entry was re-read. Before that, **2026-10-09 19:3x** - one closed-fault note only, at the v219 ritual: the Settings page drew every multi-line word key as a one-line input (false pending changes on load; saving would have flattened line breaks); found by review on the mock and fixed in v219 (`fieldaids.js` `keepsLines`) before any save lost data; checked live (settings.html loads with no pending-change bar); no entry added. Before that, **2026-10-09** - KI-44 only, ADDED by the `points-discord` branch (not merged): the refusals and the DM routing read from the code and the branch's tests, not from the live log. 
+> Last verified: **2026-11-19 07:5x** - KI-46 only, ADDED (measured by anonymous fetch; owner decision the same hour). ⚠️ No other entry was re-read. Before that, **2026-10-18 09:5x** - header only: v228 to v234 accepted or waived nothing, so no entry was added or changed; the two defects found today (a dropped Hotfix show never goes stale; run ids drift on marathon 14) are open work in [`TODO.md`](TODO.md) ▸ Session 2026-10-18, not tolerated. ⚠️ No other entry was re-read. Before that, **2026-10-09 19:3x** - one closed-fault note only, at the v219 ritual: the Settings page drew every multi-line word key as a one-line input (false pending changes on load; saving would have flattened line breaks); found by review on the mock and fixed in v219 (`fieldaids.js` `keepsLines`) before any save lost data; checked live (settings.html loads with no pending-change bar); no entry added. Before that, **2026-10-09** - KI-44 only, ADDED by the `points-discord` branch (not merged): the refusals and the DM routing read from the code and the branch's tests, not from the live log. 
 > Before that, **2026-10-07** — KI-33 only, by the `date-fuse-sweep` branch (not merged): the date-fuse sweep, seven tests (four fuses) pinned, the `BB_FAKE_NOW` guard and CI's `clock-ahead` job; measured by running the suite under moved clocks. ⚠️ Nothing else in this file was re-read.
 > Before that, **2026-10-04 18:3x** — the v202 docs ritual (v195 to v202): KI-41 was added 2026-10-04 (already in the file) and **KI-42 ADDED** (the 256 MB OOM kill, `WATCHING`; read from the TODO 💥 bullet, not re-measured). ⚠️ KI-10 and KI-40 were NOT re-read for these eight deploys; nothing else in this file was re-tested.
 > Before that, **2026-09-25 19:3x** — KI-10 only, at the v166 docs ritual: a KI-10 line for the v166 swap (the line itself NOT read — `flyctl logs --no-tail` at 19:3x starts at 02:32:34Z, after the boot). ⚠️ Nothing else re-read.
@@ -171,6 +171,16 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-46 — The old encrypted `.env.enc` is still served by GitHub from two unreferenced commits — `ACCEPTED`
+
+**Symptom:** the 2026-09-10 purge took `.env.enc` out of every branch, but GitHub still answers for the two commits that carried it (`66eea8b`, `8e81a03`) with no login. Measured 2026-11-19 07:3x: an anonymous fetch of the file at `8e81a03` returned 200 and 2,112 bytes, and GitHub's blob id equals the local one; after `git fetch --prune` no remote branch, tag or pull ref contains either commit, so no push can remove them. The file is the whole `.env` of 2026-09-02, AES-256-CBC with PBKDF2 at 600,000 rounds; what protects it is the owner's passphrase. Local branches `logs-buttons` and `recur-web` still carry the pre-purge history — ⚠️ never push either.
+
+**Status:** `ACCEPTED` 2026-11-19 07:5x — owner, verbatim: *"Neither we're fine"*, after being offered a rotation, a GitHub Support purge, or deleting and recreating the repository.
+
+**Why tolerated:** it is ciphertext, not a readable secret; the repository has 0 forks and 0 stars; nothing in the bot misbehaves. ⚠️ NOT known: whether anyone fetched it, and which of its secrets have been rotated since 2026-09-02.
+
+**What would change it:** **1** sign of any secret from that file being used by someone else (an unexpected Discord bot login, model spend on `/api/costs` nobody made, a Twitch or YouTube quota nobody spent), or the passphrase being reused or written down anywhere — then rotate every name in `.env.example` and ask GitHub Support to collect the two commits (or delete and recreate the repository).
 
 ## KI-45 — A GDQ Hotfix show the sheet drops (renamed or moved) is never stale-archived; staff archive it by hand — `WATCHING`
 
