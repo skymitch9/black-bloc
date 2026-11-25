@@ -1203,6 +1203,79 @@ async def test_a_role_holder_reads_not_baf_and_count_as_baf_anyway_moves_both_wa
     assert (await web_row(wf, web, "web.marathon.baf_override_cleared"))["member"] == SKY
 
 
+async def sky_on_a_timed_role(web, wf):
+    from functools import partial
+
+    from black_bloc import timed_roles
+    from black_bloc.cogs.content.marathon_announce import roles_changed
+    from tests.api.conftest import WebRole
+
+    runner = WebRole(6200, "Runner", position=2)
+    web.guild.roles.append(runner)
+    wf.member(web.guild, SKY, name="sky").roles[:] = [runner]
+    wf.member(web.guild, 77, name="crew").roles.append(runner)
+    wf.member(web.guild, 78, name="plain")
+    await timed_roles.add(web.db, wf.GUILD_ID, 6200, "Runner")
+    web.store.on_change("marathon_member_role_ids", partial(roles_changed, web))
+
+
+def holders_of(client):
+    found = client.get("/api/marathons/member-rule").json()["holders"]
+    return {one["username"]: one for one in found}
+
+
+async def test_the_member_rule_preview_reads_while_off_and_the_rule_leaves_sky_out(
+    client, sign_in, web, cog, wf
+):
+    assert not client.get("/api/marathons/member-rule").is_success
+    sign_in(client)
+    await sky_on_a_timed_role(web, wf)
+    marathon_id = add(client).json()["id"]
+    people = f"/api/marathons/{marathon_id}/people"
+    assert person(client.get(people).json(), "Sky")[1]
+
+    off = client.get("/api/marathons/member-rule")
+
+    assert off.status_code == 200, off.text
+    found = off.json()
+    assert found["member_role_ids"] == [] and found["on"] is False
+    assert found["timed_role_ids"] == ["6200"]
+    rows = {one["username"]: one for one in found["holders"]}
+    assert set(rows) == {"sky", "crew"}
+    assert rows["sky"] | {"member_name": None} == {
+        "user_id": str(SKY),
+        "username": "sky",
+        "member_name": None,
+        "timed_roles": ["Runner"],
+        "has_member_role": False,
+        "has_role_named_member": False,
+        "override": False,
+        "left_out": False,
+    }
+    assert rows["crew"]["has_role_named_member"] is True
+
+    member = str(wf.PLAIN_ROLE_ID)
+    put = client.put("/api/settings/marathon_member_role_ids", json={"value": [member]})
+
+    assert put.status_code == 200, put.text
+    on = client.get("/api/marathons/member-rule").json()
+    rows = {one["username"]: one for one in on["holders"]}
+    assert on["on"] is True and on["member_role_ids"] == [member]
+    assert rows["sky"]["left_out"] is True and rows["crew"]["has_member_role"] is True
+    assert rows["crew"]["left_out"] is False
+    sky, baf = person(client.get(people).json(), "Sky")
+    assert not baf and sky["baf_rule"]["said"] == "not BaF (no Member role)"
+    assert sky["baf_rule"]["move"] == "set"
+    assert (await web_row(wf, web, "web.marathon.role_opted_out"))["members"] == [SKY]
+
+    out = client.post(f"/api/marathons/baf-override/{SKY}", json={"reason": "runs with us"})
+
+    assert out.status_code == 200, out.text
+    assert person(client.get(people).json(), "Sky")[1]
+    assert holders_of(client)["sky"]["override"] is True
+    assert holders_of(client)["sky"]["left_out"] is False
+
+
 async def test_the_override_refuses_in_words(client, sign_in, web, cog, wf):
     sign_in(client)
     stranger = client.post("/api/marathons/baf-override/424242")

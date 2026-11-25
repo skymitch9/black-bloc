@@ -6,7 +6,7 @@ from typing import Any
 
 from ... import marathon_announce as ma
 from ... import optouts
-from ...cogs.content.marathon import baf_overrides, list_marathons
+from ...cogs.content.marathon import baf_overrides, list_marathons, not_ours_of
 from ...cogs.content.marathon_announce import baf_rule, override_reason, words
 from ...cogs.content.spotlight import channels_for
 from ...golive import ignored_by_role
@@ -37,8 +37,7 @@ def chip(source: str, said: Any = None, *, marathons: Any = (), rule: Any = None
 
 
 async def marathon_chips(bot: Any, guild: Any) -> list[tuple[int, dict[str, Any]]]:
-    overrides = await baf_overrides(bot.db)
-    held = ma.role_holders(guild, ma.optout_roles(guild, bot.store)) - set(overrides)
+    held = await not_ours_of(bot, guild)
     found = []
     for user_id in sorted(held):
         rule = baf_rule(bot, guild, held=user_id)

@@ -9,7 +9,7 @@ import discord
 
 from ... import marathon as mt
 from ... import marathon_announce as ma
-from ... import optouts
+from ... import optouts, timed_roles
 from ...actionlog import log_action
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, VIA_WEBSITE, kind_via
@@ -53,6 +53,7 @@ from ...settings_store import (
     MARATHON_MENTION_ON_SAID_KEY,
     MARATHON_MENTION_PEOPLE_KEY,
     MARATHON_MENTION_PLAIN_SAID_KEY,
+    MARATHON_NOT_BAF_MEMBER_WORD_KEY,
     MARATHON_NOT_BAF_ROLE_WORD_KEY,
     MARATHON_OVERRIDE_CLEARED_BY_OPTOUT_KEY,
 )
@@ -63,6 +64,7 @@ from .marathon import (
     cog_of,
     get_marathon,
     list_marathons,
+    member_rule_timed,
     run_by_id,
     runs_of,
     said_default,
@@ -542,7 +544,7 @@ async def role_rematch(
 
 
 async def roles_changed(bot: Any, guild_id: Any, key: str, value: Any, by: Any) -> None:
-    """marathon_optout_role_ids was changed on the site."""
+    """marathon_optout_role_ids or marathon_member_role_ids was changed."""
     guild = bot.get_guild(int(guild_id))
     if guild is None:
         return
@@ -551,7 +553,8 @@ async def roles_changed(bot: Any, guild_id: Any, key: str, value: Any, by: Any) 
 
 
 async def member_roles_changed(bot: Any, before: Any, after: Any) -> None:
-    """A member put on or took off a role of marathon_optout_role_ids."""
+    """A member put on or took off a role of marathon_optout_role_ids, or their standing under
+    the member rule flipped."""
     guild = getattr(after, "guild", None)
     if guild is None or getattr(after, "bot", False) or not bot.db.is_connected:
         return
@@ -559,11 +562,32 @@ async def member_roles_changed(bot: Any, before: Any, after: Any) -> None:
     was = wanted & {int(role.id) for role in getattr(before, "roles", ())}
     now = wanted & {int(role.id) for role in getattr(after, "roles", ())}
     if not wanted or bool(was) == bool(now):
+        await member_rule_flipped(bot, guild, before, after)
         return
     if int(after.id) in await baf_overrides(bot.db):
         if not now or not await clear_by_optout(bot, guild, after):
             return
     await role_rematch(bot, guild, via=VIA_DISCORD)
+
+
+async def member_rule_flipped(bot: Any, guild: Any, before: Any, after: Any) -> None:
+    members = ma.member_roles(guild, bot.store)
+    if not members or ma.worn(before) == ma.worn(after):
+        return
+    timed = await member_rule_timed(bot, guild)
+    if ma.left_by_member_rule(before, members, timed) == ma.left_by_member_rule(
+        after, members, timed
+    ):
+        return
+    if int(after.id) in await baf_overrides(bot.db):
+        return
+    await role_rematch(bot, guild, via=VIA_DISCORD)
+
+
+async def timed_list_changed(bot: Any, guild: Any, *, actor: Any = None, via: str) -> None:
+    """The timed list gained or lost a role; only the member rule reads it."""
+    if ma.member_roles(guild, bot.store):
+        await role_rematch(bot, guild, actor=actor, via=via)
 
 
 async def clear_by_optout(bot: Any, guild: Any, member: Any) -> bool:
@@ -612,9 +636,7 @@ def baf_rule(
             "state": RULE_ROLE,
             "user_id": str(int(held)),
             "member_name": display_name(guild, int(held), str(held)),
-            "said": words(
-                bot, guild.id, MARATHON_NOT_BAF_ROLE_WORD_KEY, role=getattr(role, "name", "")
-            ),
+            "said": held_said(bot, guild, member, role),
             "move": MOVE_SET,
             "move_label": words(bot, guild.id, MARATHON_BAF_OVERRIDE_BUTTON_KEY),
             "reason_title": words(bot, guild.id, MARATHON_BAF_OVERRIDE_REASON_TITLE_KEY),
@@ -632,9 +654,58 @@ def baf_rule(
     return None
 
 
+def held_said(bot: Any, guild: Any, member: Any, role: Any) -> str:
+    """The opt-out role's reason wins; the member rule's only for someone it alone left out."""
+    members = ma.member_roles(guild, bot.store)
+    if role is None and member is not None and members:
+        named = guild.get_role(members[0]) if hasattr(guild, "get_role") else None
+        return words(
+            bot, guild.id, MARATHON_NOT_BAF_MEMBER_WORD_KEY, role=getattr(named, "name", "")
+        )
+    return words(bot, guild.id, MARATHON_NOT_BAF_ROLE_WORD_KEY, role=getattr(role, "name", ""))
+
+
 def override_reason(bot: Any, guild: Any, row: Any) -> str:
     reason = str(mt._cell(row, "reason") or "").strip()
     return reason or words(bot, guild.id, MARATHON_BAF_OVERRIDE_NO_REASON_KEY)
+
+
+MEMBER_ROLE_NAME = "member"
+
+
+async def member_rule_state(bot: Any, guild: Any) -> dict[str, Any]:
+    """Every timed-role holder and what the member rule does to them, read even while it is off."""
+    members = ma.member_roles(guild, bot.store)
+    timed = await timed_roles.role_ids(bot.db, guild.id)
+    overrides = await baf_overrides(bot.db)
+    names = {int(getattr(role, "id", 0) or 0): str(role.name) for role in guild.roles or ()}
+    named = {one for one, name in names.items() if name.strip().lower() == MEMBER_ROLE_NAME}
+    holders = []
+    for member in ma.members_of(guild):
+        held = ma.worn(member) & set(timed)
+        if getattr(member, "bot", False) or not held:
+            continue
+        member_id = int(member.id)
+        holders.append(
+            {
+                "user_id": str(member_id),
+                "username": str(getattr(member, "name", "") or ""),
+                "member_name": display_name(guild, member_id, str(member_id)),
+                "timed_roles": [names.get(one, str(one)) for one in timed if one in held],
+                "has_member_role": bool(ma.worn(member) & set(members)),
+                "has_role_named_member": bool(ma.worn(member) & named),
+                "override": member_id in overrides,
+                "left_out": ma.left_by_member_rule(member, members, timed)
+                and member_id not in overrides,
+            }
+        )
+    holders.sort(key=lambda one: (one["member_name"].lower(), one["user_id"]))
+    return {
+        "member_role_ids": [str(one) for one in members],
+        "on": bool(members),
+        "timed_role_ids": [str(one) for one in timed],
+        "holders": holders,
+    }
 
 
 async def set_baf_override(
@@ -712,7 +783,11 @@ __all__ = [
     "clear_by_optout",
     "override_reason",
     "ours_and_held",
+    "held_said",
     "member_roles_changed",
+    "member_rule_flipped",
+    "member_rule_state",
+    "timed_list_changed",
     "role_rematch",
     "roles_changed",
     "set_baf_override",

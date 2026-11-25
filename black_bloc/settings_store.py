@@ -7892,6 +7892,8 @@ MARATHON_PEOPLE_BUTTON_UNLINK_KEY = "marathon_people_button_unlink"
 MARATHON_PEOPLE_BUTTON_LINK_NEAR_KEY = "marathon_people_button_link_near"
 MARATHON_OPTOUT_ROLE_IDS_KEY = "marathon_optout_role_ids"
 MARATHON_NOT_BAF_ROLE_WORD_KEY = "marathon_not_baf_role_word"
+MARATHON_MEMBER_ROLE_IDS_KEY = "marathon_member_role_ids"
+MARATHON_NOT_BAF_MEMBER_WORD_KEY = "marathon_not_baf_member_word"
 MARATHON_BAF_OVERRIDE_WORD_KEY = "marathon_baf_override_word"
 MARATHON_POSTS_OPTED_OUT_WORD_KEY = "marathon_posts_opted_out_word"
 MARATHON_BAF_OVERRIDE_BUTTON_KEY = "marathon_baf_override_button"
@@ -8185,6 +8187,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "ours — no BaF mark, no staff-thread runner post, never the reason a Hotfix show is "
         "tracked, no public post — unless staff count them as BaF anyway on the site. Changed "
         "on the website only. none by default",
+    ),
+    MARATHON_MEMBER_ROLE_IDS_KEY: (
+        "roles",
+        [],
+        "roles a member must wear to be BaF in marathons while they wear a timed role (the role "
+        "menu's timed list): a timed-role holder wearing none of these is never matched as ours "
+        "unless staff count them as BaF anyway. Someone with no timed role is not affected. "
+        "Blank turns the rule off. none by default",
     ),
     MARATHON_HOST_HIGHLIGHTS_KEY: (
         "bool",
@@ -8791,6 +8801,13 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("role",),
         "what the site's People card and the Members page's Opted out list say about someone "
         "a marathon would match but who wears one of marathon_optout_role_ids. It takes {role}",
+    ),
+    MARATHON_NOT_BAF_MEMBER_WORD_KEY: (
+        "not BaF (no {role} role)",
+        ("role",),
+        "what the site's People card and the Members page's Opted out list say about someone "
+        "a marathon would match who wears a timed role and none of marathon_member_role_ids. "
+        "It takes {role}, the first of those roles",
     ),
     MARATHON_BAF_OVERRIDE_WORD_KEY: (
         "BaF (staff override)",

@@ -7130,6 +7130,32 @@
     },
     {
       "method": "GET",
+      "path": "/api/marathons/member-rule",
+      "read_by": [
+        "the conductor, with the operator token: who marathon_member_role_ids leaves out of BaF, read before it is switched on"
+      ],
+      "shape": "object",
+      "keys": [
+        "member_role_ids",
+        "on",
+        "timed_role_ids",
+        "holders"
+      ],
+      "rows": {
+        "holders": [
+          "user_id",
+          "username",
+          "member_name",
+          "timed_roles",
+          "has_member_role",
+          "has_role_named_member",
+          "override",
+          "left_out"
+        ]
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/marathons/{marathon_archived_id}",
       "read_by": [
         "marathons-section.js (events.html) the read-only drawer of an archived marathon"

@@ -1284,6 +1284,8 @@ const SETTING_SPECS = [
   ["marathon_announce_opted_out_said", "text", "**{name}** is opted out of **{marathon}**'s public posts: no reminders and no highlight. A highlight of theirs that was up is taken down.", "**{name}** is opted out of **{marathon}**'s public posts: no reminders and no highlight. A highlight of theirs that was up is taken down.", "what staff are told once a person is opted out of a marathon's public posts. It takes {name} {marathon}"],
   ["marathon_announce_opted_in_said", "text", "**{name}** is back in **{marathon}**'s public posts from the next reminder mark.", "**{name}** is back in **{marathon}**'s public posts from the next reminder mark.", "what staff are told once a person is opted back in to a marathon's public posts. It takes {name} {marathon}"],
   ["marathon_optout_role_ids", "roles", ["900000000000000011"], [], "roles whose holders are NOT BaF in marathons: a member wearing one is never matched as ours — no BaF mark, no staff-thread runner post, never the reason a Hotfix show is tracked, no public post — unless staff count them as BaF anyway on the site. Changed on the website only. none by default"],
+  ["marathon_member_role_ids", "roles", [], [], "roles a member must wear to be BaF in marathons while they wear a timed role (the role menu's timed list): a timed-role holder wearing none of these is never matched as ours unless staff count them as BaF anyway. Someone with no timed role is not affected. Blank turns the rule off. none by default"],
+  ["marathon_not_baf_member_word", "text", "not BaF (no {role} role)", "not BaF (no {role} role)", "what the site's People card and the Members page's Opted out list say about someone a marathon would match who wears a timed role and none of marathon_member_role_ids. It takes {role}, the first of those roles"],
   ["marathon_not_baf_role_word", "text", "not BaF ({role})", "not BaF ({role})", "what the site's People card and the Members page's Opted out list say about someone a marathon would match but who wears one of marathon_optout_role_ids. It takes {role}"],
   ["marathon_baf_override_word", "text", "BaF (staff override)", "BaF (staff override)", "what the site says about someone staff count as BaF on every marathon although they wear one of marathon_optout_role_ids"],
   ["marathon_posts_opted_out_word", "text", "opted out of posts", "opted out of posts", "what the Members page's Opted out list says about a BaF person opted out of a marathon's public posts; they are still tracked"],
@@ -9876,19 +9878,60 @@ function marathonHeldRole(userId) {
   return held.sort((a, b) => b.position - a.position)[0] || null;
 }
 
+// The member rule (marathon_announce.left_by_member_rule): with marathon_member_role_ids set, a
+// timed-role holder wearing none of those roles is not BaF either.
+function marathonMemberRoles() {
+  return (state.settings.get('marathon_member_role_ids') || []).map(String);
+}
+
+function marathonLeftByMemberRule(row) {
+  const members = marathonMemberRoles();
+  const timed = timedIds();
+  if (!row || row.bot || !members.length || !timed.length) return false;
+  return row.role_ids.some((id) => timed.includes(id)) && !row.role_ids.some((id) => members.includes(id));
+}
+
 function marathonNotOurs() {
   const kept = new Set(marathonBafOverrides().map((one) => String(one.user_id)));
-  return new Set(ROSTER.filter((row) => !row.bot && marathonHeldRole(row.id) && !kept.has(row.id)).map((row) => row.id));
+  return new Set(ROSTER.filter((row) => !row.bot && (marathonHeldRole(row.id) || marathonLeftByMemberRule(row)) && !kept.has(row.id)).map((row) => row.id));
+}
+
+function marathonHeldSaid(userId) {
+  const role = marathonHeldRole(userId);
+  const members = marathonMemberRoles();
+  const row = ROSTER.find((one) => one.id === String(userId));
+  if (!role && row && members.length) {
+    const named = ROLES.find((one) => one.id === members[0]);
+    return marathonWords('marathon_not_baf_member_word').split('{role}').join(named ? named.name : '');
+  }
+  return marathonWords('marathon_not_baf_role_word').split('{role}').join(role ? role.name : '');
+}
+
+function marathonMemberRule() {
+  const members = marathonMemberRoles();
+  const timed = timedIds();
+  const kept = new Set(marathonBafOverrides().map((one) => String(one.user_id)));
+  const holders = ROSTER.filter((row) => !row.bot && row.role_ids.some((id) => timed.includes(id))).map((row) => ({
+    user_id: row.id,
+    username: row.name || '',
+    member_name: memberName(row.id) || row.id,
+    timed_roles: timed.filter((id) => row.role_ids.includes(id)).map((id) => (ROLES.find((one) => one.id === id) || { name: id }).name),
+    has_member_role: row.role_ids.some((id) => members.includes(id)),
+    has_role_named_member: row.role_ids.some((id) => (ROLES.find((one) => one.id === id) || { name: '' }).name.trim().toLowerCase() === 'member'),
+    override: kept.has(row.id),
+    left_out: marathonLeftByMemberRule(row) && !kept.has(row.id),
+  }));
+  holders.sort((a, b) => a.member_name.toLowerCase().localeCompare(b.member_name.toLowerCase()) || a.user_id.localeCompare(b.user_id));
+  return { member_role_ids: members, on: members.length > 0, timed_role_ids: timed, holders };
 }
 
 function marathonBafRule({ held = null, userId = null } = {}) {
   if (held) {
-    const role = marathonHeldRole(held);
     return {
       state: 'role',
       user_id: String(held),
       member_name: memberName(held),
-      said: marathonWords('marathon_not_baf_role_word').split('{role}').join(role ? role.name : ''),
+      said: marathonHeldSaid(held),
       move: 'set',
       move_label: marathonWords('marathon_baf_override_button'),
       reason_title: marathonWords('marathon_baf_override_reason_title'),
@@ -9929,7 +9972,7 @@ function marathonRoleRematch(via) {
 }
 
 function settingChanged(key) {
-  if (key === 'marathon_optout_role_ids') marathonRoleRematch('website');
+  if (key === 'marathon_optout_role_ids' || key === 'marathon_member_role_ids') marathonRoleRematch('website');
 }
 
 async function marathonOverrideMove(context, on) {
@@ -10728,6 +10771,11 @@ function marathonDetailAny(id) {
   if (gone) return marathonArchivedDetail(gone);
   return marathonDetail(marathonOf(id));
 }
+
+route('GET', '/api/marathons/member-rule', (context) => {
+  requireStaff(context.session);
+  return marathonMemberRule();
+});
 
 route('GET', '/api/marathons/archive', (context) => {
   requireStaff(context.session);

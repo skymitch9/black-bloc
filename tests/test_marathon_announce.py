@@ -517,6 +517,76 @@ def test_the_role_a_holder_is_named_by_is_the_highest_listed_one_they_wear():
     assert ma.held_role(member(1, 70), {50}) is None
 
 
+# --- the member rule (member-rule, 2026-11-24) --------------------------------------------------
+
+RUNNER = 80
+MEMBER = 90
+
+
+class Keys:
+    def __init__(self, optout=(), members=()):
+        self.values = {
+            "marathon_optout_role_ids": list(optout),
+            "marathon_member_role_ids": list(members),
+        }
+
+    def get(self, guild_id, key):
+        return self.values[key]
+
+
+def timed_crowd():
+    return SimpleNamespace(
+        id=1,
+        members=[
+            member(1, RUNNER),
+            member(2, RUNNER, MEMBER),
+            member(3, MEMBER),
+            member(4),
+            member(5, RUNNER, 50),
+            member(6, RUNNER, bot=True),
+        ],
+    )
+
+
+def test_a_blank_member_key_or_no_timed_list_leaves_not_ours_as_it_was():
+    guild = timed_crowd()
+    before = ma.not_ours(guild, Keys([50]), ())
+
+    assert before == frozenset({5})
+    assert ma.not_ours(guild, Keys([50]), (), [RUNNER]) == before
+    assert ma.not_ours(guild, Keys([50], [MEMBER]), ()) == before
+    assert ma.not_ours(guild, Keys([50], [MEMBER]), (), []) == before
+
+
+def test_a_timed_holder_without_a_member_role_is_not_ours_and_nobody_else_is_touched():
+    guild = timed_crowd()
+
+    assert ma.not_ours(guild, Keys([], [MEMBER]), (), [RUNNER]) == frozenset({1, 5})
+    assert ma.not_ours(guild, Keys([50], [MEMBER]), (), [RUNNER]) == frozenset({1, 5})
+    assert ma.not_ours(guild, Keys([], [MEMBER, 50]), (), [RUNNER]) == frozenset({1})
+
+
+def test_an_override_wins_over_the_member_rule():
+    assert ma.not_ours(timed_crowd(), Keys([], [MEMBER]), {1}, [RUNNER]) == frozenset({5})
+
+
+def test_left_by_member_rule_needs_both_lists_a_timed_role_and_no_member_role():
+    assert ma.left_by_member_rule(member(1, RUNNER), [MEMBER], [RUNNER])
+    assert not ma.left_by_member_rule(member(1, RUNNER, MEMBER), [MEMBER], [RUNNER])
+    assert not ma.left_by_member_rule(member(1, 70), [MEMBER], [RUNNER])
+    assert not ma.left_by_member_rule(member(1, RUNNER), [], [RUNNER])
+    assert not ma.left_by_member_rule(member(1, RUNNER), [MEMBER], [])
+    assert not ma.left_by_member_rule(member(1, RUNNER, bot=True), [MEMBER], [RUNNER])
+    assert ma.member_rule_holders(timed_crowd(), [MEMBER], [RUNNER]) == {1, 5}
+
+
+def test_the_member_roles_keep_their_order_and_drop_junk():
+    guild = SimpleNamespace(id=1)
+
+    assert ma.member_roles(guild, Keys([], ["92", 91, 92, "x"])) == [92, 91]
+    assert ma.member_roles(guild, Keys([], [])) == []
+
+
 # --- one opt-out (one-optout, 2026-10-20) -----------------------------------------------------
 
 

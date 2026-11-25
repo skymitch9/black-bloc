@@ -1446,7 +1446,14 @@ async def add_timed_role(
         actor=actor,
         details={"role_id": int(role.id), "label": wanted, "via": via},
     )
+    await marathon_member_rule(bot, guild, actor, via)
     return None
+
+
+async def marathon_member_rule(bot: Any, guild: Any, actor: Any, via: str) -> None:
+    from ..content.marathon_announce import timed_list_changed
+
+    await timed_list_changed(bot, guild, actor=actor, via=via)
 
 
 async def timed_role_refusal(bot: Any, guild: Any, role: Any) -> tuple[str, str] | None:
@@ -1496,6 +1503,7 @@ async def drop_timed_role(
         actor=actor,
         details={"role_id": int(role_id), "via": via},
     )
+    await marathon_member_rule(bot, guild, actor, via)
     return None
 
 

@@ -8,7 +8,7 @@ from typing import Any, NamedTuple
 
 from . import marathon as mt
 from . import marathon_hosts as mh
-from .settings_store import MARATHON_OPTOUT_ROLE_IDS_KEY
+from .settings_store import MARATHON_MEMBER_ROLE_IDS_KEY, MARATHON_OPTOUT_ROLE_IDS_KEY
 
 SWITCH = mh.ANNOUNCE
 HOSTS = mh.HOST_ANNOUNCE
@@ -223,11 +223,64 @@ def role_holders(guild: Any, role_ids: Any) -> set[int]:
     }
 
 
-def not_ours(guild: Any, store: Any, overrides: Any) -> frozenset[int]:
-    """Who is not BaF in marathons: everyone wearing a role of marathon_optout_role_ids, less
-    the people staff count as BaF anyway."""
+def _id_list(raw: Any) -> list[int]:
+    try:
+        found = json.loads(raw or "[]") if not isinstance(raw, list) else raw
+    except (TypeError, ValueError):
+        return []
+    kept: list[int] = []
+    for one in found if isinstance(found, list) else ():
+        try:
+            wanted = int(one)
+        except (TypeError, ValueError):
+            continue
+        if wanted not in kept:
+            kept.append(wanted)
+    return kept
+
+
+def member_roles(guild: Any, store: Any) -> list[int]:
+    return _id_list(store.get(guild.id, MARATHON_MEMBER_ROLE_IDS_KEY))
+
+
+def worn(member: Any) -> set[int]:
+    return {int(getattr(role, "id", 0) or 0) for role in getattr(member, "roles", ()) or ()}
+
+
+def left_by_member_rule(member: Any, member_role_ids: Any, timed_role_ids: Any) -> bool:
+    """A timed-role holder wearing none of the member roles; never anyone while either is blank."""
+    members = {int(one) for one in member_role_ids or ()}
+    timed = {int(one) for one in timed_role_ids or ()}
+    if not members or not timed or getattr(member, "bot", False):
+        return False
+    held = worn(member)
+    return bool(held & timed) and not held & members
+
+
+def members_of(guild: Any) -> list[Any]:
+    found = getattr(guild, "members", None) or ()
+    return list(found.values() if isinstance(found, dict) else found)
+
+
+def member_rule_holders(guild: Any, member_role_ids: Any, timed_role_ids: Any) -> set[int]:
+    if not member_role_ids or not timed_role_ids:
+        return set()
+    return {
+        int(member.id)
+        for member in members_of(guild)
+        if left_by_member_rule(member, member_role_ids, timed_role_ids)
+    }
+
+
+def not_ours(guild: Any, store: Any, overrides: Any, timed: Any = ()) -> frozenset[int]:
+    """Who is not BaF in marathons: everyone wearing a role of marathon_optout_role_ids, and every
+    timed-role holder (`timed`) wearing none of marathon_member_role_ids, less the people staff
+    count as BaF anyway."""
     kept = {int(one) for one in overrides or ()}
-    return frozenset(role_holders(guild, optout_roles(guild, store)) - kept)
+    out = role_holders(guild, optout_roles(guild, store))
+    if timed:
+        out |= member_rule_holders(guild, member_roles(guild, store), timed)
+    return frozenset(out - kept)
 
 
 def held_role(member: Any, role_ids: Any) -> Any:
@@ -731,7 +784,12 @@ __all__ = [
     "optout_roles",
     "all_silent",
     "not_ours",
+    "left_by_member_rule",
+    "member_roles",
+    "member_rule_holders",
+    "members_of",
     "role_holders",
+    "worn",
     "held_role",
     "option_of",
     "policy",

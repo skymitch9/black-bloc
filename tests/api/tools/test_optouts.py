@@ -104,6 +104,32 @@ async def test_staff_overrides_are_their_own_counted_in_list_never_an_opt_out(
     assert kept["rule"]["move"] == "clear" and kept["rule"]["move_label"] == "Undo the override"
 
 
+async def test_the_member_rule_lands_on_the_opted_out_list_in_its_own_words(
+    client, sign_in, web, cog, wf  # noqa: F811
+):
+    from black_bloc import timed_roles
+
+    await seed(web, wf, client, sign_in)
+    runner, member = WebRole(6400, "Runner", position=2), WebRole(6500, "Member", position=1)
+    web.guild.roles.extend([runner, member])
+    wf.member(web.guild, 50, name="guest").roles.append(runner)
+    wf.member(web.guild, 51, name="regular").roles.extend([runner, member])
+    web.guild.get_member(CREW).roles.append(runner)
+    await timed_roles.add(web.db, wf.GUILD_ID, 6400, "Runner")
+    before = await roll_up(web, web.guild)
+    assert "50" not in {one["user_id"] for one in before["people"]}
+
+    await web.store.set(wf.GUILD_ID, "marathon_member_role_ids", [6500])
+    found = await roll_up(web, web.guild)
+
+    guest, _ = chips_of(found, 50)
+    assert guest["marathon_role"]["said"] == "not BaF (no Member role)"
+    assert guest["marathon_role"]["rule"]["move"] == "set"
+    crew, _ = chips_of(found, CREW)
+    assert crew["marathon_role"]["said"] == "not BaF (Staff)"
+    assert "51" not in {one["user_id"] for one in found["people"]}
+
+
 async def test_an_override_saved_before_reasons_reads_no_reason_given(
     client, sign_in, web, cog, wf  # noqa: F811
 ):
