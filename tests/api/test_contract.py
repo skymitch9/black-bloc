@@ -312,6 +312,7 @@ def inbox_forum(guild, wf):
 
 TIMED_ROLE_ID = 44
 SPARE_ROLE_ID = 46
+TIMED_MEMBER_ID = 47
 
 
 def seed_members(guild, wf) -> None:
@@ -323,6 +324,7 @@ def seed_members(guild, wf) -> None:
     wf.member(guild, PING_MEMBER_ID, name="namu")
     guild.roles.append(wf.Role(TIMED_ROLE_ID, "Runner", position=1))
     guild.roles.append(wf.Role(SPARE_ROLE_ID, "Host", position=1))
+    wf.member(guild, TIMED_MEMBER_ID, name="runs").roles.append(guild.get_role(TIMED_ROLE_ID))
 
 
 

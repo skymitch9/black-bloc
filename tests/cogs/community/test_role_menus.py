@@ -1853,6 +1853,25 @@ async def test_the_timed_list_refuses_a_role_it_could_not_strip_and_keeps_one_st
     assert await timed.role_ids(db, GUILD) == [10]
 
 
+async def test_a_timed_list_change_tells_the_marathon_member_rule(bot, db, lead, monkeypatch):
+    from black_bloc.cogs.content import marathon_announce
+
+    heard = []
+
+    async def told(bot, guild, *, actor=None, via):
+        heard.append(via)
+
+    monkeypatch.setattr(marathon_announce, "timed_list_changed", told)
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Timed roles…")
+
+    await choose(interaction, "Add a role…", [SimpleNamespace(id=14)])
+    await choose(interaction, "Add a role…", [SimpleNamespace(id=14)])
+    await choose(interaction, "Remove a role…", ["14"])
+
+    assert heard == ["discord", "discord"]
+
+
 async def test_give_roles_takes_twenty_five_a_batch_and_keeps_a_running_count(bot, db, lead):
     await timed_list(db, 10)
     await an_event(db, "a", ends_at=LATER)

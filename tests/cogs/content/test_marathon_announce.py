@@ -1093,6 +1093,7 @@ async def test_a_finished_highlight_whose_runner_left_the_schedule_is_left_as_it
 
 STAFF_ROLE = 6100
 OPTOUT_KEY = "marathon_optout_role_ids"
+MEMBER_KEY = "marathon_member_role_ids"
 
 
 class Holder:
@@ -1255,7 +1256,7 @@ async def test_the_marathon_cog_hooks_the_role_setting_when_it_loads():
     )
     await cogmod.Marathons.cog_load(made)
 
-    assert hooked == [OPTOUT_KEY]
+    assert hooked == [OPTOUT_KEY, MEMBER_KEY]
 
 
 async def test_the_role_rule_reads_in_the_sites_words(bot, cog):
@@ -1271,6 +1272,165 @@ async def test_the_role_rule_reads_in_the_sites_words(bot, cog):
     assert announce.baf_rule(bot, bot.guild, user_id=SKY, overrides=()) is None
     await bot.store.set(GUILD, "marathon_not_baf_role_word", "GDQ crew ({role})")
     assert announce.baf_rule(bot, bot.guild, held=SKY)["said"] == "GDQ crew (Staff)"
+
+
+# --- the member rule: a timed-role holder without a member role is not BaF (2026-11-24) ---------
+
+TIMED_ROLE = 6200
+MEMBER_ROLE = 6300
+RUNNER_R = (TIMED_ROLE, "Runner")
+MEMBER_R = (MEMBER_ROLE, "Member")
+STAFF_R = (STAFF_ROLE, "Staff")
+
+
+def sky_wearing(*roles):
+    holder = Holder(SKY, [])
+    holder.roles = [SimpleNamespace(id=one, name=name, position=10) for one, name in roles]
+    return holder
+
+
+async def member_rule_ready(bot, cog, *roles):
+    from functools import partial
+
+    from black_bloc import timed_roles
+    from tests.cogs.content.test_marathon_public import highlighted, ready
+
+    bot.guild.roles = [SimpleNamespace(id=one, name=name) for one, name in (MEMBER_R, RUNNER_R)]
+    marathon = await ready(bot, cog)
+    post = the_highlight(await highlighted(bot, cog, marathon))
+    await timed_roles.add(bot.db, GUILD, TIMED_ROLE, "Runner")
+    wear(bot, sky_wearing(*roles))
+    bot.store.on_change(MEMBER_KEY, partial(announce.roles_changed, bot))
+    bot.store.on_change(OPTOUT_KEY, partial(announce.roles_changed, bot))
+    return marathon, post
+
+
+async def sky_is_ours(bot, marathon):
+    return mt.is_ours((await sky_on(bot, marathon))[0])
+
+
+async def test_with_the_member_key_blank_a_timed_holder_stays_baf_exactly_as_before(bot, cog):
+    marathon, post = await member_rule_ready(bot, cog, RUNNER_R)
+
+    found = await announce.role_rematch(bot, bot.guild)
+
+    assert found == {"out": [], "in": [], "marathons": []}
+    assert await sky_is_ours(bot, marathon) and "took down" not in post.content
+    assert await cogmod.member_rule_timed(bot, bot.guild) == []
+    assert announce.baf_rule(bot, bot.guild, user_id=SKY, overrides=()) is None
+
+
+async def test_a_timed_holder_without_a_member_role_is_left_out_with_its_own_words(bot, cog):
+    marathon, post = await member_rule_ready(bot, cog, RUNNER_R)
+
+    await bot.store.set(GUILD, MEMBER_KEY, [MEMBER_ROLE], by=FakeActor.id)
+
+    row, sky = await sky_on(bot, marathon)
+    assert sky["user_id"] is None and sky[mt.NOT_OURS_ID] == SKY and not mt.is_ours(row)
+    assert "took down" in post.content
+    assert (await details_of(bot.db, "web.marathon.role_opted_out"))["members"] == [SKY]
+    rule = announce.baf_rule(bot, bot.guild, held=SKY)
+    assert rule["said"] == "not BaF (no Member role)"
+    assert rule["state"] == "role" and rule["move"] == "set"
+    await bot.store.set(GUILD, "marathon_not_baf_member_word", "guest ({role})")
+    assert announce.baf_rule(bot, bot.guild, held=SKY)["said"] == "guest (Member)"
+
+
+async def test_a_timed_holder_with_a_member_role_is_kept(bot, cog):
+    marathon, post = await member_rule_ready(bot, cog, RUNNER_R, MEMBER_R)
+
+    await bot.store.set(GUILD, MEMBER_KEY, [MEMBER_ROLE])
+
+    assert await sky_is_ours(bot, marathon) and "took down" not in post.content
+
+
+async def test_someone_with_no_timed_role_is_untouched_by_the_member_rule(bot, cog):
+    marathon, _post = await member_rule_ready(bot, cog)
+
+    await bot.store.set(GUILD, MEMBER_KEY, [MEMBER_ROLE])
+
+    assert await sky_is_ours(bot, marathon)
+
+
+async def test_count_as_baf_anyway_wins_over_the_member_rule(bot, cog):
+    marathon, post = await member_rule_ready(bot, cog, RUNNER_R)
+    await bot.store.set(GUILD, MEMBER_KEY, [MEMBER_ROLE])
+
+    said = await announce.set_baf_override(
+        bot, bot.guild, FakeActor(), SKY, True, reason="runs with us", via="website"
+    )
+
+    assert said.ok and await sky_is_ours(bot, marathon)
+    assert "**Super Metroid**" in post.content
+
+
+async def test_an_opt_out_role_and_the_member_rule_together_read_as_the_opt_out(bot, cog):
+    marathon, _post = await member_rule_ready(bot, cog, RUNNER_R, STAFF_R)
+    await bot.store.set(GUILD, OPTOUT_KEY, [STAFF_ROLE])
+    await bot.store.set(GUILD, MEMBER_KEY, [MEMBER_ROLE])
+
+    assert not await sky_is_ours(bot, marathon)
+    assert announce.baf_rule(bot, bot.guild, held=SKY)["said"] == "not BaF (Staff)"
+
+
+async def test_the_member_rule_rematches_when_a_member_role_or_the_timed_role_moves(bot, cog):
+    marathon, post = await member_rule_ready(bot, cog, RUNNER_R)
+    await bot.store.set(GUILD, MEMBER_KEY, [MEMBER_ROLE])
+    assert not await sky_is_ours(bot, marathon)
+    bare, member, plain = sky_wearing(RUNNER_R), sky_wearing(RUNNER_R, MEMBER_R), sky_wearing()
+
+    wear(bot, member)
+    await cog.on_member_update(bare, member)
+    assert await sky_is_ours(bot, marathon) and "**Super Metroid**" in post.content
+    assert (await details_of(bot.db, "marathon.role_opted_in"))["via"] == "discord"
+
+    wear(bot, bare)
+    await cog.on_member_update(member, bare)
+    assert not await sky_is_ours(bot, marathon) and "took down" in post.content
+    assert (await details_of(bot.db, "marathon.role_opted_out"))["via"] == "discord"
+
+    wear(bot, plain)
+    await cog.on_member_update(bare, plain)
+    assert await sky_is_ours(bot, marathon)
+
+    wear(bot, bare)
+    await cog.on_member_update(plain, bare)
+    assert not await sky_is_ours(bot, marathon)
+
+
+async def test_a_role_move_the_member_rule_does_not_care_about_rematches_nothing(bot, cog):
+    marathon, _post = await member_rule_ready(bot, cog, RUNNER_R, MEMBER_R)
+    await bot.store.set(GUILD, MEMBER_KEY, [MEMBER_ROLE])
+    before = sky_wearing(RUNNER_R, MEMBER_R)
+    after = sky_wearing(RUNNER_R, MEMBER_R, (1, "Events"))
+
+    wear(bot, after)
+    await cog.on_member_update(before, after)
+    await announce.set_baf_override(bot, bot.guild, FakeActor(), SKY, True, reason="r")
+    wear(bot, sky_wearing(RUNNER_R))
+    await cog.on_member_update(after, sky_wearing(RUNNER_R))
+
+    assert await sky_is_ours(bot, marathon)
+    assert not [one for one in await kinds(bot.db) if one.endswith("role_opted_out")]
+    assert SKY in await announce.baf_overrides(bot.db)
+    await announce.role_rematch(bot, bot.guild)
+    assert await sky_is_ours(bot, marathon)
+
+
+async def test_a_timed_list_change_rematches_only_while_the_member_rule_is_on(bot, cog):
+    from black_bloc import timed_roles
+
+    marathon, _post = await member_rule_ready(bot, cog, RUNNER_R)
+    await timed_roles.remove(bot.db, GUILD, TIMED_ROLE)
+    await bot.store.set(GUILD, MEMBER_KEY, [MEMBER_ROLE])
+    assert await sky_is_ours(bot, marathon)
+
+    await timed_roles.add(bot.db, GUILD, TIMED_ROLE, "Runner")
+    await announce.timed_list_changed(bot, bot.guild, via="website")
+
+    assert not await sky_is_ours(bot, marathon)
+    await bot.store.clear(GUILD, MEMBER_KEY)
+    assert await sky_is_ours(bot, marathon)
 
 
 # --- one opt-out (one-optout, 2026-10-20) -----------------------------------------------------

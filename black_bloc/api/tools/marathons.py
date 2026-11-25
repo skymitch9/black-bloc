@@ -49,6 +49,7 @@ from ...cogs.content.marathon import (
 )
 from ...cogs.content.marathon_announce import (
     baf_rule,
+    member_rule_state,
     mention_state,
     person_state,
     set_baf_override,
@@ -706,6 +707,12 @@ def build_router(bot: Any) -> APIRouter:
             "offset": skip,
             "marathons": [await archived_row(bot, guild, row) for row in rows],
         }
+
+    @router.get("/member-rule")
+    async def marathon_member_rule() -> dict[str, Any]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return await member_rule_state(bot, guild)
 
     @router.post("")
     async def marathon_create(request: Request, payload: dict[str, Any]) -> dict[str, Any]:

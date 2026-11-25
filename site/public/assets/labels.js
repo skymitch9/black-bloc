@@ -309,6 +309,8 @@ export const LABELS = {
   marathon_announce_opted_in_said: "What staff hear once a person is opted back in",
   marathon_optout_role_ids: "Roles whose holders are not BaF in marathons",
   marathon_not_baf_role_word: "How the site names someone a role keeps out of BaF",
+  marathon_member_role_ids: "Roles a timed-role holder needs to be BaF in marathons",
+  marathon_not_baf_member_word: "How the site names a timed-role holder without those roles",
   marathon_baf_override_word: "How the site names someone counted as BaF anyway",
   marathon_posts_opted_out_word: "How the Opted out list names a person out of a marathon’s posts",
   marathon_baf_override_button: "The button that counts someone as BaF anyway",

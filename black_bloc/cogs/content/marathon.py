@@ -23,7 +23,7 @@ from ... import marathon_ping as mp
 from ... import marathon_reminder_posts as mrem
 from ... import marathon_spotlight as ms
 from ... import marathon_stale as stale
-from ... import pings
+from ... import pings, timed_roles
 from ... import shadow as shadow_home
 from ... import spotlight as spot
 from ...actionlog import log_action, send_logs
@@ -100,6 +100,7 @@ from ...settings_store import (
     MARATHON_LIVE_POLL_MINUTES_KEY,
     MARATHON_LIVE_TEMPLATE_KEY,
     MARATHON_MATCH_HOSTS_KEY,
+    MARATHON_MEMBER_ROLE_IDS_KEY,
     MARATHON_MODE_KEY,
     MARATHON_MOVE_MINUTES_KEY,
     MARATHON_NEXT_ADDED_TEMPLATE_KEY,
@@ -549,8 +550,16 @@ async def baf_overrides(db: Any) -> dict[int, Any]:
     return {int(row["user_id"]): row for row in await cur.fetchall()}
 
 
+async def member_rule_timed(bot: Any, guild: Any) -> list[int]:
+    """The timed list the member rule reads; never read while marathon_member_role_ids is blank."""
+    if not mann.member_roles(guild, bot.store):
+        return []
+    return await timed_roles.role_ids(bot.db, guild.id)
+
+
 async def not_ours_of(bot: Any, guild: Any) -> frozenset[int]:
-    return role_not_ours(guild, bot.store, await baf_overrides(bot.db))
+    timed = await member_rule_timed(bot, guild)
+    return role_not_ours(guild, bot.store, await baf_overrides(bot.db), timed)
 
 
 async def marathon_windows(db: Any, marathon_id: int) -> list[Any]:
@@ -1757,6 +1766,7 @@ class Marathons(commands.Cog):
         store = getattr(self.bot, "store", None)
         if store is not None:
             store.on_change(MARATHON_OPTOUT_ROLE_IDS_KEY, partial(roles_changed, self.bot))
+            store.on_change(MARATHON_MEMBER_ROLE_IDS_KEY, partial(roles_changed, self.bot))
         if not self.bot.db.is_connected:
             return
         self.ticker.start()
@@ -3915,6 +3925,7 @@ __all__ = [
     "NextButton",
     "add_next",
     "baf_overrides",
+    "member_rule_timed",
     "not_ours_of",
     "create_marathon",
     "dismiss_next",

@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-11-24 — one section APPENDED, nothing re-keyed**: *The member rule* (branch `member-rule`, off `main` `1b2a8e8b`); keyed by LINE at that branch. It added ~50 lines above `held_role` in `marathon_announce.py` and ~40 above `baf_rule` in `cogs/content/marathon_announce.py`, so earlier rows below those points sit lower — trust the anchor text. Before that:
 > **2026-11-14 — one section APPENDED, nothing re-keyed**: *Pick the event later* (branch `pick-later`, off `main` `32545928`); keyed by LINE at that branch. It added ~170 lines to `cogs/community/role_menus.py`, so dispatch A/B rows there sit up to ~100 lines lower — trust the anchor text. Before that:
 > **2026-11-14 — one section APPENDED, nothing re-keyed**: *Timed roles per event, dispatch B* (branch `timed-roles`, after A); keyed by LINE at that branch. B rewrote `api/tools/rolemenus.py` whole and moved rows in `cogs/community/role_menus.py` by up to ~40 lines (the dispatch-A rows below `add_timed_role` sit lower — trust the anchor text); A's two stopgap rows at the foot of its section describe code that is gone. Before that:
 > **2026-11-14 — one section APPENDED, nothing re-keyed**: *Timed roles per event, dispatch A* (branch `timed-roles`, off `main` `702945d9`); keyed by LINE at that branch. Dispatch A rewrote the panel and the end pass of `cogs/community/role_menus.py`: every earlier row pointing into that file below ~line 440 sits elsewhere now — trust the anchor text, and the 1b / *Pings keeps no role menus* rows on `end_refused`, `menu_pings_refusal`, `run_add_option`, `refuse_pings`, `put_option`, `drop_option`, `stamp_grants`, `close_menu_grants` describe code that is gone. Before that:
@@ -11306,3 +11307,18 @@ Design: [`event-roles-design.md`](event-roles-design.md) §8 and §8.9 (every de
 | `cogs/community/role_menus.py:2701` `ROUTE_NAMES` · `free_name` | An event's key never equals a word the `/api/rolemenus` router uses as a path segment, so `GET /{name}` and `GET /waiting` cannot shadow each other. |
 | `black_bloc/timed_roles_waiting_flow.py:1217` `TakeOffConfirm` | `AnswersErrors` first, so a fault in the confirm reaches the presser as a sentence, not Discord's *interaction failed*. |
 | `site/mock/server.mjs:6060` `endPlan` · `:6107` `waitEntries` | The mock's copies of the plan's waiting count and the entries; the seed (`waits:`) holds one member waiting with time to spare and one past the rough end (checklist 49). |
+
+## The member rule — `member-rule` (keyed by LINE at that branch)
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_announce.py:250` `left_by_member_rule` | The ONE predicate (`docs/info/member-rule-design.md`): `not_ours`, the flip check and the preview's `left_out` all call it, so the preview cannot drift from the matcher. False while either list is blank. |
+| `black_bloc/marathon_announce.py:275` `not_ours` | `timed` defaults to empty and the member key is read only when it is given, so every old caller and fake store sees exactly the old function. |
+| `black_bloc/marathon_announce.py:226` `_id_list` | Ordered, unlike `_ids`: the reason word names the FIRST member role. |
+| `black_bloc/cogs/content/marathon.py:553` `member_rule_timed` | The timed list is a DB read; it is skipped while the key is blank, so a blank key queries nothing new. |
+| `black_bloc/cogs/content/marathon_announce.py:555` `member_roles_changed` · `:573` `member_rule_flipped` | The opt-out branch is untouched; the member branch runs only when the opt-out holding did not flip, diffs the role sets in memory first, and never clears or re-matches for someone with an override. |
+| `black_bloc/cogs/content/marathon_announce.py:657` `held_said` | The opt-out role's reason wins; the member word only for a member still here, not wearing an opt-out role, while the key is set — so a blank key reads byte-for-byte as before. |
+| `black_bloc/cogs/content/marathon_announce.py:676` `member_rule_state` | Reads the timed list even while the key is blank (it is the preview). `has_role_named_member` is always sent: the live contract sweep reads the contract keys on every row. |
+| `black_bloc/cogs/community/role_menus.py:1453` `marathon_member_rule` | Lazy import: `cogs/content/marathon` already imports this module at load. |
+| `black_bloc/api/tools/optouts.py:40` `marathon_chips` | Reads `not_ours_of` instead of computing the opt-out holders itself, so the member rule reaches the Opted out list. |
+| `site/mock/server.mjs:9887` `marathonLeftByMemberRule` · `:9910` `marathonMemberRule` | The mock's copies; reads `ROSTER[].role_ids` and `state.timedRoles` (checklist 49). The seed key is blank, so the mock's people do not move. |
