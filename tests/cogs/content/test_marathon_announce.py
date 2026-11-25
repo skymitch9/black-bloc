@@ -1393,6 +1393,10 @@ async def test_the_member_rule_rematches_when_a_member_role_or_the_timed_role_mo
     await cog.on_member_update(bare, plain)
     assert await sky_is_ours(bot, marathon)
 
+    wear(bot, bare)
+    await cog.on_member_update(plain, bare)
+    assert not await sky_is_ours(bot, marathon)
+
 
 async def test_a_role_move_the_member_rule_does_not_care_about_rematches_nothing(bot, cog):
     marathon, _post = await member_rule_ready(bot, cog, RUNNER_R, MEMBER_R)
@@ -1408,6 +1412,9 @@ async def test_a_role_move_the_member_rule_does_not_care_about_rematches_nothing
 
     assert await sky_is_ours(bot, marathon)
     assert not [one for one in await kinds(bot.db) if one.endswith("role_opted_out")]
+    assert SKY in await announce.baf_overrides(bot.db)
+    await announce.role_rematch(bot, bot.guild)
+    assert await sky_is_ours(bot, marathon)
 
 
 async def test_a_timed_list_change_rematches_only_while_the_member_rule_is_on(bot, cog):

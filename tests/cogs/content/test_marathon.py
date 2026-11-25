@@ -1992,3 +1992,19 @@ async def test_archiving_or_removing_the_marathon_leaves_its_menu_on_the_last_da
     assert unbound["marathon_id"] == marathon["id"]
     [notice] = bot.guild.channels[ROLE_NOTICES].messages
     assert "left the marathon list" in notice.content
+
+
+async def test_not_ours_of_reads_the_timed_list_only_while_the_member_key_is_set(bot, cog):
+    from types import SimpleNamespace
+
+    from black_bloc import timed_roles
+
+    sky = SimpleNamespace(id=SKY, bot=False, roles=[SimpleNamespace(id=6200, name="Runner")])
+    bot.guild.members = [sky]
+    await timed_roles.add(bot.db, GUILD, 6200, "Runner")
+
+    assert await cogmod.member_rule_timed(bot, bot.guild) == []
+    assert await cogmod.not_ours_of(bot, bot.guild) == frozenset()
+    await bot.store.set(GUILD, "marathon_member_role_ids", [6300])
+    assert await cogmod.member_rule_timed(bot, bot.guild) == [6200]
+    assert await cogmod.not_ours_of(bot, bot.guild) == frozenset({SKY})

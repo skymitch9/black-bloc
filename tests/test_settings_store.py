@@ -3149,3 +3149,11 @@ async def test_every_word_of_the_staff_control_is_a_rolemenu_key_with_its_own_pl
     assert settings_store.KEY_TYPES[holds] == "bool" and store.get(7, holds) is True
     with pytest.raises(SettingError):
         coerce_value(settings_store.ROLEMENU_PUSH_BACK_REFUSED_KEY, "{role} ends {when}")
+
+
+def test_the_member_rule_keys_are_a_blank_roles_list_and_a_word_with_a_role():
+    assert settings_store.KEY_TYPES["marathon_member_role_ids"] == "roles"
+    assert settings_store.MARATHON_SETTINGS["marathon_member_role_ids"][1] == []
+    assert "marathon_member_role_ids" not in settings_store.SITE_ONLY_KEYS
+    default, takes, _help = settings_store.MARATHON_WORDS["marathon_not_baf_member_word"]
+    assert default == "not BaF (no {role} role)" and takes == ("role",)
