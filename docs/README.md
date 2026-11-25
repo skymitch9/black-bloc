@@ -123,6 +123,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 **2026-10-10 09:1x:** the rehearsal channel `#welcome-test` (`1550284332365783091`) is now **#post-test**; `frontdoor_`, `posts_`, `points_` and `sticky_shadow_channel_id` point there (the last two set this morning), `shadow_channel_id` stays `#blackbloc-logs`; the pinned leaderboard rehearsal copy lives in #post-test. No deploy.
 
+**2026-11-25 00:17:** v277 live - **the member rule**: a timed-role holder without the Member role is not BaF in marathons (`marathon_member_role_ids`, on since 00:18; 13 people left out, none were BaF); 12 people linked as BaF on Back to Black 2027 (37) and AGDQ 2027 (6); keys **1621**. Not seen in Discord or a browser. [`TODO.md`](TODO.md) Session 2026-11-24.
+
 **2026-11-14 13:43:** v276 live - **pick the event later**: a timed role given by hand can wait for an event (required rough date, protected from every event's end, reminders at days 0 / 7 / 13, off at day 14 with a staff notice pinging Leads and one-press Revert); **Waiting for an event** on `/rolemenu` and `rolemenus.html`; schema **110**, keys **1619**. Not yet seen in Discord. [`DONE.md`](DONE.md) 2026-11-14.
 
 **2026-11-14 10:40:** v275 live - **timed roles per event**: one shared list of ten roles, events that overlap, the end takes a timed role from everyone not assigned on another open event, by-hand adds asked about in `#bot-control`, bulk giving three ways; `/rolemenu` and `rolemenus.html` read *Timed roles*; schema **109**, keys **1569**. Not yet seen in Discord. [`DONE.md`](DONE.md) 2026-11-14.
